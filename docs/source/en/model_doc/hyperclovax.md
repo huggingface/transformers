@@ -1,4 +1,4 @@
-<!--Copyright 2025 NAVER Cloud Corp. and The HuggingFace Inc. team. All rights reserved.
+<!--Copyright 2026 NAVER Cloud Corp. and The HuggingFace Inc. team. All rights reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with
 the License. You may obtain a copy of the License at
@@ -13,7 +13,7 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was released on 2025-07-21 and added to Hugging Face Transformers on 2026-03-29.*
+*This model was released on 2025-07-21 and added to Hugging Face Transformers on 2026-04-02.*
 
 <div style="float: right;">
     <div class="flex flex-wrap space-x-1">
@@ -52,7 +52,7 @@ model_id = "naver-hyperclovax/HyperCLOVAX-SEED-Think-14B"
 tokenizer = AutoTokenizer.from_pretrained(model_id)
 model = AutoModelForCausalLM.from_pretrained(
     model_id,
-    torch_dtype=torch.bfloat16,
+    dtype=torch.bfloat16,
     device_map="auto",
 )
 
@@ -93,19 +93,4 @@ print(tokenizer.decode(output[0][model_inputs["input_ids"].shape[-1]:], skip_spe
 ## HyperCLOVAXForCausalLM
 
 [[autodoc]] HyperCLOVAXForCausalLM
-    - forward
-
-## HyperCLOVAXForSequenceClassification
-
-[[autodoc]] HyperCLOVAXForSequenceClassification
-    - forward
-
-## HyperCLOVAXForQuestionAnswering
-
-[[autodoc]] HyperCLOVAXForQuestionAnswering
-    - forward
-
-## HyperCLOVAXForTokenClassification
-
-[[autodoc]] HyperCLOVAXForTokenClassification
     - forward

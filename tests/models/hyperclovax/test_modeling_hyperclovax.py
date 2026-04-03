@@ -103,42 +103,31 @@ class HyperCLOVAXModelTest(CausalLMModelTest, unittest.TestCase):
             "logits_scaling does not scale logits proportionally — MuP logit scaling is broken.",
         )
 
-    def test_post_norm_output_shape(self):
-        """use_post_norm=True must not change the output shape."""
+    def test_post_norm(self):
+        """use_post_norm=True must not change the output shape and must produce different outputs than use_post_norm=False."""
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-
-        model_no_post_norm = HyperCLOVAXForCausalLM(config).to(torch_device).eval()
 
         config_post_norm = HyperCLOVAXConfig(**config.to_dict())
         config_post_norm.use_post_norm = True
         model_post_norm = HyperCLOVAXForCausalLM(config_post_norm).to(torch_device).eval()
+
+        config_no_post_norm = HyperCLOVAXConfig(**config.to_dict())
+        config_no_post_norm.use_post_norm = False
+        model_no_post_norm = HyperCLOVAXForCausalLM(config_no_post_norm).to(torch_device).eval()
 
         input_ids = inputs_dict["input_ids"].to(torch_device)
         with torch.no_grad():
             out_default = model_no_post_norm(input_ids).logits
             out_post_norm = model_post_norm(input_ids).logits
 
+        # check shape
         self.assertEqual(
             out_default.shape,
             out_post_norm.shape,
             "use_post_norm=True changes the output shape unexpectedly.",
         )
 
-    def test_post_norm_changes_output(self):
-        """use_post_norm=True must produce different outputs than the default (no post-norm)."""
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-
-        model_no_post_norm = HyperCLOVAXForCausalLM(config).to(torch_device).eval()
-
-        config_post_norm = HyperCLOVAXConfig(**config.to_dict())
-        config_post_norm.use_post_norm = True
-        model_post_norm = HyperCLOVAXForCausalLM(config_post_norm).to(torch_device).eval()
-
-        input_ids = inputs_dict["input_ids"].to(torch_device)
-        with torch.no_grad():
-            out_default = model_no_post_norm(input_ids).logits
-            out_post_norm = model_post_norm(input_ids).logits
-
+        # check output
         self.assertFalse(
             torch.allclose(out_default, out_post_norm),
             "use_post_norm=True produces identical outputs to the default — Peri-Layer Norm has no effect.",

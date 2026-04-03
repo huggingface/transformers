@@ -4,11 +4,7 @@
 #             the file from the modular. If any change should be done, please apply the change to the
 #                          modular_hyperclovax.py file directly. One of our CI enforces this.
 #                🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨
-# Copyright 2025 NAVER CLOUD Corp. and The HuggingFace Inc. team. All rights reserved.
-#
-# Adapted from
-# https://github.com/huggingface/transformers/blob/main/src/transformers/models/granite/modeling_granite.py
-# Copyright 2024 IBM and the HuggingFace Inc. team. All rights reserved.
+# Copyright 2026 NAVER CLOUD Corp. and The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -33,12 +29,7 @@ from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationMixin
 from ...integrations import use_kernel_forward_from_hub, use_kernel_func_from_hub, use_kernelized_func
 from ...masking_utils import create_causal_mask
-from ...modeling_layers import (
-    GenericForQuestionAnswering,
-    GenericForSequenceClassification,
-    GenericForTokenClassification,
-    GradientCheckpointingLayer,
-)
+from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
@@ -133,22 +124,6 @@ class HyperCLOVAXRotaryEmbedding(nn.Module):
             sin = emb.sin() * self.attention_scaling
 
         return cos.to(dtype=x.dtype), sin.to(dtype=x.dtype)
-
-
-class HyperCLOVAXMLP(nn.Module):
-    def __init__(self, config):
-        super().__init__()
-        self.config = config
-        self.hidden_size = config.hidden_size
-        self.intermediate_size = config.intermediate_size
-        self.gate_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=config.mlp_bias)
-        self.up_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=config.mlp_bias)
-        self.down_proj = nn.Linear(self.intermediate_size, self.hidden_size, bias=config.mlp_bias)
-        self.act_fn = ACT2FN[config.hidden_act]
-
-    def forward(self, x):
-        down_proj = self.down_proj(self.act_fn(self.gate_proj(x)) * self.up_proj(x))
-        return down_proj
 
 
 def rotate_half(x):
@@ -289,6 +264,22 @@ class HyperCLOVAXAttention(nn.Module):
         return attn_output, attn_weights
 
 
+class HyperCLOVAXMLP(nn.Module):
+    def __init__(self, config):
+        super().__init__()
+        self.config = config
+        self.hidden_size = config.hidden_size
+        self.intermediate_size = config.intermediate_size
+        self.gate_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=config.mlp_bias)
+        self.up_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=config.mlp_bias)
+        self.down_proj = nn.Linear(self.intermediate_size, self.hidden_size, bias=config.mlp_bias)
+        self.act_fn = ACT2FN[config.hidden_act]
+
+    def forward(self, x):
+        down_proj = self.down_proj(self.act_fn(self.gate_proj(x)) * self.up_proj(x))
+        return down_proj
+
+
 class HyperCLOVAXDecoderLayer(GradientCheckpointingLayer):
     def __init__(self, config: HyperCLOVAXConfig, layer_idx: int):
         super().__init__()
@@ -380,7 +371,6 @@ class HyperCLOVAXPreTrainedModel(PreTrainedModel):
         "hidden_states": HyperCLOVAXDecoderLayer,
         "attentions": HyperCLOVAXAttention,
     }
-    config_class = HyperCLOVAXConfig
 
 
 @auto_docstring
@@ -467,7 +457,7 @@ class HyperCLOVAXForCausalLM(HyperCLOVAXPreTrainedModel, GenerationMixin):
     _tp_plan = {"lm_head": "colwise_gather_output"}
     _pp_plan = {"lm_head": (["hidden_states"], ["logits"])}
 
-    def __init__(self, config: HyperCLOVAXConfig):
+    def __init__(self, config):
         super().__init__(config)
         self.model = HyperCLOVAXModel(config)
         self.vocab_size = config.vocab_size
@@ -505,7 +495,7 @@ class HyperCLOVAXForCausalLM(HyperCLOVAXPreTrainedModel, GenerationMixin):
         >>> # Generate
         >>> generate_ids = model.generate(inputs.input_ids, max_length=30)
         >>> tokenizer.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0]
-        "Hey, are you conscious? Can you talk to me? Are you okay?" The man was confused and answered, "Yes." Then the woman asked."
+        "Hey, are you conscious? Can you talk to me? Are you okay?" The man was confused and answered, "Yes." Then the woman asked.
         ```"""
         outputs = self.model(
             input_ids=input_ids,
@@ -535,23 +525,4 @@ class HyperCLOVAXForCausalLM(HyperCLOVAXPreTrainedModel, GenerationMixin):
         )
 
 
-class HyperCLOVAXForSequenceClassification(GenericForSequenceClassification, HyperCLOVAXPreTrainedModel):
-    pass
-
-
-class HyperCLOVAXForQuestionAnswering(GenericForQuestionAnswering, HyperCLOVAXPreTrainedModel):
-    base_model_prefix = "transformer"  # For BC, where `transformer` was used instead of `model`
-
-
-class HyperCLOVAXForTokenClassification(GenericForTokenClassification, HyperCLOVAXPreTrainedModel):
-    pass
-
-
-__all__ = [
-    "HyperCLOVAXPreTrainedModel",
-    "HyperCLOVAXModel",
-    "HyperCLOVAXForCausalLM",
-    "HyperCLOVAXForSequenceClassification",
-    "HyperCLOVAXForQuestionAnswering",
-    "HyperCLOVAXForTokenClassification",
-]
+__all__ = ["HyperCLOVAXPreTrainedModel", "HyperCLOVAXModel", "HyperCLOVAXForCausalLM"]
