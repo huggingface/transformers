@@ -1432,21 +1432,6 @@ class Gemma4PreTrainedModel(PreTrainedModel):
     _skip_keys_device_placement = ["past_key_values"]
     input_modalities = ("image", "text", "video", "audio")
 
-    def _flash_attn_can_dispatch(self, flash_attn_version: int, is_init_check: bool = False) -> bool:
-        text_config = self.config.get_text_config() if hasattr(self.config, "get_text_config") else self.config
-        global_head_dim = getattr(text_config, "global_head_dim", None)
-        layer_types = getattr(text_config, "layer_types", None)
-        has_full_attention = layer_types is None or any(layer_type != "sliding_attention" for layer_type in layer_types)
-
-        if global_head_dim is not None and global_head_dim > 256 and has_full_attention:
-            raise ValueError(
-                "Gemma4 cannot use Flash Attention because its full-attention layers use "
-                f"`global_head_dim={global_head_dim}`, but Flash Attention only supports `head_dim <= 256`. "
-                'Please use `attn_implementation="sdpa"` or `"eager"` instead.'
-            )
-
-        return super()._flash_attn_can_dispatch(flash_attn_version, is_init_check=is_init_check)
-
     @torch.no_grad()
     def _init_weights(self, module):
         super()._init_weights(module)

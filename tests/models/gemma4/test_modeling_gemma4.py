@@ -31,7 +31,6 @@ from transformers.testing_utils import (
     cleanup,
     is_flash_attn_2_available,
     require_deterministic_for_xpu,
-    require_flash_attn,
     require_torch,
     require_torch_accelerator,
     require_torch_large_accelerator,
