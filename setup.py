@@ -292,8 +292,10 @@ class DepsTableUpdateCommand(Command):
         pass
 
     def run(self):
-        if SUPPORTED_PYTHON_VERSIONS[0] != PYTHON_MINOR_VERSION:
-            print(f"Table updated only when running 3.{SUPPORTED_PYTHON_VERSIONS[0]}.x")
+        if SUPPORTED_PYTHON_VERSIONS[0] >= PYTHON_MINOR_VERSION:
+            print(
+                f"Table updated only when running 3.{SUPPORTED_PYTHON_VERSIONS[0]}.x, detected version is {sys.version}."
+            )
             return
 
         entries = "\n".join([f'    "{k}": "{v}",' for k, v in deps.items()])
