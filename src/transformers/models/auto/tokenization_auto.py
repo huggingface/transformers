@@ -260,6 +260,7 @@ TOKENIZER_MAPPING_NAMES = OrderedDict[str, str | None](
         ("plbart", "PLBartTokenizer" if is_tokenizers_available() else None),
         ("prophetnet", "ProphetNetTokenizer"),
         ("qdqbert", "BertTokenizer" if is_tokenizers_available() else None),
+        ("qianfan_ocr", "Qwen2Tokenizer" if is_tokenizers_available() else None),
         ("qwen2", "Qwen2Tokenizer" if is_tokenizers_available() else None),
         ("qwen2_5_omni", "Qwen2Tokenizer" if is_tokenizers_available() else None),
         ("qwen2_5_vl", "Qwen2Tokenizer" if is_tokenizers_available() else None),
