@@ -14,7 +14,6 @@
 
 import math
 from collections.abc import Iterable
-from copy import deepcopy
 from functools import partial
 from typing import Any
 
@@ -193,19 +192,10 @@ class BaseImageProcessor(ImageProcessingMixin):
     def __init__(self, **kwargs: Unpack[ImagesKwargs]):
         super().__init__(**kwargs)
 
-        attributes = {}
-        for key in self.valid_kwargs.__annotations__:
-            kwarg = kwargs.pop(key, None)
-            if kwarg is not None:
-                attributes[key] = kwarg
-            else:
-                attributes[key] = deepcopy(getattr(self, key, None))
+        attributes = {key: getattr(self, key) for key in self._valid_kwargs_names}
         attributes = self._standardize_kwargs(**attributes)
         for key, value in attributes.items():
             setattr(self, key, value)
-
-        # get valid kwargs names
-        self._valid_kwargs_names = list(self.valid_kwargs.__annotations__.keys())
 
     def __call__(self, images: ImageInput, *args, **kwargs: Unpack[ImagesKwargs]) -> BatchFeature:
         """Preprocess an image or a batch of images."""

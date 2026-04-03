@@ -408,6 +408,7 @@ class AudioKwargs(TypedDict, total=False):
             - `'np'`: Return NumPy `np.ndarray` objects.
     """
 
+    sample_rate: Annotated[int | None, positive_int()]
     sampling_rate: Annotated[int | None, positive_int()]
     raw_speech: Union["np.ndarray", list[float], list["np.ndarray"], list[list[float]]] | None
     padding: Annotated[bool | str | PaddingStrategy | None, padding_validator()]
@@ -416,6 +417,8 @@ class AudioKwargs(TypedDict, total=False):
     pad_to_multiple_of: Annotated[int | None, positive_int()]
     return_attention_mask: bool | None
     return_tensors: Annotated[str | TensorType | None, tensor_type_validator()]
+    do_normalize: bool | None
+    device: str | None
 
 
 class ProcessingKwargs(TypedDict, total=False):

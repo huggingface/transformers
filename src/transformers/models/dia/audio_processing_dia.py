@@ -1,4 +1,4 @@
-# Copyright 2025 The HuggingFace Inc. team. All rights reserved.
+# Copyright 2025 The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -11,12 +11,15 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from ...utils.deprecation import deprecated_feature_extractor
-from .audio_processing_voxtral_realtime import VoxtralRealtimeAudioProcessor
+
+from ...audio_processing_backends import NumpyAudioBackend
 
 
-VoxtralRealtimeFeatureExtractor = deprecated_feature_extractor(
-    VoxtralRealtimeAudioProcessor, "VoxtralRealtimeFeatureExtractor"
-)
+class DiaAudioProcessor(NumpyAudioBackend):
+    sample_rate = 44100
+    force_mono = True
+    add_channel_dim = True
+    pad_to_multiple_of = 512
 
-__all__ = ["VoxtralRealtimeFeatureExtractor"]
+
+__all__ = ["DiaAudioProcessor"]
