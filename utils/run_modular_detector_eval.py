@@ -39,8 +39,9 @@ import tempfile
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 
-from datasets import load_dataset
 import torch
+from datasets import load_dataset
+
 
 # Allow importing modular_model_detector when run as python utils/run_modular_detector_eval.py
 sys.path.insert(0, str(Path(__file__).resolve().parent))
@@ -49,6 +50,7 @@ from modular_model_detector import (
     CodeSimilarityAnalyzer,
     compute_model_class_match_summary,
 )
+
 
 logging.basicConfig(level=logging.INFO, format="%(message)s")
 logger = logging.getLogger(__name__)
@@ -235,9 +237,7 @@ def main():
     if args.eval_source == "json":
         if not args.eval_dataset.exists():
             logger.error("Eval dataset not found at %s", args.eval_dataset)
-            logger.info(
-                "Generate it or download from https://huggingface.co/datasets/itazap/modular-model-eval"
-            )
+            logger.info("Generate it or download from https://huggingface.co/datasets/itazap/modular-model-eval")
             sys.exit(1)
         eval_entries = load_eval_dataset(args.eval_dataset)
     else:
@@ -396,10 +396,16 @@ def main():
     logger.info("=== Eval summary (models that have bases and a non-empty detector summary) ===")
     logger.info("Total with labels and summary: %d", n)
     if n:
-        logger.info("Top-1 accuracy (first suggested model in bases): %.2f%% (%d/%d)", 100 * correct_top1 / n, correct_top1, n)
+        logger.info(
+            "Top-1 accuracy (first suggested model in bases): %.2f%% (%d/%d)", 100 * correct_top1 / n, correct_top1, n
+        )
         logger.info("Top-3 accuracy (any base in top 3): %.2f%% (%d/%d)", 100 * correct_top3 / n, correct_top3, n)
         logger.info("Top-5 accuracy (any base in top 5): %.2f%% (%d/%d)", 100 * correct_top5 / n, correct_top5, n)
-    logger.info("Total eval entries with bases: %d (skipped/errors: %d)", total_with_bases, total_with_bases - total_with_summary)
+    logger.info(
+        "Total eval entries with bases: %d (skipped/errors: %d)",
+        total_with_bases,
+        total_with_bases - total_with_summary,
+    )
 
     # Per-model table for quick inspection
     logger.info("")
@@ -431,10 +437,13 @@ def main():
     if rows:
         model_width = max(len("model"), max(len(model) for model, _, _ in rows))
         bases_width = max(len("bases"), max(len(bases) for _, bases, _ in rows))
+
         # For pred_width, account for ANSI codes by stripping them first
         def strip_ansi(s: str) -> str:
             import re
+
             return re.sub(r"\033\[[0-9;]*m", "", s)
+
         pred_width = max(len("predicted"), max(len(strip_ansi(pred)) for _, _, pred in rows))
 
         header = f"{'model':<{model_width}}  {'bases':<{bases_width}}  {'predicted':<{pred_width}}"

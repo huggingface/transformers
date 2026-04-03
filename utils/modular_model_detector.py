@@ -112,7 +112,6 @@ import numpy as np
 import torch
 from datasets import Dataset, load_dataset, load_from_disk
 from huggingface_hub import logging as huggingface_hub_logging
-from huggingface_hub import snapshot_download
 from tqdm import tqdm
 
 import transformers
@@ -1049,10 +1048,10 @@ def main():
         "--generate-prompt",
         metavar="OUTPUT_FILE",
         nargs="?",
-           const="__AUTO__",
+        const="__AUTO__",
         default=None,
         help="Generate an AI agent prompt to create the modular file. "
-               "Pass a file path to save it, or omit the value to save to <model>_MODULAR_PROMPT.",
+        "Pass a file path to save it, or omit the value to save to <model>_MODULAR_PROMPT.",
     )
     parser.add_argument(
         "--ignore-models",
@@ -1088,7 +1087,12 @@ def main():
         ignore_models_set = {_normalize(model.strip()) for model in args.ignore_models.split(",") if model.strip()}
 
     results = analyzer.analyze_file(
-        Path(modeling_file), top_k_per_item=12, allow_hub_fallback=True, use_jaccard=args.use_jaccard, dates=dates, ignore_models=ignore_models_set
+        Path(modeling_file),
+        top_k_per_item=12,
+        allow_hub_fallback=True,
+        use_jaccard=args.use_jaccard,
+        dates=dates,
+        ignore_models=ignore_models_set,
     )
     modeling_filename = Path(modeling_file).name
     release_key = modeling_filename.split("modeling_")[-1][:-3]
@@ -1392,4 +1396,3 @@ Matched classes:
 
 if __name__ == "__main__":
     main()
-
