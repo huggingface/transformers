@@ -61,6 +61,7 @@ def embed(
         transformers embed --text "Hello world"
     """
     import numpy as np
+
     from transformers import pipeline
 
     pipe_kwargs = {}
@@ -70,6 +71,7 @@ def embed(
         pipe_kwargs["device"] = device
     if dtype != "auto":
         import torch
+
         pipe_kwargs["dtype"] = getattr(torch, dtype)
     if trust_remote_code:
         pipe_kwargs["trust_remote_code"] = True
@@ -200,16 +202,25 @@ def inspect(
         print()
 
         important_keys = [
-            "hidden_size", "num_hidden_layers", "num_attention_heads", "num_key_value_heads",
-            "intermediate_size", "vocab_size", "max_position_embeddings",
-            "hidden_act", "torch_dtype",
+            "hidden_size",
+            "num_hidden_layers",
+            "num_attention_heads",
+            "num_key_value_heads",
+            "intermediate_size",
+            "vocab_size",
+            "max_position_embeddings",
+            "hidden_act",
+            "torch_dtype",
         ]
         for key in important_keys:
             if key in config_dict:
                 print(f"  {key}: {config_dict[key]}")
 
-        remaining = {k: v for k, v in config_dict.items()
-                     if k not in important_keys and k not in ("architectures", "model_type", "transformers_version")}
+        remaining = {
+            k: v
+            for k, v in config_dict.items()
+            if k not in important_keys and k not in ("architectures", "model_type", "transformers_version")
+        }
         if remaining:
             print(f"\n  ({len(remaining)} additional config keys — use --json for full output)")
 
@@ -218,7 +229,9 @@ def inspect_forward(
     text: Annotated[str, typer.Option(help="Text to run through the model.")],
     model: Annotated[str | None, typer.Option("--model", "-m", help="Model ID or local path.")] = None,
     output: Annotated[str | None, typer.Option(help="Directory to save activations as .npy files.")] = None,
-    layers: Annotated[str | None, typer.Option(help="Comma-separated layer indices to inspect (default: all).")] = None,
+    layers: Annotated[
+        str | None, typer.Option(help="Comma-separated layer indices to inspect (default: all).")
+    ] = None,
     token: Annotated[str | None, typer.Option(help="HF Hub token.")] = None,
     trust_remote_code: Annotated[bool, typer.Option(help="Trust remote code.")] = False,
     output_json: Annotated[bool, typer.Option("--json", help="Output as JSON.")] = False,
@@ -257,6 +270,7 @@ def inspect_forward(
 
     inputs = tokenizer(text, return_tensors="pt")
     import torch
+
     with torch.no_grad():
         outputs = loaded_model(**inputs, output_attentions=True, output_hidden_states=True)
 
@@ -285,6 +299,7 @@ def inspect_forward(
 
     if output is not None:
         from pathlib import Path
+
         out_dir = Path(output)
         out_dir.mkdir(parents=True, exist_ok=True)
         for i, attn in enumerate(attentions):
@@ -300,8 +315,12 @@ def inspect_forward(
 
 def benchmark_quantization(
     model: Annotated[str, typer.Option("--model", "-m", help="Model ID or local path.")],
-    methods: Annotated[str, typer.Option(help="Comma-separated quantization methods to compare: none, bnb-4bit, bnb-8bit.")] = "bnb-4bit,bnb-8bit",
-    prompt: Annotated[str, typer.Option(help="Prompt to use for benchmarking.")] = "The quick brown fox jumps over the lazy dog.",
+    methods: Annotated[
+        str, typer.Option(help="Comma-separated quantization methods to compare: none, bnb-4bit, bnb-8bit.")
+    ] = "bnb-4bit,bnb-8bit",
+    prompt: Annotated[
+        str, typer.Option(help="Prompt to use for benchmarking.")
+    ] = "The quick brown fox jumps over the lazy dog.",
     max_new_tokens: Annotated[int, typer.Option(help="Tokens to generate per run.")] = 50,
     trust_remote_code: Annotated[bool, typer.Option(help="Trust remote code.")] = False,
     token: Annotated[str | None, typer.Option(help="HF Hub token.")] = None,
@@ -343,9 +362,11 @@ def benchmark_quantization(
 
         if method == "bnb-4bit":
             from transformers import BitsAndBytesConfig
+
             model_kwargs["quantization_config"] = BitsAndBytesConfig(load_in_4bit=True)
         elif method == "bnb-8bit":
             from transformers import BitsAndBytesConfig
+
             model_kwargs["quantization_config"] = BitsAndBytesConfig(load_in_8bit=True)
         elif method == "none":
             pass
@@ -365,11 +386,12 @@ def benchmark_quantization(
             output_ids = loaded_model.generate(**inputs, max_new_tokens=max_new_tokens)
             elapsed = time.time() - start
 
-            new_tokens = output_ids[0, inputs["input_ids"].shape[1]:]
+            new_tokens = output_ids[0, inputs["input_ids"].shape[1] :]
             generated_text = tokenizer.decode(new_tokens, skip_special_tokens=True)
             tokens_per_sec = len(new_tokens) / elapsed
 
             import torch
+
             mem_mb = torch.cuda.max_memory_allocated() / 1024 / 1024 if torch.cuda.is_available() else 0
 
             result = {

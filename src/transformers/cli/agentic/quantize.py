@@ -42,7 +42,9 @@ def quantize(
     model: Annotated[str, typer.Option("--model", "-m", help="Model ID or local path to quantize.")],
     method: Annotated[str, typer.Option(help=f"Quantization method: {', '.join(_QUANTIZATION_METHODS)}.")],
     output: Annotated[str, typer.Option(help="Output directory for the quantized model.")],
-    calibration_dataset: Annotated[str | None, typer.Option(help="Calibration dataset for GPTQ/AWQ (Hub name or local path).")] = None,
+    calibration_dataset: Annotated[
+        str | None, typer.Option(help="Calibration dataset for GPTQ/AWQ (Hub name or local path).")
+    ] = None,
     calibration_samples: Annotated[int, typer.Option(help="Number of calibration samples.")] = 128,
     bits: Annotated[int, typer.Option(help="Target bit width (for GPTQ/AWQ).")] = 4,
     group_size: Annotated[int, typer.Option(help="Group size for GPTQ/AWQ.")] = 128,
@@ -86,6 +88,7 @@ def quantize(
     # --- BitsAndBytes ---
     if method == "bnb-4bit":
         from transformers import BitsAndBytesConfig
+
         model_kwargs["quantization_config"] = BitsAndBytesConfig(
             load_in_4bit=True,
             bnb_4bit_compute_dtype="bfloat16",
@@ -99,6 +102,7 @@ def quantize(
 
     elif method == "bnb-8bit":
         from transformers import BitsAndBytesConfig
+
         model_kwargs["quantization_config"] = BitsAndBytesConfig(load_in_8bit=True)
         print(f"Loading {model} in 8-bit (BitsAndBytes)...")
         loaded_model = AutoModelForCausalLM.from_pretrained(model, **model_kwargs)
@@ -115,6 +119,7 @@ def quantize(
             print("No --calibration-dataset specified, defaulting to 'wikitext'.")
 
         from datasets import load_dataset
+
         cal_ds = load_dataset(calibration_dataset, split=f"train[:{calibration_samples}]")
         cal_texts = [ex["text"] for ex in cal_ds if ex.get("text")]
 
