@@ -29,18 +29,24 @@ This object is still importable:
 
 ```python
 >>> from transformers import DetrImageProcessor
->>> print(DetrImageProcessor)
-<class 'DetrImageProcessor'>
+>>> print(DetrImageProcessor)  # doctest: +ELLIPSIS
+<class '...DetrImageProcessor'>
 ```
 
 However, no method can be called on that object:
 
 ```python
+>>> from transformers.utils.import_utils import BACKENDS_MAPPING, DummyObject
+>>> _torchvision_backend = BACKENDS_MAPPING["torchvision"]
+>>> BACKENDS_MAPPING["torchvision"] = (lambda: False, _torchvision_backend[1].lstrip("\n"))
+>>> DetrImageProcessor = DummyObject("DetrImageProcessor", (), {"_backends": ["torchvision"]})
 >>> DetrImageProcessor.from_pretrained()
-ImportError:
-DetrImageProcessor requires the Torchvision library but it was not found in your environment. Check out the instructions on the
+Traceback (most recent call last):
+...
+ImportError: DetrImageProcessor requires the Torchvision library but it was not found in your environment. Check out the instructions on the
 installation page: https://pytorch.org/get-started/locally/ and follow the ones that match your environment.
 Please note that you may need to restart your runtime after installation.
+>>> BACKENDS_MAPPING["torchvision"] = _torchvision_backend
 ```
 
 Let's see how to specify specific object dependencies.
