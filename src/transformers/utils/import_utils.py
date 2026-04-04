@@ -795,6 +795,7 @@ def is_mamba_2_ssm_available() -> bool:
 @lru_cache
 def is_flash_linear_attention_available():
     from . import agnostic
+
     is_available, fla_version = _is_package_available("fla", return_version=True)
     return (
         agnostic.gpu.is_accelerator_available()
