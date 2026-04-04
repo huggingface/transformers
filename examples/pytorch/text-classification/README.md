@@ -14,6 +14,39 @@ See the License for the specific language governing permissions and
 limitations under the License.
 -->
 
+## Simple Sentiment Analysis (Beginner-Friendly)
+
+**NEW:** For those new to transformers, we now have a simplified example perfect for learning!
+
+The script [`run_simple_sentiment.py`](./run_simple_sentiment.py) provides a beginner-friendly introduction to text classification. It fine-tunes a DistilBERT model on the IMDB movie review dataset with clear explanations at each step.
+
+### Quick Start
+```bash
+# Basic usage with full dataset
+python run_simple_sentiment.py
+
+# Quick demo with smaller dataset (faster for testing)
+python run_simple_sentiment.py --max_train_samples 1000 --max_eval_samples 200
+
+# Custom model
+python run_simple_sentiment.py --model_name_or_path bert-base-uncased
+```
+
+### Why use this example?
+- **Educational focus**: Clear comments explaining each step
+- **Quick to run**: Option to use subset of data
+- **Simple structure**: Easier to understand than production scripts
+- **Complete workflow**: Loading data → Training → Evaluation → Predictions
+
+Expected accuracy: ~90% on IMDB test set after 3 epochs.
+
+Run tests:
+```bash
+python test_simple_sentiment.py
+```
+
+---
+
 # Text classification examples
 
 ## GLUE tasks
