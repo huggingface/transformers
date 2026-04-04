@@ -1,0 +1,98 @@
+gpustat==1.1.1
+psutil==6.0.0
+psycopg2==2.9.9
+pandas>=1.5.0
+numpy>=1.21.0
+psutil>=5.8.0
+nvidia-ml-py>=12.0.0
+torch>=2.0.0
+datasets>=2.10.0
+huggingface_hub>=0.16.0
+amdsmi>=7.0.2
+git+https://github.com/huggingface/transformers.git@main # install main or adjust it with vX.X.X for installing version specific transforms
+datasets==1.8.0accelerate >= 0.12.0
+datasets >= 1.8.0
+torch >= 1.3.0
+evaluateaccelerate >= 0.21.0
+sentencepiece != 0.1.92
+protobuf
+torch >= 1.3
+datasets[audio]>=1.14.0
+evaluate
+librosa
+torchaudio
+torch>=1.6
+accelerate >= 0.12.0
+datasets >= 1.8.0
+sentencepiece != 0.1.92
+protobuf
+sacrebleu >= 1.4.12
+py7zr
+torch >= 1.3
+evaluatedatasets >= 2.0.0
+torch >= 1.3
+accelerate
+evaluate
+Pillow
+albumentations >= 1.4.16
+accelerate >= 0.12.0
+datasets >= 1.8.0
+sentencepiece != 0.1.92
+protobuf
+rouge-score
+nltk
+py7zr
+torch >= 1.3
+evaluate
+torch>=1.5.0
+torchvision>=0.6.0
+datasets>=1.8.0accelerate >= 0.12.0
+datasets >= 1.8.0
+sentencepiece != 0.1.92
+scipy
+scikit-learn
+protobuf
+torch >= 1.3
+evaluateaccelerate>=0.12.0
+torch>=1.5.0
+torchvision>=0.6.0
+datasets>=2.14.0
+evaluate
+scikit-learnaccelerate >= 0.12.0
+torch >= 1.3
+datasets >= 2.14.0
+sentencepiece != 0.1.92
+protobuf
+evaluate
+scikit-learn
+accelerate >= 0.12.0
+seqeval
+datasets >= 1.8.0
+torch >= 1.3
+evaluatealbumentations >= 1.4.16
+timm
+datasets>=4.0
+torchmetrics
+pycocotools
+datasets[audio] >= 1.18.0
+torch >= 1.5
+torchaudio
+librosa
+jiwer
+evaluate
+datasets[audio] >= 1.12.0
+torch >= 1.5
+torchaudio
+accelerate >= 0.12.0
+librosatorch>=1.5.0
+torchvision>=0.6.0
+datasets>=1.8.0albumentations >= 1.4.16
+timm
+datasets
+torchmetrics
+pycocotools
+accelerate >= 0.12.0
+sentencepiece != 0.1.92
+protobuf
+torch >= 1.3
+evaluate
