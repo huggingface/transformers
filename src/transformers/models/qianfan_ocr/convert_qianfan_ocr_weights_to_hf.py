@@ -312,12 +312,13 @@ def write_model(model_path, input_base_path, push_to_hub=False):
 {%- if message['content'] is string %}
 {%- set raw_content = message['content'] %}
 {%- else %}
-{%- set raw_content = '' %}
+{%- set content_ns = namespace(raw='') %}
 {%- for item in message['content'] %}
 {%- if item['type'] == 'text' %}
-{%- set raw_content = raw_content + item['text'] %}
+{%- set content_ns.raw = content_ns.raw + item['text'] %}
 {%- endif %}
 {%- endfor %}
+{%- set raw_content = content_ns.raw %}
 {%- endif %}
 {%- set content = raw_content %}
 {%- set reasoning_content = '' %}
@@ -327,12 +328,8 @@ def write_model(model_path, input_base_path, push_to_hub=False):
 {%- set content = raw_content.split('</think>')[-1].lstrip('\\n') %}
 {%- set reasoning_content = raw_content.split('</think>')[0].rstrip('\\n').split('<think>')[-1].lstrip('\\n') %}
 {%- endif %}
-{%- if loop.index0 > ns.last_query_index %}
-{%- if loop.last or (not loop.last and reasoning_content) %}
+{%- if loop.index0 > ns.last_query_index and reasoning_content %}
 {{- '<|im_start|>' + message['role'] + '\\n<think>\\n' + reasoning_content.strip('\\n') + '\\n</think>\\n\\n' + content.lstrip('\\n') }}
-{%- else %}
-{{- '<|im_start|>' + message['role'] + '\\n' + content }}
-{%- endif %}
 {%- else %}
 {{- '<|im_start|>' + message['role'] + '\\n' + content }}
 {%- endif %}
