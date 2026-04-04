@@ -185,6 +185,21 @@ configs_requiring_too_exotic_dependency = {
 }
 
 
+# Checkpoints for some configs are only available on hub PRs or in subfolders.
+# TODO: a better long-term handle for revisions and subfolders.
+CHECKPOINT_REVISIONS = {
+    "NanoChatConfig": "refs/pr/1",
+    "Ernie4_5_VL_MoeConfig": "refs/pr/10",
+    "Ernie4_5_VLMoeConfig": "refs/pr/10",
+    "Phi4MultimodalConfig": "refs/pr/70",
+}
+
+CHECKPOINT_SUBFOLDERS = {
+    "GlmImageTextConfig": "processor",
+    "GlmImageVisionConfig": "processor",
+    "GlmImageVQVAEConfig": "processor",
+}
+
 
 def get_processor_types_from_config_class(config_class, allowed_mappings=None):
     """Return a tuple of processors for `config_class`.
@@ -340,19 +355,8 @@ def build_processor(config_class, processor_class, allow_no_checkpoint=False):
 
     processor = None
     try:
-        revision = None
-        # TODO: a better handle for revisions
-        if config_class.__name__ == 'NanoChatConfig':
-            revision = "refs/pr/1"
-        elif config_class.__name__ in ['Ernie4_5_VL_MoeConfig', 'Ernie4_5_VLMoeConfig']:
-            revision = "refs/pr/10"
-        elif config_class.__name__ in ['Phi4MultimodalConfig']:
-            revision = "refs/pr/70"
-
-        sub_folder = ""
-        if config_class.__name__ in ['GlmImageTextConfig', 'GlmImageVisionConfig', 'GlmImageVQVAEConfig']:
-            sub_folder = "processor"
-
+        revision = CHECKPOINT_REVISIONS.get(config_class.__name__)
+        sub_folder = CHECKPOINT_SUBFOLDERS.get(config_class.__name__, "")
         processor = processor_class.from_pretrained(checkpoint, revision=revision, subfolder=sub_folder)
     except Exception as e:
         logger.error(f"{e.__class__.__name__}: {e}")
@@ -375,10 +379,7 @@ def build_processor(config_class, processor_class, allow_no_checkpoint=False):
         and issubclass(processor_class, (PreTrainedTokenizerBase, AutoTokenizer))
     ):
         try:
-            revision = None
-            # TODO: a better handle for revisions
-            if config_class.__name__ == 'NanoChatConfig':
-                revision = "refs/pr/1"
+            revision = CHECKPOINT_REVISIONS.get(config_class.__name__)
             config = AutoConfig.from_pretrained(checkpoint, revision=revision)
         except Exception as e:
             logger.error(f"{e.__class__.__name__}: {e}")
@@ -529,6 +530,47 @@ def _get_exact_config(_config, config_class):
     return _config
 
 
+def _build_model_tester_and_get_config(tester_class, model_tester_kwargs, model_type):
+    """Instantiate a model tester and retrieve a tiny config from it.
+
+    Falls back to stripping `vocab_size` from kwargs on `TypeError`, to handle testers
+    that don't accept it directly (e.g. multimodal testers using `text_kwargs`).
+    """
+    try:
+        model_tester = tester_class(parent=None, **model_tester_kwargs)
+    except TypeError:
+        # Strip `vocab_size` from top-level kwargs and from any nested dict kwargs
+        # (e.g. `config_kwargs` in `PeVideoTextModelTester`).
+        model_tester_kwargs_new = {k: v for k, v in model_tester_kwargs.items() if k != "vocab_size"}
+        for k, v in model_tester_kwargs_new.items():
+            if isinstance(v, dict):
+                model_tester_kwargs_new[k] = {k1: v1 for k1, v1 in v.items() if k1 != "vocab_size"}
+        model_tester = tester_class(parent=None, **model_tester_kwargs_new)
+
+    if hasattr(model_tester, "get_pipeline_config"):
+        config = model_tester.get_pipeline_config()
+    elif hasattr(model_tester, "prepare_config_and_inputs"):
+        # `PoolFormer` has no `get_config` defined. Furthermore, it's better to use `prepare_config_and_inputs` even if
+        # `get_config` is defined, since there might be some extra changes in `prepare_config_and_inputs`.
+        # We don't really need to call `prepare_config_and_inputs` which might require more dependencies.
+        if hasattr(model_tester, "get_config"):
+            try:
+                config = model_tester.prepare_config_and_inputs()[0]
+            except Exception:
+                config = model_tester.get_config()
+        else:
+            config = model_tester.prepare_config_and_inputs()[0]
+    elif hasattr(model_tester, "get_config"):
+        config = model_tester.get_config()
+    else:
+        raise ValueError(
+            f"Tiny config not created for {model_type} - the model tester {tester_class.__name__} lacks"
+            " a necessary method to create config."
+        )
+
+    return model_tester, config
+
+
 # TODO: Sam2Video will fail here
 def get_tiny_config(config_class, model_class=None, **model_tester_kwargs):
     """Retrieve a tiny configuration from `config_class` using each model's `ModelTester`.
@@ -598,45 +640,7 @@ def get_tiny_config(config_class, model_class=None, **model_tester_kwargs):
             model_tester_kwargs["text_kwargs"] = {"vocab_size": vocab_size}
 
     # `parent` is an instance of `unittest.TestCase`, but we don't need it here.
-
-    # TODO: we need to make sure the kwargs are actually arguments!
-    #   But we are likely NOT to override anymore! Let's do something easy and quick here despite ugly.
-    try:
-        model_tester = model_tester_class(parent=None, **model_tester_kwargs)
-    except TypeError as e:
-
-        # if "vocab_size" in model_tester_kwargs:
-        model_tester_kwargs_new = {k: v for k, v in model_tester_kwargs.items() if k != "vocab_size"}
-
-        # we need to handle unusual arguments, like "config_kwargs" in `PeVideoTextModelTester` (not good practice but understandable)
-        for k, v in model_tester_kwargs_new.items():
-            if isinstance(v, dict):
-                model_tester_kwargs_new[k] = {k1: v1 for k1, v1 in v.items() if k1 != "vocab_size"}
-
-        model_tester = model_tester_class(parent=None, **model_tester_kwargs_new)
-
-    if hasattr(model_tester, "get_pipeline_config"):
-        config = model_tester.get_pipeline_config()
-    elif hasattr(model_tester, "prepare_config_and_inputs"):
-        # `PoolFormer` has no `get_config` defined. Furthermore, it's better to use `prepare_config_and_inputs` even if
-        # `get_config` is defined, since there might be some extra changes in `prepare_config_and_inputs`.
-        # We don't really need to call `prepare_config_and_inputs` which might require more dependencies
-        if hasattr(model_tester, "get_config"):
-            try:
-                config = model_tester.prepare_config_and_inputs()[0]
-            except Exception as e:
-                config = model_tester.get_config()
-        else:
-            config = model_tester.prepare_config_and_inputs()[0]
-
-    elif hasattr(model_tester, "get_config"):
-        config = model_tester.get_config()
-    else:
-        error = (
-            f"Tiny config not created for {model_type} - the model tester {model_tester_class.__name__} lacks"
-            " necessary method to create config."
-        )
-        raise ValueError(error)
+    model_tester, config = _build_model_tester_and_get_config(model_tester_class, model_tester_kwargs, model_type)
 
     config = _get_exact_config(config, config_class)
 
@@ -650,50 +654,7 @@ def get_tiny_config(config_class, model_class=None, **model_tester_kwargs):
             new_model_tester_class = getattr(test_module, model_tester_class_name)
 
 
-            #　TODO: Avoid code duplication
-            # TODO: we need to make sure the kwargs are actually arguments!
-            #   But we are likely NOT to override anymore! Let's do something easy and quick here despite ugly.
-            try:
-                new_model_tester = new_model_tester_class(parent=None, **model_tester_kwargs)
-            except TypeError as e:
-
-                # if "vocab_size" in model_tester_kwargs:
-                model_tester_kwargs_new = {k: v for k, v in model_tester_kwargs.items() if k != "vocab_size"}
-
-                # we need to handle unusual arguments, like "config_kwargs" in `PeVideoTextModelTester` (not good practice but understandable)
-                for k, v in model_tester_kwargs_new.items():
-                    if isinstance(v, dict):
-                        model_tester_kwargs_new[k] = {k1: v1 for k1, v1 in v.items() if k1 != "vocab_size"}
-
-                new_model_tester = new_model_tester_class(parent=None, **model_tester_kwargs_new)
-
-            ### new_model_tester = new_model_tester_class(parent=None, **model_tester_kwargs)
-
-            model_tester = new_model_tester
-
-            if hasattr(model_tester, "get_pipeline_config"):
-                config = model_tester.get_pipeline_config()
-            elif hasattr(model_tester, "prepare_config_and_inputs"):
-                # `PoolFormer` has no `get_config` defined. Furthermore, it's better to use `prepare_config_and_inputs` even if
-                # `get_config` is defined, since there might be some extra changes in `prepare_config_and_inputs`.
-
-                # We don't really need to call `prepare_config_and_inputs` which might require more dependencies
-                if hasattr(model_tester, "get_config"):
-                    try:
-                        config = model_tester.prepare_config_and_inputs()[0]
-                    except Exception as e:
-                        config = model_tester.get_config()
-                else:
-                    config = model_tester.prepare_config_and_inputs()[0]
-
-            elif hasattr(model_tester, "get_config"):
-                config = model_tester.get_config()
-            else:
-                error = (
-                    f"Tiny config not created for {model_type} - the model tester {model_tester_class.__name__} lacks"
-                    " necessary method to create config."
-                )
-                raise ValueError(error)
+            model_tester, config = _build_model_tester_and_get_config(new_model_tester_class, model_tester_kwargs, model_type)
 
 
         # TODO: Disabled as this causes issues due to much larger models
