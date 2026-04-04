@@ -12,15 +12,15 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# from transformers import *
-
 import argparse
 import collections.abc
 import copy
+import importlib
 import inspect
 import json
 import multiprocessing
 import os
+import re
 import shutil
 import tempfile
 import traceback
@@ -41,7 +41,14 @@ from transformers import (
     LayoutLMv3TokenizerFast,
     PreTrainedTokenizerFast,
     PythonBackend,
-    logging, ViTImageProcessor, AutoImageProcessor, AutoFeatureExtractor, AutoVideoProcessor,
+    AutoFeatureExtractor,
+    AutoImageProcessor,
+    AutoVideoProcessor,
+    FastSpeech2ConformerTokenizer,
+    TokenizersBackend,
+    ViTImageProcessor,
+    VibeVoiceAcousticTokenizerFeatureExtractor,
+    logging,
 )
 from transformers.feature_extraction_utils import FeatureExtractionMixin
 from transformers.file_utils import is_torch_available
@@ -188,7 +195,7 @@ def get_processor_types_from_config_class(config_class, allowed_mappings=None):
     # To make a uniform return type
     def _to_tuple(x):
         if isinstance(x, dict):
-           x = tuple(x.values())
+            x = tuple(x.values())
         elif not isinstance(x, collections.abc.Sequence):
             x = (x,)
         else:
@@ -228,7 +235,6 @@ def get_processor_types_from_config_class(config_class, allowed_mappings=None):
     # contains `VibeVoiceTokenizerProcessor` and `VibeVoiceProcessor` also don't exist.
     # The feature extractor auto mapping only has entries for `vibevoice_acoustic_tokenizer` but not for encoder/decoder config.
     if config_class.__name__ in ["VibeVoiceAcousticTokenizerEncoderConfig", "VibeVoiceAcousticTokenizerDecoderConfig"]:
-        from transformers import VibeVoiceAcousticTokenizerFeatureExtractor
         processor_types = (VibeVoiceAcousticTokenizerFeatureExtractor,) + processor_types
 
     return processor_types
@@ -256,8 +262,6 @@ def get_architectures_from_config_class(config_class, arch_mappings, models_to_s
             try:
                 models = mapping[config_class]
             except ValueError as e:
-                import re, importlib, inspect
-
                 # Extract missing model name from error message
                 match = re.search(r'Could not find (\w+)', str(e))
                 missing_model_name = match.group(1) if match else None
@@ -306,7 +310,6 @@ def get_config_class_from_processor_class(processor_class):
         processor_prefix = "Wav2Vec2"
 
     # Find the new configuration class
-    # breakpoint()
     new_config_name = f"{processor_prefix}Config"
     new_config_class = getattr(transformers_module, new_config_name)
 
@@ -324,12 +327,10 @@ def build_processor(config_class, processor_class, allow_no_checkpoint=False):
     `convert_processors`. For each model architecture`, a copy will be created and saved along the built model.
     """
     # Currently, this solely uses the docstring in the source file of `config_class` to find a checkpoint.
-    # breakpoint()
     checkpoint = get_checkpoint_from_config_class(config_class)
 
     # New method that is more robust to get checkpoints!
 
-    # breakpoint()
 
     if checkpoint is None and not processor_class.__name__.startswith("Auto"):
         # try to get the checkpoint from the config class for `processor_class`.
@@ -339,7 +340,6 @@ def build_processor(config_class, processor_class, allow_no_checkpoint=False):
 
     processor = None
     try:
-        # breakpoint()
         revision = None
         # TODO: a better handle for revisions
         if config_class.__name__ == 'NanoChatConfig':
@@ -353,7 +353,6 @@ def build_processor(config_class, processor_class, allow_no_checkpoint=False):
         if config_class.__name__ in ['GlmImageTextConfig', 'GlmImageVisionConfig', 'GlmImageVQVAEConfig']:
             sub_folder = "processor"
 
-        # breakpoint()
         processor = processor_class.from_pretrained(checkpoint, revision=revision, subfolder=sub_folder)
     except Exception as e:
         logger.error(f"{e.__class__.__name__}: {e}")
@@ -376,14 +375,12 @@ def build_processor(config_class, processor_class, allow_no_checkpoint=False):
         and issubclass(processor_class, (PreTrainedTokenizerBase, AutoTokenizer))
     ):
         try:
-            # breakpoint()
             revision = None
             # TODO: a better handle for revisions
             if config_class.__name__ == 'NanoChatConfig':
                 revision = "refs/pr/1"
             config = AutoConfig.from_pretrained(checkpoint, revision=revision)
         except Exception as e:
-            # breakpoint()
             logger.error(f"{e.__class__.__name__}: {e}")
             config = None
         if config is not None:
@@ -398,7 +395,6 @@ def build_processor(config_class, processor_class, allow_no_checkpoint=False):
                 tokenizer_class = config.tokenizer_class
                 new_processor_class = None
                 if tokenizer_class is not None:
-                    # breakpoint()
 
                     # Some hub configs have the wrong values!!! (e.g. it is `CPMAntTokenizer` but should be `CpmAntTokenizer`)
                     new_processor_class = getattr(transformers_module, tokenizer_class, None)
@@ -411,7 +407,6 @@ def build_processor(config_class, processor_class, allow_no_checkpoint=False):
                     new_processor_classes = get_processor_types_from_config_class(
                         config.__class__, allowed_mappings=["tokenizer"]
                     )
-                    # breakpoint()
                     # Used to avoid infinite recursion between a pair of fast/slow tokenizer types
                     names = [
                         x.__name__.replace("Fast", "") for x in [processor_class, new_processor_class] if x is not None
@@ -467,11 +462,9 @@ def build_processor(config_class, processor_class, allow_no_checkpoint=False):
             # has no tokenizer file to load `Wav2Vec2CTCTokenizer`. In this case, we try to build a processor
             # with the configuration class (for example, `Wav2Vec2Config`) corresponding to `processor_class`.
             config_class_from_processor_class = get_config_class_from_processor_class(processor_class)
-            # breakpoint()
             if config_class_from_processor_class != config_class:
                 processor = build_processor(config_class_from_processor_class, processor_class)
 
-    # breakpoint()
     # Try to create an image processor or a feature extractor without any checkpoint
     if (
         processor is None
@@ -484,25 +477,21 @@ def build_processor(config_class, processor_class, allow_no_checkpoint=False):
             logger.error(f"{e.__class__.__name__}: {e}")
 
     # validation
-    # breakpoint()
     # TODO: We might get `TokenizersBackend` in a recursive call (using `AutoTokenizer` class) and might fail if we don't add the condition
     # `isinstance(processor, TokenizersBackend)`!! (e.g. Yoso!)
     if processor is not None:
-        from transformers import TokenizersBackend
         if not (isinstance(processor, processor_class) or isinstance(processor, TokenizersBackend) or processor_class.__name__.startswith("Auto")):
             raise ValueError(
                 f"`processor` (which is of type {processor.__class__.__name__}) should be an instance of"
                 f" {processor_class.__name__} or an Auto class!"
             )
 
-    # breakpoint()
     return processor
 
 
 # recursively get the correct config
 def _get_exact_config(_config, config_class):
 
-    # breakpoint()
     # TODO: we probably needs to make sure they are equal class, not just instance
     if _config.__class__ == config_class:
         return _config
@@ -527,7 +516,6 @@ def _get_exact_config(_config, config_class):
 
                 keys.append(attr)
 
-    # breakpoint()
     for key in keys:
         sub_config = getattr(_config, key) if not isinstance(_config, dict) else _config[key]
         if sub_config is not None:
@@ -551,7 +539,6 @@ def get_tiny_config(config_class, model_class=None, **model_tester_kwargs):
     Returns:
         An instance of `config_class` with tiny hyperparameters
     """
-    # breakpoint()
     model_type = config_class.model_type
 
     # For model type like `data2vec-vision` and `donut-swin`, we can't get the config/model file name directly via
@@ -566,7 +553,6 @@ def get_tiny_config(config_class, model_class=None, **model_tester_kwargs):
     try:
         print("Importing", model_type_to_module_name(model_type))
         module_name = model_type_to_module_name(model_type)
-        # breakpoint()
         if not modeling_name.startswith(module_name):
             raise ValueError(f"{modeling_name} doesn't start with {module_name}!")
         test_file = os.path.join("tests", "models", module_name, f"test_modeling_{modeling_name}.py")
@@ -580,7 +566,6 @@ def get_tiny_config(config_class, model_class=None, **model_tester_kwargs):
             for _tester_classes in models_to_model_testers.values():
                 tester_classes.extend(_tester_classes)
         if len(tester_classes) > 0:
-            # breakpoint()
             # sort with the length of the class names first, then the alphabetical order
             # This is to avoid `T5EncoderOnlyModelTest` is used instead of `T5ModelTest`, which has
             # `is_encoder_decoder=False` and causes some pipeline tests failing (also failures in `Optimum` CI).
@@ -601,7 +586,6 @@ def get_tiny_config(config_class, model_class=None, **model_tester_kwargs):
         raise ValueError(error)
 
     if model_tester_class is None:
-        # breakpoint()
         error = f"Tiny config not created for {model_type} - no model tester is found in the testing module."
         raise ValueError(error)
 
@@ -618,7 +602,6 @@ def get_tiny_config(config_class, model_class=None, **model_tester_kwargs):
     # TODO: we need to make sure the kwargs are actually arguments!
     #   But we are likely NOT to override anymore! Let's do something easy and quick here despite ugly.
     try:
-        # breakpoint()
         model_tester = model_tester_class(parent=None, **model_tester_kwargs)
     except TypeError as e:
 
@@ -630,16 +613,13 @@ def get_tiny_config(config_class, model_class=None, **model_tester_kwargs):
             if isinstance(v, dict):
                 model_tester_kwargs_new[k] = {k1: v1 for k1, v1 in v.items() if k1 != "vocab_size"}
 
-        # breakpoint()
         model_tester = model_tester_class(parent=None, **model_tester_kwargs_new)
 
-    # breakpoint()
     if hasattr(model_tester, "get_pipeline_config"):
         config = model_tester.get_pipeline_config()
     elif hasattr(model_tester, "prepare_config_and_inputs"):
         # `PoolFormer` has no `get_config` defined. Furthermore, it's better to use `prepare_config_and_inputs` even if
         # `get_config` is defined, since there might be some extra changes in `prepare_config_and_inputs`.
-        # breakpoint()
         # We don't really need to call `prepare_config_and_inputs` which might require more dependencies
         if hasattr(model_tester, "get_config"):
             try:
@@ -658,13 +638,11 @@ def get_tiny_config(config_class, model_class=None, **model_tester_kwargs):
         )
         raise ValueError(error)
 
-    # breakpoint()
     config = _get_exact_config(config, config_class)
 
     # TODO: For `pe_audio_video`: the tester only gives `PeAudioVideoEncoderConfig` and can't create model for `PeAudioVideoModel`
     # TODO: This part is necessary for Gemma3Model!
     # TODO: Make this part much better without duplicating the code and less error prone
-    # breakpoint()
     if not isinstance(config, config_class):
         model_tester_class_name = config_class_to_model_tester_map.get(config_class.__name__, None)
         if model_tester_class_name is not None:
@@ -676,7 +654,6 @@ def get_tiny_config(config_class, model_class=None, **model_tester_kwargs):
             # TODO: we need to make sure the kwargs are actually arguments!
             #   But we are likely NOT to override anymore! Let's do something easy and quick here despite ugly.
             try:
-                # breakpoint()
                 new_model_tester = new_model_tester_class(parent=None, **model_tester_kwargs)
             except TypeError as e:
 
@@ -692,7 +669,6 @@ def get_tiny_config(config_class, model_class=None, **model_tester_kwargs):
 
             ### new_model_tester = new_model_tester_class(parent=None, **model_tester_kwargs)
 
-            # breakpoint()
             model_tester = new_model_tester
 
             if hasattr(model_tester, "get_pipeline_config"):
@@ -735,7 +711,6 @@ def get_tiny_config(config_class, model_class=None, **model_tester_kwargs):
         #             config = config_from_class
         #             break
 
-    # breakpoint()
     # make sure this is long enough (some model tester has `20` for this attr.) to pass `text-generation`
     # pipeline tests.
     max_positions = []
@@ -761,7 +736,6 @@ def get_tiny_config(config_class, model_class=None, **model_tester_kwargs):
     if config.__class__.__name__ in ["InstructBlipConfig", "InstructBlipVideoConfig"]:
         config.qformer_config.encoder_hidden_size = config.vision_config.hidden_size
 
-    # breakpoint()
     return config
 
 
@@ -875,7 +849,6 @@ def convert_processors(processors, tiny_config, output_folder, result):
         return fast_tokenizer, slow_tokenizer
 
     tokenizers = []
-    # breakpoint()
     feature_extractors = []
     for processor in processors:
         if isinstance(processor, PreTrainedTokenizerBase):
@@ -903,13 +876,11 @@ def convert_processors(processors, tiny_config, output_folder, result):
                 }:
                     feature_extractors.append(processor.feature_extractor)
 
-    # breakpoint()
     # check the built processors have the unique type
     num_types = len({x.__class__.__name__ for x in feature_extractors})
     # if num_types >= 2:
     #     raise ValueError(f"`feature_extractors` should contain at most 1 type, but it contains {num_types} types!")
     num_types = len({x.__class__.__name__.replace("Fast", "") for x in tokenizers})
-    # breakpoint()
 
     # TODO: we might have {'TokenizersBackend', 'MistralCommonBackend'} now! For example, mixtral!
     # TODO: Question: if we need to have "tokenizer.model" or "special_tokens_map.json"?
@@ -1023,7 +994,6 @@ def convert_processors(processors, tiny_config, output_folder, result):
                 )
                 slow_tokenizer = None
 
-    # breakpoint()
     # update feature extractors using the tiny config
     try:
         feature_extractors = [convert_feature_extractor(p, tiny_config) for p in feature_extractors]
@@ -1035,7 +1005,6 @@ def convert_processors(processors, tiny_config, output_folder, result):
             )
         )
         feature_extractors = []
-    # breakpoint()
 
     if hasattr(tiny_config, "max_position_embeddings") and tiny_config.max_position_embeddings > 0:
         if fast_tokenizer is not None:
@@ -1079,7 +1048,6 @@ def build_model(model_arch, tiny_config, output_dir, keep_model=False):
     Also copy the set of processors to each model (under the same model type) output folder.
     """
 
-    # breakpoint()
     checkpoint_dir = get_checkpoint_dir(output_dir, model_arch)
 
     if not os.path.isdir(checkpoint_dir):
@@ -1096,9 +1064,7 @@ def build_model(model_arch, tiny_config, output_dir, keep_model=False):
         tiny_config.is_encoder_decoder = False
         tiny_config.is_decoder = True
 
-    # breakpoint()
     model = model_arch(config=tiny_config)
-    # breakpoint()
 
     with tempfile.TemporaryDirectory(dir=checkpoint_dir) as tmpdir:
 
@@ -1111,7 +1077,6 @@ def build_model(model_arch, tiny_config, output_dir, keep_model=False):
 
         # can't call from_pretrained from saved one
         if not tiny_config.__class__.__name__.endswith(("TimmBackboneConfig",)):
-            # breakpoint()
             model.from_pretrained(checkpoint_dir_tmp)
 
     return model
@@ -1131,9 +1096,6 @@ def fill_result_with_error(result, error, trace, models_to_create):
     #   if we can't get any processor, we fill the report with the class name
     #   otherwise, we could not build with these obtained processors, as we get the error
     #   `error = f"No processor is returned by `convert_processors` for {config_class.__name__}."`
-    if len(result["processor"]) == 0:
-        # TODO: this dosen't make any sense???
-        result["processor"] = {p.__class__.__name__: p.__class__.__name__ for p in result["processor"].values()}
 
 
 def upload_model(model_dir, organization, token):
@@ -1430,7 +1392,6 @@ def build(config_class, models_to_create, output_dir, keep_model=False):
 
     # AutoTokenizer can't load from hub repo ...
     if config_class.__name__ in ["FastSpeech2ConformerWithHifiGanConfig"]:
-        from transformers import FastSpeech2ConformerTokenizer
         processor_classes = (FastSpeech2ConformerTokenizer,) + processor_classes
 
     if len(processor_classes) == 0:
@@ -1444,20 +1405,16 @@ def build(config_class, models_to_create, output_dir, keep_model=False):
 
     traces = []
     errors = []
-    # breakpoint()
 
     # processor_classes = [x for x in processor_classes if x.__name__ == "AutoTokenizer"]
 
     for processor_class in processor_classes:
         try:
-            # breakpoint()
             processor = build_processor(config_class, processor_class, allow_no_checkpoint=True)
             if processor is not None:
                 if type(processor) not in result["processor"]:
-                    # breakpoint()
                     result["processor"][type(processor)] = processor
         except Exception:
-            # breakpoint()
             error = f"Failed to build processor for {processor_class.__name__}."
             trace = traceback.format_exc()
             errors.append(error)
@@ -1478,7 +1435,6 @@ def build(config_class, models_to_create, output_dir, keep_model=False):
     if len(result["processor"]) == 0:
         # TODO: Some models use NO processor (and no processor files exist on their hub repos.)
         if config_class.__name__ not in ["PatchTSMixerConfig", "PatchTSTConfig", "TimesFmConfig", "TimmBackboneConfig", "TimmWrapperConfig", "VitDetConfig", "AutoformerConfig", "TimesFm2_5Config", "PI0Config", "PPLCNetV3Config"]:
-            # breakpoint()
             error = f"No processor could be built for {config_class.__name__}."
             fill_result_with_error(result, error, None, models_to_create)
             logger.error(result["error"][0])
@@ -1486,12 +1442,9 @@ def build(config_class, models_to_create, output_dir, keep_model=False):
             result["processor"] = {p: p for p in processor_names}
             return result
 
-    # breakpoint()
     try:
         tiny_config = get_tiny_config(config_class)
-        # breakpoint()
     except Exception as e:
-        # breakpoint()
         error = f"Failed to get tiny config for {config_class.__name__}: {e}"
         trace = traceback.format_exc()
         fill_result_with_error(result, error, trace, models_to_create)
@@ -1503,9 +1456,7 @@ def build(config_class, models_to_create, output_dir, keep_model=False):
     # Convert the processors (reduce vocabulary size, smaller image size, etc.)
     processors = list(result["processor"].values())
     processor_output_folder = os.path.join(output_dir, "processors")
-    # breakpoint()
     try:
-        # breakpoint()
         processors = convert_processors(processors, tiny_config, processor_output_folder, result)
     except Exception:
         error = "Failed to convert the processors."
@@ -1521,7 +1472,6 @@ def build(config_class, models_to_create, output_dir, keep_model=False):
 
 
     if len(processors) == 0:
-        # breakpoint()
         # TODO: Some models use NO processor (and no processor files exist on their hub repos.)
         if config_class.__name__ not in ["PatchTSMixerConfig", "PatchTSTConfig", "TimesFmConfig", "TimmBackboneConfig", "TimmWrapperConfig", "VitDetConfig", "AutoformerConfig", "TimesFm2_5Config", "PI0Config", "PPLCNetV3Config"]:
             error = f"No processor is returned by `convert_processors` for {config_class.__name__}."
@@ -1533,7 +1483,6 @@ def build(config_class, models_to_create, output_dir, keep_model=False):
 
     try:
         config_overrides = get_config_overrides(config_class, processors)
-        # breakpoint()
     except Exception as e:
         error = f"Failure occurs while calling `get_config_overrides`: {e}"
         trace = traceback.format_exc()
@@ -1568,23 +1517,19 @@ def build(config_class, models_to_create, output_dir, keep_model=False):
     if result["warnings"]:
         logger.warning(result["warnings"][0][0])
 
-    # breakpoint()
     # update `result["processor"]`
     result["processor"] = {type(p).__name__: p.__class__.__name__ for p in processors}
 
-    # breakpoint()
     for pytorch_arch in models_to_create["pytorch"]:
         result["pytorch"][pytorch_arch.__name__] = {}
         error = None
         try:
-            # breakpoint()
 
             used_tiny_config = tiny_config
 
             # TODO: Some model_type will include multiple `pytorch_arch` but they might actually have different `self.config_class`
             #   (e.g. Qwen3_5Config from qwen3_5, and `Qwen3_5ForCausalLM`
             #   Let's first try to get the component maybe
-            # breakpoint()
             if pytorch_arch.config_class != config_class:
                 used_tiny_config = _get_exact_config(tiny_config, pytorch_arch.config_class)
 
@@ -1595,7 +1540,6 @@ def build(config_class, models_to_create, output_dir, keep_model=False):
                 del result["pytorch"][pytorch_arch.__name__]
                 continue
 
-            # breakpoint()
             model = build_model(pytorch_arch, used_tiny_config, output_dir=output_dir, keep_model=keep_model)
         except Exception as e:
 
@@ -1637,12 +1581,10 @@ def build_tiny_model_summary(results, organization=None, token=None):
       ..
     }
     """
-    # breakpoint()
     tiny_model_summary = {}
     for config_name in results:
         try:
             processors = [key for key, value in results[config_name]["processor"].items()]
-            # breakpoint()
             # TODO: we update `fill_result_with_error`: at the end, with the cond `if len(result["processor"]) == 0`
             #   But sometimes, in `def build`, we can't reach `result["processor"] = {type(p).__name__: p.__class__.__name__ for p in processors}`
             #   (i.e. some other errors occur, like `Sam2VideoConfig`), and we need convert `results[config_name]["processor"]` to avid failure!
@@ -1655,7 +1597,6 @@ def build_tiny_model_summary(results, organization=None, token=None):
             print(config_name)
             print(results[config_name])
             print("******************************")
-        # breakpoint()
         tokenizer_classes = sorted([x for x in processors if x.endswith(("TokenizerFast", "Tokenizer", "TokenizersBackend'"))])
         processor_classes = sorted([x for x in processors if x not in tokenizer_classes])
 
