@@ -32,7 +32,7 @@ from ...modeling_outputs import BaseModelOutputWithPast
 from ...modeling_rope_utils import dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import TransformersKwargs, auto_docstring, logging
+from ...utils import TransformersKwargs, agnostic, auto_docstring, logging
 from ...utils.generic import maybe_autocast, merge_with_config_defaults
 from ...utils.import_utils import is_flash_linear_attention_available
 from ...utils.output_capturing import capture_outputs
@@ -513,7 +513,7 @@ class OlmoHybridGatedDeltaNet(nn.Module):
             else FusedRMSNormGated(
                 self.head_v_dim,
                 eps=1e-5,
-                device=torch.cuda.current_device(),
+                device=agnostic.gpu.current_device(),
                 dtype=config.dtype if config.dtype is not None else torch.get_default_dtype(),
             )
         )

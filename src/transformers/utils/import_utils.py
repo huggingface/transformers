@@ -38,7 +38,7 @@ from typing import Any
 import packaging.version
 from packaging import version
 
-from . import logging
+from . import agnostic, logging
 
 
 logger = logging.get_logger(__name__)  # pylint: disable=invalid-name
@@ -795,7 +795,11 @@ def is_mamba_2_ssm_available() -> bool:
 @lru_cache
 def is_flash_linear_attention_available():
     is_available, fla_version = _is_package_available("fla", return_version=True)
-    return is_torch_cuda_available() and is_available and version.parse(fla_version) >= version.parse("0.2.2")
+    return (
+        agnostic.gpu.is_accelerator_available()
+        and is_available
+        and version.parse(fla_version) >= version.parse("0.2.2")
+    )
 
 
 @lru_cache
