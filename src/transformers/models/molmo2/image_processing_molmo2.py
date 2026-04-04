@@ -18,7 +18,7 @@ import numpy as np
 
 from ...feature_extraction_utils import BatchFeature
 from ...image_processing_utils import BaseImageProcessor, get_size_dict
-from ...image_transforms import convert_to_rgb
+from ...image_transforms import convert_to_rgb, normalize
 from ...image_utils import (
     IMAGENET_STANDARD_MEAN,
     IMAGENET_STANDARD_STD,
@@ -36,16 +36,6 @@ import torchvision.transforms
 
 
 logger = logging.get_logger(__name__)
-
-
-def normalize_image(
-    image: np.ndarray,
-    image_mean: list[float],
-    image_std: list[float],
-) -> np.ndarray:
-    image -= np.array(image_mean, dtype=np.float32)[None, None, :]
-    image /= np.array(image_std, dtype=np.float32)[None, None, :]
-    return image
 
 
 def resize_image(
@@ -128,7 +118,7 @@ def build_resized_image(
         base_image_input_size,
         resample,
     )
-    resized = normalize_image(resized, image_mean, image_std)
+    resized = normalize(resized, image_mean, image_std)
     if len(resized.shape) == 3:
         resized = np.expand_dims(resized, 0)
     crop_patch_w = base_image_input_size[1] // image_patch_size
@@ -181,7 +171,7 @@ def build_overlapping_crops(
         [tiling[0] * crop_window_size + total_margin_pixels, tiling[1] * crop_window_size + total_margin_pixels],
         resample,
     )
-    src = normalize_image(src, image_mean, image_std)
+    src = normalize(src, image_mean, image_std)
 
     # Now we have to split the image into crops, and track what patches came from
     # where in `patch_idx_arr`
