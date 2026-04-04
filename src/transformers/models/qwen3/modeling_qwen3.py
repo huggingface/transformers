@@ -23,6 +23,7 @@ from typing import Optional
 
 import torch
 from torch import nn
+from torch.distributed.tensor import DTensor, Replicate
 
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
@@ -176,6 +177,10 @@ def apply_rotary_pos_emb(q, k, cos, sin, unsqueeze_dim=1):
     """
     cos = cos.unsqueeze(unsqueeze_dim)
     sin = sin.unsqueeze(unsqueeze_dim)
+    if isinstance(q, DTensor):
+        replicate = (Replicate(),) * q.device_mesh.ndim
+        cos = DTensor.from_local(cos, q.device_mesh, replicate, run_check=False)
+        sin = DTensor.from_local(sin, q.device_mesh, replicate, run_check=False)
     q_embed = (q * cos) + (rotate_half(q) * sin)
     k_embed = (k * cos) + (rotate_half(k) * sin)
     return q_embed, k_embed
@@ -441,7 +446,6 @@ class Qwen3Model(Qwen3PreTrainedModel):
 @auto_docstring
 class Qwen3ForCausalLM(Qwen3PreTrainedModel, GenerationMixin):
     _tied_weights_keys = {"lm_head.weight": "model.embed_tokens.weight"}
-    _tp_plan = {"lm_head": "colwise_gather_output"}
     _pp_plan = {"lm_head": (["hidden_states"], ["logits"])}
 
     def __init__(self, config):
@@ -452,7 +456,6 @@ class Qwen3ForCausalLM(Qwen3PreTrainedModel, GenerationMixin):
 
         # Initialize weights and apply final processing
         self.post_init()
-
     @can_return_tuple
     @auto_docstring
     def forward(

@@ -51,7 +51,7 @@ from .core_model_loading import (
     revert_weight_conversion,
 )
 from .distributed import DistributedConfig
-from .distributed.utils import is_fsdp_enabled
+from .distributed.utils import init_device_mesh, is_fsdp_enabled
 from .dynamic_module_utils import custom_object_save
 from .generation import CompileConfig, GenerationConfig
 from .integrations import PeftAdapterMixin, deepspeed_config, hub_kernels, is_deepspeed_zero3_enabled
@@ -79,7 +79,6 @@ from .integrations.tensor_parallel import (
     _get_parameter_tp_plan,
     apply_tensor_parallel,
     gather_state_dict_for_save,
-    init_device_mesh,
     shard_and_distribute_module,
     verify_tp_plan,
 )
@@ -4143,8 +4142,13 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
 
         if distributed_config is not None:
             model.config.distributed_config = distributed_config
-            model = apply_tensor_parallel(model, device_mesh["tp"], distributed_config.tp_plan)
-            model = apply_fully_shard_data_parallel(model, device_mesh["fsdp"], distributed_config.fsdp_plan)
+            model.device_mesh = device_mesh
+            sub_mesh = lambda name: device_mesh[name] if device_mesh.ndim > 1 else device_mesh
+            mesh_dim_names = device_mesh.mesh_dim_names or ()
+            if "tp" in mesh_dim_names:
+                model = apply_tensor_parallel(model, sub_mesh("tp"), distributed_config.tp_plan)
+            if "fsdp" in mesh_dim_names:
+                model = apply_fully_shard_data_parallel(model, sub_mesh("fsdp"), distributed_config.fsdp_plan)
         else:
             # Accelerate path: auto device mapping
             if device_map is not None:

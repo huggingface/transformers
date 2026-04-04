@@ -33,21 +33,17 @@ class DistributedConfig:
             FSDP wrapping plan. Use `"auto"` to wrap each transformer layer + root.
     """
 
-    tp_size: int | None = None
+    tp_size: int = 1
     tp_plan: str | dict[str, str] | None = None
-    fsdp_size: int | None = None
+    enable_sequence_parallel: bool = False
+    fsdp_size: int = 1
     fsdp_plan: str | dict | None = None
 
     def __post_init__(self):
-        # If one dimension is specified but not the other, default the missing size to 1
-        if self.fsdp_size is not None and self.tp_size is None:
-            self.tp_size = 1
-        if self.tp_size is not None and self.fsdp_size is None:
-            self.fsdp_size = 1
         # If a size is set without a plan, default the plan to "auto"
-        if self.tp_size is not None and self.tp_plan is None:
+        if self.tp_size > 1 and self.tp_plan is None:
             self.tp_plan = "auto"
-        if self.fsdp_size is not None and self.fsdp_plan is None:
+        if self.fsdp_size > 1 and self.fsdp_plan is None:
             self.fsdp_plan = "auto"
 
     @classmethod
