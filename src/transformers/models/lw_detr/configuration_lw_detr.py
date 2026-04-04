@@ -83,6 +83,9 @@ class LwDetrViTConfig(BackboneConfigMixin, PreTrainedConfig):
 
     def __post_init__(self, **kwargs):
         self.num_windows_side = int(math.sqrt(self.num_windows))
+        # ViTAttention expects these; map from dropout_prob
+        self.attention_probs_dropout_prob = self.dropout_prob
+        self.hidden_dropout_prob = self.dropout_prob
         self.stage_names = ["stem"] + [f"stage{idx}" for idx in range(1, self.num_hidden_layers + 1)]
         self.set_output_features_output_indices(
             out_indices=kwargs.pop("out_indices", None), out_features=kwargs.pop("out_features", None)

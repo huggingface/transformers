@@ -47,37 +47,6 @@ class BaseModelOutputWithCLSToken(ModelOutput):
     hidden_states: tuple[torch.FloatTensor, ...] | None = None
 
 
-# Copied from transformers.models.beit.modeling_beit.drop_path
-def drop_path(input: torch.Tensor, drop_prob: float = 0.0, training: bool = False) -> torch.Tensor:
-    """
-    Drop paths (Stochastic Depth) per sample (when applied in main path of residual blocks).
-
-    """
-    if drop_prob == 0.0 or not training:
-        return input
-    keep_prob = 1 - drop_prob
-    shape = (input.shape[0],) + (1,) * (input.ndim - 1)  # work with diff dim tensors, not just 2D ConvNets
-    random_tensor = keep_prob + torch.rand(shape, dtype=input.dtype, device=input.device)
-    random_tensor.floor_()  # binarize
-    output = input.div(keep_prob) * random_tensor
-    return output
-
-
-# Copied from transformers.models.beit.modeling_beit.BeitDropPath
-class CvtDropPath(nn.Module):
-    """Drop paths (Stochastic Depth) per sample (when applied in main path of residual blocks)."""
-
-    def __init__(self, drop_prob: float | None = None) -> None:
-        super().__init__()
-        self.drop_prob = drop_prob
-
-    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        return drop_path(hidden_states, self.drop_prob, self.training)
-
-    def extra_repr(self) -> str:
-        return f"p={self.drop_prob}"
-
-
 class CvtEmbeddings(nn.Module):
     """
     Construct the CvT embeddings.
@@ -324,6 +293,31 @@ class CvtOutput(nn.Module):
         return hidden_state
 
 
+# Copied from transformers.models.swin.modular_swin.SwinDropPath with SwinDropPath->CvtDropPath
+class CvtDropPath(nn.Module):
+    """Stochastic depth (DropPath) per sample, for residual blocks.
+
+    Identity when ``drop_prob`` is 0 or outside training. See `Deep Networks with Stochastic Depth
+    <https://arxiv.org/abs/1603.09382>`_.
+    """
+
+    def __init__(self, drop_prob: float = 0.0) -> None:
+        super().__init__()
+        self.drop_prob = drop_prob
+
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        if self.drop_prob == 0.0 or not self.training:
+            return hidden_states
+        keep_prob = 1 - self.drop_prob
+        shape = (hidden_states.shape[0],) + (1,) * (hidden_states.ndim - 1)
+        random_tensor = torch.rand(shape, dtype=hidden_states.dtype, device=hidden_states.device)
+        random_tensor = torch.floor(random_tensor + keep_prob)
+        return hidden_states.div(keep_prob) * random_tensor
+
+    def extra_repr(self) -> str:
+        return f"p={self.drop_prob}"
+
+
 class CvtLayer(nn.Module):
     """
     CvtLayer composed by attention layers, normalization and multi-layer perceptrons (mlps).
@@ -364,7 +358,7 @@ class CvtLayer(nn.Module):
 
         self.intermediate = CvtIntermediate(embed_dim, mlp_ratio)
         self.output = CvtOutput(embed_dim, mlp_ratio, drop_rate)
-        self.drop_path = CvtDropPath(drop_prob=drop_path_rate) if drop_path_rate > 0.0 else nn.Identity()
+        self.drop_path = CvtDropPath(drop_path_rate) if drop_path_rate > 0.0 else nn.Identity()
         self.layernorm_before = nn.LayerNorm(embed_dim)
         self.layernorm_after = nn.LayerNorm(embed_dim)
 

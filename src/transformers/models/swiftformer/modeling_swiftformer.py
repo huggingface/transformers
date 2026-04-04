@@ -57,36 +57,6 @@ class SwiftFormerPatchEmbedding(nn.Module):
         return self.patch_embedding(x)
 
 
-# Copied from transformers.models.beit.modeling_beit.drop_path
-def drop_path(input: torch.Tensor, drop_prob: float = 0.0, training: bool = False) -> torch.Tensor:
-    """
-    Drop paths (Stochastic Depth) per sample (when applied in main path of residual blocks).
-
-    """
-    if drop_prob == 0.0 or not training:
-        return input
-    keep_prob = 1 - drop_prob
-    shape = (input.shape[0],) + (1,) * (input.ndim - 1)  # work with diff dim tensors, not just 2D ConvNets
-    random_tensor = keep_prob + torch.rand(shape, dtype=input.dtype, device=input.device)
-    random_tensor.floor_()  # binarize
-    output = input.div(keep_prob) * random_tensor
-    return output
-
-
-class SwiftFormerDropPath(nn.Module):
-    """Drop paths (Stochastic Depth) per sample (when applied in main path of residual blocks)."""
-
-    def __init__(self, config: SwiftFormerConfig) -> None:
-        super().__init__()
-        self.drop_prob = config.drop_path_rate
-
-    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        return drop_path(hidden_states, self.drop_prob, self.training)
-
-    def extra_repr(self) -> str:
-        return f"p={self.drop_prob}"
-
-
 class SwiftFormerEmbeddings(nn.Module):
     """
     Embeddings layer consisting of a single 2D convolutional and batch normalization layer.
@@ -252,6 +222,31 @@ class SwiftFormerLocalRepresentation(nn.Module):
         return x
 
 
+# Copied from transformers.models.swin.modular_swin.SwinDropPath with SwinDropPath->SwiftFormerDropPath
+class SwiftFormerDropPath(nn.Module):
+    """Stochastic depth (DropPath) per sample, for residual blocks.
+
+    Identity when ``drop_prob`` is 0 or outside training. See `Deep Networks with Stochastic Depth
+    <https://arxiv.org/abs/1603.09382>`_.
+    """
+
+    def __init__(self, drop_prob: float = 0.0) -> None:
+        super().__init__()
+        self.drop_prob = drop_prob
+
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        if self.drop_prob == 0.0 or not self.training:
+            return hidden_states
+        keep_prob = 1 - self.drop_prob
+        shape = (hidden_states.shape[0],) + (1,) * (hidden_states.ndim - 1)
+        random_tensor = torch.rand(shape, dtype=hidden_states.dtype, device=hidden_states.device)
+        random_tensor = torch.floor(random_tensor + keep_prob)
+        return hidden_states.div(keep_prob) * random_tensor
+
+    def extra_repr(self) -> str:
+        return f"p={self.drop_prob}"
+
+
 class SwiftFormerEncoderBlock(nn.Module):
     """
     SwiftFormer Encoder Block for SwiftFormer. It consists of (1) Local representation module, (2)
@@ -271,7 +266,7 @@ class SwiftFormerEncoderBlock(nn.Module):
         self.local_representation = SwiftFormerLocalRepresentation(config, dim=dim)
         self.attn = SwiftFormerEfficientAdditiveAttention(config, dim=dim)
         self.linear = SwiftFormerMlp(config, in_features=dim)
-        self.drop_path = SwiftFormerDropPath(config) if drop_path > 0.0 else nn.Identity()
+        self.drop_path = SwiftFormerDropPath(drop_path) if drop_path > 0.0 else nn.Identity()
         self.use_layer_scale = use_layer_scale
         if use_layer_scale:
             self.layer_scale_1 = nn.Parameter(

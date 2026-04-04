@@ -15,11 +15,14 @@
 
 import unittest
 from functools import cached_property
+from unittest.mock import patch
 
 import pytest
 from datasets import load_dataset
 
 from transformers import BeitConfig
+from transformers.conversion_mapping import get_model_conversion_mapping as _base_get_model_conversion_mapping
+from transformers.core_model_loading import WeightRenaming
 from transformers.testing_utils import (
     require_torch,
     require_torch_multi_gpu,
@@ -32,6 +35,7 @@ from transformers.utils import (
     is_vision_available,
 )
 
+from ... import test_modeling_common
 from ...test_backbone_common import BackboneTesterMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
@@ -84,6 +88,8 @@ class BeitModelTester:
         out_features=["stage1", "stage2", "stage3", "stage4"],
         attn_implementation="eager",
         mask_ratio=0.5,
+        use_relative_position_bias=False,
+        use_shared_relative_position_bias=False,
     ):
         self.parent = parent
         self.vocab_size = vocab_size
@@ -113,6 +119,8 @@ class BeitModelTester:
         self.mask_length = self.seq_length - 1
         self.num_masks = int(mask_ratio * self.seq_length)
         self.attn_implementation = attn_implementation
+        self.use_relative_position_bias = use_relative_position_bias
+        self.use_shared_relative_position_bias = use_shared_relative_position_bias
 
     def prepare_config_and_inputs(self):
         pixel_values = floats_tensor([self.batch_size, self.num_channels, self.image_size, self.image_size])
@@ -145,6 +153,8 @@ class BeitModelTester:
             out_indices=self.out_indices,
             out_features=self.out_features,
             attn_implementation=self.attn_implementation,
+            use_relative_position_bias=self.use_relative_position_bias,
+            use_shared_relative_position_bias=self.use_shared_relative_position_bias,
         )
 
     def create_and_check_model(self, config, pixel_values, labels, pixel_labels):
@@ -281,6 +291,33 @@ class BeitModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     @unittest.skip(reason="BEiT does not support feedforward chunking yet")
     def test_feed_forward_chunking(self):
         pass
+
+    def test_reverse_loading_mapping(self, check_keys_were_modified=True):
+        # relative_position_bias keys must exist for all source patterns to match; enable both variants.
+        # FPN renames (`fpn1.`, `fpn2.`) are in the shared `beit` mapping but only apply to models that
+        # actually have FPN weights — strip them for the classes that don't.
+        _FPN_SOURCE = {"fpn1.", "fpn2."}
+
+        def _mapping(model, key_mapping=None, hf_quantizer=None, add_legacy=True):
+            conversions = _base_get_model_conversion_mapping(
+                model, key_mapping=key_mapping, hf_quantizer=hf_quantizer, add_legacy=add_legacy
+            )
+            if not any("fpn.fpn1." in k for k in model.state_dict()):
+                conversions = [
+                    c
+                    for c in conversions
+                    if not (isinstance(c, WeightRenaming) and set(c.source_patterns) & _FPN_SOURCE)
+                ]
+            return conversions
+
+        self.model_tester.use_relative_position_bias = True
+        self.model_tester.use_shared_relative_position_bias = True
+        try:
+            with patch.object(test_modeling_common, "get_model_conversion_mapping", _mapping):
+                super().test_reverse_loading_mapping(check_keys_were_modified)
+        finally:
+            self.model_tester.use_relative_position_bias = False
+            self.model_tester.use_shared_relative_position_bias = False
 
     @unittest.skip(reason="BEiT can't compile dynamic")
     @pytest.mark.torch_compile_test
