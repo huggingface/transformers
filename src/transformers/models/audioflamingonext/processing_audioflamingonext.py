@@ -76,7 +76,7 @@ class AudioFlamingoNextProcessor(ProcessorMixin):
             Special token used to represent the beginning of audio.
         audio_eos_token (`Optional[str]`, *optional*, defaults to `"<|sound_eos|>"`):
             Special token used to represent the end of audio.
-        max_audio_len (`int`, *optional*, defaults to 1200):
+        max_audio_len (`int`, *optional*, defaults to 1800):
             Maximum length of audio sequences in seconds. Audio longer than this will be truncated.
     """
 
@@ -88,7 +88,7 @@ class AudioFlamingoNextProcessor(ProcessorMixin):
         audio_token="<sound>",
         audio_bos_token="<|sound_bos|>",
         audio_eos_token="<|sound_eos|>",
-        max_audio_len=1200,
+        max_audio_len=1800,
     ):
         self.audio_token = audio_token
         self.audio_token_id = tokenizer.convert_tokens_to_ids(audio_token)

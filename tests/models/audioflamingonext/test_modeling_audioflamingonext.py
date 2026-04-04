@@ -26,6 +26,13 @@ class AudioFlamingoNextSmokeTest(unittest.TestCase):
         self.assertEqual(AudioFlamingoNextProcessor.__name__, "AudioFlamingoNextProcessor")
         self.assertEqual(AudioFlamingoNextConfig.model_type, "audioflamingonext")
 
+    def test_default_long_audio_config(self):
+        config = AudioFlamingoNextConfig()
+        self.assertEqual(config.rope_parameters["rope_theta"], 1800)
+        self.assertEqual(config.rope_parameters["partial_rotary_factor"], 0.2)
+        self.assertEqual(config.max_position_embeddings, 1800)
+        self.assertEqual(config.head_dim, config.audio_config.hidden_size)
+
     def test_auto_model_from_config(self):
         config = AudioFlamingoNextConfig(
             audio_config={

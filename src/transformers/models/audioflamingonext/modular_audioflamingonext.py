@@ -15,9 +15,7 @@
 
 from huggingface_hub.dataclasses import strict
 
-from ...configuration_utils import PreTrainedConfig
 from ...utils import auto_docstring
-from ..auto import CONFIG_MAPPING, AutoConfig
 from ..musicflamingo.configuration_musicflamingo import MusicFlamingoConfig
 from ..musicflamingo.modeling_musicflamingo import MusicFlamingoForConditionalGeneration, MusicFlamingoPreTrainedModel
 from ..musicflamingo.processing_musicflamingo import MusicFlamingoProcessor, MusicFlamingoProcessorKwargs
@@ -27,35 +25,65 @@ from ..musicflamingo.processing_musicflamingo import MusicFlamingoProcessor, Mus
 @strict(accept_kwargs=True)
 class AudioFlamingoNextConfig(MusicFlamingoConfig):
     model_type = "audioflamingonext"
-    sub_configs = {"audio_config": AutoConfig, "text_config": AutoConfig}
-    audio_config: dict | PreTrainedConfig | None = None
-    text_config: dict | PreTrainedConfig | None = None
 
     def __post_init__(self, **kwargs):
         if self.rope_parameters is None:
-            self.rope_parameters = {"rope_type": "default", "rope_theta": 1200}
-        self.max_position_embeddings = self.rope_parameters["rope_theta"]
-
+            self.rope_parameters = {"rope_type": "default", "rope_theta": 1800, "partial_rotary_factor": 0.2}
         if isinstance(self.audio_config, dict):
             self.audio_config["model_type"] = self.audio_config.get("model_type", "audioflamingo3_encoder")
-            self.audio_config = CONFIG_MAPPING[self.audio_config["model_type"]](**self.audio_config)
         elif self.audio_config is None:
-            self.audio_config = CONFIG_MAPPING["audioflamingo3_encoder"]()
-
-        if isinstance(self.text_config, dict):
-            self.text_config["model_type"] = self.text_config.get("model_type", "qwen2")
-            self.text_config = CONFIG_MAPPING[self.text_config["model_type"]](**self.text_config)
-        elif self.text_config is None:
-            self.text_config = CONFIG_MAPPING["qwen2"]()
-
-        PreTrainedConfig.__post_init__(self, **kwargs)
+            self.audio_config = {"model_type": "audioflamingo3_encoder"}
+        super().__post_init__(**kwargs)
 
 
 class AudioFlamingoNextProcessorKwargs(MusicFlamingoProcessorKwargs): ...
 
 
 class AudioFlamingoNextProcessor(MusicFlamingoProcessor):
-    pass
+    r"""
+    Constructs an AudioFlamingoNext processor which wraps an AudioFlamingoNext feature extractor and an AudioFlamingoNext
+    tokenizer into a single processor.
+
+    [`AudioFlamingoNextProcessor`] offers all the functionalities of [`WhisperFeatureExtractor`] and
+    [`Qwen2TokenizerFast`]. See the [`~AudioFlamingoNextProcessor.__call__`] for more information.
+
+    Args:
+        feature_extractor ([`WhisperFeatureExtractor`]):
+            The feature extractor is a required input.
+        tokenizer ([`Qwen2TokenizerFast`]):
+            The tokenizer is a required input.
+        chat_template (`Optional[str]`, *optional*):
+            The Jinja template to use for formatting the conversation. If not provided, the tokenizer's default chat
+            template will be used.
+        audio_token (`Optional[str]`, *optional*, defaults to `"<sound>"`):
+            Special token used to represent audio inputs in the chat template.
+        audio_bos_token (`Optional[str]`, *optional*, defaults to `"<|sound_bos|>"`):
+            Special token used to represent the beginning of audio.
+        audio_eos_token (`Optional[str]`, *optional*, defaults to `"<|sound_eos|>"`):
+            Special token used to represent the end of audio.
+        max_audio_len (`int`, *optional*, defaults to 1800):
+            Maximum length of audio sequences in seconds. Audio longer than this will be truncated.
+    """
+
+    def __init__(
+        self,
+        feature_extractor,
+        tokenizer,
+        chat_template=None,
+        audio_token="<sound>",
+        audio_bos_token="<|sound_bos|>",
+        audio_eos_token="<|sound_eos|>",
+        max_audio_len=1800,
+    ):
+        super().__init__(
+            feature_extractor=feature_extractor,
+            tokenizer=tokenizer,
+            chat_template=chat_template,
+            audio_token=audio_token,
+            audio_bos_token=audio_bos_token,
+            audio_eos_token=audio_eos_token,
+            max_audio_len=max_audio_len,
+        )
 
 
 class AudioFlamingoNextPreTrainedModel(MusicFlamingoPreTrainedModel):
