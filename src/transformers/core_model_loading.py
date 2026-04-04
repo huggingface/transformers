@@ -898,8 +898,17 @@ class DtensorShardOperation:
                 return None
             return param[...].to(device=device, dtype=dtype)
 
-        # Materialize then split using each placement's own _split_tensor method,
+        # 1D: shard-on-read — slice directly from safetensors without materializing the full tensor
+        if len(shard_dims) == 1:
+            mesh_dim_idx, placement = shard_dims[0]
+            sub_mesh = self.device_mesh[self.device_mesh.mesh_dim_names[mesh_dim_idx]] if self.device_mesh.ndim > 1 else self.device_mesh
+            return get_tensor_shard(
+                param, self.param, sub_mesh, sub_mesh.get_local_rank(), placement.dim, tensor_idx=tensor_idx
+            ).to(device=device, dtype=dtype)
+
+        # nD: materialize then split using each placement's _split_tensor,
         # which correctly handles both contiguous Shard and interleaved _StridedShard.
+        # TODO(3outeille): make nD shard-on-read work without materializing the full tensor
         tensor = param[...] if not isinstance(param, torch.Tensor) else param
         for mesh_dim_idx, placement in shard_dims:
             sub_mesh = self.device_mesh[self.device_mesh.mesh_dim_names[mesh_dim_idx]] if self.device_mesh.ndim > 1 else self.device_mesh
