@@ -517,6 +517,10 @@ def _build_checkpoint_conversion_mapping():
             operations=[MergeModulelist(dim=0)],
         ),
     ]
+    mapping["mimo_v2_flash"] = mapping["solar_open"].copy()
+    mapping["mimo_v2_flash"] += [
+        WeightRenaming("self_attn.attention_sink_bias", "self_attn.sinks"),
+    ]
 
     mapping["qwen3_5_moe_text"] = mapping["qwen3_5_text"].copy()
     mapping["qwen3_5_moe_text"] += mapping["qwen2_moe"].copy()
