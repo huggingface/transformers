@@ -565,22 +565,24 @@ class TimesFmModelForPrediction(TimesFmPreTrainedModel):
         input_ts, input_padding = [], []
 
         for ts in inputs:
-            input_len = ts.shape[0]
-            padding = torch.zeros(input_len + self.horizon_len, dtype=ts.dtype, device=ts.device)
-            if input_len < context_len:
-                num_front_pad = context_len - input_len
-                ts = torch.cat([torch.zeros(num_front_pad, dtype=ts.dtype, device=ts.device), ts], dim=0)
-                padding = torch.cat([torch.ones(num_front_pad, dtype=ts.dtype, device=padding.device), padding], dim=0)
-            elif input_len > context_len:
-                ts = ts[-context_len:]
-                padding = padding[-(context_len + self.horizon_len) :]
-
+            ts = ts[-context_len:]
+            num_front_pad = context_len - ts.shape[0]
+            ts = torch.cat([torch.zeros(num_front_pad, dtype=ts.dtype, device=ts.device), ts], dim=0)
+            padding = torch.cat(
+                [
+                    torch.ones(num_front_pad, dtype=ts.dtype, device=ts.device),
+                    torch.zeros(context_len + self.horizon_len - num_front_pad, dtype=ts.dtype, device=ts.device),
+                ],
+                dim=0,
+            )
             input_ts.append(ts)
             input_padding.append(padding)
 
         result = (torch.stack(input_ts, dim=0), torch.stack(input_padding, dim=0))
         if freq is not None:
-            result = result + (torch.tensor(freq[: len(inputs)], dtype=torch.int32).reshape(-1, 1),)
+            result = result + (
+                torch.as_tensor(freq[: len(inputs)], dtype=torch.int32, device=result[0].device).reshape(-1, 1),
+            )
         return result
 
     def _postprocess_output(
