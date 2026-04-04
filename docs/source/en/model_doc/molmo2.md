@@ -1,4 +1,4 @@
-<!--Copyright 2025 The HuggingFace Inc. team. All rights reserved.
+<!--Copyright 2026 The HuggingFace Team. All rights reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with
 the License. You may obtain a copy of the License at
@@ -24,14 +24,13 @@ rendered properly in your Markdown viewer.
 
 # Molmo2
 
-## Overview
+[Molmo2](https://huggingface.co/papers/2601.10611) is a family of open-weight vision-language models by AllenAI that are state-of-the-art among open-source models, with exceptional capabilities in point-driven grounding for single image, multi-image, and video tasks. The architecture combines a Vision Transformer (ViT) for image processing with an adapter layer connecting vision and text modalities, and a text decoder based on transformer architecture with rotary position embeddings.
 
-Molmo2 is a multimodal vision-language model developed by AllenAI. It combines a Vision Transformer (ViT) for image processing with a text decoder for generating text responses. The model supports both image and video inputs, making it suitable for various vision-language tasks.
+The abstract from the paper is the following:
 
-The model architecture consists of:
-- A Vision Transformer (ViT) for processing images
-- An adapter layer that connects vision and text modalities
-- A text decoder based on transformer architecture with rotary position embeddings
+*Today's strongest video-language models (VLMs) remain proprietary. The strongest open-weight models either rely on synthetic data from proprietary VLMs, effectively distilling from them, or do not disclose their training data or recipe. As a result, the open-source community lacks the foundations needed to improve on the state-of-the-art video (and image) language models. Crucially, many downstream applications require more than just high-level video understanding; they require grounding -- either by pointing or by tracking in pixels. Even proprietary models lack this capability. We present Molmo2, a new family of VLMs that are state-of-the-art among open-source models and demonstrate exceptional new capabilities in point-driven grounding in single image, multi-image, and video tasks. Our key contribution is a collection of 7 new video datasets and 2 multi-image datasets, including a dataset of highly detailed video captions for pre-training, a free-form video Q&A dataset for fine-tuning, a new object tracking dataset with complex queries, and an innovative new video pointing dataset, all collected without the use of closed VLMs. We also present a training recipe for this data utilizing an efficient packing and message-tree encoding scheme, and show bi-directional attention on vision tokens and a novel token-weight strategy improves performance. Our best-in-class 8B model outperforms others in the class of open weight and data models on short videos, counting, and captioning, and is competitive on long-videos. On video-grounding Molmo2 significantly outperforms existing open-weight models like Qwen3-VL (35.5 vs 29.6 accuracy on video counting) and surpasses proprietary models like Gemini 3 Pro on some tasks (38.4 vs 20.0 F1 on video pointing and 56.2 vs 41.1 J&F on video tracking).*
+
+You can find all the original Molmo2 checkpoints under the [Molmo2](https://huggingface.co/collections/allenai/molmo2-67d6b5b0e138c5d621de1e5d) collection.
 
 ## Usage example
 
@@ -42,28 +41,37 @@ Here's how to use Molmo2 for image-text-to-text generation:
 ```python
 from transformers import Molmo2ForConditionalGeneration, Molmo2Processor
 import torch
-from PIL import Image
-import requests
 
 processor = Molmo2Processor.from_pretrained("allenai/Molmo2-8B")
 model = Molmo2ForConditionalGeneration.from_pretrained(
     "allenai/Molmo2-8B",
-    dtype=torch.float16,
+    torch_dtype=torch.bfloat16,
     device_map="auto",
 )
 
-# Load an image
-url = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg"
-image = Image.open(requests.get(url, stream=True).raw)
+messages = [
+    {
+        "role": "user",
+        "content": [
+            {"type": "text", "text": "Describe this image."},
+            {"type": "image", "image": "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg"},
+        ],
+    }
+]
 
-# Prepare inputs
-text = "Describe this image."
-inputs = processor(text=text, images=image, return_tensors="pt").to(model.device)
+inputs = processor.apply_chat_template(
+    messages,
+    tokenize=True,
+    add_generation_prompt=True,
+    return_tensors="pt",
+    return_dict=True,
+).to(model.device)
 
-# Generate
 generated_ids = model.generate(**inputs, max_new_tokens=128)
-generated_text = processor.batch_decode(generated_ids, skip_special_tokens=True)
-print(generated_text)
+generated_text = processor.batch_decode(
+    generated_ids[:, inputs["input_ids"].shape[1]:], skip_special_tokens=True
+)
+print(generated_text[0])
 ```
 
 ## Molmo2Config
