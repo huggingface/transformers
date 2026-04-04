@@ -13,10 +13,10 @@
 # limitations under the License.
 
 
-from ..internvl.processing_internvl import InternVLProcessor
+from ...image_processing_utils import BatchFeature
 from ...image_utils import ImageInput
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
-from ...image_processing_utils import BatchFeature
+from ..internvl.processing_internvl import InternVLProcessor
 
 
 class QianfanOCRProcessor(InternVLProcessor):

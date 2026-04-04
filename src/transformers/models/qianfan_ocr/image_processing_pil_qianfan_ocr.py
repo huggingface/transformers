@@ -13,9 +13,9 @@
 # limitations under the License.
 """Image processor class for QianfanOCR (PIL backend)."""
 
-from ..got_ocr2.image_processing_pil_got_ocr2 import GotOcr2ImageProcessorKwargs, GotOcr2ImageProcessorPil
-from ...utils import auto_docstring
 from ...processing_utils import Unpack
+from ...utils import auto_docstring
+from ..got_ocr2.image_processing_pil_got_ocr2 import GotOcr2ImageProcessorKwargs, GotOcr2ImageProcessorPil
 
 
 QianfanOCRImageProcessorKwargs = GotOcr2ImageProcessorKwargs

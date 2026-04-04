@@ -19,16 +19,14 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from ...activations import ACT2FN
 from ...cache_utils import Cache
+from ...generation import GenerationMixin
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling
+from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, torch_compilable_check
 from ...utils.generic import can_return_tuple, merge_with_config_defaults
 from ...utils.output_capturing import OutputRecorder, capture_outputs
-from ...generation import GenerationMixin
-from ...modeling_utils import PreTrainedModel
-from ...utils.output_capturing import OutputRecorder
 from ..auto import AutoModel
 from ..internvl.modular_internvl import (
     InternVLCausalLMOutputWithPast,
@@ -379,10 +377,6 @@ class QianfanOCRModel(QianfanOCRPreTrainedModel):
         # Use pixel_values dtype as fallback: under nn.DataParallel a replica may
         # have no parameters on the primary device (self.dtype raises StopIteration),
         # but input tensors are always correctly scattered so pixel_values.dtype is safe.
-        model_dtype = next(
-            (p.dtype for p in self.parameters() if p.is_floating_point()),
-            pixel_values.dtype,
-        )
 
         downsample_ratio = self.config.downsample_ratio
         if vision_feature_layer != -1:

@@ -383,10 +383,6 @@ class QianfanOCRModel(QianfanOCRPreTrainedModel):
         # Use pixel_values dtype as fallback: under nn.DataParallel a replica may
         # have no parameters on the primary device (self.dtype raises StopIteration),
         # but input tensors are always correctly scattered so pixel_values.dtype is safe.
-        model_dtype = next(
-            (p.dtype for p in self.parameters() if p.is_floating_point()),
-            pixel_values.dtype,
-        )
 
         downsample_ratio = self.config.downsample_ratio
         if vision_feature_layer != -1:

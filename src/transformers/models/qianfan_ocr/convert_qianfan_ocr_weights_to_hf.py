@@ -126,9 +126,9 @@ def convert_old_keys_to_new_keys(state_dict_keys, input_base_path=None):
 
 def load_original_state_dict(input_base_path):
     """Load state dict directly from safetensors files (no model instantiation)."""
-    from safetensors import safe_open
-
     import glob
+
+    from safetensors import safe_open
 
     state_dict = {}
     # Prefer sharded files (model-00001-of-*.safetensors) over the merged model.safetensors

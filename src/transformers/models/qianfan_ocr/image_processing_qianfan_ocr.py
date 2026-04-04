@@ -13,9 +13,9 @@
 # limitations under the License.
 """Image processor class for QianfanOCR (Torchvision backend)."""
 
-from ..got_ocr2.image_processing_got_ocr2 import GotOcr2ImageProcessor, GotOcr2ImageProcessorKwargs
-from ...utils import auto_docstring
 from ...processing_utils import Unpack
+from ...utils import auto_docstring
+from ..got_ocr2.image_processing_got_ocr2 import GotOcr2ImageProcessor, GotOcr2ImageProcessorKwargs
 
 
 QianfanOCRImageProcessorKwargs = GotOcr2ImageProcessorKwargs
