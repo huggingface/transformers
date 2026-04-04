@@ -252,7 +252,7 @@ The library has 400+ models with many established patterns:
 - Search for similar models (e.g., other vision-language models)
 - Reuse attention mechanisms, layer implementations, and processing patterns
 - Check models like LLaVA, Idefics2, Fuyu for vision-language patterns
-- Use provided decorators like (`auto_docstring`, `can_return_tuple`, `check_model_inputs` and `_can_record_outputs`) where relevant.
+- Use provided decorators like (`auto_docstring`, `can_return_tuple`, `capture_outputs`, `merge_with_config_defaults` and `_can_record_outputs`) where relevant.
 - Don't reinvent the wheel
 
 ☐ **7. Run quality checks and read the output**
@@ -394,7 +394,7 @@ You'll need **[Python 3.9](https://github.com/huggingface/transformers/blob/main
    make sure you install the [documentation builder](https://github.com/huggingface/doc-builder).
 
    ```bash
-   pip install hf-doc-builder
+   pip install ".[docs]"
    ```
 
    Run the following command from the root of the repository:
@@ -405,6 +405,18 @@ You'll need **[Python 3.9](https://github.com/huggingface/transformers/blob/main
 
    This will build the documentation in the `~/tmp/test-build` folder where you can inspect the generated
    Markdown files with your favorite editor. You can also preview the docs on GitHub when you open a pull request.
+
+   If you're adding or editing runnable examples in Markdown docs, mark Python fences with `runnable` or
+   `runnable:<label>` and run them locally with `pytest`:
+
+   ```bash
+   pytest -q docs/source/en/my_page.md
+   pytest -q docs/source/en/
+   ```
+
+   For the full runnable syntax, including continuation blocks, `# pytest-decorator:`, and
+   `# doc-builder: hide`, see the
+   [doc-builder runnable code blocks guide](https://github.com/huggingface/doc-builder/blob/main/docs/runnable-code-blocks.md).
 
    Once you're happy with your changes, add the changed files with `git add` and
    record your changes locally with `git commit`:

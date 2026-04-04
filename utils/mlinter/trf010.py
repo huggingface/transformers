@@ -20,7 +20,7 @@ from pathlib import Path
 from ._helpers import (
     Violation,
     _has_rule_suppression,
-    _has_strict_accept_kwargs_decorator,
+    _has_strict_decorator,
     _is_direct_pretrained_config_subclass,
 )
 
@@ -40,17 +40,14 @@ def check(tree: ast.Module, file_path: Path, source_lines: list[str]) -> list[Vi
             continue
         if _has_rule_suppression(source_lines, RULE_ID, node.lineno):
             continue
-        if _has_strict_accept_kwargs_decorator(node):
+        if _has_strict_decorator(node):
             continue
 
         violations.append(
             Violation(
                 file_path=file_path,
                 line_number=node.lineno,
-                message=(
-                    f"{RULE_ID}: {node.name} directly inherits PreTrainedConfig but is missing "
-                    "@strict(accept_kwargs=True)."
-                ),
+                message=(f"{RULE_ID}: {node.name} directly inherits PreTrainedConfig but is missing @strict."),
             )
         )
 

@@ -29,7 +29,7 @@ from ..llama.modeling_llama import LlamaAttention, LlamaModel, LlamaPreTrainedMo
 
 
 @auto_docstring(checkpoint="EuroBERT/EuroBERT-210m")
-@strict(accept_kwargs=True)
+@strict
 class EuroBertConfig(LlamaConfig):
     r"""
     mask_token_id (`int`, *optional*, defaults to 128002):
@@ -67,7 +67,7 @@ class EuroBertConfig(LlamaConfig):
     pad_token_id: int | None = 128001
     mask_token_id: int = 128002
     pretraining_tp: int = 1
-    tie_word_embeddings: int = False
+    tie_word_embeddings: bool = False
     rope_parameters: RopeParameters | dict | None = None
     attention_bias: bool = False
     attention_dropout: int | float = 0.0

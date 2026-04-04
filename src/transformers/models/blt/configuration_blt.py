@@ -24,13 +24,13 @@ logger = logging.get_logger(__name__)
 
 
 @auto_docstring(checkpoint="itazap/blt-1b-hf")
-@strict(accept_kwargs=True)
+@strict
 class BltLocalEncoderConfig(PreTrainedConfig):
     r"""
-    cross_attn_k (`int`, *optional*, defaults to 2):
-        Number of cross-attention heads used in the model.
     cross_attn_all_layers (`bool`, *optional*, defaults to `True`):
         Whether all attention layers have cross attention.
+    cross_attn_k (`int`, *optional*, defaults to 2):
+        Number of cross-attention heads used in the model.
     hidden_size_global (`int`, *int*, defaults to 2048):
         Hidden size of the global transformer layer.
     """
@@ -62,13 +62,13 @@ class BltLocalEncoderConfig(PreTrainedConfig):
 
 
 @auto_docstring(checkpoint="itazap/blt-1b-hf")
-@strict(accept_kwargs=True)
+@strict
 class BltLocalDecoderConfig(PreTrainedConfig):
     r"""
-    cross_attn_k (`int`, *optional*, defaults to 2):
-        Number of cross-attention heads used in the model.
     cross_attn_all_layers (`bool`, *optional*, defaults to `True`):
         Whether all attention layers have cross attention.
+    cross_attn_k (`int`, *optional*, defaults to 2):
+        Number of cross-attention heads used in the model.
     hidden_size_global (`int`, *int*, defaults to 2048):
         Hidden size of the global transformer layer.
     """
@@ -105,7 +105,7 @@ class BltLocalDecoderConfig(PreTrainedConfig):
 
 
 @auto_docstring(checkpoint="itazap/blt-1b-hf")
-@strict(accept_kwargs=True)
+@strict
 class BltGlobalTransformerConfig(PreTrainedConfig):
     model_type = "blt_global_transformer"
     default_theta = 500000.0
@@ -133,7 +133,7 @@ class BltGlobalTransformerConfig(PreTrainedConfig):
 
 
 @auto_docstring(checkpoint="itazap/blt-1b-hf")
-@strict(accept_kwargs=True)
+@strict
 class BltPatcherConfig(PreTrainedConfig):
     model_type = "blt_patcher"
 
@@ -161,7 +161,7 @@ class BltPatcherConfig(PreTrainedConfig):
 
 
 @auto_docstring(checkpoint="itazap/blt-1b-hf")
-@strict(accept_kwargs=True)
+@strict
 class BltConfig(PreTrainedConfig):
     r"""
     patch_in_forward (`bool`, *optional*, defaults to `True`):

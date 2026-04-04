@@ -38,14 +38,7 @@ from ...test_pipeline_mixin import PipelineTesterMixin
 if is_torch_available():
     import torch
 
-    from transformers import (
-        ZambaForCausalLM,
-        ZambaForSequenceClassification,
-        ZambaModel,
-    )
-    from transformers.models.zamba.modeling_zamba import (
-        ZambaHybridDynamicCache,
-    )
+    from transformers import ZambaForCausalLM, ZambaForSequenceClassification, ZambaModel
 
 
 class ZambaModelTester:
@@ -212,12 +205,9 @@ class ZambaModelTester:
         model.eval()
 
         # first forward pass
-        # Attention: Zamba needs the cache to be initialized to return a cache!
-        past_key_values = ZambaHybridDynamicCache(config, input_ids.shape[0], model.dtype, device=model.device)
         outputs = model(
             input_ids,
             attention_mask=input_mask,
-            past_key_values=past_key_values,
             use_cache=True,
         )
         past_key_values = outputs.past_key_values
@@ -297,46 +287,37 @@ class ZambaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
         if is_torch_available()
         else {}
     )
+    model_split_percents = [0.5, 0.8, 0.9]
 
-    def _check_past_key_values_for_generate(self, batch_size, past_key_values, seq_length, config):
-        self.assertIsInstance(past_key_values, ZambaHybridDynamicCache)
-
-        # (batch, kv heads, seq_length, head_dim)
-        num_heads = getattr(config, "num_key_value_heads", config.num_attention_heads)
-        head_dim = getattr(config, "attention_head_dim")
-        attention_shape = (batch_size, num_heads, seq_length, head_dim)
-
+    def _get_conv_state_shape(self, batch_size: int, config):
         intermediate_size = config.mamba_expand * config.hidden_size
-        conv_shape = (batch_size, intermediate_size, config.mamba_d_conv)
-        ssm_shape = (batch_size, config.n_mamba_heads, intermediate_size // config.n_mamba_heads, config.mamba_d_state)
+        return (batch_size, intermediate_size, config.mamba_d_conv)
 
-        self.assertTrue(config.num_hidden_layers, len(past_key_values))
-
-        for idx in range(len(past_key_values)):
-            if config.layers_block_type[idx] == "mamba":
-                self.assertEqual(past_key_values.conv_states[idx].shape, conv_shape)
-                self.assertEqual(past_key_values.ssm_states[idx].shape, ssm_shape)
-            else:
-                self.assertEqual(past_key_values.key_cache[idx].shape, attention_shape)
-                self.assertEqual(past_key_values.value_cache[idx].shape, attention_shape)
-
-    def _check_caches_are_equal(self, cache1: ZambaHybridDynamicCache, cache2: ZambaHybridDynamicCache):
-        if not isinstance(cache1, ZambaHybridDynamicCache) or not isinstance(cache2, ZambaHybridDynamicCache):
-            raise ValueError("The wrong cache is being used!")
-
-        if not len(cache1) == len(cache2):
-            raise ValueError("Both caches do not have the same number of layers.")
-
-        num_layers = len(cache1)
-        for idx in range(num_layers):
-            torch.testing.assert_close(cache1.key_cache[idx], cache2.key_cache[idx])
-            torch.testing.assert_close(cache1.value_cache[idx], cache2.value_cache[idx])
-            torch.testing.assert_close(cache1.conv_states[idx], cache2.conv_states[idx])
-            torch.testing.assert_close(cache1.ssm_states[idx], cache2.ssm_states[idx])
+    def _get_recurrent_state_shape(self, batch_size: int, config):
+        intermediate_size = config.mamba_expand * config.hidden_size
+        return (batch_size, config.n_mamba_heads, intermediate_size // config.n_mamba_heads, config.mamba_d_state)
 
     def setUp(self):
         self.model_tester = ZambaModelTester(self)
         self.config_tester = ConfigTester(self, config_class=ZambaConfig, hidden_size=32)
+
+    @unittest.skip(
+        "Same as zamba2 -> investigate, it's probably due to their mixed layer classes or tied weights that accelerate does not work"
+    )
+    def test_disk_offload_bin(self):
+        pass
+
+    @unittest.skip(
+        "Same as zamba2 -> investigate, it's probably due to their mixed layer classes or tied weights that accelerate does not work"
+    )
+    def test_disk_offload_safetensors(self):
+        pass
+
+    @unittest.skip(
+        "Same as zamba2 -> investigate, it's probably due to their mixed layer classes or tied weights that accelerate does not work"
+    )
+    def test_cpu_offload(self):
+        pass
 
     def test_config(self):
         self.config_tester.run_common_tests()

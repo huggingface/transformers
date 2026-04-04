@@ -24,7 +24,7 @@ logger = logging.get_logger(__name__)
 
 
 @auto_docstring(checkpoint="westlake-repl/Evolla-10B-hf")
-@strict(accept_kwargs=True)
+@strict
 class SaProtConfig(PreTrainedConfig):
     r"""
     mask_token_id (`int`, *optional*, defaults to 4):
@@ -34,7 +34,8 @@ class SaProtConfig(PreTrainedConfig):
     emb_layer_norm_before (`bool`, *optional*, defaults to `False`):
         Whether to apply layer normalization before the position embedding in the protein sequence model.
     token_dropout (`bool`, *optional*, defaults to `True`):
-        Whether to apply dropout to the tokens in the protein sequence model."""
+        Whether to apply dropout to the tokens in the protein sequence model.
+    """
 
     vocab_size: int = 446
     mask_token_id: int = 4
@@ -43,8 +44,8 @@ class SaProtConfig(PreTrainedConfig):
     num_hidden_layers: int = 33
     num_attention_heads: int = 20
     intermediate_size: int = 5120
-    hidden_dropout_prob: float = 0.1
-    attention_probs_dropout_prob: float = 0.1
+    hidden_dropout_prob: float | int = 0.1
+    attention_probs_dropout_prob: float | int = 0.1
     max_position_embeddings: int = 1026
     initializer_range: float = 0.02
     layer_norm_eps: float = 1e-05
@@ -56,7 +57,7 @@ class SaProtConfig(PreTrainedConfig):
 
 
 @auto_docstring(checkpoint="westlake-repl/Evolla-10B-hf")
-@strict(accept_kwargs=True)
+@strict
 class EvollaConfig(PreTrainedConfig):
     r"""
     protein_encoder_config (`dict`, *optional*):
@@ -95,7 +96,7 @@ class EvollaConfig(PreTrainedConfig):
     >>> configuration = model.config
     ```"""
 
-    model_type = "EvollaModel"
+    model_type = "evolla"
     sub_configs = {"protein_encoder_config": SaProtConfig}
     default_theta = 500000.0
 
