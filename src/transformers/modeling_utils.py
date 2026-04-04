@@ -1003,6 +1003,33 @@ class EmbeddingAccessMixin:
 
     _input_embed_layer = "embed_tokens"  # default layer that holds input embeddings.
 
+    def _resolve_input_embed_layer(self) -> tuple[nn.Module | None, str]:
+        """
+        Returns the parent module and leaf attribute for `_input_embed_layer`.
+
+        Supports both a simple attribute name such as `embed_tokens` and a dotted path such as
+        `text_model.embed_tokens`.
+        """
+
+        name = getattr(self, "_input_embed_layer", "embed_tokens")
+        if "." not in name:
+            return None, name
+
+        module_path, _, attribute_name = name.rpartition(".")
+        try:
+            module = self.get_submodule(module_path)
+        except AttributeError as error:
+            raise NotImplementedError(
+                f"`_input_embed_layer={name}` could not be resolved for {self.__class__.__name__}."
+            ) from error
+
+        if not hasattr(module, attribute_name):
+            raise NotImplementedError(
+                f"`_input_embed_layer={name}` could not be resolved for {self.__class__.__name__}."
+            )
+
+        return module, attribute_name
+
     def get_input_embeddings(self) -> nn.Module:
         """
         Returns the model's input embeddings.
@@ -1011,7 +1038,9 @@ class EmbeddingAccessMixin:
             `nn.Module`: A torch module mapping vocabulary to hidden states.
         """
 
-        name = getattr(self, "_input_embed_layer", "embed_tokens")
+        module, name = self._resolve_input_embed_layer()
+        if module is not None:
+            return getattr(module, name)
 
         # 1) Direct attribute (most NLP models).
         if (default_embedding := getattr(self, name, None)) is not None:
@@ -1044,7 +1073,11 @@ class EmbeddingAccessMixin:
             should) override for exotic layouts.
         """
 
-        name = getattr(self, "_input_embed_layer", "embed_tokens")
+        module, name = self._resolve_input_embed_layer()
+        if module is not None:
+            setattr(module, name, value)
+            return
+
         # 1) Direct attribute (most NLP models)
         if hasattr(self, name):
             setattr(self, name, value)
