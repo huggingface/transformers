@@ -367,12 +367,6 @@ def build_processor(config_class, processor_class, allow_no_checkpoint=False):
     # `https://huggingface.co/asapp/sew-tiny-100k` has no tokenizer file, but we can get
     # `tokenizer_class: Wav2Vec2CTCTokenizer` from the config file. (The new processor class won't be able to load from
     # `checkpoint`, but it helps this recursive method to find a way to build a processor).
-    # try:
-    #     issubclass(processor_class, (PreTrainedTokenizerBase, AutoTokenizer))
-    # except:
-    #     breakpoint()
-
-
     if (
         processor is None
         and checkpoint is not None
@@ -1701,31 +1695,11 @@ def create_tiny_models(
     if not all:
         config_classes = [CONFIG_MAPPING[model_type] for model_type in model_types]
 
-    # config_classes = [x for x in config_classes if x.__name__ in ["JanusConfig", "Emu3Config", "ClvpConfig", "BarkConfig", "FastSpeech2ConformerWithHifiGanConfig", "FastSpeech2ConformerConfig", "Pop2PianoConfig"]]
     # TODO: we should add information to the reports instead of skip them
     config_classes = [x for x in config_classes if x.__name__ not in no_model_tester_at_all]
     config_classes = [x for x in config_classes if x.__name__ not in configs_requiring_too_exotic_dependency]
     config_classes = [x for x in config_classes if x.__name__ not in deprecated_models]
     config_classes = [x for x in config_classes if x.__name__ not in config_without_meaningful_model_class]
-
-    # config_classes = [x for x in config_classes if x.__name__ in ["CohereAsrConfig"]]
-
-
-    # config_classes = config_classes[178:179]
-
-    # import random
-    # for i in range(100):
-    #     random.shuffle(config_classes)
-
-    # mamba = {"BambaConfig", "FalconMambaConfig", "GraniteMoeHybridConfig", "JambaConfig", "MambaConfig", "Mamba2Config", ""}
-    # config_classes = [x for x in config_classes if x.__name__ in mamba]
-
-    # for x in config_classes:
-    #     if x.__name__ == "Pop2PianoConfig":
-    #         break
-    #
-    # config_classes = config_classes[:1]
-    # config_classes += [x]
 
     # A map from config classes to tuples of processors (tokenizer, feature extractor, processor) classes
     processor_type_map = {c: get_processor_types_from_config_class(c) for c in config_classes}
@@ -1861,8 +1835,6 @@ if __name__ == "__main__":
     if not args.all and not args.model_types:
         raise ValueError("Please provide at least one model type or pass `--all` to export all architectures.")
 
-    # os.environ["HF_TOKEN"] = args.token
-
     create_tiny_models(
         args.output_path,
         args.all,
@@ -1874,62 +1846,3 @@ if __name__ == "__main__":
         args.token,
         args.num_workers,
     )
-
-
-# FastSpeech2ConformerConfig --> needs `pip install g2p-en`
-# FastSpeech2ConformerTokenizer vs AutTokenizer --> the later can't load from `espnet/fastspeech2_conformer` ??
-
-
-
-
-# "Pop2PianoConfig" Require `pip install essentia==2.1b6.dev1034`
-# NemotronConfig ==> can't convert fast tokenizer because `Exception: Unk token `<unk>` not found in the vocabulary`
-
-
-# track but get large model:
-# BarkConfig, ClvpConfig,
-#
-# Emu3Config,
-#
-# JanusConfig
-
-
-
-
-
-# no model tester
-#
-# EdgeTamVideoConfig
-# Llama4Config
-# Llama4TextConfig
-# Sam2Video
-# Sam3TrackerVideo
-# Sam3VideoConfig
-# ShieldGemma2Config
-
-# TODO!!!
-# has model tester, but there is no model tester gives the exact config class for some model classes
-
-
-# PeAudioVideoConfig : Only deal with PeAudioVideoEncoderConfig and PeAudioVideoEncoder, no model tester
-# Qwen3OmniMoeConfig: Only deal with Qwen3OmniMoeThinkerConfig and Qwen3OmniMoeThinkerForConditionalGeneration
-# Qwen2_5OmniConfig: Only deal with Qwen2_5OmniThinkerConfig and Qwen2_5OmniThinkerForConditionalGenerationTester
-
-
-# LayoutLMv2Config: needs detectron2 and there is no `get_config`
-
-
-# Qwen3_5Config: Deal with both `Qwen3_5TextConfig` and `Qwen3_5Config` but only get the first
-# Qwen3_5MoeConfig: Deal with both `Qwen3_5MoeTextConfig` and `Qwen3_5MoeConfig`
-
-
-
-
-# InstructBlipConfig: deal 4 types
-# InstructBlipVideoConfig: deal 4 types
-
-# MllamaConfig: deal 2 types
-# Gemma3nConfig: deal 3 types
-# Gemma3Config: deal 2 types
-# VideoLlama3Config: deal 3 tyipes
-
