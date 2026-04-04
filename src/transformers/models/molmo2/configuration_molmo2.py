@@ -239,39 +239,6 @@ class Molmo2Config(PreTrainedConfig):
         self.use_cache = self.text_config.use_cache
         super().__post_init__(**kwargs)
 
-    @property
-    def image_num_patch(self):
-        assert self.vit_config is not None
-        return self.vit_config.image_num_patch
-
-    @property
-    def num_attention_heads(self):
-        return self.text_config.num_attention_heads
-
-    @property
-    def num_key_value_heads(self):
-        return self.text_config.num_key_value_heads
-
-    @property
-    def head_dim(self):
-        return self.text_config.head_dim
-
-    @property
-    def num_hidden_layers(self):
-        return self.text_config.num_hidden_layers
-
-    @property
-    def hidden_size(self):
-        return self.text_config.hidden_size
-
-    @property
-    def vocab_size(self):
-        return self.text_config.vocab_size
-
-    @property
-    def max_position_embeddings(self):
-        return self.text_config.max_position_embeddings
-
 
 __all__ = [
     "Molmo2AdapterConfig",
