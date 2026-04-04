@@ -42,55 +42,42 @@ logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
 
 
-SYSTEM_PROMPT = (
-    "You are Audio Flamingo-Next, a multimodal assistant for language and audio. "
-    "On each turn you receive an optional audio clip which may contain speech, music, or ambient sounds "
-    "and optional text, you will receive at least one or both; use your world knowledge and reasoning "
-    "to help the user with any task. Interpret the entirety of the content of any input audio—regardless "
-    "of whether the user calls it audio, speech, music, or sound."
-)
-
-PREFIX_MAP = {
-    "llm": "language_model",
-    "sound_tower": "audio_tower",
-    "sound_mm_projector": "multi_modal_projector",
-}
-
-
-def _load_json(path: Path):
-    if not path.is_file():
-        raise FileNotFoundError(f"Missing JSON: {path}")
-    with path.open("r", encoding="utf-8") as f:
+def _load_json(p: Path):
+    if not p.is_file():
+        raise FileNotFoundError(f"Missing JSON: {p}")
+    with p.open("r", encoding="utf-8") as f:
         return json.load(f)
-
-
-def _load_audio_config(src_root: Path) -> dict[str, Any]:
-    config = _load_json(src_root / "sound_tower" / "config.json")
-    return {
-        "model_type": "audioflamingo3_encoder",
-        "hidden_size": config["d_model"],
-        "intermediate_size": config["encoder_ffn_dim"],
-        "num_hidden_layers": config["encoder_layers"],
-        "num_attention_heads": config["encoder_attention_heads"],
-        "num_mel_bins": config["num_mel_bins"],
-        "max_source_positions": config["max_source_positions"],
-        "scale_embedding": config.get("scale_embedding", False),
-        "activation_function": config.get("activation_function", "gelu"),
-        "dropout": config.get("dropout", 0.0),
-        "attention_dropout": config.get("attention_dropout", 0.0),
-        "activation_dropout": config.get("activation_dropout", 0.0),
-        "layerdrop": config.get("encoder_layerdrop", config.get("layerdrop", 0.0)),
-        "initializer_range": config.get("init_std", 0.02),
-    }
 
 
 def write_processor(src_root: Path, dst_root: Path):
     llm_dir = src_root / "llm"
 
+    system_prompt = (
+        "You are Audio Flamingo-Next, a multimodal assistant for language and audio. "
+        "On each turn you receive an optional audio clip which may contain speech, music, or ambient sounds "
+        "and optional text, you will receive at least one or both; use your world knowledge and reasoning "
+        "to help the user with any task. Interpret the entirety of the content of any input audio—regardless "
+        "of whether the user calls it audio, speech, music, or sound."
+    )
+
+    # fmt: off
+    tokenizer_chat_template = (
+        "{% if messages[0]['role'] != 'system' %}"
+            "{{ '<|im_start|>system\\n" + system_prompt + "<|im_end|>\\n' }}"
+        "{% endif %}"
+        "{% for message in messages if message['content'] is not none %}"
+            "{{ '<|im_start|>' + message['role'] + '\\n' + message['content'] + '<|im_end|>' + '\\n' }}"
+        "{% endfor %}"
+        "{% if add_generation_prompt %}"
+            "{{ '<|im_start|>assistant\\n' }}"
+        "{% endif %}"
+    )
+    # fmt: on
+
     # fmt: off
     processor_chat_template = (
         "{% if messages[0]['role'] != 'system' %}"
-            "<|im_start|>system\n" + SYSTEM_PROMPT + "<|im_end|>\n"
+            "<|im_start|>system\n" + system_prompt + "<|im_end|>\n"
         "{% endif %}"
         "{% for m in messages if m['content'] is not none %}"
             "<|im_start|>{{ m['role'] }}\n"
@@ -116,17 +103,22 @@ def write_processor(src_root: Path, dst_root: Path):
     )
     # fmt: on
 
-    tokenizer = AutoTokenizer.from_pretrained(str(llm_dir), use_fast=True)
     processor = AudioFlamingoNextProcessor(
         feature_extractor=WhisperFeatureExtractor(feature_size=128, return_attention_mask=True),
-        tokenizer=tokenizer,
+        tokenizer=AutoTokenizer.from_pretrained(str(llm_dir), chat_template=tokenizer_chat_template, use_fast=True),
         chat_template=processor_chat_template,
-        max_audio_len=1800,
     )
     processor.save_pretrained(str(dst_root))
 
     logger.info("processor (tokenizer + preprocessor)")
     return processor
+
+
+PREFIX_MAP = {
+    "llm": "language_model",
+    "sound_tower": "audio_tower",
+    "sound_mm_projector": "multi_modal_projector",
+}
 
 
 def _resolve_component_dir(dirpath: Path):
@@ -137,62 +129,70 @@ def _resolve_component_dir(dirpath: Path):
     if idx.exists():
         wm = _load_json(idx).get("weight_map") or {}
         by_shard: dict[str, list[str]] = defaultdict(list)
-        for key, shard in wm.items():
-            by_shard[shard].append(key)
-        return ("sharded", dirpath, {key: sorted(value) for key, value in sorted(by_shard.items())})
+        for k, shard in wm.items():
+            by_shard[shard].append(k)
+        return ("sharded", dirpath, {k: sorted(v) for k, v in sorted(by_shard.items())})
     if mono.exists():
         return ("file", mono)
-    candidates = sorted(path for path in dirpath.iterdir() if path.suffix == ".safetensors")
-    return ("file", candidates[0]) if len(candidates) == 1 else None
+    cands = sorted([x for x in dirpath.iterdir() if x.suffix == ".safetensors"])
+    return ("file", cands[0]) if len(cands) == 1 else None
 
 
 def merge_and_shard_weights(src_root: Path, dst_root: Path, processor: AudioFlamingoNextProcessor):
     state: dict[str, Any] = {}
-    for tag in PREFIX_MAP:
-        component = _resolve_component_dir(src_root / tag)
-        if not component:
+    for tag in PREFIX_MAP.keys():
+        comp = _resolve_component_dir(src_root / tag)
+        if not comp:
             continue
 
-        out_prefix = PREFIX_MAP[tag]
-        if component[0] == "file":
-            file_path: Path = component[1]
-            with safe_open(str(file_path), framework="pt", device="cpu") as f:
-                for key in f.keys():
-                    if key == "__metadata__":
+        out_prefix = PREFIX_MAP.get(tag, tag)
+
+        if comp[0] == "file":
+            fp: Path = comp[1]
+            with safe_open(str(fp), framework="pt", device="cpu") as f:
+                for k in f.keys():
+                    if k == "__metadata__":
                         continue
-                    state[f"{out_prefix}.{key}"] = f.get_tensor(key)
+                    state[f"{out_prefix}.{k}"] = f.get_tensor(k)
         else:
-            base: Path = component[1]
-            shard_map: dict[str, list[str]] = component[2]
+            base: Path = comp[1]
+            shard_map: dict[str, list[str]] = comp[2]
             for shard, keys in shard_map.items():
-                shard_path = base / shard
-                with safe_open(str(shard_path), framework="pt", device="cpu") as f:
-                    for key in keys:
-                        state[f"{out_prefix}.{key}"] = f.get_tensor(key)
+                sp = base / shard
+                with safe_open(str(sp), framework="pt", device="cpu") as f:
+                    for k in keys:
+                        state[f"{out_prefix}.{k}"] = f.get_tensor(k)
 
     if not state:
         raise FileNotFoundError("No tensors found in llm/, sound_tower/, or sound_mm_projector/.")
 
-    llm_dir = src_root / "llm"
-    tokenizer = processor.tokenizer
-    text_config = Qwen2Config.from_pretrained(str(llm_dir))
-    text_config.bos_token_id = tokenizer.bos_token_id
-    text_config.eos_token_id = tokenizer.eos_token_id
-    text_config.pad_token_id = tokenizer.pad_token_id
-    text_config.vocab_size = len(tokenizer)
-    text_config.use_cache = False
+    tok = processor.tokenizer
+    text_config = Qwen2Config(
+        bos_token_id=tok.bos_token_id,
+        eos_token_id=tok.eos_token_id,
+        pad_token_id=tok.pad_token_id,
+        vocab_size=len(tok),
+        hidden_size=3584,
+        intermediate_size=18944,
+        model_max_length=24000,
+        max_position_embeddings=131072,
+        num_attention_heads=28,
+        num_hidden_layers=28,
+        num_key_value_heads=4,
+        rope_theta=15300000.0,
+        use_cache=False,
+    )
 
-    vocab = tokenizer.get_vocab()
+    vocab = tok.get_vocab()
     config = AudioFlamingoNextConfig(
         text_config=text_config,
-        audio_config=_load_audio_config(src_root),
         audio_token_id=vocab["<sound>"],
         audio_bos_token_id=vocab.get("<|sound_bos|>"),
         audio_eos_token_id=vocab.get("<|sound_eos|>"),
-        rope_parameters={"rope_type": "default", "rope_theta": 1800, "partial_rotary_factor": 0.2},
     )
     model = AudioFlamingoNextForConditionalGeneration(config).to(dtype=torch.bfloat16)
 
+    # Update state dict to new key names if necessary
     projector_key_mapping = {
         "multi_modal_projector.layers.0.weight": "multi_modal_projector.linear_1.weight",
         "multi_modal_projector.layers.0.bias": "multi_modal_projector.linear_1.bias",
@@ -203,26 +203,25 @@ def merge_and_shard_weights(src_root: Path, dst_root: Path, processor: AudioFlam
         if old_key in state:
             state[new_key] = state.pop(old_key)
 
+    # Llama-style rotary caches `inv_freq` as a non-persistent buffer, so we do not load/save it in the checkpoint.
     state.pop("audio_tower.sound_tower.pos_emb.freqs", None)
 
+    # Load weights into the instantiated model so we can push via `push_to_hub` later.
     load_res = model.load_state_dict(state, strict=True)
+    # Enforce a clean load
     if getattr(load_res, "missing_keys", None) and load_res.missing_keys:
-        missing_keys = load_res.missing_keys
-        raise ValueError(f"Missing keys when loading: {missing_keys[:10]}{' ...' if len(missing_keys) > 10 else ''}")
+        mk = load_res.missing_keys
+        raise ValueError(f"Missing keys when loading: {mk[:10]}{' ...' if len(mk) > 10 else ''}")
     if getattr(load_res, "unexpected_keys", None) and load_res.unexpected_keys:
-        unexpected_keys = load_res.unexpected_keys
-        raise ValueError(
-            f"Unexpected keys when loading: {unexpected_keys[:10]}{' ...' if len(unexpected_keys) > 10 else ''}"
-        )
+        uk = load_res.unexpected_keys
+        raise ValueError(f"Unexpected keys when loading: {uk[:10]}{' ...' if len(uk) > 10 else ''}")
 
-    try:
-        model.generation_config = GenerationConfig.from_pretrained(str(llm_dir))
-    except OSError:
-        model.generation_config = GenerationConfig(
-            bos_token_id=text_config.bos_token_id,
-            eos_token_id=text_config.eos_token_id,
-            pad_token_id=text_config.pad_token_id,
-        )
+    model.generation_config = GenerationConfig(
+        bos_token_id=tok.bos_token_id,
+        eos_token_id=tok.eos_token_id,
+        pad_token_id=tok.pad_token_id,
+        max_new_tokens=2048,
+    )
 
     model.save_pretrained(save_directory=str(dst_root))
     logger.info("model.safetensors index and shards")

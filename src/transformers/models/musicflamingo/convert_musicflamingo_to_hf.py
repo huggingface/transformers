@@ -167,7 +167,6 @@ def merge_and_shard_weights(src_root: Path, dst_root: Path, processor: MusicFlam
         raise FileNotFoundError("No tensors found in llm/, sound_tower/, or sound_mm_projector/.")
 
     tok = processor.tokenizer
-
     text_config = Qwen2Config(
         bos_token_id=tok.bos_token_id,
         eos_token_id=tok.eos_token_id,
@@ -188,8 +187,6 @@ def merge_and_shard_weights(src_root: Path, dst_root: Path, processor: MusicFlam
         audio_token_id=vocab["<sound>"],
         audio_bos_token_id=vocab.get("<|sound_bos|>"),
         audio_eos_token_id=vocab.get("<|sound_eos|>"),
-        audio_rotary_dim=256,
-        rope_parameters={"rope_type": "default", "rope_theta": 1200},
     )
     model = MusicFlamingoForConditionalGeneration(config).to(dtype=torch.bfloat16)
 
@@ -217,13 +214,12 @@ def merge_and_shard_weights(src_root: Path, dst_root: Path, processor: MusicFlam
         uk = load_res.unexpected_keys
         raise ValueError(f"Unexpected keys when loading: {uk[:10]}{' ...' if len(uk) > 10 else ''}")
 
-    generation_config = GenerationConfig(
+    model.generation_config = GenerationConfig(
         bos_token_id=tok.bos_token_id,
         eos_token_id=tok.eos_token_id,
         pad_token_id=tok.pad_token_id,
         max_new_tokens=2048,
     )
-    model.generation_config = generation_config
 
     model.save_pretrained(save_directory=str(dst_root))
     logger.info("model.safetensors index and shards")
