@@ -2201,6 +2201,9 @@ class _LazyModule(ModuleType):
 
             Placeholder.__module__ = module_name
 
+            print(f"f{name}")
+            print(f"f{module_name}")
+            print("oh la la!!!!")
             value = Placeholder
         elif name in self._class_to_module:
             try:
