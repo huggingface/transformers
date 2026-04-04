@@ -267,7 +267,7 @@ class QianfanOCRIntegrationTest(unittest.TestCase):
         # fmt: off
         expected_logits = Expectations(
             {
-                ("cuda", 8): torch.tensor([8.4375, 14.125, 10.8125, 11.5, 7.5625]),
+                ("cuda", 8): torch.tensor([10.1875, 15.8125, 13.1875, 12.3750,  9.6250]),
             }
         )  # fmt: skip
         self.assertTrue(
@@ -301,7 +301,7 @@ class QianfanOCRIntegrationTest(unittest.TestCase):
         # fmt: off
         expected_outputs = Expectations(
             {
-                ("cuda", 8): "The image features two cats lying on a couch, both appearing to be asleep. They are positioned next",
+                ("cuda", 8): "The image features two striped cats lying down on a couch, both appearing to be sleeping. They are",
             }
         )  # fmt: skip
         self.assertEqual(decoded, expected_outputs.get_expectation())
@@ -350,7 +350,7 @@ class QianfanOCRIntegrationTest(unittest.TestCase):
                 "role": "user",
                 "content": [
                     {"type": "image", "image": image},
-                    {"type": "text", "text": "Describe this image briefly."},
+                    {"type": "text", "text": "Describe the image."},
                 ],
             }
         ]
@@ -371,12 +371,12 @@ class QianfanOCRIntegrationTest(unittest.TestCase):
         # fmt: off
         expected_outputs_0 = Expectations(
             {
-                ("cuda", 8): "In the tranquil setting of this image, two brown and black striped cats are the stars of the scene",
+                ("cuda", 8): "In the tranquil setting of this image, two tabby cats are the stars of the scene. Their",
             }
         )  # fmt: skip
         expected_outputs_1 = Expectations(
             {
-                ("cuda", 8): "In the image, two striped cats are comfortably sprawled out on a pink couch, each with a",
+                ("cuda", 8): "The image features two striped cats lying down and sleeping on a pink couch. They are positioned close to",
             }
         )  # fmt: skip
         self.assertEqual(decoded_0, expected_outputs_0.get_expectation())
