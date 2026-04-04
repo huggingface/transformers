@@ -85,15 +85,17 @@ def init_device_mesh(distributed_config: DistributedConfig) -> torch.distributed
     if device_type != "cpu":
         getattr(torch, device_type).set_device(int(os.environ.get("LOCAL_RANK", 0)))
 
-    tp_size = distributed_config.tp_size or 1
-    fsdp_size = distributed_config.fsdp_size or 1
+    tp_size = distributed_config.tp_size
+    fsdp_size = distributed_config.fsdp_size
 
-    if tp_size == 1 and fsdp_size == 1:
-        tp_size = world_size
-    elif tp_size * fsdp_size != world_size:
-        raise ValueError(
-            f"tp_size ({tp_size}) * fsdp_size ({fsdp_size}) = {tp_size * fsdp_size} "
-            f"does not match world_size ({world_size})."
-        )
+    assert world_size == tp_size * fsdp_size, f"world_size ({world_size}) must be equal to tp_size ({tp_size}) * fsdp_size ({fsdp_size})"
 
-    return torch.distributed.init_device_mesh(device_type, (fsdp_size, tp_size), mesh_dim_names=("fsdp", "tp"))
+    dims, names = [], []
+    if fsdp_size > 1:
+        dims.append(fsdp_size)
+        names.append("fsdp")
+    if tp_size > 1:
+        dims.append(tp_size)
+        names.append("tp")
+
+    return torch.distributed.init_device_mesh(device_type, tuple(dims), mesh_dim_names=tuple(names))

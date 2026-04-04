@@ -4142,8 +4142,13 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
 
         if distributed_config is not None:
             model.config.distributed_config = distributed_config
-            model = apply_tensor_parallel(model, device_mesh["tp"], distributed_config.tp_plan)
-            model = apply_fully_shard_data_parallel(model, device_mesh["fsdp"], distributed_config.fsdp_plan)
+            model.device_mesh = device_mesh
+            sub_mesh = lambda name: device_mesh[name] if device_mesh.ndim > 1 else device_mesh
+            mesh_dim_names = device_mesh.mesh_dim_names or ()
+            if "tp" in mesh_dim_names:
+                model = apply_tensor_parallel(model, sub_mesh("tp"), distributed_config.tp_plan)
+            if "fsdp" in mesh_dim_names:
+                model = apply_fully_shard_data_parallel(model, sub_mesh("fsdp"), distributed_config.fsdp_plan)
         else:
             # Accelerate path: auto device mapping
             if device_map is not None:

@@ -524,7 +524,6 @@ class WeightTransform:
     target_patterns: str | list[str] = field(init=True)
     compiled_sources: re.Pattern = field(init=False)
 
-    distributed_operation: Any | None = None
     quantization_operation: ConversionOps | None = None
 
     collected_tensors: dict[str, list[Future]] = field(default_factory=lambda: defaultdict(list), init=False)
@@ -859,158 +858,86 @@ def spawn_parallel_materialize(
         return _job
 
 
-@dataclass(slots=True)
-class ParallelMaterializationContext:
-    distributed_operation: Any
-    tensor_idx: int | None
-    device: Any
 
+class DtensorShardOperation:
+    """Extracts the local shard from a full checkpoint tensor based on this rank's DTensor placements."""
 
-def is_dtensor_like(value: Any) -> bool:
-    return all(hasattr(value, attr) for attr in ("device_mesh", "placements", "to_local"))
+    __slots__ = ("device_mesh", "param", "placements", "local_shape")
 
-
-@dataclass(slots=True)
-class FSDPShardOperation:
-    device_mesh: Any
-    rank: int
-    empty_param: Any
-    placements: tuple[Any, ...]
-    shard_placements_with_dim_idx: list = field(init=False, default_factory=list)
-    shard_placement: Any | None = field(init=False, default=None)
-    local_shape: tuple[int, ...] = field(init=False)
-
-    def __post_init__(self):
-        self.shard_placements_with_dim_idx = [
-            (i, placement) for i, placement in enumerate(self.placements) if placement.is_shard()
-        ]
-        # Keep single shard_placement for backward compat with 1D case
-        self.shard_placement = self.shard_placements_with_dim_idx[0][1] if self.shard_placements_with_dim_idx else None
-        self.local_shape = self.get_expected_sharded_shape(self.empty_param.shape)
-
-    @classmethod
-    def from_param(cls, param: Any) -> FSDPShardOperation:
-        mesh = param.device_mesh
-        rank = mesh.get_local_rank() if mesh.ndim == 1 else 0  # rank per-dim handled in shard_tensor
-        return cls(
-            device_mesh=mesh,
-            rank=rank,
-            empty_param=param,
-            placements=tuple(param.placements),
+    def __init__(self, param: DTensor):
+        self.device_mesh = param.device_mesh
+        self.param = param
+        self.placements = tuple(param.placements)
+        self.local_shape, _ = compute_local_shape_and_global_offset(
+            param.shape, self.device_mesh, self.placements
         )
+        self.local_shape = tuple(self.local_shape)
 
     def shard_tensor(
         self, param: torch.Tensor, tensor_idx: int | None = None, device=None, dtype=None
     ) -> torch.Tensor | None:
-        if not self.shard_placements_with_dim_idx:
-            local_tensor = param[...]
-        elif len(self.shard_placements_with_dim_idx) == 1:
-            # Single shard placement (1D: TP-only or FSDP-only)
-            param_shape = list(param.shape) if isinstance(param, torch.Tensor) else param.get_shape()
-            shard_placement = self.shard_placements_with_dim_idx[0][1]
-            # Mixtral-style converted expert weights
-            if (
-                tensor_idx is not None
-                and len(self.empty_param.shape) == len(param_shape) + 1
-                and shard_placement.dim == 0
-            ):
-                local_expert_count = self.local_shape[0]
-                expert_offset = compute_local_shape_and_global_offset(
-                    self.empty_param.shape, self.device_mesh, self.placements
-                )[1][0]
-                if tensor_idx < expert_offset or tensor_idx >= expert_offset + local_expert_count:
-                    return None
-                local_tensor = param[...]
-            else:
-                local_tensor = get_tensor_shard(
-                    param,
-                    self.empty_param,
-                    self.device_mesh,
-                    self.rank,
-                    shard_placement.dim,
-                    tensor_idx=tensor_idx,
-                )
-        else:
-            # Multiple shard placements (2D: TP+FSDP) — shard each dim sequentially
-            local_tensor = param[...] if not isinstance(param, torch.Tensor) else param
-            for mesh_dim_idx, placement in self.shard_placements_with_dim_idx:
-                sub_mesh = self.device_mesh[self.device_mesh.mesh_dim_names[mesh_dim_idx]]
-                rank = sub_mesh.get_local_rank()
-                size = sub_mesh.size()
-                shard_dim = placement.dim
-                chunk_size = local_tensor.shape[shard_dim] // size
-                local_tensor = local_tensor.narrow(shard_dim, rank * chunk_size, chunk_size).contiguous()
+        # Find which mesh dimensions shard data.
+        # Note: _StridedShard.is_shard() returns False in PyTorch, so we also
+        # check for the ``dim`` attribute that both Shard and _StridedShard have.
+        shard_dims = [
+            (i, p) for i, p in enumerate(self.placements)
+            if p.is_shard() or (hasattr(p, "dim") and not p.is_replicate())
+        ]
 
-        if local_tensor is None:
-            return None
-        return local_tensor.to(device=device, dtype=dtype)
+        if not shard_dims:
+            return param[...].to(device=device, dtype=dtype)
 
-    def get_expected_sharded_shape(self, full_shape: tuple[int, ...] | torch.Size) -> tuple[int, ...]:
-        local_shape, _ = compute_local_shape_and_global_offset(full_shape, self.device_mesh, self.placements)
-        return tuple(local_shape)
+        # Mixtral-style experts: individual tensors arrive one at a time.
+        # Skip experts not owned by this rank.
+        param_shape = list(param.shape) if isinstance(param, torch.Tensor) else param.get_shape()
+        if tensor_idx is not None and len(self.param.shape) == len(param_shape) + 1:
+            _, offsets = compute_local_shape_and_global_offset(
+                self.param.shape, self.device_mesh, self.placements
+            )
+            if tensor_idx < offsets[0] or tensor_idx >= offsets[0] + self.local_shape[0]:
+                return None
+            return param[...].to(device=device, dtype=dtype)
 
-    def update_module_attributes(self, module: torch.nn.Module):
-        return None
+        # Materialize then split using each placement's own _split_tensor method,
+        # which correctly handles both contiguous Shard and interleaved _StridedShard.
+        tensor = param[...] if not isinstance(param, torch.Tensor) else param
+        for mesh_dim_idx, placement in shard_dims:
+            sub_mesh = self.device_mesh[self.device_mesh.mesh_dim_names[mesh_dim_idx]] if self.device_mesh.ndim > 1 else self.device_mesh
+            rank = sub_mesh.get_local_rank()
+            shards, _ = placement._split_tensor(tensor, sub_mesh.size(), with_padding=False, contiguous=True)
+            tensor = shards[rank]
+        return tensor.to(device=device, dtype=dtype)
+
+
+@dataclass
+class ParallelMaterializationContext:
+    distributed_operation: DtensorShardOperation
+    tensor_idx: int | None
+    device: str | None
 
 
 def get_parallel_materialization_context(
-    mapping: WeightTransform,
+    mapping,
     renamed_key: str,
-    source_pattern: str,
-    empty_param: Any,
-    device_mesh: Any,
-    parallel_plan: dict[str, Any],
-    parallel_pattern_matcher: re.Pattern | None,
-    parallel_pattern_by_group_name: dict[str, str] | None,
-    device_map: dict[str, Any],
+    source_pattern: str | None,
+    empty_param,
+    device_mesh,
+    device_map,
 ) -> ParallelMaterializationContext | None:
+    """Return the parallel context needed to shard a tensor on read, or None if not applicable."""
+    if not isinstance(empty_param, DTensor):
+        return None
+
     tensor_idx = (
         len(mapping.collected_tensors.get(source_pattern, []))
         if isinstance(mapping, WeightConverter) and isinstance(mapping.operations[0], MergeModulelist)
         else None
     )
-
-    tp_op = None
-    # Check if TP shard-on-read applies to this param
-    if (
-        device_mesh
-        and parallel_plan
-        and parallel_pattern_matcher is not None
-        and parallel_pattern_by_group_name is not None
-    ):
-        if matched_parallel_pattern := parallel_pattern_matcher.search(renamed_key):
-            matched_parallel_pattern = parallel_pattern_by_group_name[matched_parallel_pattern.lastgroup]
-            tp_mesh = (
-                device_mesh["tp"]
-                if device_mesh.ndim > 1 and "tp" in (device_mesh.mesh_dim_names or ())
-                else device_mesh
-            )
-            parallel_layer = ALL_PARALLEL_STYLES[parallel_plan[matched_parallel_pattern]].__class__
-            tp_op = parallel_layer(
-                device_mesh=tp_mesh,
-                rank=tp_mesh.get_local_rank(),
-                empty_param=empty_param.clone()
-                if not is_dtensor_like(empty_param)
-                else empty_param.to_local().clone(),
-            )
-
-    # Compose or use individually
-    if tp_op is not None and not is_dtensor_like(empty_param):
-        # TP-only
-        if getattr(mapping, "distributed_operation", None) is None:
-            mapping.distributed_operation = tp_op
-        return ParallelMaterializationContext(mapping.distributed_operation, tensor_idx, device_map.get("", "cpu"))
-    elif is_dtensor_like(empty_param):
-        # FSDP-only (no TP match, but param is DTensor from fully_shard)
-        if getattr(mapping, "distributed_operation", None) is None:
-            mapping.distributed_operation = FSDPShardOperation.from_param(empty_param)
-        return ParallelMaterializationContext(
-            mapping.distributed_operation,
-            tensor_idx,
-            get_device(device_map, renamed_key, valid_torch_device=True),
-        )
-
-    return None
+    return ParallelMaterializationContext(
+        distributed_operation=DtensorShardOperation(empty_param),
+        tensor_idx=tensor_idx,
+        device=get_device(device_map, renamed_key, valid_torch_device=True),
+    )
 
 
 def dot_natural_key(s: str):
@@ -1081,7 +1008,6 @@ def set_param_for_module(
     target_name: str,
     param_value: torch.Tensor,
     loading_info: LoadStateDictInfo,
-    distributed_operation: Any | None,
     hf_quantizer: HfQuantizer,
 ):
     module_path, _, param_name = target_name.rpartition(".")
@@ -1096,18 +1022,14 @@ def set_param_for_module(
     if ref is None:
         loading_info.unexpected_keys.add(target_name)
     else:
-        if not isinstance(param_value, torch.nn.Parameter) and not is_dtensor_like(ref):
+        if not isinstance(param_value, torch.nn.Parameter) and not isinstance(ref, DTensor):
             if param_name not in module_obj._buffers:
                 param_value = torch.nn.Parameter(param_value, requires_grad=param_value.is_floating_point())
 
         # Remove from missing keys (it's either mismatched, or all good)
         loading_info.missing_keys.discard(target_name)
 
-        # Determine expected shape: use the distributed operation (which accounts for TP+FSDP composition),
-        # or fall back to DTensor local shape for FSDP-only, or full shape for plain loading.
-        if distributed_operation is not None:
-            expected_shape = torch.Size(distributed_operation.get_expected_sharded_shape(ref.shape))
-        elif is_dtensor_like(ref):
+        if isinstance(ref, DTensor):
             local_shape, _ = compute_local_shape_and_global_offset(ref.shape, ref.device_mesh, ref.placements)
             expected_shape = torch.Size(local_shape)
         else:
@@ -1116,11 +1038,8 @@ def set_param_for_module(
         if ref is not None and param_value.shape != expected_shape and hf_quantizer is None:
             loading_info.mismatched_keys.add((target_name, param_value.shape, expected_shape))
         else:
-            if is_dtensor_like(ref):
+            if isinstance(ref, DTensor):
                 local_param = param_value.detach() if isinstance(param_value, torch.nn.Parameter) else param_value
-                # ref.shape is the DTensor global shape. For DTensor-based TP+FSDP,
-                # parallelize_module + fully_shard compose correctly, so ref.shape
-                # and ref.placements are already correct for the 2D DTensor.
                 fsdp_param = DTensor.from_local(
                     local_param.contiguous(),
                     ref.device_mesh,
@@ -1140,8 +1059,6 @@ def set_param_for_module(
                 # super important otherwise _init_weight will re-init the param
                 param_value._is_hf_initialized = True
                 setattr(module_obj, param_name, param_value)
-                if distributed_operation is not None:
-                    distributed_operation.update_module_attributes(module_obj)
 
 
 def offload_and_maybe_resave_param(
@@ -1365,10 +1282,6 @@ def convert_and_load_state_dict_in_model(
     converters = [entry for entry in weight_mapping if isinstance(entry, WeightConverter)]
     param_name_to_load: dict[str, WeightRenaming | WeightConverter] = {}
 
-    # build '(?P<g0>.*.*\\.block_sparse_moe\\..*)' and group to source {'g0': '*.block_sparse_moe.'}
-    # and target to source {'g0': '*.mlp.'}. This allows us to quickly find which pattern matched.
-    if tp_plan != {}:
-        tp_plan_alt, tp_plan_by_group_name, _ = build_glob_alternation(list(tp_plan.keys()))
     if dtype_plan != {}:
         dtype_policy_alt, dtype_policy_by_group_name, _ = build_glob_alternation(list(dtype_plan.keys()))
 
@@ -1446,16 +1359,12 @@ def convert_and_load_state_dict_in_model(
                 _dtype = empty_param.dtype  # usually correct when initializing
 
             # 4. Handle parallel shard-on-read or device_map placement
-            future_or_tensor = None
             if parallel_context := get_parallel_materialization_context(
                 mapping=mapping,
                 renamed_key=renamed_key,
                 source_pattern=source_pattern,
                 empty_param=empty_param,
                 device_mesh=device_mesh,
-                parallel_plan=tp_plan,
-                parallel_pattern_matcher=tp_plan_alt if tp_plan else None,
-                parallel_pattern_by_group_name=tp_plan_by_group_name if tp_plan else None,
                 device_map=device_map,
             ):
                 future_or_tensor = spawn_parallel_materialize(
@@ -1466,8 +1375,7 @@ def convert_and_load_state_dict_in_model(
                     parallel_context.device,
                     _dtype,
                 )
-
-            if future_or_tensor is None:
+            else:
                 param_device = get_device(device_map, renamed_key, valid_torch_device=True)
                 future_or_tensor = spawn_materialize(thread_pool, tensor, param_device, _dtype)
 
@@ -1499,12 +1407,7 @@ def convert_and_load_state_dict_in_model(
                         )
                     else:
                         set_param_for_module(
-                            model,
-                            target_name,
-                            param,
-                            loading_info,
-                            mapping.distributed_operation,
-                            hf_quantizer,
+                            model, target_name, param, loading_info, hf_quantizer
                         )
 
                 # Cleanup all the tensors that were gathered before next iteration
