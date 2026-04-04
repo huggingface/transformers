@@ -29,14 +29,10 @@ from ...image_utils import (
     valid_images,
 )
 from ...processing_utils import ImagesKwargs
-from ...utils import TensorType, is_torch_available, is_torchvision_available, logging
+from ...utils import TensorType, logging
 
-
-if is_torch_available():
-    import torch
-
-if is_torchvision_available():
-    import torchvision.transforms
+import torch
+import torchvision.transforms
 
 
 logger = logging.get_logger(__name__)
