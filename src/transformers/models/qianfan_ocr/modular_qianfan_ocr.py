@@ -376,13 +376,13 @@ class QianfanOCRModel(QianfanOCRPreTrainedModel):
         vision_feature_layer (`int` or `list[int]`):
             Layer index or list of layer indices to extract features from.
         """
-        try:
-            model_dtype = self.dtype
-        except StopIteration:
-            # Under nn.DataParallel the replica may have no parameters on the
-            # primary device; fall back to the dtype of the vision_tower params.
-            model_dtype = next(self.vision_tower.parameters()).dtype
-        pixel_values = pixel_values.to(dtype=model_dtype)
+        # Use pixel_values dtype as fallback: under nn.DataParallel a replica may
+        # have no parameters on the primary device (self.dtype raises StopIteration),
+        # but input tensors are always correctly scattered so pixel_values.dtype is safe.
+        model_dtype = next(
+            (p.dtype for p in self.parameters() if p.is_floating_point()),
+            pixel_values.dtype,
+        )
 
         downsample_ratio = self.config.downsample_ratio
         if vision_feature_layer != -1:
