@@ -94,7 +94,9 @@ def load_balancing_loss_func(
 
     if attention_mask is None:
         # Compute the percentage of tokens routed to each experts
-        tokens_per_expert = torch.mean(expert_mask.float(), dim=0)
+        # Normalize by top_k so that sum(f_i) = 1, matching the distribution of P_i
+        # See: https://github.com/huggingface/transformers/issues/43688
+        tokens_per_expert = torch.mean(expert_mask.float(), dim=0) / top_k
 
         # Compute the average probability of routing to these experts
         router_prob_per_expert = torch.mean(routing_weights, dim=0)
@@ -111,8 +113,10 @@ def load_balancing_loss_func(
         )
 
         # Compute the percentage of tokens routed to each experts
-        tokens_per_expert = torch.sum(expert_mask.float() * expert_attention_mask, dim=0) / torch.sum(
-            expert_attention_mask, dim=0
+        # Normalize by top_k so that sum(f_i) = 1, matching the distribution of P_i
+        # See: https://github.com/huggingface/transformers/issues/43688
+        tokens_per_expert = torch.sum(expert_mask.float() * expert_attention_mask, dim=0) / (
+            torch.sum(expert_attention_mask, dim=0) * top_k
         )
 
         # Compute the mask that masks all padding tokens as 0 with the same shape of tokens_per_expert
