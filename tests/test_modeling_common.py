@@ -1301,7 +1301,7 @@ class ModelTesterMixin:
             config.scale = 0
         for sub_key in config.sub_configs:
             subconfig = getattr(config, sub_key)
-            if hasattr(subconfig, "scale"):
+            if subconfig is not None and hasattr(subconfig, "scale"):
                 subconfig.scale = 0
 
         for model_class in self.all_model_classes:
@@ -2397,6 +2397,55 @@ class ModelTesterMixin:
         }
         with _deepspeed_zero3(ds_config):
             self.test_resize_embeddings_untied()
+
+    def test_resize_embeddings_untied_no_reinit_on_post_init(self):
+        if not self.test_resize_embeddings:
+            self.skipTest(reason="test_resize_embeddings is set to `False`")
+
+        original_config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        original_config.tie_word_embeddings = False
+        try:
+            original_config.get_text_config().tie_word_embeddings = False
+        except Exception as e:
+            model_type = getattr(original_config, "model_type", "unknown")
+            print(f"Could not set text config's `tie_word_embeddings` for model type `{model_type}`: {e}")
+
+        if original_config.tie_word_embeddings:
+            self.skipTest(reason="Model cannot untie embeddings")
+
+        for model_class in self.all_model_classes:
+            with self.subTest(model_class):
+                config = copy.deepcopy(original_config)
+                model = model_class(config).to(torch_device)
+                model.eval()
+
+                # The bug only affects nn.Linear LM heads created by _get_resized_lm_head
+                output_embeds = model.get_output_embeddings()
+                if not isinstance(output_embeds, nn.Linear):
+                    continue
+
+                model_vocab_size = config.get_text_config().vocab_size
+                try:
+                    model.resize_token_embeddings(model_vocab_size + 10)
+                except (NotImplementedError, AttributeError):
+                    continue
+
+                output_embeds = model.get_output_embeddings()
+                weights_before = output_embeds.weight.data.clone()
+                bias_before = output_embeds.bias.data.clone() if output_embeds.bias is not None else None
+
+                model.post_init()
+
+                output_embeds_after = model.get_output_embeddings()
+                self.assertTrue(
+                    torch.equal(weights_before, output_embeds_after.weight.data),
+                    "Output embedding weights were reinitialized by post_init() after resize_token_embeddings()",
+                )
+                if bias_before is not None:
+                    self.assertTrue(
+                        torch.equal(bias_before, output_embeds_after.bias.data),
+                        "Output embedding bias was reinitialized by post_init() after resize_token_embeddings()",
+                    )
 
     def test_model_get_set_embeddings(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -3612,7 +3661,7 @@ class ModelTesterMixin:
                     "PaliGemma-like models currently (transformers==4.41.0) requires an attention_mask input"
                 )
             if config.model_type in [
-                "EvollaModel",
+                "evolla",
                 "modernbert",
                 "gemma3",
                 "t5gemma",
@@ -4861,6 +4910,7 @@ class ModelTesterMixin:
                 or "input_values" in key
                 or "input_features" in key
                 or key in ["padding_mask", "is_longer", "feature_attention_mask"]
+                or (config.model_type == "musicflamingo" and key == "input_ids")
             }
         return config, inputs_dict
 

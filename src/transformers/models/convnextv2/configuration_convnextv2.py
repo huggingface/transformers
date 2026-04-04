@@ -51,7 +51,7 @@ class ConvNextV2Config(BackboneConfigMixin, PreTrainedConfig):
     hidden_act: str = "gelu"
     initializer_range: float = 0.02
     layer_norm_eps: float = 1e-12
-    drop_path_rate: float = 0.0
+    drop_path_rate: float | int = 0.0
     image_size: int | list[int] | tuple[int, int] = 224
     _out_features: list[str] | None = None
     _out_indices: list[int] | None = None

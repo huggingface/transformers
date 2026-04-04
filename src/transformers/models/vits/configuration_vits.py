@@ -150,7 +150,7 @@ class VitsConfig(PreTrainedConfig):
     wavenet_kernel_size: int = 5
     wavenet_dilation_rate: int = 1
     wavenet_dropout: float | int = 0.0
-    speaking_rate: float = 1.0
+    speaking_rate: float | int = 1.0
     noise_scale: float = 0.667
     noise_scale_duration: float = 0.8
     sampling_rate: int = 16_000

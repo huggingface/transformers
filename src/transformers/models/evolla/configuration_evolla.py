@@ -44,8 +44,8 @@ class SaProtConfig(PreTrainedConfig):
     num_hidden_layers: int = 33
     num_attention_heads: int = 20
     intermediate_size: int = 5120
-    hidden_dropout_prob: float = 0.1
-    attention_probs_dropout_prob: float = 0.1
+    hidden_dropout_prob: float | int = 0.1
+    attention_probs_dropout_prob: float | int = 0.1
     max_position_embeddings: int = 1026
     initializer_range: float = 0.02
     layer_norm_eps: float = 1e-05
@@ -96,7 +96,7 @@ class EvollaConfig(PreTrainedConfig):
     >>> configuration = model.config
     ```"""
 
-    model_type = "EvollaModel"
+    model_type = "evolla"
     sub_configs = {"protein_encoder_config": SaProtConfig}
     default_theta = 500000.0
 

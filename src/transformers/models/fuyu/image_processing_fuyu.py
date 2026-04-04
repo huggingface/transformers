@@ -16,6 +16,7 @@
 import math
 
 import torch
+from torchvision.transforms.v2 import functional as tvF
 
 from ...image_processing_backends import TorchvisionBackend
 from ...image_processing_utils import BatchFeature, get_size_dict
@@ -31,14 +32,9 @@ from ...processing_utils import ImagesKwargs, Unpack
 from ...utils import (
     TensorType,
     auto_docstring,
-    is_torchvision_available,
     logging,
     requires_backends,
 )
-
-
-if is_torchvision_available():
-    from torchvision.transforms.v2 import functional as tvF
 
 
 logger = logging.get_logger(__name__)
