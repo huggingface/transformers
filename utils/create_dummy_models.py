@@ -184,6 +184,22 @@ configs_requiring_too_exotic_dependency = {
 }
 
 
+# Models that intentionally have no processor (no processor files exist on their Hub repos).
+# These are excluded from the "no processor found" error checks.
+CONFIGS_WITHOUT_PROCESSOR = {
+    "AutoformerConfig",
+    "PatchTSMixerConfig",
+    "PatchTSTConfig",
+    "PI0Config",
+    "PPLCNetV3Config",
+    "TimesFmConfig",
+    "TimesFm2_5Config",
+    "TimmBackboneConfig",
+    "TimmWrapperConfig",
+    "VitDetConfig",
+}
+
+
 # Checkpoints for some configs are only available on hub PRs or in subfolders.
 # TODO: a better long-term handle for revisions and subfolders.
 CHECKPOINT_REVISIONS = {
@@ -1389,19 +1405,7 @@ def build(config_class, models_to_create, output_dir, keep_model=False):
         fill_result_with_error(result, error, trace, models_to_create)
 
     if len(result["processor"]) == 0:
-        # TODO: Some models use NO processor (and no processor files exist on their hub repos.)
-        if config_class.__name__ not in [
-            "PatchTSMixerConfig",
-            "PatchTSTConfig",
-            "TimesFmConfig",
-            "TimmBackboneConfig",
-            "TimmWrapperConfig",
-            "VitDetConfig",
-            "AutoformerConfig",
-            "TimesFm2_5Config",
-            "PI0Config",
-            "PPLCNetV3Config",
-        ]:
+        if config_class.__name__ not in CONFIGS_WITHOUT_PROCESSOR:
             error = f"No processor could be built for {config_class.__name__}."
             fill_result_with_error(result, error, None, models_to_create)
             logger.error(result["error"][0])
@@ -1437,19 +1441,7 @@ def build(config_class, models_to_create, output_dir, keep_model=False):
     #     p.save_pretrained(processor_output_folder)
 
     if len(processors) == 0:
-        # TODO: Some models use NO processor (and no processor files exist on their hub repos.)
-        if config_class.__name__ not in [
-            "PatchTSMixerConfig",
-            "PatchTSTConfig",
-            "TimesFmConfig",
-            "TimmBackboneConfig",
-            "TimmWrapperConfig",
-            "VitDetConfig",
-            "AutoformerConfig",
-            "TimesFm2_5Config",
-            "PI0Config",
-            "PPLCNetV3Config",
-        ]:
+        if config_class.__name__ not in CONFIGS_WITHOUT_PROCESSOR:
             error = f"No processor is returned by `convert_processors` for {config_class.__name__}."
             fill_result_with_error(result, error, None, models_to_create)
             logger.error(result["error"][0])
