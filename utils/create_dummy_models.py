@@ -292,7 +292,7 @@ def get_architectures_from_config_class(config_class, arch_mappings, models_to_s
                 for modeling_name in modeling_names:
                     modeling_module = getattr(module, modeling_name)
                     _models = getattr(modeling_module, missing_model_name, None)
-                    if models is not None:
+                    if _models is not None:
                         models = _models
                         break
 
