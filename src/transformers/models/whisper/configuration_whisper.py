@@ -154,10 +154,10 @@ class WhisperConfig(PreTrainedConfig):
     use_weighted_layer_sum: bool = False
     classifier_proj_size: int = 256
     apply_spec_augment: bool = False
-    mask_time_prob: float = 0.05
+    mask_time_prob: float | int = 0.05
     mask_time_length: int = 10
     mask_time_min_masks: int = 2
-    mask_feature_prob: float = 0.0
+    mask_feature_prob: float | int = 0.0
     mask_feature_length: int = 10
     mask_feature_min_masks: int = 0
     median_filter_width: int = 7

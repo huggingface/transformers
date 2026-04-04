@@ -441,17 +441,19 @@ class FullAttentionCacheAllocator(CacheAllocator):
 class SlidingAttentionCacheAllocator(CacheAllocator):
     """Cache manager for sliding window attention layers."""
 
-    def __init__(self, index: int, block_size: int, sliding_window: int) -> None:
-        """Initializes the cache manager for a group of sliding window attention layers.
-        Args:
-            - index: the index of the associated layer group
-            - block_size: the size of the blocks in the cache
-            - sliding_window: the size of the sliding window
+    def __init__(
+        self, index: int, block_size: int, sliding_window: int, sentinel_index: int, trash_index: int
+    ) -> None:
+        """Initializes the cache manager for a group of sliding window attention layers. ``sentinel_index`` and
+        ``trash_index`` are valid cache positions in the padding zone, used instead of -1 in read and write indices
+        respectively so that index_select/index_copy_ never receive negative values.
         """
         self._index = index
         self.uses_block_sharing = False
         self.block_size = block_size
         self.sliding_window = sliding_window
+        self.sentinel_index = sentinel_index
+        self.trash_index = trash_index
         self._max_blocks_per_request = ceil(self.sliding_window / self.block_size)
         self.block_table = {}
 
@@ -481,8 +483,8 @@ class SlidingAttentionCacheAllocator(CacheAllocator):
         """Returns the physical indices of where to read request_id's cache in the cache tensor.
         For a group of sliding window attention layers, we read from the cache tensor before writing on it, because the
         new cache can overwrite the old one. To form the cache + new key / values states, we read the at most
-        sliding_window - 1 cache page and then manually add the new key / values states after. Hence the -1 indices
-        which indicate where to store the new key or values indices."""
+        sliding_window - 1 cache page and then manually add the new key / values states after. Hence the sentinel
+        indices which indicate where to store the new key or values indices."""
         # Retrieve the block table for the request and raise an error if it doesn't exist
         block_table = self.block_table.get(request_id)
         if block_table is None:
@@ -498,7 +500,7 @@ class SlidingAttentionCacheAllocator(CacheAllocator):
             block_offset = i % self.block_size
             physical_index = block_table[block_idx] * self.block_size + block_offset
             physical_indices.append(physical_index)
-        return physical_indices + [-1] * query_length
+        return physical_indices + [self.sentinel_index] * query_length
 
     def get_write_indices(self, request_id: str, past_length: int, query_length: int) -> list[int]:
         """Returns the physical indices of where to write request_id's cache in the cache tensor. For a group of
@@ -521,7 +523,7 @@ class SlidingAttentionCacheAllocator(CacheAllocator):
             physical_index = block_table[block_idx] * self.block_size + block_offset
             physical_indices.append(physical_index)
         if padding_length > 0:
-            physical_indices = [-1] * padding_length + physical_indices
+            physical_indices = [self.trash_index] * padding_length + physical_indices
         return physical_indices
 
     # TODO: implement this

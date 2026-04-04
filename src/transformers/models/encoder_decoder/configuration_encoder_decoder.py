@@ -63,7 +63,7 @@ class EncoderDecoderConfig(PreTrainedConfig):
 
     pad_token_id: int | None = None
     decoder_start_token_id: int | None = None
-    is_encoder_decoder: int | None = True
+    is_encoder_decoder: bool | None = True
 
     def __post_init__(self, **kwargs):
         if "encoder" not in kwargs or "decoder" not in kwargs:
