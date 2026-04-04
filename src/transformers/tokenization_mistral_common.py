@@ -1246,7 +1246,7 @@ class MistralCommonBackend(PreTrainedTokenizerBase):
 
     def _get_image_sizes_for_tensor(
         self, images: list[np.ndarray], return_tensors: str | TensorType | None
-    ) -> list[list[int]] | np.ndarray | torch.Tensor:
+    ) -> "list[list[int]] | np.ndarray | torch.Tensor":
         """
         Convert image sizes to the appropriate format based on return_tensors.
 

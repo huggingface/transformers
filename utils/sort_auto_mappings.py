@@ -34,6 +34,14 @@ import os
 import re
 
 
+CHECKER_CONFIG = {
+    "name": "auto_mappings",
+    "label": "Auto mappings",
+    "file_globs": ["src/transformers/models/auto/*.py"],
+    "check_args": ["--check_only"],
+    "fix_args": [],
+}
+
 # Path are set with the intent you should run this script from the root of the repo.
 PATH_TO_AUTO_MODULE = "src/transformers/models/auto"
 

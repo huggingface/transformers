@@ -324,7 +324,19 @@ class AutoFeatureExtractorTest(unittest.TestCase):
             self.assertFalse(processor.feature_extractor.special_attribute_present)
             self.assertFalse(processor.tokenizer.special_attribute_present)
 
-            # If remote is enabled, we load from the Hub.
+            # If remote code is enabled but the user explicitly registered the local one, we load the local one.
+            processor = AutoProcessor.from_pretrained(
+                "hf-internal-testing/test_dynamic_processor_updated", trust_remote_code=True
+            )
+            self.assertEqual(processor.__class__.__name__, "NewProcessor")
+            self.assertFalse(processor.special_attribute_present)
+            self.assertFalse(processor.feature_extractor.special_attribute_present)
+            self.assertFalse(processor.tokenizer.special_attribute_present)
+
+            # If remote code is enabled but local code originated from transformers, we load the remote one.
+            NewFeatureExtractor.__module__ = "transformers.models.custom.feature_extraction_custom"
+            NewTokenizer.__module__ = "transformers.models.custom.tokenization_custom"
+            NewProcessor.__module__ = "transformers.models.custom.configuration_custom"
             processor = AutoProcessor.from_pretrained(
                 "hf-internal-testing/test_dynamic_processor_updated", trust_remote_code=True
             )
