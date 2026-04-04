@@ -47,6 +47,7 @@ if is_torch_available():
 if is_vision_available():
     from PIL import Image
 
+
 class QianfanOCRVisionText2TextModelTester:
     def __init__(
         self,
@@ -201,10 +202,6 @@ class QianfanOCRModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTeste
     def test_flash_attn_2_fp32_ln(self):
         pass
 
-    # @unittest.skip(reason="DataParallel not supported for multimodal models with dynamic image tokens")
-    # def test_multi_gpu_data_parallel_forward(self):
-    #     pass
-
     def test_model_fp16_forward(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         self.model_tester.create_and_check_model_fp16_forward(
@@ -231,9 +228,7 @@ class QianfanOCRIntegrationTest(unittest.TestCase):
         # model weights in baidu/Qianfan-OCR will be updated after this PR get released in transformers,
         # use bairongz/QianfanOCR for testing and will update back to baidu/Qianfan-OCR after weight update
         self.model_checkpoint = "bairongz/QianfanOCR"
-        self.image_path = (
-            Path(__file__).parents[2] / "fixtures" / "tests_samples" / "COCO" / "000000039769.png"
-        )
+        self.image_path = Path(__file__).parents[2] / "fixtures" / "tests_samples" / "COCO" / "000000039769.png"
         cleanup(torch_device, gc_collect=True)
 
     def tearDown(self):
@@ -297,7 +292,7 @@ class QianfanOCRIntegrationTest(unittest.TestCase):
         ).to(torch_device, torch.bfloat16)
 
         output = model.generate(**inputs, max_new_tokens=20, do_sample=False)
-        decoded = processor.decode(output[0, inputs["input_ids"].shape[1]:], skip_special_tokens=True)
+        decoded = processor.decode(output[0, inputs["input_ids"].shape[1] :], skip_special_tokens=True)
 
         # fmt: off
         expected_outputs = Expectations(
@@ -319,7 +314,7 @@ class QianfanOCRIntegrationTest(unittest.TestCase):
         ).to(torch_device)
 
         output = model.generate(**inputs, max_new_tokens=16, do_sample=False)
-        decoded = processor.decode(output[0, inputs["input_ids"].shape[1]:], skip_special_tokens=True)
+        decoded = processor.decode(output[0, inputs["input_ids"].shape[1] :], skip_special_tokens=True)
 
         # fmt: off
         expected_outputs = Expectations(
@@ -366,8 +361,8 @@ class QianfanOCRIntegrationTest(unittest.TestCase):
         output = model.generate(**inputs, max_new_tokens=20, do_sample=False)
         self.assertEqual(output.shape[0], 2)
 
-        decoded_0 = processor.decode(output[0, inputs["input_ids"].shape[1]:], skip_special_tokens=True)
-        decoded_1 = processor.decode(output[1, inputs["input_ids"].shape[1]:], skip_special_tokens=True)
+        decoded_0 = processor.decode(output[0, inputs["input_ids"].shape[1] :], skip_special_tokens=True)
+        decoded_1 = processor.decode(output[1, inputs["input_ids"].shape[1] :], skip_special_tokens=True)
 
         # fmt: off
         expected_outputs_0 = Expectations(

@@ -120,7 +120,6 @@ class QianfanViTEncoder(nn.Module):
 
 
 class QianfanViTEmbeddings(nn.Module):
-
     def __init__(self, config: QianfanViTConfig):
         super().__init__()
         self.embed_dim = config.hidden_size
@@ -185,6 +184,7 @@ class QianfanViTModelOutputWithPooling(BaseModelOutputWithPooling):
         *config.use_mean_pooling* is set to True. If set to False, then the final hidden state of the *[CLS]* token
         will be returned.
     """
+
     pass
 
 
