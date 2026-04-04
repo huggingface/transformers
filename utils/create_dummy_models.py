@@ -1360,9 +1360,6 @@ def build(config_class, models_to_create, output_dir, keep_model=False):
 
     traces = []
     errors = []
-
-    # processor_classes = [x for x in processor_classes if x.__name__ == "AutoTokenizer"]
-
     for processor_class in processor_classes:
         try:
             processor = build_processor(config_class, processor_class, allow_no_checkpoint=True)
