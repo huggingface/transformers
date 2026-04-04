@@ -35,6 +35,7 @@ class DistributedConfig:
 
     tp_size: int | None = None
     tp_plan: str | dict[str, str] | None = None
+    enable_sequence_parallel: bool = False
     fsdp_size: int | None = None
     fsdp_plan: str | dict | None = None
 

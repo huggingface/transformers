@@ -108,6 +108,8 @@ class Qwen3Attention(LlamaAttention):
 
 
 class Qwen3ForCausalLM(Qwen2ForCausalLM):
+    _pp_plan = {"lm_head": (["hidden_states"], ["logits"])}
+
     def forward(
         self,
         **super_kwargs: Unpack[TransformersKwargs],

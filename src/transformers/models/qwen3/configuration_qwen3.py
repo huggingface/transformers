@@ -41,17 +41,42 @@ class Qwen3Config(PreTrainedConfig):
     model_type = "qwen3"
     keys_to_ignore_at_inference = ["past_key_values"]
 
-    # Default tensor parallel plan for base model `Qwen3`
+    # TP plan (for inference/generation).
+    # All activations are plain tensors — compatible with KV cache and autoregressive
+    # decode (seq_len=1). Each rank holds a full copy of activations between layers.
     base_model_tp_plan = {
+        "embed_tokens": "embedding_rowwise_inference",
         "layers.*.self_attn.q_proj": "colwise",
         "layers.*.self_attn.k_proj": "colwise",
         "layers.*.self_attn.v_proj": "colwise",
-        "layers.*.self_attn.q_norm": "replicated_with_grad_allreduce",
-        "layers.*.self_attn.k_norm": "replicated_with_grad_allreduce",
+        "layers.*.self_attn.o_proj": "rowwise_inference",
+        "layers.*.mlp.gate_proj": "colwise",
+        "layers.*.mlp.up_proj": "colwise",
+        "layers.*.mlp.down_proj": "rowwise_inference",
+    }
+
+    # TP + Sequence Parallelism plan (for training).
+    # Activations between layers are sharded on the sequence dimension (Shard(1)),
+    # reducing per-rank activation memory by tp_size. In exchange, extra collectives
+    # (all-gather before attention/MLP, reduce-scatter after) are needed.
+    # Not compatible with autoregressive decode (because seq_len=1 can't be split across ranks)
+    # or KV cache (which stores plain tensors).
+    base_model_sp_plan = {
+        "embed_tokens": "embedding_rowwise",
+        "layers.*.input_layernorm": "sequence_parallel",
+        "layers.*.self_attn": "prepare_input_sp_to_replicate",
+        "layers.*.self_attn.q_proj": "colwise",
+        "layers.*.self_attn.k_proj": "colwise",
+        "layers.*.self_attn.v_proj": "colwise",
+        "layers.*.self_attn.q_norm": "sequence_parallel_head_dim",
+        "layers.*.self_attn.k_norm": "sequence_parallel_head_dim",
         "layers.*.self_attn.o_proj": "rowwise",
+        "layers.*.post_attention_layernorm": "sequence_parallel",
+        "layers.*.mlp": "prepare_mlp_input_sp",
         "layers.*.mlp.gate_proj": "colwise",
         "layers.*.mlp.up_proj": "colwise",
         "layers.*.mlp.down_proj": "rowwise",
+        "norm": "sequence_parallel_local_output",
     }
     base_model_pp_plan = {
         "embed_tokens": (["input_ids"], ["inputs_embeds"]),

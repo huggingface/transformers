@@ -173,7 +173,7 @@ class CausalLMModelTester:
         use_input_mask=True,
         use_token_type_ids=False,
         use_labels=True,
-        vocab_size=99,
+        vocab_size=100,
         hidden_size=32,
         num_hidden_layers=2,
         num_attention_heads=2,
