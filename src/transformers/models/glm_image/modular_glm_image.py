@@ -226,7 +226,7 @@ class GlmImageVisionAttention(Glm4vVisionAttention):
 
         if "flash" in self.config._attn_implementation:
             # Flash Attention: Use cu_seqlens for variable length attention
-            max_seqlen = (cu_seqlens[1:] - cu_seqlens[:-1]).max()
+            max_seqlen = (cu_seqlens[1:] - cu_seqlens[:-1]).max().item()
             attn_output, _ = attention_interface(
                 self,
                 query_states,
