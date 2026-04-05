@@ -700,16 +700,16 @@ class TimesFm2_5ModelForPrediction(TimesFm2_5PreTrainedModel):
         input_ts, input_padding = [], []
 
         for ts in inputs:
-            input_len = ts.shape[0]
-            padding = torch.zeros(input_len + self.horizon_len, dtype=ts.dtype, device=ts.device)
-            if input_len < context_len:
-                num_front_pad = context_len - input_len
-                ts = torch.cat([torch.zeros(num_front_pad, dtype=ts.dtype, device=ts.device), ts], dim=0)
-                padding = torch.cat([torch.ones(num_front_pad, dtype=ts.dtype, device=padding.device), padding], dim=0)
-            elif input_len > context_len:
-                ts = ts[-context_len:]
-                padding = padding[-(context_len + self.horizon_len) :]
-
+            ts = ts[-context_len:]
+            num_front_pad = context_len - ts.shape[0]
+            ts = torch.cat([torch.zeros(num_front_pad, dtype=ts.dtype, device=ts.device), ts], dim=0)
+            padding = torch.cat(
+                [
+                    torch.ones(num_front_pad, dtype=ts.dtype, device=ts.device),
+                    torch.zeros(context_len + self.horizon_len - num_front_pad, dtype=ts.dtype, device=ts.device),
+                ],
+                dim=0,
+            )
             input_ts.append(ts)
             input_padding.append(padding)
 
