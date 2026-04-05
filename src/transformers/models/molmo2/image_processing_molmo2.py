@@ -15,9 +15,11 @@
 """Image processor class for Molmo2"""
 
 import numpy as np
+import torch
+import torchvision.transforms
 
-from ...feature_extraction_utils import BatchFeature
-from ...image_processing_utils import BaseImageProcessor, get_size_dict
+from ...image_processing_backends import TorchvisionBackend
+from ...image_processing_utils import BatchFeature, get_size_dict
 from ...image_transforms import convert_to_rgb, normalize
 from ...image_utils import (
     IMAGENET_STANDARD_MEAN,
@@ -29,10 +31,7 @@ from ...image_utils import (
     valid_images,
 )
 from ...processing_utils import ImagesKwargs
-from ...utils import TensorType, logging
-
-import torch
-import torchvision.transforms
+from ...utils import TensorType, auto_docstring, logging
 
 
 logger = logging.get_logger(__name__)
@@ -43,33 +42,16 @@ def resize_image(
     desired_output_size: list[int],
     resample: PILImageResampling,
 ) -> np.ndarray:
+    """Resize an image and rescale to [0, 1] float32."""
     image = torch.permute(torch.from_numpy(image), [2, 0, 1])
-    dtype = image.dtype
-    if torch.is_floating_point(image):
-        in_min = 0.0
-        in_max = 1.0
-        resized = torchvision.transforms.Resize(
-            desired_output_size,
-            resample,
-            antialias=False,
-        )(image)
-        resized = torch.clip(resized, 0.0, 1.0).to(dtype)
-    else:
-        assert image.dtype == torch.uint8, f"SigLIP expects float images or uint8 images, but got {image.dtype}"
-        in_min = 0.0
-        in_max = 255.0
-        resized = torchvision.transforms.Resize(
-            desired_output_size,
-            resample,
-            antialias=False,
-        )(image)
-        resized = torch.clip(resized, 0, 255).to(dtype)
-
-    resized = resized.to(torch.float32)
-    resized = (resized - in_min) / (in_max - in_min)
-
+    resized = torchvision.transforms.Resize(
+        desired_output_size,
+        resample,
+        antialias=False,
+    )(image)
+    resized = torch.clip(resized, 0, 255).to(torch.uint8)
+    resized = resized.to(torch.float32) / 255.0
     resized = torch.permute(resized, [1, 2, 0]).numpy()
-
     return resized
 
 
@@ -145,7 +127,8 @@ def build_overlapping_crops(
     """
     original_image_h, original_image_w = image.shape[:2]
     crop_size = base_image_input_size[0]
-    assert base_image_input_size[0] == base_image_input_size[1]
+    if base_image_input_size[0] != base_image_input_size[1]:
+        raise ValueError(f"Expected square base_image_input_size, got {base_image_input_size}")
 
     left_margin, right_margin = overlap_margins
     total_margin_pixels = image_patch_size * (right_margin + left_margin)  # pixels removed per dim
@@ -315,66 +298,42 @@ def image_to_patches_and_grids(
 
 
 class Molmo2ImagesKwargs(ImagesKwargs, total=False):
+    """
+    max_crops (`int`, *optional*, defaults to 8):
+        Maximum number of crops to use per image.
+    overlap_margins (`list[int]`, *optional*, defaults to `[4, 4]`):
+        Overlap margins (in patches) for overlapping crop extraction.
+    patch_size (`int`, *optional*, defaults to 14):
+        The spatial patch size of the vision encoder.
+    pooling_size (`list[int]`, *optional*, defaults to `[2, 2]`):
+        The pooling size of the vision adapter.
+    """
+
     max_crops: int | None
     overlap_margins: list[int] | None
     patch_size: int | None
     pooling_size: list[int] | None
 
 
-class Molmo2ImageProcessor(BaseImageProcessor):
-    r"""
-    Constructs a Molmo2 image processor that preprocesses images for the model.
-
-    Args:
-        size (`dict[str, int]` *optional*, defaults to `{"height": 378, "width": 378}`):
-            Size of the image after resizing.
-        resample (`PILImageResampling`, *optional*, defaults to `Resampling.BILINEAR`):
-            Resampling filter to use when resizing the image.
-        image_mean (`float` or `list[float]`, *optional*, defaults to `[0.5, 0.5, 0.5]`):
-            Mean to use if normalizing the image. This is a float or list of floats for each channel in the image.
-        image_std (`float` or `list[float]`, *optional*, defaults to `[0.5, 0.5, 0.5]`):
-            Standard deviation to use if normalizing the image. This is a float or list of floats for each channel in the image.
-        do_convert_rgb (`bool`, *optional*, defaults to `True`):
-            Whether to convert the image to RGB.
-        max_crops (`int`, *optional*, defaults to 8):
-            Maximum number of crops to use per image.
-        overlap_margins (`list[int]`, *optional*, defaults to `[4, 4]`):
-            Overlap margins to use.
-        patch_size (`int`, *optional*, defaults to 14):
-            The spatial patch size of the vision encoder.
-        pooling_size (`list[int]`, *optional*, defaults to `[2, 2]`):
-            The pooling size of the vision adapter.
-    """
-
+@auto_docstring
+class Molmo2ImageProcessor(TorchvisionBackend):
+    valid_kwargs = Molmo2ImagesKwargs
     model_input_names = ["pixel_values", "image_token_pooling", "image_grids", "image_num_crops"]
+    resample = PILImageResampling.BILINEAR
+    image_mean = IMAGENET_STANDARD_MEAN
+    image_std = IMAGENET_STANDARD_STD
+    size = {"height": 378, "width": 378}
+    do_resize = True
+    do_rescale = True
+    do_normalize = True
+    do_convert_rgb = True
+    max_crops = 8
+    overlap_margins = [4, 4]
+    patch_size = 14
+    pooling_size = [2, 2]
 
-    def __init__(
-        self,
-        size: dict[str, int] | None = None,
-        resample: PILImageResampling = PILImageResampling.BILINEAR,
-        image_mean: float | list[float] | None = None,
-        image_std: float | list[float] | None = None,
-        do_convert_rgb: bool = True,
-        max_crops: int = 8,
-        overlap_margins: list[int] = [4, 4],
-        patch_size: int = 14,
-        pooling_size: list[int] = [2, 2],
-        **kwargs,
-    ) -> None:
+    def __init__(self, **kwargs):
         super().__init__(**kwargs)
-        size = size if size is not None else {"height": 378, "width": 378}
-        size = get_size_dict(size, default_to_square=True)
-        self.size = size
-
-        self.resample = resample
-        self.image_mean = list(image_mean) if image_mean is not None else list(IMAGENET_STANDARD_MEAN)
-        self.image_std = list(image_std) if image_std is not None else list(IMAGENET_STANDARD_STD)
-        self.do_convert_rgb = do_convert_rgb
-
-        self.max_crops = max_crops
-        self.overlap_margins = overlap_margins
-        self.patch_size = patch_size
-        self.pooling_size = pooling_size
 
     def preprocess(
         self,
@@ -431,10 +390,9 @@ class Molmo2ImageProcessor(BaseImageProcessor):
                 - `image_num_crops`: The number of crops for each image.
         """
         if size is not None:
-            if "height" not in size or "width" not in size:
-                raise ValueError("size must contain 'height' and 'width' keys.")
+            size = get_size_dict(size, default_to_square=True)
         else:
-            size = {**self.size}
+            size = self.size if isinstance(self.size, dict) else {"height": self.size.height, "width": self.size.width}
 
         base_image_input_size = [size["height"], size["width"]]
 

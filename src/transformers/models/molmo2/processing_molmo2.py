@@ -124,6 +124,7 @@ class Molmo2Processor(ProcessorMixin):
         self.image_placeholder_token = IMAGE_PROMPT
         self.video_placeholder_token = VIDEO_PROMPT
         self.image_token_ids = [tokenizer.convert_tokens_to_ids(token) for token in IMAGE_TOKENS]
+        self.image_ids = self.image_token_ids
         self.image_use_col_tokens = image_use_col_tokens
         self.use_single_crop_col_tokens = use_single_crop_col_tokens
         self.use_single_crop_start_token = use_single_crop_start_token
@@ -348,7 +349,8 @@ class Molmo2Processor(ProcessorMixin):
             index = 0
             for i in range(len(text)):
                 num_videos = text[i].count(self.video_placeholder_token)
-                assert num_videos in {0, 1}, "At most one video is supported for now"
+                if num_videos > 1:
+                    raise ValueError("At most one video is supported per sample.")
                 video_grids_i = video_grids[index : index + num_videos]
                 metadata_i = video_metadata[index : index + num_videos]
                 for video_grid, metadata in zip(video_grids_i, metadata_i):
@@ -373,9 +375,7 @@ class Molmo2Processor(ProcessorMixin):
         input_ids, attention_mask = self.insert_bos(input_ids, attention_mask, bos, self.tokenizer.pad_token_id)
 
         if return_mm_token_type_ids:
-            image_tokens = np.array(self.image_token_ids).astype(input_ids.dtype)
-            token_type_ids = np.any(input_ids[:, :, None] == image_tokens[None, None, :], axis=-1)
-            text_inputs["token_type_ids"] = token_type_ids.tolist()
+            text_inputs["token_type_ids"] = self.create_mm_token_type_ids(input_ids.tolist())
 
         text_inputs["input_ids"] = input_ids.tolist()
         text_inputs["attention_mask"] = attention_mask.tolist()
@@ -383,33 +383,6 @@ class Molmo2Processor(ProcessorMixin):
         return BatchFeature(
             data={**text_inputs, **image_inputs, **videos_inputs},
             tensor_type=return_tensors,
-        )
-
-    def post_process_image_text_to_text(
-        self, generated_outputs, skip_special_tokens=True, clean_up_tokenization_spaces=False, **kwargs
-    ):
-        """
-        Post-process the output of the model to decode the text.
-
-        Args:
-            generated_outputs (`torch.Tensor` or `np.ndarray`):
-                The output of the model `generate` function. The output is expected to be a tensor of shape `(batch_size, sequence_length)`
-                or `(sequence_length,)`.
-            skip_special_tokens (`bool`, *optional*, defaults to `True`):
-                Whether or not to remove special tokens in the output. Argument passed to the tokenizer's `batch_decode` method.
-            clean_up_tokenization_spaces (`bool`, *optional*, defaults to `False`):
-                Whether or not to clean up the tokenization spaces. Argument passed to the tokenizer's `batch_decode` method.
-            **kwargs:
-                Additional arguments to be passed to the tokenizer's `batch_decode method`.
-
-        Returns:
-            `list[str]`: The decoded text.
-        """
-        return self.tokenizer.batch_decode(
-            generated_outputs,
-            skip_special_tokens=skip_special_tokens,
-            clean_up_tokenization_spaces=clean_up_tokenization_spaces,
-            **kwargs,
         )
 
 

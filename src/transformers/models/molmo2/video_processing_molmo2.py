@@ -23,8 +23,11 @@ from io import BytesIO
 from urllib.parse import urlparse
 
 import numpy as np
+import torch
+import torchvision.transforms
 
 from ...feature_extraction_utils import BatchFeature
+from ...image_transforms import normalize
 from ...image_utils import (
     IMAGENET_STANDARD_MEAN,
     IMAGENET_STANDARD_STD,
@@ -38,9 +41,7 @@ from ...utils import (
     TensorType,
     is_av_available,
     is_decord_available,
-    is_torch_available,
     is_torchcodec_available,
-    is_torchvision_available,
     is_yt_dlp_available,
     logging,
     to_numpy,
@@ -55,25 +56,9 @@ from ...video_utils import (
 )
 
 
-if is_torch_available():
-    import torch
-
-if is_torchvision_available():
-    import torchvision.transforms
-
 logger = logging.get_logger(__name__)
 
 MAX_VIDEO_FPS = 8
-
-
-def normalize_image(
-    image: np.ndarray,
-    image_mean: list[float],
-    image_std: list[float],
-) -> np.ndarray:
-    image -= np.array(image_mean, dtype=np.float32)[None, None, :]
-    image /= np.array(image_std, dtype=np.float32)[None, None, :]
-    return image
 
 
 def resize_image(
@@ -81,35 +66,17 @@ def resize_image(
     desired_output_size: list[int],
     resample: PILImageResampling,
 ) -> np.ndarray:
+    """Resize an image or video and rescale to [0, 1] float32."""
     if len(image.shape) == 3:
         is_video = False
         image = torch.permute(torch.from_numpy(image), [2, 0, 1])
     else:
         is_video = True
         image = torch.permute(torch.from_numpy(image), [0, 3, 1, 2])
-    dtype = image.dtype
-    if torch.is_floating_point(image):
-        in_min = 0.0
-        in_max = 1.0
-        resized = torchvision.transforms.Resize(
-            desired_output_size,
-            resample,
-            antialias=False,
-        )(image)
-        resized = torch.clip(resized, 0.0, 1.0).to(dtype)
-    else:
-        assert image.dtype == torch.uint8, f"SigLIP expects float images or uint8 images, but got {image.dtype}"
-        in_min = 0.0
-        in_max = 255.0
-        resized = torchvision.transforms.Resize(
-            desired_output_size,
-            resample,
-            antialias=False,
-        )(image)
-        resized = torch.clip(resized, 0, 255).to(dtype)
 
-    resized = resized.to(torch.float32)
-    resized = (resized - in_min) / (in_max - in_min)
+    resized = torchvision.transforms.Resize(desired_output_size, resample, antialias=False)(image)
+    resized = torch.clip(resized, 0, 255).to(torch.uint8)
+    resized = resized.to(torch.float32) / 255.0
 
     if is_video:
         resized = torch.permute(resized, [0, 2, 3, 1]).numpy()
@@ -132,7 +99,7 @@ def build_resized_image(
         base_image_input_size,
         resample,
     )
-    resized = normalize_image(resized, image_mean, image_std)
+    resized = normalize(resized, image_mean, image_std)
     if len(resized.shape) == 3:
         resized = np.expand_dims(resized, 0)
     crop_patch_w = base_image_input_size[1] // image_patch_size
@@ -362,8 +329,10 @@ def read_video_torchcodec(
 
     # Floating point/rounding issues might cause `target_timestamps` to be very slightly
     # out-of-bounds, to handle this we sanity check then clip them
-    assert all(x >= 0 for x in target_timestamps)
-    assert all(x < duration + 1e-6 for x in target_timestamps)
+    if not all(x >= 0 for x in target_timestamps):
+        raise ValueError("All target timestamps must be non-negative.")
+    if not all(x < duration + 1e-6 for x in target_timestamps):
+        raise ValueError(f"All target timestamps must be less than video duration ({duration}s).")
     # 1e-6 padding since torchcodec can throw out-of-bounds errors even if you ask for the
     # exact boundary value, we should still get the first/last frame anyway
     max_timestamp = decoder.metadata.end_stream_seconds_from_content - 1e-6
@@ -547,7 +516,10 @@ def get_target_fps(
 
         else:
             # the candidate sampling fps increases so frame count can't decrease
-            assert num_frames_sampled <= num_frames_sampled_at_fps
+            if num_frames_sampled > num_frames_sampled_at_fps:
+                raise ValueError(
+                    f"Frame count decreased unexpectedly: {num_frames_sampled} > {num_frames_sampled_at_fps}"
+                )
             if num_frames_sampled_at_fps > max_frames:
                 # choose the sampling fps that spans the video
                 continue
@@ -589,6 +561,7 @@ class Molmo2VideoProcessor(BaseVideoProcessor):
     do_convert_rgb = True
     patch_size = 14
     pooling_size = [3, 3]
+    num_frames = 64
     do_sample_frames = True
     frame_sample_mode = "uniform_last_frame"
     max_fps = 2
@@ -663,7 +636,8 @@ class Molmo2VideoProcessor(BaseVideoProcessor):
                 else:
                     times = np.arange(0.0, stop=duration, step=1 / max_fps)
                     times = np.concatenate([times, [duration]], axis=0)
-                    assert len(times) <= num_frames
+                    if len(times) > num_frames:
+                        raise ValueError(f"Sampled {len(times)} frames but max is {num_frames}.")
             else:
                 times = np.linspace(0, duration, num=num_frames, endpoint=True, dtype=np.float64)
             return times
@@ -721,8 +695,10 @@ class Molmo2VideoProcessor(BaseVideoProcessor):
                 if np.round(float_indices[-1]) != total_num_frames - 1:
                     float_indices = np.concatenate([float_indices, [total_num_frames - 1]], axis=0)
                 indices = np.round(float_indices).astype(int)
-                assert indices[-1] < total_num_frames
-                assert len(float_indices) <= num_frames
+                if indices[-1] >= total_num_frames:
+                    raise ValueError(f"Frame index {indices[-1]} exceeds total frames {total_num_frames}.")
+                if len(float_indices) > num_frames:
+                    raise ValueError(f"Sampled {len(float_indices)} frames but max is {num_frames}.")
                 return indices
         elif frame_sample_mode == "uniform_last_frame":
             indices = np.linspace(
@@ -799,7 +775,8 @@ class Molmo2VideoProcessor(BaseVideoProcessor):
         # Framed-based sampling if an array video is passed
         # Otherwise, time-based sampling with decoding
         if is_valid_video(videos[0]) and do_sample_frames:
-            assert video_metadata[0].fps is not None, "FPS must be provided for video input"
+            if video_metadata[0].fps is None:
+                raise ValueError("FPS must be provided for video input.")
             sampled_videos = []
             sampled_metadata = []
             for video, metadata in zip(videos, video_metadata):
