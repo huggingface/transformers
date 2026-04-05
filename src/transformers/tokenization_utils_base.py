@@ -3403,7 +3403,7 @@ def find_sentencepiece_model_file(pretrained_model_name_or_path, **kwargs):
             entries = list_repo_tree(
                 repo_id=pretrained_model_name_or_path,
                 revision=kwargs.get("revision"),
-                path_in_repo=subfolder if subfolder else None,
+                path_in_repo=subfolder or None,
                 recursive=False,
                 token=kwargs.get("token"),
             )

@@ -296,7 +296,7 @@ class WhisperFeatureExtractor(SequenceFeatureExtractor):
         padded_inputs = self.pad(
             batched_speech,
             padding=padding,
-            max_length=max_length if max_length else self.n_samples,
+            max_length=max_length or self.n_samples,
             truncation=truncation,
             pad_to_multiple_of=pad_to_multiple_of,
             return_attention_mask=return_attention_mask or do_normalize,
