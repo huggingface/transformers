@@ -28,7 +28,7 @@ from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_outputs import MoeCausalLMOutputWithPast, MoeModelOutputWithPast
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import TransformersKwargs, auto_docstring, logging
+from ...utils import TransformersKwargs, agnostic, auto_docstring, logging
 from ...utils.generic import merge_with_config_defaults
 from ...utils.import_utils import (
     is_causal_conv1d_available,
@@ -380,7 +380,7 @@ class Qwen3NextGatedDeltaNet(nn.Module):
                 self.head_v_dim,
                 eps=self.layer_norm_epsilon,
                 activation=self.activation,
-                device=torch.cuda.current_device(),
+                device=agnostic.gpu.current_device(),
                 dtype=config.dtype if config.dtype is not None else torch.get_default_dtype(),
             )
         )
