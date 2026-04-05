@@ -1181,9 +1181,9 @@ class VideomtForUniversalSegmentation(VideomtPreTrainedModel):
             if propagated_query is None:
                 query_tokens = self.query.weight[None, :, :].expand(batch_size, -1, -1)
             else:
-                query_tokens = self.query_updater(propagated_query) + self.query.weight[None, :, :].to(
-                    frame_hidden_states.device
-                )
+                query_tokens = self.query_updater(propagated_query).to(frame_hidden_states.device) + self.query.weight[
+                    None, :, :
+                ].to(frame_hidden_states.device)
             frame_hidden_states = torch.cat((query_tokens.to(frame_hidden_states.device), frame_hidden_states), dim=1)
 
             for layer_module in self.layers[query_start_idx:]:
