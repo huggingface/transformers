@@ -580,9 +580,7 @@ class TimesFmModelForPrediction(TimesFmPreTrainedModel):
 
         result = (torch.stack(input_ts, dim=0), torch.stack(input_padding, dim=0))
         if freq is not None:
-            result = result + (
-                torch.as_tensor(freq[: len(inputs)], dtype=torch.int32, device=result[0].device).reshape(-1, 1),
-            )
+            result = result + (torch.tensor(freq[: len(inputs)], dtype=torch.int32).reshape(-1, 1),)
         return result
 
     def _postprocess_output(
