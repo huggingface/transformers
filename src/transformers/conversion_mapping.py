@@ -19,6 +19,7 @@ from typing import TYPE_CHECKING
 
 from .core_model_loading import (
     Chunk,
+    ChunkGQA,
     Concatenate,
     ErnieFuseAndSplitTextVisionExperts,
     MergeModulelist,
@@ -59,6 +60,7 @@ _MODEL_TO_CONVERSION_PATTERN = {
     "flex_olmo": "qwen2_moe",
     "olmoe": "qwen2_moe",
     "exaone_moe": "qwen2_moe",
+    "sarvam_moe": "sarvam_moe",
     "rt_detr_v2": "rt_detr",
     "pp_doclayout_v2": "rt_detr",
     "pp_doclayout_v3": "rt_detr",
@@ -503,6 +505,37 @@ def _build_checkpoint_conversion_mapping():
     mapping["exaone_moe"] += [WeightRenaming("mlp.e_score_correction_bias", "mlp.gate.e_score_correction_bias")]
 
     mapping["solar_open"] = [
+        WeightConverter(
+            source_patterns=[
+                "mlp.experts.*.gate_proj.weight",
+                "mlp.experts.*.up_proj.weight",
+            ],
+            target_patterns="mlp.experts.gate_up_proj",
+            operations=[MergeModulelist(dim=0), Concatenate(dim=1)],
+        ),
+        WeightConverter(
+            source_patterns="mlp.experts.*.down_proj.weight",
+            target_patterns="mlp.experts.down_proj",
+            operations=[MergeModulelist(dim=0)],
+        ),
+    ]
+
+    mapping["sarvam_moe"] = [
+        # Embedding
+        WeightRenaming("word_embeddings", "embed_tokens"),
+        # Attention renaming (direct: original → HF, no chaining)
+        WeightRenaming(r"\.attention\.dense\.", ".self_attn.o_proj."),
+        WeightRenaming(r"\.attention\.query_layernorm\.", ".self_attn.q_norm."),
+        WeightRenaming(r"\.attention\.key_layernorm\.", ".self_attn.k_norm."),
+        # Expert bias
+        WeightRenaming("mlp.gate.expert_bias", "mlp.gate.e_score_correction_bias"),
+        # QKV split (GQA: Q has more heads than K/V, rename + split in one step)
+        WeightConverter(
+            source_patterns="attention.query_key_value",
+            target_patterns=["self_attn.q_proj", "self_attn.k_proj", "self_attn.v_proj"],
+            operations=[ChunkGQA(dim=0)],
+        ),
+        # MoE expert fusing (same as qwen2_moe)
         WeightConverter(
             source_patterns=[
                 "mlp.experts.*.gate_proj.weight",
