@@ -91,34 +91,21 @@ class NandiTokenizer(TokenizersBackend):
             **kwargs,
         )
 
-    def encode(
-        self,
-        text,
-        text_pair=None,
-        add_special_tokens: bool = True,
-        padding=False,
-        truncation=None,
-        max_length=None,
-        stride: int = 0,
-        padding_side=None,
-        return_tensors=None,
-        **kwargs,
-    ):
-        if isinstance(text, str):
-            # This is a temporary fix to match the behaviour of the training pipeline
-            text = "<|im_start|> " + text
-        return super().encode(
-            text,
-            text_pair=text_pair,
-            add_special_tokens=add_special_tokens,
-            padding=padding,
-            truncation=truncation,
-            max_length=max_length,
-            stride=stride,
-            padding_side=padding_side,
-            return_tensors=return_tensors,
-            **kwargs,
-        )
-
+    def __call__(self, text, *args, **kwargs):
+        add_special_tokens = kwargs.get("add_special_tokens", False)
+    
+        def add_prefix(t):
+            if isinstance(t, str):
+                return "<|im_start|> " + t
+            return t
+    
+        # Only inject when special tokens are disabled
+        if not add_special_tokens:
+            if isinstance(text, list):
+                text = [add_prefix(t) for t in text]
+            else:
+                text = add_prefix(text)
+    
+        return super().__call__(text, *args, **kwargs)
 
 __all__ = ["NandiTokenizer"]
