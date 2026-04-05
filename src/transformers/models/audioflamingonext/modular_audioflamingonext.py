@@ -21,7 +21,7 @@ from ..musicflamingo.modeling_musicflamingo import MusicFlamingoForConditionalGe
 from ..musicflamingo.processing_musicflamingo import MusicFlamingoProcessor, MusicFlamingoProcessorKwargs
 
 
-@auto_docstring(checkpoint="nvidia/audio-flamingo-next")
+@auto_docstring(checkpoint="nvidia/audio-flamingo-next-hf")
 @strict(accept_kwargs=True)
 class AudioFlamingoNextConfig(MusicFlamingoConfig):
     model_type = "audioflamingonext"

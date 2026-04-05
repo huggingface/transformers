@@ -26,7 +26,7 @@ from ...utils import auto_docstring
 from ..auto import CONFIG_MAPPING, AutoConfig
 
 
-@auto_docstring(checkpoint="nvidia/audio-flamingo-next")
+@auto_docstring(checkpoint="nvidia/audio-flamingo-next-hf")
 @strict(accept_kwargs=True)
 class AudioFlamingoNextConfig(PreTrainedConfig):
     r"""
