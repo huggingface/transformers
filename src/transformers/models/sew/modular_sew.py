@@ -175,23 +175,23 @@ class SEWEncoder(nn.Module):
             else:
                 # make sure padded tokens output 0
                 hidden_states[~expand_attention_mask] = 0.0
-                input_lengths = (attention_mask.long()).sum(-1)
-                # apply pooling formula to get real output_lengths
-                output_lengths = input_lengths // self.config.squeeze_factor
-                max_encoder_length = hidden_states.shape[1] // self.config.squeeze_factor
-                attention_ids = (
-                    torch.arange(0, max_encoder_length, device=output_lengths.device)
-                    .view(1, -1)
-                    .expand(output_lengths.shape[0], -1)
+                # Pool the attention mask to match the pooled hidden_states shape.
+                # max_pool1d avoids torch.arange(max_encoder_length) which bakes
+                # the sequence length as a constant during ONNX export.
+                attention_mask = (
+                    nn.functional.max_pool1d(
+                        attention_mask.float().unsqueeze(1),
+                        kernel_size=self.config.squeeze_factor,
+                        stride=self.config.squeeze_factor,
+                    )
+                    .squeeze(1)
+                    .long()
                 )
-                attention_mask = (attention_ids < output_lengths.view(-1, 1)).long()
 
-                # extend attention_mask
+                # extend attention_mask — keep {batch,1,1,seq} so the key-seq dimension
+                # stays symbolic during ONNX export (no square seq×seq materialization).
                 attention_mask = 1.0 - attention_mask[:, None, None, :].to(dtype=hidden_states.dtype)
                 attention_mask = attention_mask * torch.finfo(hidden_states.dtype).min
-                attention_mask = attention_mask.expand(
-                    attention_mask.shape[0], 1, attention_mask.shape[-1], attention_mask.shape[-1]
-                )
 
         n_input_timesteps = hidden_states.shape[1]
 
@@ -303,15 +303,11 @@ class SEWPreTrainedModel(PreTrainedModel):
 
     def _get_feature_vector_attention_mask(self, feature_vector_length: int, attention_mask: torch.LongTensor):
         output_lengths = self._get_feat_extract_output_lengths(attention_mask.sum(-1)).to(torch.long)
-        batch_size = attention_mask.shape[0]
-
-        attention_mask = torch.zeros(
-            (batch_size, feature_vector_length), dtype=attention_mask.dtype, device=attention_mask.device
-        )
-        # these two operations makes sure that all values before the output lengths idxs are attended to
-        attention_mask[(torch.arange(attention_mask.shape[0], device=attention_mask.device), output_lengths - 1)] = 1
-        attention_mask = attention_mask.flip([-1]).cumsum(-1).flip([-1]).bool()
-        return attention_mask
+        # Build the feature mask via arange broadcast comparison.  This keeps feature_vector_length
+        # as a symbolic SymInt in torch.export / torch.onnx.export (ONNX Range op), avoiding the
+        # data-dependent scatter + cumsum pattern that bakes the length as a constant.
+        attention_ids = torch.arange(feature_vector_length, device=attention_mask.device)
+        return attention_ids.unsqueeze(0) < output_lengths.unsqueeze(1)
 
 
 @auto_docstring

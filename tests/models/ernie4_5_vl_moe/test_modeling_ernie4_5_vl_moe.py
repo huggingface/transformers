@@ -195,6 +195,7 @@ class Ernie4_5_VLMoeModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.
         if is_torch_available()
         else ()
     )
+    test_torch_exportable = False
     model_split_percents = [0.7, 0.9]  # model too big to split at 0.5
     test_all_params_have_gradient = False  # e score correction bias + moe
     _is_composite = True

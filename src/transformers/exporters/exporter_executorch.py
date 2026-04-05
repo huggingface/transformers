@@ -1,0 +1,290 @@
+# Copyright 2026 The HuggingFace Inc. team. All rights reserved.
+# Modifications Copyright (C) 2025, Advanced Micro Devices, Inc. All rights reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+"""ExecuTorch exporter.
+
+Extends `DynamoExporter` to produce an `ExecutorchProgramManager` for
+mobile and edge deployment, with two extra steps:
+
+1. **Backend preparation** (`prepare_for_xnnpack`, `prepare_for_cuda`): move the
+   model to the target device/dtype and build the partitioner list.
+2. **Torch patches** (`patch_torch_ops`): replace ops unsupported by ExecuTorch
+   backends (split_copy, topk, avg_pool2d, ...) with decomposed equivalents.
+"""
+
+from __future__ import annotations
+
+import math
+from contextlib import contextmanager
+from typing import TYPE_CHECKING, Any
+
+from ..utils import logging
+from ..utils.export_config import ExecutorchConfig
+from ..utils.import_utils import is_executorch_available, is_torch_available
+from .exporter_dynamo import DynamoExporter
+
+
+if is_torch_available():
+    import torch
+    from torch.export import ExportedProgram
+
+
+if is_executorch_available():
+    from executorch.backends.cuda.cuda_backend import CudaBackend
+    from executorch.backends.cuda.cuda_partitioner import CudaPartitioner
+    from executorch.backends.xnnpack.partition.xnnpack_partitioner import XnnpackPartitioner
+    from executorch.exir.program import EdgeProgramManager, ExecutorchProgramManager, to_edge_transform_and_lower
+
+
+if TYPE_CHECKING:
+    if is_torch_available():
+        from ..modeling_utils import PreTrainedModel
+
+
+logger = logging.get_logger(__name__)
+
+
+class ExecutorchExporter(DynamoExporter):
+    """Exporter that converts a [`PreTrainedModel`] to an ExecuTorch `ExecutorchProgramManager`.
+
+    Example:
+
+    ```python
+    >>> from transformers.exporters.exporter_executorch import ExecutorchExporter, ExecutorchConfig
+
+    >>> exporter = ExecutorchExporter(export_config=ExecutorchConfig(backend="xnnpack"))
+    >>> et_program = exporter.export(model, inputs)
+    >>> et_program.write_to_file("model.pte")
+    ```
+    """
+
+    export_config: ExecutorchConfig
+
+    required_packages = ["torch", "executorch"]
+
+    def export(self, model: PreTrainedModel, sample_inputs: dict[str, Any]) -> ExecutorchProgramManager:
+        """Export a model to ExecuTorch, applying backend preparation and torch op patches."""
+        prepare_for_backend = _BACKEND_PREPARE.get(self.export_config.backend)
+        if prepare_for_backend is None:
+            raise ValueError(f"Unsupported backend {self.export_config.backend} for ExecuTorch export")
+
+        model, sample_inputs, partitioner = prepare_for_backend(model, sample_inputs)
+
+        with patch_torch_ops():
+            exported_program: ExportedProgram = super().export(model, sample_inputs)
+            edge_program_manager: EdgeProgramManager = to_edge_transform_and_lower(
+                exported_program, partitioner=partitioner
+            )
+            executorch_programs_manager: ExecutorchProgramManager = edge_program_manager.to_executorch()
+
+        return executorch_programs_manager
+
+
+# ── Backend preparation ────────────────────────────────────────────────────────
+# Each prepare_for_* function receives the original model and sample inputs, applies backend-specific preparation,
+# and returns the modified model, the list of partitioners to apply, and the modified sample inputs. Common patterns include:
+# - Move the model to the target device.
+# - Cast the model and inputs to the required dtype (e.g., bfloat16 for CUDA).
+# - Build the backend-specific partitioner list passed to to_edge_transform_and_lower.
+# To add a new backend: implement _prepare_for_new_backend and add it to the _BACKEND_PREPARE table.
+
+
+def prepare_for_xnnpack(model: PreTrainedModel, sample_inputs: dict[str, Any]):
+    """CPU inference via XNNPACK. Moves the model to CPU and uses the default XnnpackPartitioner."""
+
+    model.requires_grad_(False)
+    device = getattr(model, "device", None) or next(model.parameters()).device
+    if device.type != "cpu":
+        model = model.to(device="cpu")
+    partitioner = [XnnpackPartitioner()]
+    return model, sample_inputs, partitioner
+
+
+def prepare_for_cuda(model: PreTrainedModel, sample_inputs: dict[str, Any]):
+    """GPU inference via the ExecuTorch CUDA backend.
+
+    Moves the model to CUDA and upcasts to bfloat16 — required by the CUDA backend.
+    """
+    model.requires_grad_(False)
+    dtype = next(model.parameters()).dtype
+    device = getattr(model, "device", None) or next(model.parameters()).device
+    if device.type != "cuda":
+        model = model.to(device="cuda")
+    if dtype != torch.bfloat16:
+        model = model.to(dtype=torch.bfloat16)
+    partitioner = [CudaPartitioner([CudaBackend.generate_method_name_compile_spec(model.__class__.__name__)])]
+    return model, sample_inputs, partitioner
+
+
+_BACKEND_PREPARE = {
+    "xnnpack": prepare_for_xnnpack,
+    "cuda": prepare_for_cuda,
+}
+
+
+# ── Torch patches ──────────────────────────────────────────────────────────────
+# Same factory pattern as exporter_onnx.py: each _patch_* receives the original
+# and returns the replacement. _TORCH_PATCHES lists (obj, attr, factory).
+
+
+def _patch_split(original):
+    """Narrow-based split (split_copy not supported by CUDA backend)."""
+
+    def patch(input, split_size_or_sections, dim=0):
+        if isinstance(split_size_or_sections, int):
+            splits = []
+            total = input.size(dim)
+            for i in range(0, total, split_size_or_sections):
+                splits.append(input.narrow(dim, i, min(split_size_or_sections, total - i)))
+            return tuple(splits)
+        else:
+            splits = []
+            start = 0
+            for size in split_size_or_sections:
+                splits.append(input.narrow(dim, start, size))
+                start += size
+            return tuple(splits)
+
+    return patch
+
+
+def _patch_chunk(original):
+    """Narrow-based chunk (delegates to split patch)."""
+
+    def patch(input, chunks, dim=0):
+        total = input.size(dim)
+        chunk_size = (total + chunks - 1) // chunks
+        # Call through torch.split which is already patched
+        return torch.split(input, chunk_size, dim)
+
+    return patch
+
+
+def _patch_topk(original):
+    """Argsort-based topk fallback."""
+
+    def patch(input, k, dim=None, largest=True, sorted=True):
+        if dim is None:
+            dim = -1
+        indices = torch.argsort(input, dim=dim, descending=largest)
+        topk_indices = indices.narrow(dim, 0, k)
+        topk_values = torch.gather(input, dim, topk_indices)
+        return topk_values, topk_indices
+
+    return patch
+
+
+def _patch_detach(_original):
+    """No-op detach."""
+
+    def patch(input):
+        return input
+
+    return patch
+
+
+def _patch_avg_pool2d(original):
+    """Decompose avg_pool2d as depthwise conv2d (no CUDA ExecuTorch kernel)."""
+
+    def patch(
+        input, kernel_size, stride=None, padding=0, ceil_mode=False, count_include_pad=True, divisor_override=None
+    ):
+        if isinstance(kernel_size, int):
+            kernel_size = (kernel_size, kernel_size)
+        if stride is None:
+            stride = kernel_size
+        elif isinstance(stride, int):
+            stride = (stride, stride)
+        if isinstance(padding, int):
+            padding = (padding, padding)
+        kh, kw = kernel_size
+        h, w = input.shape[-2:]
+        channels = input.shape[1]
+        actual_kh = min(kh, h + padding[0] * 2)
+        actual_kw = min(kw, w + padding[1] * 2)
+        divisor = divisor_override if divisor_override is not None else actual_kh * actual_kw
+        weight = input.new_ones(channels, 1, actual_kh, actual_kw) / divisor
+        return torch.nn.functional.conv2d(input, weight, bias=None, stride=stride, padding=padding, groups=channels)
+
+    return patch
+
+
+def _patch_scaled_dot_product_attention(original):
+    """Manual matmul+softmax fallback for cases unsupported by the ExecuTorch CUDA backend.
+
+    Falls back to eager attention when:
+    - enable_gqa=True
+    - D_q != D_v (asymmetric head dims, e.g. MLA attention)
+    - attn_mask is float (ExecuTorch CUDA SDPA only accepts bool masks)
+    """
+
+    def patch(query, key, value, attn_mask=None, dropout_p=0.0, is_causal=False, scale=None, **kwargs):
+        needs_eager_attention = query.device.type == "cuda" and (
+            kwargs.get("enable_gqa", False)
+            or query.shape[-1] != value.shape[-1]
+            or (attn_mask is not None and attn_mask.is_floating_point())
+        )
+        if needs_eager_attention:
+            scale_factor = scale if scale is not None else math.sqrt(query.shape[-1]) ** -1
+            if key.shape[1] != query.shape[1]:
+                n_rep = query.shape[1] // key.shape[1]
+                key = key.repeat_interleave(n_rep, dim=1)
+                value = value.repeat_interleave(n_rep, dim=1)
+            attn_weight = torch.matmul(query, key.transpose(-2, -1)) * scale_factor
+            if is_causal:
+                L, S = query.shape[-2], key.shape[-2]
+                causal_mask = torch.ones(L, S, dtype=torch.bool, device=query.device).tril()
+                attn_weight = attn_weight.masked_fill(~causal_mask, float("-inf"))
+            if attn_mask is not None:
+                attn_weight = attn_weight + attn_mask
+            attn_weight = torch.nn.functional.softmax(attn_weight, dim=-1)
+            return torch.matmul(attn_weight, value)
+        return original(
+            query, key, value, attn_mask=attn_mask, dropout_p=dropout_p, is_causal=is_causal, scale=scale, **kwargs
+        )
+
+    return patch
+
+
+# (object, attribute, factory) triples installed by patch_torch_ops.
+_TORCH_PATCHES = []
+if is_torch_available():
+    _TORCH_PATCHES += [
+        (torch, "split", _patch_split),
+        (torch.Tensor, "split", _patch_split),
+        (torch, "chunk", _patch_chunk),
+        (torch.Tensor, "chunk", _patch_chunk),
+        (torch, "topk", _patch_topk),
+        (torch.Tensor, "topk", _patch_topk),
+        (torch, "detach", _patch_detach),
+        (torch.Tensor, "detach", _patch_detach),
+        (torch.nn.functional, "avg_pool2d", _patch_avg_pool2d),
+        (torch.nn.functional, "scaled_dot_product_attention", _patch_scaled_dot_product_attention),
+    ]
+
+
+@contextmanager
+def patch_torch_ops():
+    """Context manager: install torch patches for ExecuTorch export."""
+    originals = []
+    for obj, attr, factory in _TORCH_PATCHES:
+        original = getattr(obj, attr)
+        originals.append((obj, attr, original))
+        setattr(obj, attr, factory(original))
+
+    try:
+        yield
+    finally:
+        for obj, attr, original in originals:
+            setattr(obj, attr, original)
