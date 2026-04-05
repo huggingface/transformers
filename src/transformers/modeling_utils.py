@@ -867,8 +867,12 @@ class ModuleUtilsMixin:
         """
         if encoder_attention_mask.dim() == 3:
             encoder_extended_attention_mask = encoder_attention_mask[:, None, :, :]
-        if encoder_attention_mask.dim() == 2:
+        elif encoder_attention_mask.dim() == 2:
             encoder_extended_attention_mask = encoder_attention_mask[:, None, None, :]
+        else:
+            raise ValueError(
+                f"Wrong shape for encoder_attention_mask (shape {encoder_attention_mask.shape})"
+            )
         # T5 has a mask that can compare sequence ids, we can simulate this here with this transposition
         # encoder_extended_attention_mask = (encoder_extended_attention_mask ==
         # encoder_extended_attention_mask.transpose(-1, -2))
