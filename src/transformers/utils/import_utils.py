@@ -68,16 +68,30 @@ def _is_package_available(pkg_name: str, return_version: bool = False) -> tuple[
                 distribution_name = distributions[0]
             package_version = importlib.metadata.version(distribution_name)
         except (importlib.metadata.PackageNotFoundError, KeyError):
-            # If we cannot find the metadata (because of editable install for example), try to import directly.
-            # Note that this branch will almost never be run, so we do not import packages for nothing here
-            package = importlib.import_module(pkg_name)
-            package_version = getattr(package, "__version__", "N/A")
+            try:
+                package_version = importlib.metadata.version(pkg_name)
+            except importlib.metadata.PackageNotFoundError:
+                # If we cannot find the metadata (because of editable install for example), try to import directly.
+                # Note that this branch will almost never be run, so we do not import packages for nothing here
+                package = importlib.import_module(pkg_name)
+                package_version = getattr(package, "__version__", "N/A")
         logger.debug(f"Detected {pkg_name} version: {package_version}")
 
     if return_version:
         return package_exists, package_version
     else:
         return package_exists, None
+
+
+def _version_meets_minimum(is_available: bool, package_version: str, min_version: str) -> bool:
+    if not is_available:
+        return False
+
+    try:
+        return version.parse(package_version) >= version.parse(min_version)
+    except version.InvalidVersion:
+        logger.debug(f"Skipping optional package with invalid version string: {package_version!r}")
+        return False
 
 
 def resolve_internal_import(module: ModuleType | None, chained_path: str) -> Callable | ModuleType | None:
@@ -147,7 +161,7 @@ def is_torch_available() -> bool:
         parsed_version = version.parse(torch_version)
         if is_available and parsed_version < version.parse("2.4.0"):
             logger.warning_once(f"Disabling PyTorch because PyTorch >= 2.4 is required but found {torch_version}")
-        return is_available and version.parse(torch_version) >= version.parse("2.4.0")
+        return _version_meets_minimum(is_available, torch_version, "2.4.0")
     except packaging.version.InvalidVersion:
         return False
 
@@ -642,7 +656,7 @@ def is_kenlm_available() -> bool:
 @lru_cache
 def is_kernels_available(MIN_VERSION: str = KERNELS_MIN_VERSION) -> bool:
     is_available, kernels_version = _is_package_available("kernels", return_version=True)
-    return is_available and version.parse(kernels_version) >= version.parse(MIN_VERSION)
+    return _version_meets_minimum(is_available, kernels_version, MIN_VERSION)
 
 
 @lru_cache
@@ -665,13 +679,13 @@ def is_accelerate_available(min_version: str = ACCELERATE_MIN_VERSION) -> bool:
     if not is_torch_available():
         return False
     is_available, accelerate_version = _is_package_available("accelerate", return_version=True)
-    return is_available and version.parse(accelerate_version) >= version.parse(min_version)
+    return _version_meets_minimum(is_available, accelerate_version, min_version)
 
 
 @lru_cache
 def is_triton_available(min_version: str = TRITON_MIN_VERSION) -> bool:
     is_available, triton_version = _is_package_available("triton", return_version=True)
-    return is_available and version.parse(triton_version) >= version.parse(min_version)
+    return _version_meets_minimum(is_available, triton_version, min_version)
 
 
 @lru_cache
@@ -682,7 +696,7 @@ def is_hadamard_available() -> bool:
 @lru_cache
 def is_hqq_available(min_version: str = HQQ_MIN_VERSION) -> bool:
     is_available, hqq_version = _is_package_available("hqq", return_version=True)
-    return is_available and version.parse(hqq_version) >= version.parse(min_version)
+    return _version_meets_minimum(is_available, hqq_version, min_version)
 
 
 @lru_cache
@@ -728,7 +742,7 @@ def is_grokadamw_available() -> bool:
 @lru_cache
 def is_schedulefree_available(min_version: str = SCHEDULEFREE_MIN_VERSION) -> bool:
     is_available, schedulefree_version = _is_package_available("schedulefree", return_version=True)
-    return is_available and version.parse(schedulefree_version) >= version.parse(min_version)
+    return _version_meets_minimum(is_available, schedulefree_version, min_version)
 
 
 @lru_cache
@@ -789,13 +803,13 @@ def is_mamba_ssm_available() -> bool:
 @lru_cache
 def is_mamba_2_ssm_available() -> bool:
     is_available, mamba_ssm_version = _is_package_available("mamba_ssm", return_version=True)
-    return is_torch_cuda_available() and is_available and version.parse(mamba_ssm_version) >= version.parse("2.0.4")
+    return is_torch_cuda_available() and _version_meets_minimum(is_available, mamba_ssm_version, "2.0.4")
 
 
 @lru_cache
 def is_flash_linear_attention_available():
     is_available, fla_version = _is_package_available("fla", return_version=True)
-    return is_torch_cuda_available() and is_available and version.parse(fla_version) >= version.parse("0.2.2")
+    return is_torch_cuda_available() and _version_meets_minimum(is_available, fla_version, "0.2.2")
 
 
 @lru_cache
@@ -836,7 +850,7 @@ def is_onnx_available() -> bool:
 @lru_cache
 def is_flute_available() -> bool:
     is_available, flute_version = _is_package_available("flute", return_version=True)
-    return is_available and version.parse(flute_version) >= version.parse("0.4.1")
+    return _version_meets_minimum(is_available, flute_version, "0.4.1")
 
 
 @lru_cache
@@ -905,7 +919,7 @@ def is_aqlm_available() -> bool:
 @lru_cache
 def is_vptq_available(min_version: str = VPTQ_MIN_VERSION) -> bool:
     is_available, vptq_version = _is_package_available("vptq", return_version=True)
-    return is_available and version.parse(vptq_version) >= version.parse(min_version)
+    return _version_meets_minimum(is_available, vptq_version, min_version)
 
 
 @lru_cache
@@ -940,7 +954,7 @@ def is_ninja_available() -> bool:
 @lru_cache
 def is_bitsandbytes_available(min_version: str = BITSANDBYTES_MIN_VERSION) -> bool:
     is_available, bitsandbytes_version = _is_package_available("bitsandbytes", return_version=True)
-    return is_available and version.parse(bitsandbytes_version) >= version.parse(min_version)
+    return _version_meets_minimum(is_available, bitsandbytes_version, min_version)
 
 
 @lru_cache
@@ -1078,7 +1092,7 @@ def is_seqio_available() -> bool:
 @lru_cache
 def is_gguf_available(min_version: str = GGUF_MIN_VERSION) -> bool:
     is_available, gguf_version = _is_package_available("gguf", return_version=True)
-    return is_available and version.parse(gguf_version) >= version.parse(min_version)
+    return _version_meets_minimum(is_available, gguf_version, min_version)
 
 
 @lru_cache
@@ -1104,7 +1118,7 @@ def is_llm_awq_available() -> bool:
 @lru_cache
 def is_auto_round_available(min_version: str = AUTOROUND_MIN_VERSION) -> bool:
     is_available, auto_round_version = _is_package_available("auto_round", return_version=True)
-    return is_available and version.parse(auto_round_version) >= version.parse(min_version)
+    return _version_meets_minimum(is_available, auto_round_version, min_version)
 
 
 @lru_cache
@@ -1120,13 +1134,13 @@ def is_quark_available() -> bool:
 @lru_cache
 def is_fp_quant_available():
     is_available, fp_quant_version = _is_package_available("fp_quant", return_version=True)
-    return is_available and version.parse(fp_quant_version) >= version.parse("0.3.2")
+    return _version_meets_minimum(is_available, fp_quant_version, "0.3.2")
 
 
 @lru_cache
 def is_qutlass_available():
     is_available, qutlass_version = _is_package_available("qutlass", return_version=True)
-    return is_available and version.parse(qutlass_version) >= version.parse("0.2.0")
+    return _version_meets_minimum(is_available, qutlass_version, "0.2.0")
 
 
 @lru_cache
@@ -1244,7 +1258,7 @@ def is_torchao_available(min_version: str = TORCHAO_MIN_VERSION) -> bool:
     if not is_torch_available():
         return False
     is_available, torchao_version = _is_package_available("torchao", return_version=True)
-    return is_available and version.parse(torchao_version) >= version.parse(min_version)
+    return _version_meets_minimum(is_available, torchao_version, min_version)
 
 
 @lru_cache
@@ -1276,7 +1290,7 @@ def is_sudachi_available() -> bool:
 @lru_cache
 def is_sudachi_projection_available() -> bool:
     is_available, sudachipy_version = _is_package_available("sudachipy", return_version=True)
-    return is_available and version.parse(sudachipy_version) >= version.parse("0.6.8")
+    return _version_meets_minimum(is_available, sudachipy_version, "0.6.8")
 
 
 @lru_cache
@@ -1319,7 +1333,7 @@ def is_tiktoken_available(with_blobfile: bool = True) -> bool:
 @lru_cache
 def is_liger_kernel_available() -> bool:
     is_available, liger_kernel_version = _is_package_available("liger_kernel", return_version=True)
-    return is_available and version.parse(liger_kernel_version) >= version.parse("0.3.0")
+    return _version_meets_minimum(is_available, liger_kernel_version, "0.3.0")
 
 
 @lru_cache

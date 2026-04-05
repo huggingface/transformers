@@ -1,6 +1,7 @@
 import sys
 
 from transformers.testing_utils import run_test_using_subprocess
+from transformers.utils import import_utils
 from transformers.utils.import_utils import clear_import_cache
 
 
@@ -24,3 +25,20 @@ def test_clear_import_cache():
 
     assert "transformers.models.auto.modeling_auto" in sys.modules
     assert modeling_auto.__name__ == "transformers.models.auto.modeling_auto"
+
+
+def test_is_package_available_falls_back_to_package_name_metadata(monkeypatch):
+    monkeypatch.setattr(import_utils.importlib.util, "find_spec", lambda _name: object())
+    monkeypatch.setattr(import_utils, "PACKAGE_DISTRIBUTION_MAPPING", {})
+    monkeypatch.setattr(
+        import_utils.importlib.metadata,
+        "version",
+        lambda name: "0.18.0"
+        if name == "gguf"
+        else (_ for _ in ()).throw(import_utils.importlib.metadata.PackageNotFoundError()),
+    )
+
+    is_available, package_version = import_utils._is_package_available("gguf", return_version=True)
+
+    assert is_available is True
+    assert package_version == "0.18.0"
