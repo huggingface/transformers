@@ -165,9 +165,11 @@
     - local: data_collators
       title: Data collators
     - local: optimizers
-      title: Optimizers
+      title: Optimizers and schedulers
     - local: hpo_train
       title: Hyperparameter search
+    - local: trainer_recipes
+      title: Trainer features
     title: Customization
   - local: peft
     title: Parameter-efficient fine-tuning
