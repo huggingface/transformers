@@ -115,6 +115,10 @@ class Molmo2TextConfig(PreTrainedConfig):
         The dropout ratio for the embedding layer.
     residual_dropout (`float`, *optional*, defaults to 0.0):
         The dropout ratio applied after residual connections.
+    rope_theta (`float`, *optional*, defaults to 1000000.0):
+        The base period of the RoPE embeddings.
+    rope_scaling (`dict[str, Any]`, *optional*):
+        Dictionary containing the scaling configuration for the RoPE embeddings.
     rope_scaling_layers (`list[int]`, *optional*):
         List of layer indices where rope scaling is applied.
     use_qk_norm (`bool`, *optional*, defaults to `False`):

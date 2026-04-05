@@ -1618,8 +1618,8 @@ class Molmo2ForConditionalGeneration(Molmo2PreTrainedModel, GenerationMixin):
         super().__init__(config)
 
         self.model = Molmo2Model(config)
-        self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
-        self.vocab_size = config.vocab_size
+        self.lm_head = nn.Linear(config.text_config.hidden_size, config.text_config.vocab_size, bias=False)
+        self.vocab_size = config.text_config.vocab_size
 
         # Initialize weights and apply final processing
         self.post_init()
