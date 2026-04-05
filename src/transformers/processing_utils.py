@@ -674,9 +674,8 @@ class ProcessorMixin(PushToHubMixin):
             "feature_extractor": (audio, "audio_kwargs"),
         }
         outputs = {}
-        for attribute_name in self.get_attributes():
+        for attribute_name, (input_data, input_kwargs) in attribute_to_kwargs.items():
             attribute = getattr(self, attribute_name, None)
-            input_data, input_kwargs = attribute_to_kwargs[attribute_name]
             if input_data is not None and attribute is not None:
                 attribute_output = attribute(input_data, **kwargs[input_kwargs])
                 outputs.update(attribute_output)
