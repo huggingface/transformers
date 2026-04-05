@@ -213,6 +213,14 @@ class PI0ForConditionalGenerationModelTest(ModelTesterMixin, unittest.TestCase):
     def test_training_gradient_checkpointing_use_reentrant_true(self):
         pass
 
+    @unittest.skip("PI0 model requires pixel_attention_mask to be provided")
+    def test_flash_attn_2_inference_equivalence(self):
+        pass
+
+    @unittest.skip("PI0 model requires pixel_attention_mask to be provided")
+    def test_flash_attn_2_inference_equivalence_right_padding(self):
+        pass
+
     def test_full_run_smoke(self):
         torch.manual_seed(0)
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
