@@ -91,11 +91,22 @@ class Gemma4TextConfig(PreTrainedConfig):
         attend bidirectionally while text tokens use causal attention. When set to `"all"`,
         all tokens use bidirectional attention.
     vocab_size_per_layer_input (`int`, defaults to 262144):
-        Vocabulary size for the per-layer input embeddings. Used by models with per-layer
-        residual streams where a smaller embedding is added at each decoder layer.
+        Vocabulary size for the per-layer input embeddings (PLE). Used by models with
+        per-layer residual streams where a smaller embedding is added at each decoder layer.
     hidden_size_per_layer_input (`int`, defaults to 256):
-        Hidden dimension for the per-layer input embeddings. Controls the width of the
-        per-layer residual embedding vectors.
+        Per-layer hidden dimension for the per-layer input embeddings (PLE). This is the
+        dimension of each layer's individual embedding slice. Note: the actual embedding
+        weight has shape `[vocab_size_per_layer_input, num_hidden_layers * hidden_size_per_layer_input]`
+        (e.g. `[262144, 8960]` for 35 layers x 256 dims) because all layers are packed into
+        a single embedding table. The embedding is also a `Gemma4TextScaledWordEmbedding`
+        that scales lookups by `sqrt(hidden_size_per_layer_input)`.
+
+        The full PLE pipeline in `Gemma4TextModel` combines two components:
+        1. **Token-identity**: `embed_tokens_per_layer(input_ids)` (scaled), reshaped to
+           `[batch, seq, num_hidden_layers, hidden_size_per_layer_input]`
+        2. **Context-aware**: `per_layer_model_projection(inputs_embeds)` scaled by
+           `1/sqrt(hidden_size)`, reshaped, then normalized by `per_layer_projection_norm`
+        These are summed and scaled by `1/sqrt(2)` before being passed to each decoder layer.
     num_global_key_value_heads (`int`, *optional*):
         Number of key-value heads for global (full) attention layers. If `None`, defaults
         to `num_key_value_heads`.
