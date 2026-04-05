@@ -1,174 +1,231 @@
-<!--Copyright 2025 The HuggingFace Team. All rights reserved.
+<!--Copyright 2025 the HuggingFace Team. All rights reserved.
 
-Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with
-the License. You may obtain a copy of the License at
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
 
-http://www.apache.org/licenses/LICENSE-2.0
+    http://www.apache.org/licenses/LICENSE-2.0
 
-Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on
-an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
-specific language governing permissions and limitations under the License.
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
 
-⚠️ Note that this file is in Markdown but contain specific syntax for our doc-builder (similar to MDX) that may not be
-rendered properly in your Markdown viewer.
+⚠️ Note that this file is in Markdown but contain specific syntax for our doc-builder (similar to MDX) that may not be rendered properly in your Markdown viewer.
 
 -->
+*This model was released on 2025-12-08 and added to Hugging Face Transformers on 2025-12-24.*
 
-*This model was released on 2025-05-06 and added to Hugging Face Transformers on 2025-12-02.*
-
-# FastVLM
-
-<div class="flex flex-wrap space-x-1">
-<img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
-<img alt="FlashAttention" src="https://img.shields.io/badge/%E2%9A%A1%EF%B8%8E%20FlashAttention-eae0c8?style=flat">
-<img alt="SDPA" src="https://img.shields.io/badge/SDPA-DE3412?style=flat&logo=pytorch&logoColor=white">
-</div>
+# GlmAsr
 
 ## Overview
 
-FastVLM is an open-source vision-language model featuring a novel hybrid vision encoder, FastViTHD. Leveraging reparameterizable convolutional layers, scaled input resolution, and a reduced number of visual tokens, FastVLM delivers high accuracy with exceptional efficiency. Its optimized architecture enables deployment even on edge devices, achieving ultra-low TTFT (time to first token) without sacrificing performance.
+**GLM-ASR-Nano-2512** is a robust, open-source speech recognition model with **1.5B parameters**. Designed for
+real-world complexity, it outperforms OpenAI Whisper V3 on multiple benchmarks while maintaining a compact size.
 
-The model was proposed in [FastVLM: Efficient Vision Encoding for Vision Language Models](https://huggingface.co/papers/2412.13303) by Pavan Kumar Anasosalu Vasu, Fartash Faghri, Chun-Liang Li, Cem Koc, Nate True, Albert Antony, Gokul Santhanam, James Gabriel, Peter Grasch, Oncel Tuzel and Hadi Pouransari.
+Key capabilities include:
 
-The abstract from the paper is the following:
+* **Exceptional Dialect Support**
+  Beyond standard Mandarin and English, the model is highly optimized for **Cantonese (粤语)** and other dialects,
+  effectively bridging the gap in dialectal speech recognition.
 
-*Scaling the input image resolution is essential for enhancing the performance of Vision Language Models (VLMs), particularly in text-rich image understanding tasks. However, popular visual encoders such as ViTs become inefficient at high resolutions due to the large number of tokens and high encoding latency. At different operational resolutions, the vision encoder of a VLM can be optimized along two axes: reducing encoding latency and  minimizing the number of visual tokens passed to the LLM, thereby lowering overall latency. Based on a comprehensive efficiency analysis of the interplay between image resolution, vision latency, token count, and LLM size, we introduce FastVLM—a model that achieves an optimized trade-off between resolution, latency, and accuracy. FastVLM incorporates FastViTHD, a novel hybrid vision encoder designed to output fewer tokens and significantly reduce encoding time for high-resolution images. Unlike previous methods, FastVLM achieves the optimal balance between visual token count and image resolution solely by scaling the input image, eliminating the need for additional token pruning and simplifying the model design. In the LLaVA-1.5 setup, FastVLM achieves 3.2× improvement in time-to-first-token (TTFT) while maintaining similar performance on VLM benchmarks compared to prior works. Compared to LLaVa-OneVision at the highest resolution (1152×1152), FastVLM achieves better performance on key benchmarks like SeedBench, MMMU and DocVQA, using the same 0.5B LLM, but with 85× faster TTFT and a vision encoder that is 3.4× smaller.*
+* **Low-Volume Speech Robustness**
+  Specifically trained for **"Whisper/Quiet Speech"** scenarios. It captures and accurately transcribes extremely
+  low-volume audio that traditional models often miss.
 
-This model was contributed by [Kamila](https://github.com/kamila-chay).
-The original code can be found [here](https://github.com/apple/ml-fastvlm).
+* **SOTA Performance**
+  Achieves the **lowest average error rate (4.10)** among comparable open-source models, showing significant advantages
+  in Chinese benchmarks (Wenet Meeting, Aishell-1, etc..).
 
-## Usage tips
+This model was contributed by [Eustache Le Bihan](https://huggingface.co/eustlb) and [Yuxuan Zhang](https://huggingface.co/ZHANGYUXUAN-zR).
+you can check the [model card](https://huggingface.co/zai-org/GLM-ASR-Nano-2512) for more details and our
+[github repo](https://github.com/zai-org/GLM-ASR).
 
-- We advise users to use `padding_side="left"` when computing batched generation as it leads to more accurate results. Simply make sure to call `processor.tokenizer.padding_side = "left"` before generating.
+## Usage
 
-- Note the model has not been explicitly trained to process multiple images in the same prompt, although this is technically possible, you may experience inaccurate results.
+### Basic usage
 
-**Important:**
+<options id="usage">
+<hfoption id="AutoModel">
 
-Hugging Face models use SDPA by default; however, this model’s visual backbone supports only eager attention, so it automatically falls back to `"eager"`.
+```py runnable:test_basic
+# pytest-decorator: transformers.testing_utils.slow, transformers.testing_utils.require_torch
+from transformers import AutoModelForSeq2SeqLM, AutoProcessor
 
-If you want to use a different attention implementation in the language decoder, make sure to set it explicitly, for example:
+processor = AutoProcessor.from_pretrained("zai-org/GLM-ASR-Nano-2512")
+model = AutoModelForSeq2SeqLM.from_pretrained("zai-org/GLM-ASR-Nano-2512", dtype="auto", device_map="auto")
 
-`model = FastVlmForConditionalGeneration.from_pretrained("KamilaMila/FastVLM-0.5B", attn_implementation={"text_config": "flash_attention_2"})`
+inputs = processor.apply_transcription_request("https://huggingface.co/datasets/hf-internal-testing/dummy-audio-samples/resolve/main/bcn_weather.mp3")
 
-Setting it for the entire model, e.g.
+inputs = inputs.to(model.device, dtype=model.dtype)
+outputs = model.generate(**inputs, do_sample=False, max_new_tokens=500)
 
-`model = FastVlmForConditionalGeneration.from_pretrained("KamilaMila/FastVLM-0.5B", attn_implementation="flash_attention_2")`
+decoded_outputs = processor.batch_decode(outputs[:, inputs.input_ids.shape[1] :], skip_special_tokens=True)
+assert len(decoded_outputs) == 1  # nodoc
+print(decoded_outputs)
+```
 
-will result in an error.
+</hfoption>
+</hfoptions>
 
-### Formatting Prompts with Chat Templates
+### Advanced usage
 
-Each **checkpoint** is trained with a specific prompt format, depending on the underlying large language model backbone. To ensure correct formatting, use the processor’s `apply_chat_template` method.
+The processor's `apply_transcription_request` is equivalent to using the chat template in the following manner:
 
-**Important:**
+```py runnable:test_advanced
+# pytest-decorator: transformers.testing_utils.slow, transformers.testing_utils.require_torch
+from transformers import GlmAsrForConditionalGeneration, AutoProcessor
 
-- You must construct a conversation history — passing a plain string won't work.
-- Each message should be a dictionary with `"role"` and `"content"` keys.
-- The `"content"` should be a list of dictionaries for different modalities like `"text"` and `"image"`.
+processor = AutoProcessor.from_pretrained("zai-org/GLM-ASR-Nano-2512")
+model = GlmAsrForConditionalGeneration.from_pretrained("zai-org/GLM-ASR-Nano-2512", dtype="auto", device_map="auto")
 
-## Usage examples
+inputs = processor.apply_transcription_request("https://huggingface.co/datasets/hf-internal-testing/dummy-audio-samples/resolve/main/bcn_weather.mp3")
 
-### Single input inference
-
-```python
-import torch
-from transformers import AutoProcessor, FastVlmForConditionalGeneration
-
-# Load the model in half-precision
-model = FastVlmForConditionalGeneration.from_pretrained("KamilaMila/FastVLM-0.5B", dtype=torch.bfloat16, device_map="auto")
-processor = AutoProcessor.from_pretrained("KamilaMila/FastVLM-0.5B")
-
+# which is equivalent to
 conversation = [
     {
         "role": "user",
         "content": [
-            {"type": "image", "url": "https://www.ilankelman.org/stopsigns/australia.jpg"},
-            {"type": "text", "text": "What is shown in this image?"},
+            {
+                "type": "audio",
+                "url": "https://huggingface.co/datasets/hf-internal-testing/dummy-audio-samples/resolve/main/bcn_weather.mp3",
+            },
+            {"type": "text", "text": "Please transcribe this audio into text"},
         ],
     },
 ]
 
 inputs = processor.apply_chat_template(
     conversation,
-    add_generation_prompt=True,
     tokenize=True,
+    add_generation_prompt=True,
     return_dict=True,
-    return_tensors="pt"
-).to(model.device, torch.bfloat16)
+)
 
-# Generate
-generate_ids = model.generate(**inputs, max_new_tokens=30)
-processor.batch_decode(generate_ids, skip_special_tokens=True)
+inputs = inputs.to(model.device, dtype=model.dtype)
+outputs = model.generate(**inputs, do_sample=False, max_new_tokens=500)
+
+decoded_outputs = processor.batch_decode(outputs[:, inputs.input_ids.shape[1] :], skip_special_tokens=True)
+print(decoded_outputs)
+```
+
+One can also use audio arrays directly:
+
+```py runnable:test_audio_array
+# pytest-decorator: transformers.testing_utils.slow, transformers.testing_utils.require_torch
+from transformers import GlmAsrForConditionalGeneration, AutoProcessor
+from datasets import load_dataset, Audio
+
+processor = AutoProcessor.from_pretrained("zai-org/GLM-ASR-Nano-2512")
+model = GlmAsrForConditionalGeneration.from_pretrained("zai-org/GLM-ASR-Nano-2512", dtype="auto", device_map="auto")
+
+# loading audio directly from dataset
+ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
+ds = ds.cast_column("audio", Audio(sampling_rate=processor.feature_extractor.sampling_rate))
+audio_array = ds[0]["audio"]["array"]
+
+inputs = processor.apply_transcription_request(audio_array)
+
+inputs = inputs.to(model.device, dtype=model.dtype)
+outputs = model.generate(**inputs, do_sample=False, max_new_tokens=500)
+
+decoded_outputs = processor.batch_decode(outputs[:, inputs.input_ids.shape[1] :], skip_special_tokens=True)
+print(decoded_outputs)
 ```
 
 ### Batched inference
 
-FastVLM also supports batched inference. Here is how you can do it:
+You can process multiple audio files at once:
 
-```python
+```py runnable:test_batched
+# pytest-decorator: transformers.testing_utils.slow, transformers.testing_utils.require_torch
 import torch
-from transformers import AutoProcessor, FastVlmForConditionalGeneration
+from transformers import AutoProcessor, GlmAsrForConditionalGeneration
 
-# Load the model in half-precision
-model = FastVlmForConditionalGeneration.from_pretrained("KamilaMila/FastVLM-0.5B", dtype=torch.bfloat16, device_map="auto")
-processor = AutoProcessor.from_pretrained("KamilaMila/FastVLM-0.5B")
+checkpoint_name = "zai-org/GLM-ASR-Nano-2512"
+processor = AutoProcessor.from_pretrained(checkpoint_name)
 
-
-# Prepare a batch of two prompts
-conversation_1 = [
-    {
-        "role": "user",
-        "content": [
-            {"type": "image", "url": "https://www.ilankelman.org/stopsigns/australia.jpg"},
-            {"type": "text", "text": "What is shown in this image?"},
-        ],
-    },
+conversation = [
+    [
+        {
+            "role": "user",
+            "content": [
+                {
+                    "type": "audio",
+                    "url": "https://huggingface.co/datasets/eustlb/audio-samples/resolve/main/bcn_weather.mp3",
+                },
+                {"type": "text", "text": "Please transcribe this audio into text"},
+            ],
+        },
+    ],
+    [
+        {
+            "role": "user",
+            "content": [
+                {
+                    "type": "audio",
+                    "url": "https://huggingface.co/datasets/eustlb/audio-samples/resolve/main/obama2.mp3",
+                },
+                {"type": "text", "text": "Please transcribe this audio into text"},
+            ],
+        },
+    ],
 ]
 
-conversation_2 = [
-    {
-        "role": "user",
-        "content": [
-            {"type": "image", "url": "http://images.cocodataset.org/val2017/000000039769.jpg"},
-            {"type": "text", "text": "What is shown in this image?"},
-        ],
-    },
-]
+model = GlmAsrForConditionalGeneration.from_pretrained(checkpoint_name, device_map="auto", dtype="auto")
 
 inputs = processor.apply_chat_template(
-    [conversation_1, conversation_2],
-    add_generation_prompt=True,
-    tokenize=True,
-    return_dict=True,
-    padding=True,
-    return_tensors="pt"
-).to(model.device, torch.bfloat16)
+    conversation, tokenize=True, add_generation_prompt=True, return_dict=True
+).to(model.device, dtype=model.dtype)
 
+inputs_transcription = processor.apply_transcription_request(
+    [
+        "https://huggingface.co/datasets/eustlb/audio-samples/resolve/main/bcn_weather.mp3",
+        "https://huggingface.co/datasets/eustlb/audio-samples/resolve/main/obama2.mp3",
+    ],
+).to(model.device, dtype=model.dtype)
 
-# Generate
-generate_ids = model.generate(**inputs, max_new_tokens=30)
-processor.batch_decode(generate_ids, skip_special_tokens=True)
+for key in inputs:  # doc-builder: ignore-bare-assert
+    assert torch.equal(inputs[key], inputs_transcription[key])
+
+outputs = model.generate(**inputs, do_sample=False, max_new_tokens=500)
+
+decoded_outputs = processor.batch_decode(
+    outputs[:, inputs.input_ids.shape[1] :], skip_special_tokens=True
+)
+
+EXPECTED_OUTPUT = [
+    "Yesterday it was thirty five degrees in Barcelona, but today the temperature will go down to minus twenty degrees.",
+    "This week, I traveled to Chicago to deliver my final farewell address to the nation, following in the tradition of presidents before me. It was an opportunity to say thank you. Whether we've seen eye to eye or rarely agreed at all, my conversations with you, the American people, in living rooms and schools, at farms and on factory floors, at diners and on distant military outposts, all these conversations are what have kept me honest, kept me inspired, and kept me going. Every day, I learned from you. You made me a better president, and you made me a better man. Over the",
+]
+assert decoded_outputs != EXPECTED_OUTPUT
 ```
 
-## Note regarding reproducing original implementation
+## GlmAsrEncoderConfig
 
-In order to match the logits of the [original implementation](https://github.com/apple/ml-fastvlm), one needs to use float32. In half precision the logit difference is higher due to tiny differences in how some ops are implemented in timm.
+[[autodoc]] GlmAsrEncoderConfig
 
-### Using Flash Attention 2
+## GlmAsrConfig
 
-Flash Attention 2 is an even faster, optimized version of the previous optimization, please refer to the [Flash Attention 2 section of performance docs](https://huggingface.co/docs/transformers/perf_infer_gpu_one).
+[[autodoc]] GlmAsrConfig
 
-## FastVlmConfig
+## GlmAsrPreTrainedModel
 
-[[autodoc]] FastVlmConfig
-
-## FastVlmModel
-
-[[autodoc]] FastVlmModel
-
-## FastVlmForConditionalGeneration
-
-[[autodoc]] FastVlmForConditionalGeneration
+[[autodoc]] GlmAsrPreTrainedModel
     - forward
-    - get_image_features
+
+## GlmAsrProcessor
+
+[[autodoc]] GlmAsrProcessor
+    - __call__
+
+## GlmAsrEncoder
+
+[[autodoc]] GlmAsrEncoder
+    - forward
+
+## GlmAsrForConditionalGeneration
+
+[[autodoc]] GlmAsrForConditionalGeneration
+    - forward
