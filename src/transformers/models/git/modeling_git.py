@@ -632,7 +632,7 @@ class GitVisionAttention(nn.Module):
         return attn_output, attn_weights
 
 
-# Copied from transformers.models.altclip.modeling_altclip.AltCLIPEncoderLayer with AltCLIP->GitVision
+# Copied from transformers.models.altclip.modeling_altclip.AltCLIPEncoderLayer with AltCLIPVisionConfig->GitVisionConfig,AltCLIP->GitVision
 class GitVisionEncoderLayer(GradientCheckpointingLayer):
     def __init__(self, config: GitVisionConfig):
         super().__init__()
@@ -647,7 +647,7 @@ class GitVisionEncoderLayer(GradientCheckpointingLayer):
         hidden_states: torch.Tensor,
         attention_mask: torch.Tensor,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple[torch.FloatTensor, torch.Tensor | None]:
+    ) -> torch.FloatTensor:
         residual = hidden_states
 
         hidden_states = self.layer_norm1(hidden_states)
@@ -687,22 +687,7 @@ class GitVisionEncoder(nn.Module):
         inputs_embeds,
         attention_mask: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | BaseModelOutput:
-        r"""
-        Args:
-            inputs_embeds (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
-                Optionally, instead of passing `input_ids` you can choose to directly pass an embedded representation.
-                This is useful if you want more control over how to convert `input_ids` indices into associated vectors
-                than the model's internal embedding lookup matrix.
-            attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
-                Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
-
-                - 1 for tokens that are **not masked**,
-                - 0 for tokens that are **masked**.
-
-                [What are attention masks?](../glossary#attention-mask)
-
-        """
+    ) -> BaseModelOutput:
         hidden_states = inputs_embeds
         for encoder_layer in self.layers:
             hidden_states = encoder_layer(
@@ -717,7 +702,6 @@ class GitVisionEncoder(nn.Module):
 
 
 class GitVisionTransformer(nn.Module):
-    # Copied from transformers.models.altclip.modeling_altclip.AltCLIPVisionTransformer.__init__ with AltCLIPEncoder->GitVisionEncoder, AltCLIP->Git
     def __init__(self, config: GitVisionConfig):
         super().__init__()
         self.config = config
@@ -769,7 +753,6 @@ class GitVisionModel(GitPreTrainedModel):
         "attentions": GitVisionAttention,
     }
 
-    # Copied from transformers.models.clip.modeling_clip.CLIPVisionModel.__init__ with CLIP->Git
     def __init__(self, config: GitVisionConfig):
         super().__init__(config)
         self.vision_model = GitVisionTransformer(config)
