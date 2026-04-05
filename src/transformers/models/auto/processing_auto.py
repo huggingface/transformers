@@ -89,6 +89,7 @@ else:
             ("glm_image", "Glm4vProcessor"),
             ("glmasr", "GlmAsrProcessor"),
             ("got_ocr2", "GotOcr2Processor"),
+            ("granite_docling_hybrid", "GraniteDoclingHybridProcessor"),
             ("granite_speech", "GraniteSpeechProcessor"),
             ("grounding-dino", "GroundingDinoProcessor"),
             ("groupvit", "CLIPProcessor"),
