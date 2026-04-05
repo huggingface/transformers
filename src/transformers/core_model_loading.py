@@ -306,6 +306,72 @@ class Transpose(ConversionOps):
         return Transpose(dim0=self.dim1, dim1=self.dim0, check_dims=self.check_dims)
 
 
+class Conv3dToLinear(ConversionOps):
+    """Conv3d weights → flattened Linear layout."""
+
+    def __init__(self, in_channels: int, kernel_size: tuple[int, int, int]):
+        self.in_channels = in_channels
+        self.kernel_size = kernel_size
+
+    @staticmethod
+    def _get_target_pattern(
+        input_dict: dict[str, torch.Tensor], source_patterns: list[str], target_patterns: list[str]
+    ) -> str:
+        if len(input_dict) != 1:
+            raise ValueError("Undefined Operation encountered!")
+        if len(target_patterns) > 1:
+            if len(source_patterns) == 1:
+                return source_patterns[0]
+            else:
+                raise ValueError("Undefined Operation encountered!")
+        return target_patterns[0]
+
+    @torch.no_grad
+    def convert(
+        self, input_dict: dict[str, torch.Tensor], source_patterns: list[str], target_patterns: list[str], **kwargs
+    ) -> dict[str, torch.Tensor]:
+        target_pattern = self._get_target_pattern(input_dict, source_patterns, target_patterns)
+        tensors = next(iter(input_dict.values()))
+        tensor = tensors[0] if isinstance(tensors, list) else tensors
+
+        if tensor.ndim == 5:
+            tensor = tensor.reshape(tensor.shape[0], -1).contiguous()
+        elif tensor.ndim != 2:
+            raise ValueError(f"Conv3dToLinear expects a 5D or 2D tensor, got {tensor.ndim}D")
+
+        return {target_pattern: tensor}
+
+    @property
+    def reverse_op(self) -> ConversionOps:
+        return LinearToConv3d(in_channels=self.in_channels, kernel_size=self.kernel_size)
+
+
+class LinearToConv3d(ConversionOps):
+    """Flattened Linear weights → Conv3d layout."""
+
+    def __init__(self, in_channels: int, kernel_size: tuple[int, int, int]):
+        self.in_channels = in_channels
+        self.kernel_size = kernel_size
+
+    @torch.no_grad
+    def convert(
+        self, input_dict: dict[str, torch.Tensor], source_patterns: list[str], target_patterns: list[str], **kwargs
+    ) -> dict[str, torch.Tensor]:
+        target_pattern = Conv3dToLinear._get_target_pattern(input_dict, source_patterns, target_patterns)
+        tensors = next(iter(input_dict.values()))
+        tensor = tensors[0] if isinstance(tensors, list) else tensors
+
+        target_shape = (tensor.shape[0], self.in_channels, *self.kernel_size)
+        if tensor.numel() != math.prod(target_shape):
+            raise ValueError(f"Cannot reshape tensor with shape {tensor.shape} into {target_shape}")
+
+        return {target_pattern: tensor.reshape(target_shape).contiguous()}
+
+    @property
+    def reverse_op(self) -> ConversionOps:
+        return Conv3dToLinear(in_channels=self.in_channels, kernel_size=self.kernel_size)
+
+
 class PermuteForRope(ConversionOps):
     """
     Applies the permutation required to convert complex RoPE weights to the split sin/cos format.
