@@ -596,10 +596,9 @@ class FP8Experts(nn.Module):
         self.block_size = block_size
         self.hidden_dim = config.hidden_size
         self.activation_scheme = activation_scheme
-        self.num_experts = config.num_local_experts if hasattr(config, "num_local_experts") else config.num_experts
-        self.intermediate_dim = (
-            config.moe_intermediate_size if hasattr(config, "moe_intermediate_size") else config.intermediate_size
-        )
+        self.num_experts = getattr(config, "num_local_experts", config.num_experts)
+        self.intermediate_dim = getattr(config, "moe_intermediate_size", config.intermediate_size)
+        self.act_fn = ACT2FN[getattr(config, "hidden_activation", config.hidden_act)]
 
         if self.has_gate:
             gu_proj_out, gu_proj_in = 2 * self.intermediate_dim, self.hidden_dim
@@ -632,8 +631,6 @@ class FP8Experts(nn.Module):
         if self.activation_scheme == "static":
             self.gate_up_proj_activation_scale = nn.Parameter(torch.ones(self.num_experts, dtype=torch.float32))
             self.down_proj_activation_scale = nn.Parameter(torch.ones(self.num_experts, dtype=torch.float32))
-
-        self.act_fn = ACT2FN[config.hidden_act]
 
     def _apply_gate(self, gate_up: torch.Tensor) -> torch.Tensor:
         gate, up = gate_up.chunk(2, dim=-1)
