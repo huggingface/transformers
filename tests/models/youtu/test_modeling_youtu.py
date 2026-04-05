@@ -33,7 +33,7 @@ from ...causal_lm_tester import CausalLMModelTest, CausalLMModelTester
 if is_torch_available():
     import torch
 
-    torch.set_float32_matmul_precision("high")
+    torch.set_float32_matmul_precision("highest")
 
     from transformers import (
         Cache,
@@ -99,8 +99,8 @@ class YoutuIntegrationTest(unittest.TestCase):
     def test_dynamic_cache(self):
         NUM_TOKENS_TO_GENERATE = 40
         EXPECTED_TEXT_COMPLETION = [
-            "Simply put, the theory of relativity states that , the speed of light is constant in all reference frames. This means that if you are traveling at the speed of light, you will never reach the speed of light. This is because the speed of",
-            "My favorite all time favorite condiment is ketchup. I love it on everything. I love it on burgers, hot dogs, and even on my fries. I also love it on my french fries. I love it on my french fries. I love",
+            "Simply put, the theory of relativity states that , time is relative. It is the speed of light is constant in all reference frames. This means that if you are moving at a certain speed, you will experience time differently than someone who is stationary",
+            "My favorite all time favorite condiment is ketchup. I love it on everything. I love it on burgers, hot dogs, and even on my fries. I also love it on my french fries. I love it on my french fries. I love"
         ]
 
         prompts = [
@@ -123,8 +123,8 @@ class YoutuIntegrationTest(unittest.TestCase):
     def test_static_cache(self):
         NUM_TOKENS_TO_GENERATE = 40
         EXPECTED_TEXT_COMPLETION = [
-            "Simply put, the theory of relativity states that , the speed of light is constant in all reference frames. This means that if you are traveling at the speed of light, you will never reach the speed of light. This is because the speed of",
-            "My favorite all time favorite condiment is ketchup. I love it on everything. I love it on burgers, hot dogs, and even on my fries. I also love it on my french fries. I love it on my french fries. I love",
+            "Simply put, the theory of relativity states that , time is relative. It is the speed of light is constant in all reference frames. This means that if you are moving at a certain speed, you will experience time differently than someone who is stationary",
+            "My favorite all time favorite condiment is ketchup. I love it on everything. I love it on burgers, hot dogs, and even on my fries. I also love it on my french fries. I love it on my french fries. I love"
         ]
 
         prompts = [
@@ -151,8 +151,8 @@ class YoutuIntegrationTest(unittest.TestCase):
     def test_compile_static_cache(self):
         NUM_TOKENS_TO_GENERATE = 40
         EXPECTED_TEXT_COMPLETION = [
-            "Simply put, the theory of relativity states that , the speed of light is constant in all reference frames. This means that if you are traveling at the speed of light, you will never reach the speed of light. This is because the speed of",
-            "My favorite all time favorite condiment is ketchup. I love it on everything. I love it on burgers, hot dogs, and even on my fries. I also love it on my french fries. I love it on my french fries. I love",
+            "Simply put, the theory of relativity states that , time is relative. It is the speed of light is constant in all reference frames. This means that if you are moving at a certain speed, you will experience time differently than someone who is stationary",
+            "My favorite all time favorite condiment is ketchup. I love it on everything. I love it on burgers, hot dogs, and even on my fries. I also love it on my french fries. I love it on my french fries. I love"
         ]
 
         prompts = [
