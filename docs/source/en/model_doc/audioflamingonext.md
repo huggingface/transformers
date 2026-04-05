@@ -14,7 +14,7 @@ rendered properly in your Markdown viewer.
 
 -->
 
-*This model was released on 2026-04-07 and added to Hugging Face Transformers on 2026-04-04.*
+*This model was released on 2026-04-07 and added to Hugging Face Transformers on 2026-04-07.*
 
 # Audio Flamingo-Next
 
@@ -26,32 +26,35 @@ rendered properly in your Markdown viewer.
 
 ## Overview
 
-Audio Flamingo-Next is a fully open large audio–language model designed for robust understanding and reasoning over music. It builds upon the [Audio Flamingo 3](./audioflamingo3.md) architecture by including **Rotary Time Embeddings (RoTE)**, which injects temporal position information to enable the model to handle audio sequences up to 30 minutes (1800 seconds).
+Audio Flamingo-Next (AF-Next) is a fully open large audio-language model for understanding and reasoning over speech, environmental sounds, and music. In Transformers, it is implemented as a replace-in-place audio-text model: the processor expands a dedicated audio placeholder into the exact number of post-pool audio frames, and the model replaces those token slots with projected audio embeddings during the forward pass.
+
+AF-Next builds on [Audio Flamingo 3](./audioflamingo3.md) with a stronger audio-language training recipe, Rotary Time Embeddings (RoTE) for temporally grounded modeling, and support for long and complex audio inputs up to **30 minutes (1800 seconds)**.
 
 The model checkpoint is available at: [nvidia/audio-flamingo-next-hf](https://huggingface.co/nvidia/audio-flamingo-next-hf)
 
 Highlights:
 
-- Unified audio encoder across speech, sound, and music.
-- **Rotary Time Embeddings (RoTE)** for enhanced temporal modeling, enabling support for **up to 30 minutes of audio**.
-- **Extended long-audio support via windowing and post-pool alignment (up to 30 minutes maximum).** The model processes audio in 30-second windows with a hard limit of 60 windows (30 minutes total). Audio longer than 30 minutes will be truncated.
-- Special sound boundary tokens (`<|sound_bos|>` and `<|sound_eos|>`) for improved audio sequence modeling.
-- Deterministic fusion that preserves sequence length by replacing audio placeholder tokens with audio embeddings.
+- Generalist audio understanding across speech, sound, and music.
+- **RoTE-based temporal grounding** for long-form audio reasoning.
+- **Long-audio support up to 30 minutes** through 30-second windowing and post-pool alignment.
+- Special sound boundary tokens (`<|sound_bos|>` and `<|sound_eos|>`) for audio sequence boundaries.
+- Deterministic replace-in-place fusion that preserves the text sequence length.
 
 This model was contributed by [Lasha Koroshinadze](https://huggingface.co/lashahub) and [Eric Bezzam](https://huggingface.co/bezzam).
 
 ### Paper
 
-[Music Flamingo: Scaling Music Understanding in Audio Language Models](https://huggingface.co/papers/2511.10289)  
-S. Ghosh, A. Goel, L. Koroshinadze, S. Lee, Z. Kong, J. F. Santos, R. Duraiswami, D. Manocha, W. Ping, M. Shoeybi, B. Catanzaro  
-NVIDIA and University of Maryland  
-Project: https://research.nvidia.com/labs/adlr/MF/
+Audio Flamingo Next: Next-Generation Open Audio-Language Models for Speech, Sound, and Music  
+Sreyan Ghosh, Arushi Goel, Kaousheik Jayakumar, Lasha Koroshinadze, Nishit Anand, Zhifeng Kong, Siddharth Gururani, Sang-gil Lee, Jaehyeon Kim, Aya Aljafari, Chao-Han Huck Yang, Sungwon Kim, Ramani Duraiswami, Dinesh Manocha, Mohammad Shoeybi, Bryan Catanzaro, Ming-Yu Liu, Wei Ping  
+NVIDIA and University of Maryland
+
+The paper introduces AF-Next as an open frontier audio-language model trained with a curriculum spanning pre-training, mid-training, post-training, and time-grounded reasoning. Compared to Audio Flamingo 3, it expands long-audio support to 30 minutes, strengthens performance across speech, sound, and music tasks, and introduces Temporal Audio Chain-of-Thought for timestamp-grounded reasoning over long recordings.
 
 ## Usage
 
 ### Audio Instruct Mode
 
-The model supports audio-text instructions, including multi-turn interactions, all processed in batches.
+The model supports audio-text instructions, including multi-turn and batched interactions.
 
 ➡️ audio + text instruction
 
@@ -66,8 +69,14 @@ conversation = [
     {
         "role": "user",
         "content": [
-            {"type": "text", "text": "Describe this track in full detail - tell me the genre, tempo, and key, then dive into the instruments, production style, and overall mood it creates."},
-            {"type": "audio", "path": "https://huggingface.co/datasets/nvidia/AudioSkills/resolve/main/assets/song_1.mp3"},
+            {
+                "type": "text",
+                "text": "What is surprising about the relationship between the barking and the music?",
+            },
+            {
+                "type": "audio",
+                "path": "https://huggingface.co/datasets/nvidia/AudioSkills/resolve/main/assets/dogs_barking_in_sync_with_the_music.wav",
+            },
         ],
     }
 ]
@@ -101,19 +110,22 @@ conversation = [
         "content": [
             {
                 "type": "text",
-                "text": "Write a rich caption that blends the technical details (genre, BPM, key, chords, mix) with how the song feels emotionally and dynamically as it unfolds.",
+                "text": "Instruction: How does the tone of female speech change throughout the audio? Choose the correct option among the options below: (A) Sad to happy (B) Happy to sad (C) Neutral to happy (D) Happy to neutral.",
             },
-            {"type": "audio", "path": "https://huggingface.co/datasets/nvidia/AudioSkills/resolve/main/assets/song_1.mp3"},
+            {
+                "type": "audio",
+                "path": "https://huggingface.co/datasets/nvidia/AudioSkills/resolve/main/assets/000000786159.31.wav",
+            },
         ],
     },
     {
         "role": "assistant",
-        "content": [{"type": "text", "text": "This energetic Eurodance anthem at 150 BPM in E major combines bright synth arpeggios with a punchy four-on-the-floor beat..."}],
+        "content": [{"type": "text", "text": "(A) Sad to happy"}],
     },
     {
         "role": "user",
         "content": [
-            {"type": "text", "text": "What instruments stand out the most?"},
+            {"type": "text", "text": "Why do you think so?"},
         ],
     },
 ]
@@ -146,10 +158,13 @@ conversations = [
         {
             "role": "user",
             "content": [
-                {"type": "text", "text": "Describe this track in full detail - tell me the genre, tempo, and key, then dive into the instruments, production style, and overall mood it creates."},
+                {
+                    "type": "text",
+                    "text": "What is surprising about the relationship between the barking and the music?",
+                },
                 {
                     "type": "audio",
-                    "path": "https://huggingface.co/datasets/nvidia/AudioSkills/resolve/main/assets/song_1.mp3",
+                    "path": "https://huggingface.co/datasets/nvidia/AudioSkills/resolve/main/assets/dogs_barking_in_sync_with_the_music.wav",
                 },
             ],
         }
@@ -160,9 +175,16 @@ conversations = [
             "content": [
                 {
                     "type": "text",
-                    "text": "Generate a structured lyric sheet from the input music.",
+                    "text": "Why is the philosopher's name mentioned in the lyrics? "
+                    "(A) To express a sense of nostalgia "
+                    "(B) To indicate that language cannot express clearly, satirizing the inversion of black and white in the world "
+                    "(C) To add depth and complexity to the lyrics "
+                    "(D) To showcase the wisdom and influence of the philosopher",
                 },
-                {"type": "audio", "path": "https://huggingface.co/datasets/nvidia/AudioSkills/resolve/main/assets/song_2.mp3"},
+                {
+                    "type": "audio",
+                    "path": "https://huggingface.co/datasets/nvidia/AudioSkills/resolve/main/assets/Ch6Ae9DT6Ko_00-04-03_00-04-31.wav",
+                },
             ],
         }
     ],
@@ -197,13 +219,13 @@ conversation = [
         {
             "role": "user",
             "content": [
-                {"type": "text", "text": "Break the track down like a critic - list its tempo, key, and chordal motion, then explain the textures, dynamics, and emotional impact of the performance."},
-                {"type": "audio", "path": "https://huggingface.co/datasets/nvidia/AudioSkills/resolve/main/assets/song_1.mp3"},
+                {"type": "text", "text": "Transcribe the input speech."},
+                {"type": "audio", "path": "https://huggingface.co/datasets/nvidia/AudioSkills/resolve/main/assets/WhDJDIviAOg_120_10.mp3"},
             ],
         },
         {
-            "role": "assistant",
-            "content": [{"type": "text", "text": "This Eurodance track operates at 150 BPM in E major, with harmonic movement centering on the I-vi-IV-V family. The production features layered synth arpeggios, a four-on-the-floor kick pattern, and a mezzo-soprano lead vocal with bright timbre. Dynamically, the track builds through verses into an anthemic chorus with full synth orchestration and backing vocals, creating an uplifting, euphoric atmosphere characteristic of late 2000s dance-pop."}],
+            "role": "assistant", 
+            "content": [{"type": "text", "text": "Summer follows spring. The days grow longer and the nights are warm."}],
         }
     ],
     [
@@ -212,14 +234,17 @@ conversation = [
             "content": [
                 {
                     "type": "text",
-                    "text": "Describe this song from both a technical and artistic lens: mention tempo, harmony, and instrumentation, but also mood, lyrical themes, and structure.",
+                    "text": "What is surprising about the relationship between the barking and the music?",
                 },
-                {"type": "audio", "path": "https://huggingface.co/datasets/nvidia/AudioSkills/resolve/main/assets/song_2.mp3"},
+                {
+                    "type": "audio",
+                    "path": "https://huggingface.co/datasets/nvidia/AudioSkills/resolve/main/assets/dogs_barking_in_sync_with_the_music.wav",
+                },
             ],
         },
         {
-            "role": "assistant",
-            "content": [{"type": "text", "text": "This electronic pop track combines upbeat production with playful lyrical themes centered around late-night pizza cravings. The structure follows a verse-chorus format with recurring melodic motifs and rhythmic patterns that emphasize the celebratory, lighthearted mood of the piece."}],
+            "role": "assistant", 
+            "content": [{"type": "text", "text": "The barking is surprisingly synchronized with the beat and timing of the music, almost like the dogs are part of the performance rather than incidental background noise."}],
         }
 
     ]
@@ -243,21 +268,20 @@ loss.backward()
 ### Architecture
 
 * **Audio Encoder**
-  Whisper-style feature extractor + encoder → average-pool over time (stride 2) → LayerNorm.
-  Produces per-frame hidden states at the post-pool rate.
+  AF-Next uses the AF-Whisper encoder. Audio is resampled to 16 kHz mono, converted to a 128-bin log-mel spectrogram with a 25 ms window and 10 ms hop, encoded in non-overlapping 30-second windows, then pooled with stride 2.
 
 * **Rotary Time Embeddings (RoTE)**
-  Applied to the encoder output to inject temporal position information, enabling the model to handle audio sequences up to 30 minutes (1800 seconds). RoTE uses 2D axial rotary embeddings for batch and time dimensions with time-based angle modulation.
+  AF-Next uses the same checkpoint-faithful RoTE integration as the current Transformers MusicFlamingo implementation: axial rotary embeddings are applied over the window index and the encoder time index, and both axes are modulated with absolute timestamps in seconds. This is what enables the public checkpoint to ground audio features over up to 30 minutes.
 
 * **AudioFlamingoNextMultiModalProjector**
-  A small MLP that maps encoder features to the language model's hidden size.
+  A 2-layer MLP that maps AF-Whisper features to the language model hidden size.
 
 * **AudioFlamingoNextForConditionalGeneration**
-  A causal language model that accepts text embeddings where each audio placeholder token slot is replaced, in place, by an audio frame embedding. Uses special boundary tokens (`<|sound_bos|>` and `<|sound_eos|>`) to mark audio sequences. No sequence-length change is introduced by fusion.
+  A decoder-only audio-language model built on a Qwen2.5-7B text backbone. Audio placeholder token slots are replaced in place by projected audio frame embeddings, with `<|sound_bos|>` and `<|sound_eos|>` marking audio boundaries. The paper introduces multiple AF-Next variants; the current Transformers checkpoint exposes the public conditional-generation model in this standard interface.
 
 ### Processor-level alignment
 
-1. Each raw waveform is split into fixed-length windows based on the feature extractor’s `chunk_length` (seconds) and `sampling_rate` (Hz).
+1. Each raw waveform is resampled and split into fixed 30-second windows using the feature extractor configuration.
 2. For each window, the processor computes the number of post-pool frames `post_pool_len` that the encoder will output (matching the conv/pool schedule).
 3. The processor expands the audio placeholder token by the total number of post-pool frames across all windows.
 4. The model later replaces those token positions with the corresponding projected audio embeddings.
@@ -268,7 +292,7 @@ loss.backward()
 
 * The default setup processes 30-second windows at 16 kHz mono.
 * **The processor enforces a hard limit of 60 windows per sample, resulting in a maximum of 30 minutes of audio (60 windows × 30 seconds).**
-* Rotary Time Embeddings (RoTE) provide position information for sequences up to 30 minutes (1800 seconds).
+* RoTE provides temporal position information for audio sequences up to 30 minutes (1800 seconds).
 * For each window:
 
   * `mel_len` is the padded mel length.
