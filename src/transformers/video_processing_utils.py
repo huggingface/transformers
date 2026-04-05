@@ -67,9 +67,10 @@ if is_torch_available():
 if is_torchvision_v2_available():
     import torchvision.transforms.v2.functional as tvF
 
-if is_vision_available():
+try:
     from .image_utils import PILImageResampling
-
+except Exception:
+    PILImageResampling = None
 
 logger = logging.get_logger(__name__)
 
