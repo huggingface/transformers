@@ -2662,6 +2662,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
 
     def _resize_token_embeddings(self, new_num_tokens, pad_to_multiple_of=None, mean_resizing=True):
         old_embeddings = self.get_input_embeddings()
+        old_lm_head = copy.deepcopy(self.get_output_embeddings())
         new_embeddings = self._get_resized_embeddings(
             old_embeddings, new_num_tokens, pad_to_multiple_of, mean_resizing
         )
@@ -2684,8 +2685,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                 new_num_tokens = new_embeddings.weight.shape[0]
 
         # if word embeddings are not tied, make sure that lm head is resized as well
-        if self.get_output_embeddings() is not None:
-            old_lm_head = self.get_output_embeddings()
+        if old_lm_head is not None:
             if isinstance(old_lm_head, torch.nn.Embedding):
                 new_lm_head = self._get_resized_embeddings(old_lm_head, new_num_tokens, mean_resizing=mean_resizing)
             else:
