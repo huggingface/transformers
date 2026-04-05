@@ -149,6 +149,7 @@ SPECIAL_CASES_TO_ALLOW = {
     "GptOssConfig": True,
     "LwDetrConfig": True,
     "NemotronHConfig": True,
+    "RfDetrConfig": True,
     # Internally uses Got Ocr2 so no need to use in the modeling code as we remap in auto instead
     "PPChart2TableConfig": True,
     "PPChart2TableVisionConfig": True,
