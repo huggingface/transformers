@@ -1361,6 +1361,11 @@ class Gemma4TextModel(Gemma3TextModel):
                 "sliding_attention": create_sliding_window_causal_mask(**mask_kwargs),
             }
 
+        # Ensure a cache exists for KV sharing between layers, even when use_cache=False.
+        # This must happen after mask creation to avoid affecting causal mask computation.
+        if past_key_values is None:
+            past_key_values = DynamicCache(config=self.config)
+
         # embed positions
         hidden_states = inputs_embeds
         position_embeddings = {}
@@ -1385,7 +1390,7 @@ class Gemma4TextModel(Gemma3TextModel):
 
         return BaseModelOutputWithPast(
             last_hidden_state=hidden_states,
-            past_key_values=past_key_values,
+            past_key_values=past_key_values if use_cache else None,
         )
 
 

@@ -114,6 +114,27 @@ class Gemma4TextModelTest(CausalLMModelTest, unittest.TestCase):
     def test_generate_from_random_inputs_embeds(self):
         pass
 
+    def test_use_cache_false_with_kv_sharing(self):
+        """Regression test: use_cache=False must produce the same logits as use_cache=True.
+
+        Gemma4 uses KV sharing (num_kv_shared_layers) where later layers reuse K/V from earlier
+        layers via the cache object. When use_cache=False the cache was not created, breaking the
+        sharing mechanism and causing receiver layers to use keys as values (garbage logits).
+        See https://github.com/huggingface/transformers/issues/45242
+        """
+        config = self.model_tester.get_config()
+        config.attention_k_eq_v = True
+        config.num_global_key_value_heads = config.num_key_value_heads
+        model = Gemma4ForCausalLM(config).to(torch_device).eval()
+        input_ids = ids_tensor([1, 16], config.vocab_size).to(torch_device)
+
+        with torch.no_grad():
+            out_cached = model(input_ids, use_cache=True)
+            out_uncached = model(input_ids, use_cache=False)
+
+        torch.testing.assert_close(out_cached.logits, out_uncached.logits, atol=1e-4, rtol=1e-4)
+        self.assertIsNone(out_uncached.past_key_values, "past_key_values should be None when use_cache=False")
+
     @unittest.skip(
         "Flaky on CI, but not locally on Mac. If model is set to fp32 instead of bf16, not flaky anymore."
         "TODO Cyril: investigate where the loss of precision between bf16 and fp32 comes from."
