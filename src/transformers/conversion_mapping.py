@@ -428,6 +428,8 @@ def _build_checkpoint_conversion_mapping():
                 source_patterns="LayerNorm.beta",
                 target_patterns="LayerNorm.bias",
             ),
+            # Applied to all CLIP-like models
+            WeightRenaming(source_patterns=r"layrnorm", target_patterns="layernorm"),
         ],
         "nomic_bert": [
             WeightRenaming(r"encoder.layers", r"layers"),

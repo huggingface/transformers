@@ -361,7 +361,7 @@ class MLCDVisionTransformer(CLIPVisionTransformer):
         position_embeddings = (emb.cos(), emb.sin())
 
         hidden_states = self.embeddings(pixel_values)
-        hidden_states = self.pre_layrnorm(hidden_states)
+        hidden_states = self.pre_layernorm(hidden_states)
 
         encoder_outputs = self.encoder(
             inputs_embeds=hidden_states,

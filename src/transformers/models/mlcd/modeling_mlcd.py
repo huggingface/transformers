@@ -460,7 +460,7 @@ class MLCDVisionTransformer(MLCDPreTrainedModel):
         embed_dim = config.hidden_size
 
         self.embeddings = MLCDVisionEmbeddings(config)
-        self.pre_layrnorm = nn.LayerNorm(embed_dim, eps=config.layer_norm_eps)
+        self.pre_layernorm = nn.LayerNorm(embed_dim, eps=config.layer_norm_eps)
         self.encoder = MLCDEncoder(config)
         self.post_layernorm = nn.LayerNorm(embed_dim, eps=config.layer_norm_eps)
         self.vision_rotary_embedding = MLCDRotaryEmbedding(config.hidden_size // config.num_attention_heads // 2)
@@ -487,7 +487,7 @@ class MLCDVisionTransformer(MLCDPreTrainedModel):
         position_embeddings = (emb.cos(), emb.sin())
 
         hidden_states = self.embeddings(pixel_values)
-        hidden_states = self.pre_layrnorm(hidden_states)
+        hidden_states = self.pre_layernorm(hidden_states)
 
         encoder_outputs = self.encoder(
             inputs_embeds=hidden_states,
