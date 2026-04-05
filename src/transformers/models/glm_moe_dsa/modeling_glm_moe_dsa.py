@@ -64,13 +64,6 @@ class GlmMoeDsaRMSNorm(nn.Module):
         return f"{tuple(self.weight.shape)}, eps={self.variance_epsilon}"
 
 
-def rotate_half(x):
-    """Rotates half the hidden dims of the input."""
-    x1 = x[..., : x.shape[-1] // 2]
-    x2 = x[..., x.shape[-1] // 2 :]
-    return torch.cat((-x2, x1), dim=-1)
-
-
 def apply_rotary_pos_emb(
     x: torch.Tensor,
     cos: torch.Tensor,
@@ -93,13 +86,14 @@ def apply_rotary_pos_emb(
     Returns:
         `torch.Tensor`: Tensor with rotary embeddings applied, same shape as input.
     """
-    cos = cos.unsqueeze(unsqueeze_dim)
-    sin = sin.unsqueeze(unsqueeze_dim)
-
-    # Split-half (NeoX/Llama style): (x[:d/2], x[d/2:])
-    # This matches llama's apply_rotary_pos_emb logic.
-    x_rotated = (x * cos) + (rotate_half(x) * sin)
-    return x_rotated
+    # Interleaved (GPT-J style): (x[0], x[1]), (x[2], x[3]), ...
+    # RotaryEmbedding outputs cos/sin with repeated halves for NeoX compatibility,
+    # while interleaved rotation expects [.., D/2] frequencies.
+    cos = cos[..., : x.shape[-1] // 2].unsqueeze(unsqueeze_dim)
+    sin = sin[..., : x.shape[-1] // 2].unsqueeze(unsqueeze_dim)
+    x1 = x[..., ::2]
+    x2 = x[..., 1::2]
+    return torch.stack((x1 * cos - x2 * sin, x2 * cos + x1 * sin), dim=-1).flatten(-2)
 
 
 class GlmMoeDsaIndexer(nn.Module):
@@ -107,8 +101,7 @@ class GlmMoeDsaIndexer(nn.Module):
     Dynamic Sparse Attention (DSA) indexer for selecting top-k tokens.
 
     The Indexer has its own lightweight projections (wq_b, wk) separate from the
-    main MLA attention. It uses non-interleaved (NeoX/Llama) RoPE, unlike the main attention
-    which uses interleaved RoPE.
+    main MLA attention.
 
     **Cache strategy**: The Indexer manages its own key cache (`_cached_keys`) separately
     from the DynamicCache used by MLA attention, since DynamicCache is sized for exactly
@@ -216,7 +209,6 @@ class GlmMoeDsaIndexer(nn.Module):
 
         # q·k^T per head: [B, S, H, D] @ [B, T, D]^T → [B, S, H, T]
         scores = torch.einsum("bshd,btd->bsht", q.float(), k_cached.float()) * self.softmax_scale
-        scores = F.relu(scores)
         # Weight per head and sum across heads → [B, S, T]
         index_scores = torch.einsum("bsht,bsh->bst", scores, weights)
 
