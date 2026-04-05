@@ -63,9 +63,68 @@ from transformers.utils.hub import cached_file
 
 # ==== Internal Constants and Classes ====
 
+
+def _patch_template_for_openai_tool_role(template: str) -> str:
+    """Patch a Gemma4 chat template to support OpenAI-standard ``role: "tool"`` messages.
+
+    Applies three changes:
+    1. Adds a handler for ``message['role'] == 'tool'`` that renders as
+       ``<|tool_response>`` without opening a new ``<|turn>`` block.
+    2. Extends the ``<turn|>`` close condition to keep the model turn open when
+       it has ``tool_calls`` without ``tool_responses`` (OpenAI format sends tool
+       results as separate messages).
+    3. Closes the new if/else block before ``endfor``.
+    """
+    # --- Change 1: Insert tool role handler before the turn-open line ---
+    old_turn_open = (
+        """{%- set role = 'model' if message['role'] == 'assistant' else message['role'] -%}\n"""
+        """        {{- '<|turn>' + role + '\\n' }}"""
+    )
+    new_turn_open = (
+        """{%- set role = 'model' if message['role'] == 'assistant' else message['role'] -%}\n"""
+        """\n"""
+        """    {%- if message['role'] == 'tool' -%}\n"""
+        """        {#- OpenAI-standard tool result: render as <|tool_response> inside previous model turn -#}\n"""
+        """        {{- '<|tool_response>' -}}\n"""
+        """        {{- 'response:' + message['name'] | default('unknown') -}}\n"""
+        """        {%- if message['content'] is string and message['content'][0:1] == '{' -%}\n"""
+        """            {{- message['content'] -}}\n"""
+        """        {%- else -%}\n"""
+        """            {{- '{value:' + format_argument(message['content'], escape_keys=False) + '}' -}}\n"""
+        """        {%- endif -%}\n"""
+        """        {{- '<tool_response|>' -}}\n"""
+        """        {%- set ns.prev_message_type = 'tool_response' -%}\n"""
+        """    {%- else -%}\n"""
+        """        {{- '<|turn>' + role + '\\n' }}"""
+    )
+    template = template.replace(old_turn_open, new_turn_open)
+
+    # --- Change 2: Extend turn-close condition for pending tool_calls ---
+    old_turn_close = (
+        """{%- if not (message['tool_responses'] and not message['content']) -%}\n"""
+        """            {{- '<turn|>\\n' -}}\n"""
+        """        {%- endif -%}"""
+    )
+    new_turn_close = (
+        """{%- if not (message['tool_responses'] and not message['content'])\n"""
+        """            and not (role == 'model' and message['tool_calls'] and not message['tool_responses']) -%}\n"""
+        """            {{- '<turn|>\\n' -}}\n"""
+        """        {%- endif -%}\n"""
+        """    {%- endif -%}"""
+    )
+    template = template.replace(old_turn_close, new_turn_close)
+
+    return template
+
+
 # The correct chat templates were already uploaded to those 2 repos, so download from there
 _CHAT_TEMPLATE = pathlib.Path(cached_file("gg-hf-gg/gemma-4-E4B-it", "chat_template.jinja")).read_text()
 _CHAT_TEMPLATE_LARGE = pathlib.Path(cached_file("gg-hf-gg/gemma-4-31B-it", "chat_template.jinja")).read_text()
+
+# Patch templates to support OpenAI-standard role: "tool" messages
+_CHAT_TEMPLATE = _patch_template_for_openai_tool_role(_CHAT_TEMPLATE)
+_CHAT_TEMPLATE_LARGE = _patch_template_for_openai_tool_role(_CHAT_TEMPLATE_LARGE)
+
 
 _RESPONSE_SCHEMA = {
     "type": "object",
@@ -1215,7 +1274,7 @@ def main(*args):
         pad_token_id=config.get_text_config().pad_token_id,
         bos_token_id=config.get_text_config().bos_token_id,
         eos_token_id=(
-            tokenizer.convert_tokens_to_ids([tokenizer.eos_token, tokenizer.eot_token, tokenizer.str_token])
+            tokenizer.convert_tokens_to_ids([tokenizer.eos_token, tokenizer.eot_token, tokenizer.etc_token])
             if _INCLUDE_CHAT_TEMPLATE.value
             else config.get_text_config().eos_token_id
         ),
