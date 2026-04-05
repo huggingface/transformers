@@ -352,3 +352,27 @@ class TokenizerUtilsTest(unittest.TestCase):
             new_tokenizer.decode(new_tokenizer.encode(text_with_nonspecial_tokens), skip_special_tokens=True)
             == text_with_nonspecial_tokens
         )
+
+    @require_sentencepiece
+    @require_tokenizers
+    @slow
+    def test_mask_token_no_duplicate_registration(self):
+        from transformers import BigBirdTokenizer
+
+        tokenizer = BigBirdTokenizer.from_pretrained("google/bigbird-roberta-base")
+
+        # Check that tokenizing "Hello [MASK] world" does not produce '_' artifacts
+        tokens_single = tokenizer.tokenize("Hello [MASK] world")
+        self.assertNotIn(
+            "▁",
+            tokens_single,
+            f"Tokenization of 'Hello [MASK] world' should not produce '▁' tokens. Got: {tokens_single}",
+        )
+
+        # Check that tokenizing "[MASK] [MASK] [MASK]" does not produce '_' artifacts
+        tokens_multiple = tokenizer.tokenize("[MASK] [MASK] [MASK]")
+        self.assertNotIn(
+            "▁",
+            tokens_multiple,
+            f"Tokenization of '[MASK] [MASK] [MASK]' should not produce '▁' tokens. Got: {tokens_multiple}",
+        )

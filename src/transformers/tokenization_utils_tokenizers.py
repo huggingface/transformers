@@ -446,9 +446,11 @@ class TokenizersBackend(PreTrainedTokenizerBase):
                 tokens_to_add.append(special_token_value)
 
         # Also check extra special tokens
+        tokens_to_add_str = {str(t) for t in tokens_to_add}
         for token in self._extra_special_tokens:
-            if str(token) not in encoder and token not in tokens_to_add:
+            if str(token) not in encoder and str(token) not in tokens_to_add_str:
                 tokens_to_add.append(token)
+                tokens_to_add_str.add(str(token))
 
         if len(tokens_to_add) > 0:
             tokens = []
