@@ -319,6 +319,35 @@ class Seq2SeqTrainer(Trainer):
                 k: v for k, v in inputs.items() if k not in ("decoder_input_ids", "decoder_attention_mask")
             }
 
+        is_encoder_decoder = getattr(model.config, "is_encoder_decoder", False)
+        if not is_encoder_decoder and "generation_input_ids" in generation_inputs:
+            generation_input_ids = generation_inputs.pop("generation_input_ids")
+            generation_attention_mask = generation_inputs.pop("generation_attention_mask", None)
+            generation_inputs["input_ids"] = generation_input_ids
+
+            if generation_attention_mask is not None:
+                generation_inputs["attention_mask"] = generation_attention_mask
+            elif (
+                "attention_mask" not in generation_inputs
+                or generation_inputs["attention_mask"].shape != generation_input_ids.shape
+            ):
+                generation_inputs["attention_mask"] = torch.ones_like(generation_input_ids)
+        elif not is_encoder_decoder and "labels" in generation_inputs and "input_ids" in generation_inputs:
+            generation_input_ids, generation_attention_mask = self._prepare_decoder_only_generation_inputs(
+                generation_inputs["input_ids"],
+                generation_inputs.get("attention_mask"),
+                generation_inputs["labels"],
+            )
+            if generation_input_ids is not None:
+                generation_inputs["input_ids"] = generation_input_ids
+                generation_inputs["attention_mask"] = generation_attention_mask
+
+        prompt_input_length = (
+            generation_inputs["input_ids"].shape[-1]
+            if (not is_encoder_decoder and "input_ids" in generation_inputs)
+            else None
+        )
+
         summon_full_params_context = (
             FullyShardedDataParallel.summon_full_params(self.model)
             if torch.distributed.is_available() and isinstance(self.model, FullyShardedDataParallel)
@@ -327,6 +356,8 @@ class Seq2SeqTrainer(Trainer):
 
         with summon_full_params_context:
             generated_tokens = self.model.generate(**generation_inputs, **gen_kwargs)
+            if prompt_input_length is not None:
+                generated_tokens = generated_tokens[:, prompt_input_length:]
 
         # Temporary hack to ensure the generation config is not initialized for each iteration of the evaluation loop
         # TODO: remove this hack when the legacy code that initializes generation_config from a model config is
@@ -371,19 +402,58 @@ class Seq2SeqTrainer(Trainer):
 
         return loss, generated_tokens, labels
 
-    def _pad_tensors_to_max_len(self, tensor, max_length):
+    @staticmethod
+    def _get_prompt_lengths_from_labels(labels: torch.Tensor) -> torch.Tensor:
+        # Labels use -100 to mask prompt tokens; we only keep the contiguous prefix.
+        prompt_prefix_mask = labels.eq(-100).long().cumprod(dim=-1).bool()
+        return prompt_prefix_mask.long().sum(dim=-1)
+
+    def _prepare_decoder_only_generation_inputs(
+        self,
+        input_ids: torch.Tensor,
+        attention_mask: torch.Tensor | None,
+        labels: torch.Tensor,
+    ) -> tuple[torch.Tensor | None, torch.Tensor | None]:
+        prompt_lengths = self._get_prompt_lengths_from_labels(labels)
+        if prompt_lengths.max().item() == 0:
+            return None, None
+
+        if attention_mask is None:
+            attention_mask = torch.ones_like(input_ids)
+
+        valid_lengths = attention_mask.long().sum(dim=-1)
+        prompt_lengths = torch.where(prompt_lengths > 0, prompt_lengths, valid_lengths)
+        max_prompt_length = int(prompt_lengths.max().item())
+        pad_token_id = self._get_pad_token_id()
+
+        generation_input_ids = input_ids.new_full((input_ids.shape[0], max_prompt_length), pad_token_id)
+        generation_attention_mask = attention_mask.new_zeros((input_ids.shape[0], max_prompt_length))
+
+        for row_idx, prompt_length in enumerate(prompt_lengths.tolist()):
+            if prompt_length == 0:
+                continue
+
+            generation_input_ids[row_idx, -prompt_length:] = input_ids[row_idx, :prompt_length]
+            generation_attention_mask[row_idx, -prompt_length:] = 1
+
+        return generation_input_ids, generation_attention_mask
+
+    def _get_pad_token_id(self) -> int:
         if self.processing_class is not None and hasattr(self.processing_class, "pad_token_id"):
-            # If PAD token is not defined at least EOS token has to be defined
             pad_token_id = (
                 self.processing_class.pad_token_id
                 if self.processing_class.pad_token_id is not None
                 else self.processing_class.eos_token_id
             )
+        elif getattr(self.model.config, "pad_token_id", None) is not None:
+            pad_token_id = self.model.config.pad_token_id
         else:
-            if getattr(self.model.config, "pad_token_id", None) is not None:
-                pad_token_id = self.model.config.pad_token_id
-            else:
-                raise ValueError("Pad_token_id must be set in the configuration of the model, in order to pad tensors")
+            raise ValueError("Pad_token_id must be set in the configuration of the model, in order to pad tensors")
+
+        return pad_token_id
+
+    def _pad_tensors_to_max_len(self, tensor, max_length):
+        pad_token_id = self._get_pad_token_id()
 
         padded_tensor = pad_token_id * torch.ones(
             (tensor.shape[0], max_length), dtype=tensor.dtype, device=tensor.device
