@@ -295,3 +295,39 @@ class ObjectDetectionPipelineTests(unittest.TestCase):
                 {"score": 0.9993, "label": "I-ANSWER", "box": {"xmin": 294, "ymin": 254, "xmax": 343, "ymax": 264}},
             ],
         )
+
+    @require_torch
+    def test_small_model_pt_batched(self):
+        """Test batched inference with batch_size parameter - Fixes #31356"""
+        model_id = "hf-internal-testing/tiny-detr-mobilenetsv3"
+
+        model = AutoModelForObjectDetection.from_pretrained(model_id)
+        image_processor = AutoImageProcessor.from_pretrained(model_id)
+        object_detector = ObjectDetectionPipeline(model=model, image_processor=image_processor)
+
+        # Create a list of images for batch processing
+        images = [
+            "./tests/fixtures/tests_samples/COCO/000000039769.png",
+            "./tests/fixtures/tests_samples/COCO/000000039769.png",
+            "./tests/fixtures/tests_samples/COCO/000000039769.png",
+        ]
+
+        # Test with batch_size parameter - this uses DataLoader batching
+        outputs = list(object_detector(images, batch_size=2, threshold=0.0))
+
+        # Should return results for ALL images, not just the first one
+        self.assertEqual(len(outputs), len(images))
+
+        # Each output should be a list of detections
+        for i, output in enumerate(outputs):
+            self.assertIsInstance(output, list, f"Output {i} should be a list")
+            self.assertGreater(len(output), 0, f"Output {i} should have detections")
+            for detected_object in output:
+                self.assertEqual(
+                    detected_object,
+                    {
+                        "score": ANY(float),
+                        "label": ANY(str),
+                        "box": {"xmin": ANY(int), "ymin": ANY(int), "xmax": ANY(int), "ymax": ANY(int)},
+                    },
+                )
