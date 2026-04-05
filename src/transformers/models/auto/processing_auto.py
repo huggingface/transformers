@@ -100,6 +100,7 @@ else:
             ("instructblip", "InstructBlipProcessor"),
             ("instructblipvideo", "InstructBlipVideoProcessor"),
             ("internvl", "InternVLProcessor"),
+            ("internvl_chat", "InternVLProcessor"),
             ("janus", "JanusProcessor"),
             ("kosmos-2", "Kosmos2Processor"),
             ("kosmos-2.5", "Kosmos2_5Processor"),

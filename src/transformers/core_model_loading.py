@@ -177,6 +177,98 @@ class Concatenate(ConversionOps):
         return Chunk(self.dim)
 
 
+class SplitInternLM2QKV(ConversionOps):
+    """Split InternLM2 fused grouped-query attention weights into q/k/v projections."""
+
+    @staticmethod
+    def _get_text_config(config):
+        return getattr(config, "text_config", config)
+
+    @torch.no_grad
+    def convert(
+        self, input_dict: dict[str, torch.Tensor], source_patterns: list[str], target_patterns: list[str], **kwargs
+    ) -> dict[str, torch.Tensor]:
+        if len(input_dict) > 1 or len(target_patterns) != 3:
+            raise ValueError("SplitInternLM2QKV expects one source tensor and exactly three target patterns.")
+
+        text_config = self._get_text_config(kwargs.get("config"))
+        if text_config is None:
+            raise ValueError("SplitInternLM2QKV requires a config to infer the grouped-query attention layout.")
+
+        tensor = next(iter(input_dict.values()))
+        tensor = tensor[0] if isinstance(tensor, list) else tensor
+
+        num_attention_heads = text_config.num_attention_heads
+        num_key_value_heads = text_config.num_key_value_heads
+        head_dim = getattr(text_config, "head_dim", None) or (text_config.hidden_size // num_attention_heads)
+        num_key_value_groups = num_attention_heads // num_key_value_heads
+
+        expected_qkv_rows = num_key_value_heads * (num_key_value_groups + 2) * head_dim
+        if tensor.shape[0] != expected_qkv_rows:
+            raise ValueError(
+                "Expected fused wqkv rows="
+                f"{expected_qkv_rows}, but got {tensor.shape[0]} for {kwargs.get('full_layer_name')}."
+            )
+
+        qkv = tensor.reshape(num_key_value_heads, num_key_value_groups + 2, head_dim, tensor.shape[1])
+        q_proj = qkv[:, :num_key_value_groups].reshape(-1, tensor.shape[1]).contiguous()
+        k_proj = qkv[:, -2].reshape(-1, tensor.shape[1]).contiguous()
+        v_proj = qkv[:, -1].reshape(-1, tensor.shape[1]).contiguous()
+
+        return dict(zip(target_patterns, [q_proj, k_proj, v_proj]))
+
+    @property
+    def reverse_op(self) -> ConversionOps:
+        return FuseInternLM2QKV()
+
+
+class FuseInternLM2QKV(ConversionOps):
+    """Fuse q/k/v projections into the legacy InternLM2 grouped-query attention layout."""
+
+    @staticmethod
+    def _get_text_config(config):
+        return getattr(config, "text_config", config)
+
+    @torch.no_grad
+    def convert(
+        self,
+        input_dict: dict[str, list[torch.Tensor]],
+        source_patterns: list[str],
+        target_patterns: list[str],
+        **kwargs,
+    ) -> dict[str, torch.Tensor]:
+        if len(source_patterns) != 3 or len(target_patterns) != 1:
+            raise ValueError("FuseInternLM2QKV expects three source patterns and one target pattern.")
+
+        text_config = self._get_text_config(kwargs.get("config"))
+        if text_config is None:
+            raise ValueError("FuseInternLM2QKV requires a config to infer the grouped-query attention layout.")
+
+        num_attention_heads = text_config.num_attention_heads
+        num_key_value_heads = text_config.num_key_value_heads
+        head_dim = getattr(text_config, "head_dim", None) or (text_config.hidden_size // num_attention_heads)
+        num_key_value_groups = num_attention_heads // num_key_value_heads
+
+        q_proj, k_proj, v_proj = (
+            input_dict[source_pattern][0]
+            if isinstance(input_dict[source_pattern], list)
+            else input_dict[source_pattern]
+            for source_pattern in source_patterns
+        )
+        hidden_size = q_proj.shape[1]
+
+        q_proj = q_proj.reshape(num_key_value_heads, num_key_value_groups, head_dim, hidden_size)
+        k_proj = k_proj.reshape(num_key_value_heads, 1, head_dim, hidden_size)
+        v_proj = v_proj.reshape(num_key_value_heads, 1, head_dim, hidden_size)
+        fused = torch.cat([q_proj, k_proj, v_proj], dim=1).reshape(-1, hidden_size).contiguous()
+
+        return {target_patterns[0]: fused}
+
+    @property
+    def reverse_op(self) -> ConversionOps:
+        return SplitInternLM2QKV()
+
+
 class MergeModulelist(ConversionOps):
     """
     Merge a list of tensors into a single tensor along the first dimension.

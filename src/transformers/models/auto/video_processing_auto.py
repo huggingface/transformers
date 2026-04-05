@@ -45,6 +45,22 @@ from .configuration_auto import (
 logger = logging.get_logger(__name__)
 
 
+def _is_legacy_internvl_chat_config(config: PreTrainedConfig | None) -> bool:
+    return isinstance(config, PreTrainedConfig) and getattr(config, "model_type", None) == "internvl_chat"
+
+
+def _get_legacy_internvl_processor_init_kwargs(config: PreTrainedConfig) -> dict[str, dict[str, int]]:
+    image_size = getattr(config, "force_image_size", None) or getattr(config.vision_config, "image_size", None)
+    if isinstance(image_size, (list, tuple)):
+        size = {"height": image_size[0], "width": image_size[1]}
+    elif image_size is not None:
+        size = {"height": image_size, "width": image_size}
+    else:
+        return {}
+
+    return {"size": size, "crop_size": size}
+
+
 if TYPE_CHECKING:
     # This significantly improves completion suggestion performance when
     # the transformers package is used with Microsoft's Pylance language server.
@@ -59,6 +75,7 @@ else:
             ("instructblip", "InstructBlipVideoVideoProcessor"),
             ("instructblipvideo", "InstructBlipVideoVideoProcessor"),
             ("internvl", "InternVLVideoProcessor"),
+            ("internvl_chat", "InternVLVideoProcessor"),
             ("llava_next_video", "LlavaNextVideoVideoProcessor"),
             ("llava_onevision", "LlavaOnevisionVideoProcessor"),
             ("pe_audio_video", "PeVideoVideoProcessor"),
@@ -328,8 +345,52 @@ class AutoVideoProcessor:
         trust_remote_code = kwargs.pop("trust_remote_code", None)
         kwargs["_from_auto"] = True
 
-        config_dict, _ = BaseVideoProcessor.get_video_processor_dict(pretrained_model_name_or_path, **kwargs)
-        video_processor_class = config_dict.get("video_processor_type", None)
+        def _get_raw_model_type():
+            if isinstance(config, PreTrainedConfig):
+                return getattr(config, "model_type", None)
+
+            resolved_config_file = cached_file(
+                pretrained_model_name_or_path,
+                CONFIG_NAME,
+                _raise_exceptions_for_gated_repo=False,
+                _raise_exceptions_for_missing_entries=False,
+                _raise_exceptions_for_connection_errors=False,
+                **kwargs,
+            )
+            if resolved_config_file is None:
+                return None
+
+            raw_config_dict = safe_load_json_file(resolved_config_file)
+            return raw_config_dict.get("model_type")
+
+        def _ensure_config():
+            nonlocal config
+            if not isinstance(config, PreTrainedConfig):
+                config = AutoConfig.from_pretrained(
+                    pretrained_model_name_or_path, trust_remote_code=trust_remote_code, **kwargs
+                )
+            return config
+
+        def _maybe_build_legacy_internvl_video_processor(video_processor_class):
+            if not missing_video_processor_dict:
+                return None
+
+            if _get_raw_model_type() == "internvl_chat":
+                config_obj = _ensure_config()
+                return video_processor_class(**_get_legacy_internvl_processor_init_kwargs(config_obj))
+            return None
+
+        missing_video_processor_dict = False
+        try:
+            config_dict, _ = BaseVideoProcessor.get_video_processor_dict(pretrained_model_name_or_path, **kwargs)
+        except Exception as initial_exception:
+            missing_video_processor_dict = True
+            if _get_raw_model_type() == "internvl_chat":
+                config_dict = {}
+            else:
+                raise initial_exception
+
+        video_processor_class = config_dict.get("video_processor_type")
         video_processor_auto_map = None
         if "AutoVideoProcessor" in config_dict.get("auto_map", {}):
             video_processor_auto_map = config_dict["auto_map"]["AutoVideoProcessor"]
@@ -351,10 +412,7 @@ class AutoVideoProcessor:
 
         # If we don't find the video processor class in the video processor config, let's try the model config.
         if video_processor_class is None and video_processor_auto_map is None:
-            if not isinstance(config, PreTrainedConfig):
-                config = AutoConfig.from_pretrained(
-                    pretrained_model_name_or_path, trust_remote_code=trust_remote_code, **kwargs
-                )
+            _ensure_config()
             # It could be in `config.video_processor_type``
             video_processor_class = getattr(config, "video_processor_type", None)
             if hasattr(config, "auto_map") and "AutoVideoProcessor" in config.auto_map:
@@ -384,11 +442,17 @@ class AutoVideoProcessor:
             video_processor_class.register_for_auto_class()
             return video_processor_class.from_pretrained(pretrained_model_name_or_path, *inputs, **kwargs)
         elif video_processor_class is not None:
+            legacy_processor = _maybe_build_legacy_internvl_video_processor(video_processor_class)
+            if legacy_processor is not None:
+                return legacy_processor
             return video_processor_class.from_pretrained(pretrained_model_name_or_path, *inputs, **kwargs)
         # Last try: we use the VIDEO_PROCESSOR_MAPPING.
         elif type(config) in VIDEO_PROCESSOR_MAPPING:
             video_processor_class = VIDEO_PROCESSOR_MAPPING[type(config)]
             if video_processor_class is not None:
+                legacy_processor = _maybe_build_legacy_internvl_video_processor(video_processor_class)
+                if legacy_processor is not None:
+                    return legacy_processor
                 return video_processor_class.from_pretrained(pretrained_model_name_or_path, *inputs, **kwargs)
 
         # Raise a more informative error message if torchvision isn't found, otherwise just fallback to default
