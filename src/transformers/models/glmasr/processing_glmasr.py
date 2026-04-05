@@ -46,6 +46,7 @@ class GlmAsrProcessorKwargs(ProcessingKwargs, total=False):
             "sampling_rate": 16000,
             "return_attention_mask": True,
             "padding": "max_length",
+            "device": "cpu",
         },
         "common_kwargs": {
             "return_tensors": "pt",
