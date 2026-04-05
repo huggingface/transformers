@@ -12,12 +12,14 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import argparse
+import ast
 import glob
 import importlib
 import multiprocessing as mp
 import os
 import re
 import subprocess
+import symtable
 from abc import ABC, abstractmethod
 from collections import Counter, defaultdict, deque
 from functools import partial
@@ -49,16 +51,38 @@ AUTO_GENERATED_MESSAGE = """#                🚨🚨🚨🚨🚨🚨🚨🚨�
 #                🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨
 """
 
+ENABLE_MODULE_SOURCE_CACHE = True
+ENABLE_FAST_IMPORT_ANALYSIS = True
+ENABLE_FAST_MAPPER_VISIT = True
+_MODULE_SOURCE_CACHE = {}
 
-def get_module_source_from_name(module_name: str) -> str:
-    # Extract the source code from the module name
+
+def clear_module_source_cache():
+    _MODULE_SOURCE_CACHE.clear()
+
+
+def get_module_source_and_tree_from_name(module_name: str) -> tuple[str, cst.Module]:
     spec = importlib.util.find_spec(module_name)
     if spec is None or spec.origin is None:
         raise ValueError(f"Cannot open file associated with {module_name} module.")
 
-    with open(spec.origin, "r", encoding="utf-8") as file:
+    file_path = spec.origin
+    cache_key = (module_name, file_path)
+    mtime_ns = os.stat(file_path).st_mtime_ns
+    cached = _MODULE_SOURCE_CACHE.get(cache_key)
+    if ENABLE_MODULE_SOURCE_CACHE and cached is not None and cached[0] == mtime_ns:
+        return cached[1], cached[2]
+
+    with open(file_path, "r", encoding="utf-8") as file:
         source_code = file.read()
-    return source_code
+    tree = cst.parse_module(source_code)
+    if ENABLE_MODULE_SOURCE_CACHE:
+        _MODULE_SOURCE_CACHE[cache_key] = (mtime_ns, source_code, tree)
+    return source_code, tree
+
+
+def get_module_source_from_name(module_name: str) -> str:
+    return get_module_source_and_tree_from_name(module_name)[0]
 
 
 def preserve_case_replace(text, patterns: dict, default_name: str):
@@ -547,11 +571,34 @@ class ModuleMapper(CSTVisitor, ABC):
         self.current_function = None                               # this keeps track of the current module-scope function
         self.current_class = None                                  # this keeps track of the current module-scope class
         self.current_assignment = None                             # this keeps track of the current module-scope assignment
+        self._suite_depth = 0                                      # tracks whether we are inside an indented/simple statement suite
+        self._node_order = {}                                      # source order of recorded top-level nodes
+        self._next_node_order = 0
         # this keeps track of objects imported from modeling files (`from .configuration import Config`) -> `Config` should not be a dependency
         self.objects_imported_from_modeling = set()
         # regex pattern joining every possible file type
         self.match_patterns = "|".join(ALL_FILE_TYPES)
         # fmt: on
+
+    def _is_direct_module_child(self) -> bool:
+        return self._suite_depth == 0
+
+    def _record_node_order(self, node_name: str) -> None:
+        if node_name not in self._node_order:
+            self._node_order[node_name] = self._next_node_order
+            self._next_node_order += 1
+
+    def visit_IndentedBlock(self, node):
+        self._suite_depth += 1
+
+    def leave_IndentedBlock(self, node):
+        self._suite_depth -= 1
+
+    def visit_SimpleStatementSuite(self, node):
+        self._suite_depth += 1
+
+    def leave_SimpleStatementSuite(self, node):
+        self._suite_depth -= 1
 
     def visit_ImportFrom(self, node):
         """This keeps track of objects imported from neighbor modeling files (e.g. in `modeling_xxx.py, we have
@@ -573,7 +620,6 @@ class ModuleMapper(CSTVisitor, ABC):
         Global Assigns like `GEMMA_INPUT_DOCSTRING = 'THIS IS THE INPUT'` and all import statements
         are extracted and saved in their corresponding dict. They are then used when updating dependency mappings.
         """
-        parent_node = self.get_metadata(cst.metadata.ParentNodeProvider, node)
         simple_top_level_assign_structure = m.SimpleStatementLine(
             body=[m.Assign(targets=[m.AssignTarget(target=m.Name())])]
         )
@@ -581,11 +627,17 @@ class ModuleMapper(CSTVisitor, ABC):
             body=[m.Assign(targets=[m.AssignTarget(target=m.Subscript(value=m.Name()) | m.Attribute(value=m.Name()))])]
         )
 
-        if m.matches(parent_node, m.Module()):
+        is_module_level = (
+            self._is_direct_module_child()
+            if ENABLE_FAST_MAPPER_VISIT
+            else m.matches(self.get_metadata(cst.metadata.ParentNodeProvider, node), m.Module())
+        )
+        if is_module_level:
             if m.matches(node, simple_top_level_assign_structure):
                 left_hand_side = node.body[0].targets[0].target.value
                 self.current_assignment = left_hand_side
                 self.assignments[left_hand_side] = node
+                self._record_node_order(left_hand_side)
             # This corresponds to a global variable being indexed or having an attribute look-up
             elif m.matches(node, simple_top_level_variable_indexing):
                 indexed_variable = node.body[0].targets[0].target.value.value
@@ -595,6 +647,7 @@ class ModuleMapper(CSTVisitor, ABC):
                 node_name = self.python_module.code_for_node(node)
                 self.assignments[node_name] = node
                 self.object_dependency_mapping[indexed_variable].add(node_name)
+                self._record_node_order(node_name)
             elif m.matches(node, m.SimpleStatementLine(body=[m.Import() | m.ImportFrom()])):
                 self.imports.append(node)
 
@@ -604,14 +657,23 @@ class ModuleMapper(CSTVisitor, ABC):
         self.current_assignment = None
 
     def visit_FunctionDef(self, node):
-        parent_node = self.get_metadata(cst.metadata.ParentNodeProvider, node)
-        if m.matches(parent_node, m.Module()):
+        is_module_level = (
+            self._is_direct_module_child()
+            if ENABLE_FAST_MAPPER_VISIT
+            else m.matches(self.get_metadata(cst.metadata.ParentNodeProvider, node), m.Module())
+        )
+        if is_module_level:
             self.current_function = node.name.value
             self.functions[node.name.value] = node
+            self._record_node_order(node.name.value)
 
     def leave_FunctionDef(self, node):
-        parent_node = self.get_metadata(cst.metadata.ParentNodeProvider, node)
-        if m.matches(parent_node, m.Module()):
+        is_module_level = (
+            self._is_direct_module_child()
+            if ENABLE_FAST_MAPPER_VISIT
+            else m.matches(self.get_metadata(cst.metadata.ParentNodeProvider, node), m.Module())
+        )
+        if is_module_level:
             self.current_function = None
 
     def visit_If(self, node):
@@ -624,6 +686,7 @@ class ModuleMapper(CSTVisitor, ABC):
     def visit_ClassDef(self, node: ClassDef) -> None:
         """Record class nodes to create their dependencies at the end."""
         self.classes[node.name.value] = node
+        self._record_node_order(node.name.value)
         self.current_class = node.name.value
 
     def leave_ClassDef(self, node):
@@ -646,8 +709,12 @@ class ModuleMapper(CSTVisitor, ABC):
         self.global_nodes = {**self.assignments, **self.classes, **self.functions}
         # now sort the class dependency_mapping based on the position of the nodes
         self.start_lines = {}
-        for id, node in self.global_nodes.items():
-            self.start_lines[id] = self.get_metadata(cst.metadata.PositionProvider, node).start.line
+        if ENABLE_FAST_MAPPER_VISIT:
+            for node_name in self.global_nodes:
+                self.start_lines[node_name] = self._node_order[node_name]
+        else:
+            for node_name, current_node in self.global_nodes.items():
+                self.start_lines[node_name] = self.get_metadata(cst.metadata.PositionProvider, current_node).start.line
 
     def _restrict_dependencies_to_known_entities(self):
         """Since we added every Name as part of `self.object_dependency_mapping`, we need to remove those that
@@ -855,9 +922,12 @@ class ModelFileMapper(ModuleMapper):
     def visit_and_merge_dependencies(
         cls, module: cst.Module, classes, functions, assignments, object_mapping, start_lines
     ) -> "ModelFileMapper":
-        wrapper = MetadataWrapper(module)
         mapper = cls(module)
-        wrapper.visit(mapper)
+        if ENABLE_FAST_MAPPER_VISIT:
+            module.visit(mapper)
+        else:
+            wrapper = MetadataWrapper(module, unsafe_skip_copy=True)
+            wrapper.visit(mapper)
         # Merge dependencies
         mapper.merge_modular_dependencies(classes, functions, assignments, object_mapping, start_lines)
         # Create the class dependencies graph
@@ -1153,30 +1223,22 @@ def append_new_import_node(
         imports_to_keep.append(new_node)
 
 
-def get_needed_imports(body: dict[str, dict], all_imports: list[cst.CSTNode]) -> list[cst.CSTNode]:
-    """Get all the imports needed in the `body`, from the list of `all_imports`.
-    `body` is a dict with the following structure `{str: {"insert_idx": int, "node": cst.CSTNode}}`.
-    Note: we need to use `isinstance` on scope assignments, m.matches apparently does not work here yet!
-    """
-    new_body = [k[1]["node"] for k in sorted(body.items(), key=lambda x: x[1]["insert_idx"])]
-    wrapper = MetadataWrapper(cst.Module(body=all_imports + new_body))
-    scopes = set(wrapper.resolve(ScopeProvider).values())
-    unused_imports = set()
-    import_ref_count = defaultdict(lambda: 0)
-    for scope in scopes:
-        for assignment in scope.assignments:
-            node = assignment.node
-            if isinstance(assignment, cst.metadata.Assignment) and isinstance(node, (cst.Import, cst.ImportFrom)):
-                ref_count = len(assignment.references)
-                name = assignment.name
-                import_ref_count[name] = max(ref_count, import_ref_count[name])
-    # Similar imports may be redefined, and only used between their 1st and 2nd definition so if we already have
-    # a ref count > 0 at any point, the imports is actually used
-    unused_imports = {name for name, count in import_ref_count.items() if count <= 0 or name in body}
+def _get_import_names(all_imports: list[cst.CSTNode]) -> set[str]:
+    import_names = set()
+    for node in all_imports:
+        statements = node.body.body if isinstance(node, cst.If) else [node]
+        for statement in statements:
+            import_node = statement.body[0]
+            for alias in import_node.names:
+                import_names.add(alias.evaluated_alias or alias.evaluated_name)
+    return import_names
 
+
+def _build_needed_imports(all_imports: list[cst.CSTNode], unused_imports: set[str]) -> list[cst.CSTNode]:
+    """Build the final import block after pruning the unused names."""
     imports_to_keep = []
-    # We need to keep track of which names were already imported, because some import may be duplicated from multiple sources
-    # or be both protected and unprotected due to inconsistency between models
+    # We need to keep track of which names were already imported, because some import may be duplicated from multiple
+    # sources or be both protected and unprotected due to inconsistency between models.
     added_names = set()
     existing_protected_statements = set()  # str repr of the import nodes - does not work with the nodes directly
     for node in all_imports:
@@ -1197,6 +1259,141 @@ def get_needed_imports(body: dict[str, dict], all_imports: list[cst.CSTNode]) ->
 
     # Protected imports always appear at the end of all imports
     return usual_import_nodes + protected_import_nodes
+
+
+def _collect_referenced_plain_names(scope_table: symtable.SymbolTable) -> set[str]:
+    """Collect referenced names across all scopes.
+
+    We intentionally do not distinguish between top-level and nested imports here to preserve the current LibCST
+    behavior, which merges import reference counts for same-named imports across scopes.
+    """
+    referenced_names = {name for name in scope_table.get_identifiers() if scope_table.lookup(name).is_referenced()}
+    for child in scope_table.get_children():
+        referenced_names.update(_collect_referenced_plain_names(child))
+    return referenced_names
+
+
+def _get_attribute_chain(node: ast.Attribute) -> list[str] | None:
+    parts = []
+    current = node
+    while isinstance(current, ast.Attribute):
+        parts.append(current.attr)
+        current = current.value
+    if isinstance(current, ast.Name):
+        parts.append(current.id)
+        return list(reversed(parts))
+    return None
+
+
+def _collect_referenced_names(tree: ast.AST, plain_name_filter: set[str] | None = None) -> set[str]:
+    referenced_names = set()
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Attribute) and isinstance(node.ctx, ast.Load):
+            chain = _get_attribute_chain(node)
+            if chain is None:
+                continue
+            if plain_name_filter is not None and chain[0] not in plain_name_filter:
+                continue
+            for end in range(1, len(chain) + 1):
+                referenced_names.add(".".join(chain[:end]))
+        elif isinstance(node, ast.Name) and isinstance(node.ctx, ast.Load):
+            if plain_name_filter is None or node.id in plain_name_filter:
+                referenced_names.add(node.id)
+    return referenced_names
+
+
+def _iter_annotation_expressions(module_ast: ast.AST):
+    for node in ast.walk(module_ast):
+        if isinstance(node, ast.AnnAssign):
+            yield node.annotation
+        elif isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            for arg in (*node.args.posonlyargs, *node.args.args, *node.args.kwonlyargs):
+                if arg.annotation is not None:
+                    yield arg.annotation
+            if node.args.vararg is not None and node.args.vararg.annotation is not None:
+                yield node.args.vararg.annotation
+            if node.args.kwarg is not None and node.args.kwarg.annotation is not None:
+                yield node.args.kwarg.annotation
+            if node.returns is not None:
+                yield node.returns
+
+
+def _collect_string_annotation_names(module_ast: ast.AST) -> set[str]:
+    """Collect names used inside quoted annotations and type comments."""
+    referenced_names = set()
+    for annotation in _iter_annotation_expressions(module_ast):
+        if isinstance(annotation, ast.Constant) and isinstance(annotation.value, str):
+            try:
+                annotation_tree = ast.parse(annotation.value, mode="eval")
+            except SyntaxError:
+                continue
+            referenced_names.update(_collect_referenced_names(annotation_tree))
+
+    for node in ast.walk(module_ast):
+        type_comment = getattr(node, "type_comment", None)
+        if isinstance(type_comment, str):
+            try:
+                type_comment_tree = ast.parse(type_comment, mode="eval")
+            except SyntaxError:
+                continue
+            referenced_names.update(_collect_referenced_names(type_comment_tree))
+
+    return referenced_names
+
+
+def _has_future_annotations_import(all_imports: list[cst.CSTNode]) -> bool:
+    for node in all_imports:
+        if not isinstance(node, cst.SimpleStatementLine):
+            continue
+        import_node = node.body[0]
+        if not isinstance(import_node, cst.ImportFrom):
+            continue
+        if not isinstance(import_node.module, cst.Name) or import_node.module.value != "__future__":
+            continue
+        for alias in import_node.names:
+            if alias.evaluated_name == "annotations":
+                return True
+    return False
+
+
+def _get_needed_imports_with_scope_provider(
+    body: dict[str, dict], all_imports: list[cst.CSTNode]
+) -> list[cst.CSTNode]:
+    """ScopeProvider-based fallback for modules where the fast path is unsafe."""
+    new_body = [k[1]["node"] for k in sorted(body.items(), key=lambda x: x[1]["insert_idx"])]
+    wrapper = MetadataWrapper(cst.Module(body=all_imports + new_body), unsafe_skip_copy=True)
+    scopes = set(wrapper.resolve(ScopeProvider).values())
+    import_ref_count = defaultdict(lambda: 0)
+    for scope in scopes:
+        for assignment in scope.assignments:
+            node = assignment.node
+            if isinstance(assignment, cst.metadata.Assignment) and isinstance(node, (cst.Import, cst.ImportFrom)):
+                ref_count = len(assignment.references)
+                name = assignment.name
+                import_ref_count[name] = max(ref_count, import_ref_count[name])
+    # Similar imports may be redefined, and only used between their 1st and 2nd definition so if we already have
+    # a ref count > 0 at any point, the imports is actually used
+    unused_imports = {name for name, count in import_ref_count.items() if count <= 0 or name in body}
+    return _build_needed_imports(all_imports, unused_imports)
+
+
+def get_needed_imports(body: dict[str, dict], all_imports: list[cst.CSTNode]) -> list[cst.CSTNode]:
+    """Get all the imports needed in the `body`, from the list of `all_imports`.
+    `body` is a dict with the following structure `{str: {"insert_idx": int, "node": cst.CSTNode}}`.
+    """
+    if not ENABLE_FAST_IMPORT_ANALYSIS or _has_future_annotations_import(all_imports):
+        return _get_needed_imports_with_scope_provider(body, all_imports)
+
+    new_body = [k[1]["node"] for k in sorted(body.items(), key=lambda x: x[1]["insert_idx"])]
+    module = cst.Module(body=all_imports + new_body)
+    module_ast = ast.parse(module.code, type_comments=True)
+    referenced_plain_names = _collect_referenced_plain_names(symtable.symtable(module.code, "<generated>", "exec"))
+    referenced_names = _collect_referenced_names(module_ast, referenced_plain_names)
+    referenced_names.update(_collect_string_annotation_names(module_ast))
+
+    import_names = _get_import_names(all_imports)
+    unused_imports = {name for name in import_names if name not in referenced_names or name in body}
+    return _build_needed_imports(all_imports, unused_imports)
 
 
 def _ensure_utils_availability_imports(imports: list[cst.CSTNode], needed: set[str]) -> list[cst.CSTNode]:
@@ -1373,12 +1570,11 @@ class ModularFileMapper(ModuleMapper):
                         if not import_module.startswith("transformers"):
                             import_module = "transformers." + import_module
                         try:
-                            source_code = get_module_source_from_name(import_module)
+                            _, tree = get_module_source_and_tree_from_name(import_module)
                         except ModuleNotFoundError as e:
                             raise ModuleNotFoundError(
                                 f"Failed to visit import from for: {self.python_module.code_for_node(node)}. Tried to import {import_module} but failed."
                             ) from e
-                        tree = cst.parse_module(source_code)
                         self.model_specific_modules[import_module] = tree
                     imported_object = self.python_module.code_for_node(imported_.name)
                     self.model_specific_imported_objects[imported_object] = import_module
@@ -1392,7 +1588,6 @@ class ModularFileMapper(ModuleMapper):
         """If we visit an import statement not previously visited, record it. If we visit a module-scope assignment,
         simply record it or, if it is `__all__`, split it between files where we should dispatch it.
         """
-        parent_node = self.get_metadata(cst.metadata.ParentNodeProvider, node)
         simple_top_level_assign_structure = m.SimpleStatementLine(
             body=[m.Assign(targets=[m.AssignTarget(target=m.Name())])]
         )
@@ -1400,7 +1595,12 @@ class ModularFileMapper(ModuleMapper):
             body=[m.Assign(targets=[m.AssignTarget(target=m.Subscript(value=m.Name()) | m.Attribute(value=m.Name()))])]
         )
 
-        if m.matches(parent_node, m.Module()):
+        is_module_level = (
+            self._is_direct_module_child()
+            if ENABLE_FAST_MAPPER_VISIT
+            else m.matches(self.get_metadata(cst.metadata.ParentNodeProvider, node), m.Module())
+        )
+        if is_module_level:
             if m.matches(node, m.SimpleStatementLine(body=[m.Import()])):
                 self.imports.append(node)
             elif m.matches(node, m.SimpleStatementLine(body=[m.ImportFrom()])):
@@ -1424,6 +1624,7 @@ class ModularFileMapper(ModuleMapper):
                 else:
                     self.current_assignment = assigned_variable
                     self.assignments[assigned_variable] = node
+                    self._record_node_order(assigned_variable)
             # This corresponds to a global variable being indexed or having an attribute look-up
             elif m.matches(node, simple_top_level_variable_indexing):
                 indexed_variable = node.body[0].targets[0].target.value.value
@@ -1433,6 +1634,7 @@ class ModularFileMapper(ModuleMapper):
                 node_name = self.python_module.code_for_node(node)
                 self.assignments[node_name] = node
                 self.object_dependency_mapping[indexed_variable].add(node_name)
+                self._record_node_order(node_name)
 
     def leave_Module(self, node):
         """When we leave the modular file, we do the following in order:
@@ -1919,9 +2121,12 @@ def convert_modular_file(modular_file: str, source_library: str | None = "transf
         if source_library != "transformers":
             module = module.visit(AbsoluteImportTransformer(relative_path, source_library))
 
-        wrapper = MetadataWrapper(module)
         cst_transformers = ModularFileMapper(module, model_name, source_library)
-        wrapper.visit(cst_transformers)
+        if ENABLE_FAST_MAPPER_VISIT:
+            module.visit(cst_transformers)
+        else:
+            wrapper = MetadataWrapper(module, unsafe_skip_copy=True)
+            wrapper.visit(cst_transformers)
         for file, module in create_modules(
             cst_transformers, file_path=relative_path, package_name=source_library
         ).items():
