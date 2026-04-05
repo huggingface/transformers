@@ -37,9 +37,13 @@ from .deepspeed import is_deepspeed_zero3_enabled
 from .fsdp import is_fsdp_enabled
 
 
+if TYPE_CHECKING:
+    import torch.nn as nn
+
 if is_torch_available():
     import torch
-    import torch.nn as nn
+    if not TYPE_CHECKING:  # avoid duplicate import
+        import torch.nn as nn
 
 if is_accelerate_available():
     from accelerate import dispatch_model
