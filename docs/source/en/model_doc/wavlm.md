@@ -15,48 +15,95 @@ rendered properly in your Markdown viewer.
 -->
 *This model was released on 2021-10-26 and added to Hugging Face Transformers on 2021-12-16.*
 
-# WavLM
-
-<div class="flex flex-wrap space-x-1">
-<img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
+<div style="float: right;">
+    <div class="flex flex-wrap space-x-1">
+           <img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
+    </div>
 </div>
 
-## Overview
+# WavLM
 
-The WavLM model was proposed in [WavLM: Large-Scale Self-Supervised Pre-Training for Full Stack Speech Processing](https://huggingface.co/papers/2110.13900) by Sanyuan Chen, Chengyi Wang, Zhengyang Chen, Yu Wu, Shujie Liu, Zhuo Chen,
-Jinyu Li, Naoyuki Kanda, Takuya Yoshioka, Xiong Xiao, Jian Wu, Long Zhou, Shuo Ren, Yanmin Qian, Yao Qian, Jian Wu,
-Michael Zeng, Furu Wei.
+[WavLM](https://huggingface.co/papers/2110.13900) is a self-supervised speech representation model from Microsoft designed to work across the “full stack” of speech tasks, from automatic speech recognition (ASR) to speaker diarization and audio event detection. It builds on HuBERT’s masked prediction approach but introduces denoising and data augmentation to make the learned representations more robust in noisy and multi-speaker conditions.
 
-The abstract from the paper is the following:
+You can find all the original WavLM checkpoints under the [WavLM](https://huggingface.co/models?other=wavlm) collection.
 
-*Self-supervised learning (SSL) achieves great success in speech recognition, while limited exploration has been
-attempted for other speech processing tasks. As speech signal contains multi-faceted information including speaker
-identity, paralinguistics, spoken content, etc., learning universal representations for all speech tasks is
-challenging. In this paper, we propose a new pre-trained model, WavLM, to solve full-stack downstream speech tasks.
-WavLM is built based on the HuBERT framework, with an emphasis on both spoken content modeling and speaker identity
-preservation. We first equip the Transformer structure with gated relative position bias to improve its capability on
-recognition tasks. For better speaker discrimination, we propose an utterance mixing training strategy, where
-additional overlapped utterances are created unsupervisedly and incorporated during model training. Lastly, we scale up
-the training dataset from 60k hours to 94k hours. WavLM Large achieves state-of-the-art performance on the SUPERB
-benchmark, and brings significant improvements for various speech processing tasks on their representative benchmarks.*
+> [!TIP]
+> This model was contributed by [patrickvonplaten](https://huggingface.co/patrickvonplaten).
+>
+> Click on the WavLM models in the right sidebar for more examples of how to apply WavLM to different audio tasks.
 
-Relevant checkpoints can be found under https://huggingface.co/models?other=wavlm.
+The example below demonstrates how to extract audio features with [`Pipeline`] or the [`AutoModel`] class.
 
-This model was contributed by [patrickvonplaten](https://huggingface.co/patrickvonplaten). The Authors' code can be
-found [here](https://github.com/microsoft/unilm/tree/master/wavlm).
+<hfoptions id="usage">
+<hfoption id="Pipeline">
 
-## Usage tips
+```python
+import torch
+from transformers import pipeline
 
-- WavLM is a speech model that accepts a float array corresponding to the raw waveform of the speech signal. Please use
-  [`Wav2Vec2Processor`] for the feature extraction.
-- WavLM model can be fine-tuned using connectionist temporal classification (CTC) so the model output has to be decoded
-  using [`Wav2Vec2CTCTokenizer`].
-- WavLM performs especially well on speaker verification, speaker identification, and speaker diarization tasks.
+pipe = pipeline(
+    task="feature-extraction",
+    model="microsoft/wavlm-base",
+    torch_dtype=torch.float16,
+    device=0
+)
+
+features = pipe("https://huggingface.co/datasets/Narsil/asr_dummy/resolve/main/1.flac")
+print(features)
+```
+
+</hfoption>
+<hfoption id="AutoModel">
+
+```python
+import torch
+from transformers import AutoProcessor, AutoModel
+
+processor = AutoProcessor.from_pretrained("microsoft/wavlm-base")
+model = AutoModel.from_pretrained(
+    "microsoft/wavlm-base",
+    torch_dtype=torch.float16,
+    device_map="auto"
+)
+
+audio_url = "https://huggingface.co/datasets/Narsil/asr_dummy/resolve/main/1.flac"
+inputs = processor(audio_url, return_tensors="pt")
+with torch.no_grad():
+    outputs = model(**inputs)
+print(outputs.last_hidden_state)
+```
+
+</hfoption>
+</hfoptions>
+
+Quantization reduces the memory burden of large models by representing the weights in a lower precision. 
+Refer to the [Quantization](https://huggingface.co/docs/transformers/en/quantization/overview) overview for more available quantization backends.
+
+The example below uses [bitsandbytes](../quantization/bitsandbytes) to quantize the weights to 4-bits.
+
+```python
+from transformers import WavLMForCTC, BitsAndBytesConfig
+
+bnb_config = BitsAndBytesConfig(
+    load_in_8bit=True,
+    llm_int8_threshold=6.0
+)
+
+model = WavLMForCTC.from_pretrained(
+    "microsoft/wavlm-large",
+    quantization_config=bnb_config,
+    device_map="auto"
+)
+```
+
+## Notes
+- WavLM processes raw 16kHz audio waveforms provided as 1D float arrays. Use `Wav2Vec2Processor` for preprocessing.
+- For CTC-based fine-tuning, model outputs should be decoded with `Wav2Vec2CTCTokenizer`.
+- The model works particularly well for tasks like speaker verification, identification, and diarization.
 
 ## Resources
-
-- [Audio classification task guide](../tasks/audio_classification)
-- [Automatic speech recognition task guide](../tasks/asr)
+- [Audio classification task guide](https://huggingface.co/docs/transformers/en/tasks/audio_classification)
+- [Automatic speech recognition task guide](https://huggingface.co/docs/transformers/en/tasks/asr)
 
 ## WavLMConfig
 
