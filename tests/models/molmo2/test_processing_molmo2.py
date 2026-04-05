@@ -15,14 +15,10 @@
 import tempfile
 import unittest
 
+from transformers import Molmo2Processor
 from transformers.testing_utils import require_torch, require_torchvision, require_vision
-from transformers.utils import is_vision_available
 
 from ...test_processing_common import ProcessorTesterMixin
-
-
-if is_vision_available():
-    from transformers import Molmo2Processor
 
 
 @require_vision

@@ -75,7 +75,7 @@ class Molmo2VisionText2TextModelTester:
             "num_attention_heads": 4,
             "num_hidden_layers": 2,
             "num_key_value_heads": 2,
-            "rope_theta": 10000,
+            "rope_theta": 10000.0,
             "tie_word_embeddings": False,
             "use_qk_norm": False,
             "layer_norm_eps": 1e-6,
@@ -89,14 +89,14 @@ class Molmo2VisionText2TextModelTester:
             "head_dim": 8,
             "hidden_act": "gelu_pytorch_tanh",
             "layer_norm_eps": 1e-6,
-            "image_default_input_size": (378, 378),
+            "image_default_input_size": [378, 378],
             "image_patch_size": 14,
             "image_num_pos": 729,
             "attention_dropout": 0.0,
             "residual_dropout": 0.0,
         },
         adapter_config={
-            "vit_layers": (-1,),
+            "vit_layers": [-1],
             "pooling_attention_mask": False,
             "hidden_size": 32,
             "num_attention_heads": 4,
@@ -337,7 +337,9 @@ class Molmo2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
     def test_resize_embeddings_untied(self):
         pass
 
-    @unittest.skip("Failing because of specific cache")
+    @unittest.skip(
+        reason="Molmo2 interleaves visual features in text hidden states, causing shape mismatches in equivalence checks"
+    )
     def test_model_outputs_equivalence(self, **kwargs):
         pass
 

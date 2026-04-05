@@ -259,7 +259,7 @@ class Molmo2VisionBlock(nn.Module):
             attention_dropout=config.attention_dropout,
             residual_dropout=config.residual_dropout,
             device=device,
-            attn_implementation=config.attn_implementation,
+            attn_implementation=config._attn_implementation or "eager",
         )
         self.feed_forward = ViTMLP(config.hidden_size, config.intermediate_size, config.hidden_act, device=device)
         self.attention_norm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps, device=device)
@@ -404,7 +404,7 @@ class Molmo2VisionBackbone(nn.Module):
             float32_attention=adapter_config.float32_attention,
             attention_dropout=adapter_config.attention_dropout,
             residual_dropout=adapter_config.residual_dropout,
-            attn_implementation=adapter_config.attn_implementation,
+            attn_implementation=adapter_config._attn_implementation or "eager",
         )
         self.image_projector = ImageProjectorMLP(
             adapter_config.hidden_size,
@@ -729,8 +729,8 @@ class Molmo2Attention(nn.Module):
             key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx, cache_kwargs)
 
         attention_interface: Callable = eager_attention_forward
-        if self.config.attn_implementation != "eager":
-            attention_interface = ALL_ATTENTION_FUNCTIONS[self.config.attn_implementation]
+        if (self.config._attn_implementation or "eager") != "eager":
+            attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
 
         attn_output, attn_weights = attention_interface(
             self,

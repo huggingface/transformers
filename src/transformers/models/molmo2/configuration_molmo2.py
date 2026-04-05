@@ -16,6 +16,7 @@
 Molmo2 configuration
 """
 
+from dataclasses import field
 from typing import Any
 
 from huggingface_hub.dataclasses import strict
@@ -53,7 +54,7 @@ class Molmo2VitConfig(PreTrainedConfig):
     head_dim: int = 72
     hidden_act: str = "gelu_pytorch_tanh"
     layer_norm_eps: float = 1e-6
-    image_default_input_size: list[int] = [378, 378]
+    image_default_input_size: list[int] = field(default_factory=lambda: [378, 378])
     image_patch_size: int = 14
     image_num_pos: int = 577
     attention_dropout: float = 0.0
@@ -86,7 +87,7 @@ class Molmo2AdapterConfig(PreTrainedConfig):
     model_type = "molmo2"
     base_config_key = "adapter_config"
 
-    vit_layers: list[int] = [-3, -9]
+    vit_layers: list[int] = field(default_factory=lambda: [-3, -9])
     pooling_attention_mask: bool = False
     hidden_size: int = 1152
     num_attention_heads: int = 16
