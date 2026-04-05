@@ -79,6 +79,7 @@ _MODEL_TO_CONVERSION_PATTERN = {
     "qwen2_5_vl": "qwen2_vl",
     "sam3_tracker_video": "sam3_tracker",
     "pp_chart2table": "got_ocr2",
+    "vlm": "hyperclovax_vision",
 }
 
 
@@ -418,6 +419,16 @@ def _build_checkpoint_conversion_mapping():
                 target_patterns="feed_forward.experts.down_proj",
                 operations=[MergeModulelist(dim=0)],
             ),
+        ],
+        "hyperclovax": [
+            WeightRenaming("model.language_model.model", "model"),
+            WeightRenaming("model.language_model.lm_head", "lm_head"),
+        ],
+        "hyperclovax_vision": [
+            WeightRenaming("language_model.lm_head", "lm_head"),
+            WeightRenaming("mm_projector", "model.projector"),
+            WeightRenaming("language_model.model", "model.language_model"),
+            WeightRenaming("vision_model", "model.vision_model"),
         ],
         "legacy": [
             WeightRenaming(
