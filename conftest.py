@@ -149,6 +149,10 @@ if is_torch_available():
     # The flag below controls whether to allow TF32 on cuDNN. This flag defaults to True.
     # We set it to `False` for CI. See https://github.com/pytorch/pytorch/issues/157274#issuecomment-3090791615
     enable_tf32(False)
+    # # torch.backends.fp32_precision does not cascade to torch.backends.cudnn.conv.fp32_precision and torch.backends.cudnn.rnn.fp32_precision
+    # TODO: Considering move this to `enable_tf32`, or report a bug to `torch`.
+    import torch
+    torch.backends.cudnn.conv.fp32_precision = "ieee"
 
     # patch `torch.compile`: if `TORCH_COMPILE_FORCE_FULLGRAPH=1` (or values considered as true, e.g. yes, y, etc.),
     # the patched version will always run with `fullgraph=True`.
