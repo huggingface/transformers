@@ -145,7 +145,7 @@ class FooModel(FooPreTrainedModel):
 [rules.TRF009]
 description = "modeling_<name>.py should avoid importing implementation code from another model package."
 default_enabled = true
-allowlist_models = ["dpr", "maskformer", "sam3_video", "vision_text_dual_encoder"]
+allowlist_models = ["dpr", "maskformer", "sam3_lite_text", "sam3_video", "vision_text_dual_encoder"]
 
 [rules.TRF009.explanation]
 what_it_does = "Checks modeling files for cross-model imports such as transformers.models.other_model.* or from ..other_model.* imports."
