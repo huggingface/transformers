@@ -629,7 +629,7 @@ class HiggsAudioV2TokenizerModel(HiggsAudioV2TokenizerPreTrainedModel):
 
         >>> inputs = feature_extractor(raw_audio=audio_sample, return_tensors="pt")
 
-        >>> outputs = model(**inputs)
+        >>> outputs = model(inputs["input_values"])
         >>> audio_codes = outputs.audio_codes
         >>> audio_values = outputs.audio_values
         ```
