@@ -4910,7 +4910,7 @@ class ModelTesterMixin:
                 or "input_values" in key
                 or "input_features" in key
                 or key in ["padding_mask", "is_longer", "feature_attention_mask"]
-                or (config.model_type == "musicflamingo" and key == "input_ids")
+                or (config.model_type in {"musicflamingo", "audioflamingonext"} and key == "input_ids")
             }
         return config, inputs_dict
 

@@ -13,7 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Convert MusicFlamingo checkpoints into a Hugging Face repository layout."""
+"""Convert AudioFlamingoNext checkpoints into a Hugging Face repository layout."""
 
 from __future__ import annotations
 
@@ -28,11 +28,11 @@ import torch
 from safetensors.torch import safe_open
 
 from transformers import (
+    AudioFlamingoNextConfig,
+    AudioFlamingoNextForConditionalGeneration,
+    AudioFlamingoNextProcessor,
     AutoTokenizer,
     GenerationConfig,
-    MusicFlamingoConfig,
-    MusicFlamingoForConditionalGeneration,
-    MusicFlamingoProcessor,
     Qwen2Config,
     WhisperFeatureExtractor,
 )
@@ -53,11 +53,11 @@ def write_processor(src_root: Path, dst_root: Path):
     llm_dir = src_root / "llm"
 
     system_prompt = (
-        "You are Music Flamingo, a multimodal assistant for language and music. "
-        "On each turn you receive an audio clip which contains music and optional text, "
-        "you will receive at least one or both; use your world knowledge and reasoning "
-        "to help the user with any task. Interpret the entirety of the content any input music"
-        "--regardlenss of whether the user calls it audio, music, or sound."
+        "You are Audio Flamingo-Next, a multimodal assistant for language and audio. "
+        "On each turn you receive an optional audio clip which may contain speech, music, or ambient sounds "
+        "and optional text, you will receive at least one or both; use your world knowledge and reasoning "
+        "to help the user with any task. Interpret the entirety of the content of any input audio—regardless "
+        "of whether the user calls it audio, speech, music, or sound."
     )
 
     # fmt: off
@@ -103,7 +103,7 @@ def write_processor(src_root: Path, dst_root: Path):
     )
     # fmt: on
 
-    processor = MusicFlamingoProcessor(
+    processor = AudioFlamingoNextProcessor(
         feature_extractor=WhisperFeatureExtractor(feature_size=128, return_attention_mask=True),
         tokenizer=AutoTokenizer.from_pretrained(str(llm_dir), chat_template=tokenizer_chat_template, use_fast=True),
         chat_template=processor_chat_template,
@@ -138,7 +138,7 @@ def _resolve_component_dir(dirpath: Path):
     return ("file", cands[0]) if len(cands) == 1 else None
 
 
-def merge_and_shard_weights(src_root: Path, dst_root: Path, processor: MusicFlamingoProcessor):
+def merge_and_shard_weights(src_root: Path, dst_root: Path, processor: AudioFlamingoNextProcessor):
     state: dict[str, Any] = {}
     for tag in PREFIX_MAP.keys():
         comp = _resolve_component_dir(src_root / tag)
@@ -174,21 +174,23 @@ def merge_and_shard_weights(src_root: Path, dst_root: Path, processor: MusicFlam
         vocab_size=len(tok),
         hidden_size=3584,
         intermediate_size=18944,
-        model_max_length=8192,
+        model_max_length=24000,
+        max_position_embeddings=131072,
         num_attention_heads=28,
         num_hidden_layers=28,
         num_key_value_heads=4,
-        rope_theta=1000000.0,
+        rope_theta=15300000.0,
         use_cache=False,
     )
+
     vocab = tok.get_vocab()
-    config = MusicFlamingoConfig(
+    config = AudioFlamingoNextConfig(
         text_config=text_config,
         audio_token_id=vocab["<sound>"],
         audio_bos_token_id=vocab.get("<|sound_bos|>"),
         audio_eos_token_id=vocab.get("<|sound_eos|>"),
     )
-    model = MusicFlamingoForConditionalGeneration(config).to(dtype=torch.bfloat16)
+    model = AudioFlamingoNextForConditionalGeneration(config).to(dtype=torch.bfloat16)
 
     # Update state dict to new key names if necessary
     projector_key_mapping = {
@@ -230,44 +232,37 @@ def merge_and_shard_weights(src_root: Path, dst_root: Path, processor: MusicFlam
 Reproducible Usage
 ==================
 
-1) Download the original MusicFlamingo weights from NVIDIA (requires Git LFS and private repo access):
+1) Download the original AudioFlamingoNext weights from NVIDIA (requires Git LFS and private repo access):
 
 ```
 git lfs install
-git clone https://huggingface.co/nvidia/music-flamingo-2601
+git clone https://huggingface.co/nvidia/audio-flamingo-next
 ```
 
-The source repository (`nvidia/music-flamingo-2601`) is private.
-This will create a folder `music-flamingo-2601/` containing the original components:
+This creates a folder `audio-flamingo-next/` containing the original components:
 `llm/`, `sound_tower/`, and `sound_mm_projector/`.
-
-Note for integration tests: without access to the private source repository, you cannot recompute
-expected outputs with the original model checkpoint.
 
 2) Convert to the Hugging Face Transformers format (locally):
 
 ```
-python src/transformers/models/musicflamingo/convert_musicflamingo_to_hf.py \
-  --src_dir music-flamingo-2601 \
-  --dst_dir music-flamingo-2601-hf
+python src/transformers/models/audioflamingonext/convert_audioflamingonext_to_hf.py \
+  --src_dir audio-flamingo-next \
+  --dst_dir audio-flamingo-next-hf
 ```
 
 3) Convert and push directly to the Hub (requires `huggingface-cli login` or `HF_TOKEN`):
 
 ```
-python src/transformers/models/musicflamingo/convert_musicflamingo_to_hf.py \
-  --src_dir music-flamingo-2601 \
-  --dst_dir music-flamingo-2601-hf \
-  --push_to_hub <username-or-org>/music-flamingo-2601-hf
+python src/transformers/models/audioflamingonext/convert_audioflamingonext_to_hf.py \
+  --src_dir audio-flamingo-next \
+  --dst_dir audio-flamingo-next-hf \
+  --push_to_hub <username-or-org>/audio-flamingo-next-hf
 ```
-
-This command uploads both the processor (tokenizer + feature extractor) and the converted
-model (sharded safetensors + configs) to the specified Hub repository.
 """
 
 
 def main() -> None:
-    ap = argparse.ArgumentParser(description="Convert MusicFlamingo to Hugging Face format.")
+    ap = argparse.ArgumentParser(description="Convert AudioFlamingoNext to Hugging Face format.")
     ap.add_argument("--src_dir", required=True, help="Source model root directory")
     ap.add_argument("--dst_dir", required=True, help="Destination directory for converted model")
     ap.add_argument(
@@ -276,7 +271,7 @@ def main() -> None:
         type=str,
         help=(
             "Optional repository ID to push the converted assets to the Hugging Face Hub, "
-            "e.g. 'username/music-flamingo-hf'."
+            "e.g. 'username/audio-flamingo-next-hf'."
         ),
     )
     args = ap.parse_args()
@@ -292,7 +287,6 @@ def main() -> None:
     processor = write_processor(src_root, dst_root)
     model = merge_and_shard_weights(src_root, dst_root, processor)
 
-    # Optionally push converted assets using native push_to_hub only
     if args.push_to_hub:
         logger.info("Pushing processor to the Hub ...")
         processor.push_to_hub(args.push_to_hub)
