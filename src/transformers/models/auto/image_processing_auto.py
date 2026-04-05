@@ -179,6 +179,7 @@ else:
             ("mobilenet_v2", {"torchvision": "MobileNetV2ImageProcessor", "pil": "MobileNetV2ImageProcessorPil"}),
             ("mobilevit", {"torchvision": "MobileViTImageProcessor", "pil": "MobileViTImageProcessorPil"}),
             ("mobilevitv2", {"torchvision": "MobileViTImageProcessor", "pil": "MobileViTImageProcessorPil"}),
+            ("molmo2", {"torchvision": "Molmo2ImageProcessor"}),
             ("nougat", {"torchvision": "NougatImageProcessor", "pil": "NougatImageProcessorPil"}),
             ("omdet-turbo", {"torchvision": "DetrImageProcessor", "pil": "DetrImageProcessorPil"}),
             ("oneformer", {"torchvision": "OneFormerImageProcessor", "pil": "OneFormerImageProcessorPil"}),
