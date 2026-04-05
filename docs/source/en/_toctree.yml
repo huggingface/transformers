@@ -402,7 +402,7 @@
   - local: contributing
     title: Contribute to Transformers
   - local: testing
-    title: Transformers model tests
+    title: Writing model tests
   - local: pr_checks
     title: Pull request checks
   title: Contribute
