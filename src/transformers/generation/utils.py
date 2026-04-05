@@ -117,6 +117,10 @@ if TYPE_CHECKING:
 
 logger = logging.get_logger(__name__)
 
+# `torch.multinomial` requires `input.shape[-1] <= 2**24` (see PyTorch and #45245). Beam search with
+# `do_sample=True` flattens `num_beams * vocab_size` categories; above this we use an equivalent path.
+_BEAM_SEARCH_MULTINOMIAL_DIM_LIMIT = 2**24
+
 if is_accelerate_available():
     from accelerate.hooks import AlignDevicesHook, add_hook_to_module
 
@@ -2973,9 +2977,18 @@ class GenerationMixin(ContinuousMixin):
 
         # Gather the top K scores from _all_ beams.
         if do_sample:
-            topk_indices = torch.multinomial(
-                nn.functional.softmax(accumulated_log_probs, dim=-1), num_samples=beams_to_keep
-            )
+            flat_dim = accumulated_log_probs.shape[-1]
+            if flat_dim >= _BEAM_SEARCH_MULTINOMIAL_DIM_LIMIT:
+                # Gumbel-top-k is equivalent to `multinomial(softmax(logits), k, replacement=False)` here
+                # without requiring a categorical dimension above PyTorch's multinomial limit.
+                log_probs_32 = accumulated_log_probs.to(torch.float32)
+                uniform = torch.rand_like(log_probs_32).clamp(1e-20, 1.0 - 1e-7)
+                gumbel_noise = -torch.log(-torch.log(uniform))
+                _, topk_indices = torch.topk(log_probs_32 + gumbel_noise, k=beams_to_keep, dim=-1)
+            else:
+                topk_indices = torch.multinomial(
+                    nn.functional.softmax(accumulated_log_probs, dim=-1), num_samples=beams_to_keep
+                )
             topk_log_probs = torch.gather(input=accumulated_log_probs, dim=1, index=topk_indices)
         else:
             topk_log_probs, topk_indices = torch.topk(accumulated_log_probs, k=beams_to_keep)
