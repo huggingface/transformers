@@ -122,9 +122,11 @@ from .utils.generic import GeneralInterface, is_flash_attention_requested
 from .utils.hub import DownloadKwargs, create_and_tag_model_card, get_checkpoint_shard_files
 from .utils.import_utils import (
     is_flash_attn_greater_or_equal,
+    is_flash_attn_torch_available,
     is_huggingface_hub_greater_or_equal,
     is_sagemaker_mp_enabled,
     is_torch_cuda_available,
+    is_torch_greater_or_equal,
     is_tracing,
 )
 from .utils.loading_report import LoadStateDictInfo, log_state_dict_report
@@ -1556,7 +1558,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
 
     def _flash_attn_import_error(
         self,
-        flash_attn_version: int,
+        flash_attn_version: int | str,
         general_availability_check: Callable,
         pkg_availability_check: Callable,
         supported_devices: tuple[tuple[Callable, str]],
@@ -1568,7 +1570,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         on why it failed - package import and/or device incompatibility issues.
 
         Args:
-            flash_attn_version (`int`):
+            flash_attn_version (`Union[int, str]`):
                 The requested version of Flash Attention.
             general_availability_check (`Callable`):
                 Checks whether our `is_available` function detects the specific FA version. Failing reasons
@@ -1595,29 +1597,33 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                 return
 
         if not general_availability_check():
-            preface = f"FlashAttention{flash_attn_version} has been toggled on, but it cannot be used due to the following error:"
+            preface = f"Flash Attention {flash_attn_version} has been toggled on, but it cannot be used due to the following error:"
 
             # Can the package be seen in the import structure
             if not pkg_availability_check():
                 raise ImportError(
-                    f"{preface} the package for FlashAttention{flash_attn_version} doesn't seem to be installed."
+                    f"{preface} the package for Flash Attention {flash_attn_version} doesn't seem to be installed."
                 )
-            # Minimum version (FA2 only)
+            # Minimum version
             elif flash_attn_version == 2 and not is_flash_attn_greater_or_equal("2.3.3"):
-                raise ImportError(f"{preface} FlashAttention{flash_attn_version} requires at least version `2.3.3`.")
+                raise ImportError(f"{preface} Flash Attention {flash_attn_version} requires at least version `2.3.3`.")
+            elif flash_attn_version == "torch" and not is_torch_greater_or_equal("2.11.0"):
+                raise ImportError(
+                    f"{preface} Flash Attention {flash_attn_version} requires at least version `2.11.0`."
+                )
             else:
                 # Supported devices availability
                 device_availability_checks, device_names = zip(*supported_devices)
                 if not any(device_availability_check() for device_availability_check in device_availability_checks):
                     raise ImportError(
-                        f"{preface} FlashAttention{flash_attn_version} is not available on CPU. Please make sure you are on any of the supported devices: {device_names}."
+                        f"{preface} Flash Attention {flash_attn_version} is not available on CPU. Please make sure you are on any of the supported devices: {device_names}."
                     )
                 # Cuda major versions (more recent FA versions are specialized to newer cuda devices)
                 elif cuda_min_major_version is not None and is_torch_cuda_available():
                     major, _ = torch.cuda.get_device_capability()
                     if major < cuda_min_major_version:
                         raise ImportError(
-                            f"{preface} FlashAttention{flash_attn_version} requires compute capability >= {cuda_min_major_version}, but found {torch.cuda.get_device_capability()} with compute capability {major}.x"
+                            f"{preface} Flash Attention {flash_attn_version} requires compute capability >= {cuda_min_major_version}, but found {torch.cuda.get_device_capability()} with compute capability {major}.x"
                         )
 
     def _flash_attn_can_dispatch(self, flash_attn_version: int, is_init_check: bool = False) -> bool:
@@ -1640,7 +1646,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                 " or in the Transformers GitHub repo: https://github.com/huggingface/transformers/issues/new"
             )
 
-        if flash_attn_version not in [2, 3, 4]:
+        if flash_attn_version not in [2, 3, 4, "torch"]:
             raise ValueError(f"Requested Flash Attention {flash_attn_version} which is not supported.")
 
         # Check if we can even use the FA version based on the env of the user
@@ -1648,7 +1654,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
 
         # Check for attention dropout, which is incompatible with newer FA versions
         # (many should not really care about dropout as it is not super effective, hence warning for now)
-        if flash_attn_version > 2:
+        if flash_attn_version == "torch" or flash_attn_version > 2:
             if hasattr(self.config, "attention_dropout") and self.config.attention_dropout > 0:
                 logger.warning_once(
                     f"You are attempting to use Flash Attention {flash_attn_version} with dropout. "
@@ -1814,6 +1820,10 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         if is_flash_attention_requested(requested_attention_implementation=attn_implementation):
             # If FA not installed, do not fail but use kernels instead if possible
             for fa_version in FLASH_ATTENTION_COMPATIBILITY_MATRIX.keys():
+                # No fallback for native torch
+                if fa_version == "torch":
+                    continue
+
                 # Check whether we have an original FA requested but not available in the env
                 if requested_original_flash_attn := (
                     attn_implementation.removeprefix("paged|") == f"flash_attention_{fa_version}"
@@ -1867,7 +1877,10 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             )
 
             # preload flash attention here to allow compile with fullgraph
-            if is_flash_attention_requested(requested_attention_implementation=applicable_attn_implementation):
+            if is_flash_attention_requested(
+                requested_attention_implementation=applicable_attn_implementation,
+                allow_torch=is_flash_attn_torch_available(),
+            ):
                 lazy_import_flash_attention(applicable_attn_implementation)
 
         return applicable_attn_implementation
@@ -1906,9 +1919,11 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
 
         # Perform relevant checks
         if is_flash_attention_requested(requested_attention_implementation=applicable_attention) and (
-            fa_matched := re.search(r"^flash_attention_(\d)$", applicable_attention)
+            fa_matched := re.search(r"^flash_attention_(torch|\d)$", applicable_attention)
         ):
-            fa_version = int(fa_matched.group(1))  # last digit
+            fa_version = (
+                fa_matched.group(1) if fa_matched.group(1) == "torch" else int(fa_matched.group(1))
+            )  # last digit
             self._flash_attn_can_dispatch(flash_attn_version=fa_version, is_init_check=is_init_check)
         elif "flex_attention" in applicable_attention:
             self._flex_attn_can_dispatch(is_init_check)
@@ -3775,6 +3790,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                     - `"flash_attention_2"` (using [Dao-AILab/flash-attention](https://github.com/Dao-AILab/flash-attention))
                     - `"flash_attention_3"` (using [Dao-AILab/flash-attention/hopper](https://github.com/Dao-AILab/flash-attention/tree/main/hopper))
                     - `"flash_attention_4"` (using [Dao-AILab/flash-attention/flash_attn/cute](https://github.com/Dao-AILab/flash-attention/tree/main/flash_attn/cute)).
+                    - `"flash_attention_torch"` (using [`varlen`](https://docs.pytorch.org/docs/stable/nn.attention.varlen.html)).
                 By default, if available, SDPA will be used. The default is otherwise the manual `"eager"` implementation.
 
                 Accept HF kernel references in the form:
@@ -4839,11 +4855,13 @@ class AttentionInterface(GeneralInterface):
     # Class instance object, so that a call to `register` can be reflected into all other files correctly, even if
     # a new instance is created (in order to locally override a given function)
     _global_mapping = {
+        "flash_attention_torch": flash_attention_forward,
         "flash_attention_4": flash_attention_forward,
         "flash_attention_3": flash_attention_forward,
         "flash_attention_2": flash_attention_forward,
         "flex_attention": flex_attention_forward,
         "sdpa": sdpa_attention_forward,
+        "paged|flash_attention_torch": flash_attention_forward,
         "paged|flash_attention_4": paged_attention_forward,
         "paged|flash_attention_3": paged_attention_forward,
         "paged|flash_attention_2": paged_attention_forward,
@@ -4851,7 +4869,7 @@ class AttentionInterface(GeneralInterface):
         "paged|eager": eager_paged_attention_forward,
     }
 
-    def get_interface(self, attn_implementation: str, default: Callable) -> Callable:
+    def get_interface(self, attn_implementation: str | None, default: Callable) -> Callable:
         """Return the requested `attn_implementation`. Also strictly check its validity, and raise if invalid."""
         if attn_implementation is None:
             logger.warning_once(
@@ -4863,6 +4881,7 @@ class AttentionInterface(GeneralInterface):
             raise KeyError(
                 f"`{attn_implementation}` is not a valid attention implementation registered in the `AttentionInterface`"
             )
+
         return super().get(attn_implementation, default)
 
 
