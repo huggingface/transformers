@@ -126,6 +126,7 @@ class Qwen3VLMoeTextConfig(Qwen3MoeConfig):
 @auto_docstring(checkpoint="Qwen/Qwen3-VL-30B-A3B-Instruct")
 @strict
 class Qwen3VLMoeVisionConfig(Qwen3VLVisionConfig):
+    model_type = "qwen3_vl_moe_vision"
     pass
 
 
