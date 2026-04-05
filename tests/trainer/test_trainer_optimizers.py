@@ -37,6 +37,7 @@ from transformers.testing_utils import (
     TestCasePlus,
     require_apollo_torch,
     require_bitsandbytes,
+    require_flashoptim,
     require_galore_torch,
     require_grokadamw,
     require_lomo,
@@ -249,6 +250,27 @@ class TrainerOptimizerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
     @require_torch_accelerator
     def test_grokadamw(self):
         self._train_with_llama("grokadamw", learning_rate=2e-5, max_steps=20)
+
+    # ---------------------------------------------------------------------------
+    # FlashOptim tests
+    # ---------------------------------------------------------------------------
+
+    @parameterized.expand([("flash_adamw",), ("flash_adam",), ("flash_sgd",), ("flash_sgdw",), ("flash_lion",)])
+    @require_flashoptim
+    @require_torch_accelerator
+    def test_flashoptim(self, optim):
+        self._train_with_llama(optim, learning_rate=1e-5, max_steps=20, bf16=True)
+
+    @require_flashoptim
+    @require_torch_accelerator
+    def test_flashoptim_extra_args(self):
+        self._train_with_llama(
+            "flash_adamw",
+            learning_rate=1e-5,
+            max_steps=20,
+            bf16=True,
+            optim_args="master_weight_bits=16, compress_state_dict=False, decouple_lr=True",
+        )
 
     # ---------------------------------------------------------------------------
     # Schedule-free tests
