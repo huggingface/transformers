@@ -741,7 +741,7 @@
         title: Starcoder2
       - local: in_translation
         title: SwitchTransformers
-      - local: in_translation
+      - local: model_doc/t5
         title: T5
       - local: in_translation
         title: T5Gemma
