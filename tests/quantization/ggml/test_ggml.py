@@ -1040,6 +1040,22 @@ class GgufModelTests(unittest.TestCase):
 
         self.assertIsNone(deci_mapping["rope.dimension_count"])
 
+    def test_gemma_softcap_config_mapping(self):
+        """Test that Gemma2/Gemma3 GGUF config mapping includes attn_logit_softcapping."""
+        from transformers.integrations.ggml import GGUF_CONFIG_MAPPING
+
+        # Test Gemma2
+        self.assertIn("gemma2", GGUF_CONFIG_MAPPING)
+        gemma2_mapping = GGUF_CONFIG_MAPPING["gemma2"]
+        self.assertIn("attention.logit_softcapping", gemma2_mapping)
+        self.assertEqual(gemma2_mapping["attention.logit_softcapping"], "attn_logit_softcapping")
+
+        # Test Gemma3
+        self.assertIn("gemma3", GGUF_CONFIG_MAPPING)
+        gemma3_mapping = GGUF_CONFIG_MAPPING["gemma3"]
+        self.assertIn("attention.logit_softcapping", gemma3_mapping)
+        self.assertEqual(gemma3_mapping["attention.logit_softcapping"], "attn_logit_softcapping")
+
     def test_deci_architecture_mapping(self):
         """Test that Deci architectures are mapped to GGUFLlamaConverter."""
         from transformers.integrations.ggml import GGUF_TO_FAST_CONVERTERS, GGUFLlamaConverter
