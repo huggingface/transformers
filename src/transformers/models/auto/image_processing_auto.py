@@ -97,6 +97,7 @@ else:
                 "deformable_detr",
                 {"torchvision": "DeformableDetrImageProcessor", "pil": "DeformableDetrImageProcessorPil"},
             ),
+            ("deimv2", {"torchvision": "RTDetrImageProcessor", "pil": "RTDetrImageProcessorPil"}),
             ("deit", {"torchvision": "DeiTImageProcessor", "pil": "DeiTImageProcessorPil"}),
             ("depth_anything", {"torchvision": "DPTImageProcessor", "pil": "DPTImageProcessorPil"}),
             ("depth_pro", {"torchvision": "DepthProImageProcessor"}),
