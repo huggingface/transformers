@@ -100,7 +100,7 @@ class YoutuIntegrationTest(unittest.TestCase):
         NUM_TOKENS_TO_GENERATE = 40
         EXPECTED_TEXT_COMPLETION = [
             "Simply put, the theory of relativity states that , time is relative. It is the speed of light is constant in all reference frames. This means that if you are moving at a certain speed, you will experience time differently than someone who is stationary",
-            "My favorite all time favorite condiment is ketchup. I love it on everything. I love it on burgers, hot dogs, and even on my fries. I also love it on my french fries. I love it on my french fries. I love"
+            "My favorite all time favorite condiment is ketchup. I love it on everything. I love it on burgers, hot dogs, and even on my fries. I also love it on my french fries. I love it on my french fries. I love",
         ]
 
         prompts = [
@@ -124,7 +124,7 @@ class YoutuIntegrationTest(unittest.TestCase):
         NUM_TOKENS_TO_GENERATE = 40
         EXPECTED_TEXT_COMPLETION = [
             "Simply put, the theory of relativity states that , time is relative. It is the speed of light is constant in all reference frames. This means that if you are moving at a certain speed, you will experience time differently than someone who is stationary",
-            "My favorite all time favorite condiment is ketchup. I love it on everything. I love it on burgers, hot dogs, and even on my fries. I also love it on my french fries. I love it on my french fries. I love"
+            "My favorite all time favorite condiment is ketchup. I love it on everything. I love it on burgers, hot dogs, and even on my fries. I also love it on my french fries. I love it on my french fries. I love",
         ]
 
         prompts = [
@@ -152,7 +152,7 @@ class YoutuIntegrationTest(unittest.TestCase):
         NUM_TOKENS_TO_GENERATE = 40
         EXPECTED_TEXT_COMPLETION = [
             "Simply put, the theory of relativity states that , time is relative. It is the speed of light is constant in all reference frames. This means that if you are moving at a certain speed, you will experience time differently than someone who is stationary",
-            "My favorite all time favorite condiment is ketchup. I love it on everything. I love it on burgers, hot dogs, and even on my fries. I also love it on my french fries. I love it on my french fries. I love"
+            "My favorite all time favorite condiment is ketchup. I love it on everything. I love it on burgers, hot dogs, and even on my fries. I also love it on my french fries. I love it on my french fries. I love",
         ]
 
         prompts = [
