@@ -930,6 +930,8 @@ class Molmo2PreTrainedModel(PreTrainedModel):
             init.ones_(module.weight)
             if module.bias is not None:
                 init.zeros_(module.bias)
+        elif isinstance(module, Molmo2VisionTransformer):
+            init.normal_(module.positional_embedding, mean=0.0, std=std)
         elif isinstance(module, Molmo2RotaryEmbedding):
             rope_fn = (
                 ROPE_INIT_FUNCTIONS[module.rope_type]
