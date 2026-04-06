@@ -79,7 +79,7 @@ _MODEL_TO_CONVERSION_PATTERN = {
     "qwen2_5_vl": "qwen2_vl",
     "sam3_tracker_video": "sam3_tracker",
     "pp_chart2table": "got_ocr2",
-    "vlm": "hyperclovax_vision",
+    "hyperclovax_vision_v2": "llava",
 }
 
 
@@ -421,14 +421,17 @@ def _build_checkpoint_conversion_mapping():
             ),
         ],
         "hyperclovax": [
-            WeightRenaming("model.language_model.model", "model"),
-            WeightRenaming("model.language_model.lm_head", "lm_head"),
+            WeightRenaming(r"^model.language_model.model.layers", "model.layers"),
+            WeightRenaming(r"^model.language_model.lm_head", "lm_head"),
+            WeightRenaming(r"^model.language_model.model.embed_tokens", "model.embed_tokens"),
+            WeightRenaming(r"^model.language_model.model.norm", "model.norm"),
         ],
-        "hyperclovax_vision": [
-            WeightRenaming("language_model.lm_head", "lm_head"),
-            WeightRenaming("mm_projector", "model.projector"),
-            WeightRenaming("language_model.model", "model.language_model"),
-            WeightRenaming("vision_model", "model.vision_model"),
+        "hyperclovax_vision_v2": [
+            WeightRenaming(r"^model.language_model.lm_head", "lm_head"),
+            WeightRenaming(r"^model.mm_projector", "model.projector"),
+            WeightRenaming(r"^model.language_model.model.layers", "model.language_model.layers"),
+            WeightRenaming(r"^model.language_model.model.embed_tokens", "model.language_model.embed_tokens"),
+            WeightRenaming(r"^model.language_model.model.norm", "model.language_model.norm"),
         ],
         "legacy": [
             WeightRenaming(

@@ -11,7 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""HyperClovaX model configuration"""
+"""HCXVisionV2Model model configuration"""
 
 from huggingface_hub.dataclasses import strict
 
@@ -23,35 +23,24 @@ from ..granite.configuration_granite import GraniteConfig
 
 @auto_docstring(checkpoint="naver-hyperclovax/HyperCLOVAX-SEED-Think-32B")
 @strict(accept_kwargs=True)
-class HyperClovaXConfig(GraniteConfig):
+class HyperCLOVAXConfig(GraniteConfig):
     r"""
-    HyperClovaX language model configuration.  Extends [`GraniteConfig`] with
+    HyperCLOVAX language model configuration.  Extends [`GraniteConfig`] with
     MuP post-norm support and backward-compatible RoPE fields.
 
-    ``rope_theta`` / ``rope_scaling`` are accepted for compatibility with
-    existing hub checkpoints that store RoPE settings in the legacy Llama-style
-    flat format.  They are converted to the ``rope_parameters`` dict expected
-    by [`GraniteRotaryEmbedding`] during ``__post_init__``.
-
     Args:
-        rope_theta (`float`, *optional*, defaults to 10000.0):
-            Base period of the Rotary Position Embedding (RoPE).  Converted to
-            ``rope_parameters["rope_theta"]`` when ``rope_parameters`` is not
-            set explicitly.
-        rope_scaling (`dict`, *optional*):
-            Legacy RoPE scaling dict (Llama style).  Keys are merged into
-            ``rope_parameters`` when ``rope_parameters`` is not set explicitly.
-        head_dim (`int`, *optional*):
-            Dimension of each attention head.  Defaults to
-            ``hidden_size // num_attention_heads``.
-    ```python
-    >>> from transformers import HyperClovaXConfig, HyperClovaXModel
+        use_post_norm (`bool`, *optional*, defaults to False):
+            Whether to use post-norm (Peri-LN) architecture. For more details checkout [this
+            paper](https://arxiv.org/pdf/2502.02732.pdf)
 
-    >>> # Initializing a HyperClovaX configuration
-    >>> configuration = HyperClovaXConfig()
+    ```python
+    >>> from transformers import HyperCLOVAXConfig, HyperCLOVAXModel
+
+    >>> # Initializing a HyperCLOVAX configuration
+    >>> configuration = HyperCLOVAXConfig()
 
     >>> # Initializing a model from the configuration
-    >>> model = HyperClovaXModel(configuration)
+    >>> model = HyperCLOVAXModel(configuration)
 
     >>> # Accessing the model configuration
     >>> configuration = model.config
@@ -64,10 +53,10 @@ class HyperClovaXConfig(GraniteConfig):
 
 @auto_docstring(checkpoint="naver-hyperclovax/HyperCLOVAX-SEED-Think-32B")
 @strict(accept_kwargs=True)
-class HCXVisionConfig(PreTrainedConfig):
+class HCXVisionV2Config(PreTrainedConfig):
     r"""
-    text_config (`dict` or [`HyperClovaXConfig`], *optional*):
-        Configuration for the LLM backbone.  Defaults to [`HyperClovaXConfig`].
+    text_config (`dict` or [`HyperCLOVAXConfig`], *optional*):
+        Configuration for the LLM backbone.  Defaults to [`HyperCLOVAXConfig`].
     vision_config (`dict` or config, *optional*):
         Configuration for the vision encoder.  Defaults to
         [`Qwen2_5_VLVisionConfig`].
@@ -81,10 +70,10 @@ class HCXVisionConfig(PreTrainedConfig):
         compatibility with older checkpoints.
 
     ```python
-    >>> from transformers import HCXVisionConfig, HCXVisionForConditionalGeneration
+    >>> from transformers import HCXVisionV2Config, HCXVisionForConditionalGeneration
 
-    >>> # Initializing a HyperClovaX Vision configuration with defaults
-    >>> configuration = HCXVisionConfig()
+    >>> # Initializing a HyperCLOVAX Vision configuration with defaults
+    >>> configuration = HCXVisionV2Config()
 
     >>> # Initializing a model from the configuration
     >>> model = HCXVisionForConditionalGeneration(configuration)
@@ -94,8 +83,8 @@ class HCXVisionConfig(PreTrainedConfig):
     ```
     """
 
-    model_type = "hyperclovax_vision"
-    sub_configs = {"text_config": HyperClovaXConfig, "vision_config": AutoConfig}
+    model_type = "hyperclovax_vision_v2"
+    sub_configs = {"text_config": HyperCLOVAXConfig, "vision_config": AutoConfig}
     keys_to_ignore_at_inference = ["past_key_values"]
 
     text_config: dict | PreTrainedConfig | None = None
@@ -116,13 +105,18 @@ class HCXVisionConfig(PreTrainedConfig):
             model_type = self.text_config.get("model_type", "hyperclovax")
             self.text_config = CONFIG_MAPPING[model_type](**self.text_config)
         elif self.text_config is None:
-            self.text_config = HyperClovaXConfig()
+            self.text_config = HyperCLOVAXConfig()
 
         if self.image_token_id is None:
             self.image_token_id = kwargs.pop("img_start_id", 128060)
         if self.video_token_id is None:
             self.video_token_id = kwargs.pop("video_start_id", 128061)
+
+        # This is necessary to properly find the weight conversion mapping.
+        if kwargs.get("model_type") == "vlm":
+            kwargs["model_type"] = "hyperclovax_vision_v2"
+
         super().__post_init__(**kwargs)
 
 
-__all__ = ["HyperClovaXConfig", "HCXVisionConfig"]
+__all__ = ["HyperCLOVAXConfig", "HCXVisionV2Config"]

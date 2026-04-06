@@ -1198,6 +1198,8 @@
         title: Grounding DINO
       - local: model_doc/groupvit
         title: GroupViT
+      - local: model_doc/hyperclovax_vision_v2
+        title: HyperCLOVAX Vision V2
       - local: model_doc/idefics
         title: IDEFICS
       - local: model_doc/idefics2

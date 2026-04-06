@@ -27,6 +27,7 @@ from ...modeling_outputs import (
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
 from ..auto.modeling_auto import AutoModel
+from ..gemma3.modeling_gemma3 import Gemma3ForSequenceClassification
 from ..granite.modeling_granite import (
     GraniteAttention,
     GraniteDecoderLayer,
@@ -36,28 +37,28 @@ from ..granite.modeling_granite import (
 )
 from ..llama.modeling_llama import LlamaPreTrainedModel
 from ..video_llama_3.modeling_video_llama_3 import VideoLlama3Model
-from .configuration_hyperclovax_vision import HCXVisionConfig, HyperClovaXConfig
+from .configuration_hyperclovax_vision_v2 import HCXVisionV2Config, HyperCLOVAXConfig
 
 
 logger = logging.get_logger(__name__)
 
 
-class HyperClovaXAttention(GraniteAttention):
+class HyperCLOVAXAttention(GraniteAttention):
     pass
 
 
-class HyperClovaXRMSNorm(GraniteRMSNorm):
+class HyperCLOVAXRMSNorm(GraniteRMSNorm):
     pass
 
 
-class HyperClovaXDecoderLayer(GraniteDecoderLayer):
-    def __init__(self, config: HyperClovaXConfig, layer_idx: int):
+class HyperCLOVAXDecoderLayer(GraniteDecoderLayer):
+    def __init__(self, config: HyperCLOVAXConfig, layer_idx: int):
         super().__init__(config, layer_idx)
 
         self.use_post_norm = getattr(config, "use_post_norm", False)
         if self.use_post_norm:  # Peri-LN (post-norm)
-            self.post_norm1 = HyperClovaXRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-            self.post_norm2 = HyperClovaXRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+            self.post_norm1 = HyperCLOVAXRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+            self.post_norm2 = HyperCLOVAXRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
     def forward(
         self,
@@ -119,52 +120,52 @@ class HyperClovaXDecoderLayer(GraniteDecoderLayer):
 
 
 @auto_docstring
-class HCXVisionPreTrainedModel(LlamaPreTrainedModel):
-    config: HCXVisionConfig
-    _no_split_modules = ["HyperClovaXDecoderLayer"]
+class HCXVisionV2PreTrainedModel(LlamaPreTrainedModel):
+    config: HCXVisionV2Config
+    _no_split_modules = ["HyperCLOVAXDecoderLayer"]
     input_modalities = ("image", "video", "text")
     _can_record_outputs = {
-        "hidden_states": HyperClovaXDecoderLayer,
-        "attentions": HyperClovaXAttention,
+        "hidden_states": HyperCLOVAXDecoderLayer,
+        "attentions": HyperCLOVAXAttention,
     }
 
 
 @auto_docstring
-class HyperClovaXModel(GraniteModel):
-    config_class = HyperClovaXConfig
+class HyperCLOVAXModel(GraniteModel):
+    config_class = HyperCLOVAXConfig
     input_modalities = ("text",)
 
-    def __init__(self, config: HyperClovaXConfig):
+    def __init__(self, config: HyperCLOVAXConfig):
         super().__init__(config)
 
         self.layers = nn.ModuleList(
-            [HyperClovaXDecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
+            [HyperCLOVAXDecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
         )
 
         self.post_init()
 
 
 @auto_docstring
-class HyperClovaXForCausalLM(GraniteForCausalLM):
+class HyperCLOVAXForCausalLM(GraniteForCausalLM):
     accepts_loss_kwargs = False
-    config_class = HyperClovaXConfig
+    config_class = HyperCLOVAXConfig
     input_modalities = ("text",)
 
     def __init__(self, config):
         super().__init__(config)
-        self.model = HyperClovaXModel(config)
+        self.model = HyperCLOVAXModel(config)
 
 
 @auto_docstring
-class HCXVisionModel(VideoLlama3Model):
-    config: HCXVisionConfig
-    _no_split_modules = ["HyperClovaXDecoderLayer"]
+class HCXVisionV2Model(VideoLlama3Model):
+    config: HCXVisionV2Config
+    _no_split_modules = ["HyperCLOVAXDecoderLayer"]
     _can_record_outputs = {
-        "hidden_states": HyperClovaXDecoderLayer,
-        "attentions": HyperClovaXAttention,
+        "hidden_states": HyperCLOVAXDecoderLayer,
+        "attentions": HyperCLOVAXAttention,
     }
 
-    def __init__(self, config: HCXVisionConfig):
+    def __init__(self, config: HCXVisionV2Config):
         super().__init__(config)
 
         self.vision_model = AutoModel.from_config(config.vision_config)
@@ -280,13 +281,13 @@ class HCXVisionModel(VideoLlama3Model):
 
 
 @auto_docstring
-class HCXVisionForConditionalGeneration(HCXVisionPreTrainedModel, GenerationMixin):
+class HCXVisionV2ForConditionalGeneration(HCXVisionV2PreTrainedModel, GenerationMixin):
     accepts_loss_kwargs = False
     _tied_weights_keys = {"lm_head.weight": "model.language_model.embed_tokens.weight"}
 
-    def __init__(self, config: HCXVisionConfig):
+    def __init__(self, config: HCXVisionV2Config):
         super().__init__(config)
-        self.model = HCXVisionModel(config)
+        self.model = HCXVisionV2Model(config)
         self.vocab_size = config.text_config.vocab_size
         self.lm_head = nn.Linear(config.text_config.hidden_size, config.text_config.vocab_size, bias=False)
         self.post_init()
@@ -366,9 +367,9 @@ class HCXVisionForConditionalGeneration(HCXVisionPreTrainedModel, GenerationMixi
         ```python
         >>> from PIL import Image
         >>> import requests
-        >>> from transformers import AutoProcessor, HCXVisionForConditionalGeneration
+        >>> from transformers import AutoProcessor, HCXVisionV2ForConditionalGeneration
 
-        >>> model = HCXVisionForConditionalGeneration.from_pretrained(
+        >>> model = HCXVisionV2ForConditionalGeneration.from_pretrained(
         ...     "naver-hyperclovax/HyperCLOVAX-SEED-Think-32B",
         ...     torch_dtype="auto",
         ...     device_map="auto",
@@ -377,11 +378,11 @@ class HCXVisionForConditionalGeneration(HCXVisionPreTrainedModel, GenerationMixi
 
         >>> messages = [
         ...     {"role": "user", "content": [
-        ...         {"type": "image", "url": "http://images.cocodataset.org/val2017/000000039769.jpg"},
+        ...         {"type": "image_url", "image_url": {"url": "http://images.cocodataset.org/val2017/000000039769.jpg"}},
         ...         {"type": "text", "text": "Describe this image in detail."},
         ...     ]}
         ... ]
-        >>> inputs = processor.apply_chat_template(
+        >>> inputs = processor.tokenizer.apply_chat_template(
         ...     messages, tokenize=True, return_dict=True, return_tensors="pt"
         ... ).to(model.device)
         >>> output = model.generate(**inputs, max_new_tokens=200)
@@ -456,15 +457,26 @@ class HCXVisionForConditionalGeneration(HCXVisionPreTrainedModel, GenerationMixi
         return model_inputs
 
 
-class HCXVisionForSequenceClassification(HCXVisionPreTrainedModel, GenericForSequenceClassification):
-    accepts_loss_kwargs = False
+class HCXVisionV2ForSequenceClassification(Gemma3ForSequenceClassification, HCXVisionV2PreTrainedModel):
+    config: HyperCLOVAXConfig
+    input_modalities = ("text",)
+
+    def __init__(self, config):
+        super().__init__(config)
+        self.model = HCXVisionV2Model(config)
+
+
+class HyperCLOVAXForSequenceClassification(GenericForSequenceClassification, HCXVisionV2PreTrainedModel):
+    config: HyperCLOVAXConfig
+    input_modalities = ("text",)
 
 
 __all__ = [
-    "HCXVisionForConditionalGeneration",
-    "HCXVisionForSequenceClassification",
-    "HCXVisionModel",
-    "HCXVisionPreTrainedModel",
-    "HyperClovaXForCausalLM",
-    "HyperClovaXModel",
+    "HCXVisionV2ForConditionalGeneration",
+    "HCXVisionV2ForSequenceClassification",
+    "HCXVisionV2Model",
+    "HCXVisionV2PreTrainedModel",
+    "HyperCLOVAXForCausalLM",
+    "HyperCLOVAXModel",
+    "HyperCLOVAXForSequenceClassification",
 ]

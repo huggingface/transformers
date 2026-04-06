@@ -1,5 +1,3 @@
-import copy
-
 from typing_extensions import Unpack
 
 from ...image_processing_utils import BatchFeature
@@ -45,20 +43,6 @@ class HCXVisionV2Processor(Qwen2VLProcessor):
         )
         super().__init__(image_processor, tokenizer, video_processor, chat_template=chat_template)
 
-    def apply_chat_template(self, conversation, chat_template=None, **kwargs):
-        conversation = copy.deepcopy(conversation)
-
-        tokenize = kwargs.get("tokenize", False)
-        if not tokenize:
-            template = chat_template
-            if template is None:
-                template = (
-                    self.chat_template["default"] if isinstance(self.chat_template, dict) else self.chat_template
-                )
-            return self.tokenizer.apply_chat_template(conversation, chat_template=template, **kwargs)
-
-        return super().apply_chat_template(conversation, chat_template=chat_template, **kwargs)
-
     @auto_docstring
     def __call__(
         self,
@@ -87,11 +71,11 @@ class HCXVisionV2Processor(Qwen2VLProcessor):
         )
 
         image_inputs = videos_inputs = {}
-        if images and images is not None:
+        if images is not None:
             image_inputs = self.image_processor(images=images, **output_kwargs["images_kwargs"])
             image_grid_thw = image_inputs["image_grid_thw"]
 
-        if videos and videos is not None:
+        if videos is not None:
             videos_inputs = self.video_processor(videos=videos, **output_kwargs["videos_kwargs"])
             video_grid_thw = videos_inputs["video_grid_thw"]
 
