@@ -30,7 +30,7 @@ from ... import initialization as init
 from ...activations import ACT2FN
 from ...backbone_utils import BackboneMixin, filter_output_hidden_states
 from ...modeling_layers import GradientCheckpointingLayer
-from ...modeling_outputs import BackboneOutput
+from ...modeling_outputs import BackboneOutput, BaseModelOutput
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import ModelOutput, TransformersKwargs, auto_docstring, torch_int
@@ -69,7 +69,7 @@ class SwinDropPath(nn.Module):
     Swin encoder's outputs, with potential hidden states and attentions.
     """
 )
-class SwinEncoderOutput(ModelOutput):
+class SwinEncoderOutput(BaseModelOutput):
     r"""
     reshaped_hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
         Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each stage) of
@@ -79,9 +79,6 @@ class SwinEncoderOutput(ModelOutput):
         include the spatial dimensions.
     """
 
-    last_hidden_state: torch.FloatTensor | None = None
-    hidden_states: tuple[torch.FloatTensor, ...] | None = None
-    attentions: tuple[torch.FloatTensor, ...] | None = None
     reshaped_hidden_states: tuple[torch.FloatTensor, ...] | None = None
 
 
@@ -91,7 +88,7 @@ class SwinEncoderOutput(ModelOutput):
     Swin model's outputs that also contains a pooling of the last hidden states.
     """
 )
-class SwinModelOutput(ModelOutput):
+class SwinModelOutput(BaseModelOutput):
     r"""
     pooler_output (`torch.FloatTensor` of shape `(batch_size, hidden_size)`, *optional*, returned when `add_pooling_layer=True` is passed):
         Average pooling of the last layer hidden-state.
@@ -103,10 +100,7 @@ class SwinModelOutput(ModelOutput):
         include the spatial dimensions.
     """
 
-    last_hidden_state: torch.FloatTensor | None = None
     pooler_output: torch.FloatTensor | None = None
-    hidden_states: tuple[torch.FloatTensor, ...] | None = None
-    attentions: tuple[torch.FloatTensor, ...] | None = None
     reshaped_hidden_states: tuple[torch.FloatTensor, ...] | None = None
 
 
@@ -293,27 +287,19 @@ class SwinPatchMerging(nn.Module):
     Patch Merging Layer.
 
     Args:
-        input_resolution (`tuple[int]`):
-            Resolution of input feature.
         dim (`int`):
             Number of input channels.
-        norm_layer (`nn.Module`, *optional*, defaults to `nn.LayerNorm`):
-            Normalization layer class.
     """
 
-    def __init__(self, input_resolution: tuple[int], dim: int, norm_layer: nn.Module = nn.LayerNorm) -> None:
+    def __init__(self, dim: int) -> None:
         super().__init__()
-        self.input_resolution = input_resolution
-        self.dim = dim
         self.reduction = nn.Linear(4 * dim, 2 * dim, bias=False)
-        self.norm = norm_layer(4 * dim)
+        self.norm = nn.LayerNorm(4 * dim)
 
-    def maybe_pad(self, input_feature, height, width):
-        should_pad = (height % 2 == 1) or (width % 2 == 1)
-        if should_pad:
-            pad_values = (0, 0, 0, width % 2, 0, height % 2)
-            input_feature = nn.functional.pad(input_feature, pad_values)
-
+    def maybe_pad(self, input_feature: torch.Tensor, height: int, width: int) -> torch.Tensor:
+        """Pad input feature map to be divisible by 2 in both spatial dimensions if needed."""
+        if (height % 2 == 1) or (width % 2 == 1):
+            input_feature = nn.functional.pad(input_feature, (0, 0, 0, width % 2, 0, height % 2))
         return input_feature
 
     def forward(self, input_feature: torch.Tensor, input_dimensions: tuple[int, int]) -> torch.Tensor:
@@ -355,13 +341,18 @@ class SwinRelativePositionBias(nn.Module):
     def _create_relative_position_index(self) -> torch.Tensor:
         coords_h = torch.arange(self.window_size[0])
         coords_w = torch.arange(self.window_size[1])
+
         coords = torch.stack(torch.meshgrid([coords_h, coords_w], indexing="ij"))  # 2, Wh, Ww
         coords_flatten = torch.flatten(coords, 1)  # 2, Wh*Ww
+
         relative_coords = coords_flatten[:, :, None] - coords_flatten[:, None, :]  # 2, Wh*Ww, Wh*Ww
         relative_coords = relative_coords.permute(1, 2, 0).contiguous()  # Wh*Ww, Wh*Ww, 2
-        relative_coords[:, :, 0] += self.window_size[0] - 1  # shift to start from 0
+
+        # shift to start from 0 and compute a unique flat index for each (dh, dw) pair
+        relative_coords[:, :, 0] += self.window_size[0] - 1
         relative_coords[:, :, 1] += self.window_size[1] - 1
         relative_coords[:, :, 0] *= 2 * self.window_size[1] - 1
+
         return relative_coords.sum(-1)  # Wh*Ww, Wh*Ww
 
     def forward(self) -> torch.Tensor:
@@ -416,11 +407,6 @@ class SwinAttention(nn.Module):
 
         self.relative_position_bias = SwinRelativePositionBias(num_attention_heads, (window_size, window_size))
 
-        if hidden_size % num_attention_heads != 0:
-            raise ValueError(
-                f"The hidden size ({hidden_size}) is not a multiple of the number of attention heads ({num_attention_heads})"
-            )
-
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -428,7 +414,6 @@ class SwinAttention(nn.Module):
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor, torch.Tensor]:
         # hidden_states: (batch_size * num_windows, window_size * window_size, channels)
-        batch_size, seq_len, _ = hidden_states.shape
         input_shape = hidden_states.shape[:-1]
         hidden_shape = (*input_shape, -1, self.head_dim)
 
@@ -441,12 +426,13 @@ class SwinAttention(nn.Module):
         if attention_mask is not None:
             # attention_mask: (num_windows, ws*ws, ws*ws)
             num_windows = attention_mask.shape[0]
-            batch = batch_size // num_windows
+            batch_size = input_shape[0] // num_windows
+            seq_len = input_shape[1]
             # Expand to (batch * num_windows, 1, ws*ws, ws*ws) for broadcasting
             attention_mask = (
                 attention_mask.unsqueeze(1)  # (num_windows, 1, ws*ws, ws*ws)
                 .unsqueeze(0)  # (1, num_windows, 1, ws*ws, ws*ws)
-                .expand(batch, -1, -1, -1, -1)  # (batch, num_windows, 1, ws*ws, ws*ws)
+                .expand(batch_size, -1, -1, -1, -1)  # (batch, num_windows, 1, ws*ws, ws*ws)
                 .reshape(-1, 1, seq_len, seq_len)  # (batch * num_windows, 1, ws*ws, ws*ws)
             )
             combined_mask = relative_position_bias + attention_mask
@@ -511,7 +497,7 @@ def window_reverse(windows, window_size, height, width):
     return windows
 
 
-class SwinLayer(nn.Module):
+class SwinLayer(GradientCheckpointingLayer):
     def __init__(
         self,
         config: SwinConfig,
@@ -522,27 +508,74 @@ class SwinLayer(nn.Module):
         shift_size: int = 0,
     ):
         super().__init__()
-        self.shift_size = shift_size
         self.window_size = config.window_size
-        self.input_resolution = input_resolution
-        self.layernorm_before = nn.LayerNorm(dim, eps=config.layer_norm_eps)
         self.attention = SwinAttention(config, dim, num_heads, window_size=self.window_size)
-        self.drop_path = SwinDropPath(drop_path_rate) if drop_path_rate > 0.0 else nn.Identity()
+        self.layernorm_before = nn.LayerNorm(dim, eps=config.layer_norm_eps)
         self.layernorm_after = nn.LayerNorm(dim, eps=config.layer_norm_eps)
         self.mlp = SwinMLP(config, dim)
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
+        self.shift_size = shift_size
+        self.input_resolution = input_resolution
+        self.drop_path = SwinDropPath(drop_path_rate) if drop_path_rate > 0.0 else nn.Identity()
 
-    def set_shift_and_window_size(self, input_resolution):
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        input_dimensions: tuple[int, int],
+        always_partition: bool = False,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> torch.Tensor:
+        if not always_partition:
+            self.set_shift_and_window_size(input_dimensions)
+        height, width = input_dimensions
+        batch_size, _, channels = hidden_states.size()
+        shortcut = hidden_states
+
+        hidden_states = self.layernorm_before(hidden_states)
+        hidden_states = hidden_states.view(batch_size, height, width, channels)
+
+        # pad hidden_states to multiples of window size
+        hidden_states, pad_values = self.maybe_pad(hidden_states, height, width)
+        _, height_pad, width_pad, _ = hidden_states.shape
+
+        hidden_states_windows = window_partition(self.cyclic_shift(hidden_states), self.window_size)
+        hidden_states_windows = hidden_states_windows.view(-1, self.window_size * self.window_size, channels)
+        attn_mask = self.get_attn_mask(
+            height_pad, width_pad, dtype=hidden_states.dtype, device=hidden_states_windows.device
+        )
+
+        attention_output, attn_weights = self.attention(hidden_states_windows, attn_mask, **kwargs)
+        attention_output = self.dropout(attention_output)
+
+        attention_windows = attention_output.view(-1, self.window_size, self.window_size, channels)
+        attention_windows = self.cyclic_shift(
+            window_reverse(attention_windows, self.window_size, height_pad, width_pad), reverse=True
+        )
+
+        if pad_values[3] > 0 or pad_values[5] > 0:
+            attention_windows = attention_windows[:, :height, :width, :].contiguous()
+
+        attention_windows = attention_windows.view(batch_size, height * width, channels)
+        hidden_states = shortcut + self.drop_path(attention_windows)
+
+        residual = hidden_states
+        hidden_states = self.layernorm_after(hidden_states)
+        hidden_states = self.mlp(hidden_states)
+        hidden_states = self.dropout(hidden_states) + residual
+
+        return hidden_states, attn_weights
+
+    def set_shift_and_window_size(self, input_resolution: tuple[int, int]) -> None:
+        """Clamp window and shift sizes when the window is larger than the input resolution."""
         if min(input_resolution) <= self.window_size:
-            # if window size is larger than input resolution, we don't partition windows
             self.shift_size = torch_int(0)
             self.window_size = (
                 torch.min(torch.tensor(input_resolution)) if torch.jit.is_tracing() else min(input_resolution)
             )
 
-    def get_attn_mask(self, height, width, dtype, device):
+    def get_attn_mask(self, height: int, width: int, dtype: torch.dtype, device: torch.device) -> torch.Tensor | None:
+        """Build the cyclic-shift attention mask for shifted-window MSA; returns None when shift_size is 0."""
         if self.shift_size > 0:
-            # calculate attention mask for SW-MSA
             img_mask = torch.zeros((1, height, width, 1), dtype=dtype, device=device)
             height_slices = (
                 slice(0, -self.window_size),
@@ -568,71 +601,24 @@ class SwinLayer(nn.Module):
             attn_mask = None
         return attn_mask
 
-    def maybe_pad(self, hidden_states, height, width):
+    def maybe_pad(self, hidden_states: torch.Tensor, height: int, width: int) -> tuple[torch.Tensor, tuple[int, ...]]:
+        """Pad feature map so both spatial dimensions are divisible by window_size."""
         pad_right = (self.window_size - width % self.window_size) % self.window_size
         pad_bottom = (self.window_size - height % self.window_size) % self.window_size
         pad_values = (0, 0, 0, pad_right, 0, pad_bottom)
         hidden_states = nn.functional.pad(hidden_states, pad_values)
         return hidden_states, pad_values
 
-    def forward(
-        self,
-        hidden_states: torch.Tensor,
-        input_dimensions: tuple[int, int],
-        always_partition: bool = False,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> torch.Tensor:
-        if not always_partition:
-            self.set_shift_and_window_size(input_dimensions)
-        height, width = input_dimensions
-        batch_size, _, channels = hidden_states.size()
-        shortcut = hidden_states
-
-        hidden_states = self.layernorm_before(hidden_states)
-        hidden_states = hidden_states.view(batch_size, height, width, channels)
-
-        # pad hidden_states to multiples of window size
-        hidden_states, pad_values = self.maybe_pad(hidden_states, height, width)
-
-        _, height_pad, width_pad, _ = hidden_states.shape
-        # cyclic shift
+    def cyclic_shift(self, hidden_states: torch.Tensor, reverse: bool = False) -> torch.Tensor:
+        """Apply a cyclic shift along the spatial dimensions for shifted-window attention."""
         if self.shift_size > 0:
-            shifted_hidden_states = torch.roll(hidden_states, shifts=(-self.shift_size, -self.shift_size), dims=(1, 2))
-        else:
-            shifted_hidden_states = hidden_states
-
-        # partition windows
-        hidden_states_windows = window_partition(shifted_hidden_states, self.window_size)
-        hidden_states_windows = hidden_states_windows.view(-1, self.window_size * self.window_size, channels)
-        attn_mask = self.get_attn_mask(
-            height_pad, width_pad, dtype=hidden_states.dtype, device=hidden_states_windows.device
-        )
-
-        attention_output, attn_weights = self.attention(hidden_states_windows, attn_mask, **kwargs)
-        attention_output = self.dropout(attention_output)
-
-        attention_windows = attention_output.view(-1, self.window_size, self.window_size, channels)
-        shifted_windows = window_reverse(attention_windows, self.window_size, height_pad, width_pad)
-
-        # reverse cyclic shift
-        if self.shift_size > 0:
-            attention_windows = torch.roll(shifted_windows, shifts=(self.shift_size, self.shift_size), dims=(1, 2))
-        else:
-            attention_windows = shifted_windows
-
-        if pad_values[3] > 0 or pad_values[5] > 0:
-            attention_windows = attention_windows[:, :height, :width, :].contiguous()
-
-        attention_windows = attention_windows.view(batch_size, height * width, channels)
-
-        hidden_states = shortcut + self.drop_path(attention_windows)
-
-        residual = hidden_states
-        hidden_states = self.layernorm_after(hidden_states)
-        hidden_states = self.mlp(hidden_states)
-        hidden_states = self.dropout(hidden_states) + residual
-
-        return hidden_states, attn_weights
+            direction = 1 if reverse else -1
+            hidden_states = torch.roll(
+                hidden_states,
+                shifts=(direction * self.shift_size, direction * self.shift_size),
+                dims=(1, 2),
+            )
+        return hidden_states
 
 
 class SwinStage(GradientCheckpointingLayer):
@@ -648,7 +634,6 @@ class SwinStage(GradientCheckpointingLayer):
     ):
         super().__init__()
         self.config = config
-        self.dim = dim
         self.blocks = nn.ModuleList(
             [
                 SwinLayer(
@@ -663,9 +648,32 @@ class SwinStage(GradientCheckpointingLayer):
             ]
         )
 
-        self.downsample = (
-            downsample(input_resolution, dim=dim, norm_layer=nn.LayerNorm) if downsample is not None else None
-        )
+        self.downsample = downsample(dim=dim) if downsample is not None else None
+
+    def get_reshaped_hidden_states(
+        self,
+        hidden_states: torch.Tensor,
+        hidden_states_before_downsampling: torch.Tensor,
+        height: int,
+        width: int,
+        output_hidden_states_before_downsampling: bool,
+    ) -> torch.Tensor:
+        """
+        Select the spatial hidden states for this stage and reshape from (B, L, C) to (B, C, H, W).
+
+        The chosen state and its resolution depend on output_hidden_states_before_downsampling:
+        - True  → pre-downsampling states at (height, width) — used by the backbone.
+        - False → post-downsampling states at half the resolution (if a downsampler exists).
+        """
+        if output_hidden_states_before_downsampling:
+            spatial_state, h, w = hidden_states_before_downsampling, height, width
+        elif self.downsample is not None:
+            spatial_state, h, w = hidden_states, (height + 1) // 2, (width + 1) // 2
+        else:
+            spatial_state, h, w = hidden_states, height, width
+
+        batch_size, _, hidden_size = spatial_state.shape
+        return spatial_state.view(batch_size, h, w, hidden_size).permute(0, 3, 1, 2).contiguous()
 
     def forward(
         self,
@@ -686,20 +694,9 @@ class SwinStage(GradientCheckpointingLayer):
         if self.downsample is not None:
             hidden_states = self.downsample(hidden_states_before_downsampling, input_dimensions)
 
-        # Index 0: always post-downsampling hidden states — fed as input to the next stage.
-        # Index 1: spatial (B, C, H, W) view whose resolution depends on the flag:
-        #   output_hidden_states_before_downsampling=True  → pre-downsampling (used by backbone)
-        #   output_hidden_states_before_downsampling=False → post-downsampling (default)
-        # Index 2: attention weights from the last block in this stage (None if output_attentions=False).
-        if output_hidden_states_before_downsampling:
-            spatial_state, h, w = hidden_states_before_downsampling, height, width
-        elif self.downsample is not None:
-            spatial_state, h, w = hidden_states, (height + 1) // 2, (width + 1) // 2
-        else:
-            spatial_state, h, w = hidden_states, height, width
-
-        batch_size, _, hidden_size = spatial_state.shape
-        reshaped_hidden_states = spatial_state.view(batch_size, h, w, hidden_size).permute(0, 3, 1, 2).contiguous()
+        reshaped_hidden_states = self.get_reshaped_hidden_states(
+            hidden_states, hidden_states_before_downsampling, height, width, output_hidden_states_before_downsampling
+        )
 
         return hidden_states, reshaped_hidden_states, last_attn_weights
 
@@ -727,12 +724,19 @@ class SwinPreTrainedModel(PreTrainedModel):
         # capture the last block's attention weights at index 2, giving one entry per stage.
         "attentions": OutputRecorder(SwinStage, index=2, capture_initial_hidden_state=False),
     }
+    _input_embed_layer = "patch_embeddings"
 
     @torch.no_grad()
     def _init_weights(self, module):
         """Initialize the weights"""
-        super()._init_weights(module)
-        if isinstance(module, SwinEmbeddings):
+        if isinstance(module, nn.Linear | nn.Conv2d):
+            init.trunc_normal_(module.weight, mean=0.0, std=self.config.initializer_range)
+            if module.bias is not None:
+                init.zeros_(module.bias)
+        elif isinstance(module, nn.LayerNorm):
+            init.zeros_(module.bias)
+            init.ones_(module.weight)
+        elif isinstance(module, SwinEmbeddings):
             if module.mask_token is not None:
                 init.zeros_(module.mask_token)
             if module.position_embeddings is not None:
@@ -836,9 +840,6 @@ class SwinModel(SwinPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    def get_input_embeddings(self):
-        return self.embeddings.patch_embeddings
-
     @can_return_tuple
     @auto_docstring
     def forward(
@@ -852,6 +853,8 @@ class SwinModel(SwinPreTrainedModel):
         bool_masked_pos (`torch.BoolTensor` of shape `(batch_size, num_patches)`, *optional*):
             Boolean masked positions. Indicates which patches are masked (1) and which aren't (0).
         """
+        # FIXME: output_hidden_states must be popped manually here because SwinEncoder takes it as an
+        # explicit argument (not via **kwargs), so it is not captured by the @capture_outputs decorator.
         output_hidden_states = kwargs.pop("output_hidden_states", self.config.output_hidden_states)
 
         embedding_output, input_dimensions = self.embeddings(
@@ -1076,9 +1079,6 @@ class SwinBackbone(BackboneMixin, SwinPreTrainedModel):
 
         # Initialize weights and apply final processing
         self.post_init()
-
-    def get_input_embeddings(self):
-        return self.embeddings.patch_embeddings
 
     @can_return_tuple
     @filter_output_hidden_states

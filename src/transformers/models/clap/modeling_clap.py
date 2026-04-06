@@ -644,7 +644,7 @@ class ClapAudioStage(GradientCheckpointingLayer):
 
         # patch merging layer
         if downsample is not None:
-            self.downsample = downsample(input_resolution, dim=dim, norm_layer=nn.LayerNorm)
+            self.downsample = downsample(dim=dim)
         else:
             self.downsample = None
 
@@ -684,27 +684,19 @@ class ClapAudioPatchMerging(nn.Module):
     Patch Merging Layer.
 
     Args:
-        input_resolution (`tuple[int]`):
-            Resolution of input feature.
         dim (`int`):
             Number of input channels.
-        norm_layer (`nn.Module`, *optional*, defaults to `nn.LayerNorm`):
-            Normalization layer class.
     """
 
-    def __init__(self, input_resolution: tuple[int], dim: int, norm_layer: nn.Module = nn.LayerNorm) -> None:
+    def __init__(self, dim: int) -> None:
         super().__init__()
-        self.input_resolution = input_resolution
-        self.dim = dim
         self.reduction = nn.Linear(4 * dim, 2 * dim, bias=False)
-        self.norm = norm_layer(4 * dim)
+        self.norm = nn.LayerNorm(4 * dim)
 
-    def maybe_pad(self, input_feature, height, width):
-        should_pad = (height % 2 == 1) or (width % 2 == 1)
-        if should_pad:
-            pad_values = (0, 0, 0, width % 2, 0, height % 2)
-            input_feature = nn.functional.pad(input_feature, pad_values)
-
+    def maybe_pad(self, input_feature: torch.Tensor, height: int, width: int) -> torch.Tensor:
+        """Pad input feature map to be divisible by 2 in both spatial dimensions if needed."""
+        if (height % 2 == 1) or (width % 2 == 1):
+            input_feature = nn.functional.pad(input_feature, (0, 0, 0, width % 2, 0, height % 2))
         return input_feature
 
     def forward(self, input_feature: torch.Tensor, input_dimensions: tuple[int, int]) -> torch.Tensor:

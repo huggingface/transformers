@@ -24,7 +24,6 @@ from dataclasses import dataclass
 
 import torch
 from torch import Tensor, nn
-from torch.nn import CrossEntropyLoss
 
 from ... import initialization as init
 from ...activations import ACT2FN
@@ -107,10 +106,11 @@ class BeitEmbeddings(nn.Module):
         self.patch_embeddings = BeitPatchEmbeddings(config)
         self.patch_size = config.patch_size
         num_patches = self.patch_embeddings.num_patches
-        if config.use_absolute_position_embeddings:
-            self.position_embeddings = nn.Parameter(torch.zeros(1, num_patches + 1, config.hidden_size))
-        else:
-            self.position_embeddings = None
+        self.position_embeddings = (
+            nn.Parameter(torch.zeros(1, num_patches + 1, config.hidden_size))
+            if config.use_absolute_position_embeddings
+            else None
+        )
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
 
     def interpolate_pos_encoding(self, embeddings: torch.Tensor, height: int, width: int) -> torch.Tensor:
@@ -300,7 +300,7 @@ class BeitAttention(nn.Module):
         super().__init__()
         self.config = config
         self.num_attention_heads = config.num_attention_heads
-        self.head_dim = config.hidden_size // config.num_attention_heads
+        self.head_dim = getattr(config, "head_dim", config.hidden_size // config.num_attention_heads)
         self.attention_dropout = config.attention_probs_dropout_prob
         self.scaling = self.head_dim**-0.5
         self.is_causal = False
@@ -388,12 +388,14 @@ class BeitLayer(GradientCheckpointingLayer):
 
     def __init__(self, config: BeitConfig, drop_path_rate: float = 0.0):
         super().__init__()
-        self.config = config
-        self.drop_path = BeitDropPath(drop_path_rate) if drop_path_rate > 0.0 else nn.Identity()
         self.attention = BeitAttention(config)
         self.layernorm_before = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.layernorm_after = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.mlp = BeitMLP(config)
+        self.dropout = nn.Dropout(config.hidden_dropout_prob)
+        self.patch_size = config.patch_size
+        self.drop_path = BeitDropPath(drop_path_rate) if drop_path_rate > 0.0 else nn.Identity()
+
         init_values = config.layer_scale_init_value
         self.lambda_1 = (
             nn.Parameter(init_values * torch.ones(config.hidden_size), requires_grad=True) if init_values > 0 else 1.0
@@ -402,7 +404,6 @@ class BeitLayer(GradientCheckpointingLayer):
             nn.Parameter(init_values * torch.ones(config.hidden_size), requires_grad=True) if init_values > 0 else 1.0
         )
         self.relative_position_bias = BeitRelativePositionBias(config) if config.use_relative_position_bias else None
-        self.dropout = nn.Dropout(config.hidden_dropout_prob)
 
     def forward(
         self,
@@ -414,7 +415,7 @@ class BeitLayer(GradientCheckpointingLayer):
     ) -> torch.Tensor:
         if self.relative_position_bias is not None:
             height, width = resolution
-            window_size = (height // self.config.patch_size, width // self.config.patch_size)
+            window_size = (height // self.patch_size, width // self.patch_size)
             relative_position_bias = self.relative_position_bias(
                 window_size, interpolate_pos_encoding, dim_size=hidden_states.shape[1]
             )
@@ -422,6 +423,7 @@ class BeitLayer(GradientCheckpointingLayer):
                 relative_position_bias + attention_mask if attention_mask is not None else relative_position_bias
             )
 
+        # Self Attention
         residual = hidden_states
         hidden_states = self.layernorm_before(hidden_states)
         hidden_states, _ = self.attention(
@@ -432,6 +434,8 @@ class BeitLayer(GradientCheckpointingLayer):
         hidden_states = self.dropout(hidden_states)
         hidden_states = self.lambda_1 * hidden_states
         hidden_states = self.drop_path(hidden_states) + residual
+
+        # Fully Connected
         residual = hidden_states
         hidden_states = self.layernorm_after(hidden_states)
         hidden_states = self.mlp(hidden_states)
@@ -446,20 +450,23 @@ class BeitLayer(GradientCheckpointingLayer):
 class BeitPreTrainedModel(PreTrainedModel):
     config: BeitConfig
     base_model_prefix = "beit"
-    input_modalities = ("image",)
     main_input_name = "pixel_values"
+    input_modalities = ("image",)
     supports_gradient_checkpointing = True
     _no_split_modules = ["BeitLayer"]
-    _keys_to_ignore_on_load_unexpected = [r".*relative_position_index.*"]
     _supports_sdpa = True
     _supports_flash_attn = True
     _supports_flex_attn = True
     _supports_attention_backend = True
+    _can_compile_fullgraph = True
     _can_record_outputs = {
         "hidden_states": BeitLayer,
         "attentions": BeitAttention,
     }
+    _input_embed_layer = "patch_embeddings"
+    _keys_to_ignore_on_load_unexpected = [r".*relative_position_index.*"]
 
+    @torch.no_grad()
     def _init_weights(self, module):
         """Initialize the weights"""
         super()._init_weights(module)
@@ -503,9 +510,6 @@ class BeitModel(BeitPreTrainedModel):
 
         # Initialize weights and apply final processing
         self.post_init()
-
-    def get_input_embeddings(self):
-        return self.embeddings.patch_embeddings
 
     @merge_with_config_defaults
     @capture_outputs(tie_last_hidden_states=False)
@@ -653,7 +657,7 @@ class BeitForMaskedImageModeling(BeitPreTrainedModel):
 
         masked_lm_loss = None
         if labels is not None:
-            loss_fct = CrossEntropyLoss()  # -100 index = padding token
+            loss_fct = nn.CrossEntropyLoss()  # -100 index = padding token
             masked_lm_loss = loss_fct(prediction_scores[bool_masked_pos], labels)
 
         return MaskedLMOutput(
@@ -710,7 +714,12 @@ class BeitForImageClassification(BeitPreTrainedModel):
 
         loss = None
         if labels is not None:
-            loss = self.loss_function(labels, logits, self.config)
+            loss = self.loss_function(
+                labels,
+                logits,
+                ignore_index=self.config.semantic_loss_ignore_index,
+                auxiliary_loss_weight=self.config.auxiliary_loss_weight,
+            )
 
         return ImageClassifierOutput(
             loss=loss,
@@ -760,17 +769,12 @@ class BeitConvModule(nn.Module):
 class BeitPyramidPoolingBlock(nn.Module):
     def __init__(self, pool_scale: int, in_channels: int, channels: int) -> None:
         super().__init__()
-        self.layers = [
-            nn.AdaptiveAvgPool2d(pool_scale),
-            BeitConvModule(in_channels, channels, kernel_size=1),
-        ]
-        for i, layer in enumerate(self.layers):
-            self.add_module(str(i), layer)
+        self.pooling = nn.AdaptiveAvgPool2d(pool_scale)
+        self.conv = BeitConvModule(in_channels, channels, kernel_size=1)
 
     def forward(self, input: torch.Tensor) -> torch.Tensor:
-        hidden_state = input
-        for layer in self.layers:
-            hidden_state = layer(hidden_state)
+        hidden_state = self.pooling(input)
+        hidden_state = self.conv(hidden_state)
         return hidden_state
 
 
@@ -783,32 +787,31 @@ class BeitPyramidPoolingModule(nn.Module):
             Module.
         in_channels (int): Input channels.
         channels (int): Channels after modules, before conv_seg.
-        align_corners (bool): align_corners argument of F.interpolate.
 
     Based on OpenMMLab's implementation, found in https://github.com/open-mmlab/mmsegmentation.
     """
 
-    def __init__(self, pool_scales: tuple[int, ...], in_channels: int, channels: int, align_corners: bool) -> None:
+    def __init__(self, pool_scales: tuple[int, ...], in_channels: int, channels: int) -> None:
         super().__init__()
         self.pool_scales = pool_scales
-        self.align_corners = align_corners
         self.in_channels = in_channels
         self.channels = channels
-        self.blocks = []
-        for i, pool_scale in enumerate(pool_scales):
-            block = BeitPyramidPoolingBlock(pool_scale=pool_scale, in_channels=in_channels, channels=channels)
-            self.blocks.append(block)
-            self.add_module(str(i), block)
+        self.blocks = nn.ModuleList(
+            [
+                BeitPyramidPoolingBlock(pool_scale=pool_scale, in_channels=in_channels, channels=channels)
+                for pool_scale in pool_scales
+            ]
+        )
 
-    def forward(self, x: torch.Tensor) -> list[torch.Tensor]:
-        ppm_outs = []
-        for ppm in self.blocks:
-            ppm_out = ppm(x)
-            upsampled_ppm_out = nn.functional.interpolate(
-                ppm_out, size=x.size()[2:], mode="bilinear", align_corners=self.align_corners
+    def forward(self, hidden_states: torch.Tensor) -> list[torch.Tensor]:
+        outputs = []
+        for block in self.blocks:
+            pooled = block(hidden_states)
+            upsampled = nn.functional.interpolate(
+                pooled, size=hidden_states.size()[2:], mode="bilinear", align_corners=False
             )
-            ppm_outs.append(upsampled_ppm_out)
-        return ppm_outs
+            outputs.append(upsampled)
+        return outputs
 
 
 class BeitUperHead(nn.Module):
@@ -825,7 +828,6 @@ class BeitUperHead(nn.Module):
         self.pool_scales = config.pool_scales  # e.g. (1, 2, 3, 6)
         self.in_channels = [config.hidden_size] * 4  # e.g. [768, 768, 768, 768]
         self.channels = config.hidden_size
-        self.align_corners = False
         self.classifier = nn.Conv2d(self.channels, config.num_labels, kernel_size=1)
 
         # PSP Module
@@ -833,7 +835,6 @@ class BeitUperHead(nn.Module):
             self.pool_scales,
             self.in_channels[-1],
             self.channels,
-            align_corners=self.align_corners,
         )
         self.bottleneck = BeitConvModule(
             self.in_channels[-1] + len(self.pool_scales) * self.channels,
@@ -845,10 +846,8 @@ class BeitUperHead(nn.Module):
         self.lateral_convs = nn.ModuleList()
         self.fpn_convs = nn.ModuleList()
         for in_channels in self.in_channels[:-1]:  # skip the top layer
-            l_conv = BeitConvModule(in_channels, self.channels, kernel_size=1)
-            fpn_conv = BeitConvModule(self.channels, self.channels, kernel_size=3, padding=1)
-            self.lateral_convs.append(l_conv)
-            self.fpn_convs.append(fpn_conv)
+            self.lateral_convs.append(BeitConvModule(in_channels, self.channels, kernel_size=1))
+            self.fpn_convs.append(BeitConvModule(self.channels, self.channels, kernel_size=3, padding=1))
 
         self.fpn_bottleneck = BeitConvModule(
             len(self.in_channels) * self.channels,
@@ -857,18 +856,16 @@ class BeitUperHead(nn.Module):
             padding=1,
         )
 
-    def psp_forward(self, inputs):
-        x = inputs[-1]
-        psp_outs = [x]
-        psp_outs.extend(self.psp_modules(x))
-        psp_outs = torch.cat(psp_outs, dim=1)
-        output = self.bottleneck(psp_outs)
+    def psp_forward(self, hidden_states: list[torch.Tensor]) -> torch.Tensor:
+        x = hidden_states[-1]
+        hidden_states = torch.cat([x, *self.psp_modules(x)], dim=1)
+        return self.bottleneck(hidden_states)
 
-        return output
-
-    def forward(self, encoder_hidden_states: torch.Tensor) -> torch.Tensor:
+    def forward(self, encoder_hidden_states: list[torch.Tensor]) -> torch.Tensor:
         # build laterals
-        laterals = [lateral_conv(encoder_hidden_states[i]) for i, lateral_conv in enumerate(self.lateral_convs)]
+        laterals = [
+            lateral_conv(hidden_state) for lateral_conv, hidden_state in zip(self.lateral_convs, encoder_hidden_states)
+        ]
 
         laterals.append(self.psp_forward(encoder_hidden_states))
 
@@ -877,17 +874,19 @@ class BeitUperHead(nn.Module):
         for i in range(used_backbone_levels - 1, 0, -1):
             prev_shape = laterals[i - 1].shape[2:]
             laterals[i - 1] = laterals[i - 1] + nn.functional.interpolate(
-                laterals[i], size=prev_shape, mode="bilinear", align_corners=self.align_corners
+                laterals[i], size=prev_shape, mode="bilinear", align_corners=False
             )
 
         # build outputs
-        fpn_outs = [self.fpn_convs[i](laterals[i]) for i in range(used_backbone_levels - 1)]
+        fpn_outs = []
+        for i in range(used_backbone_levels - 1):
+            fpn_outs.append(self.fpn_convs[i](laterals[i]))
         # append psp feature
         fpn_outs.append(laterals[-1])
 
         for i in range(used_backbone_levels - 1, 0, -1):
             fpn_outs[i] = nn.functional.interpolate(
-                fpn_outs[i], size=fpn_outs[0].shape[2:], mode="bilinear", align_corners=self.align_corners
+                fpn_outs[i], size=fpn_outs[0].shape[2:], mode="bilinear", align_corners=False
             )
         fpn_outs = torch.cat(fpn_outs, dim=1)
         output = self.fpn_bottleneck(fpn_outs)
@@ -922,22 +921,23 @@ class BeitFCNHead(nn.Module):
         self.in_index = in_index
 
         conv_padding = (kernel_size // 2) * dilation
-        convs = []
-        convs.append(
-            BeitConvModule(
-                self.in_channels, self.channels, kernel_size=kernel_size, padding=conv_padding, dilation=dilation
-            )
-        )
-        for i in range(self.num_convs - 1):
-            convs.append(
+        self.convs = nn.ModuleList()
+        if self.num_convs > 0:
+            self.convs.append(
                 BeitConvModule(
-                    self.channels, self.channels, kernel_size=kernel_size, padding=conv_padding, dilation=dilation
+                    self.in_channels, self.channels, kernel_size=kernel_size, padding=conv_padding, dilation=dilation
                 )
             )
-        if self.num_convs == 0:
-            self.convs = nn.Identity()
-        else:
-            self.convs = nn.Sequential(*convs)
+            for _ in range(self.num_convs - 1):
+                self.convs.append(
+                    BeitConvModule(
+                        self.channels,
+                        self.channels,
+                        kernel_size=kernel_size,
+                        padding=conv_padding,
+                        dilation=dilation,
+                    )
+                )
         if self.concat_input:
             self.conv_cat = BeitConvModule(
                 self.in_channels + self.channels, self.channels, kernel_size=kernel_size, padding=kernel_size // 2
@@ -945,14 +945,34 @@ class BeitFCNHead(nn.Module):
 
         self.classifier = nn.Conv2d(self.channels, config.num_labels, kernel_size=1)
 
-    def forward(self, encoder_hidden_states: torch.Tensor) -> torch.Tensor:
+    def forward(self, encoder_hidden_states: list[torch.Tensor]) -> torch.Tensor:
         # just take the relevant feature maps
         hidden_states = encoder_hidden_states[self.in_index]
-        output = self.convs(hidden_states)
+        output = hidden_states
+        for conv in self.convs:
+            output = conv(output)
         if self.concat_input:
             output = self.conv_cat(torch.cat([hidden_states, output], dim=1))
         output = self.classifier(output)
         return output
+
+
+class BeitFPNUpBlock(nn.Module):
+    """4x upsampling block: ConvTranspose → BN → GELU → ConvTranspose."""
+
+    def __init__(self, hidden_size: int) -> None:
+        super().__init__()
+        self.conv_transpose1 = nn.ConvTranspose2d(hidden_size, hidden_size, kernel_size=2, stride=2)
+        self.bn = nn.BatchNorm2d(hidden_size)
+        self.activation = nn.GELU()
+        self.conv_transpose2 = nn.ConvTranspose2d(hidden_size, hidden_size, kernel_size=2, stride=2)
+
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        hidden_states = self.conv_transpose1(hidden_states)
+        hidden_states = self.bn(hidden_states)
+        hidden_states = self.activation(hidden_states)
+        hidden_states = self.conv_transpose2(hidden_states)
+        return hidden_states
 
 
 class BeitFPNNeck(nn.Module):
@@ -964,13 +984,8 @@ class BeitFPNNeck(nn.Module):
     def __init__(self, config: BeitConfig):
         super().__init__()
         hidden_size = config.hidden_size
-        self.fpn1 = nn.Sequential(
-            nn.ConvTranspose2d(hidden_size, hidden_size, kernel_size=2, stride=2),
-            nn.BatchNorm2d(hidden_size),
-            nn.GELU(),
-            nn.ConvTranspose2d(hidden_size, hidden_size, kernel_size=2, stride=2),
-        )
-        self.fpn2 = nn.Sequential(nn.ConvTranspose2d(hidden_size, hidden_size, kernel_size=2, stride=2))
+        self.fpn1 = BeitFPNUpBlock(hidden_size)
+        self.fpn2 = nn.ConvTranspose2d(hidden_size, hidden_size, kernel_size=2, stride=2)
         self.fpn4 = nn.MaxPool2d(kernel_size=2, stride=2)
 
     def forward(self, feature_maps: tuple[torch.Tensor, ...]) -> tuple[torch.Tensor, ...]:
@@ -1005,26 +1020,8 @@ class BeitForSemanticSegmentation(BeitPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    def compute_loss(self, logits, auxiliary_logits, labels):
-        # upsample logits to the images' original size
-        upsampled_logits = nn.functional.interpolate(
-            logits, size=labels.shape[-2:], mode="bilinear", align_corners=False
-        )
-        if auxiliary_logits is not None:
-            upsampled_auxiliary_logits = nn.functional.interpolate(
-                auxiliary_logits, size=labels.shape[-2:], mode="bilinear", align_corners=False
-            )
-        # compute weighted loss
-        loss_fct = CrossEntropyLoss(ignore_index=self.config.semantic_loss_ignore_index)
-        main_loss = loss_fct(upsampled_logits, labels)
-        loss = main_loss
-        if auxiliary_logits is not None:
-            auxiliary_loss = loss_fct(upsampled_auxiliary_logits, labels)
-            loss += self.config.auxiliary_loss_weight * auxiliary_loss
-
-        return loss
-
     @can_return_tuple
+    @filter_output_hidden_states
     @auto_docstring
     def forward(
         self,
@@ -1058,11 +1055,10 @@ class BeitForSemanticSegmentation(BeitPreTrainedModel):
         ```"""
         if labels is not None and self.config.num_labels == 1:
             raise ValueError("The number of labels should be greater than one")
-        output_hidden_states = kwargs.pop("output_hidden_states", self.config.output_hidden_states)
+        kwargs["output_hidden_states"] = True
         outputs = self.beit(
             pixel_values,
             interpolate_pos_encoding=interpolate_pos_encoding,
-            output_hidden_states=True,
             **kwargs,
         )
 
@@ -1087,12 +1083,12 @@ class BeitForSemanticSegmentation(BeitPreTrainedModel):
 
         loss = None
         if labels is not None:
-            loss = self.compute_loss(logits, auxiliary_logits, labels)
+            loss = self.loss_function(logits, labels, self.config, auxiliary_logits=auxiliary_logits, **kwargs)
 
         return SemanticSegmenterOutput(
             loss=loss,
             logits=logits,
-            hidden_states=outputs.hidden_states if output_hidden_states else None,
+            hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
 
@@ -1103,8 +1099,6 @@ class BeitForSemanticSegmentation(BeitPreTrainedModel):
     """
 )
 class BeitBackbone(BackboneMixin, BeitPreTrainedModel):
-    _checkpoint_conversion_mapping = {"^embeddings": "encoder.embeddings"}
-
     def __init__(self, config):
         super().__init__(config)
 
@@ -1112,12 +1106,6 @@ class BeitBackbone(BackboneMixin, BeitPreTrainedModel):
         self.encoder = BeitModel(config, add_pooling_layer=False)
 
         if config.add_fpn:
-            if len(self.config.out_indices) != 4:
-                raise ValueError(
-                    "BeitBackbone requires config.out_indices to be a list of 4 integers, "
-                    "specifying which features to use from the backbone. One can use [3, 5, 7, 11] in case of "
-                    "a base-sized architecture."
-                )
             self.fpn = BeitFPNNeck(config)
 
         # initialize weights and apply final processing

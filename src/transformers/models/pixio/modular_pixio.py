@@ -202,9 +202,6 @@ class PixioModel(PixioPreTrainedModel):
 
         self.post_init()
 
-    def get_input_embeddings(self) -> PixioPatchEmbeddings:
-        return self.embeddings.patch_embeddings
-
     @merge_with_config_defaults
     @capture_outputs(tie_last_hidden_states=False)
     @auto_docstring

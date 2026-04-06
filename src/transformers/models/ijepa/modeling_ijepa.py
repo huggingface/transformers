@@ -174,7 +174,7 @@ class IJepaAttention(nn.Module):
         super().__init__()
         self.config = config
         self.num_attention_heads = config.num_attention_heads
-        self.head_dim = config.hidden_size // config.num_attention_heads
+        self.head_dim = getattr(config, "head_dim", config.hidden_size // config.num_attention_heads)
         self.attention_dropout = config.attention_probs_dropout_prob
         self.scaling = self.head_dim**-0.5
         self.is_causal = False
@@ -249,12 +249,14 @@ class IJepaLayer(GradientCheckpointingLayer):
         attention_mask: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> torch.Tensor:
+        # Self Attention
         residual = hidden_states
         hidden_states = self.layernorm_before(hidden_states)
         hidden_states, _ = self.attention(hidden_states, attention_mask, **kwargs)
         hidden_states = self.dropout(hidden_states)
         hidden_states = hidden_states + residual
 
+        # Fully Connected
         residual = hidden_states
         hidden_states = self.layernorm_after(hidden_states)
         hidden_states = self.mlp(hidden_states)
@@ -281,6 +283,7 @@ class IJepaPreTrainedModel(PreTrainedModel):
         "hidden_states": IJepaLayer,
         "attentions": IJepaAttention,
     }
+    _input_embed_layer = "patch_embeddings"
 
     @torch.no_grad()
     def _init_weights(self, module):
@@ -332,9 +335,6 @@ class IJepaModel(IJepaPreTrainedModel):
 
         # Initialize weights and apply final processing
         self.post_init()
-
-    def get_input_embeddings(self) -> IJepaPatchEmbeddings:
-        return self.embeddings.patch_embeddings
 
     @merge_with_config_defaults
     @capture_outputs(tie_last_hidden_states=False)

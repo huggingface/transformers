@@ -548,8 +548,21 @@ def _build_checkpoint_conversion_mapping():
     mapping["beit"] += [
         WeightRenaming("attention.attention.relative_position_bias.", "relative_position_bias."),
         WeightRenaming("encoder.relative_position_bias", "shared_position_bias"),
-        WeightRenaming("fpn1.", "fpn.fpn1."),
-        WeightRenaming("fpn2.", "fpn.fpn2."),
+        # Checkpoints may use top-level `fpn1.*` / `fpn2.*` (anchor avoids matching inside `fpn.fpn1`).
+        WeightRenaming(r"^fpn1\.", "fpn.fpn1."),
+        WeightRenaming(r"^fpn2\.", "fpn.fpn2."),
+        WeightRenaming(r"fpn\.fpn1\.0\.", "fpn.fpn1.conv_transpose1."),
+        WeightRenaming(r"fpn\.fpn1\.1\.", "fpn.fpn1.bn."),
+        WeightRenaming(r"fpn\.fpn1\.3\.", "fpn.fpn1.conv_transpose2."),
+        WeightRenaming(r"fpn\.fpn2\.0\.", "fpn.fpn2."),
+        WeightRenaming(
+            r"decode_head\.psp_modules\.(\d+)\.1\.conv\.",
+            r"decode_head.psp_modules.blocks.\1.conv.conv.",
+        ),
+        WeightRenaming(
+            r"decode_head\.psp_modules\.(\d+)\.1\.bn\.",
+            r"decode_head.psp_modules.blocks.\1.conv.bn.",
+        ),
     ]
 
     mapping["pixio"] = mapping["vit"].copy()

@@ -174,7 +174,7 @@ class PixioAttention(nn.Module):
         super().__init__()
         self.config = config
         self.num_attention_heads = config.num_attention_heads
-        self.head_dim = config.hidden_size // config.num_attention_heads
+        self.head_dim = getattr(config, "head_dim", config.hidden_size // config.num_attention_heads)
         self.attention_dropout = config.attention_probs_dropout_prob
         self.scaling = self.head_dim**-0.5
         self.is_causal = False
@@ -309,6 +309,7 @@ class PixioPreTrainedModel(PreTrainedModel):
         "hidden_states": PixioLayer,
         "attentions": PixioAttention,
     }
+    _input_embed_layer = "patch_embeddings"
 
     @torch.no_grad()
     def _init_weights(self, module):
@@ -321,7 +322,8 @@ class PixioPreTrainedModel(PreTrainedModel):
             init.zeros_(module.bias)
             init.ones_(module.weight)
         elif isinstance(module, PixioEmbeddings):
-            init.trunc_normal_(module.position_embeddings, mean=0.0, std=self.config.initializer_range)
+            if module.position_embeddings is not None:
+                init.trunc_normal_(module.position_embeddings, mean=0.0, std=self.config.initializer_range)
             init.trunc_normal_(module.cls_token, mean=0.0, std=self.config.initializer_range)
             if module.mask_token is not None:
                 init.zeros_(module.mask_token)
@@ -339,9 +341,6 @@ class PixioModel(PixioPreTrainedModel):
         self.layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
 
         self.post_init()
-
-    def get_input_embeddings(self) -> PixioPatchEmbeddings:
-        return self.embeddings.patch_embeddings
 
     @merge_with_config_defaults
     @capture_outputs(tie_last_hidden_states=False)

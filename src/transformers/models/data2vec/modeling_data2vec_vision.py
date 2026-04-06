@@ -894,17 +894,12 @@ class Data2VecVisionConvModule(nn.Module):
 class Data2VecVisionPyramidPoolingBlock(nn.Module):
     def __init__(self, pool_scale: int, in_channels: int, channels: int) -> None:
         super().__init__()
-        self.layers = [
-            nn.AdaptiveAvgPool2d(pool_scale),
-            Data2VecVisionConvModule(in_channels, channels, kernel_size=1),
-        ]
-        for i, layer in enumerate(self.layers):
-            self.add_module(str(i), layer)
+        self.pooling = nn.AdaptiveAvgPool2d(pool_scale)
+        self.conv = Data2VecVisionConvModule(in_channels, channels, kernel_size=1)
 
     def forward(self, input: torch.Tensor) -> torch.Tensor:
-        hidden_state = input
-        for layer in self.layers:
-            hidden_state = layer(hidden_state)
+        hidden_state = self.pooling(input)
+        hidden_state = self.conv(hidden_state)
         return hidden_state
 
 
@@ -918,34 +913,31 @@ class Data2VecVisionPyramidPoolingModule(nn.Module):
             Module.
         in_channels (int): Input channels.
         channels (int): Channels after modules, before conv_seg.
-        align_corners (bool): align_corners argument of F.interpolate.
 
     Based on OpenMMLab's implementation, found in https://github.com/open-mmlab/mmsegmentation.
     """
 
-    def __init__(self, pool_scales: tuple[int, ...], in_channels: int, channels: int, align_corners: bool) -> None:
+    def __init__(self, pool_scales: tuple[int, ...], in_channels: int, channels: int) -> None:
         super().__init__()
         self.pool_scales = pool_scales
-        self.align_corners = align_corners
         self.in_channels = in_channels
         self.channels = channels
-        self.blocks = []
-        for i, pool_scale in enumerate(pool_scales):
-            block = Data2VecVisionPyramidPoolingBlock(
-                pool_scale=pool_scale, in_channels=in_channels, channels=channels
-            )
-            self.blocks.append(block)
-            self.add_module(str(i), block)
+        self.blocks = nn.ModuleList(
+            [
+                Data2VecVisionPyramidPoolingBlock(pool_scale=pool_scale, in_channels=in_channels, channels=channels)
+                for pool_scale in pool_scales
+            ]
+        )
 
-    def forward(self, x: torch.Tensor) -> list[torch.Tensor]:
-        ppm_outs = []
-        for ppm in self.blocks:
-            ppm_out = ppm(x)
-            upsampled_ppm_out = nn.functional.interpolate(
-                ppm_out, size=x.size()[2:], mode="bilinear", align_corners=self.align_corners
+    def forward(self, hidden_states: torch.Tensor) -> list[torch.Tensor]:
+        outputs = []
+        for block in self.blocks:
+            pooled = block(hidden_states)
+            upsampled = nn.functional.interpolate(
+                pooled, size=hidden_states.size()[2:], mode="bilinear", align_corners=False
             )
-            ppm_outs.append(upsampled_ppm_out)
-        return ppm_outs
+            outputs.append(upsampled)
+        return outputs
 
 
 # Copied from transformers.models.beit.modeling_beit.BeitUperHead with Beit->Data2VecVision
@@ -963,7 +955,6 @@ class Data2VecVisionUperHead(nn.Module):
         self.pool_scales = config.pool_scales  # e.g. (1, 2, 3, 6)
         self.in_channels = [config.hidden_size] * 4  # e.g. [768, 768, 768, 768]
         self.channels = config.hidden_size
-        self.align_corners = False
         self.classifier = nn.Conv2d(self.channels, config.num_labels, kernel_size=1)
 
         # PSP Module
@@ -971,7 +962,6 @@ class Data2VecVisionUperHead(nn.Module):
             self.pool_scales,
             self.in_channels[-1],
             self.channels,
-            align_corners=self.align_corners,
         )
         self.bottleneck = Data2VecVisionConvModule(
             self.in_channels[-1] + len(self.pool_scales) * self.channels,
@@ -983,10 +973,8 @@ class Data2VecVisionUperHead(nn.Module):
         self.lateral_convs = nn.ModuleList()
         self.fpn_convs = nn.ModuleList()
         for in_channels in self.in_channels[:-1]:  # skip the top layer
-            l_conv = Data2VecVisionConvModule(in_channels, self.channels, kernel_size=1)
-            fpn_conv = Data2VecVisionConvModule(self.channels, self.channels, kernel_size=3, padding=1)
-            self.lateral_convs.append(l_conv)
-            self.fpn_convs.append(fpn_conv)
+            self.lateral_convs.append(Data2VecVisionConvModule(in_channels, self.channels, kernel_size=1))
+            self.fpn_convs.append(Data2VecVisionConvModule(self.channels, self.channels, kernel_size=3, padding=1))
 
         self.fpn_bottleneck = Data2VecVisionConvModule(
             len(self.in_channels) * self.channels,
@@ -995,18 +983,16 @@ class Data2VecVisionUperHead(nn.Module):
             padding=1,
         )
 
-    def psp_forward(self, inputs):
-        x = inputs[-1]
-        psp_outs = [x]
-        psp_outs.extend(self.psp_modules(x))
-        psp_outs = torch.cat(psp_outs, dim=1)
-        output = self.bottleneck(psp_outs)
+    def psp_forward(self, hidden_states: list[torch.Tensor]) -> torch.Tensor:
+        x = hidden_states[-1]
+        hidden_states = torch.cat([x, *self.psp_modules(x)], dim=1)
+        return self.bottleneck(hidden_states)
 
-        return output
-
-    def forward(self, encoder_hidden_states: torch.Tensor) -> torch.Tensor:
+    def forward(self, encoder_hidden_states: list[torch.Tensor]) -> torch.Tensor:
         # build laterals
-        laterals = [lateral_conv(encoder_hidden_states[i]) for i, lateral_conv in enumerate(self.lateral_convs)]
+        laterals = [
+            lateral_conv(hidden_state) for lateral_conv, hidden_state in zip(self.lateral_convs, encoder_hidden_states)
+        ]
 
         laterals.append(self.psp_forward(encoder_hidden_states))
 
@@ -1015,17 +1001,19 @@ class Data2VecVisionUperHead(nn.Module):
         for i in range(used_backbone_levels - 1, 0, -1):
             prev_shape = laterals[i - 1].shape[2:]
             laterals[i - 1] = laterals[i - 1] + nn.functional.interpolate(
-                laterals[i], size=prev_shape, mode="bilinear", align_corners=self.align_corners
+                laterals[i], size=prev_shape, mode="bilinear", align_corners=False
             )
 
         # build outputs
-        fpn_outs = [self.fpn_convs[i](laterals[i]) for i in range(used_backbone_levels - 1)]
+        fpn_outs = []
+        for i in range(used_backbone_levels - 1):
+            fpn_outs.append(self.fpn_convs[i](laterals[i]))
         # append psp feature
         fpn_outs.append(laterals[-1])
 
         for i in range(used_backbone_levels - 1, 0, -1):
             fpn_outs[i] = nn.functional.interpolate(
-                fpn_outs[i], size=fpn_outs[0].shape[2:], mode="bilinear", align_corners=self.align_corners
+                fpn_outs[i], size=fpn_outs[0].shape[2:], mode="bilinear", align_corners=False
             )
         fpn_outs = torch.cat(fpn_outs, dim=1)
         output = self.fpn_bottleneck(fpn_outs)
@@ -1065,22 +1053,23 @@ class Data2VecVisionFCNHead(nn.Module):
         self.in_index = in_index
 
         conv_padding = (kernel_size // 2) * dilation
-        convs = []
-        convs.append(
-            Data2VecVisionConvModule(
-                self.in_channels, self.channels, kernel_size=kernel_size, padding=conv_padding, dilation=dilation
-            )
-        )
-        for i in range(self.num_convs - 1):
-            convs.append(
+        self.convs = nn.ModuleList()
+        if self.num_convs > 0:
+            self.convs.append(
                 Data2VecVisionConvModule(
-                    self.channels, self.channels, kernel_size=kernel_size, padding=conv_padding, dilation=dilation
+                    self.in_channels, self.channels, kernel_size=kernel_size, padding=conv_padding, dilation=dilation
                 )
             )
-        if self.num_convs == 0:
-            self.convs = nn.Identity()
-        else:
-            self.convs = nn.Sequential(*convs)
+            for _ in range(self.num_convs - 1):
+                self.convs.append(
+                    Data2VecVisionConvModule(
+                        self.channels,
+                        self.channels,
+                        kernel_size=kernel_size,
+                        padding=conv_padding,
+                        dilation=dilation,
+                    )
+                )
         if self.concat_input:
             self.conv_cat = Data2VecVisionConvModule(
                 self.in_channels + self.channels, self.channels, kernel_size=kernel_size, padding=kernel_size // 2
@@ -1088,10 +1077,12 @@ class Data2VecVisionFCNHead(nn.Module):
 
         self.classifier = nn.Conv2d(self.channels, config.num_labels, kernel_size=1)
 
-    def forward(self, encoder_hidden_states: torch.Tensor) -> torch.Tensor:
+    def forward(self, encoder_hidden_states: list[torch.Tensor]) -> torch.Tensor:
         # just take the relevant feature maps
         hidden_states = encoder_hidden_states[self.in_index]
-        output = self.convs(hidden_states)
+        output = hidden_states
+        for conv in self.convs:
+            output = conv(output)
         if self.concat_input:
             output = self.conv_cat(torch.cat([hidden_states, output], dim=1))
         output = self.classifier(output)

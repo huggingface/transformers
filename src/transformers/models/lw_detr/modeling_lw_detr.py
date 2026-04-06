@@ -86,7 +86,7 @@ class LwDetrViTAttention(nn.Module):
         super().__init__()
         self.config = config
         self.num_attention_heads = config.num_attention_heads
-        self.head_dim = config.hidden_size // config.num_attention_heads
+        self.head_dim = getattr(config, "head_dim", config.hidden_size // config.num_attention_heads)
         self.attention_dropout = config.attention_probs_dropout_prob
         self.scaling = self.head_dim**-0.5
         self.is_causal = False
