@@ -20,14 +20,15 @@ from huggingface_hub.dataclasses import strict
 from torch import nn
 
 from ... import initialization as init
-from ...cache_utils import Cache, DynamicCache
+from ...cache_utils import Cache
 from ...configuration_utils import PreTrainedConfig
 from ...generation import GenerationMixin
-from ...masking_utils import create_causal_mask, create_sliding_window_causal_mask
+from ...masking_utils import create_causal_mask
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPast, BaseModelOutputWithPooling
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
+from ...utils.output_capturing import capture_outputs
 from ..deepseek_v2.configuration_deepseek_v2 import DeepseekV2Config
 from ..deepseek_v2.modeling_deepseek_v2 import (
     DeepseekV2DecoderLayer,
@@ -215,7 +216,12 @@ class DeepseekOcr2CausalLMOutputWithPast(LlavaNextCausalLMOutputWithPast):
 
 
 class DeepseekOcr2PreTrainedModel(LlavaNextPreTrainedModel):
-    _no_split_modules = ["DeepseekOcr2SamVisionLayer", "DeepseekOcr2TextDecoderLayer"]
+    _no_split_modules = [
+        "DeepseekOcr2SamVisionLayer",
+        "DeepseekOcr2SamVisionEncoder",
+        "DeepseekOcr2VisionModel",
+        "DeepseekOcr2TextDecoderLayer",
+    ]
     _can_compile_fullgraph = False
     _supports_flash_attn = False
     _supports_sdpa = False
@@ -301,6 +307,7 @@ class DeepseekOcr2SamVisionEncoder(SamVisionEncoder, DeepseekOcr2PreTrainedModel
         pos_embed = pos_embed.permute(0, 2, 3, 1)
         return pos_embed
 
+    @capture_outputs(tie_last_hidden_states=False)
     def forward(self, pixel_values: torch.FloatTensor, **kwargs) -> BaseModelOutput:
         hidden_states = self.patch_embed(pixel_values)
         if self.pos_embed is not None:
@@ -330,64 +337,32 @@ class DeepseekOcr2VisionEncoder(Qwen2Model):
         super().__init__(config)
         del self.embed_tokens
 
+    @capture_outputs
+    @auto_docstring
     def forward(
         self,
-        input_ids: torch.LongTensor | None = None,
+        inputs_embeds: torch.FloatTensor,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
-        past_key_values: Cache | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
-        use_cache: bool | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ):
-        if input_ids is not None:
-            raise ValueError("`input_ids` is expected to be `None`")
-
-        if use_cache and past_key_values is None:
-            past_key_values = DynamicCache(config=self.config)
-
+    ) -> BaseModelOutputWithPast:
         if position_ids is None:
-            past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
-            position_ids = torch.arange(inputs_embeds.shape[1], device=inputs_embeds.device) + past_seen_tokens
-            position_ids = position_ids.unsqueeze(0)
-
-        # It may already have been prepared by e.g. `generate`
-        if not isinstance(causal_mask_mapping := attention_mask, dict):
-            # Prepare mask arguments
-            mask_kwargs = {
-                "config": self.config,
-                "inputs_embeds": inputs_embeds,
-                "attention_mask": attention_mask,
-                "past_key_values": past_key_values,
-                "position_ids": position_ids,
-            }
-            # Create the masks
-            causal_mask_mapping = {
-                "full_attention": create_causal_mask(**mask_kwargs),
-            }
-            # The sliding window alternating layers are not always activated depending on the config
-            if self.has_sliding_layers:
-                causal_mask_mapping["sliding_attention"] = create_sliding_window_causal_mask(**mask_kwargs)
+            position_ids = torch.arange(inputs_embeds.shape[1], device=inputs_embeds.device).unsqueeze(0)
 
         hidden_states = inputs_embeds
         position_embeddings = self.rotary_emb(hidden_states, position_ids)
 
-        for i, decoder_layer in enumerate(self.layers[: self.config.num_hidden_layers]):
+        for decoder_layer in self.layers[: self.config.num_hidden_layers]:
             hidden_states = decoder_layer(
                 hidden_states,
-                attention_mask=causal_mask_mapping[self.config.layer_types[i]],
+                attention_mask=attention_mask,
                 position_embeddings=position_embeddings,
                 position_ids=position_ids,
-                past_key_values=past_key_values,
-                use_cache=use_cache,
                 **kwargs,
             )
 
         hidden_states = self.norm(hidden_states)
-        return BaseModelOutputWithPast(
-            last_hidden_state=hidden_states,
-            past_key_values=past_key_values if use_cache else None,
-        )
+        return BaseModelOutputWithPast(last_hidden_state=hidden_states)
 
 
 class DeepseekOcr2Projector(nn.Module):
@@ -406,38 +381,23 @@ class DeepseekOcr2Projector(nn.Module):
         return self.proj(x)
 
 
-def _create_deepseek_ocr2_hybrid_mask(
-    token_type_ids: torch.Tensor,
-    dtype: torch.dtype,
-    device: torch.device,
-) -> torch.Tensor:
+def token_type_ids_mask_function(token_type_ids: torch.Tensor):
     """
-    Create hybrid attention mask based on token_type_ids.
-    - type_id=0 (image): bidirectional (attend to all image tokens)
-    - type_id=1 (query): causal (attend to images + preceding queries)
+    Creates an or_mask_function for `create_causal_mask` that allows
+    bidirectional attention between image tokens (type_id=0).
 
-    Returns: [batch_size, 1, seq_len, seq_len] attention mask
+    Args:
+        token_type_ids: `(batch_size, seq_len)` tensor where 0=image, 1=query.
+
+    Returns:
+        A mask function compatible with `create_causal_mask(or_mask_function=...)`.
     """
-    batch_size, seq_len = token_type_ids.shape
-    min_dtype = torch.finfo(dtype).min
-
     is_image = token_type_ids == 0
-    is_query = token_type_ids == 1
 
-    target_is_image = is_image.unsqueeze(1)  # [B, 1, seq_len]
-    source_is_query = is_query.unsqueeze(2)  # [B, seq_len, 1]
-    target_is_query = is_query.unsqueeze(1)  # [B, 1, seq_len]
+    def inner_mask(batch_idx: int, head_idx: int, q_idx: int, kv_idx: int) -> bool:
+        return is_image[batch_idx, q_idx] & is_image[batch_idx, kv_idx]
 
-    # Causal mask for queries
-    causal_mask = torch.tril(torch.ones((seq_len, seq_len), dtype=torch.bool, device=device)).unsqueeze(0)
-
-    query_causal_allowed = source_is_query & target_is_query & causal_mask
-    allowed = target_is_image | query_causal_allowed
-
-    mask = torch.full((batch_size, seq_len, seq_len), min_dtype, dtype=dtype, device=device)
-    mask.masked_fill_(allowed, 0.0)
-
-    return mask.unsqueeze(1)
+    return inner_mask
 
 
 class DeepseekOcr2VisionModel(DeepseekOcr2PreTrainedModel):
@@ -477,7 +437,14 @@ class DeepseekOcr2VisionModel(DeepseekOcr2PreTrainedModel):
             ],
             dim=1,
         )
-        hybrid_mask = _create_deepseek_ocr2_hybrid_mask(token_type_ids, dtype=combined.dtype, device=combined.device)
+
+        hybrid_mask = create_causal_mask(
+            config=self.config,
+            inputs_embeds=combined,
+            attention_mask=None,
+            past_key_values=None,
+            or_mask_function=token_type_ids_mask_function(token_type_ids),
+        )
 
         encoder_outputs = self.vision_encoder(
             inputs_embeds=combined,
