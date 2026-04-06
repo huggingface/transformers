@@ -244,6 +244,7 @@ class ContinuousBatchingIOs:
         other.total_seqlen_q = self.total_seqlen_q
         other.max_seqlen_q = self.max_seqlen_q
         other.max_seqlen_k = dict(self.max_seqlen_k.items())
+        # Graph captures depend on these padded scalar bounds too, so async transfers must mirror them with tensors.
         other.graph_max_seqlen_q = self.graph_max_seqlen_q
         other.graph_max_seqlen_k = dict(self.graph_max_seqlen_k.items())
         # Transfer static tensors
@@ -551,6 +552,7 @@ class ContinuousBatchingIOs:
         return self.carry_over_ids, self.output_ids, self.output_ids
 
     def set_graph_bounds(self, max_seqlen_q: int, max_seqlen_k: int | dict[str, int]) -> None:
+        """Store the padded max_seqlen kwargs that the next graph capture or replay must see."""
         self.graph_max_seqlen_q = max_seqlen_q
         if isinstance(max_seqlen_k, dict):
             self.graph_max_seqlen_k.update(max_seqlen_k)
@@ -565,6 +567,7 @@ class ContinuousBatchingIOs:
         on non-tensor integer kwargs such as `max_seqlen_q` and `max_seqlen_k`. Reusing a graph across batches that
         share padded `(Q, KV)` sizes but differ on those integers can replay kernels with stale launch parameters.
         """
+        # Hybrid models can have per-layer KV limits, so the signature has to encode them explicitly.
         max_seqlen_k_signature = tuple(
             (
                 layer_type,
@@ -788,6 +791,7 @@ class ContinuousBatchingAsyncIOs:
         )
 
     def set_graph_bounds(self, max_seqlen_q: int, max_seqlen_k: int | dict[str, int]) -> None:
+        # Keep the host and device pair on the same graph signature before async H2D transfer starts.
         io_pair = self.io_pairs[self.current_pair]
         io_pair.host_io.set_graph_bounds(max_seqlen_q, max_seqlen_k)
         io_pair.device_io.set_graph_bounds(max_seqlen_q, max_seqlen_k)

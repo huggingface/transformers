@@ -39,6 +39,7 @@ class CudaGraphBuffer:
         self.max_size = original_max_size
 
     def get_graph(self, key: Hashable) -> torch.cuda.CUDAGraph | None:
+        # Replay safety sometimes depends on scalar kwargs as well as tensor extents, so the key is generic.
         graph = self._storage.get(key)
         if graph is not None:
             self._storage.move_to_end(key)

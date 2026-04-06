@@ -393,8 +393,11 @@ class ContinuousBatchProcessor:
         )
         if self._pad_inputs:
             if self.inputs_and_outputs.use_block_table:
+                # Block-table decode ignores the varlen max_seqlen kwargs, so keep the graph signature constant.
                 self.inputs_and_outputs.set_graph_bounds(1, 1)
             else:
+                # FA varlen kernels also specialize on max_seqlen_* integer kwargs, so bucket those for graph replay
+                # separately from the already-padded tensor shapes.
                 padded_max_seqlen_q = pad_to_interval(
                     self.inputs_and_outputs.max_seqlen_q, self.q_padding_interval_size, self.inputs_and_outputs.num_q_tokens
                 )
