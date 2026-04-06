@@ -605,8 +605,6 @@ class HCXVisionV2Model(HCXVisionV2PreTrainedModel):
             The tensors corresponding to the input videos.
         video_grid_thw (`torch.LongTensor` of shape `(num_videos, 3)`, *optional*):
             The temporal, height and width of feature shape of each video in LLM.
-        video_merge_sizes (`torch.Tensor` of shape `(num_videos,)`):
-            The spatial downsampling ratio of each video feature.
         """
         return self.get_image_features(pixel_values=pixel_values_videos, image_grid_thw=video_grid_thw, **kwargs)
 
@@ -916,7 +914,7 @@ class HCXVisionV2ForConditionalGeneration(HCXVisionV2PreTrainedModel, Generation
 
 
 class HCXVisionV2ForSequenceClassification(HCXVisionV2PreTrainedModel):
-    config: HyperCLOVAXConfig
+    config: HCXVisionV2Config
     input_modalities = ("text",)
 
     def __init__(self, config):

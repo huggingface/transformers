@@ -458,7 +458,7 @@ class HCXVisionV2ForConditionalGeneration(HCXVisionV2PreTrainedModel, Generation
 
 
 class HCXVisionV2ForSequenceClassification(Gemma3ForSequenceClassification, HCXVisionV2PreTrainedModel):
-    config: HyperCLOVAXConfig
+    config: HCXVisionV2Config
     input_modalities = ("text",)
 
     def __init__(self, config):
