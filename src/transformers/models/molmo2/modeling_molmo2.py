@@ -345,6 +345,8 @@ class Molmo2VisionModel(PreTrainedModel):
 
         self.encoder = Molmo2VisionEncoder(config)
 
+        self.post_init()
+
     def add_pos_emb(self, x: torch.Tensor, patch_num: int) -> torch.Tensor:
         pos_emb = self.positional_embedding
 
