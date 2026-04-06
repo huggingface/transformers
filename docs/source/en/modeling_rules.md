@@ -13,7 +13,7 @@ specific language governing permissions and limitations under the License.
 
 # Model structure rules
 
-Transformers enforces a set of static rules on every `modeling_*.py`, `modular_*.py`, and `configuration_*.py` file. The [mlinter](https://github.com/huggingface/transformers/tree/main/utils/mlinter) tool checks them as part of `make typing` and blocks CircleCI if violations are found.
+Transformers enforces a set of static rules on every `modeling_*.py`, `modular_*.py`, and `configuration_*.py` file. The [mlinter](https://github.com/huggingface/transformers/tree/main/utils/mlinter) tool checks them as part of `make typing` and errors out if violations are found.
 
 These are the expected model conventions for adding or changing modeling code. They keep the codebase consistent and ensure compatibility with features like pipeline parallelism, device maps, and weight tying.
 
@@ -52,68 +52,70 @@ Use the rule ID to look up the fix in the [rules reference](#rules-reference). T
 
 ## Rules reference
 
-Each rule below lists what it enforces and a diff showing the fix.
+Each rule below lists what it enforces and a diff showing the fix. Run `python -m utils.mlinter --rule TRF001` to see the built-in docs for any rule.
+
+<!-- BEGIN RULES REFERENCE -->
 
 ### TRF001
 
-`config_class` on an `AcmePreTrainedModel` must reference `AcmeConfig`. The name prefix must match. A mismatch breaks [Auto](./model_doc/auto) classes and model loading.
+Checks naming consistency between <Model>PreTrainedModel and config_class. Mismatched config_class can break loading, auto classes, and developer expectations.
 
 ```diff
- class AcmePreTrainedModel(PreTrainedModel):
--    config_class = NanoConfig  # wrong family; should be AcmeConfig
+class AcmePreTrainedModel(PreTrainedModel):
+-    config_class = WileConfig
 +    config_class = AcmeConfig
 ```
 
 ### TRF002
 
-`base_model_prefix` must be a non-empty string with no whitespace. Invalid values break weight-loading key mapping and base model access patterns.
+Checks that base_model_prefix, when set, is a non-empty, whitespace-free string literal. Invalid prefixes can break weight loading key mapping and base model access patterns.
 
 ```diff
- class AcmePreTrainedModel(PreTrainedModel):
+class AcmePreTrainedModel(PreTrainedModel):
 -    base_model_prefix = ""
 +    base_model_prefix = "model"
 ```
 
 ### TRF003
 
-`forward()` must use the `@can_return_tuple` decorator rather than manual `if not return_dict: return (x,)` branching. The old pattern is error-prone and verbose.
+Detects forward methods that use the old 'if not return_dict: return (x,)' pattern. The old return_dict branching pattern is error-prone and verbose. Use the capture_output or can_return_tuple decorators instead.
 
 ```diff
-- def forward(self, x, return_dict=None):
--     if not return_dict:
--         return (x,)
--     return AcmeModelOutput(last_hidden_state=x)
-+ @can_return_tuple
-+ def forward(self, x):
-+     return AcmeModelOutput(last_hidden_state=x)
+-def forward(self, x, return_dict=None):
+-    if not return_dict:
+-        return (x,)
+-    return AcmeModelOutput(last_hidden_state=x)
++@can_return_tuple
++def forward(self, x):
++    return AcmeModelOutput(last_hidden_state=x)
 ```
 
 ### TRF004
 
-Models must not override `tie_weights()`. Overriding it breaks weight loading, `device_map` computation, and saving. Declare tied weights using the `_tied_weights_keys` class attribute instead.
+Checks that no model class defines a tie_weights method. Overriding tie_weights leads to bad consequences for loading, device_map computation, and saving. Use _tied_weights_keys class attribute to declare tied weights instead.
 
 ```diff
-- def tie_weights(self):
--     self.lm_head.weight = self.emb.weight
-+ class AcmeForCausalLM(AcmePreTrainedModel):
-+     _tied_weights_keys = ["lm_head.weight"]
+-def tie_weights(self):
+-    self.lm_head.weight = self.emb.weight
++class AcmeForCausalLM(AcmePreTrainedModel):
++    _tied_weights_keys = ["lm_head.weight"]
 ```
 
 ### TRF005
 
-`_no_split_modules`, when defined, must be a list or tuple of non-empty strings. Bad values break device-map partitioning and sharding.
+Checks the shape of _no_split_modules when present. Malformed values can break device-map partitioning and sharding behavior.
 
 ```diff
-- _no_split_modules = [SomeLayerClass, ""]
-+ _no_split_modules = ["AcmeDecoderLayer", "AcmeAttention"]
+-_no_split_modules = [SomeLayerClass, ""]
++_no_split_modules = ["AcmeDecoderLayer", "AcmeAttention"]
 ```
 
 ### TRF006
 
-`forward()` must reference every cache argument (`past_key_values`, `use_cache`) declared in its signature. Unused cache arguments indicate incomplete caching support and produce an inconsistent API.
+Checks forward signatures that expose cache arguments for usage of those arguments in method body. Unused cache arguments can indicate incomplete caching support and inconsistent API behavior.
 
 ```diff
- def forward(self, x, past_key_values=None, use_cache=False):
+def forward(self, x, past_key_values=None, use_cache=False):
 +    if use_cache:
 +        ...
      return x
@@ -121,10 +123,10 @@ Models must not override `tie_weights()`. Overriding it breaks weight loading, `
 
 ### TRF007
 
-`self.post_init()` must be the final call in `__init__`. Attribute assignments after it bypass initialization and finalization logic.
+Checks for self attribute assignments after self.post_init() in __init__. Mutating model structure after post_init can bypass intended initialization/finalization logic.
 
 ```diff
- def __init__(self, config):
+def __init__(self, config):
      ...
 -    self.post_init()
 -    self.proj = nn.Linear(...)
@@ -134,41 +136,41 @@ Models must not override `tie_weights()`. Overriding it breaks weight loading, `
 
 ### TRF008
 
-`@add_start_docstrings` must not be called with an empty string. Empty usage produces incomplete API documentation.
+Checks add_start_docstrings usage on model classes for non-empty docstring arguments. Empty decorator usage produces unclear docs and weakens generated API documentation quality.
 
 ```diff
-- @add_start_docstrings("")
-+ @add_start_docstrings("The Acme model.")
-  class AcmeModel(AcmePreTrainedModel):
+-@add_start_docstrings("")
++@add_start_docstrings("The Acme model.")
+ class AcmeModel(AcmePreTrainedModel):
      ...
 ```
 
 ### TRF009
 
-Each model must be self-contained in a single file. Importing implementation code from another model package makes behavior harder to inspect and maintain.
+Checks modeling files for cross-model imports such as transformers.models.other_model.* or from ..other_model.* imports. Cross-model implementation imports violate the single-file policy and make model behavior harder to inspect and maintain.
 
 ```diff
-- from transformers.models.llama.modeling_llama import LlamaAttention
-+ # Keep implementation local to this file.
-+ # If reusing code from another model, copy it with a # Copied from comment.
+-from transformers.models.llama.modeling_llama import LlamaAttention
++# Keep implementation local to this file.
++# If reusing code, copy it with a # Copied from comment.
 ```
 
 ### TRF010
 
-Direct [`PreTrainedConfig`] subclasses in `configuration_*.py` and `modular_*.py` should use the `@strict(accept_kwargs=True)` decorator. Without it, the config class misses the runtime type-validation contract and drifts from the dataclass-based config standard.
+Checks direct PreTrainedConfig/PretrainedConfig subclasses in configuration_*.py and modular_*.py for an explicit @strict(accept_kwargs=True) decorator. Without strict, new config classes miss the repo's runtime type-validation contract and drift from the dataclass-based config standard.
 
 ```diff
-+ @strict(accept_kwargs=True)
-  class AcmeConfig(PreTrainedConfig):
-      ...
++@strict(accept_kwargs=True)
+ class AcmeConfig(PreTrainedConfig):
+     ...
 ```
 
 ### TRF011
 
-`forward()` must not access non-`nn.Module` attributes on submodules. Pipeline parallelism can replace any submodule with `torch.nn.Identity`, so accessing custom attributes raises `AttributeError` at runtime. Read per-layer metadata from `self.config` instead.
+In forward() methods of PreTrainedModel subclasses, checks for attribute accesses on submodules that would not exist on torch.nn.Identity. This includes attribute accesses on loop variables iterating over self.layers, and self.<submodule>.<attr> chains where <attr> is not a standard nn.Module attribute. Pipeline parallelism may replace any submodule with torch.nn.Identity. Accessing custom attributes (e.g. decoder_layer.attention_type) on a replaced module raises AttributeError at runtime. Per-layer metadata should be read from self.config instead.
 
 ```diff
- def forward(self, ...):
+def forward(self, ...):
 -    for decoder_layer in self.layers:
 +    for i, decoder_layer in enumerate(self.layers):
          hidden_states = decoder_layer(
@@ -180,39 +182,41 @@ Direct [`PreTrainedConfig`] subclasses in `configuration_*.py` and `modular_*.py
 
 ### TRF012
 
-`_init_weights(self, module)` must not call in-place operations like `.normal_()` or `.zero_()` directly on module weights. Transformers tracks initialization state with internal flags, and in-place ops bypass that mechanism. Use `transformers.initialization` primitives instead.
+Checks that _init_weights(self, module) does not use in-place operations (e.g. .normal_(), .zero_()) directly on module weights. We rely on internal flags set on parameters to track whether they need re-initialization. In-place ops bypass this mechanism. Use the `init` primitives instead.
 
 ```diff
-+ from transformers import initialization as init
-+ 
-  def _init_weights(self, module):
--     module.weight.normal_(mean=0.0, std=0.02)
-+     init.normal_(module.weight, mean=0.0, std=0.02)
++from transformers import initialization as init
++
+ def _init_weights(self, module):
+-    module.weight.normal_(mean=0.0, std=0.02)
++    init.normal_(module.weight, mean=0.0, std=0.02)
 ```
 
 ### TRF013
 
-Every [`PreTrainedModel`] subclass with an `__init__` method must call `self.post_init()`. In modular files, `super().__init__()` is also accepted, and it propagates `post_init()` from the parent. Omitting it skips essential finalization and causes runtime bugs.
+Checks that every PreTrainedModel subclass with an __init__ method calls self.post_init(). In modular files, calling super().__init__() is also accepted since it propagates post_init from the parent. post_init performs essential finalization (weight initialization, gradient checkpointing setup, etc.). Omitting it causes subtle runtime bugs.
 
 ```diff
-  class AcmeModel(AcmePreTrainedModel):
-      def __init__(self, config):
-          super().__init__(config)
-          self.layers = nn.ModuleList(...)
-+         self.post_init()
+class AcmeModel(AcmePreTrainedModel):
+     def __init__(self, config):
+         super().__init__(config)
+         self.layers = nn.ModuleList(...)
++        self.post_init()
 ```
 
 ### TRF014
 
-`trust_remote_code` should never be passed or used in native model integration files. It allows arbitrary code loading which native integrations should never depend on.
+Checks whether `trust_remote_code` is passed or used in code (e.g. as kwarg) within native model integration files. `trust_remote_code` allows arbitrary loading, including binaries, which should only be a power feature for users, not a standard use-case. Native integrations must not depend on it, as remote code cannot be reviewed or maintained within transformers.
 
 ```diff
-  class AcmeModel(AcmePreTrainedModel):
-      def __init__(self, config):
-          super().__init__(config)
--         self.model = AutoModel.from_pretrained(..., trust_remote_code=True)
-+         self.model = AutoModel.from_pretrained(...)
+class AcmeModel(AcmePreTrainedModel):
+     def __init__(self, config):
+         super().__init__(config)
+-        self.model = AutoModel.from_pretrained(..., trust_remote_code=True)
++        self.model = AutoModel.from_pretrained(...)
 ```
+
+<!-- END RULES REFERENCE -->
 
 ## Suppressing violations
 
