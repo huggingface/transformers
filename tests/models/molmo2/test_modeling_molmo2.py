@@ -26,6 +26,11 @@ from transformers import (
     is_torch_available,
     is_vision_available,
 )
+from transformers.models.molmo2.configuration_molmo2 import (
+    Molmo2AdapterConfig,
+    Molmo2TextConfig,
+    Molmo2VitConfig,
+)
 from transformers.testing_utils import (
     cleanup,
     require_torch,
@@ -149,12 +154,6 @@ class Molmo2VisionText2TextModelTester:
         self.seq_length = seq_length + self.num_image_tokens
 
     def get_config(self):
-        from transformers.models.molmo2.configuration_molmo2 import (
-            Molmo2AdapterConfig,
-            Molmo2TextConfig,
-            Molmo2VitConfig,
-        )
-
         return Molmo2Config(
             text_config=Molmo2TextConfig(**self.text_config),
             vit_config=Molmo2VitConfig(**self.vit_config),

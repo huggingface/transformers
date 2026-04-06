@@ -29,8 +29,6 @@ from ...generation import GenerationMixin
 from ...masking_utils import create_causal_mask, create_masks_for_generate
 from ...modeling_flash_attention_utils import (
     FlashAttentionKwargs,
-    _flash_attention_forward,
-    flash_attn_supports_top_left_mask,
 )
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import (
