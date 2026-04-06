@@ -14,6 +14,8 @@
 """Testing suite for the PyTorch Qwen3.5 model."""
 
 import copy
+import os
+import tempfile
 import unittest
 
 from transformers import AutoProcessor, AutoTokenizer, is_torch_available
@@ -303,6 +305,23 @@ class Qwen3_5ModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCas
 
     def test_config(self):
         self.config_tester.run_common_tests()
+
+    def test_save_pretrained_no_triple_nested_language_model_prefix(self):
+        """Regression test for huggingface/transformers#45216 (save_pretrained must not duplicate `language_model`)."""
+        from safetensors.torch import load_file
+
+        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+        model = Qwen3_5ForConditionalGeneration._from_config(config)
+        model.to(torch_device)
+        with tempfile.TemporaryDirectory() as tmpdirname:
+            model.save_pretrained(tmpdirname)
+            loaded = load_file(os.path.join(tmpdirname, "model.safetensors"))
+        for key in loaded:
+            self.assertNotIn(
+                "language_model.language_model.language_model",
+                key,
+                f"Unexpected repeated language_model segments in saved key {key!r}",
+            )
 
     @unittest.skip(
         "Conversion only for the `CausalLM` loading from saved `ConditionalLM`, doesn't apply to simple VLM"

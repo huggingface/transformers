@@ -622,12 +622,32 @@ def get_model_conversion_mapping(
         seen_model_types.add(model.config.model_type)
 
     # Recurse over submodules and collect all conversions
+    inner_model = getattr(model, "model", None)
+    nested_language_model = getattr(inner_model, "language_model", None) if inner_model is not None else None
     for submodule in model.modules():
         if (
             submodule is not model
             and isinstance(submodule, PreTrainedModel)
             and submodule.config.model_type not in seen_model_types
         ):
+            # `qwen3_5_text` maps hub keys `model.language_model.*` to the causal LM trunk `model.*` for
+            # standalone `Qwen3_5ForCausalLM`. Reversing that mapping on save replaces a leading `model` segment,
+            # which wrongly matches keys that already start with `model.language_model.` on composite VL models and
+            # duplicates the prefix (https://github.com/huggingface/transformers/issues/45216). Skip the text remap
+            # when this submodule is the nested `model.language_model` trunk; still apply `qwen2_moe` for
+            # `qwen3_5_moe_text` inside MoE VL models.
+            if nested_language_model is not None and submodule is nested_language_model:
+                model_type = submodule.config.model_type
+                if model_type == "qwen3_5_text":
+                    seen_model_types.add(model_type)
+                    continue
+                if model_type == "qwen3_5_moe_text":
+                    moe_conversions = get_checkpoint_conversion_mapping("qwen2_moe")
+                    if moe_conversions is not None:
+                        weight_conversions.extend(moe_conversions)
+                    seen_model_types.add(model_type)
+                    continue
+
             conversions = extract_weight_conversions_for_model(submodule)
             if conversions is not None:
                 weight_conversions.extend(conversions)
