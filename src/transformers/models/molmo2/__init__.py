@@ -31,7 +31,7 @@ if TYPE_CHECKING:
         Molmo2PreTrainedModel,
         Molmo2TextModel,
         Molmo2VisionBackbone,
-        Molmo2VisionTransformer,
+        Molmo2VisionModel,
     )
     from .processing_molmo2 import Molmo2Processor
     from .video_processing_molmo2 import Molmo2VideoProcessor

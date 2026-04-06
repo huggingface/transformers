@@ -42,6 +42,7 @@ from ...processing_utils import Unpack
 from ...utils import (
     ModelOutput,
     TransformersKwargs,
+    auto_docstring,
     can_return_tuple,
     logging,
 )
@@ -97,75 +98,144 @@ class Molmo2ModelOutputWithPast(BaseModelOutputWithPast):
     image_hidden_states: torch.FloatTensor | None = None
 
 
-class ViTMLP(nn.Module):
-    def __init__(self, dim: int, hidden_dim: int, hidden_act: str, device: str | torch.device = None):
+# Copied from transformers.models.siglip2.modeling_siglip2.Siglip2MLP with Siglip2->Molmo2Vision
+class Molmo2VisionMLP(nn.Module):
+    def __init__(self, config):
         super().__init__()
-        self.w1 = nn.Linear(dim, hidden_dim, bias=True, device=device)
-        self.act = ACT2FN[hidden_act]
-        self.w2 = nn.Linear(hidden_dim, dim, bias=True, device=device)
+        self.config = config
+        self.activation_fn = ACT2FN[config.hidden_act]
+        self.fc1 = nn.Linear(config.hidden_size, config.intermediate_size)
+        self.fc2 = nn.Linear(config.intermediate_size, config.hidden_size)
 
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
-        return self.w2(self.act(self.w1(x)))
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        hidden_states = self.fc1(hidden_states)
+        hidden_states = self.activation_fn(hidden_states)
+        hidden_states = self.fc2(hidden_states)
+        return hidden_states
 
 
-class ViTMultiHeadDotProductAttention(nn.Module):
+class Molmo2VisionAttention(nn.Module):
+    """Multi-headed attention from 'Attention Is All You Need' paper"""
+
+    def __init__(self, config):
+        super().__init__()
+        self.config = config
+        self.embed_dim = config.hidden_size
+        self.num_heads = config.num_attention_heads
+        self.num_key_value_heads = config.num_key_value_heads
+        self.num_key_value_groups = self.num_heads // self.num_key_value_heads
+        self.head_dim = config.head_dim
+        self.scale = self.head_dim**-0.5
+        self.dropout = config.attention_dropout
+        self.is_causal = False
+
+        self.q_proj = nn.Linear(self.embed_dim, self.num_heads * self.head_dim)
+        self.k_proj = nn.Linear(self.embed_dim, self.num_key_value_heads * self.head_dim)
+        self.v_proj = nn.Linear(self.embed_dim, self.num_key_value_heads * self.head_dim)
+        self.out_proj = nn.Linear(self.num_heads * self.head_dim, self.embed_dim)
+
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        attention_mask: torch.Tensor | None = None,
+        **kwargs,
+    ) -> tuple[torch.Tensor, torch.Tensor | None]:
+        batch_size, seq_length, _ = hidden_states.shape
+
+        queries = self.q_proj(hidden_states)
+        keys = self.k_proj(hidden_states)
+        values = self.v_proj(hidden_states)
+
+        queries = queries.view(batch_size, seq_length, self.num_heads, self.head_dim).transpose(1, 2)
+        keys = keys.view(batch_size, seq_length, self.num_key_value_heads, self.head_dim).transpose(1, 2)
+        values = values.view(batch_size, seq_length, self.num_key_value_heads, self.head_dim).transpose(1, 2)
+
+        attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
+            self.config._attn_implementation or "eager", eager_attention_forward
+        )
+
+        attn_output, attn_weights = attention_interface(
+            self,
+            queries,
+            keys,
+            values,
+            attention_mask,
+            is_causal=self.is_causal,
+            scaling=self.scale,
+            dropout=0.0 if not self.training else self.dropout,
+        )
+
+        attn_output = attn_output.reshape(batch_size, seq_length, -1).contiguous()
+        attn_output = self.out_proj(attn_output)
+
+        return attn_output, attn_weights
+
+
+# Copied from transformers.models.siglip2.modeling_siglip2.Siglip2EncoderLayer with Siglip2->Molmo2Vision
+class Molmo2VisionEncoderLayer(GradientCheckpointingLayer):
+    def __init__(self, config: Molmo2VitConfig):
+        super().__init__()
+        self.embed_dim = config.hidden_size
+        self.layer_norm1 = nn.LayerNorm(self.embed_dim, eps=config.layer_norm_eps)
+        self.self_attn = Molmo2VisionAttention(config)
+        self.layer_norm2 = nn.LayerNorm(self.embed_dim, eps=config.layer_norm_eps)
+        self.mlp = Molmo2VisionMLP(config)
+
+    @auto_docstring
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        attention_mask: torch.Tensor,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> torch.FloatTensor:
+        residual = hidden_states
+
+        hidden_states = self.layer_norm1(hidden_states)
+        hidden_states, _ = self.self_attn(
+            hidden_states=hidden_states,
+            attention_mask=attention_mask,
+            **kwargs,
+        )
+        hidden_states = residual + hidden_states
+
+        residual = hidden_states
+        hidden_states = self.layer_norm2(hidden_states)
+        hidden_states = self.mlp(hidden_states)
+        hidden_states = residual + hidden_states
+
+        return hidden_states
+
+
+class Molmo2PoolingAttention(nn.Module):
+    """Cross-attention module used for image feature pooling in the vision adapter."""
+
     def __init__(
         self,
         hidden_size: int,
         num_heads: int,
         num_key_value_heads: int,
         head_dim: int,
-        use_bias: bool = True,
         input_dim: int | None = None,
-        float32_attention: bool = True,
         attention_dropout: float = 0.0,
-        residual_dropout: float = 0.0,
-        device: str | torch.device = None,
         attn_implementation: str = "eager",
     ):
         super().__init__()
-
         self.hidden_size = hidden_size
         self.num_heads = num_heads
         self.head_dim = head_dim
         self.num_key_value_heads = num_key_value_heads
         self.num_key_value_groups = self.num_heads // self.num_key_value_heads
+        self.scale = self.head_dim**-0.5
         self.attn_implementation = attn_implementation
         self.is_causal = False
 
         input_dim = input_dim or hidden_size
 
-        self.wq = nn.Linear(
-            input_dim,
-            self.num_heads * self.head_dim,
-            bias=use_bias,
-            device=device,
-        )
-        self.wk = nn.Linear(
-            input_dim,
-            self.num_key_value_heads * self.head_dim,
-            bias=use_bias,
-            device=device,
-        )
-        self.wv = nn.Linear(
-            input_dim,
-            self.num_key_value_heads * self.head_dim,
-            bias=use_bias,
-            device=device,
-        )
-        self.wo = nn.Linear(
-            self.num_heads * self.head_dim,
-            self.hidden_size,
-        )
-        self.float32_attention = float32_attention
+        self.q_proj = nn.Linear(input_dim, self.num_heads * self.head_dim, bias=True)
+        self.k_proj = nn.Linear(input_dim, self.num_key_value_heads * self.head_dim, bias=True)
+        self.v_proj = nn.Linear(input_dim, self.num_key_value_heads * self.head_dim, bias=True)
+        self.out_proj = nn.Linear(self.num_heads * self.head_dim, self.hidden_size)
         self.attention_dropout = attention_dropout
-        self.residual_dropout = nn.Dropout(residual_dropout)
-
-    def _split_heads(self, hidden_states, num_heads) -> torch.Tensor:
-        return hidden_states.reshape(hidden_states.shape[:2] + (num_heads, self.head_dim))
-
-    def _merge_heads(self, hidden_states) -> torch.Tensor:
-        return hidden_states.reshape(hidden_states.shape[:2] + (self.hidden_size,))
 
     def forward(
         self,
@@ -180,114 +250,84 @@ class ViTMultiHeadDotProductAttention(nn.Module):
             inputs_k = inputs_q
             inputs_v = inputs_q
 
-        xq, xk, xv = self.wq(inputs_q), self.wk(inputs_k), self.wv(inputs_v)
+        batch_size = inputs_q.shape[0]
+        queries = self.q_proj(inputs_q)
+        keys = self.k_proj(inputs_k)
+        values = self.v_proj(inputs_v)
 
-        xq = self._split_heads(xq, self.num_heads)
-        xk = self._split_heads(xk, self.num_key_value_heads)
-        xv = self._split_heads(xv, self.num_key_value_heads)
+        queries = queries.view(batch_size, -1, self.num_heads, self.head_dim).transpose(1, 2)
+        keys = keys.view(batch_size, -1, self.num_key_value_heads, self.head_dim).transpose(1, 2)
+        values = values.view(batch_size, -1, self.num_key_value_heads, self.head_dim).transpose(1, 2)
 
-        if self.num_heads != self.num_key_value_heads:
-            xk = xk.repeat_interleave(self.num_key_value_groups, dim=2, output_size=self.num_heads)
-            xv = xv.repeat_interleave(self.num_key_value_groups, dim=2, output_size=self.num_heads)
+        attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
+            self.attn_implementation, eager_attention_forward
+        )
 
-        og_dtype = xq.dtype
+        attn_output, _ = attention_interface(
+            self,
+            queries,
+            keys,
+            values,
+            attn_mask,
+            is_causal=self.is_causal,
+            scaling=self.scale,
+            dropout=0.0 if not self.training else self.attention_dropout,
+        )
 
-        if self.float32_attention:
-            xq = xq.to(torch.float)
-            xk = xk.to(torch.float)
-
-        dropout_p = 0.0 if not self.training else self.attention_dropout
-
-        if self.attn_implementation == "eager":
-            attn_weights = torch.einsum("...qhd,...khd->...hqk", xq / math.sqrt(xq.size(-1)), xk)
-            attn_weights = F.softmax(attn_weights, dim=-1, dtype=torch.float32).to(xq.dtype)
-            attn_weights = F.dropout(attn_weights, p=dropout_p, training=self.training)
-            attn_output = torch.einsum("...hqk,...khd->...qhd", attn_weights.to(xv.dtype), xv)
-
-        elif self.attn_implementation == "sdpa":
-            if not torch.is_autocast_enabled():
-                xv = xv.to(torch.float)
-
-            attn_output = F.scaled_dot_product_attention(
-                xq.transpose(1, 2).contiguous(),
-                xk.transpose(1, 2).contiguous(),
-                xv.transpose(1, 2).contiguous(),
-                attn_mask=attn_mask,
-                is_causal=False,
-                dropout_p=dropout_p,
-            ).transpose(1, 2)
-
-        elif self.attn_implementation == "flash_attention_2":
-            if xq.dtype == torch.float32:
-                if torch.is_autocast_enabled():
-                    target_dtype = torch.get_autocast_gpu_dtype()
-                else:
-                    target_dtype = self.wq.weight.dtype
-            attn_output = _flash_attention_forward(
-                xq,
-                xk,
-                xv,
-                attention_mask=attn_mask,
-                query_length=inputs_q.shape[1],
-                is_causal=False,
-                dropout=dropout_p,
-                softmax_scale=xq.shape[-1] ** -0.5,
-                use_top_left_mask=flash_attn_supports_top_left_mask(),
-                target_dtype=target_dtype,
-                implementation=self.attn_implementation,
-            )
-        else:
-            raise ValueError(f"Attention implementation {self.attn_implementation} not supported")
-
-        attn_output = attn_output.to(og_dtype)
-        attn_output = self._merge_heads(attn_output)
-        attn_output = self.wo(attn_output)
-        attn_output = self.residual_dropout(attn_output)
+        attn_output = attn_output.reshape(batch_size, -1, self.num_heads * self.head_dim).contiguous()
+        attn_output = self.out_proj(attn_output)
 
         return attn_output
 
 
-class Molmo2VisionBlock(nn.Module):
-    def __init__(self, config: Molmo2VitConfig, device: str | torch.device = None):
+class Molmo2VisionEncoder(nn.Module):
+    """
+    Transformer encoder consisting of `config.num_hidden_layers` self attention layers. Each layer is a
+    [`Molmo2VisionEncoderLayer`].
+
+    Args:
+        config: Molmo2VitConfig
+    """
+
+    def __init__(self, config: Molmo2VitConfig):
         super().__init__()
-        self.attention = ViTMultiHeadDotProductAttention(
-            hidden_size=config.hidden_size,
-            num_heads=config.num_attention_heads,
-            num_key_value_heads=config.num_key_value_heads,
-            head_dim=config.head_dim,
-            float32_attention=config.float32_attention,
-            attention_dropout=config.attention_dropout,
-            residual_dropout=config.residual_dropout,
-            device=device,
-            attn_implementation=config._attn_implementation or "eager",
-        )
-        self.feed_forward = ViTMLP(config.hidden_size, config.intermediate_size, config.hidden_act, device=device)
-        self.attention_norm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps, device=device)
-        self.ffn_norm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps, device=device)
+        self.config = config
+        self.layers = nn.ModuleList([Molmo2VisionEncoderLayer(config) for _ in range(config.num_hidden_layers)])
 
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
-        x = x + self.attention(self.attention_norm(x))
-        x = x + self.feed_forward(self.ffn_norm(x))
-        return x
+    def forward(
+        self,
+        inputs_embeds: torch.Tensor,
+        attention_mask: torch.Tensor | None = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> list[torch.Tensor]:
+        """Returns a list of hidden states, one per encoder layer."""
+        hidden_states = inputs_embeds
+        all_hidden_states = []
+        for encoder_layer in self.layers:
+            hidden_states = encoder_layer(hidden_states, attention_mask=attention_mask, **kwargs)
+            all_hidden_states.append(hidden_states)
+        return all_hidden_states
 
 
-class Molmo2VisionBlockCollection(nn.Module):
-    def __init__(self, config: Molmo2VitConfig, device: str | torch.device = None):
-        super().__init__()
-        self.conifg = config
-        self.resblocks = nn.ModuleList([Molmo2VisionBlock(config, device) for _ in range(config.num_hidden_layers)])
+class Molmo2VisionModel(PreTrainedModel):
+    config_class = Molmo2VitConfig
+    _no_split_modules = ["Molmo2VisionEncoderLayer"]
 
-    def forward(self, x: torch.Tensor) -> list[torch.Tensor]:
-        hidden_states = []
-        for r in self.resblocks:
-            x = r(x)
-            hidden_states.append(x)
-        return hidden_states
+    def _init_weights(self, module):
+        std = self.config.initializer_range
+        if isinstance(module, nn.Linear):
+            init.normal_(module.weight, mean=0.0, std=std)
+            if module.bias is not None:
+                init.zeros_(module.bias)
+        elif isinstance(module, nn.LayerNorm):
+            init.ones_(module.weight)
+            if module.bias is not None:
+                init.zeros_(module.bias)
+        elif isinstance(module, Molmo2VisionModel):
+            init.normal_(module.positional_embedding, mean=0.0, std=std)
 
-
-class Molmo2VisionTransformer(nn.Module):
-    def __init__(self, config: Molmo2VitConfig, device: str | torch.device = None):
-        super().__init__()
+    def __init__(self, config: Molmo2VitConfig):
+        super().__init__(config)
         self.config = config
         self.image_default_input_size = config.image_default_input_size
 
@@ -295,7 +335,7 @@ class Molmo2VisionTransformer(nn.Module):
         self.scale = config.hidden_size**-0.5
         self.num_prefix_tokens: int = 0  # no class embeddings
         self.positional_embedding = nn.Parameter(
-            torch.zeros(config.image_num_pos, config.hidden_size, device=device),
+            torch.zeros(config.image_num_pos, config.hidden_size),
         )
 
         image_patch_size = config.image_patch_size
@@ -303,10 +343,9 @@ class Molmo2VisionTransformer(nn.Module):
             image_patch_size * image_patch_size * 3,
             config.hidden_size,
             bias=True,
-            device=device,
         )
 
-        self.transformer = Molmo2VisionBlockCollection(config, device)
+        self.encoder = Molmo2VisionEncoder(config)
 
     def add_pos_emb(self, x: torch.Tensor, patch_num: int) -> torch.Tensor:
         pos_emb = self.positional_embedding
@@ -348,11 +387,11 @@ class Molmo2VisionTransformer(nn.Module):
         # class embeddings and positional embeddings
         x = self.add_pos_emb(x, patch_num)
 
-        hidden_states = self.transformer(x)
+        hidden_states = self.encoder(x)
         return hidden_states
 
 
-class ImageProjectorMLP(nn.Module):
+class Molmo2ImageProjectorMLP(nn.Module):
     def __init__(
         self,
         input_dim: int,
@@ -388,25 +427,23 @@ class Molmo2VisionBackbone(nn.Module):
         if last_layer_needed < vit_config.num_hidden_layers:
             new_vit_config = deepcopy(vit_config)
             new_vit_config.num_hidden_layers = last_layer_needed
-            self.image_vit = Molmo2VisionTransformer(new_vit_config)
+            self.image_vit = Molmo2VisionModel(new_vit_config)
         else:
-            self.image_vit = Molmo2VisionTransformer(vit_config)
+            self.image_vit = Molmo2VisionModel(vit_config)
 
         self.num_prefix_tokens: int = self.image_vit.num_prefix_tokens
 
         pool_dim = vit_config.hidden_size * len(adapter_config.vit_layers)
-        self.image_pooling_2d = ViTMultiHeadDotProductAttention(
+        self.image_pooling_2d = Molmo2PoolingAttention(
             hidden_size=adapter_config.hidden_size,
             num_heads=adapter_config.num_attention_heads,
             num_key_value_heads=adapter_config.num_key_value_heads,
             head_dim=adapter_config.head_dim,
             input_dim=pool_dim,
-            float32_attention=adapter_config.float32_attention,
             attention_dropout=adapter_config.attention_dropout,
-            residual_dropout=adapter_config.residual_dropout,
             attn_implementation=adapter_config._attn_implementation or "eager",
         )
-        self.image_projector = ImageProjectorMLP(
+        self.image_projector = Molmo2ImageProjectorMLP(
             adapter_config.hidden_size,
             adapter_config.intermediate_size,
             adapter_config.text_hidden_size,
@@ -748,7 +785,7 @@ class Molmo2Attention(nn.Module):
         return attn_output, attn_weights
 
 
-class LanguageModelMLP(nn.Module):
+class Molmo2MLP(nn.Module):
     def __init__(
         self,
         input_dim: int,
@@ -777,7 +814,7 @@ class Molmo2DecoderLayer(GradientCheckpointingLayer):
         self.self_attn = Molmo2Attention(config, layer_idx)
         self.attn_norm = Molmo2RMSNorm(config.hidden_size, eps=config.layer_norm_eps, device=device)
         self.dropout = nn.Dropout(config.residual_dropout)
-        self.mlp = LanguageModelMLP(config.hidden_size, config.intermediate_size, config.hidden_act, device=device)
+        self.mlp = Molmo2MLP(config.hidden_size, config.intermediate_size, config.hidden_act, device=device)
         self.ff_norm = Molmo2RMSNorm(config.hidden_size, eps=config.layer_norm_eps, device=device)
 
     def forward(
@@ -897,8 +934,8 @@ class Molmo2PreTrainedModel(PreTrainedModel):
     _no_split_modules = [
         "Molmo2DecoderLayer",
         "Molmo2PostNormDecoderLayer",
-        "Molmo2VisionBlock",
-        "ViTMultiHeadDotProductAttention",
+        "Molmo2VisionEncoderLayer",
+        "Molmo2VisionAttention",
     ]
     _skip_keys_device_placement = "past_key_values"
     _supports_flash_attn = True
@@ -930,7 +967,7 @@ class Molmo2PreTrainedModel(PreTrainedModel):
             init.ones_(module.weight)
             if module.bias is not None:
                 init.zeros_(module.bias)
-        elif isinstance(module, Molmo2VisionTransformer):
+        elif isinstance(module, Molmo2VisionModel):
             init.normal_(module.positional_embedding, mean=0.0, std=std)
         elif isinstance(module, Molmo2RotaryEmbedding):
             rope_fn = (
@@ -945,11 +982,9 @@ class Molmo2PreTrainedModel(PreTrainedModel):
 
 class Molmo2TextModel(Molmo2PreTrainedModel):
     config: Molmo2TextConfig
-    _no_split_modules = ["Molmo2DecoderLayer", "Molmo2PostNormDecoderLayer"]
+    _input_embed_layer = "wte"
 
-    def __init__(self, config: Molmo2TextConfig | Molmo2Config):
-        if isinstance(config, Molmo2Config):
-            config = config.text_config
+    def __init__(self, config: Molmo2TextConfig):
         super().__init__(config)
         if config.additional_vocab_size is not None:
             self.wte = Molmo2Embedding(
@@ -978,12 +1013,6 @@ class Molmo2TextModel(Molmo2PreTrainedModel):
 
         # Initialize weights and apply final processing
         self.post_init()
-
-    def get_input_embeddings(self) -> torch.nn.Module:
-        return self.wte
-
-    def set_input_embeddings(self, value: torch.nn.Module) -> None:
-        self.wte = value
 
     @can_return_tuple
     def forward(
@@ -1144,7 +1173,7 @@ class Molmo2Model(Molmo2PreTrainedModel):
 
     def __init__(self, config: Molmo2Config):
         super().__init__(config)
-        self.transformer: Molmo2TextModel = Molmo2TextModel(config.text_config)
+        self.language_model: Molmo2TextModel = Molmo2TextModel(config.text_config)
         self.image_col_id = config.image_col_id
         self.image_low_res_id = config.image_low_res_id
         self.vision_backbone: Molmo2VisionBackbone | None = None
@@ -1155,20 +1184,10 @@ class Molmo2Model(Molmo2PreTrainedModel):
         self.post_init()
 
     def get_input_embeddings(self) -> torch.nn.Module:
-        return self.transformer.wte
+        return self.language_model.wte
 
     def set_input_embeddings(self, value: torch.nn.Module) -> None:
-        self.transformer.wte = value
-
-    def set_decoder(self, decoder):
-        self.transformer = decoder
-
-    def get_decoder(self):
-        return self.transformer
-
-    @property
-    def device(self) -> torch.device:
-        return self.transformer.ln_f.weight.device
+        self.language_model.wte = value
 
     def build_batched_images(
         self,
@@ -1486,7 +1505,7 @@ class Molmo2Model(Molmo2PreTrainedModel):
         # Get embeddings of input.
         # shape: (batch_size, seq_len, d_model)
         input_ids = input_ids * (input_ids != -1).to(input_ids.dtype)
-        x = self.transformer.wte(input_ids)
+        x = self.language_model.wte(input_ids)
 
         image_features: torch.FloatTensor | None = None
         if images is not None:
@@ -1496,7 +1515,7 @@ class Molmo2Model(Molmo2PreTrainedModel):
             x.view(-1, x.shape[-1])[is_image_patch] += image_features
 
         # shape: (batch_size, seq_len, d_model)
-        x = self.transformer.emb_drop(x)  # type: ignore
+        x = self.language_model.emb_drop(x)  # type: ignore
 
         return x, image_features
 
@@ -1588,7 +1607,7 @@ class Molmo2Model(Molmo2PreTrainedModel):
             # Create the mask
             causal_mask_mapping = create_causal_mask(**mask_kwargs)
 
-        outputs = self.transformer(
+        outputs = self.language_model(
             attention_mask=causal_mask_mapping,
             position_ids=position_ids,
             past_key_values=past_key_values,
@@ -1611,7 +1630,7 @@ class Molmo2Model(Molmo2PreTrainedModel):
 
 class Molmo2ForConditionalGeneration(Molmo2PreTrainedModel, GenerationMixin):
     _checkpoint_conversion_mapping = {}
-    _tied_weights_keys = {"lm_head.weight": "model.transformer.wte.weight"}
+    _tied_weights_keys = {"lm_head.weight": "model.language_model.wte.weight"}
     # Reference: fix gemma3 grad acc #37208
     accepts_loss_kwargs = False
     config: Molmo2Config
@@ -1625,33 +1644,6 @@ class Molmo2ForConditionalGeneration(Molmo2PreTrainedModel, GenerationMixin):
 
         # Initialize weights and apply final processing
         self.post_init()
-
-    def get_input_embeddings(self) -> torch.nn.Module:
-        return self.model.transformer.wte
-
-    def set_input_embeddings(self, value: torch.nn.Module) -> None:
-        self.model.transformer.wte = value
-
-    def get_output_embeddings(self):
-        return self.lm_head
-
-    def set_output_embeddings(self, new_embeddings):
-        self.lm_head = new_embeddings
-
-    def set_decoder(self, decoder):
-        self.model.set_decoder(decoder)
-
-    def get_decoder(self):
-        return self.model.get_decoder()
-
-    # Make modules available throught conditional class for BC
-    @property
-    def language_model(self) -> torch.nn.Module:
-        return self.model.transformer
-
-    @property
-    def vision_backbone(self) -> torch.nn.Module:
-        return self.model.vision_backbone
 
     @can_return_tuple
     def forward(
@@ -1819,5 +1811,5 @@ __all__ = [
     "Molmo2PreTrainedModel",
     "Molmo2TextModel",
     "Molmo2VisionBackbone",
-    "Molmo2VisionTransformer",
+    "Molmo2VisionModel",
 ]

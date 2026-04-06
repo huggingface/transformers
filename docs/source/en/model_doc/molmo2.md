@@ -121,9 +121,9 @@ print(generated_text[0])
 [[autodoc]] Molmo2VisionBackbone
     - forward
 
-## Molmo2VisionTransformer
+## Molmo2VisionModel
 
-[[autodoc]] Molmo2VisionTransformer
+[[autodoc]] Molmo2VisionModel
     - forward
 
 ## Molmo2ForConditionalGeneration

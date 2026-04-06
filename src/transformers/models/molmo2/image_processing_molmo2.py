@@ -55,36 +55,61 @@ def resize_image(
     return resized
 
 
-def select_tiling(h, w, patch_size, max_num_crops):
-    """Divide in image of size [w, h] in up to max_num_patches of size patch_size"""
-    original_size = np.stack([h, w])  # [1, 2]
-    tilings = []
-    for i in range(1, max_num_crops + 1):
-        for j in range(1, max_num_crops + 1):
-            if i * j <= max_num_crops:
-                tilings.append((i, j))
-    # sort so argmin and argmax favour smaller tilings in the event of a tie
-    tilings.sort(key=lambda x: (x[0] * x[1], x[0]))
-    candidate_tilings = np.array(tilings, dtype=np.int32)  # [n_resolutions, 2]
-    candidate_resolutions = candidate_tilings * patch_size  # [n_resolutions, 2]
+# Copied from transformers.models.cohere2_vision.image_processing_cohere2_vision.get_all_supported_aspect_ratios
+def get_all_supported_aspect_ratios(max_image_tiles: int) -> list[tuple[int, int]]:
+    """
+    Computes all allowed aspect ratios for a given maximum number of input tiles.
 
-    # How much we would need to scale the image to fit exactly in each tiling
-    original_size = np.stack([h, w], dtype=np.float32)  # [1, 2]
+    This function calculates all possible arrangements of tiles that can be formed
+    within the constraint of the maximum number of tiles. Each arrangement is
+    represented by its aspect ratio (width/height) and the corresponding tile configuration.
 
-    # The original size can be zero in rare cases if the image is smaller than the margin
-    # In those cases letting the scale become infinite means the tiling is based on the
-    # other side, or falls back to the smallest tiling
-    with np.errstate(divide="ignore"):
-        required_scale_d = (candidate_resolutions.astype(np.float32) / original_size,)
-    required_scale = np.min(required_scale_d, axis=-1, keepdims=True)  # [n_resolutions, 1]
+    Args:
+        max_image_tiles (`int`):
+            The maximum number of tiles allowed.
+
+    Returns:
+        `list[tuple[int, int]]`: A list of tuples, each tuple representing a valid (width, height)
+        configuration in terms of number of tiles.
+
+    Example:
+        >>> get_all_supported_aspect_ratios(4)
+        [(1, 1), (1, 2), (1, 3), (1, 4), (2, 1), (2, 2), (3, 1), (4, 1)]
+
+    """
+    aspect_ratios = []
+    for width in range(1, max_image_tiles + 1):
+        for height in range(1, max_image_tiles + 1):
+            if width * height <= max_image_tiles:
+                aspect_ratios.append((width, height))
+    return aspect_ratios
+
+
+# Copied from transformers.models.cohere2_vision.image_processing_cohere2_vision.get_optimal_tiled_canvas
+def get_optimal_tiled_canvas(
+    original_image_size: tuple[int, int],
+    target_tile_size: tuple[int, int],
+    min_image_tiles: int,
+    max_image_tiles: int,
+) -> tuple[int, int]:
+    possible_resolutions = get_all_supported_aspect_ratios(max_image_tiles)
+    possible_resolutions = sorted(possible_resolutions, key=lambda x: x[0] * x[1])
+    image_height, image_width = original_image_size
+    patch_size_height, patch_size_width = target_tile_size  # (height == width)
+
+    candidate_resolutions = np.array(possible_resolutions) * patch_size_height
+    # tiles following (width, height) order to align with aspect ratio convention
+    tile_size = np.stack([image_width, image_height])
+    required_scales = candidate_resolutions / tile_size
+    required_scale = np.min(required_scales, axis=-1, keepdims=True)  # [n_resolutions, 1]
     if np.all(required_scale < 1):
         # We are forced to downscale, so try to minimize the amount of downscaling
-        ix = np.argmax(required_scale)
+        best_grid = possible_resolutions[np.argmax(required_scale)]
     else:
         # Pick the resolution that required the least upscaling so that it most closely fits the image
         required_scale = np.where(required_scale < 1.0, 10e9, required_scale)
-        ix = np.argmin(required_scale)
-    return candidate_tilings[ix]
+        best_grid = possible_resolutions[np.argmin(required_scale)]
+    return best_grid  # (width, height)
 
 
 def build_resized_image(
@@ -142,31 +167,32 @@ def build_overlapping_crops(
 
     # Decide how to tile the image, to account for the overlap margins we compute the tiling
     # as if we had an image without the margins and were using a crop size without the margins
-    tiling = select_tiling(
-        original_image_h - total_margin_pixels,
-        original_image_w - total_margin_pixels,
-        crop_window_size,
-        max_crops,
+    effective_image_size = (original_image_h - total_margin_pixels, original_image_w - total_margin_pixels)
+    tiling_w, tiling_h = get_optimal_tiled_canvas(
+        original_image_size=effective_image_size,
+        target_tile_size=(crop_window_size, crop_window_size),
+        min_image_tiles=1,
+        max_image_tiles=max_crops,
     )
 
     src = resize_image(
         image,
-        [tiling[0] * crop_window_size + total_margin_pixels, tiling[1] * crop_window_size + total_margin_pixels],
+        [tiling_h * crop_window_size + total_margin_pixels, tiling_w * crop_window_size + total_margin_pixels],
         resample,
     )
     src = normalize(src, image_mean, image_std)
 
     # Now we have to split the image into crops, and track what patches came from
     # where in `patch_idx_arr`
-    n_crops = tiling[0] * tiling[1]
+    n_crops = tiling_h * tiling_w
     crop_arr = np.zeros([n_crops, crop_size, crop_size, 3], dtype=src.dtype)
     patch_idx_arr = np.zeros([n_crops, crop_patch_h, crop_patch_w], dtype=np.int32)
     on_crop = 0
-    for i in range(tiling[0]):
+    for i in range(tiling_h):
         # Slide over `src` by `crop_window_size` steps, but extract crops of size `crops_size`
         # which results in overlapping crop windows
         y0 = i * crop_window_size
-        for j in range(tiling[1]):
+        for j in range(tiling_w):
             x0 = j * crop_window_size
             crop_arr[on_crop] = src[y0 : y0 + crop_size, x0 : x0 + crop_size]
             patch_idx = np.arange(crop_patch_w * crop_patch_h).reshape(crop_patch_h, crop_patch_w)
@@ -177,16 +203,16 @@ def build_overlapping_crops(
                 patch_idx[:left_margin, :] = -1
             if j != 0:
                 patch_idx[:, :left_margin] = -1
-            if i != tiling[0] - 1:
+            if i != tiling_h - 1:
                 patch_idx[-right_margin:, :] = -1
-            if j != tiling[1] - 1:
+            if j != tiling_w - 1:
                 patch_idx[:, -right_margin:] = -1
             patch_idx_arr[on_crop] = patch_idx
             on_crop += 1
 
     # `patch_idx_arr` is ordered crop-by-crop, here we transpose `patch_idx_arr`
     # so it is ordered left-to-right order
-    patch_idx_arr = np.reshape(patch_idx_arr, [tiling[0], tiling[1], crop_patch_h, crop_patch_w])
+    patch_idx_arr = np.reshape(patch_idx_arr, [tiling_h, tiling_w, crop_patch_h, crop_patch_w])
     patch_idx_arr = np.transpose(patch_idx_arr, [0, 2, 1, 3])
     patch_idx_arr = np.reshape(patch_idx_arr, [-1])
 
