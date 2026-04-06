@@ -95,8 +95,8 @@ jobs:
             "https://circleci.com/api/v2/workflow/${workflow_id}/job")
           
           # Step 5: Extract collection_job details
-          collection_job_number=$(echo "$jobs" | jq -r '.items[] | select(.name == "collection_job") | .job_number')
-          collection_job_id=$(echo "$jobs" | jq -r '.items[] | select(.name == "collection_job") | .id')
+          collection_job_number=$(echo "$jobs" | jq -r '[.items[] | select(.name == "collection_job") | .job_number] | first // empty')
+          collection_job_id=$(echo "$jobs" | jq -r '[.items[] | select(.name == "collection_job") | .id] | first // empty')
           echo "CircleCI Collection job number: ${collection_job_number}"
           echo "CircleCI Collection job ID: ${collection_job_id}"
 
@@ -111,10 +111,10 @@ jobs:
           artifacts=$(curl -s \
             "https://circleci.com/api/v2/project/gh/${REPO}/${collection_job_number}/artifacts")
           
-          echo "$artifacts" | jq '.'
+          echo "$artifacts" | jq '.' || true
           
           # Step 7: Download failure_summary.json specifically
-          failure_summary_url=$(echo "$artifacts" | jq -r '.items[] | select(.path == "outputs/failure_summary.json") | .url')
+          failure_summary_url=$(echo "$artifacts" | jq -r '.items // [] | .[] | select(.path == "outputs/failure_summary.json") | .url')
           
           if [ -z "$failure_summary_url" ]; then
             echo "failure_summary.json not found in artifacts - PR may not have latest main merged. Skipping."
