@@ -12,11 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from ..utils import PushToHubMixin, is_torch_available
-
-
-if is_torch_available():
-    import torch
+from ..utils import PushToHubMixin
 
 
 def infer_device(model):
@@ -48,8 +44,13 @@ def infer_device(model):
     dev_type = param.device.type
     if dev_type == "cuda":
         # Refine based on actual platform
-        if getattr(torch, "version").hip is not None:
-            return "rocm"
+        from ..utils import is_torch_available
+
+        if is_torch_available():
+            import torch
+
+            if getattr(torch, "version").hip is not None:
+                return "rocm"
 
     return dev_type
 

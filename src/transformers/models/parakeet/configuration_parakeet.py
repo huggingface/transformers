@@ -77,7 +77,7 @@ class ParakeetEncoderConfig(PreTrainedConfig):
     subsampling_conv_kernel_size: int = 3
     subsampling_conv_stride: int = 2
     dropout: float | int = 0.1
-    dropout_positions: float = 0.0
+    dropout_positions: float | int = 0.0
     layerdrop: float | int = 0.1
     activation_dropout: float | int = 0.1
     attention_dropout: float | int = 0.1
