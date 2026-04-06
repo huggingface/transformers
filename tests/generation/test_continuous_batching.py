@@ -40,7 +40,11 @@ from transformers.generation.continuous_batching.cache import (
 )
 from transformers.generation.continuous_batching.cache_manager import FullAttentionCacheAllocator
 from transformers.generation.continuous_batching.continuous_api import ContinuousBatchProcessor, OutputRouter
-from transformers.generation.continuous_batching.input_outputs import ContinuousBatchingIOs, build_attention_mask
+from transformers.generation.continuous_batching.input_outputs import (
+    ContinuousBatchingAsyncIOs,
+    ContinuousBatchingIOs,
+    build_attention_mask,
+)
 from transformers.generation.continuous_batching.requests import GenerationOutput, RequestStatus
 from transformers.testing_utils import (
     require_deterministic_for_xpu,
@@ -259,6 +263,103 @@ class ContinuousBatchingNoAcceleratorTest(unittest.TestCase):
             io.get_graph_signature(),
             "Graph signature should change when switching between varlen and decode-fast-path batches.",
         )
+
+    def test_transfer_inputs_copies_graph_bounds(self) -> None:
+        """Host-to-device IO transfers must keep graph-bound metadata in sync with tensor inputs."""
+
+        class _DummyLogitsProcessor:
+            tensors_required = 0
+
+            def fill_defaults(self, arg_storage: torch.Tensor) -> None:
+                return None
+
+            def prepare_tensor_args(self, requests_in_batch: list[Any], arg_storage: torch.Tensor) -> None:
+                return None
+
+        config = AutoConfig.from_pretrained("HuggingFaceTB/SmolLM-1.7B", attn_implementation="flash_attention_2")
+        cache = PagedAttentionCache(
+            config=config,
+            continuous_batching_config=ContinuousBatchingConfig(block_size=16, num_blocks=8, max_batch_tokens=32),
+            device="cpu",
+        )
+        source = ContinuousBatchingIOs(
+            cache=cache,
+            config=config,
+            device=torch.device("cpu"),
+            model_dtype=torch.float16,
+            max_graphs=2,
+            return_logprobs=False,
+            logit_processor=_DummyLogitsProcessor(),
+        )
+        target = ContinuousBatchingIOs(
+            cache=cache,
+            config=config,
+            device=torch.device("cpu"),
+            model_dtype=torch.float16,
+            max_graphs=2,
+            return_logprobs=False,
+            logit_processor=_DummyLogitsProcessor(),
+        )
+
+        source.num_q_tokens = 16
+        source.max_kv_read = 32
+        source.max_seqlen_q = 7
+        source.max_seqlen_k = dict.fromkeys(source.max_seqlen_k, 19)
+        source.set_graph_bounds(11, 23)
+
+        source._transfer_inputs(target, stream=None)
+
+        self.assertEqual(target.graph_max_seqlen_q, 11)
+        self.assertEqual(target.graph_max_seqlen_k, dict.fromkeys(target.graph_max_seqlen_k, 23))
+
+
+@require_torch_gpu
+class ContinuousBatchingAsyncIOTest(unittest.TestCase):
+    def test_async_io_exposes_graph_bounds_interface(self) -> None:
+        """Async IOs should expose the same graph-bound interface as sync IOs."""
+
+        class _DummyLogitsProcessor:
+            tensors_required = 0
+
+            def fill_defaults(self, arg_storage: torch.Tensor) -> None:
+                return None
+
+            def prepare_tensor_args(self, requests_in_batch: list[Any], arg_storage: torch.Tensor) -> None:
+                return None
+
+        config = AutoConfig.from_pretrained("HuggingFaceTB/SmolLM-1.7B", attn_implementation="flash_attention_2")
+        cache = PagedAttentionCache(
+            config=config,
+            continuous_batching_config=ContinuousBatchingConfig(block_size=16, num_blocks=8, max_batch_tokens=32),
+            device=torch_device,
+        )
+        io = ContinuousBatchingAsyncIOs(
+            cache=cache,
+            config=config,
+            device=torch.device(torch_device),
+            model_dtype=torch.float16,
+            max_graphs=2,
+            return_logprobs=False,
+            logit_processor=_DummyLogitsProcessor(),
+        )
+
+        self.assertEqual(io.num_q_tokens, 0)
+        self.assertEqual(io.max_kv_read, 0)
+        self.assertEqual(io.max_seqlen_q, 0)
+        self.assertEqual(io.max_seqlen_k, dict.fromkeys(io.max_seqlen_k, 0))
+
+        io.set_graph_bounds(13, 29)
+
+        current_pair = io.io_pairs[io.current_pair]
+        self.assertEqual(current_pair.host_io.graph_max_seqlen_q, 13)
+        self.assertEqual(current_pair.device_io.graph_max_seqlen_q, 13)
+        self.assertEqual(current_pair.host_io.graph_max_seqlen_k, dict.fromkeys(current_pair.host_io.graph_max_seqlen_k, 29))
+        self.assertEqual(
+            current_pair.device_io.graph_max_seqlen_k,
+            dict.fromkeys(current_pair.device_io.graph_max_seqlen_k, 29),
+        )
+
+        io.reset()
 
     @parameterized.expand(
         [

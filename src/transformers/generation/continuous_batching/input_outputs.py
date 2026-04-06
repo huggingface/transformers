@@ -244,6 +244,8 @@ class ContinuousBatchingIOs:
         other.total_seqlen_q = self.total_seqlen_q
         other.max_seqlen_q = self.max_seqlen_q
         other.max_seqlen_k = dict(self.max_seqlen_k.items())
+        other.graph_max_seqlen_q = self.graph_max_seqlen_q
+        other.graph_max_seqlen_k = dict(self.graph_max_seqlen_k.items())
         # Transfer static tensors
         maybe_stream = torch.cuda.stream(stream) if stream is not None else nullcontext()
         with maybe_stream:
@@ -711,6 +713,22 @@ class ContinuousBatchingAsyncIOs:
     def get_cumulative_seqlens(self) -> tuple[torch.Tensor, dict[str, torch.Tensor]]:
         return self.io_pairs[self.current_pair].host_io.get_cumulative_seqlens()
 
+    @property
+    def num_q_tokens(self) -> int:
+        return self.io_pairs[self.current_pair].host_io.num_q_tokens
+
+    @property
+    def max_kv_read(self) -> int:
+        return self.io_pairs[self.current_pair].host_io.max_kv_read
+
+    @property
+    def max_seqlen_q(self) -> int:
+        return self.io_pairs[self.current_pair].host_io.max_seqlen_q
+
+    @property
+    def max_seqlen_k(self) -> dict[str, int]:
+        return self.io_pairs[self.current_pair].host_io.max_seqlen_k
+
     # The prepare_batch_tensor method also has to prepare the carry over ids
     def prepare_batch_tensors(
         self,
@@ -768,6 +786,11 @@ class ContinuousBatchingAsyncIOs:
             previous_pair.device_io.output_ids,
             current_pair.device_io.output_ids,
         )
+
+    def set_graph_bounds(self, max_seqlen_q: int, max_seqlen_k: int | dict[str, int]) -> None:
+        io_pair = self.io_pairs[self.current_pair]
+        io_pair.host_io.set_graph_bounds(max_seqlen_q, max_seqlen_k)
+        io_pair.device_io.set_graph_bounds(max_seqlen_q, max_seqlen_k)
 
     def carry_over_tokens(
         self, input_ids: torch.Tensor, carry_over_ids: torch.Tensor, prev_output_ids: torch.Tensor
