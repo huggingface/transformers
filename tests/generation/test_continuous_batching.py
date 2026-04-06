@@ -39,7 +39,11 @@ from transformers.generation.continuous_batching.cache import (
     group_layers_by_attn_type,
 )
 from transformers.generation.continuous_batching.cache_manager import FullAttentionCacheAllocator
-from transformers.generation.continuous_batching.continuous_api import ContinuousBatchProcessor, OutputRouter
+from transformers.generation.continuous_batching.continuous_api import (
+    ContinuousBatchProcessor,
+    OutputRouter,
+    _should_disable_async_batching_for_large_fa2_graphs,
+)
 from transformers.generation.continuous_batching.input_outputs import (
     ContinuousBatchingAsyncIOs,
     ContinuousBatchingIOs,
@@ -206,6 +210,66 @@ def regular_generate(
 
 # Class for all continuous batching tests that do not require any accelerator. Usualy those test are faster to run.
 class ContinuousBatchingNoAcceleratorTest(unittest.TestCase):
+    def test_async_graph_guard_only_trips_for_large_fa2_cuda_batches(self) -> None:
+        fa2_config = AutoConfig.from_pretrained("HuggingFaceTB/SmolLM-1.7B", attn_implementation="flash_attention_2")
+        sdpa_config = AutoConfig.from_pretrained("HuggingFaceTB/SmolLM-1.7B", attn_implementation="sdpa")
+        cuda_device = torch.device("cuda")
+
+        self.assertTrue(
+            _should_disable_async_batching_for_large_fa2_graphs(
+                config=fa2_config,
+                model_device=cuda_device,
+                use_cuda_graph=True,
+                use_async_batching=True,
+                max_batch_tokens=1024,
+            )
+        )
+        self.assertFalse(
+            _should_disable_async_batching_for_large_fa2_graphs(
+                config=fa2_config,
+                model_device=cuda_device,
+                use_cuda_graph=True,
+                use_async_batching=True,
+                max_batch_tokens=768,
+            )
+        )
+        self.assertFalse(
+            _should_disable_async_batching_for_large_fa2_graphs(
+                config=fa2_config,
+                model_device=torch.device("cpu"),
+                use_cuda_graph=True,
+                use_async_batching=True,
+                max_batch_tokens=1024,
+            )
+        )
+        self.assertFalse(
+            _should_disable_async_batching_for_large_fa2_graphs(
+                config=fa2_config,
+                model_device=cuda_device,
+                use_cuda_graph=False,
+                use_async_batching=True,
+                max_batch_tokens=1024,
+            )
+        )
+        self.assertFalse(
+            _should_disable_async_batching_for_large_fa2_graphs(
+                config=fa2_config,
+                model_device=cuda_device,
+                use_cuda_graph=True,
+                use_async_batching=False,
+                max_batch_tokens=1024,
+            )
+        )
+        self.assertFalse(
+            _should_disable_async_batching_for_large_fa2_graphs(
+                config=sdpa_config,
+                model_device=cuda_device,
+                use_cuda_graph=True,
+                use_async_batching=True,
+                max_batch_tokens=1024,
+            )
+        )
+
     def test_cuda_graph_signature_tracks_non_tensor_runtime_args(self) -> None:
         """CUDA graph reuse must distinguish batches that share padded tensor sizes but not FA runtime ints."""
 

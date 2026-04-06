@@ -64,6 +64,27 @@ The maximum number of cached graphs is controlled by max_cached_graphs (default 
 All defaults are stored in ContinuousBatchingConfig.resolve_sentinel_values().
 """
 
+_ASYNC_CUDAGRAPH_FA2_MAX_BATCH_TOKENS = 768
+
+
+def _should_disable_async_batching_for_large_fa2_graphs(
+    *,
+    config: PretrainedConfig,
+    model_device: torch.device,
+    use_cuda_graph: bool,
+    use_async_batching: bool,
+    max_batch_tokens: int,
+) -> bool:
+    """Return whether FA2 async+graph batching should be downgraded for large resolved batch-token budgets."""
+
+    return (
+        model_device.type == "cuda"
+        and use_cuda_graph
+        and use_async_batching
+        and max_batch_tokens > _ASYNC_CUDAGRAPH_FA2_MAX_BATCH_TOKENS
+        and is_flash_attention_requested(config=config, version=2)
+    )
+
 
 # We cannot use `PreTrainedModel` for circular import reasons, so this helps keep track of the basic types
 class ProtoPretrainedModel(nn.Module):
@@ -188,6 +209,20 @@ class ContinuousBatchProcessor:
         # Set up metrics collector
         self.max_batch_tokens = cache.max_batch_tokens
         self.metrics = ContinuousBatchProcessorMetrics(cache.max_batch_tokens)
+
+        if _should_disable_async_batching_for_large_fa2_graphs(
+            config=self.config,
+            model_device=self.model_device,
+            use_cuda_graph=self.use_cuda_graph,
+            use_async_batching=self.cb_config.use_async_batching,
+            max_batch_tokens=self.max_batch_tokens,
+        ):
+            logger.warning(
+                "Disabling async batching for flash_attention_2 continuous batching because "
+                f"{self.max_batch_tokens = } exceeds the validated async+graph limit of "
+                f"{_ASYNC_CUDAGRAPH_FA2_MAX_BATCH_TOKENS} tokens."
+            )
+            self.cb_config.use_async_batching = False
 
         # If the user turned on the decode fast path (ie. using a block table), check if it is available
         self._ensure_decode_fast_path_is_available()  # this needs to happen before self.inputs_and_outputs is created
