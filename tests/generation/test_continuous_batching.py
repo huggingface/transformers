@@ -40,7 +40,7 @@ from transformers.generation.continuous_batching.cache import (
 )
 from transformers.generation.continuous_batching.cache_manager import FullAttentionCacheAllocator
 from transformers.generation.continuous_batching.continuous_api import ContinuousBatchProcessor, OutputRouter
-from transformers.generation.continuous_batching.input_outputs import build_attention_mask
+from transformers.generation.continuous_batching.input_outputs import ContinuousBatchingIOs, build_attention_mask
 from transformers.generation.continuous_batching.requests import GenerationOutput, RequestStatus
 from transformers.testing_utils import (
     require_deterministic_for_xpu,
@@ -202,6 +202,64 @@ def regular_generate(
 
 # Class for all continuous batching tests that do not require any accelerator. Usualy those test are faster to run.
 class ContinuousBatchingNoAcceleratorTest(unittest.TestCase):
+    def test_cuda_graph_signature_tracks_non_tensor_runtime_args(self) -> None:
+        """CUDA graph reuse must distinguish batches that share padded tensor sizes but not FA runtime ints."""
+
+        class _DummyLogitsProcessor:
+            tensors_required = 0
+
+            def fill_defaults(self, arg_storage: torch.Tensor) -> None:
+                return None
+
+            def prepare_tensor_args(self, requests_in_batch: list[Any], arg_storage: torch.Tensor) -> None:
+                return None
+
+        config = AutoConfig.from_pretrained("HuggingFaceTB/SmolLM-1.7B", attn_implementation="flash_attention_2")
+        cache = PagedAttentionCache(
+            config=config,
+            continuous_batching_config=ContinuousBatchingConfig(block_size=16, num_blocks=8, max_batch_tokens=32),
+            device="cpu",
+        )
+        io = ContinuousBatchingIOs(
+            cache=cache,
+            config=config,
+            device=torch.device("cpu"),
+            model_dtype=torch.float16,
+            max_graphs=2,
+            return_logprobs=False,
+            logit_processor=_DummyLogitsProcessor(),
+        )
+
+        io.use_block_table = False
+        io.num_q_tokens = 16
+        io.max_kv_read = 32
+        io.max_seqlen_q = 7
+        io.max_seqlen_k = dict.fromkeys(io.max_seqlen_k, 19)
+        base_signature = io.get_graph_signature()
+
+        io.max_seqlen_q = 11
+        self.assertNotEqual(
+            base_signature,
+            io.get_graph_signature(),
+            "Graph signature should change when max_seqlen_q changes under the same padded Q/KV sizes.",
+        )
+
+        io.max_seqlen_q = 7
+        io.max_seqlen_k = dict.fromkeys(io.max_seqlen_k, 23)
+        self.assertNotEqual(
+            base_signature,
+            io.get_graph_signature(),
+            "Graph signature should change when max_seqlen_k changes under the same padded Q/KV sizes.",
+        )
+
+        io.max_seqlen_k = dict.fromkeys(io.max_seqlen_k, 19)
+        io.use_block_table = True
+        self.assertNotEqual(
+            base_signature,
+            io.get_graph_signature(),
+            "Graph signature should change when switching between varlen and decode-fast-path batches.",
+        )
+
     @parameterized.expand(
         [
             (None, None, "0"),

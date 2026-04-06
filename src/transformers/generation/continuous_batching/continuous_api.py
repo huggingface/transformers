@@ -391,6 +391,22 @@ class ContinuousBatchProcessor:
         self.inputs_and_outputs.prepare_batch_tensors(
             requests_in_batch, self.logit_processor, use_decode_fast_path, num_q_tokens, max_kv_read
         )
+        if self._pad_inputs:
+            if self.inputs_and_outputs.use_block_table:
+                self.inputs_and_outputs.set_graph_bounds(1, 1)
+            else:
+                padded_max_seqlen_q = pad_to_interval(
+                    self.inputs_and_outputs.max_seqlen_q, self.q_padding_interval_size, self.inputs_and_outputs.num_q_tokens
+                )
+                padded_max_seqlen_k = {
+                    layer_type: pad_to_interval(
+                        self.inputs_and_outputs.max_seqlen_k[layer_type],
+                        self.kv_padding_interval_size,
+                        self.inputs_and_outputs.max_kv_read + self.inputs_and_outputs.num_q_tokens,
+                    )
+                    for layer_type in self.inputs_and_outputs.max_seqlen_k
+                }
+                self.inputs_and_outputs.set_graph_bounds(padded_max_seqlen_q, padded_max_seqlen_k)
         self.metrics.record_kv_cache_memory_metrics(self.cache)
         return True
 

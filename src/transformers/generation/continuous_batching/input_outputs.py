@@ -11,6 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+from collections.abc import Hashable
 from contextlib import nullcontext
 from dataclasses import dataclass
 from functools import partial
@@ -128,6 +129,8 @@ class ContinuousBatchingIOs:
         self.true_read_sizes = [0 for _ in range(cache.num_groups)]
         self.true_write_sizes = [0 for _ in range(cache.num_groups)]
         self.use_block_table = False  # True if all requests in batch have query_length == 1
+        self.graph_max_seqlen_q = 0
+        self.graph_max_seqlen_k: dict[str, int] = {}
         # Setup other accumulators
         self.requests_in_batch: list[FutureRequestState] = []
         self.req_id_to_new_token_position: dict[str, int] = {}  # only used for async API
@@ -194,6 +197,7 @@ class ContinuousBatchingIOs:
         self.total_seqlen_q = 0
         self.max_seqlen_q = 0
         self.max_seqlen_k = dict.fromkeys(self.cumulative_seqlens_k.keys(), 0)
+        self.graph_max_seqlen_k = dict.fromkeys(self.cumulative_seqlens_k.keys(), 0)
 
         # If the attention mask is needed, it is allocated separately
         if attn_mask_is_needed(self.config):
@@ -276,10 +280,12 @@ class ContinuousBatchingIOs:
         # Reset the logits indices and output ids
         self.logits_indices[:q_len].zero_()
         self.output_ids[:, :q_len].zero_()
+        self.graph_max_seqlen_q = 0
 
         # Reset the attributes that are either tensors or dict of tensors
         for layer_type in self.cumulative_seqlens_k:
             self.max_seqlen_k[layer_type] = 0
+            self.graph_max_seqlen_k[layer_type] = 0
             if self.attention_mask is not None:
                 self.attention_mask[layer_type][:, :, :q_len, : q_len + kv_len].fill_(
                     torch.finfo(self.model_dtype).min
@@ -460,13 +466,14 @@ class ContinuousBatchingIOs:
         q_size = self.num_q_tokens
         kv_size = self.max_kv_read + self.num_q_tokens
         batch_size = self.num_q_tokens if use_padding else self.true_batch_size
+        effective_max_seqlen_q = self.graph_max_seqlen_q if use_padding and self.graph_max_seqlen_q > 0 else self.max_seqlen_q
 
         # Prepare the kwargs, the attributes that are either tensors or dict of tensors are initialized to empty dicts.
         kwargs = PagedAttentionArgs(
             input_ids=self.input_ids[:q_size].unsqueeze(0),
             position_ids=self.position_ids[:q_size].unsqueeze(0),
             cu_seq_lens_q=self.cumulative_seqlens_q[: batch_size + 1],
-            max_seqlen_q=self.max_seqlen_q,
+            max_seqlen_q=effective_max_seqlen_q,
             logits_indices=self.logits_indices[:q_size],
             logits_processor_args=self._bulk_input_tensor[self.static_inputs :, :q_size],
             cu_seq_lens_k={},
@@ -483,8 +490,8 @@ class ContinuousBatchingIOs:
         # some models like Qwen3-4B-Instruct-2507, if we don't include these tokens in cumulative_seqlens_q, there are
         # some NaNs in the output logits even for non-padded tokens.
         if use_padding:
-            self.max_seqlen_q = max(self.max_seqlen_q, q_size - self.total_seqlen_q)
-            kwargs.max_seqlen_q = self.max_seqlen_q
+            effective_max_seqlen_q = max(effective_max_seqlen_q, q_size - self.total_seqlen_q)
+            kwargs.max_seqlen_q = effective_max_seqlen_q
             self.cumulative_seqlens_q[self.true_batch_size + 1 :] = q_size
             # FIXME: is there another way to avoid this? It has a very slight impact on performance (~5 tok/s)
 
@@ -509,14 +516,24 @@ class ContinuousBatchingIOs:
             kwargs.attention_mask: dict[str, torch.Tensor] = {}
             for layer_type, seqlens_k in self.cumulative_seqlens_k.items():
                 kwargs.cu_seq_lens_k[layer_type] = seqlens_k[: batch_size + 1]
-                kwargs.max_seqlen_k[layer_type] = 1 if self.use_block_table else self.max_seqlen_k[layer_type]
+                graph_max_seqlen_k = (
+                    self.graph_max_seqlen_k[layer_type]
+                    if use_padding and self.graph_max_seqlen_k[layer_type] > 0
+                    else self.max_seqlen_k[layer_type]
+                )
+                kwargs.max_seqlen_k[layer_type] = 1 if self.use_block_table else graph_max_seqlen_k
                 if self.attention_mask is not None:
                     k_len = kv_size if use_padding else seqlens_k[batch_size]
                     kwargs.attention_mask[layer_type] = self.attention_mask[layer_type][..., :q_size, :k_len]
         else:
             layer_type = layer_types[0]
             kwargs.cu_seq_lens_k = self.cumulative_seqlens_k[layer_type][: batch_size + 1]
-            kwargs.max_seqlen_k = 1 if self.use_block_table else self.max_seqlen_k[layer_type]
+            graph_max_seqlen_k = (
+                self.graph_max_seqlen_k[layer_type]
+                if use_padding and self.graph_max_seqlen_k[layer_type] > 0
+                else self.max_seqlen_k[layer_type]
+            )
+            kwargs.max_seqlen_k = 1 if self.use_block_table else graph_max_seqlen_k
             if self.attention_mask is not None:
                 k_len = kv_size if use_padding else self.cumulative_seqlens_k[layer_type][batch_size]
                 kwargs.attention_mask = self.attention_mask[layer_type][..., :q_size, :k_len]
@@ -531,16 +548,47 @@ class ContinuousBatchingIOs:
         return 3 tensors to have the same interface as when using async batching."""
         return self.carry_over_ids, self.output_ids, self.output_ids
 
+    def set_graph_bounds(self, max_seqlen_q: int, max_seqlen_k: int | dict[str, int]) -> None:
+        self.graph_max_seqlen_q = max_seqlen_q
+        if isinstance(max_seqlen_k, dict):
+            self.graph_max_seqlen_k.update(max_seqlen_k)
+        else:
+            for layer_type in self.graph_max_seqlen_k:
+                self.graph_max_seqlen_k[layer_type] = max_seqlen_k
+
+    def get_graph_signature(self) -> Hashable:
+        """Return the CUDA graph signature for the current batch.
+
+        Continuous batching pads tensor inputs to static shapes for CUDA graph replay, but FA-style kernels also depend
+        on non-tensor integer kwargs such as `max_seqlen_q` and `max_seqlen_k`. Reusing a graph across batches that
+        share padded `(Q, KV)` sizes but differ on those integers can replay kernels with stale launch parameters.
+        """
+        max_seqlen_k_signature = tuple(
+            (
+                layer_type,
+                self.graph_max_seqlen_k[layer_type] if self.graph_max_seqlen_k[layer_type] > 0 else self.max_seqlen_k[layer_type],
+            )
+            for layer_type in self.cumulative_seqlens_k.keys()
+        )
+        return (
+            "decode_fast_path" if self.use_block_table else "varlen",
+            self.num_q_tokens,
+            self.max_kv_read,
+            self.graph_max_seqlen_q if self.graph_max_seqlen_q > 0 else self.max_seqlen_q,
+            max_seqlen_k_signature,
+        )
+
     def get_graph(self) -> torch.cuda.CUDAGraph | None:
-        graph = self.graphs.get_graph(self.num_q_tokens, self.max_kv_read)
+        graph_signature = self.get_graph_signature()
+        graph = self.graphs.get_graph(graph_signature)
         # If this point is reached, it means the next step will be a new graph capture
         if graph is None:
             self.graphs.plan_for_new_graph()
-            logger.info(f"Creating graph for {(self.num_q_tokens, self.max_kv_read) = }")
+            logger.info(f"Creating graph for {graph_signature = }")
         return graph
 
     def set_graph(self, graph: torch.cuda.CUDAGraph) -> None:
-        self.graphs.set_graph(self.num_q_tokens, self.max_kv_read, graph)
+        self.graphs.set_graph(self.get_graph_signature(), graph)
 
 
 class HostDeviceIOPair:

@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 from collections import OrderedDict
+from collections.abc import Hashable
 from math import ceil
 from typing import Any
 
@@ -29,7 +30,7 @@ class CudaGraphBuffer:
         if max_size <= 0:
             raise ValueError(f"max_size must be positive, but got {max_size}")
         self.max_size = max_size
-        self._storage: OrderedDict[tuple[int, int], torch.cuda.CUDAGraph] = OrderedDict()
+        self._storage: OrderedDict[Hashable, torch.cuda.CUDAGraph] = OrderedDict()
 
     def __del__(self) -> None:
         original_max_size = self.max_size
@@ -37,10 +38,10 @@ class CudaGraphBuffer:
         self.plan_for_new_graph(silent=True)
         self.max_size = original_max_size
 
-    def get_graph(self, q_len: int, kv_len: int) -> torch.cuda.CUDAGraph | None:
-        graph = self._storage.get((q_len, kv_len))
+    def get_graph(self, key: Hashable) -> torch.cuda.CUDAGraph | None:
+        graph = self._storage.get(key)
         if graph is not None:
-            self._storage.move_to_end((q_len, kv_len))
+            self._storage.move_to_end(key)
         return graph
 
     def plan_for_new_graph(self, silent: bool = False) -> None:
@@ -50,11 +51,11 @@ class CudaGraphBuffer:
                 logger.info(f"Evicting graph for {evicted_key = }")
             evicted_graph.reset()
 
-    def set_graph(self, q_len: int, kv_len: int, graph: torch.cuda.CUDAGraph) -> None:
+    def set_graph(self, key: Hashable, graph: torch.cuda.CUDAGraph) -> None:
         # In our use case, this should not have any effect because we plan for a new graph before it is captured
         self.plan_for_new_graph()
-        logger.info(f"Setting graph for {q_len = }, {kv_len = }")
-        self._storage[(q_len, kv_len)] = graph
+        logger.info(f"Setting graph for {key = }")
+        self._storage[key] = graph
 
 
 def attn_mask_is_needed(config: PretrainedConfig) -> bool:
