@@ -346,7 +346,6 @@ class Sam3LiteTextPreTrainedModel(PreTrainedModel):
     main_input_name = "pixel_values"
     input_modalities = ["image", "text"]
     supports_gradient_checkpointing = True
-    _no_split_modules = ["Sam3LiteTextTextEmbeddings", "Sam3LiteTextTextEncoderLayer", "Sam3LiteTextRepMixerBlock"]
     _supports_sdpa = True
     _supports_flash_attn = True
     _supports_flex_attn = True
