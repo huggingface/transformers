@@ -332,7 +332,6 @@ def format_rule_summary(rule_id: str) -> str:
 def format_rule_details(rule_id: str) -> str:
     spec = TRF_RULE_SPECS[rule_id]
     explanation = spec["explanation"]
-    default_label = "yes" if spec["default_enabled"] else "no"
     return "\n".join(
         [
             f"### {rule_id}",
