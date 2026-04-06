@@ -264,7 +264,7 @@ class Scheduler(ABC):
 
             # Store the future request state
             has_new_token = not state.remaining_prefill_tokens
-            scheduled_requests.append(FutureRequestState(state, has_new_token, complete_blocks))
+            scheduled_requests.append(FutureRequestState(state, has_new_token, complete_blocks, request_len))
 
             # Remove the request from the waiting queue and mark it as removed
             req_id = state.request_id
