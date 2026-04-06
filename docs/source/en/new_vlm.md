@@ -84,5 +84,5 @@ class MyModelImageProcessorPil(PilBackend):
 
 ## Next steps
 
-- Read the [Documenting a model](./auto_docstring) guide to auto-generate consistent docstrings with `@auto_docstring`.
+- Read the [Auto-generating docstrings](./auto_docstring) guide to auto-generate consistent docstrings with `@auto_docstring`.
 - Read the [Writing model tests](./testing) guide to write integration tests for your model.
