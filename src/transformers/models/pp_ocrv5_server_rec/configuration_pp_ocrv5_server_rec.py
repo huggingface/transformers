@@ -46,7 +46,7 @@ class PPOCRV5ServerRecConfig(PreTrainedConfig):
     conv_kernel_size: list | None = None
     qkv_bias: bool = True
     num_attention_heads: int = 8
-    attention_dropout: float = 0.0
+    attention_dropout: float | int = 0.0
     layer_norm_eps: float = 1e-6
 
     def __post_init__(self, **kwargs):

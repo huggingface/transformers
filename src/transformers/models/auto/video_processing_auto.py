@@ -53,6 +53,7 @@ else:
     VIDEO_PROCESSOR_MAPPING_NAMES = OrderedDict(
         [
             ("ernie4_5_vl_moe", "Ernie4_5_VLMoeVideoProcessor"),
+            ("gemma4", "Gemma4VideoProcessor"),
             ("glm46v", "Glm46VVideoProcessor"),
             ("glm4v", "Glm4vVideoProcessor"),
             ("hyperclovax_vision_v2", "Qwen2VLVideoProcessor"),

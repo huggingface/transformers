@@ -231,6 +231,7 @@ TOKENIZER_MAPPING_NAMES = OrderedDict[str, str | None](
         ("nezha", "BertTokenizer" if is_tokenizers_available() else None),
         ("nllb", "NllbTokenizer" if is_tokenizers_available() else None),
         ("nllb-moe", "NllbTokenizer" if is_tokenizers_available() else None),
+        ("nomic_bert", "BertTokenizer" if is_tokenizers_available() else None),
         ("nougat", "NougatTokenizer" if is_tokenizers_available() else None),
         ("nystromformer", "AlbertTokenizer" if is_tokenizers_available() else None),
         ("olmo", "GPTNeoXTokenizer" if is_tokenizers_available() else None),
@@ -739,11 +740,15 @@ class AutoTokenizer:
                 or tokenizer_class_from_name(tokenizer_config_class + "Fast") is not None
             )
         )
-        explicit_local_code = has_local_code and (
-            tokenizer_config_class is not None
-            and not (
-                tokenizer_class_from_name(tokenizer_config_class).__module__.startswith("transformers.")
-                and tokenizer_class_from_name(tokenizer_config_class + "Fast").__module__.startswith("transformers.")
+        explicit_local_code = (
+            has_local_code
+            and type(config) not in TOKENIZER_MAPPING
+            and (
+                tokenizer_config_class is not None
+                and not (
+                    tokenizer_class_from_name(tokenizer_config_class)
+                    or tokenizer_class_from_name(tokenizer_config_class + "Fast")
+                ).__module__.startswith("transformers.")
             )
         )
         # V5: Skip remote tokenizer for custom models with incorrect hub tokenizer class
