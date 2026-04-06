@@ -170,10 +170,12 @@ class ObjectDetectionPipeline(Pipeline):
                 raw_annotation["boxes"] = [self._get_bounding_box(box) for box in boxes]
 
                 keys = ["score", "label", "box"]
-                annotation.append([
-                    dict(zip(keys, vals))
-                    for vals in zip(raw_annotation["scores"], raw_annotation["labels"], raw_annotation["boxes"])
-                ])
+                annotation.append(
+                    [
+                        dict(zip(keys, vals))
+                        for vals in zip(raw_annotation["scores"], raw_annotation["labels"], raw_annotation["boxes"])
+                    ]
+                )
 
         return annotation
 
