@@ -99,6 +99,12 @@ jobs:
           collection_job_id=$(echo "$jobs" | jq -r '.items[] | select(.name == "collection_job") | .id')
           echo "CircleCI Collection job number: ${collection_job_number}"
           echo "CircleCI Collection job ID: ${collection_job_id}"
+
+          if [ -z "$collection_job_number" ]; then
+            echo "No collection_job found (only empty job ran - no tests were selected). Skipping."
+            echo "artifact_found=false" >> $GITHUB_OUTPUT
+            exit 0
+          fi
           
           # Step 6: Get artifacts list
           echo "Getting artifacts for job ${collection_job_number}..."
