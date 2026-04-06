@@ -1,3 +1,18 @@
+# Copyright 2026 The HuggingFace Inc. team. All rights reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+
 from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
@@ -50,7 +65,7 @@ class VideoPrismVisionConfig(VivitConfig):
         Softcapping constant for attention logits.
     num_auxiliary_layers (`int`, *optional*, defaults to 2):
         Number of auxiliary layers. This is used in the VideoPrismVideoModel that is a part of VideoPrismClipModel.
-    apply_l2_norm (`bool`, *optional*, defaults to `True`):
+    apply_l2norm (`bool`, *optional*, defaults to `True`):
         Whether to apply L2 normalization to the output. This is used in the VideoPrismVideoModel that is a part of VideoPrismClipModel.
     """
 
@@ -73,14 +88,14 @@ class VideoPrismVisionConfig(VivitConfig):
     qkv_bias: bool = True
     attn_logit_softcapping: float = 50.0
     num_auxiliary_layers: int = 2
-    apply_l2_norm: bool = True
+    apply_l2norm: bool = True
 
 
 @auto_docstring(checkpoint="google/videoprism-lvt-base-f16r288")
 @strict
 class VideoPrismTextConfig(SiglipTextConfig):
     r"""
-    apply_l2_norm (`bool`, *optional*, defaults to `True`):
+    apply_l2norm (`bool`, *optional*, defaults to `True`):
         Whether to apply L2 normalization to the output of VideoPrismTextEncoder.
     attn_logit_softcapping (`float`, *optional*, defaults to 50.0):
         Softcapping constant for attention logits.
@@ -95,7 +110,7 @@ class VideoPrismTextConfig(SiglipTextConfig):
     hidden_act: str = "relu"
     layer_norm_eps: float = 1e-6
     attention_probs_dropout_prob: float | int = 0.0
-    apply_l2_norm: bool = True
+    apply_l2norm: bool = True
     qkv_bias: bool = True
     hidden_dropout_prob: float = 0.0
     initializer_range: float = 0.02
@@ -104,7 +119,7 @@ class VideoPrismTextConfig(SiglipTextConfig):
     projection_size = AttributeError()
 
     def __post_init__(self, **kwargs):
-        PreTrainedConfig.__post_init__(**kwargs)
+        raise AttributeError("Not used here") #PreTrainedConfig.__post_init__(**kwargs)
 
 
 @auto_docstring(
@@ -840,7 +855,7 @@ class VideoPrismTextModel(VideoPrismPreTrainedModel):
         self.text_encoder = VideoPrismTextEncoder(self.config)
         self.cls_emb = nn.Parameter(torch.zeros(1, 1, config.hidden_size))
         self.layernorm = VideoPrismLayerNorm(config.hidden_size, eps=config.layer_norm_eps)
-        self.normalize = config.apply_l2_norm
+        self.normalize = config.apply_l2norm
         self.post_init()
 
     def get_input_embeddings(self) -> nn.Module:
@@ -906,7 +921,7 @@ class VideoPrismVideoModel(VideoPrismPreTrainedModel):
         self.backbone = VideoPrismVisionModel._from_config(config)
         self.auxiliary_encoder = VideoPrismAuxiliaryEncoder(config)
         self.contrastive_vision_pooler = VideoPrismMultiheadAttentionPoolingHead(config)
-        self.normalize = config.apply_l2_norm
+        self.normalize = config.apply_l2norm
         self.post_init()
 
     def get_input_embeddings(self) -> nn.Module:

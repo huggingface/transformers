@@ -4,6 +4,21 @@
 #             the file from the modular. If any change should be done, please apply the change to the
 #                          modular_videoprism.py file directly. One of our CI enforces this.
 #                🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨
+# Copyright 2026 The HuggingFace Inc. team. All rights reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+
 from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
@@ -798,7 +813,7 @@ class VideoPrismTextModel(VideoPrismPreTrainedModel):
         self.text_encoder = VideoPrismTextEncoder(self.config)
         self.cls_emb = nn.Parameter(torch.zeros(1, 1, config.hidden_size))
         self.layernorm = VideoPrismLayerNorm(config.hidden_size, eps=config.layer_norm_eps)
-        self.normalize = config.apply_l2_norm
+        self.normalize = config.apply_l2norm
         self.post_init()
 
     def get_input_embeddings(self) -> nn.Module:
@@ -864,7 +879,7 @@ class VideoPrismVideoModel(VideoPrismPreTrainedModel):
         self.backbone = VideoPrismVisionModel._from_config(config)
         self.auxiliary_encoder = VideoPrismAuxiliaryEncoder(config)
         self.contrastive_vision_pooler = VideoPrismMultiheadAttentionPoolingHead(config)
-        self.normalize = config.apply_l2_norm
+        self.normalize = config.apply_l2norm
         self.post_init()
 
     def get_input_embeddings(self) -> nn.Module:

@@ -1,4 +1,4 @@
-# Copyright 2025 The HuggingFace Inc. team. All rights reserved.
+# Copyright 2026 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -85,7 +85,7 @@ class VideoPrismVisionModelTester:
         qkv_bias=True,
         attn_logit_softcapping=50.0,
         num_auxiliary_layers=2,
-        apply_l2_norm=True,
+        apply_l2norm=True,
         is_training=False,
         **kwargs,
     ):
@@ -108,7 +108,7 @@ class VideoPrismVisionModelTester:
         self.qkv_bias = qkv_bias
         self.attn_logit_softcapping = attn_logit_softcapping
         self.num_auxiliary_layers = num_auxiliary_layers
-        self.apply_l2_norm = apply_l2_norm
+        self.apply_l2norm = apply_l2norm
         self.is_training = is_training
 
         if kwargs:
@@ -141,7 +141,7 @@ class VideoPrismVisionModelTester:
             qkv_bias=self.qkv_bias,
             attn_logit_softcapping=self.attn_logit_softcapping,
             num_auxiliary_layers=self.num_auxiliary_layers,
-            apply_l2_norm=self.apply_l2_norm,
+            apply_l2norm=self.apply_l2norm,
         )
         return config
 
@@ -251,7 +251,7 @@ class VideoPrismTextModelTester:
         num_attention_heads=2,
         num_hidden_layers=2,
         vocab_size=32,
-        apply_l2_norm=True,
+        apply_l2norm=True,
         hidden_act="relu",
         attention_probs_dropout_prob=0.0,
         qkv_bias=True,
@@ -270,7 +270,7 @@ class VideoPrismTextModelTester:
         self.num_attention_heads = num_attention_heads
         self.num_hidden_layers = num_hidden_layers
         self.vocab_size = vocab_size
-        self.apply_l2_norm = apply_l2_norm
+        self.apply_l2norm = apply_l2norm
         self.hidden_act = hidden_act
         self.attention_probs_dropout_prob = attention_probs_dropout_prob
         self.qkv_bias = qkv_bias
@@ -310,7 +310,7 @@ class VideoPrismTextModelTester:
             num_attention_heads=self.num_attention_heads,
             num_hidden_layers=self.num_hidden_layers,
             vocab_size=self.vocab_size,
-            apply_l2_norm=self.apply_l2_norm,
+            apply_l2norm=self.apply_l2norm,
             hidden_act=self.hidden_act,
             attention_probs_dropout_prob=self.attention_probs_dropout_prob,
             qkv_bias=self.qkv_bias,

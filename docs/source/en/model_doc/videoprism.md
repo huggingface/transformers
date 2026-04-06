@@ -1,4 +1,4 @@
-<!--Copyright 2025 The HuggingFace Team. All rights reserved.
+<!--Copyright 2026 The HuggingFace Team. All rights reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with
 the License. You may obtain a copy of the License at
@@ -9,7 +9,7 @@ Unless required by applicable law or agreed to in writing, software distributed 
 an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
 specific language governing permissions and limitations under the License.
 -->
-*This model was released on 2024-02-20 and added to Hugging Face Transformers on 2026-04-01.*
+*This model was released on 2024-02-20 and added to Hugging Face Transformers on 2026-04-03.*
 
 <div style="float: right;">
     <div class="flex flex-wrap space-x-1">
@@ -63,7 +63,7 @@ video_url = "https://huggingface.co/datasets/nateraw/kinetics-mini/resolve/main/
 # when do_sample_frames=True, 16/8 frames will be sampled by default depending on the checkpoint size base/large.
 processed_video_inputs = processor(videos=[video_url], return_metadata=True, do_sample_frames=True)
 video_metadata = processed_video_inputs["video_metadata"]
-video_inputs = processed_video_inputs["pixel_values_videos"]
+video_inputs = processed_video_inputs["pixel_values_videos"].to(model.device)
 outputs = model(video_inputs)
 
 # VideoPrism encoder outputs

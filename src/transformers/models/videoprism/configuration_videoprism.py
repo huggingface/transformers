@@ -4,6 +4,21 @@
 #             the file from the modular. If any change should be done, please apply the change to the
 #                          modular_videoprism.py file directly. One of our CI enforces this.
 #                🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨
+# Copyright 2026 The HuggingFace Inc. team. All rights reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+
 from huggingface_hub.dataclasses import strict
 
 from ...configuration_utils import PreTrainedConfig
@@ -29,7 +44,7 @@ class VideoPrismVisionConfig(PreTrainedConfig):
         Softcapping constant for attention logits.
     num_auxiliary_layers (`int`, *optional*, defaults to 2):
         Number of auxiliary layers. This is used in the VideoPrismVideoModel that is a part of VideoPrismClipModel.
-    apply_l2_norm (`bool`, *optional*, defaults to `True`):
+    apply_l2norm (`bool`, *optional*, defaults to `True`):
         Whether to apply L2 normalization to the output. This is used in the VideoPrismVideoModel that is a part of VideoPrismClipModel.
     """
 
@@ -54,14 +69,14 @@ class VideoPrismVisionConfig(PreTrainedConfig):
     num_temporal_layers: int = 4
     attn_logit_softcapping: float = 50.0
     num_auxiliary_layers: int = 2
-    apply_l2_norm: bool = True
+    apply_l2norm: bool = True
 
 
 @auto_docstring(checkpoint="google/videoprism-lvt-base-f16r288")
 @strict
 class VideoPrismTextConfig(PreTrainedConfig):
     r"""
-    apply_l2_norm (`bool`, *optional*, defaults to `True`):
+    apply_l2norm (`bool`, *optional*, defaults to `True`):
         Whether to apply L2 normalization to the output of VideoPrismTextEncoder.
     attn_logit_softcapping (`float`, *optional*, defaults to 50.0):
         Softcapping constant for attention logits.
@@ -84,14 +99,11 @@ class VideoPrismTextConfig(PreTrainedConfig):
     bos_token_id: int | None = 49406
     eos_token_id: int | list[int] | None = 49407
     attention_probs_dropout_prob: float | int = 0.0
-    apply_l2_norm: bool = True
+    apply_l2norm: bool = True
     qkv_bias: bool = True
     hidden_dropout_prob: float = 0.0
     initializer_range: float = 0.02
     attn_logit_softcapping: float = 50.0
-
-    def __post_init__(self, **kwargs):
-        super().__post_init__(**kwargs)
 
 
 @auto_docstring(

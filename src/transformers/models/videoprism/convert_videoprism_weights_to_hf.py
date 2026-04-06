@@ -1,3 +1,18 @@
+# Copyright 2026 The HuggingFace Inc. team. All rights reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+
 import argparse
 import os
 import re
@@ -317,7 +332,8 @@ def convert_params(flax_state_dict, model_name):
 
     # Last step is to add the buffers named "scale", "positional_embedding" and "position_ids"
     if "lvt" in model_name:
-        # scale
+        # scale (used inside VideoPrismMultiheadAttentionPoolingHead)
+        # dim is the dimension of a single attention head, which is hidden_size / num_attention_heads 
         dim = int(vision_config["intermediate_size"] / vision_config["num_attention_heads"])
         r_softplus_0 = 1.442695041
         scale = torch.tensor(r_softplus_0 / (dim**0.5))
@@ -484,6 +500,8 @@ def convert_videoprism_checkpoint(
 def main():
     """
     Typical workflow
+    1.Select the models names from the keys of `ORIGINAL_CHECKPOINTS` dictionary,
+    
     Select a model, convert=True (saves locally), load_model=True, from_pretrained=False (loads local checkpoint)
     -> load_video=True -> inference=True (compares to expected outputs).
     If outputs match perfectly, upload=True (uploads to Hugging Face hub).
@@ -506,7 +524,7 @@ def main():
     parser.add_argument(
         "--convert",
         default=True,
-        type=bool,
+        
         help="Whether to convert the original Flax checkpoint to Hugging Face format.",
     )
     parser.add_argument(
