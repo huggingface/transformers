@@ -391,25 +391,6 @@ class ContinuousBatchProcessor:
         self.inputs_and_outputs.prepare_batch_tensors(
             requests_in_batch, self.logit_processor, use_decode_fast_path, num_q_tokens, max_kv_read
         )
-        if self._pad_inputs:
-            if self.inputs_and_outputs.use_block_table:
-                # Block-table decode ignores the varlen max_seqlen kwargs, so keep the graph signature constant.
-                self.inputs_and_outputs.set_graph_bounds(1, 1)
-            else:
-                # FA varlen kernels also specialize on max_seqlen_* integer kwargs, so bucket those for graph replay
-                # separately from the already-padded tensor shapes.
-                padded_max_seqlen_q = pad_to_interval(
-                    self.inputs_and_outputs.max_seqlen_q, self.q_padding_interval_size, self.inputs_and_outputs.num_q_tokens
-                )
-                padded_max_seqlen_k = {
-                    layer_type: pad_to_interval(
-                        self.inputs_and_outputs.max_seqlen_k[layer_type],
-                        self.kv_padding_interval_size,
-                        self.inputs_and_outputs.max_kv_read + self.inputs_and_outputs.num_q_tokens,
-                    )
-                    for layer_type in self.inputs_and_outputs.max_seqlen_k
-                }
-                self.inputs_and_outputs.set_graph_bounds(padded_max_seqlen_q, padded_max_seqlen_k)
         self.metrics.record_kv_cache_memory_metrics(self.cache)
         return True
 
@@ -541,7 +522,9 @@ class ContinuousBatchProcessor:
 
         # Otherwise, we use create or replay the graph (cuda is available in this path)
         else:
-            graph = self.inputs_and_outputs.get_graph()
+            graph = self.inputs_and_outputs.get_graph(
+                batch_data, self.q_padding_interval_size, self.kv_padding_interval_size
+            )
             # Case: the graph already exists, so we replay it
             if graph is not None:
                 with torch.cuda.stream(compute_stream):
@@ -549,12 +532,12 @@ class ContinuousBatchProcessor:
             # Otherwise, the graph does not exist, so we create it
             else:
                 args = (model, batch_data, carry_over_ids, prev_output_ids, output_ids)
-                self.capture_graph(forward_fn, compute_stream, *args)
+                self.capture_graph(forward_fn, compute_stream, batch_data, *args)
 
         # In any case, we transfer the outputs to the host
         self.inputs_and_outputs.retrieve_device_outputs()
 
-    def capture_graph(self, forward_fn: Any, compute_stream: torch.cuda.Stream, *args) -> None:
+    def capture_graph(self, forward_fn: Any, compute_stream: torch.cuda.Stream, batch_data: dict, *args) -> None:
         # Warmup (ensures the right result is computed before capturing the graph)
         with torch.cuda.stream(compute_stream):
             forward_fn(*args)
@@ -566,7 +549,9 @@ class ContinuousBatchProcessor:
         with torch.cuda.graph(graph, stream=compute_stream, pool=self.graph_pool, capture_error_mode="thread_local"):
             forward_fn(*args)
         # Store
-        self.inputs_and_outputs.set_graph(graph)
+        self.inputs_and_outputs.set_graph(
+            graph, batch_data, self.q_padding_interval_size, self.kv_padding_interval_size
+        )
 
     @traced
     def _forward_process_and_sample(
@@ -685,7 +670,7 @@ class ContinuousBatchProcessor:
                 forward_fn = self._compiled_varlen or self._forward_process_and_sample
                 forward_fn_args = (model, batch_data, carry_over_ids, prev_output_ids, output_ids)
                 if self.use_cuda_graph:
-                    self.capture_graph(forward_fn, compute_stream, *forward_fn_args)
+                    self.capture_graph(forward_fn, compute_stream, batch_data, *forward_fn_args)
                 else:
                     with torch.cuda.stream(compute_stream):
                         forward_fn(*forward_fn_args)
@@ -723,7 +708,7 @@ class ContinuousBatchProcessor:
                     forward_fn = self._compiled_decode or self._forward_process_and_sample
                     forward_fn_args = (model, batch_data, carry_over_ids, prev_output_ids, output_ids)
                     if self.use_cuda_graph:
-                        self.capture_graph(forward_fn, compute_stream, *forward_fn_args)
+                        self.capture_graph(forward_fn, compute_stream, batch_data, *forward_fn_args)
                     else:
                         with torch.cuda.stream(compute_stream):
                             forward_fn(*forward_fn_args)
