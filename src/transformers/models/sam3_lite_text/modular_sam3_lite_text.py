@@ -19,6 +19,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 from huggingface_hub.dataclasses import strict
 
+from ... import initialization as init
 from ...configuration_utils import PreTrainedConfig
 from ...masking_utils import create_bidirectional_mask
 from ...modeling_outputs import BaseModelOutputWithPooling
@@ -69,6 +70,10 @@ class Sam3LiteTextTextConfig(PreTrainedConfig):
     use_repmixer_blocks (`bool`, *optional*, defaults to `True`):
         Whether to use RepMixer blocks (MobileCLIP-style) for the first and last encoder layers.
         When `False`, all layers are standard Transformer encoder layers.
+    layer_scale_init_value (`float`, *optional*, defaults to `1e-5`):
+        Initial value for the learnable layer-scale parameters in RepMixer blocks (residual branches).
+    repmixer_kernel_size (`int`, *optional*, defaults to `11`):
+        Kernel size for depthwise convolutions in RepMixer blocks (token mixer and convolutional feed-forward path).
     """
 
     model_type = "sam3_lite_text_text_model"
@@ -84,6 +89,8 @@ class Sam3LiteTextTextConfig(PreTrainedConfig):
     layer_norm_eps: float = 1e-5
     attention_dropout: float = 0.0
     use_repmixer_blocks: bool = True
+    layer_scale_init_value: float = 1e-5
+    repmixer_kernel_size: int = 11
 
 
 @auto_docstring(checkpoint="facebook/sam3_lite_text")
@@ -210,89 +217,97 @@ class Sam3LiteTextTextPositionEmbedding(nn.Module):
         return position_embedding.reshape(1, seq_len, -1)
 
 
+class Sam3LiteTextMobileOneBlock(nn.Module):
+    """Depthwise conv branch with batch norm on the skip path and after the conv (MobileOne-style)."""
+
+    def __init__(self, hidden_size: int, kernel_size: int = 3):
+        super().__init__()
+        self.batchnorm_skip = nn.BatchNorm2d(hidden_size)
+        self.conv = nn.Conv2d(
+            hidden_size,
+            hidden_size,
+            kernel_size=(1, kernel_size),
+            stride=1,
+            padding=(0, kernel_size // 2),
+            groups=hidden_size,
+            bias=False,
+        )
+        self.batchnorm_conv = nn.BatchNorm2d(hidden_size)
+
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        residual = hidden_states
+        hidden_states = self.batchnorm_skip(hidden_states)
+        hidden_states = hidden_states + self.batchnorm_conv(self.conv(residual))
+        return hidden_states
+
+
+class Sam3LiteTextConvMLP(SiglipMLP):
+    """Pointwise MLP using 1×1 convolutions, compatible with 4-D (B, C, H, W) feature maps."""
+
+    def __init__(self, config: Sam3LiteTextTextConfig):
+        nn.Module.__init__(self)
+        self.activation_fn = nn.GELU()
+        self.fc1 = nn.Conv2d(config.hidden_size, config.intermediate_size, kernel_size=1)
+        self.fc2 = nn.Conv2d(config.intermediate_size, config.hidden_size, kernel_size=1)
+
+
+class Sam3LiteTextConvolutionalFeedForward(nn.Module):
+    """Convolutional feed-forward network: depthwise conv + two pointwise projections."""
+
+    def __init__(self, config: Sam3LiteTextTextConfig):
+        super().__init__()
+        hidden_size = config.hidden_size
+        kernel_size = config.repmixer_kernel_size
+        self.depthwise_conv = nn.Conv2d(
+            hidden_size,
+            hidden_size,
+            kernel_size=(1, kernel_size),
+            padding=(0, kernel_size // 2),
+            groups=hidden_size,
+            bias=False,
+        )
+        self.depthwise_batchnorm = nn.BatchNorm2d(hidden_size)
+        self.mlp = Sam3LiteTextConvMLP(config)
+
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        hidden_states = self.depthwise_batchnorm(self.depthwise_conv(hidden_states))
+        return self.mlp(hidden_states)
+
+
 class Sam3LiteTextRepMixer(nn.Module):
     """Re-parameterisable depthwise-conv token mixer operating on 1D sequence data."""
 
-    def __init__(self, hidden_size: int, kernel_size: int = 11):
+    def __init__(self, config: Sam3LiteTextTextConfig):
         super().__init__()
-        self.norm = Sam3LiteTextMobileOneBlock(hidden_size, kernel_size=kernel_size, use_conv_branch=False)
-        self.mixer = Sam3LiteTextMobileOneBlock(hidden_size, kernel_size=kernel_size, use_conv_branch=True)
-        self.layer_scale = nn.Parameter(1e-5 * torch.ones((hidden_size, 1, 1)), requires_grad=True)
+        hidden_size = config.hidden_size
+        kernel_size = config.repmixer_kernel_size
+        self.reference_batchnorm = nn.BatchNorm2d(hidden_size)
+        self.mixer = Sam3LiteTextMobileOneBlock(hidden_size, kernel_size=kernel_size)
+        self.layer_scale = nn.Parameter(
+            config.layer_scale_init_value * torch.ones((hidden_size, 1, 1)), requires_grad=True
+        )
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        return hidden_states + self.layer_scale * (self.mixer(hidden_states) - self.norm(hidden_states))
-
-
-class Sam3LiteTextMobileOneBlock(nn.Module):
-    """Multi-branch depthwise conv block with BN-skip and optional conv branch."""
-
-    def __init__(self, hidden_size: int, kernel_size: int = 3, use_conv_branch: bool = True):
-        super().__init__()
-        self.rbr_skip = nn.BatchNorm2d(hidden_size)
-        self.rbr_conv = nn.ModuleList()
-        if use_conv_branch:
-            self.rbr_conv.append(
-                nn.Sequential(
-                    nn.Conv2d(
-                        hidden_size,
-                        hidden_size,
-                        kernel_size=(1, kernel_size),
-                        stride=1,
-                        padding=(0, kernel_size // 2),
-                        groups=hidden_size,
-                        bias=False,
-                    ),
-                    nn.BatchNorm2d(hidden_size),
-                )
-            )
-
-    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        output = self.rbr_skip(hidden_states)
-        for branch in self.rbr_conv:
-            output = output + branch(hidden_states)
-        return output
+        return hidden_states + self.layer_scale * (self.mixer(hidden_states) - self.reference_batchnorm(hidden_states))
 
 
 class Sam3LiteTextRepMixerBlock(nn.Module):
-    """Full token-mixing block: RepMixer (depthwise conv) + ConvFFN with layer scale."""
+    """Token-mixing RepMixer plus a convolutional feed-forward path, each with layer scale."""
 
-    def __init__(self, hidden_size: int, intermediate_size: int):
+    def __init__(self, config: Sam3LiteTextTextConfig):
         super().__init__()
-        self.layer_scale = nn.Parameter(1e-5 * torch.ones((hidden_size, 1, 1)), requires_grad=True)
-        self.token_mixer = Sam3LiteTextRepMixer(hidden_size, kernel_size=11)
-        self.convffn = Sam3LiteTextConvFFN(hidden_size, intermediate_size, kernel_size=11)
-
-    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        hidden_states = self.token_mixer(hidden_states)
-        return hidden_states + self.layer_scale * self.convffn(hidden_states)
-
-
-class Sam3LiteTextConvFFN(nn.Module):
-    """Convolutional feed-forward network: depthwise conv + two pointwise projections."""
-
-    def __init__(self, hidden_size: int, intermediate_size: int, kernel_size: int = 3):
-        super().__init__()
-        self.conv = nn.Sequential(
-            nn.Conv2d(
-                hidden_size,
-                hidden_size,
-                kernel_size=(1, kernel_size),
-                padding=(0, kernel_size // 2),
-                groups=hidden_size,
-                bias=False,
-            ),
-            nn.BatchNorm2d(hidden_size),
+        hidden_size = config.hidden_size
+        self.layer_scale = nn.Parameter(
+            config.layer_scale_init_value * torch.ones((hidden_size, 1, 1)), requires_grad=True
         )
-        self.fc1 = nn.Conv2d(hidden_size, intermediate_size, kernel_size=1)
-        self.act = nn.GELU()
-        self.fc2 = nn.Conv2d(intermediate_size, hidden_size, kernel_size=1)
+        self.token_mixer = Sam3LiteTextRepMixer(config)
+        self.conv_feed_forward = Sam3LiteTextConvolutionalFeedForward(config)
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        hidden_states = self.conv(hidden_states)
-        hidden_states = self.fc1(hidden_states)
-        hidden_states = self.act(hidden_states)
-        hidden_states = self.fc2(hidden_states)
-        return hidden_states
+        hidden_states = hidden_states.permute(0, 2, 1).unsqueeze(2)
+        hidden_states = self.token_mixer(hidden_states)
+        hidden_states = hidden_states + self.layer_scale * self.conv_feed_forward(hidden_states)
+        return hidden_states.squeeze(2).permute(0, 2, 1)
 
 
 class Sam3LiteTextTextAttention(SiglipAttention):
@@ -327,10 +342,11 @@ class Sam3LiteTextTextEmbeddings(nn.Module):
 @auto_docstring
 class Sam3LiteTextPreTrainedModel(PreTrainedModel):
     config_class = Sam3LiteTextConfig
-    base_model_prefix = "sam3_lite_text"
+    base_model_prefix = "model"
     main_input_name = "pixel_values"
     input_modalities = ["image", "text"]
     supports_gradient_checkpointing = True
+    _no_split_modules = ["Sam3LiteTextTextEmbeddings", "Sam3LiteTextTextEncoderLayer", "Sam3LiteTextRepMixerBlock"]
     _supports_sdpa = True
     _supports_flash_attn = True
     _supports_flex_attn = True
@@ -340,9 +356,9 @@ class Sam3LiteTextPreTrainedModel(PreTrainedModel):
     def _init_weights(self, module):
         super()._init_weights(module)
         if isinstance(module, Sam3LiteTextTextPositionEmbedding):
-            nn.init.normal_(module.position_embedding, std=module.position_embedding.shape[-1] ** -0.5)
+            init.normal_(module.position_embedding, std=module.position_embedding.shape[-1] ** -0.5)
         elif isinstance(module, Sam3LiteTextTextModel):
-            nn.init.normal_(module.projection, std=module.config.hidden_size**-0.5)
+            init.normal_(module.projection.weight, std=module.config.hidden_size**-0.5)
 
 
 @auto_docstring(
@@ -356,10 +372,6 @@ class Sam3LiteTextPreTrainedModel(PreTrainedModel):
 class Sam3LiteTextTextModel(Sam3LiteTextPreTrainedModel):
     config_class = Sam3LiteTextTextConfig
     config: Sam3LiteTextTextConfig
-    _no_split_modules = ["Sam3LiteTextTextEmbeddings", "Sam3LiteTextTextEncoderLayer", "Sam3LiteTextRepMixerBlock"]
-    _supports_flash_attn = True
-    _supports_sdpa = True
-    _supports_attention_backend = True
     _can_record_outputs = {
         "hidden_states": Sam3LiteTextTextEncoderLayer,
         "attentions": Sam3LiteTextTextAttention,
@@ -368,25 +380,19 @@ class Sam3LiteTextTextModel(Sam3LiteTextPreTrainedModel):
     def __init__(self, config: Sam3LiteTextTextConfig):
         super().__init__(config)
         self.embeddings = Sam3LiteTextTextEmbeddings(config)
-        if config.use_repmixer_blocks:
-            num_transformer_layers = config.num_hidden_layers - 2
-            self.layers = nn.ModuleList(
-                [Sam3LiteTextRepMixerBlock(config.hidden_size, config.intermediate_size)]
-                + [Sam3LiteTextTextEncoderLayer(config) for _ in range(num_transformer_layers)]
-                + [Sam3LiteTextRepMixerBlock(config.hidden_size, config.intermediate_size)]
-            )
-            self.repmixer_layer_indices = frozenset({0, config.num_hidden_layers - 1})
-        else:
-            self.layers = nn.ModuleList(
-                [Sam3LiteTextTextEncoderLayer(config) for _ in range(config.num_hidden_layers)]
-            )
-            self.repmixer_layer_indices = frozenset()
+        repmixer_positions = {0, config.num_hidden_layers - 1} if config.use_repmixer_blocks else set()
+        self.layers = nn.ModuleList(
+            [
+                Sam3LiteTextRepMixerBlock(config) if i in repmixer_positions else Sam3LiteTextTextEncoderLayer(config)
+                for i in range(config.num_hidden_layers)
+            ]
+        )
         self.final_layer_norm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
-        self.projection = nn.Parameter(torch.empty(config.hidden_size, config.projection_dim))
+        self.projection = nn.Linear(config.hidden_size, config.projection_dim, bias=False)
         self.post_init()
 
     @merge_with_config_defaults
-    @capture_outputs(tie_last_hidden_states=False)
+    @capture_outputs
     @auto_docstring
     def forward(
         self,
@@ -395,15 +401,11 @@ class Sam3LiteTextTextModel(Sam3LiteTextPreTrainedModel):
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | Sam3LiteTextTextEncoderOutput:
         hidden_states = self.embeddings(input_ids)
+        attention_mask = create_bidirectional_mask(self.config, hidden_states, attention_mask)
 
-        if attention_mask is not None:
-            attention_mask = create_bidirectional_mask(self.config, hidden_states, attention_mask)
-
-        for idx, layer in enumerate(self.layers):
-            if idx in self.repmixer_layer_indices:
-                hidden_states = hidden_states.permute(0, 2, 1).unsqueeze(2)
+        for layer in self.layers:
+            if isinstance(layer, Sam3LiteTextRepMixerBlock):
                 hidden_states = layer(hidden_states)
-                hidden_states = hidden_states.squeeze(2).permute(0, 2, 1)
             else:
                 hidden_states = layer(hidden_states, attention_mask=attention_mask, **kwargs)
 
@@ -412,7 +414,7 @@ class Sam3LiteTextTextModel(Sam3LiteTextPreTrainedModel):
         pooled = hidden_states[
             torch.arange(hidden_states.shape[0], device=hidden_states.device), input_ids.argmax(dim=-1)
         ]
-        pooled = pooled @ self.projection
+        pooled = self.projection(pooled)
         return Sam3LiteTextTextEncoderOutput(
             last_hidden_state=hidden_states,
             pooler_output=pooled,

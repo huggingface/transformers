@@ -278,6 +278,10 @@ class Sam3LiteTextModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Test
     def test_eager_matches_sdpa_inference(self, *args):
         pass
 
+    @unittest.skip(reason="SAM3LiteTextModel does not support SDPA")
+    def test_flash_attn_2_can_dispatch_composite_models(self):
+        pass
+
     # Override as SAM3Model has component-specific attention outputs
     def test_attention_outputs(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()

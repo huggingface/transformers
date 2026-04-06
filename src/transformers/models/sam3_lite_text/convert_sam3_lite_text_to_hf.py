@@ -21,7 +21,7 @@ import regex as re
 import torch
 from huggingface_hub import hf_hub_download
 
-from transformers import CLIPTokenizerFast, Sam3ImageProcessorFast, Sam3Processor
+from transformers import CLIPTokenizerFast, Sam3ImageProcessor, Sam3Processor
 from transformers.models.sam3_lite_text.configuration_sam3_lite_text import Sam3LiteTextConfig, Sam3LiteTextTextConfig
 from transformers.models.sam3_lite_text.modeling_sam3_lite_text import Sam3LiteTextModel
 from transformers.utils import logging
@@ -66,20 +66,20 @@ ORIGINAL_TO_CONVERTED_KEY_MAPPING = {
     r"^backbone\.language_backbone\.encoder\.embedding_layer\.":            r"text_encoder.embeddings.token_embedding.",
     r"^backbone\.language_backbone\.encoder\.positional_embedding\.pos_embed\.pos_embed$": r"text_encoder.embeddings.position_embedding.position_embedding",
     r"^backbone\.language_backbone\.encoder\.final_layer_norm\.":           r"text_encoder.final_layer_norm.",
-    r"^backbone\.language_backbone\.encoder\.projection_layer$":            r"text_encoder.projection",
+    r"^backbone\.language_backbone\.encoder\.projection_layer$":            r"text_encoder.projection.weight",
     # text_projection: projects from text hidden-dim to DETR hidden-dim
     r"^backbone\.language_backbone\.projector\.":                           r"text_projection.",
     # RepMixer blocks (layer 0 and the last layer in the mct variant)
     r"^backbone\.language_backbone\.encoder\.transformer\.(\d+)\.layer_scale$": r"text_encoder.layers.\1.layer_scale",
     r"^backbone\.language_backbone\.encoder\.transformer\.(\d+)\.token_mixer\.layer_scale$": r"text_encoder.layers.\1.token_mixer.layer_scale",
-    r"^backbone\.language_backbone\.encoder\.transformer\.(\d+)\.token_mixer\.norm\.rbr_skip\.": r"text_encoder.layers.\1.token_mixer.norm.rbr_skip.",
-    r"^backbone\.language_backbone\.encoder\.transformer\.(\d+)\.token_mixer\.mixer\.rbr_skip\.": r"text_encoder.layers.\1.token_mixer.mixer.rbr_skip.",
-    r"^backbone\.language_backbone\.encoder\.transformer\.(\d+)\.token_mixer\.mixer\.rbr_conv\.0\.conv\.": r"text_encoder.layers.\1.token_mixer.mixer.rbr_conv.0.0.",
-    r"^backbone\.language_backbone\.encoder\.transformer\.(\d+)\.token_mixer\.mixer\.rbr_conv\.0\.bn\.": r"text_encoder.layers.\1.token_mixer.mixer.rbr_conv.0.1.",
-    r"^backbone\.language_backbone\.encoder\.transformer\.(\d+)\.convffn\.conv\.conv\.": r"text_encoder.layers.\1.convffn.conv.0.",
-    r"^backbone\.language_backbone\.encoder\.transformer\.(\d+)\.convffn\.conv\.bn\.": r"text_encoder.layers.\1.convffn.conv.1.",
-    r"^backbone\.language_backbone\.encoder\.transformer\.(\d+)\.convffn\.fc1\.": r"text_encoder.layers.\1.convffn.fc1.",
-    r"^backbone\.language_backbone\.encoder\.transformer\.(\d+)\.convffn\.fc2\.": r"text_encoder.layers.\1.convffn.fc2.",
+    r"^backbone\.language_backbone\.encoder\.transformer\.(\d+)\.token_mixer\.norm\.rbr_skip\.": r"text_encoder.layers.\1.token_mixer.reference_batchnorm.",
+    r"^backbone\.language_backbone\.encoder\.transformer\.(\d+)\.token_mixer\.mixer\.rbr_skip\.": r"text_encoder.layers.\1.token_mixer.mixer.batchnorm_skip.",
+    r"^backbone\.language_backbone\.encoder\.transformer\.(\d+)\.token_mixer\.mixer\.rbr_conv\.0\.conv\.": r"text_encoder.layers.\1.token_mixer.mixer.conv.",
+    r"^backbone\.language_backbone\.encoder\.transformer\.(\d+)\.token_mixer\.mixer\.rbr_conv\.0\.bn\.": r"text_encoder.layers.\1.token_mixer.mixer.batchnorm_conv.",
+    r"^backbone\.language_backbone\.encoder\.transformer\.(\d+)\.convffn\.conv\.conv\.": r"text_encoder.layers.\1.conv_feed_forward.depthwise_conv.",
+    r"^backbone\.language_backbone\.encoder\.transformer\.(\d+)\.convffn\.conv\.bn\.": r"text_encoder.layers.\1.conv_feed_forward.depthwise_batchnorm.",
+    r"^backbone\.language_backbone\.encoder\.transformer\.(\d+)\.convffn\.fc1\.": r"text_encoder.layers.\1.conv_feed_forward.mlp.fc1.",
+    r"^backbone\.language_backbone\.encoder\.transformer\.(\d+)\.convffn\.fc2\.": r"text_encoder.layers.\1.conv_feed_forward.mlp.fc2.",
     # Standard transformer layers (pre-norm MHA + FFN)
     r"^backbone\.language_backbone\.encoder\.transformer\.(\d+)\.pre_norm_mha\.0\.": r"text_encoder.layers.\1.layer_norm1.",
     r"^backbone\.language_backbone\.encoder\.transformer\.(\d+)\.pre_norm_mha\.1\.qkv_proj\.": r"text_encoder.layers.\1.self_attn.in_proj_",
@@ -91,6 +91,9 @@ ORIGINAL_TO_CONVERTED_KEY_MAPPING = {
     # ============================================================================
     # Geometry Encoder
     # ============================================================================
+    r"^geometry_encoder\.points_direct_project\.":                         r"geometry_encoder.boxes_direct_project.",
+    r"^geometry_encoder\.points_pool_project\.":                           r"geometry_encoder.boxes_pool_project.",
+    r"^geometry_encoder\.points_pos_enc_project\.":                        r"geometry_encoder.boxes_pos_enc_project.",
     r"^geometry_encoder\.encode\.(\d+)\.cross_attn_image\.out_proj\.":     r"geometry_encoder.layers.\1.cross_attn.o_proj.",
     r"^geometry_encoder\.encode\.(\d+)\.cross_attn_image\.":               r"geometry_encoder.layers.\1.cross_attn.",
     r"^geometry_encoder\.encode\.(\d+)\.self_attn\.out_proj\.":            r"geometry_encoder.layers.\1.self_attn.o_proj.",
@@ -318,6 +321,9 @@ def convert_sam3_lite_text_checkpoint(
         # num_batches_tracked from BatchNorm is not needed
         if "num_batches_tracked" in new_key:
             continue
+        # Parallel SAM2 neck branch in the original checkpoint; HF vision uses `convs` only.
+        if "vision_backbone.sam2_convs" in new_key:
+            continue
         # Drop keys whose names were not transformed (unrecognised / legacy keys)
         if new_key == old_key:
             continue
@@ -375,7 +381,7 @@ def convert_sam3_lite_text_checkpoint(
 
     # Save processor
     print("Creating and saving processor...")
-    image_processor = Sam3ImageProcessorFast()
+    image_processor = Sam3ImageProcessor()
     tokenizer = CLIPTokenizerFast.from_pretrained(
         "openai/clip-vit-base-patch32",
         max_length=config.text_config.max_position_embeddings,

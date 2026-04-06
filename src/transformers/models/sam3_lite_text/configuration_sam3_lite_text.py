@@ -115,6 +115,10 @@ class Sam3LiteTextTextConfig(PreTrainedConfig):
     use_repmixer_blocks (`bool`, *optional*, defaults to `True`):
         Whether to use RepMixer blocks (MobileCLIP-style) for the first and last encoder layers.
         When `False`, all layers are standard Transformer encoder layers.
+    layer_scale_init_value (`float`, *optional*, defaults to `1e-5`):
+        Initial value for the learnable layer-scale parameters in RepMixer blocks (residual branches).
+    repmixer_kernel_size (`int`, *optional*, defaults to `11`):
+        Kernel size for depthwise convolutions in RepMixer blocks (token mixer and convolutional feed-forward path).
     """
 
     model_type = "sam3_lite_text_text_model"
@@ -130,6 +134,8 @@ class Sam3LiteTextTextConfig(PreTrainedConfig):
     layer_norm_eps: float = 1e-5
     attention_dropout: float = 0.0
     use_repmixer_blocks: bool = True
+    layer_scale_init_value: float = 1e-5
+    repmixer_kernel_size: int = 11
 
 
 @auto_docstring(checkpoint="facebook/sam3_lite_text")
