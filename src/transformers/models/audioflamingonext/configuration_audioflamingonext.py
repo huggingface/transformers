@@ -72,12 +72,16 @@ class AudioFlamingoNextConfig(PreTrainedConfig):
     rope_parameters: dict | None = None
 
     def __post_init__(self, **kwargs):
-        if self.rope_parameters is None:
-            self.rope_parameters = {"rope_type": "default", "rope_theta": 1800, "partial_rotary_factor": 0.2}
         if isinstance(self.audio_config, dict):
             self.audio_config["model_type"] = self.audio_config.get("model_type", "audioflamingo3_encoder")
         elif self.audio_config is None:
             self.audio_config = {"model_type": "audioflamingo3_encoder"}
+        if self.rope_parameters is None:
+            self.rope_parameters = {
+                "rope_type": "default",
+                "rope_theta": kwargs.get("rope_theta", 1200),
+                "partial_rotary_factor": kwargs.get("partial_rotary_factor", 0.2),
+            }
         if isinstance(self.audio_config, dict):
             self.audio_config["model_type"] = self.audio_config.get("model_type", "audioflamingonext_encoder")
             self.audio_config = CONFIG_MAPPING[self.audio_config["model_type"]](**self.audio_config)
@@ -92,8 +96,6 @@ class AudioFlamingoNextConfig(PreTrainedConfig):
 
         super().__post_init__(**kwargs)
 
-        if self.rope_parameters is None:
-            self.rope_parameters = {"rope_type": "default", "rope_theta": 1200, "partial_rotary_factor": 0.2}
         self.max_position_embeddings = self.rope_parameters["rope_theta"]
         self.head_dim = self.audio_config.hidden_size
 

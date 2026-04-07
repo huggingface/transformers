@@ -108,6 +108,7 @@ def write_processor(src_root: Path, dst_root: Path):
         tokenizer=AutoTokenizer.from_pretrained(str(llm_dir), chat_template=tokenizer_chat_template, use_fast=True),
         chat_template=processor_chat_template,
     )
+    processor.tokenizer.model_max_length = 131072
     processor.save_pretrained(str(dst_root))
 
     logger.info("processor (tokenizer + preprocessor)")
@@ -174,7 +175,7 @@ def merge_and_shard_weights(src_root: Path, dst_root: Path, processor: AudioFlam
         vocab_size=len(tok),
         hidden_size=3584,
         intermediate_size=18944,
-        model_max_length=24000,
+        model_max_length=131072,
         max_position_embeddings=131072,
         num_attention_heads=28,
         num_hidden_layers=28,

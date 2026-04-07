@@ -27,8 +27,6 @@ class AudioFlamingoNextConfig(MusicFlamingoConfig):
     model_type = "audioflamingonext"
 
     def __post_init__(self, **kwargs):
-        if self.rope_parameters is None:
-            self.rope_parameters = {"rope_type": "default", "rope_theta": 1800, "partial_rotary_factor": 0.2}
         if isinstance(self.audio_config, dict):
             self.audio_config["model_type"] = self.audio_config.get("model_type", "audioflamingo3_encoder")
         elif self.audio_config is None:

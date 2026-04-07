@@ -16,7 +16,7 @@ rendered properly in your Markdown viewer.
 
 *This model was released on 2026-04-07 and added to Hugging Face Transformers on 2026-04-07.*
 
-# Audio Flamingo-Next
+# Audio Flamingo Next
 
 <div class="flex flex-wrap space-x-1">
 <img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
@@ -26,7 +26,7 @@ rendered properly in your Markdown viewer.
 
 ## Overview
 
-Audio Flamingo-Next (AF-Next) is a fully open large audio-language model for understanding and reasoning over speech, environmental sounds, and music. In Transformers, it is implemented as a replace-in-place audio-text model: the processor expands a dedicated audio placeholder into the exact number of post-pool audio frames, and the model replaces those token slots with projected audio embeddings during the forward pass.
+Audio Flamingo Next (AF-Next) is a fully open large audio-language model for understanding and reasoning over speech, environmental sounds, and music. In Transformers, it is implemented as a replace-in-place audio-text model: the processor expands a dedicated audio placeholder into the exact number of post-pool audio frames, and the model replaces those token slots with projected audio embeddings during the forward pass.
 
 AF-Next builds on [Audio Flamingo 3](./audioflamingo3.md) with a stronger audio-language training recipe, Rotary Time Embeddings (RoTE) for temporally grounded modeling, and support for long and complex audio inputs up to **30 minutes (1800 seconds)**.
 
@@ -271,7 +271,7 @@ loss.backward()
   AF-Next uses the AF-Whisper encoder. Audio is resampled to 16 kHz mono, converted to a 128-bin log-mel spectrogram with a 25 ms window and 10 ms hop, encoded in non-overlapping 30-second windows, then pooled with stride 2.
 
 * **Rotary Time Embeddings (RoTE)**
-  AF-Next uses the same checkpoint-faithful RoTE integration as the current Transformers MusicFlamingo implementation: axial rotary embeddings are applied over the window index and the encoder time index, and both axes are modulated with absolute timestamps in seconds. This is what enables the public checkpoint to ground audio features over up to 30 minutes.
+  AF-Next uses axial rotary embeddings over the window index and the encoder time index, and both axes are modulated with absolute timestamps in seconds. This is the same RoTE formulation used by Music Flamingo.
 
 * **AudioFlamingoNextMultiModalProjector**
   A 2-layer MLP that maps AF-Whisper features to the language model hidden size.
