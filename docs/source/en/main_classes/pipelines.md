@@ -64,7 +64,7 @@ GPU. If it doesn't don't hesitate to create an issue.
 ```python
 import datasets
 from transformers import pipeline
-from transformers.pipelines.pt_utils import KeyDataset
+from transformers import KeyDataset
 from tqdm.auto import tqdm
 
 pipe = pipeline("automatic-speech-recognition", model="facebook/wav2vec2-base-960h", device=0)
