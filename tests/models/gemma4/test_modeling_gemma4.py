@@ -29,7 +29,6 @@ from transformers.testing_utils import (
     Expectations,
     cleanup,
     is_flash_attn_2_available,
-    require_deterministic_for_xpu,
     require_flash_attn,
     require_torch,
     require_torch_accelerator,
@@ -47,6 +46,7 @@ if is_torch_available():
     import torch
 
     from transformers import (
+        AutoModelForCausalLM,
         Gemma4ForCausalLM,
         Gemma4ForConditionalGeneration,
         Gemma4Model,
@@ -417,7 +417,6 @@ class Gemma4Vision2TextModelTest(ModelTesterMixin, GenerationTesterMixin, unitte
         pass
 
 
-@unittest.skip("Integration Tests are not up-to-date yet! TODO Cyril: update me pretty pretty please!")
 @slow
 @require_torch_accelerator
 class Gemma4IntegrationTest(unittest.TestCase):
@@ -440,8 +439,7 @@ class Gemma4IntegrationTest(unittest.TestCase):
     def tearDown(self):
         cleanup(torch_device, gc_collect=True)
 
-    @require_deterministic_for_xpu
-    def test_model_4b_bf16(self):
+    def test_model_4b(self):
         model = Gemma4ForConditionalGeneration.from_pretrained(self.model_name, device_map=torch_device)
 
         inputs = self.processor.apply_chat_template(
@@ -453,17 +451,17 @@ class Gemma4IntegrationTest(unittest.TestCase):
         ).to(torch_device)
 
         output = model.generate(**inputs, max_new_tokens=30, do_sample=False)
-        output_text = self.processor.batch_decode(output, skip_special_tokens=True)
+        input_size = inputs.input_ids.shape[-1]
+        output_text = self.processor.batch_decode(output[:, input_size:], skip_special_tokens=True)
 
         EXPECTED_TEXTS = Expectations(
             {
-                ("cuda", 8): ['user\nYou are a helpful assistant.\n\n\n\n\n\nWhat is shown in this image?\nmodel\nCertainly! \n\nThe image shows a brown cow standing on a sandy beach with clear blue water and a blue sky in the background. It looks like'],
+                ("cuda", 8): ['This image shows a **brown and white cow** standing on a **sandy beach** with the **ocean and a blue sky** in the background'],
             }
         )  # fmt: skip
         EXPECTED_TEXT = EXPECTED_TEXTS.get_expectation()
         self.assertEqual(output_text, EXPECTED_TEXT)
 
-    @require_deterministic_for_xpu
     def test_model_4b_batch(self):
         model = Gemma4ForConditionalGeneration.from_pretrained(self.model_name, device_map=torch_device)
 
@@ -492,104 +490,19 @@ class Gemma4IntegrationTest(unittest.TestCase):
         ).to(torch_device)
 
         output = model.generate(**inputs, max_new_tokens=30, do_sample=False)
-        output_text = self.processor.batch_decode(output, skip_special_tokens=True)
+        input_size = inputs.input_ids.shape[-1]
+        output_text = self.processor.batch_decode(output[:, input_size:], skip_special_tokens=True)
 
         EXPECTED_TEXTS = Expectations(
             {
                 ("cuda", 8):
                     [
-                        'user\nYou are a helpful assistant.\n\n\n\n\n\nWhat is shown in this image?\nmodel\nCertainly! \n\nThe image shows a brown cow standing on a sandy beach with clear blue water and a blue sky in the background. It looks like',
-                        "user\nYou are a helpful assistant.\n\n\n\n\n\n\n\n\n\nAre these images identical?\nmodel\nNo, these images are not identical. \n\nHere's a breakdown of the differences:\n\n*   **Image 1:** Shows a brown"
+                        'This image shows a **brown and white cow** standing on a **sandy beach** with the **ocean and a blue sky** in the background',
+                        'No, these images are not identical.\n\nThe first image is a photograph of a **cow** standing on a beach under a blue sky.\n\n'
                     ],
             }
         )  # fmt: skip
         EXPECTED_TEXT = EXPECTED_TEXTS.get_expectation()
-        self.assertEqual(output_text, EXPECTED_TEXT)
-
-    def test_model_4b_crops(self):
-        model = Gemma4ForConditionalGeneration.from_pretrained(self.model_name, device_map=torch_device)
-
-        crop_config = {
-            "images_kwargs": {
-                "do_pan_and_scan": True,
-                "pan_and_scan_max_num_crops": 448,
-                "pan_and_scan_min_crop_size": 32,
-                "pan_and_scan_min_ratio_to_activate": 0.3,
-            }
-        }
-
-        inputs = self.processor.apply_chat_template(
-            self.messages,
-            tokenize=True,
-            return_dict=True,
-            return_tensors="pt",
-            add_generation_prompt=True,
-            **crop_config,
-        ).to(torch_device)
-
-        output = model.generate(**inputs, max_new_tokens=30, do_sample=False)
-        output_text = self.processor.batch_decode(output, skip_special_tokens=True)
-
-        EXPECTED_NUM_IMAGES = 3  # one for the origin image and two crops of images
-        EXPECTED_TEXTS = Expectations(
-            {
-                ("cuda", 8): ["user\nYou are a helpful assistant.\n\nHere is the original image \n\n\n\n and here are some crops to help you see better \n\n\n\n \n\n\n\nWhat is shown in this image?\nmodel\nThe image shows a brown cow standing on a sandy beach next to a turquoise ocean. There's a blue sky with some white clouds in the background"],
-            }
-        )  # fmt: skip
-        EXPECTED_TEXT = EXPECTED_TEXTS.get_expectation()
-        self.assertEqual(len(inputs["pixel_values"]), EXPECTED_NUM_IMAGES)
-        print(f"Generated text: {output_text}")
-        self.assertEqual(output_text, EXPECTED_TEXT)
-
-    @require_deterministic_for_xpu
-    def test_model_4b_batch_crops(self):
-        model = Gemma4ForConditionalGeneration.from_pretrained(self.model_name, device_map=torch_device)
-        crop_config = {
-            "images_kwargs": {
-                "do_pan_and_scan": True,
-                "pan_and_scan_max_num_crops": 448,
-                "pan_and_scan_min_crop_size": 32,
-                "pan_and_scan_min_ratio_to_activate": 0.3,
-            }
-        }
-        messages_2 = [
-            {"role": "system", "content": [{"type": "text", "text": "You are a helpful assistant."}]},
-            {
-                "role": "user",
-                "content": [
-                    {
-                        "type": "image",
-                        "url": "https://huggingface.co/datasets/hf-internal-testing/fixtures-captioning/resolve/main/cow_beach_1.png",
-                    },
-                    {"type": "image", "url": "https://www.ilankelman.org/stopsigns/australia.jpg"},
-                    {"type": "text", "text": "Are these images identical?"},
-                ],
-            },
-        ]
-
-        inputs = self.processor.apply_chat_template(
-            [self.messages, messages_2],
-            tokenize=True,
-            return_dict=True,
-            return_tensors="pt",
-            padding=True,
-            add_generation_prompt=True,
-            **crop_config,
-        ).to(torch_device)
-
-        output = model.generate(**inputs, max_new_tokens=30, do_sample=False)
-        output_text = self.processor.batch_decode(output, skip_special_tokens=True)
-        EXPECTED_NUM_IMAGES = 9  # 3 * (one for the origin image and two crops of images) = 9
-        EXPECTED_TEXTS = Expectations(
-            {
-                ("cuda", 8): [
-                    "user\nYou are a helpful assistant.\n\nHere is the original image \n\n\n\n and here are some crops to help you see better \n\n\n\n \n\n\n\nWhat is shown in this image?\nmodel\nThe image shows a brown cow standing on a sandy beach next to a turquoise ocean. There's a bright blue sky with some white clouds in the",
-                    'user\nYou are a helpful assistant.\n\nHere is the original image \n\n\n\n and here are some crops to help you see better \n\n\n\n \n\n\n\nHere is the original image \n\n\n\n and here are some crops to help you see better \n\n\n\n \n\n\n\nAre these images identical?\nmodel\nNo, the images are not identical. \n\nThe first image shows a cow on a beach, while the second image shows a street scene with a'
-                ],
-            }
-        )  # fmt: skip
-        EXPECTED_TEXT = EXPECTED_TEXTS.get_expectation()
-        self.assertEqual(len(inputs["pixel_values"]), EXPECTED_NUM_IMAGES)
         self.assertEqual(output_text, EXPECTED_TEXT)
 
     def test_model_4b_multiimage(self):
@@ -616,29 +529,34 @@ class Gemma4IntegrationTest(unittest.TestCase):
         ).to(torch_device)
 
         output = model.generate(**inputs, max_new_tokens=30, do_sample=False)
-        output_text = self.processor.batch_decode(output, skip_special_tokens=True)
+        input_size = inputs.input_ids.shape[-1]
+        output_text = self.processor.batch_decode(output[:, input_size:], skip_special_tokens=True)
         EXPECTED_TEXTS = Expectations(
             {
-                ("cuda", 8): ["user\nYou are a helpful assistant.\n\n\n\n\n\nWhat do you see here?\nmodel\nOkay, let's break down what I see in this image:\n\n**Overall Scene:**\n\nIt appears to be a street scene in a city"],
+                ("cuda", 8): ['Based on the image, here is a description of what I see:\n\n**Foreground & Street Scene:**\n* **Traffic Sign:** The most prominent'],
             }
         )  # fmt: skip
         EXPECTED_TEXT = EXPECTED_TEXTS.get_expectation()
         self.assertEqual(output_text, EXPECTED_TEXT)
 
-    @require_deterministic_for_xpu
-    def test_model_1b_text_only(self):
-        model_id = "google/gemma-3-1b-it"
-
-        model = Gemma4ForCausalLM.from_pretrained(model_id, dtype=torch.bfloat16).to(torch_device)
-        tokenizer = AutoTokenizer.from_pretrained(model_id, padding_side="left")
-        inputs = tokenizer("Write a poem about Machine Learning.", return_tensors="pt").to(torch_device)
+    def test_model_text_only(self):
+        model = AutoModelForCausalLM.from_pretrained(self.model_name, device_map=torch_device)
+        tokenizer = AutoTokenizer.from_pretrained(self.model_name, padding_side="left")
+        inputs = tokenizer.apply_chat_template(
+            [{"role": "user", "content": "Write a poem about Machine Learning."}],
+            tokenize=True,
+            return_dict=True,
+            return_tensors="pt",
+            add_generation_prompt=True,
+        ).to(torch_device)
 
         output = model.generate(**inputs, max_new_tokens=30, do_sample=False)
-        output_text = tokenizer.batch_decode(output, skip_special_tokens=True)
+        input_size = inputs.input_ids.shape[-1]
+        output_text = self.processor.batch_decode(output[:, input_size:], skip_special_tokens=True)
 
         EXPECTED_TEXTS = Expectations(
             {
-                ("cuda", 8): ['Write a poem about Machine Learning.\n\n---\n\nThe data flows, a silent stream,\nInto the neural net, a waking dream.\nAlgorithms hum, a coded grace,\n'],
+                ("cuda", 8): ['## The Algorithmic Mind\n\nA whisper starts, a seed unseen,\nOf data vast, a vibrant sheen.\nA sea of numbers,'],
             }
         )  # fmt: skip
         EXPECTED_TEXT = EXPECTED_TEXTS.get_expectation()
@@ -660,7 +578,8 @@ class Gemma4IntegrationTest(unittest.TestCase):
         ).to(torch_device)
 
         output = model.generate(**inputs, max_new_tokens=30, do_sample=False)
-        output_text = self.processor.batch_decode(output, skip_special_tokens=True)
+        input_size = inputs.input_ids.shape[-1]
+        output_text = self.processor.batch_decode(output[:, input_size:], skip_special_tokens=True)
 
         EXPECTED_TEXTS = Expectations(
             {
@@ -705,7 +624,7 @@ class Gemma4IntegrationTest(unittest.TestCase):
         self.assertEqual(output_text, EXPECTED_COMPLETIONS)
 
     @pytest.mark.torch_export_test
-    def test_export_text_only_with_hybrid_cache(self):
+    def test_export_text_only(self):
         if not is_torch_greater_or_equal("2.6.0"):
             self.skipTest(reason="This test requires torch >= 2.6 to run.")
 
