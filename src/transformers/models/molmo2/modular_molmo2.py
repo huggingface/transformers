@@ -311,7 +311,7 @@ class Molmo2VisionModel(PreTrainedModel):
         x = x + pos_emb[None, :, :].to(x.dtype)
         return x
 
-    def forward(self, x: torch.Tensor, patch_num: int | None = None) -> list[torch.Tensor]:
+    def forward(self, x: torch.Tensor, patch_num: int | None = None, **kwargs) -> list[torch.Tensor]:
         """
         : param x: (batch_size, num_patch, n_pixels)
         """
