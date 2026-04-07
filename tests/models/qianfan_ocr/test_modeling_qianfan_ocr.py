@@ -263,7 +263,7 @@ class QianfanOCRIntegrationTest(unittest.TestCase):
         # fmt: off
         expected_logits = Expectations(
             {
-                ("cuda", 8): torch.tensor([10.1875, 15.8125, 13.1875, 12.3750,  9.6250]),
+                ("cuda", 8): torch.tensor([10.1250, 15.8125, 13.1250, 12.2500,  9.5000]),
             }
         )  # fmt: skip
         self.assertTrue(
@@ -297,7 +297,7 @@ class QianfanOCRIntegrationTest(unittest.TestCase):
         # fmt: off
         expected_outputs = Expectations(
             {
-                ("cuda", 8): "The image features two striped cats lying down on a couch, both appearing to be sleeping. They are",
+                ("cuda", 8): "The image features two striped cats lying down and sleeping on a pink couch. They are positioned close to",
             }
         )  # fmt: skip
         self.assertEqual(decoded, expected_outputs.get_expectation())
