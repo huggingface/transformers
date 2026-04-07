@@ -3668,7 +3668,7 @@ class ModelTesterMixin:
                     "PaliGemma-like models currently (transformers==4.41.0) requires an attention_mask input"
                 )
             if config.model_type in [
-                "EvollaModel",
+                "evolla",
                 "modernbert",
                 "gemma3",
                 "t5gemma",
