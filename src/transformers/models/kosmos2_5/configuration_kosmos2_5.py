@@ -92,7 +92,7 @@ class Kosmos2_5VisionConfig(PreTrainedConfig):
     num_attention_heads: int = 24
     dense_act_fn: str = "gelu_new"
     layer_norm_eps: float = 1e-6
-    dropout_rate: float = 0.0
+    dropout_rate: float | int = 0.0
     attention_dropout: float | int = 0.0
     max_num_patches: int = 4096
     initializer_factor: float = 1.0

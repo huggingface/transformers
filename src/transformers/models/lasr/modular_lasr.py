@@ -186,7 +186,7 @@ class LasrEncoderConfig(ParakeetEncoderConfig):
         ```
 
     This configuration class is based on the LasrEncoder architecture from Google Health AI. You can find more details
-    and pre-trained models at [TODO/TODO](https://huggingface.co/TODO/TODO).
+    and pre-trained models at [google/medasr](https://huggingface.co/google/medasr).
     """
 
     hidden_size: int = 512
@@ -231,7 +231,7 @@ class LasrCTCConfig(ParakeetCTCConfig):
         >>> configuration = model.config
         ```
     This configuration class is based on the Lasr CTC architecture from Google Health AI. You can find more details
-    and pre-trained models at [TODO/TODO](https://huggingface.co/TODO/TODO).
+    and pre-trained models at [google/medasr](https://huggingface.co/google/medasr).
     """
 
     vocab_size: int = 512

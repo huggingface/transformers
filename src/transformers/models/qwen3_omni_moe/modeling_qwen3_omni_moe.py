@@ -1896,10 +1896,7 @@ class Qwen3OmniMoeThinkerForConditionalGeneration(
     config: Qwen3OmniMoeThinkerConfig
     base_model_prefix = "thinker"
     _tied_weights_keys = {"lm_head.weight": "model.embed_tokens.weight"}
-    _no_split_modules = [
-        "Qwen3OmniMoeAudioEncoderLayer",
-        "Qwen3OmniMoeThinkerTextDecoderLayer",
-    ]
+    _no_split_modules = ["Qwen3OmniMoeAudioEncoder", "Qwen3OmniMoeVisionEncoder"]
     _can_record_outputs = {
         "hidden_states": Qwen3OmniMoeThinkerTextDecoderLayer,
         "attentions": Qwen3OmniMoeThinkerTextAttention,
@@ -3232,9 +3229,9 @@ class Qwen3OmniMoeTalkerForConditionalGeneration(Qwen3OmniMoeThinkerTextPreTrain
         hidden_states = kwargs.pop("hidden_states", None)
         inputs = super().prepare_inputs_for_generation(
             input_ids,
-            past_key_values,
-            attention_mask,
-            inputs_embeds,
+            past_key_values=past_key_values,
+            attention_mask=attention_mask,
+            inputs_embeds=inputs_embeds,
             is_first_iteration=is_first_iteration,
             **kwargs,
         )
@@ -4074,7 +4071,7 @@ class Qwen3OmniMoeForConditionalGeneration(Qwen3OmniMoePreTrainedModel, Generati
         talker_codes = (
             torch.stack([hid[-1] for hid in talker_result.hidden_states if hid[-1] is not None], dim=1)
             .transpose(1, 2)
-            .to(self.code2wav.device)
+            .to(talker_result.hidden_states[-1][-1].device)
         )
         talker_wavs = self.code2wav.chunked_decode(talker_codes, chunk_size=300, left_context_size=25)
 
