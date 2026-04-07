@@ -302,9 +302,11 @@ class HqqConfig(QuantizationConfigMixin):
         view_as_float: bool = False,
         axis: int | None = None,
         dynamic_config: dict | None = None,
-        skip_modules: list[str] = ["lm_head"],
+        skip_modules: list[str] | None = None,
         **kwargs,
     ):
+        if skip_modules is None:
+            skip_modules = ["lm_head"]
         if is_hqq_available():
             from hqq.core.quantize import BaseQuantizeConfig as HQQBaseQuantizeConfig
         else:
@@ -946,13 +948,19 @@ class VptqLayerConfig(QuantizationConfigMixin):
         in_features: int = -1,
         indices_as_float: bool = False,
         is_indice_packed: bool = True,
-        num_centroids: list = [-1, -1],
-        num_res_centroids: list = [-1, -1],
+        num_centroids: list | None = None,
+        num_res_centroids: list | None = None,
         out_features: int = -1,
         outlier_size: int = 0,
-        vector_lens: list = [-1, -1],
+        vector_lens: list | None = None,
         **kwargs,
     ):
+        if num_centroids is None:
+            num_centroids = [-1, -1]
+        if num_res_centroids is None:
+            num_res_centroids = [-1, -1]
+        if vector_lens is None:
+            vector_lens = [-1, -1]
         self.enable_norm = enable_norm
         self.enable_perm = enable_perm
         self.group_num = group_num
@@ -994,11 +1002,15 @@ class VptqConfig(QuantizationConfigMixin):
     def __init__(
         self,
         enable_proxy_error: bool = False,
-        config_for_layers: dict[str, Any] = {},
-        shared_layer_config: dict[str, Any] = {},
+        config_for_layers: dict[str, Any] | None = None,
+        shared_layer_config: dict[str, Any] | None = None,
         modules_to_not_convert: list | None = None,
         **kwargs,
     ):
+        if config_for_layers is None:
+            config_for_layers = {}
+        if shared_layer_config is None:
+            shared_layer_config = {}
         self.quant_method = QuantizationMethod.VPTQ
         self.enable_proxy_error = enable_proxy_error
         self.config_for_layers: dict[str, Any] = config_for_layers
@@ -1903,9 +1915,11 @@ class FourOverSixConfig(QuantizationConfigMixin):
         weight_scale_2d: bool = False,
         weight_scale_rule: str | None = None,
         module_config_overrides: dict[str, dict[str, Any]] | None = None,
-        modules_to_not_convert: list[str] | None = ["lm_head"],
+        modules_to_not_convert: list[str] | None = None,
         **kwargs,
     ):
+        if modules_to_not_convert is None:
+            modules_to_not_convert = ["lm_head"]
         self.quant_method = QuantizationMethod.FOUR_OVER_SIX
 
         self.activation_scale_rule = activation_scale_rule
