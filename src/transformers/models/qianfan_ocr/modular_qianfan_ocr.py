@@ -155,14 +155,17 @@ class QianfanOCRVisionEmbeddings(nn.Module):
 
         self.class_embedding = nn.Parameter(torch.randn(1, 1, self.embed_dim))
         self.patch_embedding = nn.Conv2d(
-            in_channels=3,
+            in_channels=config.num_channels,
             out_channels=self.embed_dim,
             kernel_size=(self.patch_size_h, self.patch_size_w),
             stride=(self.patch_size_h, self.patch_size_w),
         )
         self.num_patches = (self.image_size_h // self.patch_size_h) * (self.image_size_w // self.patch_size_w)
         self.num_positions = self.num_patches + 1
-        self.position_embedding = nn.Parameter(torch.randn(1, self.num_positions, self.embed_dim))
+        if config.use_absolute_position_embeddings:
+            self.position_embedding = nn.Parameter(torch.randn(1, self.num_positions, self.embed_dim))
+        else:
+            self.position_embedding = None
 
     def _get_pos_embed(self, pos_embed: torch.Tensor, H: int, W: int) -> torch.Tensor:
         target_dtype = pos_embed.dtype
@@ -184,14 +187,15 @@ class QianfanOCRVisionEmbeddings(nn.Module):
         patch_embeds = patch_embeds.flatten(2).transpose(1, 2)
         class_embeds = self.class_embedding.expand(batch_size, 1, -1).to(target_dtype)
         embeddings = torch.cat([class_embeds, patch_embeds], dim=1)
-        position_embedding = torch.cat(
-            [
-                self.position_embedding[:, :1, :],
-                self._get_pos_embed(self.position_embedding[:, 1:, :], height, width),
-            ],
-            dim=1,
-        )
-        embeddings = embeddings + position_embedding.to(target_dtype)
+        if self.position_embedding is not None:
+            position_embedding = torch.cat(
+                [
+                    self.position_embedding[:, :1, :],
+                    self._get_pos_embed(self.position_embedding[:, 1:, :], height, width),
+                ],
+                dim=1,
+            )
+            embeddings = embeddings + position_embedding.to(target_dtype)
         return embeddings
 
 

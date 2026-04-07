@@ -184,10 +184,7 @@ def get_qianfan_ocr_config(input_base_path, tokenizer):
         downsample_ratio=getattr(base_config, "downsample_ratio", 0.5),
         force_image_size=getattr(base_config, "force_image_size", 448),
         dynamic_image_size=getattr(base_config, "dynamic_image_size", True),
-        use_thumbnail=getattr(base_config, "use_thumbnail", True),
         ps_version=getattr(base_config, "ps_version", "v2"),
-        min_dynamic_patch=getattr(base_config, "min_dynamic_patch", 1),
-        max_dynamic_patch=getattr(base_config, "max_dynamic_patch", 12),
     )
 
 

@@ -30,8 +30,6 @@ class QianfanOCRVisionConfig(PreTrainedConfig):
         Dropout probability for the projection layer.
     norm_type (`str`, *optional*, defaults to `"layer_norm"`):
         The type of normalization to use in the encoder. Can be `"layer_norm"` or `"rms_norm"`.
-    use_mask_token (`bool`, *optional*, defaults to `False`):
-        Whether to use a mask token for masked image modeling.
     use_mean_pooling (`bool`, *optional*, defaults to `True`):
         Whether to mean pool the final hidden states of the patches instead of using the final hidden state of the
         CLS token, before applying the classification head.
@@ -65,7 +63,6 @@ class QianfanOCRVisionConfig(PreTrainedConfig):
     image_size: int | list[int] | tuple[int, ...] = (448, 448)
     patch_size: int | list[int] | tuple[int, ...] = (14, 14)
     num_channels: int = 3
-    use_mask_token: bool = False
     use_absolute_position_embeddings: bool = True
     layer_scale_init_value: float = 0.1
     use_mean_pooling: bool = True
@@ -89,14 +86,8 @@ class QianfanOCRConfig(PreTrainedConfig):
         Force all images to this resolution before patching.
     dynamic_image_size (`bool`, *optional*, defaults to `True`):
         Whether to dynamically tile images into multiple patches.
-    use_thumbnail (`bool`, *optional*, defaults to `True`):
-        Whether to include a thumbnail of the full image as an additional tile.
     ps_version (`str`, *optional*, defaults to `"v2"`):
         Pixel shuffle version. Can be `"v1"` or `"v2"`.
-    min_dynamic_patch (`int`, *optional*, defaults to 1):
-        Minimum number of dynamic patches when `dynamic_image_size` is enabled.
-    max_dynamic_patch (`int`, *optional*, defaults to 12):
-        Maximum number of dynamic patches when `dynamic_image_size` is enabled.
     downsample_ratio (`float`, *optional*, defaults to 0.5):
         Factor by which to downsample the image.
 
@@ -124,10 +115,7 @@ class QianfanOCRConfig(PreTrainedConfig):
     tie_word_embeddings: bool = False
     force_image_size: int | None = 448
     dynamic_image_size: bool = True
-    use_thumbnail: bool = True
     ps_version: str = "v2"
-    min_dynamic_patch: int = 1
-    max_dynamic_patch: int = 12
 
     def __post_init__(self, **kwargs):
         if isinstance(self.vision_config, dict):

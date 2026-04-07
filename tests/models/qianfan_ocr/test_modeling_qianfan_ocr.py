@@ -170,7 +170,7 @@ class QianfanOCRVisionText2TextModelTester:
 
 @require_torch
 class QianfanOCRModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
-    test_torch_exportable = False 
+    test_torch_exportable = False
     all_model_classes = (QianfanOCRForConditionalGeneration, QianfanOCRModel) if is_torch_available() else ()
     all_generative_model_classes = (QianfanOCRForConditionalGeneration,) if is_torch_available() else ()
     pipeline_model_mapping = (
