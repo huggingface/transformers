@@ -22,7 +22,7 @@ from ..auto import CONFIG_MAPPING, AutoConfig
 
 @auto_docstring(checkpoint="baidu/Qianfan-OCR")
 @strict
-class QianfanViTConfig(PreTrainedConfig):
+class QianfanOCRVisionConfig(PreTrainedConfig):
     r"""
     drop_path_rate (`float`, *optional*, defaults to 0.1):
         Dropout rate for stochastic depth.
@@ -39,9 +39,9 @@ class QianfanViTConfig(PreTrainedConfig):
     Example:
 
     ```python
-    >>> from transformers import QianfanViTConfig
+    >>> from transformers import QianfanOCRVisionConfig
 
-    >>> configuration = QianfanViTConfig()
+    >>> configuration = QianfanOCRVisionConfig()
     >>> configuration.hidden_size
     1024
     ```"""
@@ -111,7 +111,7 @@ class QianfanOCRConfig(PreTrainedConfig):
     ```"""
 
     model_type = "qianfan_ocr"
-    sub_configs = {"text_config": AutoConfig, "vision_config": QianfanViTConfig}
+    sub_configs = {"text_config": AutoConfig, "vision_config": QianfanOCRVisionConfig}
 
     vision_config: dict | PreTrainedConfig | None = None
     text_config: dict | PreTrainedConfig | None = None
@@ -131,9 +131,9 @@ class QianfanOCRConfig(PreTrainedConfig):
 
     def __post_init__(self, **kwargs):
         if isinstance(self.vision_config, dict):
-            self.vision_config = QianfanViTConfig(**self.vision_config)
+            self.vision_config = QianfanOCRVisionConfig(**self.vision_config)
         elif self.vision_config is None:
-            self.vision_config = QianfanViTConfig()
+            self.vision_config = QianfanOCRVisionConfig()
 
         if isinstance(self.text_config, dict):
             self.text_config["model_type"] = self.text_config.get("model_type", "qwen3")
@@ -144,4 +144,4 @@ class QianfanOCRConfig(PreTrainedConfig):
         super().__post_init__(**kwargs)
 
 
-__all__ = ["QianfanViTConfig", "QianfanOCRConfig"]
+__all__ = ["QianfanOCRVisionConfig", "QianfanOCRConfig"]

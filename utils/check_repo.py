@@ -119,6 +119,7 @@ PRIVATE_MODELS = [
     "Glm4vMoeVisionModel",
     "GlmImageVisionModel",
     "GlmOcrVisionModel",
+    "QianfanOCRVisionModel",
     "EvollaSaProtPreTrainedModel",
     "BltLocalEncoder",  # Building part of bigger (tested) model. Tested implicitly through BLTForCausalLM.
     "BltLocalDecoder",  # Building part of bigger (tested) model. Tested implicitly through BLTForCausalLM.
@@ -247,6 +248,8 @@ IGNORE_NON_TESTED = (
         "Qwen2VLTextModel",  # Building part of bigger (tested) model
         "Qwen2_5_VLTextModel",  # Building part of bigger (tested) model
         "InternVLVisionModel",  # Building part of bigger (tested) model
+        "QianfanOCRVisionModel",  # Building part of bigger (tested) model
+        "QianfanOCRVisionModel",  # Building part of bigger (tested) model
         "JanusVisionModel",  # Building part of bigger (tested) model
         "PPDocLayoutV3Model",  # Building part of bigger (tested) model
         "TimesFmModel",  # Building part of bigger (tested) model

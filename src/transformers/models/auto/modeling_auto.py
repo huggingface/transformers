@@ -364,7 +364,7 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("pvt", "PvtModel"),
         ("pvt_v2", "PvtV2Model"),
         ("qianfan_ocr", "QianfanOCRModel"),
-        ("qianfan_ocr_vision", "QianfanViTModel"),
+        ("qianfan_ocr_vision", "QianfanOCRVisionModel"),
         ("qwen2", "Qwen2Model"),
         ("qwen2_5_vl", "Qwen2_5_VLModel"),
         ("qwen2_5_vl_text", "Qwen2_5_VLTextModel"),

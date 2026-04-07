@@ -19,29 +19,26 @@
 # limitations under the License.
 
 
+from collections.abc import Callable
 from dataclasses import dataclass
 
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
+from ...activations import ACT2FN
 from ...cache_utils import Cache
 from ...generation import GenerationMixin
-from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling
-from ...modeling_utils import PreTrainedModel
+from ...integrations import use_kernel_forward_from_hub
+from ...modeling_layers import GradientCheckpointingLayer
+from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPast, BaseModelOutputWithPooling
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import TransformersKwargs, auto_docstring, torch_compilable_check
+from ...utils import ModelOutput, TransformersKwargs, auto_docstring, torch_compilable_check
 from ...utils.generic import can_return_tuple, merge_with_config_defaults
 from ...utils.output_capturing import OutputRecorder, capture_outputs
 from ..auto import AutoModel
-from ..internvl.modular_internvl import (
-    InternVLCausalLMOutputWithPast,
-    InternVLModelOutputWithPast,
-    InternVLMultiModalProjector,
-    InternVLVisionAttention,
-    InternVLVisionLayer,
-)
-from .configuration_qianfan_ocr import QianfanOCRConfig, QianfanViTConfig
+from .configuration_qianfan_ocr import QianfanOCRConfig, QianfanOCRVisionConfig
 
 
 class DropPath(nn.Module):
@@ -62,11 +59,159 @@ class DropPath(nn.Module):
         return x * random_tensor
 
 
-class QianfanViTLayer(InternVLVisionLayer):
+@use_kernel_forward_from_hub("RMSNorm")
+class QianfanOCRVisionRMSNorm(nn.Module):
+    def __init__(self, hidden_size, eps: float = 1e-6) -> None:
+        """
+        QianfanOCRVisionRMSNorm is equivalent to T5LayerNorm
+        """
+        super().__init__()
+        self.weight = nn.Parameter(torch.ones(hidden_size))
+        self.variance_epsilon = eps
+
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        input_dtype = hidden_states.dtype
+        hidden_states = hidden_states.to(torch.float32)
+        variance = hidden_states.pow(2).mean(-1, keepdim=True)
+        hidden_states = hidden_states * torch.rsqrt(variance + self.variance_epsilon)
+        return self.weight * hidden_states.to(input_dtype)
+
+    def extra_repr(self):
+        return f"{tuple(self.weight.shape)}, eps={self.variance_epsilon}"
+
+
+def eager_attention_forward(
+    module: nn.Module,
+    query: torch.Tensor,
+    key: torch.Tensor,
+    value: torch.Tensor,
+    attention_mask: torch.Tensor | None,
+    scaling: float,
+    dropout: float | int = 0.0,
+    **kwargs,
+):
+    key_states = key
+    value_states = value
+
+    attn_weights = torch.matmul(query, key_states.transpose(2, 3)) * scaling
+    if attention_mask is not None:
+        attn_weights = attn_weights + attention_mask
+
+    # No upcasting of the attention weights to float32 in this implementation
+    attn_weights = nn.functional.softmax(attn_weights, dim=-1)
+    attn_weights = nn.functional.dropout(attn_weights, p=dropout, training=module.training)
+    attn_output = torch.matmul(attn_weights, value_states)
+    attn_output = attn_output.transpose(1, 2).contiguous()
+
+    return attn_output, attn_weights
+
+
+class QianfanOCRVisionAttention(nn.Module):
+    """Attention Class for QianfanOCR Vision Encoder"""
+
+    def __init__(self, config: QianfanOCRVisionConfig):
+        super().__init__()
+        self.config = config
+        self.embed_dim = config.hidden_size
+        self.num_heads = config.num_attention_heads
+        self.head_dim = self.embed_dim // self.num_heads
+        if self.head_dim * self.num_heads != self.embed_dim:
+            raise ValueError(
+                f"embed_dim must be divisible by num_heads (got `embed_dim`: {self.embed_dim} and `num_heads`:"
+                f" {self.num_heads})."
+            )
+        self.scale = self.head_dim**-0.5
+        self.attention_dropout = config.attention_dropout
+        proj_dropout = config.projection_dropout
+        qk_norm = config.use_qk_norm
+
+        # Needed for flash attention
+        self.is_causal = False
+
+        self.q_proj = nn.Linear(self.embed_dim, self.num_heads * self.head_dim, bias=config.attention_bias)
+        self.k_proj = nn.Linear(self.embed_dim, self.num_heads * self.head_dim, bias=config.attention_bias)
+        self.v_proj = nn.Linear(self.embed_dim, self.num_heads * self.head_dim, bias=config.attention_bias)
+        self.projection_layer = nn.Linear(self.embed_dim, self.embed_dim)
+        self.projection_dropout = nn.Dropout(proj_dropout) if proj_dropout > 0 else nn.Identity()
+
+        self.q_norm = QianfanOCRVisionRMSNorm(self.embed_dim) if qk_norm else nn.Identity()
+        self.k_norm = QianfanOCRVisionRMSNorm(self.embed_dim) if qk_norm else nn.Identity()
+
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        attention_mask: torch.Tensor | None = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ):
+        batch_size, seq_len, _ = hidden_states.size()
+
+        query_states = self.q_proj(hidden_states)
+        key_states = self.k_proj(hidden_states)
+        value_states = self.v_proj(hidden_states)
+
+        query_states = self.q_norm(query_states)
+        key_states = self.k_norm(key_states)
+
+        query_states = query_states.reshape(batch_size, seq_len, self.num_heads, self.head_dim).transpose(1, 2)
+        key_states = key_states.reshape(batch_size, seq_len, self.num_heads, self.head_dim).transpose(1, 2)
+        value_states = value_states.view(batch_size, seq_len, self.num_heads, self.head_dim).transpose(1, 2)
+
+        attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
+            self.config._attn_implementation, eager_attention_forward
+        )
+
+        attn_output, attn_weights = attention_interface(
+            self,
+            query_states,
+            key_states,
+            value_states,
+            attention_mask,
+            dropout=0.0 if not self.training else self.attention_dropout,
+            scaling=self.scale,
+            is_causal=False,
+            **kwargs,
+        )
+        attn_output = attn_output.reshape(batch_size, seq_len, self.embed_dim)
+
+        output = self.projection_layer(attn_output)
+        output = self.projection_dropout(output)
+
+        return output, attn_weights
+
+
+class QianfanOCRVisionMLP(nn.Module):
+    def __init__(self, config):
+        super().__init__()
+        self.config = config
+        self.activation_fn = ACT2FN[config.hidden_act]
+        self.fc1 = nn.Linear(config.hidden_size, config.intermediate_size)
+        self.fc2 = nn.Linear(config.intermediate_size, config.hidden_size)
+
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        hidden_states = self.fc1(hidden_states)
+        hidden_states = self.activation_fn(hidden_states)
+        hidden_states = self.fc2(hidden_states)
+        return hidden_states
+
+
+NORM2FN = {"layer_norm": nn.LayerNorm, "rms_norm": QianfanOCRVisionRMSNorm}
+
+
+class QianfanOCRVisionLayer(GradientCheckpointingLayer):
     """Vision transformer layer with stochastic depth (DropPath) support."""
 
-    def __init__(self, config: QianfanViTConfig, drop_path_rate: float = 0.0) -> None:
-        super().__init__(config)
+    def __init__(self, config: QianfanOCRVisionConfig, drop_path_rate: float = 0.0) -> None:
+        super().__init__()
+        self.chunk_size_feed_forward = config.chunk_size_feed_forward
+        self.seq_len_dim = 1
+        self.attention = QianfanOCRVisionAttention(config)
+        self.mlp = QianfanOCRVisionMLP(config)
+        self.layernorm_before = NORM2FN[config.norm_type](config.hidden_size, eps=config.layer_norm_eps)
+        self.layernorm_after = NORM2FN[config.norm_type](config.hidden_size, eps=config.layer_norm_eps)
+        init_values = config.layer_scale_init_value
+        self.lambda_1 = nn.Parameter(init_values * torch.ones(config.hidden_size), requires_grad=True)
+        self.lambda_2 = nn.Parameter(init_values * torch.ones(config.hidden_size), requires_grad=True)
+        self.dropout = nn.Dropout(config.hidden_dropout_prob)
         self.drop_path1 = nn.Identity() if drop_path_rate <= 0.0 else DropPath(drop_path_rate)
         self.drop_path2 = nn.Identity() if drop_path_rate <= 0.0 else DropPath(drop_path_rate)
 
@@ -98,8 +243,8 @@ class QianfanViTLayer(InternVLVisionLayer):
         return layer_output
 
 
-class QianfanViTEncoder(nn.Module):
-    def __init__(self, config: QianfanViTConfig) -> None:
+class QianfanOCRVisionEncoder(nn.Module):
+    def __init__(self, config: QianfanOCRVisionConfig) -> None:
         super().__init__()
         self.config = config
         self.gradient_checkpointing = False
@@ -111,7 +256,7 @@ class QianfanViTEncoder(nn.Module):
         else:
             dpr = [rate * i / (n - 1) for i in range(n)]
 
-        self.layer = nn.ModuleList([QianfanViTLayer(config, drop_path_rate=dpr[i]) for i in range(n)])
+        self.layer = nn.ModuleList([QianfanOCRVisionLayer(config, drop_path_rate=dpr[i]) for i in range(n)])
 
     def forward(
         self,
@@ -125,8 +270,8 @@ class QianfanViTEncoder(nn.Module):
         )
 
 
-class QianfanViTEmbeddings(nn.Module):
-    def __init__(self, config: QianfanViTConfig):
+class QianfanOCRVisionEmbeddings(nn.Module):
+    def __init__(self, config: QianfanOCRVisionConfig):
         super().__init__()
         self.embed_dim = config.hidden_size
 
@@ -183,7 +328,7 @@ class QianfanViTEmbeddings(nn.Module):
         return embeddings
 
 
-class QianfanViTModelOutputWithPooling(BaseModelOutputWithPooling):
+class QianfanOCRVisionModelOutputWithPooling(BaseModelOutputWithPooling):
     r"""
     pooler_output (`torch.FloatTensor` of shape `(batch_size, hidden_size)`):
         Average of the last layer hidden states of the patch tokens (excluding the *[CLS]* token) if
@@ -195,40 +340,40 @@ class QianfanViTModelOutputWithPooling(BaseModelOutputWithPooling):
 
 
 @auto_docstring
-class QianfanViTPreTrainedModel(PreTrainedModel):
-    config_class = QianfanViTConfig
+class QianfanOCRVisionPreTrainedModel(PreTrainedModel):
+    config_class = QianfanOCRVisionConfig
     base_model_prefix = "vision_model"
     main_input_name = "pixel_values"
     supports_gradient_checkpointing = True
-    _no_split_modules = ["QianfanViTLayer"]
+    _no_split_modules = ["QianfanOCRVisionLayer"]
     _supports_sdpa = True
     _supports_flash_attn = True
     _supports_flex_attn = True
     _supports_attention_backend = True
     _can_record_outputs = {
-        "hidden_states": OutputRecorder(QianfanViTLayer, index=0),
-        "attentions": OutputRecorder(InternVLVisionAttention, index=1),
+        "hidden_states": OutputRecorder(QianfanOCRVisionLayer, index=0),
+        "attentions": OutputRecorder(QianfanOCRVisionAttention, index=1),
     }
 
     @torch.no_grad()
     def _init_weights(self, module):
         super()._init_weights(module)
-        if isinstance(module, QianfanViTEmbeddings):
+        if isinstance(module, QianfanOCRVisionEmbeddings):
             nn.init.zeros_(module.class_embedding)
             nn.init.zeros_(module.position_embedding)
-        elif isinstance(module, QianfanViTLayer):
+        elif isinstance(module, QianfanOCRVisionLayer):
             nn.init.constant_(module.lambda_1, self.config.layer_scale_init_value)
             nn.init.constant_(module.lambda_2, self.config.layer_scale_init_value)
 
 
 @auto_docstring
-class QianfanViTModel(QianfanViTPreTrainedModel):
-    def __init__(self, config: QianfanViTConfig) -> None:
+class QianfanOCRVisionModel(QianfanOCRVisionPreTrainedModel):
+    def __init__(self, config: QianfanOCRVisionConfig) -> None:
         super().__init__(config)
         self.config = config
 
-        self.embeddings = QianfanViTEmbeddings(config)
-        self.encoder = QianfanViTEncoder(config)
+        self.embeddings = QianfanOCRVisionEmbeddings(config)
+        self.encoder = QianfanOCRVisionEncoder(config)
 
         self.layernorm = (
             nn.Identity() if config.use_mean_pooling else nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
@@ -244,7 +389,7 @@ class QianfanViTModel(QianfanViTPreTrainedModel):
     @auto_docstring
     def forward(
         self, pixel_values: torch.Tensor, bool_masked_pos: torch.BoolTensor | None = None, **kwargs
-    ) -> tuple | QianfanViTModelOutputWithPooling:
+    ) -> tuple | QianfanOCRVisionModelOutputWithPooling:
         r"""
         bool_masked_pos (`torch.BoolTensor` of shape `(batch_size, num_patches)`, *optional*):
             Boolean masked positions. Indicates which patches are masked (1) and which aren't (0).
@@ -254,16 +399,29 @@ class QianfanViTModel(QianfanViTPreTrainedModel):
         sequence_output = encoder_outputs[0]
         sequence_output = self.layernorm(sequence_output)
 
-        return QianfanViTModelOutputWithPooling(
+        return QianfanOCRVisionModelOutputWithPooling(
             last_hidden_state=sequence_output,
             hidden_states=encoder_outputs.hidden_states,
             attentions=encoder_outputs.attentions,
         )
 
 
-class QianfanOCRMultiModalProjector(InternVLMultiModalProjector):
+class QianfanOCRMultiModalProjector(nn.Module):
     def __init__(self, config: QianfanOCRConfig):
-        super().__init__(config)
+        super().__init__()
+        self.layer_norm = nn.LayerNorm(config.vision_config.hidden_size * int(1 / config.downsample_ratio) ** 2)
+        self.linear_1 = nn.Linear(
+            config.vision_config.hidden_size * int(1 / config.downsample_ratio) ** 2, config.text_config.hidden_size
+        )
+        self.act = ACT2FN[config.projector_hidden_act]
+        self.linear_2 = nn.Linear(config.text_config.hidden_size, config.text_config.hidden_size)
+
+    def forward(self, image_features):
+        hidden_states = self.layer_norm(image_features)
+        hidden_states = self.linear_1(hidden_states)
+        hidden_states = self.act(hidden_states)
+        hidden_states = self.linear_2(hidden_states)
+        return hidden_states
 
 
 class QianfanOCRPreTrainedModel(PreTrainedModel):
@@ -274,7 +432,7 @@ class QianfanOCRPreTrainedModel(PreTrainedModel):
     _skip_keys_device_placement = "past_key_values"
     _supports_flash_attn = True
     _supports_sdpa = True
-    _no_split_modules = ["QianfanViTLayer", "Qwen3DecoderLayer"]
+    _no_split_modules = ["QianfanOCRVisionLayer", "Qwen3DecoderLayer"]
 
 
 @dataclass
@@ -283,12 +441,14 @@ class QianfanOCRPreTrainedModel(PreTrainedModel):
     Base class for QianfanOCR outputs, with hidden states and attentions.
     """
 )
-class QianfanOCRModelOutputWithPast(InternVLModelOutputWithPast):
+class QianfanOCRModelOutputWithPast(BaseModelOutputWithPast):
     r"""
     image_hidden_states (`torch.FloatTensor`, *optional*):
         A `torch.FloatTensor` of size `(batch_size, num_images, sequence_length, hidden_size)`.
         image_hidden_states of the model produced by the vision encoder and after projecting the last hidden state.
     """
+
+    image_hidden_states: torch.FloatTensor | None = None
 
 
 class QianfanOCRModel(QianfanOCRPreTrainedModel):
@@ -464,7 +624,7 @@ class QianfanOCRModel(QianfanOCRPreTrainedModel):
     Base class for QianfanOCR causal language model outputs.
     """
 )
-class QianfanOCRCausalLMOutputWithPast(InternVLCausalLMOutputWithPast):
+class QianfanOCRCausalLMOutputWithPast(ModelOutput):
     r"""
     loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
         Language modeling loss (for next-token prediction).
@@ -474,6 +634,13 @@ class QianfanOCRCausalLMOutputWithPast(InternVLCausalLMOutputWithPast):
         A `torch.FloatTensor` of size `(batch_size, num_images, sequence_length, hidden_size)`.
         image_hidden_states of the model produced by the vision encoder and after projecting the last hidden state.
     """
+
+    loss: torch.FloatTensor | None = None
+    logits: torch.FloatTensor | None = None
+    past_key_values: Cache | None = None
+    hidden_states: tuple[torch.FloatTensor] | None = None
+    attentions: tuple[torch.FloatTensor] | None = None
+    image_hidden_states: torch.FloatTensor | None = None
 
 
 class QianfanOCRForConditionalGeneration(QianfanOCRPreTrainedModel, GenerationMixin):
@@ -602,8 +769,8 @@ class QianfanOCRForConditionalGeneration(QianfanOCRPreTrainedModel, GenerationMi
 
 
 __all__ = [
-    "QianfanViTPreTrainedModel",
-    "QianfanViTModel",
+    "QianfanOCRVisionPreTrainedModel",
+    "QianfanOCRVisionModel",
     "QianfanOCRPreTrainedModel",
     "QianfanOCRModel",
     "QianfanOCRForConditionalGeneration",

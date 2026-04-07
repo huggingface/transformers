@@ -121,9 +121,9 @@ For documents with complex layouts, cluttered elements, or non-standard reading 
 
 [[autodoc]] QianfanOCRConfig
 
-## QianfanViTConfig
+## QianfanOCRVisionConfig
 
-[[autodoc]] QianfanViTConfig
+[[autodoc]] QianfanOCRVisionConfig
 
 ## QianfanOCRImageProcessor
 
@@ -140,9 +140,9 @@ For documents with complex layouts, cluttered elements, or non-standard reading 
 [[autodoc]] QianfanOCRProcessor
     - __call__
 
-## QianfanViTModel
+## QianfanOCRVisionModel
 
-[[autodoc]] QianfanViTModel
+[[autodoc]] QianfanOCRVisionModel
     - forward
 
 ## QianfanOCRModel

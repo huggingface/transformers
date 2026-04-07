@@ -61,7 +61,7 @@ ORIGINAL_TO_CONVERTED_KEY_MAPPING_VISION = {
     # Encoder layer list: encoder.layers.N → encoder.layer.N
     r"encoder\.layers\.":                           r"encoder.layer.",
     # NOTE: class_embedding, patch_embedding, position_embedding keep their
-    #       original names because QianfanViTEmbeddings uses the same attribute names.
+    #       original names because QianfanOCRVisionEmbeddings uses the same attribute names.
     # Layer scale params: ls1/ls2 → lambda_1/lambda_2
     r"\.ls(\d+)":                                   r".lambda_\1",
     # Attention projection: attn.proj → attention.projection_layer
@@ -147,7 +147,7 @@ def load_original_state_dict(input_base_path):
 
 
 def get_qianfan_ocr_config(input_base_path, tokenizer):
-    from transformers import QianfanOCRConfig, QianfanViTConfig
+    from transformers import QianfanOCRConfig, QianfanOCRVisionConfig
 
     # Use AutoConfig so we never instantiate the original model
     base_config = AutoConfig.from_pretrained(input_base_path, trust_remote_code=True)
@@ -166,7 +166,7 @@ def get_qianfan_ocr_config(input_base_path, tokenizer):
         vision_dict["attention_dropout"] = attn_dropout
         vision_dict["projection_dropout"] = attn_dropout
     vision_dict["use_absolute_position_embeddings"] = True
-    # Remove keys that don't map to QianfanViTConfig
+    # Remove keys that don't map to QianfanOCRVisionConfig
     for k in ["architectures", "model_type", "torch_dtype", "initializer_factor"]:
         vision_dict.pop(k, None)
 
@@ -179,7 +179,7 @@ def get_qianfan_ocr_config(input_base_path, tokenizer):
     # Top-level config
     return QianfanOCRConfig(
         text_config=text_config,
-        vision_config=QianfanViTConfig(**vision_dict),
+        vision_config=QianfanOCRVisionConfig(**vision_dict),
         image_token_id=tokenizer.convert_tokens_to_ids("<IMG_CONTEXT>"),
         downsample_ratio=getattr(base_config, "downsample_ratio", 0.5),
         force_image_size=getattr(base_config, "force_image_size", 448),
