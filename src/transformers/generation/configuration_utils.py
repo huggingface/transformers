@@ -1558,10 +1558,9 @@ class ContinuousBatchingConfig:
             Maximum number of tokens in a batch. Auto-inferred from GPU memory when `None`.
         max_memory_percent (`float`, *optional*, defaults to 0.8):
             Maximum percentage of free GPU memory (after the model is loaded) to use for the KV cache.
-        max_blocks_per_request (`int`, *optional*):
+        max_blocks_per_request (`int`, *optional*, defaults to 0):
             Maximum blocks per request, used in the `flash_attn_with_kvcache` fast decode path to dimension
-            the block table. When left unset, continuous batching can choose a FlashAttention-specific default.
-            Setting this to 0 disables the fast decode path explicitly.
+            the block table. Setting this to 0 disables the fast decode path.
         allow_block_sharing (`bool`, *optional*, defaults to `True`):
             Whether to allow block sharing for prefix caching. Block sharing can only be allowed, never forced,
             as some models do not support it. Disable if you have few short prompts but long generation lengths.
@@ -1609,9 +1608,10 @@ class ContinuousBatchingConfig:
     # The max percentage of free GPU memory (after the model is loaded) to use for the KV cache.
     max_memory_percent: float = 0.8
 
-    # This is only used in the flash_attn_with_kvcache fast decode path to dimension the block table. None keeps the
-    # door open for backend-specific defaults, while 0 still disables the path explicitly.
-    max_blocks_per_request: int | None = None
+    # This is only used in the flash_attn_with_kvcache fast decode path to dimension the block table. If it is set to 0,
+    # the fast decode path will not be used. Callers can still pass None explicitly if they want backend-specific
+    # defaults to decide the block table size later.
+    max_blocks_per_request: int | None = 0
 
     # Block sharing can only be allowed, but never forced: some model just do not support it. If you only have a few
     # short prompts, but long generation lengths, you might want to disable block sharing.
