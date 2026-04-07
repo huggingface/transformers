@@ -350,7 +350,7 @@ class Gemma2IntegrationTest(unittest.TestCase):
             self.assertEqual(export_generated_text, eager_generated_text)
 
             import time
-            for _ in range(4):
+            for _ in range(5):
                 time.sleep(60)
 
 
