@@ -23,7 +23,7 @@ from ...utils.import_utils import requires
 
 
 if is_vision_available():
-    from .image_processing_pil_emu3 import Emu3ImageProcessorKwargs, smart_resize
+    from .image_processing_emu3 import Emu3ImageProcessorKwargs, smart_resize
 
 
 class Emu3TextKwargs(TextKwargs, total=False):
@@ -174,8 +174,8 @@ class Emu3Processor(ProcessorMixin):
                     height,
                     width,
                     self.image_processor.spatial_factor,
-                    self.image_processor.size["shortest_edge"],
-                    self.image_processor.size["longest_edge"],
+                    self.image_processor.max_pixels,
+                    self.image_processor.min_pixels,
                 )
                 height = height // self.downsample_ratio
                 width = width // self.downsample_ratio
