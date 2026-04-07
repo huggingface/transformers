@@ -18,7 +18,13 @@ import unittest
 
 from transformers import AutoProcessor, CohereAsrConfig, CohereAsrForConditionalGeneration, is_torch_available
 from transformers.audio_utils import load_audio
-from transformers.testing_utils import cleanup, require_torch, slow, torch_device
+from transformers.testing_utils import (
+    cleanup,
+    require_deterministic_for_xpu,
+    require_torch,
+    slow,
+    torch_device,
+)
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import (
@@ -328,9 +334,14 @@ class CohereAsrIntegrationTest(unittest.TestCase):
         outputs = model.generate(**inputs, max_new_tokens=256)
         text = self.processor.decode(outputs, skip_special_tokens=True)
 
-        EXPECTED_OUTPUT = [
-            " Yesterday it was thirty-five degrees in Barcelona, but today the temperature will go down to minus twenty degrees."
-        ]
+        if torch_device == "xpu":
+            EXPECTED_OUTPUT = [
+                " Yesterday it was 35 degrees in Barcelona, but today the temperature will go down to minus 20 degrees."
+            ]
+        else:
+            EXPECTED_OUTPUT = [
+                " Yesterday it was thirty-five degrees in Barcelona, but today the temperature will go down to minus twenty degrees."
+            ]
         self.assertEqual(text, EXPECTED_OUTPUT)
 
     @slow
@@ -359,12 +370,20 @@ class CohereAsrIntegrationTest(unittest.TestCase):
         text_pnc = self.processor.decode(outputs_pnc, skip_special_tokens=True)
         text_nopnc = self.processor.decode(outputs_nopnc, skip_special_tokens=True)
 
-        EXPECTED_OUTPUT_PNC = [
-            " Yesterday it was thirty-five degrees in Barcelona, but today the temperature will go down to minus twenty degrees."
-        ]
-        EXPECTED_OUTPUT_NOPNC = [
-            " yesterday it was thirty-five degrees in barcelona but today the temperature will go down to minus twenty degrees"
-        ]
+        if torch_device == "xpu":
+            EXPECTED_OUTPUT_PNC = [
+                " Yesterday it was 35 degrees in Barcelona, but today the temperature will go down to minus 20 degrees."
+            ]
+            EXPECTED_OUTPUT_NOPNC = [
+                " yesterday it was 35 degrees in barcelona but today the temperature will go down to minus 20 degrees"
+            ]
+        else:
+            EXPECTED_OUTPUT_PNC = [
+                " Yesterday it was thirty-five degrees in Barcelona, but today the temperature will go down to minus twenty degrees."
+            ]
+            EXPECTED_OUTPUT_NOPNC = [
+                " yesterday it was thirty-five degrees in barcelona but today the temperature will go down to minus twenty degrees"
+            ]
         self.assertEqual(text_pnc, EXPECTED_OUTPUT_PNC)
         self.assertEqual(text_nopnc, EXPECTED_OUTPUT_NOPNC)
 
@@ -396,6 +415,7 @@ class CohereAsrIntegrationTest(unittest.TestCase):
         # fmt: on
         self.assertEqual(text, EXPECTED_OUTPUT)
 
+    @require_deterministic_for_xpu
     @slow
     def test_batched_mixed_lengths(self):
         """
@@ -430,6 +450,7 @@ class CohereAsrIntegrationTest(unittest.TestCase):
         self.assertEqual(text, EXPECTED_OUTPUT)
 
     @slow
+    @require_deterministic_for_xpu
     def test_non_english_with_punctuation(self):
         """
         reproducer: https://gist.github.com/eustlb/cfcea58b4ffabfd45b4b6fce5ab283ed
@@ -447,5 +468,8 @@ class CohereAsrIntegrationTest(unittest.TestCase):
         outputs = model.generate(**inputs, max_new_tokens=256)
         text = self.processor.decode(outputs, skip_special_tokens=True)
 
-        EXPECTED_OUTPUT = [" Esto parece tener sentido ya que en la Tierra no se percibe su movimiento, ¿cierto?"]
+        if torch_device == "xpu":
+            EXPECTED_OUTPUT = [" Esto parece tener sentido ya que en la Tierra no se percibe su movimiento. ¿Cierto?"]
+        else:
+            EXPECTED_OUTPUT = [" Esto parece tener sentido ya que en la Tierra no se percibe su movimiento, ¿cierto?"]
         self.assertEqual(text, EXPECTED_OUTPUT)
