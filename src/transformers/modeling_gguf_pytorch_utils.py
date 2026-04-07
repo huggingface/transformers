@@ -353,7 +353,6 @@ class MiniMaxM2TensorProcessor(TensorProcessor):
 
 
 class Gemma4TensorProcessor(TensorProcessor):
-
     _ROUTER_SCALE = re.compile(r"(?:model\.)?layers\.(?P<bid>\d+)\.router\.scale")
     _ROUTER_PER_EXPERT_SCALE = re.compile(r"(?:model\.)?layers\.(?P<bid>\d+)\.router\.per_expert_scale")
 
@@ -612,7 +611,6 @@ def load_gguf_checkpoint(gguf_checkpoint_path, return_tensors=False, model_to_lo
     # Gemma3 GGUF checkpoint only contains weights of text backbone
     if parsed_parameters["config"]["model_type"] == "gemma3":
         parsed_parameters["config"]["model_type"] = "gemma3_text"
-
 
     # Gemma4 GGUF: config expects scalars plus boolean flags; convert them here.
     if parsed_parameters["config"]["model_type"] == "gemma4":
