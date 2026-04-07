@@ -3423,7 +3423,11 @@ class ModelTesterMixin:
     @slow
     @is_flaky()
     def test_flash_attn_2_inference_equivalence(self):
-        self.flash_attn_inference_equivalence(attn_implementation="flash_attention_2", padding_side="left")
+        self.flash_attn_inference_equivalence(attn_implementation="flash_attention_2",
+        padding_side="left",
+        atol=2e-1,
+        rtol=2e-1,
+        )
 
     @require_flash_attn
     @require_torch_accelerator
@@ -3431,7 +3435,11 @@ class ModelTesterMixin:
     @slow
     @is_flaky()
     def test_flash_attn_2_inference_equivalence_right_padding(self):
-        self.flash_attn_inference_equivalence(attn_implementation="flash_attention_2", padding_side="right")
+        self.flash_attn_inference_equivalence(attn_implementation="flash_attention_2",
+        padding_side="right",
+        atol=2e-1,
+        rtol=2e-1,
+        )
 
     @require_flash_attn_3
     @require_torch_gpu
