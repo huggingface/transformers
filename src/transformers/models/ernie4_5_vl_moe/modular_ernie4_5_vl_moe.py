@@ -117,7 +117,7 @@ class Ernie4_5_VLMoeTextConfig(Ernie4_5_MoeConfig):
         Whether to use a bias in any of the projections including mlp and attention for example
     moe_k (`int`, *optional*, defaults to 6):
         Number of selected experts.
-    moe_num_experts (`int`, *optional*, defaults to 64):
+    moe_num_experts (`int` or `list[int]`, *optional*, defaults to 64):
         Number of routed experts.
     moe_num_shared_experts (`int`, *optional*, defaults to 2):
         The number of experts that are shared for all MoE forwards.
@@ -149,6 +149,7 @@ class Ernie4_5_VLMoeTextConfig(Ernie4_5_MoeConfig):
     pad_token_id: int | None = None
     eos_token_id: int | list[int] | None = None
     bos_token_id: int | None = None
+    moe_num_experts: int | list[int] | None = 64
     moe_layer_end_index = AttributeError()
     moe_layer_interval = AttributeError()
     moe_layer_start_index = AttributeError()
