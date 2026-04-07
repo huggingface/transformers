@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import time
+from copy import deepcopy
 from dataclasses import dataclass, field
 from enum import IntEnum
 
@@ -144,30 +145,38 @@ class RequestState:
     # Required fields
     request_id: str
     initial_tokens: list[int]  # Initial prompt tokens # TODO: rename this as prefill tokens
-    # Optional fields
+
+    # Optional fields (CB parameters)
+    streaming: bool = False  # Whether to stream tokens as they're generated
     record_timestamps: bool = False  # Whether to record timestamps for the generated tokens
-    num_children: int = 0  # Number of children requests
-    # Internal fields
-    tokens_to_process: list[int] = field(default_factory=list)  # Tokens IDs currently being processed
-    remaining_prefill_tokens: list[int] = field(
-        default_factory=list
-    )  # Initial tokens left to process (initialized in __post_init__)
-    generated_tokens: list[int] = field(default_factory=list)  # Generated tokens
-    logprobs: list[float] = field(default_factory=list)  # Log probabilities of the generated tokens
-    allocated_blocks: int = 0  # Number of blocks allocated to the request
-    position_offset: int = 0  # Current position in the sequence for position_ids
-    _status: RequestStatus = RequestStatus.PENDING  # Status of the request, hidden behind a property
+
+    # Optional fields (generation parameters)
     max_new_tokens: int | None = 20  # Maximum number of new tokens to generate. None means no limit. Default to 20.
     eos_token_id: int | list[int] | None = None  # ID(s) of the end-of-sequence tokens. Only used in post-init.
+    num_children: int = 0  # Number of children requests
+    logit_processor_kwargs: dict = field(default_factory=dict)  # Keyword arguments for the logits processor.
+
+    # Internal fields (for scheduling)
+    tokens_to_process: list[int] = field(default_factory=list)  # Tokens IDs currently being processed
+    generated_tokens: list[int] = field(default_factory=list)  # Generated tokens
+    logprobs: list[float] = field(default_factory=list)  # Log probabilities of the generated tokens
+    position_offset: int = 0  # Current position in the sequence for position_ids
+    allocated_blocks: int = 0  # Number of blocks allocated to the request
+
+    _status: RequestStatus = RequestStatus.PENDING  # Status of the request, hidden behind a property
     _eos_token_ids: set[int] = field(default_factory=set)  # IDs of the end-of-sequence tokens, formatted as a set
-    streaming: bool = False  # Whether to stream tokens as they're generated
+
+    # Internal fields (for tracking)
     created_time: float = field(default_factory=time.perf_counter)  # Time the request was created
     error: str | None = None  # Error message if the request failed
     lifespan: tuple[float, float] = (-1, -1)  # (time request was no longer pending, time request finished)
     _timestamps: list[float] = field(default_factory=list)  # Timestamps of the generated tokens
     _true_initial_tokens: int = 0  # The true number of initial tokens, useful when soft resetting requests
     # TODO: remove the attribute above to _num_initial_tokens once initial_tokens is renamed
+
+    # Fields overwritten in __post_init__
     _new_tokens_limit: int = 2147483647  # An int to check the max number of new tokens w/out always comparing w/ None
+    remaining_prefill_tokens: list[int] = field(default_factory=list)  # Initial tokens left to process
 
     def __post_init__(self):
         # If no max length is set, we set an absurdly high value which will never be reached
@@ -265,6 +274,7 @@ class RequestState:
             f"full_prompt_length={len(self.initial_tokens)}",
             f"allocated_blocks={self.allocated_blocks}",
             f"generated_tokens={self.generated_tokens}",
+            f"logit_processor_kwargs={self.logit_processor_kwargs}",
         ]
         return "RequestState(\n\t" + ",\n\t".join(msg) + "\n)"
 
@@ -287,44 +297,43 @@ class RequestState:
 
     def fork(self, new_request_id: str) -> "RequestState":
         """Fork the request into a new request with the same state except for request_id, created_time and lifespan."""
-        t = time.perf_counter()
-        new_request = RequestState(
-            request_id=new_request_id,
-            initial_tokens=self.initial_tokens,
-            num_children=self.num_children,
-            tokens_to_process=self.tokens_to_process[:],
-            generated_tokens=self.generated_tokens[:],
-            logprobs=self.logprobs[:],
-            allocated_blocks=self.allocated_blocks,
-            position_offset=self.position_offset,
-            _status=self.status,
-            max_new_tokens=self.max_new_tokens,
-            eos_token_id=self.eos_token_id,
-            streaming=self.streaming,
-            created_time=t,
-            lifespan=(t, -1),
-            _timestamps=[],
-            error=self.error,
-            record_timestamps=self.record_timestamps,
-        )
-        # Modified by __post_init__
+        new_request = deepcopy(self)
+        # Update tracking fields
+        new_request.request_id = new_request_id
+        new_request.created_time = time.perf_counter()
+        new_request.lifespan = (new_request.created_time, -1)
+        new_request._timestamps = []
+        # Update fields overwritten in __post_init__
         new_request.remaining_prefill_tokens = self.remaining_prefill_tokens[:]
         return new_request
+
+    def get_request_config(self) -> dict:
+        """Get all the fields necessary to create a request that would have the same configuration."""
+        return {
+            "streaming": self.streaming,
+            "record_timestamps": self.record_timestamps,
+            "max_new_tokens": self.max_new_tokens,
+            "eos_token_id": self.eos_token_id,
+            "num_children": self.num_children,
+            "logit_processor_kwargs": deepcopy(self.logit_processor_kwargs),
+        }
 
     def create_equivalent_initial_request(self) -> "RequestState":
         """Creates an equivalent new request by removing the generated tokens and adding them to the initial prompt. The
         created request has THE SAME request_id. Notably, we can retrieve the original request from the created one with
         the _true_initial_tokens attribute. The logprobs of the generated tokens are kept in the new request."""
-        max_new_tokens = None if self.max_new_tokens is None else (self.max_new_tokens - len(self.generated_tokens))
+
+        request_config = self.get_request_config()
+        # If there is a number of max new tokens, we update it to account for the already generated tokens
+        if self.max_new_tokens is not None:
+            request_config["max_new_tokens"] = self.max_new_tokens - len(self.generated_tokens)
+        # Create new request state
         new_state = RequestState(
             request_id=self.request_id,
             initial_tokens=self.initial_tokens + self.generated_tokens,
             logprobs=self.logprobs[:],
-            num_children=self.num_children,
-            record_timestamps=self.record_timestamps,
-            max_new_tokens=max_new_tokens,
-            eos_token_id=self.eos_token_id,
-            streaming=self.streaming,
+            _true_initial_tokens=self._true_initial_tokens + len(self.initial_tokens),
+            **request_config,
         )
         # If the request has been soft reset once already, this stays the same
         if self._true_initial_tokens:
@@ -339,9 +348,10 @@ class FutureRequestState:
     """Tracks the current state of a request and the relevant information to update it."""
 
     # This makes instantiating this class faster
-    __slots__ = ("state", "has_new_token", "complete_blocks")
+    __slots__ = ("state", "has_new_token", "complete_blocks", "query_length")
 
-    def __init__(self, state: RequestState, has_new_token: bool, complete_blocks: int) -> None:
+    def __init__(self, state: RequestState, has_new_token: bool, complete_blocks: int, query_length: int) -> None:
         self.state = state
         self.has_new_token = has_new_token
         self.complete_blocks = complete_blocks
+        self.query_length = query_length
