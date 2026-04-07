@@ -12,7 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import inspect
 import math
 import warnings
 from collections.abc import Callable
@@ -816,12 +815,6 @@ class RotaryEmbeddingConfigMixin:
                     f"Missing validation function in 'RotaryEmbeddingConfigMixin' for 'rope_type'='{rope_type}'"
                 )
 
-    # Override __signature__ so that @strict dataclass validation (huggingface_hub) sees only `self`.
-    # The method still accepts **kwargs for backward compatibility with external callers (e.g. vllm).
-    validate_rope.__signature__ = inspect.Signature(
-        [inspect.Parameter("self", inspect.Parameter.POSITIONAL_OR_KEYWORD)]
-    )
-
     def _validate_default_rope_parameters(self, rope_parameters: dict, ignore_keys: set | None = None):
         required_keys = {"rope_type"}
         optional_keys = {"rope_theta"}
@@ -962,11 +955,11 @@ class RotaryEmbeddingConfigMixin:
             "original_max_position_embeddings",
             "low_freq_factor",
             "high_freq_factor",
+            "rope_theta",
         }
-        optional_keys = {"rope_theta"}
         rope_type = rope_parameters["rope_type"]
         received_keys = set(rope_parameters.keys())
-        self._check_received_keys(rope_type, received_keys, required_keys, optional_keys=optional_keys, ignore_keys=ignore_keys)
+        self._check_received_keys(rope_type, received_keys, required_keys, ignore_keys=ignore_keys)
 
         factor = rope_parameters["factor"]
         if factor is None or not isinstance(factor, float) or factor < 1.0:
@@ -997,11 +990,10 @@ class RotaryEmbeddingConfigMixin:
             )
 
     def _validate_proportional_rope_parameters(self, rope_parameters: dict, ignore_keys: set | None = None):
-        required_keys = {"rope_type"}
-        optional_keys = {"rope_theta"}
+        required_keys = {"rope_type", "rope_theta"}
         rope_type = rope_parameters["rope_type"]
         received_keys = set(rope_parameters.keys())
-        self._check_received_keys(rope_type, received_keys, required_keys, optional_keys=optional_keys, ignore_keys=ignore_keys)
+        self._check_received_keys(rope_type, received_keys, required_keys, ignore_keys=ignore_keys)
 
         partial_rotary_factor = rope_parameters.get("partial_rotary_factor")
         if partial_rotary_factor is None:
