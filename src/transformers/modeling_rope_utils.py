@@ -829,7 +829,9 @@ class RotaryEmbeddingConfigMixin:
         optional_keys = {"rope_theta"}
         received_keys = set(rope_parameters.keys())
         rope_type = rope_parameters["rope_type"]
-        self._check_received_keys(rope_type, received_keys, required_keys, optional_keys=optional_keys, ignore_keys=ignore_keys)
+        self._check_received_keys(
+            rope_type, received_keys, required_keys, optional_keys=optional_keys, ignore_keys=ignore_keys
+        )
 
         factor = rope_parameters["factor"]
         if factor is None or not isinstance(factor, float) or factor < 1.0:
@@ -840,7 +842,9 @@ class RotaryEmbeddingConfigMixin:
         optional_keys = {"rope_theta"}
         received_keys = set(rope_parameters.keys())
         rope_type = rope_parameters["rope_type"]
-        self._check_received_keys(rope_type, received_keys, required_keys, optional_keys=optional_keys, ignore_keys=ignore_keys)
+        self._check_received_keys(
+            rope_type, received_keys, required_keys, optional_keys=optional_keys, ignore_keys=ignore_keys
+        )
 
         factor = rope_parameters["factor"]
         if factor is None or not isinstance(factor, float) or factor < 1.0:
