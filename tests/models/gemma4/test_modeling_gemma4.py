@@ -597,7 +597,7 @@ class Gemma4IntegrationTest(unittest.TestCase):
         out = model.generate(**inputs, max_new_tokens=20, do_sample=False, cache_implementation="static")
         output_text = tokenizer.batch_decode(out[:, input_size:])
 
-        EXPECTED_COMPLETIONS = Expectations(
+        EXPECTED_COMPLETIONS_EAGER = Expectations(
             {
                 ("cuda", 8): [
                     "That sounds lovely! It seems like you're really enjoying the place you're in.\n\n",
@@ -605,7 +605,18 @@ class Gemma4IntegrationTest(unittest.TestCase):
                 ]
             }
         )
-        self.assertEqual(output_text, EXPECTED_COMPLETIONS.get_expectation())
+        EXPECTED_COMPLETIONS_SDPA = Expectations(
+            {
+                ("cuda", 8): [
+                    "That sounds lovely! It seems like you're really enjoying the place you're in.\n\n",
+                    "Here are a few ways you could use or expand upon that list, depending on what you're",
+                ]
+            }
+        )
+        if attn_implementation == "eager":
+            self.assertEqual(output_text, EXPECTED_COMPLETIONS_EAGER.get_expectation())
+        elif attn_implementation == "sdpa":
+            self.assertEqual(output_text, EXPECTED_COMPLETIONS_SDPA.get_expectation())
 
     @pytest.mark.torch_export_test
     def test_export_text_only(self):
