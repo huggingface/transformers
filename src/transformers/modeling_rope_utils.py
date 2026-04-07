@@ -627,47 +627,10 @@ def _compute_llama3_parameters(
     return inv_freq_llama, attention_factor
 
 
-def _compute_default_rope_parameters(
-    config: Optional["PreTrainedConfig"] = None,
-    device: Optional["torch.device"] = None,
-    seq_len: int | None = None,
-    layer_type: str | None = None,
-) -> tuple["torch.Tensor", float]:
-    """
-    Computes the inverse frequencies for the default RoPE implementation (no scaling).
-
-    Args:
-        config ([`~transformers.PreTrainedConfig`]):
-            The model configuration.
-        device (`torch.device`):
-            The device to use for initialization of the inverse frequencies.
-        seq_len (`int`, *optional*):
-            The current sequence length. Unused for this type of RoPE.
-        layer_type (`str`, *optional*):
-            The layer type for per-layer rope configs.
-
-    Returns:
-        Tuple of (`torch.Tensor`, `float`), containing the inverse frequencies for the RoPE embeddings and the
-        post-processing scaling factor applied to the computed cos/sin (unused in this type of RoPE).
-    """
-    config.standardize_rope_params()
-    rope_parameters_dict = config.rope_parameters[layer_type] if layer_type is not None else config.rope_parameters
-
-    base = rope_parameters_dict.get("rope_theta", getattr(config, "rope_theta", config.default_theta))
-    partial_rotary_factor = rope_parameters_dict.get("partial_rotary_factor", 1.0)
-    head_dim = getattr(config, "head_dim", None) or config.hidden_size // config.num_attention_heads
-    dim = int(head_dim * partial_rotary_factor)
-    attention_factor = 1.0  # Unused in this type of RoPE
-
-    inv_freq = 1.0 / (base ** (torch.arange(0, dim, 2, dtype=torch.int64).to(device=device, dtype=torch.float) / dim))
-    return inv_freq, attention_factor
-
-
 # This maps the "rope_type" string field in rope config to the corresponding function to compute the RoPE parameters
 # from the model config. You can append new {'rope_type': callable} pairs to this rope_parameters to enable custom RoPE
 # parameterizations, as long as the callable has the same signature.
 ROPE_INIT_FUNCTIONS: dict[str, Callable[..., tuple["torch.Tensor", float]]] = {
-    "default": _compute_default_rope_parameters,
     "linear": _compute_linear_scaling_rope_parameters,
     "dynamic": _compute_dynamic_ntk_parameters,
     "yarn": _compute_yarn_parameters,
@@ -869,28 +832,31 @@ class RotaryEmbeddingConfigMixin:
         )
 
     def _validate_linear_rope_parameters(self, rope_parameters: dict, ignore_keys: set | None = None):
-        required_keys = {"rope_type", "factor", "rope_theta"}
+        required_keys = {"rope_type", "factor"}
+        optional_keys = {"rope_theta"}
         received_keys = set(rope_parameters.keys())
         rope_type = rope_parameters["rope_type"]
-        self._check_received_keys(rope_type, received_keys, required_keys, ignore_keys=ignore_keys)
+        self._check_received_keys(rope_type, received_keys, required_keys, optional_keys=optional_keys, ignore_keys=ignore_keys)
 
         factor = rope_parameters["factor"]
         if factor is None or not isinstance(factor, float) or factor < 1.0:
             logger.warning(f"`rope_parameters`'s factor field must be a float >= 1, got {factor}")
 
     def _validate_dynamic_rope_parameters(self, rope_parameters: dict, ignore_keys: set | None = None):
-        required_keys = {"rope_type", "factor", "rope_theta"}
+        required_keys = {"rope_type", "factor"}
+        optional_keys = {"rope_theta"}
         received_keys = set(rope_parameters.keys())
         rope_type = rope_parameters["rope_type"]
-        self._check_received_keys(rope_type, received_keys, required_keys, ignore_keys=ignore_keys)
+        self._check_received_keys(rope_type, received_keys, required_keys, optional_keys=optional_keys, ignore_keys=ignore_keys)
 
         factor = rope_parameters["factor"]
         if factor is None or not isinstance(factor, float) or factor < 1.0:
             logger.warning(f"`rope_parameters`'s factor field must be a float >= 1, got {factor}")
 
     def _validate_yarn_rope_parameters(self, rope_parameters: dict, ignore_keys: set | None = None):
-        required_keys = {"rope_type", "factor", "rope_theta", "original_max_position_embeddings"}
+        required_keys = {"rope_type", "factor", "original_max_position_embeddings"}
         optional_keys = {
+            "rope_theta",
             "attention_factor",
             "beta_fast",
             "beta_slow",
@@ -940,8 +906,8 @@ class RotaryEmbeddingConfigMixin:
             )
 
     def _validate_longrope_rope_parameters(self, rope_parameters: dict, ignore_keys: set | None = None):
-        required_keys = {"rope_type", "short_factor", "long_factor", "rope_theta", "original_max_position_embeddings"}
-        optional_keys = {"attention_factor", "factor"}
+        required_keys = {"rope_type", "short_factor", "long_factor", "original_max_position_embeddings"}
+        optional_keys = {"rope_theta", "attention_factor", "factor"}
         received_keys = set(rope_parameters.keys())
         rope_type = rope_parameters["rope_type"]
         self._check_received_keys(rope_type, received_keys, required_keys, optional_keys, ignore_keys=ignore_keys)
@@ -996,11 +962,11 @@ class RotaryEmbeddingConfigMixin:
             "original_max_position_embeddings",
             "low_freq_factor",
             "high_freq_factor",
-            "rope_theta",
         }
+        optional_keys = {"rope_theta"}
         rope_type = rope_parameters["rope_type"]
         received_keys = set(rope_parameters.keys())
-        self._check_received_keys(rope_type, received_keys, required_keys, ignore_keys=ignore_keys)
+        self._check_received_keys(rope_type, received_keys, required_keys, optional_keys=optional_keys, ignore_keys=ignore_keys)
 
         factor = rope_parameters["factor"]
         if factor is None or not isinstance(factor, float) or factor < 1.0:
@@ -1031,10 +997,11 @@ class RotaryEmbeddingConfigMixin:
             )
 
     def _validate_proportional_rope_parameters(self, rope_parameters: dict, ignore_keys: set | None = None):
-        required_keys = {"rope_type", "rope_theta"}
+        required_keys = {"rope_type"}
+        optional_keys = {"rope_theta"}
         rope_type = rope_parameters["rope_type"]
         received_keys = set(rope_parameters.keys())
-        self._check_received_keys(rope_type, received_keys, required_keys, ignore_keys=ignore_keys)
+        self._check_received_keys(rope_type, received_keys, required_keys, optional_keys=optional_keys, ignore_keys=ignore_keys)
 
         partial_rotary_factor = rope_parameters.get("partial_rotary_factor")
         if partial_rotary_factor is None:
