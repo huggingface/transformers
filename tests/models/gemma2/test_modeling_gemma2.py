@@ -349,6 +349,11 @@ class Gemma2IntegrationTest(unittest.TestCase):
             eager_generated_text = tokenizer.decode(eager_outputs[0], skip_special_tokens=True)
             self.assertEqual(export_generated_text, eager_generated_text)
 
+            import time
+            for _ in range(10):
+                time.sleep(60)
+
+
         finally:
             stop_event.set()
             monitor_thread.join()
