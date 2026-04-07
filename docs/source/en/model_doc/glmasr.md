@@ -46,7 +46,7 @@ you can check the [model card](https://huggingface.co/zai-org/GLM-ASR-Nano-2512)
 
 ### Basic usage
 
-<options id="usage">
+<hfoptions id="usage">
 <hfoption id="AutoModel">
 
 ```py runnable:test_basic
