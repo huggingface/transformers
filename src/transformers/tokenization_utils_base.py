@@ -1495,7 +1495,7 @@ class PreTrainedTokenizerBase(PushToHubMixin):
                 - A path to a *directory* containing vocabulary files required by the tokenizer, for instance saved
                   using the [`~tokenization_utils_base.PreTrainedTokenizerBase.save_pretrained`] method, e.g.,
                   `./my_model_directory/`.
-                - (**Deprecated**, not applicable to all derived classes) A path or url to a single saved vocabulary
+                - (**Deprecated**, not applicable to all derived classes) a path to a single saved vocabulary
                   file (if and only if the tokenizer only requires a single vocabulary file like Bert or XLNet), e.g.,
                   `./my_model_directory/vocab.txt`.
             cache_dir (`str` or `os.PathLike`, *optional*):
@@ -3295,9 +3295,6 @@ class PreTrainedTokenizerBase(PushToHubMixin):
         Converts an output string created by generating text from a model into a parsed message dictionary.
         This method is intended for use with chat models, and will read the tokenizer's `response_schema` attribute to
         control parsing, although this can be overridden by passing a `response_schema` argument directly.
-
-        This method is currently **highly experimental** and the schema specification is likely to change in future!
-        We recommend not building production code on top of it just yet.
 
         Args:
             response (`str`):

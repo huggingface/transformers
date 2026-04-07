@@ -13,18 +13,20 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+
 import torch
+from huggingface_hub.dataclasses import strict
 from torch import nn
 
 from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationConfig
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_outputs import BaseModelOutputWithPooling
-from ...processing_utils import Unpack
+from ...processing_utils import ImagesKwargs, Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging, torch_compilable_check
 from ..idefics3.configuration_idefics3 import Idefics3Config, Idefics3VisionConfig
 from ..idefics3.image_processing_idefics3 import Idefics3ImageProcessor
-from ..idefics3.image_processing_idefics3_fast import Idefics3ImageProcessorFast
+from ..idefics3.image_processing_pil_idefics3 import Idefics3ImageProcessorPil
 from ..idefics3.modeling_idefics3 import (
     Idefics3BaseModelOutputWithPast,
     Idefics3ForConditionalGeneration,
@@ -38,6 +40,7 @@ logger = logging.get_logger(__name__)
 
 
 @auto_docstring(checkpoint="HuggingFaceTB/SmolVLM2-2.2B-Instruct")
+@strict
 class SmolVLMVisionConfig(Idefics3VisionConfig):
     r"""
     Example:
@@ -68,6 +71,7 @@ class SmolVLMVisionTransformer(Idefics3VisionTransformer):
 
 
 @auto_docstring(checkpoint="HuggingFaceTB/SmolVLM2-2.2B-Instruct")
+@strict
 class SmolVLMConfig(Idefics3Config):
     r"""
     scale_factor (`int`, *optional*, defaults to 2):
@@ -87,11 +91,27 @@ class SmolVLMConfig(Idefics3Config):
     model_type = "smolvlm"
 
 
+class SmolVLMImageProcessorKwargs(ImagesKwargs, total=False):
+    """
+    do_image_splitting (`bool`, *optional*, defaults to `True`):
+        Whether to split the image into sub-images concatenated with the original image. They are split into patches
+        such that each patch has a size of `max_image_size["height"]` x `max_image_size["width"]`.
+    max_image_size (`Dict`, *optional*, defaults to `{"longest_edge": 364}`):
+        Maximum resolution of the patches of images accepted by the model. This is a dictionary containing the key "longest_edge".
+    return_row_col_info (`bool`, *optional*, defaults to `False`):
+        Whether to return the row and column information of the images.
+    """
+
+    do_image_splitting: bool
+    max_image_size: dict[str, int]
+    return_row_col_info: bool
+
+
 class SmolVLMImageProcessor(Idefics3ImageProcessor):
     pass
 
 
-class SmolVLMImageProcessorFast(Idefics3ImageProcessorFast):
+class SmolVLMImageProcessorPil(Idefics3ImageProcessorPil):
     pass
 
 
@@ -206,6 +226,7 @@ class SmolVLMModel(Idefics3Model):
         image_batch_size would be 7 when num_images_per_sample=[1, 3, 1, 2] and max_num_images would be 3.
         """
     )
+    @can_return_tuple
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
@@ -217,26 +238,14 @@ class SmolVLMModel(Idefics3Model):
         pixel_attention_mask: torch.BoolTensor | None = None,
         image_hidden_states: torch.FloatTensor | None = None,
         use_cache: bool | None = None,
-        output_attentions: bool | None = None,
-        output_hidden_states: bool | None = None,
-        return_dict: bool | None = None,
-        cache_position: torch.LongTensor | None = None,
         **kwargs: Unpack[FlashAttentionKwargs],
     ) -> tuple | SmolVLMBaseModelOutputWithPast:
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
-        use_cache = use_cache if use_cache is not None else self.config.use_cache
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
         if self.training and self.text_model.gradient_checkpointing and use_cache:
             logger.warning_once(
                 "`use_cache=True` is incompatible with gradient checkpointing. Setting `use_cache=False`..."
             )
             use_cache = False
 
-        # retrieve input_ids and inputs_embeds
         if input_ids is not None:
             batch_size, seq_length = input_ids.shape
         elif inputs_embeds is not None:
@@ -250,7 +259,6 @@ class SmolVLMModel(Idefics3Model):
         if inputs_embeds is None:
             inputs_embeds = self.text_model.get_input_embeddings()(input_ids).to(input_ids.device)
 
-        # START VISUAL INPUTS INTEGRATION
         if pixel_values is not None and image_hidden_states is not None:
             raise ValueError("You cannot specify both pixel_values and image_hidden_states at the same time")
 
@@ -263,8 +271,6 @@ class SmolVLMModel(Idefics3Model):
             image_hidden_states = image_hidden_states.to(dtype=self.dtype, device=inputs_embeds.device)
 
         if image_hidden_states is not None:
-            # When we generate, we don't want to replace the potential image_token_id that we generated by images
-            # that simply don't exist
             inputs_embeds = self.inputs_merger(
                 input_ids=input_ids,
                 inputs_embeds=inputs_embeds,
@@ -277,10 +283,6 @@ class SmolVLMModel(Idefics3Model):
             position_ids=position_ids,
             past_key_values=past_key_values,
             use_cache=use_cache,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=True,
-            cache_position=cache_position,
             **kwargs,
         )
 
@@ -360,7 +362,7 @@ __all__ = [
     "SmolVLMVisionConfig",
     "SmolVLMConfig",
     "SmolVLMImageProcessor",
-    "SmolVLMImageProcessorFast",
+    "SmolVLMImageProcessorPil",
     "SmolVLMForConditionalGeneration",
     "SmolVLMPreTrainedModel",
     "SmolVLMModel",

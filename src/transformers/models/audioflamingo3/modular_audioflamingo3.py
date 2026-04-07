@@ -107,7 +107,7 @@ class AudioFlamingo3Encoder(Qwen2AudioEncoder):
         for layer in self.layers:
             drop = self.training and torch.rand([]) < self.layerdrop
             if not drop:
-                hidden_states = layer(hidden_states, attention_mask)[0]
+                hidden_states = layer(hidden_states, attention_mask)
 
         # AvgPool (time/2) + LayerNorm
         hidden_states = hidden_states.permute(0, 2, 1)
@@ -170,17 +170,16 @@ class AudioFlamingo3ForConditionalGeneration(VoxtralForConditionalGeneration):
             Mask to avoid performing attention on padded feature indices.
         """
 
-        # Encode audio
         audio_output = self.audio_tower(
             input_features, input_features_mask=input_features_mask, return_dict=True, **kwargs
         )
         audio_embeds = self.multi_modal_projector(audio_output.last_hidden_state)
 
-        # Mask according to avg pooling (which is after attention blocks)
-        post_lengths = (input_features_mask.sum(-1) - 2) // 2 + 1
+        # Mask according to the audio tower output lengths, accounting for both conv downsampling and final avg pooling
+        input_lengths = input_features_mask.sum(-1).to(torch.long)
+        _, post_lengths = self.audio_tower._get_feat_extract_output_lengths(input_lengths)
         valid_mask = torch.arange(audio_embeds.shape[1], device=post_lengths.device)[None, :] < post_lengths[:, None]
-        audio_embeds = audio_embeds[valid_mask.to(audio_embeds.device)]
-        audio_output.pooler_output = audio_embeds
+        audio_output.pooler_output = audio_embeds[valid_mask.to(audio_embeds.device)]
 
         return audio_output
 
@@ -288,15 +287,12 @@ class AudioFlamingo3ForConditionalGeneration(VoxtralForConditionalGeneration):
         return outputs
 
     def prepare_inputs_for_generation(self, *args, is_first_iteration: bool = False, **kwargs):
-        # Overwritten -- we should not pass input_features when we are in cached decoding stage
-
         input_features = kwargs.pop("input_features", None)
         input_features_mask = kwargs.pop("input_features_mask", None)
 
         model_inputs = super().prepare_inputs_for_generation(*args, **kwargs)
 
         if is_first_iteration or not model_inputs.get("use_cache", False):
-            # input_features should only be passed when we are not in cached decoding stage
             if input_features is not None:
                 model_inputs["input_features"] = input_features
             if input_features_mask is not None:

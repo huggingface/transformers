@@ -17,14 +17,14 @@ from typing import Optional
 
 import torch
 import torch.nn.functional as F
+from huggingface_hub.dataclasses import strict
 from torch import nn
 
 from ... import initialization as init
-from ...cache_utils import Cache
+from ...cache_utils import Cache, DynamicCache
 from ...masking_utils import create_causal_mask
 from ...modeling_layers import GenericForSequenceClassification, GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPooling
-from ...modeling_rope_utils import RopeParameters
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
@@ -34,7 +34,6 @@ from ..qwen3.modeling_qwen3 import Qwen3ForCausalLM
 from ..qwen3_next.configuration_qwen3_next import Qwen3NextConfig
 from ..qwen3_next.modeling_qwen3_next import (
     Qwen3NextAttention,
-    Qwen3NextDynamicCache,
     Qwen3NextGatedDeltaNet,
     Qwen3NextMLP,
     Qwen3NextModel,
@@ -56,7 +55,8 @@ from ..qwen3_vl.modeling_qwen3_vl import (
 logger = logging.get_logger(__name__)
 
 
-@auto_docstring(checkpoint="Qwen/Qwen3.5-9B-Instruct")
+@auto_docstring(checkpoint="Qwen/Qwen3.5-27B")
+@strict
 class Qwen3_5TextConfig(Qwen3NextConfig):
     r"""
     linear_conv_kernel_dim (`int`, *optional*, defaults to 4):
@@ -98,77 +98,44 @@ class Qwen3_5TextConfig(Qwen3NextConfig):
         "layers.*.mlp.up_proj": "colwise",
         "layers.*.mlp.down_proj": "rowwise",
     }
+    ignore_keys_at_rope_validation = {"mrope_section", "mrope_interleaved"}
 
-    def __init__(
-        self,
-        vocab_size=248320,
-        hidden_size=4096,
-        intermediate_size=12288,
-        num_hidden_layers=32,
-        num_attention_heads=16,
-        num_key_value_heads=4,
-        hidden_act="silu",
-        max_position_embeddings=32768,
-        initializer_range=0.02,
-        rms_norm_eps=1e-6,
-        use_cache=True,
-        tie_word_embeddings=False,
-        rope_parameters: RopeParameters | dict[str, RopeParameters] | None = None,
-        attention_bias=False,
-        attention_dropout=0.0,
-        head_dim=256,
-        linear_conv_kernel_dim=4,
-        linear_key_head_dim=128,
-        linear_value_head_dim=128,
-        linear_num_key_heads=16,
-        linear_num_value_heads=32,
-        layer_types=None,
-        pad_token_id: int | None = None,
-        bos_token_id: int | None = None,
-        eos_token_id: int | None = None,
-        **kwargs,
-    ):
-        kwargs["ignore_keys_at_rope_validation"] = {"mrope_section", "mrope_interleaved"}
-        super().__init__(
-            tie_word_embeddings=tie_word_embeddings,
-            **kwargs,
-        )
-        del self.decoder_sparse_step
-        del self.norm_topk_prob
+    vocab_size: int = 248320
+    hidden_size: int = 4096
+    intermediate_size: int = 12288
+    num_hidden_layers: int = 32
+    num_key_value_heads: int = 4
+
+    decoder_sparse_step = AttributeError()
+    norm_topk_prob = AttributeError()
+    mlp_only_layers = AttributeError()
+    moe_intermediate_size = AttributeError()
+    shared_expert_intermediate_size = AttributeError()
+    num_experts_per_tok = AttributeError()
+    num_experts = AttributeError()
+    output_router_logits = AttributeError()
+    router_aux_loss_coef = AttributeError()
+
+    def __post_init__(self, **kwargs):
+        super().__post_init__(**kwargs)
         del self.mlp_only_layers
-        del self.moe_intermediate_size
-        del self.shared_expert_intermediate_size
-        del self.num_experts_per_tok
-        del self.num_experts
-        del self.output_router_logits
-        del self.router_aux_loss_coef
 
 
-@auto_docstring(checkpoint="Qwen/Qwen3.5-9B-Instruct")
+@auto_docstring(checkpoint="Qwen/Qwen3.5-27B")
+@strict
 class Qwen3_5VisionConfig(Qwen3VLVisionConfig):
-    model_type = "qwen3_5"
+    r"""
+    out_hidden_size (`int`, *optional*, defaults to 3584):
+        The output hidden size of the vision model.
+    num_position_embeddings (`int`, *optional*, defaults to 2304):
+        The maximum sequence length that this model might ever be used with
+    """
 
-    def __init__(
-        self,
-        depth=27,
-        hidden_size=1152,
-        hidden_act="gelu_pytorch_tanh",
-        intermediate_size=4304,
-        num_heads=16,
-        in_channels=3,
-        patch_size=16,
-        spatial_merge_size=2,
-        temporal_patch_size=2,
-        out_hidden_size=3584,
-        num_position_embeddings=2304,
-        initializer_range=0.02,
-        **kwargs,
-    ):
-        super().__init__(**kwargs)
-        del self.deepstack_visual_indexes
+    deepstack_visual_indexes = AttributeError()
 
 
-@auto_docstring(checkpoint="Qwen/Qwen3.5-9B-Instruct")
+@auto_docstring(checkpoint="Qwen/Qwen3.5-27B")
+@strict
 class Qwen3_5Config(Qwen3VLConfig):
     r"""
     Example:
@@ -186,34 +153,10 @@ class Qwen3_5Config(Qwen3VLConfig):
     >>> configuration = model.config
     ```"""
 
-    model_type = "qwen3_5"
-    sub_configs = {"vision_config": Qwen3_5VisionConfig, "text_config": Qwen3_5TextConfig}
-
-    def __init__(
-        self,
-        text_config=None,
-        vision_config=None,
-        image_token_id=248056,
-        video_token_id=248057,
-        vision_start_token_id=248053,
-        vision_end_token_id=248054,
-        tie_word_embeddings=False,
-        **kwargs,
-    ):
-        super().__init__(
-            text_config=text_config,
-            vision_config=vision_config,
-            image_token_id=image_token_id,
-            video_token_id=video_token_id,
-            vision_start_token_id=vision_start_token_id,
-            vision_end_token_id=vision_end_token_id,
-            tie_word_embeddings=tie_word_embeddings,
-            **kwargs,
-        )
-
-
-class Qwen3_5DynamicCache(Qwen3NextDynamicCache):
-    pass
+    image_token_id: int = 248056
+    video_token_id: int = 248057
+    vision_start_token_id: int = 248053
+    vision_end_token_id: int = 248054
 
 
 class Qwen3_5VisionRotaryEmbedding(Qwen3VLVisionRotaryEmbedding):
@@ -264,7 +207,7 @@ class Qwen3_5GatedDeltaNet(Qwen3NextGatedDeltaNet):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        cache_params: Qwen3_5DynamicCache | None = None,
+        cache_params: Cache | None = None,
         attention_mask: torch.Tensor | None = None,
     ):
         hidden_states = apply_mask_to_padding_states(hidden_states, attention_mask)
@@ -272,12 +215,14 @@ class Qwen3_5GatedDeltaNet(Qwen3NextGatedDeltaNet):
         # Set up dimensions for reshapes later
         batch_size, seq_len, _ = hidden_states.shape
 
-        use_precomputed_states = cache_params is not None and cache_params.has_previous_state and seq_len == 1
+        use_precomputed_states = (
+            cache_params is not None and cache_params.has_previous_state(self.layer_idx) and seq_len == 1
+        )
 
         # getting projected states from cache if it exists
-        if cache_params is not None:
-            conv_state = cache_params.conv_states[self.layer_idx]
-            recurrent_state = cache_params.recurrent_states[self.layer_idx]
+        if use_precomputed_states:
+            conv_state = cache_params.layers[self.layer_idx].conv_states
+            recurrent_state = cache_params.layers[self.layer_idx].recurrent_states
 
         mixed_qkv = self.in_proj_qkv(hidden_states)
         mixed_qkv = mixed_qkv.transpose(1, 2)
@@ -301,7 +246,7 @@ class Qwen3_5GatedDeltaNet(Qwen3NextGatedDeltaNet):
         else:
             if cache_params is not None:
                 conv_state = F.pad(mixed_qkv, (self.conv_kernel_size - mixed_qkv.shape[-1], 0))
-                cache_params.conv_states[self.layer_idx] = conv_state
+                conv_state = cache_params.update_conv_state(conv_state, self.layer_idx)
             if self.causal_conv1d_fn is not None:
                 mixed_qkv = self.causal_conv1d_fn(
                     x=mixed_qkv,
@@ -361,7 +306,7 @@ class Qwen3_5GatedDeltaNet(Qwen3NextGatedDeltaNet):
 
         # Update cache
         if cache_params is not None:
-            cache_params.recurrent_states[self.layer_idx] = last_recurrent_state
+            cache_params.update_recurrent_state(last_recurrent_state, self.layer_idx)
 
         # reshape input data into 2D tensor
         core_attn_out = core_attn_out.reshape(-1, self.head_v_dim)
@@ -530,6 +475,8 @@ class Qwen3_5ModelOutputWithPast(Qwen3VLModelOutputWithPast):
 
 
 class Qwen3_5TextModel(Qwen3NextModel):
+    config: Qwen3_5TextConfig
+
     def __init__(self, config: Qwen3_5TextConfig):
         super().__init__(config)
         self.rotary_emb = Qwen3_5TextRotaryEmbedding(config=config)
@@ -551,7 +498,7 @@ class Qwen3_5TextModel(Qwen3NextModel):
             inputs_embeds = self.embed_tokens(input_ids)
 
         if use_cache and past_key_values is None:
-            past_key_values = Qwen3_5DynamicCache(config=self.config)
+            past_key_values = DynamicCache(config=self.config)
 
         # the hard coded `4` is for text, temporal, height and width.
         if position_ids is None:
@@ -579,8 +526,8 @@ class Qwen3_5TextModel(Qwen3NextModel):
         hidden_states = inputs_embeds
         position_embeddings = self.rotary_emb(hidden_states, position_ids)
 
-        for layer_idx, decoder_layer in enumerate(self.layers[: self.config.num_hidden_layers]):
-            layer_mask = linear_attn_mask if decoder_layer.layer_type == "linear_attention" else causal_mask
+        for i, decoder_layer in enumerate(self.layers[: self.config.num_hidden_layers]):
+            layer_mask = linear_attn_mask if self.config.layer_types[i] == "linear_attention" else causal_mask
 
             hidden_states = decoder_layer(
                 hidden_states,

@@ -89,6 +89,7 @@ from transformers.testing_utils import (
     require_deepspeed,
     require_flash_attn,
     require_flash_attn_3,
+    require_flash_attn_4,
     require_kernels,
     require_non_hpu,
     require_torch,
@@ -629,7 +630,13 @@ def _test_eager_matches_batched_and_grouped_inference(self, name, dtype):
 def _config_zero_init(config):
     configs_no_init = copy.deepcopy(config)
     for key in configs_no_init.__dict__:
-        if "_range" in key or "_std" in key or "initializer_factor" in key or "layer_scale" in key:
+        if (
+            "init_range" in key
+            or "initializer_range" in key
+            or "_std" in key
+            or "initializer_factor" in key
+            or ("layer_scale" in key and key != "use_layer_scale")
+        ):
             setattr(configs_no_init, key, 1e-10)
         if isinstance(getattr(configs_no_init, key, None), PreTrainedConfig):
             no_init_subconfig = _config_zero_init(getattr(configs_no_init, key))
@@ -1294,7 +1301,7 @@ class ModelTesterMixin:
             config.scale = 0
         for sub_key in config.sub_configs:
             subconfig = getattr(config, sub_key)
-            if hasattr(subconfig, "scale"):
+            if subconfig is not None and hasattr(subconfig, "scale"):
                 subconfig.scale = 0
 
         for model_class in self.all_model_classes:
@@ -2391,6 +2398,55 @@ class ModelTesterMixin:
         with _deepspeed_zero3(ds_config):
             self.test_resize_embeddings_untied()
 
+    def test_resize_embeddings_untied_no_reinit_on_post_init(self):
+        if not self.test_resize_embeddings:
+            self.skipTest(reason="test_resize_embeddings is set to `False`")
+
+        original_config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        original_config.tie_word_embeddings = False
+        try:
+            original_config.get_text_config().tie_word_embeddings = False
+        except Exception as e:
+            model_type = getattr(original_config, "model_type", "unknown")
+            print(f"Could not set text config's `tie_word_embeddings` for model type `{model_type}`: {e}")
+
+        if original_config.tie_word_embeddings:
+            self.skipTest(reason="Model cannot untie embeddings")
+
+        for model_class in self.all_model_classes:
+            with self.subTest(model_class):
+                config = copy.deepcopy(original_config)
+                model = model_class(config).to(torch_device)
+                model.eval()
+
+                # The bug only affects nn.Linear LM heads created by _get_resized_lm_head
+                output_embeds = model.get_output_embeddings()
+                if not isinstance(output_embeds, nn.Linear):
+                    continue
+
+                model_vocab_size = config.get_text_config().vocab_size
+                try:
+                    model.resize_token_embeddings(model_vocab_size + 10)
+                except (NotImplementedError, AttributeError):
+                    continue
+
+                output_embeds = model.get_output_embeddings()
+                weights_before = output_embeds.weight.data.clone()
+                bias_before = output_embeds.bias.data.clone() if output_embeds.bias is not None else None
+
+                model.post_init()
+
+                output_embeds_after = model.get_output_embeddings()
+                self.assertTrue(
+                    torch.equal(weights_before, output_embeds_after.weight.data),
+                    "Output embedding weights were reinitialized by post_init() after resize_token_embeddings()",
+                )
+                if bias_before is not None:
+                    self.assertTrue(
+                        torch.equal(bias_before, output_embeds_after.bias.data),
+                        "Output embedding bias was reinitialized by post_init() after resize_token_embeddings()",
+                    )
+
     def test_model_get_set_embeddings(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
@@ -3393,6 +3449,22 @@ class ModelTesterMixin:
     def test_flash_attn_3_inference_equivalence_right_padding(self):
         self.flash_attn_inference_equivalence(attn_implementation="flash_attention_3", padding_side="right")
 
+    @require_flash_attn_4
+    @require_torch_gpu
+    @mark.flash_attn_4_test
+    @slow
+    @is_flaky()
+    def test_flash_attn_4_inference_equivalence(self):
+        self.flash_attn_inference_equivalence(attn_implementation="flash_attention_4", padding_side="left")
+
+    @require_flash_attn_4
+    @require_torch_gpu
+    @mark.flash_attn_4_test
+    @slow
+    @is_flaky()
+    def test_flash_attn_4_inference_equivalence_right_padding(self):
+        self.flash_attn_inference_equivalence(attn_implementation="flash_attention_4", padding_side="right")
+
     def test_attn_implementation_composite_models(self):
         """
         Tests if composite models can receive a dict object as attn_implementation, where each key should be
@@ -3589,6 +3661,7 @@ class ModelTesterMixin:
                     "PaliGemma-like models currently (transformers==4.41.0) requires an attention_mask input"
                 )
             if config.model_type in [
+                "evolla",
                 "modernbert",
                 "gemma3",
                 "t5gemma",
@@ -3600,6 +3673,9 @@ class ModelTesterMixin:
                 "kosmos-2",
                 "mllama",
                 "lighton_ocr",
+                "parakeet_encoder",
+                "parakeet_ctc",
+                "pi0",
                 "pixtral",
                 "sam",
                 "sam_hq",
@@ -3797,6 +3873,12 @@ class ModelTesterMixin:
     def test_flash_attn_3_can_dispatch_composite_models(self):
         self.flash_attn_can_dispatch_composite_models(attn_implementation="flash_attention_3")
 
+    @require_flash_attn_4
+    @require_torch_gpu
+    @mark.flash_attn_4_test
+    def test_flash_attn_4_can_dispatch_composite_models(self):
+        self.flash_attn_can_dispatch_composite_models(attn_implementation="flash_attention_4")
+
     @require_flash_attn
     @require_torch_accelerator
     @require_bitsandbytes
@@ -3963,6 +4045,13 @@ class ModelTesterMixin:
     @slow
     def test_flash_attn_3_from_config(self):
         self.flash_attn_from_config(attn_implementation="flash_attention_3")
+
+    @require_flash_attn_4
+    @require_torch_gpu
+    @mark.flash_attn_4_test
+    @slow
+    def test_flash_attn_4_from_config(self):
+        self.flash_attn_from_config(attn_implementation="flash_attention_4")
 
     def test_sliding_window_mask(self):
         """Tests that we can control the sliding window attention behavior of a model."""
@@ -4218,9 +4307,9 @@ class ModelTesterMixin:
         def update_config_headdim(config, requested_dim):
             # Flex Attention cannot use dropout
             if hasattr(config, "attention_dropout"):
-                config.attention_dropout = 0
+                config.attention_dropout = 0.0
             if hasattr(config, "attention_probs_dropout_prob"):
-                config.attention_probs_dropout_prob = 0
+                config.attention_probs_dropout_prob = 0.0
 
             # Update the head dim and try to update hidden size as well if present in config
             # NOTE: some models may have none if the values in sub-config, thus we check for `Noneness`
@@ -4462,6 +4551,7 @@ class ModelTesterMixin:
                 self.skipTest(reason="No subconfigs so the test does not make sense")
             # Need to deepcopy here to avoid changing the _attn_implementation in-place
             model = model_class(copy.deepcopy(config))
+            subconfig_keys_seen = set()
 
             for submodule in model.modules():
                 # This is a submodel
@@ -4474,11 +4564,13 @@ class ModelTesterMixin:
                         if (
                             subconfig_from_model_config is not None
                             and subconfig_from_model_config.__class__ == subconfig_from_model_internal.__class__
+                            and subconfig_key not in subconfig_keys_seen
                         ):
                             # Since some composite models have different submodels parameterized by 2 of the same config
                             # class instances, we need to check against a list of matching classes, and check that at least
                             # 1 is the exact object (instead of checking immediately for similar object)
                             matching_sub_configs.append(subconfig_from_model_config)
+                            subconfig_keys_seen.add(subconfig_key)
 
                     # Both should be exactly the same object, that is when instantiating the submodel when should
                     # absolutely not copy the subconfig
@@ -4676,7 +4768,7 @@ class ModelTesterMixin:
                 # Skip if no conversions
                 conversions = get_model_conversion_mapping(model, add_legacy=False)
                 if len(conversions) == 0:
-                    self.skipTest("No conversion found for this model")
+                    self.skipTest(f"No conversion found for {model_class}")
 
                 # Find the model keys, so the targets according to the conversions
                 model_keys = list(model.state_dict().keys())
@@ -4695,6 +4787,13 @@ class ModelTesterMixin:
                 # Check that for each conversion entry, we at least map to one key
                 for conversion in conversions:
                     for source_pattern in conversion.source_patterns:
+                        # Some patterns are written for gen-model only and won't be applied on base model
+                        if "lm_head" in source_pattern and model_class not in [
+                            *get_values(MODEL_FOR_CAUSAL_LM_MAPPING_NAMES),
+                            *get_values(MODEL_FOR_IMAGE_TEXT_TO_TEXT_MAPPING_NAMES),
+                        ]:
+                            continue
+
                         # Sometimes the mappings specify keys that are tied, so absent from the saved state dict
                         if isinstance(conversion, WeightRenaming):
                             # We need to revert the target pattern to make it compatible with regex search
@@ -4708,7 +4807,7 @@ class ModelTesterMixin:
                         self.assertTrue(
                             num_matches > 0,
                             f"`{source_pattern}` in `{conversion}` did not match any of the source keys. "
-                            "This indicates whether that the pattern is not properly written, ot that it could not be reversed correctly",
+                            "This indicates whether that the pattern is not properly written, or that it could not be reversed correctly",
                         )
 
                 # If everything is still good at this point, let's test that we perform the same operations both when
@@ -4745,7 +4844,7 @@ class ModelTesterMixin:
                 # Skip if no conversions
                 conversions = get_model_conversion_mapping(model, add_legacy=False)
                 if len(conversions) == 0:
-                    self.skipTest("No conversion found for this model")
+                    self.skipTest(f"No conversion found for {model_class}")
 
                 with tempfile.TemporaryDirectory() as tmpdirname:
                     # Serialize without reverting the mapping
@@ -4811,6 +4910,7 @@ class ModelTesterMixin:
                 or "input_values" in key
                 or "input_features" in key
                 or key in ["padding_mask", "is_longer", "feature_attention_mask"]
+                or (config.model_type == "musicflamingo" and key == "input_ids")
             }
         return config, inputs_dict
 

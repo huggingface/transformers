@@ -897,7 +897,7 @@ class LukeModel(LukePreTrainedModel):
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         if input_ids is not None and inputs_embeds is not None:
             raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
@@ -1118,7 +1118,7 @@ class LukeForMaskedLM(LukePreTrainedModel):
             loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`
         """
 
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         outputs = self.luke(
             input_ids=input_ids,
@@ -1266,7 +1266,7 @@ class LukeForEntityClassification(LukePreTrainedModel):
         >>> print("Predicted class:", model.config.id2label[predicted_class_idx])
         Predicted class: person
         ```"""
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         outputs = self.luke(
             input_ids=input_ids,
@@ -1398,7 +1398,7 @@ class LukeForEntityPairClassification(LukePreTrainedModel):
         >>> print("Predicted class:", model.config.id2label[predicted_class_idx])
         Predicted class: per:cities_of_residence
         ```"""
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         outputs = self.luke(
             input_ids=input_ids,
@@ -1546,7 +1546,7 @@ class LukeForEntitySpanClassification(LukePreTrainedModel):
         Beyoncé PER
         Los Angeles LOC
         ```"""
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         outputs = self.luke(
             input_ids=input_ids,
@@ -1668,7 +1668,7 @@ class LukeForSequenceClassification(LukePreTrainedModel):
             config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
             `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
         """
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         outputs = self.luke(
             input_ids=input_ids,
@@ -1795,7 +1795,7 @@ class LukeForTokenClassification(LukePreTrainedModel):
             num_choices-1]` where `num_choices` is the size of the second dimension of the input tensors. (See
             `input_ids` above)
         """
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         outputs = self.luke(
             input_ids=input_ids,
@@ -1893,7 +1893,7 @@ class LukeForQuestionAnswering(LukePreTrainedModel):
             Indices of positions of each input entity in the position embeddings. Selected in the range `[0,
             config.max_position_embeddings - 1]`.
         """
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         outputs = self.luke(
             input_ids=input_ids,
@@ -2039,7 +2039,7 @@ class LukeForMultipleChoice(LukePreTrainedModel):
             num_choices-1]` where `num_choices` is the size of the second dimension of the input tensors. (See
             `input_ids` above)
         """
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
         num_choices = input_ids.shape[1] if input_ids is not None else inputs_embeds.shape[1]
 
         input_ids = input_ids.view(-1, input_ids.size(-1)) if input_ids is not None else None

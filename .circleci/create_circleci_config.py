@@ -30,6 +30,7 @@ COMMON_ENV_VARIABLES = {
     # will be adjust in `CircleCIJob.to_dict`.
     "RUN_FLAKY": True,
     "DISABLE_SAFETENSORS_CONVERSION": True,
+    "NETWORK_DEBUG_REPORT": True,
 }
 # Disable the use of {"s": None} as the output is way too long, causing the navigation on CircleCI impractical
 COMMON_PYTEST_OPTIONS = {"max-worker-restart": 0, "vvv": None, "rsfE":None, "random-order-bucket": "module", "random-order-seed": "${CIRCLE_BUILD_NUM:-0}"}
@@ -64,6 +65,7 @@ class EmptyJob:
             steps.extend(
                 [
                     "checkout",
+                    {"run": "pip install requests || true"},
                     {"run": """while [[ $(curl --location --request GET "https://circleci.com/api/v2/workflow/$CIRCLE_WORKFLOW_ID/job" --header "Circle-Token: $CCI_TOKEN"| jq -r '.items[]|select(.name != "collection_job")|.status' | grep -c "running") -gt 0 ]]; do sleep 5; done || true"""},
                     {"run": 'python utils/process_circleci_workflow_test_reports.py --workflow_id $CIRCLE_WORKFLOW_ID || true'},
                     {"store_artifacts": {"path": "outputs"}},
@@ -217,6 +219,7 @@ class CircleCIJob:
             {"store_artifacts": {"path": "tests.txt"}},
             {"store_artifacts": {"path": "splitted_tests.txt"}},
             {"store_artifacts": {"path": "installed.txt"}},
+            {"store_artifacts": {"path": "network_debug_report.json"}},
         ]
         if self.parallelism:
             job["parallelism"] = parallel

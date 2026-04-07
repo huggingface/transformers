@@ -29,7 +29,7 @@ from torch import nn
 
 from ... import initialization as init
 from ...activations import ACT2FN
-from ...cache_utils import Cache
+from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationMixin
 from ...integrations import use_experts_implementation, use_kernelized_func
 from ...masking_utils import create_causal_mask
@@ -171,95 +171,6 @@ class Qwen3_5MoeTextRotaryEmbedding(nn.Module):
             idx = slice(offset, length, 3)
             freqs_t[..., idx] = freqs[dim, ..., idx]
         return freqs_t
-
-
-class Qwen3_5MoeDynamicCache:
-    """
-    A dynamic cache that can handle both the attention cache (which has a seq_len dimension) and the linear attention
-    cache (which has a constant shape regardless of seq_len).
-
-    This cache has two sets of lists of tensors: `key_cache` and `value_cache` for attention cache and `conv_states`
-    and `ssm_states` for gated deltanet cache. Each of these lists has `num_layers` tensors. The expected shape for each tensor
-    For attention layers, `key_cache` and `value_cache` have a shape of `(batch_size, num_heads, seq_len, head_dim)`,
-    while `conv_states` and `ssm_states` have a shape of `(batch_size, 0)` (empty tensors).
-    For linear attention layers, `key_cache` and `value_cache` have a shape of `(batch_size, 0)` (empty tensors),
-    while `conv_states` represents the convolution state and has a shape of `(batch_size, d_inner, d_conv)`,
-    and `recurrent_states` represents the recurrent state and has a shape of `(batch_size, d_inner, d_state)`.
-    """
-
-    is_compileable = False
-
-    def __init__(self, config: Qwen3_5MoeConfig):
-        super().__init__()
-        self.layer_types = config.layer_types
-        self.transformer_layers = [
-            i for i in range(config.num_hidden_layers) if self.layer_types[i] == "full_attention"
-        ]
-        self.last_linear_layer = len(self.layer_types) - 1 - self.layer_types[::-1].index("linear_attention")
-
-        # Initialize everything to None -> will be lazy initialized to allow multi-gpu (device_map) inference
-        self.conv_states = [None for _ in range(config.num_hidden_layers)]
-        self.recurrent_states = [None for _ in range(config.num_hidden_layers)]
-        self.key_cache = [None for _ in range(config.num_hidden_layers)]
-        self.value_cache = [None for _ in range(config.num_hidden_layers)]
-
-    def __len__(self):
-        return len(self.layer_types)
-
-    def update(
-        self,
-        key_states: torch.Tensor,
-        value_states: torch.Tensor,
-        layer_idx: int,
-        cache_kwargs: dict[str, Any] | None = None,
-    ) -> tuple[torch.Tensor, torch.Tensor]:
-        if self.key_cache[layer_idx] is None:
-            self.key_cache[layer_idx] = key_states
-            self.value_cache[layer_idx] = value_states
-        else:
-            self.key_cache[layer_idx] = torch.cat([self.key_cache[layer_idx], key_states], dim=2)
-            self.value_cache[layer_idx] = torch.cat([self.value_cache[layer_idx], value_states], dim=2)
-
-        return self.key_cache[layer_idx], self.value_cache[layer_idx]
-
-    def reorder_cache(self, beam_idx: torch.LongTensor):
-        """Reorders the cache for beam search, given the selected beam indices."""
-        for layer_idx in range(len(self.key_cache)):
-            if self.key_cache[layer_idx] is not None:
-                device = self.key_cache[layer_idx].device
-                beam_idx = beam_idx.to(device)
-                self.key_cache[layer_idx] = self.key_cache[layer_idx].index_select(0, beam_idx)
-                self.value_cache[layer_idx] = self.value_cache[layer_idx].index_select(0, beam_idx)
-
-            if self.conv_states[layer_idx] is not None:
-                device = self.conv_states[layer_idx].device
-                beam_idx = beam_idx.to(device)
-                self.conv_states[layer_idx] = self.conv_states[layer_idx].index_select(0, beam_idx)
-                self.recurrent_states[layer_idx] = self.recurrent_states[layer_idx].index_select(0, beam_idx)
-
-    def get_seq_length(self, layer_idx: int | None = 0) -> int:
-        """Returns the sequence length of the cached states. A layer index can be optionally passed."""
-        # take any layer that contains cache and not empty tensor
-        layer_idx = self.transformer_layers[0] if layer_idx not in self.transformer_layers else layer_idx
-        if len(self.key_cache) <= layer_idx or self.key_cache[layer_idx] is None:
-            return 0
-        return self.key_cache[layer_idx].shape[-2]
-
-    def get_mask_sizes(self, query_length: int, layer_idx: int) -> tuple[int, int]:
-        """
-        Return a tuple (kv_length, kv_offset) corresponding to the length and offset that will be returned for
-        the given layer at `layer_idx`.
-        The masks are then prepared according to the given lengths (kv_length, kv_offset) and patterns for each layer.
-        """
-        kv_offset = 0
-        past_seen_tokens = self.get_seq_length(layer_idx)
-        kv_length = query_length + past_seen_tokens
-        return kv_length, kv_offset
-
-    @property
-    def has_previous_state(self):
-        """We have a previous state if the last linear (conv) layer was already updated."""
-        return self.conv_states[self.last_linear_layer] is not None
 
 
 class Qwen3_5MoeRMSNormGated(nn.Module):
@@ -512,7 +423,7 @@ class Qwen3_5MoeGatedDeltaNet(nn.Module):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        cache_params: Qwen3_5MoeDynamicCache | None = None,
+        cache_params: Cache | None = None,
         attention_mask: torch.Tensor | None = None,
     ):
         hidden_states = apply_mask_to_padding_states(hidden_states, attention_mask)
@@ -520,12 +431,14 @@ class Qwen3_5MoeGatedDeltaNet(nn.Module):
         # Set up dimensions for reshapes later
         batch_size, seq_len, _ = hidden_states.shape
 
-        use_precomputed_states = cache_params is not None and cache_params.has_previous_state and seq_len == 1
+        use_precomputed_states = (
+            cache_params is not None and cache_params.has_previous_state(self.layer_idx) and seq_len == 1
+        )
 
         # getting projected states from cache if it exists
-        if cache_params is not None:
-            conv_state = cache_params.conv_states[self.layer_idx]
-            recurrent_state = cache_params.recurrent_states[self.layer_idx]
+        if use_precomputed_states:
+            conv_state = cache_params.layers[self.layer_idx].conv_states
+            recurrent_state = cache_params.layers[self.layer_idx].recurrent_states
 
         mixed_qkv = self.in_proj_qkv(hidden_states)
         mixed_qkv = mixed_qkv.transpose(1, 2)
@@ -549,7 +462,7 @@ class Qwen3_5MoeGatedDeltaNet(nn.Module):
         else:
             if cache_params is not None:
                 conv_state = F.pad(mixed_qkv, (self.conv_kernel_size - mixed_qkv.shape[-1], 0))
-                cache_params.conv_states[self.layer_idx] = conv_state
+                conv_state = cache_params.update_conv_state(conv_state, self.layer_idx)
             if self.causal_conv1d_fn is not None:
                 mixed_qkv = self.causal_conv1d_fn(
                     x=mixed_qkv,
@@ -609,7 +522,7 @@ class Qwen3_5MoeGatedDeltaNet(nn.Module):
 
         # Update cache
         if cache_params is not None:
-            cache_params.recurrent_states[self.layer_idx] = last_recurrent_state
+            cache_params.update_recurrent_state(last_recurrent_state, self.layer_idx)
 
         # reshape input data into 2D tensor
         core_attn_out = core_attn_out.reshape(-1, self.head_v_dim)
@@ -1146,6 +1059,7 @@ class Qwen3_5MoeVisionBlock(GradientCheckpointingLayer):
         self.attn = Qwen3_5MoeVisionAttention(config=config)
         self.mlp = Qwen3_5MoeVisionMLP(config=config)
 
+    @auto_docstring
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -1154,6 +1068,12 @@ class Qwen3_5MoeVisionBlock(GradientCheckpointingLayer):
         position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
         **kwargs,
     ) -> torch.Tensor:
+        r"""
+        cu_seqlens (`torch.Tensor`):
+            Cumulative sequence lengths used for packed variable-length attention in Flash Attention kernels.
+        rotary_pos_emb (`torch.Tensor`, *optional*):
+            Precomputed rotary positional embeddings applied to the vision attention query/key states.
+        """
         hidden_states = hidden_states + self.attn(
             self.norm1(hidden_states),
             cu_seqlens=cu_seqlens,
@@ -1412,6 +1332,8 @@ class Qwen3_5MoeCausalLMOutputWithPast(ModelOutput):
 
 
 class Qwen3_5MoeTextModel(Qwen3_5MoePreTrainedModel):
+    config: Qwen3_5MoeTextConfig
+
     def __init__(self, config: Qwen3_5MoeTextConfig):
         super().__init__(config)
         self.embed_tokens = nn.Embedding(config.vocab_size, config.hidden_size, config.pad_token_id)
@@ -1444,7 +1366,7 @@ class Qwen3_5MoeTextModel(Qwen3_5MoePreTrainedModel):
             inputs_embeds = self.embed_tokens(input_ids)
 
         if use_cache and past_key_values is None:
-            past_key_values = Qwen3_5MoeDynamicCache(config=self.config)
+            past_key_values = DynamicCache(config=self.config)
 
         # the hard coded `4` is for text, temporal, height and width.
         if position_ids is None:
@@ -1472,8 +1394,8 @@ class Qwen3_5MoeTextModel(Qwen3_5MoePreTrainedModel):
         hidden_states = inputs_embeds
         position_embeddings = self.rotary_emb(hidden_states, position_ids)
 
-        for layer_idx, decoder_layer in enumerate(self.layers[: self.config.num_hidden_layers]):
-            layer_mask = linear_attn_mask if decoder_layer.layer_type == "linear_attention" else causal_mask
+        for i, decoder_layer in enumerate(self.layers[: self.config.num_hidden_layers]):
+            layer_mask = linear_attn_mask if self.config.layer_types[i] == "linear_attention" else causal_mask
 
             hidden_states = decoder_layer(
                 hidden_states,
@@ -1500,7 +1422,7 @@ class Qwen3_5MoeTextModel(Qwen3_5MoePreTrainedModel):
             2. Attending to all inputs
         """
         linear_attn_mask = attention_mask
-        if (past_key_values is not None and past_key_values.get_seq_length() > 0) or (
+        if (past_key_values is not None and past_key_values.has_previous_state()) or (
             attention_mask is not None and torch.all(attention_mask == 1)
         ):
             linear_attn_mask = None
@@ -1510,7 +1432,6 @@ class Qwen3_5MoeTextModel(Qwen3_5MoePreTrainedModel):
 @auto_docstring
 class Qwen3_5MoeModel(Qwen3_5MoePreTrainedModel):
     base_model_prefix = "model"
-    _checkpoint_conversion_mapping = {}
     # Reference: fix gemma3 grad acc #37208
     accepts_loss_kwargs = False
     config: Qwen3_5MoeConfig
@@ -1597,24 +1518,8 @@ class Qwen3_5MoeModel(Qwen3_5MoePreTrainedModel):
         **kwargs,
     ) -> tuple[torch.Tensor, torch.Tensor]:
         """
-        Calculate the 3D rope index based on image and video's sizes. The utility expects a `vision + text`
-        sequence and will error out otherwise. For pure text sequence, please rely on model's auto-inferred
-        position ids. In a mixed vision + text sequence, vision tokens use 3D RoPE (temporal, height, width)
-        while text tokens use standard 1D RoPE.
-
-        Example:
-            Temporal patches: 3; Height patches: 2; Width patches: 2
-            Each vision input results in (temporal x height × width) positions. Here: 3 x 2 × 2 = 12 positions total.
-
-            Temporal position IDs are spaced by:
-                `interval = tokens_per_second * temporal_patch_size / fps`
-
-                If fps = 1; tokens_per_second = 25; temporal_patch_size = 2, temporal IDs increase by 50 for each temporal patch:
-                `[0, 0, 0, 0, 50, 50, 50, 50, 100, 100, 100, 100]`
-
-            Height IDs repeat per row: `[0, 0, 1, 1, ...]`
-            Width IDs alternate per column: `[0, 1, 0, 1, ...]`
-            Text tokens follow standard 1D RoPE and the position IDs grow consequently with a step of `1`
+        Difference from Qwen2VL/Qwen2.5VL's get_rope_index:
+        - Since Qwen3.5 use timestamps to seperate videos, like <t1> <vision_start> <frame1> <vision_end> <t2> <vision_start> <frame2> <vision_end>, the video_grid_thw should also be split too.
 
         Args:
             input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
@@ -1636,6 +1541,11 @@ class Qwen3_5MoeModel(Qwen3_5MoePreTrainedModel):
             position_ids (`torch.LongTensor` of shape `(3, batch_size, sequence_length)`)
             mrope_position_deltas (`torch.Tensor` of shape `(batch_size)`)
         """
+
+        # Separate video grid thw into multiple grids because timestamps are used to seperate videos.
+        if video_grid_thw is not None:
+            video_grid_thw = torch.repeat_interleave(video_grid_thw, video_grid_thw[:, 0], dim=0)
+            video_grid_thw[:, 0] = 1
         spatial_merge_size = self.config.vision_config.spatial_merge_size
 
         mrope_position_deltas = []
@@ -1785,11 +1695,14 @@ class Qwen3_5MoeModel(Qwen3_5MoePreTrainedModel):
         mm_token_type_ids: torch.IntTensor | None = None,
     ) -> torch.Tensor | None:
         past_key_values_length = 0 if past_key_values is None else past_key_values.get_seq_length()
-        can_compute_mrope = (
-            input_ids is not None
-            and mm_token_type_ids is not None
-            and (image_grid_thw is not None or video_grid_thw is not None)
-        )
+        has_multimodal = image_grid_thw is not None or video_grid_thw is not None
+        if has_multimodal and mm_token_type_ids is None and input_ids is not None:
+            raise ValueError(
+                "Multimodal data was passed (via `image_grid_thw` or `video_grid_thw`) but `mm_token_type_ids` is "
+                "missing. Please pass `mm_token_type_ids` to the model so that multimodal RoPE (M-RoPE) can be "
+                "computed correctly. `mm_token_type_ids` is returned by the processor alongside `input_ids`."
+            )
+        can_compute_mrope = input_ids is not None and mm_token_type_ids is not None and has_multimodal
 
         if can_compute_mrope and (self.rope_deltas is None or past_key_values_length == 0):
             position_ids, rope_deltas = self.get_rope_index(
@@ -1800,8 +1713,11 @@ class Qwen3_5MoeModel(Qwen3_5MoePreTrainedModel):
                 mm_token_type_ids=mm_token_type_ids,
             )
             self.rope_deltas = rope_deltas
-        # Use pre-calculated rope-deltas to infer correct 3D position ids
-        elif self.rope_deltas is not None:
+        # Use pre-calculated rope-deltas to infer correct 3D position ids during incremental
+        # generation (past_key_values_length > 0) or when only inputs_embeds is provided (no input_ids
+        # to recompute from). Skip when input_ids is provided without past_key_values to avoid shape
+        # mismatches from stale rope_deltas (e.g., training forward pass after generation).
+        elif self.rope_deltas is not None and (past_key_values_length > 0 or input_ids is None):
             batch_size, seq_length, _ = inputs_embeds.shape
             if attention_mask is not None:
                 position_ids = attention_mask.long().cumsum(-1) - 1
@@ -1813,7 +1729,7 @@ class Qwen3_5MoeModel(Qwen3_5MoePreTrainedModel):
             delta = self.rope_deltas.repeat_interleave(batch_size // self.rope_deltas.shape[0], dim=0)
             position_ids = position_ids + delta.to(device=inputs_embeds.device)
         else:
-            # Can't build correct 3D positions. Let the model infer it from `cache_position`
+            # Can't build correct 3D positions. Let the model infer it
             position_ids = None
         return position_ids
 
@@ -2002,7 +1918,7 @@ class Qwen3_5MoeForCausalLM(Qwen3_5MoePreTrainedModel, GenerationMixin):
         input_ids: torch.LongTensor | None = None,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
-        past_key_values: Qwen3_5MoeDynamicCache | None = None,
+        past_key_values: Cache | None = None,
         inputs_embeds: torch.FloatTensor | None = None,
         labels: torch.LongTensor | None = None,
         use_cache: bool | None = None,
@@ -2081,11 +1997,11 @@ class Qwen3_5MoeForCausalLM(Qwen3_5MoePreTrainedModel, GenerationMixin):
 
 
 class Qwen3_5MoeForConditionalGeneration(Qwen3_5MoePreTrainedModel, GenerationMixin):
-    _checkpoint_conversion_mapping = {}
     _tied_weights_keys = {"lm_head.weight": "model.language_model.embed_tokens.weight"}
     # Reference: fix gemma3 grad acc #37208
     accepts_loss_kwargs = False
     config: Qwen3_5MoeConfig
+    _tp_plan = {"lm_head": "colwise_gather_output"}
 
     def __init__(self, config):
         super().__init__(config)
@@ -2450,8 +2366,7 @@ class Qwen3_5MoeForConditionalGeneration(Qwen3_5MoePreTrainedModel, GenerationMi
                 if key == "position_ids" and dict_to_expand[key].ndim == 3:
                     dict_to_expand[key] = dict_to_expand[key].repeat_interleave(expand_size, dim=1)
                 elif (
-                    key != "cache_position"
-                    and dict_to_expand[key] is not None
+                    dict_to_expand[key] is not None
                     and isinstance(dict_to_expand[key], torch.Tensor)
                     and key not in visual_keys
                 ):

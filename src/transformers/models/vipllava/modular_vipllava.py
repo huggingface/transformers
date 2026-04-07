@@ -25,7 +25,7 @@ from transformers.models.llava.modeling_llava import (
 
 from ...activations import ACT2FN
 from ...cache_utils import Cache
-from ...modeling_outputs import BaseModelOutputWithPooling
+from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPooling
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, logging
 from ...utils.generic import can_return_tuple
@@ -80,7 +80,6 @@ class VipLlavaModel(LlavaModel):
         self,
         pixel_values: torch.FloatTensor,
         vision_feature_layers: int | list[int] | None = None,
-        output_hidden_states: bool | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
         r"""
@@ -93,10 +92,10 @@ class VipLlavaModel(LlavaModel):
         vision_feature_layers = (
             vision_feature_layers if vision_feature_layers is not None else self.config.vision_feature_layers
         )
+        # We need hidden states to select intermediate vision features by layer index below.
+        kwargs["output_hidden_states"] = True
         image_outputs = self.vision_tower(
             pixel_values,
-            output_hidden_states=True,  # Ignore arg on purpose
-            return_dict=True,
             **kwargs,
         )
 
@@ -113,6 +112,7 @@ class VipLlavaModel(LlavaModel):
 
         return image_outputs
 
+    @can_return_tuple
     @auto_docstring
     def forward(
         self,
@@ -124,22 +124,13 @@ class VipLlavaModel(LlavaModel):
         inputs_embeds: torch.FloatTensor | None = None,
         vision_feature_layers: int | list[int] | None = None,
         use_cache: bool | None = None,
-        output_attentions: bool | None = None,
-        output_hidden_states: bool | None = None,
-        return_dict: bool | None = None,
-        cache_position: torch.LongTensor | None = None,
-        **lm_kwargs,
+        **lm_kwargs: Unpack[TransformersKwargs],
     ) -> tuple | VipLlavaModelOutputWithPast:
         r"""
         vision_feature_layers (`Union[int, list[int]]`, *optional*):
             The vision feature layer, or the list of indexes of the layers to select
             the vision feature.
         """
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
         vision_feature_layers = (
             vision_feature_layers if vision_feature_layers is not None else self.config.vision_feature_layers
         )
@@ -152,7 +143,7 @@ class VipLlavaModel(LlavaModel):
 
         if pixel_values is not None:
             image_features = self.get_image_features(
-                pixel_values=pixel_values, vision_feature_layers=vision_feature_layers, return_dict=True
+                pixel_values=pixel_values, vision_feature_layers=vision_feature_layers
             ).pooler_output
             image_features = image_features.to(inputs_embeds.device, inputs_embeds.dtype)
             special_image_mask = self.get_placeholder_mask(
@@ -160,16 +151,12 @@ class VipLlavaModel(LlavaModel):
             )
             inputs_embeds = inputs_embeds.masked_scatter(special_image_mask, image_features)
 
-        outputs = self.language_model(
+        outputs: BaseModelOutputWithPast = self.language_model(
             attention_mask=attention_mask,
             position_ids=position_ids,
             past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=True,
-            cache_position=cache_position,
             **lm_kwargs,
         )
 
@@ -180,7 +167,7 @@ class VipLlavaModel(LlavaModel):
             attentions=outputs.attentions,
             image_hidden_states=image_features if pixel_values is not None else None,
         )
-        return output if return_dict else output.to_tuple()
+        return output
 
 
 class VipLlavaForConditionalGeneration(LlavaForConditionalGeneration):
@@ -202,6 +189,8 @@ class VipLlavaForConditionalGeneration(LlavaForConditionalGeneration):
             pixel_values=pixel_values, vision_feature_layers=vision_feature_layers, **kwargs
         )
 
+    @can_return_tuple
+    @auto_docstring
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
@@ -213,12 +202,8 @@ class VipLlavaForConditionalGeneration(LlavaForConditionalGeneration):
         vision_feature_layers: int | list[int] | None = None,
         labels: torch.LongTensor | None = None,
         use_cache: bool | None = None,
-        output_attentions: bool | None = None,
-        output_hidden_states: bool | None = None,
-        return_dict: bool | None = None,
-        cache_position: torch.LongTensor | None = None,
         logits_to_keep: int | torch.Tensor = 0,
-        **lm_kwargs,
+        **lm_kwargs: Unpack[TransformersKwargs],
     ) -> tuple | VipLlavaCausalLMOutputWithPast:
         r"""
         vision_feature_layers (`Union[int, list[int]]`, *optional*):
@@ -256,16 +241,11 @@ class VipLlavaForConditionalGeneration(LlavaForConditionalGeneration):
         The image features a brown and white cat sitting on a green surface, with a red ball in its
         ```"""
 
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
         vision_feature_layers = (
             vision_feature_layers if vision_feature_layers is not None else self.config.vision_feature_layers
         )
 
-        outputs = self.model(
+        outputs: VipLlavaModelOutputWithPast = self.model(
             input_ids=input_ids,
             pixel_values=pixel_values,
             attention_mask=attention_mask,
@@ -274,14 +254,10 @@ class VipLlavaForConditionalGeneration(LlavaForConditionalGeneration):
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
             vision_feature_layers=vision_feature_layers,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=True,
-            cache_position=cache_position,
             **lm_kwargs,
         )
 
-        hidden_states = outputs[0]
+        hidden_states = outputs.last_hidden_state
         # Only compute necessary logits, and do not upcast them to float if we are not computing the loss
         slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
         logits = self.lm_head(hidden_states[:, slice_indices, :])

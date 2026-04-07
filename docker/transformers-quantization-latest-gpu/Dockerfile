@@ -78,6 +78,7 @@ RUN python3 -m pip uninstall -y flash-attn
 RUN cd transformers && python3 setup.py develop
 
 # Add fouroversix for quantization testing
+RUN python3 -m pip install --no-cache-dir --upgrade setuptools wheel
 RUN python3 -m pip install --no-cache-dir "fouroversix>=1.0.2" --no-build-isolation
 
 # Add fp-quant for quantization testing

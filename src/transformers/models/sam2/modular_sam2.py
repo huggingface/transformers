@@ -24,8 +24,8 @@ import torch.nn.functional as F
 
 from ... import initialization as init
 from ...activations import ACT2FN
+from ...image_processing_backends import TorchvisionBackend
 from ...image_processing_utils import BatchFeature, get_size_dict
-from ...image_processing_utils_fast import BaseImageProcessorFast
 from ...image_utils import (
     IMAGENET_DEFAULT_MEAN,
     IMAGENET_DEFAULT_STD,
@@ -33,7 +33,6 @@ from ...image_utils import (
     ImageInput,
     PILImageResampling,
     SizeDict,
-    pil_torch_interpolation_mapping,
 )
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutputWithPooling
@@ -48,7 +47,7 @@ from ...utils.generic import (
 from ...utils.output_capturing import capture_outputs
 from ..auto import AutoModel
 from ..maskformer.modeling_maskformer import MaskFormerSinePositionEmbedding
-from ..sam.image_processing_sam_fast import SamImageProcessorFast
+from ..sam.image_processing_sam import SamImageProcessor
 from ..sam.modeling_sam import (
     SamLayerNorm,
     SamMaskDecoder,
@@ -72,7 +71,7 @@ from .configuration_sam2 import (
 logger = logging.get_logger(__name__)
 
 
-class Sam2FastImageProcessorKwargs(ImagesKwargs, total=False):
+class Sam2ImageProcessorKwargs(ImagesKwargs, total=False):
     r"""
     mask_size (`dict[str, int]`, *optional*):
         The size `{"height": int, "width": int}` to resize the segmentation maps to.
@@ -82,7 +81,7 @@ class Sam2FastImageProcessorKwargs(ImagesKwargs, total=False):
 
 
 @auto_docstring
-class Sam2ImageProcessorFast(SamImageProcessorFast):
+class Sam2ImageProcessor(SamImageProcessor):
     resample = PILImageResampling.BILINEAR
     image_mean = IMAGENET_DEFAULT_MEAN
     image_std = IMAGENET_DEFAULT_STD
@@ -93,15 +92,15 @@ class Sam2ImageProcessorFast(SamImageProcessorFast):
     do_normalize = True
     do_convert_rgb = True
 
-    valid_kwargs = Sam2FastImageProcessorKwargs
+    valid_kwargs = Sam2ImageProcessorKwargs
 
-    # modular artefacts
+    # disable SAM padding logic
     do_pad = None
     pad_size = None
     mask_pad_size = None
 
-    def __init__(self, **kwargs: Unpack[Sam2FastImageProcessorKwargs]):
-        BaseImageProcessorFast.__init__(self, **kwargs)
+    def __init__(self, **kwargs: Unpack[Sam2ImageProcessorKwargs]):
+        TorchvisionBackend.__init__(self, **kwargs)
 
     def _preprocess(
         self,
@@ -109,14 +108,14 @@ class Sam2ImageProcessorFast(SamImageProcessorFast):
         return_tensors: str | TensorType | None,
         **kwargs,
     ) -> "torch.Tensor":
-        return BaseImageProcessorFast._preprocess(self, images, return_tensors=return_tensors, **kwargs).pixel_values
+        return TorchvisionBackend._preprocess(self, images, return_tensors=return_tensors, **kwargs).pixel_values
 
     @auto_docstring
     def preprocess(
         self,
         images: ImageInput,
         segmentation_maps: ImageInput | None = None,
-        **kwargs: Unpack[Sam2FastImageProcessorKwargs],
+        **kwargs: Unpack[Sam2ImageProcessorKwargs],
     ) -> BatchFeature:
         r"""
         segmentation_maps (`ImageInput`, *optional*):
@@ -131,7 +130,7 @@ class Sam2ImageProcessorFast(SamImageProcessorFast):
         do_convert_rgb: bool,
         input_data_format: ChannelDimension,
         device: Union[str, "torch.device"] | None = None,
-        **kwargs: Unpack[Sam2FastImageProcessorKwargs],
+        **kwargs: Unpack[Sam2ImageProcessorKwargs],
     ) -> BatchFeature:
         """
         Preprocess image-like inputs.
@@ -160,7 +159,7 @@ class Sam2ImageProcessorFast(SamImageProcessorFast):
                 {
                     "do_normalize": False,
                     "do_rescale": False,
-                    "interpolation": pil_torch_interpolation_mapping[PILImageResampling.NEAREST],
+                    "resample": PILImageResampling.NEAREST,
                     "size": segmentation_maps_kwargs.pop("mask_size"),
                 }
             )
@@ -171,49 +170,18 @@ class Sam2ImageProcessorFast(SamImageProcessorFast):
 
         return BatchFeature(data=data, tensor_type=kwargs["return_tensors"])
 
-    def _further_process_kwargs(
+    def _standardize_kwargs(
         self,
-        size: SizeDict | None = None,
         mask_size: SizeDict | None = None,
-        default_to_square: bool | None = None,
-        image_mean: float | list[float] | None = None,
-        image_std: float | list[float] | None = None,
-        data_format: ChannelDimension | None = None,
         **kwargs,
     ) -> dict:
         """
-        Update kwargs that need further processing before being validated
-        Can be overridden by subclasses to customize the processing of kwargs.
+        Update kwargs that need further processing before being validated.
         """
-        if kwargs is None:
-            kwargs = {}
-        if size is not None:
-            size = SizeDict(**get_size_dict(size=size, default_to_square=default_to_square))
-        if mask_size is not None:
+        if mask_size is not None and not isinstance(mask_size, SizeDict):
             mask_size = SizeDict(**get_size_dict(mask_size, param_name="mask_size"))
-        if isinstance(image_mean, list):
-            image_mean = tuple(image_mean)
-        if isinstance(image_std, list):
-            image_std = tuple(image_std)
-        if data_format is None:
-            data_format = ChannelDimension.FIRST
-
-        kwargs["size"] = size
         kwargs["mask_size"] = mask_size
-        kwargs["image_mean"] = image_mean
-        kwargs["image_std"] = image_std
-        kwargs["data_format"] = data_format
-
-        # torch resize uses interpolation instead of resample
-        # Check if resample is an int before checking if it's an instance of PILImageResampling
-        # because if pillow < 9.1.0, resample is an int and PILImageResampling is a module.
-        # Checking PILImageResampling will fail with error `TypeError: isinstance() arg 2 must be a type or tuple of types`.
-        resample = kwargs.pop("resample")
-        kwargs["interpolation"] = (
-            pil_torch_interpolation_mapping[resample] if isinstance(resample, (PILImageResampling, int)) else resample
-        )
-
-        return kwargs
+        return TorchvisionBackend._standardize_kwargs(self, **kwargs)
 
     def _apply_non_overlapping_constraints(self, pred_masks: torch.Tensor) -> torch.Tensor:
         """
@@ -362,7 +330,7 @@ class Sam2PatchEmbeddings(nn.Module):
     Args:
         pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
             Pixel values. Pixel values can be obtained using
-            [`AutoImageProcessor`]. See [`Sam2ImageProcessorFast.__call__`] for details.
+            [`AutoImageProcessor`]. See [`Sam2ImageProcessor.__call__`] for details.
 
     Returns:
         embeddings (`torch.FloatTensor`):
@@ -1465,6 +1433,6 @@ __all__ = [
     "Sam2Model",
     "Sam2VisionModel",
     "Sam2PreTrainedModel",
-    "Sam2ImageProcessorFast",
+    "Sam2ImageProcessor",
     "Sam2HieraDetModel",
 ]
