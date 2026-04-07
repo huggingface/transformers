@@ -124,7 +124,7 @@ class AudioFlamingo3Attention(nn.Module):
         # ATM, we have mixed things encoder, decoder, and encoder-decoder attn
         **kwargs: Unpack[FlashAttentionKwargs],
     ) -> tuple[torch.Tensor, torch.Tensor | None, tuple[torch.Tensor] | None]:
-        """Input shape: (..., Time, Channel) — batch dimension is optional."""
+        """Input shape: Batch x Time x Channel"""
 
         # if key_value_states are provided this layer is used as a cross-attention layer
         # for the decoder
@@ -160,7 +160,8 @@ class AudioFlamingo3Attention(nn.Module):
             # Use the query's batch dimension for kv view so that a different-batch
             # encoder output (e.g. in tests) gets absorbed into the sequence axis,
             # preserving backward-compatible behaviour.
-            kv_shape = (input_shape[0], -1, self.num_heads, self.head_dim)
+            input_shape_kv = current_states.shape[:-1]
+            kv_shape = (*input_shape_kv, -1, self.head_dim)
             key_states = self.k_proj(current_states).view(kv_shape).transpose(1, 2).contiguous()
             value_states = self.v_proj(current_states).view(kv_shape).transpose(1, 2).contiguous()
             if past_key_values is not None:
