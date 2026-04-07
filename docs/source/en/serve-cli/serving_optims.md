@@ -21,7 +21,7 @@ rendered properly in your Markdown viewer.
 
 [Continuous batching](../continuous_batching) dynamically groups and interleaves requests to share forward passes on the GPU. New requests join the batch as others progress through prefill. Completed requests drop out after decoding. This increases GPU utilization and throughput without compromising latency.
 
-Add the `--continuous-batching` argument to enable continuous batching.
+Add `--continuous-batching` to enable it.
 
 ```sh
 transformers serve \
@@ -41,7 +41,7 @@ pip install transformers[open-telemetry]
 
 [Quantization](../quantization/overview) reduces memory usage by mapping weights to a lower precision. `transformers serve` is compatible with all quantization methods in Transformers. It supports pre-quantized models and runtime quantization.
 
-Pre-quantized models don't require any changes. They generally provide the best balance between performance and accuracy. Install the appropriate quantization library. Then pass the pre-quantized model from the Hub to the `model` argument.
+Pre-quantized models don't require any changes. They offer the best balance between performance and accuracy. Install the appropriate quantization library. Then pass the pre-quantized model from the Hub to the `model` argument.
 
 ```sh
 curl http://localhost:8000/v1/responses \
@@ -53,7 +53,7 @@ curl http://localhost:8000/v1/responses \
   }'
 ```
 
-Use the `--quantization` argument to quantize a model at runtime. This helps when experimenting with new checkpoints or finetunes that don't have quantized weights yet. Only [bitsandbytes](../quantization/bitsandbytes) 4-bit and 8-bit quantization is supported.
+Use `--quantization` to quantize a model at runtime. This is useful for new checkpoints or finetunes without pre-quantized weights. Only [bitsandbytes](../quantization/bitsandbytes) 4-bit and 8-bit quantization are supported.
 
 ```sh
 transformers serve \
@@ -68,6 +68,18 @@ An optimized [attention backend](../attention_interface) improves memory efficie
 transformers serve \
   --continuous_batching \
   --attn_implementation "flash_attention_2"
+```
+
+## Compile
+
+[torch.compile](../perf_torch_compile) traces and compiles the decode loop for faster inference.
+
+> [!NOTE]
+> Compile is incompatible with continuous batching.
+
+```sh
+transformers serve \
+  --compile
 ```
 
 ## Data type

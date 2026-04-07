@@ -538,7 +538,7 @@ class GenerationMixin(ContinuousMixin):
             model_inputs["token_type_ids"] = token_type_ids
 
         # 3. Slice model inputs if it's an input that should have the same length as `input_ids`
-        for model_input_name in [position_ids_key, "token_type_ids"]:
+        for model_input_name in [position_ids_key, "token_type_ids", "mm_token_type_ids"]:
             model_input = model_inputs.get(model_input_name)
             if model_input is not None and model_input.shape[-1] != sequence_length:
                 # Input can be 2D or 3D, and we always slice on `seq-length` (last dim)
@@ -567,7 +567,9 @@ class GenerationMixin(ContinuousMixin):
                 attention_mask=attention_mask,
                 past_key_values=model_inputs.get("past_key_values"),
                 position_ids=model_inputs.get(position_ids_key),
+                # The following kwargs are not used in the main function - only on a few models with overloaded `create_masks_for_generate`
                 token_type_ids=model_inputs.get("token_type_ids"),
+                mm_token_type_ids=model_inputs.get("mm_token_type_ids"),
                 is_first_iteration=is_first_iteration,
             )
 
@@ -918,6 +920,12 @@ class GenerationMixin(ContinuousMixin):
         # update token_type_ids with last value
         if (token_type_ids := model_kwargs.get("token_type_ids")) is not None:
             model_kwargs["token_type_ids"] = torch.cat([token_type_ids, token_type_ids[:, -num_new_tokens:]], dim=-1)
+
+        # update mm_token_type_ids with zeros (only-text)
+        if (mm_token_type_ids := model_kwargs.get("mm_token_type_ids")) is not None:
+            model_kwargs["mm_token_type_ids"] = torch.cat(
+                [mm_token_type_ids, mm_token_type_ids.new_zeros((mm_token_type_ids.shape[0], num_new_tokens))], dim=-1
+            )
 
         # Position ids (2D or 3D sometimes)
         position_ids_key = "position_ids" if not is_encoder_decoder else "decoder_position_ids"
@@ -1852,7 +1860,7 @@ class GenerationMixin(ContinuousMixin):
         # linear attention models always need to pass the config, otherwise it will use an Attention cache for the LinearAttention layers
         is_linear_attention = any(
             x in ("mamba", "conv", "linear_attention")
-            for x in getattr(self.config.get_text_config(decoder=True), "layer_types", [])
+            for x in (getattr(self.config.get_text_config(decoder=True), "layer_types", []) or [])
         )
         if generation_config.cache_implementation != "dynamic_full" or is_linear_attention:
             dynamic_cache_kwargs["config"] = self.config.get_text_config(decoder=True)
