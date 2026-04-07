@@ -666,7 +666,14 @@ def load_gguf_checkpoint(gguf_checkpoint_path, return_tensors=False, model_to_lo
                     parsed_parameters["config"]["attention_k_eq_v"] = True
 
         # GGUF metadata has add_bos_token=false but Gemma4 models require BOS
-        parsed_parameters["tokenizer_config"]["add_bos_token"] = True
+        # setting correct token strings from the GGUF vocab as default bos_token doesn't match Gemma4's vocab
+        tokens = parsed_parameters["tokenizer"].get("tokens", [])
+        tc = parsed_parameters["tokenizer_config"]
+        tc["add_bos_token"] = True
+        if tc.get("bos_token_id") is not None and tc["bos_token_id"] < len(tokens):
+            tc["bos_token"] = tokens[tc["bos_token_id"]]
+        if tc.get("eos_token_id") is not None and tc["eos_token_id"] < len(tokens):
+            tc["eos_token"] = tokens[tc["eos_token_id"]]
 
     # MiniMax-M2: convert expert_gating_func integer to scoring_func string
     if parsed_parameters["config"].get("model_type") == "minimax_m2":
