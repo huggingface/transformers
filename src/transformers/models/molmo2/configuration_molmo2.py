@@ -39,8 +39,6 @@ class Molmo2VitConfig(PreTrainedConfig):
         Size of each image patch.
     image_num_pos (`int`, *optional*, defaults to 577):
         Number of positional embeddings for the image.
-    float32_attention (`bool`, *optional*, defaults to `True`):
-        Whether to use float32 for attention computation.
     """
 
     model_type = "molmo2"
@@ -60,7 +58,6 @@ class Molmo2VitConfig(PreTrainedConfig):
     attention_dropout: float = 0.0
     residual_dropout: float = 0.0
     initializer_range: float = 0.02
-    float32_attention: bool = True
 
     @property
     def image_num_patch(self):
@@ -76,8 +73,6 @@ class Molmo2AdapterConfig(PreTrainedConfig):
         Indices of ViT layers to extract features from.
     pooling_attention_mask (`bool`, *optional*, defaults to `False`):
         Whether to use attention mask during pooling.
-    float32_attention (`bool`, *optional*, defaults to `True`):
-        Whether to use float32 for attention computation.
     text_hidden_size (`int`, *optional*, defaults to 3584):
         Hidden size of the text model (used for projection).
     image_feature_dropout (`float`, *optional*, defaults to 0.0):
@@ -93,7 +88,6 @@ class Molmo2AdapterConfig(PreTrainedConfig):
     num_attention_heads: int = 16
     num_key_value_heads: int = 16
     head_dim: int = 72
-    float32_attention: bool = True
     attention_dropout: float = 0.0
     residual_dropout: float = 0.0
     hidden_act: str = "silu"
