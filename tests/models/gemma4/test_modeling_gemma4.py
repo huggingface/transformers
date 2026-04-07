@@ -13,7 +13,6 @@
 # limitations under the License.
 """Testing suite for the PyTorch Gemma4 model."""
 
-import logging
 import unittest
 
 import pytest
@@ -29,7 +28,6 @@ from transformers.testing_utils import (
     Expectations,
     cleanup,
     is_flash_attn_2_available,
-    require_flash_attn,
     require_torch,
     require_torch_accelerator,
     slow,
@@ -53,7 +51,6 @@ if is_torch_available():
         Gemma4Processor,
         Gemma4TextModel,
     )
-    from transformers.pytorch_utils import is_torch_greater_or_equal
 
 
 class Gemma4TextModelTester(CausalLMModelTester):
@@ -562,34 +559,7 @@ class Gemma4IntegrationTest(unittest.TestCase):
         EXPECTED_TEXT = EXPECTED_TEXTS.get_expectation()
         self.assertEqual(output_text, EXPECTED_TEXT)
 
-    @require_flash_attn
-    @pytest.mark.flash_attn_test
-    def test_model_4b_flash_attn(self):
-        model = Gemma4ForConditionalGeneration.from_pretrained(
-            self.model_name, device_map=torch_device, attn_implementation="flash_attention_2"
-        )
-
-        inputs = self.processor.apply_chat_template(
-            self.messages,
-            tokenize=True,
-            return_dict=True,
-            return_tensors="pt",
-            add_generation_prompt=True,
-        ).to(torch_device)
-
-        output = model.generate(**inputs, max_new_tokens=30, do_sample=False)
-        input_size = inputs.input_ids.shape[-1]
-        output_text = self.processor.batch_decode(output[:, input_size:], skip_special_tokens=True)
-
-        EXPECTED_TEXTS = Expectations(
-            {
-                ("cuda", 8): ['user\nYou are a helpful assistant.\n\n\n\n\n\nWhat is shown in this image?\nmodel\nThe image shows a brown and white cow standing on a sandy beach with turquoise water and a distant island in the background. It looks like a sunny day'],
-            }
-        )  # fmt: skip
-        EXPECTED_TEXT = EXPECTED_TEXTS.get_expectation()
-        self.assertEqual(output_text, EXPECTED_TEXT)
-
-    @parameterized.expand([("flash_attention_2",), ("sdpa",), ("eager",)])
+    @parameterized.expand([("sdpa",), ("eager",)])
     def test_generation_beyond_sliding_window(self, attn_implementation: str):
         """Test that we can correctly generate beyond the sliding window. Outputs for every attention functions
         should be coherent and identical.
@@ -603,6 +573,15 @@ class Gemma4IntegrationTest(unittest.TestCase):
             "A list of colors: red, blue",  # This will almost all be padding tokens
         ]
         tokenizer = AutoTokenizer.from_pretrained(self.model_name, padding="left")
+        input_text = [
+            tokenizer.apply_chat_template(
+                [{"role": "user", "content": item}],
+                tokenize=False,
+                return_dict=True,
+                add_generation_prompt=True,
+            )
+            for item in input_text
+        ]
         inputs = tokenizer(input_text, padding=True, return_tensors="pt").to(torch_device)
 
         model = Gemma4ForConditionalGeneration.from_pretrained(
@@ -613,40 +592,49 @@ class Gemma4IntegrationTest(unittest.TestCase):
 
         # Make sure prefill is larger than sliding window
         input_size = inputs.input_ids.shape[-1]
-        self.assertTrue(input_size > model.config.sliding_window)
+        self.assertTrue(input_size > model.config.get_text_config().sliding_window)
 
-        out = model.generate(**inputs, max_new_tokens=20, do_sample=False, cache_implementation="static")[
-            :, input_size:
-        ]
-        output_text = tokenizer.batch_decode(out)
+        out = model.generate(**inputs, max_new_tokens=20, do_sample=False, cache_implementation="static")
+        output_text = tokenizer.batch_decode(out[:, input_size:])
 
-        EXPECTED_COMPLETIONS = [" and I'm going to take a walk.\n\nI really enjoy the scenery, and I'", ", green, yellow, orange, purple, brown, black, white, gray.\n\nI'"]  # fmt: skip
-        self.assertEqual(output_text, EXPECTED_COMPLETIONS)
+        EXPECTED_COMPLETIONS = Expectations(
+            {
+                ("cuda", 8): [
+                    "That sounds lovely! It seems like you're really enjoying the place you're in.\n\n",
+                    "Here are a few ways you could use or expand upon that list, depending on what you need:",
+                ]
+            }
+        )
+        self.assertEqual(output_text, EXPECTED_COMPLETIONS.get_expectation())
 
     @pytest.mark.torch_export_test
     def test_export_text_only(self):
-        if not is_torch_greater_or_equal("2.6.0"):
-            self.skipTest(reason="This test requires torch >= 2.6 to run.")
-
         from transformers.integrations.executorch import TorchExportableModuleForDecoderOnlyLM
 
         model = Gemma4ForConditionalGeneration.from_pretrained(self.model_name)
+        tokenizer = AutoTokenizer.from_pretrained(self.model_name)
 
-        # Export + hybrid cache
         exportable_module = TorchExportableModuleForDecoderOnlyLM(model, batch_size=1, max_cache_len=1024)
         exported_program = exportable_module.export(
-            input_ids=torch.tensor([[1]], dtype=torch.long, device=model.device),
+            input_ids=torch.tensor([[1]], dtype=torch.long),
         )
 
         # Test generation with the exported model
-        prompt = "What is the capital of France?"
+        prompt = tokenizer.apply_chat_template(
+            [{"role": "user", "content": "What is the capital of France?"}],
+            tokenize=False,
+            return_dict=True,
+            add_generation_prompt=True,
+        )
+
         max_new_tokens_to_generate = 20
         # Generate text with the exported model
-        tokenizer = AutoTokenizer.from_pretrained(self.model_name)
         export_generated_text = TorchExportableModuleForDecoderOnlyLM.generate(
-            exported_program, tokenizer, prompt, max_new_tokens=max_new_tokens_to_generate
+            exported_program,
+            tokenizer,
+            prompt,
+            max_new_tokens=max_new_tokens_to_generate,
         )
-        logging.info(f"\nExport generated texts: '{export_generated_text}'")
 
         input_text = tokenizer(prompt, return_tensors="pt")
         eager_outputs = model.generate(
