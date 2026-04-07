@@ -256,13 +256,13 @@ class HyperCLOVAXDecoderLayer(GradientCheckpointingLayer):
             attention_mask (`torch.FloatTensor`, *optional*):
                 attention mask of size `(batch_size, sequence_length)` if flash attention is used or `(batch_size, 1,
                 query_sequence_length, key_sequence_length)` if default attention is used.
-            output_attentions (`bool`, *optional*):
-                Whether or not to return the attentions tensors of all attention layers. See `attentions` under
-                returned tensors for more detail.
+            position_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
+                Indices of positions of each input sequence tokens in the position embeddings. Selected in the range
+                `[0, config.n_positions - 1]`.
+            past_key_values (`Cache`, *optional*): cached past key and value projection states
             use_cache (`bool`, *optional*):
                 If set to `True`, `past_key_values` key value states are returned and can be used to speed up decoding
                 (see `past_key_values`).
-            past_key_values (`Cache`, *optional*): cached past key and value projection states
             position_embeddings (`tuple[torch.FloatTensor, torch.FloatTensor]`, *optional*):
                 Tuple containing the cosine and sine positional embeddings of shape `(batch_size, seq_len, head_dim)`,
                 with `head_dim` being the embedding dimension of each attention head.
@@ -523,8 +523,8 @@ class HyperCLOVAXForCausalLM(HyperCLOVAXPreTrainedModel, GenerationMixin):
         ```python
         >>> from transformers import AutoTokenizer, HyperCLOVAXForCausalLM
 
-        >>> model = HyperCLOVAXForCausalLM.from_pretrained("meta-hyperclovax/HyperCLOVAX-2-7b-hf")
-        >>> tokenizer = AutoTokenizer.from_pretrained("meta-hyperclovax/HyperCLOVAX-2-7b-hf")
+        >>> model = HyperCLOVAXForCausalLM.from_pretrained("naver-hyperclovax/HyperCLOVAX-SEED-Think-32B")
+        >>> tokenizer = AutoTokenizer.from_pretrained("naver-hyperclovax/HyperCLOVAX-SEED-Think-32B")
 
         >>> prompt = "Hey, are you conscious? Can you talk to me?"
         >>> inputs = tokenizer(prompt, return_tensors="pt")
@@ -533,7 +533,8 @@ class HyperCLOVAXForCausalLM(HyperCLOVAXPreTrainedModel, GenerationMixin):
         >>> generate_ids = model.generate(inputs.input_ids, max_length=30)
         >>> tokenizer.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0]
         "Hey, are you conscious? Can you talk to me?\nI'm not conscious, but I can talk to you."
-        ```"""
+        ```
+        """
         outputs: BaseModelOutputWithPast = self.model(
             input_ids=input_ids,
             attention_mask=attention_mask,
@@ -808,29 +809,29 @@ class HCXVisionV2ForConditionalGeneration(HCXVisionV2PreTrainedModel, Generation
         pixel_values (`torch.FloatTensor`, *optional*):
             Pixel values of input images after preprocessing.
         pixel_values_videos (`torch.FloatTensor`, *optional*):
-            Pixel values of input videos, same format as ``pixel_values``.
+            Pixel values of input videos, same format as `pixel_values`.
         image_grid_thw (`torch.LongTensor` of shape `(num_images, 3)`, *optional*):
-            ``[temporal, height, width]`` grid counts per image.
+            `[temporal, height, width]` grid counts per image.
         video_grid_thw (`torch.LongTensor` of shape `(num_videos, 3)`, *optional*):
-            ``[temporal, height, width]`` grid counts per video.
+            `[temporal, height, width]` grid counts per video.
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for computing the masked language modeling loss.
         logits_to_keep (`int` or `torch.Tensor`, *optional*, defaults to 0):
-            If an ``int``, compute logits for the last ``logits_to_keep`` tokens.
+            If an `int`, compute logits for the last `logits_to_keep` tokens.
 
         Example:
 
         ```python
         >>> from PIL import Image
         >>> import requests
-        >>> from transformers import AutoProcessor, HCXVisionV2ForConditionalGeneration
+        >>> from transformers import HCXVisionV2Processor, HCXVisionV2ForConditionalGeneration
 
         >>> model = HCXVisionV2ForConditionalGeneration.from_pretrained(
         ...     "naver-hyperclovax/HyperCLOVAX-SEED-Think-32B",
         ...     torch_dtype="auto",
         ...     device_map="auto",
         ... )
-        >>> processor = AutoProcessor.from_pretrained("naver-hyperclovax/HyperCLOVAX-SEED-Think-32B")
+        >>> processor = HCXVisionV2Processor.from_pretrained("naver-hyperclovax/HyperCLOVAX-SEED-Think-32B")
 
         >>> messages = [
         ...     {"role": "user", "content": [

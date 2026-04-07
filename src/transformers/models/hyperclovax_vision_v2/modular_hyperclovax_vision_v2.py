@@ -14,9 +14,11 @@
 """PyTorch HyperCLOVAX Vision model."""
 
 import torch
+from huggingface_hub.dataclasses import strict
 from torch import nn
 
 from ...cache_utils import Cache
+from ...configuration_utils import PreTrainedConfig
 from ...generation import GenerationMixin
 from ...modeling_layers import GenericForSequenceClassification
 from ...modeling_outputs import (
@@ -26,8 +28,10 @@ from ...modeling_outputs import (
 )
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
+from ..auto import CONFIG_MAPPING, AutoConfig
 from ..auto.modeling_auto import AutoModel
 from ..gemma3.modeling_gemma3 import Gemma3ForSequenceClassification
+from ..granite.configuration_granite import GraniteConfig
 from ..granite.modeling_granite import (
     GraniteAttention,
     GraniteDecoderLayer,
@@ -36,11 +40,125 @@ from ..granite.modeling_granite import (
     GraniteRMSNorm,
 )
 from ..llama.modeling_llama import LlamaPreTrainedModel
+from ..qwen2_vl.processing_qwen2_vl import Qwen2VLProcessor, Qwen2VLProcessorKwargs
 from ..video_llama_3.modeling_video_llama_3 import VideoLlama3Model
-from .configuration_hyperclovax_vision_v2 import HCXVisionV2Config, HyperCLOVAXConfig
 
 
 logger = logging.get_logger(__name__)
+
+
+@auto_docstring(checkpoint="naver-hyperclovax/HyperCLOVAX-SEED-Think-32B")
+@strict(accept_kwargs=True)
+class HyperCLOVAXConfig(GraniteConfig):
+    r"""
+    use_post_norm (`bool`, *optional*, defaults to False):
+        Whether to use post-norm (Peri-LN) architecture. For more details checkout [this
+        paper](https://arxiv.org/pdf/2502.02732.pdf)
+
+    ```python
+    >>> from transformers import HyperCLOVAXConfig, HyperCLOVAXModel
+
+    >>> # Initializing a HyperCLOVAX configuration
+    >>> configuration = HyperCLOVAXConfig()
+
+    >>> # Initializing a model from the configuration
+    >>> model = HyperCLOVAXModel(configuration)
+
+    >>> # Accessing the model configuration
+    >>> configuration = model.config
+    ```
+    """
+
+    model_type = "hyperclovax"
+    use_post_norm: bool = False  # Peri-LN (post-norm)
+
+
+@auto_docstring(checkpoint="naver-hyperclovax/HyperCLOVAX-SEED-Think-32B")
+@strict(accept_kwargs=True)
+class HCXVisionV2Config(PreTrainedConfig):
+    r"""
+    text_config (`dict` or [`HyperCLOVAXConfig`], *optional*):
+        Configuration for the LLM backbone.  Defaults to [`HyperCLOVAXConfig`].
+    vision_config (`dict` or config, *optional*):
+        Configuration for the vision encoder.  Defaults to
+        [`Qwen2_5_VLVisionConfig`].
+    image_token_id (`int`, *optional*):
+        Token ID used as a placeholder for image patches in the input
+        sequence. Falls back to `img_start_id` for backward compatibility
+        with older checkpoints.
+    video_token_id (`int`, *optional*):
+        Token ID used as a placeholder for video patches in the input
+        sequence. Falls back to `video_start_id` for backward
+        compatibility with older checkpoints.
+
+    ```python
+    >>> from transformers import HCXVisionV2Config, HCXVisionV2ForConditionalGeneration
+
+    >>> # Initializing a HyperCLOVAX Vision configuration with defaults
+    >>> configuration = HCXVisionV2Config()
+
+    >>> # Initializing a model from the configuration
+    >>> model = HCXVisionV2ForConditionalGeneration(configuration)
+
+    >>> # Accessing the model configuration
+    >>> configuration = model.config
+    ```
+    """
+
+    model_type = "hyperclovax_vision_v2"
+    sub_configs = {"text_config": HyperCLOVAXConfig, "vision_config": AutoConfig}
+    keys_to_ignore_at_inference = ["past_key_values"]
+
+    text_config: dict | PreTrainedConfig | None = None
+    vision_config: dict | PreTrainedConfig | None = None
+    image_token_id: int | None = None
+    video_token_id: int | None = None
+
+    def __post_init__(self, **kwargs):
+        if isinstance(self.vision_config, dict):
+            model_type = self.vision_config.get("model_type", "qwen2_5_vl_vision")
+            model_type = "qwen2_5_vl_vision" if model_type == "qwen2_5_vl" else model_type
+            self.vision_config["model_type"] = model_type
+            self.vision_config = CONFIG_MAPPING[model_type](**self.vision_config)
+        elif self.vision_config is None:
+            self.vision_config = CONFIG_MAPPING["qwen2_5_vl_vision"]()
+
+        if isinstance(self.text_config, dict):
+            model_type = self.text_config.get("model_type", "hyperclovax")
+            self.text_config = CONFIG_MAPPING[model_type](**self.text_config)
+        elif self.text_config is None:
+            self.text_config = HyperCLOVAXConfig()
+
+        if self.image_token_id is None:
+            self.image_token_id = kwargs.pop("img_start_id", 128060)
+        if self.video_token_id is None:
+            self.video_token_id = kwargs.pop("video_start_id", 128061)
+
+        # This is necessary to properly find the weight conversion mapping.
+        if kwargs.get("model_type") == "vlm":
+            kwargs["model_type"] = "hyperclovax_vision_v2"
+
+        super().__post_init__(**kwargs)
+
+
+class HCXVisionV2ProcessorKwargs(Qwen2VLProcessorKwargs, total=False):
+    _defaults = {
+        "text_kwargs": {
+            "padding": False,
+            "return_mm_token_type_ids": False,  # HCX does not use mm_token_type_ids
+        },
+    }
+
+
+@auto_docstring
+class HCXVisionV2Processor(Qwen2VLProcessor):
+    @property
+    def model_input_names(self):
+        return (
+            self.tokenizer.model_input_names
+            + self.image_processor.model_input_names
+            + self.video_processor.model_input_names
+        )
 
 
 class HyperCLOVAXAttention(GraniteAttention):
@@ -76,13 +194,13 @@ class HyperCLOVAXDecoderLayer(GraniteDecoderLayer):
             attention_mask (`torch.FloatTensor`, *optional*):
                 attention mask of size `(batch_size, sequence_length)` if flash attention is used or `(batch_size, 1,
                 query_sequence_length, key_sequence_length)` if default attention is used.
-            output_attentions (`bool`, *optional*):
-                Whether or not to return the attentions tensors of all attention layers. See `attentions` under
-                returned tensors for more detail.
+            position_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
+                Indices of positions of each input sequence tokens in the position embeddings. Selected in the range
+                `[0, config.n_positions - 1]`.
+            past_key_values (`Cache`, *optional*): cached past key and value projection states
             use_cache (`bool`, *optional*):
                 If set to `True`, `past_key_values` key value states are returned and can be used to speed up decoding
                 (see `past_key_values`).
-            past_key_values (`Cache`, *optional*): cached past key and value projection states
             position_embeddings (`tuple[torch.FloatTensor, torch.FloatTensor]`, *optional*):
                 Tuple containing the cosine and sine positional embeddings of shape `(batch_size, seq_len, head_dim)`,
                 with `head_dim` being the embedding dimension of each attention head.
@@ -155,6 +273,50 @@ class HyperCLOVAXForCausalLM(GraniteForCausalLM):
         super().__init__(config)
         self.model = HyperCLOVAXModel(config)
 
+    @can_return_tuple
+    @auto_docstring
+    def forward(
+        self,
+        input_ids: torch.LongTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
+        position_ids: torch.LongTensor | None = None,
+        past_key_values: Cache | None = None,
+        inputs_embeds: torch.FloatTensor | None = None,
+        labels: torch.LongTensor | None = None,
+        use_cache: bool | None = None,
+        logits_to_keep: int | torch.Tensor = 0,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> CausalLMOutputWithPast:
+        r"""
+        Example:
+
+        ```python
+        >>> from transformers import AutoTokenizer, HyperCLOVAXForCausalLM
+
+        >>> model = HyperCLOVAXForCausalLM.from_pretrained("naver-hyperclovax/HyperCLOVAX-SEED-Think-32B")
+        >>> tokenizer = AutoTokenizer.from_pretrained("naver-hyperclovax/HyperCLOVAX-SEED-Think-32B")
+
+        >>> prompt = "Hey, are you conscious? Can you talk to me?"
+        >>> inputs = tokenizer(prompt, return_tensors="pt")
+
+        >>> # Generate
+        >>> generate_ids = model.generate(inputs.input_ids, max_length=30)
+        >>> tokenizer.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0]
+        "Hey, are you conscious? Can you talk to me?\nI'm not conscious, but I can talk to you."
+        ```
+        """
+        return super().forward(
+            input_ids=input_ids,
+            attention_mask=attention_mask,
+            position_ids=position_ids,
+            past_key_values=past_key_values,
+            inputs_embeds=inputs_embeds,
+            labels=labels,
+            use_cache=use_cache,
+            logits_to_keep=logits_to_keep,
+            **kwargs,
+        )
+
 
 @auto_docstring
 class HCXVisionV2Model(VideoLlama3Model):
@@ -188,8 +350,6 @@ class HCXVisionV2Model(VideoLlama3Model):
             The tensors corresponding to the input videos.
         video_grid_thw (`torch.LongTensor` of shape `(num_videos, 3)`, *optional*):
             The temporal, height and width of feature shape of each video in LLM.
-        video_merge_sizes (`torch.Tensor` of shape `(num_videos,)`):
-            The spatial downsampling ratio of each video feature.
         """
         return self.get_image_features(pixel_values=pixel_values_videos, image_grid_thw=video_grid_thw, **kwargs)
 
@@ -352,29 +512,29 @@ class HCXVisionV2ForConditionalGeneration(HCXVisionV2PreTrainedModel, Generation
         pixel_values (`torch.FloatTensor`, *optional*):
             Pixel values of input images after preprocessing.
         pixel_values_videos (`torch.FloatTensor`, *optional*):
-            Pixel values of input videos, same format as ``pixel_values``.
+            Pixel values of input videos, same format as `pixel_values`.
         image_grid_thw (`torch.LongTensor` of shape `(num_images, 3)`, *optional*):
-            ``[temporal, height, width]`` grid counts per image.
+            `[temporal, height, width]` grid counts per image.
         video_grid_thw (`torch.LongTensor` of shape `(num_videos, 3)`, *optional*):
-            ``[temporal, height, width]`` grid counts per video.
+            `[temporal, height, width]` grid counts per video.
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for computing the masked language modeling loss.
         logits_to_keep (`int` or `torch.Tensor`, *optional*, defaults to 0):
-            If an ``int``, compute logits for the last ``logits_to_keep`` tokens.
+            If an `int`, compute logits for the last `logits_to_keep` tokens.
 
         Example:
 
         ```python
         >>> from PIL import Image
         >>> import requests
-        >>> from transformers import AutoProcessor, HCXVisionV2ForConditionalGeneration
+        >>> from transformers import HCXVisionV2Processor, HCXVisionV2ForConditionalGeneration
 
         >>> model = HCXVisionV2ForConditionalGeneration.from_pretrained(
         ...     "naver-hyperclovax/HyperCLOVAX-SEED-Think-32B",
         ...     torch_dtype="auto",
         ...     device_map="auto",
         ... )
-        >>> processor = AutoProcessor.from_pretrained("naver-hyperclovax/HyperCLOVAX-SEED-Think-32B")
+        >>> processor = HCXVisionV2Processor.from_pretrained("naver-hyperclovax/HyperCLOVAX-SEED-Think-32B")
 
         >>> messages = [
         ...     {"role": "user", "content": [
@@ -472,10 +632,13 @@ class HyperCLOVAXForSequenceClassification(GenericForSequenceClassification, HCX
 
 
 __all__ = [
+    "HCXVisionV2Config",
     "HCXVisionV2ForConditionalGeneration",
     "HCXVisionV2ForSequenceClassification",
     "HCXVisionV2Model",
     "HCXVisionV2PreTrainedModel",
+    "HCXVisionV2Processor",
+    "HyperCLOVAXConfig",
     "HyperCLOVAXForCausalLM",
     "HyperCLOVAXModel",
     "HyperCLOVAXForSequenceClassification",
