@@ -281,6 +281,7 @@ if TYPE_CHECKING:
     from .nanochat import *
     from .nemotron import *
     from .nemotron_h import *
+    from .new_qwen2_5_vl import *
     from .nllb import *
     from .nllb_moe import *
     from .nougat import *
