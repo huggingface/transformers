@@ -226,7 +226,9 @@ class VideoMAESelfAttention(nn.Module):
         self.key = nn.Linear(config.hidden_size, self.all_head_size, bias=config.qkv_bias)
         self.value = nn.Linear(config.hidden_size, self.all_head_size, bias=config.qkv_bias)
 
-    def forward(self, hidden_states: torch.Tensor | None = None) -> tuple[torch.Tensor, torch.Tensor]: # TODO: siglip attention 1-1
+    def forward(
+        self, hidden_states: torch.Tensor | None = None
+    ) -> tuple[torch.Tensor, torch.Tensor]:  # TODO: siglip attention 1-1
         input_shape = hidden_states.shape[:-1]
 
         hidden_shape = (*input_shape, -1, self.attention_head_size)

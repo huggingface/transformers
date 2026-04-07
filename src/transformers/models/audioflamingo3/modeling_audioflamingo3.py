@@ -124,7 +124,7 @@ class AudioFlamingo3Attention(nn.Module):
         # ATM, we have mixed things encoder, decoder, and encoder-decoder attn
         **kwargs: Unpack[FlashAttentionKwargs],
     ) -> tuple[torch.Tensor, torch.Tensor | None, tuple[torch.Tensor] | None]:
-        """Input shape: (..., Time, Channel) — batch dimension is optional."""
+        """Input shape: Batch x Time x Channel"""
 
         # if key_value_states are provided this layer is used as a cross-attention layer
         # for the decoder

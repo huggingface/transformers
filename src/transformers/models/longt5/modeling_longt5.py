@@ -434,8 +434,7 @@ class LongT5Attention(nn.Module):
         # if key_value_states are provided this layer is used as a cross-attention layer for the decoder
         is_cross_attention = key_value_states is not None
 
-        query_states = self.q(hidden_states)
-        query_states = query_states.view(hidden_shape).transpose(1, 2)
+        query_states = self.q(hidden_states).view(hidden_shape).transpose(1, 2)
 
         # Check is encoder-decoder model is being used. Otherwise we'll get `DynamicCache`
         is_updated = False
