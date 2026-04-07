@@ -89,16 +89,22 @@ class Scheduler(ABC):
             self._requests_to_cancel.add(request_id)
 
     @traced
-    def clear_cancelled_requests(self):
+    def clear_cancelled_requests(self) -> list[RequestState]:
         """Remove all cancelled requests from active and waiting queues."""
+        cancelled_states = []
         with self._cancellation_lock:
             for request_id in self._requests_to_cancel:
-                self.active_requests.pop(request_id, None)
-                self.waiting_requests.pop(request_id, None)
+                state_a = self.active_requests.pop(request_id, None)
+                state_w = self.waiting_requests.pop(request_id, None)
+                # Look for the non-None state and add it to the cancelled states list
+                state = state_a or state_w
+                if state is not None:
+                    cancelled_states.append(state)
                 if request_id in self.waiting_requests_order:
                     self.waiting_requests_order.remove(request_id)
                 self.cache.free_blocks(request_id)
             self._requests_to_cancel = set()
+        return cancelled_states
 
     @traced
     def request_is_cancelled(self, request_id: str) -> bool:
@@ -114,8 +120,8 @@ class Scheduler(ABC):
         cache occupancy and the number of tokens to be processed. The allocation itself is done by the CacheAllocator
         objects. Returns a boolean indicating if the allocation was successful or not.
         """
-        # 1. we check that the occupancy is less than the requested length
-        # 2. we allocate enough blocks to cover the requested length
+        # First we check that the occupancy is less than the requested length, then we allocate enough blocks to cover
+        # the requested length. This is done using `current_len` so it also works for offloaded requests.
         current_len = state.current_len()
         occupancy = state.allocated_blocks * self.cache.block_size - current_len
         if occupancy < len_next_tokens or state.allocated_blocks == 0:
@@ -130,7 +136,7 @@ class Scheduler(ABC):
         """Prepares a request for processing in the current batch. If prefix sharing is enabled, and the request was
         pending, this is where we look for a prefix match and split the request if found."""
         # If prefix sharing is enabled, we look for a prefix match and split the request if found
-        if self.cache.use_prefix_sharing and state.status == RequestStatus.PENDING:
+        if self.cache.use_prefix_sharing and state.status == RequestStatus.PENDING and not state.is_cpu_offloaded:
             prefill_length = self.cache.search_prefix_match(state.request_id, state.remaining_prefill_tokens)
             if prefill_length > 0:
                 self.active_requests[state.request_id] = state
@@ -280,6 +286,19 @@ class Scheduler(ABC):
         max_kv_read = original_cache_budget - cache_budget
         return scheduled_requests, one_allocation_failed, decode_fast_path, num_q_tokens, max_kv_read
 
+    def _get_waiting_candidates(self) -> list[RequestState]:
+        """Returns waiting requests in priority order. CPU-offloaded requests come first (they are cheaper to restore
+        than fresh requests are to prefill), then FIFO order for the rest."""
+        offloaded = []
+        fresh = []
+        for req_id in self.waiting_requests_order:
+            state = self.waiting_requests[req_id]
+            if state.is_cpu_offloaded:
+                offloaded.append(state)
+            else:
+                fresh.append(state)
+        return offloaded + fresh
+
     def _cleanup_waiting_queue(self, request_ids_to_remove_from_waiting: set[str]) -> None:
         """Removes processed requests from the waiting queue order."""
         self.waiting_requests_order = deque(
@@ -315,10 +334,9 @@ class FIFOScheduler(Scheduler):
             elif state.status == RequestStatus.PREFILLING:
                 second_priority_states.append(state)
 
-        # Add waiting requests to second priority
+        # Add waiting requests to second priority, with CPU-offloaded requests first
         if not self.block_new_requests:
-            for req_id in self.waiting_requests_order:
-                second_priority_states.append(self.waiting_requests[req_id])
+            second_priority_states.extend(self._get_waiting_candidates())
 
         candidates = priority_states + second_priority_states
         request_ids_to_remove_from_waiting = set()
@@ -364,10 +382,9 @@ class PrefillFirstScheduler(Scheduler):
             elif state.status == RequestStatus.DECODING:
                 second_priority_states.append(state)
 
-        # Add waiting requests to second priority
+        # Add waiting requests to second priority, with CPU-offloaded requests first
         if not self.block_new_requests:
-            for req_id in self.waiting_requests_order:
-                second_priority_states.append(self.waiting_requests[req_id])
+            second_priority_states.extend(self._get_waiting_candidates())
 
         candidates = priority_states + second_priority_states
         request_ids_to_remove_from_waiting = set()
