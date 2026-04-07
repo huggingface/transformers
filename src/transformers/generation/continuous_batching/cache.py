@@ -58,6 +58,15 @@ def group_layers_by_attn_type(config: PreTrainedConfig) -> tuple[list[list[int]]
     return layer_groups, group_types
 
 
+def default_flash_attention_max_blocks_per_request(config: PreTrainedConfig, max_batch_tokens: int) -> int:
+    """Pick the decode-fast-path block-table size for FlashAttention continuous batching."""
+    if not (
+        is_flash_attention_requested(config, version=2) or is_flash_attention_requested(config, version=3)
+    ):
+        return 0
+    return 16 if max_batch_tokens > 4096 else 1
+
+
 @attach_tracer()
 class PagedAttentionCache:
     """
@@ -207,15 +216,10 @@ class PagedAttentionCache:
             f"{self.max_batch_tokens = } {num_attention_masks = }"
         )
 
-        # If max_blocks_per_request is not set, the default value is 16 max blocks. With default block size of 256, this
-        # means a max sequence length of 4096 tokens for the fast decode path.
+        # Resolve the block-table size after max_batch_tokens is known so the auto path can scale with the final cache.
         max_blocks_per_request = continuous_batching_config.max_blocks_per_request
         if max_blocks_per_request is None:
-            max_blocks_per_request = 0
-            # logger.info( TODO: uncomment when we have good defaults
-            #     f"max_blocks_per_request was not set, using {max_blocks_per_request}. This means max sequence "
-            #     f"length for the decode fast path is {max_blocks_per_request * self.block_size}."
-            # )
+            max_blocks_per_request = default_flash_attention_max_blocks_per_request(config, self.max_batch_tokens)
         self.max_blocks_per_request = max_blocks_per_request
 
         # Initialize the cache

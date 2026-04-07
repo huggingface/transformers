@@ -16,6 +16,7 @@ import functools
 import gc
 import itertools
 import unittest
+from types import SimpleNamespace
 from typing import Any
 from unittest.mock import patch
 
@@ -36,6 +37,7 @@ from transformers.generation.continuous_batching.cache import (
     PagedAttentionCache,
     PagedAttentionMemoryHandler,
     SlidingAttentionCacheAllocator,
+    default_flash_attention_max_blocks_per_request,
     group_layers_by_attn_type,
 )
 from transformers.generation.continuous_batching.cache_manager import FullAttentionCacheAllocator
@@ -202,6 +204,28 @@ def regular_generate(
 
 # Class for all continuous batching tests that do not require any accelerator. Usualy those test are faster to run.
 class ContinuousBatchingNoAcceleratorTest(unittest.TestCase):
+    def test_flash_attention_auto_max_blocks_per_request(self) -> None:
+        """FlashAttention auto-defaults should scale the block table with the resolved batch-token budget."""
+
+        config = SimpleNamespace(_attn_implementation="flash_attention_2")
+        self.assertEqual(default_flash_attention_max_blocks_per_request(config, 2048), 1)
+        self.assertEqual(default_flash_attention_max_blocks_per_request(config, 8192), 16)
+        self.assertEqual(default_flash_attention_max_blocks_per_request(SimpleNamespace(_attn_implementation="sdpa"), 8192), 0)
+
+    def test_decode_fast_path_accepts_fa2(self) -> None:
+        """FA2 should keep the block-table decode path enabled when flash_attn_with_kvcache is available."""
+
+        cache = SimpleNamespace(max_blocks_per_request=4, num_sliding_attention_groups=0)
+        processor = SimpleNamespace(cache=cache, config=SimpleNamespace(_attn_implementation="flash_attention_2"))
+
+        with patch("torch.cuda.is_available", return_value=True), patch(
+            "transformers.generation.continuous_batching.continuous_api.lazy_import_paged_flash_attention",
+            return_value=(None, object()),
+        ):
+            ContinuousBatchProcessor._ensure_decode_fast_path_is_available(processor)
+
+        self.assertEqual(cache.max_blocks_per_request, 4)
+
     def test_cuda_graph_signature_tracks_non_tensor_runtime_args(self) -> None:
         """CUDA graph reuse must distinguish batches that share padded tensor sizes but not FA runtime ints."""
 

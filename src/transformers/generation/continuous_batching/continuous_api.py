@@ -257,8 +257,10 @@ class ContinuousBatchProcessor:
     def _ensure_decode_fast_path_is_available(self) -> None:
         """Ensures the decode fast path is available. If it is not, set the max blocks per request to 0."""
         if self.cache.max_blocks_per_request > 0:
-            # NOTE: block table should be available with FA2 and FA3, but there seems to be an issue with FA2 atm
-            if is_flash_attention_requested(self.config, version=3):
+            # flash_attn_with_kvcache underpins the paged decode fast path for both FA2 and FA3.
+            if is_flash_attention_requested(self.config, version=2) or is_flash_attention_requested(
+                self.config, version=3
+            ):
                 flash_attn_with_kvcache = lazy_import_paged_flash_attention(self.config._attn_implementation)[1]
                 conditions = [
                     self.cache.num_sliding_attention_groups == 0,  # TODO: add support for sliding window layers
@@ -274,7 +276,7 @@ class ContinuousBatchProcessor:
             else:
                 logger.warning(
                     f"Although {self.cache.max_blocks_per_request = }, the decode fast path is not available "
-                    f"because the attention implementation is not FA3. Got {self.config._attn_implementation = }."
+                    f"because the attention implementation is not FA2/FA3. Got {self.config._attn_implementation = }."
                 )
                 self.cache.max_blocks_per_request = 0
 
