@@ -353,16 +353,6 @@ class MiniMaxM2TensorProcessor(TensorProcessor):
 
 
 class Gemma4TensorProcessor(TensorProcessor):
-    """Handle gemma4-specific GGUF ↔ HF tensor name mismatches.
-
-    gguf-py's standard name map covers most tensors. The exceptions are:
-    - router.scale and router.per_expert_scale are nn.Parameters with no
-      .weight suffix in the HF state dict, but gguf-py cannot discover them
-      automatically → handled in perform_fallback_tensor_mapping.
-    - layer_output_scale (buffer), experts.gate_up_proj and experts.down_proj
-      (nn.Parameters) also lack a .weight suffix in HF, but GGUF stores them
-      with .weight → stripped in process().
-    """
 
     _ROUTER_SCALE = re.compile(r"(?:model\.)?layers\.(?P<bid>\d+)\.router\.scale")
     _ROUTER_PER_EXPERT_SCALE = re.compile(r"(?:model\.)?layers\.(?P<bid>\d+)\.router\.per_expert_scale")
@@ -379,8 +369,7 @@ class Gemma4TensorProcessor(TensorProcessor):
             gguf_to_hf_name_map[f"blk.{m['bid']}.ffn_down_exps.scale"] = qual_name + hf_name
 
     def process(self, weights, name, **kwargs):
-        # These HF targets are buffers/Parameters without .weight suffix,
-        # but GGUF stores them with .weight — strip it so the key matches.
+        # Strip .weight from buffers/Parameters to match HF
         if ".layer_output_scale.weight" in name:
             name = name.replace(".layer_output_scale.weight", ".layer_output_scale")
         elif ".ffn_gate_up_exps.weight" in name:

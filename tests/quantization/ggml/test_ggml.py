@@ -311,7 +311,7 @@ class GgufModelTests(unittest.TestCase):
     qwen3moe_model_id = "Qwen/Qwen3-30B-A3B-GGUF"
     umt5_encoder_model_id = "city96/umt5-xxl-encoder-gguf"
     lfm2_model_id = "LiquidAI/LFM2-1.2B-GGUF"
-    gemma4_model_id = "lmstudio-community/gemma-4-26B-A4B-it-GGUF"
+    gemma4_26b_model_id = "lmstudio-community/gemma-4-26B-A4B-it-GGUF"
     gemma4_31b_model_id = "lmstudio-community/gemma-4-31B-it-GGUF"
 
     q4_0_phi3_model_id = "Phi-3-mini-4k-instruct-q4.gguf"
@@ -353,8 +353,8 @@ class GgufModelTests(unittest.TestCase):
     q4_k_m_qwen3moe_model_id = "Qwen3-30B-A3B-Q4_K_M.gguf"
     q8_0_umt5_encoder_model_id = "umt5-xxl-encoder-Q8_0.gguf"
     q4_k_m_lfm2_model_id = "LFM2-1.2B-Q4_K_M.gguf"
-    q4_k_m_gemma4_model_id = "gemma-4-26B-A4B-it-Q4_K_M.gguf"
-    q8_0_gemma4_model_id = "gemma-4-26B-A4B-it-Q8_0.gguf"
+    q4_k_m_gemma4_26b_model_id = "gemma-4-26B-A4B-it-Q4_K_M.gguf"
+    q8_0_gemma4_26b_model_id = "gemma-4-26B-A4B-it-Q8_0.gguf"
     q4_k_m_gemma4_31b_model_id = "gemma-4-31B-it-Q4_K_M.gguf"
     q8_0_gemma4_31b_model_id = "gemma-4-31B-it-Q8_0.gguf"
 
@@ -1136,32 +1136,32 @@ class GgufModelTests(unittest.TestCase):
         EXPECTED_TEXT = "Hello Atari 2600! es un videoj"
         self.assertEqual(tokenizer.decode(out[0], skip_special_tokens=True), EXPECTED_TEXT)
 
-    def test_gemma4_q4_k_m(self):
-        tokenizer = AutoTokenizer.from_pretrained(self.gemma4_model_id, gguf_file=self.q4_k_m_gemma4_model_id)
+    def test_gemma4_26b_q4_k_m(self):
+        tokenizer = AutoTokenizer.from_pretrained(self.gemma4_26b_model_id, gguf_file=self.q4_k_m_gemma4_26b_model_id)
         model = AutoModelForCausalLM.from_pretrained(
-            self.gemma4_model_id,
-            gguf_file=self.q4_k_m_gemma4_model_id,
+            self.gemma4_26b_model_id,
+            gguf_file=self.q4_k_m_gemma4_26b_model_id,
             dtype=torch.float16,
         )
 
         text = tokenizer(self.example_text, return_tensors="pt")["input_ids"]
         out = model.generate(text, max_new_tokens=10)
 
-        EXPECTED_TEXT = "HelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHello"
+        EXPECTED_TEXT = "Hello! I'm a bit of a bit of"
         self.assertEqual(tokenizer.decode(out[0], skip_special_tokens=True), EXPECTED_TEXT)
 
-    def test_gemma4_q8_0(self):
-        tokenizer = AutoTokenizer.from_pretrained(self.gemma4_model_id, gguf_file=self.q8_0_gemma4_model_id)
+    def test_gemma4_26b_q8_0(self):
+        tokenizer = AutoTokenizer.from_pretrained(self.gemma4_26b_model_id, gguf_file=self.q8_0_gemma4_26b_model_id)
         model = AutoModelForCausalLM.from_pretrained(
-            self.gemma4_model_id,
-            gguf_file=self.q8_0_gemma4_model_id,
+            self.gemma4_26b_model_id,
+            gguf_file=self.q8_0_gemma4_26b_model_id,
             dtype=torch.float16,
         )
 
         text = tokenizer(self.example_text, return_tensors="pt")["input_ids"]
         out = model.generate(text, max_new_tokens=10)
 
-        EXPECTED_TEXT = "HelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHello"
+        EXPECTED_TEXT = "Hello there! It's a pleasure to meet you"
         self.assertEqual(tokenizer.decode(out[0], skip_special_tokens=True), EXPECTED_TEXT)
 
     def test_gemma4_31b_q4_k_m(self):
@@ -1175,7 +1175,7 @@ class GgufModelTests(unittest.TestCase):
         text = tokenizer(self.example_text, return_tensors="pt")["input_ids"]
         out = model.generate(text, max_new_tokens=10)
 
-        EXPECTED_TEXT = "HelloHelloHelloHelloHelloHelloHelloHelloHelloHelloHello"
+        EXPECTED_TEXT = "HelloKelloKelloKelloKelloKello"
         self.assertEqual(tokenizer.decode(out[0], skip_special_tokens=True), EXPECTED_TEXT)
 
     def test_gemma4_31b_q8_0(self):
