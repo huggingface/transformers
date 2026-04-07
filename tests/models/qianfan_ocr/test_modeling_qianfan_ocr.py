@@ -297,7 +297,7 @@ class QianfanOCRIntegrationTest(unittest.TestCase):
         # fmt: off
         expected_outputs = Expectations(
             {
-                ("cuda", 8): "The image features two striped cats lying down and sleeping on a pink couch. They are positioned close to",
+                ("cuda", 8): "The image features two striped cats lying down on a couch, both appearing to be sleeping. They are",
             }
         )  # fmt: skip
         self.assertEqual(decoded, expected_outputs.get_expectation())
@@ -372,7 +372,7 @@ class QianfanOCRIntegrationTest(unittest.TestCase):
         )  # fmt: skip
         expected_outputs_1 = Expectations(
             {
-                ("cuda", 8): "The image features two striped cats lying down and sleeping on a pink couch. They are positioned close to",
+                ("cuda", 8): "The image features two striped cats lying down on a couch, both appearing to be asleep. They are",
             }
         )  # fmt: skip
         self.assertEqual(decoded_0, expected_outputs_0.get_expectation())
