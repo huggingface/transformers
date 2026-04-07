@@ -175,6 +175,28 @@ jobs:
             - store_artifacts:
                   path: ~/transformers/installed.txt
             - run: make check-repository-consistency
+            - run:
+                name: "Test import with all backends (torch + PIL + torchvision)"
+                command: python -c "from transformers import *" || (echo '🚨 import failed with all backends. Fix unprotected imports!! 🚨'; exit 1)
+            - run:
+                name: "Test import with torch only (no PIL, no torchvision)"
+                command: |
+                    uv pip uninstall Pillow torchvision -q
+                    python -c "from transformers import *" || (echo '🚨 import failed with torch only (no PIL). Fix unprotected imports!! 🚨'; exit 1)
+                    uv pip install -e ".[quality]" -q
+            - run:
+                name: "Test import with PIL only (no torch, no torchvision)"
+                command: |
+                    uv pip uninstall torch torchvision torchaudio -q
+                    python -c "from transformers import *" || (echo '🚨 import failed with PIL only (no torch). Fix unprotected imports!! 🚨'; exit 1)
+                    uv pip install -e ".[quality]" -q
+            - run:
+                name: "Test import with torch + PIL, no torchvision"
+                command: |
+                    uv pip uninstall torchvision -q
+                    python -c "from transformers import *" || (echo '🚨 import failed with torch+PIL but no torchvision. Fix unprotected imports!! 🚨'; exit 1)
+                    uv pip install -e ".[quality]" -q
+
 
 workflows:
     version: 2

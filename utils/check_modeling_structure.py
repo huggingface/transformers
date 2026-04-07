@@ -48,6 +48,20 @@ from utils.mlinter.mlinter import (  # noqa: E402, F401
 )
 
 
+CHECKER_CONFIG = {
+    "name": "modeling_structure",
+    "label": "Modeling file structure",
+    # mlinter scans modeling_*.py, modular_*.py, and configuration_*.py via MODELING_PATTERNS.
+    "file_globs": [
+        "src/transformers/models/**/modeling_*.py",
+        "src/transformers/models/**/modular_*.py",
+        "src/transformers/models/**/configuration_*.py",
+    ],
+    "check_args": [],
+    "fix_args": None,
+}
+
+
 # Expose rule-id string constants (e.g. cms.TRF001 == "TRF001") for test compatibility.
 for _rule_id in TRF_RULE_CHECKS:
     globals()[_rule_id] = _rule_id

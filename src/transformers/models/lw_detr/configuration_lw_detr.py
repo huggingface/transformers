@@ -65,7 +65,7 @@ class LwDetrViTConfig(BackboneConfigMixin, PreTrainedConfig):
     num_attention_heads: int = 12
     mlp_ratio: int = 4
     hidden_act: str = "gelu"
-    dropout_prob: float = 0.0
+    dropout_prob: float | int = 0.0
     initializer_range: float = 0.02
     layer_norm_eps: float = 1e-6
 

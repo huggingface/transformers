@@ -336,6 +336,15 @@ class TrainerCallbackTest(unittest.TestCase):
                     expected_events.append("on_log")
                 if trainer.args.eval_strategy == IntervalStrategy.STEPS and step % trainer.args.eval_steps == 0:
                     expected_events += evaluation_events.copy()
+                # End-of-training evaluation: triggers if step-based eval strategy and final step
+                # isn't already an eval step (to avoid duplicate evaluation)
+                if (
+                    step == trainer.state.max_steps
+                    and trainer.args.eval_strategy == IntervalStrategy.STEPS
+                    and step % trainer.args.eval_steps != 0
+                    and trainer.args.eval_delay <= step
+                ):
+                    expected_events += evaluation_events.copy()
                 if step % trainer.args.save_steps == 0 or step == trainer.state.max_steps:
                     expected_events.append("on_save")
             expected_events.append("on_epoch_end")
