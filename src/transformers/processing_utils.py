@@ -1832,6 +1832,9 @@ class ProcessorMixin(PushToHubMixin):
                             batch_audios.append(load_audio(fname, sampling_rate=sampling_rate))
                     else:
                         for fname in video_fnames:
+                            # This updates the template in-place and adds audio entry
+                            # to ensure `audio` token is added by jinja
+                            message["content"].append({"type": "audio"})
                             batch_audios.append(load_audio(fname, sampling_rate=sampling_rate))
 
                 # Currently all processors can accept nested list of batches, but not flat list of visuals
@@ -1839,10 +1842,8 @@ class ProcessorMixin(PushToHubMixin):
                 batch_images.append(images)
                 batch_videos.append(videos)
 
-        template_kwargs = {
-            **self.tokenizer.special_tokens_map,
-            **kwargs,
-        }  # kwargs overwrite special tokens if both are present
+        # `kwargs` overwrite special tokens if both are present
+        template_kwargs = {**self.tokenizer.special_tokens_map, **kwargs}
         prompt, generation_indices = render_jinja_template(
             conversations=conversations,
             tools=tools,
