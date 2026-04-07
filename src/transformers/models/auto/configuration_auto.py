@@ -145,6 +145,7 @@ CONFIG_MAPPING_NAMES = OrderedDict[str, str](
         ("ernie", "ErnieConfig"),
         ("ernie4_5", "Ernie4_5Config"),
         ("ernie4_5_moe", "Ernie4_5_MoeConfig"),
+        ("ernie4_5_moe_vl", "Ernie4_5_VLMoeConfig"),
         ("ernie4_5_vl_moe", "Ernie4_5_VLMoeConfig"),
         ("esm", "EsmConfig"),
         ("eurobert", "EuroBertConfig"),
@@ -661,6 +662,7 @@ MODEL_NAMES_MAPPING = OrderedDict[str, str](
         ("ernie", "ERNIE"),
         ("ernie4_5", "Ernie4_5"),
         ("ernie4_5_moe", "Ernie4_5_MoE"),
+        ("ernie4_5_moe_vl", "Ernie4_5_VLMoE"),
         ("ernie4_5_vl_moe", "Ernie4_5_VLMoE"),
         ("esm", "ESM"),
         ("eurobert", "EuroBERT"),
@@ -1081,6 +1083,7 @@ DEPRECATED_MODELS = []
 
 SPECIAL_MODEL_TYPE_TO_MODULE_NAME = OrderedDict[str, str](
     [
+        ("ernie4_5_moe_vl", "ernie4_5_vl_moe"),
         ("audioflamingo3_encoder", "audioflamingo3"),
         ("musicflamingo_encoder", "musicflamingo"),
         ("openai-gpt", "openai"),

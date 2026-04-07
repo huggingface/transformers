@@ -265,7 +265,9 @@ class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin):
         # BC for rotary embeddings. We will pop out legacy keys from kwargs and rename to new format
         if hasattr(self, "rope_parameters"):
             kwargs = self.convert_rope_params_to_dict(**kwargs)
-        elif kwargs.get("rope_scaling") and kwargs.get("rope_theta"):
+        elif kwargs.get("rope_scaling") and (
+            kwargs.get("rope_theta") or getattr(self, "rope_theta", None) is not None
+        ):
             logger.warning(
                 f"{self.__class__.__name__} got `key=rope_scaling` in kwargs but hasn't set it as attribute. "
                 "For RoPE standardization you need to set `self.rope_parameters` in model's config. "
