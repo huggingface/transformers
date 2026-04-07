@@ -73,7 +73,7 @@ class Lfm2Config(PreTrainedConfig):
     conv_bias: bool = False
     conv_L_cache: int = 3
     block_multiple_of: int = 256
-    block_ffn_dim_multiplier: float = 1.0
+    block_ffn_dim_multiplier: float | int = 1.0
     block_auto_adjust_ff_dim: bool = True
     full_attn_idxs: list[int] | None = None
     layer_types: list[str] | None = None

@@ -241,3 +241,24 @@ class FooModel(FooPreTrainedModel):
         self.layers = nn.ModuleList(...)
         self.post_init()
 '''
+
+[rules.TRF014]
+description = "`trust_remote_code` should never be used in native model integrations."
+default_enabled = true
+allowlist_models = []
+
+[rules.TRF014.explanation]
+what_it_does = "Checks whether `trust_remote_code` is passed or used in code (e.g. as kwarg) within native model integration files."
+why_bad = "`trust_remote_code` allows arbitrary loading, including binaries, which should only be a power feature for users, not a standard use-case. Native integrations must not depend on it, as remote code cannot be reviewed or maintained within transformers."
+bad_example = '''
+class FooModel(FooPreTrainedModel):
+    def __init__(self, config):
+        super().__init__(config)
+        self.model = AutoModel.from_pretrained(..., trust_remote_code=True)
+'''
+good_example = '''
+class FooModel(FooPreTrainedModel):
+    def __init__(self, config):
+        super().__init__(config)
+        self.model = AutoModel.from_pretrained(...)
+'''
