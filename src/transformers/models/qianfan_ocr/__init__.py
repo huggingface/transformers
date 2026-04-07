@@ -19,8 +19,6 @@ from ...utils.import_utils import define_import_structure
 
 if TYPE_CHECKING:
     from .configuration_qianfan_ocr import *
-    from .image_processing_pil_qianfan_ocr import *
-    from .image_processing_qianfan_ocr import *
     from .modeling_qianfan_ocr import *
     from .processing_qianfan_ocr import *
 else:

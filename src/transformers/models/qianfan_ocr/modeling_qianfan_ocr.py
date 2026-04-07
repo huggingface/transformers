@@ -19,6 +19,7 @@
 # limitations under the License.
 
 
+import collections.abc
 from collections.abc import Callable
 from dataclasses import dataclass
 
@@ -41,22 +42,33 @@ from ..auto import AutoModel
 from .configuration_qianfan_ocr import QianfanOCRConfig, QianfanOCRVisionConfig
 
 
-class DropPath(nn.Module):
-    """Drop paths (Stochastic Depth) per sample."""
+def drop_path(input: torch.Tensor, drop_prob: float = 0.0, training: bool = False) -> torch.Tensor:
+    """
+    Drop paths (Stochastic Depth) per sample (when applied in main path of residual blocks).
 
-    def __init__(self, drop_prob: float = 0.0):
+    """
+    if drop_prob == 0.0 or not training:
+        return input
+    keep_prob = 1 - drop_prob
+    shape = (input.shape[0],) + (1,) * (input.ndim - 1)  # work with diff dim tensors, not just 2D ConvNets
+    random_tensor = keep_prob + torch.rand(shape, dtype=input.dtype, device=input.device)
+    random_tensor.floor_()  # binarize
+    output = input.div(keep_prob) * random_tensor
+    return output
+
+
+class QianfanOCRDropPath(nn.Module):
+    """Drop paths (Stochastic Depth) per sample (when applied in main path of residual blocks)."""
+
+    def __init__(self, drop_prob: float | None = None) -> None:
         super().__init__()
         self.drop_prob = drop_prob
 
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
-        if self.drop_prob == 0.0 or not self.training:
-            return x
-        keep_prob = 1 - self.drop_prob
-        shape = (x.shape[0],) + (1,) * (x.ndim - 1)
-        random_tensor = x.new_empty(shape).bernoulli_(keep_prob)
-        if keep_prob > 0.0:
-            random_tensor.div_(keep_prob)
-        return x * random_tensor
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        return drop_path(hidden_states, self.drop_prob, self.training)
+
+    def extra_repr(self) -> str:
+        return f"p={self.drop_prob}"
 
 
 @use_kernel_forward_from_hub("RMSNorm")
@@ -206,14 +218,16 @@ class QianfanOCRVisionLayer(GradientCheckpointingLayer):
         self.seq_len_dim = 1
         self.attention = QianfanOCRVisionAttention(config)
         self.mlp = QianfanOCRVisionMLP(config)
+        # QianfanOCR uses different layernorm implementations for different models
         self.layernorm_before = NORM2FN[config.norm_type](config.hidden_size, eps=config.layer_norm_eps)
         self.layernorm_after = NORM2FN[config.norm_type](config.hidden_size, eps=config.layer_norm_eps)
+
         init_values = config.layer_scale_init_value
         self.lambda_1 = nn.Parameter(init_values * torch.ones(config.hidden_size), requires_grad=True)
         self.lambda_2 = nn.Parameter(init_values * torch.ones(config.hidden_size), requires_grad=True)
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
-        self.drop_path1 = nn.Identity() if drop_path_rate <= 0.0 else DropPath(drop_path_rate)
-        self.drop_path2 = nn.Identity() if drop_path_rate <= 0.0 else DropPath(drop_path_rate)
+        self.drop_path1 = nn.Identity() if drop_path_rate <= 0.0 else QianfanOCRDropPath(drop_path_rate)
+        self.drop_path2 = nn.Identity() if drop_path_rate <= 0.0 else QianfanOCRDropPath(drop_path_rate)
 
     def forward(
         self,
@@ -270,65 +284,126 @@ class QianfanOCRVisionEncoder(nn.Module):
         )
 
 
-class QianfanOCRVisionEmbeddings(nn.Module):
-    def __init__(self, config: QianfanOCRVisionConfig):
+class QianfanOCRVisionPatchEmbeddings(nn.Module):
+    """
+    This class turns `pixel_values` of shape `(batch_size, num_channels, height, width)` into the initial
+    `hidden_states` (patch embeddings) of shape `(batch_size, seq_length, hidden_size)` to be consumed by a
+    Transformer.
+    """
+
+    def __init__(self, config):
         super().__init__()
-        self.embed_dim = config.hidden_size
+        image_size, patch_size = config.image_size, config.patch_size
+        num_channels, hidden_size = config.num_channels, config.hidden_size
 
-        image_size = config.image_size
-        patch_size = config.patch_size
-        if isinstance(image_size, (list, tuple)):
-            self.image_size_h, self.image_size_w = image_size[0], image_size[1]
-        else:
-            self.image_size_h = self.image_size_w = image_size
-        if isinstance(patch_size, (list, tuple)):
-            self.patch_size_h, self.patch_size_w = patch_size[0], patch_size[1]
-        else:
-            self.patch_size_h = self.patch_size_w = patch_size
+        num_patches = (image_size[1] // patch_size[1]) * (image_size[0] // patch_size[0])
+        patch_shape = (image_size[0] // patch_size[0], image_size[1] // patch_size[1])
+        self.image_size = image_size
+        self.patch_size = patch_size
+        self.num_channels = num_channels
+        self.num_patches = num_patches
+        self.patch_shape = patch_shape
 
-        self.class_embedding = nn.Parameter(torch.randn(1, 1, self.embed_dim))
-        self.patch_embedding = nn.Conv2d(
-            in_channels=config.num_channels,
-            out_channels=self.embed_dim,
-            kernel_size=(self.patch_size_h, self.patch_size_w),
-            stride=(self.patch_size_h, self.patch_size_w),
-        )
-        self.num_patches = (self.image_size_h // self.patch_size_h) * (self.image_size_w // self.patch_size_w)
-        self.num_positions = self.num_patches + 1
-        if config.use_absolute_position_embeddings:
-            self.position_embedding = nn.Parameter(torch.randn(1, self.num_positions, self.embed_dim))
-        else:
-            self.position_embedding = None
+        self.projection = nn.Conv2d(num_channels, hidden_size, kernel_size=patch_size, stride=patch_size)
 
-    def _get_pos_embed(self, pos_embed: torch.Tensor, H: int, W: int) -> torch.Tensor:
-        target_dtype = pos_embed.dtype
-        base_h = self.image_size_h // self.patch_size_h
-        base_w = self.image_size_w // self.patch_size_w
-        pos_embed = pos_embed.float().reshape(1, base_h, base_w, -1).permute(0, 3, 1, 2)
-        pos_embed = (
-            F.interpolate(pos_embed, size=(H, W), mode="bicubic", align_corners=False)
-            .reshape(1, -1, H * W)
-            .permute(0, 2, 1)
-            .to(target_dtype)
-        )
-        return pos_embed
-
-    def forward(self, pixel_values: torch.FloatTensor, bool_masked_pos=None, **kwargs) -> torch.Tensor:
-        target_dtype = self.patch_embedding.weight.dtype
-        patch_embeds = self.patch_embedding(pixel_values.to(target_dtype))
-        batch_size, _, height, width = patch_embeds.shape
-        patch_embeds = patch_embeds.flatten(2).transpose(1, 2)
-        class_embeds = self.class_embedding.expand(batch_size, 1, -1).to(target_dtype)
-        embeddings = torch.cat([class_embeds, patch_embeds], dim=1)
-        if self.position_embedding is not None:
-            position_embedding = torch.cat(
-                [
-                    self.position_embedding[:, :1, :],
-                    self._get_pos_embed(self.position_embedding[:, 1:, :], height, width),
-                ],
-                dim=1,
+    def forward(self, pixel_values: torch.Tensor) -> torch.Tensor:
+        batch_size, num_channels, height, width = pixel_values.shape
+        if num_channels != self.num_channels:
+            raise ValueError(
+                "Make sure that the channel dimension of the pixel values match with the one set in the configuration."
             )
-            embeddings = embeddings + position_embedding.to(target_dtype)
+
+        embeddings = self.projection(pixel_values.to(self.projection.weight.dtype))
+        embeddings = embeddings.flatten(2).transpose(1, 2)
+
+        return embeddings
+
+
+# Based on timm implementation, which can be found here:
+# https://github.com/rwightman/pytorch-image-models/blob/master/timm/models/vision_transformer.py
+class QianfanOCRVisionEmbeddings(nn.Module):
+    """
+    Construct the CLS token, position and patch embeddings. Optionally, also the mask token.
+
+    """
+
+    def __init__(self, config: QianfanOCRVisionConfig) -> None:
+        super().__init__()
+
+        self.cls_token = nn.Parameter(torch.zeros(1, 1, config.hidden_size))
+        if config.use_mask_token:
+            self.mask_token = nn.Parameter(torch.zeros(1, 1, config.hidden_size))
+        else:
+            self.mask_token = None
+        self.patch_embeddings = QianfanOCRVisionPatchEmbeddings(config)
+        self.patch_size = config.patch_size
+        self.image_size = (
+            config.image_size
+            if isinstance(config.image_size, collections.abc.Iterable)
+            else (config.image_size, config.image_size)
+        )
+        num_patches = self.patch_embeddings.num_patches
+        if config.use_absolute_position_embeddings:
+            self.position_embeddings = nn.Parameter(torch.zeros(1, num_patches + 1, config.hidden_size))
+        else:
+            self.position_embeddings = None
+        self.dropout = nn.Dropout(config.hidden_dropout_prob)
+
+    def interpolate_pos_encoding(self, embeddings: torch.Tensor, height: int, width: int) -> torch.Tensor:
+        """
+        This method allows to interpolate the pre-trained position encodings, to be able to use the model on higher resolution
+        images. This method is also adapted to support torch.jit tracing.
+
+        Adapted from:
+        - https://github.com/facebookresearch/dino/blob/de9ee3df6cf39fac952ab558447af1fa1365362a/vision_transformer.py#L174-L194, and
+        - https://github.com/facebookresearch/dinov2/blob/e1277af2ba9496fbadf7aec6eba56e8d882d1e35/dinov2/models/vision_transformer.py#L179-L211
+        """
+        patch_size = self.patch_size
+        base_h = self.image_size[0] // patch_size[0]
+        base_w = self.image_size[1] // patch_size[1]
+        new_h = height // patch_size[0]
+        new_w = width // patch_size[1]
+
+        class_pos_embed = self.position_embeddings[:, :1]
+        patch_pos_embed = self.position_embeddings[:, 1:]
+        dim = embeddings.shape[-1]
+
+        if new_h == base_h and new_w == base_w:
+            return self.position_embeddings
+
+        patch_pos_embed = patch_pos_embed.float().reshape(1, base_h, base_w, dim).permute(0, 3, 1, 2)
+        patch_pos_embed = (
+            F.interpolate(patch_pos_embed, size=(new_h, new_w), mode="bicubic", align_corners=False)
+            .reshape(1, -1, new_h * new_w)
+            .permute(0, 2, 1)
+            .to(embeddings.dtype)
+        )
+        class_pos_embed = class_pos_embed.to(embeddings.dtype)
+        return torch.cat([class_pos_embed, patch_pos_embed], dim=1)
+
+    def forward(
+        self,
+        pixel_values: torch.Tensor,
+        bool_masked_pos: torch.BoolTensor | None = None,
+    ) -> torch.Tensor:
+        _, _, height, width = pixel_values.shape
+        embeddings = self.patch_embeddings(pixel_values)
+        batch_size, seq_len, _ = embeddings.size()
+
+        if bool_masked_pos is not None:
+            mask_tokens = self.mask_token.expand(batch_size, seq_len, -1)
+            # replace the masked visual tokens by mask_tokens
+            w = bool_masked_pos.unsqueeze(-1).type_as(mask_tokens)
+            embeddings = embeddings * (1 - w) + mask_tokens * w
+
+        cls_tokens = self.cls_token.expand(batch_size, -1, -1)
+        embeddings = torch.cat((cls_tokens, embeddings), dim=1)
+
+        if self.position_embeddings is not None:
+            embeddings = embeddings + self.interpolate_pos_encoding(embeddings, height, width)
+
+        embeddings = self.dropout(embeddings)
+
         return embeddings
 
 
@@ -363,8 +438,8 @@ class QianfanOCRVisionPreTrainedModel(PreTrainedModel):
     def _init_weights(self, module):
         super()._init_weights(module)
         if isinstance(module, QianfanOCRVisionEmbeddings):
-            nn.init.zeros_(module.class_embedding)
-            nn.init.zeros_(module.position_embedding)
+            nn.init.zeros_(module.cls_token)
+            nn.init.zeros_(module.position_embeddings)
         elif isinstance(module, QianfanOCRVisionLayer):
             nn.init.constant_(module.lambda_1, self.config.layer_scale_init_value)
             nn.init.constant_(module.lambda_2, self.config.layer_scale_init_value)
@@ -386,7 +461,7 @@ class QianfanOCRVisionModel(QianfanOCRVisionPreTrainedModel):
         self.post_init()
 
     def get_input_embeddings(self):
-        return self.embeddings.patch_embedding
+        return self.embeddings.patch_embeddings.projection
 
     @merge_with_config_defaults
     @capture_outputs(tie_last_hidden_states=False)
@@ -405,8 +480,6 @@ class QianfanOCRVisionModel(QianfanOCRVisionPreTrainedModel):
 
         return QianfanOCRVisionModelOutputWithPooling(
             last_hidden_state=sequence_output,
-            hidden_states=encoder_outputs.hidden_states,
-            attentions=encoder_outputs.attentions,
         )
 
 
@@ -455,10 +528,16 @@ class QianfanOCRModelOutputWithPast(BaseModelOutputWithPast):
     image_hidden_states: torch.FloatTensor | None = None
 
 
+@auto_docstring(
+    custom_intro="""
+    The QianfanOCR model which consists of a vision backbone and a language model, without a language modeling head.
+    """
+)
 class QianfanOCRModel(QianfanOCRPreTrainedModel):
     def __init__(self, config: QianfanOCRConfig):
         super().__init__(config)
         self.vision_tower = AutoModel.from_config(config.vision_config)
+
         self.multi_modal_projector = QianfanOCRMultiModalProjector(config)
         self.language_model = AutoModel.from_config(config.text_config)
         self.post_init()
@@ -469,63 +548,6 @@ class QianfanOCRModel(QianfanOCRPreTrainedModel):
     def set_input_embeddings(self, value):
         self.language_model.set_input_embeddings(value)
 
-    def get_placeholder_mask(
-        self, input_ids: torch.LongTensor, inputs_embeds: torch.FloatTensor, image_features: torch.FloatTensor
-    ):
-        if input_ids is None:
-            special_image_mask = inputs_embeds == self.get_input_embeddings()(
-                torch.tensor(self.config.image_token_id, dtype=torch.long, device=inputs_embeds.device)
-            )
-            special_image_mask = special_image_mask.all(-1)
-        else:
-            special_image_mask = input_ids == self.config.image_token_id
-
-        n_image_tokens = special_image_mask.sum()
-        n_image_features = image_features.shape[0] * image_features.shape[1]
-        special_image_mask = special_image_mask.unsqueeze(-1).expand_as(inputs_embeds).to(inputs_embeds.device)
-        if not torch.compiler.is_compiling():
-            torch_compilable_check(
-                inputs_embeds[special_image_mask].numel() == image_features.numel(),
-                lambda: f"Image features and image tokens do not match, tokens: {n_image_tokens}, features: {n_image_features}",
-            )
-        return special_image_mask
-
-    def pixel_shuffle(self, vision_features: torch.Tensor, scale_factor: float = 0.5):
-        """Perform pixel shuffle downsampling on vision features.
-
-        Args:
-            vision_features (`torch.Tensor`):
-                Input tensor of shape (batch_size, width, height, channels).
-            scale_factor (`float`, *optional*, defaults to `0.5`):
-                Factor by which to downsample.
-
-        Returns:
-            vision_features (`torch.Tensor`):
-                Downsampled tensor.
-        """
-        batch_size, width, height, channels = vision_features.size()
-
-        vision_features = vision_features.view(
-            batch_size, width, int(height * scale_factor), int(channels / scale_factor)
-        )
-        vision_features = vision_features.permute(0, 2, 1, 3).contiguous()
-
-        vision_features = vision_features.view(
-            batch_size, int(height * scale_factor), int(width * scale_factor), int(channels / (scale_factor**2))
-        )
-
-        if self.config.ps_version == "v1":
-            import warnings
-
-            warnings.warn(
-                "In ps_version 'v1', the height and width have not been swapped back, "
-                "which results in a transposed image."
-            )
-        else:
-            vision_features = vision_features.permute(0, 2, 1, 3).contiguous()
-
-        return vision_features
-
     @merge_with_config_defaults
     @can_return_tuple
     @auto_docstring(
@@ -534,7 +556,7 @@ class QianfanOCRModel(QianfanOCRPreTrainedModel):
     def get_image_features(
         self,
         pixel_values: torch.FloatTensor,
-        vision_feature_layer: int | list[int] | None = None,
+        vision_feature_layer: int | list[int] | list[int] | None = None,
         vision_feature_select_strategy: str | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
@@ -544,9 +566,7 @@ class QianfanOCRModel(QianfanOCRPreTrainedModel):
         vision_feature_layer (`int` or `list[int]`):
             Layer index or list of layer indices to extract features from.
         """
-        # Use pixel_values dtype as fallback: under nn.DataParallel a replica may
-        # have no parameters on the primary device (self.dtype raises StopIteration),
-        # but input tensors are always correctly scattered so pixel_values.dtype is safe.
+        pixel_values = pixel_values.to(dtype=self.dtype)  # fp16 compatibility
 
         downsample_ratio = self.config.downsample_ratio
         if vision_feature_layer != -1:
@@ -559,18 +579,49 @@ class QianfanOCRModel(QianfanOCRPreTrainedModel):
         if vision_feature_select_strategy == "default":
             vision_features = vision_features[:, 1:, :]
 
+        # Calculate dimensions based on vision features
         channels = vision_features.shape[1]
         feature_size = int(channels**0.5)
         batch_size = vision_features.shape[0]
 
+        # Reshape tensor to spatial dimensions
         vision_features = vision_features.reshape(batch_size, feature_size, feature_size, -1)
+
+        # Apply downsampling using pixel shuffle
         vision_features = self.pixel_shuffle(vision_features, scale_factor=downsample_ratio)
+
+        # Reshape tensor to prepare for projection
         vision_features = vision_features.reshape(batch_size, -1, vision_features.shape[-1])
 
+        # Project features through multi-modal projector
         vision_features = self.multi_modal_projector(vision_features)
         vision_outputs.pooler_output = vision_features
 
         return vision_outputs
+
+    def get_placeholder_mask(
+        self, input_ids: torch.LongTensor, inputs_embeds: torch.FloatTensor, image_features: torch.FloatTensor
+    ):
+        """
+        Obtains multimodal placeholder mask from `input_ids` or `inputs_embeds`, and checks that the placeholder token count is
+        equal to the length of multimodal features. If the lengths are different, an error is raised.
+        """
+        if input_ids is None:
+            special_image_mask = inputs_embeds == self.get_input_embeddings()(
+                torch.tensor(self.config.image_token_id, dtype=torch.long, device=inputs_embeds.device)
+            )
+            special_image_mask = special_image_mask.all(-1)
+        else:
+            special_image_mask = input_ids == self.config.image_token_id
+
+        n_image_tokens = special_image_mask.sum()
+        n_image_features = image_features.shape[0] * image_features.shape[1]
+        special_image_mask = special_image_mask.unsqueeze(-1).expand_as(inputs_embeds).to(inputs_embeds.device)
+        torch_compilable_check(
+            inputs_embeds[special_image_mask].numel() == image_features.numel(),
+            f"Image features and image tokens do not match, tokens: {n_image_tokens}, features: {n_image_features}",
+        )
+        return special_image_mask
 
     @can_return_tuple
     @auto_docstring
@@ -582,7 +633,7 @@ class QianfanOCRModel(QianfanOCRPreTrainedModel):
         position_ids: torch.LongTensor | None = None,
         past_key_values: Cache | None = None,
         inputs_embeds: torch.FloatTensor | None = None,
-        vision_feature_layer: int | list[int] | None = None,
+        vision_feature_layer: int | list[int] | list[int] | None = None,
         vision_feature_select_strategy: str | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | QianfanOCRModelOutputWithPast:
@@ -621,6 +672,41 @@ class QianfanOCRModel(QianfanOCRPreTrainedModel):
             image_hidden_states=image_features if pixel_values is not None else None,
         )
 
+    def pixel_shuffle(self, vision_features: torch.Tensor, scale_factor: float = 0.5):
+        """Perform pixel shuffle downsampling on vision features.
+
+        Args:
+            vision_features (`torch.Tensor`):
+                Input tensor of shape (batch_size, width, height, channels).
+            scale_factor (`float`, *optional*, defaults to `0.5`):
+                Factor by which to downsample. Default is 0.5, which halves the dimensions.
+
+        Returns:
+            vision_features (`torch.Tensor`):
+                Downsampled tensor of shape (batch_size, height*scale_factor, width*scale_factor, channels/(scale_factor^2)).
+        """
+        batch_size, width, height, channels = vision_features.size()
+
+        if height % scale_factor != 0 or width % scale_factor != 0:
+            raise ValueError("Height and width must be divisible by scale_factor for proper downsampling.")
+
+        # Reshape to allow downsampling
+        vision_features = vision_features.view(
+            batch_size, width, int(height * scale_factor), int(channels / scale_factor)
+        )
+        # Permute dimensions to align downsampled axis correctly
+        vision_features = vision_features.permute(0, 2, 1, 3).contiguous()
+
+        # Reshape to achieve final downsampled dimensions
+        vision_features = vision_features.view(
+            batch_size, int(height * scale_factor), int(width * scale_factor), int(channels / (scale_factor**2))
+        )
+
+        # Swap height and width back for proper orientation
+        vision_features = vision_features.permute(0, 2, 1, 3).contiguous()
+
+        return vision_features
+
 
 @dataclass
 @auto_docstring(
@@ -647,18 +733,34 @@ class QianfanOCRCausalLMOutputWithPast(ModelOutput):
     image_hidden_states: torch.FloatTensor | None = None
 
 
+@auto_docstring(
+    custom_intro="""
+    The QIANFAN_OCR model which consists of a vision backbone and a language model.
+    """
+)
 class QianfanOCRForConditionalGeneration(QianfanOCRPreTrainedModel, GenerationMixin):
+    _tied_weights_keys = {"lm_head.weight": "model.language_model.embed_tokens.weight"}
+
     def __init__(self, config: QianfanOCRConfig):
         super().__init__(config)
         self.model = QianfanOCRModel(config)
         self.lm_head = nn.Linear(config.text_config.hidden_size, config.text_config.vocab_size, bias=False)
         self.post_init()
 
+    def get_input_embeddings(self):
+        return self.model.get_input_embeddings()
+
+    def set_input_embeddings(self, value):
+        self.model.set_input_embeddings(value)
+
+    def get_output_embeddings(self) -> nn.Module:
+        return self.lm_head
+
     @auto_docstring
     def get_image_features(
         self,
         pixel_values: torch.FloatTensor,
-        vision_feature_layer: int | list[int] | None = None,
+        vision_feature_layer: int | list[int] | list[int] | None = None,
         vision_feature_select_strategy: str | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
@@ -727,6 +829,7 @@ class QianfanOCRForConditionalGeneration(QianfanOCRPreTrainedModel, GenerationMi
         )
 
         hidden_states = outputs[0]
+        # Only compute necessary logits, and do not upcast them to float if we are not computing the loss
         slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
         logits = self.lm_head(hidden_states[:, slice_indices, :])
 
@@ -756,6 +859,8 @@ class QianfanOCRForConditionalGeneration(QianfanOCRPreTrainedModel, GenerationMi
         is_first_iteration=False,
         **kwargs,
     ):
+        # Overwritten -- in specific circumstances we don't want to forward image inputs to the model
+
         model_inputs = super().prepare_inputs_for_generation(
             input_ids,
             past_key_values=past_key_values,
@@ -767,6 +872,10 @@ class QianfanOCRForConditionalGeneration(QianfanOCRPreTrainedModel, GenerationMi
         )
 
         if is_first_iteration or not kwargs.get("use_cache", True):
+            # Pixel values are used only in the first iteration if available
+            # In subsequent iterations, they are already merged with text and cached
+            # NOTE: first iteration doesn't have to be prefill, it can be the first
+            # iteration with a question and cached system prompt (continue generate from cache)
             model_inputs["pixel_values"] = pixel_values
 
         return model_inputs

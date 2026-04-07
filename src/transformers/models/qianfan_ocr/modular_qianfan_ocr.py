@@ -15,47 +15,111 @@
 
 from dataclasses import dataclass
 
+import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
 from ...cache_utils import Cache
+from ...configuration_utils import PreTrainedConfig
 from ...generation import GenerationMixin
+from ...image_processing_utils import BatchFeature
+from ...image_utils import ImageInput
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import TransformersKwargs, auto_docstring, torch_compilable_check
+from ...tokenization_utils_base import PreTokenizedInput, TextInput
+from ...utils import TransformersKwargs, auto_docstring
 from ...utils.generic import can_return_tuple, merge_with_config_defaults
 from ...utils.output_capturing import OutputRecorder, capture_outputs
-from ..auto import AutoModel
+from ..auto import AutoConfig, AutoModel
+from ..auto.configuration_auto import CONFIG_MAPPING
+from ..beit.modeling_beit import BeitDropPath
+from ..internvl.configuration_internvl import InternVLConfig, InternVLVisionConfig
 from ..internvl.modeling_internvl import (
     NORM2FN,
     InternVLCausalLMOutputWithPast,
+    InternVLForConditionalGeneration,
+    InternVLModel,
     InternVLModelOutputWithPast,
     InternVLMultiModalProjector,
     InternVLVisionAttention,
+    InternVLVisionEmbeddings,
     InternVLVisionLayer,
     InternVLVisionMLP,
 )
-from .configuration_qianfan_ocr import QianfanOCRConfig, QianfanOCRVisionConfig
+from ..internvl.processing_internvl import InternVLProcessor
 
 
-class DropPath(nn.Module):
-    """Drop paths (Stochastic Depth) per sample."""
+@auto_docstring(checkpoint="baidu/Qianfan-OCR")
+class QianfanOCRVisionConfig(InternVLVisionConfig):
+    r"""
+    drop_path_rate (`float`, *optional*, defaults to 0.1):
+        Dropout rate for stochastic depth.
+    projection_dropout (`float`, *optional*, defaults to 0.0):
+        Dropout probability for the projection layer.
+    norm_type (`str`, *optional*, defaults to `"layer_norm"`):
+        The type of normalization to use in the encoder. Can be `"layer_norm"` or `"rms_norm"`.
+    use_mask_token (`bool`, *optional*, defaults to `False`):
+        Whether to use a mask token for masked image modeling.
+    use_mean_pooling (`bool`, *optional*, defaults to `True`):
+        Whether to mean pool the final hidden states of the patches instead of using the final hidden state of the
+        CLS token, before applying the classification head.
 
-    def __init__(self, drop_prob: float = 0.0):
-        super().__init__()
-        self.drop_prob = drop_prob
+    Example:
 
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
-        if self.drop_prob == 0.0 or not self.training:
-            return x
-        keep_prob = 1 - self.drop_prob
-        shape = (x.shape[0],) + (1,) * (x.ndim - 1)
-        random_tensor = x.new_empty(shape).bernoulli_(keep_prob)
-        if keep_prob > 0.0:
-            random_tensor.div_(keep_prob)
-        return x * random_tensor
+    ```python
+    >>> from transformers import QianfanOCRVisionConfig
+
+    >>> configuration = QianfanOCRVisionConfig()
+    >>> configuration.hidden_size
+    1024
+    ```"""
+
+    model_type = "qianfan_ocr_vision"
+
+    attention_bias: bool = True
+    drop_path_rate: float = 0.1
+
+
+@auto_docstring(checkpoint="baidu/Qianfan-OCR")
+class QianfanOCRConfig(InternVLConfig):
+    r"""
+    downsample_ratio (`float`, *optional*, defaults to 0.5):
+        Factor by which to downsample the image.
+
+    Example:
+
+    ```python
+    >>> from transformers import QianfanOCRConfig
+
+    >>> configuration = QianfanOCRConfig()
+    >>> configuration.downsample_ratio
+    0.5
+    ```"""
+
+    model_type = "qianfan_ocr"
+    sub_configs = {"text_config": AutoConfig, "vision_config": QianfanOCRVisionConfig}
+
+    tie_word_embeddings: bool = False
+
+    def __post_init__(self, **kwargs):
+        if isinstance(self.vision_config, dict):
+            self.vision_config = QianfanOCRVisionConfig(**self.vision_config)
+        elif self.vision_config is None:
+            self.vision_config = QianfanOCRVisionConfig()
+
+        if isinstance(self.text_config, dict):
+            self.text_config["model_type"] = self.text_config.get("model_type", "qwen3")
+            self.text_config = CONFIG_MAPPING[self.text_config["model_type"]](**self.text_config)
+        elif self.text_config is None:
+            self.text_config = CONFIG_MAPPING["qwen3"]()
+
+        PreTrainedConfig.__post_init__(self, **kwargs)
+
+
+class QianfanOCRDropPath(BeitDropPath):
+    pass
 
 
 class QianfanOCRVisionAttention(InternVLVisionAttention):
@@ -71,16 +135,8 @@ class QianfanOCRVisionLayer(InternVLVisionLayer):
 
     def __init__(self, config: QianfanOCRVisionConfig, drop_path_rate: float = 0.0) -> None:
         super().__init__(config)
-        self.attention = QianfanOCRVisionAttention(config)
-        self.mlp = QianfanOCRVisionMLP(config)
-        self.layernorm_before = NORM2FN[config.norm_type](config.hidden_size, eps=config.layer_norm_eps)
-        self.layernorm_after = NORM2FN[config.norm_type](config.hidden_size, eps=config.layer_norm_eps)
-        init_values = config.layer_scale_init_value
-        self.lambda_1 = nn.Parameter(init_values * torch.ones(config.hidden_size), requires_grad=True)
-        self.lambda_2 = nn.Parameter(init_values * torch.ones(config.hidden_size), requires_grad=True)
-        self.dropout = nn.Dropout(config.hidden_dropout_prob)
-        self.drop_path1 = nn.Identity() if drop_path_rate <= 0.0 else DropPath(drop_path_rate)
-        self.drop_path2 = nn.Identity() if drop_path_rate <= 0.0 else DropPath(drop_path_rate)
+        self.drop_path1 = nn.Identity() if drop_path_rate <= 0.0 else QianfanOCRDropPath(drop_path_rate)
+        self.drop_path2 = nn.Identity() if drop_path_rate <= 0.0 else QianfanOCRDropPath(drop_path_rate)
 
     def forward(
         self,
@@ -137,66 +193,30 @@ class QianfanOCRVisionEncoder(nn.Module):
         )
 
 
-class QianfanOCRVisionEmbeddings(nn.Module):
-    def __init__(self, config: QianfanOCRVisionConfig):
-        super().__init__()
-        self.embed_dim = config.hidden_size
+class QianfanOCRVisionEmbeddings(InternVLVisionEmbeddings):
+    def interpolate_pos_encoding(self, embeddings: torch.Tensor, height: int, width: int) -> torch.Tensor:
+        patch_size = self.patch_size
+        base_h = self.image_size[0] // patch_size[0]
+        base_w = self.image_size[1] // patch_size[1]
+        new_h = height // patch_size[0]
+        new_w = width // patch_size[1]
 
-        image_size = config.image_size
-        patch_size = config.patch_size
-        if isinstance(image_size, (list, tuple)):
-            self.image_size_h, self.image_size_w = image_size[0], image_size[1]
-        else:
-            self.image_size_h = self.image_size_w = image_size
-        if isinstance(patch_size, (list, tuple)):
-            self.patch_size_h, self.patch_size_w = patch_size[0], patch_size[1]
-        else:
-            self.patch_size_h = self.patch_size_w = patch_size
+        class_pos_embed = self.position_embeddings[:, :1]
+        patch_pos_embed = self.position_embeddings[:, 1:]
+        dim = embeddings.shape[-1]
 
-        self.class_embedding = nn.Parameter(torch.randn(1, 1, self.embed_dim))
-        self.patch_embedding = nn.Conv2d(
-            in_channels=config.num_channels,
-            out_channels=self.embed_dim,
-            kernel_size=(self.patch_size_h, self.patch_size_w),
-            stride=(self.patch_size_h, self.patch_size_w),
-        )
-        self.num_patches = (self.image_size_h // self.patch_size_h) * (self.image_size_w // self.patch_size_w)
-        self.num_positions = self.num_patches + 1
-        if config.use_absolute_position_embeddings:
-            self.position_embedding = nn.Parameter(torch.randn(1, self.num_positions, self.embed_dim))
-        else:
-            self.position_embedding = None
+        if new_h == base_h and new_w == base_w:
+            return self.position_embeddings
 
-    def _get_pos_embed(self, pos_embed: torch.Tensor, H: int, W: int) -> torch.Tensor:
-        target_dtype = pos_embed.dtype
-        base_h = self.image_size_h // self.patch_size_h
-        base_w = self.image_size_w // self.patch_size_w
-        pos_embed = pos_embed.float().reshape(1, base_h, base_w, -1).permute(0, 3, 1, 2)
-        pos_embed = (
-            F.interpolate(pos_embed, size=(H, W), mode="bicubic", align_corners=False)
-            .reshape(1, -1, H * W)
+        patch_pos_embed = patch_pos_embed.float().reshape(1, base_h, base_w, dim).permute(0, 3, 1, 2)
+        patch_pos_embed = (
+            F.interpolate(patch_pos_embed, size=(new_h, new_w), mode="bicubic", align_corners=False)
+            .reshape(1, -1, new_h * new_w)
             .permute(0, 2, 1)
-            .to(target_dtype)
+            .to(embeddings.dtype)
         )
-        return pos_embed
-
-    def forward(self, pixel_values: torch.FloatTensor, bool_masked_pos=None, **kwargs) -> torch.Tensor:
-        target_dtype = self.patch_embedding.weight.dtype
-        patch_embeds = self.patch_embedding(pixel_values.to(target_dtype))
-        batch_size, _, height, width = patch_embeds.shape
-        patch_embeds = patch_embeds.flatten(2).transpose(1, 2)
-        class_embeds = self.class_embedding.expand(batch_size, 1, -1).to(target_dtype)
-        embeddings = torch.cat([class_embeds, patch_embeds], dim=1)
-        if self.position_embedding is not None:
-            position_embedding = torch.cat(
-                [
-                    self.position_embedding[:, :1, :],
-                    self._get_pos_embed(self.position_embedding[:, 1:, :], height, width),
-                ],
-                dim=1,
-            )
-            embeddings = embeddings + position_embedding.to(target_dtype)
-        return embeddings
+        class_pos_embed = class_pos_embed.to(embeddings.dtype)
+        return torch.cat([class_pos_embed, patch_pos_embed], dim=1)
 
 
 class QianfanOCRVisionModelOutputWithPooling(BaseModelOutputWithPooling):
@@ -229,8 +249,8 @@ class QianfanOCRVisionPreTrainedModel(PreTrainedModel):
     def _init_weights(self, module):
         super()._init_weights(module)
         if isinstance(module, QianfanOCRVisionEmbeddings):
-            nn.init.zeros_(module.class_embedding)
-            nn.init.zeros_(module.position_embedding)
+            nn.init.zeros_(module.cls_token)
+            nn.init.zeros_(module.position_embeddings)
         elif isinstance(module, QianfanOCRVisionLayer):
             nn.init.constant_(module.lambda_1, self.config.layer_scale_init_value)
             nn.init.constant_(module.lambda_2, self.config.layer_scale_init_value)
@@ -252,7 +272,7 @@ class QianfanOCRVisionModel(QianfanOCRVisionPreTrainedModel):
         self.post_init()
 
     def get_input_embeddings(self):
-        return self.embeddings.patch_embedding
+        return self.embeddings.patch_embeddings.projection
 
     @merge_with_config_defaults
     @capture_outputs(tie_last_hidden_states=False)
@@ -271,15 +291,11 @@ class QianfanOCRVisionModel(QianfanOCRVisionPreTrainedModel):
 
         return QianfanOCRVisionModelOutputWithPooling(
             last_hidden_state=sequence_output,
-            hidden_states=encoder_outputs.hidden_states,
-            attentions=encoder_outputs.attentions,
         )
 
 
 class QianfanOCRMultiModalProjector(InternVLMultiModalProjector):
-    def __init__(self, config: QianfanOCRConfig):
-        super().__init__(config)
-
+    pass
 
 class QianfanOCRPreTrainedModel(PreTrainedModel):
     config_class = QianfanOCRConfig
@@ -306,171 +322,8 @@ class QianfanOCRModelOutputWithPast(InternVLModelOutputWithPast):
     """
 
 
-class QianfanOCRModel(QianfanOCRPreTrainedModel):
-    def __init__(self, config: QianfanOCRConfig):
-        super().__init__(config)
-        self.vision_tower = AutoModel.from_config(config.vision_config)
-        self.multi_modal_projector = QianfanOCRMultiModalProjector(config)
-        self.language_model = AutoModel.from_config(config.text_config)
-        self.post_init()
-
-    def get_input_embeddings(self):
-        return self.language_model.get_input_embeddings()
-
-    def set_input_embeddings(self, value):
-        self.language_model.set_input_embeddings(value)
-
-    def get_placeholder_mask(
-        self, input_ids: torch.LongTensor, inputs_embeds: torch.FloatTensor, image_features: torch.FloatTensor
-    ):
-        if input_ids is None:
-            special_image_mask = inputs_embeds == self.get_input_embeddings()(
-                torch.tensor(self.config.image_token_id, dtype=torch.long, device=inputs_embeds.device)
-            )
-            special_image_mask = special_image_mask.all(-1)
-        else:
-            special_image_mask = input_ids == self.config.image_token_id
-
-        n_image_tokens = special_image_mask.sum()
-        n_image_features = image_features.shape[0] * image_features.shape[1]
-        special_image_mask = special_image_mask.unsqueeze(-1).expand_as(inputs_embeds).to(inputs_embeds.device)
-        if not torch.compiler.is_compiling():
-            torch_compilable_check(
-                inputs_embeds[special_image_mask].numel() == image_features.numel(),
-                lambda: f"Image features and image tokens do not match, tokens: {n_image_tokens}, features: {n_image_features}",
-            )
-        return special_image_mask
-
-    def pixel_shuffle(self, vision_features: torch.Tensor, scale_factor: float = 0.5):
-        """Perform pixel shuffle downsampling on vision features.
-
-        Args:
-            vision_features (`torch.Tensor`):
-                Input tensor of shape (batch_size, width, height, channels).
-            scale_factor (`float`, *optional*, defaults to `0.5`):
-                Factor by which to downsample.
-
-        Returns:
-            vision_features (`torch.Tensor`):
-                Downsampled tensor.
-        """
-        batch_size, width, height, channels = vision_features.size()
-
-        vision_features = vision_features.view(
-            batch_size, width, int(height * scale_factor), int(channels / scale_factor)
-        )
-        vision_features = vision_features.permute(0, 2, 1, 3).contiguous()
-
-        vision_features = vision_features.view(
-            batch_size, int(height * scale_factor), int(width * scale_factor), int(channels / (scale_factor**2))
-        )
-
-        if self.config.ps_version == "v1":
-            import warnings
-
-            warnings.warn(
-                "In ps_version 'v1', the height and width have not been swapped back, "
-                "which results in a transposed image."
-            )
-        else:
-            vision_features = vision_features.permute(0, 2, 1, 3).contiguous()
-
-        return vision_features
-
-    @merge_with_config_defaults
-    @can_return_tuple
-    @auto_docstring(
-        custom_intro="Obtains image last hidden states from the vision tower and apply multimodal projection."
-    )
-    def get_image_features(
-        self,
-        pixel_values: torch.FloatTensor,
-        vision_feature_layer: int | list[int] | None = None,
-        vision_feature_select_strategy: str | None = None,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | BaseModelOutputWithPooling:
-        r"""
-        pixel_values (`torch.FloatTensor]` of shape `(batch_size, channels, height, width)`)
-            The tensors corresponding to the input images.
-        vision_feature_layer (`int` or `list[int]`):
-            Layer index or list of layer indices to extract features from.
-        """
-        # Use pixel_values dtype as fallback: under nn.DataParallel a replica may
-        # have no parameters on the primary device (self.dtype raises StopIteration),
-        # but input tensors are always correctly scattered so pixel_values.dtype is safe.
-
-        downsample_ratio = self.config.downsample_ratio
-        if vision_feature_layer != -1:
-            kwargs["output_hidden_states"] = True
-        vision_outputs = self.vision_tower(pixel_values=pixel_values, return_dict=True, **kwargs)
-        if vision_feature_layer == -1:
-            vision_features = vision_outputs.last_hidden_state
-        else:
-            vision_features = vision_outputs.hidden_states[vision_feature_layer]
-        if vision_feature_select_strategy == "default":
-            vision_features = vision_features[:, 1:, :]
-
-        channels = vision_features.shape[1]
-        feature_size = int(channels**0.5)
-        batch_size = vision_features.shape[0]
-
-        vision_features = vision_features.reshape(batch_size, feature_size, feature_size, -1)
-        vision_features = self.pixel_shuffle(vision_features, scale_factor=downsample_ratio)
-        vision_features = vision_features.reshape(batch_size, -1, vision_features.shape[-1])
-
-        vision_features = self.multi_modal_projector(vision_features)
-        vision_outputs.pooler_output = vision_features
-
-        return vision_outputs
-
-    @can_return_tuple
-    @auto_docstring
-    def forward(
-        self,
-        input_ids: torch.LongTensor | None = None,
-        pixel_values: torch.FloatTensor | None = None,
-        attention_mask: torch.Tensor | None = None,
-        position_ids: torch.LongTensor | None = None,
-        past_key_values: Cache | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
-        vision_feature_layer: int | list[int] | None = None,
-        vision_feature_select_strategy: str | None = None,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | QianfanOCRModelOutputWithPast:
-        if (input_ids is None) ^ (inputs_embeds is not None):
-            raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
-
-        if inputs_embeds is None:
-            inputs_embeds = self.get_input_embeddings()(input_ids)
-
-        if pixel_values is not None:
-            image_features = self.get_image_features(
-                pixel_values=pixel_values,
-                vision_feature_layer=vision_feature_layer,
-                vision_feature_select_strategy=vision_feature_select_strategy,
-                return_dict=True,
-            ).pooler_output
-            image_features = image_features.to(inputs_embeds.device, inputs_embeds.dtype)
-            special_image_mask = self.get_placeholder_mask(
-                input_ids, inputs_embeds=inputs_embeds, image_features=image_features
-            )
-            inputs_embeds = inputs_embeds.masked_scatter(special_image_mask, image_features)
-
-        outputs = self.language_model(
-            attention_mask=attention_mask,
-            position_ids=position_ids,
-            past_key_values=past_key_values,
-            inputs_embeds=inputs_embeds,
-            **kwargs,
-        )
-
-        return QianfanOCRModelOutputWithPast(
-            last_hidden_state=outputs.last_hidden_state,
-            past_key_values=outputs.past_key_values,
-            hidden_states=outputs.hidden_states,
-            attentions=outputs.attentions,
-            image_hidden_states=image_features if pixel_values is not None else None,
-        )
+class QianfanOCRModel(InternVLModel):
+    pass
 
 
 @dataclass
@@ -491,28 +344,7 @@ class QianfanOCRCausalLMOutputWithPast(InternVLCausalLMOutputWithPast):
     """
 
 
-class QianfanOCRForConditionalGeneration(QianfanOCRPreTrainedModel, GenerationMixin):
-    def __init__(self, config: QianfanOCRConfig):
-        super().__init__(config)
-        self.model = QianfanOCRModel(config)
-        self.lm_head = nn.Linear(config.text_config.hidden_size, config.text_config.vocab_size, bias=False)
-        self.post_init()
-
-    @auto_docstring
-    def get_image_features(
-        self,
-        pixel_values: torch.FloatTensor,
-        vision_feature_layer: int | list[int] | None = None,
-        vision_feature_select_strategy: str | None = None,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | BaseModelOutputWithPooling:
-        return self.model.get_image_features(
-            pixel_values=pixel_values,
-            vision_feature_layer=vision_feature_layer,
-            vision_feature_select_strategy=vision_feature_select_strategy,
-            **kwargs,
-        )
-
+class QianfanOCRForConditionalGeneration(InternVLForConditionalGeneration):
     @can_return_tuple
     @auto_docstring
     def forward(
@@ -557,7 +389,7 @@ class QianfanOCRForConditionalGeneration(QianfanOCRPreTrainedModel, GenerationMi
         >>> generate_ids = model.generate(**inputs, max_new_tokens=200)
         >>> print(processor.decode(generate_ids[0, inputs["input_ids"].shape[1] :], skip_special_tokens=True))
         ```"""
-        outputs = self.model(
+        return super().forward(
             input_ids=input_ids,
             pixel_values=pixel_values,
             attention_mask=attention_mask,
@@ -566,60 +398,123 @@ class QianfanOCRForConditionalGeneration(QianfanOCRPreTrainedModel, GenerationMi
             inputs_embeds=inputs_embeds,
             vision_feature_layer=vision_feature_layer,
             vision_feature_select_strategy=vision_feature_select_strategy,
+            labels=labels,
+            logits_to_keep=logits_to_keep,
             image_sizes=image_sizes,
             **kwargs,
         )
 
-        hidden_states = outputs[0]
-        slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
-        logits = self.lm_head(hidden_states[:, slice_indices, :])
 
-        loss = None
-        if labels is not None:
-            loss = self.loss_function(
-                logits=logits, labels=labels, vocab_size=self.config.text_config.vocab_size, **kwargs
-            )
-
-        return QianfanOCRCausalLMOutputWithPast(
-            loss=loss,
-            logits=logits,
-            past_key_values=outputs.past_key_values,
-            hidden_states=outputs.hidden_states,
-            attentions=outputs.attentions,
-            image_hidden_states=outputs.image_hidden_states,
-        )
-
-    def prepare_inputs_for_generation(
+class QianfanOCRProcessor(InternVLProcessor):
+    def __init__(
         self,
-        input_ids,
-        past_key_values=None,
-        inputs_embeds=None,
-        pixel_values=None,
-        attention_mask=None,
-        logits_to_keep=None,
-        is_first_iteration=False,
+        image_processor=None,
+        tokenizer=None,
+        video_processor=None,
+        image_seq_length: int = 256,
+        chat_template=None,
+        start_image_token: str = "<img>",
+        end_image_token: str = "</img>",
+        context_image_token: str = "<IMG_CONTEXT>",
         **kwargs,
     ):
-        model_inputs = super().prepare_inputs_for_generation(
-            input_ids,
-            past_key_values=past_key_values,
-            inputs_embeds=inputs_embeds,
-            attention_mask=attention_mask,
-            logits_to_keep=logits_to_keep,
-            is_first_iteration=is_first_iteration,
+        r"""
+        start_image_token (`str`, *optional*, defaults to `"<img>"`):
+            The token used to mark the start of an image sequence.
+        end_image_token (`str`, *optional*, defaults to `"</img>"`):
+            The token used to mark the end of an image sequence.
+        context_image_token (`str`, *optional*, defaults to `"<IMG_CONTEXT>"`):
+            The token used as an image context placeholder in the input sequence.
+        """
+        # InternVLProcessor.__init__ reads these as tokenizer attributes.
+        # Inject them so it works with tokenizers that don't expose them (e.g. Qwen2Tokenizer).
+        if tokenizer is not None:
+            for attr, value in (
+                ("start_image_token", start_image_token),
+                ("end_image_token", end_image_token),
+                ("start_image_token_id", tokenizer.convert_tokens_to_ids(start_image_token)),
+                ("end_image_token_id", tokenizer.convert_tokens_to_ids(end_image_token)),
+                ("context_image_token", context_image_token),
+                ("context_image_token_id", tokenizer.convert_tokens_to_ids(context_image_token)),
+            ):
+                if not hasattr(tokenizer, attr):
+                    setattr(tokenizer, attr, value)
+        super().__init__(
+            image_processor=image_processor,
+            tokenizer=tokenizer,
+            video_processor=None,
+            image_seq_length=image_seq_length,
+            chat_template=chat_template,
             **kwargs,
         )
+        # Override with the config values to ensure they are always used,
+        # regardless of what the tokenizer may have returned.
+        self.start_image_token = start_image_token
+        self.end_image_token = end_image_token
+        self.image_token = context_image_token
+        self.video_token = None
+        self.start_image_token_id = tokenizer.convert_tokens_to_ids(start_image_token)
+        self.end_image_token_id = tokenizer.convert_tokens_to_ids(end_image_token)
+        self.image_token_id = tokenizer.convert_tokens_to_ids(context_image_token)
+        self.image_ids = [self.image_token_id, self.start_image_token_id, self.end_image_token_id]
+        self.video_processor = None
 
-        if is_first_iteration or not kwargs.get("use_cache", True):
-            model_inputs["pixel_values"] = pixel_values
+    def _insert_media_placeholders(
+        self,
+        text: list[str],
+        image_pixel_values,
+        video_pixel_values,
+        image_num_patches: list[int],
+        video_num_patches: list[int],
+        image_num_patches_indices: np.ndarray,
+        video_num_patches_indices: np.ndarray,
+        video_patch_indices: np.ndarray,
+    ):
+        """
+        Processes interleaved text with <image> placeholders, replacing them with appropriate image tokens.
+        """
+        image_index = 0
+        processed_text = []
+        image_patches = []
+        replace_strings = []
+        for prompt in text:
+            new_prompt = prompt
+            while self.image_token in new_prompt:
+                start_index = image_num_patches_indices[image_index - 1] if image_index > 0 else 0
+                end_index = image_num_patches_indices[image_index]
+                image_patches.append(image_pixel_values[start_index:end_index])
+                new_prompt = new_prompt.replace(self.image_token, "<placeholder>", 1)
+                replace_strings.append(
+                    f"{self.start_image_token}{self.image_token * self.image_seq_length * image_num_patches[image_index]}{self.end_image_token}"
+                )
+                image_index += 1
+            while "<placeholder>" in new_prompt:
+                replace_str = replace_strings.pop(0)
+                new_prompt = new_prompt.replace("<placeholder>", replace_str, 1)
+            processed_text.append(new_prompt)
+        return processed_text, image_patches, image_index, 0
 
-        return model_inputs
+    def __call__(
+        self,
+        images: ImageInput | None = None,
+        text: TextInput | PreTokenizedInput | list[TextInput] | list[PreTokenizedInput] | None = None,
+        videos=None,
+        **kwargs,
+    ) -> BatchFeature:
+        # QianfanOCR has no video or audio support. Drop those keys if they arrive
+        # from apply_chat_template's internal self(...) call, so that InternVLProcessor
+        # never sees them.
+        kwargs.pop("audio", None)
+        return super().__call__(images=images, text=text, videos=None, **kwargs)
 
 
 __all__ = [
+    "QianfanOCRVisionConfig",
+    "QianfanOCRConfig",
     "QianfanOCRVisionPreTrainedModel",
     "QianfanOCRVisionModel",
     "QianfanOCRPreTrainedModel",
     "QianfanOCRModel",
     "QianfanOCRForConditionalGeneration",
+    "QianfanOCRProcessor",
 ]
