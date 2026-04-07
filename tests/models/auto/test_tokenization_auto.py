@@ -709,12 +709,20 @@ class NopConfig(PreTrainedConfig):
             finally:
                 os.chdir(prev_dir)
 
-    @require_sentencepiece
     @require_tokenizers
-    def test_mismatched_model_type_uses_config_tokenizer_class(self):
-        """AutoTokenizer should load tokenizer_class when sentenecepiece is available, not TokenizersBackend."""
+    @require_sentencepiece
+    def test_mismatched_model_type_uses_config_tokenizer_class_with_sentencepiece(self):
         tokenizer = AutoTokenizer.from_pretrained(
             "facebook/nllb-200-distilled-600M",
             revision="f8d333a098d19b4fd9a8b18f94170487ad3f821d",
         )
         self.assertEqual(tokenizer.__class__.__name__, "NllbTokenizer")
+
+    @require_tokenizers
+    def test_mismatched_model_type_uses_config_tokenizer_class_without_sentencepiece(self):
+        with mock.patch("transformers.models.auto.tokenization_auto.is_sentencepiece_available", return_value=False):
+            tokenizer = AutoTokenizer.from_pretrained(
+                "facebook/nllb-200-distilled-600M",
+                revision="f8d333a098d19b4fd9a8b18f94170487ad3f821d",
+            )
+            self.assertEqual(tokenizer.__class__.__name__, "NllbTokenizer")

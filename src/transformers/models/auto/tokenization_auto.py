@@ -714,7 +714,11 @@ class AutoTokenizer:
             != (tokenizer_config_class.removesuffix("Fast"))
         ):
             tokenizer_class = tokenizer_class_from_name(tokenizer_config_class)
-            if tokenizer_class is not None and tokenizer_class.__name__ not in ("TokenizersBackend", "PythonBackend"):
+            if tokenizer_class is not None and tokenizer_class.__name__ not in (
+                "TokenizersBackend",
+                "PythonBackend",
+                "PreTrainedTokenizerFast",
+            ):
                 return tokenizer_class.from_pretrained(pretrained_model_name_or_path, *inputs, **kwargs)
 
             if TokenizersBackend is not None:
