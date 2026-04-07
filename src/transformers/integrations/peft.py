@@ -57,7 +57,7 @@ if is_accelerate_available():
     from accelerate.utils import get_balanced_memory, infer_auto_device_map
 
 # Minimum PEFT version supported for the integration
-MIN_PEFT_VERSION = "0.18.0"
+MIN_PEFT_VERSION = "0.18.2"
 
 
 logger = logging.get_logger(__name__)
@@ -500,6 +500,7 @@ class PeftAdapterMixin:
                 `find_adapter_config_file` method.
         """
         from peft import PeftType
+        from peft.utils.save_and_load import _maybe_shard_state_dict_for_tp
 
         from ..modeling_utils import LoadStateDictConfig, _get_resolved_checkpoint_files
 
@@ -611,6 +612,8 @@ class PeftAdapterMixin:
 
         device_map = getattr(self, "hf_device_map", {"": self.device})
 
+        # If the model is tensor parallel, we handle the sharding of the state dict here since the logic in `self._load_pretrained_model`
+        # is not compatible with the way PEFT adapter should be sharded.
         has_tp_adapters = False
         for module in self.modules():
             tp_info = getattr(module, "_tp_info", None)
@@ -644,7 +647,9 @@ class PeftAdapterMixin:
                 raise ValueError("Neither a state dict nor checkpoint files were found.")
 
             adapter_state_dict = merged_state_dict
-            from peft.utils.save_and_load import _maybe_shard_state_dict_for_tp
+
+            if any(not isinstance(v, torch.Tensor) for v in adapter_state_dict.values()):
+                raise ValueError("Expected all values in the adapter state dict to be tensors.")
 
             _maybe_shard_state_dict_for_tp(self, adapter_state_dict, adapter_name)
 
