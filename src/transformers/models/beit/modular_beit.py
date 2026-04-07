@@ -518,12 +518,7 @@ class BeitForImageClassification(BeitPreTrainedModel):
 
         loss = None
         if labels is not None:
-            loss = self.loss_function(
-                labels,
-                logits,
-                ignore_index=self.config.semantic_loss_ignore_index,
-                auxiliary_loss_weight=self.config.auxiliary_loss_weight,
-            )
+            loss = self.loss_function(labels, logits, self.config)
 
         return ImageClassifierOutput(
             loss=loss,
@@ -887,8 +882,13 @@ class BeitForSemanticSegmentation(BeitPreTrainedModel):
 
         loss = None
         if labels is not None:
-            loss = self.loss_function(logits, labels, self.config, auxiliary_logits=auxiliary_logits, **kwargs)
-
+            loss = self.loss_function(
+                logits,
+                labels,
+                ignore_index=self.config.semantic_loss_ignore_index,
+                auxiliary_logits=auxiliary_logits,
+                auxiliary_loss_weight=self.config.auxiliary_loss_weight,
+            )
         return SemanticSegmenterOutput(
             loss=loss,
             logits=logits,
