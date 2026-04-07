@@ -70,6 +70,7 @@ ALLOWED_LAYER_TYPES = (
     "dense",
     "hybrid",  # for layers that have both mamba and attention in zamba and zamba2
     "moe",  # for nemotron_h, which uses either attention, mamba or moe
+    "mlp",  # for nemotron_h standalone MLP layers (the "-" in hybrid_override_pattern)
 )
 
 
