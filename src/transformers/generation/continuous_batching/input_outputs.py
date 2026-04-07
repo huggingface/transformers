@@ -550,7 +550,9 @@ class ContinuousBatchingIOs:
             max_seqlen_q = pad_to_interval(max_seqlen_q, q_padding_interval_size, q_tokens)
         max_kv_total = max_kv_read + q_tokens
         if self.use_block_table:
-            max_seqlen_k_signature = tuple((layer_type, 1) for layer_type in max_seqlen_k) if isinstance(max_seqlen_k, dict) else 1
+            max_seqlen_k_signature = (
+                tuple((layer_type, 1) for layer_type in max_seqlen_k) if isinstance(max_seqlen_k, dict) else 1
+            )
         else:
             max_seqlen_k_signature = (
                 tuple(

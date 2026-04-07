@@ -60,9 +60,7 @@ def group_layers_by_attn_type(config: PreTrainedConfig) -> tuple[list[list[int]]
 
 def default_flash_attention_max_blocks_per_request(config: PreTrainedConfig, max_batch_tokens: int) -> int:
     """Pick the decode-fast-path block-table size for FlashAttention continuous batching."""
-    if not (
-        is_flash_attention_requested(config, version=2) or is_flash_attention_requested(config, version=3)
-    ):
+    if not (is_flash_attention_requested(config, version=2) or is_flash_attention_requested(config, version=3)):
         return 0
     return 16 if max_batch_tokens > 4096 else 1
 
