@@ -665,6 +665,9 @@ def load_gguf_checkpoint(gguf_checkpoint_path, return_tensors=False, model_to_lo
                 if not has_v:
                     parsed_parameters["config"]["attention_k_eq_v"] = True
 
+        # GGUF metadata has add_bos_token=false but Gemma4 models require BOS
+        parsed_parameters["tokenizer_config"]["add_bos_token"] = True
+
     # MiniMax-M2: convert expert_gating_func integer to scoring_func string
     if parsed_parameters["config"].get("model_type") == "minimax_m2":
         _gating_func_map = {0: "none", 1: "softmax", 2: "sigmoid"}
