@@ -27,7 +27,7 @@ from torch import nn
 
 from ... import initialization as init
 from ...cache_utils import Cache
-from ...masking_utils import create_bidirectional_mask
+from ...masking_utils import create_blockwise_causal_mask
 from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
 from ...modeling_utils import PreTrainedModel
 from ...utils import auto_docstring, can_return_tuple
@@ -204,13 +204,14 @@ class PI0Model(PI0PreTrainedModel):
         # The mask should be bidirectional within each block and to prev blocks, but not to next blocks
         vlm_input_length = past_key_values.get_seq_length()
         block_sizes = torch.tensor([vlm_input_length + 1, action_embeds.shape[1] - 1], device=action_embeds.device)
-        block_boundaries = torch.cumsum(block_sizes, dim=0) - 1
-        bidirectional_mask = create_bidirectional_mask(
+        block_sequence_ids = torch.repeat_interleave(torch.arange(2), block_sizes)
+        block_sequence_ids = block_sequence_ids[None, :].repeat(action_embeds.shape[0], 1)
+        bidirectional_mask = create_blockwise_causal_mask(
             config=self.config.dit_config,
             inputs_embeds=action_embeds,
+            block_sequence_ids=block_sequence_ids,
             attention_mask=dit_attention_mask,
             past_key_values=past_key_values,
-            and_mask_function=blockwise_bidirectional_mask(block_boundaries),
         )
 
         dit_output = self.dit(

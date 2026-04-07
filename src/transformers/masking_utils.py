@@ -111,6 +111,46 @@ def chunked_overlay(chunk_size: int, left_padding: torch.Tensor) -> Callable:
     return inner_mask
 
 
+def blockwise_overlay(block_sequence_ids: torch.Tensor) -> Callable:
+    """
+    This is an overlay depicting a blockwise masking pattern. Instead of a single
+    token, each block consists of arbitrary length tokens. In causal setup, each block
+    can attend to prev block causally and can't attend to future blocks. Within one block
+    the attention is always bidirectional.
+    Mostly used in MLLMs when non-text data attends bidirectionally to itself.
+    """
+
+    def inner_mask(batch_idx: int, head_idx: int, q_idx: int, kv_idx: int) -> bool:
+        seq_length = block_sequence_ids.shape[-1]
+
+        # clamp indices because with static cache they can go beyond `block_sequence_ids.shape[-1]`
+        q_idx_clamped = q_idx.clamp(max=seq_length - 1)
+        kv_idx_clamped = kv_idx.clamp(max=seq_length - 1)
+
+        # Unmask if the q and kv come from same group which is not -1 (i.e. non-text)
+        q_group = block_sequence_ids[batch_idx, q_idx_clamped]
+        kv_group = block_sequence_ids[batch_idx, kv_idx_clamped]
+        q_group = torch.where(q_idx < seq_length, q_group, -1)
+        kv_group = torch.where(kv_idx < seq_length, kv_group, -1)
+        return (q_group == kv_group) & (q_group >= 0)
+
+    return inner_mask
+
+
+def blockwise_causal_mask_function(block_sequence_ids: torch.Tensor) -> Callable:
+    """
+    This return the mask_function function to create a blockwise causal mask.
+    """
+    return or_masks(blockwise_overlay(block_sequence_ids), causal_mask_function)
+
+
+def blockwise_bidirectional_mask_function(block_sequence_ids: torch.Tensor) -> Callable:
+    """
+    This return the mask_function function to create a blockwise bidirectional mask.
+    """
+    return and_masks(blockwise_overlay(block_sequence_ids), bidirectional_mask_function)
+
+
 def sliding_window_causal_mask_function(sliding_window: int) -> Callable:
     """
     This return the mask_function function to create a sliding window mask.
@@ -1402,6 +1442,107 @@ def create_chunked_causal_mask(
         attention_mask=attention_mask,
         allow_is_causal_skip=allow_is_causal_skip,  # additional kwarg for sdpa
         local_size=chunk_size,  # Additional kwarg for sdpa
+        dtype=dtype,  # Additional kwarg for eager
+        config=config,  # Pass the config as well, in case someone wants to easily have their own mask_interface
+        use_vmap=use_vmap,  # Short-circuit to non-vmap expansions for the mask
+        device=device,
+    )
+    return causal_mask
+
+
+def create_blockwise_causal_mask(
+    config: PreTrainedConfig,
+    inputs_embeds: torch.Tensor,
+    block_sequence_ids: torch.Tensor,
+    attention_mask: torch.Tensor | None,
+    past_key_values: Cache | None,
+    position_ids: torch.Tensor | None = None,
+    or_mask_function: Callable | None = None,
+    and_mask_function: Callable | None = None,
+) -> torch.Tensor | BlockMask | None:
+    """
+    Create a blockwise causal mask based on the attention implementation used (stored in the config). This type
+    of attention pattern was mostly democratized by Gemma models in multimodal models. Tokens from the same
+    block keep a bidirectional mask within that block, attending causally to the past. Index `-1`
+    can be used for blocks that have to keep complete causality within, for ex text blocks.
+
+    Args:
+        config (`PreTrainedConfig`):
+            The model config.
+        inputs_embeds (`torch.Tensor`):
+            The input embeddings of shape (batch_size, query_length, hidden_dim). This is used only to infer the
+            batch size, query length and dtype.
+        block_sequence_ids (`torch.Tensor`):
+            A tensor of same shape as input IDs indicating to which block or group each token belongs to. Tokens from
+            the same block will keep a bidirectional mask within the block.
+        attention_mask (`torch.Tensor`, *optional*):
+            The 2D attention mask corresponding to padded tokens of shape (batch_size, number_of_seen_tokens+q_length).
+            It can also be an already prepared 4D mask, in which case it is returned as-is.
+        past_key_values (`Cache`, *optional*):
+            The past key values, if we use a cache.
+        position_ids (`torch.Tensor`, *optional*)
+            A 2D tensor of shape (batch_size, query_length) indicating the positions of each token in the sequences.
+        or_mask_function (`Callable`, *optional*):
+            An optional mask function to combine with the sliding causal mask function (by doing the union of both). This is
+            useful to easily overlay another mask on top of the sliding causal one, for example for image tokens handling.
+        and_mask_function (`Callable`, *optional*):
+            An optional mask function to combine with the sliding causal mask function (by doing the intersection of both). This is
+            useful to easily overlay another mask on top of the sliding causal one, for example for image tokens handling.
+    """
+    # If we have an hybrid cache structure, here we want to create the mask for the sliding layers
+    if hasattr(past_key_values, "is_sliding") and True in past_key_values.is_sliding:
+        layer_idx = past_key_values.is_sliding.index(True)
+    else:
+        layer_idx = 0
+
+    early_exit, attention_mask, packed_sequence_mask, q_length, kv_length, q_offset, kv_offset = (
+        _preprocess_mask_arguments(config, inputs_embeds, attention_mask, past_key_values, position_ids, layer_idx)
+    )
+    if early_exit:
+        return attention_mask
+
+    batch_size, dtype, device = inputs_embeds.shape[0], inputs_embeds.dtype, inputs_embeds.device
+    mask_factory_function = blockwise_causal_mask_function(block_sequence_ids=block_sequence_ids)
+    mask_interface = ALL_MASK_ATTENTION_FUNCTIONS[config._attn_implementation]
+
+    # Defaulting to using non-vmap based mask creations except when detecting
+    # users passing custom mask functions (as we cannot guarantee that they
+    # are properly index-based as required by our implementation).
+    use_vmap = False
+    # Do not allow skip if we are compiling (this is to match BC)
+    # TODO: cyril -> probably revisit and remove this, but a lot of tests rely on it
+    allow_is_causal_skip = not getattr(past_key_values, "is_compileable", False)
+
+    # Allow slight deviations from causal mask
+    # Note that it is very important to apply this before any other deviations of the mask (such as packed sequence mask,
+    # padding mask, etc) as the resulting mask may otherwise not be correct!
+    if or_mask_function is not None:
+        if not _is_torch_greater_or_equal_than_2_6:
+            raise ValueError("Using `or_mask_function` or `and_mask_function` arguments require torch>=2.6")
+        mask_factory_function = or_masks(mask_factory_function, or_mask_function)
+        allow_is_causal_skip = False
+        use_vmap = True
+    if and_mask_function is not None:
+        if not _is_torch_greater_or_equal_than_2_6:
+            raise ValueError("Using `or_mask_function` or `and_mask_function` arguments require torch>=2.6")
+        mask_factory_function = and_masks(mask_factory_function, and_mask_function)
+        allow_is_causal_skip = False
+        use_vmap = True
+
+    # We dont support packing format yet for this type of mask
+    if packed_sequence_mask is not None:
+        raise ValueError("Packed sequence detected but `blockwise_causal_mask` cannot be created for packed inputs!")
+
+    # We now create the mask
+    causal_mask = mask_interface(
+        batch_size=batch_size,
+        q_length=q_length,
+        kv_length=kv_length,
+        q_offset=q_offset,
+        kv_offset=kv_offset,
+        mask_function=mask_factory_function,
+        attention_mask=attention_mask,
+        allow_is_causal_skip=allow_is_causal_skip,  # additional kwarg for sdpa
         dtype=dtype,  # Additional kwarg for eager
         config=config,  # Pass the config as well, in case someone wants to easily have their own mask_interface
         use_vmap=use_vmap,  # Short-circuit to non-vmap expansions for the mask
