@@ -163,7 +163,7 @@ if is_torch_available():
         torch.backends.cudnn.allow_tf32 = False
 
     # This is necessary to make several `test_batching_equivalence` pass (within the tolerance `1e-5`)
-    if hasattr(torch.backends.cudnn.conv, "fp32_precision"):
+    if hasattr(torch.backends.cudnn, "conv") and hasattr(torch.backends.cudnn.conv, "fp32_precision"):
         torch.backends.cudnn.conv.fp32_precision = "ieee"
 
     # patch `torch.compile`: if `TORCH_COMPILE_FORCE_FULLGRAPH=1` (or values considered as true, e.g. yes, y, etc.),
