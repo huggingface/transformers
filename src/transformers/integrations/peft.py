@@ -19,6 +19,10 @@ import re
 from dataclasses import replace
 from typing import TYPE_CHECKING, Any, Literal, Optional
 
+from safetensors import safe_open
+from safetensors.torch import save_file as safe_save_file
+from torch import adaptive_avg_pool1d
+
 from ..conversion_mapping import (
     _MODEL_TO_CONVERSION_PATTERN,
     get_checkpoint_conversion_mapping,
@@ -220,15 +224,6 @@ class PermuteDims(ConversionOps):
 
     def __repr__(self):
         return f"{self.__class__.__name__}(dims={self.dims})"
-
-
-def _build_lora_tp_plan(model) -> dict[str, str]:
-    lora_tp_plan: dict[str, str] = {}
-    for module in model.modules():
-        tp_info = getattr(module, "_tp_info", None)
-        if tp_info is not None:
-            lora_tp_plan.update(tp_info.tp_plan)
-    return lora_tp_plan
 
 
 # TODO: remove once PEFT < 0.19 no longer supported
@@ -617,6 +612,39 @@ class PeftAdapterMixin:
             checkpoint_files, sharded_metadata = [], {}
 
         device_map = getattr(self, "hf_device_map", {"": self.device})
+
+        has_tp_adapters = False
+        for module in self.modules():
+            tp_info = getattr(module, "_tp_info", None)
+            if tp_info is not None:
+                has_tp_adapters = True
+                break
+
+        if has_tp_adapters:
+            all_pointer = set()
+            if adapter_state_dict is not None:
+                merged_state_dict = adapter_state_dict
+            elif checkpoint_files is not None and checkpoint_files[0].endswith(".safetensors") and adapter_state_dict is None:
+                merged_state_dict = {}
+                for file in checkpoint_files:
+                    file_pointer = safe_open(file, framework="pt", device="cpu")
+                    all_pointer.add(file_pointer)
+                    for k in file_pointer.keys():
+                        merged_state_dict[k] = file_pointer.get_tensor(k)  
+            # Checkpoints are .bin
+            elif checkpoint_files is not None:
+                merged_state_dict = {}
+                for ckpt_file in checkpoint_files:
+                    from ..modeling_utils import load_state_dict
+                    merged_state_dict.update(load_state_dict(ckpt_file))
+            else:
+                raise ValueError("Neither a state dict nor checkpoint files were found.")
+
+            adapter_state_dict = merged_state_dict
+            from peft.utils.save_and_load import _maybe_shard_state_dict_for_tp
+            _maybe_shard_state_dict_for_tp(self, adapter_state_dict, adapter_name)
+
+
         load_config = replace(
             load_config,
             pretrained_model_name_or_path=peft_model_id,
@@ -624,12 +652,7 @@ class PeftAdapterMixin:
             weight_mapping=peft_weight_conversions,
             device_map=device_map,
         )
-        # For TP models, extend _tp_plan with LoRA-specific patterns so that
-        # convert_and_load_state_dict_in_model shards LoRA weights when loading from checkpoint.
-        lora_tp_plan = _build_lora_tp_plan(self)
-        if lora_tp_plan:
-            original_tp_plan = self._tp_plan
-            self._tp_plan = lora_tp_plan
+
 
         loading_info, _ = self._load_pretrained_model(
             model=self,
@@ -640,9 +663,6 @@ class PeftAdapterMixin:
             # unexpected entries, like "layer.SCB" from a bnb layer.
             expected_keys=[n for n, _ in self.named_parameters()],
         )
-
-        if lora_tp_plan:
-            self._tp_plan = original_tp_plan
 
         if peft_config.inference_mode:
             from peft.tuners.tuners_utils import BaseTunerLayer
@@ -660,9 +680,6 @@ class PeftAdapterMixin:
             return any(marker in key for marker in adapter_key_markers)
 
         loading_info.missing_keys = {k for k in loading_info.missing_keys if is_adapter_key(k)}
-
-        for n, p in self.named_parameters():
-            print(f"{n} => {p.shape}")
 
         log_state_dict_report(
             model=self,
