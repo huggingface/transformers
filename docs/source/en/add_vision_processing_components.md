@@ -14,7 +14,7 @@ rendered properly in your Markdown viewer.
 
 -->
 
-# Add a vision language model
+# Add vision processing components
 
 Adding a vision language model (VLM) requires two image processor classes on top of the standard [modular](./modular_transformers) approach.
 
@@ -31,10 +31,10 @@ Both classes share the same preprocessing logic but have different backends. The
 Create `image_processing_<model_name>.py` with a class that inherits from [`TorchvisionBackend`]. Define a kwargs class first if your processor needs custom parameters beyond the standard [`ImagesKwargs`].
 
 ```py
-from transformers.image_processing_backends import TorchvisionBackend
-from transformers.image_utils import OPENAI_CLIP_MEAN, OPENAI_CLIP_STD, PILImageResampling
-from transformers.processing_utils import ImagesKwargs, Unpack
-from transformers.utils import auto_docstring
+from ...image_processing_backends import TorchvisionBackend
+from ...image_utils import OPENAI_CLIP_MEAN, OPENAI_CLIP_STD, PILImageResampling
+from ...processing_utils import ImagesKwargs, Unpack
+from ...utils import auto_docstring
 
 class MyModelImageProcessorKwargs(ImagesKwargs, total=False):
     tile_size: int  # any model-specific kwargs
@@ -59,9 +59,9 @@ class MyModelImageProcessor(TorchvisionBackend):
 Create `image_processing_pil_<model_name>.py` with a class that inherits from [`PilBackend`]. Import the kwargs class from the torchvision file, but don't redefine it. Sharing the same class keeps both backends' kwargs in sync. For processors with no custom parameters, use [`ImagesKwargs`] directly.
 
 ```py
-from transformers.image_processing_backends import PilBackend
-from transformers.image_utils import OPENAI_CLIP_MEAN, OPENAI_CLIP_STD, PILImageResampling
-from transformers.utils import auto_docstring
+from ...image_processing_backends import PilBackend
+from ...image_utils import OPENAI_CLIP_MEAN, OPENAI_CLIP_STD, PILImageResampling
+from ...utils import auto_docstring
 from .image_processing_<model_name> import MyModelImageProcessorKwargs
 
 @auto_docstring
