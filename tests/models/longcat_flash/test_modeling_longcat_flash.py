@@ -326,6 +326,29 @@ class LongcatFlashModelTest(CausalLMModelTest, unittest.TestCase):
                     _ = model(dummy_input, attention_mask=dummy_attention_mask)
 
 
+import threading
+import psutil
+import os
+import logging
+
+logger = logging.getLogger(__name__)
+
+def log_memory_usage(stop_event, interval=1):
+    process = psutil.Process(os.getpid())
+    while not stop_event.is_set():
+        vm = psutil.virtual_memory()
+        process_mem = process.memory_info().rss / 1024**3
+        logger.warning(
+            f"[Memory] "
+            f"total={vm.total / 1024**3:.2f}GB, "
+            f"used={vm.used / 1024**3:.2f}GB, "
+            f"free={vm.free / 1024**3:.2f}GB, "
+            f"available={vm.available / 1024**3:.2f}GB, "
+            f"process_rss={process_mem:.2f}GB",
+        )
+        stop_event.wait(interval)
+
+
 @slow
 class LongcatFlashIntegrationTest(unittest.TestCase):
     short_model_id = "hf-internal-testing/LongCat-ShortCat"
@@ -336,43 +359,70 @@ class LongcatFlashIntegrationTest(unittest.TestCase):
 
     @slow
     def test_shortcat_generation(self):
-        self.model = LongcatFlashForCausalLM.from_pretrained(
-            self.short_model_id,
-            device_map="auto",
-            dtype=torch.bfloat16,
-        )
-        self.model.generation_config.bos_token_id = 1
-        self.model.generation_config.pad_token_id = 3
-        self.model.generation_config.eos_token_id = 2
-        self.tokenizer = AutoTokenizer.from_pretrained(self.model_id)
 
-        chat = [{"role": "user", "content": "Paris is..."}]
-        inputs = self.tokenizer.apply_chat_template(
-            chat, tokenize=True, add_generation_prompt=True, return_tensors="pt"
-        ).to(self.model.device)
+        stop_event = threading.Event()
+        monitor_thread = threading.Thread(target=log_memory_usage, args=(stop_event,), daemon=True)
+        monitor_thread.start()
 
-        with torch.no_grad():
-            outputs = self.model.generate(inputs, max_new_tokens=10, do_sample=False)
+        try:
 
-        response = self.tokenizer.batch_decode(outputs, skip_special_tokens=False)[0]
-        expected_output = "[Round 0] USER:Paris is... ASSISTANT: dig年车龄juanaheast稍achaotingupebarebones"
 
-        self.assertEqual(response, expected_output)
+            self.model = LongcatFlashForCausalLM.from_pretrained(
+                self.short_model_id,
+                device_map="auto",
+                dtype=torch.bfloat16,
+            )
+            self.model.generation_config.bos_token_id = 1
+            self.model.generation_config.pad_token_id = 3
+            self.model.generation_config.eos_token_id = 2
+            self.tokenizer = AutoTokenizer.from_pretrained(self.model_id)
+
+            chat = [{"role": "user", "content": "Paris is..."}]
+            inputs = self.tokenizer.apply_chat_template(
+                chat, tokenize=True, add_generation_prompt=True, return_tensors="pt"
+            ).to(self.model.device)
+
+            with torch.no_grad():
+                outputs = self.model.generate(inputs, max_new_tokens=10, do_sample=False)
+
+            response = self.tokenizer.batch_decode(outputs, skip_special_tokens=False)[0]
+            expected_output = "[Round 0] USER:Paris is... ASSISTANT: dig年车龄juanaheast稍achaotingupebarebones"
+
+            self.assertEqual(response, expected_output)
+
+            # ... rest of test
+        finally:
+            stop_event.set()
+            monitor_thread.join()
+
 
     @slow
     @require_large_cpu_ram
     def test_longcat_generation_cpu(self):
-        # takes absolutely forever and a lot RAM, but allows to test the output in the CI
-        model = LongcatFlashForCausalLM.from_pretrained(self.model_id, device_map="auto", dtype=torch.bfloat16)
-        tokenizer = AutoTokenizer.from_pretrained(self.model_id)
 
-        chat = [{"role": "user", "content": "Paris is..."}]
-        inputs = tokenizer.apply_chat_template(chat, tokenize=True, add_generation_prompt=True, return_tensors="pt")
+        stop_event = threading.Event()
+        monitor_thread = threading.Thread(target=log_memory_usage, args=(stop_event,), daemon=True)
+        monitor_thread.start()
 
-        with torch.no_grad():
-            outputs = model.generate(inputs, max_new_tokens=3, do_sample=False)
+        try:
 
-        response = tokenizer.batch_decode(outputs, skip_special_tokens=False)[0]
-        expected_output = "[Round 0] USER:Paris is... ASSISTANT:Paris is..."
 
-        self.assertEqual(response, expected_output)
+            # takes absolutely forever and a lot RAM, but allows to test the output in the CI
+            model = LongcatFlashForCausalLM.from_pretrained(self.model_id, device_map="auto", dtype=torch.bfloat16)
+            tokenizer = AutoTokenizer.from_pretrained(self.model_id)
+
+            chat = [{"role": "user", "content": "Paris is..."}]
+            inputs = tokenizer.apply_chat_template(chat, tokenize=True, add_generation_prompt=True, return_tensors="pt")
+
+            with torch.no_grad():
+                outputs = model.generate(inputs, max_new_tokens=3, do_sample=False)
+
+            response = tokenizer.batch_decode(outputs, skip_special_tokens=False)[0]
+            expected_output = "[Round 0] USER:Paris is... ASSISTANT:Paris is..."
+
+            self.assertEqual(response, expected_output)
+
+            # ... rest of test
+        finally:
+            stop_event.set()
+            monitor_thread.join()

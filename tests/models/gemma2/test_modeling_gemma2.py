@@ -66,6 +66,30 @@ class Gemma2ModelTest(CausalLMModelTest, unittest.TestCase):
         pass
 
 
+import threading
+import psutil
+import os
+import logging
+
+logger = logging.getLogger(__name__)
+
+def log_memory_usage(stop_event, interval=1):
+    process = psutil.Process(os.getpid())
+    while not stop_event.is_set():
+        vm = psutil.virtual_memory()
+        process_mem = process.memory_info().rss / 1024**3
+        logger.warning(
+            f"[Memory] "
+            f"total={vm.total / 1024**3:.2f}GB, "
+            f"used={vm.used / 1024**3:.2f}GB, "
+            f"free={vm.free / 1024**3:.2f}GB, "
+            f"available={vm.available / 1024**3:.2f}GB, "
+            f"process_rss={process_mem:.2f}GB",
+        )
+        stop_event.wait(interval)
+
+
+
 @slow
 @require_torch_accelerator
 class Gemma2IntegrationTest(unittest.TestCase):
@@ -279,43 +303,57 @@ class Gemma2IntegrationTest(unittest.TestCase):
     @require_large_cpu_ram
     @pytest.mark.torch_export_test
     def test_export_hybrid_cache(self):
-        from transformers.integrations.executorch import TorchExportableModuleForDecoderOnlyLM
-        from transformers.pytorch_utils import is_torch_greater_or_equal
 
-        if not is_torch_greater_or_equal("2.6.0"):
-            self.skipTest(reason="This test requires torch >= 2.6 to run.")
 
-        model_id = "google/gemma-2-2b"
-        model = AutoModelForCausalLM.from_pretrained(model_id)
-        self.assertEqual(model.config.cache_implementation, "hybrid")
+        stop_event = threading.Event()
+        monitor_thread = threading.Thread(target=log_memory_usage, args=(stop_event,), daemon=True)
+        monitor_thread.start()
 
-        # Export + hybrid cache
-        model.eval()
-        exportable_module = TorchExportableModuleForDecoderOnlyLM(model, batch_size=1, max_cache_len=1024)
-        exported_program = exportable_module.export(
-            input_ids=torch.tensor([[1]], dtype=torch.long, device=model.device),
-            cache_position=torch.tensor([0], dtype=torch.long, device=model.device),
-        )
+        try:
 
-        # Test generation with the exported model
-        prompt = "What is the capital of France?"
-        max_new_tokens_to_generate = 20
-        # Generate text with the exported model
-        tokenizer = AutoTokenizer.from_pretrained(model_id)
-        export_generated_text = TorchExportableModuleForDecoderOnlyLM.generate(
-            exported_program, tokenizer, prompt, max_new_tokens=max_new_tokens_to_generate
-        )
+            from transformers.integrations.executorch import TorchExportableModuleForDecoderOnlyLM
+            from transformers.pytorch_utils import is_torch_greater_or_equal
 
-        input_text = tokenizer(prompt, return_tensors="pt")
-        with torch.no_grad():
-            eager_outputs = model.generate(
-                **input_text,
-                max_new_tokens=max_new_tokens_to_generate,
-                do_sample=False,  # Use greedy decoding to match the exported model
+            if not is_torch_greater_or_equal("2.6.0"):
+                self.skipTest(reason="This test requires torch >= 2.6 to run.")
+
+            model_id = "google/gemma-2-2b"
+            model = AutoModelForCausalLM.from_pretrained(model_id)
+            self.assertEqual(model.config.cache_implementation, "hybrid")
+
+            # Export + hybrid cache
+            model.eval()
+            exportable_module = TorchExportableModuleForDecoderOnlyLM(model, batch_size=1, max_cache_len=1024)
+            exported_program = exportable_module.export(
+                input_ids=torch.tensor([[1]], dtype=torch.long, device=model.device),
+                cache_position=torch.tensor([0], dtype=torch.long, device=model.device),
             )
 
-        eager_generated_text = tokenizer.decode(eager_outputs[0], skip_special_tokens=True)
-        self.assertEqual(export_generated_text, eager_generated_text)
+            # Test generation with the exported model
+            prompt = "What is the capital of France?"
+            max_new_tokens_to_generate = 20
+            # Generate text with the exported model
+            tokenizer = AutoTokenizer.from_pretrained(model_id)
+            export_generated_text = TorchExportableModuleForDecoderOnlyLM.generate(
+                exported_program, tokenizer, prompt, max_new_tokens=max_new_tokens_to_generate
+            )
+
+            input_text = tokenizer(prompt, return_tensors="pt")
+            with torch.no_grad():
+                eager_outputs = model.generate(
+                    **input_text,
+                    max_new_tokens=max_new_tokens_to_generate,
+                    do_sample=False,  # Use greedy decoding to match the exported model
+                )
+
+            eager_generated_text = tokenizer.decode(eager_outputs[0], skip_special_tokens=True)
+            self.assertEqual(export_generated_text, eager_generated_text)
+
+        finally:
+            stop_event.set()
+            monitor_thread.join()
+
+
 
     @require_torch_large_accelerator
     def test_model_9b_bf16_flex_attention(self):

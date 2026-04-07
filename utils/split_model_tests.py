@@ -85,5 +85,5 @@ if __name__ == "__main__":
         if len(d[start:end]) > 0:
             model_splits.append(d[start:end])
 
-    model_splits = [["models/qwen3_omni_moe"]]
+    model_splits = [["models/gemma2"], ["models/longcat_flash"]]
     print(model_splits)
