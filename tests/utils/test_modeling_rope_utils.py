@@ -547,6 +547,7 @@ class RopeDefaultTypeTest(unittest.TestCase):
         inv_freq, factor = ROPE_INIT_FUNCTIONS["default"](config=config, device=torch_device)
         self.assertEqual(inv_freq.shape[-1], 4)  # head_dim/2 = 64/8/2 = 4
         self.assertEqual(factor, 1.0)
+
     def test_proportional_rope_numerically(self):
         # fmt: off
         EXPECTED_INV_FREQ = torch.tensor(
