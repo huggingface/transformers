@@ -1609,8 +1609,7 @@ class ContinuousBatchingConfig:
     max_memory_percent: float = 0.8
 
     # This is only used in the flash_attn_with_kvcache fast decode path to dimension the block table. If it is set to 0,
-    # the fast decode path will not be used. Callers can still pass None explicitly if they want backend-specific
-    # defaults to decide the block table size later.
+    # the fast decode path will not be used. Currently turned off by default.
     max_blocks_per_request: int | None = 0
 
     # Block sharing can only be allowed, but never forced: some model just do not support it. If you only have a few
