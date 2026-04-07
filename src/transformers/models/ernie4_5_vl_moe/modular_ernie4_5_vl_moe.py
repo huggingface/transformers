@@ -118,7 +118,7 @@ class Ernie4_5_VLMoeTextConfig(Ernie4_5_MoeConfig):
     moe_k (`int`, *optional*, defaults to 6):
         Number of selected experts.
     moe_num_experts (`int` or `list[int]`, *optional*, defaults to 64):
-        Number of routed experts.
+        Number of routed experts. Can be a list to specify per-layer expert counts.
     moe_num_shared_experts (`int`, *optional*, defaults to 2):
         The number of experts that are shared for all MoE forwards.
     moe_norm_min (`float`, *optional*, defaults to 1e-12):
