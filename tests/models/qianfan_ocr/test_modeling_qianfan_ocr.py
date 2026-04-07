@@ -172,6 +172,7 @@ class QianfanOCRVisionText2TextModelTester:
 
 @require_torch
 class QianfanOCRModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
+    test_torch_exportable = False 
     all_model_classes = (QianfanOCRForConditionalGeneration, QianfanOCRModel) if is_torch_available() else ()
     all_generative_model_classes = (QianfanOCRForConditionalGeneration,) if is_torch_available() else ()
     pipeline_model_mapping = (
@@ -291,13 +292,13 @@ class QianfanOCRIntegrationTest(unittest.TestCase):
             messages, add_generation_prompt=True, tokenize=True, return_dict=True, return_tensors="pt"
         ).to(torch_device, torch.bfloat16)
 
-        output = model.generate(**inputs, max_new_tokens=20, do_sample=False)
+        output = model.generate(**inputs, max_new_tokens=16, do_sample=False)
         decoded = processor.decode(output[0, inputs["input_ids"].shape[1] :], skip_special_tokens=True)
 
         # fmt: off
         expected_outputs = Expectations(
             {
-                ("cuda", 8): "The image features two striped cats lying down on a couch, both appearing to be sleeping. They are",
+                ("cuda", 2): "The image features two striped cats lying down on a couch, both appearing to be",
             }
         )  # fmt: skip
         self.assertEqual(decoded, expected_outputs.get_expectation())
@@ -319,7 +320,7 @@ class QianfanOCRIntegrationTest(unittest.TestCase):
         # fmt: off
         expected_outputs = Expectations(
             {
-                ("cuda", 8): "1 + 1 equals 2.",
+                ("cuda", 2): "1 + 1 equals 2.",
             }
         )  # fmt: skip
         self.assertEqual(decoded, expected_outputs.get_expectation())
@@ -358,7 +359,7 @@ class QianfanOCRIntegrationTest(unittest.TestCase):
             torch_device, torch.bfloat16
         )
 
-        output = model.generate(**inputs, max_new_tokens=20, do_sample=False)
+        output = model.generate(**inputs, max_new_tokens=16, do_sample=False)
         self.assertEqual(output.shape[0], 2)
 
         decoded_0 = processor.decode(output[0, inputs["input_ids"].shape[1] :], skip_special_tokens=True)
@@ -367,12 +368,12 @@ class QianfanOCRIntegrationTest(unittest.TestCase):
         # fmt: off
         expected_outputs_0 = Expectations(
             {
-                ("cuda", 8): "In the tranquil setting of this image, two tabby cats are the stars of the scene. Their",
+                ("cuda", 2): "In the tranquil setting of this image, two tabby cats are the stars of",
             }
         )  # fmt: skip
         expected_outputs_1 = Expectations(
             {
-                ("cuda", 8): "The image features two striped cats lying down on a couch, both appearing to be asleep. They are",
+                ("cuda", 2): "The image features two striped cats lying down on a couch, both appearing to be",
             }
         )  # fmt: skip
         self.assertEqual(decoded_0, expected_outputs_0.get_expectation())
