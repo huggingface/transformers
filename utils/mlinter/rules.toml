@@ -6,13 +6,10 @@ allowlist_models = ["qwen3_omni_moe"]
 [rules.TRF001.explanation]
 what_it_does = "Checks naming consistency between <Model>PreTrainedModel and config_class."
 why_bad = "Mismatched config_class can break loading, auto classes, and developer expectations."
-bad_example = '''
-class FooPreTrainedModel(PreTrainedModel):
-    config_class = BarConfig
-'''
-good_example = '''
-class FooPreTrainedModel(PreTrainedModel):
-    config_class = FooConfig
+diff = '''
+ class AcmePreTrainedModel(PreTrainedModel):
+-    config_class = WileConfig
++    config_class = AcmeConfig
 '''
 
 [rules.TRF002]
@@ -23,13 +20,10 @@ allowlist_models = ["lighton_ocr"]
 [rules.TRF002.explanation]
 what_it_does = "Checks that base_model_prefix, when set, is a non-empty, whitespace-free string literal."
 why_bad = "Invalid prefixes can break weight loading key mapping and base model access patterns."
-bad_example = '''
-class FooPreTrainedModel(PreTrainedModel):
-    base_model_prefix = ""
-'''
-good_example = '''
-class FooPreTrainedModel(PreTrainedModel):
-    base_model_prefix = "model"
+diff = '''
+ class AcmePreTrainedModel(PreTrainedModel):
+-    base_model_prefix = ""
++    base_model_prefix = "model"
 '''
 
 [rules.TRF003]
@@ -40,16 +34,14 @@ allowlist_models = []
 [rules.TRF003.explanation]
 what_it_does = "Detects forward methods that use the old 'if not return_dict: return (x,)' pattern."
 why_bad = "The old return_dict branching pattern is error-prone and verbose. Use the capture_output or can_return_tuple decorators instead."
-bad_example = '''
-def forward(self, x, return_dict=None):
-    if not return_dict:
-        return (x,)
-    return FooOutput(last_hidden_state=x)
-'''
-good_example = '''
-@can_return_tuple
-def forward(self, x):
-    return FooOutput(last_hidden_state=x)
+diff = '''
+-def forward(self, x, return_dict=None):
+-    if not return_dict:
+-        return (x,)
+-    return AcmeModelOutput(last_hidden_state=x)
++@can_return_tuple
++def forward(self, x):
++    return AcmeModelOutput(last_hidden_state=x)
 '''
 
 [rules.TRF004]
@@ -60,13 +52,11 @@ allowlist_models = ["data2vec", "hubert", "sew", "sew_d", "unispeech", "unispeec
 [rules.TRF004.explanation]
 what_it_does = "Checks that no model class defines a tie_weights method."
 why_bad = "Overriding tie_weights leads to bad consequences for loading, device_map computation, and saving. Use _tied_weights_keys class attribute to declare tied weights instead."
-bad_example = '''
-def tie_weights(self):
-    self.lm_head.weight = self.emb.weight
-'''
-good_example = '''
-class FooForCausalLM(FooPreTrainedModel):
-    _tied_weights_keys = ["lm_head.weight"]
+diff = '''
+-def tie_weights(self):
+-    self.lm_head.weight = self.emb.weight
++class AcmeForCausalLM(AcmePreTrainedModel):
++    _tied_weights_keys = ["lm_head.weight"]
 '''
 
 [rules.TRF005]
@@ -77,11 +67,9 @@ allowlist_models = ["d_fine", "deformable_detr", "glm46v", "lw_detr", "pp_doclay
 [rules.TRF005.explanation]
 what_it_does = "Checks the shape of _no_split_modules when present."
 why_bad = "Malformed values can break device-map partitioning and sharding behavior."
-bad_example = '''
-_no_split_modules = [SomeLayerClass, ""]
-'''
-good_example = '''
-_no_split_modules = ["FooDecoderLayer", "FooAttention"]
+diff = '''
+-_no_split_modules = [SomeLayerClass, ""]
++_no_split_modules = ["AcmeDecoderLayer", "AcmeAttention"]
 '''
 
 [rules.TRF006]
@@ -92,15 +80,11 @@ allowlist_models = ["chinese_clip", "evolla", "idefics2", "llama4"]
 [rules.TRF006.explanation]
 what_it_does = "Checks forward signatures that expose cache arguments for usage of those arguments in method body."
 why_bad = "Unused cache arguments can indicate incomplete caching support and inconsistent API behavior."
-bad_example = '''
-def forward(self, x, past_key_values=None, use_cache=False):
-    return x
-'''
-good_example = '''
-def forward(self, x, past_key_values=None, use_cache=False):
-    if use_cache:
-        ...
-    return x
+diff = '''
+ def forward(self, x, past_key_values=None, use_cache=False):
++    if use_cache:
++        ...
+     return x
 '''
 
 [rules.TRF007]
@@ -111,17 +95,13 @@ allowlist_models = ["distilbert", "lxmert", "mt5", "pix2struct", "pop2piano", "s
 [rules.TRF007.explanation]
 what_it_does = "Checks for self attribute assignments after self.post_init() in __init__."
 why_bad = "Mutating model structure after post_init can bypass intended initialization/finalization logic."
-bad_example = '''
-def __init__(self, config):
-    ...
-    self.post_init()
-    self.proj = nn.Linear(...)
-'''
-good_example = '''
-def __init__(self, config):
-    ...
-    self.proj = nn.Linear(...)
-    self.post_init()
+diff = '''
+ def __init__(self, config):
+     ...
+-    self.post_init()
+-    self.proj = nn.Linear(...)
++    self.proj = nn.Linear(...)
++    self.post_init()
 '''
 
 [rules.TRF008]
@@ -131,15 +111,11 @@ default_enabled = true
 [rules.TRF008.explanation]
 what_it_does = "Checks add_start_docstrings usage on model classes for non-empty docstring arguments."
 why_bad = "Empty decorator usage produces unclear docs and weakens generated API documentation quality."
-bad_example = '''
-@add_start_docstrings("")
-class FooModel(FooPreTrainedModel):
-    ...
-'''
-good_example = '''
-@add_start_docstrings("The Foo model.")
-class FooModel(FooPreTrainedModel):
-    ...
+diff = '''
+-@add_start_docstrings("")
++@add_start_docstrings("The Acme model.")
+ class AcmeModel(AcmePreTrainedModel):
+     ...
 '''
 
 [rules.TRF009]
@@ -150,12 +126,10 @@ allowlist_models = ["dpr", "maskformer", "sam3_video", "vision_text_dual_encoder
 [rules.TRF009.explanation]
 what_it_does = "Checks modeling files for cross-model imports such as transformers.models.other_model.* or from ..other_model.* imports."
 why_bad = "Cross-model implementation imports violate the single-file policy and make model behavior harder to inspect and maintain."
-bad_example = '''
-from transformers.models.llama.modeling_llama import LlamaAttention
-'''
-good_example = '''
-# Keep implementation local in this modeling file.
-# If code is reused, copy it with an appropriate # Copied from ... statement.
+diff = '''
+-from transformers.models.llama.modeling_llama import LlamaAttention
++# Keep implementation local to this file.
++# If reusing code, copy it with a # Copied from comment.
 '''
 
 [rules.TRF010]
@@ -166,14 +140,10 @@ allowlist_models = ["nemotron_h", "vibevoice_asr"]
 [rules.TRF010.explanation]
 what_it_does = "Checks direct PreTrainedConfig/PretrainedConfig subclasses in configuration_*.py and modular_*.py for an explicit @strict(accept_kwargs=True) decorator."
 why_bad = "Without strict, new config classes miss the repo's runtime type-validation contract and drift from the dataclass-based config standard."
-bad_example = '''
-class FooConfig(PreTrainedConfig):
-    ...
-'''
-good_example = '''
-@strict(accept_kwargs=True)
-class FooConfig(PreTrainedConfig):
-    ...
+diff = '''
++@strict(accept_kwargs=True)
+ class AcmeConfig(PreTrainedConfig):
+     ...
 '''
 
 [rules.TRF011]
@@ -184,21 +154,15 @@ allowlist_models = []
 [rules.TRF011.explanation]
 what_it_does = "In forward() methods of PreTrainedModel subclasses, checks for attribute accesses on submodules that would not exist on torch.nn.Identity. This includes attribute accesses on loop variables iterating over self.layers, and self.<submodule>.<attr> chains where <attr> is not a standard nn.Module attribute."
 why_bad = "Pipeline parallelism may replace any submodule with torch.nn.Identity. Accessing custom attributes (e.g. decoder_layer.attention_type) on a replaced module raises AttributeError at runtime. Per-layer metadata should be read from self.config instead."
-bad_example = '''
-def forward(self, ...):
-    for decoder_layer in self.layers:
-        hidden_states = decoder_layer(
-            hidden_states,
-            attention_mask=causal_mask_mapping[decoder_layer.attention_type],
-        )
-'''
-good_example = '''
-def forward(self, ...):
-    for i, decoder_layer in enumerate(self.layers):
-        hidden_states = decoder_layer(
-            hidden_states,
-            attention_mask=causal_mask_mapping[self.config.layer_types[i]],
-        )
+diff = '''
+ def forward(self, ...):
+-    for decoder_layer in self.layers:
++    for i, decoder_layer in enumerate(self.layers):
+         hidden_states = decoder_layer(
+             hidden_states,
+-            attention_mask=causal_mask_mapping[decoder_layer.attention_type],
++            attention_mask=causal_mask_mapping[self.config.layer_types[i]],
+         )
 '''
 
 [rules.TRF012]
@@ -209,15 +173,12 @@ allowlist_models = []
 [rules.TRF012.explanation]
 what_it_does = "Checks that _init_weights(self, module) does not use in-place operations (e.g. .normal_(), .zero_()) directly on module weights."
 why_bad = "We rely on internal flags set on parameters to track whether they need re-initialization. In-place ops bypass this mechanism. Use the `init` primitives instead."
-bad_example = '''
-def _init_weights(self, module):
-    module.weight.normal_(mean=0.0, std=0.02)
-'''
-good_example = '''
-from transformers import initialization as init
-
-def _init_weights(self, module):
-    init.normal_(module.weight, mean=0.0, std=0.02)
+diff = '''
++from transformers import initialization as init
++
+ def _init_weights(self, module):
+-    module.weight.normal_(mean=0.0, std=0.02)
++    init.normal_(module.weight, mean=0.0, std=0.02)
 '''
 
 [rules.TRF013]
@@ -228,18 +189,12 @@ allowlist_models = []
 [rules.TRF013.explanation]
 what_it_does = "Checks that every PreTrainedModel subclass with an __init__ method calls self.post_init(). In modular files, calling super().__init__() is also accepted since it propagates post_init from the parent."
 why_bad = "post_init performs essential finalization (weight initialization, gradient checkpointing setup, etc.). Omitting it causes subtle runtime bugs."
-bad_example = '''
-class FooModel(FooPreTrainedModel):
-    def __init__(self, config):
-        super().__init__(config)
-        self.layers = nn.ModuleList(...)
-'''
-good_example = '''
-class FooModel(FooPreTrainedModel):
-    def __init__(self, config):
-        super().__init__(config)
-        self.layers = nn.ModuleList(...)
-        self.post_init()
+diff = '''
+ class AcmeModel(AcmePreTrainedModel):
+     def __init__(self, config):
+         super().__init__(config)
+         self.layers = nn.ModuleList(...)
++        self.post_init()
 '''
 
 [rules.TRF014]
@@ -250,15 +205,10 @@ allowlist_models = []
 [rules.TRF014.explanation]
 what_it_does = "Checks whether `trust_remote_code` is passed or used in code (e.g. as kwarg) within native model integration files."
 why_bad = "`trust_remote_code` allows arbitrary loading, including binaries, which should only be a power feature for users, not a standard use-case. Native integrations must not depend on it, as remote code cannot be reviewed or maintained within transformers."
-bad_example = '''
-class FooModel(FooPreTrainedModel):
-    def __init__(self, config):
-        super().__init__(config)
-        self.model = AutoModel.from_pretrained(..., trust_remote_code=True)
-'''
-good_example = '''
-class FooModel(FooPreTrainedModel):
-    def __init__(self, config):
-        super().__init__(config)
-        self.model = AutoModel.from_pretrained(...)
+diff = '''
+ class AcmeModel(AcmePreTrainedModel):
+     def __init__(self, config):
+         super().__init__(config)
+-        self.model = AutoModel.from_pretrained(..., trust_remote_code=True)
++        self.model = AutoModel.from_pretrained(...)
 '''

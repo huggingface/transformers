@@ -1724,7 +1724,7 @@ class ProcessorTesterMixin:
             tokenize=True,
             return_dict=True,
             return_tensors="pt",
-            processor_kwargs={"num_frames": num_frames},
+            processor_kwargs={"num_frames": num_frames, "fps": None},
         )
         self.assertTrue(self.videos_input_name in out_dict_with_video)
         self.assertEqual(len(out_dict_with_video[self.videos_input_name]), 1)
@@ -1738,7 +1738,7 @@ class ProcessorTesterMixin:
             tokenize=True,
             return_dict=True,
             return_tensors="pt",
-            processor_kwargs={"fps": fps},
+            processor_kwargs={"fps": fps, "num_frames": None},
         )
         self.assertTrue(self.videos_input_name in out_dict_with_video)
         self.assertEqual(len(out_dict_with_video[self.videos_input_name]), 1)

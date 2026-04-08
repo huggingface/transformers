@@ -278,6 +278,8 @@ IGNORE_NON_TESTED = (
         "VibeVoiceAcousticTokenizerDecoderModel",  # Tested through VibeVoiceAcousticTokenizerModel
         "PI0Model",  # special arch, tested through PI0ForConditionalGeneration
         "UVDocBridge",  # Building part of a bigger model, tested implicitly through UVDocModel
+        "Gemma4VisionModel",  # Building part of a bigger model, tested implicitly
+        "Gemma4AudioModel",  # Building part of a bigger model, tested implicitly
     ]
 )
 

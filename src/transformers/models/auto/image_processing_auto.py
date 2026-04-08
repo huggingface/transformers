@@ -89,6 +89,7 @@ else:
             ("florence2", {"torchvision": "CLIPImageProcessor", "pil": "CLIPImageProcessorPil"}),
             ("focalnet", {"torchvision": "BitImageProcessor", "pil": "BitImageProcessorPil"}),
             ("gemma3n", {"torchvision": "SiglipImageProcessor", "pil": "SiglipImageProcessorPil"}),
+            ("gemma4", {"torchvision": "Gemma4ImageProcessor", "pil": "Gemma4ImageProcessorPil"}),
             ("git", {"torchvision": "CLIPImageProcessor", "pil": "CLIPImageProcessorPil"}),
             ("groupvit", {"torchvision": "CLIPImageProcessor", "pil": "CLIPImageProcessorPil"}),
             ("hiera", {"torchvision": "BitImageProcessor", "pil": "BitImageProcessorPil"}),

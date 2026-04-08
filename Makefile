@@ -37,6 +37,7 @@ check-repository-consistency:
 		copies,\
 		modular_conversion,\
 		doc_toc,\
+		modeling_rules_doc,\
 		docstrings,\
 		dummies,\
 		repo,\
@@ -64,6 +65,7 @@ check-repo:
 		copies,\
 		modular_conversion,\
 		doc_toc,\
+		modeling_rules_doc,\
 		docstrings,\
 		dummies,\
 		repo,\
@@ -86,6 +88,7 @@ fix-repo:
 		auto_mappings,\
 		sort_auto_mappings,\
 		doc_toc,\
+		modeling_rules_doc,\
 		copies,\
 		modular_conversion,\
 		dummies,\

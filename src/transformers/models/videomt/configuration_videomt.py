@@ -24,7 +24,7 @@ from ...configuration_utils import PreTrainedConfig
 from ...utils import auto_docstring
 
 
-@auto_docstring(checkpoint="tue-mps/coco_panoptic_videomt_large_640")
+@auto_docstring(checkpoint="tue-mps/videomt-dinov2-small-ytvis2019")
 @strict
 class VideomtConfig(PreTrainedConfig):
     r"""

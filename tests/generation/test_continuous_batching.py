@@ -30,11 +30,11 @@ from transformers import (
     ContinuousBatchingConfig,
     GenerationConfig,
     GenerationMixin,
-    LogitsProcessorList,
     StaticCache,
 )
 from transformers.generation.continuous_batching.cache import (
     PagedAttentionCache,
+    PagedAttentionMemoryHandler,
     SlidingAttentionCacheAllocator,
     group_layers_by_attn_type,
 )
@@ -43,11 +43,11 @@ from transformers.generation.continuous_batching.continuous_api import Continuou
 from transformers.generation.continuous_batching.input_outputs import build_attention_mask
 from transformers.generation.continuous_batching.requests import GenerationOutput, RequestStatus
 from transformers.testing_utils import (
-    Expectations,
     require_deterministic_for_xpu,
     require_flash_attn,
     require_kernels,
     require_torch_accelerator,
+    require_torch_gpu,
     slow,
     torch_device,
 )
@@ -159,6 +159,45 @@ def get_generation_inputs(
             return_attention_mask=True,
         )
         return inputs
+
+
+def regular_generate(
+    model: GenerationMixin,
+    tokenizer: AutoTokenizer,
+    user_messages: list[str],
+    **generate_kwargs,
+) -> tuple[list[list[int]], list[list[float]]]:
+    # Run generation
+    inputs = get_generation_inputs(user_messages, tokenizer, for_continuous_batching=False)
+    generate_outputs = model.generate(**inputs.to(model.device), return_dict_in_generate=True, **generate_kwargs)
+
+    # Keep only generated tokens
+    all_generated_tokens = []
+    num_input_tokens = inputs.input_ids.shape[1]
+    for i in range(len(user_messages)):
+        # Remove left-side input and padding tokens
+        generated_toks = generate_outputs.sequences[i, num_input_tokens:].tolist()
+        # Remove right-side padding tokens
+        while generated_toks[-1] == model.generation_config.pad_token_id:
+            generated_toks.pop()
+        all_generated_tokens.append(generated_toks)
+
+    # Retrieve logprobs if the scores were requested
+    per_prompt_logprobs = []
+    if generate_kwargs.get("output_scores", False):
+        # Loop over prompts
+        for i in range(len(user_messages)):
+            logprobs = []
+            tokens_for_prompt = generate_outputs.sequences[i, num_input_tokens:].tolist()
+            for score, token in zip(generate_outputs.scores, tokens_for_prompt):
+                # Scores already have logits processors applied (including temperature)
+                probs = torch.nn.functional.softmax(score[i], dim=-1)
+                logprobs.append(probs[token].log().item())
+            per_prompt_logprobs.append(logprobs)
+    # Otherwise, return an empty list
+    else:
+        per_prompt_logprobs = []
+    return all_generated_tokens, per_prompt_logprobs
 
 
 # Class for all continuous batching tests that do not require any accelerator. Usualy those test are faster to run.
@@ -634,69 +673,59 @@ class ContinuousBatchingWithAcceleratorTest(unittest.TestCase):
         """Test that log probabilities match between continuous batching and regular generate."""
         model_id = "TinyLlama/TinyLlama-1.1B-Chat-v1.0"
 
+        # Retrieve tokenizer, model and eos_token_id (required otherwise logits will be misaligned)
         tokenizer, model = get_tokenizer_and_model(model_id, "sdpa", torch_device, torch.float32)
+        eos_token_id = model.config.eos_token_id  # type: ignore[attr-defined]
+
+        # Run CB generation
         user_messages = ["What is 2+2?", "Hello world"]
         input_ids = get_generation_inputs(user_messages, tokenizer, for_continuous_batching=True)
-
-        eos_token_id = model.config.eos_token_id  # required otherwise logits will be misaligned
         gen_config = GenerationConfig(max_new_tokens=10, do_sample=False, eos_token_id=eos_token_id)
-
         continuous_batching_config = ContinuousBatchingConfig(
             use_cuda_graph=use_cuda_graph,
             use_async_batching=use_async_batching,
             return_logprobs=True,
         )
-
         cb_outputs = model.generate_batch(
             inputs=input_ids, generation_config=gen_config, continuous_batching_config=continuous_batching_config
         )
 
-        # Load fresh model for regular generate (same pattern as parity tests)
-        model = AutoModelForCausalLM.from_pretrained(model_id, attn_implementation="sdpa", torch_dtype=torch.float32)
-        model = model.to(torch_device).eval()
-
-        # Run regular generate with output_scores to get logits
-        inputs = get_generation_inputs(user_messages, tokenizer, for_continuous_batching=False)
-
-        gen_config_regular = GenerationConfig(
-            max_new_tokens=10, do_sample=False, output_scores=True, eos_token_id=tokenizer.eos_token_id
-        )
-        generate_outputs = model.generate(
-            **inputs.to(torch_device), generation_config=gen_config_regular, return_dict_in_generate=True
+        # Load fresh model for regular generate
+        tokenizer, model = get_tokenizer_and_model(model_id, "sdpa", torch_device, torch.float32)
+        # Run regular generate
+        regular_outputs, regular_logprobs = regular_generate(
+            model=model,
+            tokenizer=tokenizer,
+            user_messages=user_messages,
+            max_new_tokens=10,
+            do_sample=False,
+            output_scores=True,
+            eos_token_id=eos_token_id,
         )
 
         # Compare log_probs for each request, matching by prompt_ids
-        num_input_tokens = inputs.input_ids.shape[1]
-        for i in range(len(user_messages)):
-            # Find the corresponding CB output by matching prompt tokens
-            input_tokens = inputs.input_ids[i][inputs.attention_mask[i] == 1].tolist()
-            cb_output = None
-            for state in cb_outputs.values():
-                if state.prompt_ids == input_tokens:
-                    cb_output = state
-                    break
-            self.assertIsNotNone(cb_output, f"Could not find CB output for request {i}")
+        for i, cb_output in enumerate(cb_outputs.values()):
+            # Compare Cb and regular generate outputs
+            cb_output_ids = cb_output.generated_tokens
+            regular_output_ids = regular_outputs[i]
+            self.assertEqual(len(cb_output_ids), len(regular_output_ids))
+            self.assertEqual(cb_output_ids, regular_output_ids)
 
-            # Compute log_probs from regular generate scores
-            expected_logprobs = []
-            generated_tokens = generate_outputs.sequences[i, num_input_tokens:].tolist()
-            for score, token in zip(generate_outputs.scores, generated_tokens):
-                probs = torch.nn.functional.softmax(score[i], dim=-1)
-                expected_logprobs.append(probs[token].log().item())
+            # Retrieve logprobs from CB and regular generate
+            cb_logprobs = cb_output.logprobs
+            expected_logprobs = regular_logprobs[i]
 
-            # Truncate to same length (in case of padding differences)
-            min_len = min(len(cb_output.logprobs), len(expected_logprobs))
-            cb_logprobs = cb_output.logprobs[:min_len]
+            # Because of padding, we need to truncate to the same length
+            min_len = min(len(cb_logprobs), len(expected_logprobs))
+            cb_logprobs = cb_logprobs[:min_len]
             expected_logprobs = expected_logprobs[:min_len]
+            self.assertEqual(len(cb_logprobs), len(expected_logprobs))
 
-            # Compare with tolerance for floating point differences
+            # Compare with tolerance for floating point differences (because of padding, tol is higher for cuda graphs)
+            delta = 2e-5 if use_cuda_graph else 1e-5
             for j, (cb_lp, exp_lp) in enumerate(zip(cb_logprobs, expected_logprobs)):
-                self.assertAlmostEqual(
-                    cb_lp,
-                    exp_lp,
-                    delta=2e-5 if use_cuda_graph else 1e-5,  # cuda graphs add padding, hence lower precision
-                    msg=f"logprob mismatch at position {j} for request {i}: CB={cb_lp}, expected={exp_lp}",
-                )
+                error_msg = f"logprob mismatch at position {j} for request {i}: CB={cb_lp}, expected={exp_lp}"
+                self.assertAlmostEqual(cb_lp, exp_lp, delta=delta, msg=error_msg)
 
     def test_continuous_batching_with_default_compile_configs(self) -> None:
         """Test continuous batching with use_default_compile_configs=True in ContinuousBatchingConfig.
@@ -792,7 +821,7 @@ class ContinuousBatchingWithAcceleratorTest(unittest.TestCase):
 
         tokenizer, model = get_tokenizer_and_model(model_id, "sdpa", torch_device)
         manager = model.init_continuous_batching()
-        manager.logit_processor = LogitsProcessorList()
+        manager.logit_processor.clear()
         manager.start()
 
         user_messages = ["What is the Transformers library known for?"]
@@ -840,18 +869,18 @@ class ContinuousBatchingWithAcceleratorTest(unittest.TestCase):
 
         tokenizer, model = get_tokenizer_and_model(model_id, "sdpa", torch_device)
         manager = model.init_continuous_batching()
-        manager.logit_processor = LogitsProcessorList()
+        manager.logit_processor.clear()
         manager.start()
 
         user_messages = ["What is the Transformers library known for?"]
         inputs = get_generation_inputs(user_messages, tokenizer, for_continuous_batching=True)[0]
 
         async def collect_results():
-            results = []
+            token_counts = []
             future = asyncio.get_running_loop().create_future()
 
             def on_result(output):
-                results.append(output)
+                token_counts.append(len(output.generated_tokens))
                 if output.is_finished():
                     future.set_result(True)
 
@@ -859,15 +888,12 @@ class ContinuousBatchingWithAcceleratorTest(unittest.TestCase):
             manager.register_result_handler(request_id, on_result)
 
             await asyncio.wait_for(future, timeout=30)
-            return results
+            return token_counts
 
-        results = asyncio.run(collect_results())
+        token_counts = asyncio.run(collect_results())
 
         # Streaming via handler: incremental token count, same as request_id_iter
-        self.assertEqual(len(results[0].generated_tokens), 1)
-        self.assertEqual(len(results[1].generated_tokens), 2)
-        self.assertEqual(len(results[2].generated_tokens), 3)
-        self.assertTrue(results[-1].is_finished())
+        self.assertEqual(token_counts, [1, 2, 3])
         # Queue should be empty — everything went through the handler
         self.assertTrue(manager.output_router.output_queue.empty())
 
@@ -876,18 +902,23 @@ class ContinuousBatchingWithAcceleratorTest(unittest.TestCase):
     # -----------------------------------------Misc. tests----------------------------------------- #
     #                     Various tests that don't fit into the other categories                    #
     # --------------------------------------------------------------------------------------------- #
-    def _test_block_sharing(
-        self, model_id: str, expected_layer_types: dict[str, int], input_msg: str, expected_output_tokens: list[int]
-    ) -> None:
-        tokenizer, model = get_tokenizer_and_model(model_id, "sdpa", torch_device)
+    def _test_block_sharing(self, model_id: str, expected_layer_types: dict[str, int], input_msg: str) -> None:
+        # Use float32 for SDPA to handle precision differences from attention masks (same as parity test)
+        tokenizer, model = get_tokenizer_and_model(model_id, "sdpa", torch_device, dtype=torch.float32)
+
+        # Configure generation for parity: disable processors not supported by CB (like repetition_penalty)
+        model.generation_config.max_new_tokens = 32
+        model.generation_config.do_sample = False
+        model.generation_config.repetition_penalty = None
+
+        # Get expected output from regular generate for parity check
+        expected_output_tokens, _ = regular_generate(model, tokenizer, [input_msg])
 
         cb_context_manager = model.continuous_batching_context_manager(
-            generation_config=GenerationConfig(do_sample=False),
+            generation_config=model.generation_config,
             continuous_batching_config=ContinuousBatchingConfig(block_size=32),
         )
         with cb_context_manager as manager:
-            manager.logit_processor = LogitsProcessorList()
-
             # Create a request with at least 32 tokens but less than 64 so prefill only generates one complete block
             inputs = get_generation_inputs([input_msg], tokenizer, for_continuous_batching=True)[0]
             self.assertGreaterEqual(len(inputs), 32, f"Input length is {len(inputs)} instead of at least 32")
@@ -960,32 +991,23 @@ class ContinuousBatchingWithAcceleratorTest(unittest.TestCase):
                 f"Expected total prefix length to be {expected_total_prefix_length}, but got {total_prefix_length = }",
             )
 
-        # Check the outputs were the same
+        # Check the outputs were the same (block sharing should produce identical results)
         self.assertEqual(chunk_no_reuse.generated_tokens, chunk_with_reuse.generated_tokens)
 
-        # As an additional sanity check, we also compare to the generated tokens when prefix sharing is disabled
-        print(f"{chunk_no_reuse.generated_tokens = } {expected_output_tokens = }")
-        self.assertEqual(chunk_no_reuse.generated_tokens, expected_output_tokens)
+        # Verify parity with regular generate
+        self.assertEqual(chunk_no_reuse.generated_tokens, expected_output_tokens[0])
 
     def test_prefix_sharing(self) -> None:
         model_id = "Qwen/Qwen2.5-0.5B-Instruct"
         num_layer_groups = {"full_attention": 1, "sliding_window": 0}
         input_msg = "What is the Transformers library known for?"
-        expected_generated_tokens = Expectations({
-            (None, None): [785, 80532, 6733, 374, 3881, 369, 1181, 5726, 311, 1855, 323, 36635, 3460, 12934, 4128, 4119, 11, 2670, 1846, 429, 646, 6923, 1467, 11, 14683, 1467, 11, 323, 2736, 1008, 4128, 13904]
-        }).get_expectation()  # fmt: skip
-
-        return self._test_block_sharing(model_id, num_layer_groups, input_msg, expected_generated_tokens)
+        return self._test_block_sharing(model_id, num_layer_groups, input_msg)
 
     def test_block_sharing_with_hybrid_model(self) -> None:
         model_id = "google/gemma-3-1b-it"
         num_layer_groups = {"full_attention": 2, "sliding_window": 11}
         input_msg = "I am a software engineer looking to use open source software to build a new AI agent. What is the Transformers library known for?"
-        expected_generated_tokens = Expectations({
-            (None, None): [19058, 236764, 1531, 236789, 236751, 2541, 1679, 1144, 506, 128282, 9427, 563, 3224, 573, 236764, 10916, 528, 506, 4403, 529, 3788, 12498, 11362, 236761, 1030, 236789, 236751, 496, 808, 120749, 236829, 532]
-        }).get_expectation()  # fmt: skip
-
-        return self._test_block_sharing(model_id, num_layer_groups, input_msg, expected_generated_tokens)
+        return self._test_block_sharing(model_id, num_layer_groups, input_msg)
 
     @parameterized.expand([True, False])
     @require_flash_attn  # otherwise the test can fail because attention bias has a very slight impact on SDPA and eager
@@ -1095,3 +1117,216 @@ class ContinuousBatchingWithAcceleratorTest(unittest.TestCase):
             text_fa2 = tokenizer.decode(out_fa2.generated_tokens, skip_special_tokens=True)
             text_fa3 = tokenizer.decode(out_fa3.generated_tokens, skip_special_tokens=True)
             self.assertEqual(text_fa2, text_fa3, f"Mismatch:\nFA2: {text_fa2}\nFA3: {text_fa3}")
+
+    @parameterized.expand([(False, False), (False, True), (True, False), (True, True)])
+    @slow
+    def test_per_request_logits_processors(self, use_cuda_graph: bool, use_async_batching: bool) -> None:
+        """Tests that per-request logits processor kwargs (temperature, top_k, top_p) work correctly in generation."""
+        model_id = "TinyLlama/TinyLlama-1.1B-Chat-v1.0"
+        max_new_tokens = 10
+        temperatures = [1.0, 1.0]
+        top_ks = [10, 50]
+        top_ps = [0.9, 0.99]
+
+        tokenizer, model = get_tokenizer_and_model(model_id, "flash_attention_2", torch_device)
+        eos_token_id = model.config.eos_token_id  # type: ignore[attr-defined]
+
+        # Same prompt for both requests
+        user_messages = ["Write a random number:"]
+        input_ids = get_generation_inputs(user_messages, tokenizer, for_continuous_batching=True)[0]
+
+        # Use the context manager to add requests with different per-request kwargs
+        generation_config = GenerationConfig(
+            do_sample=True,
+            temperature=max(temperatures) + 1,  # enables temperature warping
+            top_k=max(top_ks) + 1,
+            top_p=min(top_ps) - 0.01,
+            max_new_tokens=max_new_tokens,
+            eos_token_id=eos_token_id,
+        )
+        continuous_batching_config = ContinuousBatchingConfig(
+            use_cuda_graph=use_cuda_graph,
+            use_async_batching=use_async_batching,
+            per_request_processors=True,
+            return_logprobs=True,
+        )
+        manager = model.init_continuous_batching(
+            generation_config=generation_config,
+            continuous_batching_config=continuous_batching_config,
+            q_padding_interval_size=16,  # allows for exact comparison between CB and regular generation
+        )
+
+        # Trick to have temperature, top-k, top-p ... without randomness: diable sampling after manager creation
+        manager.generation_config.do_sample = False
+
+        manager.start()
+        try:
+            # Request 0: low temperature (more deterministic)
+            req0_id = manager.add_request(
+                input_ids, max_new_tokens=max_new_tokens, temperature=temperatures[0], top_k=top_ks[0], top_p=top_ps[0]
+            )
+            # Request 1: high temperature (more random)
+            req1_id = manager.add_request(
+                input_ids, max_new_tokens=max_new_tokens, temperature=temperatures[1], top_k=top_ks[1], top_p=top_ps[1]
+            )
+            # Collect results
+            results = {}
+            while len(results) < 2:
+                result = manager.get_result(timeout=1)
+                if result is not None and result.is_finished():
+                    results[result.request_id] = result
+                elif not manager.is_running():
+                    break
+        finally:
+            manager.stop(block=True)
+
+        # Both requests should complete and have logprobs
+        self.assertEqual(len(results), 2, f"Expected 2 results, got {len(results)}")
+        self.assertGreater(len(results[req0_id].logprobs), 0)
+        self.assertGreater(len(results[req1_id].logprobs), 0)
+        # Also ensure the logprobs were not the same
+        self.assertNotEqual(results[req0_id].logprobs, results[req1_id].logprobs)
+
+        # Compare each request with regular generation
+        # Build logits processor with do_sample=True (so temperature is included), then set do_sample=False for
+        # deterministic generation, which is the same trick that CB uses
+        delta = 2e-5 if use_cuda_graph else 1e-5
+        for i, req_id in enumerate([req0_id, req1_id]):
+            tokenizer, model = get_tokenizer_and_model(model_id, "flash_attention_2", torch_device)
+            gen_config = GenerationConfig(
+                do_sample=True,
+                temperature=temperatures[i],
+                top_k=top_ks[i],
+                top_p=top_ps[i],
+                max_new_tokens=max_new_tokens,
+                eos_token_id=eos_token_id,
+            )
+            logits_processor = model._get_logits_processor(gen_config)
+            gen_config.do_sample = False
+            regular_generated_tokens, regular_logprobs = regular_generate(
+                model=model,
+                tokenizer=tokenizer,
+                user_messages=user_messages,
+                logits_processor=logits_processor,
+                max_new_tokens=max_new_tokens,
+                do_sample=False,
+                output_scores=True,
+                eos_token_id=eos_token_id,
+            )
+            self.assertEqual(results[req_id].generated_tokens, regular_generated_tokens[0])
+            for j, (cb_lp, exp_lp) in enumerate(zip(results[req_id].logprobs, regular_logprobs[0])):
+                error_msg = f"Request {i}: logprob mismatch at position {j}: CB={cb_lp}, expected={exp_lp}"
+                self.assertAlmostEqual(cb_lp, exp_lp, delta=delta, msg=error_msg)
+
+
+@require_torch_gpu
+class TestMemoryHandlerPrediction(unittest.TestCase):
+    """Verifies that ``PagedAttentionMemoryHandler.compute_memory_footprint`` matches real GPU memory usage.
+
+    For each configuration we allocate tensors at the *idealized* sizes modeled by the handler (same shapes, same
+    dtypes, no alignment padding or extra blocks) and compare the CUDA memory delta to the handler's prediction.
+    """
+
+    # (block_size, page_size, num_groups, group_size, peak_act, num_attn_masks, max_bpr, logprobs, cache_dtype, use_async_batching)
+    CONFIGS = [
+        (32, 256, 1, 22, 34048, 1, 0, False, torch.float16, False),  # sdpa-like, 1 attn mask
+        (256, 256, 1, 22, 34048, 0, 0, False, torch.float16, False),  # flash-like, no attn mask
+        (32, 256, 2, 14, 34048, 2, 0, False, torch.bfloat16, False),  # hybrid model, 2 groups + 2 masks
+        (32, 128, 1, 16, 8192, 1, 8, True, torch.float16, False),  # with block_table + logprobs
+        (32, 128, 1, 16, 8192, 1, 8, True, torch.float16, True),  # with block_table + logprobs + async batching
+    ]
+
+    NUM_BLOCKS = 4
+    MAX_BATCH_TOKENS = 64
+
+    @parameterized.expand(CONFIGS)
+    def test_memory_prediction(
+        self,
+        block_size: int,
+        page_size: int,
+        num_groups: int,
+        group_size: int,
+        peak_act: int,
+        num_attn_masks: int,
+        max_bpr: int,
+        logprobs: bool,
+        cache_dtype: torch.dtype,
+        use_async_batching: bool,
+    ) -> None:
+        cb_config = ContinuousBatchingConfig(
+            max_blocks_per_request=max_bpr,
+            return_logprobs=logprobs,
+            use_async_batching=use_async_batching,
+        )
+
+        handler = PagedAttentionMemoryHandler(
+            block_size=block_size,
+            page_size=page_size,
+            num_groups=num_groups,
+            group_size=group_size,
+            peak_activation_per_token=peak_act,
+            num_attention_masks=num_attn_masks,
+            continuous_batching_config=cb_config,
+        )
+
+        N = self.NUM_BLOCKS * block_size  # num_pages
+        M = self.MAX_BATCH_TOKENS
+        predicted = handler.compute_memory_footprint(self.NUM_BLOCKS, M, cache_dtype)
+        num_output_rows = 2 if logprobs else 1
+        act_dtype = handler._activation_dtype
+        i32 = handler._input_dtype
+
+        # -- Allocate tensors at the exact idealized sizes the handler models --
+        device = "cuda"
+        torch.cuda.empty_cache()
+        baseline = torch.cuda.memory_allocated(device)
+
+        k = handler.io_multiplier  # 1 sync, 2 async -- scales IO tensors only
+        tensors = []
+        # kv_cache: 2 * group_size tensors of [N, page_size] (not scaled by k)
+        for _ in range(group_size):
+            tensors.append(torch.empty((N, page_size), dtype=cache_dtype, device=device))
+            tensors.append(torch.empty((N, page_size), dtype=cache_dtype, device=device))
+        # activation peak: flat tensor of peak_act * M elements (not scaled by k)
+        tensors.append(torch.empty(peak_act * M, dtype=act_dtype, device=device))
+        # IO tensors below are allocated k times (once per IO instance)
+        for _ in range(k):
+            # bulk_input: [7, M]
+            tensors.append(torch.empty((7, M), dtype=i32, device=device))
+            # output_ids: [num_output_rows, M]
+            tensors.append(torch.empty((num_output_rows, M), dtype=i32, device=device))
+            # attention_mask: [1, 1, M, N + M] per mask type
+            for _ in range(num_attn_masks):
+                tensors.append(torch.empty((1, 1, M, N + M), dtype=act_dtype, device=device))
+            # block_table: [num_groups, M, max_bpr] (empty when max_bpr == 0)
+            if max_bpr > 0:
+                tensors.append(torch.empty((num_groups, M, max_bpr), dtype=i32, device=device))
+            # write_index: [num_groups, M]
+            tensors.append(torch.empty((num_groups, M), dtype=torch.int64, device=device))
+            # read_index: [num_groups, N + M]
+            tensors.append(torch.empty((num_groups, N + M), dtype=torch.int64, device=device))
+
+        actual_cuda = torch.cuda.memory_allocated(device) - baseline
+        expected_nbytes = sum(t.nbytes for t in tensors)
+        num_allocations = len(tensors)
+
+        del tensors
+        torch.cuda.empty_cache()
+
+        # 1) Exact check: prediction must equal the sum of tensor nbytes. This validates the polynomial
+        #    coefficients against the tensor shapes, with zero tolerance.
+        self.assertEqual(
+            predicted,
+            expected_nbytes,
+            f"Prediction ({predicted}) != sum of tensor nbytes ({expected_nbytes})",
+        )
+
+        # 2) GPU memory check: CUDA's caching allocator rounds each allocation up (typically to 512 bytes).
+        #    We allow up to 512 bytes of overhead per allocation.
+        max_cuda_overhead = num_allocations * 512
+        self.assertLessEqual(
+            abs(actual_cuda - predicted),
+            max_cuda_overhead,
+            f"CUDA delta ({actual_cuda}) too far from prediction ({predicted}), "
+            f"allowed overhead = {max_cuda_overhead} ({num_allocations} allocs × 512B)",
+        )
