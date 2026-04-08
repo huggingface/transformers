@@ -19,6 +19,7 @@ import os
 import sys
 import threading
 from collections.abc import Callable
+from datetime import datetime
 from logging import (
     CRITICAL,  # NOQA
     DEBUG,
@@ -81,6 +82,22 @@ def _get_library_root_logger() -> logging.Logger:
     return logging.getLogger(_get_library_name())
 
 
+class ColoredVerboseFormatter(logging.Formatter):
+    default_color = "\033[0m"
+    colors = {
+        logging.DEBUG: "\033[90m",  # gray
+        logging.INFO: "\033[96m",  # cyan
+        logging.WARNING: "\033[93m",  # yellow
+        logging.ERROR: "\033[91m",  # red
+        logging.CRITICAL: "\033[41m",  # red background
+    }
+
+    def format(self, record):
+        color = self.colors.get(record.levelno, "")
+        asctime = datetime.fromtimestamp(record.created).strftime("%H:%M:%S")
+        return f"{color}{record.levelname}{self.default_color} [{record.name}:{record.lineno}] {asctime} {record.getMessage()}"
+
+
 def _configure_library_root_logger() -> None:
     global _default_handler
 
@@ -99,10 +116,16 @@ def _configure_library_root_logger() -> None:
         library_root_logger = _get_library_root_logger()
         library_root_logger.addHandler(_default_handler)
         library_root_logger.setLevel(_get_default_logging_level())
+        # Always show lib when logging in non-verbose mode
+        logging_format = "\033[95m[transformers]\033[0m %(message)s"
+        formatter = logging.Formatter(logging_format)
+
         # if logging level is debug, we add pathname and lineno to formatter for easy debugging
         if os.getenv("TRANSFORMERS_VERBOSITY", None) == "detail":
-            formatter = logging.Formatter("[%(levelname)s|%(pathname)s:%(lineno)s] %(asctime)s >> %(message)s")
-            _default_handler.setFormatter(formatter)
+            formatter = ColoredVerboseFormatter()
+
+        formatter = ColoredVerboseFormatter()
+        _default_handler.setFormatter(formatter)
 
         ci = os.getenv("CI")
         is_ci = ci is not None and ci.upper() in {"1", "ON", "YES", "TRUE"}
