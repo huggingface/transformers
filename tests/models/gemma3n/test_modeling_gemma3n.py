@@ -866,12 +866,6 @@ class Gemma3nVision2TextModelTest(ModelTesterMixin, GenerationTesterMixin, unitt
     def test_generate_with_quant_cache(self):
         pass
 
-    @unittest.skip(
-        "Conversion only for the `CausalLM` loading from saved `ConditionalLM`, doesn't apply to simple VLM"
-    )
-    def test_reverse_loading_mapping(self, check_keys_were_modified=True):
-        pass
-
     def _check_hidden_states_for_generate(
         self, batch_size, hidden_states, prompt_length, output_length, config, use_cache=False
     ):

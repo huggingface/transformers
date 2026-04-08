@@ -300,12 +300,6 @@ class Qwen3_5MoeModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.Test
     def test_config(self):
         self.config_tester.run_common_tests()
 
-    @unittest.skip(
-        "Conversion only for the `CausalLM` loading from saved `ConditionalLM`, doesn't apply to simple VLM"
-    )
-    def test_reverse_loading_mapping(self, check_keys_were_modified=True):
-        pass
-
     def _get_conv_state_shape(self, batch_size: int, config):
         num_v_heads = config.linear_num_value_heads
         num_k_heads = config.linear_num_key_heads
