@@ -22,7 +22,6 @@
 from huggingface_hub.dataclasses import strict
 
 from ...configuration_utils import PreTrainedConfig
-from ...modeling_rope_utils import RopeParameters
 from ...utils import auto_docstring
 
 
@@ -101,7 +100,7 @@ class MiMoV2FlashConfig(PreTrainedConfig):
     moe_layer_freq: list | None = None
     add_swa_attention_sink_bias: bool = True
     add_full_attention_sink_bias: bool = False
-    rope_parameters: RopeParameters | dict | None = None
+    rope_parameters: dict | None = None
 
     def __post_init__(self, **kwargs):
         hybrid_layer_pattern = kwargs.pop("hybrid_layer_pattern", None)
@@ -136,6 +135,9 @@ class MiMoV2FlashConfig(PreTrainedConfig):
         rope_scaling = kwargs.pop("rope_scaling", None)
         partial_rotary_factor = kwargs.pop("partial_rotary_factor", 0.334)
 
+        # Similar to Gemma3:
+        # Try to set `rope_scaling` if available, otherwise use `rope_parameters`. If we find `rope_parameters`
+        # as arg in the inputs, we can safely assume that it is in the new format. New naming used -> new format
         default_rope_params = {
             "full_attention": {"rope_type": "default"},
             "sliding_attention": {"rope_type": "default"},
@@ -145,20 +147,15 @@ class MiMoV2FlashConfig(PreTrainedConfig):
         if rope_scaling is not None:
             self.rope_parameters["full_attention"].update(rope_scaling)
 
-        if self.rope_parameters.get("full_attention") is None:
-            self.rope_parameters["full_attention"] = {"rope_type": "default"}
-        self.rope_parameters["full_attention"].setdefault(
-            "rope_theta", kwargs.pop("rope_theta", self.default_theta["full_attention"])
-        )
-        self.rope_parameters["full_attention"].setdefault("partial_rotary_factor", partial_rotary_factor)
+        for attn_type, theta_key in (("full_attention", "rope_theta"), ("sliding_attention", "swa_rope_theta")):
+            if self.rope_parameters.get(attn_type) is None:
+                self.rope_parameters[attn_type] = {"rope_type": "default"}
+            self.rope_parameters[attn_type].setdefault(
+                "rope_theta", kwargs.pop(theta_key, self.default_theta[attn_type])
+            )
+            self.rope_parameters[attn_type].setdefault("partial_rotary_factor", partial_rotary_factor)
 
-        if self.rope_parameters.get("sliding_attention") is None:
-            self.rope_parameters["sliding_attention"] = {"rope_type": "default"}
-        self.rope_parameters["sliding_attention"].setdefault(
-            "rope_theta", kwargs.pop("swa_rope_theta", self.default_theta["sliding_attention"])
-        )
-        self.rope_parameters["sliding_attention"].setdefault("partial_rotary_factor", partial_rotary_factor)
-
+        # Standardize and validate the correctness of rotary position embeddings parameters
         self.standardize_rope_params()
         return kwargs
 

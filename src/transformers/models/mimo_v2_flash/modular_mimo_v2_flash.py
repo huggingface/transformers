@@ -29,7 +29,7 @@ from ...generation import GenerationMixin
 from ...integrations import use_experts_implementation, use_kernelized_func
 from ...masking_utils import create_causal_mask, create_sliding_window_causal_mask
 from ...modeling_outputs import MoeCausalLMOutputWithPast, MoeModelOutputWithPast
-from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, RopeParameters, dynamic_rope_update
+from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
@@ -122,7 +122,7 @@ class MiMoV2FlashConfig(PreTrainedConfig):
     moe_layer_freq: list | None = None
     add_swa_attention_sink_bias: bool = True
     add_full_attention_sink_bias: bool = False
-    rope_parameters: RopeParameters | dict | None = None
+    rope_parameters: dict | None = None
 
     def __post_init__(self, **kwargs):
         hybrid_layer_pattern = kwargs.pop("hybrid_layer_pattern", None)
@@ -157,6 +157,9 @@ class MiMoV2FlashConfig(PreTrainedConfig):
         rope_scaling = kwargs.pop("rope_scaling", None)
         partial_rotary_factor = kwargs.pop("partial_rotary_factor", 0.334)
 
+        # Similar to Gemma3:
+        # Try to set `rope_scaling` if available, otherwise use `rope_parameters`. If we find `rope_parameters`
+        # as arg in the inputs, we can safely assume that it is in the new format. New naming used -> new format
         default_rope_params = {
             "full_attention": {"rope_type": "default"},
             "sliding_attention": {"rope_type": "default"},
@@ -166,20 +169,15 @@ class MiMoV2FlashConfig(PreTrainedConfig):
         if rope_scaling is not None:
             self.rope_parameters["full_attention"].update(rope_scaling)
 
-        if self.rope_parameters.get("full_attention") is None:
-            self.rope_parameters["full_attention"] = {"rope_type": "default"}
-        self.rope_parameters["full_attention"].setdefault(
-            "rope_theta", kwargs.pop("rope_theta", self.default_theta["full_attention"])
-        )
-        self.rope_parameters["full_attention"].setdefault("partial_rotary_factor", partial_rotary_factor)
+        for attn_type, theta_key in (("full_attention", "rope_theta"), ("sliding_attention", "swa_rope_theta")):
+            if self.rope_parameters.get(attn_type) is None:
+                self.rope_parameters[attn_type] = {"rope_type": "default"}
+            self.rope_parameters[attn_type].setdefault(
+                "rope_theta", kwargs.pop(theta_key, self.default_theta[attn_type])
+            )
+            self.rope_parameters[attn_type].setdefault("partial_rotary_factor", partial_rotary_factor)
 
-        if self.rope_parameters.get("sliding_attention") is None:
-            self.rope_parameters["sliding_attention"] = {"rope_type": "default"}
-        self.rope_parameters["sliding_attention"].setdefault(
-            "rope_theta", kwargs.pop("swa_rope_theta", self.default_theta["sliding_attention"])
-        )
-        self.rope_parameters["sliding_attention"].setdefault("partial_rotary_factor", partial_rotary_factor)
-
+        # Standardize and validate the correctness of rotary position embeddings parameters
         self.standardize_rope_params()
         return kwargs
 
@@ -229,14 +227,11 @@ class MiMoV2FlashRotaryEmbedding(nn.Module):
         attention_config.rope_parameters = dict(config.rope_parameters[layer_type])
         attention_config.rope_parameters.setdefault("rope_type", "default")
 
+        # Only SWA layers need to be overridden, full attention values are already present in `attention_config`
         if layer_type == "sliding_attention":
             attention_config.qk_head_dim = config.swa_qk_head_dim
             attention_config.num_attention_heads = config.swa_num_attention_heads
             attention_config.num_key_value_heads = config.swa_num_key_value_heads
-        else:
-            attention_config.qk_head_dim = config.qk_head_dim
-            attention_config.num_attention_heads = config.num_attention_heads
-            attention_config.num_key_value_heads = config.num_key_value_heads
 
         # Rest of the code is ~inspired by the `Gemma3RotaryEmbedding` class
         self.max_seq_len_cached = attention_config.max_position_embeddings
@@ -263,7 +258,7 @@ class MiMoV2FlashRotaryEmbedding(nn.Module):
         config.standardize_rope_params()
         base = config.rope_parameters["rope_theta"]
         partial_rotary_factor = config.rope_parameters.get("partial_rotary_factor", 0.334)
-        qk_head_dim = getattr(config, "qk_head_dim", None) or config.hidden_size // config.num_attention_heads
+        qk_head_dim = config.qk_head_dim
         dim = int(qk_head_dim * partial_rotary_factor)
         attention_factor = 1.0
         inv_freq = 1.0 / (
@@ -435,9 +430,8 @@ def _prepare_sink_eager_attention_mask(
         row_pos = torch.arange(seq_len, device=device).unsqueeze(1) + (key_len - seq_len)
         col_pos = torch.arange(key_len, device=device).unsqueeze(0)
         mask = col_pos > row_pos  # causal
-        sw = config.sliding_window
-        if sw is not None and config.layer_types[layer_idx] == "sliding_attention":
-            mask = mask | (row_pos - col_pos >= sw)
+        if config.layer_types[layer_idx] == "sliding_attention":
+            mask = mask | (row_pos - col_pos >= config.sliding_window)
         return torch.where(mask, min_val, 0.0).to(dtype)[None, None]
     if attention_mask.dtype == torch.bool:
         min_dtype = torch.finfo(query_states.dtype).min
@@ -458,7 +452,6 @@ class MiMoV2FlashAttention(nn.Module):
 
         self.config = config
         self.layer_idx = layer_idx
-        self.head_dim = qk_head_dim
         self.qk_head_dim = qk_head_dim
         self.v_head_dim = v_head_dim
         self.num_key_value_groups = num_attn_heads // num_kv_heads
@@ -473,9 +466,7 @@ class MiMoV2FlashAttention(nn.Module):
 
         # Dispatch attention: sink layers use GPT-OSS always-sink eager, non-sink layers use standard Llama eager
         # (which is compatible with SDPA/FA2/flex backends)
-        add_sink = (config.add_full_attention_sink_bias and not is_swa) or (
-            config.add_swa_attention_sink_bias and is_swa
-        )
+        add_sink = config.add_swa_attention_sink_bias if is_swa else config.add_full_attention_sink_bias
         if add_sink:
             self.sinks = nn.Parameter(torch.empty(num_attn_heads), requires_grad=False)
             self._eager_attention_forward = eager_attention_forward_with_sink
@@ -492,7 +483,7 @@ class MiMoV2FlashAttention(nn.Module):
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor, torch.Tensor | None]:
         input_shape = hidden_states.shape[:-1]
-        qk_hidden_shape = (*input_shape, -1, self.head_dim)
+        qk_hidden_shape = (*input_shape, -1, self.qk_head_dim)
         v_hidden_shape = (*input_shape, -1, self.v_head_dim)
 
         query_states = self.q_proj(hidden_states).view(qk_hidden_shape).transpose(1, 2)
