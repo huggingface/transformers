@@ -41,6 +41,7 @@ from ...utils import (
     TransformersKwargs,
     auto_docstring,
     can_return_tuple,
+    is_accelerate_available,
     logging,
     torch_compilable_check,
 )
@@ -70,6 +71,10 @@ from ..llama.modeling_llama import LlamaRotaryEmbedding
 from ..mixtral.modeling_mixtral import MixtralExperts
 from ..moonshine_streaming.modeling_moonshine_streaming import sliding_window_mask_function
 from .configuration_gemma4 import Gemma4AudioConfig, Gemma4Config, Gemma4TextConfig, Gemma4VisionConfig
+
+
+if is_accelerate_available():
+    from accelerate.hooks import add_hook_to_module
 
 
 logger = logging.get_logger(__name__)
@@ -1209,6 +1214,44 @@ class Gemma4PreTrainedModel(PreTrainedModel):
             init.zeros_(module.std_bias)
             init.ones_(module.std_scale)
 
+    def get_per_layer_input_embeddings(self):
+        return self.base_model.embed_tokens_per_layer
+
+    def set_per_layer_input_embeddings(self, value):
+        self.base_model.embed_tokens_per_layer = value
+
+    def resize_token_embeddings(
+        self,
+        new_num_tokens: int | None = None,
+        pad_to_multiple_of: int | None = None,
+        mean_resizing: bool = True,
+    ) -> nn.Embedding:
+        inputs_embeds = super().resize_token_embeddings(
+            new_num_tokens=new_num_tokens,
+            pad_to_multiple_of=pad_to_multiple_of,
+            mean_resizing=mean_resizing,
+        )
+        self._resize_per_layer_embeddings(new_num_tokens, pad_to_multiple_of, mean_resizing)
+        return inputs_embeds
+
+    def _resize_per_layer_embeddings(
+        self,
+        new_num_tokens: int | None = None,
+        pad_to_multiple_of: int | None = None,
+        mean_resizing: bool = True,
+    ):
+        self.config.get_text_config().vocab_size_per_layer_input = self.vocab_size
+        if self.config.get_text_config().hidden_size_per_layer_input:
+            embed_tokens_per_layer = self.get_per_layer_input_embeddings()
+            new_embeddings_per_layer = self._get_resized_embeddings(
+                embed_tokens_per_layer, new_num_tokens, pad_to_multiple_of, mean_resizing
+            )
+            if hasattr(embed_tokens_per_layer, "_hf_hook"):
+                hook = embed_tokens_per_layer._hf_hook
+                add_hook_to_module(new_embeddings_per_layer, hook)
+            new_embeddings_per_layer.requires_grad_(embed_tokens_per_layer.weight.requires_grad)
+            self.set_per_layer_input_embeddings(new_embeddings_per_layer)
+
 
 @auto_docstring(custom_intro="The base Gemma 4 language model without a language modeling head.")
 class Gemma4TextModel(Gemma3TextModel):
@@ -1691,6 +1734,12 @@ class Gemma4Model(Gemma3nModel):
             else None
         )
 
+    def get_per_layer_input_embeddings(self):
+        return self.language_model.embed_tokens_per_layer
+
+    def set_per_layer_input_embeddings(self, value):
+        self.language_model.embed_tokens_per_layer = value
+
     @can_return_tuple
     @auto_docstring(custom_intro="Projects the last hidden state from the vision model into language model space.")
     def get_image_features(
@@ -1974,6 +2023,12 @@ class Gemma4Model(Gemma3nModel):
 )
 class Gemma4ForConditionalGeneration(Gemma3nForConditionalGeneration):
     base_model_prefix = "model"
+
+    def get_per_layer_input_embeddings(self):
+        return self.model.get_per_layer_input_embeddings()
+
+    def set_per_layer_input_embeddings(self, value):
+        self.model.set_per_layer_input_embeddings(value)
 
     def forward(
         self,
