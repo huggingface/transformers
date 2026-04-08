@@ -19,12 +19,16 @@ import os
 import re
 
 
-# Ensure we always download from the public HuggingFace Hub, not the CI staging endpoint
-# that may be configured via HF_ENDPOINT in the CI environment.
-os.environ.pop("HF_ENDPOINT", None)
+# Ensure we always download from the public HuggingFace Hub, not the CI staging endpoint.
+# huggingface_hub reads HUGGINGFACE_CO_STAGING at import time and hardcodes hub-ci.huggingface.co.
+_staging_mode = os.environ.pop("HUGGINGFACE_CO_STAGING", None)
 
 import httpx
 from huggingface_hub import hf_hub_download, snapshot_download
+
+# Restore so transformers.testing_utils._run_staging can still read it.
+if _staging_mode is not None:
+    os.environ["HUGGINGFACE_CO_STAGING"] = _staging_mode
 
 
 URLS_FOR_TESTING_DATA = [
