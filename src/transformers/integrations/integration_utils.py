@@ -935,9 +935,9 @@ class TrackioCallback(TrainerCallback):
     """
     A [`TrainerCallback`] that logs metrics to Trackio.
 
-    It records training metrics, model (including PEFT) configuration. When a Hugging Face Space is used, by default
-    training **freezes** that Space at the end (converts it from a live Gradio Space to a static read-only dashboard
-    backed by an HF Bucket). Set `trackio_freeze_space=False` in [`TrainingArguments`] to keep a live Space.
+    It records training metrics, model (including PEFT) configuration. When Trackio metrics are synced to a Hugging Face Space, by default
+    training **freezes** that Space at the end (converts it from a live Gradio Space to a static read-only dashboard). Set 
+    `trackio_freeze_space=False` in [`TrainingArguments`] to keep a live Space.
 
     **Requires**:
     ```bash
