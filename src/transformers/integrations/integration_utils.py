@@ -1003,11 +1003,7 @@ class TrackioCallback(TrainerCallback):
         if args.trackio_space_id is None or not args.trackio_freeze_space:
             return
         if packaging.version.parse(self._trackio.__version__) < packaging.version.parse("0.21.0"):
-            logger.warning(
-                "trackio>=0.21.0 is required to freeze the Space after training. "
-                "Install a newer trackio or set trackio_freeze_space=False."
-            )
-            return
+            return  # trackio>=0.21.0 is required to freeze the Space after training
         try:
             space_id = self._trackio.context_vars.current_space_id.get() or args.trackio_space_id
             self._trackio.sync(
@@ -1015,13 +1011,10 @@ class TrackioCallback(TrainerCallback):
                 space_id=space_id,
                 sdk="static",
                 force=True,
-                private=args.hub_private_repo,
-                bucket_id=args.trackio_bucket_id,
             )
         except Exception as e:
             logger.warning(
-                "Trackio could not freeze the Hugging Face Space after training (metrics remain in your local Trackio "
-                f"project). {e}"
+                "Trackio could not freeze the Hugging Face Space after training."
             )
 
     def on_log(self, args, state, control, model=None, logs=None, **kwargs):
