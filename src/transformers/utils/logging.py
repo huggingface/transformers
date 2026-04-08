@@ -124,7 +124,6 @@ def _configure_library_root_logger() -> None:
         if os.getenv("TRANSFORMERS_VERBOSITY", None) == "detail":
             formatter = ColoredVerboseFormatter()
 
-        formatter = ColoredVerboseFormatter()
         _default_handler.setFormatter(formatter)
 
         ci = os.getenv("CI")
