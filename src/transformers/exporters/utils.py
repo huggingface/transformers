@@ -198,11 +198,18 @@ def prepare_for_export(
         try:
             model.set_attn_implementation("sdpa")
         except Exception as e:
-            logger.warning(
-                "Could not set attention implementation to sdpa for %s: %s",
-                model.config.model_type,
-                e,
-            )
+            logger.warning("Could not set attention implementation to sdpa for %s: %s", model.config.model_type, e)
+
+    # Idefics3's vision encoder uses boolean indexing to filter padding images, creating
+    # an unbacked symbolic batch dim. SDPA's CPU kernel guards on Eq(batch, 1) when a mask
+    # is provided, which fails with unbacked dims. Keep the vision part on eager.
+    if (
+        isinstance(model, PreTrainedModel)
+        and model._can_set_attn_implementation()
+        and model.config.model_type == "idefics3"
+        and model.device.type == "cpu"
+    ):
+        model.set_attn_implementation({"vision_config": "eager"})
 
     for module in model.modules():
         if hasattr(module, "config"):
