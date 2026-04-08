@@ -146,7 +146,7 @@ class CLIPSegDecoderOutput(ModelOutput):
     r"""
     logits (`torch.FloatTensor` of shape `(batch_size, height, width)`):
         Classification scores for each pixel.
-    hidden_states (`tuple(torch.FloatTensor)`, *optional*, ):
+    hidden_states (`tuple(torch.FloatTensor)`, *optional*,):
         Hidden-states of the model at the output of each layer plus the optional initial embedding outputs.
         Rreturned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`
     attentions (`tuple(torch.FloatTensor)`, *optional*):

@@ -49,7 +49,7 @@ from .configuration_x_clip import XCLIPConfig, XCLIPTextConfig, XCLIPVisionConfi
 
 
 class XCLIPOutput(CLIPOutput):
-    """
+    r"""
     loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `return_loss` is `True`):
         Contrastive loss for video-text similarity.
     logits_per_video (`torch.FloatTensor` of shape `(video_batch_size, text_batch_size)`):
