@@ -319,25 +319,6 @@ class HCXVisionV2PreTrainedModel(PreTrainedModel):
     input_modalities = ("image", "video", "text")
 
 
-@auto_docstring
-class HyperCLOVAXPreTrainedModel(PreTrainedModel):
-    config: HyperCLOVAXConfig
-    base_model_prefix = "model"
-    supports_gradient_checkpointing = True
-    _no_split_modules = ["HyperCLOVAXDecoderLayer"]
-    _skip_keys_device_placement = ["past_key_values"]
-    _supports_flash_attn = True
-    _supports_sdpa = True
-    _supports_flex_attn = True
-
-    _can_compile_fullgraph = True
-    _supports_attention_backend = True
-    _can_record_outputs = {
-        "hidden_states": HyperCLOVAXDecoderLayer,
-        "attentions": HyperCLOVAXAttention,
-    }
-
-
 class HyperCLOVAXRotaryEmbedding(nn.Module):
     inv_freq: torch.Tensor  # fix linting for `register_buffer`
 
@@ -404,7 +385,7 @@ class HyperCLOVAXRotaryEmbedding(nn.Module):
 
 
 @auto_docstring
-class HyperCLOVAXModel(HyperCLOVAXPreTrainedModel):
+class HyperCLOVAXModel(HCXVisionV2PreTrainedModel):
     config_class = HyperCLOVAXConfig
     input_modalities = ("text",)
 
@@ -486,7 +467,7 @@ class HyperCLOVAXModel(HyperCLOVAXPreTrainedModel):
 
 
 @auto_docstring
-class HyperCLOVAXForCausalLM(HyperCLOVAXPreTrainedModel, GenerationMixin):
+class HyperCLOVAXForCausalLM(HCXVisionV2PreTrainedModel, GenerationMixin):
     _tied_weights_keys = {"lm_head.weight": "model.embed_tokens.weight"}
     _tp_plan = {"lm_head": "colwise_gather_output"}
     _pp_plan = {"lm_head": (["hidden_states"], ["logits"])}

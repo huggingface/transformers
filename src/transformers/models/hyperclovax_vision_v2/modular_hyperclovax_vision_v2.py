@@ -48,7 +48,7 @@ logger = logging.get_logger(__name__)
 
 
 @auto_docstring(checkpoint="naver-hyperclovax/HyperCLOVAX-SEED-Think-32B")
-@strict(accept_kwargs=True)
+@strict
 class HyperCLOVAXConfig(GraniteConfig):
     r"""
     use_post_norm (`bool`, *optional*, defaults to False):
@@ -74,7 +74,7 @@ class HyperCLOVAXConfig(GraniteConfig):
 
 
 @auto_docstring(checkpoint="naver-hyperclovax/HyperCLOVAX-SEED-Think-32B")
-@strict(accept_kwargs=True)
+@strict
 class HCXVisionV2Config(PreTrainedConfig):
     r"""
     text_config (`dict` or [`HyperCLOVAXConfig`], *optional*):
@@ -249,7 +249,7 @@ class HCXVisionV2PreTrainedModel(LlamaPreTrainedModel):
 
 
 @auto_docstring
-class HyperCLOVAXModel(GraniteModel):
+class HyperCLOVAXModel(HCXVisionV2PreTrainedModel, GraniteModel):
     config_class = HyperCLOVAXConfig
     input_modalities = ("text",)
 
@@ -264,7 +264,7 @@ class HyperCLOVAXModel(GraniteModel):
 
 
 @auto_docstring
-class HyperCLOVAXForCausalLM(GraniteForCausalLM):
+class HyperCLOVAXForCausalLM(HCXVisionV2PreTrainedModel, GraniteForCausalLM):
     accepts_loss_kwargs = False
     config_class = HyperCLOVAXConfig
     input_modalities = ("text",)

@@ -26,7 +26,7 @@ from ..auto import CONFIG_MAPPING, AutoConfig
 
 
 @auto_docstring(checkpoint="naver-hyperclovax/HyperCLOVAX-SEED-Think-32B")
-@strict(accept_kwargs=True)
+@strict
 class HyperCLOVAXConfig(PreTrainedConfig):
     r"""
     use_post_norm (`bool`, *optional*, defaults to False):
@@ -98,7 +98,7 @@ class HyperCLOVAXConfig(PreTrainedConfig):
 
 
 @auto_docstring(checkpoint="naver-hyperclovax/HyperCLOVAX-SEED-Think-32B")
-@strict(accept_kwargs=True)
+@strict
 class HCXVisionV2Config(PreTrainedConfig):
     r"""
     text_config (`dict` or [`HyperCLOVAXConfig`], *optional*):
