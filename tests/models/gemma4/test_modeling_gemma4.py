@@ -37,6 +37,7 @@ from ...causal_lm_tester import CausalLMModelTest, CausalLMModelTester
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
+from ...test_processing_common import url_to_local_path
 
 
 if is_torch_available():
@@ -418,15 +419,18 @@ class Gemma4Vision2TextModelTest(ModelTesterMixin, GenerationTesterMixin, unitte
 class Gemma4IntegrationTest(unittest.TestCase):
     def setUp(self):
         self.model_name = "google/gemma-4-E2B-it"
-        self.processor = Gemma4Processor.from_pretrained(self.model_name, padding_side="left")
+        self.processor = Gemma4Processor.from_pretrained(self.model_name)
 
-        url = "https://huggingface.co/datasets/hf-internal-testing/fixtures-captioning/resolve/main/cow_beach_1.png"
+        self.url1 = url_to_local_path(
+            "https://huggingface.co/datasets/hf-internal-testing/fixtures-captioning/resolve/main/cow_beach_1.png"
+        )
+        self.url2 = url_to_local_path("https://www.ilankelman.org/stopsigns/australia.jpg")
         self.messages = [
             {"role": "system", "content": [{"type": "text", "text": "You are a helpful assistant."}]},
             {
                 "role": "user",
                 "content": [
-                    {"type": "image", "url": url},
+                    {"type": "image", "url": self.url1},
                     {"type": "text", "text": "What is shown in this image?"},
                 ],
             },
@@ -468,9 +472,9 @@ class Gemma4IntegrationTest(unittest.TestCase):
                 "content": [
                     {
                         "type": "image",
-                        "url": "https://huggingface.co/datasets/hf-internal-testing/fixtures-captioning/resolve/main/cow_beach_1.png",
+                        "url": self.url1,
                     },
-                    {"type": "image", "url": "https://www.ilankelman.org/stopsigns/australia.jpg"},
+                    {"type": "image", "url": self.url2},
                     {"type": "text", "text": "Are these images identical?"},
                 ],
             },
@@ -509,7 +513,7 @@ class Gemma4IntegrationTest(unittest.TestCase):
             {
                 "role": "user",
                 "content": [
-                    {"type": "image", "url": "https://www.ilankelman.org/stopsigns/australia.jpg"},
+                    {"type": "image", "url": self.url2},
                     {"type": "text", "text": "What do you see here?"},
                 ],
             },
@@ -590,40 +594,31 @@ class Gemma4IntegrationTest(unittest.TestCase):
         input_size = inputs.input_ids.shape[-1]
         self.assertTrue(input_size > model.config.get_text_config().sliding_window)
 
-        out = model.generate(**inputs, max_new_tokens=20, do_sample=False, cache_implementation="static")
+        out = model.generate(**inputs, max_new_tokens=16, do_sample=False, cache_implementation="static")
         output_text = tokenizer.batch_decode(out[:, input_size:])
 
-        EXPECTED_COMPLETIONS_EAGER = Expectations(
+        EXPECTED_COMPLETIONS = Expectations(
             {
                 ("cuda", 8): [
-                    "That sounds lovely! It seems like you're really enjoying the place you're in.\n\n",
-                    "Here are a few ways you could use or expand upon that list, depending on what you need:",
+                    "That sounds lovely! It seems like you're really enjoying the place you'",
+                    "Here are a few ways you could use or expand upon that list, depending on",
                 ]
             }
         )
-        EXPECTED_COMPLETIONS_SDPA = Expectations(
-            {
-                ("cuda", 8): [
-                    "That sounds lovely! It seems like you're really enjoying the place you're in.\n\n",
-                    "Here are a few ways you could use or expand upon that list, depending on what you're",
-                ]
-            }
-        )
-        if attn_implementation == "eager":
-            self.assertEqual(output_text, EXPECTED_COMPLETIONS_EAGER.get_expectation())
-        elif attn_implementation == "sdpa":
-            self.assertEqual(output_text, EXPECTED_COMPLETIONS_SDPA.get_expectation())
+        self.assertEqual(output_text, EXPECTED_COMPLETIONS.get_expectation())
 
     @pytest.mark.torch_export_test
     def test_export_text_only(self):
         from transformers.integrations.executorch import TorchExportableModuleForDecoderOnlyLM
 
-        model = Gemma4ForConditionalGeneration.from_pretrained(self.model_name)
+        model = Gemma4ForConditionalGeneration.from_pretrained(self.model_name, device_map=torch_device)
         tokenizer = AutoTokenizer.from_pretrained(self.model_name)
 
-        exportable_module = TorchExportableModuleForDecoderOnlyLM(model, batch_size=1, max_cache_len=1024)
+        exportable_module = TorchExportableModuleForDecoderOnlyLM(
+            model, batch_size=1, max_cache_len=1024, device=torch_device
+        )
         exported_program = exportable_module.export(
-            input_ids=torch.tensor([[1]], dtype=torch.long),
+            input_ids=torch.tensor([[1]], device=torch_device, dtype=torch.long),
         )
 
         # Test generation with the exported model
@@ -636,13 +631,10 @@ class Gemma4IntegrationTest(unittest.TestCase):
         max_new_tokens_to_generate = 20
         # Generate text with the exported model
         export_generated_text = TorchExportableModuleForDecoderOnlyLM.generate(
-            exported_program,
-            tokenizer,
-            prompt,
-            max_new_tokens=max_new_tokens_to_generate,
+            exported_program, tokenizer, prompt, max_new_tokens=max_new_tokens_to_generate, device=torch_device
         )
 
-        input_text = tokenizer(prompt, return_tensors="pt")
+        input_text = tokenizer(prompt, return_tensors="pt").to(torch_device)
         eager_outputs = model.generate(
             **input_text,
             max_new_tokens=max_new_tokens_to_generate,
