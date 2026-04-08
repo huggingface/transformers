@@ -2017,3 +2017,56 @@ class ProcessorTesterMixin:
         num_image_tokens_from_call = inputs.mm_token_type_ids.sum(-1).tolist()
         num_image_tokens_from_helper = processor._get_num_multimodal_tokens(image_sizes=image_sizes)
         self.assertListEqual(num_image_tokens_from_call, num_image_tokens_from_helper["num_image_tokens"])
+
+    def test_apply_chat_template_with_tool_calls_no_content(self):
+        """Regression test for issue #45290: assistant messages with tool_calls but no content field should not raise KeyError."""
+        processor = self.get_processor()
+
+        # Skip if processor doesn't support apply_chat_template
+        if not hasattr(processor, "apply_chat_template"):
+            self.skipTest("Processor doesn't support apply_chat_template")
+
+        # Skip processors without a default chat template — they raise ValueError
+        # before reaching the patched code path.
+        chat_template = getattr(processor, "chat_template", None)
+        if chat_template is None:
+            self.skipTest("Processor has no chat_template")
+
+        # The bug only manifests for chat templates that actually iterate over
+        # tool_calls. For templates that don't reference tool_calls at all, the
+        # test is meaningless because the template would never inspect that
+        # field. Skip those rather than asserting against templates that were
+        # never designed to handle tool-calling at all.
+        chat_template_source = (
+            chat_template
+            if isinstance(chat_template, str)
+            else (chat_template.get("default") if isinstance(chat_template, dict) else "")
+        )
+        if not chat_template_source or "tool_calls" not in chat_template_source:
+            self.skipTest("Processor's chat_template does not support tool_calls")
+
+        # Message with tool_calls but no content field (valid per OpenAI spec)
+        messages = [
+            {"role": "user", "content": "What's the weather?"},
+            {
+                "role": "assistant",
+                "tool_calls": [
+                    {
+                        "id": "call_123",
+                        "type": "function",
+                        "function": {"name": "get_weather", "arguments": '{"location": "NYC"}'},
+                    }
+                ],
+            },
+        ]
+
+        # Should not raise KeyError
+        try:
+            result = processor.apply_chat_template(messages, tokenize=False)
+            # If we get here, the fix worked
+            self.assertIsInstance(result, str)
+        except KeyError as e:
+            if "content" in str(e):
+                self.fail(f"apply_chat_template raised KeyError for missing 'content' field: {e}")
+            else:
+                raise

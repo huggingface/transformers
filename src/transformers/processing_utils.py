@@ -58,7 +58,7 @@ from .utils import (
     list_repo_templates,
     logging,
 )
-from .utils.chat_template_utils import _get_template_variables, render_jinja_template
+from .utils.chat_template_utils import _get_template_variables, get_message_content, render_jinja_template
 from .utils.type_validators import (
     device_validator,
     image_size_validator,
@@ -1804,10 +1804,13 @@ class ProcessorMixin(PushToHubMixin):
             for conversation in conversations:
                 images, videos = [], []
                 for message in conversation:
-                    visuals = [content for content in message["content"] if content["type"] in ["image", "video"]]
+                    # Use get_message_content to safely default to [] when an
+                    # assistant message has tool_calls but no content (#45290).
+                    message_content = get_message_content(message, default=[])
+                    visuals = [content for content in message_content if content["type"] in ["image", "video"]]
                     audio_fnames = [
                         content[key]
-                        for content in message["content"]
+                        for content in message_content
                         for key in ["audio", "url", "path"]
                         if key in content and content["type"] == "audio"
                     ]
@@ -1834,7 +1837,9 @@ class ProcessorMixin(PushToHubMixin):
                         for fname in video_fnames:
                             # This updates the template in-place and adds audio entry
                             # to ensure `audio` token is added by jinja
-                            message["content"].append({"type": "audio"})
+                            content_list = get_message_content(message, default=[])
+                            if isinstance(content_list, list):
+                                content_list.append({"type": "audio"})
                             batch_audios.append(load_audio(fname, sampling_rate=sampling_rate))
 
                 # Currently all processors can accept nested list of batches, but not flat list of visuals
@@ -1886,7 +1891,7 @@ class ProcessorMixin(PushToHubMixin):
                 text=prompt,
                 images=batch_images if images_exist else None,
                 videos=batch_videos if videos_exist else None,
-                audio=batch_audios if batch_audios else None,
+                audio=batch_audios or None,
                 **processor_kwargs,
             )
 
@@ -1913,7 +1918,7 @@ class ProcessorMixin(PushToHubMixin):
                             # Ensure end_pos is also within bounds
                             if end_pos > len(input_ids[i]):
                                 end_pos = len(input_ids[i])
-                            for token_id in range(start_pos, end_pos if end_pos else len(input_ids[i])):
+                            for token_id in range(start_pos, end_pos or len(input_ids[i])):
                                 current_mask[token_id] = 1
                         assistant_masks.append(current_mask)
                     out["assistant_masks"] = assistant_masks

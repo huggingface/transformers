@@ -209,6 +209,55 @@ class TestProcessorInputsFromMessages(unittest.TestCase):
             self.assertIsInstance(msg["content"], list)
             self.assertEqual(msg["content"][0]["type"], "text")
 
+    # Regression tests for issue #45290 — assistant messages with tool_calls but no content
+    def test_vlm_tool_calls_without_content(self):
+        """VLM modality must not crash on an assistant message that has tool_calls but no content field."""
+        get_processor_inputs_from_messages = BaseHandler.get_processor_inputs_from_messages
+
+        messages = [
+            {"role": "user", "content": "What's the weather in London?"},
+            {
+                "role": "assistant",
+                "tool_calls": [
+                    {
+                        "id": "call_def456",
+                        "type": "function",
+                        "function": {"name": "get_weather", "arguments": '{"location": "London"}'},
+                    }
+                ],
+            },
+        ]
+
+        result = get_processor_inputs_from_messages(messages, Modality.VLM)
+        self.assertIsInstance(result, list)
+        self.assertEqual(result[1]["role"], "assistant")
+        # Missing content should default to an empty list for VLM
+        self.assertEqual(result[1]["content"], [])
+
+    def test_llm_tool_calls_without_content(self):
+        """LLM modality must not crash on an assistant message that has tool_calls but no content field."""
+        get_processor_inputs_from_messages = BaseHandler.get_processor_inputs_from_messages
+
+        messages = [
+            {"role": "user", "content": "What's the weather in London?"},
+            {
+                "role": "assistant",
+                "tool_calls": [
+                    {
+                        "id": "call_def456",
+                        "type": "function",
+                        "function": {"name": "get_weather", "arguments": '{"location": "London"}'},
+                    }
+                ],
+            },
+        ]
+
+        result = get_processor_inputs_from_messages(messages, Modality.LLM)
+        self.assertIsInstance(result, list)
+        self.assertEqual(result[1]["role"], "assistant")
+        # Missing content should default to an empty string for LLM
+        self.assertEqual(result[1]["content"], "")
+
 
 class TestGenerativeModelList(unittest.TestCase):
     def test_lists_only_generative_models(self):

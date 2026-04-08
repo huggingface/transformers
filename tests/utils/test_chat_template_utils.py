@@ -16,6 +16,7 @@ import unittest
 from typing import Literal
 
 from transformers.utils import DocstringParsingException, TypeHintParsingException, get_json_schema
+from transformers.utils.chat_template_utils import get_message_content, is_valid_message
 
 
 class JsonSchemaGeneratorTest(unittest.TestCase):
@@ -611,3 +612,72 @@ class JsonSchemaGeneratorTest(unittest.TestCase):
             },
         }
         self.assertEqual(schema["function"], expected_schema)
+
+
+class GetMessageContentTest(unittest.TestCase):
+    """Tests for get_message_content (issue #45290)."""
+
+    def test_returns_content_when_present(self):
+        self.assertEqual(get_message_content({"role": "user", "content": "hi"}), "hi")
+        self.assertEqual(
+            get_message_content({"role": "user", "content": [{"type": "text", "text": "x"}]}),
+            [{"type": "text", "text": "x"}],
+        )
+
+    def test_returns_default_list_when_content_missing(self):
+        # Default is [] — multimodal-iterating callers expect a list.
+        self.assertEqual(get_message_content({"role": "assistant", "tool_calls": []}), [])
+
+    def test_returns_explicit_default_string(self):
+        # Text-only callers pass default="".
+        self.assertEqual(
+            get_message_content({"role": "assistant", "tool_calls": []}, default=""),
+            "",
+        )
+
+    def test_returns_explicit_default_list(self):
+        self.assertEqual(
+            get_message_content({"role": "assistant", "tool_calls": []}, default=[]),
+            [],
+        )
+
+    def test_default_is_keyword_only(self):
+        # Passing default positionally must raise TypeError to keep call sites self-documenting.
+        with self.assertRaises(TypeError):
+            get_message_content({"role": "user"}, [])  # type: ignore[misc]
+
+
+class IsValidMessageTest(unittest.TestCase):
+    """Tests for is_valid_message (issue #45290)."""
+
+    def test_accepts_role_and_content(self):
+        self.assertTrue(is_valid_message({"role": "user", "content": "hi"}))
+        self.assertTrue(is_valid_message({"role": "assistant", "content": [{"type": "text", "text": "ok"}]}))
+
+    def test_accepts_role_and_tool_calls_without_content(self):
+        # Per OpenAI chat-completion spec, assistant messages may omit content
+        # when tool_calls is present.
+        self.assertTrue(
+            is_valid_message(
+                {
+                    "role": "assistant",
+                    "tool_calls": [
+                        {"id": "abc12345x", "type": "function", "function": {"name": "f", "arguments": "{}"}}
+                    ],
+                }
+            )
+        )
+
+    def test_rejects_missing_role(self):
+        self.assertFalse(is_valid_message({"content": "hi"}))
+        self.assertFalse(is_valid_message({"tool_calls": []}))
+
+    def test_rejects_message_missing_both_content_and_tool_calls(self):
+        # Negative case explicitly requested by review of #45290 patch.
+        self.assertFalse(is_valid_message({"role": "assistant"}))
+        self.assertFalse(is_valid_message({"role": "user"}))
+
+    def test_rejects_non_dict(self):
+        self.assertFalse(is_valid_message("not a dict"))
+        self.assertFalse(is_valid_message(["role", "user"]))
+        self.assertFalse(is_valid_message(None))

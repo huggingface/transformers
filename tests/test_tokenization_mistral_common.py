@@ -2274,3 +2274,35 @@ class TestMistralCommonBackend(unittest.TestCase):
         # unsupported kwargs should raise ValueError
         with self.assertRaises(ValueError):
             self.tokenizer.prepare_for_model(token_ids, add_special_tokens=False, unsupported_arg="")
+
+    @require_mistral_common
+    def test_apply_chat_template_with_tool_calls_no_content(self):
+        """Regression test for issue #45290: Mistral tokenizer should handle assistant messages with tool_calls but no content field."""
+        tokenizer = AutoTokenizer.from_pretrained("mistralai/Mistral-7B-Instruct-v0.3")
+
+        # Message with tool_calls but no content field (valid per OpenAI spec)
+        messages = [
+            {"role": "user", "content": "What's the weather in Paris?"},
+            {
+                "role": "assistant",
+                "tool_calls": [
+                    {
+                        # Mistral tokenizer requires tool_call ids to be exactly 9 alphanumeric chars.
+                        "id": "abc123xyz",
+                        "type": "function",
+                        "function": {"name": "get_weather", "arguments": '{"location": "Paris"}'},
+                    }
+                ],
+            },
+        ]
+
+        # Should not raise KeyError when processing messages with tool_calls but no content
+        try:
+            result = tokenizer.apply_chat_template(messages, tokenize=False)
+            # If we get here, the fix worked
+            self.assertIsInstance(result, str)
+        except KeyError as e:
+            if "content" in str(e):
+                self.fail(f"Mistral tokenizer raised KeyError for missing 'content' field: {e}")
+            else:
+                raise

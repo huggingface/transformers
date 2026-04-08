@@ -31,6 +31,7 @@ from queue import Queue
 from typing import TYPE_CHECKING
 
 from transformers.utils import logging
+from transformers.utils.chat_template_utils import get_message_content
 
 
 if TYPE_CHECKING:
@@ -194,7 +195,7 @@ class ToolCallParser:
             if result is not None:
                 tool_calls.append({"name": result[0], "arguments": result[1]})
             pos = e + len(end)
-        return tool_calls if tool_calls else None
+        return tool_calls or None
 
     def _parse_block(self, block: str) -> dict | None:
         """Parse a buffered tool call block. Returns ``{"name": str, "arguments": str}`` or None."""
@@ -927,17 +928,23 @@ class BaseHandler:
             parsed = {"role": message["role"], "content": []}
 
             if modality == Modality.LLM:
-                if isinstance(message["content"], str):
-                    parsed["content"] = message["content"]
-                elif isinstance(message["content"], list):
-                    texts = [c["text"] for c in message["content"] if c["type"] == "text"]
+                # Default to "" so assistant messages with tool_calls but no
+                # content (#45290) become an empty string for LLM context.
+                message_content = get_message_content(message, default="")
+                if isinstance(message_content, str):
+                    parsed["content"] = message_content
+                elif isinstance(message_content, list):
+                    texts = [c["text"] for c in message_content if c["type"] == "text"]
                     parsed["content"] = " ".join(texts)
 
             elif modality == Modality.VLM:
-                if isinstance(message["content"], str):
-                    parsed["content"].append({"type": "text", "text": message["content"]})
-                else:
-                    for content in message["content"]:
+                # Default to [] so assistant messages with tool_calls but no
+                # content (#45290) iterate over zero blocks for VLM context.
+                message_content = get_message_content(message, default=[])
+                if isinstance(message_content, str):
+                    parsed["content"].append({"type": "text", "text": message_content})
+                elif isinstance(message_content, list):
+                    for content in message_content:
                         if content["type"] == "text":
                             parsed["content"].append(content)
                         elif content["type"] == "image_url":

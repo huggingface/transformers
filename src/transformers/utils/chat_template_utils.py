@@ -51,6 +51,43 @@ ChatType = list[dict[str, Any]]
 
 
 BASIC_TYPES = (int, float, str, bool, Any, type(None), ...)
+
+
+def get_message_content(message: dict, *, default: list | str | None = None) -> Any:
+    """Return the ``content`` field of a chat message, defaulting if missing.
+
+    Per the OpenAI chat-completion spec, an assistant message MAY omit
+    ``content`` when ``tool_calls`` is present (the assistant is requesting
+    tool execution and has no textual reply yet). Code that iterates over
+    message content for processing — extracting visuals from a multimodal
+    conversation, joining text segments for a text-only model, or rendering
+    a Jinja template — must default to a safe empty value rather than
+    raising ``KeyError``.
+
+    This helper centralizes that convention so individual processors,
+    tokenizers, and serving handlers don't each have to re-implement it
+    inline (and don't drift apart over time).
+
+    Args:
+        message:
+            A chat message dict, e.g.
+            ``{"role": "assistant", "tool_calls": [...]}``.
+        default:
+            **Keyword-only.** The value to return when the ``content`` key
+            is missing. Pass ``[]`` for code that iterates over multimodal
+            content blocks, and ``""`` for code that treats content as a
+            single text string. If ``None`` (the default), an empty list
+            is returned — callers SHOULD pass an explicit default that
+            matches the shape their code expects.
+
+    Returns:
+        ``message["content"]`` if the key is present, otherwise *default*.
+    """
+    if default is None:
+        default = []
+    return message.get("content", default)
+
+
 # Extracts the initial segment of the docstring, containing the function description
 description_re = re.compile(r"^(.*?)[\n\s]*(Args:|Returns:|Raises:|\Z)", re.DOTALL)
 # Extracts the Args: block from the docstring
@@ -539,9 +576,17 @@ def render_jinja_template(
         if hasattr(chat, "messages"):
             # Indicates it's a Conversation object
             chat = chat.messages
+        # Ensure all messages have a content field for Jinja template compatibility.
+        # Per the OpenAI spec, assistant messages with tool_calls MAY omit content;
+        # default to an empty string here (text-only template default) so the
+        # rendered template still has a content field to reference. See
+        # ``get_message_content`` above for the convention.
+        chat = [
+            {**msg, "content": get_message_content(msg, default="")} if "content" not in msg else msg for msg in chat
+        ]
         if continue_final_message:
             chat = deepcopy(chat)
-            final_message = chat[-1]["content"]
+            final_message = get_message_content(chat[-1], default="")
             if isinstance(final_message, (list, tuple)):
                 for content_block in reversed(final_message):
                     if "text" in content_block:
@@ -554,7 +599,7 @@ def render_jinja_template(
                         "continue_final_message is set but we could not find any text to continue in the final message!"
                     )
             else:
-                chat[-1]["content"] = chat[-1]["content"] + continue_final_message_tag
+                chat[-1]["content"] = final_message + continue_final_message_tag
         if return_assistant_tokens_mask:
             rendered_chat, generation_indices = _render_with_assistant_indices(
                 compiled_template=compiled_template,
@@ -597,11 +642,16 @@ def render_jinja_template(
 
 def is_valid_message(message):
     """
-    Check that input is a valid message in a chat, namely a dict with "role" and "content" keys.
+    Check that input is a valid message in a chat. A valid message is a dict with a ``"role"``
+    key and either a ``"content"`` key or a ``"tool_calls"`` key — assistant messages that
+    request tool execution may omit ``"content"`` per the OpenAI chat-completion spec
+    (see ``get_message_content``).
     """
     if not isinstance(message, dict):
         return False
-    if not ("role" in message and "content" in message):
+    if "role" not in message:
+        return False
+    if "content" not in message and "tool_calls" not in message:
         return False
     return True
 
@@ -609,10 +659,18 @@ def is_valid_message(message):
 class Chat:
     """This class is intended to just be used internally for pipelines and not exposed to users. We convert chats
     to this format because the rest of the pipeline code tends to assume that lists of messages are
-    actually a batch of samples rather than messages in the same conversation."""
+    actually a batch of samples rather than messages in the same conversation.
+
+    Each message must be a dict with a ``"role"`` key and either a ``"content"`` key or a
+    ``"tool_calls"`` key. Assistant messages that request tool execution may omit ``"content"``
+    per the OpenAI chat-completion spec — see ``is_valid_message`` and ``get_message_content``.
+    """
 
     def __init__(self, messages: dict):
         for message in messages:
             if not is_valid_message(message):
-                raise ValueError("When passing chat dicts as input, each dict must have a 'role' and 'content' key.")
+                raise ValueError(
+                    "When passing chat dicts as input, each dict must have a 'role' key and either a "
+                    "'content' or 'tool_calls' key."
+                )
         self.messages = messages

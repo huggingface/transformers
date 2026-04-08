@@ -35,6 +35,7 @@ from transformers.tokenization_utils_base import (
     TruncationStrategy,
 )
 from transformers.utils import PaddingStrategy, TensorType, add_end_docstrings, logging, to_py_obj
+from transformers.utils.chat_template_utils import get_message_content
 from transformers.utils.import_utils import is_mistral_common_available, is_torch_available, requires
 
 
@@ -1127,7 +1128,9 @@ class MistralCommonBackend(PreTrainedTokenizerBase):
             """Adapt message to `mistral-common` format and leave validation to `mistral-common`."""
             if not isinstance(message, dict):
                 return message
-            maybe_list_content: str | list[dict[str, str | dict[str, Any]]] | None = message.get("content")
+            # Use get_message_content to keep the missing-content convention consistent
+            # across all chat-template entry points (#45290).
+            maybe_list_content: str | list[dict[str, str | dict[str, Any]]] = get_message_content(message, default=[])
             if not maybe_list_content or isinstance(maybe_list_content, str):
                 return message
 

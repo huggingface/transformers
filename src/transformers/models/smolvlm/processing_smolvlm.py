@@ -23,6 +23,7 @@ from ...image_utils import ImageInput, make_nested_list_of_images
 from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import BatchEncoding, TextInput
 from ...utils import auto_docstring, is_num2words_available, logging
+from ...utils.chat_template_utils import get_message_content
 from ...video_utils import VideoInput
 
 
@@ -333,7 +334,7 @@ class SmolVLMProcessor(ProcessorMixin):
             (isinstance(content, dict) and content["type"] == "video")
             for conversation in conversations
             for message in conversation
-            for content in message["content"]
+            for content in get_message_content(message, default=[])
         )
         if chat_template is None and has_video:
             # re-assign to the correct default template for BC, if user is not requesting their own template
