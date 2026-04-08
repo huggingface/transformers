@@ -523,7 +523,7 @@ class TorchExportableModuleWithStaticCache(torch.nn.Module):
         # simple StaticLayer... It means that any generation beyond the window is unfortunately unsupported
         for i, layer in enumerate(self.static_cache.layers):
             if isinstance(layer, StaticSlidingWindowLayer):
-                self.static_cache.layers[i] = StaticLayer(layer.max_cache_len)
+                self.static_cache.layers[i] = StaticLayer(max_cache_len)
         # Gemma4 has different head_dim and num_heads depending on layer type
         if hasattr(config, "global_head_dim"):
             head_dim = [
@@ -882,7 +882,7 @@ class Seq2SeqLMDecoderExportableModuleWithStaticCache(torch.nn.Module):
         # simple StaticLayer... It means that any generation beyond the window is unfortunately unsupported
         for i, layer in enumerate(self.static_cache.layers):
             if isinstance(layer, StaticSlidingWindowLayer):
-                self.static_cache.layers[i] = StaticLayer(layer.max_cache_len)
+                self.static_cache.layers[i] = StaticLayer(max_static_cache_length)
         head_dim = getattr(self.config, "head_dim", self.config.hidden_size // self.config.num_attention_heads)
         num_heads = getattr(self.config, "num_key_value_heads", self.config.num_attention_heads)
         self.static_cache.early_initialization(batch_size, num_heads, head_dim, torch.float32, model_device)
