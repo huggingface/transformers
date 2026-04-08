@@ -1350,11 +1350,11 @@ class Gemma4TextDecoderLayer(GradientCheckpointingLayer):
     def forward(
         self,
         hidden_states: torch.Tensor,
+        past_key_values: Cache,
         per_layer_input: torch.Tensor = None,
         position_embeddings: torch.Tensor = None,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
-        past_key_values: Cache | None = None,
         use_cache: bool = True,
         **kwargs,
     ) -> torch.Tensor:
@@ -1609,11 +1609,11 @@ class Gemma4TextModel(Gemma4PreTrainedModel):
 
             hidden_states = decoder_layer(
                 hidden_states,
+                past_key_values,
                 per_layer_input,
                 position_embeddings=position_embeddings[self.config.layer_types[i]],
                 attention_mask=causal_mask_mapping[self.config.layer_types[i]],
                 position_ids=position_ids,
-                past_key_values=past_key_values,
                 use_cache=use_cache,
                 **kwargs,
             )
