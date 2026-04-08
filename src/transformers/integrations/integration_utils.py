@@ -1051,10 +1051,11 @@ class TrackioCallback(TrainerCallback):
         if (current_project := self._trackio.context_vars.current_project.get()) is None:
             return
         trackio_version = packaging.version.parse(self._trackio.__version__)
-        if trackio_version < packaging.version.parse("0.21.0"):
+        if trackio_version < packaging.version.parse("0.13.0"):
             warnings.warn(
-                "The installed `trackio` is older than 0.21.0, so the Hub integration may be incomplete. "
-                "Run `pip install --upgrade trackio`."
+                "The version of `trackio` that is installed is <=0.13.0, so "
+                "the local Trackio project will not be pushed to Hugging Face. Run "
+                "`pip install --upgrade trackio` to fix this."
             )
             return
 
