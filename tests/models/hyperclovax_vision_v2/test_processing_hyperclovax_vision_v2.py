@@ -18,7 +18,6 @@ import unittest
 import numpy as np
 import requests
 
-from transformers.image_utils import load_image
 from transformers.testing_utils import require_av, require_cv2, require_torch, require_torchvision, require_vision
 from transformers.utils import is_cv2_available, is_torch_available, is_vision_available
 
