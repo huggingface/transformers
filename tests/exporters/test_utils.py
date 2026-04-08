@@ -63,9 +63,14 @@ EXPORT_SKIP_MODEL_CLASSES = {
 
 
 # Model classes where ONNX optimization must be disabled due to upstream onnxscript bugs.
-# SplitToSequence constant folding crashes with "'NoneType' object has no attribute 'ndim'".
-# TODO: remove once onnxscript fixes FoldConstantsPass for SplitToSequence with None inputs.
 ONNX_DISABLE_OPTIMIZE_MODEL_CLASSES = {
+    # LayoutLMv2 uses detectron2's FPN backbone — the ONNX optimizer drops initializers
+    # that are still referenced by nodes, producing an invalid graph for ORT.
+    "LayoutLMv2Model",
+    "LayoutLMv2ForSequenceClassification",
+    "LayoutLMv2ForTokenClassification",
+    "LayoutLMv2ForQuestionAnswering",
+    # SplitToSequence constant folding crashes with "'NoneType' object has no attribute 'ndim'".
     "ProphetNetModel",
     "ProphetNetForConditionalGeneration",
     "ProphetNetDecoder",
