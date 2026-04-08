@@ -515,10 +515,10 @@ class ContinuousBatchingIOs:
 
         # If there is only one layer type, we remove the dicts around some attributes to avoid unnecessary overhead
         if len(self.cumulative_seqlens_k.keys()) == 1:
-            kwargs.cu_seq_lens_k = kwargs.cu_seq_lens_k.popitem()[1] # type: ignore
-            kwargs.max_seqlen_k = kwargs.max_seqlen_k.popitem()[1] # type: ignore
+            kwargs.cu_seq_lens_k = kwargs.cu_seq_lens_k.popitem()[1]  # type: ignore
+            kwargs.max_seqlen_k = kwargs.max_seqlen_k.popitem()[1]  # type: ignore
             if self.attention_mask is not None:
-                kwargs.attention_mask = kwargs.attention_mask.popitem()[1] # type: ignore
+                kwargs.attention_mask = kwargs.attention_mask.popitem()[1]  # type: ignore
 
         return kwargs.asdict()  # TODO: this is imperfect, check if there is no better way to juggle dict / dataclass
 
@@ -564,12 +564,24 @@ class HostDeviceIOPair:
     ) -> None:
         # The host IO has automatic pinned memory because it is created on the CPU
         self.host_io = ContinuousBatchingIOs(
-            cache, config, torch.device("cpu"), model_dtype, max_graphs, return_logprobs, logit_processor,
-            use_cuda_graph_varlen=use_cuda_graph_varlen,
+            cache,
+            config,
+            torch.device("cpu"),
+            model_dtype,
+            max_graphs,
+            return_logprobs,
+            logit_processor,
+            use_cuda_graph_varlen,
         )
         self.device_io = ContinuousBatchingIOs(
-            cache, config, device, model_dtype, max_graphs, return_logprobs, logit_processor,
-            use_cuda_graph_varlen=use_cuda_graph_varlen,
+            cache,
+            config,
+            device,
+            model_dtype,
+            max_graphs,
+            return_logprobs,
+            logit_processor,
+            use_cuda_graph_varlen,
         )
         # Create events only on CUDA devices
         self.h2d_over = torch.cuda.Event() if torch.cuda.is_available() else None
@@ -656,8 +668,14 @@ class ContinuousBatchingAsyncIOs:
         self.current_pair = 0
         self.io_pairs = [
             HostDeviceIOPair(
-                cache, config, device, model_dtype, max_graphs, return_logprobs, logit_processor,
-                use_cuda_graph_varlen=use_cuda_graph_varlen,
+                cache,
+                config,
+                device,
+                model_dtype,
+                max_graphs,
+                return_logprobs,
+                logit_processor,
+                use_cuda_graph_varlen,
             )
             for _ in range(2)
         ]
