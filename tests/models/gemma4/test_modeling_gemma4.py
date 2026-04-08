@@ -439,7 +439,7 @@ class Gemma4IntegrationTest(unittest.TestCase):
     def tearDown(self):
         cleanup(torch_device, gc_collect=True)
 
-    def test_model_4b(self):
+    def test_model_with_image(self):
         model = Gemma4ForConditionalGeneration.from_pretrained(self.model_name, device_map=torch_device)
 
         inputs = self.processor.apply_chat_template(
@@ -462,7 +462,7 @@ class Gemma4IntegrationTest(unittest.TestCase):
         EXPECTED_TEXT = EXPECTED_TEXTS.get_expectation()
         self.assertEqual(output_text, EXPECTED_TEXT)
 
-    def test_model_4b_batch(self):
+    def test_model_with_image_batch(self):
         model = Gemma4ForConditionalGeneration.from_pretrained(self.model_name, device_map=torch_device)
 
         messages_2 = [
@@ -508,7 +508,7 @@ class Gemma4IntegrationTest(unittest.TestCase):
         EXPECTED_TEXT = EXPECTED_TEXTS.get_expectation()
         self.assertEqual(output_text, EXPECTED_TEXT)
 
-    def test_model_4b_multiimage(self):
+    def test_model_multiimage(self):
         model = Gemma4ForConditionalGeneration.from_pretrained(self.model_name, device_map=torch_device)
 
         messages = [
