@@ -1101,6 +1101,7 @@ class Gemma4TextDecoderLayer(Gemma3DecoderLayer):
         hidden_states = self.input_layernorm(hidden_states)
         hidden_states, _ = self.self_attn(
             hidden_states=hidden_states,
+            shared_kv_states=shared_kv_states,
             position_embeddings=position_embeddings,
             attention_mask=attention_mask,
             shared_kv_states=shared_kv_states,
