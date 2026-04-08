@@ -474,7 +474,7 @@ class ContinuousBatchingIOs:
             logits_processor_args=self._bulk_input_tensor[self.static_inputs :, :q_size],
             cu_seq_lens_k={},
             max_seqlen_k={},
-            attention_mask={},
+            attention_mask=None if self.attention_mask is None else {},
             read_index=[],
             write_index=[],
             cache=self.cache,
@@ -484,22 +484,19 @@ class ContinuousBatchingIOs:
 
         # If there is padding, make sure the padding sequences have length 0
         if use_padding:
-            self.cumulative_seqlens_q[self.true_batch_size + 1 :] = 0
-            # Additionally, if there are CUDA graphs, we need to pad max_seqlen so graph catpure will work regardless of the future Q / KV lengths of the next batches
-            if self.use_cuda_graph_varlen:
+            kwargs.cu_seq_lens_q[self.true_batch_size + 1 :] = 0
+            # Additionally, if there are CUDA graphs, we need to pad max_seqlen so graph capture will work regardless of
+            # the future Q / KV lengths of the next batches
+            if not self.use_block_table and self.use_cuda_graph_varlen:
                 self.max_seqlen_q = q_size
                 self.max_seqlen_k = {
-                    ltype: pad_to_pow2(max_seqlen_k, self.cache.num_pages, 1024)
-                    for ltype, max_seqlen_k in self.max_seqlen_k.items()
+                    layer_type: pad_to_pow2(self.max_seqlen_k[layer_type], self.cache.num_pages, 1024)
+                    for layer_type in self.max_seqlen_k.keys()
                 }
 
         # When using block table, max_seqlen_q and max_seqlen_k are not used by flash_attn_with_kvcache, so we set them
         # to constant `1` to avoid dynamo guards on these changing integer values. This applies throughout this method.
-        if self.use_block_table:
-            kwargs.max_seqlen_q = 1
-        # Otherwise, we set max_seqlen_q to the actual value
-        else:
-            kwargs.max_seqlen_q = self.max_seqlen_q
+        kwargs.max_seqlen_q = 1 if self.use_block_table else self.max_seqlen_q
 
         # For the attributes that are lists of tensors, we construct list of tensor references
         for i in range(self.cache.num_groups):
@@ -508,29 +505,21 @@ class ContinuousBatchingIOs:
             kwargs.read_index.append(self.read_index_storage[i, :read_index_size])
             kwargs.write_index.append(self.write_index_storage[i, :write_index_size])
 
-        # For the attributes that are dict of tensors, we replace the dict with a tensor if there is only one entry
-        # When using block table, max_seqlen_k is not used, so we set it to a constant to avoid dynamo guards
-        layer_types = list(self.cumulative_seqlens_k.keys())
-        if len(layer_types) > 1:
-            kwargs.max_seqlen_k: dict[str, int] = {}
-            kwargs.cu_seq_lens_k: dict[str, torch.Tensor] = {}
-            kwargs.attention_mask: dict[str, torch.Tensor] = {}
-            for layer_type, seqlens_k in self.cumulative_seqlens_k.items():
-                kwargs.cu_seq_lens_k[layer_type] = seqlens_k[: batch_size + 1]
-                kwargs.max_seqlen_k[layer_type] = 1 if self.use_block_table else self.max_seqlen_k[layer_type]
-                if self.attention_mask is not None:
-                    k_len = kv_size if use_padding else seqlens_k[batch_size]
-                    kwargs.attention_mask[layer_type] = self.attention_mask[layer_type][..., :q_size, :k_len]
-        else:
-            layer_type = layer_types[0]
-            kwargs.cu_seq_lens_k = self.cumulative_seqlens_k[layer_type][: batch_size + 1]
-            kwargs.max_seqlen_k = 1 if self.use_block_table else self.max_seqlen_k[layer_type]
+        # For the attributes that are dict of tensors, we first fill the dict with the actual values
+        for layer_type, seqlens_k in self.cumulative_seqlens_k.items():
+            kwargs.cu_seq_lens_k[layer_type] = seqlens_k[: batch_size + 1]
+            kwargs.max_seqlen_k[layer_type] = 1 if self.use_block_table else self.max_seqlen_k[layer_type]
             if self.attention_mask is not None:
-                k_len = kv_size if use_padding else self.cumulative_seqlens_k[layer_type][batch_size]
-                kwargs.attention_mask = self.attention_mask[layer_type][..., :q_size, :k_len]
+                k_len = kv_size if use_padding else seqlens_k[batch_size]
+                kwargs.attention_mask[layer_type] = self.attention_mask[layer_type][..., :q_size, :k_len]
 
-        if self.attention_mask is None:
-            kwargs.attention_mask = None
+        # If there is only one layer type, we remove the dicts around some attributes to avoid unnecessary overhead
+        if len(self.cumulative_seqlens_k.keys()) == 1:
+            kwargs.cu_seq_lens_k = kwargs.cu_seq_lens_k.popitem()[1] # type: ignore
+            kwargs.max_seqlen_k = kwargs.max_seqlen_k.popitem()[1] # type: ignore
+            if self.attention_mask is not None:
+                kwargs.attention_mask = kwargs.attention_mask.popitem()[1] # type: ignore
+
         return kwargs.asdict()  # TODO: this is imperfect, check if there is no better way to juggle dict / dataclass
 
     def get_cb_kwargs(self) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
@@ -540,7 +529,11 @@ class ContinuousBatchingIOs:
         return self.carry_over_ids, self.output_ids, self.output_ids
 
     def _get_graph_key(self) -> tuple[int, ...]:
-        return (self.num_q_tokens, self.max_kv_read, *self.max_seqlen_k.values())
+        # Keys for varlen path
+        if self.max_kv_read > 0:
+            return (self.num_q_tokens, self.max_kv_read, *self.max_seqlen_k.values())
+        # Keys for decode fast path
+        return (self.num_q_tokens,)
 
     def get_graph(self) -> torch.cuda.CUDAGraph | None:
         key = self._get_graph_key()
@@ -548,13 +541,13 @@ class ContinuousBatchingIOs:
         # If this point is reached, it means the next step will be a new graph capture
         if graph is None:
             self.graphs.plan_for_new_graph()
-            logger.info(f"Creating graph for (num_q_tokens, max_kv_read, max_seqlen_k[...]) = {key}")
+            logger.info(f"Creating graph for {key = }")
         return graph
 
     def set_graph(self, graph: torch.cuda.CUDAGraph) -> None:
         key = self._get_graph_key()
         self.graphs.set_graph(key, graph)
-        logger.info(f"Setting graph for (num_q_tokens, max_kv_read, max_seqlen_k[...]) = {key}")
+        logger.info(f"Setting graph for {key = }")
 
 
 class HostDeviceIOPair:

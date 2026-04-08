@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 from collections import OrderedDict
-from math import ceil, log2, pow
+from math import ceil, log2
 from typing import Any
 
 import torch
@@ -29,7 +29,7 @@ class CudaGraphBuffer:
         if max_size <= 0:
             raise ValueError(f"max_size must be positive, but got {max_size}")
         self.max_size = max_size
-        self._storage: OrderedDict[tuple[int, int], torch.cuda.CUDAGraph] = OrderedDict()
+        self._storage: OrderedDict[tuple[int, ...], torch.cuda.CUDAGraph] = OrderedDict()
 
     def __del__(self) -> None:
         original_max_size = self.max_size
@@ -73,7 +73,7 @@ def pad_to_pow2(value: int, max_value: int, min_value: int = 0) -> int:
     """Return the smallest power of 2 >= (value), capped at (max_value). If a minimum value is provided, the value is at
     least padded to that value."""
     value = max(value, max(1, min_value))
-    padded = pow(2, ceil(log2(value)))
+    padded = 2 ** int(ceil(log2(value)))
     return min(padded, max_value)
 
 
