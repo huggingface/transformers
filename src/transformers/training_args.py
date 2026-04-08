@@ -395,14 +395,14 @@ class TrainingArguments:
             The Hugging Face Space ID to deploy to when using Trackio. Should be a complete Space name like
             `'username/reponame'` or `'orgname/reponame'`, or just `'reponame'` in which case the Space will be
             created in the currently-logged-in Hugging Face user's namespace. If `None`, will log to a local directory.
-            Metrics are persisted to a Hugging Face Bucket (not a Dataset). Note that this Space will be public unless
-            you set `hub_private_repo=True` or your organization's default is to create private Spaces.
+            Note that this Space will be public unless you set `hub_private_repo=True` or your organization's default is
+            to create private Spaces.
         trackio_bucket_id (`str` or `None`, *optional*, defaults to `None`):
             Optional Hugging Face Bucket id (`namespace/name`) for Trackio metric storage when using a Space. If
             unset, Trackio derives a bucket from the Space id. Only used when `trackio_space_id` is set.
         trackio_freeze_space (`bool`, *optional*, defaults to `True`):
             When `True` (default), after training the Space is **frozen** (converted from a live Gradio Space to a
-            static read-only dashboard backed by the HF Bucket). Set to `False` to keep a live Gradio Space for further
+            static read-only dashboard). Set to `False` to keep a live Gradio Space for further
             logging to the same Space.
 
         > Evaluation
@@ -1056,9 +1056,9 @@ class TrainingArguments:
         metadata={
             "help": "The Hugging Face Space ID to deploy to when using Trackio. Should be a complete Space name like "
             "'username/reponame' or 'orgname/reponame', or just 'reponame' in which case the Space will be created in "
-            "the currently-logged-in Hugging Face user's namespace. If `None`, will log to a local directory. Metrics "
-            "use a Hugging Face Bucket. Note that this Space will be public unless you set `hub_private_repo=True` or "
-            "your organization's default is to create private Spaces."
+            "the currently-logged-in Hugging Face user's namespace. If `None`, will log to a local directory. Note that "
+            "this Space will be public unless you set `hub_private_repo=True` or your organization's default is to "
+            "create private Spaces."
         },
     )
     trackio_bucket_id: str | None = field(
