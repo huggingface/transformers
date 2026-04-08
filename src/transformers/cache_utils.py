@@ -1154,7 +1154,15 @@ class Cache:
     @property
     def is_initialized(self) -> bool:
         """Return whether the cache data is initialized"""
-        return len(self.layers) > 0 and all(layer.is_initialized for layer in self.layers)
+        return (
+            len(self.layers) > 0
+            and all(layer.is_initialized for layer in self.layers if isinstance(layer, CacheLayerMixin))
+            and all(
+                layer.is_conv_states_initialized
+                for layer in self.layers
+                if isinstance(layer, LinearAttentionCacheLayerMixin)
+            )
+        )
 
     @property
     def is_sliding(self) -> list[bool]:
