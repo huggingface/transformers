@@ -240,6 +240,7 @@ class Qwen3_5MoeModel(Qwen3_5Model):
 
 class Qwen3_5MoeForCausalLM(Qwen3NextForCausalLM):
     config: Qwen3_5MoeTextConfig
+    _checkpoint_conversion_mapping = {"model.language_model": "model"}
     _keys_to_ignore_on_load_unexpected = [r"^mtp.*", r"^model.visual.*"]
 
     def __init__(self, config):

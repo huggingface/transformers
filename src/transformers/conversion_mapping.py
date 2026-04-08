@@ -108,9 +108,6 @@ def _build_checkpoint_conversion_mapping():
             WeightRenaming(source_patterns=r"vlm.model", target_patterns="vlm"),
             WeightRenaming(source_patterns=r"vlm(?!\.(language_model|visual))", target_patterns="vlm.language_model"),
         ],
-        "gemma3n_text": [
-            WeightRenaming(source_patterns=r"^model.language_model", target_patterns="model"),
-        ],
         "timm_wrapper": [
             # Simply add the prefix `timm_model`. Similar to `base_model_prefix` but also removes prefix
             # when saving. TODO: Would be probably much cleaner with a `add_prefix` argument in WeightRenaming
@@ -151,9 +148,6 @@ def _build_checkpoint_conversion_mapping():
         "olmo_hybrid": [
             WeightRenaming("attention_layer_norm", "input_layernorm"),
             WeightRenaming("feedforward_layer_norm", "post_attention_layernorm"),
-        ],
-        "qwen3_5_text": [
-            WeightRenaming(source_patterns=r"^model.language_model", target_patterns="model"),
         ],
         "sam3_tracker": [
             WeightRenaming(
@@ -518,8 +512,7 @@ def _build_checkpoint_conversion_mapping():
         ),
     ]
 
-    mapping["qwen3_5_moe_text"] = mapping["qwen3_5_text"].copy()
-    mapping["qwen3_5_moe_text"] += mapping["qwen2_moe"].copy()
+    mapping["qwen3_5_moe_text"] = mapping["qwen2_moe"].copy()
 
     mapping["cohere_asr"] = [
         WeightRenaming(r"encoder\.pre_encode\.conv\.", r"encoder.subsampling.layers."),
@@ -612,6 +605,17 @@ def get_model_conversion_mapping(
     # Load models with explicit, user-provided key mapping
     if key_mapping is not None:
         weight_conversions = [WeightRenaming(source_patterns=k, target_patterns=v) for k, v in key_mapping.items()]
+    elif any(
+        allowed_name in class_name.__name__.lower()
+        for class_name in model.__class__.__mro__[:-1]
+        for allowed_name in ["qwen3_5", "gemma3n"]
+    ):
+        # TODO: these are used only for VLMs which sometimes are loaded as LLMs
+        # prob can be fixed as we did with `config_class`, all at once for VLM-LLMs
+        weight_conversions = [
+            WeightRenaming(source_patterns=k, target_patterns=v)
+            for k, v in model._checkpoint_conversion_mapping.items()
+        ]
 
     # Model have several `PreTrainedModel` within with the same model type
     # For ex: XForConditionalGeneration -> XModel. We don't want to apply the same

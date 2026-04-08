@@ -652,6 +652,7 @@ class Qwen3_5Model(Qwen3VLModel):
 
 class Qwen3_5ForCausalLM(Qwen3ForCausalLM):
     config: Qwen3_5TextConfig
+    _checkpoint_conversion_mapping = {"model.language_model": "model"}
     _keys_to_ignore_on_load_unexpected = [r"^mtp.*", r"^model.visual.*"]
 
     def __init__(self, config):

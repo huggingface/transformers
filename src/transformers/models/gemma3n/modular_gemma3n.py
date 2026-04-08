@@ -1926,7 +1926,7 @@ class Gemma3nTextModel(Gemma3TextModel):
 
 @auto_docstring(custom_intro="The base Gemma 3n language model with a language modeling head.")
 class Gemma3nForCausalLM(Gemma3ForCausalLM):
-    pass
+    _checkpoint_conversion_mapping = {"model.language_model": "model"}
 
 
 class Gemma3nMultimodalEmbedder(nn.Module):
