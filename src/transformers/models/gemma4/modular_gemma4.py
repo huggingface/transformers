@@ -968,7 +968,9 @@ class Gemma4TextAttention(nn.Module):
         query_states = apply_rotary_pos_emb(query_states, cos, sin, unsqueeze_dim=2)
         query_states = query_states.transpose(1, 2)
 
-        # For layers with shared KV (from kv sharing point onwards), we reuse the same keys/values states as the last non-sharing layer
+        # For layers with shared KV (from kv sharing point onwards), we reuse the same keys/values states as the last non-sharing layer.
+        # We cannot simply reuse the cached state if we have a Cache, as sliding layers will not remember the full states in their Cache
+        # once we are past the sliding window - so we always use `shared_kv_states` instead, even when past_key_values is not None
         if self.is_kv_shared_layer:
             key_states, value_states = shared_kv_states[self.kv_shared_layer_index]
             # Device of past layer may be different from current one
