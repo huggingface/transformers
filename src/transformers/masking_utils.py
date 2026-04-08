@@ -868,7 +868,13 @@ def _preprocess_mask_arguments(
     # We check the position_ids for potential packed sequence format (only if the 2D attention mask is explicitly None,
     # and we don't have past_key_values, i.e. generally a training setup)
     packed_sequence_mask = None
-    if position_ids is not None and attention_mask is None and past_key_values is None:
+    if (
+        position_ids is not None
+        and attention_mask is None
+        # Some models (e.g. Gemma4) can use a Cache even with use_cache=False for k/v sharing between layers, but the
+        # cache is never initialized and updated in those cases
+        and (past_key_values is None or not past_key_values.is_initialized)
+    ):
         batch_size = inputs_embeds.shape[0]
         # The position ids are sometimes just unsqueezed, without being expanded
         if batch_size != position_ids.shape[0]:
