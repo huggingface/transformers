@@ -1569,6 +1569,10 @@ class EncoderDecoderCache(Cache):
     def is_compileable(self) -> bool:
         return self.self_attention_cache.is_compileable
 
+    @property
+    def is_initialized(self) -> bool:
+        return self.self_attention_cache.is_initialized
+
 
 # Deprecated alias: SlidingWindowCache was removed in transformers v5. StaticCache is the replacement.
 SlidingWindowCache = StaticCache
