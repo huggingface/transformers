@@ -95,20 +95,37 @@ jobs:
             "https://circleci.com/api/v2/workflow/${workflow_id}/job")
           
           # Step 5: Extract collection_job details
-          collection_job_number=$(echo "$jobs" | jq -r '.items[] | select(.name == "collection_job") | .job_number')
-          collection_job_id=$(echo "$jobs" | jq -r '.items[] | select(.name == "collection_job") | .id')
+          # "first // empty": if collection_job is absent or has job_number=null, jq outputs nothing
+          # (empty string). Without this, jq -r would output the literal string "null", making
+          # [ -z "$collection_job_number" ] false and bypassing the early-exit check below.
+          collection_job_number=$(echo "$jobs" | jq -r '[.items[] | select(.name == "collection_job") | .job_number] | first // empty')
+          collection_job_id=$(echo "$jobs" | jq -r '[.items[] | select(.name == "collection_job") | .id] | first // empty')
           echo "CircleCI Collection job number: ${collection_job_number}"
           echo "CircleCI Collection job ID: ${collection_job_id}"
+
+          # When only the "empty" job ran (no tests selected), there is no collection_job.
+          # Exit gracefully to avoid curl hitting a broken URL.
+          if [ -z "$collection_job_number" ]; then
+            echo "No collection_job found (only empty job ran - no tests were selected). Skipping."
+            echo "artifact_found=false" >> $GITHUB_OUTPUT
+            exit 0
+          fi
           
           # Step 6: Get artifacts list
           echo "Getting artifacts for job ${collection_job_number}..."
           artifacts=$(curl -s \
             "https://circleci.com/api/v2/project/gh/${REPO}/${collection_job_number}/artifacts")
           
-          echo "$artifacts" | jq '.'
+          # Print for debugging; "|| true" prevents failure if the response is not valid JSON.
+          echo "$artifacts" | jq '.' || true
           
           # Step 7: Download failure_summary.json specifically
-          failure_summary_url=$(echo "$artifacts" | jq -r '.items[] | select(.path == "outputs/failure_summary.json") | .url')
+          # .items // []  : use empty array if .items is null (avoids "Cannot iterate over null")
+          # .[]           : iterate over each artifact object in the array
+          # select(...)   : keep only the artifact whose .path matches
+          # | .url        : extract the download URL from the matched artifact
+          # first // empty: take the first match; outputs nothing (not "null") if no match found
+          failure_summary_url=$(echo "$artifacts" | jq -r '[.items // [] | .[] | select(.path == "outputs/failure_summary.json") | .url] | first // empty')
           
           if [ -z "$failure_summary_url" ]; then
             echo "failure_summary.json not found in artifacts - PR may not have latest main merged. Skipping."
