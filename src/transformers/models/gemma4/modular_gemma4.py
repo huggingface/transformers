@@ -954,8 +954,8 @@ class Gemma4TextAttention(nn.Module):
         hidden_states: torch.Tensor,
         position_embeddings: torch.Tensor,
         attention_mask: torch.Tensor | None,
-        past_key_values: Cache,
-        use_cache: bool = True,
+        shared_kv_states: dict,
+        past_key_values: Cache | None = None,
         **kwargs: Unpack[FlashAttentionKwargs],
     ) -> tuple[torch.Tensor, torch.Tensor | None]:
         input_shape = hidden_states.shape[:-1]
@@ -970,7 +970,7 @@ class Gemma4TextAttention(nn.Module):
 
         # For layers with shared KV (from kv sharing point onwards), we reuse the same keys/values states as the last non-sharing layer
         if self.is_kv_shared_layer:
-            key_states, value_states = past_key_values.shared_layers[self.kv_shared_layer_index]
+            key_states, value_states = shared_kv_states[self.kv_shared_layer_index]
             # Device of past layer may be different from current one
             key_states = key_states.to(query_states.device)
             value_states = value_states.to(query_states.device)
@@ -985,14 +985,10 @@ class Gemma4TextAttention(nn.Module):
             value_states = self.v_norm(value_states)
             value_states = value_states.transpose(1, 2)
 
-        # We check use_cache here, as `past_key_values` will always be provided anyway for the Cache sharing - if
-        # `use_cache=False`, we don't want to `update` the Cache, only use it for sharing
-        if use_cache and not self.is_kv_shared_layer:
+        if past_key_values is not None and not self.is_kv_shared_layer:
             key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx)
         if self.store_full_length_kv:
-            if not hasattr(past_key_values, "shared_layers"):
-                past_key_values.shared_layers = {}
-            past_key_values.shared_layers[self.layer_idx] = key_states, value_states
+            shared_kv_states[self.layer_idx] = key_states, value_states
 
         attention_interface: Callable = eager_attention_forward
         if self.config._attn_implementation != "eager":
@@ -1084,12 +1080,12 @@ class Gemma4TextDecoderLayer(Gemma3DecoderLayer):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        past_key_values: Cache,
+        shared_kv_states: dict,
         per_layer_input: torch.Tensor = None,
         position_embeddings: torch.Tensor = None,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
-        use_cache: bool = True,
+        past_key_values: Cache | None = None,
         **kwargs,
     ) -> torch.Tensor:
         residual = hidden_states
@@ -1099,9 +1095,9 @@ class Gemma4TextDecoderLayer(Gemma3DecoderLayer):
             hidden_states=hidden_states,
             position_embeddings=position_embeddings,
             attention_mask=attention_mask,
+            shared_kv_states=shared_kv_states,
             position_ids=position_ids,
             past_key_values=past_key_values,
-            use_cache=use_cache,
             **kwargs,
         )
         hidden_states = self.post_attention_layernorm(hidden_states)
@@ -1328,8 +1324,6 @@ class Gemma4TextModel(Gemma3TextModel):
             merging multimodal soft tokens into `inputs_embeds` — at which point the original token ids are
             no longer recoverable.
         """
-        use_cache = use_cache if use_cache is not None else self.config.use_cache
-
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
 
@@ -1341,12 +1335,11 @@ class Gemma4TextModel(Gemma3TextModel):
                 per_layer_inputs = self.get_per_layer_inputs(input_ids, inputs_embeds)
             per_layer_inputs = self.project_per_layer_inputs(inputs_embeds, per_layer_inputs)
 
-        # Independently of the value of `use_cache` here, we create a Cache object to be able to use Cache sharing
-        if past_key_values is None:
+        if use_cache and past_key_values is None:
             past_key_values = DynamicCache(config=self.config)
 
         if position_ids is None:
-            past_seen_tokens = past_key_values.get_seq_length()
+            past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
             position_ids = torch.arange(inputs_embeds.shape[1], device=inputs_embeds.device) + past_seen_tokens
             position_ids = position_ids.unsqueeze(0)
 
@@ -1372,18 +1365,21 @@ class Gemma4TextModel(Gemma3TextModel):
         for layer_type in self.unique_layer_types:
             position_embeddings[layer_type] = self.rotary_emb(hidden_states, position_ids, layer_type)
 
+        # Initialize as empty dict - it will be filled in the right layers
+        shared_kv_states = {}
+
         # decoder layers
         for i, decoder_layer in enumerate(self.layers[: self.config.num_hidden_layers]):
             per_layer_input = per_layer_inputs[:, :, i, :] if per_layer_inputs is not None else None
 
             hidden_states = decoder_layer(
                 hidden_states,
-                past_key_values,
+                shared_kv_states,
                 per_layer_input,
                 position_embeddings=position_embeddings[self.config.layer_types[i]],
                 attention_mask=causal_mask_mapping[self.config.layer_types[i]],
                 position_ids=position_ids,
-                use_cache=use_cache,
+                past_key_values=past_key_values,
                 **kwargs,
             )
 
@@ -1391,8 +1387,7 @@ class Gemma4TextModel(Gemma3TextModel):
 
         return BaseModelOutputWithPast(
             last_hidden_state=hidden_states,
-            # we use a Cache even with `use_cache=False` to allow cache sharing, so adapt the return here if False
-            past_key_values=past_key_values if use_cache else None,
+            past_key_values=past_key_values,
         )
 
 

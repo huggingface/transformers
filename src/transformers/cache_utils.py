@@ -1154,15 +1154,7 @@ class Cache:
     @property
     def is_initialized(self) -> bool:
         """Return whether the cache data is initialized"""
-        return (
-            len(self.layers) > 0
-            and all(layer.is_initialized for layer in self.layers if isinstance(layer, CacheLayerMixin))
-            and all(
-                layer.is_conv_states_initialized
-                for layer in self.layers
-                if isinstance(layer, LinearAttentionCacheLayerMixin)
-            )
-        )
+        return len(self.layers) > 0 and all(layer.is_initialized for layer in self.layers)
 
     @property
     def is_sliding(self) -> list[bool]:
@@ -1576,10 +1568,6 @@ class EncoderDecoderCache(Cache):
     @property
     def is_compileable(self) -> bool:
         return self.self_attention_cache.is_compileable
-
-    @property
-    def is_initialized(self) -> bool:
-        return self.self_attention_cache.is_initialized
 
 
 # Deprecated alias: SlidingWindowCache was removed in transformers v5. StaticCache is the replacement.
