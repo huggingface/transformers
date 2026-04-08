@@ -351,6 +351,13 @@ class Qwen2_5_VisionTransformerPretrainedModel(Qwen2_5_VLPreTrainedModel):
         "attentions": Qwen2_5_VLVisionAttention,
     }
 
+    def get_cu_seqlens(self, grid_thw):
+        """Compute cumulative sequence lengths from vision grid info (pure, no model weights)."""
+        cu_seqlens = torch.repeat_interleave(grid_thw[:, 1] * grid_thw[:, 2], grid_thw[:, 0]).cumsum(
+            dim=0, dtype=grid_thw.dtype if torch.jit.is_tracing() else torch.int32
+        )
+        return F.pad(cu_seqlens, (1, 0), value=0)
+
     def __init__(self, config, *inputs, **kwargs) -> None:
         super().__init__(config, *inputs, **kwargs)
         self.spatial_merge_size = config.spatial_merge_size
@@ -447,7 +454,8 @@ class Qwen2_5_VisionTransformerPretrainedModel(Qwen2_5_VLPreTrainedModel):
             cu_window_seqlens.extend(cu_seqlens_tmp.tolist())
             window_index_id += grid_t * llm_grid_h * llm_grid_w
         window_index = torch.cat(window_index, dim=0)
-
+        cu_window_seqlens = torch.tensor(cu_window_seqlens, device=grid_thw.device, dtype=torch.int32)
+        cu_window_seqlens = torch.unique_consecutive(cu_window_seqlens)
         return window_index, cu_window_seqlens
 
     @merge_with_config_defaults
@@ -484,28 +492,12 @@ class Qwen2_5_VisionTransformerPretrainedModel(Qwen2_5_VLPreTrainedModel):
 
         if rotary_pos_emb is None:
             rotary_pos_emb = self.rot_pos_emb(grid_thw)
+
         if window_index is None:
-            window_index, cu_window_seqlens_list = self.get_window_index(grid_thw)
-            cu_window_seqlens = torch.tensor(
-                cu_window_seqlens_list,
-                device=hidden_states.device,
-                # Select dtype based on the following factors:
-                #  - FA2 requires that cu_seqlens_q must have dtype int32
-                #  - torch.onnx.export requires that cu_seqlens_q must have same dtype as grid_thw
-                # See https://github.com/huggingface/transformers/pull/34852 for more information
-                dtype=grid_thw.dtype if torch.jit.is_tracing() else torch.int32,
-            )
-            cu_window_seqlens = torch.unique_consecutive(cu_window_seqlens)
+            window_index, cu_window_seqlens = self.get_window_index(grid_thw)
+
         if cu_seqlens is None:
-            cu_seqlens = torch.repeat_interleave(grid_thw[:, 1] * grid_thw[:, 2], grid_thw[:, 0]).cumsum(
-                dim=0,
-                # Select dtype based on the following factors:
-                #  - FA2 requires that cu_seqlens_q must have dtype int32
-                #  - torch.onnx.export requires that cu_seqlens_q must have same dtype as grid_thw
-                # See https://github.com/huggingface/transformers/pull/34852 for more information
-                dtype=grid_thw.dtype if torch.jit.is_tracing() else torch.int32,
-            )
-            cu_seqlens = F.pad(cu_seqlens, (1, 0), value=0)
+            cu_seqlens = self.get_cu_seqlens(grid_thw)
 
         reverse_indices = torch.argsort(window_index)
 

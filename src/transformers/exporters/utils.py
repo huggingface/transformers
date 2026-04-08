@@ -319,15 +319,13 @@ def _precompute_vision_inputs(model: torch.nn.Module, inputs: dict[str, Any]) ->
 
     # Only precompute for models whose forward accepts optional precomputed params
     forward_params = set(inspect.signature(model.forward).parameters)
-    precompute_keys = {"rotary_pos_emb", "image_type_ids", "cu_seqlens", "position_embeddings"}
+    precompute_keys = {"rotary_pos_emb", "image_type_ids", "cu_seqlens", "position_embeddings", "pos_embeds"}
     if not (precompute_keys & forward_params):
         return
 
     # cu_seqlens from repeat_interleave (data-dependent output size)
-    cu_seqlens = torch.repeat_interleave(grid_thw[:, 1] * grid_thw[:, 2], grid_thw[:, 0]).cumsum(
-        dim=0, dtype=torch.int32
-    )
-    inputs["cu_seqlens"] = torch.nn.functional.pad(cu_seqlens, (1, 0), value=0)
+    if hasattr(model, "get_cu_seqlens"):
+        inputs["cu_seqlens"] = model.get_cu_seqlens(grid_thw)
 
     # rot_pos_emb (loops over grid_thw values) — inject with the key the forward expects
     if hasattr(model, "rot_pos_emb"):
@@ -339,10 +337,7 @@ def _precompute_vision_inputs(model: torch.nn.Module, inputs: dict[str, Any]) ->
 
     # get_window_index (loops + .tolist())
     if hasattr(model, "get_window_index"):
-        window_index, cu_window_seqlens_list = model.get_window_index(grid_thw)
-        cu_window_seqlens = torch.tensor(cu_window_seqlens_list, device=grid_thw.device, dtype=torch.int32)
-        inputs["cu_window_seqlens"] = torch.unique_consecutive(cu_window_seqlens)
-        inputs["window_index"] = window_index
+        inputs["window_index"], inputs["cu_window_seqlens"] = model.get_window_index(grid_thw)
 
     # fast_pos_embed_interpolate (loops over grid_thw)
     if hasattr(model, "fast_pos_embed_interpolate"):

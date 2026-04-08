@@ -23,6 +23,7 @@ from typing import Any
 
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 from torch.nn import LayerNorm
 
 from ... import initialization as init
@@ -399,6 +400,13 @@ class VideoLlama3VisionModel(VideoLlama3PreTrainedModel):
         "attentions": VideoLlama3VisionAttention,
     }
 
+    def get_cu_seqlens(self, grid_thw):
+        """Compute cumulative sequence lengths from vision grid info (pure, no model weights)."""
+        cu_seqlens = torch.repeat_interleave(grid_thw[:, 1] * grid_thw[:, 2], grid_thw[:, 0]).cumsum(
+            dim=0, dtype=grid_thw.dtype if torch.jit.is_tracing() else torch.int32
+        )
+        return F.pad(cu_seqlens, (1, 0), value=0)
+
     def __init__(self, config: VideoLlama3VisionConfig):
         super().__init__(config)
         head_dim = config.hidden_size // config.num_attention_heads
@@ -444,6 +452,7 @@ class VideoLlama3VisionModel(VideoLlama3PreTrainedModel):
         pixel_values: torch.Tensor,
         grid_thw: torch.Tensor,
         merge_sizes: torch.Tensor,
+        cu_seqlens: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutput:
         r"""
@@ -451,18 +460,13 @@ class VideoLlama3VisionModel(VideoLlama3PreTrainedModel):
             The temporal, height and width dimensions of feature shape for each image. Each row contains [t, h, w] values.
         merge_sizes (`torch.Tensor` of shape `(num_images_or_videos,)`):
             The spatial downsampling ratio of each image or video feature.
+        cu_seqlens (`torch.IntTensor`, *optional*):
+            Precomputed cumulative sequence lengths (from `get_cu_seqlens`).
         """
         position_embeddings = self.rotary_pos_emb(grid_thw, merge_sizes)
 
-        cu_seqlens = torch.repeat_interleave(grid_thw[:, 1] * grid_thw[:, 2], grid_thw[:, 0]).cumsum(
-            dim=0,
-            # Select dtype based on the following factors:
-            #  - FA2 requires that cu_seqlens_q must have dtype int32
-            #  - torch.onnx.export requires that cu_seqlens_q must have same dtype as grid_thw
-            # See https://github.com/huggingface/transformers/pull/34852 for more information
-            dtype=grid_thw.dtype if torch.jit.is_tracing() else torch.int32,
-        )
-        cu_seqlens = torch.nn.functional.pad(cu_seqlens, (1, 0), value=0)
+        if cu_seqlens is None:
+            cu_seqlens = self.get_cu_seqlens(grid_thw)
 
         hidden_states = self.embeddings(pixel_values.type(self.dtype))
         encoder_outputs: BaseModelOutput = self.encoder(

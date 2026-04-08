@@ -606,6 +606,13 @@ class Qwen3VLMoeVisionModel(Qwen3VLMoePreTrainedModel):
         "attentions": Qwen3VLMoeVisionAttention,
     }
 
+    def get_cu_seqlens(self, grid_thw):
+        """Compute cumulative sequence lengths from vision grid info (pure, no model weights)."""
+        cu_seqlens = torch.repeat_interleave(grid_thw[:, 1] * grid_thw[:, 2], grid_thw[:, 0]).cumsum(
+            dim=0, dtype=grid_thw.dtype if torch.jit.is_tracing() else torch.int32
+        )
+        return F.pad(cu_seqlens, (1, 0), value=0)
+
     def __init__(self, config, *inputs, **kwargs) -> None:
         super().__init__(config, *inputs, **kwargs)
         self.spatial_merge_size = config.spatial_merge_size
@@ -784,15 +791,7 @@ class Qwen3VLMoeVisionModel(Qwen3VLMoePreTrainedModel):
             rotary_pos_emb = self.rot_pos_emb(grid_thw)
 
         if cu_seqlens is None:
-            cu_seqlens = torch.repeat_interleave(grid_thw[:, 1] * grid_thw[:, 2], grid_thw[:, 0]).cumsum(
-                dim=0,
-                # Select dtype based on the following factors:
-                #  - FA2 requires that cu_seqlens_q must have dtype int32
-                #  - torch.onnx.export requires that cu_seqlens_q must have same dtype as grid_thw
-                # See https://github.com/huggingface/transformers/pull/34852 for more information
-                dtype=grid_thw.dtype if torch.jit.is_tracing() else torch.int32,
-            )
-            cu_seqlens = F.pad(cu_seqlens, (1, 0), value=0)
+            cu_seqlens = self.get_cu_seqlens(grid_thw)
 
         seq_len, _ = hidden_states.size()
         hidden_states = hidden_states.reshape(seq_len, -1)

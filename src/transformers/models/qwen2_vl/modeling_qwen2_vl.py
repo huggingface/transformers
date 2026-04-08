@@ -722,6 +722,17 @@ class Qwen2VisionTransformerPretrainedModel(Qwen2VLPreTrainedModel):
     def get_device(self) -> torch.device:
         return self.blocks[0].mlp.fc2.weight.device
 
+    def get_cu_seqlens(self, grid_thw):
+        """Compute cumulative sequence lengths from vision grid (temporal, height, width) info.
+
+        Pure — no model weights needed. Uses `repeat_interleave` which produces a
+        data-dependent output size, so this is precomputed before ``torch.export``.
+        """
+        cu_seqlens = torch.repeat_interleave(grid_thw[:, 1] * grid_thw[:, 2], grid_thw[:, 0]).cumsum(
+            dim=0, dtype=grid_thw.dtype if torch.jit.is_tracing() else torch.int32
+        )
+        return F.pad(cu_seqlens, (1, 0), value=0)
+
     def rot_pos_emb(self, grid_thw):
         pos_ids = []
         for t, h, w in grid_thw:
@@ -758,26 +769,22 @@ class Qwen2VisionTransformerPretrainedModel(Qwen2VLPreTrainedModel):
         self,
         hidden_states: torch.Tensor,
         grid_thw: torch.Tensor,
+        cu_seqlens: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> torch.Tensor:
         r"""
         grid_thw (`torch.LongTensor` of shape `(num_images, 3)`):
             The temporal, height and width dimensions of feature shape for each image. Each row contains [t, h, w] values.
+        cu_seqlens (`torch.IntTensor`, *optional*):
+            Precomputed cumulative sequence lengths (from `get_cu_seqlens`).
         """
         hidden_states = self.patch_embed(hidden_states)
         rotary_pos_emb = self.rot_pos_emb(grid_thw)
         emb = torch.cat((rotary_pos_emb, rotary_pos_emb), dim=-1)
         position_embeddings = (emb.cos(), emb.sin())
 
-        cu_seqlens = torch.repeat_interleave(grid_thw[:, 1] * grid_thw[:, 2], grid_thw[:, 0]).cumsum(
-            dim=0,
-            # Select dtype based on the following factors:
-            #  - FA2 requires that cu_seqlens_q must have dtype int32
-            #  - torch.onnx.export requires that cu_seqlens_q must have same dtype as grid_thw
-            # See https://github.com/huggingface/transformers/pull/34852 for more information
-            dtype=grid_thw.dtype if torch.jit.is_tracing() else torch.int32,
-        )
-        cu_seqlens = F.pad(cu_seqlens, (1, 0), value=0)
+        if cu_seqlens is None:
+            cu_seqlens = self.get_cu_seqlens(grid_thw)
 
         for blk in self.blocks:
             hidden_states = blk(
