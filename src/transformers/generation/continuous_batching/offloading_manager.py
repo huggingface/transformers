@@ -55,7 +55,7 @@ class OffloadingManager:
 
         # Compute the size of the CPU swap pool in blocks
         self._num_cpu_blocks = self._compute_num_cpu_blocks(cpu_offload_space_gib, safety_threshold)
-        if self._num_cpu_blocks == 0:
+        if self._num_cpu_blocks == 0 and cpu_offload_space_gib > 0:
             logger.warning(
                 f"cpu_offload_space={cpu_offload_space_gib:.1f} GiB is too small for even one block. No CPU offloading."
             )
@@ -86,8 +86,9 @@ class OffloadingManager:
     # Initialization
     # ------------------------------------------------------------------
 
-    def _compute_cpu_pool_size(self, cpu_offload_space_gib: float, safety_threshold: float) -> int:
-        """Returns the size of the CPU swap pool in bytes."""
+    def _compute_num_cpu_blocks(self, cpu_offload_space_gib: float, safety_threshold: float) -> int:
+        """Returns the number of blocks that can fit in the CPU swap pool."""
+        # Compute the CPU pool size in bytes
         offload_bytes = int(cpu_offload_space_gib * (1024**3))
 
         if is_psutil_available():
@@ -107,11 +108,6 @@ class OffloadingManager:
                 "psutil is not available — cpu_offload_space_safety_threshold cannot be enforced. "
                 "Install psutil to enable the safety cap."
             )
-        return offload_bytes
-
-    def _compute_num_cpu_blocks(self, cpu_offload_space_gib: float, safety_threshold: float) -> int:
-        """Returns the number of blocks that can fit in the CPU swap pool."""
-        offload_bytes = self._compute_cpu_pool_size(cpu_offload_space_gib, safety_threshold)
 
         # Compute how many blocks fit in CPU pool
         bytes_per_block = (

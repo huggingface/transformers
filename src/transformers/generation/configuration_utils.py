@@ -1657,9 +1657,10 @@ class ContinuousBatchingConfig:
     return_logprobs: bool = False
 
     # CPU swap space in GiB for KV cache offloading. When the GPU cache is full and a request must be evicted, its KV
-    # cache is copied to this pre-allocated pinned CPU buffer instead of being discarded. 0 disables offloading.
-    cpu_offload_space: float = 0.0
-    # Safety cap: if cpu_offload_space exceeds this fraction of total system RAM, it is clamped. Set to 1.0 to disable the cap.
+    # cache is copied to this pre-allocated pinned CPU buffer instead of being discarded. Default to 1.0 GiB.
+    cpu_offload_space: float = 1.0
+    # Safety cap: if cpu_offload_space exceeds this fraction of total system RAM, it is clamped. Set to 1.0 to disable
+    # offloading.
     cpu_offload_space_safety_threshold: float = 0.8
 
     # The parameters below are mostly useful in the context of serving
