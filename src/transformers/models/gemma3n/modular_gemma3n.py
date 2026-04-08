@@ -2115,11 +2115,6 @@ class Gemma3nModel(PaliGemmaModel):
         if input_ids is not None:
             inputs_embeds = self.get_input_embeddings()(input_ids)
 
-            # Prepare per-layer inputs from inputs_ids
-            per_layer_inputs_mask = torch.logical_and(input_ids >= 0, input_ids < self.vocab_size_per_layer_input)
-            per_layer_inputs_tokens = torch.where(per_layer_inputs_mask, input_ids, torch.zeros_like(input_ids))
-            per_layer_inputs = self.language_model.get_per_layer_inputs(per_layer_inputs_tokens)
-
             # Handle vision tokens (>= embed_vision.vocab_offset and < embed_audio.vocab_offset)
             vision_mask = torch.logical_and(
                 input_ids >= self.embed_vision.vocab_offset, input_ids < self.embed_audio.vocab_offset
@@ -2139,6 +2134,11 @@ class Gemma3nModel(PaliGemmaModel):
             audio_embeds = audio_embeds.to(inputs_embeds.device, inputs_embeds.dtype)
             expanded_audio_mask = audio_mask.unsqueeze(-1).expand_as(inputs_embeds)
             inputs_embeds = torch.where(expanded_audio_mask, audio_embeds, inputs_embeds)
+
+            # Prepare per-layer inputs from inputs_ids by masking out multimodal soft tokens
+            per_layer_inputs_mask = vision_mask | audio_mask
+            per_layer_inputs_tokens = torch.where(per_layer_inputs_mask, torch.zeros_like(input_ids)), input_ids
+            per_layer_inputs = self.language_model.get_per_layer_inputs(per_layer_inputs_tokens)
         else:
             per_layer_inputs = None
 
