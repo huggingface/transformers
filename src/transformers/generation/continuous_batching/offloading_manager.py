@@ -43,7 +43,7 @@ class OffloadingManager:
         self,
         cache: PagedAttentionCache,
         scheduler: Scheduler,
-        cpu_offload_space_gib: float,
+        cpu_offload_space_gib: float | None,
         safety_threshold: float,
         inputs_and_outputs: ContinuousBatchingIOs | ContinuousBatchingAsyncIOs,
     ) -> None:
@@ -86,16 +86,22 @@ class OffloadingManager:
     # Initialization
     # ------------------------------------------------------------------
 
-    def _compute_num_cpu_blocks(self, cpu_offload_space_gib: float, safety_threshold: float) -> int:
+    def _compute_num_cpu_blocks(self, cpu_offload_space_gib: float | None, safety_threshold: float) -> int:
         """Returns the number of blocks that can fit in the CPU swap pool."""
         # Compute the CPU pool size in bytes
-        offload_bytes = int(cpu_offload_space_gib * (1024**3))
+        offload_bytes = int(cpu_offload_space_gib * (1024**3)) if cpu_offload_space_gib is not None else None
 
+        # Determine the maximum number of bytes that can be offloaded based on the safety threshold
         if is_psutil_available():
             import psutil
 
-            total_ram = psutil.virtual_memory().total
+            total_ram = psutil.virtual_memory().available
             max_bytes = int(total_ram * safety_threshold)
+        else:
+            max_bytes = None
+
+        # If both the request number of bytes and its limit are not None, we just clamp one to the other
+        if offload_bytes is not None and max_bytes is not None:
             if offload_bytes > max_bytes:
                 clamped_gib = max_bytes / (1024**3)
                 logger.warning(
@@ -103,11 +109,20 @@ class OffloadingManager:
                     f"({total_ram / (1024**3):.1f} GiB). Clamping to {clamped_gib:.1f} GiB."
                 )
                 offload_bytes = max_bytes
-        else:
+        # Else if the max is None, throw a warning and accept the requested number of bytes as is
+        elif offload_bytes is not None:
             logger.warning(
                 "psutil is not available — cpu_offload_space_safety_threshold cannot be enforced. "
                 "Install psutil to enable the safety cap."
             )
+        # Else if the requested number of bytes is None, we use the max number of bytes as the requested number of bytes
+        elif max_bytes is not None:
+            offload_bytes = max_bytes
+            max_bytes_in_gb = max_bytes / (1024**3)
+            logger.warning(f"Using automatically sized CPU swap pool based on safety threshold: {max_bytes_in_gb = }")
+        # Otherwise, it means the pool was supposed to be sized using psutil but it is not available
+        else:
+            raise ImportError(f"{offload_bytes = } and psutil is not available: could not size the CPU swap pool.")
 
         # Compute how many blocks fit in CPU pool
         bytes_per_block = (
@@ -144,8 +159,8 @@ class OffloadingManager:
         else:
             request_id, state = next(iter(scheduler.active_requests.items()))
         logger.info(
-            f"Soft resetting request {request_id} with {len(state.initial_tokens)} initial tokens and "
-            f"{len(state.generated_tokens)} generated tokens"
+            f"Offloading request {request_id} with {len(state.initial_tokens)} initial tokens and "
+            f"{len(state.generated_tokens)} generated tokens."
         )
 
         # Try CPU offloading first, if it fails, we soft reset the request
@@ -160,16 +175,14 @@ class OffloadingManager:
             # Here, the new state is the same as the old one, but with the status set to PENDING
             state._status = RequestStatus.PENDING
             new_state = state
+            logger.info(f"Offloaded request {request_id} to CPU: {len(self._free_cpu_blocks)} free blocks remaining.")
         else:
             new_state = state.create_equivalent_initial_request()
             state._status = RequestStatus.FINISHED
+            logger.info(f"Soft reset request {request_id}.")
 
         scheduler.finish_request(request_id)
         scheduler.add_waiting_request(new_state)
-        logger.info(
-            f"{'Offloaded' if offloaded_to_cpu else 'Soft reset'} request {request_id} with {len(state.initial_tokens)}"
-            f" initial tokens and {len(state.generated_tokens)} generated tokens."
-        )
         scheduler.block_new_requests = True
 
     # ------------------------------------------------------------------
@@ -205,7 +218,10 @@ class OffloadingManager:
             # If prefix sharing is on, these freshly allocated blocks will be deduplicated at the next update
             if cache.allow_block_sharing:
                 future_state.complete_blocks += state.position_offset // cache.block_size
-            logger.info(f"Restored CPU-offloaded request {state.request_id}")
+            logger.info(
+                f"Restored CPU-offloaded request {state.request_id} with {len(state.initial_tokens)} prefill tokens "
+                f"and {len(state.generated_tokens)} generated tokens."
+            )
 
         # Early return if there are no copy to perform
         if not all_cpu_indices:
