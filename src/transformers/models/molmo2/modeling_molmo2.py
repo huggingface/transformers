@@ -189,8 +189,7 @@ class Molmo2VisionAttention(nn.Module):
         keys = keys.view(batch_size, seq_length, self.num_key_value_heads, self.head_dim).transpose(1, 2)
         values = values.view(batch_size, seq_length, self.num_key_value_heads, self.head_dim).transpose(1, 2)
 
-        attn_impl = getattr(self.config, "_attn_implementation", None) or "sdpa"
-        attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(attn_impl, eager_attention_forward)
+        attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface("sdpa", eager_attention_forward)
 
         attn_output, attn_weights = attention_interface(
             self,
@@ -296,8 +295,7 @@ class Molmo2PoolingAttention(nn.Module):
         keys = keys.view(batch_size, -1, self.num_key_value_heads, self.head_dim).transpose(1, 2)
         values = values.view(batch_size, -1, self.num_key_value_heads, self.head_dim).transpose(1, 2)
 
-        attn_impl = self.attn_implementation or "sdpa"
-        attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(attn_impl, eager_attention_forward)
+        attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface("sdpa", eager_attention_forward)
 
         attn_output, _ = attention_interface(
             self,
