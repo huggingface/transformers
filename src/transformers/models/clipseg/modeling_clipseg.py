@@ -780,7 +780,7 @@ class CLIPSegVisionTransformer(nn.Module):
         embed_dim = config.hidden_size
 
         self.embeddings = CLIPSegVisionEmbeddings(config)
-        self.pre_layrnorm = nn.LayerNorm(embed_dim, eps=config.layer_norm_eps)
+        self.pre_layernorm = nn.LayerNorm(embed_dim, eps=config.layer_norm_eps)
         self.encoder = CLIPSegEncoder(config)
         self.post_layernorm = nn.LayerNorm(embed_dim, eps=config.layer_norm_eps)
 
@@ -800,7 +800,7 @@ class CLIPSegVisionTransformer(nn.Module):
         return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         hidden_states = self.embeddings(pixel_values, interpolate_pos_encoding=interpolate_pos_encoding)
-        hidden_states = self.pre_layrnorm(hidden_states)
+        hidden_states = self.pre_layernorm(hidden_states)
 
         encoder_outputs = self.encoder(
             inputs_embeds=hidden_states,
