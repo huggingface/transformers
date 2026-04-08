@@ -750,7 +750,7 @@ class AssistantToTargetTranslator:
         This method is required for the first forward pass of `_MapInputEmbedding` where input ids are already in the assistant vocabulary space. By disabling the mapping, it ensures that the input ids are processed correctly without remapping.
 
         """
-        if self.assistant_prune_lm_head:
+        if self.assistant_prune_lm_head and len(self._suppress_input_ids) > 0:
             self.map_input_embeddings.map = False
 
     def _get_assistant_to_target_input_ids(self):
