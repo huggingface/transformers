@@ -1355,7 +1355,7 @@ class Gemma4TextDecoderLayer(GradientCheckpointingLayer):
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
         past_key_values: Cache | None = None,
-        use_cache: bool | None = None,
+        use_cache: bool = True,
         **kwargs,
     ) -> torch.Tensor:
         residual = hidden_states
@@ -1577,7 +1577,7 @@ class Gemma4TextModel(Gemma4PreTrainedModel):
             past_key_values = DynamicCache(config=self.config)
 
         if position_ids is None:
-            past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
+            past_seen_tokens = past_key_values.get_seq_length()
             position_ids = torch.arange(inputs_embeds.shape[1], device=inputs_embeds.device) + past_seen_tokens
             position_ids = position_ids.unsqueeze(0)
 
