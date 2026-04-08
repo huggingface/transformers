@@ -403,6 +403,8 @@
     title: Contribute to Transformers
   - local: testing
     title: Transformers model tests
+  - local: modeling_rules
+    title: Model structure rules
   - local: pr_checks
     title: Pull request checks
   title: Contribute
