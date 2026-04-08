@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2023 Authors: Wenhai Wang, Enze Xie, Xiang Li, Deng-Ping Fan,
 # Kaitao Song, Ding Liang, Tong Lu, Ping Luo, Ling Shao and The HuggingFace Inc. team.
 # All rights reserved.
@@ -17,9 +16,10 @@
 """Convert Pvt checkpoints from the original library."""
 
 import argparse
+from io import BytesIO
 from pathlib import Path
 
-import requests
+import httpx
 import torch
 from PIL import Image
 
@@ -35,7 +35,7 @@ logger = logging.get_logger(__name__)
 def create_rename_keys(config):
     rename_keys = []
     for i in range(config.num_encoder_blocks):
-        # Remane embedings' paramters
+        # Rename embeddings' parameters
         rename_keys.append((f"pos_embed{i + 1}", f"pvt.encoder.patch_embeddings.{i}.position_embeddings"))
 
         rename_keys.append((f"patch_embed{i + 1}.proj.weight", f"pvt.encoder.patch_embeddings.{i}.projection.weight"))
@@ -142,8 +142,9 @@ def rename_key(dct, old, new):
 # We will verify our results on an image of cute cats
 def prepare_img():
     url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-    im = Image.open(requests.get(url, stream=True).raw)
-    return im
+    with httpx.stream("GET", url) as response:
+        image = Image.open(BytesIO(response.read()))
+    return image
 
 
 @torch.no_grad()
@@ -165,7 +166,7 @@ def convert_pvt_checkpoint(pvt_size, pvt_checkpoint, pytorch_dump_folder_path):
         raise ValueError(f"Available model's size: 'tiny', 'small', 'medium', 'large', but '{pvt_size}' was given")
     config = PvtConfig(name_or_path=config_path)
     # load original model from https://github.com/whai362/PVT
-    state_dict = torch.load(pvt_checkpoint, map_location="cpu")
+    state_dict = torch.load(pvt_checkpoint, map_location="cpu", weights_only=True)
 
     rename_keys = create_rename_keys(config)
     for src, dest in rename_keys:

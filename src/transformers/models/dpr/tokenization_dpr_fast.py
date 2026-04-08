@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2018 The HuggingFace Inc. team, The Hugging Face Team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -15,11 +14,10 @@
 """Tokenization classes for DPR."""
 
 import collections
-from typing import List, Optional, Union
 
 from ...tokenization_utils_base import BatchEncoding
 from ...utils import TensorType, add_end_docstrings, add_start_docstrings, logging
-from ..bert.tokenization_bert_fast import BertTokenizerFast
+from ..bert.tokenization_bert import BertTokenizer
 from .tokenization_dpr import DPRContextEncoderTokenizer, DPRQuestionEncoderTokenizer, DPRReaderTokenizer
 
 
@@ -28,28 +26,28 @@ logger = logging.get_logger(__name__)
 VOCAB_FILES_NAMES = {"vocab_file": "vocab.txt", "tokenizer_file": "tokenizer.json"}
 
 
-class DPRContextEncoderTokenizerFast(BertTokenizerFast):
+class DPRContextEncoderTokenizerFast(BertTokenizer):
     r"""
     Construct a "fast" DPRContextEncoder tokenizer (backed by HuggingFace's *tokenizers* library).
 
-    [`DPRContextEncoderTokenizerFast`] is identical to [`BertTokenizerFast`] and runs end-to-end tokenization:
+    [`DPRContextEncoderTokenizerFast`] is identical to [`BertTokenizer`] and runs end-to-end tokenization:
     punctuation splitting and wordpiece.
 
-    Refer to superclass [`BertTokenizerFast`] for usage examples and documentation concerning parameters.
+    Refer to superclass [`BertTokenizer`] for usage examples and documentation concerning parameters.
     """
 
     vocab_files_names = VOCAB_FILES_NAMES
     slow_tokenizer_class = DPRContextEncoderTokenizer
 
 
-class DPRQuestionEncoderTokenizerFast(BertTokenizerFast):
+class DPRQuestionEncoderTokenizerFast(BertTokenizer):
     r"""
     Constructs a "fast" DPRQuestionEncoder tokenizer (backed by HuggingFace's *tokenizers* library).
 
-    [`DPRQuestionEncoderTokenizerFast`] is identical to [`BertTokenizerFast`] and runs end-to-end tokenization:
+    [`DPRQuestionEncoderTokenizerFast`] is identical to [`BertTokenizer`] and runs end-to-end tokenization:
     punctuation splitting and wordpiece.
 
-    Refer to superclass [`BertTokenizerFast`] for usage examples and documentation concerning parameters.
+    Refer to superclass [`BertTokenizer`] for usage examples and documentation concerning parameters.
     """
 
     vocab_files_names = VOCAB_FILES_NAMES
@@ -72,13 +70,13 @@ CUSTOM_DPR_READER_DOCSTRING = r"""
     [CLS] <question token ids> [SEP] <titles ids> [SEP] <texts ids>
 
     Args:
-        questions (`str` or `List[str]`):
+        questions (`str` or `list[str]`):
             The questions to be encoded. You can specify one question for many passages. In this case, the question
             will be duplicated like `[questions] * n_passages`. Otherwise you have to specify as many questions as in
             `titles` or `texts`.
-        titles (`str` or `List[str]`):
+        titles (`str` or `list[str]`):
             The passages titles to be encoded. This can be a string or a list of strings if there are several passages.
-        texts (`str` or `List[str]`):
+        texts (`str` or `list[str]`):
             The passages texts to be encoded. This can be a string or a list of strings if there are several passages.
         padding (`bool`, `str` or [`~utils.PaddingStrategy`], *optional*, defaults to `False`):
             Activates and controls padding. Accepts the following values:
@@ -113,7 +111,6 @@ CUSTOM_DPR_READER_DOCSTRING = r"""
         return_tensors (`str` or [`~utils.TensorType`], *optional*):
                 If set, will return tensors instead of list of python integers. Acceptable values are:
 
-                - `'tf'`: Return TensorFlow `tf.constant` objects.
                 - `'pt'`: Return PyTorch `torch.Tensor` objects.
                 - `'np'`: Return Numpy `np.ndarray` objects.
         return_attention_mask (`bool`, *optional*):
@@ -123,7 +120,7 @@ CUSTOM_DPR_READER_DOCSTRING = r"""
             [What are attention masks?](../glossary#attention-mask)
 
     Return:
-        `Dict[str, List[List[int]]]`: A dictionary with the following keys:
+        `dict[str, list[list[int]]]`: A dictionary with the following keys:
 
         - `input_ids`: List of token ids to be fed to a model.
         - `attention_mask`: List of indices specifying which tokens should be attended to by the model.
@@ -135,13 +132,13 @@ class CustomDPRReaderTokenizerMixin:
     def __call__(
         self,
         questions,
-        titles: Optional[str] = None,
-        texts: Optional[str] = None,
-        padding: Union[bool, str] = False,
-        truncation: Union[bool, str] = False,
-        max_length: Optional[int] = None,
-        return_tensors: Optional[Union[str, TensorType]] = None,
-        return_attention_mask: Optional[bool] = None,
+        titles: str | None = None,
+        texts: str | None = None,
+        padding: bool | str = False,
+        truncation: bool | str = False,
+        max_length: int | None = None,
+        return_tensors: str | TensorType | None = None,
+        return_attention_mask: bool | None = None,
         **kwargs,
     ) -> BatchEncoding:
         if titles is None and texts is None:
@@ -197,7 +194,7 @@ class CustomDPRReaderTokenizerMixin:
         num_spans: int = 16,
         max_answer_length: int = 64,
         num_spans_per_passage: int = 4,
-    ) -> List[DPRSpanPrediction]:
+    ) -> list[DPRSpanPrediction]:
         """
         Get the span predictions for the extractive Q&A model.
 
@@ -233,7 +230,7 @@ class CustomDPRReaderTokenizerMixin:
         start_logits, end_logits, relevance_logits = reader_output[:3]
         n_passages = len(relevance_logits)
         sorted_docs = sorted(range(n_passages), reverse=True, key=relevance_logits.__getitem__)
-        nbest_spans_predictions: List[DPRReaderOutput] = []
+        nbest_spans_predictions: list[DPRReaderOutput] = []
         for doc_id in sorted_docs:
             sequence_ids = list(input_ids[doc_id])
             # assuming question & title information is at the beginning of the sequence
@@ -268,11 +265,11 @@ class CustomDPRReaderTokenizerMixin:
 
     def _get_best_spans(
         self,
-        start_logits: List[int],
-        end_logits: List[int],
+        start_logits: list[int],
+        end_logits: list[int],
         max_answer_length: int,
         top_spans: int,
-    ) -> List[DPRSpanPrediction]:
+    ) -> list[DPRSpanPrediction]:
         """
         Finds the best answer span for the extractive Q&A model for one passage. It returns the best span by descending
         `span_score` order and keeping max `top_spans` spans. Spans longer that `max_answer_length` are ignored.
@@ -301,15 +298,15 @@ class CustomDPRReaderTokenizerMixin:
 
 
 @add_end_docstrings(CUSTOM_DPR_READER_DOCSTRING)
-class DPRReaderTokenizerFast(CustomDPRReaderTokenizerMixin, BertTokenizerFast):
+class DPRReaderTokenizerFast(CustomDPRReaderTokenizerMixin, BertTokenizer):
     r"""
     Constructs a "fast" DPRReader tokenizer (backed by HuggingFace's *tokenizers* library).
 
-    [`DPRReaderTokenizerFast`] is almost identical to [`BertTokenizerFast`] and runs end-to-end tokenization:
+    [`DPRReaderTokenizerFast`] is almost identical to [`BertTokenizer`] and runs end-to-end tokenization:
     punctuation splitting and wordpiece. The difference is that is has three inputs strings: question, titles and texts
     that are combined to be fed to the [`DPRReader`] model.
 
-    Refer to superclass [`BertTokenizerFast`] for usage examples and documentation concerning parameters.
+    Refer to superclass [`BertTokenizer`] for usage examples and documentation concerning parameters.
 
     """
 

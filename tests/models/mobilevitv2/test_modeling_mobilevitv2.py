@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2023 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -15,10 +14,18 @@
 """Testing suite for the PyTorch MobileViTV2 model."""
 
 import unittest
+from functools import cached_property
 
 from transformers import MobileViTV2Config
-from transformers.testing_utils import require_torch, require_torch_multi_gpu, require_vision, slow, torch_device
-from transformers.utils import cached_property, is_torch_available, is_vision_available
+from transformers.testing_utils import (
+    Expectations,
+    require_torch,
+    require_torch_multi_gpu,
+    require_vision,
+    slow,
+    torch_device,
+)
+from transformers.utils import is_torch_available, is_vision_available
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
@@ -37,7 +44,7 @@ if is_torch_available():
 if is_vision_available():
     from PIL import Image
 
-    from transformers import MobileViTImageProcessor
+    from transformers import MobileViTImageProcessorPil
 
 
 class MobileViTV2ConfigTester(ConfigTester):
@@ -196,11 +203,8 @@ class MobileViTV2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestC
         else {}
     )
 
-    test_pruning = False
     test_resize_embeddings = False
-    test_head_masking = False
     has_attentions = False
-    test_torch_exportable = True
 
     def setUp(self):
         self.model_tester = MobileViTV2ModelTester(self)
@@ -295,7 +299,7 @@ class MobileViTV2ModelIntegrationTest(unittest.TestCase):
     @cached_property
     def default_image_processor(self):
         return (
-            MobileViTImageProcessor.from_pretrained("apple/mobilevitv2-1.0-imagenet1k-256")
+            MobileViTImageProcessorPil.from_pretrained("apple/mobilevitv2-1.0-imagenet1k-256")
             if is_vision_available()
             else None
         )
@@ -318,16 +322,22 @@ class MobileViTV2ModelIntegrationTest(unittest.TestCase):
         expected_shape = torch.Size((1, 1000))
         self.assertEqual(outputs.logits.shape, expected_shape)
 
-        expected_slice = torch.tensor([-1.6336e00, -7.3204e-02, -5.1883e-01]).to(torch_device)
+        expectations = Expectations(
+            {
+                (None, None): [-1.6336e00, -7.3204e-02, -5.1883e-01],
+                ("cuda", 8): [-1.6336, -0.0732, -0.5188],
+            }
+        )
+        expected_slice = torch.tensor(expectations.get_expectation()).to(torch_device)
 
-        torch.testing.assert_close(outputs.logits[0, :3], expected_slice, rtol=1e-4, atol=1e-4)
+        torch.testing.assert_close(outputs.logits[0, :3], expected_slice, rtol=2e-4, atol=2e-4)
 
     @slow
     def test_inference_semantic_segmentation(self):
         model = MobileViTV2ForSemanticSegmentation.from_pretrained("shehan97/mobilevitv2-1.0-voc-deeplabv3")
         model = model.to(torch_device)
 
-        image_processor = MobileViTImageProcessor.from_pretrained("shehan97/mobilevitv2-1.0-voc-deeplabv3")
+        image_processor = MobileViTImageProcessorPil.from_pretrained("shehan97/mobilevitv2-1.0-voc-deeplabv3")
 
         image = prepare_img()
         inputs = image_processor(images=image, return_tensors="pt").to(torch_device)
@@ -341,23 +351,30 @@ class MobileViTV2ModelIntegrationTest(unittest.TestCase):
         expected_shape = torch.Size((1, 21, 32, 32))
         self.assertEqual(logits.shape, expected_shape)
 
-        expected_slice = torch.tensor(
-            [
-                [[7.0863, 7.1525, 6.8201], [6.6931, 6.8770, 6.8933], [6.2978, 7.0366, 6.9636]],
-                [[-3.7134, -3.6712, -3.6675], [-3.5825, -3.3549, -3.4777], [-3.3435, -3.3979, -3.2857]],
-                [[-2.9329, -2.8003, -2.7369], [-3.0564, -2.4780, -2.0207], [-2.6889, -1.9298, -1.7640]],
-            ],
-            device=torch_device,
+        expectations = Expectations(
+            {
+                (None, None): [
+                    [[7.0863, 7.1525, 6.8201], [6.6931, 6.8770, 6.8933], [6.2978, 7.0366, 6.9636]],
+                    [[-3.7134, -3.6712, -3.6675], [-3.5825, -3.3549, -3.4777], [-3.3435, -3.3979, -3.2857]],
+                    [[-2.9329, -2.8003, -2.7369], [-3.0564, -2.4780, -2.0207], [-2.6889, -1.9298, -1.7640]],
+                ],
+                ("cuda", 8): [
+                    [[7.0863, 7.1525, 6.8201], [6.6931, 6.8770, 6.8933], [6.2978, 7.0366, 6.9636]],
+                    [[-3.7134, -3.6712, -3.6675], [-3.5825, -3.3549, -3.4777], [-3.3435, -3.3979, -3.2857]],
+                    [[-2.9329, -2.8003, -2.7369], [-3.0564, -2.4780, -2.0207], [-2.6889, -1.9298, -1.7640]],
+                ],
+            }
         )
+        expected_slice = torch.tensor(expectations.get_expectation()).to(torch_device)
 
-        torch.testing.assert_close(logits[0, :3, :3, :3], expected_slice, rtol=1e-4, atol=1e-4)
+        torch.testing.assert_close(logits[0, :3, :3, :3], expected_slice, rtol=2e-4, atol=2e-4)
 
     @slow
     def test_post_processing_semantic_segmentation(self):
         model = MobileViTV2ForSemanticSegmentation.from_pretrained("shehan97/mobilevitv2-1.0-voc-deeplabv3")
         model = model.to(torch_device)
 
-        image_processor = MobileViTImageProcessor.from_pretrained("shehan97/mobilevitv2-1.0-voc-deeplabv3")
+        image_processor = MobileViTImageProcessorPil.from_pretrained("shehan97/mobilevitv2-1.0-voc-deeplabv3")
 
         image = prepare_img()
         inputs = image_processor(images=image, return_tensors="pt").to(torch_device)

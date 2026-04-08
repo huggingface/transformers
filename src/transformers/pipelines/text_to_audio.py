@@ -11,23 +11,45 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.from typing import List, Union
-from typing import List, Union
 
+from typing import Any, TypedDict, overload
+
+from ..audio_utils import AudioInput
+from ..generation import GenerationConfig
 from ..utils import is_torch_available
+from ..utils.chat_template_utils import Chat, ChatType
 from .base import Pipeline
 
 
 if is_torch_available():
+    import torch
+
     from ..models.auto.modeling_auto import MODEL_FOR_TEXT_TO_SPECTROGRAM_MAPPING
     from ..models.speecht5.modeling_speecht5 import SpeechT5HifiGan
 
 DEFAULT_VOCODER_ID = "microsoft/speecht5_hifigan"
 
 
+class AudioOutput(TypedDict, total=False):
+    """
+    audio (`AudioInput`):
+        The generated audio waveform.
+    sampling_rate (`int`):
+        The sampling rate of the generated audio waveform.
+    """
+
+    audio: AudioInput
+    sampling_rate: int
+
+
 class TextToAudioPipeline(Pipeline):
     """
     Text-to-audio generation pipeline using any `AutoModelForTextToWaveform` or `AutoModelForTextToSpectrogram`. This
     pipeline generates an audio file from an input text and optional other conditional inputs.
+
+    Unless the model you're using explicitly sets these generation parameters in its configuration files
+    (`generation_config.json`), the following default values will be used:
+    - max_new_tokens: 256
 
     Example:
 
@@ -53,7 +75,7 @@ class TextToAudioPipeline(Pipeline):
     ```python
     >>> from transformers import pipeline
 
-    >>> music_generator = pipeline(task="text-to-audio", model="facebook/musicgen-small", framework="pt")
+    >>> music_generator = pipeline(task="text-to-audio", model="facebook/musicgen-small")
 
     >>> # diversify the music generation by adding randomness with a high temperature and set a maximum music length
     >>> generate_kwargs = {
@@ -73,11 +95,19 @@ class TextToAudioPipeline(Pipeline):
     See the list of available models on [huggingface.co/models](https://huggingface.co/models?filter=text-to-speech).
     """
 
+    _pipeline_calls_generate = True
+    _load_processor = None  # prioritize processors as some models require it
+    _load_image_processor = False
+    _load_feature_extractor = False
+    _load_tokenizer = True
+
+    # Make sure the docstring is updated when the default generation config is changed
+    _default_generation_config = GenerationConfig(
+        max_new_tokens=256,
+    )
+
     def __init__(self, *args, vocoder=None, sampling_rate=None, **kwargs):
         super().__init__(*args, **kwargs)
-
-        if self.framework == "tf":
-            raise ValueError("The TextToAudioPipeline is only available in PyTorch.")
 
         self.vocoder = None
         if self.model.__class__ in MODEL_FOR_TEXT_TO_SPECTROGRAM_MAPPING.values():
@@ -86,6 +116,10 @@ class TextToAudioPipeline(Pipeline):
                 if vocoder is None
                 else vocoder
             )
+
+        if self.model.config.model_type in ["musicgen", "speecht5"]:
+            # MusicGen and SpeechT5 expect to use their tokenizer instead
+            self.processor = None
 
         self.sampling_rate = sampling_rate
         if self.vocoder is not None:
@@ -103,6 +137,14 @@ class TextToAudioPipeline(Pipeline):
                 sampling_rate = getattr(config, sampling_rate_name, None)
                 if sampling_rate is not None:
                     self.sampling_rate = sampling_rate
+                elif getattr(config, "codec_config", None) is not None:
+                    sampling_rate = getattr(config.codec_config, sampling_rate_name, None)
+                    if sampling_rate is not None:
+                        self.sampling_rate = sampling_rate
+
+        # last fallback to get the sampling rate based on processor
+        if self.sampling_rate is None and self.processor is not None and hasattr(self.processor, "feature_extractor"):
+            self.sampling_rate = self.processor.feature_extractor.sampling_rate
 
     def preprocess(self, text, **kwargs):
         if isinstance(text, str):
@@ -110,20 +152,36 @@ class TextToAudioPipeline(Pipeline):
 
         if self.model.config.model_type == "bark":
             # bark Tokenizer is called with BarkProcessor which uses those kwargs
+            # Check if generation_config has semantic_config (BarkGenerationConfig) or use default
+            max_length = 256
+            if hasattr(self.generation_config, "semantic_config"):
+                max_length = getattr(self.generation_config.semantic_config, "max_input_semantic_length", 256)
             new_kwargs = {
-                "max_length": self.generation_config.semantic_config.get("max_input_semantic_length", 256),
+                "max_length": max_length,
                 "add_special_tokens": False,
                 "return_attention_mask": True,
                 "return_token_type_ids": False,
-                "padding": "max_length",
             }
 
             # priority is given to kwargs
             new_kwargs.update(kwargs)
-
             kwargs = new_kwargs
 
-        output = self.tokenizer(text, **kwargs, return_tensors="pt")
+        preprocessor = self.processor if self.processor is not None else self.tokenizer
+        if isinstance(text, Chat):
+            output = preprocessor.apply_chat_template(
+                text.messages,
+                tokenize=True,
+                return_dict=True,
+                **kwargs,
+            )
+        else:
+            # Add speaker ID if needed and user didn't insert at start of text
+            if self.model.config.model_type == "csm":
+                text = [f"[0]{t}" if not t.startswith("[") else t for t in text]
+            if self.model.config.model_type == "dia":
+                text = [f"[S1] {t}" if not t.startswith("[") else t for t in text]
+            output = preprocessor(text, **kwargs, return_tensors="pt")
 
         return output
 
@@ -144,6 +202,15 @@ class TextToAudioPipeline(Pipeline):
             # generate_kwargs get priority over forward_params
             forward_params.update(generate_kwargs)
 
+            # ensure dict output to facilitate postprocessing
+            forward_params.update({"return_dict_in_generate": True})
+
+            if self.model.config.model_type in ["csm"]:
+                # NOTE (ebezzam): CSM does not have the audio tokenizer in the processor therefore `output_audio=True`
+                # needed for decoding to audio
+                if "output_audio" not in forward_params:
+                    forward_params["output_audio"] = True
+
             output = self.model.generate(**model_inputs, **forward_params)
         else:
             if len(generate_kwargs):
@@ -160,13 +227,28 @@ class TextToAudioPipeline(Pipeline):
 
         return output
 
-    def __call__(self, text_inputs: Union[str, List[str]], **forward_params):
+    @overload
+    def __call__(self, text_inputs: str, **forward_params: Any) -> AudioOutput: ...
+
+    @overload
+    def __call__(self, text_inputs: list[str], **forward_params: Any) -> list[AudioOutput]: ...
+
+    @overload
+    def __call__(self, text_inputs: ChatType, **forward_params: Any) -> AudioOutput: ...
+
+    @overload
+    def __call__(self, text_inputs: list[ChatType], **forward_params: Any) -> list[AudioOutput]: ...
+
+    def __call__(self, text_inputs, **forward_params):
         """
         Generates speech/audio from the inputs. See the [`TextToAudioPipeline`] documentation for more information.
 
         Args:
-            text_inputs (`str` or `List[str]`):
-                The text(s) to generate.
+            text_inputs (`str`, `list[str]`, `ChatType`, or `list[ChatType]`):
+                One or several texts to generate. If strings or a list of string are passed, this pipeline will
+                generate the corresponding text. Alternatively, a "chat", in the form of a list of dicts with "role"
+                and "content" keys, can be passed, or a list of such chats. When chats are passed, the model's chat
+                template will be used to format them before passing them to the model.
             forward_params (`dict`, *optional*):
                 Parameters passed to the model generation/forward method. `forward_params` are always passed to the
                 underlying model.
@@ -177,7 +259,7 @@ class TextToAudioPipeline(Pipeline):
                 only passed to the underlying model if the latter is a generative model.
 
         Return:
-            A `dict` or a list of `dict`: The dictionaries have two keys:
+            `AudioOutput` or a list of `AudioOutput`, which is a `TypedDict` with two keys:
 
             - **audio** (`np.ndarray` of shape `(nb_channels, audio_length)`) -- The generated audio waveform.
             - **sampling_rate** (`int`) -- The sampling rate of the generated audio waveform.
@@ -190,9 +272,9 @@ class TextToAudioPipeline(Pipeline):
         forward_params=None,
         generate_kwargs=None,
     ):
-        if self.assistant_model is not None:
+        if getattr(self, "assistant_model", None) is not None:
             generate_kwargs["assistant_model"] = self.assistant_model
-        if self.assistant_tokenizer is not None:
+        if getattr(self, "assistant_tokenizer", None) is not None:
             generate_kwargs["tokenizer"] = self.tokenizer
             generate_kwargs["assistant_tokenizer"] = self.assistant_tokenizer
 
@@ -207,13 +289,27 @@ class TextToAudioPipeline(Pipeline):
 
         return preprocess_params, params, postprocess_params
 
-    def postprocess(self, waveform):
-        output_dict = {}
-        if isinstance(waveform, dict):
-            waveform = waveform["waveform"]
-        elif isinstance(waveform, tuple):
-            waveform = waveform[0]
-        output_dict["audio"] = waveform.cpu().float().numpy()
-        output_dict["sampling_rate"] = self.sampling_rate
+    def postprocess(self, audio):
+        needs_decoding = False
+        if isinstance(audio, dict):
+            if "audio" in audio:
+                audio = audio["audio"]
+            else:
+                needs_decoding = True
+                audio = audio["sequences"]
+        elif isinstance(audio, tuple):
+            audio = audio[0]
 
-        return output_dict
+        if needs_decoding and self.processor is not None:
+            audio = self.processor.decode(audio)
+
+        if isinstance(audio, list):
+            audio = [el.to(device="cpu", dtype=torch.float).numpy().squeeze() for el in audio]
+            audio = audio if len(audio) > 1 else audio[0]
+        else:
+            audio = audio.to(device="cpu", dtype=torch.float).numpy().squeeze()
+
+        return AudioOutput(
+            audio=audio,
+            sampling_rate=self.sampling_rate,
+        )

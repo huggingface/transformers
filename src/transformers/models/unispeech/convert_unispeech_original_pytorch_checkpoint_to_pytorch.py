@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2021 The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -210,7 +209,7 @@ def convert_unispeech_checkpoint(
             config.vocab_size = len(target_dict.symbols)
             vocab_path = os.path.join(pytorch_dump_folder_path, "vocab.json")
             if not os.path.isdir(pytorch_dump_folder_path):
-                logger.error("--pytorch_dump_folder_path ({}) should be a directory".format(pytorch_dump_folder_path))
+                logger.error(f"--pytorch_dump_folder_path ({pytorch_dump_folder_path}) should be a directory")
                 return
             os.makedirs(pytorch_dump_folder_path, exist_ok=True)
             vocab_dict = target_dict.indices
@@ -229,7 +228,7 @@ def convert_unispeech_checkpoint(
                 word_delimiter_token="|",
                 do_lower_case=False,
             )
-            return_attention_mask = True if config.feat_extract_norm == "layer" else False
+            return_attention_mask = config.feat_extract_norm == "layer"
             feature_extractor = Wav2Vec2FeatureExtractor(
                 feature_size=1,
                 sampling_rate=16000,

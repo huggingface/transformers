@@ -19,9 +19,7 @@ from ...utils.import_utils import define_import_structure
 
 if TYPE_CHECKING:
     from .configuration_opt import *
-    from .modeling_flax_opt import *
     from .modeling_opt import *
-    from .modeling_tf_opt import *
 else:
     import sys
 

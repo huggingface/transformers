@@ -20,6 +20,7 @@ from ...utils.import_utils import define_import_structure
 if TYPE_CHECKING:
     from .configuration_poolformer import *
     from .feature_extraction_poolformer import *
+    from .image_processing_pil_poolformer import *
     from .image_processing_poolformer import *
     from .modeling_poolformer import *
 else:

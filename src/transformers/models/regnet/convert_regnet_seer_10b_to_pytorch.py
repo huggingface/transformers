@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2022 The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -25,7 +24,6 @@ from dataclasses import dataclass, field
 from functools import partial
 from pathlib import Path
 from pprint import pprint
-from typing import Dict, List, Optional, Tuple
 
 import torch
 import torch.nn as nn
@@ -46,12 +44,12 @@ logger = logging.get_logger()
 @dataclass
 class Tracker:
     module: nn.Module
-    traced: List[nn.Module] = field(default_factory=list)
+    traced: list[nn.Module] = field(default_factory=list)
     handles: list = field(default_factory=list)
-    name2module: Dict[str, nn.Module] = field(default_factory=OrderedDict)
+    name2module: dict[str, nn.Module] = field(default_factory=OrderedDict)
 
     def _forward_hook(self, m, inputs: Tensor, outputs: Tensor, name: str):
-        has_not_submodules = len(list(m.modules())) == 1 or isinstance(m, nn.Conv2d) or isinstance(m, nn.BatchNorm2d)
+        has_not_submodules = len(list(m.modules())) == 1 or isinstance(m, (nn.Conv2d, nn.BatchNorm2d))
         if has_not_submodules:
             self.traced.append(m)
             self.name2module[name] = m
@@ -77,7 +75,7 @@ class FakeRegNetVisslWrapper(nn.Module):
     def __init__(self, model: nn.Module):
         super().__init__()
 
-        feature_blocks: List[Tuple[str, nn.Module]] = []
+        feature_blocks: list[tuple[str, nn.Module]] = []
         # - get the stem
         feature_blocks.append(("conv1", model.stem))
         # - get all the feature blocks
@@ -106,7 +104,7 @@ class FakeRegNetParams(RegNetParams):
         return [(8, 2, 2, 8, 1.0), (8, 2, 7, 8, 1.0), (8, 2, 17, 8, 1.0), (8, 2, 1, 8, 1.0)]
 
 
-def get_from_to_our_keys(model_name: str) -> Dict[str, str]:
+def get_from_to_our_keys(model_name: str) -> dict[str, str]:
     """
     Returns a dictionary that maps from original model's key -> our implementation's keys
     """
@@ -159,16 +157,14 @@ def get_from_to_our_keys(model_name: str) -> Dict[str, str]:
     return from_to_ours_keys
 
 
-def convert_weights_and_push(save_directory: Path, model_name: Optional[str] = None, push_to_hub: bool = True):
+def convert_weights_and_push(save_directory: Path, model_name: str | None = None, push_to_hub: bool = True):
     filename = "imagenet-1k-id2label.json"
     num_labels = 1000
 
     repo_id = "huggingface/label-files"
-    num_labels = num_labels
     id2label = json.loads(Path(hf_hub_download(repo_id, filename, repo_type="dataset")).read_text())
     id2label = {int(k): v for k, v in id2label.items()}
 
-    id2label = id2label
     label2id = {v: k for k, v in id2label.items()}
 
     ImageNetPreTrainedConfig = partial(RegNetConfig, num_labels=num_labels, id2label=id2label, label2id=label2id)
@@ -184,7 +180,7 @@ def convert_weights_and_push(save_directory: Path, model_name: Optional[str] = N
     }
 
     # add seer weights logic
-    def load_using_classy_vision(checkpoint_url: str) -> Tuple[Dict, Dict]:
+    def load_using_classy_vision(checkpoint_url: str) -> tuple[dict, dict]:
         files = torch.hub.load_state_dict_from_url(checkpoint_url, model_dir=str(save_directory), map_location="cpu")
         # check if we have a head, if yes add it
         model_state_dict = files["classy_state_dict"]["base_model"]["model"]
@@ -217,7 +213,7 @@ def convert_weights_and_push(save_directory: Path, model_name: Optional[str] = N
         not_used_keys = list(from_state_dict.keys())
         regex = r"\.block.-part."
         # this is "interesting", so the original checkpoints have `block[0,1]-part` in each key name, we remove it
-        for key in from_state_dict.keys():
+        for key in from_state_dict:
             # remove the weird "block[0,1]-part" from the key
             src_key = re.sub(regex, "", key)
             # now src_key from the model checkpoints is the one we got from the original model after tracing, so use it to get the correct destination key
@@ -259,18 +255,12 @@ def convert_weights_and_push(save_directory: Path, model_name: Optional[str] = N
         )
         logger.info("Finally, pushing!")
         # push it to hub
-        our_model.push_to_hub(
-            repo_path_or_name=save_directory / model_name,
-            commit_message="Add model",
-            output_dir=save_directory / model_name,
-        )
+        our_model.push_to_hub(repo_id=model_name, commit_message="Add model", output_dir=save_directory / model_name)
         size = 384
         # we can use the convnext one
         image_processor = AutoImageProcessor.from_pretrained("facebook/convnext-base-224-22k-1k", size=size)
         image_processor.push_to_hub(
-            repo_path_or_name=save_directory / model_name,
-            commit_message="Add image processor",
-            output_dir=save_directory / model_name,
+            repo_id=model_name, commit_message="Add image processor", output_dir=save_directory / model_name
         )
 
 

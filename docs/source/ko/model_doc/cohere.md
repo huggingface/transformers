@@ -22,10 +22,10 @@ The Cohere Command-R 모델은 Cohere팀이 [Command-R: 프로덕션 규모의 �
 
 <Tip warning={true}>
 
-Hub에 업로드된 체크포인트들은 `torch_dtype = 'float16'`을 사용합니다. 
+Hub에 업로드된 체크포인트들은 `dtype = 'float16'`을 사용합니다. 
 이는 `AutoModel` API가 체크포인트를 `torch.float32`에서 `torch.float16`으로 변환하는 데 사용됩니다. 
 
-온라인 가중치의 `dtype`은 `model = AutoModelForCausalLM.from_pretrained("path", torch_dtype = "auto")`를 사용하여 모델을 초기화할 때 `torch_dtype="auto"`를 사용하지 않는 한 대부분 무관합니다. 그 이유는 모델이 먼저 다운로드되고(온라인 체크포인트의 `dtype` 사용), 그 다음 `torch`의 기본 `dtype`으로 변환되며(이때 `torch.float32`가 됨), 마지막으로 config에 `torch_dtype`이 제공된 경우 이를 사용하기 때문입니다.
+온라인 가중치의 `dtype`은 `model = AutoModelForCausalLM.from_pretrained("path", dtype = "auto")`를 사용하여 모델을 초기화할 때 `dtype="auto"`를 사용하지 않는 한 대부분 무관합니다. 그 이유는 모델이 먼저 다운로드되고(온라인 체크포인트의 `dtype` 사용), 그 다음 `torch`의 기본 `dtype`으로 변환되며(이때 `torch.float32`가 됨), 마지막으로 config에 `dtype`이 제공된 경우 이를 사용하기 때문입니다.
 
 모델을 `float16`으로 훈련하는 것은 권장되지 않으며 `nan`을 생성하는 것으로 알려져 있습니다. 따라서 모델은 `bfloat16`으로 훈련해야 합니다.
 </Tip>
@@ -55,7 +55,7 @@ gen_text = tokenizer.decode(gen_tokens[0])
 print(gen_text)
 ```
 
-- Flash Attention 2를 `attn_implementation="flash_attention_2"`를 통해 사용할 때는, `from_pretrained` 클래스 메서드에 `torch_dtype`을 전달하지 말고 자동 혼합 정밀도 훈련(Automatic Mixed-Precision training)을 사용하세요. `Trainer`를 사용할 때는 단순히 `fp16` 또는 `bf16`을 `True`로 지정하면 됩니다. 그렇지 않은 경우에는 `torch.autocast`를 사용하고 있는지 확인하세요. 이는 Flash Attention이 `fp16`와 `bf16` 데이터 타입만 지원하기 때문에 필요합니다.
+- Flash Attention 2를 `attn_implementation="flash_attention_2"`를 통해 사용할 때는, `from_pretrained` 클래스 메서드에 `dtype`을 전달하지 말고 자동 혼합 정밀도 훈련(Automatic Mixed-Precision training)을 사용하세요. `Trainer`를 사용할 때는 단순히 `fp16` 또는 `bf16`을 `True`로 지정하면 됩니다. 그렇지 않은 경우에는 `torch.autocast`를 사용하고 있는지 확인하세요. 이는 Flash Attention이 `fp16`와 `bf16` 데이터 타입만 지원하기 때문에 필요합니다.
 
 ## 리소스[[resources]]
 
@@ -115,15 +115,7 @@ print(gen_text)
 ## CohereConfig[[transformers.CohereConfig]]
 
 [[autodoc]] CohereConfig
-
-## CohereTokenizerFast[[transformers.CohereTokenizerFast]]
-
-[[autodoc]] CohereTokenizerFast
-    - build_inputs_with_special_tokens
-    - get_special_tokens_mask
-    - create_token_type_ids_from_sequences
-    - update_post_processor
-    - save_vocabulary
+ave_vocabulary
 
 ## CohereModel[[transformers.CohereModel]]
 

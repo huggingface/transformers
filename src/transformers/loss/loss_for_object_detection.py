@@ -11,7 +11,6 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from typing import List, Optional
 
 import torch
 import torch.nn as nn
@@ -53,7 +52,7 @@ def dice_loss(inputs, targets, num_boxes):
 
 def sigmoid_focal_loss(inputs, targets, num_boxes, alpha: float = 0.25, gamma: float = 2):
     """
-    Loss used in RetinaNet for dense detection: https://arxiv.org/abs/1708.02002.
+    Loss used in RetinaNet for dense detection: https://huggingface.co/papers/1708.02002.
 
     Args:
         inputs (`torch.FloatTensor` of arbitrary shape):
@@ -104,7 +103,7 @@ class ImageLoss(nn.Module):
             Number of object categories, omitting the special no-object category.
         eos_coef (`float`):
             Relative classification weight applied to the no-object category.
-        losses (`List[str]`):
+        losses (`list[str]`):
             List of all the losses to be applied. See `get_loss` for a list of all available losses.
     """
 
@@ -243,7 +242,7 @@ class ImageLoss(nn.Module):
         Args:
              outputs (`dict`, *optional*):
                 Dictionary of tensors, see the output specification of the model for the format.
-             targets (`List[dict]`, *optional*):
+             targets (`list[dict]`, *optional*):
                 List of dicts, such that `len(targets) == batch_size`. The expected keys in each dict depends on the
                 losses applied, see each loss' doc.
         """
@@ -318,7 +317,7 @@ class HungarianMatcher(nn.Module):
                 A dictionary that contains at least these entries:
                 * "logits": Tensor of dim [batch_size, num_queries, num_classes] with the classification logits
                 * "pred_boxes": Tensor of dim [batch_size, num_queries, 4] with the predicted box coordinates.
-            targets (`List[dict]`):
+            targets (`list[dict]`):
                 A list of targets (len(targets) = batch_size), where each target is a dict containing:
                 * "class_labels": Tensor of dim [num_target_boxes] (where num_target_boxes is the number of
                   ground-truth
@@ -326,7 +325,7 @@ class HungarianMatcher(nn.Module):
                 * "boxes": Tensor of dim [num_target_boxes, 4] containing the target box coordinates.
 
         Returns:
-            `List[Tuple]`: A list of size `batch_size`, containing tuples of (index_i, index_j) where:
+            `list[Tuple]`: A list of size `batch_size`, containing tuples of (index_i, index_j) where:
             - index_i is the indices of the selected predictions (in order)
             - index_j is the indices of the corresponding selected targets (in order)
             For each batch element, it holds: len(index_i) = len(index_j) = min(num_queries, num_target_boxes)
@@ -343,7 +342,7 @@ class HungarianMatcher(nn.Module):
 
         # Compute the classification cost. Contrary to the loss, we don't use the NLL,
         # but approximate it in 1 - proba[target class].
-        # The 1 is a constant that doesn't change the matching, it can be ommitted.
+        # The 1 is a constant that doesn't change the matching, it can be omitted.
         class_cost = -out_prob[:, target_ids]
 
         # Compute the L1 cost between boxes
@@ -431,7 +430,7 @@ def generalized_box_iou(boxes1, boxes2):
 
 # below: taken from https://github.com/facebookresearch/detr/blob/master/util/misc.py#L306
 def _max_by_axis(the_list):
-    # type: (List[List[int]]) -> List[int]
+    # type: (list[list[int]]) -> list[int]
     maxes = the_list[0]
     for sublist in the_list[1:]:
         for index, item in enumerate(sublist):
@@ -440,7 +439,7 @@ def _max_by_axis(the_list):
 
 
 class NestedTensor:
-    def __init__(self, tensors, mask: Optional[Tensor]):
+    def __init__(self, tensors, mask: Tensor | None):
         self.tensors = tensors
         self.mask = mask
 
@@ -460,7 +459,7 @@ class NestedTensor:
         return str(self.tensors)
 
 
-def nested_tensor_from_tensor_list(tensor_list: List[Tensor]):
+def nested_tensor_from_tensor_list(tensor_list: list[Tensor]):
     if tensor_list[0].ndim == 3:
         max_size = _max_by_axis([list(img.shape) for img in tensor_list])
         batch_shape = [len(tensor_list)] + max_size
@@ -478,11 +477,7 @@ def nested_tensor_from_tensor_list(tensor_list: List[Tensor]):
 
 
 # taken from https://github.com/facebookresearch/detr/blob/master/models/detr.py
-@torch.jit.unused
 def _set_aux_loss(outputs_class, outputs_coord):
-    # this is a workaround to make torchscript happy, as torchscript
-    # doesn't support dictionary with non-homogeneous values, such
-    # as a dict having both a Tensor and a list.
     return [{"logits": a, "pred_boxes": b} for a, b in zip(outputs_class[:-1], outputs_coord[:-1])]
 
 
@@ -522,7 +517,7 @@ def ForSegmentationLoss(
         for i in range(config.decoder_layers - 1):
             aux_weight_dict.update({k + f"_{i}": v for k, v in weight_dict.items()})
         weight_dict.update(aux_weight_dict)
-    loss = sum(loss_dict[k] * weight_dict[k] for k in loss_dict.keys() if k in weight_dict)
+    loss = sum(loss_dict[k] * weight_dict[k] for k in loss_dict if k in weight_dict)
     return loss, loss_dict, auxiliary_outputs
 
 
@@ -558,5 +553,5 @@ def ForObjectDetectionLoss(
         for i in range(config.decoder_layers - 1):
             aux_weight_dict.update({k + f"_{i}": v for k, v in weight_dict.items()})
         weight_dict.update(aux_weight_dict)
-    loss = sum(loss_dict[k] * weight_dict[k] for k in loss_dict.keys() if k in weight_dict)
+    loss = sum(loss_dict[k] * weight_dict[k] for k in loss_dict if k in weight_dict)
     return loss, loss_dict, auxiliary_outputs

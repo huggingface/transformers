@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2021 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -217,11 +216,7 @@ class SplinterModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
         if is_torch_available()
         else ()
     )
-    pipeline_model_mapping = (
-        {"feature-extraction": SplinterModel, "question-answering": SplinterForQuestionAnswering}
-        if is_torch_available()
-        else {}
-    )
+    pipeline_model_mapping = {"feature-extraction": SplinterModel} if is_torch_available() else {}
 
     # TODO: Fix the failed tests when this model gets more usage
     def is_pipeline_test_to_skip(
@@ -275,7 +270,7 @@ class SplinterModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
 
     def setUp(self):
         self.model_tester = SplinterModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=SplinterConfig, hidden_size=37)
+        self.config_tester = ConfigTester(self, config_class=SplinterConfig, hidden_size=32)
 
     def test_config(self):
         self.config_tester.run_common_tests()
@@ -283,12 +278,6 @@ class SplinterModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
     def test_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
-
-    def test_model_various_embeddings(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        for type in ["absolute", "relative_key", "relative_key_query"]:
-            config_and_inputs[0].position_embedding_type = type
-            self.model_tester.create_and_check_model(*config_and_inputs)
 
     def test_for_question_answering(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
@@ -347,12 +336,6 @@ class SplinterModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
         from torch import nn
 
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-
-        # some params shouldn't be scattered by nn.DataParallel
-        # so just remove them if they are present.
-        blacklist_non_batched_params = ["head_mask", "decoder_head_mask", "cross_attn_head_mask"]
-        for k in blacklist_non_batched_params:
-            inputs_dict.pop(k, None)
 
         # move input tensors to cuda:O
         for k, v in inputs_dict.items():

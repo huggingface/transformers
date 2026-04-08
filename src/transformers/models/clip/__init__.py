@@ -19,15 +19,11 @@ from ...utils.import_utils import define_import_structure
 
 if TYPE_CHECKING:
     from .configuration_clip import *
-    from .feature_extraction_clip import *
     from .image_processing_clip import *
-    from .image_processing_clip_fast import *
+    from .image_processing_pil_clip import *
     from .modeling_clip import *
-    from .modeling_flax_clip import *
-    from .modeling_tf_clip import *
     from .processing_clip import *
     from .tokenization_clip import *
-    from .tokenization_clip_fast import *
 else:
     import sys
 

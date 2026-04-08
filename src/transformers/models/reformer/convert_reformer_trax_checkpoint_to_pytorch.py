@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2020 The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -15,6 +14,7 @@
 """Convert Reformer checkpoint."""
 
 import argparse
+import os
 import pickle
 
 import numpy as np
@@ -23,6 +23,8 @@ from torch import nn
 
 from transformers import ReformerConfig, ReformerModelWithLMHead
 from transformers.utils import logging
+
+from ...utils import strtobool
 
 
 logging.set_verbosity_info()
@@ -188,6 +190,13 @@ def convert_trax_checkpoint_to_pytorch(trax_model_pkl_path, config_file, pytorch
     print(f"Building PyTorch model from configuration: {config}")
     model = ReformerModelWithLMHead(config)
 
+    if not strtobool(os.environ.get("TRUST_REMOTE_CODE", "False")):
+        raise ValueError(
+            "This part uses `pickle.load` which is insecure and will execute arbitrary code that is potentially "
+            "malicious. It's recommended to never unpickle data that could have come from an untrusted source, or "
+            "that could have been tampered with. If you already verified the pickle data and decided to use it, "
+            "you can set the environment variable `TRUST_REMOTE_CODE` to `True` to allow it."
+        )
     with open(trax_model_pkl_path, "rb") as f:
         model_weights = pickle.load(f)["weights"]
 

@@ -20,7 +20,6 @@ from ...utils.import_utils import define_import_structure
 if TYPE_CHECKING:
     from .configuration_hubert import *
     from .modeling_hubert import *
-    from .modeling_tf_hubert import *
 else:
     import sys
 

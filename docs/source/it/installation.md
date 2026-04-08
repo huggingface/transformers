@@ -22,11 +22,9 @@ rendered properly in your Markdown viewer.
 
 Installa 🤗 Transformers per qualsiasi libreria di deep learning con cui stai lavorando, imposta la tua cache, e opzionalmente configura 🤗 Transformers per l'esecuzione offline.
 
-🤗 Transformers è testato su Python 3.6+, PyTorch 1.1.0+, TensorFlow 2.0+, e Flax. Segui le istruzioni di installazione seguenti per la libreria di deep learning che stai utilizzando:
+🤗 Transformers è testato su Python 3.10+ e PyTorch 2.4+. Segui le istruzioni di installazione seguenti per la libreria di deep learning che stai utilizzando:
 
 * [PyTorch](https://pytorch.org/get-started/locally/) istruzioni di installazione.
-* [TensorFlow 2.0](https://www.tensorflow.org/install/pip) istruzioni di installazione.
-* [Flax](https://flax.readthedocs.io/en/latest/) istruzioni di installazione.
 
 ## Installazione con pip
 
@@ -54,18 +52,6 @@ Per il solo supporto della CPU, puoi installare facilmente 🤗 Transformers e u
 
 ```bash
 pip install transformers[torch]
-```
-
-🤗 Transformers e TensorFlow 2.0:
-
-```bash
-pip install transformers[tf-cpu]
-```
-
-🤗 Transformers e Flax:
-
-```bash
-pip install transformers[flax]
 ```
 
 Infine, verifica se 🤗 Transformers è stato installato in modo appropriato eseguendo il seguente comando. Questo scaricherà un modello pre-allenato:
@@ -111,7 +97,7 @@ cd transformers
 pip install -e .
 ```
 
-Questi comandi collegheranno la cartella in cui è stato clonato il repository e i path delle librerie Python. Python guarderà ora all'interno della cartella clonata, oltre ai normali path delle librerie. Per esempio, se i tuoi pacchetti Python sono installati tipicamente in `~/anaconda3/envs/main/lib/python3.7/site-packages/`, Python cercherà anche nella cartella clonata: `~/transformers/`.
+Questi comandi collegheranno la cartella in cui è stato clonato il repository e i path delle librerie Python. Python guarderà ora all'interno della cartella clonata, oltre ai normali path delle librerie. Per esempio, se i tuoi pacchetti Python sono installati tipicamente in `~/anaconda3/envs/main/lib/python3.10/site-packages/`, Python cercherà anche nella cartella clonata: `~/transformers/`.
 
 <Tip warning={true}>
 
@@ -138,17 +124,11 @@ conda install conda-forge::transformers
 
 ## Impostazione della cache
 
-I modelli pre-allenati sono scaricati e memorizzati localmente nella cache in: `~/.cache/huggingface/transformers/`. Questa è la directory di default data dalla variabile d'ambiente della shell `TRANSFORMERS_CACHE`. Su Windows, la directory di default è data da `C:\Users\username\.cache\huggingface\transformers`. Puoi cambiare le variabili d'ambiente della shell indicate in seguito, in ordine di priorità, per specificare una directory differente per la cache:
+I modelli pre-allenati sono scaricati e memorizzati localmente nella cache in: `~/.cache/huggingface/transformers/`. Questa è la directory di default data dalla variabile d'ambiente della shell `HF_HUB_CACHE`. Su Windows, la directory di default è data da `C:\Users\username\.cache\huggingface\transformers`. Puoi cambiare le variabili d'ambiente della shell indicate in seguito, in ordine di priorità, per specificare una directory differente per la cache:
 
-1. Variabile d'ambiente della shell (default): `TRANSFORMERS_CACHE`.
+1. Variabile d'ambiente della shell (default): `HF_HUB_CACHE`.
 2. Variabile d'ambiente della shell: `HF_HOME` + `transformers/`.
 3. Variabile d'ambiente della shell: `XDG_CACHE_HOME` + `/huggingface/transformers`.
-
-<Tip>
-
-🤗 Transformers utilizzerà le variabili d'ambiente della shell `PYTORCH_TRANSFORMERS_CACHE` o `PYTORCH_PRETRAINED_BERT_CACHE` se si proviene da un'iterazione precedente di questa libreria e sono state impostate queste variabili d'ambiente, a meno che non si specifichi la variabile d'ambiente della shell `TRANSFORMERS_CACHE`.
-
-</Tip>
 
 ## Modalità Offline
 

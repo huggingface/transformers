@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2023 The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -16,9 +15,10 @@
 
 import argparse
 import json
+from io import BytesIO
 from pathlib import Path
 
-import requests
+import httpx
 import torch
 from huggingface_hub import hf_hub_download
 from PIL import Image
@@ -40,8 +40,9 @@ device = torch.device("cpu")
 # We will verify our results on an image of cute cats
 def prepare_img():
     url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-    im = Image.open(requests.get(url, stream=True).raw)
-    return im
+    with httpx.stream("GET", url) as response:
+        image = Image.open(BytesIO(response.read()))
+    return image
 
 
 def get_expected_output(swiftformer_name):
@@ -65,7 +66,7 @@ def rename_key(dct, old, new):
 
 def create_rename_keys(state_dict):
     rename_keys = []
-    for k in state_dict.keys():
+    for k in state_dict:
         k_new = k
         if ".pwconv" in k:
             k_new = k_new.replace(".pwconv", ".point_wise_conv")
@@ -125,7 +126,7 @@ def convert_swiftformer_checkpoint(swiftformer_name, pytorch_dump_folder_path, o
         if original_ckpt.startswith("https"):
             checkpoint = torch.hub.load_state_dict_from_url(original_ckpt, map_location="cpu", check_hash=True)
         else:
-            checkpoint = torch.load(original_ckpt, map_location="cpu")
+            checkpoint = torch.load(original_ckpt, map_location="cpu", weights_only=True)
     state_dict = checkpoint
 
     rename_keys = create_rename_keys(state_dict)

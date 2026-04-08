@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2023 The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -15,9 +14,10 @@
 """Convert DPT 3.1 checkpoints from the MiDaS repository. URL: https://github.com/isl-org/MiDaS"""
 
 import argparse
+from io import BytesIO
 from pathlib import Path
 
-import requests
+import httpx
 import torch
 from PIL import Image
 
@@ -77,7 +77,7 @@ def create_rename_keys(config):
     rename_keys.append(("pretrained.model.patch_embed.proj.weight", "backbone.embeddings.patch_embeddings.projection.weight"))
     rename_keys.append(("pretrained.model.patch_embed.proj.bias", "backbone.embeddings.patch_embeddings.projection.bias"))
 
-    # Transfomer encoder
+    # Transformer encoder
     for i in range(config.backbone_config.num_hidden_layers):
         rename_keys.append((f"pretrained.model.blocks.{i}.gamma_1", f"backbone.encoder.layer.{i}.lambda_1"))
         rename_keys.append((f"pretrained.model.blocks.{i}.gamma_2", f"backbone.encoder.layer.{i}.lambda_2"))
@@ -166,8 +166,9 @@ def rename_key(dct, old, new):
 # We will verify our results on an image of cute cats
 def prepare_img():
     url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-    im = Image.open(requests.get(url, stream=True).raw)
-    return im
+    with httpx.stream("GET", url) as response:
+        image = Image.open(BytesIO(response.read()))
+    return image
 
 
 @torch.no_grad()
@@ -218,12 +219,12 @@ def convert_dpt_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub):
     print("Mean of pixel values:", pixel_values.mean().item())
     print("Shape of pixel values:", pixel_values.shape)
 
-    import requests
     from PIL import Image
     from torchvision import transforms
 
     url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-    image = Image.open(requests.get(url, stream=True).raw)
+    with httpx.stream("GET", url) as response:
+        image = Image.open(BytesIO(response.read()))
 
     transforms = transforms.Compose(
         [

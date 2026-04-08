@@ -35,7 +35,7 @@ Ciò introduce due modifiche sostanziali:
 
 ##### Come ottenere lo stesso comportamento di v3.x in v4.x
 
-- Le pipeline ora contengono funzionalità aggiuntive pronte all'uso. Vedi la [pipeline di classificazione dei token con il flag `grouped_entities`](main_classes/pipelines#transformers.TokenClassificationPipeline).
+- Le pipeline ora contengono funzionalità aggiuntive pronte all'uso. Vedi la [pipeline di classificazione dei token con il parametro `aggregation_strategy`](main_classes/pipelines#transformers.TokenClassificationPipeline).
 - Gli auto-tokenizer ora restituiscono tokenizer rust. Per ottenere invece i tokenizer python, l'utente deve usare il flag `use_fast` impostandolo `False`:
 
 Nella versione `v3.x`:
@@ -79,7 +79,7 @@ pip install transformers[sentencepiece]
 ```
 o
 ```bash
-pip install transformers stentencepiece
+pip install transformers sentencepiece
 ```
 #### 3. L'architettura delle repo è stato aggiornata in modo che ogni modello abbia la propria cartella
 
@@ -170,7 +170,7 @@ Per quanto riguarda la classe `TrainingArguments`:
 - L'argomento `evaluate_during_training` di `TrainingArguments` è deprecato a favore di `eval_strategy`.
 
 Per quanto riguarda il modello Transfo-XL:
-- L'attributo di configurazione `tie_weight` di Transfo-XL diventa `tie_words_embeddings`.
+- L'attributo di configurazione `tie_weight` di Transfo-XL diventa `tie_word_embeddings`.
 - Il metodo di modellazione `reset_length` di Transfo-XL diventa `reset_memory_length`.
 
 Per quanto riguarda le pipeline:

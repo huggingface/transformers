@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2018 Microsoft Authors and the HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -229,7 +228,6 @@ class DebertaModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
         {
             "feature-extraction": DebertaModel,
             "fill-mask": DebertaForMaskedLM,
-            "question-answering": DebertaForQuestionAnswering,
             "text-classification": DebertaForSequenceClassification,
             "token-classification": DebertaForTokenClassification,
             "zero-shot": DebertaForSequenceClassification,
@@ -238,15 +236,11 @@ class DebertaModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
         else {}
     )
 
-    fx_compatible = True
-    test_torchscript = False
-    test_pruning = False
-    test_head_masking = False
     is_encoder_decoder = False
 
     def setUp(self):
         self.model_tester = DebertaModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=DebertaConfig, hidden_size=37)
+        self.config_tester = ConfigTester(self, config_class=DebertaConfig, hidden_size=32)
 
     def test_config(self):
         self.config_tester.run_common_tests()
@@ -276,14 +270,6 @@ class DebertaModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
         model_name = "microsoft/deberta-base"
         model = DebertaModel.from_pretrained(model_name)
         self.assertIsNotNone(model)
-
-    @unittest.skip("This test was broken by the refactor in #22105, TODO @ArthurZucker")
-    def test_torch_fx_output_loss(self):
-        pass
-
-    @unittest.skip("This test was broken by the refactor in #22105, TODO @ArthurZucker")
-    def test_torch_fx(self):
-        pass
 
 
 @require_torch

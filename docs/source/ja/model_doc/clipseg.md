@@ -18,7 +18,7 @@ rendered properly in your Markdown viewer.
 
 ## Overview
 
-CLIPSeg モデルは、Timo Lüddecke, Alexander Ecker によって [Image Segmentation using Text and Image Prompts](https://arxiv.org/abs/2112.10003) で提案されました。
+CLIPSeg モデルは、Timo Lüddecke, Alexander Ecker によって [Image Segmentation using Text and Image Prompts](https://huggingface.co/papers/2112.10003) で提案されました。
 そしてアレクサンダー・エッカー。 CLIPSeg は、ゼロショットおよびワンショット画像セグメンテーションのために、凍結された [CLIP](clip) モデルの上に最小限のデコーダを追加します。
 
 論文の要約は次のとおりです。
@@ -44,7 +44,7 @@ PhraseCut データセット、私たちのシステムは、フリーテキス�
 <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/model_doc/clipseg_architecture.png"
 alt="描画" width="600"/>
 
-<small> CLIPSeg の概要。 <a href="https://arxiv.org/abs/2112.10003">元の論文から抜粋。</a> </small>
+<small> CLIPSeg の概要。 <a href="https://huggingface.co/papers/2112.10003">元の論文から抜粋。</a> </small>
 
 このモデルは、[nielsr](https://huggingface.co/nielsr) によって提供されました。
 元のコードは [ここ](https://github.com/timojl/clipseg) にあります。
@@ -67,7 +67,6 @@ CLIPSeg の使用を開始するのに役立つ、公式 Hugging Face および�
 ## CLIPSegConfig
 
 [[autodoc]] CLIPSegConfig
-    - from_text_vision_configs
 
 ## CLIPSegTextConfig
 

@@ -27,11 +27,11 @@ import argparse
 import gc
 import glob
 import json
+from io import BytesIO
 from pathlib import Path
 
-import requests
+import httpx
 import torch
-from accelerate import init_empty_weights
 from huggingface_hub import hf_hub_download, snapshot_download
 from PIL import Image
 from safetensors import safe_open
@@ -88,7 +88,8 @@ def convert_state_dict_to_hf(state_dict):
 
 def load_image():
     url = "https://github.com/haotian-liu/LLaVA/blob/1a91fc274d7c35a9b50b3cb29c4247ae5837ce39/images/llava_v1_5_radar.jpg?raw=true"
-    image = Image.open(requests.get(url, stream=True).raw)
+    with httpx.stream("GET", url) as response:
+        image = Image.open(BytesIO(response.read()))
     return image
 
 
@@ -102,32 +103,32 @@ def convert_llava_to_hf(model_id, pytorch_dump_folder_path, push_to_hub=False):
 
     if model_id == "liuhaotian/llava-v1.6-mistral-7b":
         text_model_id = "mistralai/Mistral-7B-Instruct-v0.2"
-        image_token_index = 32000
+        image_token_id = 32000
     elif model_id == "liuhaotian/llava-v1.6-vicuna-7b":
         text_model_id = "lmsys/vicuna-7b-v1.5"
-        image_token_index = 32000
+        image_token_id = 32000
     elif model_id == "liuhaotian/llava-v1.6-vicuna-13b":
         text_model_id = "lmsys/vicuna-13b-v1.5"
-        image_token_index = 32000
+        image_token_id = 32000
     elif model_id == "liuhaotian/llava-v1.6-34b":
         text_model_id = "NousResearch/Nous-Hermes-2-Yi-34B"
-        image_token_index = 64000
+        image_token_id = 64000
     elif model_id == "lmms-lab/llama3-llava-next-8b":
         text_model_id = "meta-llama/Meta-Llama-3-8B-Instruct"
-        image_token_index = 128256
+        image_token_id = 128256
     elif model_id == "lmms-lab/llava-next-72b":
         text_model_id = "Qwen/Qwen1.5-72B-Chat"
-        image_token_index = 151646
+        image_token_id = 151646
     elif model_id == "lmms-lab/llava-next-110b":
         text_model_id = "Qwen/Qwen1.5-110B-Chat"
-        image_token_index = 151646
+        image_token_id = 151646
 
     vision_model_id = data["mm_vision_tower"]
 
     torch.set_default_dtype(torch.float16)
     text_config = AutoConfig.from_pretrained(text_model_id)
 
-    use_fast = False if model_id == "liuhaotian/llava-v1.6-34b" else True
+    use_fast = model_id != "liuhaotian/llava-v1.6-34b"
     tokenizer = AutoTokenizer.from_pretrained(text_model_id, use_fast=use_fast)
     tokenizer.add_tokens(AddedToken("<image>", special=True, normalized=False), special_tokens=True)
 
@@ -142,10 +143,10 @@ def convert_llava_to_hf(model_id, pytorch_dump_folder_path, push_to_hub=False):
         text_config=text_config.to_dict(),
         image_grid_pinpoints=image_processor.image_grid_pinpoints,
         use_image_newline_parameter=True,
-        image_token_index=image_token_index,
+        image_token_id=image_token_id,
     )
 
-    with init_empty_weights():
+    with torch.device("meta"):
         model = LlavaNextForConditionalGeneration(config)
 
     # load original state dict
@@ -175,15 +176,12 @@ def convert_llava_to_hf(model_id, pytorch_dump_folder_path, push_to_hub=False):
         model.resize_token_embeddings(num_tokens, pad_to_multiple_of=pad_shape)
         model.language_model.model.embed_tokens.weight.data[vocab_size:] = torch.stack(
             tuple(
-                (
-                    dist.sample()
-                    for _ in range(model.language_model.model.embed_tokens.weight.data[vocab_size:].shape[0])
-                )
+                dist.sample() for _ in range(model.language_model.model.embed_tokens.weight.data[vocab_size:].shape[0])
             ),
             dim=0,
         )
         model.language_model.lm_head.weight.data[vocab_size:] = torch.stack(
-            tuple((dist.sample() for _ in range(model.language_model.lm_head.weight.data[vocab_size:].shape[0]))),
+            tuple(dist.sample() for _ in range(model.language_model.lm_head.weight.data[vocab_size:].shape[0])),
             dim=0,
         )
 
@@ -219,23 +217,23 @@ def convert_llava_to_hf(model_id, pytorch_dump_folder_path, push_to_hub=False):
 
     # verify inputs
     filepath = hf_hub_download(repo_id="nielsr/test-image", filename="llava_1_6_pixel_values.pt", repo_type="dataset")
-    original_pixel_values = torch.load(filepath, map_location="cpu")
+    original_pixel_values = torch.load(filepath, map_location="cpu", weights_only=True)
     assert torch.allclose(original_pixel_values, inputs.pixel_values.half())
 
     if model_id == "liuhaotian/llava-v1.6-mistral-7b":
         filepath = hf_hub_download(repo_id="nielsr/test-image", filename="llava_1_6_input_ids.pt", repo_type="dataset")
-        original_input_ids = torch.load(filepath, map_location="cpu")
-        # replace -200 by image_token_index (since we use token ID = 32000 for the image token)
-        original_input_ids[original_input_ids == -200] = image_token_index
+        original_input_ids = torch.load(filepath, map_location="cpu", weights_only=True)
+        # replace -200 by image_token_id (since we use token ID = 32000 for the image token)
+        original_input_ids[original_input_ids == -200] = image_token_id
         assert original_input_ids[0].tolist() == inputs.input_ids[0].tolist()
 
     elif model_id == "liuhaotian/llava-v1.6-34b":
         filepath = hf_hub_download(
             repo_id="nielsr/test-image", filename="llava_1_6_34b_input_ids.pt", repo_type="dataset"
         )
-        original_input_ids = torch.load(filepath, map_location="cpu")
-        # replace -200 by image_token_index
-        original_input_ids[original_input_ids == -200] = image_token_index
+        original_input_ids = torch.load(filepath, map_location="cpu", weights_only=True)
+        # replace -200 by image_token_id
+        original_input_ids[original_input_ids == -200] = image_token_id
 
         assert original_input_ids[0].tolist() == inputs.input_ids[0].tolist()
 
@@ -334,7 +332,8 @@ def convert_llava_to_hf(model_id, pytorch_dump_folder_path, push_to_hub=False):
     # verify batched generation
     print("Batched generation...")
     url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-    cats_image = Image.open(requests.get(url, stream=True).raw)
+    with httpx.stream("GET", url) as response:
+        cats_image = Image.open(BytesIO(response.read()))
 
     inputs = processor(
         images=[image, cats_image],
@@ -390,7 +389,9 @@ if __name__ == "__main__":
         "--pytorch_dump_folder_path", type=str, required=True, help="Path to the output PyTorch model directory."
     )
     parser.add_argument(
-        "--push_to_hub", action="store_true", help="Whether or not to push the converted model to the 🤗 hub."
+        "--push_to_hub",
+        action="store_true",
+        help="Whether or not to push the converted model to the Hugging Face hub.",
     )
     args = parser.parse_args()
 

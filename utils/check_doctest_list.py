@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2023 The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -18,13 +17,13 @@ alphabetical order.
 
 Usage (from the root of the repo):
 
-Check that the doctest list is properly sorted and all files exist (used in `make repo-consistency`):
+Check that the doctest list is properly sorted and all files exist (used in `make check-repo`):
 
 ```bash
 python utils/check_doctest_list.py
 ```
 
-Auto-sort the doctest list if it is not properly sorted (used in `make fix-copies`):
+Auto-sort the doctest list if it is not properly sorted (used in `make fix-repo`):
 
 ```bash
 python utils/check_doctest_list.py --fix_and_overwrite
@@ -34,6 +33,21 @@ python utils/check_doctest_list.py --fix_and_overwrite
 import argparse
 import os
 
+
+CHECKER_CONFIG = {
+    "name": "doctest_list",
+    "label": "Doctest list",
+    # Over-approximation: the checker validates that paths in .txt list files exist and are
+    # sorted. The broad globs ensure cache invalidation when source files are added/removed.
+    "file_globs": [
+        "utils/not_doctested.txt",
+        "utils/slow_documentation_tests.txt",
+        "src/transformers/**/*.py",
+        "docs/**/*.md",
+    ],
+    "check_args": [],
+    "fix_args": ["--fix_and_overwrite"],
+}
 
 # All paths are set with the intent you should run this script from the root of the repo with the command
 # python utils/check_doctest_list.py
@@ -69,7 +83,7 @@ def clean_doctest_list(doctest_file: str, overwrite: bool = False):
     if all_paths != sorted_paths:
         if not overwrite:
             raise ValueError(
-                f"Files in `{doctest_file}` are not in alphabetical order, run `make fix-copies` to fix "
+                f"Files in `{doctest_file}` are not in alphabetical order, run `make fix-repo` to fix "
                 "this automatically."
             )
         with open(doctest_file, "w", encoding="utf-8") as f:

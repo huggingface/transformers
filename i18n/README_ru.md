@@ -47,9 +47,11 @@ limitations under the License.
         <a href="https://github.com/huggingface/transformers/blob/main/i18n/README_te.md">తెలుగు</a> |
         <a href="https://github.com/huggingface/transformers/blob/main/i18n/README_fr.md">Français</a> |
         <a href="https://github.com/huggingface/transformers/blob/main/i18n/README_de.md">Deutsch</a> |
+        <a href="https://github.com/huggingface/transformers/blob/main/i18n/README_it.md">Italiano</a> |
         <a href="https://github.com/huggingface/transformers/blob/main/i18n/README_vi.md">Tiếng Việt</a> |
         <a href="https://github.com/huggingface/transformers/blob/main/i18n/README_ar.md">العربية</a> |
         <a href="https://github.com/huggingface/transformers/blob/main/i18n/README_ur.md">اردو</a> |
+        <a href="https://github.com/huggingface/transformers/blob/main/i18n/README_bn.md">বাংলা</a> |
     <p>
 </h4>
 
@@ -118,7 +120,7 @@ Transformers - это не просто набор инструментов дл
 Hugging Face Hub. Мы хотим, чтобы Transformers позволил разработчикам, исследователям, студентам, профессорам, инженерам и всем желающим
 создавать проекты своей мечты.
 
-Чтобы отпраздновать 100 тысяч звезд Transformers, мы решили сделать акцент на сообществе, и создали страницу [awesome-transformers](./awesome-transformers.md), на которой перечислены 100
+Чтобы отпраздновать 100 тысяч звезд Transformers, мы решили сделать акцент на сообществе, и создали страницу [awesome-transformers](https://github.com/huggingface/transformers/blob/main/awesome-transformers.md), на которой перечислены 100
 невероятных проектов, созданных с помощью transformers.
 
 Если вы являетесь владельцем или пользователем проекта, который, по вашему мнению, должен быть включен в этот список, пожалуйста, откройте PR для его добавления!
@@ -244,7 +246,7 @@ Hugging Face Hub. Мы хотим, чтобы Transformers позволил ра
 
 ### С помощью pip
 
-Данный репозиторий протестирован на Python 3.9+, Flax 0.4.1+, PyTorch 2.0+ и TensorFlow 2.6+.
+Данный репозиторий протестирован на Python 3.10+ и PyTorch 2.4+.
 
 Устанавливать 🤗 Transformers следует в [виртуальной среде](https://docs.python.org/3/library/venv.html). Если вы не знакомы с виртуальными средами Python, ознакомьтесь с [руководством пользователя](https://packaging.python.org/guides/installing-using-pip-and-virtual-environments/).
 

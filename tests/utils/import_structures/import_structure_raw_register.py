@@ -14,50 +14,49 @@
 
 # fmt: off
 
-from transformers.utils.import_utils import export
+from transformers.utils.import_utils import requires
 
 
-@export()
+@requires()
 class A0:
     def __init__(self):
         pass
 
 
-@export()
+@requires()
 def a0():
     pass
 
 
-@export(backends=("torch", "tf"))
+@requires(backends=("torch",))
 class A1:
     def __init__(self):
         pass
 
 
-@export(backends=("torch", "tf"))
+@requires(backends=("torch",))
 def a1():
     pass
 
 
-@export(
-    backends=("torch", "tf")
+@requires(
+    backends=("torch",)
 )
 class A2:
     def __init__(self):
         pass
 
 
-@export(
-    backends=("torch", "tf")
+@requires(
+    backends=("torch",)
 )
 def a2():
     pass
 
 
-@export(
+@requires(
     backends=(
         "torch",
-        "tf"
     )
 )
 class A3:
@@ -65,16 +64,15 @@ class A3:
         pass
 
 
-@export(
+@requires(
     backends=(
             "torch",
-            "tf"
     )
 )
 def a3():
     pass
 
-@export(backends=())
+@requires(backends=())
 class A4:
     def __init__(self):
         pass

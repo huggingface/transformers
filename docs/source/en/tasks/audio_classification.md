@@ -36,7 +36,7 @@ To see all architectures and checkpoints compatible with this task, we recommend
 Before you begin, make sure you have all the necessary libraries installed:
 
 ```bash
-pip install transformers datasets evaluate
+pip install transformers datasets evaluate soundfile librosa torchcodec
 ```
 
 We encourage you to login to your Hugging Face account so you can upload and share your model with the community. When prompted, enter your token to login:
@@ -187,8 +187,6 @@ Your `compute_metrics` function is ready to go now, and you'll return to it when
 
 ## Train
 
-<frameworkcontent>
-<pt>
 <Tip>
 
 If you aren't familiar with finetuning a model with the [`Trainer`], take a look at the basic tutorial [here](../training#train-with-pytorch-trainer)!
@@ -212,7 +210,6 @@ At this point, only three steps remain:
 2. Pass the training arguments to [`Trainer`] along with the model, dataset, tokenizer, data collator, and `compute_metrics` function.
 3. Call [`~Trainer.train`] to fine-tune your model.
 
-
 ```py
 >>> training_args = TrainingArguments(
 ...     output_dir="my_awesome_mind_model",
@@ -223,11 +220,12 @@ At this point, only three steps remain:
 ...     gradient_accumulation_steps=4,
 ...     per_device_eval_batch_size=32,
 ...     num_train_epochs=10,
-...     warmup_ratio=0.1,
+...     warmup_steps=0.1,
 ...     logging_steps=10,
 ...     load_best_model_at_end=True,
 ...     metric_for_best_model="accuracy",
 ...     push_to_hub=True,
+...     report_to="trackio",
 ... )
 
 >>> trainer = Trainer(
@@ -247,8 +245,6 @@ Once training is completed, share your model to the Hub with the [`~transformers
 ```py
 >>> trainer.push_to_hub()
 ```
-</pt>
-</frameworkcontent>
 
 <Tip>
 
@@ -289,8 +285,6 @@ The simplest way to try out your fine-tuned model for inference is to use it in 
 
 You can also manually replicate the results of the `pipeline` if you'd like:
 
-<frameworkcontent>
-<pt>
 Load a feature extractor to preprocess the audio file and return the `input` as PyTorch tensors:
 
 ```py
@@ -320,5 +314,3 @@ Get the class with the highest probability, and use the model's `id2label` mappi
 >>> predicted_label
 'cash_deposit'
 ```
-</pt>
-</frameworkcontent>

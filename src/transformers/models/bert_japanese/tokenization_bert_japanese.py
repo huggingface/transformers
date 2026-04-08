@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2018 The Google AI Language Team Authors and The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -18,9 +17,9 @@ import collections
 import copy
 import os
 import unicodedata
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any
 
-from ...tokenization_utils import PreTrainedTokenizer, _is_control, _is_punctuation, _is_whitespace
+from ...tokenization_python import PreTrainedTokenizer, _is_control, _is_punctuation, _is_whitespace
 from ...utils import is_sentencepiece_available, is_sudachi_projection_available, logging
 
 
@@ -36,7 +35,6 @@ VOCAB_FILES_NAMES = {"vocab_file": "vocab.txt", "spm_file": "spiece.model"}
 SPIECE_UNDERLINE = "▁"
 
 
-# Copied from transformers.models.bert.tokenization_bert.load_vocab
 def load_vocab(vocab_file):
     """Loads a vocabulary file into a dictionary."""
     vocab = collections.OrderedDict()
@@ -48,7 +46,6 @@ def load_vocab(vocab_file):
     return vocab
 
 
-# Copied from transformers.models.bert.tokenization_bert.whitespace_tokenize
 def whitespace_tokenize(text):
     """Runs basic whitespace cleaning and splitting on a piece of text."""
     text = text.strip()
@@ -181,6 +178,9 @@ class BertJapaneseTokenizer(PreTrainedTokenizer):
             mecab_kwargs=mecab_kwargs,
             sudachi_kwargs=sudachi_kwargs,
             jumanpp_kwargs=jumanpp_kwargs,
+            token_type_ids_pattern="bert_style",
+            token_type_ids_include_special_tokens=True,
+            special_tokens_pattern="cls_sep",
             **kwargs,
         )
 
@@ -233,7 +233,13 @@ class BertJapaneseTokenizer(PreTrainedTokenizer):
             vocab = {self.convert_ids_to_tokens(i): i for i in range(self.vocab_size)}
             vocab.update(self.added_tokens_encoder)
             return vocab
-        return dict(self.vocab, **self.added_tokens_encoder)
+        # base vocab
+        vocab = dict(self.vocab)
+        # + added_tokens_encoder (only for tokens not in base vocab)
+        for token, index in self.added_tokens_encoder.items():
+            if token not in self.vocab:
+                vocab[token] = index
+        return vocab
 
     def _convert_token_to_id(self, token):
         """Converts a token (str) in an id using the vocab."""
@@ -254,92 +260,7 @@ class BertJapaneseTokenizer(PreTrainedTokenizer):
         out_string = " ".join(tokens).replace(" ##", "").strip()
         return out_string
 
-    # Copied from transformers.models.bert.tokenization_bert.BertTokenizer.build_inputs_with_special_tokens
-    def build_inputs_with_special_tokens(
-        self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None
-    ) -> List[int]:
-        """
-        Build model inputs from a sequence or a pair of sequence for sequence classification tasks by concatenating and
-        adding special tokens. A BERT sequence has the following format:
-
-        - single sequence: `[CLS] X [SEP]`
-        - pair of sequences: `[CLS] A [SEP] B [SEP]`
-
-        Args:
-            token_ids_0 (`List[int]`):
-                List of IDs to which the special tokens will be added.
-            token_ids_1 (`List[int]`, *optional*):
-                Optional second list of IDs for sequence pairs.
-
-        Returns:
-            `List[int]`: List of [input IDs](../glossary#input-ids) with the appropriate special tokens.
-        """
-        if token_ids_1 is None:
-            return [self.cls_token_id] + token_ids_0 + [self.sep_token_id]
-        cls = [self.cls_token_id]
-        sep = [self.sep_token_id]
-        return cls + token_ids_0 + sep + token_ids_1 + sep
-
-    # Copied from transformers.models.bert.tokenization_bert.BertTokenizer.get_special_tokens_mask
-    def get_special_tokens_mask(
-        self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None, already_has_special_tokens: bool = False
-    ) -> List[int]:
-        """
-        Retrieve sequence ids from a token list that has no special tokens added. This method is called when adding
-        special tokens using the tokenizer `prepare_for_model` method.
-
-        Args:
-            token_ids_0 (`List[int]`):
-                List of IDs.
-            token_ids_1 (`List[int]`, *optional*):
-                Optional second list of IDs for sequence pairs.
-            already_has_special_tokens (`bool`, *optional*, defaults to `False`):
-                Whether or not the token list is already formatted with special tokens for the model.
-
-        Returns:
-            `List[int]`: A list of integers in the range [0, 1]: 1 for a special token, 0 for a sequence token.
-        """
-
-        if already_has_special_tokens:
-            return super().get_special_tokens_mask(
-                token_ids_0=token_ids_0, token_ids_1=token_ids_1, already_has_special_tokens=True
-            )
-
-        if token_ids_1 is not None:
-            return [1] + ([0] * len(token_ids_0)) + [1] + ([0] * len(token_ids_1)) + [1]
-        return [1] + ([0] * len(token_ids_0)) + [1]
-
-    # Copied from transformers.models.bert.tokenization_bert.BertTokenizer.create_token_type_ids_from_sequences
-    def create_token_type_ids_from_sequences(
-        self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None
-    ) -> List[int]:
-        """
-        Create a mask from the two sequences passed to be used in a sequence-pair classification task. A BERT sequence
-        pair mask has the following format:
-
-        ```
-        0 0 0 0 0 0 0 0 0 0 0 1 1 1 1 1 1 1 1 1
-        | first sequence    | second sequence |
-        ```
-
-        If `token_ids_1` is `None`, this method only returns the first portion of the mask (0s).
-
-        Args:
-            token_ids_0 (`List[int]`):
-                List of IDs.
-            token_ids_1 (`List[int]`, *optional*):
-                Optional second list of IDs for sequence pairs.
-
-        Returns:
-            `List[int]`: List of [token type IDs](../glossary#token-type-ids) according to the given sequence(s).
-        """
-        sep = [self.sep_token_id]
-        cls = [self.cls_token_id]
-        if token_ids_1 is None:
-            return len(cls + token_ids_0 + sep) * [0]
-        return len(cls + token_ids_0 + sep) * [0] + len(token_ids_1 + sep) * [1]
-
-    def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> Tuple[str]:
+    def save_vocabulary(self, save_directory: str, filename_prefix: str | None = None) -> tuple[str]:
         if os.path.isdir(save_directory):
             if self.subword_tokenizer_type == "sentencepiece":
                 vocab_file = os.path.join(
@@ -380,8 +301,8 @@ class MecabTokenizer:
         do_lower_case=False,
         never_split=None,
         normalize_text=True,
-        mecab_dic: Optional[str] = "unidic_lite",
-        mecab_option: Optional[str] = None,
+        mecab_dic: str | None = "unidic_lite",
+        mecab_option: str | None = None,
     ):
         """
         Constructs a MecabTokenizer.
@@ -667,7 +588,7 @@ class CharacterTokenizer:
         """
         Tokenizes a piece of text into characters.
 
-        For example, `input = "apple""` wil return as output `["a", "p", "p", "l", "e"]`.
+        For example, `input = "apple""` will return as output `["a", "p", "p", "l", "e"]`.
 
         Args:
             text: A single token or whitespace separated tokens.
@@ -690,7 +611,6 @@ class CharacterTokenizer:
         return output_tokens
 
 
-# Copied from transformers.models.bert.tokenization_bert.BasicTokenizer
 class BasicTokenizer:
     """
     Constructs a BasicTokenizer that will run basic tokenization (punctuation splitting, lower casing, etc.).
@@ -826,14 +746,14 @@ class BasicTokenizer:
         # like the all of the other languages.
         if (
             (cp >= 0x4E00 and cp <= 0x9FFF)
-            or (cp >= 0x3400 and cp <= 0x4DBF)  #
-            or (cp >= 0x20000 and cp <= 0x2A6DF)  #
-            or (cp >= 0x2A700 and cp <= 0x2B73F)  #
-            or (cp >= 0x2B740 and cp <= 0x2B81F)  #
-            or (cp >= 0x2B820 and cp <= 0x2CEAF)  #
+            or (cp >= 0x3400 and cp <= 0x4DBF)
+            or (cp >= 0x20000 and cp <= 0x2A6DF)
+            or (cp >= 0x2A700 and cp <= 0x2B73F)
+            or (cp >= 0x2B740 and cp <= 0x2B81F)
+            or (cp >= 0x2B820 and cp <= 0x2CEAF)
             or (cp >= 0xF900 and cp <= 0xFAFF)
-            or (cp >= 0x2F800 and cp <= 0x2FA1F)  #
-        ):  #
+            or (cp >= 0x2F800 and cp <= 0x2FA1F)
+        ):
             return True
 
         return False
@@ -852,7 +772,6 @@ class BasicTokenizer:
         return "".join(output)
 
 
-# Copied from transformers.models.bert.tokenization_bert.WordpieceTokenizer
 class WordpieceTokenizer:
     """Runs WordPiece tokenization."""
 
@@ -866,7 +785,7 @@ class WordpieceTokenizer:
         Tokenizes a piece of text into its word pieces. This uses a greedy longest-match-first algorithm to perform
         tokenization using the given vocabulary.
 
-        For example, `input = "unaffable"` wil return as output `["un", "##aff", "##able"]`.
+        For example, `input = "unaffable"` will return as output `["un", "##aff", "##able"]`.
 
         Args:
             text: A single token or whitespace separated tokens. This should have
@@ -922,7 +841,7 @@ class SentencepieceTokenizer:
         do_lower_case=False,
         remove_space=True,
         keep_accents=True,
-        sp_model_kwargs: Optional[Dict[str, Any]] = None,
+        sp_model_kwargs: dict[str, Any] | None = None,
     ):
         self.vocab = vocab
         self.unk_token = unk_token
@@ -964,7 +883,7 @@ class SentencepieceTokenizer:
         pieces = self.sp_model.encode(text, out_type=str)
         new_pieces = []
         for piece in pieces:
-            if len(piece) > 1 and piece[-1] == str(",") and piece[-2].isdigit():
+            if len(piece) > 1 and piece[-1] == "," and piece[-2].isdigit():
                 cur_pieces = self.sp_model.EncodeAsPieces(piece[:-1].replace(SPIECE_UNDERLINE, ""))
                 if piece[0] != SPIECE_UNDERLINE and cur_pieces[0][0] == SPIECE_UNDERLINE:
                     if len(cur_pieces[0]) == 1:

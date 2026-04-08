@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2021 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -15,6 +14,7 @@
 """Testing suite for the PyTorch ViT model."""
 
 import unittest
+from functools import cached_property
 
 from transformers import ViTConfig
 from transformers.testing_utils import (
@@ -26,7 +26,7 @@ from transformers.testing_utils import (
     slow,
     torch_device,
 )
-from transformers.utils import cached_property, is_torch_available, is_vision_available
+from transformers.utils import is_torch_available, is_vision_available
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
@@ -43,7 +43,7 @@ if is_torch_available():
 if is_vision_available():
     from PIL import Image
 
-    from transformers import ViTImageProcessor
+    from transformers import ViTImageProcessorPil
 
 
 class ViTModelTester:
@@ -202,16 +202,12 @@ class ViTModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         if is_torch_available()
         else {}
     )
-    fx_compatible = True
 
-    test_pruning = False
     test_resize_embeddings = False
-    test_head_masking = False
-    test_torch_exportable = True
 
     def setUp(self):
         self.model_tester = ViTModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=ViTConfig, has_text_modality=False, hidden_size=37)
+        self.config_tester = ConfigTester(self, config_class=ViTConfig, has_text_modality=False, hidden_size=32)
 
     @unittest.skip(
         "Since `torch==2.3+cu121`, although this test passes, many subsequent tests have `CUDA error: misaligned address`."
@@ -266,7 +262,7 @@ def prepare_img():
 class ViTModelIntegrationTest(unittest.TestCase):
     @cached_property
     def default_image_processor(self):
-        return ViTImageProcessor.from_pretrained("google/vit-base-patch16-224") if is_vision_available() else None
+        return ViTImageProcessorPil.from_pretrained("google/vit-base-patch16-224") if is_vision_available() else None
 
     @slow
     def test_inference_image_classification_head(self):
@@ -296,7 +292,7 @@ class ViTModelIntegrationTest(unittest.TestCase):
         # to visualize self-attention on higher resolution images.
         model = ViTModel.from_pretrained("facebook/dino-vits8").to(torch_device)
 
-        image_processor = ViTImageProcessor.from_pretrained("facebook/dino-vits8", size=480)
+        image_processor = ViTImageProcessorPil.from_pretrained("facebook/dino-vits8", size=480)
         image = prepare_img()
         inputs = image_processor(images=image, return_tensors="pt")
         pixel_values = inputs.pixel_values.to(torch_device)
@@ -323,7 +319,7 @@ class ViTModelIntegrationTest(unittest.TestCase):
         r"""
         A small test to make sure that inference work in half precision without any problem.
         """
-        model = ViTModel.from_pretrained("facebook/dino-vits8", torch_dtype=torch.float16, device_map="auto")
+        model = ViTModel.from_pretrained("facebook/dino-vits8", dtype=torch.float16, device_map="auto")
         image_processor = self.default_image_processor
 
         image = prepare_img()

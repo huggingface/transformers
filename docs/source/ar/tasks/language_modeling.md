@@ -182,8 +182,6 @@ pip install transformers datasets evaluate
 
 الآن قم بإنشاء دفعة من الأمثلة باستخدام [`DataCollatorForLanguageModeling`]. من الأفضل أن تقوم بـ *الحشو الديناميكي* للجمل إلى الطول الأطول في الدفعة أثناء التجميع، بدلاً من حشو كامل المجموعة من البيانات إلى الطول الأقصى.
 
-<frameworkcontent>
-<pt>
 استخدم رمز نهاية التسلسل كرمز للحشو، وحدد `mlm_probability` لحجب الرموز بشكل عشوائي عند كل تكرار للبيانات:
 
 ```py
@@ -193,23 +191,9 @@ pip install transformers datasets evaluate
 >>> data_collator = DataCollatorForLanguageModeling(tokenizer=tokenizer, mlm=False)
 ```
 
-</pt>
-<tf>
-استخدم رمز نهاية التسلسل كرمز للحشو، وحدد `mlm_probability` لحجب الرموز بشكل عشوائي عند كل تكرار للبيانات:
-
-```py
->>> from transformers import DataCollatorForLanguageModeling
-
->>> data_collator = DataCollatorForLanguageModeling(tokenizer=tokenizer, mlm=False, return_tensors="tf")
-```
-
-</tf>
-</frameworkcontent>
 
 ## التدريب (Train)
 
-<frameworkcontent>
-<pt>
 
 <Tip>
 
@@ -267,75 +251,6 @@ Perplexity: 49.61
 ```py
 >>> trainer.push_to_hub()
 ```
-</pt>
-<tf>
-<Tip>
-
-إذا لم تكن على دراية بتدريب نموذج باستخدام Keras، اطلع على [البرنامج التعليمي الأساسي](../training#train-a-tensorflow-model-with-keras)!
-
-</Tip>
-لتدريب نموذج في TensorFlow، ابدأ بإعداد دالة المحسن، وجدول معدل التعلم، وبعض معاملات التدريب:
-
-```py
->>> from transformers import create_optimizer, AdamWeightDecay
-
->>> optimizer = AdamWeightDecay(learning_rate=2e-5, weight_decay_rate=0.01)
-```
-
-ثم يمكنك تحميل DistilGPT2 باستخدام [`TFAutoModelForCausalLM`]:
-
-```py
->>> from transformers import TFAutoModelForCausalLM
-
->>> model = TFAutoModelForCausalLM.from_pretrained("distilbert/distilgpt2")
-```
-
-حول مجموعات بياناتك إلى تنسيق `tf.data.Dataset` باستخدام [`~transformers.TFPreTrainedModel.prepare_tf_dataset`]:
-
-```py
->>> tf_train_set = model.prepare_tf_dataset(
-...     lm_dataset["train"],
-...     shuffle=True,
-...     batch_size=16,
-...     collate_fn=data_collator,
-... )
-
->>> tf_test_set = model.prepare_tf_dataset(
-...     lm_dataset["test"],
-...     shuffle=False,
-...     batch_size=16,
-...     collate_fn=data_collator,
-... )
-```
-
-قم بتهيئة النموذج للتدريب باستخدام [`compile`](https://keras.io/api/models/model_training_apis/#compile-method). لاحظ أن جميع نماذج Transformers لديها دالة خسارة ذات صلة بالمهمة الافتراضية، لذلك لا تحتاج إلى تحديد واحدة ما لم ترغب في ذلك:
-
-```py
->>> import tensorflow as tf
-
->>> model.compile(optimizer=optimizer)  # لا يوجد حجة للخسارة!
-```
-
-يمكن القيام بذلك عن طريق تحديد مكان دفع نموذجك ومجمّع البيانات في [`~transformers.PushToHubCallback`]:
-
-```py
->>> from transformers.keras_callbacks import PushToHubCallback
-
->>> callback = PushToHubCallback(
-...     output_dir="my_awesome_eli5_clm-model",
-...     tokenizer=tokenizer,
-... )
-```
-
-أخيراً، أنت جاهز لبدء تدريب نموذجك! قم باستدعاء [`fit`](https://keras.io/api/models/model_training_apis/#fit-method) مع مجموعات بيانات التدريب والتحقق من الصحة، وعدد العصور، والتعليقات الخاصة بك لتدريب النموذج:
-
-```py
->>> model.fit(x=tf_train_set, validation_data=tf_test_set, epochs=3, callbacks=[callback])
-```
-
-بمجرد اكتمال التدريب، يتم تحميل نموذجك تلقائيًا إلى Hub حتى يتمكن الجميع من استخدامه!
-</tf>
-</frameworkcontent>
 
 <Tip>
 
@@ -365,8 +280,6 @@ Perplexity: 49.61
 [{'generated_text': "Somatic hypermutation allows the immune system to be able to effectively reverse the damage caused by an infection.\n\n\nThe damage caused by an infection is caused by the immune system's ability to perform its own self-correcting tasks."}]
 ```
 
-<frameworkcontent>
-<pt>
 قسم النص وإرجع `input_ids` كتنسورات PyTorch:
 
 ```py
@@ -392,31 +305,3 @@ Perplexity: 49.61
 >>> tokenizer.batch_decode(outputs, skip_special_tokens=True)
 ["Somatic hypermutation allows the immune system to react to drugs with the ability to adapt to a different environmental situation. In other words, a system of 'hypermutation' can help the immune system to adapt to a different environmental situation or in some cases even a single life. In contrast, researchers at the University of Massachusetts-Boston have found that 'hypermutation' is much stronger in mice than in humans but can be found in humans, and that it's not completely unknown to the immune system. A study on how the immune system"]
 ```
-</pt>
-<tf>
-قم بتقسيم النص وإرجاع `input_ids` كـ TensorFlow tensors:
-
-```py
->>> from transformers import AutoTokenizer
-
->>> tokenizer = AutoTokenizer.from_pretrained("username/my_awesome_eli5_clm-model")
->>> inputs = tokenizer(prompt, return_tensors="tf").input_ids
-```
-
-استخدم طريقة [`~transformers.generation_tf_utils.TFGenerationMixin.generate`] لإنشاء الملخص. للمزيد من التفاصيل حول استراتيجيات توليد النص المختلفة والبارامترات للتحكم في التوليد، راجع صفحة [استراتيجيات توليد النص](../generation_strategies).
-
-```py
->>> from transformers import TFAutoModelForCausalLM
-
->>> model = TFAutoModelForCausalLM.from_pretrained("username/my_awesome_eli5_clm-model")
->>> outputs = model.generate(input_ids=inputs, max_new_tokens=100, do_sample=True, top_k=50, top_p=0.95)
-```
-
-فك ترميز  الرموز المولدة مرة أخرى إلى نص:
-
-```py
->>> tokenizer.batch_decode(outputs, skip_special_tokens=True)
-['Somatic hypermutation allows the immune system to detect the presence of other viruses as they become more prevalent. Therefore, researchers have identified a high proportion of human viruses. The proportion of virus-associated viruses in our study increases with age. Therefore, we propose a simple algorithm to detect the presence of these new viruses in our samples as a sign of improved immunity. A first study based on this algorithm, which will be published in Science on Friday, aims to show that this finding could translate into the development of a better vaccine that is more effective for']
-```
-</tf>
-</frameworkcontent>

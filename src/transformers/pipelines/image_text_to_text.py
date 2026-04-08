@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2024 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -14,9 +13,9 @@
 # limitations under the License.
 
 import enum
-from collections.abc import Iterable  # pylint: disable=g-importing-member
-from typing import Dict, List, Optional, Union
+from typing import Any, Union, overload
 
+from ..generation import GenerationConfig
 from ..processing_utils import ProcessingKwargs, Unpack
 from ..utils import (
     add_end_docstrings,
@@ -25,6 +24,7 @@ from ..utils import (
     logging,
     requires_backends,
 )
+from ..utils.chat_template_utils import Chat
 from .base import Pipeline, build_pipeline_init_args
 
 
@@ -49,71 +49,6 @@ class ReturnType(enum.Enum):
     FULL_TEXT = 2
 
 
-class Chat:
-    """This class is intended to just be used internally in this pipeline and not exposed to users. We convert chats
-    to this format because the rest of the pipeline code tends to assume that lists of messages are
-    actually a batch of samples rather than messages in the same conversation."""
-
-    def __init__(self, messages: Dict, images: Union[str, List[str], "Image.Image", List["Image.Image"]]):
-        for message in messages:
-            if not ("role" in message and "content" in message):
-                raise ValueError("When passing chat dicts as input, each dict must have a 'role' and 'content' key.")
-        images = retrieve_images_in_messages(messages, images)
-
-        self.messages = messages
-        self.images = images
-
-
-def retrieve_images_in_messages(
-    messages: dict, images: Optional[Union[str, List[str], "Image.Image", List["Image.Image"]]]
-):
-    """
-    Retrieve and combine images from the chat and the images passed as input.
-    """
-    if images is None:
-        images = []
-    elif not isinstance(images, Iterable):
-        images = [images]
-    idx_images = 0
-    retrieved_images = []
-    for message in messages:
-        for content in message["content"]:
-            if isinstance(content, dict):
-                if content.get("type") == "image":
-                    for key in ["image", "url", "path", "base64"]:
-                        if key in content:
-                            retrieved_images.append(content[key])
-                            break
-                    else:
-                        if idx_images < len(images):
-                            retrieved_images.append(images[idx_images])
-                            idx_images += 1
-                        else:
-                            raise ValueError(
-                                "The number of images in the chat messages should be the same as the number of images passed to the pipeline."
-                            )
-                # Add support for OpenAI/TGI chat format
-                elif content.get("type") == "image_url":
-                    if isinstance(content.get("image_url"), dict) and "url" in content["image_url"]:
-                        retrieved_images.append(content["image_url"]["url"])
-                        # Rewrite content to be in the Transformers chat format
-                        content["type"] = "image"
-                        content["image"] = content["image_url"]["url"]
-                        del content["image_url"]
-                    else:
-                        raise ValueError(
-                            "Wrong format for 'image_url' content type. The content should have an 'image_url' dict with a 'url' key."
-                        )
-
-    # The number of images passed should be consistent with the number of images in the chat without an image key
-    if idx_images != len(images):
-        raise ValueError(
-            "The number of images in the chat messages should be the same as the number of images passed to the pipeline."
-        )
-
-    return retrieved_images
-
-
 @add_end_docstrings(build_pipeline_init_args(has_processor=True))
 class ImageTextToTextPipeline(Pipeline):
     """
@@ -121,6 +56,10 @@ class ImageTextToTextPipeline(Pipeline):
     When the underlying model is a conversational model, it can also accept one or more chats,
     in which case the pipeline will operate in chat mode and will continue the chat(s) by adding its response(s).
     Each chat takes the form of a list of dicts, where each dict contains "role" and "content" keys.
+
+    Unless the model you're using explicitly sets these generation parameters in its configuration files
+    (`generation_config.json`), the following default values will be used:
+    - max_new_tokens: 256
 
     Example:
 
@@ -178,6 +117,12 @@ class ImageTextToTextPipeline(Pipeline):
     _load_feature_extractor = False
     _load_tokenizer = False
 
+    _pipeline_calls_generate = True
+    # Make sure the docstring is updated when the default generation config is changed
+    _default_generation_config = GenerationConfig(
+        max_new_tokens=256,
+    )
+
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         requires_backends(self, "vision")
@@ -194,22 +139,36 @@ class ImageTextToTextPipeline(Pipeline):
         clean_up_tokenization_spaces=None,
         stop_sequence=None,
         continue_final_message=None,
+        skip_special_tokens=None,
+        processor_kwargs=None,
         **kwargs: Unpack[ProcessingKwargs],
     ):
         forward_kwargs = {}
         preprocess_params = {}
         postprocess_params = {}
-        preprocess_params.update(kwargs)
 
+        # Preprocess params
+        preprocess_params.update(kwargs)
         if timeout is not None:
             preprocess_params["timeout"] = timeout
-
         if continue_final_message is not None:
             preprocess_params["continue_final_message"] = continue_final_message
+        if processor_kwargs is not None:
+            preprocess_params["processor_kwargs"] = processor_kwargs
 
+        # Forward kwargs
         if generate_kwargs is not None:
             forward_kwargs["generate_kwargs"] = generate_kwargs
-
+        if stop_sequence is not None:
+            stop_sequence_ids = self.processor.tokenizer.encode(stop_sequence, add_special_tokens=False)
+            if len(stop_sequence_ids) > 1:
+                logger.warning_once(
+                    "Stopping on a multiple token sequence is not yet supported on transformers. The first token of"
+                    " the stop sequence will be used as the stop sequence string in the interim."
+                )
+            generate_kwargs["eos_token_id"] = stop_sequence_ids[0]
+        if generate_kwargs is not None:
+            forward_kwargs["generate_kwargs"] = generate_kwargs
         if max_new_tokens is not None:
             if "generate_kwargs" not in forward_kwargs:
                 forward_kwargs["generate_kwargs"] = {}
@@ -220,6 +179,7 @@ class ImageTextToTextPipeline(Pipeline):
                 )
             forward_kwargs["generate_kwargs"]["max_new_tokens"] = max_new_tokens
 
+        # Postprocess params
         if return_full_text is not None and return_type is None:
             if return_tensors is not None:
                 raise ValueError("`return_full_text` is mutually exclusive with `return_tensors`")
@@ -232,43 +192,56 @@ class ImageTextToTextPipeline(Pipeline):
             postprocess_params["continue_final_message"] = continue_final_message
         if clean_up_tokenization_spaces is not None:
             postprocess_params["clean_up_tokenization_spaces"] = clean_up_tokenization_spaces
-        if stop_sequence is not None:
-            stop_sequence_ids = self.processor.tokenizer.encode(stop_sequence, add_special_tokens=False)
-            if len(stop_sequence_ids) > 1:
-                logger.warning_once(
-                    "Stopping on a multiple token sequence is not yet supported on transformers. The first token of"
-                    " the stop sequence will be used as the stop sequence string in the interim."
-                )
-            generate_kwargs["eos_token_id"] = stop_sequence_ids[0]
+        if skip_special_tokens is not None:
+            postprocess_params["skip_special_tokens"] = skip_special_tokens
+
         return preprocess_params, forward_kwargs, postprocess_params
+
+    @overload
+    def __call__(
+        self,
+        image: Union[str, "Image.Image"] | None = None,
+        text: str | None = None,
+        **kwargs: Any,
+    ) -> list[dict[str, Any]]: ...
+
+    @overload
+    def __call__(
+        self,
+        image: list[str] | list["Image.Image"] | None = None,
+        text: list[str] | None = None,
+        **kwargs: Any,
+    ) -> list[list[dict[str, Any]]]: ...
 
     def __call__(
         self,
-        images: Optional[
-            Union[str, List[str], List[List[str]], "Image.Image", List["Image.Image"], List[List["Image.Image"]]]
-        ] = None,
-        text: Optional[Union[str, List[str], List[dict]]] = None,
+        images: Union[
+            str, list[str], list[list[str]], "Image.Image", list["Image.Image"], list[list["Image.Image"]], list[dict]
+        ]
+        | None = None,
+        text: str | list[str] | list[dict] | None = None,
         **kwargs,
-    ):
+    ) -> list[dict[str, Any]] | list[list[dict[str, Any]]]:
         """
         Generate a text given text and the image(s) passed as inputs.
 
         Args:
-            images (`str`, `List[str]`, `PIL.Image or `List[PIL.Image]`):
+            images (`str`, `list[str]`, `PIL.Image, `list[PIL.Image]`, `list[dict[str, Union[str, PIL.Image]]]`):
                 The pipeline handles three types of images:
 
                 - A string containing a HTTP(s) link pointing to an image
                 - A string containing a local path to an image
                 - An image loaded in PIL directly
 
-                The pipeline accepts either a single image or a batch of images.
-            text (str, List[str], `List[Dict[str, Union[str, PIL.Image]]]`):
-                The text to be used for generation. If a list of strings is passed, the length of the list should be the
-                same as the number of images. Text can also follow the chat format: a list of dictionaries where each
-                dictionary represents a message in a conversation. Each dictionary should have two keys: 'role' and
-                'content'. 'role' should be one of 'user', 'system' or 'assistant'. 'content' should be a list of dictionary
-                containing the text of the message and the type of the message. The type of the message can be either
-                'text' or 'image'. If the type is 'image', no text is needed.
+                The pipeline accepts either a single image or a batch of images. Finally, this pipeline also supports
+                the chat format (see `text`) containing images and text in this argument.
+            text (str, list[str], `list[dict[str, Union[str, PIL.Image]]]`):
+                The text to be used for generation. If a list of strings is passed, the length of the list should be
+                the same as the number of images. Text can also follow the chat format: a list of dictionaries where
+                each dictionary represents a message in a conversation. Each dictionary should have two keys: 'role'
+                and 'content'. 'role' should be one of 'user', 'system' or 'assistant'. 'content' should be a list of
+                dictionary containing the text of the message and the type of the message. The type of the message
+                can be either 'text' or 'image'. If the type is 'image', no text is needed.
             return_tensors (`bool`, *optional*, defaults to `False`):
                 Returns the tensors of predictions (as token indices) in the outputs. If set to
                 `True`, the decoded text is not returned.
@@ -285,8 +258,8 @@ class ImageTextToTextPipeline(Pipeline):
                 `False` otherwise, but you can manually override that behaviour by setting this flag.
 
         Return:
-            A list or a list of list of `dict`: Each result comes as a dictionary with the following key (cannot return a combination
-            of both `generated_text` and `generated_token_ids`):
+            A list or a list of list of `dict`: Each result comes as a dictionary with the following key (cannot
+            return a combination of both `generated_text` and `generated_token_ids`):
 
             - **generated_text** (`str`, present when `return_text=True`) -- The generated text.
             - **generated_token_ids** (`torch.Tensor`, present when `return_tensors=True`) -- The token
@@ -295,7 +268,37 @@ class ImageTextToTextPipeline(Pipeline):
         """
         if images is None and text is None:
             raise ValueError("You must at least provide either text or images.")
-        if images is not None and text is None and not valid_images(images):
+
+        def _is_chat(arg):
+            return isinstance(arg, (list, tuple, KeyDataset)) and isinstance(arg[0], (list, tuple, dict))
+
+        if _is_chat(text):
+            if images is not None:
+                raise ValueError(
+                    "Invalid input: you passed `chat` and `images` as separate input arguments. "
+                    "Images must be placed inside the chat message's `content`. For example, "
+                    "'content': ["
+                    "      {'type': 'image', 'url': 'image_url'}, {'type': 'text', 'text': 'Describe the image.'}}"
+                    "]"
+                )
+            # We have one or more prompts in list-of-dicts format, so this is chat mode
+            if isinstance(text[0], dict):
+                return super().__call__(Chat(text), **kwargs)
+            else:
+                chats = [Chat(chat) for chat in text]  # 🐈 🐈 🐈
+                return super().__call__(chats, **kwargs)
+
+        # Same as above, but the `images` argument contains the chat. This can happen e.g. is the user only passes a
+        # chat as a positional argument.
+        elif text is None and _is_chat(images):
+            # We have one or more prompts in list-of-dicts format, so this is chat mode
+            if isinstance(images[0], dict):
+                return super().__call__(Chat(images), **kwargs)
+            else:
+                chats = [Chat(image) for image in images]  # 🐈 🐈 🐈
+                return super().__call__(chats, **kwargs)
+
+        elif images is not None and text is None and not valid_images(images):
             """
             Supports the following format
             - {"image": image, "text": text}
@@ -305,21 +308,12 @@ class ImageTextToTextPipeline(Pipeline):
             """
             return super().__call__(images, **kwargs)
 
-        if isinstance(text, (list, tuple, KeyDataset)) and isinstance(text[0], (list, tuple, dict)):
-            # We have one or more prompts in list-of-dicts format, so this is chat mode
-            if isinstance(text[0], dict):
-                return super().__call__(Chat(text, images), **kwargs)
-            else:
-                if images is None:
-                    images = [None] * len(text)
-                chats = [Chat(chat, image) for chat, image in zip(text, images)]  # 🐈 🐈 🐈
-                return super().__call__(chats, **kwargs)
-
         # encourage the user to use the chat format if supported
         if getattr(self.processor, "chat_template", None) is not None:
             logger.warning_once(
-                "The input data was not formatted as a chat with dicts containing 'role' and 'content' keys, even though this model supports chat. "
-                "Consider using the chat format for better results. For more information, see https://huggingface.co/docs/transformers/en/chat_templating"
+                "The input data was not formatted as a chat with dicts containing 'role' and 'content' keys, even "
+                "though this model supports chat. Consider using the chat format for better results. For more "
+                "information, see https://huggingface.co/docs/transformers/en/chat_templating"
             )
 
         # support text only generation
@@ -331,38 +325,55 @@ class ImageTextToTextPipeline(Pipeline):
         return super().__call__({"images": images, "text": text}, **kwargs)
 
     def preprocess(self, inputs=None, timeout=None, continue_final_message=None, **processing_kwargs):
+        if isinstance(inputs, Chat):
+            # If the user passes a chat that ends in an assistant message, we treat it as a prefill by default
+            # because very few models support multiple separate, consecutive assistant messages
+            if continue_final_message is None:
+                continue_final_message = inputs.messages[-1]["role"] == "assistant"
+
+            # Processor kwargs are passed separately from jinja kwargs to chat template
+            # but it was added only in https://github.com/huggingface/transformers/pull/44881
+            processor_kwargs = processing_kwargs.pop("processor_kwargs", None) or {}
+
+            chat_template_kwargs = {
+                "continue_final_message": continue_final_message,
+                "return_tensors": "pt",
+                "tokenize": True,
+                "return_dict": True,
+                "add_generation_prompt": not continue_final_message,
+                "processor_kwargs": processor_kwargs,
+                **processing_kwargs,
+            }
+
+            # Handle Mistral tokenizer which does not accept processing kwargs
+            if self.processor.tokenizer.__class__.__name__ == "MistralCommonBackend":
+                chat_template_kwargs = {
+                    k: v for k, v in chat_template_kwargs.items() if k in ["padding", "truncation", "max_length"]
+                }
+
+            model_inputs = self.processor.apply_chat_template(
+                inputs.messages,
+                **chat_template_kwargs,
+            ).to(dtype=self.dtype)
+            model_inputs["text"] = inputs
+            return model_inputs
+
         # In case we only have text inputs
         if isinstance(inputs, (list, tuple, str)):
             images = None
             text = inputs
             inputs_text = inputs
         else:
-            if isinstance(inputs, Chat):
-                # If the user passes a chat that ends in an assistant message, we treat it as a prefill by default
-                # because very few models support multiple separate, consecutive assistant messages
-                if continue_final_message is None:
-                    continue_final_message = inputs.messages[-1]["role"] == "assistant"
-                text = self.processor.apply_chat_template(
-                    inputs.messages,
-                    add_generation_prompt=not continue_final_message,
-                    continue_final_message=continue_final_message,
-                    return_tensors=self.framework,
-                    **processing_kwargs,
-                )
-                inputs_text = inputs
-                images = inputs.images
-            else:
-                text = inputs["text"]
-                inputs_text = inputs["text"]
-                images = inputs["images"]
-
-            images = load_images(images, timeout=timeout)
+            images = load_images(inputs["images"], timeout=timeout)
+            text = inputs["text"]
+            inputs_text = inputs["text"]
 
         # if batched text inputs, we set padding to True unless specified otherwise
+        processor_kwargs = processing_kwargs.pop("processor_kwargs", None) or processing_kwargs
         if isinstance(text, (list, tuple)) and len(text) > 1:
-            processing_kwargs.setdefault("padding", True)
-        model_inputs = self.processor(images=images, text=text, return_tensors=self.framework, **processing_kwargs).to(
-            dtype=self.torch_dtype
+            processor_kwargs.setdefault("padding", True)
+        model_inputs = self.processor(images=images, text=text, return_tensors="pt", **processor_kwargs).to(
+            dtype=self.dtype
         )
 
         model_inputs["text"] = inputs_text
@@ -375,12 +386,22 @@ class ImageTextToTextPipeline(Pipeline):
         input_ids = (
             model_inputs["input_ids"] if "input_ids" in model_inputs else model_inputs["decoder_input_ids"]
         )  # for decoder-only models
+
+        # User-defined `generation_config` passed to the pipeline call take precedence
+        if "generation_config" not in generate_kwargs:
+            generate_kwargs["generation_config"] = self.generation_config
+
         generated_sequence = self.model.generate(**model_inputs, **generate_kwargs)
 
         return {"generated_sequence": generated_sequence, "prompt_text": prompt_text, "input_ids": input_ids}
 
     def postprocess(
-        self, model_outputs, return_type=ReturnType.FULL_TEXT, continue_final_message=None, **postprocess_kwargs
+        self,
+        model_outputs,
+        return_type=ReturnType.FULL_TEXT,
+        continue_final_message=None,
+        skip_special_tokens=None,
+        **postprocess_kwargs,
     ):
         input_texts = model_outputs["prompt_text"]
         input_texts = [input_texts] if isinstance(input_texts, (str, Chat)) else input_texts
@@ -393,8 +414,15 @@ class ImageTextToTextPipeline(Pipeline):
             ]
 
         # Decode inputs and outputs the same way to remove input text from generated text if present
-        generated_texts = self.processor.post_process_image_text_to_text(generated_sequence, **postprocess_kwargs)
-        decoded_inputs = self.processor.post_process_image_text_to_text(input_ids, **postprocess_kwargs)
+        skip_special_tokens = skip_special_tokens if skip_special_tokens is not None else True
+        if getattr(self.tokenizer, "response_schema", False):
+            skip_special_tokens = False
+        generated_texts = self.processor.post_process_image_text_to_text(
+            generated_sequence, skip_special_tokens=skip_special_tokens, **postprocess_kwargs
+        )
+        decoded_inputs = self.processor.post_process_image_text_to_text(
+            input_ids, skip_special_tokens=skip_special_tokens, **postprocess_kwargs
+        )
 
         # Force consistent behavior for including the input text in the output
         if return_type in {ReturnType.NEW_TEXT, ReturnType.FULL_TEXT}:
@@ -433,9 +461,11 @@ class ImageTextToTextPipeline(Pipeline):
                         ]
                     else:
                         # When we're not starting from a prefill, the output is a new assistant message
-                        generated_text = list(prompt_text.messages) + [
-                            {"role": "assistant", "content": generated_text}
-                        ]
+                        if getattr(self.tokenizer, "response_schema", False):
+                            assistant_message = self.tokenizer.parse_response(generated_text)
+                        else:
+                            assistant_message = {"role": "assistant", "content": generated_text}
+                        generated_text = list(prompt_text.messages) + [assistant_message]
                 full_texts.append(generated_text)
             generated_texts = full_texts
 

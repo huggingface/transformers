@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2023 The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -17,9 +16,19 @@ import inspect
 import os
 import re
 
-from transformers.configuration_utils import PretrainedConfig
+from transformers.configuration_utils import PreTrainedConfig
 from transformers.utils import direct_transformers_import
 
+
+CHECKER_CONFIG = {
+    "name": "config_attributes",
+    "label": "Config attributes",
+    # Approximate: iterates CONFIG_MAPPING at runtime and also reads modeling_*.py files
+    # in each config's directory via os.listdir(). Deprecated models are skipped.
+    "file_globs": ["src/transformers/models/**/configuration_*.py", "src/transformers/models/**/modeling_*.py"],
+    "check_args": [],
+    "fix_args": None,
+}
 
 # All paths are set with the intent you should run this script from the root of the repo with the command
 # python utils/check_config_docstrings.py
@@ -31,251 +40,173 @@ transformers = direct_transformers_import(PATH_TO_TRANSFORMERS)
 
 CONFIG_MAPPING = transformers.models.auto.configuration_auto.CONFIG_MAPPING
 
+# Usually of small list of allowed attrs, but can be True to allow all
 SPECIAL_CASES_TO_ALLOW = {
-    # 'max_position_embeddings' is not used in modeling file, but needed for eval frameworks like Huggingface's lighteval (https://github.com/huggingface/lighteval/blob/af24080ea4f16eaf1683e353042a2dfc9099f038/src/lighteval/models/base_model.py#L264).
-    # periods and offsets are not used in modeling file, but used in the configuration file to define `layers_block_type` and `layers_num_experts`.
-    "BambaConfig": [
-        "attn_layer_indices",
-    ],
-    "JambaConfig": [
-        "max_position_embeddings",
-        "attn_layer_offset",
-        "attn_layer_period",
-        "expert_layer_offset",
-        "expert_layer_period",
-    ],
-    "Qwen2Config": ["use_sliding_window"],
-    "Qwen2MoeConfig": ["use_sliding_window"],
-    "Qwen2VLConfig": ["use_sliding_window"],
-    # `cache_implementation` should be in the default generation config, but we don't yet support per-model
-    # generation configs (TODO joao)
-    "Gemma2Config": ["tie_word_embeddings", "cache_implementation"],
-    "Cohere2Config": ["cache_implementation"],
-    # Dropout with this value was declared but never used
+    "PI0Config": ["vlm_projection_dim"],
+    "EuroBertConfig": ["is_causal"],  # not used directly, allows causal-bidirectional switch
+    "Ernie4_5_VL_MoeConfig": ["args"],  # BC Alias
+    "Ernie4_5_VL_MoeTextConfig": ["args"],  # BC Alias
+    "Ernie4_5_VL_MoeVisionConfig": ["args"],  # BC Alias
+    "ExaoneMoeConfig": ["first_k_dense_replace"],  # BC for other frameworks
+    "AfmoeConfig": ["global_attn_every_n_layers", "rope_scaling"],
+    "xLSTMConfig": ["add_out_norm", "chunkwise_kernel", "sequence_kernel", "step_kernel"],
+    "Lfm2Config": ["full_attn_idxs"],
+    "DiaConfig": ["delay_pattern"],
+    "BambaConfig": ["attn_layer_indices"],
+    "Dots1Config": ["max_window_layers"],
+    "JambaConfig": ["attn_layer_offset", "attn_layer_period", "expert_layer_offset", "expert_layer_period"],
+    "JetMoeConfig": ["output_router_logits"],
     "Phi3Config": ["embd_pdrop"],
-    # used to compute the property `self.chunk_length`
     "EncodecConfig": ["overlap"],
-    # used to compute the property `self.layers_block_type`
-    "RecurrentGemmaConfig": ["block_types"],
-    # used as in the config to define `intermediate_size`
+    "XcodecConfig": ["sample_rate", "audio_channels"],
+    "RecurrentGemmaConfig": ["block_types", "attention_window_size"],
     "MambaConfig": ["expand"],
-    # used as in the config to define `intermediate_size`
     "FalconMambaConfig": ["expand"],
-    # used as `self.bert_model = BertModel(config, ...)`
-    "DPRConfig": True,
-    "FuyuConfig": True,
-    # not used in modeling files, but it's an important information
-    "FSMTConfig": ["langs"],
-    # used internally in the configuration class file
+    "FSMTConfig": ["langs", "common_kwargs", "early_stopping", "length_penalty", "max_length", "num_beams"],
     "GPTNeoConfig": ["attention_types"],
-    # used internally in the configuration class file
+    "BlenderbotConfig": ["encoder_no_repeat_ngram_size"],
     "EsmConfig": ["is_folding_model"],
-    # used during training (despite we don't have training script for these models yet)
     "Mask2FormerConfig": ["ignore_value"],
-    # `ignore_value` used during training (despite we don't have training script for these models yet)
-    # `norm` used in conversion script (despite not using in the modeling file)
     "OneFormerConfig": ["ignore_value", "norm"],
-    # used internally in the configuration class file
     "T5Config": ["feed_forward_proj"],
-    # used internally in the configuration class file
-    # `tokenizer_class` get default value `T5Tokenizer` intentionally
     "MT5Config": ["feed_forward_proj", "tokenizer_class"],
     "UMT5Config": ["feed_forward_proj", "tokenizer_class"],
-    # used internally in the configuration class file
     "LongT5Config": ["feed_forward_proj"],
-    # used internally in the configuration class file
     "Pop2PianoConfig": ["feed_forward_proj"],
-    # used internally in the configuration class file
-    "SwitchTransformersConfig": ["feed_forward_proj"],
-    # having default values other than `1e-5` - we can't fix them without breaking
     "BioGptConfig": ["layer_norm_eps"],
-    # having default values other than `1e-5` - we can't fix them without breaking
     "GLPNConfig": ["layer_norm_eps"],
-    # having default values other than `1e-5` - we can't fix them without breaking
     "SegformerConfig": ["layer_norm_eps"],
-    # having default values other than `1e-5` - we can't fix them without breaking
     "CvtConfig": ["layer_norm_eps"],
-    # having default values other than `1e-5` - we can't fix them without breaking
     "PerceiverConfig": ["layer_norm_eps"],
-    # used internally to calculate the feature size
     "InformerConfig": ["num_static_real_features", "num_time_features"],
-    # used internally to calculate the feature size
     "TimeSeriesTransformerConfig": ["num_static_real_features", "num_time_features"],
-    # used internally to calculate the feature size
     "AutoformerConfig": ["num_static_real_features", "num_time_features"],
-    # used internally to calculate `mlp_dim`
     "SamVisionConfig": ["mlp_ratio"],
-    # For (head) training, but so far not implemented
+    "Sam3VisionConfig": ["backbone_feature_sizes"],
+    "SamHQVisionConfig": ["mlp_ratio"],
     "ClapAudioConfig": ["num_classes"],
-    # Not used, but providing useful information to users
+    "ClvpDecoderConfig": ["add_cross_attention"],
     "SpeechT5HifiGanConfig": ["sampling_rate"],
-    # used internally in the configuration class file
     "UdopConfig": ["feed_forward_proj"],
-    # Actually used in the config or generation config, in that case necessary for the sub-components generation
-    "SeamlessM4TConfig": [
-        "max_new_tokens",
-        "t2u_max_new_tokens",
-        "t2u_decoder_attention_heads",
-        "t2u_decoder_ffn_dim",
-        "t2u_decoder_layers",
-        "t2u_encoder_attention_heads",
-        "t2u_encoder_ffn_dim",
-        "t2u_encoder_layers",
-        "t2u_max_position_embeddings",
-    ],
-    # Actually used in the config or generation config, in that case necessary for the sub-components generation
-    "SeamlessM4Tv2Config": [
-        "max_new_tokens",
-        "t2u_decoder_attention_heads",
-        "t2u_decoder_ffn_dim",
-        "t2u_decoder_layers",
-        "t2u_encoder_attention_heads",
-        "t2u_encoder_ffn_dim",
-        "t2u_encoder_layers",
-        "t2u_max_position_embeddings",
-        "t2u_variance_pred_dropout",
-        "t2u_variance_predictor_embed_dim",
-        "t2u_variance_predictor_hidden_dim",
-        "t2u_variance_predictor_kernel_size",
-    ],
-    "ZambaConfig": [
-        "tie_word_embeddings",
-        "attn_layer_offset",
-        "attn_layer_period",
-    ],
-    "MllamaTextConfig": [
-        "initializer_range",
-    ],
-    "MllamaVisionConfig": [
-        "initializer_range",
-        "supported_aspect_ratios",
-    ],
-    "ConditionalDetrConfig": [
-        "bbox_cost",
-        "bbox_loss_coefficient",
-        "class_cost",
-        "cls_loss_coefficient",
-        "dice_loss_coefficient",
-        "focal_alpha",
-        "giou_cost",
-        "giou_loss_coefficient",
-        "mask_loss_coefficient",
-    ],
-    "DabDetrConfig": [
-        "dilation",
-        "bbox_cost",
-        "bbox_loss_coefficient",
-        "class_cost",
-        "cls_loss_coefficient",
-        "focal_alpha",
-        "giou_cost",
-        "giou_loss_coefficient",
-    ],
-    "DetrConfig": [
-        "bbox_cost",
-        "bbox_loss_coefficient",
-        "class_cost",
-        "dice_loss_coefficient",
-        "eos_coefficient",
-        "giou_cost",
-        "giou_loss_coefficient",
-        "mask_loss_coefficient",
-    ],
-    "GroundingDinoConfig": [
-        "bbox_cost",
-        "bbox_loss_coefficient",
-        "class_cost",
-        "focal_alpha",
-        "giou_cost",
-        "giou_loss_coefficient",
-    ],
-    "RTDetrConfig": [
-        "eos_coefficient",
-        "focal_loss_alpha",
-        "focal_loss_gamma",
-        "matcher_alpha",
-        "matcher_bbox_cost",
-        "matcher_class_cost",
-        "matcher_gamma",
-        "matcher_giou_cost",
-        "use_focal_loss",
-        "weight_loss_bbox",
-        "weight_loss_giou",
-        "weight_loss_vfl",
-    ],
-    "RTDetrV2Config": [
-        "eos_coefficient",
-        "focal_loss_alpha",
-        "focal_loss_gamma",
-        "matcher_alpha",
-        "matcher_bbox_cost",
-        "matcher_class_cost",
-        "matcher_gamma",
-        "matcher_giou_cost",
-        "use_focal_loss",
-        "weight_loss_bbox",
-        "weight_loss_giou",
-        "weight_loss_vfl",
-    ],
-    "YolosConfig": [
-        "bbox_cost",
-        "bbox_loss_coefficient",
-        "class_cost",
-        "eos_coefficient",
-        "giou_cost",
-        "giou_loss_coefficient",
-    ],
+    "ZambaConfig": ["attn_layer_offset", "attn_layer_period"],
+    "MllamaVisionConfig": ["supported_aspect_ratios"],
+    "LEDConfig": ["classifier_dropout"],
     "GPTNeoXConfig": ["rotary_emb_base"],
-    "Gemma3Config": ["boi_token_index", "eoi_token_index"],
-    "Gemma3TextConfig": ["cache_implementation", "tie_word_embeddings"],
-    "ShieldGemma2Config": [
-        "boi_token_index",
-        "eoi_token_index",
-        "initializer_range",
-        "mm_tokens_per_image",
-        "text_config",
-        "vision_config",
-    ],
+    "ShieldGemma2Config": ["mm_tokens_per_image", "vision_config"],
+    "Llama4VisionConfig": ["multi_modal_projector_bias", "norm_eps"],
+    "ModernBertConfig": ["local_attention", "reference_compile"],
+    "ModernBertDecoderConfig": ["global_attn_every_n_layers", "local_attention", "local_rope_theta"],
+    "SmolLM3Config": ["no_rope_layer_interval"],
+    "Gemma3nVisionConfig": ["architecture", "do_pooling", "model_args"],
+    "HiggsAudioV2Config": ["audio_bos_token", "audio_stream_bos_id", "audio_stream_eos_id"],
+    "HiggsAudioV2TokenizerConfig": ["downsample_factor"],
+    "CsmConfig": ["tie_codebooks_embeddings"],
+    "DeepseekV2Config": ["norm_topk_prob"],
+    "EsmFoldConfig": ["esm_ablate_pairwise", "esm_ablate_sequence", "esm_input_dropout", "esm_type"],
+    "TrunkConfig": ["cpu_grad_checkpoint", "layer_drop"],
+    "SeamlessM4TConfig": True,
+    "SeamlessM4Tv2Config": True,
+    "ConditionalDetrConfig": True,
+    "DabDetrConfig": True,
+    "SwitchTransformersConfig": True,
+    "MaskFormerDetrConfig": True,
+    "DetrConfig": True,
+    "DFineConfig": True,
+    "GroundingDinoConfig": True,
+    "MMGroundingDinoConfig": True,
+    "RTDetrConfig": True,
+    "RTDetrV2Config": True,
+    "YolosConfig": True,
+    "Llama4TextConfig": True,
+    "DPRConfig": True,
+    "FuyuConfig": True,
+    "LayoutXLMConfig": True,
+    "CLIPSegConfig": True,
+    "DeformableDetrConfig": True,
+    "DinatConfig": True,
+    "DonutSwinConfig": True,
+    "FastSpeech2ConformerConfig": True,
+    "LayoutLMv2Config": True,
+    "MaskFormerSwinConfig": True,
+    "MptConfig": True,
+    "MptAttentionConfig": True,
+    "RagConfig": True,
+    "SpeechT5Config": True,
+    "SwinConfig": True,
+    "Swin2SRConfig": True,
+    "Swinv2Config": True,
+    "TableTransformerConfig": True,
+    "TapasConfig": True,
+    "UniSpeechConfig": True,
+    "UniSpeechSatConfig": True,
+    "WavLMConfig": True,
+    "WhisperConfig": True,
+    "JukeboxPriorConfig": True,
+    "Pix2StructTextConfig": True,
+    "IdeficsConfig": True,
+    "IdeficsVisionConfig": True,
+    "IdeficsPerceiverConfig": True,
+    "GptOssConfig": True,
+    "LwDetrConfig": True,
+    "NemotronHConfig": True,
+    # Internally uses Got Ocr2 so no need to use in the modeling code as we remap in auto instead
+    "PPChart2TableConfig": True,
+    "PPChart2TableVisionConfig": True,
 }
 
-
-# TODO (ydshieh): Check the failing cases, try to fix them or move some cases to the above block once we are sure
-SPECIAL_CASES_TO_ALLOW.update(
-    {
-        "CLIPSegConfig": True,
-        "DeformableDetrConfig": True,
-        "DinatConfig": True,
-        "DonutSwinConfig": True,
-        "FastSpeech2ConformerConfig": True,
-        "FSMTConfig": True,
-        "LayoutLMv2Config": True,
-        "MaskFormerSwinConfig": True,
-        "MT5Config": True,
-        # For backward compatibility with trust remote code models
-        "MptConfig": True,
-        "MptAttentionConfig": True,
-        "OneFormerConfig": True,
-        "PerceiverConfig": True,
-        "RagConfig": True,
-        "SpeechT5Config": True,
-        "SwinConfig": True,
-        "Swin2SRConfig": True,
-        "Swinv2Config": True,
-        "SwitchTransformersConfig": True,
-        "TableTransformerConfig": True,
-        "TapasConfig": True,
-        "UniSpeechConfig": True,
-        "UniSpeechSatConfig": True,
-        "WavLMConfig": True,
-        "WhisperConfig": True,
-        # TODO: @Arthur (for `alignment_head` and `alignment_layer`)
-        "JukeboxPriorConfig": True,
-        # TODO: @Younes (for `is_decoder`)
-        "Pix2StructTextConfig": True,
-        "IdeficsConfig": True,
-        "IdeficsVisionConfig": True,
-        "IdeficsPerceiverConfig": True,
-    }
+# Common and important attributes, even if they do not always appear in the modeling files (can be a regex pattern)
+ATTRIBUTES_TO_ALLOW = (
+    # Attr in base `PreTrainedConfig`
+    "transformers_version",
+    "architectures",
+    "chunk_size_feed_forward",
+    "dtype",
+    "id2label",
+    "label2id",
+    "problem_type",
+    "tokenizer_class",
+    "is_encoder_decoder",
+    "output_hidden_states",
+    "return_dict",
+    # Inits related
+    "initializer_range",
+    "init_std",
+    "initializer_factor",
+    "tie_word_embeddings",
+    # Special tokens
+    "bos_index",
+    "eos_index",
+    "pad_index",
+    "unk_index",
+    "mask_index",
+    r".+_token_id",
+    r".+_token_index",
+    # Processors
+    "image_seq_length",
+    "video_seq_length",
+    "image_size",
+    "text_config",  # may appear as `get_text_config()`
+    "use_cache",
+    "out_features",
+    "out_indices",
+    "sampling_rate",
+    # backbone related arguments passed to load_backbone
+    "use_pretrained_backbone",
+    "backbone",
+    "backbone_config",
+    "use_timm_backbone",
+    "backbone_kwargs",
+    # rope attributes may not appear directly in the modeling but are used
+    "rope_theta",
+    "partial_rotary_factor",
+    "max_position_embeddings",
+    "pretraining_tp",
+    "use_sliding_window",
+    "max_window_layers",
+    # vision attributes that may be used indirectly via merge_with_config_defaults
+    "vision_feature_layer",
+    "vision_feature_select_strategy",
+    "vision_aspect_ratio",
 )
 
 
@@ -293,7 +224,7 @@ def check_attribute_being_used(config_class, attributes, default_value, source_s
             The python source code strings in the same modeling directory where `config_class` is defined. The file
             containing the definition of `config_class` should be excluded.
     """
-    attribute_used = False
+    # If we can find the attribute used, then it's all good
     for attribute in attributes:
         for modeling_source in source_strings:
             # check if we can find `config.xxx`, `getattr(config, "xxx", ...)` or `getattr(self.config, "xxx", ...)`
@@ -306,7 +237,7 @@ def check_attribute_being_used(config_class, attributes, default_value, source_s
                     and f"config.get_text_config().{attribute}" in modeling_source
                 )
             ):
-                attribute_used = True
+                return True
             # Deal with multi-line cases
             elif (
                 re.search(
@@ -315,75 +246,24 @@ def check_attribute_being_used(config_class, attributes, default_value, source_s
                 )
                 is not None
             ):
-                attribute_used = True
-            # `SequenceSummary` is called with `SequenceSummary(config)`
-            elif attribute in [
-                "summary_type",
-                "summary_use_proj",
-                "summary_activation",
-                "summary_last_dropout",
-                "summary_proj_to_labels",
-                "summary_first_dropout",
-            ]:
-                if "SequenceSummary" in modeling_source:
-                    attribute_used = True
-            if attribute_used:
-                break
-        if attribute_used:
-            break
+                return True
 
-    # common and important attributes, even if they do not always appear in the modeling files
-    attributes_to_allow = [
-        "bos_index",
-        "eos_index",
-        "pad_index",
-        "unk_index",
-        "mask_index",
-        "image_token_index",  # for VLMs
-        "video_token_index",
-        "image_seq_length",
-        "video_seq_length",
-        "image_size",
-        "use_cache",
-        "out_features",
-        "out_indices",
-        "sampling_rate",
-        # backbone related arguments passed to load_backbone
-        "use_pretrained_backbone",
-        "backbone",
-        "backbone_config",
-        "use_timm_backbone",
-        "backbone_kwargs",
-        # rope attributes may not appear directly in the modeling but are used
-        "rope_theta",
-        "partial_rotary_factor",
-        "pretraining_tp",
-    ]
-    attributes_used_in_generation = ["encoder_no_repeat_ngram_size"]
+    # Special cases to be allowed even if not found as used
+    for attribute in attributes:
+        # Allow if the default value in the configuration class is different from the one in `PreTrainedConfig`
+        if (attribute == "is_encoder_decoder" and default_value is True) or attribute == "tie_word_embeddings":
+            return True
+        # General exceptions for all models
+        elif any(re.search(exception, attribute) for exception in ATTRIBUTES_TO_ALLOW):
+            return True
+        # Model-specific exceptions
+        elif config_class.__name__ in SPECIAL_CASES_TO_ALLOW:
+            model_exceptions = SPECIAL_CASES_TO_ALLOW[config_class.__name__]
+            # Can be true to allow all attributes, or a list of specific allowed attributes
+            if (isinstance(model_exceptions, bool) and model_exceptions) or attribute in model_exceptions:
+                return True
 
-    # Special cases to be allowed
-    case_allowed = True
-    if not attribute_used:
-        case_allowed = False
-        for attribute in attributes:
-            # Allow if the default value in the configuration class is different from the one in `PretrainedConfig`
-            if attribute in ["is_encoder_decoder"] and default_value is True:
-                case_allowed = True
-            elif attribute in ["tie_word_embeddings"] and default_value is False:
-                case_allowed = True
-
-            # Allow cases without checking the default value in the configuration class
-            elif attribute in attributes_to_allow + attributes_used_in_generation:
-                case_allowed = True
-            elif attribute.endswith("_token_id"):
-                case_allowed = True
-
-            # configuration class specific cases
-            if not case_allowed:
-                allowed_cases = SPECIAL_CASES_TO_ALLOW.get(config_class.__name__, [])
-                case_allowed = allowed_cases is True or attribute in allowed_cases
-
-    return attribute_used or case_allowed
+    return False
 
 
 def check_config_attributes_being_used(config_class):
@@ -407,7 +287,6 @@ def check_config_attributes_being_used(config_class):
     # Get the path to modeling source files
     config_source_file = inspect.getsourcefile(config_class)
     model_dir = os.path.dirname(config_source_file)
-    # Let's check against all frameworks: as long as one framework uses an attribute, we are good.
     modeling_paths = [os.path.join(model_dir, fn) for fn in os.listdir(model_dir) if fn.startswith("modeling_")]
 
     # Get the source code strings
@@ -445,7 +324,7 @@ def check_config_attributes():
             for name, cls in inspect.getmembers(
                 inspect.getmodule(_config_class),
                 lambda x: inspect.isclass(x)
-                and issubclass(x, PretrainedConfig)
+                and issubclass(x, PreTrainedConfig)
                 and inspect.getmodule(x) == inspect.getmodule(_config_class),
             )
         ]

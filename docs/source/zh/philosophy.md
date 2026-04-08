@@ -30,13 +30,13 @@ Transformers 设计时有两个主要目标：
 
    - 我们尽可能地限制用户能接触的抽象层，实际上几乎没有抽象。用户只需学习三个标准类即可使用每个模型：[configuration](main_classes/configuration)、[models](main_classes/model) 和一个预处理类（用于 NLP 的 [tokenizer](main_classes/tokenizer)，用于视觉的 [image processor](main_classes/image_processor)，用于音频的 [feature extractor](main_classes/feature_extractor)，以及用于多模态输入的 [processor](main_classes/processors)）。
    - 所有这些类都可以通过一个通用的 `from_pretrained()` 方法从预训练实例中简单统一地初始化，该方法会从提供在 [Hugging Face Hub](https://huggingface.co/models) 上的预训练检查点（如果需要的话）下载、缓存和加载相关类实例及相关数据（配置的超参数、分词器的词汇表和模型的权重）。
-   - 在这三个基本类之上，该库提供了两种 API：[`pipeline`] 用于快速在给定任务上使用模型进行推断，以及 [`Trainer`] 用于快速训练或微调 PyTorch 模型（所有 TensorFlow 模型与 `Keras.fit` 兼容）。
-   - 因此，Transformers 不是神经网络的模块化工具箱。如果要基于 Transformers 扩展或搭建新项目，请使用常规的 Python、PyTorch、TensorFlow、Keras 模块，并从 Transformers 的基类继承以重用模型加载和保存等功能。如果想了解更多有关我们的模型代码的设计理念，请查看我们的[重复自己](https://huggingface.co/blog/transformers-design-philosophy)博文。
+   - 在这三个基本类之上，该库提供了两种 API：[`pipeline`] 用于快速在给定任务上使用模型进行推断，以及 [`Trainer`] 用于快速训练或微调 PyTorch 模型。
+   - 因此，Transformers 不是神经网络的模块化工具箱。如果要基于 Transformers 扩展或搭建新项目，请使用常规的 Python 或者 PyTorch 模块，并从 Transformers 的基类继承以重用模型加载和保存等功能。如果想了解更多有关我们的模型代码的设计理念，请查看我们的[重复自己](https://huggingface.co/blog/transformers-design-philosophy)博文。
 
 2. 提供与原始模型性能尽可能接近的最新模型：
 
    - 我们为每种架构提供至少一个示例，复现了该架构官方作者提供的结果。
-   - 代码通常尽可能接近原始代码库，这意味着某些 PyTorch 代码可能不够*pytorchic*，因为它是转换后的 TensorFlow 代码，反之亦然。
+   - 代码通常尽可能接近原始代码库，这意味着某些 PyTorch 代码可能不够*pytorchic*，因为它可能是从其它的深度学习框架转换过来的代码。
 
 其他几个目标：
 
@@ -50,13 +50,11 @@ Transformers 设计时有两个主要目标：
    - 简单一致的方法来向词汇表和嵌入中添加新标记以进行微调。
    - 简单的方法来屏蔽和修剪 Transformer 头部。
 
-- 轻松在 PyTorch、TensorFlow 2.0 和 Flax 之间切换，允许使用一个框架进行训练并使用另一个进行推断。
-
 ## 主要概念
 
 该库围绕每个模型的三类类构建：
 
-- **模型类** 可以是 PyTorch 模型（[torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module)）、Keras 模型（[tf.keras.Model](https://www.tensorflow.org/api_docs/python/tf/keras/Model)）或 JAX/Flax 模型（[flax.linen.Module](https://flax.readthedocs.io/en/latest/api_reference/flax.linen/module.html)），这些模型可以使用库中提供的预训练权重。
+- **模型类** 是 PyTorch 模型（[torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module)），这些模型可以使用库中提供的预训练权重。
 - **配置类** 存储构建模型所需的超参数（如层数和隐藏大小）。通常情况下，如果您使用不进行任何修改的预训练模型，则创建模型将自动处理配置的实例化（配置是模型的一部分）。
 - **预处理类** 将原始数据转换为模型可接受的格式。一个 [tokenizer](main_classes/tokenizer) 存储每个模型的词汇表，并提供编码和解码字符串为要馈送到模型的令牌嵌入索引列表的方法。[Image processors](main_classes/image_processor) 预处理视觉输入，[feature extractors](main_classes/feature_extractor) 预处理音频输入，而 [processor](main_classes/processors) 则处理多模态输入。
 

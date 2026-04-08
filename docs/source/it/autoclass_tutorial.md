@@ -80,8 +80,6 @@ Carica un processore con [`AutoProcessor.from_pretrained`]:
 
 ## AutoModel
 
-<frameworkcontent>
-<pt>
 Infine, le classi `AutoModelFor` ti permettono di caricare un modello pre-allenato per un determinato compito (guarda [qui](model_doc/auto) per una lista completa di compiti presenti). Per esempio, carica un modello per la classificazione di sequenze con [`AutoModelForSequenceClassification.from_pretrained`]:
 
 ```py
@@ -100,24 +98,3 @@ Semplicemente utilizza lo stesso checkpoint per caricare un'architettura per un 
 
 Generalmente, raccomandiamo di utilizzare la classe `AutoTokenizer` e la classe `AutoModelFor` per caricare istanze pre-allenate dei modelli. Questo ti assicurerà di aver caricato la corretta architettura ogni volta. Nel prossimo [tutorial](preprocessing), imparerai come utilizzare il tokenizer, il feature extractor e il processore per elaborare un dataset per il fine-tuning.
 
-</pt>
-<tf>
-Infine, le classi `TFAutoModelFor` ti permettono di caricare un modello pre-allenato per un determinato compito (guarda [qui](model_doc/auto) per una lista completa di compiti presenti). Per esempio, carica un modello per la classificazione di sequenze con [`TFAutoModelForSequenceClassification.from_pretrained`]:
-
-```py
->>> from transformers import TFAutoModelForSequenceClassification
-
->>> model = TFAutoModelForSequenceClassification.from_pretrained("distilbert/distilbert-base-uncased")
-```
-
-Semplicemente utilizza lo stesso checkpoint per caricare un'architettura per un task differente:
-
-```py
->>> from transformers import TFAutoModelForTokenClassification
-
->>> model = TFAutoModelForTokenClassification.from_pretrained("distilbert/distilbert-base-uncased")
-```
-
-Generalmente, raccomandiamo di utilizzare la classe `AutoTokenizer` e la classe `TFAutoModelFor` per caricare istanze pre-allenate dei modelli. Questo ti assicurerà di aver caricato la corretta architettura ogni volta. Nel prossimo [tutorial](preprocessing), imparerai come utilizzare il tokenizer, il feature extractor e il processore per elaborare un dataset per il fine-tuning.
-</tf>
-</frameworkcontent>

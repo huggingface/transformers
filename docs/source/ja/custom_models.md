@@ -29,17 +29,17 @@ rendered properly in your Markdown viewer.
 この例では、ResNetクラスのいくつかの引数を取得し、調整したいかもしれないとします。異なる設定は、異なるタイプのResNetを提供します。その後、これらの引数を確認した後、それらの引数を単に格納します。
 
 ```python
-from transformers import PretrainedConfig
+from transformers import PreTrainedConfig
 from typing import List
 
 
-class ResnetConfig(PretrainedConfig):
+class ResnetConfig(PreTrainedConfig):
     model_type = "resnet"
 
     def __init__(
         self,
         block_type="bottleneck",
-        layers: List[int] = [3, 4, 6, 3],
+        layers: list[int] = [3, 4, 6, 3],
         num_classes: int = 1000,
         input_channels: int = 3,
         cardinality: int = 1,
@@ -67,12 +67,12 @@ class ResnetConfig(PretrainedConfig):
 ```
 
 重要なことを3つ覚えておくべきポイントは次のとおりです：
-- `PretrainedConfig` を継承する必要があります。
-- あなたの `PretrainedConfig` の `__init__` は任意の kwargs を受け入れる必要があります。
+- `PreTrainedConfig` を継承する必要があります。
+- あなたの `PreTrainedConfig` の `__init__` は任意の kwargs を受け入れる必要があります。
 - これらの `kwargs` は親クラスの `__init__` に渡す必要があります。
 
 継承は、🤗 Transformers ライブラリのすべての機能を取得できるようにするためです。他の2つの制約は、
-`PretrainedConfig` が設定しているフィールド以外にも多くのフィールドを持っていることから来ています。
+`PreTrainedConfig` が設定しているフィールド以外にも多くのフィールドを持っていることから来ています。
 `from_pretrained` メソッドで設定を再ロードする場合、これらのフィールドはあなたの設定に受け入れられ、
 その後、親クラスに送信される必要があります。
 
@@ -95,7 +95,7 @@ resnet50d_config.save_pretrained("custom-resnet")
 resnet50d_config = ResnetConfig.from_pretrained("custom-resnet")
 ```
 
-また、[`PretrainedConfig`] クラスの他のメソッドを使用することもできます。たとえば、[`~PretrainedConfig.push_to_hub`] を使用して、設定を直接 Hub にアップロードできます。
+また、[`PreTrainedConfig`] クラスの他のメソッドを使用することもできます。たとえば、[`~PreTrainedConfig.push_to_hub`] を使用して、設定を直接 Hub にアップロードできます。
 
 ## Writing a custom model
 
@@ -270,7 +270,7 @@ resnet50d.model.load_state_dict(pretrained_model.state_dict())
 モデルをHubに送信するには、ログインしていることを確認してください。ターミナルで次のコマンドを実行します：
 
 ```bash
-huggingface-cli login
+hf auth login
 ```
 
 またはノートブックから：

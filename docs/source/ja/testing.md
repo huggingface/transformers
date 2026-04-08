@@ -445,13 +445,6 @@ CUDA_VISIBLE_DEVICES="1" pytest tests/utils/test_logging.py
 def test_example_with_multi_gpu():
 ```
 
-テストに `tensorflow` が必要な場合は、`require_tf` デコレータを使用します。例えば：
-
-```python no-style
-@require_tf
-def test_tf_thing_with_tensorflow():
-```
-
 これらのデコレータは積み重ねることができます。たとえば、テストが遅く、pytorch で少なくとも 1 つの GPU が必要な場合は、次のようになります。
 設定方法:
 
@@ -505,7 +498,7 @@ TRANSFORMERS_TEST_BACKEND="torch_npu" pytest tests/utils/test_logging.py
 
 これを使用するいくつかのテストがあります：
 
-- [test_trainer_distributed.py](https://github.com/huggingface/transformers/tree/main/tests/trainer/test_trainer_distributed.py)
+- [test_trainer_distributed.py](https://github.com/huggingface/transformers/tree/main/tests/trainer/distributed/test_trainer_distributed.py)
 - [test_deepspeed.py](https://github.com/huggingface/transformers/tree/main/tests/deepspeed/test_deepspeed.py)
 
 実行ポイントにすぐに移動するには、これらのテスト内で `execute_subprocess_async` 呼び出しを検索してください。
@@ -1135,9 +1128,6 @@ if torch.cuda.is_available():
 import numpy as np
 
 np.random.seed(seed)
-
-# tf RNG
-tf.random.set_seed(seed)
 ```
 
 

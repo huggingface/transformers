@@ -13,6 +13,7 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
+*This model was released on 2024-04-22 and added to Hugging Face Transformers on 2024-10-04.*
 
 # PhiMoE
 
@@ -24,7 +25,7 @@ rendered properly in your Markdown viewer.
 
 ## Overview
 
-The PhiMoE model was proposed in [Phi-3 Technical Report: A Highly Capable Language Model Locally on Your Phone](https://arxiv.org/abs/2404.14219) by Microsoft.
+The PhiMoE model was proposed in [Phi-3 Technical Report: A Highly Capable Language Model Locally on Your Phone](https://huggingface.co/papers/2404.14219) by Microsoft.
 
 ### Summary
 
@@ -44,12 +45,14 @@ The original code for PhiMoE can be found [here](https://huggingface.co/microsof
 <Tip warning={true}>
 
 Phi-3.5-MoE-instruct has been integrated in the development version (4.44.2.dev) of `transformers`. Until the official version is released through `pip`, ensure that you are doing the following:
+
 * When loading the model, ensure that `trust_remote_code=True` is passed as an argument of the `from_pretrained()` function.
 
 The current `transformers` version can be verified with: `pip list | grep transformers`.
 
 Examples of required packages:
-```
+
+```bash
 flash_attn==2.5.8
 torch==2.3.1
 accelerate==0.31.0
@@ -66,9 +69,8 @@ torch.random.manual_seed(0)
 
 model = AutoModelForCausalLM.from_pretrained( 
     "microsoft/Phi-3.5-MoE-instruct",  
-    device_map="cuda",  
-    torch_dtype="auto",  
-    trust_remote_code=True,  
+    device_map="auto",  
+    dtype="auto",
 ) 
 
 tokenizer = AutoTokenizer.from_pretrained("microsoft/Phi-3.5-MoE-instruct") 
@@ -101,9 +103,6 @@ print(output[0]['generated_text'])
 
 [[autodoc]] PhimoeConfig
 
-<frameworkcontent>
-<pt>
-
 ## PhimoeModel
 
 [[autodoc]] PhimoeModel
@@ -119,6 +118,3 @@ print(output[0]['generated_text'])
 
 [[autodoc]] PhimoeForSequenceClassification
     - forward
-
-</pt>
-</frameworkcontent>

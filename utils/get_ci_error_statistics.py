@@ -1,5 +1,6 @@
 import argparse
 import json
+import logging
 import math
 import os
 import time
@@ -8,6 +9,9 @@ import zipfile
 from collections import Counter
 
 import requests
+
+
+logger = logging.getLogger(__name__)
 
 
 def get_jobs(workflow_run_id, token=None):
@@ -62,14 +66,16 @@ def get_job_links(workflow_run_id, token=None):
     return {}
 
 
-def get_artifacts_links(worflow_run_id, token=None):
+def get_artifacts_links(workflow_run_id, token=None):
     """Get all artifact links from a workflow run"""
 
     headers = None
     if token is not None:
         headers = {"Accept": "application/vnd.github+json", "Authorization": f"Bearer {token}"}
 
-    url = f"https://api.github.com/repos/huggingface/transformers/actions/runs/{worflow_run_id}/artifacts?per_page=100"
+    url = (
+        f"https://api.github.com/repos/huggingface/transformers/actions/runs/{workflow_run_id}/artifacts?per_page=100"
+    )
     result = requests.get(url, headers=headers).json()
     artifacts = {}
 
@@ -128,8 +134,8 @@ def get_errors_from_single_artifact(artifact_zip_path, job_links=None):
                                     error = line[line.index(": ") + len(": ") :]
                                     errors.append([error_line, error])
                                 except Exception:
-                                    # skip un-related lines
-                                    pass
+                                    # skip un-related lines that don't match the expected format
+                                    logger.debug(f"Skipping unrelated line: {line}")
                             elif filename == "summary_short.txt" and line.startswith("FAILED "):
                                 # `test` is the test method that failed
                                 test = line[len("FAILED ") :]

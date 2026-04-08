@@ -22,12 +22,12 @@ PEFT를 활용한 GPTQ 양자화를 사용해보시려면 이 [노트북](https:
 
 </Tip>
 
-[AutoGPTQ](https://github.com/PanQiWei/AutoGPTQ) 라이브러리는 GPTQ 알고리즘을 구현합니다. 이는 훈련 후 양자화 기법으로, 가중치 행렬의 각 행을 독립적으로 양자화하여 오차를 최소화하는 가중치 버전을 찾습니다. 이 가중치는 int4로 양자화되지만, 추론 중에는 실시간으로 fp16으로 복원됩니다. 이는 int4 가중치가 GPU의 전역 메모리 대신 결합된 커널에서 역양자화되기 때문에 메모리 사용량을 4배 절약할 수 있으며, 더 낮은 비트 너비를 사용함으로써 통신 시간이 줄어들어 추론 속도가 빨라질 것으로 기대할 수 있습니다.
+[GPT-QModel](https://github.com/ModelCloud/GPTQModel) 라이브러리는 GPTQ 알고리즘을 구현합니다. 이는 훈련 후 양자화 기법으로, 가중치 행렬의 각 행을 독립적으로 양자화하여 오차를 최소화하는 가중치 버전을 찾습니다. 이 가중치는 int4로 양자화되지만, 추론 중에는 실시간으로 fp16으로 복원됩니다. 이는 int4 가중치가 GPU의 전역 메모리 대신 결합된 커널에서 역양자화되기 때문에 메모리 사용량을 4배 절약할 수 있으며, 더 낮은 비트 너비를 사용함으로써 통신 시간이 줄어들어 추론 속도가 빨라질 것으로 기대할 수 있습니다.
 
 시작하기 전에 다음 라이브러리들이 설치되어 있는지 확인하세요:
 
 ```bash
-pip install auto-gptq
+pip install gptqmodel --no-build-isolation
 pip install --upgrade accelerate optimum transformers
 ```
 
@@ -44,7 +44,7 @@ gptq_config = GPTQConfig(bits=4, dataset="c4", tokenizer=tokenizer)
 자신의 데이터셋을 문자열 리스트 형태로 전달할 수도 있지만, GPTQ 논문에서 사용한 동일한 데이터셋을 사용하는 것을 강력히 권장합니다.
 
 ```py
-dataset = ["auto-gptq is an easy-to-use model quantization library with user-friendly apis, based on GPTQ algorithm."]
+dataset = ["gptqmodel is an easy-to-use model quantization library with user-friendly apis, based on the GPTQ algorithm."]
 gptq_config = GPTQConfig(bits=4, dataset=dataset, tokenizer=tokenizer)
 ```
 
@@ -90,31 +90,4 @@ quantized_model.save_pretrained("opt-125m-gptq")
 from transformers import AutoModelForCausalLM
 
 model = AutoModelForCausalLM.from_pretrained("{your_username}/opt-125m-gptq", device_map="auto")
-```
-
-## ExLlama [[exllama]]
-
-[ExLlama](https://github.com/turboderp/exllama)은 [Llama](model_doc/llama) 모델의 Python/C++/CUDA 구현체로, 4비트 GPTQ 가중치를 사용하여 더 빠른 추론을 위해 설계되었습니다(이 [벤치마크](https://github.com/huggingface/optimum/tree/main/tests/benchmark#gptq-benchmark)를 참고하세요). ['GPTQConfig'] 객체를 생성할 때 ExLlama 커널이 기본적으로 활성화됩니다. 추론 속도를 더욱 높이기 위해, `exllama_config` 매개변수를 구성하여 [ExLlamaV2](https://github.com/turboderp/exllamav2) 커널을 사용할 수 있습니다:
-
-```py
-import torch
-from transformers import AutoModelForCausalLM, GPTQConfig
-
-gptq_config = GPTQConfig(bits=4, exllama_config={"version":2})
-model = AutoModelForCausalLM.from_pretrained("{your_username}/opt-125m-gptq", device_map="auto", quantization_config=gptq_config)
-```
-
-<Tip warning={true}>
-
-4비트 모델만 지원되며, 양자화된 모델을 PEFT로 미세 조정하는 경우 ExLlama 커널을 비활성화할 것을 권장합니다.
-
-</Tip>
-
-ExLlama 커널은 전체 모델이 GPU에 있을 때만 지원됩니다. AutoGPTQ(버전 0.4.2 이상)로 CPU에서 추론을 수행하는 경우 ExLlama 커널을 비활성화해야 합니다. 이를 위해 config.json 파일의 양자화 설정에서 ExLlama 커널과 관련된 속성을 덮어써야 합니다.
-
-```py
-import torch
-from transformers import AutoModelForCausalLM, GPTQConfig
-gptq_config = GPTQConfig(bits=4, use_exllama=False)
-model = AutoModelForCausalLM.from_pretrained("{your_username}/opt-125m-gptq", device_map="cpu", quantization_config=gptq_config)
 ```

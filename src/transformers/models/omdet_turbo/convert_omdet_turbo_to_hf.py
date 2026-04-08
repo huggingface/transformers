@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2024 The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -17,8 +16,9 @@
 URL: https://github.com/om-ai-lab/OmDet"""
 
 import argparse
+from io import BytesIO
 
-import requests
+import httpx
 import torch
 from PIL import Image
 
@@ -55,7 +55,7 @@ def get_omdet_turbo_config(model_name, use_timm_backbone):
         text_config={"model_type": "clip_text_model"},
         use_timm_backbone=use_timm_backbone,
         backbone="swin_tiny_patch4_window7_224" if use_timm_backbone else None,
-        apply_layernorm_after_vision_backbone=True if use_timm_backbone else False,
+        apply_layernorm_after_vision_backbone=bool(use_timm_backbone),
         use_pretrained_backbone=False,
     )
 
@@ -66,7 +66,7 @@ def create_rename_keys_vision(state_dict, config):
     rename_keys = []
     # fmt: off
     ########################################## VISION BACKBONE - START
-    for layer_name in state_dict.keys():
+    for layer_name in state_dict:
         if layer_name.startswith("backbone") and not layer_name.startswith("backbone.norm"):
             if config.use_timm_backbone:
                 layer_name_replace = layer_name.replace("backbone", "vision_backbone.vision_backbone._backbone")
@@ -100,7 +100,7 @@ def create_rename_keys_vision(state_dict, config):
     ########################################## VISION BACKBONE - END
 
     ########################################## ENCODER - START
-    for layer_name, params in state_dict.items():
+    for layer_name in state_dict:
         if "neck" in layer_name:
             layer_name_replace = layer_name.replace("neck", "encoder")
             layer_name_replace = layer_name_replace.replace("input_proj", "channel_projection_layers")
@@ -117,7 +117,7 @@ def create_rename_keys_vision(state_dict, config):
     ########################################## ENCODER - END
 
     ########################################## DECODER - START
-    for layer_name, params in state_dict.items():
+    for layer_name in state_dict:
         if layer_name.startswith("decoder"):
             layer_name_replace = layer_name.replace("decoder.decoder.layers", "decoder.layers")
             layer_name_replace = layer_name_replace.replace("input_proj", "channel_projection_layers")
@@ -136,7 +136,7 @@ def create_rename_keys_vision(state_dict, config):
 def create_rename_keys_language(state_dict):
     rename_keys = []
     # fmt: off
-    for layer_name in state_dict.keys():
+    for layer_name in state_dict:
         if layer_name.startswith("language_backbone") and not layer_name.startswith("language_backbone.text_projection"):
             layer_name_replace = layer_name.replace("language_backbone", "language_backbone.model.text_model")
             layer_name_replace = layer_name_replace.replace("transformer.resblocks", "encoder.layers")
@@ -237,10 +237,11 @@ def read_in_q_k_v_decoder(state_dict, config):
 def run_test(model, processor):
     # We will verify our results on an image of cute cats
     url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-    image = Image.open(requests.get(url, stream=True).raw).convert("RGB")
+    with httpx.stream("GET", url) as response:
+        image = Image.open(BytesIO(response.read())).convert("RGB")
 
     classes = ["cat", "remote"]
-    task = "Detect {}.".format(", ".join(classes))
+    task = f"Detect {', '.join(classes)}."
     inputs = processor(image, text=classes, task=task, return_tensors="pt")
 
     # Running forward
@@ -268,7 +269,7 @@ def convert_omdet_turbo_checkpoint(args):
             "https://huggingface.co/omlab/OmDet-Turbo_tiny_SWIN_T/resolve/main/ViT-B-16.pt",
         ],
     }
-    # Define default OmDetTurbo configuation
+    # Define default OmDetTurbo configuration
     config = get_omdet_turbo_config(model_name, use_timm_backbone)
 
     # Load original checkpoint
@@ -339,7 +340,9 @@ if __name__ == "__main__":
         "--pytorch_dump_folder_path", default=None, type=str, help="Path to the output PyTorch model directory."
     )
     parser.add_argument(
-        "--push_to_hub", action="store_true", help="Whether or not to push the converted model to the 🤗 hub."
+        "--push_to_hub",
+        action="store_true",
+        help="Whether or not to push the converted model to the Hugging Face hub.",
     )
     parser.add_argument(
         "--use_timm_backbone", action="store_true", help="Whether or not to use timm backbone for vision backbone."

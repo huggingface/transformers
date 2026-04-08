@@ -19,6 +19,7 @@ from ...utils.import_utils import define_import_structure
 
 if TYPE_CHECKING:
     from .configuration_tvp import *
+    from .image_processing_pil_tvp import *
     from .image_processing_tvp import *
     from .modeling_tvp import *
     from .processing_tvp import *

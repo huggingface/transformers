@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2022 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -16,10 +15,11 @@
 
 import copy
 import unittest
+from functools import cached_property
 
 from transformers.models.auto import get_values
 from transformers.testing_utils import require_torch, slow, torch_device
-from transformers.utils import cached_property, is_torch_available, is_vision_available
+from transformers.utils import is_torch_available, is_vision_available
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor, random_attention_mask
@@ -44,7 +44,7 @@ if is_torch_available():
 if is_vision_available():
     from PIL import Image
 
-    from transformers import LayoutLMv3ImageProcessor
+    from transformers import LayoutLMv3ImageProcessorPil
 
 
 class LayoutLMv3ModelTester:
@@ -270,8 +270,6 @@ class LayoutLMv3ModelTester:
 
 @require_torch
 class LayoutLMv3ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
-    test_pruning = False
-    test_torchscript = False
     test_mismatched_shapes = False
 
     all_model_classes = (
@@ -309,7 +307,7 @@ class LayoutLMv3ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
 
     def setUp(self):
         self.model_tester = LayoutLMv3ModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=LayoutLMv3Config, hidden_size=37)
+        self.config_tester = ConfigTester(self, config_class=LayoutLMv3Config, hidden_size=32)
 
     def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
         inputs_dict = copy.deepcopy(inputs_dict)
@@ -354,12 +352,6 @@ class LayoutLMv3ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
 
-    def test_model_various_embeddings(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        for type in ["absolute", "relative_key", "relative_key_query"]:
-            config_and_inputs[0].position_embedding_type = type
-            self.model_tester.create_and_check_model(*config_and_inputs)
-
     def test_for_sequence_classification(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_for_sequence_classification(*config_and_inputs)
@@ -389,7 +381,7 @@ def prepare_img():
 class LayoutLMv3ModelIntegrationTest(unittest.TestCase):
     @cached_property
     def default_image_processor(self):
-        return LayoutLMv3ImageProcessor(apply_ocr=False) if is_vision_available() else None
+        return LayoutLMv3ImageProcessorPil(apply_ocr=False) if is_vision_available() else None
 
     @slow
     def test_inference_no_head(self):

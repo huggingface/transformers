@@ -61,8 +61,7 @@ Here is an example of how one can load a Quark model in Transformers:
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
 model_id = "EmbeddedLLM/Llama-3.1-8B-Instruct-w_fp8_per_channel_sym"
-model = AutoModelForCausalLM.from_pretrained(model_id)
-model = model.to("cuda")
+model = AutoModelForCausalLM.from_pretrained(model_id, device_map="auto")
 
 print(model.model.layers[0].self_attn.q_proj)
 # QParamsLinear(
@@ -73,7 +72,7 @@ print(model.model.layers[0].self_attn.q_proj)
 
 tokenizer = AutoTokenizer.from_pretrained(model_id)
 inp = tokenizer("Where is a good place to cycle around Tokyo?", return_tensors="pt")
-inp = inp.to("cuda")
+inp = inp.to(model.device)
 
 res = model.generate(**inp, min_new_tokens=50, max_new_tokens=100)
 

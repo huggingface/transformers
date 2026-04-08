@@ -30,7 +30,6 @@ Callbacks是“只读”的代码片段，除了它们返回的[TrainerControl]�
 - [`~integrations.WandbCallback`]，如果安装了[wandb](https://www.wandb.com/)。
 - [`~integrations.CometCallback`]，如果安装了[comet_ml](https://www.comet.com/site/)。
 - [`~integrations.MLflowCallback`]，如果安装了[mlflow](https://www.mlflow.org/)。
-- [`~integrations.NeptuneCallback`]，如果安装了[neptune](https://neptune.ai/)。
 - [`~integrations.AzureMLCallback`]，如果安装了[azureml-sdk](https://pypi.org/project/azureml-sdk/)。
 - [`~integrations.CodeCarbonCallback`]，如果安装了[codecarbon](https://pypi.org/project/codecarbon/)。
 - [`~integrations.ClearMLCallback`]，如果安装了[clearml](https://github.com/allegroai/clearml)。
@@ -70,8 +69,6 @@ Callbacks是“只读”的代码片段，除了它们返回的[TrainerControl]�
 [[autodoc]] integrations.AzureMLCallback
 
 [[autodoc]] integrations.CodeCarbonCallback
-
-[[autodoc]] integrations.NeptuneCallback
 
 [[autodoc]] integrations.ClearMLCallback
 

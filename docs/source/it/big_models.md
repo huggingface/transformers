@@ -106,10 +106,10 @@ La mappa dei pesi è la parte principale di questo indice, che mappa ogni nome d
  ...
 ```
 
-Se vuoi caricare direttamente un checkpoint frammentato in un modello senza usare [`~PreTrainedModel.from_pretrained`] (come si farebbe con `model.load_state_dict()` per un checkpoint completo) devi usare [`~modeling_utils.load_sharded_checkpoint`]:
+Se vuoi caricare direttamente un checkpoint frammentato in un modello senza usare [`~PreTrainedModel.from_pretrained`] (come si farebbe con `model.load_state_dict()` per un checkpoint completo) devi usare [`~trainer_utils.load_sharded_checkpoint`]:
 
 ```py
->>> from transformers.modeling_utils import load_sharded_checkpoint
+>>> from transformers.trainer_utils import load_sharded_checkpoint
 
 >>> with tempfile.TemporaryDirectory() as tmp_dir:
 ...     model.save_pretrained(tmp_dir, max_shard_size="200MB")

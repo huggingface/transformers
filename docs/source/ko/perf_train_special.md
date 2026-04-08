@@ -54,8 +54,7 @@ python examples/pytorch/text-classification/run_glue.py \
   --per_device_train_batch_size 32 \
   --learning_rate 2e-5 \
   --num_train_epochs 3 \
-  --output_dir /tmp/$TASK_NAME/ \
-  --overwrite_output_dir
+  --output_dir /tmp/$TASK_NAME/
 ```
 
 `gloco`와 `nccl`과 같은 [분산 학습 백엔드](https://pytorch.org/docs/stable/distributed.html#backends)는 `mps` 장치에서 지원되지 않으므로, MPS 백엔드에서는 단일 GPU로만 학습이 가능합니다.

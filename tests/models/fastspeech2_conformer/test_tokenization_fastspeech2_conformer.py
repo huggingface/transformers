@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2023 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -28,10 +27,11 @@ class FastSpeech2ConformerTokenizerTest(TokenizerTesterMixin, unittest.TestCase)
     tokenizer_class = FastSpeech2ConformerTokenizer
     test_rust_tokenizer = False
 
-    def setUp(self):
-        super().setUp()
+    @classmethod
+    def setUpClass(cls):
+        super().setUpClass()
         tokenizer = FastSpeech2ConformerTokenizer.from_pretrained("espnet/fastspeech2_conformer")
-        tokenizer.save_pretrained(self.tmpdirname)
+        tokenizer.save_pretrained(cls.tmpdirname)
 
     def get_input_output_texts(self, tokenizer):
         input_text = "this is a test"

@@ -13,6 +13,7 @@ tests/fixtures/cached_*_text.txt
 logs/
 lightning_logs/
 lang_code_data/
+reports/
 
 # Distribution / packaging
 .Python
@@ -97,6 +98,7 @@ celerybeat-schedule
 # Environments
 .env
 .venv
+.venv*
 env/
 venv/
 ENV/
@@ -167,3 +169,18 @@ tags
 
 # ruff
 .ruff_cache
+
+# modeling structure lint cache
+utils/mlinter/.mlinter_cache.json
+utils/.checkers_cache.json
+
+# modular conversion
+*.modular_backup
+
+# Cursor IDE files
+.cursor/
+test-results/
+
+# AI agent local setup artifacts
+/.agents/skills
+/.claude/skills

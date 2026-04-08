@@ -10,13 +10,18 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from typing import List, Optional, Tuple, Union
 
 import torch
 import torch.nn as nn
 
-from transformers.models.depth_anything.configuration_depth_anything import DepthAnythingConfig
-from transformers.models.depth_anything.modeling_depth_anything import (
+from ...modeling_outputs import DepthEstimatorOutput
+from ...modeling_utils import PreTrainedModel
+from ...processing_utils import Unpack
+from ...utils import TransformersKwargs, auto_docstring
+from ...utils.generic import merge_with_config_defaults, torch_int
+from ...utils.output_capturing import capture_outputs
+from ..depth_anything.configuration_depth_anything import DepthAnythingConfig
+from ..depth_anything.modeling_depth_anything import (
     DepthAnythingDepthEstimationHead,
     DepthAnythingFeatureFusionLayer,
     DepthAnythingFeatureFusionStage,
@@ -24,22 +29,10 @@ from transformers.models.depth_anything.modeling_depth_anything import (
     DepthAnythingNeck,
     DepthAnythingReassembleStage,
 )
-from transformers.utils.generic import torch_int
-
-from ...file_utils import (
-    add_start_docstrings,
-    add_start_docstrings_to_model_forward,
-    replace_return_docstrings,
-)
-from ...modeling_outputs import DepthEstimatorOutput
-from ...modeling_utils import PreTrainedModel
-
-
-_CONFIG_FOR_DOC = "PromptDepthAnythingConfig"
 
 
 class PromptDepthAnythingConfig(DepthAnythingConfig):
-    model_type = "prompt_depth_anything"
+    pass
 
 
 class PromptDepthAnythingLayer(nn.Module):
@@ -141,7 +134,7 @@ class PromptDepthAnythingFeatureFusionStage(DepthAnythingFeatureFusionStage):
 
 
 class PromptDepthAnythingDepthEstimationHead(DepthAnythingDepthEstimationHead):
-    def forward(self, hidden_states: List[torch.Tensor], patch_height: int, patch_width: int) -> torch.Tensor:
+    def forward(self, hidden_states: list[torch.Tensor], patch_height: int, patch_width: int) -> torch.Tensor:
         hidden_states = hidden_states[-1]
 
         predicted_depth = self.conv1(hidden_states)
@@ -164,61 +157,13 @@ class PromptDepthAnythingDepthEstimationHead(DepthAnythingDepthEstimationHead):
         return predicted_depth
 
 
-PROMPT_DEPTH_ANYTHING_START_DOCSTRING = r"""
-    This model is a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) subclass. Use it
-    as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage and
-    behavior.
-
-    Parameters:
-        config ([`PromptDepthAnythingConfig`]): Model configuration class with all the parameters of the model.
-            Initializing with a config file does not load the weights associated with the model, only the
-            configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model weights.
-"""
-
-PROMPT_DEPTH_ANYTHING_INPUTS_DOCSTRING = r"""
-    Args:
-        pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
-            Pixel values. Pixel values can be obtained using [`AutoImageProcessor`]. See [`DPTImageProcessor.__call__`]
-            for details.
-        output_attentions (`bool`, *optional*):
-            Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
-            tensors for more detail.
-        output_hidden_states (`bool`, *optional*):
-            Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
-            more detail.
-        prompt_depth (`torch.FloatTensor` of shape `(batch_size, 1, height, width)`, *optional*):
-            Prompt depth is the sparse or low-resolution depth obtained from multi-view geometry or a
-            low-resolution depth sensor. It generally has shape (height, width), where height
-            and width can be smaller than those of the images. It is optional and can be None, which means no prompt depth
-            will be used. If it is None, the output will be a monocular relative depth.
-            The values are recommended to be in meters, but this is not necessary.
-        return_dict (`bool`, *optional*):
-            Whether or not to return a [`~file_utils.ModelOutput`] instead of a plain tuple.
-"""
-
-
+@auto_docstring
 class PromptDepthAnythingPreTrainedModel(PreTrainedModel):
-    """
-    An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
-    models.
-    """
-
-    config_class = PromptDepthAnythingConfig
+    config: PromptDepthAnythingConfig
     base_model_prefix = "prompt_depth_anything"
     main_input_name = "pixel_values"
+    input_modalities = ("image",)
     supports_gradient_checkpointing = True
-
-    def _init_weights(self, module):
-        """Initialize the weights"""
-        if isinstance(module, (nn.Linear, nn.Conv2d, nn.ConvTranspose2d)):
-            # Slightly different from the TF version which uses truncated_normal for initialization
-            # cf https://github.com/pytorch/pytorch/pull/5617
-            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
-            if module.bias is not None:
-                module.bias.data.zero_()
-        elif isinstance(module, nn.LayerNorm):
-            module.bias.data.zero_()
-            module.weight.data.fill_(1.0)
 
 
 class PromptDepthAnythingReassembleLayer(nn.Module):
@@ -250,14 +195,14 @@ class PromptDepthAnythingReassembleStage(DepthAnythingReassembleStage):
 class PromptDepthAnythingNeck(DepthAnythingNeck):
     def forward(
         self,
-        hidden_states: List[torch.Tensor],
-        patch_height: Optional[int] = None,
-        patch_width: Optional[int] = None,
-        prompt_depth: Optional[torch.Tensor] = None,
-    ) -> List[torch.Tensor]:
+        hidden_states: list[torch.Tensor],
+        patch_height: int | None = None,
+        patch_width: int | None = None,
+        prompt_depth: torch.Tensor | None = None,
+    ) -> list[torch.Tensor]:
         """
         Args:
-            hidden_states (`List[torch.FloatTensor]`, each of shape `(batch_size, sequence_length, hidden_size)` or `(batch_size, hidden_size, height, width)`):
+            hidden_states (`list[torch.FloatTensor]`, each of shape `(batch_size, sequence_length, hidden_size)` or `(batch_size, hidden_size, height, width)`):
                 List of hidden states from the backbone.
         """
         if not isinstance(hidden_states, (tuple, list)):
@@ -277,40 +222,50 @@ class PromptDepthAnythingNeck(DepthAnythingNeck):
         return output
 
 
-@add_start_docstrings(
-    """
+@auto_docstring(
+    custom_intro="""
     Prompt Depth Anything Model with a depth estimation head on top (consisting of 3 convolutional layers) e.g. for KITTI, NYUv2.
-    """,
-    PROMPT_DEPTH_ANYTHING_START_DOCSTRING,
+    """
 )
 class PromptDepthAnythingForDepthEstimation(DepthAnythingForDepthEstimation):
-    @add_start_docstrings_to_model_forward(PROMPT_DEPTH_ANYTHING_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=DepthEstimatorOutput, config_class=_CONFIG_FOR_DOC)
+    @merge_with_config_defaults
+    @capture_outputs
+    @auto_docstring
     def forward(
         self,
         pixel_values: torch.FloatTensor,
-        prompt_depth: Optional[torch.FloatTensor] = None,
-        labels: Optional[torch.LongTensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-    ) -> Union[Tuple[torch.Tensor], DepthEstimatorOutput]:
+        prompt_depth: torch.FloatTensor | None = None,
+        labels: torch.LongTensor | None = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> tuple[torch.Tensor] | DepthEstimatorOutput:
         r"""
+        prompt_depth (`torch.FloatTensor` of shape `(batch_size, 1, height, width)`, *optional*):
+            Prompt depth is the sparse or low-resolution depth obtained from multi-view geometry or a
+            low-resolution depth sensor. It generally has shape (height, width), where height
+            and width can be smaller than those of the images. It is optional and can be None, which means no prompt depth
+            will be used. If it is None, the output will be a monocular relative depth.
+            The values are recommended to be in meters, but this is not necessary.
+
+        Example:
+
         ```python
         >>> from transformers import AutoImageProcessor, AutoModelForDepthEstimation
         >>> import torch
         >>> import numpy as np
         >>> from PIL import Image
-        >>> import requests
+        >>> import httpx
+        >>> from io import BytesIO
 
         >>> url = "https://github.com/DepthAnything/PromptDA/blob/main/assets/example_images/image.jpg?raw=true"
-        >>> image = Image.open(requests.get(url, stream=True).raw)
+        >>> with httpx.stream("GET", url) as response:
+        ...     image = Image.open(BytesIO(response.read()))
 
         >>> image_processor = AutoImageProcessor.from_pretrained("depth-anything/prompt-depth-anything-vits-hf")
         >>> model = AutoModelForDepthEstimation.from_pretrained("depth-anything/prompt-depth-anything-vits-hf")
 
         >>> prompt_depth_url = "https://github.com/DepthAnything/PromptDA/blob/main/assets/example_images/arkit_depth.png?raw=true"
-        >>> prompt_depth = Image.open(requests.get(prompt_depth_url, stream=True).raw)
+        >>> with httpx.stream("GET", prompt_depth_url) as response:
+        ...     prompt_depth = Image.open(BytesIO(response.read()))
 
         >>> # prepare image for the model
         >>> inputs = image_processor(images=image, return_tensors="pt", prompt_depth=prompt_depth)
@@ -329,20 +284,13 @@ class PromptDepthAnythingForDepthEstimation(DepthAnythingForDepthEstimation):
         >>> depth = predicted_depth * 1000.
         >>> depth = depth.detach().cpu().numpy()
         >>> depth = Image.fromarray(depth.astype("uint16")) # mm
-        ```"""
+        ```
+        """
         loss = None
         if labels is not None:
             raise NotImplementedError("Training is not implemented yet")
 
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-
-        outputs = self.backbone.forward_with_filtered_kwargs(
-            pixel_values, output_hidden_states=output_hidden_states, output_attentions=output_attentions
-        )
+        outputs = self.backbone.forward_with_filtered_kwargs(pixel_values, **kwargs)
         hidden_states = outputs.feature_maps
 
         _, _, height, width = pixel_values.shape
@@ -351,35 +299,24 @@ class PromptDepthAnythingForDepthEstimation(DepthAnythingForDepthEstimation):
         patch_width = width // patch_size
 
         if prompt_depth is not None:
-            # normalize prompt depth
             batch_size = prompt_depth.shape[0]
             depth_min = torch.min(prompt_depth.reshape(batch_size, -1), dim=1).values
             depth_max = torch.max(prompt_depth.reshape(batch_size, -1), dim=1).values
             depth_min, depth_max = depth_min.view(batch_size, 1, 1, 1), depth_max.view(batch_size, 1, 1, 1)
             prompt_depth = (prompt_depth - depth_min) / (depth_max - depth_min)
-            # normalize done
 
         hidden_states = self.neck(hidden_states, patch_height, patch_width, prompt_depth=prompt_depth)
 
         predicted_depth = self.head(hidden_states, patch_height, patch_width)
         if prompt_depth is not None:
-            # denormalize predicted depth
             depth_min = depth_min.squeeze(1).to(predicted_depth.device)
             depth_max = depth_max.squeeze(1).to(predicted_depth.device)
             predicted_depth = predicted_depth * (depth_max - depth_min) + depth_min
-            # denormalize done
-
-        if not return_dict:
-            if output_hidden_states:
-                output = (predicted_depth,) + outputs[1:]
-            else:
-                output = (predicted_depth,) + outputs[2:]
-            return ((loss,) + output) if loss is not None else output
 
         return DepthEstimatorOutput(
             loss=loss,
             predicted_depth=predicted_depth,
-            hidden_states=outputs.hidden_states if output_hidden_states else None,
+            hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
 

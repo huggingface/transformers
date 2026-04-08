@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2024 The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -80,7 +79,7 @@ DTYPES = {"float32": torch.float32, "bfloat16": torch.bfloat16, "float16": torch
 
 def get_paligemma2_config(variant: str, precision: str):
     config = {
-        "image_token_index": None,
+        "image_token_id": None,
         "pad_token_id": 0,
         "bos_token_id": 2,
         "eos_token_id": 1,
@@ -93,7 +92,7 @@ def get_paligemma2_config(variant: str, precision: str):
         patch_size = 14
         num_image_tokens = (image_size**2) // (patch_size**2)
         config["projection_dim"] = variant_config["hidden_size"]
-        config["image_token_index"] = 257152
+        config["image_token_id"] = 257152
         config["num_hidden_layers"] = variant_config["num_hidden_layers"]  # For generate
         text_config = Gemma2Config.from_pretrained("google/gemma-2-2b-it").to_dict()
         sup_text_config = {
@@ -102,7 +101,7 @@ def get_paligemma2_config(variant: str, precision: str):
             "num_hidden_layers": variant_config["num_hidden_layers"],
             "num_key_value_heads": variant_config["num_key_value_heads"],
             "head_dim": variant_config["head_dim"],
-            "torch_dtype": precision,
+            "dtype": precision,
             "hidden_size": variant_config["hidden_size"],
             "hidden_activation": "gelu_pytorch_tanh",
             "num_attention_heads": variant_config["num_attention_heads"],
@@ -114,7 +113,7 @@ def get_paligemma2_config(variant: str, precision: str):
 
         vision_config = {
             "num_positions": variant_config["num_positions"],  # not useful, to remove
-            "torch_dtype": precision,
+            "dtype": precision,
             "image_size": image_size,
             "patch_size": patch_size,
             "num_image_tokens": num_image_tokens,
@@ -263,7 +262,7 @@ def slice_state_dict(state_dict, config):
         state_dict[f"language_model.model.layers.{i}.post_feedforward_layernorm.weight"] = llm_post_feedforward_layernorm[i]
     state_dict["language_model.model.norm.weight"] = state_dict.pop("llm/final_norm/scale")
     state_dict["language_model.lm_head.weight"] = embedding_vector # weights are tied.
-    [k for k in state_dict.keys() if not k.startswith('vision') and not k.startswith('language')]
+    [k for k in state_dict if not k.startswith('vision') and not k.startswith('language')]
     # fmt: on
     for key, value in state_dict.items():
         if not isinstance(value, torch.Tensor):
@@ -346,19 +345,17 @@ def convert_paligemma2_checkpoint(
         # We add an image token so we resize the model
         model.resize_token_embeddings(config.text_config.vocab_size + 2, pad_shape)
         model.language_model.model.embed_tokens.weight.data[257152:] = torch.stack(
-            tuple(
-                (dist.sample() for _ in range(model.language_model.model.embed_tokens.weight.data[257152:].shape[0]))
-            ),
+            tuple(dist.sample() for _ in range(model.language_model.model.embed_tokens.weight.data[257152:].shape[0])),
             dim=0,
         )
         model.language_model.lm_head.weight.data[257152:] = torch.stack(
-            tuple((dist.sample() for _ in range(model.language_model.lm_head.weight.data[257152:].shape[0]))),
+            tuple(dist.sample() for _ in range(model.language_model.lm_head.weight.data[257152:].shape[0])),
             dim=0,
         )
         # convert to needed precision
 
         model.to(DTYPES[precision])
-        model.save_pretrained(pytorch_dump_folder_path, safe_serialization=True)
+        model.save_pretrained(pytorch_dump_folder_path)
         processor.save_pretrained(pytorch_dump_folder_path)
 
     else:

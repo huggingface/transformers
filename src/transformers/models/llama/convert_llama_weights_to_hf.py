@@ -17,7 +17,6 @@ import json
 import os
 import tempfile
 import warnings
-from typing import List
 
 import torch
 from tokenizers import AddedToken, processors
@@ -186,7 +185,6 @@ def write_model(
     model_path,
     input_base_path,
     model_size=None,
-    safe_serialization=True,
     llama_version="1",
     vocab_size=None,
     num_shards=None,
@@ -228,12 +226,17 @@ def write_model(
         if num_shards == 1:
             # Not sharded
             # (The sharded implementation would also work, but this is simpler.)
-            loaded = torch.load(os.path.join(input_base_path, "consolidated.00.pth"), map_location="cpu")
+            loaded = torch.load(
+                os.path.join(input_base_path, "consolidated.00.pth"), map_location="cpu", weights_only=True
+            )
         else:
             # Sharded
             checkpoint_list = sorted([file for file in os.listdir(input_base_path) if file.endswith(".pth")])
             print("Loading in order:", checkpoint_list)
-            loaded = [torch.load(os.path.join(input_base_path, file), map_location="cpu") for file in checkpoint_list]
+            loaded = [
+                torch.load(os.path.join(input_base_path, file), map_location="cpu", weights_only=True)
+                for file in checkpoint_list
+            ]
         param_count = 0
         index_dict = {"weight_map": {}}
         for layer_i in range(n_layers):
@@ -356,8 +359,8 @@ def write_model(
         # Write configs
         index_dict["metadata"] = {"total_size": param_count * 2}
         write_json(index_dict, os.path.join(tmp_model_path, "pytorch_model.bin.index.json"))
-        ffn_dim_multiplier = params["ffn_dim_multiplier"] if "ffn_dim_multiplier" in params else 1
-        multiple_of = params["multiple_of"] if "multiple_of" in params else 256
+        ffn_dim_multiplier = params.get("ffn_dim_multiplier", 1)
+        multiple_of = params.get("multiple_of", 256)
 
         if is_llama_3(llama_version):
             bos_token_id = 128000
@@ -371,7 +374,7 @@ def write_model(
             eos_token_id = 2
 
         if llama_version in ["3.1", "3.2", "Guard-3"]:
-            rope_scaling = {
+            rope_parameters = {
                 "factor": 32.0 if llama_version == "3.2" else 8.0,
                 "low_freq_factor": 1.0,
                 "high_freq_factor": 4.0,
@@ -379,7 +382,7 @@ def write_model(
                 "rope_type": "llama3",
             }
         else:
-            rope_scaling = None
+            rope_parameters = None
 
         config = LlamaConfig(
             hidden_size=dim,
@@ -390,11 +393,11 @@ def write_model(
             num_key_value_heads=num_key_value_heads,
             vocab_size=vocab_size,
             rope_theta=base,
-            rope_scaling=rope_scaling,
+            rope_parameters=rope_parameters,
             max_position_embeddings=max_position_embeddings,
             bos_token_id=bos_token_id,
             eos_token_id=eos_token_id,
-            tie_word_embeddings=True if llama_version in ["3.2"] else False,
+            tie_word_embeddings=llama_version == "3.2",
         )
 
         config.save_pretrained(tmp_model_path)
@@ -414,19 +417,20 @@ def write_model(
         gc.collect()
 
         print("Loading the checkpoint in a Llama model.")
-        model = LlamaForCausalLM.from_pretrained(tmp_model_path, torch_dtype=torch.bfloat16, low_cpu_mem_usage=True)
+        model = LlamaForCausalLM.from_pretrained(tmp_model_path, dtype=torch.bfloat16)
 
         # Avoid saving this as part of the config.
         del model.config._name_or_path
-        model.config.torch_dtype = torch.float16
+        model.config.dtype = torch.float16
 
         print("Saving in the Transformers format.")
         if push_to_hub:
             print("Pushing to the hub.")
-            model.push_to_hub(model_path, safe_serialization=safe_serialization, private=True, use_temp_dir=True)
+            model_name = model_path.split(os.path.sep)[-1]
+            model.push_to_hub(model_name, private=True)
         else:
             print("Saving to disk.")
-            model.save_pretrained(model_path, safe_serialization=safe_serialization)
+            model.save_pretrained(model_path)
 
 
 class Llama3Converter(TikTokenConverter):
@@ -447,7 +451,7 @@ class Llama3Converter(TikTokenConverter):
         # Prevents a null chat_template, which triggers
         # a parsing warning in the Hub.
         additional_kwargs = {}
-        if instruct or llama_version in ["Guard-3"]:
+        if instruct or llama_version == "Guard-3":
             model_id, revision = templates_for_version.get(llama_version, (None, None))
             if model_id is not None:
                 from transformers import AutoTokenizer
@@ -461,7 +465,7 @@ class Llama3Converter(TikTokenConverter):
             eos_token="<|end_of_text|>" if not instruct else "<|eot_id|>",
             model_input_names=["input_ids", "attention_mask"],
             model_max_length=CONTEXT_LENGTH_FOR_VERSION[llama_version],
-            clean_up_tokenization_spaces=True,
+            clean_up_tokenization_spaces=False,
             **additional_kwargs,
         )
         self.update_post_processor(self.converted_tokenizer)
@@ -507,7 +511,8 @@ def write_tokenizer(
 
     if push_to_hub:
         print(f"Pushing a {tokenizer_class.__name__} to the Hub repo - {tokenizer_path}.")
-        tokenizer.push_to_hub(tokenizer_path, private=True, use_temp_dir=True)
+        model_name = tokenizer_path.split(os.path.sep)[-1]
+        tokenizer.push_to_hub(model_name, private=True)
     else:
         print(f"Saving a {tokenizer_class.__name__} to {tokenizer_path}.")
         tokenizer.save_pretrained(tokenizer_path)
@@ -523,7 +528,7 @@ def main():
     parser.add_argument(
         "--model_size",
         default=None,
-        help="'f' Deprecated in favor of `num_shards`: models correspond to the finetuned versions, and are specific to the Llama2 official release. For more details on Llama2, checkout the original repo: https://huggingface.co/meta-llama",
+        help="'f' Deprecated in favor of `num_shards`: models correspond to the finetuned versions, and are specific to the Llama2 official release. For more details on Llama2, check out the original repo: https://huggingface.co/meta-llama",
     )
     parser.add_argument(
         "--output_dir",
@@ -534,9 +539,6 @@ def main():
         help="Whether or not to push the model to the hub at `output_dir` instead of saving it locally.",
         action="store_true",
         default=False,
-    )
-    parser.add_argument(
-        "--safe_serialization", action="store_true", default=True, help="Whether or not to save using `safetensors`."
     )
     # Different Llama versions used different default values for max_position_embeddings, hence the need to be able to specify which version is being used.
     parser.add_argument(
@@ -555,7 +557,7 @@ def main():
     parser.add_argument(
         "--special_tokens",
         default=None,
-        type=List[str],
+        type=list[str],
         help="The list of special tokens that should be added to the model.",
     )
     parser.add_argument(
@@ -588,7 +590,6 @@ def main():
             model_path=args.output_dir,
             input_base_path=args.input_dir,
             model_size=args.model_size,
-            safe_serialization=args.safe_serialization,
             llama_version=args.llama_version,
             vocab_size=vocab_size,
             num_shards=args.num_shards,

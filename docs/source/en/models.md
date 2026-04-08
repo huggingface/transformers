@@ -18,7 +18,7 @@ rendered properly in your Markdown viewer.
 
 Transformers provides many pretrained models that are ready to use with a single line of code. It requires a model class and the [`~PreTrainedModel.from_pretrained`] method.
 
-Call [`~PreTrainedModel.from_pretrained`] to download and load a models weights and configuration stored on the Hugging Face [Hub](https://hf.co/models).
+Call [`~PreTrainedModel.from_pretrained`] to download and load a model's weights and configuration stored on the Hugging Face [Hub](https://hf.co/models).
 
 > [!TIP]
 > The [`~PreTrainedModel.from_pretrained`] method loads weights stored in the [safetensors](https://hf.co/docs/safetensors/index) file format if they're available. Traditionally, PyTorch model weights are serialized with the [pickle](https://docs.python.org/3/library/pickle.html) utility which is known to be unsecure. Safetensor files are more secure and faster to load.
@@ -26,7 +26,7 @@ Call [`~PreTrainedModel.from_pretrained`] to download and load a models weights 
 ```py
 from transformers import AutoModelForCausalLM
 
-model = AutoModelForCausalLM.from_pretrained("meta-llama/Llama-2-7b-hf", torch_dtype="auto", device_map="auto")
+model = AutoModelForCausalLM.from_pretrained("meta-llama/Llama-2-7b-hf", dtype="auto", device_map="auto")
 ```
 
 This guide explains how models are loaded, the different ways you can load a model, how to overcome memory issues for really big models, and how to load custom models.
@@ -44,44 +44,6 @@ There are two general types of models you can load:
 
 1. A barebones model, like [`AutoModel`] or [`LlamaModel`], that outputs hidden states.
 2. A model with a specific *head* attached, like [`AutoModelForCausalLM`] or [`LlamaForCausalLM`], for performing specific tasks.
-
-For each model type, there is a separate class for each machine learning framework (PyTorch, TensorFlow, Flax). Pick the corresponding prefix for the framework you're using.
-
-<hfoptions id="backend">
-<hfoption id="PyTorch">
-
-```py
-from transformers import AutoModelForCausalLM, MistralForCausalLM
-
-# load with AutoClass or model-specific class
-model = AutoModelForCausalLM.from_pretrained("mistralai/Mistral-7B-v0.1", , torch_dtype="auto", device_map="auto")
-model = MistralForCausalLM.from_pretrained("mistralai/Mistral-7B-v0.1", , torch_dtype="auto", device_map="auto")
-```
-
-</hfoption>
-<hfoption id="TensorFlow">
-
-```py
-from transformers import TFAutoModelForCausalLM, TFMistralForCausalLM
-
-# load with AutoClass or model-specific class
-model = TFAutoModelForCausalLM.from_pretrained("mistralai/Mistral-7B-v0.1")
-model = TFMistralForCausalLM.from_pretrained("mistralai/Mistral-7B-v0.1")
-```
-
-</hfoption>
-<hfoption id="Flax">
-
-```py
-from transformers import FlaxAutoModelForCausalLM, FlaxMistralForCausalLM
-
-# load with AutoClass or model-specific class
-model = FlaxAutoModelForCausalLM.from_pretrained("mistralai/Mistral-7B-v0.1")
-model = FlaxMistralForCausalLM.from_pretrained("mistralai/Mistral-7B-v0.1")
-```
-
-</hfoption>
-</hfoptions>
 
 ## Model classes
 
@@ -148,72 +110,36 @@ You need enough memory to hold two copies of the model weights (random and pretr
 
 Transformers reduces some of these memory-related challenges with fast initialization, sharded checkpoints, Accelerate's [Big Model Inference](https://hf.co/docs/accelerate/usage_guides/big_modeling) feature, and supporting lower bit data types.
 
-### Fast initialization
-
-A PyTorch model is instantiated with random weights, or "empty" tensors, that take up space in memory without filling it.
-
-Transformers boosts loading speed by skipping random weight initialization with the [_fast_init](https://github.com/huggingface/transformers/blob/c9f6e5e35156e068b227dd9b15521767f6afd4d2/src/transformers/modeling_utils.py#L2710) parameter if the pretrained weights are correctly initialized. This parameter is set to `True` by default.
-
 ### Sharded checkpoints
 
-The [`~PreTrainedModel.save_pretrained`] method automatically shards checkpoints larger than 10GB.
+[`~PreTrainedModel.save_pretrained`] automatically shards checkpoints larger than 50GB. This keeps shard counts low for large models and simplifies file management.
 
-Each shard is loaded sequentially after the previous shard is loaded, limiting memory usage to only the model size and the largest shard size.
+Parameters load in parallel and peak memory only depends on model size. Use `max_shard_size` in [`~PreTrainedModel.save_pretrained`] to set the maximum checkpoint size before sharding.
 
-The `max_shard_size` parameter defaults to 5GB for each shard because it is easier to run on free-tier GPU instances without running out of memory.
+> [!NOTE]
+> Memory usage for models requiring dynamic weight conversion depends on the model size and the size of the largest parameters in a single conversion. This typically applies to mixture-of-experts (MoE) models where the memory usage is the model size plus the number of experts on one layer. Refer to the [dynamic weight loader](./weightconverter#fast-and-efficient-model-loading) guide to learn more about how models are loaded.
 
-For example, create some shards checkpoints for [BioMistral/BioMistral-7B](https://hf.co/BioMistral/BioMistral-7B) in [`~PreTrainedModel.save_pretrained`].
-
-```py
-from transformers import AutoModel
-import tempfile
-import os
-
-model = AutoModel.from_pretrained("biomistral/biomistral-7b")
-with tempfile.TemporaryDirectory() as tmp_dir:
-    model.save_pretrained(tmp_dir, max_shard_size="5GB")
-    print(sorted(os.listdir(tmp_dir)))
-```
-
-Reload the sharded checkpoint with [`~PreTrainedModel.from_pretrained`].
-
-```py
-with tempfile.TemporaryDirectory() as tmp_dir:
-    model.save_pretrained(tmp_dir)
-    new_model = AutoModel.from_pretrained(tmp_dir)
-```
-
-Sharded checkpoints can also be directly loaded with [`~transformers.modeling_utils.load_sharded_checkpoint`].
-
-```py
-from transformers.modeling_utils import load_sharded_checkpoint
-
-with tempfile.TemporaryDirectory() as tmp_dir:
-    model.save_pretrained(tmp_dir, max_shard_size="5GB")
-    load_sharded_checkpoint(model, tmp_dir)
-```
-
-The [`~PreTrainedModel.save_pretrained`] method creates an index file that maps parameter names to the files they're stored in. The index file has two keys, `metadata` and `weight_map`.
+[`~PreTrainedModel.save_pretrained`] also creates an index file mapping parameter names to their shard files. The index contains two keys, `metadata` and `weight_map`.
 
 ```py
 import json
 
 with tempfile.TemporaryDirectory() as tmp_dir:
-    model.save_pretrained(tmp_dir, max_shard_size="5GB")
+    model.save_pretrained(tmp_dir, max_shard_size="50GB")
     with open(os.path.join(tmp_dir, "model.safetensors.index.json"), "r") as f:
         index = json.load(f)
 
 print(index.keys())
 ```
 
-The `metadata` key provides the total model size.
+`metadata` stores the total model size.
 
 ```py
 index["metadata"]
 {'total_size': 28966928384}
 ```
 
-The `weight_map` key maps each parameter to the shard it's stored in.
+`weight_map` maps each parameter to its shard file.
 
 ```py
 index["weight_map"]
@@ -245,7 +171,7 @@ Big Model Inference's second feature relates to how weights are loaded and dispa
 
 Both features combined reduces memory usage and loading times for big pretrained models.
 
-Set [device_map](https://github.com/huggingface/transformers/blob/026a173a64372e9602a16523b8fae9de4b0ff428/src/transformers/modeling_utils.py#L3061) to `"auto"` to enable Big Model Inference. This also sets the [low_cpu_mem_usage](https://github.com/huggingface/transformers/blob/026a173a64372e9602a16523b8fae9de4b0ff428/src/transformers/modeling_utils.py#L3028) parameter to `True`, such that not more than 1x the model size is used in CPU memory.
+Set [device_map](https://github.com/huggingface/transformers/blob/026a173a64372e9602a16523b8fae9de4b0ff428/src/transformers/modeling_utils.py#L3061) to `"auto"` to enable Big Model Inference.
 
 ```py
 from transformers import AutoModelForCausalLM
@@ -264,38 +190,28 @@ model.hf_device_map
 
 ### Model data type
 
-PyTorch model weights are initialized in `torch.float32` by default. Loading a model in a different data type, like `torch.float16`, requires additional memory because the model is loaded again in the desired data type.
+The `dtype` argument controls which PyTorch [dtype](https://pytorch.org/docs/stable/tensor_attributes.html#torch.dtype) model weights are instantiated in. By default, `dtype="auto"` scans `config.json` for a `dtype` or legacy `torch_dtype` entry and loads weights in that format. If `config.json` lacks this information, Transformers inspects the first floating-point weight in the checkpoint and adopts its data type.
 
-Explicitly set the [torch_dtype](https://pytorch.org/docs/stable/tensor_attributes.html#torch.dtype) parameter to directly initialize the model in the desired data type instead of loading the weights twice (`torch.float32` then `torch.float16`). You could also set `torch_dtype="auto"` to automatically load the weights in the data type they are stored in.
-
-<hfoptions id="dtype">
-<hfoption id="specific dtype">
+Override the default by passing a specific data type.
 
 ```py
+import torch
 from transformers import AutoModelForCausalLM
 
-gemma = AutoModelForCausalLM.from_pretrained("google/gemma-7b", torch_dtype=torch.float16)
+# default
+model = AutoModelForCausalLM.from_pretrained("google/gemma-3-1b-it", dtype="auto")
+
+# specific dtype
+model = AutoModelForCausalLM.from_pretrained("google/gemma-3-1b-it", dtype=torch.float16)
 ```
 
-</hfoption>
-<hfoption id="auto dtype">
-
-```py
-from transformers import AutoModelForCausalLM
-
-gemma = AutoModelForCausalLM.from_pretrained("google/gemma-7b", torch_dtype="auto")
-```
-
-</hfoption>
-</hfoptions>
-
-The `torch_dtype` parameter can also be configured in [`AutoConfig`] for models instantiated from scratch.
+[`AutoConfig`] also accepts `dtype` for models instantiated from scratch.
 
 ```py
 import torch
 from transformers import AutoConfig, AutoModel
 
-my_config = AutoConfig.from_pretrained("google/gemma-2b", torch_dtype=torch.float16)
+my_config = AutoConfig.from_pretrained("google/gemma-2b", dtype=torch.float16)
 model = AutoModel.from_config(my_config)
 ```
 

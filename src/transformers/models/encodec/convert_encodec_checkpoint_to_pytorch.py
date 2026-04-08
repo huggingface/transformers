@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2023 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -325,7 +324,7 @@ def convert_checkpoint(
     )
     feature_extractor.save_pretrained(pytorch_dump_folder_path)
 
-    original_checkpoint = torch.load(checkpoint_path)
+    original_checkpoint = torch.load(checkpoint_path, weights_only=True)
     if "best_state" in original_checkpoint:
         # we might have a training state saved, in which case discard the yaml results and just retain the weights
         original_checkpoint = original_checkpoint["best_state"]
@@ -352,7 +351,7 @@ if __name__ == "__main__":
         "--pytorch_dump_folder_path", required=True, default=None, type=str, help="Path to the output PyTorch model."
     )
     parser.add_argument(
-        "--push_to_hub", default=None, type=str, help="Where to upload the converted model on the 🤗 hub."
+        "--push_to_hub", default=None, type=str, help="Where to upload the converted model on the Hugging Face hub."
     )
 
     args = parser.parse_args()

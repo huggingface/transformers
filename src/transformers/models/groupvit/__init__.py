@@ -20,7 +20,6 @@ from ...utils.import_utils import define_import_structure
 if TYPE_CHECKING:
     from .configuration_groupvit import *
     from .modeling_groupvit import *
-    from .modeling_tf_groupvit import *
 else:
     import sys
 

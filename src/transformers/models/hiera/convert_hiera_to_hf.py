@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2024 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -20,9 +19,9 @@ URL: https://github.com/facebookresearch/hiera
 import argparse
 import json
 import math
-from typing import Dict, Tuple
+from io import BytesIO
 
-import requests
+import httpx
 import torch
 from huggingface_hub import hf_hub_download
 from PIL import Image
@@ -152,11 +151,12 @@ def rename_key(dct, old, new):
 # We will verify our results on an image of cute cats
 def prepare_img():
     url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-    im = Image.open(requests.get(url, stream=True).raw)
-    return im
+    with httpx.stream("GET", url) as response:
+        image = Image.open(BytesIO(response.read()))
+    return image
 
 
-def get_labels_for_classifier(model_name: str) -> Tuple[Dict[int, str], Dict[str, int], int]:
+def get_labels_for_classifier(model_name: str) -> tuple[dict[int, str], dict[str, int], int]:
     repo_id = "huggingface/label-files"
 
     filename = "imagenet-1k-id2label.json"
@@ -354,7 +354,9 @@ if __name__ == "__main__":
         help="Whether or not to verify the logits against the original implementation.",
     )
     parser.add_argument(
-        "--push-to-hub", action="store_true", help="Whether or not to push the converted model to the 🤗 hub."
+        "--push-to-hub",
+        action="store_true",
+        help="Whether or not to push the converted model to the Hugging Face hub.",
     )
     parser.add_argument(
         "--base-model",

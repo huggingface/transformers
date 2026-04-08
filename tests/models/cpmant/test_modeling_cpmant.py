@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2022 The OpenBMB Team and The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -142,10 +141,8 @@ class CpmAntModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         {"feature-extraction": CpmAntModel, "text-generation": CpmAntForCausalLM} if is_torch_available() else {}
     )
 
-    test_pruning = False
     test_missing_keys = False
     test_mismatched_shapes = False
-    test_head_masking = False
     test_resize_embeddings = False
 
     def setUp(self):
@@ -156,7 +153,7 @@ class CpmAntModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         self.config_tester.run_common_tests()
 
     def test_inputs_embeds(self):
-        unittest.skip(reason="CPMAnt doesn't support input_embeds.")(self.test_inputs_embeds)
+        unittest.skip(reason="CPMAnt doesn't support inputs_embeds.")(self.test_inputs_embeds)
 
     def test_retain_grad_hidden_states_attentions(self):
         unittest.skip(
@@ -178,7 +175,7 @@ class CpmAntModelIntegrationTest(unittest.TestCase):
     @tooslow
     def test_inference_masked_lm(self):
         texts = "今天天气真好！"
-        model_path = "openbmb/cpm-ant-10b"
+        model_path = "hf-internal-testing/cpm-ant-10b-testing"
         model = CpmAntModel.from_pretrained(model_path)
         tokenizer = CpmAntTokenizer.from_pretrained(model_path)
         inputs = tokenizer(texts, return_tensors="pt")
@@ -193,9 +190,9 @@ class CpmAntModelIntegrationTest(unittest.TestCase):
 @require_torch
 class CpmAntForCausalLMlIntegrationTest(unittest.TestCase):
     @tooslow
-    def test_inference_casual(self):
+    def test_inference_causal(self):
         texts = "今天天气真好！"
-        model_path = "openbmb/cpm-ant-10b"
+        model_path = "hf-internal-testing/cpm-ant-10b-testing"
         model = CpmAntForCausalLM.from_pretrained(model_path)
         tokenizer = CpmAntTokenizer.from_pretrained(model_path)
         inputs = tokenizer(texts, return_tensors="pt")
@@ -208,7 +205,7 @@ class CpmAntForCausalLMlIntegrationTest(unittest.TestCase):
 
     @tooslow
     def test_simple_generation(self):
-        model_path = "openbmb/cpm-ant-10b"
+        model_path = "hf-internal-testing/cpm-ant-10b-testing"
         model = CpmAntForCausalLM.from_pretrained(model_path)
         tokenizer = CpmAntTokenizer.from_pretrained(model_path)
         texts = "今天天气不错，"
@@ -220,7 +217,7 @@ class CpmAntForCausalLMlIntegrationTest(unittest.TestCase):
 
     @tooslow
     def test_batch_generation(self):
-        model_path = "openbmb/cpm-ant-10b"
+        model_path = "hf-internal-testing/cpm-ant-10b-testing"
         model = CpmAntForCausalLM.from_pretrained(model_path)
         tokenizer = CpmAntTokenizer.from_pretrained(model_path)
         texts = ["今天天气不错，", "新年快乐，万事如意！"]

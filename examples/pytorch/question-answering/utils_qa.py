@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2020 The HuggingFace Team All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -20,7 +19,6 @@ import collections
 import json
 import logging
 import os
-from typing import Optional, Tuple
 
 import numpy as np
 from tqdm.auto import tqdm
@@ -32,14 +30,14 @@ logger = logging.getLogger(__name__)
 def postprocess_qa_predictions(
     examples,
     features,
-    predictions: Tuple[np.ndarray, np.ndarray],
+    predictions: tuple[np.ndarray, np.ndarray],
     version_2_with_negative: bool = False,
     n_best_size: int = 20,
     max_answer_length: int = 30,
     null_score_diff_threshold: float = 0.0,
-    output_dir: Optional[str] = None,
-    prefix: Optional[str] = None,
-    log_level: Optional[int] = logging.WARNING,
+    output_dir: str | None = None,
+    prefix: str | None = None,
+    log_level: int | None = logging.WARNING,
 ):
     """
     Post-processes the predictions of a question-answering model to convert them to answers that are substrings of the
@@ -48,7 +46,7 @@ def postprocess_qa_predictions(
     Args:
         examples: The non-preprocessed dataset (see the main script for more information).
         features: The processed dataset (see the main script for more information).
-        predictions (:obj:`Tuple[np.ndarray, np.ndarray]`):
+        predictions (:obj:`tuple[np.ndarray, np.ndarray]`):
             The predictions of the model: two arrays containing the start logits and the end logits respectively. Its
             first dimension must match the number of elements of :obj:`features`.
         version_2_with_negative (:obj:`bool`, `optional`, defaults to :obj:`False`):
@@ -186,7 +184,7 @@ def postprocess_qa_predictions(
         if len(predictions) == 0 or (len(predictions) == 1 and predictions[0]["text"] == ""):
             predictions.insert(0, {"text": "empty", "start_logit": 0.0, "end_logit": 0.0, "score": 0.0})
 
-        # Compute the softmax of all scores (we do it with numpy to stay independent from torch/tf in this file, using
+        # Compute the softmax of all scores (we do it with numpy to stay independent from torch in this file, using
         # the LogSumExp trick).
         scores = np.array([pred.pop("score") for pred in predictions])
         exp_scores = np.exp(scores - np.max(scores))
@@ -223,7 +221,7 @@ def postprocess_qa_predictions(
     # If we have an output_dir, let's save all those dicts.
     if output_dir is not None:
         if not os.path.isdir(output_dir):
-            raise EnvironmentError(f"{output_dir} is not a directory.")
+            raise OSError(f"{output_dir} is not a directory.")
 
         prediction_file = os.path.join(
             output_dir, "predictions.json" if prefix is None else f"{prefix}_predictions.json"
@@ -253,15 +251,15 @@ def postprocess_qa_predictions(
 def postprocess_qa_predictions_with_beam_search(
     examples,
     features,
-    predictions: Tuple[np.ndarray, np.ndarray],
+    predictions: tuple[np.ndarray, np.ndarray],
     version_2_with_negative: bool = False,
     n_best_size: int = 20,
     max_answer_length: int = 30,
     start_n_top: int = 5,
     end_n_top: int = 5,
-    output_dir: Optional[str] = None,
-    prefix: Optional[str] = None,
-    log_level: Optional[int] = logging.WARNING,
+    output_dir: str | None = None,
+    prefix: str | None = None,
+    log_level: int | None = logging.WARNING,
 ):
     """
     Post-processes the predictions of a question-answering model with beam search to convert them to answers that are substrings of the
@@ -271,7 +269,7 @@ def postprocess_qa_predictions_with_beam_search(
     Args:
         examples: The non-preprocessed dataset (see the main script for more information).
         features: The processed dataset (see the main script for more information).
-        predictions (:obj:`Tuple[np.ndarray, np.ndarray]`):
+        predictions (:obj:`tuple[np.ndarray, np.ndarray]`):
             The predictions of the model: two arrays containing the start logits and the end logits respectively. Its
             first dimension must match the number of elements of :obj:`features`.
         version_2_with_negative (:obj:`bool`, `optional`, defaults to :obj:`False`):
@@ -393,7 +391,7 @@ def postprocess_qa_predictions_with_beam_search(
             min_null_score = -2e-6
             predictions.insert(0, {"text": "", "start_logit": -1e-6, "end_logit": -1e-6, "score": min_null_score})
 
-        # Compute the softmax of all scores (we do it with numpy to stay independent from torch/tf in this file, using
+        # Compute the softmax of all scores (we do it with numpy to stay independent from torch in this file, using
         # the LogSumExp trick).
         scores = np.array([pred.pop("score") for pred in predictions])
         exp_scores = np.exp(scores - np.max(scores))
@@ -417,7 +415,7 @@ def postprocess_qa_predictions_with_beam_search(
     # If we have an output_dir, let's save all those dicts.
     if output_dir is not None:
         if not os.path.isdir(output_dir):
-            raise EnvironmentError(f"{output_dir} is not a directory.")
+            raise OSError(f"{output_dir} is not a directory.")
 
         prediction_file = os.path.join(
             output_dir, "predictions.json" if prefix is None else f"{prefix}_predictions.json"

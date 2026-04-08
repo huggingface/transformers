@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2022 HuggingFace Inc.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -99,7 +98,7 @@ class VivitImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
     image_processing_class = VivitImageProcessor if is_vision_available() else None
 
     def setUp(self):
-        super().setUp()
+        self.image_processing_classes = {"pil": VivitImageProcessor} if is_vision_available() else {}
         self.image_processor_tester = VivitImageProcessingTester(self)
 
     @property
@@ -192,14 +191,22 @@ class VivitImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
 
         # Test not batched input
         encoded_videos = image_processing(
-            video_inputs[0], return_tensors="pt", image_mean=0, image_std=1, input_data_format="channels_first"
+            video_inputs[0],
+            return_tensors="pt",
+            image_mean=(0.0, 0.0, 0.0, 0.0),
+            image_std=(1.0, 1.0, 1.0, 1.0),
+            input_data_format="channels_first",
         ).pixel_values
         expected_output_video_shape = self.image_processor_tester.expected_output_image_shape([encoded_videos[0]])
         self.assertEqual(tuple(encoded_videos.shape), (1, *expected_output_video_shape))
 
         # Test batched
         encoded_videos = image_processing(
-            video_inputs, return_tensors="pt", image_mean=0, image_std=1, input_data_format="channels_first"
+            video_inputs,
+            return_tensors="pt",
+            image_mean=(0.0, 0.0, 0.0, 0.0),
+            image_std=(1.0, 1.0, 1.0, 1.0),
+            input_data_format="channels_first",
         ).pixel_values
         expected_output_video_shape = self.image_processor_tester.expected_output_image_shape(encoded_videos)
         self.assertEqual(
@@ -227,3 +234,7 @@ class VivitImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
         self.assertEqual(
             tuple(encoded_videos.shape), (self.image_processor_tester.batch_size, *expected_output_video_shape)
         )
+
+    @unittest.skip("VivitImageProcessor has not been refactored to use the new image processing backend architecture")
+    def test_override_instance_attributes_does_not_affect_other_instances(self):
+        pass

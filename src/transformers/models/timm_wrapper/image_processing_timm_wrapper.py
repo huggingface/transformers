@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2024 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -14,15 +13,15 @@
 # limitations under the License.
 
 import os
-from typing import Any, Dict, Optional, Tuple, Union
+from typing import Any
 
 import torch
 
 from ...image_processing_utils import BaseImageProcessor, BatchFeature
 from ...image_transforms import to_pil_image
-from ...image_utils import ImageInput, make_list_of_images
+from ...image_utils import ImageInput, make_flat_list_of_images
 from ...utils import TensorType, logging, requires_backends
-from ...utils.import_utils import is_timm_available, is_torch_available
+from ...utils.import_utils import is_timm_available, is_torch_available, requires
 
 
 if is_timm_available():
@@ -35,12 +34,13 @@ if is_torch_available():
 logger = logging.get_logger(__name__)
 
 
+@requires(backends=("torch", "timm", "torchvision"))
 class TimmWrapperImageProcessor(BaseImageProcessor):
     """
     Wrapper class for timm models to be used within transformers.
 
     Args:
-        pretrained_cfg (`Dict[str, Any]`):
+        pretrained_cfg (`dict[str, Any]`):
             The configuration of the pretrained model used to resolve evaluation and
             training transforms.
         architecture (`Optional[str]`, *optional*):
@@ -51,8 +51,8 @@ class TimmWrapperImageProcessor(BaseImageProcessor):
 
     def __init__(
         self,
-        pretrained_cfg: Dict[str, Any],
-        architecture: Optional[str] = None,
+        pretrained_cfg: dict[str, Any],
+        architecture: str | None = None,
         **kwargs,
     ):
         requires_backends(self, "timm")
@@ -71,7 +71,7 @@ class TimmWrapperImageProcessor(BaseImageProcessor):
             transform.__class__.__name__ == "ToTensor" for transform in self.val_transforms.transforms
         )
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """
         Serializes this instance to a Python dictionary.
         """
@@ -83,8 +83,8 @@ class TimmWrapperImageProcessor(BaseImageProcessor):
 
     @classmethod
     def get_image_processor_dict(
-        cls, pretrained_model_name_or_path: Union[str, os.PathLike], **kwargs
-    ) -> Tuple[Dict[str, Any], Dict[str, Any]]:
+        cls, pretrained_model_name_or_path: str | os.PathLike, **kwargs
+    ) -> tuple[dict[str, Any], dict[str, Any]]:
         """
         Get the image processor dict for the model.
         """
@@ -96,7 +96,7 @@ class TimmWrapperImageProcessor(BaseImageProcessor):
     def preprocess(
         self,
         images: ImageInput,
-        return_tensors: Optional[Union[str, TensorType]] = "pt",
+        return_tensors: str | TensorType | None = "pt",
     ) -> BatchFeature:
         """
         Preprocess an image or batch of images.
@@ -120,7 +120,7 @@ class TimmWrapperImageProcessor(BaseImageProcessor):
             # Add batch dimension if a single image
             images = images.unsqueeze(0) if images.ndim == 3 else images
         else:
-            images = make_list_of_images(images)
+            images = make_flat_list_of_images(images)
             images = [to_pil_image(image) for image in images]
             images = torch.stack([self.val_transforms(image) for image in images])
 

@@ -8,7 +8,6 @@ from flax import serialization
 from flax.traverse_util import flatten_dict, unflatten_dict
 from tensorflow.io import gfile
 
-from transformers.modeling_utils import dtype_byte_size
 from transformers.models.switch_transformers.convert_switch_transformers_original_flax_checkpoint_to_pytorch import (
     rename_keys,
 )
@@ -81,7 +80,7 @@ def shard_on_the_fly(switch_checkpoint_path, dump_path, max_shard_size, dtype, w
         checkpoint_info = flatten_dict(checkpoint_info, sep="/")
 
     all_layers = {}
-    for layer in checkpoint_info.keys():
+    for layer in checkpoint_info:
         curr_real_layer_name, split_layer, content = get_key_and_tensorstore_dict(
             layer, checkpoint_info, switch_checkpoint_path
         )
@@ -90,11 +89,11 @@ def shard_on_the_fly(switch_checkpoint_path, dump_path, max_shard_size, dtype, w
         else:
             all_layers[curr_real_layer_name] = {split_layer[-1]: content}
 
-    for key in all_layers.keys():
+    for key, layer in all_layers.items():
         # open tensorstore file
-        raw_weights = ts.open(unflatten_dict(all_layers[key])).result().read().result()
+        raw_weights = ts.open(unflatten_dict(layer)).result().read().result()
         raw_weights = torch.tensor(raw_weights)
-        weight_size = raw_weights.numel() * dtype_byte_size(raw_weights.dtype)
+        weight_size = raw_weights.numel() * raw_weights.element_size()
 
         # use the renaming pattern from the small conversion scripts
         key, raw_weights = rename_base_flax_keys(tuple(key.split("/")), raw_weights)

@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2025 The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -17,9 +16,10 @@
 import argparse
 import json
 import re
+from io import BytesIO
 from pathlib import Path
 
-import requests
+import httpx
 import torch
 from huggingface_hub import hf_hub_download
 from PIL import Image
@@ -159,7 +159,7 @@ ORIGINAL_TO_CONVERTED_KEY_MAPPING = {
 }
 
 
-def convert_old_keys_to_new_keys(state_dict_keys: dict = None):
+def convert_old_keys_to_new_keys(state_dict_keys: dict | None = None):
     # Use the mapping to rename keys
     for original_key, converted_key in ORIGINAL_TO_CONVERTED_KEY_MAPPING.items():
         for key in list(state_dict_keys.keys()):
@@ -211,9 +211,9 @@ def read_in_q_k_v(state_dict, config):
 # We will verify our results on an image of cute cats
 def prepare_img():
     url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-    im = Image.open(requests.get(url, stream=True).raw)
-
-    return im
+    with httpx.stream("GET", url) as response:
+        image = Image.open(BytesIO(response.read()))
+    return image
 
 
 @torch.no_grad()
@@ -238,13 +238,13 @@ def write_model_and_image_processor(model_name, output_dir, push_to_hub, repo_id
     ]["module"]
     # rename keys
     state_dict = convert_old_keys_to_new_keys(state_dict)
-    for key in state_dict.copy().keys():
+    for key in state_dict.copy():
         if key.endswith("num_batches_tracked"):
             del state_dict[key]
     # query, key and value matrices need special treatment
     read_in_q_k_v(state_dict, config)
     # important: we need to prepend a prefix to each of the base model keys as the head models use different attributes for them
-    for key in state_dict.copy().keys():
+    for key in state_dict.copy():
         if key.endswith("num_batches_tracked"):
             del state_dict[key]
         # for two_stage

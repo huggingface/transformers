@@ -13,6 +13,7 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
+*This model was released on 2022-06-24 and added to Hugging Face Transformers on 2022-06-29.*
 
 # MVP
 
@@ -22,8 +23,7 @@ rendered properly in your Markdown viewer.
 
 ## Overview
 
-The MVP model was proposed in [MVP: Multi-task Supervised Pre-training for Natural Language Generation](https://arxiv.org/abs/2206.12131) by Tianyi Tang, Junyi Li, Wayne Xin Zhao and Ji-Rong Wen.
-
+The MVP model was proposed in [MVP: Multi-task Supervised Pre-training for Natural Language Generation](https://huggingface.co/papers/2206.12131) by Tianyi Tang, Junyi Li, Wayne Xin Zhao and Ji-Rong Wen.
 
 According to the abstract,
 
@@ -39,7 +39,7 @@ This model was contributed by [Tianyi Tang](https://huggingface.co/StevenTang). 
 - We have released a series of models [here](https://huggingface.co/models?filter=mvp), including MVP, MVP with task-specific prompts, and multi-task pre-trained variants.
 - If you want to use a model without prompts (standard Transformer), you can load it through `MvpForConditionalGeneration.from_pretrained('RUCAIBox/mvp')`.
 - If you want to use a model with task-specific prompts, such as summarization, you can load it through `MvpForConditionalGeneration.from_pretrained('RUCAIBox/mvp-summarization')`.
-- Our model supports lightweight prompt tuning following [Prefix-tuning](https://arxiv.org/abs/2101.00190) with method `set_lightweight_tuning()`.
+- Our model supports lightweight prompt tuning following [Prefix-tuning](https://huggingface.co/papers/2101.00190) with method `set_lightweight_tuning()`.
 
 ## Usage examples
 
@@ -66,6 +66,7 @@ For summarization, it is an example to use MVP and MVP with summarization-specif
 ```
 
 For data-to-text generation, it is an example to use MVP and multi-task pre-trained variants.
+
 ```python
 >>> from transformers import MvpTokenizerFast, MvpForConditionalGeneration
 
@@ -86,7 +87,7 @@ For data-to-text generation, it is an example to use MVP and multi-task pre-trai
 ['Iron Man is a fictional superhero appearing in American comic books published by Marvel Comics.']
 ```
 
-For lightweight tuning, *i.e.*, fixing the model and only tuning prompts, you can load MVP with randomly initialized prompts or with task-specific prompts. Our code also supports Prefix-tuning with BART following the [original paper](https://arxiv.org/abs/2101.00190).
+For lightweight tuning, *i.e.*, fixing the model and only tuning prompts, you can load MVP with randomly initialized prompts or with task-specific prompts. Our code also supports Prefix-tuning with BART following the [original paper](https://huggingface.co/papers/2101.00190).
 
 ```python
 >>> from transformers import MvpForConditionalGeneration

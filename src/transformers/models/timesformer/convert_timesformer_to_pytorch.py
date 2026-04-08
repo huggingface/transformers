@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2022 The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -101,7 +100,7 @@ def rename_key(name):
 
 
 def convert_state_dict(orig_state_dict, config):
-    for key in orig_state_dict.copy().keys():
+    for key in orig_state_dict.copy():
         val = orig_state_dict.pop(key)
 
         if key.startswith("model."):
@@ -143,7 +142,7 @@ def convert_timesformer_checkpoint(checkpoint_url, pytorch_dump_folder_path, mod
     # download original checkpoint, hosted on Google Drive
     output = "pytorch_model.bin"
     gdown.cached_download(checkpoint_url, output, quiet=False)
-    files = torch.load(output, map_location="cpu")
+    files = torch.load(output, map_location="cpu", weights_only=True)
     if "model" in files:
         state_dict = files["model"]
     elif "module" in files:
@@ -244,7 +243,9 @@ if __name__ == "__main__":
     )
     parser.add_argument("--model_name", default="timesformer-base-finetuned-k400", type=str, help="Name of the model.")
     parser.add_argument(
-        "--push_to_hub", action="store_true", help="Whether or not to push the converted model to the 🤗 hub."
+        "--push_to_hub",
+        action="store_true",
+        help="Whether or not to push the converted model to the Hugging Face hub.",
     )
 
     args = parser.parse_args()

@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2023 The HuggingFace Team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -85,9 +84,6 @@ class RwkvModelTester:
         self.eos_token_id = vocab_size - 1
         self.pad_token_id = vocab_size - 1
 
-    def get_large_model_config(self):
-        return RwkvConfig.from_pretrained("sgugger/rwkv-4-pile-7b")
-
     def prepare_config_and_inputs(
         self, gradient_checkpointing=False, scale_attn_by_inverse_layer_idx=False, reorder_and_upcast_attn=False
     ):
@@ -123,7 +119,6 @@ class RwkvModelTester:
             config,
             input_ids,
             input_mask,
-            None,
             token_type_ids,
             mc_token_ids,
             sequence_labels,
@@ -158,7 +153,7 @@ class RwkvModelTester:
         config.vocab_size = 300
         return config
 
-    def create_and_check_rwkv_model(self, config, input_ids, input_mask, head_mask, token_type_ids, *args):
+    def create_and_check_rwkv_model(self, config, input_ids, input_mask, token_type_ids, *args):
         config.output_hidden_states = True
         model = RwkvModel(config=config)
         model.to(torch_device)
@@ -169,7 +164,7 @@ class RwkvModelTester:
         self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
         self.parent.assertEqual(len(result.hidden_states), config.num_hidden_layers + 1)
 
-    def create_and_check_causl_lm(self, config, input_ids, input_mask, head_mask, token_type_ids, *args):
+    def create_and_check_causl_lm(self, config, input_ids, input_mask, token_type_ids, *args):
         model = RwkvForCausalLM(config)
         model.to(torch_device)
         model.eval()
@@ -178,7 +173,7 @@ class RwkvModelTester:
         self.parent.assertEqual(result.loss.shape, ())
         self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.vocab_size))
 
-    def create_and_check_state_equivalency(self, config, input_ids, input_mask, head_mask, token_type_ids, *args):
+    def create_and_check_state_equivalency(self, config, input_ids, input_mask, token_type_ids, *args):
         model = RwkvModel(config=config)
         model.to(torch_device)
         model.eval()
@@ -195,19 +190,6 @@ class RwkvModelTester:
 
         self.parent.assertTrue(torch.allclose(torch.cat([output_one, output_two], dim=1), output_whole, atol=1e-5))
 
-    def create_and_check_forward_and_backwards(
-        self, config, input_ids, input_mask, head_mask, token_type_ids, *args, gradient_checkpointing=False
-    ):
-        model = RwkvForCausalLM(config)
-        model.to(torch_device)
-        if gradient_checkpointing:
-            model.gradient_checkpointing_enable()
-
-        result = model(input_ids, labels=input_ids)
-        self.parent.assertEqual(result.loss.shape, ())
-        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.vocab_size))
-        result.loss.backward()
-
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
 
@@ -215,7 +197,6 @@ class RwkvModelTester:
             config,
             input_ids,
             input_mask,
-            head_mask,
             token_type_ids,
             mc_token_ids,
             sequence_labels,
@@ -234,11 +215,8 @@ class RwkvModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
     pipeline_model_mapping = (
         {"feature-extraction": RwkvModel, "text-generation": RwkvForCausalLM} if is_torch_available() else {}
     )
-    fx_compatible = False
     test_missing_keys = False
-    test_model_parallel = False
-    test_pruning = False
-    test_head_masking = False  # Rwkv does not support head masking
+    test_torch_exportable = False  # uses custom kernels by default, not compatible with torch.export
 
     def setUp(self):
         self.model_tester = RwkvModelTester(self)
@@ -252,7 +230,7 @@ class RwkvModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
         """
         if isinstance(member, torch.Tensor):
             max_value, min_value = member.max().item(), member.min().item()
-        elif isinstance(member, list) or isinstance(member, tuple):
+        elif isinstance(member, (list, tuple)):
             max_value, min_value = max(member), min(member)
 
         if not isinstance(container, list):
@@ -265,7 +243,7 @@ class RwkvModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
         is_inside_interval = (min_value >= expected_min) and (max_value <= expected_max)
 
         if not is_inside_interval:
-            standardMsg = "%s not found in %s" % (safe_repr(member), safe_repr(container))
+            standardMsg = f"{safe_repr(member)} not found in {safe_repr(container)}"
             self.fail(self._formatMessage(msg, standardMsg))
 
     def test_config(self):
@@ -283,35 +261,6 @@ class RwkvModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_state_equivalency(*config_and_inputs)
 
-    def test_initialization(self):
-        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
-
-        for model_class in self.all_model_classes:
-            model = model_class(config=config)
-            for name, param in model.named_parameters():
-                if "time_decay" in name:
-                    if param.requires_grad:
-                        self.assertTrue(param.data.max().item() == 3.0)
-                        self.assertTrue(param.data.min().item() == -5.0)
-                elif "time_first" in name:
-                    if param.requires_grad:
-                        # check if it's a ones like
-                        torch.testing.assert_close(param.data, torch.ones_like(param.data), rtol=1e-5, atol=1e-5)
-                elif any(x in name for x in ["time_mix_key", "time_mix_receptance"]):
-                    if param.requires_grad:
-                        self.assertInterval(
-                            param.data,
-                            [0.0, 1.0],
-                            msg=f"Parameter {name} of model {model_class} seems not properly initialized",
-                        )
-                elif "time_mix_value" in name:
-                    if param.requires_grad:
-                        self.assertInterval(
-                            param.data,
-                            [0.0, 1.3],
-                            msg=f"Parameter {name} of model {model_class} seems not properly initialized",
-                        )
-
     def test_attention_outputs(self):
         r"""
         Overriding the test_attention_outputs test as the attention outputs of Rwkv are different from other models
@@ -326,7 +275,8 @@ class RwkvModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
             inputs_dict["output_attentions"] = True
             inputs_dict["output_hidden_states"] = False
             config.return_dict = True
-            model = model_class(config)
+            model = model_class._from_config(config, attn_implementation="eager")
+            config = model.config
             model.to(torch_device)
             model.eval()
 
@@ -400,25 +350,11 @@ class RwkvModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
         super().test_beam_search_generate_dict_output()
         self.has_attentions = old_has_attentions
 
-    def test_constrained_beam_search_generate_dict_output(self):
-        # This model has a custom attention output shape AND config flags, let's skip those checks
-        old_has_attentions = self.has_attentions
-        self.has_attentions = False
-        super().test_constrained_beam_search_generate_dict_output()
-        self.has_attentions = old_has_attentions
-
     def test_greedy_generate_dict_outputs(self):
         # This model has a custom attention output shape AND config flags, let's skip those checks
         old_has_attentions = self.has_attentions
         self.has_attentions = False
         super().test_greedy_generate_dict_outputs()
-        self.has_attentions = old_has_attentions
-
-    def test_group_beam_search_generate_dict_output(self):
-        # This model has a custom attention output shape AND config flags, let's skip those checks
-        old_has_attentions = self.has_attentions
-        self.has_attentions = False
-        super().test_group_beam_search_generate_dict_output()
         self.has_attentions = old_has_attentions
 
     def test_sample_generate_dict_output(self):
@@ -453,7 +389,7 @@ class RWKVIntegrationTests(unittest.TestCase):
         expected_output = "Hello my name is Jasmine and I am a newbie to the"
 
         input_ids = self.tokenizer("Hello my name is", return_tensors="pt").input_ids.to(torch_device)
-        model = RwkvForCausalLM.from_pretrained(self.model_id, torch_dtype=torch.bfloat16).to(torch_device)
+        model = RwkvForCausalLM.from_pretrained(self.model_id, dtype=torch.bfloat16).to(torch_device)
 
         output = model.generate(input_ids, max_new_tokens=10)
         output_sentence = self.tokenizer.decode(output[0].tolist())

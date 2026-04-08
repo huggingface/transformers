@@ -21,7 +21,7 @@ tokenizer负责准备输入以供模型使用。该库包含所有模型的token
 1. 在批量分词时显著提速
 2. 在原始字符串（字符和单词）和token空间之间进行映射的其他方法（例如，获取包含给定字符的token的索引或与给定token对应的字符范围）。
 
-基类 [PreTrainedTokenizer] 和 [PreTrained TokenizerFast] 实现了在模型输入中编码字符串输入的常用方法（见下文），并从本地文件或目录或从库提供的预训练的 tokenizer（从 HuggingFace 的 AWS S3 存储库下载）实例化/保存 python 和“Fast” tokenizer。它们都依赖于包含常用方法的 [`~tokenization_utils_base.PreTrainedTokenizerBase`]和[`~tokenization_utils_base.SpecialTokensMixin`]。
+基类 [PreTrainedTokenizer] 和 [PreTrained TokenizerFast] 实现了在模型输入中编码字符串输入的常用方法（见下文），并从本地文件或目录或从库提供的预训练的 tokenizer（从 HuggingFace 的 AWS S3 存储库下载）实例化/保存 python 和“Fast” tokenizer。它们都依赖于包含常用方法的 [`~tokenization_utils_base.PreTrainedTokenizerBase`]。
 
 因此，[`PreTrainedTokenizer`] 和 [`PreTrainedTokenizerFast`] 实现了使用所有tokenizers的主要方法：
 

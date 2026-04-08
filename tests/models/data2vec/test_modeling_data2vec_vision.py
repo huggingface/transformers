@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2022 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -15,6 +14,9 @@
 """Testing suite for the PyTorch Data2VecVision model."""
 
 import unittest
+from functools import cached_property
+
+import pytest
 
 from transformers import Data2VecVisionConfig
 from transformers.testing_utils import (
@@ -25,13 +27,12 @@ from transformers.testing_utils import (
     torch_device,
 )
 from transformers.utils import (
-    cached_property,
     is_torch_available,
     is_vision_available,
 )
 
 from ...test_configuration_common import ConfigTester
-from ...test_modeling_common import ModelTesterMixin, _config_zero_init, floats_tensor, ids_tensor
+from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
 from ...test_pipeline_mixin import PipelineTesterMixin
 
 
@@ -50,7 +51,7 @@ if is_torch_available():
 if is_vision_available():
     from PIL import Image
 
-    from transformers import BeitImageProcessor
+    from transformers import BeitImageProcessorPil
 
 
 class Data2VecVisionModelTester:
@@ -199,18 +200,23 @@ class Data2VecVisionModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Te
         else {}
     )
 
-    test_pruning = False
     test_resize_embeddings = False
-    test_head_masking = False
 
     def setUp(self):
         self.model_tester = Data2VecVisionModelTester(self)
         self.config_tester = ConfigTester(
-            self, config_class=Data2VecVisionConfig, has_text_modality=False, hidden_size=37
+            self, config_class=Data2VecVisionConfig, has_text_modality=False, hidden_size=32
         )
 
     def test_config(self):
         self.config_tester.run_common_tests()
+
+    @unittest.skip(
+        reason="Will fix only if requested by the community: it fails with `torch._dynamo.exc.InternalTorchDynamoError: IndexError: list index out of range`. Without compile, the test pass."
+    )
+    @pytest.mark.torch_compile_test
+    def test_sdpa_can_compile_dynamic(self):
+        pass
 
     @unittest.skip(reason="Data2VecVision does not use inputs_embeds")
     def test_inputs_embeds(self):
@@ -284,24 +290,6 @@ class Data2VecVisionModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Te
             loss = model(**inputs).loss
             loss.backward()
 
-    def test_initialization(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-
-        configs_no_init = _config_zero_init(config)
-        for model_class in self.all_model_classes:
-            model = model_class(config=configs_no_init)
-            for name, param in model.named_parameters():
-                # we skip lambda parameters as these require special initial values
-                # determined by config.layer_scale_init_value
-                if "lambda" in name:
-                    continue
-                if param.requires_grad:
-                    self.assertIn(
-                        ((param.data.mean() * 1e9).round() / 1e9).item(),
-                        [0.0, 1.0],
-                        msg=f"Parameter {name} of model {model_class} seems not properly initialized",
-                    )
-
     def test_for_image_classification(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_for_image_classification(*config_and_inputs)
@@ -325,7 +313,9 @@ class Data2VecVisionModelIntegrationTest(unittest.TestCase):
     @cached_property
     def default_image_processor(self):
         return (
-            BeitImageProcessor.from_pretrained("facebook/data2vec-vision-base-ft1k") if is_vision_available() else None
+            BeitImageProcessorPil.from_pretrained("facebook/data2vec-vision-base-ft1k")
+            if is_vision_available()
+            else None
         )
 
     @slow
@@ -352,7 +342,7 @@ class Data2VecVisionModelIntegrationTest(unittest.TestCase):
         torch.testing.assert_close(logits[0, :3], expected_slice, rtol=1e-4, atol=1e-4)
 
         expected_top2 = [model.config.label2id[i] for i in ["remote control, remote", "tabby, tabby cat"]]
-        self.assertEqual(logits[0].topk(2).indices.cpu().tolist(), expected_top2)
+        self.assertEqual(logits[0].topk(2).indices.tolist(), expected_top2)
 
     @slow
     def test_inference_interpolate_pos_encoding(self):
@@ -362,7 +352,7 @@ class Data2VecVisionModelIntegrationTest(unittest.TestCase):
         )
 
         image = Image.open("./tests/fixtures/tests_samples/COCO/000000039769.png")
-        processor = BeitImageProcessor.from_pretrained("facebook/data2vec-vision-base-ft1k")
+        processor = BeitImageProcessorPil.from_pretrained("facebook/data2vec-vision-base-ft1k")
         inputs = processor(images=image, return_tensors="pt", size={"height": 480, "width": 480})
         pixel_values = inputs.pixel_values.to(torch_device)
 

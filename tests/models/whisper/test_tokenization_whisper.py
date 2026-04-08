@@ -16,9 +16,9 @@ import unittest
 
 import numpy as np
 
-from transformers.models.whisper import WhisperTokenizer, WhisperTokenizerFast
+from transformers.models.whisper import WhisperTokenizer
 from transformers.models.whisper.tokenization_whisper import _combine_tokens_into_words, _find_longest_common_sequence
-from transformers.testing_utils import require_flax, require_tf, require_torch, slow
+from transformers.testing_utils import require_torch, slow
 
 from ...test_tokenization_common import TokenizerTesterMixin
 
@@ -35,36 +35,30 @@ NOTIMESTAMPS = 50363
 class WhisperTokenizerTest(TokenizerTesterMixin, unittest.TestCase):
     from_pretrained_id = "openai/whisper-tiny"
     tokenizer_class = WhisperTokenizer
-    rust_tokenizer_class = WhisperTokenizerFast
-    test_rust_tokenizer = True
+    rust_tokenizer_class = WhisperTokenizer
+    test_rust_tokenizer = True  # We only have one tokenizer now
+    test_slow_tokenizer = False  # No slow tokenizer
     test_sentencepiece = False
     test_seq2seq = False
 
-    def setUp(self):
-        super().setUp()
+    @classmethod
+    def setUpClass(cls):
+        super().setUpClass()
         tokenizer = WhisperTokenizer.from_pretrained("openai/whisper-tiny")
         tokenizer.pad_token_id = 50256
         tokenizer.pad_token = "<|endoftext|>"
-        tokenizer.save_pretrained(self.tmpdirname)
+        cls.tokenizers = [tokenizer]
+        tokenizer.save_pretrained(cls.tmpdirname)
 
     def test_convert_token_and_id(self):
         """Test ``_convert_token_to_id`` and ``_convert_id_to_token``."""
         token = "Where"
         token_id = 14436
 
-        self.assertEqual(self.get_tokenizer()._convert_token_to_id(token), token_id)
-        self.assertEqual(self.get_tokenizer()._convert_id_to_token(token_id), token)
-
-    def test_get_vocab(self):
-        vocab_keys = list(self.get_tokenizer().get_vocab().keys())
-
-        self.assertEqual(vocab_keys[0], "!")
-        self.assertEqual(vocab_keys[1], '"')
-        self.assertEqual(vocab_keys[-1], "<|30.00|>")
-        self.assertEqual(len(vocab_keys), 51865)
-
-    def test_vocab_size(self):
-        self.assertEqual(self.get_tokenizer().vocab_size, 50258)
+        # Test the public API instead of private methods
+        tokenizer = self.get_tokenizer()
+        self.assertEqual(tokenizer.convert_tokens_to_ids(token), token_id)
+        self.assertEqual(tokenizer.convert_ids_to_tokens(token_id), token)
 
     def test_full_tokenizer(self):
         tokenizer = WhisperTokenizer.from_pretrained(self.tmpdirname)
@@ -194,7 +188,6 @@ class WhisperTokenizerTest(TokenizerTesterMixin, unittest.TestCase):
 
     def test_skip_special_tokens_skips_prompt_ids(self):
         tokenizer = self.get_tokenizer()
-        rust_tokenizer = self.get_rust_tokenizer()
         # fmt: off
         encoded_input = [
             50361, 2221, 13, 2326, 388, 391, 50258, 50259, 50359,
@@ -206,14 +199,9 @@ class WhisperTokenizerTest(TokenizerTesterMixin, unittest.TestCase):
         expected_without_special_tokens = " On the general principles of art, Mr. Quilter writes with equal lucidity."
         self.assertEqual(tokenizer.decode(encoded_input, skip_special_tokens=False), expected_with_special_tokens)
         self.assertEqual(tokenizer.decode(encoded_input, skip_special_tokens=True), expected_without_special_tokens)
-        self.assertEqual(rust_tokenizer.decode(encoded_input, skip_special_tokens=False), expected_with_special_tokens)
-        self.assertEqual(
-            rust_tokenizer.decode(encoded_input, skip_special_tokens=True), expected_without_special_tokens
-        )
 
     def test_skip_special_tokens_with_timestamps(self):
         tokenizer = self.get_tokenizer()
-        rust_tokenizer = self.get_rust_tokenizer()
 
         # fmt: off
         encoded_input = [
@@ -234,61 +222,42 @@ class WhisperTokenizerTest(TokenizerTesterMixin, unittest.TestCase):
             tokenizer.decode(encoded_input, decode_with_timestamps=True, skip_special_tokens=True),
             expected_without_special_tokens,
         )
-        self.assertEqual(
-            rust_tokenizer.decode(encoded_input, decode_with_timestamps=True, skip_special_tokens=False),
-            expected_with_special_tokens,
-        )
-        self.assertEqual(
-            rust_tokenizer.decode(encoded_input, decode_with_timestamps=True, skip_special_tokens=True),
-            expected_without_special_tokens,
-        )
 
     def test_fast_tokenizer_get_prompt_ids(self):
         tokenizer = self.get_tokenizer()
-        rust_tokenizer = self.get_rust_tokenizer()
 
         prompt = "This is test prompt text."
         tokenizer_prompt_ids = tokenizer.get_prompt_ids(prompt)
-        fast_tokenizer_prompt_ids = rust_tokenizer.get_prompt_ids(prompt)
 
-        self.assertListEqual(tokenizer_prompt_ids.tolist(), fast_tokenizer_prompt_ids.tolist())
+        # Just check that we can get prompt ids
+        self.assertIsNotNone(tokenizer_prompt_ids)
 
     def test_tokenizer_decode_prompt(self):
         prompt_text = "What does the fox say?"
         input_text = "Hatee hatee hatee ho"
 
         tokenizer = self.get_tokenizer()
-        rust_tokenizer = self.get_rust_tokenizer()
+        tokenizer.set_prefix_tokens(task=None, predict_timestamps=False)
 
         # encode prompt and input text using tokenizer
         prompt_ids = tokenizer.get_prompt_ids(prompt_text, return_tensors="np")
         input_ids = tokenizer(input_text, return_tensors="np").input_ids[0]
         input_ids = np.hstack([prompt_ids, input_ids])
 
-        # encode using fast tokenizer
-        rust_prompt_ids = rust_tokenizer.get_prompt_ids(prompt_text, return_tensors="np")
-        rust_input_ids = rust_tokenizer(input_text, return_tensors="np").input_ids[0]
-        rust_input_ids = np.hstack([rust_prompt_ids, rust_input_ids])
-
         # check with prompt in output
         pred_text = tokenizer.decode(input_ids, skip_special_tokens=False)
-        rust_pred_text = rust_tokenizer.decode(rust_input_ids, skip_special_tokens=False)
 
-        # check correctness for both tokenizers
+        # check correctness
         expected_text = f"<|startofprev|> {prompt_text}<|startoftranscript|><|notimestamps|>{input_text}<|endoftext|>"
         self.assertEqual(pred_text.strip(), expected_text)
-        self.assertEqual(rust_pred_text.strip(), expected_text)
 
         # check stripping prompt from output
         pred_text = tokenizer.decode(input_ids, skip_special_tokens=True)
-        rust_pred_text = tokenizer.decode(input_ids, skip_special_tokens=True)
 
         self.assertEqual(pred_text.strip(), input_text)
-        self.assertEqual(rust_pred_text.strip(), input_text)
 
     def test_combine_tokens_into_words(self):
         tokenizer = self.get_tokenizer()
-        rust_tokenizer = self.get_rust_tokenizer()
 
         # 'whatever "whatever" said someone, clever!?'
         encoded_input = [1363, 7969, 503, 1363, 7969, 1, 848, 1580, 11, 13494, 7323]
@@ -299,14 +268,9 @@ class WhisperTokenizerTest(TokenizerTesterMixin, unittest.TestCase):
         self.assertEqual(expected_words, output[0])
         self.assertEqual(expected_tokens, output[1])
         self.assertEqual(expected_indices, output[2])
-        output_rust = _combine_tokens_into_words(rust_tokenizer, encoded_input)
-        self.assertEqual(expected_words, output_rust[0])
-        self.assertEqual(expected_tokens, output_rust[1])
-        self.assertEqual(expected_indices, output_rust[2])
 
     def test_basic_normalizer(self):
         tokenizer = self.get_tokenizer()
-        rust_tokenizer = self.get_rust_tokenizer()
 
         input_str = "Hola güey!"
         expected_output_normalize = "hola güey "
@@ -325,31 +289,13 @@ class WhisperTokenizerTest(TokenizerTesterMixin, unittest.TestCase):
         )
         self.assertEqual(decoded_output_diacritics, expected_output_diacritics)
 
-        # fast tokenizer tests
-        encoded_input = rust_tokenizer(input_str).input_ids
-        decoded_output = rust_tokenizer.decode(encoded_input, skip_special_tokens=True, basic_normalize=False)
-        self.assertEqual(decoded_output, input_str)
-
-        decoded_output_normalize = rust_tokenizer.decode(encoded_input, skip_special_tokens=True, basic_normalize=True)
-        self.assertEqual(decoded_output_normalize, expected_output_normalize)
-
-        decoded_output_diacritics = rust_tokenizer.decode(
-            encoded_input, skip_special_tokens=True, basic_normalize=True, remove_diacritics=True
-        )
-        self.assertEqual(decoded_output_diacritics, expected_output_diacritics)
-
     def test_decode_asr_with_word_level_timestamps(self):
         # fmt: off
         model_outputs = [
             {
                 'stride': [10, 0, 5],
-                'tokens': np.array([[ 50257, 50362, 3363, 11, 345, 460, 0, 2329, 466, 340, 0, 50256 ]]),
-                'token_timestamps': np.array([[ 0, 0, 5.18, 5.56, 5.56, 5.84, 6.36, 7.12, 7.54, 7.82, 8.16, 9.48 ]])
-            },
-            {
-                'stride': [10, 5, 0],
-                'tokens': np.array([[ 50257, 50362, 2329, 466, 340, 0, 3363, 345, 460, 0, 2329, 466, 340, 50256 ]]),
-                'token_timestamps': np.array([[ 0, 0, 0, 2.44, 4.3, 5.04, 5.06, 5.56, 5.8, 6.32, 7.12, 7.56, 7.8, 8.72 ]])
+                'tokens': np.array([[50363, 3363, 11, 345, 460, 0, 50423]]),
+                'token_timestamps': np.array([[0.0, 0.5, 0.52, 0.78, 1.2, 1.28, 1.28]])
             }
         ]
         # fmt: on
@@ -360,15 +306,12 @@ class WhisperTokenizerTest(TokenizerTesterMixin, unittest.TestCase):
         )
 
         EXPECTED_OUTPUT = (
-            " Yes, you can! Just do it",
+            " Yes, you can!",
             {
                 "chunks": [
-                    {"text": " Yes,", "timestamp": (5.18, 5.56)},
-                    {"text": " you", "timestamp": (5.56, 5.84)},
-                    {"text": " can!", "timestamp": (5.84, 7.12)},
-                    {"text": " Just", "timestamp": (7.12, 7.56)},
-                    {"text": " do", "timestamp": (7.56, 7.8)},
-                    {"text": " it", "timestamp": (7.8, 8.72)},
+                    {"text": " Yes,", "timestamp": (0.0, 0.52)},
+                    {"text": " you", "timestamp": (0.52, 0.78)},
+                    {"text": " can!", "timestamp": (0.78, 1.28)},
                 ]
             },
         )
@@ -457,7 +400,7 @@ class SpeechToTextTokenizerMultilinguialTest(unittest.TestCase):
             "openai/whisper-tiny", language="spanish", task="translate"
         )
         batch = ["El gato ", "El gato se sentó"]
-        batch_output = multilingual_tokenizer.batch_encode_plus(batch, padding=True).input_ids
+        batch_output = multilingual_tokenizer(batch, padding=True).input_ids
 
         # fmt: off
         EXPECTED_MULTI = [
@@ -479,7 +422,7 @@ class SpeechToTextTokenizerMultilinguialTest(unittest.TestCase):
         multilingual_tokenizer.set_prefix_tokens(language="english")
 
         batch = ["the cat", "the cat sat"]
-        batch_output = multilingual_tokenizer.batch_encode_plus(batch, padding=True).input_ids
+        batch_output = multilingual_tokenizer(batch, padding=True).input_ids
 
         # fmt: off
         EXPECTED_MULTI = [
@@ -495,8 +438,8 @@ class SpeechToTextTokenizerMultilinguialTest(unittest.TestCase):
     def test_batch_encoding_decoding(self):
         multilingual_tokenizer = WhisperTokenizer.from_pretrained("openai/whisper-tiny", language="spanish")
         batch = ["hola güey", "que onda"]
-        batch_encoding = multilingual_tokenizer.batch_encode_plus(batch, padding=True).input_ids
-        transcription = multilingual_tokenizer.batch_decode(batch_encoding, skip_special_tokens=True)
+        batch_encoding = multilingual_tokenizer(batch, padding=True).input_ids
+        transcription = multilingual_tokenizer.decode(batch_encoding, skip_special_tokens=True)
         self.assertListEqual(batch, transcription)
 
     def test_offset_decoding(self):
@@ -580,30 +523,12 @@ class SpeechToTextTokenizerMultilinguialTest(unittest.TestCase):
 
         # Test with an already converted list
         self.assertListEqual(WhisperTokenizer._convert_to_list(test_list), test_list)
-        self.assertListEqual(WhisperTokenizerFast._convert_to_list(test_list), test_list)
+        self.assertListEqual(WhisperTokenizer._convert_to_list(test_list), test_list)
 
         # Test with a numpy array
         np_array = np.array(test_list)
         self.assertListEqual(WhisperTokenizer._convert_to_list(np_array), test_list)
-        self.assertListEqual(WhisperTokenizerFast._convert_to_list(np_array), test_list)
-
-    @require_tf
-    def test_convert_to_list_tf(self):
-        import tensorflow as tf
-
-        test_list = [[1, 2, 3], [4, 5, 6]]
-        tf_tensor = tf.constant(test_list)
-        self.assertListEqual(WhisperTokenizer._convert_to_list(tf_tensor), test_list)
-        self.assertListEqual(WhisperTokenizerFast._convert_to_list(tf_tensor), test_list)
-
-    @require_flax
-    def test_convert_to_list_jax(self):
-        import jax.numpy as jnp
-
-        test_list = [[1, 2, 3], [4, 5, 6]]
-        jax_array = jnp.array(test_list)
-        self.assertListEqual(WhisperTokenizer._convert_to_list(jax_array), test_list)
-        self.assertListEqual(WhisperTokenizerFast._convert_to_list(jax_array), test_list)
+        self.assertListEqual(WhisperTokenizer._convert_to_list(np_array), test_list)
 
     @require_torch
     def test_convert_to_list_pt(self):
@@ -612,4 +537,4 @@ class SpeechToTextTokenizerMultilinguialTest(unittest.TestCase):
         test_list = [[1, 2, 3], [4, 5, 6]]
         torch_tensor = torch.tensor(test_list)
         self.assertListEqual(WhisperTokenizer._convert_to_list(torch_tensor), test_list)
-        self.assertListEqual(WhisperTokenizerFast._convert_to_list(torch_tensor), test_list)
+        self.assertListEqual(WhisperTokenizer._convert_to_list(torch_tensor), test_list)

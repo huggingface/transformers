@@ -13,11 +13,11 @@
 # limitations under the License.
 import inspect
 import unittest
-from typing import List
+from functools import cached_property
 
 from transformers.models.superpoint.configuration_superpoint import SuperPointConfig
 from transformers.testing_utils import is_flaky, require_torch, require_vision, slow, torch_device
-from transformers.utils import cached_property, is_torch_available, is_vision_available
+from transformers.utils import is_torch_available, is_vision_available
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor
@@ -43,7 +43,7 @@ class SuperPointModelTester:
         batch_size=3,
         image_width=80,
         image_height=60,
-        encoder_hidden_sizes: List[int] = [32, 32, 64, 64],
+        encoder_hidden_sizes: list[int] = [32, 32, 64, 64],
         decoder_hidden_size: int = 128,
         keypoint_decoder_dim: int = 65,
         descriptor_decoder_dim: int = 128,
@@ -114,12 +114,10 @@ class SuperPointModelTester:
 class SuperPointModelTest(ModelTesterMixin, unittest.TestCase):
     all_model_classes = (SuperPointForKeypointDetection,) if is_torch_available() else ()
 
-    fx_compatible = False
-    test_pruning = False
     test_resize_embeddings = False
-    test_head_masking = False
     has_attentions = False
     from_pretrained_id = "magic-leap-community/superpoint"
+    test_torch_exportable = False
 
     def setUp(self):
         self.model_tester = SuperPointModelTester(self)
@@ -127,7 +125,7 @@ class SuperPointModelTest(ModelTesterMixin, unittest.TestCase):
             self,
             config_class=SuperPointConfig,
             has_text_modality=False,
-            hidden_size=37,
+            hidden_size=32,
             common_properties=["encoder_hidden_sizes", "decoder_hidden_size"],
         )
 
@@ -150,20 +148,20 @@ class SuperPointModelTest(ModelTesterMixin, unittest.TestCase):
     def test_feed_forward_chunking(self):
         pass
 
-    @unittest.skip(reason="SuperPointForKeypointDetection does not support training")
+    @unittest.skip(reason="This module does not support standalone training")
     def test_training(self):
         pass
 
-    @unittest.skip(reason="SuperPointForKeypointDetection does not support training")
+    @unittest.skip(reason="This module does not support standalone training")
     def test_training_gradient_checkpointing(self):
         pass
 
-    @unittest.skip(reason="SuperPointForKeypointDetection does not support training")
-    def test_training_gradient_checkpointing_use_reentrant(self):
+    @unittest.skip(reason="This module does not support standalone training")
+    def test_training_gradient_checkpointing_use_reentrant_false(self):
         pass
 
-    @unittest.skip(reason="SuperPointForKeypointDetection does not support training")
-    def test_training_gradient_checkpointing_use_reentrant_false(self):
+    @unittest.skip(reason="This module does not support standalone training")
+    def test_training_gradient_checkpointing_use_reentrant_true(self):
         pass
 
     @unittest.skip(reason="SuperPoint does not output any loss term in the forward pass")

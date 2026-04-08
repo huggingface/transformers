@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2021 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -13,8 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """Tokenization utils for RoFormer."""
-
-from typing import List
 
 from tokenizers import NormalizedString, PreTokenizedString, normalizers
 
@@ -37,7 +34,7 @@ class JiebaPreTokenizer:
             )
         self.jieba = rjieba
 
-    def jieba_split(self, i: int, normalized_string: NormalizedString) -> List[NormalizedString]:
+    def jieba_split(self, i: int, normalized_string: NormalizedString) -> list[NormalizedString]:
         splits = []
 
         # this code slice normalized_string is too slow (6s) but test_alignment_methods can pass

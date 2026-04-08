@@ -56,7 +56,7 @@ class LlavaConfigTest(unittest.TestCase):
 
     def test_arbitrary_reload(self):
         """
-        Simple test for reloading arbirarily composed subconfigs
+        Simple test for reloading arbitrarily composed subconfigs
         """
         default_values = LlavaConfig().to_diff_dict()
         default_values["vision_config"]["model_type"] = "pixtral"

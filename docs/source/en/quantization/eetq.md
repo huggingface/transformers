@@ -50,7 +50,7 @@ from transformers import AutoModelForCausalLM, EetqConfig
 quantization_config = EetqConfig("int8")
 model = AutoModelForCausalLM.from_pretrained(
     "meta-llama/Llama-3.1-8B",
-    torch_dtype="auto",
+    dtype="auto",
     device_map="auto",
     quantization_config=quantization_config
 )

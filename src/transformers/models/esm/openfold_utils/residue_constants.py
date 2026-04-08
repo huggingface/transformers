@@ -18,8 +18,8 @@
 import collections
 import copy
 import functools
+from collections.abc import Mapping, Sequence
 from importlib import resources
-from typing import Dict, List, Mapping, Sequence, Tuple
 
 import numpy as np
 
@@ -33,7 +33,7 @@ ca_ca = 3.80209737096
 # Format: The list for each AA type contains chi1, chi2, chi3, chi4 in
 # this order (or a relevant subset from chi1 onwards). ALA and GLY don't have
 # chi angles so their chi angle lists are empty.
-chi_angles_atoms: Dict[str, List[List[str]]] = {
+chi_angles_atoms: dict[str, list[list[str]]] = {
     "ALA": [],
     # Chi5 in arginine is always 0 +- 5 degrees, so ignore it.
     "ARG": [["N", "CA", "CB", "CG"], ["CA", "CB", "CG", "CD"], ["CB", "CG", "CD", "NE"], ["CG", "CD", "NE", "CZ"]],
@@ -59,7 +59,7 @@ chi_angles_atoms: Dict[str, List[List[str]]] = {
 
 # If chi angles given in fixed-length array, this matrix determines how to mask
 # them for each AA type. The order is as per restype_order (see below).
-chi_angles_mask: List[List[float]] = [
+chi_angles_mask: list[list[float]] = [
     [0.0, 0.0, 0.0, 0.0],  # ALA
     [1.0, 1.0, 1.0, 1.0],  # ARG
     [1.0, 1.0, 0.0, 0.0],  # ASN
@@ -84,7 +84,7 @@ chi_angles_mask: List[List[float]] = [
 
 # The following chi angles are pi periodic: they can be rotated by a multiple
 # of pi without affecting the structure.
-chi_pi_periodic: List[List[float]] = [
+chi_pi_periodic: list[list[float]] = [
     [0.0, 0.0, 0.0, 0.0],  # ALA
     [0.0, 0.0, 0.0, 0.0],  # ARG
     [0.0, 0.0, 0.0, 0.0],  # ASN
@@ -120,7 +120,7 @@ chi_pi_periodic: List[List[float]] = [
 # is defined such that the dihedral-angle-definiting atom (the last entry in
 # chi_angles_atoms above) is in the xy-plane (with a positive y-coordinate).
 # format: [atomname, group_idx, rel_position]
-rigid_group_atom_positions: Dict[str, List[Tuple[str, int, Tuple[float, float, float]]]] = {
+rigid_group_atom_positions: dict[str, list[tuple[str, int, tuple[float, float, float]]]] = {
     "ALA": [
         ("N", 0, (-0.525, 1.363, 0.000)),
         ("CA", 0, (0.000, 0.000, 0.000)),
@@ -332,7 +332,7 @@ rigid_group_atom_positions: Dict[str, List[Tuple[str, int, Tuple[float, float, f
 }
 
 # A list of atoms (excluding hydrogen) for each AA type. PDB naming convention.
-residue_atoms: Dict[str, List[str]] = {
+residue_atoms: dict[str, list[str]] = {
     "ALA": ["C", "CA", "CB", "N", "O"],
     "ARG": ["C", "CA", "CB", "CG", "CD", "CZ", "N", "NE", "O", "NH1", "NH2"],
     "ASP": ["C", "CA", "CB", "CG", "N", "O", "OD1", "OD2"],
@@ -362,7 +362,7 @@ residue_atoms: Dict[str, List[str]] = {
 # in LEU, VAL and ARG can be resolved by using the 3d constellations of
 # the 'ambiguous' atoms and their neighbours)
 # TODO: ^ interpret this
-residue_atom_renaming_swaps: Dict[str, Dict[str, str]] = {
+residue_atom_renaming_swaps: dict[str, dict[str, str]] = {
     "ASP": {"OD1": "OD2"},
     "GLU": {"OE1": "OE2"},
     "PHE": {"CD1": "CD2", "CE1": "CE2"},
@@ -370,7 +370,7 @@ residue_atom_renaming_swaps: Dict[str, Dict[str, str]] = {
 }
 
 # Van der Waals radii [Angstroem] of the atoms (from Wikipedia)
-van_der_waals_radius: Dict[str, float] = {
+van_der_waals_radius: dict[str, float] = {
     "C": 1.7,
     "N": 1.55,
     "O": 1.52,
@@ -398,11 +398,11 @@ def map_structure_with_atom_order(in_list: list, first_call: bool = True) -> lis
     return in_list
 
 
-@functools.lru_cache(maxsize=None)
-def load_stereo_chemical_props() -> Tuple[
-    Mapping[str, List[Bond]],
-    Mapping[str, List[Bond]],
-    Mapping[str, List[BondAngle]],
+@functools.cache
+def load_stereo_chemical_props() -> tuple[
+    Mapping[str, list[Bond]],
+    Mapping[str, list[Bond]],
+    Mapping[str, list[BondAngle]],
 ]:
     """Load stereo_chemical_props.txt into a nice structure.
 
@@ -418,7 +418,7 @@ def load_stereo_chemical_props() -> Tuple[
 
     lines_iter = iter(stereo_chemical_props.splitlines())
     # Load bond lengths.
-    residue_bonds: Dict[str, List[Bond]] = {}
+    residue_bonds: dict[str, list[Bond]] = {}
     next(lines_iter)  # Skip header line.
     for line in lines_iter:
         if line.strip() == "-":
@@ -431,7 +431,7 @@ def load_stereo_chemical_props() -> Tuple[
     residue_bonds["UNK"] = []
 
     # Load bond angles.
-    residue_bond_angles: Dict[str, List[BondAngle]] = {}
+    residue_bond_angles: dict[str, list[BondAngle]] = {}
     next(lines_iter)  # Skip empty line.
     next(lines_iter)  # Skip header line.
     for line in lines_iter:
@@ -457,10 +457,10 @@ def load_stereo_chemical_props() -> Tuple[
         return "-".join(sorted([atom1_name, atom2_name]))
 
     # Translate bond angles into distances ("virtual bonds").
-    residue_virtual_bonds: Dict[str, List[Bond]] = {}
+    residue_virtual_bonds: dict[str, list[Bond]] = {}
     for resname, bond_angles in residue_bond_angles.items():
         # Create a fast lookup dict for bond lengths.
-        bond_cache: Dict[str, Bond] = {}
+        bond_cache: dict[str, Bond] = {}
         for b in residue_bonds[resname]:
             bond_cache[make_bond_key(b.atom1_name, b.atom2_name)] = b
         residue_virtual_bonds[resname] = []
@@ -488,16 +488,16 @@ def load_stereo_chemical_props() -> Tuple[
 
 # Between-residue bond lengths for general bonds (first element) and for Proline
 # (second element).
-between_res_bond_length_c_n: Tuple[float, float] = (1.329, 1.341)
-between_res_bond_length_stddev_c_n: Tuple[float, float] = (0.014, 0.016)
+between_res_bond_length_c_n: tuple[float, float] = (1.329, 1.341)
+between_res_bond_length_stddev_c_n: tuple[float, float] = (0.014, 0.016)
 
 # Between-residue cos_angles.
-between_res_cos_angles_c_n_ca: Tuple[float, float] = (-0.5203, 0.0353)  # degrees: 121.352 +- 2.315
-between_res_cos_angles_ca_c_n: Tuple[float, float] = (-0.4473, 0.0311)  # degrees: 116.568 +- 1.995
+between_res_cos_angles_c_n_ca: tuple[float, float] = (-0.5203, 0.0353)  # degrees: 121.352 +- 2.315
+between_res_cos_angles_ca_c_n: tuple[float, float] = (-0.4473, 0.0311)  # degrees: 116.568 +- 1.995
 
 # This mapping is used when we need to store atom data in a format that requires
 # fixed atom data size for every residue (e.g. a numpy array).
-atom_types: List[str] = [
+atom_types: list[str] = [
     "N",
     "CA",
     "C",
@@ -536,13 +536,12 @@ atom_types: List[str] = [
     "NZ",
     "OXT",
 ]
-atom_order: Dict[str, int] = {atom_type: i for i, atom_type in enumerate(atom_types)}
+atom_order: dict[str, int] = {atom_type: i for i, atom_type in enumerate(atom_types)}
 atom_type_num = len(atom_types)  # := 37.
 
 # A compact atom encoding with 14 columns
 # pylint: disable=line-too-long
-# pylint: disable=bad-whitespace
-restype_name_to_atom14_names: Dict[str, List[str]] = {
+restype_name_to_atom14_names: dict[str, list[str]] = {
     "ALA": ["N", "CA", "C", "O", "CB", "", "", "", "", "", "", "", "", ""],
     "ARG": ["N", "CA", "C", "O", "CB", "CG", "CD", "NE", "CZ", "NH1", "NH2", "", "", ""],
     "ASN": ["N", "CA", "C", "O", "CB", "CG", "OD1", "ND2", "", "", "", "", "", ""],
@@ -566,12 +565,11 @@ restype_name_to_atom14_names: Dict[str, List[str]] = {
     "UNK": ["", "", "", "", "", "", "", "", "", "", "", "", "", ""],
 }
 # pylint: enable=line-too-long
-# pylint: enable=bad-whitespace
 
 
 # This is the standard residue order when coding AA type as a number.
 # Reproduce it by taking 3-letter AA codes and sorting them alphabetically.
-restypes: List[str] = [
+restypes: list[str] = [
     "A",
     "R",
     "N",
@@ -593,12 +591,12 @@ restypes: List[str] = [
     "Y",
     "V",
 ]
-restype_order: Dict[str, int] = {restype: i for i, restype in enumerate(restypes)}
+restype_order: dict[str, int] = {restype: i for i, restype in enumerate(restypes)}
 restype_num = len(restypes)  # := 20.
 unk_restype_index = restype_num  # Catch-all index for unknown restypes.
 
-restypes_with_x: List[str] = restypes + ["X"]
-restype_order_with_x: Dict[str, int] = {restype: i for i, restype in enumerate(restypes_with_x)}
+restypes_with_x: list[str] = restypes + ["X"]
+restype_order_with_x: dict[str, int] = {restype: i for i, restype in enumerate(restypes_with_x)}
 
 
 def sequence_to_onehot(sequence: str, mapping: Mapping[str, int], map_unknown_to_x: bool = False) -> np.ndarray:
@@ -641,7 +639,7 @@ def sequence_to_onehot(sequence: str, mapping: Mapping[str, int], map_unknown_to
     return one_hot_arr
 
 
-restype_1to3: Dict[str, str] = {
+restype_1to3: dict[str, str] = {
     "A": "ALA",
     "R": "ARG",
     "N": "ASN",
@@ -669,13 +667,13 @@ restype_1to3: Dict[str, str] = {
 # 1-to-1 mapping of 3 letter names to one letter names. The latter contains
 # many more, and less common, three letter names as keys and maps many of these
 # to the same one letter name (including 'X' and 'U' which we don't use here).
-restype_3to1: Dict[str, str] = {v: k for k, v in restype_1to3.items()}
+restype_3to1: dict[str, str] = {v: k for k, v in restype_1to3.items()}
 
 # Define a restype name for all unknown residues.
 unk_restype = "UNK"
 
-resnames: List[str] = [restype_1to3[r] for r in restypes] + [unk_restype]
-resname_to_idx: Dict[str, int] = {resname: i for i, resname in enumerate(resnames)}
+resnames: list[str] = [restype_1to3[r] for r in restypes] + [unk_restype]
+resname_to_idx: dict[str, int] = {resname: i for i, resname in enumerate(resnames)}
 
 
 # The mapping here uses hhblits convention, so that B is mapped to D, J and O
@@ -685,7 +683,7 @@ resname_to_idx: Dict[str, int] = {resname: i for i, resname in enumerate(resname
 # "-" representing a missing amino acid in an alignment.  The id for these
 # codes is put at the end (20 and 21) so that they can easily be ignored if
 # desired.
-HHBLITS_AA_TO_ID: Dict[str, int] = {
+HHBLITS_AA_TO_ID: dict[str, int] = {
     "A": 0,
     "B": 2,
     "C": 1,
@@ -716,7 +714,7 @@ HHBLITS_AA_TO_ID: Dict[str, int] = {
 }
 
 # Partial inversion of HHBLITS_AA_TO_ID.
-ID_TO_HHBLITS_AA: Dict[int, str] = {
+ID_TO_HHBLITS_AA: dict[int, str] = {
     0: "A",
     1: "C",  # Also U.
     2: "D",  # Also B.
@@ -741,8 +739,8 @@ ID_TO_HHBLITS_AA: Dict[int, str] = {
     21: "-",
 }
 
-restypes_with_x_and_gap: List[str] = restypes + ["X", "-"]
-MAP_HHBLITS_AATYPE_TO_OUR_AATYPE: Tuple[int, ...] = tuple(
+restypes_with_x_and_gap: list[str] = restypes + ["X", "-"]
+MAP_HHBLITS_AATYPE_TO_OUR_AATYPE: tuple[int, ...] = tuple(
     restypes_with_x_and_gap.index(ID_TO_HHBLITS_AA[i]) for i in range(len(restypes_with_x_and_gap))
 )
 
@@ -791,7 +789,7 @@ chi_atom_1_one_hot = chi_angle_atom(1)
 chi_atom_2_one_hot = chi_angle_atom(2)
 
 # An array like chi_angles_atoms but using indices rather than names.
-chi_angles_atom_indices_list: List[List[List[str]]] = [chi_angles_atoms[restype_1to3[r]] for r in restypes]
+chi_angles_atom_indices_list: list[list[list[str]]] = [chi_angles_atoms[restype_1to3[r]] for r in restypes]
 chi_angles_atom_indices_ours: list = map_structure_with_atom_order(chi_angles_atom_indices_list)
 chi_angles_atom_indices = np.array(
     [chi_atoms + ([[0, 0, 0, 0]] * (4 - len(chi_atoms))) for chi_atoms in chi_angles_atom_indices_list]
@@ -799,7 +797,7 @@ chi_angles_atom_indices = np.array(
 
 # Mapping from (res_name, atom_name) pairs to the atom's chi group index
 # and atom index within that group.
-chi_groups_for_atom: Dict[Tuple[str, str], List[Tuple[int, int]]] = collections.defaultdict(list)
+chi_groups_for_atom: dict[tuple[str, str], list[tuple[int, int]]] = collections.defaultdict(list)
 for res_name, chi_angle_atoms_for_res in chi_angles_atoms.items():
     for chi_group_i, chi_group in enumerate(chi_angle_atoms_for_res):
         for atom_i, atom in enumerate(chi_group):
@@ -853,7 +851,7 @@ def _make_rigid_group_constants() -> None:
 
     for restype, restype_letter in enumerate(restypes):
         resname = restype_1to3[restype_letter]
-        atom_positions: Dict[str, np.ndarray] = {
+        atom_positions: dict[str, np.ndarray] = {
             name: np.array(pos) for name, _, pos in rigid_group_atom_positions[resname]
         }
 
@@ -913,7 +911,7 @@ _make_rigid_group_constants()
 def make_atom14_dists_bounds(
     overlap_tolerance: float = 1.5,
     bond_length_tolerance_factor: int = 15,
-) -> Dict[str, np.ndarray]:
+) -> dict[str, np.ndarray]:
     """compute upper and lower bounds for bonds to assess violations."""
     restype_atom14_bond_lower_bound = np.zeros([21, 14, 14], np.float32)
     restype_atom14_bond_upper_bound = np.zeros([21, 14, 14], np.float32)

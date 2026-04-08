@@ -1,7 +1,8 @@
 import argparse
 import json
+from io import BytesIO
 
-import requests
+import httpx
 import timm
 import torch
 from huggingface_hub import hf_hub_download
@@ -90,7 +91,7 @@ def rename_key(name):
 
 
 def convert_state_dict(orig_state_dict, model):
-    for key in orig_state_dict.copy().keys():
+    for key in orig_state_dict.copy():
         val = orig_state_dict.pop(key)
 
         if "mask" in key:
@@ -140,8 +141,9 @@ def convert_swin_checkpoint(swin_name, pytorch_dump_folder_path):
 
     url = "http://images.cocodataset.org/val2017/000000039769.jpg"
 
-    image_processor = AutoImageProcessor.from_pretrained("microsoft/{}".format(swin_name.replace("_", "-")))
-    image = Image.open(requests.get(url, stream=True).raw)
+    image_processor = AutoImageProcessor.from_pretrained(f"microsoft/{swin_name.replace('_', '-')}")
+    with httpx.stream("GET", url) as response:
+        image = Image.open(BytesIO(response.read()))
     inputs = image_processor(images=image, return_tensors="pt")
 
     timm_outs = timm_model(inputs["pixel_values"])

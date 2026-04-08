@@ -78,7 +78,7 @@ IDEFICS プロセッサは、[`LlamaTokenizer`] と IDEFICS 画像プロセッ�
 
 >>> processor = AutoProcessor.from_pretrained(checkpoint)
 
->>> model = IdeficsForVisionText2Text.from_pretrained(checkpoint, torch_dtype=torch.bfloat16, device_map="auto")
+>>> model = IdeficsForVisionText2Text.from_pretrained(checkpoint, dtype=torch.bfloat16, device_map="auto")
 ```
 
 `device_map`を`auto`に設定すると、モデルの重みを最も最適化された状態でロードおよび保存する方法が自動的に決定されます。
@@ -395,7 +395,7 @@ This is an image of a vegetable stand.
 >>> device = "cuda" if torch.cuda.is_available() else "cpu"
 
 >>> checkpoint = "HuggingFaceM4/idefics-9b-instruct"
->>> model = IdeficsForVisionText2Text.from_pretrained(checkpoint, torch_dtype=torch.bfloat16).to(device)
+>>> model = IdeficsForVisionText2Text.from_pretrained(checkpoint, dtype=torch.bfloat16).to(device)
 >>> processor = AutoProcessor.from_pretrained(checkpoint)
 
 >>> prompts = [

@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2022 The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -16,9 +15,10 @@
 
 import argparse
 import json
+from io import BytesIO
 from pathlib import Path
 
-import requests
+import httpx
 import torch
 from huggingface_hub import hf_hub_download
 from PIL import Image
@@ -155,7 +155,7 @@ def convert_state_dict(orig_state_dict, model, base_model=False):
     else:
         model_prefix = "mobilevit."
 
-    for key in orig_state_dict.copy().keys():
+    for key in orig_state_dict.copy():
         val = orig_state_dict.pop(key)
 
         if key[:8] == "encoder.":
@@ -187,8 +187,9 @@ def convert_state_dict(orig_state_dict, model, base_model=False):
 # We will verify our results on an image of cute cats
 def prepare_img():
     url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-    im = Image.open(requests.get(url, stream=True).raw)
-    return im
+    with httpx.stream("GET", url) as response:
+        image = Image.open(BytesIO(response.read()))
+    return image
 
 
 @torch.no_grad()
@@ -199,7 +200,7 @@ def convert_movilevit_checkpoint(mobilevit_name, checkpoint_path, pytorch_dump_f
     config = get_mobilevit_config(mobilevit_name)
 
     # load original state_dict
-    state_dict = torch.load(checkpoint_path, map_location="cpu")
+    state_dict = torch.load(checkpoint_path, map_location="cpu", weights_only=True)
 
     # load 🤗 model
     if mobilevit_name.startswith("deeplabv3_"):
@@ -302,7 +303,9 @@ if __name__ == "__main__":
         "--pytorch_dump_folder_path", required=True, type=str, help="Path to the output PyTorch model directory."
     )
     parser.add_argument(
-        "--push_to_hub", action="store_true", help="Whether or not to push the converted model to the 🤗 hub."
+        "--push_to_hub",
+        action="store_true",
+        help="Whether or not to push the converted model to the Hugging Face hub.",
     )
 
     args = parser.parse_args()

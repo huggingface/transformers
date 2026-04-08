@@ -47,9 +47,11 @@ limitations under the License.
         <a href="https://github.com/huggingface/transformers/blob/main/i18n/README_te.md">తెలుగు</a> |
         <a href="https://github.com/huggingface/transformers/blob/main/i18n/README_fr.md">Français</a> |
         <b>Deutsch</b> |
+        <a href="https://github.com/huggingface/transformers/blob/main/i18n/README_it.md">Italiano</a> |
         <a href="https://github.com/huggingface/transformers/blob/main/i18n/README_vi.md">Tiếng Việt</a> |
         <a href="https://github.com/huggingface/transformers/blob/main/i18n/README_ar.md">العربية</a> |
         <a href="https://github.com/huggingface/transformers/blob/main/i18n/README_ur.md">اردو</a> |
+        <a href="https://github.com/huggingface/transformers/blob/main/i18n/README_bn.md">বাংলা</a> |
     </p>
 </h4>
 
@@ -119,7 +121,7 @@ In multimodalen Aufgaben:
 
 🤗 Transformers ist mehr als nur ein Toolkit zur Verwendung von vortrainierten Modellen: Es ist eine Gemeinschaft von Projekten, die darum herum und um den Hugging Face Hub aufgebaut sind. Wir möchten, dass 🤗 Transformers es Entwicklern, Forschern, Studenten, Professoren, Ingenieuren und jedem anderen ermöglicht, ihre Traumprojekte zu realisieren.
 
-Um die 100.000 Sterne von 🤗 Transformers zu feiern, haben wir beschlossen, die Gemeinschaft in den Mittelpunkt zu stellen und die Seite [awesome-transformers](./awesome-transformers.md) erstellt, die 100 unglaubliche Projekte auflistet, die zusammen mit 🤗 Transformers realisiert wurden.
+Um die 100.000 Sterne von 🤗 Transformers zu feiern, haben wir beschlossen, die Gemeinschaft in den Mittelpunkt zu stellen und die Seite [awesome-transformers](https://github.com/huggingface/transformers/blob/main/awesome-transformers.md) erstellt, die 100 unglaubliche Projekte auflistet, die zusammen mit 🤗 Transformers realisiert wurden.
 
 Wenn Sie ein Projekt besitzen oder nutzen, von dem Sie glauben, dass es Teil der Liste sein sollte, öffnen Sie bitte einen PR, um es hinzuzufügen!
 
@@ -246,7 +248,7 @@ Das Modell selbst ist ein reguläres [PyTorch `nn.Module`](https://pytorch.org/d
 
 ### Mit pip
 
-Dieses Repository wurde mit Python 3.9+, Flax 0.4.1+, PyTorch 2.0+ und TensorFlow 2.6+ getestet.
+Dieses Repository wurde mit Python 3.10+ und PyTorch 2.4+ getestet.
 
 Sie sollten 🤗 Transformers in einer [virtuellen Umgebung](https://docs.python.org/3/library/venv.html) installieren. Wenn Sie mit virtuellen Python-Umgebungen nicht vertraut sind, schauen Sie sich den [Benutzerleitfaden](https://packaging.python.org/guides/installing-using-pip-and-virtual-environments/) an.
 

@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2021 The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -56,7 +55,7 @@ ACCEPTABLE_CHECKPOINTS = [
 
 
 def load_state_dict(checkpoint_path):
-    sd = torch.load(checkpoint_path, map_location="cpu")
+    sd = torch.load(checkpoint_path, map_location="cpu", weights_only=True)
     return sd
 
 

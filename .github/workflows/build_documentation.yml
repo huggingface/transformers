@@ -11,12 +11,24 @@ on:
 
 jobs:
    build:
-    uses: huggingface/doc-builder/.github/workflows/build_main_documentation.yml@main
+    uses: huggingface/doc-builder/.github/workflows/build_main_documentation.yml@90b4ee2c10b81b5c1a6367c4e6fc9e2fb510a7e3  # main
     with:
       commit_sha: ${{ github.sha }}
       package: transformers
       notebook_folder: transformers_doc
-      languages: ar de en es fr hi it ko pt tr zh ja te
+      languages: en
+      custom_container: huggingface/transformers-doc-builder
+    secrets:
+      token: ${{ secrets.HUGGINGFACE_PUSH }}
+      hf_token: ${{ secrets.HF_DOC_BUILD_PUSH }}
+
+   build_other_lang:
+    uses: huggingface/doc-builder/.github/workflows/build_main_documentation.yml@90b4ee2c10b81b5c1a6367c4e6fc9e2fb510a7e3  # main
+    with:
+      commit_sha: ${{ github.sha }}
+      package: transformers
+      notebook_folder: transformers_doc
+      languages: ar de es fr hi it ja ko pt tr zh
       custom_container: huggingface/transformers-doc-builder
     secrets:
       token: ${{ secrets.HUGGINGFACE_PUSH }}

@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2024 Meta Inc. and the HuggingFace Inc. team. All rights reserved.
 #
 #
@@ -14,10 +13,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import Optional
 
 import torch
-import torch.utils.checkpoint
+from huggingface_hub.dataclasses import strict
 from torch import nn
 
 from ....transformers.models.dinov2.modeling_dinov2 import (
@@ -28,77 +26,33 @@ from ....transformers.models.dinov2.modeling_dinov2 import (
     Dinov2PatchEmbeddings,
     Dinov2PreTrainedModel,
 )
-from ...configuration_utils import PretrainedConfig
-from ...modeling_outputs import BackboneOutput
-from ...utils import logging, torch_int
-from ...utils.backbone_utils import BackboneConfigMixin, get_aligned_output_features_output_indices
+from ... import initialization as init
+from ...backbone_utils import BackboneConfigMixin
+from ...configuration_utils import PreTrainedConfig
+from ...modeling_outputs import BackboneOutput, BaseModelOutput, BaseModelOutputWithPooling, ImageClassifierOutput
+from ...processing_utils import Unpack
+from ...utils import TransformersKwargs, auto_docstring, logging, torch_int
 
 
 logger = logging.get_logger(__name__)
 
 
-class Dinov2WithRegistersConfig(BackboneConfigMixin, PretrainedConfig):
+@auto_docstring(checkpoint="facebook/dinov2-with-registers-base")
+@strict
+class Dinov2WithRegistersConfig(BackboneConfigMixin, PreTrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`Dinov2WithRegistersModel`]. It is used to instantiate an
-    Dinov2WithRegisters model according to the specified arguments, defining the model architecture. Instantiating a configuration
-    with the defaults will yield a similar configuration to that of the DINOv2 with Registers
-    [facebook/dinov2-with-registers-base](https://huggingface.co/facebook/dinov2-with-registers-base) architecture.
-
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
-
-    Args:
-        hidden_size (`int`, *optional*, defaults to 768):
-            Dimensionality of the encoder layers and the pooler layer.
-        num_hidden_layers (`int`, *optional*, defaults to 12):
-            Number of hidden layers in the Transformer encoder.
-        num_attention_heads (`int`, *optional*, defaults to 12):
-            Number of attention heads for each attention layer in the Transformer encoder.
-        mlp_ratio (`int`, *optional*, defaults to 4):
-            Ratio of the hidden size of the MLPs relative to the `hidden_size`.
-        hidden_act (`str` or `function`, *optional*, defaults to `"gelu"`):
-            The non-linear activation function (function or string) in the encoder and pooler. If string, `"gelu"`,
-            `"relu"`, `"selu"` and `"gelu_new"` are supported.
-        hidden_dropout_prob (`float`, *optional*, defaults to 0.0):
-            The dropout probability for all fully connected layers in the embeddings, encoder, and pooler.
-        attention_probs_dropout_prob (`float`, *optional*, defaults to 0.0):
-            The dropout ratio for the attention probabilities.
-        initializer_range (`float`, *optional*, defaults to 0.02):
-            The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-        layer_norm_eps (`float`, *optional*, defaults to 1e-06):
-            The epsilon used by the layer normalization layers.
-        image_size (`int`, *optional*, defaults to 224):
-            The size (resolution) of each image.
-        patch_size (`int`, *optional*, defaults to 16):
-            The size (resolution) of each patch.
-        num_channels (`int`, *optional*, defaults to 3):
-            The number of input channels.
-        qkv_bias (`bool`, *optional*, defaults to `True`):
-            Whether to add a bias to the queries, keys and values.
-        layerscale_value (`float`, *optional*, defaults to 1.0):
-           Initial value to use for layer scale.
-        drop_path_rate (`float`, *optional*, defaults to 0.0):
-            Stochastic depth rate per sample (when applied in the main path of residual layers).
-        use_swiglu_ffn (`bool`, *optional*, defaults to `False`):
-            Whether to use the SwiGLU feedforward neural network.
-        num_register_tokens (`int`, *optional*, defaults to 4):
-            Number of register tokens to use.
-        out_features (`List[str]`, *optional*):
-            If used as backbone, list of features to output. Can be any of `"stem"`, `"stage1"`, `"stage2"`, etc.
-            (depending on how many stages the model has). If unset and `out_indices` is set, will default to the
-            corresponding stages. If unset and `out_indices` is unset, will default to the last stage. Must be in the
-            same order as defined in the `stage_names` attribute.
-        out_indices (`List[int]`, *optional*):
-            If used as backbone, list of indices of features to output. Can be any of 0, 1, 2, etc. (depending on how
-            many stages the model has). If unset and `out_features` is set, will default to the corresponding stages.
-            If unset and `out_features` is unset, will default to the last stage. Must be in the
-            same order as defined in the `stage_names` attribute.
-        apply_layernorm (`bool`, *optional*, defaults to `True`):
-            Whether to apply layer normalization to the feature maps in case the model is used as backbone.
-        reshape_hidden_states (`bool`, *optional*, defaults to `True`):
-            Whether to reshape the feature maps to 4D tensors of shape `(batch_size, hidden_size, height, width)` in
-            case the model is used as backbone. If `False`, the feature maps will be 3D tensors of shape `(batch_size,
-            seq_len, hidden_size)`.
+    layerscale_value (`float`, *optional*, defaults to 1.0):
+        Initial value to use for layer scale.
+    use_swiglu_ffn (`bool`, *optional*, defaults to `False`):
+        Whether to use the SwiGLU feedforward neural network.
+    num_register_tokens (`int`, *optional*, defaults to 4):
+        Number of register tokens to use.
+    apply_layernorm (`bool`, *optional*, defaults to `True`):
+        Whether to apply layer normalization to the feature maps in case the model is used as backbone.
+    reshape_hidden_states (`bool`, *optional*, defaults to `True`):
+        Whether to reshape the feature maps to 4D tensors of shape `(batch_size, hidden_size, height, width)` in
+        case the model is used as backbone. If `False`, the feature maps will be 3D tensors of shape `(batch_size,
+        seq_len, hidden_size)`.
 
     Example:
 
@@ -117,56 +71,34 @@ class Dinov2WithRegistersConfig(BackboneConfigMixin, PretrainedConfig):
 
     model_type = "dinov2_with_registers"
 
-    def __init__(
-        self,
-        hidden_size=768,
-        num_hidden_layers=12,
-        num_attention_heads=12,
-        mlp_ratio=4,
-        hidden_act="gelu",
-        hidden_dropout_prob=0.0,
-        attention_probs_dropout_prob=0.0,
-        initializer_range=0.02,
-        layer_norm_eps=1e-6,
-        image_size=224,
-        patch_size=16,
-        num_channels=3,
-        qkv_bias=True,
-        layerscale_value=1.0,
-        drop_path_rate=0.0,
-        use_swiglu_ffn=False,
-        num_register_tokens=4,
-        out_features=None,
-        out_indices=None,
-        apply_layernorm=True,
-        reshape_hidden_states=True,
-        **kwargs,
-    ):
-        super().__init__(**kwargs)
+    hidden_size: int = 768
+    num_hidden_layers: int = 12
+    num_attention_heads: int = 12
+    mlp_ratio: int = 4
+    hidden_act: str = "gelu"
+    hidden_dropout_prob: float | int = 0.0
+    attention_probs_dropout_prob: float | int = 0.0
+    initializer_range: float = 0.02
+    layer_norm_eps: float = 1e-6
+    image_size: int | list[int] | tuple[int, int] = 224
+    patch_size: int | list[int] | tuple[int, int] = 16
+    num_channels: int = 3
+    qkv_bias: bool = True
+    layerscale_value: float = 1.0
+    drop_path_rate: float | int = 0.0
+    use_swiglu_ffn: bool = False
+    num_register_tokens: int = 4
+    _out_features: list[str] | None = None
+    _out_indices: list[int] | None = None
+    apply_layernorm: bool = True
+    reshape_hidden_states: bool = True
 
-        self.hidden_size = hidden_size
-        self.num_hidden_layers = num_hidden_layers
-        self.num_attention_heads = num_attention_heads
-        self.mlp_ratio = mlp_ratio
-        self.hidden_act = hidden_act
-        self.hidden_dropout_prob = hidden_dropout_prob
-        self.attention_probs_dropout_prob = attention_probs_dropout_prob
-        self.initializer_range = initializer_range
-        self.layer_norm_eps = layer_norm_eps
-        self.image_size = image_size
-        self.patch_size = patch_size
-        self.num_channels = num_channels
-        self.qkv_bias = qkv_bias
-        self.layerscale_value = layerscale_value
-        self.drop_path_rate = drop_path_rate
-        self.use_swiglu_ffn = use_swiglu_ffn
-        self.num_register_tokens = num_register_tokens
-        self.stage_names = ["stem"] + [f"stage{idx}" for idx in range(1, num_hidden_layers + 1)]
-        self._out_features, self._out_indices = get_aligned_output_features_output_indices(
-            out_features=out_features, out_indices=out_indices, stage_names=self.stage_names
+    def __post_init__(self, **kwargs):
+        self.stage_names = ["stem"] + [f"stage{idx}" for idx in range(1, self.num_hidden_layers + 1)]
+        self.set_output_features_output_indices(
+            out_indices=kwargs.pop("out_indices", None), out_features=kwargs.pop("out_features", None)
         )
-        self.apply_layernorm = apply_layernorm
-        self.reshape_hidden_states = reshape_hidden_states
+        super().__post_init__(**kwargs)
 
 
 class Dinov2WithRegistersPatchEmbeddings(Dinov2PatchEmbeddings):
@@ -245,7 +177,7 @@ class Dinov2WithRegistersEmbeddings(nn.Module):
         # Combine class and patch embeddings
         return torch.cat((class_pos_embed.unsqueeze(0), patch_pos_embed), dim=1)
 
-    def forward(self, pixel_values: torch.Tensor, bool_masked_pos: Optional[torch.Tensor] = None) -> torch.Tensor:
+    def forward(self, pixel_values: torch.Tensor, bool_masked_pos: torch.Tensor | None = None) -> torch.Tensor:
         batch_size, _, height, width = pixel_values.shape
         target_dtype = self.patch_embeddings.projection.weight.dtype
         embeddings = self.patch_embeddings(pixel_values.to(dtype=target_dtype))
@@ -272,11 +204,27 @@ class Dinov2WithRegistersEmbeddings(nn.Module):
         return embeddings
 
 
-class Dinov2WithRegistersEncoder(Dinov2Encoder):
-    pass
-
-
 class Dinov2WithRegistersPreTrainedModel(Dinov2PreTrainedModel):
+    @torch.no_grad()
+    def _init_weights(self, module: nn.Linear | nn.Conv2d | nn.LayerNorm) -> None:
+        """Initialize the weights"""
+        if isinstance(module, (nn.Linear, nn.Conv2d)):
+            init.trunc_normal_(module.weight, mean=0.0, std=self.config.initializer_range)
+            if module.bias is not None:
+                init.zeros_(module.bias)
+        elif isinstance(module, nn.LayerNorm):
+            init.zeros_(module.bias)
+            init.ones_(module.weight)
+        elif isinstance(module, Dinov2WithRegistersEmbeddings):
+            init.trunc_normal_(module.position_embeddings, mean=0.0, std=self.config.initializer_range)
+            init.trunc_normal_(module.cls_token, mean=0.0, std=self.config.initializer_range)
+            init.zeros_(module.mask_token)
+            init.zeros_(module.register_tokens)
+        elif isinstance(module, Dinov2WithRegistersLayerScale):  # noqa: F821
+            init.constant_(module.lambda1, self.config.layerscale_value)
+
+
+class Dinov2WithRegistersEncoder(Dinov2Encoder):
     pass
 
 
@@ -285,13 +233,44 @@ class Dinov2WithRegistersModel(Dinov2Model):
 
 
 class Dinov2WithRegistersForImageClassification(Dinov2ForImageClassification):
-    pass
+    def forward(
+        self,
+        pixel_values: torch.Tensor | None = None,
+        labels: torch.Tensor | None = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> ImageClassifierOutput:
+        r"""
+        labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
+            Labels for computing the image classification/regression loss. Indices should be in `[0, ...,
+            config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
+            `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
+        """
+
+        outputs: BaseModelOutputWithPooling = self.dinov2_with_registers(pixel_values, **kwargs)
+        sequence_output = outputs.last_hidden_state  # batch_size, sequence_length, hidden_size
+
+        cls_token = sequence_output[:, 0]
+        # cls and register tokens should not be included in patch tokens variable
+        patch_tokens = sequence_output[:, 1 + self.config.num_register_tokens :]
+
+        linear_input = torch.cat([cls_token, patch_tokens.mean(dim=1)], dim=1)
+        logits = self.classifier(linear_input)
+
+        loss = None
+        if labels is not None:
+            loss = self.loss_function(labels, logits, self.config, **kwargs)
+
+        return ImageClassifierOutput(
+            loss=loss,
+            logits=logits,
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
+        )
 
 
 class Dinov2WithRegistersBackbone(Dinov2Backbone):
     def __init__(self, config):
         super().__init__(config)
-        super()._init_backbone(config)
 
         self.num_register_tokens = config.num_register_tokens
         self.num_features = [config.hidden_size for _ in range(config.num_hidden_layers + 1)]
@@ -309,23 +288,21 @@ class Dinov2WithRegistersBackbone(Dinov2Backbone):
     def forward(
         self,
         pixel_values: torch.Tensor,
-        output_hidden_states: Optional[bool] = None,
-        output_attentions: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> BackboneOutput:
-        """
-        Returns:
-
+        r"""
         Examples:
 
         ```python
         >>> from transformers import AutoImageProcessor, AutoBackbone
         >>> import torch
         >>> from PIL import Image
-        >>> import requests
+        >>> import httpx
+        >>> from io import BytesIO
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-        >>> image = Image.open(requests.get(url, stream=True).raw)
+        >>> with httpx.stream("GET", url) as response:
+        ...     image = Image.open(BytesIO(response.read()))
 
         >>> processor = AutoImageProcessor.from_pretrained("facebook/dinov2-with-registers-base")
         >>> model = AutoBackbone.from_pretrained(
@@ -339,46 +316,31 @@ class Dinov2WithRegistersBackbone(Dinov2Backbone):
         >>> list(feature_maps[-1].shape)
         [1, 768, 16, 16]
         ```"""
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
+        kwargs["output_hidden_states"] = True  # required to extract layers for the stages
 
         embedding_output = self.embeddings(pixel_values)
+        output: BaseModelOutput = self.encoder(embedding_output, **kwargs)
+        hidden_states = output.hidden_states
 
-        outputs = self.encoder(
-            embedding_output, output_hidden_states=True, output_attentions=output_attentions, return_dict=return_dict
-        )
-
-        hidden_states = outputs.hidden_states if return_dict else outputs[1]
-
-        feature_maps = ()
+        feature_maps = []
         for stage, hidden_state in zip(self.stage_names, hidden_states):
             if stage in self.out_features:
                 if self.config.apply_layernorm:
                     hidden_state = self.layernorm(hidden_state)
                 if self.config.reshape_hidden_states:
-                    hidden_state = hidden_state[:, self.num_register_tokens + 1 :]
+                    hidden_state = hidden_state[:, 1 + self.num_register_tokens :]
                     # this was actually a bug in the original implementation that we copied here,
                     # cause normally the order is height, width
                     batch_size, _, height, width = pixel_values.shape
                     patch_size = self.config.patch_size
                     hidden_state = hidden_state.reshape(batch_size, height // patch_size, width // patch_size, -1)
                     hidden_state = hidden_state.permute(0, 3, 1, 2).contiguous()
-                feature_maps += (hidden_state,)
-
-        if not return_dict:
-            if output_hidden_states:
-                output = (feature_maps,) + outputs[1:]
-            else:
-                output = (feature_maps,) + outputs[2:]
-            return output
+                feature_maps.append(hidden_state)
 
         return BackboneOutput(
-            feature_maps=feature_maps,
-            hidden_states=outputs.hidden_states if output_hidden_states else None,
-            attentions=outputs.attentions if output_attentions else None,
+            feature_maps=tuple(feature_maps),
+            hidden_states=hidden_states,
+            attentions=output.attentions,
         )
 
 

@@ -25,6 +25,7 @@ Run the command below to install autoawq
 ```bash
 pip install autoawq
 ```
+
 > [!WARNING]
 > AutoAWQ downgrades Transformers to version 4.47.1. If you want to do inference with AutoAWQ, you may need to reinstall your Transformers' version after installing AutoAWQ.
 
@@ -49,18 +50,21 @@ Identify an AWQ-quantized model by checking the `quant_method` key in the models
 }
 ```
 
-Load the AWQ-quantized model with [`~PreTrainedModel.from_pretrained`]. This automatically sets the other weights to fp16 by default for performance reasons. Use the `torch_dtype` parameter to load these other weights in a different format.
+Load the AWQ-quantized model with [`~PreTrainedModel.from_pretrained`]. This automatically sets the other weights to fp16 by default for performance reasons. Use the `dtype` parameter to load these other weights in a different format.
 
-If the model is loaded on the CPU, use the `device_map` parameter to move it to a GPU.
+If the model is loaded on the CPU, use the `device_map` parameter to move it to an accelerator.
 
 ```py
 from transformers import AutoModelForCausalLM, AutoTokenizer
+from accelerate import Accelerator
 import torch
+
+device = Accelerator().device
 
 model = AutoModelForCausalLM.from_pretrained(
   "TheBloke/zephyr-7B-alpha-AWQ",
-  torch_dtype=torch.float32,
-  device_map="cuda:0"
+  dtype=torch.float32,
+  device_map=device
 )
 ```
 
@@ -218,31 +222,6 @@ model = AutoModelForCausalLM.from_pretrained(
     "TheBloke/Mistral-7B-Instruct-v0.1-AWQ",
     quantization_config=quantization_config,
     device_map="auto",
-)
-```
-
-## CPU
-
-[Intel Extension for PyTorch (IPEX)](https://intel.github.io/intel-extension-for-pytorch/cpu/latest/) is designed to enable performance optimizations on Intel hardware. Run the command below to install the latest version of autoawq with IPEX support.
-
-```bash
-pip install intel-extension-for-pytorch # for IPEX-GPU refer to https://intel.github.io/intel-extension-for-pytorch/xpu/2.5.10+xpu/ 
-pip install git+https://github.com/casper-hansen/AutoAWQ.git
-```
-
-Set `version="ipex"` in [`AwqConfig`] to enable ExLlamaV2 kernels.
-
-```python
-import torch
-from transformers import AutoModelForCausalLM, AutoTokenizer, AwqConfig
-
-device = "cpu" # set to "xpu" for Intel GPU
-quantization_config = AwqConfig(version="ipex")
-
-model = AutoModelForCausalLM.from_pretrained(
-    "TheBloke/TinyLlama-1.1B-Chat-v0.3-AWQ",
-    quantization_config=quantization_config,
-    device_map=device,
 )
 ```
 

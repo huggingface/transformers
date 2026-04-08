@@ -64,7 +64,7 @@ IDEFICS 프로세서는 [`LlamaTokenizer`]와 IDEFICS 이미지 프로세서를 
 
 >>> processor = AutoProcessor.from_pretrained(checkpoint)
 
->>> model = IdeficsForVisionText2Text.from_pretrained(checkpoint, torch_dtype=torch.bfloat16, device_map="auto")
+>>> model = IdeficsForVisionText2Text.from_pretrained(checkpoint, dtype=torch.bfloat16, device_map="auto")
 ```
 
 `device_map`을 `"auto"`로 설정하면 사용 중인 장치를 고려하여 모델 가중치를 가장 최적화된 방식으로 로드하고 저장하는 방법을 자동으로 결정합니다.
@@ -113,7 +113,7 @@ IDEFICS는 텍스트 및 이미지 프롬프트를 모두 수용합니다. 그�
 ...     "https://images.unsplash.com/photo-1583160247711-2191776b4b91?ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D&auto=format&fit=crop&w=3542&q=80",
 ... ]
 
->>> inputs = processor(prompt, return_tensors="pt").to("cuda")
+>>> inputs = processor(prompt, return_tensors="pt").to(model.device)
 >>> bad_words_ids = processor.tokenizer(["<image>", "<fake_token_around_image>"], add_special_tokens=False).input_ids
 
 >>> generated_ids = model.generate(**inputs, max_new_tokens=10, bad_words_ids=bad_words_ids)
@@ -146,7 +146,7 @@ A puppy in a flower bed
 ...     "This is an image of ",
 ... ]
 
->>> inputs = processor(prompt, return_tensors="pt").to("cuda")
+>>> inputs = processor(prompt, return_tensors="pt").to(model.device)
 >>> bad_words_ids = processor.tokenizer(["<image>", "<fake_token_around_image>"], add_special_tokens=False).input_ids
 
 >>> generated_ids = model.generate(**inputs, max_new_tokens=10, bad_words_ids=bad_words_ids)
@@ -178,7 +178,7 @@ IDEFICS는 훌륭한 제로샷 결과를 보여주지만, 작업에 특정 형�
 ...            "Describe this image.\nAssistant:"
 ...            ]
 
->>> inputs = processor(prompt, return_tensors="pt").to("cuda")
+>>> inputs = processor(prompt, return_tensors="pt").to(model.device)
 >>> bad_words_ids = processor.tokenizer(["<image>", "<fake_token_around_image>"], add_special_tokens=False).input_ids
 
 >>> generated_ids = model.generate(**inputs, max_new_tokens=30, bad_words_ids=bad_words_ids)
@@ -213,7 +213,7 @@ Assistant: An image of the Statue of Liberty. Fun fact: the Statue of Liberty is
 ...     "Question: Where are these people and what's the weather like? Answer:"
 ... ]
 
->>> inputs = processor(prompt, return_tensors="pt").to("cuda")
+>>> inputs = processor(prompt, return_tensors="pt").to(model.device)
 >>> bad_words_ids = processor.tokenizer(["<image>", "<fake_token_around_image>"], add_special_tokens=False).input_ids
 
 >>> generated_ids = model.generate(**inputs, max_new_tokens=20, bad_words_ids=bad_words_ids)
@@ -244,7 +244,7 @@ IDEFICS는 특정 카테고리의 라벨이 포함된 데이터로 명시적으�
 ...     "Category: "
 ... ]
 
->>> inputs = processor(prompt, return_tensors="pt").to("cuda")
+>>> inputs = processor(prompt, return_tensors="pt").to(model.device)
 >>> bad_words_ids = processor.tokenizer(["<image>", "<fake_token_around_image>"], add_special_tokens=False).input_ids
 
 >>> generated_ids = model.generate(**inputs, max_new_tokens=6, bad_words_ids=bad_words_ids)
@@ -273,7 +273,7 @@ Category: Vegetables
 ...     "https://images.unsplash.com/photo-1517086822157-2b0358e7684a?ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D&auto=format&fit=crop&w=2203&q=80",
 ...     "Story: \n"]
 
->>> inputs = processor(prompt, return_tensors="pt").to("cuda")
+>>> inputs = processor(prompt, return_tensors="pt").to(model.device)
 >>> bad_words_ids = processor.tokenizer(["<image>", "<fake_token_around_image>"], add_special_tokens=False).input_ids
 
 >>> generated_ids = model.generate(**inputs, num_beams=2, max_new_tokens=200, bad_words_ids=bad_words_ids)
@@ -324,7 +324,7 @@ IDEFICS가 문 앞에 있는 호박을 보고 유령에 대한 으스스한 할�
 ...     ],
 ... ]
 
->>> inputs = processor(prompts, return_tensors="pt").to("cuda")
+>>> inputs = processor(prompts, return_tensors="pt").to(model.device)
 >>> bad_words_ids = processor.tokenizer(["<image>", "<fake_token_around_image>"], add_special_tokens=False).input_ids
 
 >>> generated_ids = model.generate(**inputs, max_new_tokens=10, bad_words_ids=bad_words_ids)
@@ -353,10 +353,8 @@ This is an image of a vegetable stand.
 >>> import torch
 >>> from transformers import IdeficsForVisionText2Text, AutoProcessor
 
->>> device = "cuda" if torch.cuda.is_available() else "cpu"
-
 >>> checkpoint = "HuggingFaceM4/idefics-9b-instruct"
->>> model = IdeficsForVisionText2Text.from_pretrained(checkpoint, torch_dtype=torch.bfloat16).to(device)
+>>> model = IdeficsForVisionText2Text.from_pretrained(checkpoint, dtype=torch.bfloat16, device_map="auto")
 >>> processor = AutoProcessor.from_pretrained(checkpoint)
 
 >>> prompts = [

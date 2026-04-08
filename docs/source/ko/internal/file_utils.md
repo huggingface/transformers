@@ -41,10 +41,6 @@ rendered properly in your Markdown viewer.
 
 [[autodoc]] utils.replace_return_docstrings
 
-## 특수 속성 (Special Properties) [[transformers.utils.cached_property]]
-
-[[autodoc]] utils.cached_property
-
 ## 기타 유틸리티 [[transformers.utils._LazyModule]]
 
 [[autodoc]] utils._LazyModule

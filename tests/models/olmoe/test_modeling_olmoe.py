@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2024 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -16,11 +15,9 @@
 
 import unittest
 
-from parameterized import parameterized
-
-from transformers import OlmoeConfig, is_torch_available, set_seed
+from transformers import OlmoeConfig, is_torch_available
 from transformers.models.auto.tokenization_auto import AutoTokenizer
-from transformers.models.gpt_neox.tokenization_gpt_neox_fast import GPTNeoXTokenizerFast
+from transformers.models.gpt_neox.tokenization_gpt_neox import GPTNeoXTokenizer as GPTNeoXTokenizerFast
 from transformers.testing_utils import (
     require_tokenizers,
     require_torch,
@@ -32,6 +29,7 @@ from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, ids_tensor
 from ...test_pipeline_mixin import PipelineTesterMixin
+from ...test_tensor_parallel_mixin import TensorParallelTesterMixin
 
 
 if is_torch_available():
@@ -44,6 +42,9 @@ if is_torch_available():
 
 
 class OlmoeModelTester:
+    if is_torch_available():
+        causal_lm_class = OlmoeForCausalLM
+
     def __init__(
         self,
         parent,
@@ -73,7 +74,7 @@ class OlmoeModelTester:
         norm_topk_prob=False,
         output_router_logits=False,
         router_aux_loss_coef=0.001,
-        intermediate_size=12,
+        intermediate_size=16,
     ):
         self.parent = parent
         self.batch_size = batch_size
@@ -159,116 +160,6 @@ class OlmoeModelTester:
         result = model(input_ids)
         self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
 
-    def create_and_check_model_as_decoder(
-        self,
-        config,
-        input_ids,
-        token_type_ids,
-        input_mask,
-        sequence_labels,
-        token_labels,
-        choice_labels,
-        encoder_hidden_states,
-        encoder_attention_mask,
-    ):
-        config.add_cross_attention = True
-        model = OlmoeModel(config)
-        model.to(torch_device)
-        model.eval()
-        result = model(
-            input_ids,
-            attention_mask=input_mask,
-            encoder_hidden_states=encoder_hidden_states,
-            encoder_attention_mask=encoder_attention_mask,
-        )
-        result = model(
-            input_ids,
-            attention_mask=input_mask,
-            encoder_hidden_states=encoder_hidden_states,
-        )
-        result = model(input_ids, attention_mask=input_mask)
-        self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
-
-    def create_and_check_for_causal_lm(
-        self,
-        config,
-        input_ids,
-        token_type_ids,
-        input_mask,
-        sequence_labels,
-        token_labels,
-        choice_labels,
-        encoder_hidden_states,
-        encoder_attention_mask,
-    ):
-        model = OlmoeForCausalLM(config=config)
-        model.to(torch_device)
-        model.eval()
-        result = model(input_ids, attention_mask=input_mask, labels=token_labels)
-        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.vocab_size))
-
-    def create_and_check_decoder_model_past_large_inputs(
-        self,
-        config,
-        input_ids,
-        token_type_ids,
-        input_mask,
-        sequence_labels,
-        token_labels,
-        choice_labels,
-        encoder_hidden_states,
-        encoder_attention_mask,
-    ):
-        config.is_decoder = True
-        config.add_cross_attention = True
-        model = OlmoeForCausalLM(config=config)
-        model.to(torch_device)
-        model.eval()
-
-        # first forward pass
-        outputs = model(
-            input_ids,
-            attention_mask=input_mask,
-            encoder_hidden_states=encoder_hidden_states,
-            encoder_attention_mask=encoder_attention_mask,
-            use_cache=True,
-        )
-        past_key_values = outputs.past_key_values
-
-        # create hypothetical multiple next token and extent to next_input_ids
-        next_tokens = ids_tensor((self.batch_size, 3), config.vocab_size)
-        next_mask = ids_tensor((self.batch_size, 3), vocab_size=2)
-
-        # append to next input_ids and
-        next_input_ids = torch.cat([input_ids, next_tokens], dim=-1)
-        next_attention_mask = torch.cat([input_mask, next_mask], dim=-1)
-
-        output_from_no_past = model(
-            next_input_ids,
-            attention_mask=next_attention_mask,
-            encoder_hidden_states=encoder_hidden_states,
-            encoder_attention_mask=encoder_attention_mask,
-            output_hidden_states=True,
-        )["hidden_states"][0]
-        output_from_past = model(
-            next_tokens,
-            attention_mask=next_attention_mask,
-            encoder_hidden_states=encoder_hidden_states,
-            encoder_attention_mask=encoder_attention_mask,
-            past_key_values=past_key_values,
-            output_hidden_states=True,
-        )["hidden_states"][0]
-
-        # select random slice
-        random_slice_idx = ids_tensor((1,), output_from_past.shape[-1]).item()
-        output_from_no_past_slice = output_from_no_past[:, -3:, random_slice_idx].detach()
-        output_from_past_slice = output_from_past[:, :, random_slice_idx].detach()
-
-        self.parent.assertTrue(output_from_past_slice.shape[1] == next_tokens.shape[1])
-
-        # test that outputs are equal for slice
-        self.parent.assertTrue(torch.allclose(output_from_past_slice, output_from_no_past_slice, atol=1e-3))
-
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
         (
@@ -285,7 +176,9 @@ class OlmoeModelTester:
 
 
 @require_torch
-class OlmoeModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
+class OlmoeModelTest(
+    ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, TensorParallelTesterMixin, unittest.TestCase
+):
     all_model_classes = (OlmoeModel, OlmoeForCausalLM) if is_torch_available() else ()
     pipeline_model_mapping = (
         {
@@ -295,8 +188,6 @@ class OlmoeModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
         if is_torch_available()
         else {}
     )
-    test_pruning = False
-    fx_compatible = False
 
     # Need to use `0.8` instead of `0.9` for `test_cpu_offload`
     # This is because we are hitting edge cases with the causal_mask buffer
@@ -304,7 +195,7 @@ class OlmoeModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
 
     def setUp(self):
         self.model_tester = OlmoeModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=OlmoeConfig, hidden_size=37)
+        self.config_tester = ConfigTester(self, config_class=OlmoeConfig, hidden_size=32)
 
     def test_config(self):
         self.config_tester.run_common_tests()
@@ -313,51 +204,6 @@ class OlmoeModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
 
-    @unittest.skip(reason="OLMoE does not support head pruning.")
-    def test_headmasking(self):
-        pass
-
-    def test_model_various_embeddings(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        for type in ["absolute", "relative_key", "relative_key_query"]:
-            config_and_inputs[0].position_embedding_type = type
-            self.model_tester.create_and_check_model(*config_and_inputs)
-
-    @unittest.skip(reason="OLMoE buffers include complex numbers, which breaks this test")
-    def test_save_load_fast_init_from_base(self):
-        pass
-
-    @parameterized.expand([("linear",), ("dynamic",)])
-    def test_model_rope_scaling(self, scaling_type):
-        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
-        short_input = ids_tensor([1, 10], config.vocab_size)
-        long_input = ids_tensor([1, int(config.max_position_embeddings * 1.5)], config.vocab_size)
-
-        set_seed(42)  # Fixed seed at init time so the two models get the same random weights
-        original_model = OlmoeModel(config)
-        original_model.to(torch_device)
-        original_model.eval()
-        original_short_output = original_model(short_input).last_hidden_state
-        original_long_output = original_model(long_input).last_hidden_state
-
-        set_seed(42)  # Fixed seed at init time so the two models get the same random weights
-        config.rope_scaling = {"type": scaling_type, "factor": 10.0}
-        scaled_model = OlmoeModel(config)
-        scaled_model.to(torch_device)
-        scaled_model.eval()
-        scaled_short_output = scaled_model(short_input).last_hidden_state
-        scaled_long_output = scaled_model(long_input).last_hidden_state
-
-        # Dynamic scaling does not change the RoPE embeddings until it receives an input longer than the original
-        # maximum sequence length, so the outputs for the short input should match.
-        if scaling_type == "dynamic":
-            torch.testing.assert_close(original_short_output, scaled_short_output, rtol=1e-5, atol=1e-5)
-        else:
-            self.assertFalse(torch.allclose(original_short_output, scaled_short_output, atol=1e-5))
-
-        # The output should be different for long inputs
-        self.assertFalse(torch.allclose(original_long_output, scaled_long_output, atol=1e-5))
-
 
 @require_torch
 class OlmoeIntegrationTest(unittest.TestCase):
@@ -365,21 +211,21 @@ class OlmoeIntegrationTest(unittest.TestCase):
     def test_model_7b_logits(self):
         input_ids = [[1, 306, 4658, 278, 6593, 310, 2834, 338]]
         model = OlmoeForCausalLM.from_pretrained("allenai/OLMoE-1B-7B-0924", device_map="auto")
-        out = model(torch.tensor(input_ids)).logits.float()
+        out = model(torch.tensor(input_ids, device=model.device)).logits.float()
         # Expected mean on dim = -1
         EXPECTED_MEAN = torch.tensor([[-1.3814, -3.4450, -2.2990, -1.9542, -2.4387, -2.7941, -2.9312, -2.8309]])
-        torch.testing.assert_close(out.mean(-1), EXPECTED_MEAN, rtol=1e-2, atol=1e-2)
+        torch.testing.assert_close(out.mean(-1).cpu(), EXPECTED_MEAN, rtol=1e-2, atol=1e-2)
         # slicing logits[0, 0, 0:30]
         EXPECTED_SLICE = torch.tensor([-2.3874, -2.4076, -2.4995, 4.2278, 1.4004, -0.0252, 0.4189, -2.7560, 0.3531, 1.6678, -0.7941, -1.1818, -0.2920, 0.7131, -1.4173, 1.6723, 0.5406, 0.1345, -0.1800, 0.2304, 1.2791, 0.7489, 0.6341, -0.0151, -1.3693, -1.2532, -2.3921, 0.7376, 1.6876, 0.5483])  # fmt: skip
-        torch.testing.assert_close(out[0, 0, :30], EXPECTED_SLICE, rtol=1e-2, atol=1e-2)
+        torch.testing.assert_close(out[0, 0, :30].cpu(), EXPECTED_SLICE, rtol=1e-2, atol=1e-2)
 
     @slow
     def test_model_7b_greedy_generation(self):
         EXPECTED_TEXT_COMPLETION = """Simply put, the theory of relativity states that \nthe speed of light is the same for all observers, no matter \nhow fast they are moving.  This is a very counter-intuitive \nconcept, and it took Einstein a long time to come up with \nthe theory.  The theory of relativity is based on two \npostulates"""
         prompt = "Simply put, the theory of relativity states that "
         tokenizer = AutoTokenizer.from_pretrained("allenai/OLMoE-1B-7B-0924", device_map="auto")
-        input_ids = tokenizer.encode(prompt, return_tensors="pt")
         model = OlmoeForCausalLM.from_pretrained("allenai/OLMoE-1B-7B-0924", device_map="auto")
+        input_ids = tokenizer.encode(prompt, return_tensors="pt").to(model.device)
 
         # greedy generation outputs
         generated_ids = model.generate(input_ids, max_new_tokens=64, top_p=None, temperature=1, do_sample=False)
@@ -418,10 +264,10 @@ class OlmoeIntegrationTest(unittest.TestCase):
 
         # Inner spaces showcase
         self.assertEqual(rust_tokenizer.encode("Hi  Hello"), [12764, 50276, 12092])
-        self.assertEqual(rust_tokenizer.decode([12764, 50276, 12092], skip_special_tokens=True), "Hi  Hello")
+        self.assertEqual(rust_tokenizer.decode([12764, 50276, 12092], skip_special_tokens=False), "Hi  Hello")
 
         self.assertEqual(rust_tokenizer.encode("Hi   Hello"), [12764, 50275, 12092])
-        self.assertEqual(rust_tokenizer.decode([12764, 50275, 12092], skip_special_tokens=True), "Hi   Hello")
+        self.assertEqual(rust_tokenizer.decode([12764, 50275, 12092], skip_special_tokens=False), "Hi   Hello")
 
         self.assertEqual(rust_tokenizer.encode(""), [])
 

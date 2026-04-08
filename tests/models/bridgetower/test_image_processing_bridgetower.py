@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2023 The Intel Labs Team Authors, The Microsoft Research Team Authors and HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -15,20 +14,12 @@
 
 
 import unittest
-from typing import Dict, List, Optional, Union
 
-import numpy as np
-
+from transformers.image_utils import load_image
 from transformers.testing_utils import require_torch, require_vision
-from transformers.utils import is_vision_available
 
 from ...test_image_processing_common import ImageProcessingTestMixin, prepare_image_inputs
-
-
-if is_vision_available():
-    from PIL import Image
-
-    from transformers import BridgeTowerImageProcessor
+from ...test_processing_common import url_to_local_path
 
 
 class BridgeTowerImageProcessingTester:
@@ -36,14 +27,14 @@ class BridgeTowerImageProcessingTester:
         self,
         parent,
         do_resize: bool = True,
-        size: Dict[str, int] = None,
+        size: dict[str, int] | None = None,
         size_divisor: int = 32,
         do_rescale: bool = True,
-        rescale_factor: Union[int, float] = 1 / 255,
+        rescale_factor: int | float = 1 / 255,
         do_normalize: bool = True,
         do_center_crop: bool = True,
-        image_mean: Optional[Union[float, List[float]]] = [0.48145466, 0.4578275, 0.40821073],
-        image_std: Optional[Union[float, List[float]]] = [0.26862954, 0.26130258, 0.27577711],
+        image_mean: float | list[float] | None = [0.48145466, 0.4578275, 0.40821073],
+        image_std: float | list[float] | None = [0.26862954, 0.26130258, 0.27577711],
         do_pad: bool = True,
         batch_size=7,
         min_resolution=30,
@@ -77,46 +68,7 @@ class BridgeTowerImageProcessingTester:
         }
 
     def get_expected_values(self, image_inputs, batched=False):
-        """
-        This function computes the expected height and width when providing images to BridgeTowerImageProcessor,
-        assuming do_resize is set to True with a scalar size and size_divisor.
-        """
-        if not batched:
-            size = self.size["shortest_edge"]
-            image = image_inputs[0]
-            if isinstance(image, Image.Image):
-                w, h = image.size
-            elif isinstance(image, np.ndarray):
-                h, w = image.shape[0], image.shape[1]
-            else:
-                h, w = image.shape[1], image.shape[2]
-            scale = size / min(w, h)
-            if h < w:
-                newh, neww = size, scale * w
-            else:
-                newh, neww = scale * h, size
-
-            max_size = int((1333 / 800) * size)
-            if max(newh, neww) > max_size:
-                scale = max_size / max(newh, neww)
-                newh = newh * scale
-                neww = neww * scale
-
-            newh, neww = int(newh + 0.5), int(neww + 0.5)
-            expected_height, expected_width = (
-                newh // self.size_divisor * self.size_divisor,
-                neww // self.size_divisor * self.size_divisor,
-            )
-
-        else:
-            expected_values = []
-            for image in image_inputs:
-                expected_height, expected_width = self.get_expected_values([image])
-                expected_values.append((expected_height, expected_width))
-            expected_height = max(expected_values, key=lambda item: item[0])[0]
-            expected_width = max(expected_values, key=lambda item: item[1])[1]
-
-        return expected_height, expected_width
+        return self.size["shortest_edge"], self.size["shortest_edge"]
 
     def expected_output_image_shape(self, images):
         height, width = self.get_expected_values(images, batched=True)
@@ -137,8 +89,6 @@ class BridgeTowerImageProcessingTester:
 @require_torch
 @require_vision
 class BridgeTowerImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
-    image_processing_class = BridgeTowerImageProcessor if is_vision_available() else None
-
     def setUp(self):
         super().setUp()
         self.image_processor_tester = BridgeTowerImageProcessingTester(self)
@@ -148,10 +98,58 @@ class BridgeTowerImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase
         return self.image_processor_tester.prepare_image_processor_dict()
 
     def test_image_processor_properties(self):
-        image_processing = self.image_processing_class(**self.image_processor_dict)
-        self.assertTrue(hasattr(image_processing, "image_mean"))
-        self.assertTrue(hasattr(image_processing, "image_std"))
-        self.assertTrue(hasattr(image_processing, "do_normalize"))
-        self.assertTrue(hasattr(image_processing, "do_resize"))
-        self.assertTrue(hasattr(image_processing, "size"))
-        self.assertTrue(hasattr(image_processing, "size_divisor"))
+        for image_processing_class in self.image_processing_classes.values():
+            image_processing = image_processing_class(**self.image_processor_dict)
+            self.assertTrue(hasattr(image_processing, "image_mean"))
+            self.assertTrue(hasattr(image_processing, "image_std"))
+            self.assertTrue(hasattr(image_processing, "do_normalize"))
+            self.assertTrue(hasattr(image_processing, "do_resize"))
+            self.assertTrue(hasattr(image_processing, "size"))
+            self.assertTrue(hasattr(image_processing, "size_divisor"))
+
+    @require_vision
+    @require_torch
+    def test_backends_equivalence(self):
+        if len(self.image_processing_classes) < 2:
+            self.skipTest(reason="Skipping backends equivalence test as there are less than 2 backends")
+
+        dummy_image = load_image(url_to_local_path("http://images.cocodataset.org/val2017/000000039769.jpg"))
+
+        encodings = {}
+        for backend_name, image_processing_class in self.image_processing_classes.items():
+            image_processor = image_processing_class(**self.image_processor_dict)
+            encodings[backend_name] = image_processor(dummy_image, return_tensors="pt")
+
+        backend_names = list(encodings.keys())
+        reference_backend = backend_names[0]
+        reference_pixel_values = encodings[reference_backend].pixel_values
+        reference_pixel_mask = encodings[reference_backend].pixel_mask.float()
+        for backend_name in backend_names[1:]:
+            self._assert_tensors_equivalence(reference_pixel_values, encodings[backend_name].pixel_values)
+            self._assert_tensors_equivalence(reference_pixel_mask, encodings[backend_name].pixel_mask.float())
+
+    @require_vision
+    @require_torch
+    def test_slow_fast_equivalence_batched(self):
+        if len(self.image_processing_classes) < 2:
+            self.skipTest(reason="Skipping backends equivalence test as there are less than 2 backends")
+
+        if hasattr(self.image_processor_tester, "do_center_crop") and self.image_processor_tester.do_center_crop:
+            self.skipTest(
+                reason="Skipping as do_center_crop is True and center_crop functions are not equivalent for fast and slow processors"
+            )
+
+        dummy_images = self.image_processor_tester.prepare_image_inputs(equal_resolution=False, torchify=True)
+
+        encodings = {}
+        for backend_name, image_processing_class in self.image_processing_classes.items():
+            image_processor = image_processing_class(**self.image_processor_dict)
+            encodings[backend_name] = image_processor(dummy_images, return_tensors="pt")
+
+        backend_names = list(encodings.keys())
+        reference_backend = backend_names[0]
+        reference_pixel_values = encodings[reference_backend].pixel_values
+        reference_pixel_mask = encodings[reference_backend].pixel_mask.float()
+        for backend_name in backend_names[1:]:
+            self._assert_tensors_equivalence(reference_pixel_values, encodings[backend_name].pixel_values)
+            self._assert_tensors_equivalence(reference_pixel_mask, encodings[backend_name].pixel_mask.float())

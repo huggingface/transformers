@@ -65,7 +65,7 @@ chat = [
 import torch
 from transformers import pipeline
 
-pipe = pipeline("text-generation", "meta-llama/Meta-Llama-3-8B-Instruct", torch_dtype=torch.bfloat16, device_map="auto")
+pipe = pipeline("text-generation", "meta-llama/Meta-Llama-3-8B-Instruct", dtype=torch.bfloat16, device_map="auto")
 response = pipe(chat, max_new_tokens=512)
 print(response[0]['generated_text'][-1]['content'])
 ```
@@ -188,7 +188,7 @@ chat = [
 ]
 
 # 1: 모델과 토크나이저를 불러옵니다
-model = AutoModelForCausalLM.from_pretrained("meta-llama/Meta-Llama-3-8B-Instruct", device_map="auto", torch_dtype=torch.bfloat16)
+model = AutoModelForCausalLM.from_pretrained("meta-llama/Meta-Llama-3-8B-Instruct", device_map="auto", dtype=torch.bfloat16)
 tokenizer = AutoTokenizer.from_pretrained("meta-llama/Meta-Llama-3-8B-Instruct")
 
 # 2: 채팅 템플릿에 적용합니다
@@ -233,7 +233,7 @@ Hugging Face 클래스는 모델을 `float32` 정밀도(Precision)로 로드합�
 하지만 이는 낭비일 수 있습니다! 
 대부분의 최신 언어 모델은 파라미터당 2바이트를 사용하는 "bfloat16" 정밀도(Precision)로 학습됩니다. 
 하드웨어가 이를 지원하는 경우(Nvidia 30xx/Axxx 이상), 
-`torch_dtype` 파라미터로 위와 같이 `bfloat16` 정밀도(Precision)로 모델을 로드할 수 있습니다.
+`dtype` 파라미터로 위와 같이 `bfloat16` 정밀도(Precision)로 모델을 로드할 수 있습니다.
 
 또한, 16비트보다 더 낮은 정밀도(Precision)로 모델을 압축하는 
 "양자화(quantization)" 방법을 사용할 수도 있습니다. 

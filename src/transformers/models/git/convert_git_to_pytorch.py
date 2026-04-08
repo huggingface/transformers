@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2022 The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -17,11 +16,12 @@
 URL: https://github.com/microsoft/GenerativeImage2Text/tree/main"""
 
 import argparse
+from io import BytesIO
 from pathlib import Path
 
 import av
+import httpx
 import numpy as np
-import requests
 import torch
 from huggingface_hub import hf_hub_download
 from PIL import Image
@@ -188,7 +188,8 @@ def prepare_img(model_name):
         image = Image.open(filepath).convert("RGB")
     else:
         url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-        image = Image.open(requests.get(url, stream=True).raw)
+        with httpx.stream("GET", url) as response:
+            image = Image.open(BytesIO(response.read()))
 
     return image
 
@@ -200,7 +201,7 @@ def prepare_video():
 
         Args:
             container (`av.container.input.InputContainer`): PyAV container.
-            indices (`List[int]`): List of frame indices to decode.
+            indices (`list[int]`): List of frame indices to decode.
 
         Returns:
             result (np.ndarray): np array of decoded frames of shape (num_frames, height, width, 3).
@@ -226,7 +227,7 @@ def prepare_video():
             seg_len (`int`): Maximum allowed index of sample's last frame.
 
         Returns:
-            indices (`List[int]`): List of sampled frame indices
+            indices (`list[int]`): List of sampled frame indices
         """
         converted_len = int(clip_len * frame_sample_rate)
         end_idx = np.random.randint(converted_len, seg_len)
@@ -297,7 +298,7 @@ def convert_git_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub=Fal
     if "large" in model_name and not is_video and "large-r" not in model_name:
         # large checkpoints take way too long to download
         checkpoint_path = model_name_to_path[model_name]
-        state_dict = torch.load(checkpoint_path, map_location="cpu")["model"]
+        state_dict = torch.load(checkpoint_path, map_location="cpu", weights_only=True)["model"]
     else:
         checkpoint_url = model_name_to_url[model_name]
         state_dict = torch.hub.load_state_dict_from_url(checkpoint_url, map_location="cpu", file_name=model_name)[

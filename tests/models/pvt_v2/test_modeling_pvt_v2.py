@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2023 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -17,6 +16,8 @@
 import inspect
 import tempfile
 import unittest
+
+import pytest
 
 from transformers import PvtV2Backbone, PvtV2Config, is_torch_available, is_vision_available
 from transformers.models.auto.modeling_auto import MODEL_MAPPING_NAMES
@@ -128,53 +129,6 @@ class PvtV2ModelTester(ModelTesterMixin):
         result = model(pixel_values)
         self.parent.assertIsNotNone(result.last_hidden_state)
 
-    def create_and_check_backbone(self, config, pixel_values, labels):
-        model = PvtV2Backbone(config=config)
-        model.to(torch_device)
-        model.eval()
-        result = model(pixel_values)
-
-        # verify feature maps
-        self.parent.assertEqual(len(result.feature_maps), len(config.out_features))
-        self.parent.assertListEqual(list(result.feature_maps[0].shape), [self.batch_size, self.hidden_sizes[1], 4, 4])
-
-        # verify channels
-        self.parent.assertEqual(len(model.channels), len(config.out_features))
-        self.parent.assertListEqual(model.channels, config.hidden_sizes[1:])
-
-        # verify backbone works with out_features=None
-        config.out_features = None
-        model = PvtV2Backbone(config=config)
-        model.to(torch_device)
-        model.eval()
-        result = model(pixel_values)
-
-        # verify feature maps
-        self.parent.assertEqual(len(result.feature_maps), 1)
-        self.parent.assertListEqual(list(result.feature_maps[0].shape), [self.batch_size, self.hidden_sizes[-1], 1, 1])
-
-        # verify channels
-        self.parent.assertEqual(len(model.channels), 1)
-        self.parent.assertListEqual(model.channels, [config.hidden_sizes[-1]])
-
-    def create_and_check_for_image_classification(self, config, pixel_values, labels):
-        config.num_labels = self.num_labels
-        model = PvtV2ForImageClassification(config)
-        model.to(torch_device)
-        model.eval()
-        result = model(pixel_values, labels=labels)
-        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.num_labels))
-
-        # test greyscale images
-        config.num_channels = 1
-        model = PvtV2ForImageClassification(config)
-        model.to(torch_device)
-        model.eval()
-
-        pixel_values = floats_tensor([self.batch_size, 1, self.image_size, self.image_size])
-        result = model(pixel_values)
-        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.type_sequence_label_size))
-
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
         config, pixel_values, labels = config_and_inputs
@@ -197,12 +151,8 @@ class PvtV2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         else {}
     )
 
-    test_head_masking = False
-    test_pruning = False
     test_resize_embeddings = False
-    test_torchscript = False
     has_attentions = False
-    test_torch_exportable = True
 
     def setUp(self):
         self.model_tester = PvtV2ModelTester(self)
@@ -215,6 +165,9 @@ class PvtV2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
 
+    def test_batching_equivalence(self, atol=5e-4, rtol=5e-4):
+        super().test_batching_equivalence(atol=atol, rtol=rtol)
+
     @unittest.skip(reason="Pvt-V2 does not use inputs_embeds")
     def test_inputs_embeds(self):
         pass
@@ -222,28 +175,6 @@ class PvtV2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     @unittest.skip(reason="Pvt-V2 does not have get_input_embeddings method and get_output_embeddings methods")
     def test_model_get_set_embeddings(self):
         pass
-
-    @unittest.skip(reason="This architecture does not work with using reentrant.")
-    def test_training_gradient_checkpointing(self):
-        # Scenario - 1 default behaviour
-        self.check_training_gradient_checkpointing()
-
-    @unittest.skip(reason="This architecture does not work with using reentrant.")
-    def test_training_gradient_checkpointing_use_reentrant(self):
-        # Scenario - 2 with `use_reentrant=True` - this is the default value that is used in pytorch's
-        # torch.utils.checkpoint.checkpoint
-        self.check_training_gradient_checkpointing(gradient_checkpointing_kwargs={"use_reentrant": True})
-
-    def test_initialization(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-
-        for model_class in self.all_model_classes:
-            model = model_class(config=config)
-            for name, param in model.named_parameters():
-                self.assertTrue(
-                    -1.0 <= ((param.data.mean() * 1e9).round() / 1e9).item() <= 1.0,
-                    msg=f"Parameter {name} of model {model_class} seems not properly initialized",
-                )
 
     def test_hidden_states_output(self):
         def check_hidden_states_output(inputs_dict, config, model_class):
@@ -316,6 +247,10 @@ class PvtV2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         model = PvtV2Model.from_pretrained(model_name)
         self.assertIsNotNone(model)
 
+    @pytest.mark.xfail(reason="This architecture does not seem to be compatible with use_reentrant=True.")
+    def test_training_gradient_checkpointing_use_reentrant_true(self):
+        super().test_training_gradient_checkpointing_use_reentrant_true()
+
 
 @require_torch
 class PvtV2ModelIntegrationTest(unittest.TestCase):
@@ -370,7 +305,7 @@ class PvtV2ModelIntegrationTest(unittest.TestCase):
         r"""
         A small test to make sure that inference work in half precision without any problem.
         """
-        model = PvtV2ForImageClassification.from_pretrained("OpenGVLab/pvt_v2_b0", torch_dtype=torch.float16)
+        model = PvtV2ForImageClassification.from_pretrained("OpenGVLab/pvt_v2_b0", dtype=torch.float16)
         model.to(torch_device)
         image_processor = AutoImageProcessor.from_pretrained("OpenGVLab/pvt_v2_b0")
 

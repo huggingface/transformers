@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2018 The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -29,7 +28,7 @@ logging.set_verbosity_info()
 
 def convert_xlm_checkpoint_to_pytorch(xlm_checkpoint_path, pytorch_dump_folder_path):
     # Load checkpoint
-    chkpt = torch.load(xlm_checkpoint_path, map_location="cpu")
+    chkpt = torch.load(xlm_checkpoint_path, map_location="cpu", weights_only=True)
 
     state_dict = chkpt["model"]
 

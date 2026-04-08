@@ -138,27 +138,14 @@ Quita las columnas que no necesites:
 
 Usa el [`DefaultDataCollator`] para crear un lote de ejemplos. A diferencia de los otros collators de datos en 🤗 Transformers, el `DefaultDataCollator` no aplica ningún procesamiento adicional (como el rellenado).
 
-<frameworkcontent>
-<pt>
 ```py
 >>> from transformers import DefaultDataCollator
 
 >>> data_collator = DefaultDataCollator()
 ```
-</pt>
-<tf>
-```py
->>> from transformers import DefaultDataCollator
-
->>> data_collator = DefaultDataCollator(return_tensors="tf")
-```
-</tf>
-</frameworkcontent>
 
 ## Entrenamiento
 
-<frameworkcontent>
-<pt>
 Carga el modelo DistilBERT con [`AutoModelForQuestionAnswering`]:
 
 ```py
@@ -201,70 +188,6 @@ En este punto, solo quedan tres pasos:
 
 >>> trainer.train()
 ```
-</pt>
-<tf>
-Para realizar el fine-tuning de un modelo en TensorFlow, primero convierte tus datasets al formato `tf.data.Dataset` con el método [`~TFPreTrainedModel.prepare_tf_dataset`].
-
-```py
->>> tf_train_set = model.prepare_tf_dataset(
-...     tokenized_squad["train"],
-...     shuffle=True,
-...     batch_size=16,
-...     collate_fn=data_collator,
-... )
-
->>> tf_validation_set = model.prepare_tf_dataset(
-...     tokenized_squad["validation"],
-...     shuffle=False,
-...     batch_size=16,
-...     collate_fn=data_collator,
-... )
-```
-
-<Tip>
-
-Para familiarizarte con el fine-tuning con Keras, ¡mira el tutorial básico [aquí](training#finetune-with-keras)!
-
-</Tip>
-
-Prepara una función de optimización, un programa para la tasa de aprendizaje y algunos hiperparámetros de entrenamiento:
-
-```py
->>> from transformers import create_optimizer
-
->>> batch_size = 16
->>> num_epochs = 2
->>> total_train_steps = (len(tokenized_squad["train"]) // batch_size) * num_epochs
->>> optimizer, schedule = create_optimizer(
-...     init_lr=2e-5,
-...     num_warmup_steps=0,
-...     num_train_steps=total_train_steps,
-... )
-```
-
-Carga el modelo DistilBERT con [`TFAutoModelForQuestionAnswering`]:
-
-```py
->>> from transformers import TFAutoModelForQuestionAnswering
-
->>> model = TFAutoModelForQuestionAnswering("distilbert/distilbert-base-uncased")
-```
-
-Configura el modelo para entrenarlo con [`compile`](https://keras.io/api/models/model_training_apis/#compile-method):
-
-```py
->>> import tensorflow as tf
-
->>> model.compile(optimizer=optimizer)
-```
-
-Invoca el método [`fit`](https://keras.io/api/models/model_training_apis/#fit-method) para realizar el fine-tuning del modelo:
-
-```py
->>> model.fit(x=tf_train_set, validation_data=tf_validation_set, epochs=3)
-```
-</tf>
-</frameworkcontent>
 
 <Tip>
 

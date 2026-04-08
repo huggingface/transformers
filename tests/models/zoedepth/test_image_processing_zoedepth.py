@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2024 HuggingFace Inc.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -15,17 +14,23 @@
 
 
 import unittest
+from dataclasses import dataclass
 
 import numpy as np
 
-from transformers.file_utils import is_vision_available
 from transformers.testing_utils import require_torch, require_vision
+from transformers.utils import is_torch_available
 
 from ...test_image_processing_common import ImageProcessingTestMixin, prepare_image_inputs
 
 
-if is_vision_available():
-    from transformers import ZoeDepthImageProcessor
+if is_torch_available():
+    import torch
+
+
+@dataclass
+class ZoeDepthDepthOutputProxy:
+    predicted_depth: torch.FloatTensor = None
 
 
 class ZoeDepthImageProcessingTester:
@@ -44,7 +49,7 @@ class ZoeDepthImageProcessingTester:
         do_normalize=True,
         image_mean=[0.5, 0.5, 0.5],
         image_std=[0.5, 0.5, 0.5],
-        do_pad=False,
+        do_pad=True,
     ):
         size = size if size is not None else {"height": 18, "width": 18}
         self.parent = parent
@@ -88,12 +93,23 @@ class ZoeDepthImageProcessingTester:
             torchify=torchify,
         )
 
+    def prepare_depth_outputs(self):
+        depth_tensors = prepare_image_inputs(
+            batch_size=self.batch_size,
+            num_channels=1,
+            min_resolution=self.min_resolution,
+            max_resolution=self.max_resolution,
+            equal_resolution=True,
+            torchify=True,
+        )
+        depth_tensors = [depth_tensor.squeeze(0) for depth_tensor in depth_tensors]
+        stacked_depth_tensors = torch.stack(depth_tensors, dim=0)
+        return ZoeDepthDepthOutputProxy(predicted_depth=stacked_depth_tensors)
+
 
 @require_torch
 @require_vision
 class ZoeDepthImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
-    image_processing_class = ZoeDepthImageProcessor if is_vision_available() else None
-
     def setUp(self):
         super().setUp()
 
@@ -104,23 +120,28 @@ class ZoeDepthImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
         return self.image_processor_tester.prepare_image_processor_dict()
 
     def test_image_processor_properties(self):
-        image_processing = self.image_processing_class(**self.image_processor_dict)
-        self.assertTrue(hasattr(image_processing, "image_mean"))
-        self.assertTrue(hasattr(image_processing, "image_std"))
-        self.assertTrue(hasattr(image_processing, "do_normalize"))
-        self.assertTrue(hasattr(image_processing, "do_resize"))
-        self.assertTrue(hasattr(image_processing, "size"))
-        self.assertTrue(hasattr(image_processing, "ensure_multiple_of"))
-        self.assertTrue(hasattr(image_processing, "do_rescale"))
-        self.assertTrue(hasattr(image_processing, "rescale_factor"))
-        self.assertTrue(hasattr(image_processing, "do_pad"))
+        for image_processing_class in self.image_processing_classes.values():
+            image_processing = image_processing_class(**self.image_processor_dict)
+            self.assertTrue(hasattr(image_processing, "image_mean"))
+            self.assertTrue(hasattr(image_processing, "image_std"))
+            self.assertTrue(hasattr(image_processing, "do_normalize"))
+            self.assertTrue(hasattr(image_processing, "do_resize"))
+            self.assertTrue(hasattr(image_processing, "size"))
+            self.assertTrue(hasattr(image_processing, "ensure_multiple_of"))
+            self.assertTrue(hasattr(image_processing, "do_rescale"))
+            self.assertTrue(hasattr(image_processing, "rescale_factor"))
+            self.assertTrue(hasattr(image_processing, "do_pad"))
 
     def test_image_processor_from_dict_with_kwargs(self):
-        image_processor = self.image_processing_class.from_dict(self.image_processor_dict)
-        self.assertEqual(image_processor.size, {"height": 18, "width": 18})
+        for image_processing_class in self.image_processing_classes.values():
+            image_processor = image_processing_class(**self.image_processor_dict)
+            self.assertEqual(image_processor.size, {"height": 18, "width": 18})
 
-        image_processor = self.image_processing_class.from_dict(self.image_processor_dict, size=42)
-        self.assertEqual(image_processor.size, {"height": 42, "width": 42})
+        for image_processing_class in self.image_processing_classes.values():
+            modified_dict = self.image_processor_dict
+            modified_dict["size"] = 42
+            image_processor = image_processing_class(**modified_dict)
+            self.assertEqual(image_processor.size, {"height": 42, "width": 42})
 
     def test_ensure_multiple_of(self):
         # Test variable by turning off all other variables which affect the size, size which is not multiple of 32
@@ -128,14 +149,15 @@ class ZoeDepthImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
 
         size = {"height": 380, "width": 513}
         multiple = 32
-        image_processor = ZoeDepthImageProcessor(
-            do_pad=False, ensure_multiple_of=multiple, size=size, keep_aspect_ratio=False
-        )
-        pixel_values = image_processor(image, return_tensors="pt").pixel_values
+        for image_processor_class in self.image_processing_classes.values():
+            image_processor = image_processor_class(
+                do_pad=False, ensure_multiple_of=multiple, size=size, keep_aspect_ratio=False
+            )
+            pixel_values = image_processor(image, return_tensors="pt").pixel_values
 
-        self.assertEqual(list(pixel_values.shape), [1, 3, 384, 512])
-        self.assertTrue(pixel_values.shape[2] % multiple == 0)
-        self.assertTrue(pixel_values.shape[3] % multiple == 0)
+            self.assertEqual(list(pixel_values.shape), [1, 3, 384, 512])
+            self.assertTrue(pixel_values.shape[2] % multiple == 0)
+            self.assertTrue(pixel_values.shape[3] % multiple == 0)
 
         # Test variable by turning off all other variables which affect the size, size which is already multiple of 32
         image = np.zeros((511, 511, 3))
@@ -143,14 +165,15 @@ class ZoeDepthImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
         height, width = 512, 512
         size = {"height": height, "width": width}
         multiple = 32
-        image_processor = ZoeDepthImageProcessor(
-            do_pad=False, ensure_multiple_of=multiple, size=size, keep_aspect_ratio=False
-        )
-        pixel_values = image_processor(image, return_tensors="pt").pixel_values
+        for image_processing_class in self.image_processing_classes.values():
+            image_processor = image_processing_class(
+                do_pad=False, ensure_multiple_of=multiple, size=size, keep_aspect_ratio=False
+            )
+            pixel_values = image_processor(image, return_tensors="pt").pixel_values
 
-        self.assertEqual(list(pixel_values.shape), [1, 3, height, width])
-        self.assertTrue(pixel_values.shape[2] % multiple == 0)
-        self.assertTrue(pixel_values.shape[3] % multiple == 0)
+            self.assertEqual(list(pixel_values.shape), [1, 3, height, width])
+            self.assertTrue(pixel_values.shape[2] % multiple == 0)
+            self.assertTrue(pixel_values.shape[3] % multiple == 0)
 
     def test_keep_aspect_ratio(self):
         # Test `keep_aspect_ratio=True` by turning off all other variables which affect the size
@@ -158,30 +181,67 @@ class ZoeDepthImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
         image = np.zeros((height, width, 3))
 
         size = {"height": 512, "width": 512}
-        image_processor = ZoeDepthImageProcessor(do_pad=False, keep_aspect_ratio=True, size=size, ensure_multiple_of=1)
-        pixel_values = image_processor(image, return_tensors="pt").pixel_values
+        for image_processing_class in self.image_processing_classes.values():
+            image_processor = image_processing_class(
+                do_pad=False, keep_aspect_ratio=True, size=size, ensure_multiple_of=1
+            )
+            pixel_values = image_processor(image, return_tensors="pt").pixel_values
 
-        # As can be seen, the image is resized to the maximum size that fits in the specified size
-        self.assertEqual(list(pixel_values.shape), [1, 3, 512, 670])
+            # As can be seen, the image is resized to the maximum size that fits in the specified size
+            self.assertEqual(list(pixel_values.shape), [1, 3, 512, 670])
 
         # Test `keep_aspect_ratio=False` by turning off all other variables which affect the size
-        image_processor = ZoeDepthImageProcessor(
-            do_pad=False, keep_aspect_ratio=False, size=size, ensure_multiple_of=1
-        )
-        pixel_values = image_processor(image, return_tensors="pt").pixel_values
+        for image_processing_class in self.image_processing_classes.values():
+            image_processor = image_processing_class(
+                do_pad=False, keep_aspect_ratio=False, size=size, ensure_multiple_of=1
+            )
+            pixel_values = image_processor(image, return_tensors="pt").pixel_values
 
-        # As can be seen, the size is respected
-        self.assertEqual(list(pixel_values.shape), [1, 3, size["height"], size["width"]])
+            # As can be seen, the size is respected
+            self.assertEqual(list(pixel_values.shape), [1, 3, size["height"], size["width"]])
 
         # Test `keep_aspect_ratio=True` with `ensure_multiple_of` set
         image = np.zeros((489, 640, 3))
 
         size = {"height": 511, "width": 511}
         multiple = 32
-        image_processor = ZoeDepthImageProcessor(size=size, keep_aspect_ratio=True, ensure_multiple_of=multiple)
+        for image_processing_class in self.image_processing_classes.values():
+            image_processor = image_processing_class(size=size, keep_aspect_ratio=True, ensure_multiple_of=multiple)
 
-        pixel_values = image_processor(image, return_tensors="pt").pixel_values
+            pixel_values = image_processor(image, return_tensors="pt").pixel_values
 
-        self.assertEqual(list(pixel_values.shape), [1, 3, 512, 672])
-        self.assertTrue(pixel_values.shape[2] % multiple == 0)
-        self.assertTrue(pixel_values.shape[3] % multiple == 0)
+            self.assertEqual(list(pixel_values.shape), [1, 3, 512, 672])
+            self.assertTrue(pixel_values.shape[2] % multiple == 0)
+            self.assertTrue(pixel_values.shape[3] % multiple == 0)
+
+    # extend this test to check if removal of padding works fine!
+    def test_post_processing_equivalence(self):
+        if len(self.image_processing_classes) < 2:
+            self.skipTest(reason="Skipping post-processing equivalence test as there are less than 2 backends")
+
+        outputs = self.image_processor_tester.prepare_depth_outputs()
+        list(self.image_processing_classes.keys())
+        image_processor_torchvision = self.image_processing_classes["torchvision"](**self.image_processor_dict)
+        image_processor_pil = self.image_processing_classes["pil"](**self.image_processor_dict)
+
+        source_sizes = [outputs.predicted_depth.shape[1:]] * self.image_processor_tester.batch_size
+        target_sizes = [
+            torch.Size([outputs.predicted_depth.shape[1] // 2, *(outputs.predicted_depth.shape[2:])])
+        ] * self.image_processor_tester.batch_size
+
+        processed_torchvision = image_processor_torchvision.post_process_depth_estimation(
+            outputs,
+            source_sizes=source_sizes,
+            target_sizes=target_sizes,
+        )
+        processed_pil = image_processor_pil.post_process_depth_estimation(
+            outputs,
+            source_sizes=source_sizes,
+            target_sizes=target_sizes,
+        )
+        for pred_torchvision, pred_pil in zip(processed_torchvision, processed_pil):
+            depth_torchvision = pred_torchvision["predicted_depth"]
+            depth_pil = pred_pil["predicted_depth"]
+
+            torch.testing.assert_close(depth_torchvision, depth_pil, atol=1e-1, rtol=1e-3)
+            self.assertLessEqual(torch.mean(torch.abs(depth_torchvision.float() - depth_pil.float())).item(), 5e-3)

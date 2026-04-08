@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2023 The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -62,7 +61,7 @@ def rename_key(orig_key):
 
 
 def convert_checkpoint_helper(max_position_embeddings, orig_state_dict):
-    for key in orig_state_dict.copy().keys():
+    for key in orig_state_dict.copy():
         val = orig_state_dict.pop(key)
 
         if ("pooler" in key) or ("sen_class" in key):
@@ -77,7 +76,7 @@ def convert_checkpoint_helper(max_position_embeddings, orig_state_dict):
 
 
 def convert_mra_checkpoint(checkpoint_path, mra_config_file, pytorch_dump_path):
-    orig_state_dict = torch.load(checkpoint_path, map_location="cpu")["model_state_dict"]
+    orig_state_dict = torch.load(checkpoint_path, map_location="cpu", weights_only=True)["model_state_dict"]
     config = MraConfig.from_json_file(mra_config_file)
     model = MraForMaskedLM(config)
 
@@ -87,7 +86,7 @@ def convert_mra_checkpoint(checkpoint_path, mra_config_file, pytorch_dump_path):
     model.eval()
     model.save_pretrained(pytorch_dump_path)
 
-    print(f"Checkpoint successfuly converted. Model saved at {pytorch_dump_path}")
+    print(f"Checkpoint successfully converted. Model saved at {pytorch_dump_path}")
 
 
 if __name__ == "__main__":

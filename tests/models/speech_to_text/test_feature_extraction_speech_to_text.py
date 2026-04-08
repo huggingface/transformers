@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2021 HuggingFace Inc.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -23,7 +22,11 @@ import unittest
 import numpy as np
 
 from transformers import Speech2TextFeatureExtractor
-from transformers.testing_utils import check_json_file_has_correct_format, require_torch, require_torchaudio
+from transformers.testing_utils import (
+    check_json_file_has_correct_format,
+    require_torch,
+    require_torchaudio,
+)
 
 from ...test_sequence_feature_extraction_common import SequenceFeatureExtractionTestMixin
 
@@ -295,7 +298,7 @@ class Speech2TextFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unitt
 
         ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
         # automatic decoding with librispeech
-        speech_samples = ds.sort("id").select(range(num_samples))[:num_samples]["audio"]
+        speech_samples = ds.sort("id")[:num_samples]["audio"]
 
         return [x["array"] for x in speech_samples]
 

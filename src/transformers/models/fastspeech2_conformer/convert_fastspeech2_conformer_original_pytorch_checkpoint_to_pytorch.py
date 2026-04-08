@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2023 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -164,7 +163,7 @@ def convert_FastSpeech2ConformerModel_checkpoint(
     # Prepare the model
     model = FastSpeech2ConformerModel(config)
 
-    espnet_checkpoint = torch.load(checkpoint_path)
+    espnet_checkpoint = torch.load(checkpoint_path, weights_only=True)
     hf_compatible_state_dict = convert_espnet_state_dict_to_hf(espnet_checkpoint)
 
     model.load_state_dict(hf_compatible_state_dict)
@@ -198,7 +197,7 @@ if __name__ == "__main__":
         "--pytorch_dump_folder_path", required=True, default=None, type=str, help="Path to the output PyTorch model."
     )
     parser.add_argument(
-        "--push_to_hub", default=None, type=str, help="Where to upload the converted model on the 🤗 hub."
+        "--push_to_hub", default=None, type=str, help="Where to upload the converted model on the Hugging Face hub."
     )
 
     args = parser.parse_args()

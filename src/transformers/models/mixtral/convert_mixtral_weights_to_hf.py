@@ -58,7 +58,7 @@ def write_json(text, path):
         json.dump(text, f)
 
 
-def write_model(model_path, input_base_path, model_size, safe_serialization=True):
+def write_model(model_path, input_base_path, model_size):
     os.makedirs(model_path, exist_ok=True)
 
     params = read_json(os.path.join(input_base_path, "params.json"))
@@ -94,7 +94,8 @@ def write_model(model_path, input_base_path, model_size, safe_serialization=True
     print(f"Fetching all parameters from the checkpoint at {input_base_path}.")
     # Load weights
     loaded = [
-        torch.load(os.path.join(input_base_path, f"consolidated.{i:02d}.pt"), map_location="cpu") for i in range(8)
+        torch.load(os.path.join(input_base_path, f"consolidated.{i:02d}.pt"), map_location="cpu", weights_only=True)
+        for i in range(8)
     ]
 
     merged_state_dict = {}
@@ -205,7 +206,7 @@ def write_model(model_path, input_base_path, model_size, safe_serialization=True
         model = MixtralForCausalLM(config)
     # Avoid saving this as part of the config.
     del model.config._name_or_path
-    model.config.torch_dtype = torch.float16
+    model.config.dtype = torch.float16
     print("Saving in the Transformers format.")
 
     model.load_state_dict(state_dict, strict=True, assign=True)
@@ -213,7 +214,7 @@ def write_model(model_path, input_base_path, model_size, safe_serialization=True
     for n, p in model.named_parameters():
         assert p.device.type != "meta", f"{n} has not been loaded!"
 
-    model.save_pretrained(model_path, safe_serialization=safe_serialization)
+    model.save_pretrained(model_path)
 
 
 def main():
@@ -226,17 +227,15 @@ def main():
     parser.add_argument(
         "--model_size",
         choices=["7B"],
-        help="'f' models correspond to the finetuned versions, and are specific to the Mixtral official release. For more details on Mixtral, checkout the original repo: https://huggingface.co/mistral-ai",
+        help="'f' models correspond to the finetuned versions, and are specific to the Mixtral official release. For more details on Mixtral, check out the original repo: https://huggingface.co/mistral-ai",
         default="7B",
     )
     parser.add_argument("--output_dir", help="Location to write HF model", required=True)
-    parser.add_argument("--safe_serialization", type=bool, help="Whether or not to save using `safetensors`.")
     args = parser.parse_args()
     write_model(
         model_path=args.output_dir,
         input_base_path=args.input_dir,
         model_size=args.model_size,
-        safe_serialization=args.safe_serialization,
     )
 
 

@@ -13,6 +13,7 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
+*This model was released on 2021-09-30 and added to Hugging Face Transformers on 2022-10-18.*
 
 # Table Transformer
 
@@ -22,7 +23,7 @@ rendered properly in your Markdown viewer.
 
 ## Overview
 
-The Table Transformer model was proposed in [PubTables-1M: Towards comprehensive table extraction from unstructured documents](https://arxiv.org/abs/2110.00061) by
+The Table Transformer model was proposed in [PubTables-1M: Towards comprehensive table extraction from unstructured documents](https://huggingface.co/papers/2110.00061) by
 Brandon Smock, Rohith Pesala, Robin Abraham. The authors introduce a new dataset, PubTables-1M, to benchmark progress in table extraction from unstructured documents,
 as well as table structure recognition and functional analysis. The authors train 2 [DETR](detr) models, one for table detection and one for table structure recognition, dubbed Table Transformers.
 
@@ -40,10 +41,10 @@ special customization for these tasks.*
 <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/model_doc/table_transformer_architecture.jpeg"
 alt="drawing" width="600"/>
 
-<small> Table detection and table structure recognition clarified. Taken from the <a href="https://arxiv.org/abs/2110.00061">original paper</a>. </small>
+<small> Table detection and table structure recognition clarified. Taken from the <a href="https://huggingface.co/papers/2110.00061">original paper</a>. </small>
 
-The authors released 2 models, one for [table detection](https://huggingface.co/microsoft/table-transformer-detection) in 
-documents, one for [table structure recognition](https://huggingface.co/microsoft/table-transformer-structure-recognition) 
+The authors released 2 models, one for [table detection](https://huggingface.co/microsoft/table-transformer-detection) in
+documents, one for [table structure recognition](https://huggingface.co/microsoft/table-transformer-structure-recognition)
 (the task of recognizing the individual rows, columns etc. in a table).
 
 This model was contributed by [nielsr](https://huggingface.co/nielsr). The original code can be

@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2021 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -15,13 +14,14 @@
 """Testing suite for the PyTorch CANINE model."""
 
 import unittest
-from typing import List, Tuple
+
+import pytest
 
 from transformers import CanineConfig, is_torch_available
 from transformers.testing_utils import require_torch, slow, torch_device
 
 from ...test_configuration_common import ConfigTester
-from ...test_modeling_common import ModelTesterMixin, _config_zero_init, global_rng, ids_tensor, random_attention_mask
+from ...test_modeling_common import ModelTesterMixin, ids_tensor, random_attention_mask
 from ...test_pipeline_mixin import PipelineTesterMixin
 
 
@@ -225,7 +225,6 @@ class CanineModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     pipeline_model_mapping = (
         {
             "feature-extraction": CanineModel,
-            "question-answering": CanineForQuestionAnswering,
             "text-classification": CanineForSequenceClassification,
             "token-classification": CanineForTokenClassification,
             "zero-shot": CanineForSequenceClassification,
@@ -236,12 +235,11 @@ class CanineModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 
     test_mismatched_shapes = False
     test_resize_embeddings = False
-    test_pruning = False
 
     def setUp(self):
         self.model_tester = CanineModelTester(self)
         # we set has_text_modality to False as the config has no vocab_size attribute
-        self.config_tester = ConfigTester(self, config_class=CanineConfig, has_text_modality=False, hidden_size=37)
+        self.config_tester = ConfigTester(self, config_class=CanineConfig, has_text_modality=False, hidden_size=32)
 
     def test_config(self):
         self.config_tester.run_common_tests()
@@ -320,7 +318,8 @@ class CanineModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
             inputs_dict["output_attentions"] = True
             inputs_dict["output_hidden_states"] = False
             config.return_dict = True
-            model = model_class(config)
+            model = model_class._from_config(config, attn_implementation="eager")
+            config = model.config
             model.to(torch_device)
             model.eval()
             with torch.no_grad():
@@ -383,7 +382,7 @@ class CanineModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
                 dict_output = model(**dict_inputs, return_dict=True, **additional_kwargs).to_tuple()
 
                 def recursive_check(tuple_object, dict_object):
-                    if isinstance(tuple_object, (List, Tuple)):
+                    if isinstance(tuple_object, (list, tuple)):
                         for tuple_iterable_value, dict_iterable_value in zip(tuple_object, dict_object):
                             recursive_check(tuple_iterable_value, dict_iterable_value)
                     elif tuple_object is None:
@@ -439,63 +438,6 @@ class CanineModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
                 model, tuple_inputs, dict_inputs, {"output_hidden_states": True, "output_attentions": True}
             )
 
-    def test_headmasking(self):
-        if not self.test_head_masking:
-            self.skipTest(reason="test_head_masking is set to False")
-
-        global_rng.seed(42)
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-        global_rng.seed()
-
-        inputs_dict["output_attentions"] = True
-        config.output_hidden_states = True
-        configs_no_init = _config_zero_init(config)  # To be sure we have no Nan
-        for model_class in self.all_model_classes:
-            model = model_class(config=configs_no_init)
-            model.to(torch_device)
-            model.eval()
-
-            # Prepare head_mask
-            # Set require_grad after having prepared the tensor to avoid error (leaf variable has been moved into the graph interior)
-            head_mask = torch.ones(
-                self.model_tester.num_hidden_layers,
-                self.model_tester.num_attention_heads,
-                device=torch_device,
-            )
-            head_mask[0, 0] = 0
-            head_mask[-1, :-1] = 0
-            head_mask.requires_grad_(requires_grad=True)
-            inputs = self._prepare_for_class(inputs_dict, model_class).copy()
-            inputs["head_mask"] = head_mask
-
-            outputs = model(**inputs, return_dict=True)
-
-            # Test that we can get a gradient back for importance score computation
-            output = sum(t.sum() for t in outputs[0])
-            output = output.sum()
-            output.backward()
-            multihead_outputs = head_mask.grad
-
-            self.assertIsNotNone(multihead_outputs)
-            self.assertEqual(len(multihead_outputs), self.model_tester.num_hidden_layers)
-
-            def check_attentions_validity(attentions):
-                # Remove Nan
-                for t in attentions:
-                    self.assertLess(
-                        torch.sum(torch.isnan(t)), t.numel() / 4
-                    )  # Check we don't have more than 25% nans (arbitrary)
-                attentions = [
-                    t.masked_fill(torch.isnan(t), 0.0) for t in attentions
-                ]  # remove them (the test is less complete)
-
-                self.assertAlmostEqual(attentions[1][..., 0, :, :].flatten().sum().item(), 0.0)
-                self.assertNotEqual(attentions[1][..., -1, :, :].flatten().sum().item(), 0.0)
-                self.assertAlmostEqual(attentions[-2][..., -2, :, :].flatten().sum().item(), 0.0)
-                self.assertNotEqual(attentions[-2][..., -1, :, :].flatten().sum().item(), 0.0)
-
-            check_attentions_validity(outputs.attentions)
-
     @unittest.skip(reason="CANINE does not have a get_input_embeddings() method.")
     def test_inputs_embeds(self):
         # ViT does not use inputs_embeds
@@ -509,23 +451,17 @@ class CanineModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     def test_model_get_set_embeddings(self):
         pass
 
-    @unittest.skip(
-        reason="This architecture seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
-    )
+    @pytest.mark.xfail(reason="This architecture seems to not compute gradients for some layer.")
     def test_training_gradient_checkpointing(self):
-        pass
+        super().test_training_gradient_checkpointing()
 
-    @unittest.skip(
-        reason="This architecture seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
-    )
-    def test_training_gradient_checkpointing_use_reentrant(self):
-        pass
-
-    @unittest.skip(
-        reason="This architecture seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
-    )
+    @pytest.mark.xfail(reason="This architecture seems to not compute gradients for some layer.")
     def test_training_gradient_checkpointing_use_reentrant_false(self):
-        pass
+        super().test_training_gradient_checkpointing_use_reentrant_false()
+
+    @pytest.mark.xfail(reason="This architecture seems to not compute gradients for some layer.")
+    def test_training_gradient_checkpointing_use_reentrant_true(self):
+        super().test_training_gradient_checkpointing_use_reentrant_true()
 
     @slow
     def test_model_from_pretrained(self):

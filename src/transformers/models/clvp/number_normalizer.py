@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2023 The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -15,7 +14,14 @@
 
 """English Normalizer class for CLVP."""
 
-import re
+import sys
+
+
+if sys.version_info >= (3, 11):
+    # Atomic grouping support was only added to the core RE in Python 3.11
+    import re
+else:
+    import regex as re
 
 
 class EnglishNormalizer:
@@ -168,7 +174,7 @@ class EnglishNormalizer:
         ordinal_suffixes = {1: "st", 2: "nd", 3: "rd"}
 
         num = int(num.group(0)[:-2])
-        if 10 <= num % 100 and num % 100 <= 20:
+        if num % 100 >= 10 and num % 100 <= 20:
             suffix = "th"
         else:
             suffix = ordinal_suffixes.get(num % 10, "th")
@@ -199,12 +205,12 @@ class EnglishNormalizer:
         This method is used to normalize numbers within a text such as converting the numbers to words, removing
         commas, etc.
         """
-        text = re.sub(re.compile(r"([0-9][0-9\,]+[0-9])"), self._remove_commas, text)
-        text = re.sub(re.compile(r"£([0-9\,]*[0-9]+)"), r"\1 pounds", text)
-        text = re.sub(re.compile(r"\$([0-9\.\,]*[0-9]+)"), self._expand_dollars, text)
-        text = re.sub(re.compile(r"([0-9]+\.[0-9]+)"), self._expand_decimal_point, text)
-        text = re.sub(re.compile(r"[0-9]+(st|nd|rd|th)"), self._expand_ordinal, text)
-        text = re.sub(re.compile(r"[0-9]+"), self._expand_number, text)
+        text = re.sub(r"([0-9][0-9,]+[0-9])", self._remove_commas, text)
+        text = re.sub(r"£([0-9,]*[0-9])", r"\1 pounds", text)
+        text = re.sub(r"\$([0-9.,]*[0-9])", self._expand_dollars, text)
+        text = re.sub(r"([0-9]++\.[0-9]+)", self._expand_decimal_point, text)
+        text = re.sub(r"[0-9]++(st|nd|rd|th)", self._expand_ordinal, text)
+        text = re.sub(r"[0-9]+", self._expand_number, text)
         return text
 
     def expand_abbreviations(self, text: str) -> str:

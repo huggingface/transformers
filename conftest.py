@@ -16,6 +16,7 @@
 # by pytest before any tests are run
 
 import doctest
+import os
 import sys
 import warnings
 from os.path import abspath, dirname, join
@@ -23,12 +24,20 @@ from os.path import abspath, dirname, join
 import _pytest
 import pytest
 
-from transformers.testing_utils import HfDoctestModule, HfDocTestParser
+from transformers.testing_utils import (
+    HfDoctestModule,
+    HfDocTestParser,
+    is_torch_available,
+    patch_testing_methods_to_collect_info,
+    patch_torch_compile_force_graph,
+)
+from transformers.utils import enable_tf32
+from transformers.utils.network_logging import register_network_debug_plugin
 
 
 NOT_DEVICE_TESTS = {
     "test_tokenization",
-    "test_processor",
+    "test_tokenization_mistral_common",
     "test_processing",
     "test_beam_constraints",
     "test_configuration_utils",
@@ -46,31 +55,21 @@ NOT_DEVICE_TESTS = {
     "test_keep_in_fp32_modules",
     "test_gradient_checkpointing_backward_compatibility",
     "test_gradient_checkpointing_enable_disable",
-    "test_save_load_fast_init_from_base",
-    "test_fast_init_context_manager",
-    "test_fast_init_tied_embeddings",
-    "test_save_load_fast_init_to_base",
     "test_torch_save_load",
-    "test_initialization",
     "test_forward_signature",
     "test_model_get_set_embeddings",
     "test_model_main_input_name",
     "test_correct_missing_keys",
-    "test_tie_model_weights",
     "test_can_use_safetensors",
     "test_load_save_without_tied_weights",
     "test_tied_weights_keys",
     "test_model_weights_reload_no_missing_tied_weights",
-    "test_mismatched_shapes_have_properly_initialized_weights",
-    "test_matched_shapes_have_loaded_weights_when_some_mismatched_shapes_exist",
+    "test_can_load_ignoring_mismatched_shapes",
     "test_model_is_small",
-    "test_tf_from_pt_safetensors",
-    "test_flax_from_pt_safetensors",
     "ModelTest::test_pipeline_",  # None of the pipeline tests from PipelineTesterMixin (of which XxxModelTest inherits from) are running on device
     "ModelTester::test_pipeline_",
     "/repo_utils/",
     "/utils/",
-    "/agents/",
 }
 
 # allow having multiple repository checkouts and not needing to remember to rerun
@@ -87,8 +86,20 @@ def pytest_configure(config):
     config.addinivalue_line("markers", "is_pipeline_test: mark test to run only when pipelines are tested")
     config.addinivalue_line("markers", "is_staging_test: mark test to run only in the staging environment")
     config.addinivalue_line("markers", "accelerate_tests: mark test that require accelerate")
-    config.addinivalue_line("markers", "agent_tests: mark the agent tests that are run on their specific schedule")
     config.addinivalue_line("markers", "not_device_test: mark the tests always running on cpu")
+    config.addinivalue_line("markers", "torch_compile_test: mark test which tests torch compile functionality")
+    config.addinivalue_line("markers", "torch_export_test: mark test which tests torch export functionality")
+    config.addinivalue_line("markers", "flash_attn_test: mark test which tests flash attention functionality")
+    config.addinivalue_line("markers", "flash_attn_3_test: mark test which tests flash attention 3 functionality")
+    config.addinivalue_line("markers", "flash_attn_4_test: mark test which tests flash attention 4 functionality")
+    config.addinivalue_line(
+        "markers", "all_flash_attn_test: mark test which tests all mainline flash attentions' functionality"
+    )
+    config.addinivalue_line("markers", "training_ci: mark test for training CI validation")
+    config.addinivalue_line("markers", "tensor_parallel_ci: mark test for tensor parallel CI validation")
+
+    os.environ["DISABLE_SAFETENSORS_CONVERSION"] = "true"
+    register_network_debug_plugin(config)
 
 
 def pytest_collection_modifyitems(items):
@@ -133,3 +144,32 @@ class CustomOutputChecker(OutputChecker):
 doctest.OutputChecker = CustomOutputChecker
 _pytest.doctest.DoctestModule = HfDoctestModule
 doctest.DocTestParser = HfDocTestParser
+
+if is_torch_available():
+    # The flag below controls whether to allow TF32 on cuDNN. This flag defaults to True.
+    # We set it to `False` for CI. See https://github.com/pytorch/pytorch/issues/157274#issuecomment-3090791615
+    enable_tf32(False)
+    # # torch.backends.fp32_precision does not cascade to torch.backends.cudnn.conv.fp32_precision and torch.backends.cudnn.rnn.fp32_precision
+    # TODO: Considering move this to `enable_tf32`, or report a bug to `torch`.
+    import torch
+
+    # In order to set `torch.backends.cudnn.conv.fp32_precision = "ieee"` below (new API), we still need to set this
+    # (old API) because it defaults to `True` (and not changed automatically when we change `cudnn.conv.fp32_precision`)
+    # and such inconsistency cause `torch` to complain `RuntimeError: PyTorch is checking whether allow_tf32 is enabled for cuDNN without a specific operator name,but the current flag(s) indica
+    # te that cuDNN conv and cuDNN RNN have different TF32 flags.This combination indicates that you have used a mix of the legacy and new APIs
+    #  to set the TF32 flags. We suggest only using the new API to set the TF32 flag(s).`.
+    # TODO: report a bug to `torch`
+    if hasattr(torch.backends.cudnn, "allow_tf32"):
+        torch.backends.cudnn.allow_tf32 = False
+
+    # This is necessary to make several `test_batching_equivalence` pass (within the tolerance `1e-5`)
+    if hasattr(torch.backends.cudnn, "conv") and hasattr(torch.backends.cudnn.conv, "fp32_precision"):
+        torch.backends.cudnn.conv.fp32_precision = "ieee"
+
+    # patch `torch.compile`: if `TORCH_COMPILE_FORCE_FULLGRAPH=1` (or values considered as true, e.g. yes, y, etc.),
+    # the patched version will always run with `fullgraph=True`.
+    patch_torch_compile_force_graph()
+
+
+if os.environ.get("PATCH_TESTING_METHODS_TO_COLLECT_OUTPUTS", "").lower() in ("yes", "true", "on", "y", "1"):
+    patch_testing_methods_to_collect_info()

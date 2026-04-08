@@ -19,8 +19,8 @@ from ...utils.import_utils import define_import_structure
 
 if TYPE_CHECKING:
     from .configuration_timm_wrapper import *
+    from .image_processing_timm_wrapper import *
     from .modeling_timm_wrapper import *
-    from .processing_timm_wrapper import *
 else:
     import sys
 

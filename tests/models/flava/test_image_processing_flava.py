@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2022 Meta Platforms authors and HuggingFace Inc.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -13,10 +12,13 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import io
 import random
 import unittest
 
+import httpx
 import numpy as np
+from PIL import Image
 
 from transformers.testing_utils import require_torch, require_vision
 from transformers.utils import is_torch_available, is_vision_available
@@ -30,7 +32,6 @@ if is_torch_available():
 if is_vision_available():
     import PIL
 
-    from transformers import FlavaImageProcessor
     from transformers.image_utils import PILImageResampling
     from transformers.models.flava.image_processing_flava import (
         FLAVA_CODEBOOK_MEAN,
@@ -62,7 +63,6 @@ class FlavaImageProcessingTester:
         image_std=FLAVA_IMAGE_STD,
         input_size_patches=14,
         total_mask_patches=75,
-        mask_group_max_patches=None,
         mask_group_min_patches=16,
         mask_group_min_aspect_ratio=0.3,
         mask_group_max_aspect_ratio=None,
@@ -99,14 +99,14 @@ class FlavaImageProcessingTester:
 
         self.input_size_patches = input_size_patches
         self.total_mask_patches = total_mask_patches
-        self.mask_group_max_patches = mask_group_max_patches
         self.mask_group_min_patches = mask_group_min_patches
         self.mask_group_min_aspect_ratio = mask_group_min_aspect_ratio
         self.mask_group_max_aspect_ratio = mask_group_max_aspect_ratio
 
         self.codebook_do_resize = codebook_do_resize
         self.codebook_size = codebook_size
-        self.codebook_resample = codebook_resample if codebook_resample is not None else PILImageResampling.LANCZOS
+        # LANCZOS resample does not support torch Tensor. Use BICUBIC as closest alternative
+        self.codebook_resample = codebook_resample if codebook_resample is not None else PILImageResampling.BICUBIC
         self.codebook_do_center_crop = codebook_do_center_crop
         self.codebook_crop_size = codebook_crop_size
         self.codebook_do_map_pixels = codebook_do_map_pixels
@@ -128,7 +128,6 @@ class FlavaImageProcessingTester:
             "crop_size": self.crop_size,
             "input_size_patches": self.input_size_patches,
             "total_mask_patches": self.total_mask_patches,
-            "mask_group_max_patches": self.mask_group_max_patches,
             "mask_group_min_patches": self.mask_group_min_patches,
             "mask_group_min_aspect_ratio": self.mask_group_min_aspect_ratio,
             "mask_group_max_aspect_ratio": self.mask_group_min_aspect_ratio,
@@ -171,7 +170,6 @@ class FlavaImageProcessingTester:
 @require_torch
 @require_vision
 class FlavaImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
-    image_processing_class = FlavaImageProcessor if is_vision_available() else None
     maxDiff = None
 
     def setUp(self):
@@ -183,204 +181,248 @@ class FlavaImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
         return self.image_processor_tester.prepare_image_processor_dict()
 
     def test_image_processor_properties(self):
-        image_processing = self.image_processing_class(**self.image_processor_dict)
-        self.assertTrue(hasattr(image_processing, "image_mean"))
-        self.assertTrue(hasattr(image_processing, "image_std"))
-        self.assertTrue(hasattr(image_processing, "do_normalize"))
-        self.assertTrue(hasattr(image_processing, "do_resize"))
-        self.assertTrue(hasattr(image_processing, "resample"))
-        self.assertTrue(hasattr(image_processing, "crop_size"))
-        self.assertTrue(hasattr(image_processing, "do_center_crop"))
-        self.assertTrue(hasattr(image_processing, "do_rescale"))
-        self.assertTrue(hasattr(image_processing, "rescale_factor"))
-        self.assertTrue(hasattr(image_processing, "masking_generator"))
-        self.assertTrue(hasattr(image_processing, "codebook_do_resize"))
-        self.assertTrue(hasattr(image_processing, "codebook_size"))
-        self.assertTrue(hasattr(image_processing, "codebook_resample"))
-        self.assertTrue(hasattr(image_processing, "codebook_do_center_crop"))
-        self.assertTrue(hasattr(image_processing, "codebook_crop_size"))
-        self.assertTrue(hasattr(image_processing, "codebook_do_map_pixels"))
-        self.assertTrue(hasattr(image_processing, "codebook_do_normalize"))
-        self.assertTrue(hasattr(image_processing, "codebook_image_mean"))
-        self.assertTrue(hasattr(image_processing, "codebook_image_std"))
+        for image_processing_class in self.image_processing_classes.values():
+            image_processing = image_processing_class(**self.image_processor_dict)
+            self.assertTrue(hasattr(image_processing, "image_mean"))
+            self.assertTrue(hasattr(image_processing, "image_std"))
+            self.assertTrue(hasattr(image_processing, "do_normalize"))
+            self.assertTrue(hasattr(image_processing, "do_resize"))
+            self.assertTrue(hasattr(image_processing, "resample"))
+            self.assertTrue(hasattr(image_processing, "crop_size"))
+            self.assertTrue(hasattr(image_processing, "do_center_crop"))
+            self.assertTrue(hasattr(image_processing, "do_rescale"))
+            self.assertTrue(hasattr(image_processing, "rescale_factor"))
+            self.assertTrue(hasattr(image_processing, "masking_generator"))
+            self.assertTrue(hasattr(image_processing, "codebook_do_resize"))
+            self.assertTrue(hasattr(image_processing, "codebook_size"))
+            self.assertTrue(hasattr(image_processing, "codebook_resample"))
+            self.assertTrue(hasattr(image_processing, "codebook_do_center_crop"))
+            self.assertTrue(hasattr(image_processing, "codebook_crop_size"))
+            self.assertTrue(hasattr(image_processing, "codebook_do_map_pixels"))
+            self.assertTrue(hasattr(image_processing, "codebook_do_normalize"))
+            self.assertTrue(hasattr(image_processing, "codebook_image_mean"))
+            self.assertTrue(hasattr(image_processing, "codebook_image_std"))
 
     def test_image_processor_from_dict_with_kwargs(self):
-        image_processor = self.image_processing_class.from_dict(self.image_processor_dict)
-        self.assertEqual(image_processor.size, {"height": 224, "width": 224})
-        self.assertEqual(image_processor.crop_size, {"height": 224, "width": 224})
-        self.assertEqual(image_processor.codebook_size, {"height": 112, "width": 112})
-        self.assertEqual(image_processor.codebook_crop_size, {"height": 112, "width": 112})
+        for image_processing_class in self.image_processing_classes.values():
+            image_processor = image_processing_class.from_dict(self.image_processor_dict)
+            self.assertEqual(image_processor.size, {"height": 224, "width": 224})
+            self.assertEqual(image_processor.crop_size, {"height": 224, "width": 224})
+            self.assertEqual(image_processor.codebook_size, {"height": 112, "width": 112})
+            self.assertEqual(image_processor.codebook_crop_size, {"height": 112, "width": 112})
 
-        image_processor = self.image_processing_class.from_dict(
-            self.image_processor_dict, size=42, crop_size=84, codebook_size=33, codebook_crop_size=66
-        )
-        self.assertEqual(image_processor.size, {"height": 42, "width": 42})
-        self.assertEqual(image_processor.crop_size, {"height": 84, "width": 84})
-        self.assertEqual(image_processor.codebook_size, {"height": 33, "width": 33})
-        self.assertEqual(image_processor.codebook_crop_size, {"height": 66, "width": 66})
+            image_processor = image_processing_class.from_dict(
+                self.image_processor_dict, size=42, crop_size=84, codebook_size=33, codebook_crop_size=66
+            )
+            self.assertEqual(image_processor.size, {"height": 42, "width": 42})
+            self.assertEqual(image_processor.crop_size, {"height": 84, "width": 84})
+            self.assertEqual(image_processor.codebook_size, {"height": 33, "width": 33})
+            self.assertEqual(image_processor.codebook_crop_size, {"height": 66, "width": 66})
 
     def test_call_pil(self):
-        # Initialize image_processing
-        image_processing = self.image_processing_class(**self.image_processor_dict)
-        # create random PIL images
-        image_inputs = self.image_processor_tester.prepare_image_inputs(equal_resolution=False)
-        for image in image_inputs:
-            self.assertIsInstance(image, PIL.Image.Image)
+        for image_processing_class in self.image_processing_classes.values():
+            # Initialize image_processing
+            image_processing = image_processing_class(**self.image_processor_dict)
+            # create random PIL images
+            image_inputs = self.image_processor_tester.prepare_image_inputs(equal_resolution=False)
+            for image in image_inputs:
+                self.assertIsInstance(image, PIL.Image.Image)
 
-        # Test not batched input
-        encoded_images = image_processing(image_inputs[0], return_tensors="pt")
+            # Test not batched input
+            encoded_images = image_processing(image_inputs[0], return_tensors="pt")
 
-        # Test no bool masked pos
-        self.assertFalse("bool_masked_pos" in encoded_images)
+            # Test no bool masked pos
+            self.assertFalse("bool_masked_pos" in encoded_images)
 
-        expected_height, expected_width = self.image_processor_tester.get_expected_image_size()
+            expected_height, expected_width = self.image_processor_tester.get_expected_image_size()
 
-        self.assertEqual(
-            encoded_images.pixel_values.shape,
-            (1, self.image_processor_tester.num_channels, expected_height, expected_width),
-        )
+            self.assertEqual(
+                encoded_images.pixel_values.shape,
+                (1, self.image_processor_tester.num_channels, expected_height, expected_width),
+            )
 
-        # Test batched
-        encoded_images = image_processing(image_inputs, return_tensors="pt")
-        expected_height, expected_width = self.image_processor_tester.get_expected_image_size()
+            # Test batched
+            encoded_images = image_processing(image_inputs, return_tensors="pt")
+            expected_height, expected_width = self.image_processor_tester.get_expected_image_size()
 
-        # Test no bool masked pos
-        self.assertFalse("bool_masked_pos" in encoded_images)
+            # Test no bool masked pos
+            self.assertFalse("bool_masked_pos" in encoded_images)
 
-        self.assertEqual(
-            encoded_images.pixel_values.shape,
-            (
-                self.image_processor_tester.batch_size,
-                self.image_processor_tester.num_channels,
-                expected_height,
-                expected_width,
-            ),
-        )
+            self.assertEqual(
+                encoded_images.pixel_values.shape,
+                (
+                    self.image_processor_tester.batch_size,
+                    self.image_processor_tester.num_channels,
+                    expected_height,
+                    expected_width,
+                ),
+            )
 
     def _test_call_framework(self, instance_class, prepare_kwargs):
-        # Initialize image_processing
-        image_processing = self.image_processing_class(**self.image_processor_dict)
-        # create random tensors
-        image_inputs = self.image_processor_tester.prepare_image_inputs(equal_resolution=False, **prepare_kwargs)
-        for image in image_inputs:
-            self.assertIsInstance(image, instance_class)
+        for image_processing_class in self.image_processing_classes.values():
+            # Initialize image_processing
+            image_processing = image_processing_class(**self.image_processor_dict)
+            # create random tensors
+            image_inputs = self.image_processor_tester.prepare_image_inputs(equal_resolution=False, **prepare_kwargs)
+            for image in image_inputs:
+                self.assertIsInstance(image, instance_class)
 
-        # Test not batched input
-        encoded_images = image_processing(image_inputs[0], return_tensors="pt")
+            # Test not batched input
+            encoded_images = image_processing(image_inputs[0], return_tensors="pt")
 
-        expected_height, expected_width = self.image_processor_tester.get_expected_image_size()
-        self.assertEqual(
-            encoded_images.pixel_values.shape,
-            (1, self.image_processor_tester.num_channels, expected_height, expected_width),
-        )
+            expected_height, expected_width = self.image_processor_tester.get_expected_image_size()
+            self.assertEqual(
+                encoded_images.pixel_values.shape,
+                (1, self.image_processor_tester.num_channels, expected_height, expected_width),
+            )
 
-        encoded_images = image_processing(image_inputs, return_image_mask=True, return_tensors="pt")
+            encoded_images = image_processing(image_inputs, return_image_mask=True, return_tensors="pt")
 
-        expected_height, expected_width = self.image_processor_tester.get_expected_image_size()
-        self.assertEqual(
-            encoded_images.pixel_values.shape,
-            (
-                self.image_processor_tester.batch_size,
-                self.image_processor_tester.num_channels,
-                expected_height,
-                expected_width,
-            ),
-        )
+            expected_height, expected_width = self.image_processor_tester.get_expected_image_size()
+            self.assertEqual(
+                encoded_images.pixel_values.shape,
+                (
+                    self.image_processor_tester.batch_size,
+                    self.image_processor_tester.num_channels,
+                    expected_height,
+                    expected_width,
+                ),
+            )
 
-        expected_height, expected_width = self.image_processor_tester.get_expected_mask_size()
-        self.assertEqual(
-            encoded_images.bool_masked_pos.shape,
-            (
-                self.image_processor_tester.batch_size,
-                expected_height,
-                expected_width,
-            ),
-        )
+            expected_height, expected_width = self.image_processor_tester.get_expected_mask_size()
+            self.assertEqual(
+                encoded_images.bool_masked_pos.shape,
+                (
+                    self.image_processor_tester.batch_size,
+                    expected_height,
+                    expected_width,
+                ),
+            )
 
-        # Test batched
-        encoded_images = image_processing(image_inputs, return_tensors="pt").pixel_values
+            # Test batched
+            encoded_images = image_processing(image_inputs, return_tensors="pt").pixel_values
 
-        expected_height, expected_width = self.image_processor_tester.get_expected_image_size()
-        self.assertEqual(
-            encoded_images.shape,
-            (
-                self.image_processor_tester.batch_size,
-                self.image_processor_tester.num_channels,
-                expected_height,
-                expected_width,
-            ),
-        )
+            expected_height, expected_width = self.image_processor_tester.get_expected_image_size()
+            self.assertEqual(
+                encoded_images.shape,
+                (
+                    self.image_processor_tester.batch_size,
+                    self.image_processor_tester.num_channels,
+                    expected_height,
+                    expected_width,
+                ),
+            )
 
-        # Test masking
-        encoded_images = image_processing(image_inputs, return_image_mask=True, return_tensors="pt")
+            # Test masking
+            encoded_images = image_processing(image_inputs, return_image_mask=True, return_tensors="pt")
 
-        expected_height, expected_width = self.image_processor_tester.get_expected_image_size()
-        self.assertEqual(
-            encoded_images.pixel_values.shape,
-            (
-                self.image_processor_tester.batch_size,
-                self.image_processor_tester.num_channels,
-                expected_height,
-                expected_width,
-            ),
-        )
+            expected_height, expected_width = self.image_processor_tester.get_expected_image_size()
+            self.assertEqual(
+                encoded_images.pixel_values.shape,
+                (
+                    self.image_processor_tester.batch_size,
+                    self.image_processor_tester.num_channels,
+                    expected_height,
+                    expected_width,
+                ),
+            )
 
-        expected_height, expected_width = self.image_processor_tester.get_expected_mask_size()
-        self.assertEqual(
-            encoded_images.bool_masked_pos.shape,
-            (
-                self.image_processor_tester.batch_size,
-                expected_height,
-                expected_width,
-            ),
-        )
+            expected_height, expected_width = self.image_processor_tester.get_expected_mask_size()
+            self.assertEqual(
+                encoded_images.bool_masked_pos.shape,
+                (
+                    self.image_processor_tester.batch_size,
+                    expected_height,
+                    expected_width,
+                ),
+            )
 
     def test_call_numpy(self):
         self._test_call_framework(np.ndarray, prepare_kwargs={"numpify": True})
 
     def test_call_numpy_4_channels(self):
-        self.image_processing_class.num_channels = 4
+        # Get the first backend class to modify num_channels
+        first_backend_class = list(self.image_processing_classes.values())[0]
+        original_num_channels = (
+            first_backend_class.num_channels if hasattr(first_backend_class, "num_channels") else None
+        )
+        first_backend_class.num_channels = 4
         self._test_call_framework(np.ndarray, prepare_kwargs={"numpify": True})
-        self.image_processing_class.num_channels = 3
+        if original_num_channels is not None:
+            first_backend_class.num_channels = original_num_channels
+        else:
+            delattr(first_backend_class, "num_channels")
 
     def test_call_pytorch(self):
         self._test_call_framework(torch.Tensor, prepare_kwargs={"torchify": True})
 
     def test_masking(self):
-        # Initialize image_processing
-        random.seed(1234)
-        image_processing = self.image_processing_class(**self.image_processor_dict)
-        image_inputs = self.image_processor_tester.prepare_image_inputs(equal_resolution=False, torchify=True)
+        for image_processing_class in self.image_processing_classes.values():
+            # Initialize image_processing
+            random.seed(1234)
+            image_processing = image_processing_class(**self.image_processor_dict)
+            image_inputs = self.image_processor_tester.prepare_image_inputs(equal_resolution=False, torchify=True)
 
-        # Test not batched input
-        encoded_images = image_processing(image_inputs[0], return_image_mask=True, return_tensors="pt")
-        self.assertEqual(encoded_images.bool_masked_pos.sum().item(), 75)
+            # Test not batched input
+            encoded_images = image_processing(image_inputs[0], return_image_mask=True, return_tensors="pt")
+            self.assertEqual(encoded_images.bool_masked_pos.sum().item(), 75)
 
     def test_codebook_pixels(self):
-        # Initialize image_processing
-        image_processing = self.image_processing_class(**self.image_processor_dict)
-        # create random PIL images
-        image_inputs = self.image_processor_tester.prepare_image_inputs(equal_resolution=False)
-        for image in image_inputs:
-            self.assertIsInstance(image, PIL.Image.Image)
+        for image_processing_class in self.image_processing_classes.values():
+            # Initialize image_processing
+            image_processing = image_processing_class(**self.image_processor_dict)
+            # create random PIL images
+            image_inputs = self.image_processor_tester.prepare_image_inputs(equal_resolution=False)
+            for image in image_inputs:
+                self.assertIsInstance(image, PIL.Image.Image)
 
-        # Test not batched input
-        encoded_images = image_processing(image_inputs[0], return_codebook_pixels=True, return_tensors="pt")
-        expected_height, expected_width = self.image_processor_tester.get_expected_codebook_image_size()
-        self.assertEqual(
-            encoded_images.codebook_pixel_values.shape,
-            (1, self.image_processor_tester.num_channels, expected_height, expected_width),
+            # Test not batched input
+            encoded_images = image_processing(image_inputs[0], return_codebook_pixels=True, return_tensors="pt")
+            expected_height, expected_width = self.image_processor_tester.get_expected_codebook_image_size()
+            self.assertEqual(
+                encoded_images.codebook_pixel_values.shape,
+                (1, self.image_processor_tester.num_channels, expected_height, expected_width),
+            )
+
+            # Test batched
+            encoded_images = image_processing(image_inputs, return_codebook_pixels=True, return_tensors="pt")
+            expected_height, expected_width = self.image_processor_tester.get_expected_codebook_image_size()
+            self.assertEqual(
+                encoded_images.codebook_pixel_values.shape,
+                (
+                    self.image_processor_tester.batch_size,
+                    self.image_processor_tester.num_channels,
+                    expected_height,
+                    expected_width,
+                ),
+            )
+
+    @require_vision
+    @require_torch
+    def test_slow_fast_equivalence(self):
+        if len(self.image_processing_classes) < 2:
+            self.skipTest(reason="Skipping backends equivalence test as there are less than 2 backends")
+
+        dummy_image = Image.open(
+            io.BytesIO(
+                httpx.get("http://images.cocodataset.org/val2017/000000039769.jpg", follow_redirects=True).content
+            )
         )
 
-        # Test batched
-        encoded_images = image_processing(image_inputs, return_codebook_pixels=True, return_tensors="pt")
-        expected_height, expected_width = self.image_processor_tester.get_expected_codebook_image_size()
-        self.assertEqual(
-            encoded_images.codebook_pixel_values.shape,
-            (
-                self.image_processor_tester.batch_size,
-                self.image_processor_tester.num_channels,
-                expected_height,
-                expected_width,
-            ),
-        )
+        # Create processors for each backend
+        encodings = {}
+        for backend_name, image_processing_class in self.image_processing_classes.items():
+            image_processor = image_processing_class(**self.image_processor_dict)
+            encodings[backend_name] = image_processor(
+                dummy_image, return_tensors="pt", return_codebook_pixels=True, return_image_mask=True
+            )
+
+        # Compare all backends to the first one (reference backend)
+        backend_names = list(encodings.keys())
+        reference_backend = backend_names[0]
+        reference_encoding = encodings[reference_backend]
+        for backend_name in backend_names[1:]:
+            self._assert_tensors_equivalence(reference_encoding.pixel_values, encodings[backend_name].pixel_values)
+            self._assert_tensors_equivalence(
+                reference_encoding.codebook_pixel_values, encodings[backend_name].codebook_pixel_values
+            )

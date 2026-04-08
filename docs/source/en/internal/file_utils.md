@@ -20,7 +20,6 @@ This page lists all of Transformers general utility functions that are found in 
 
 Most of those are only useful if you are studying the general code in the library.
 
-
 ## Enums and namedtuples
 
 [[autodoc]] utils.ExplicitEnum
@@ -40,10 +39,6 @@ Most of those are only useful if you are studying the general code in the librar
 [[autodoc]] utils.add_code_sample_docstrings
 
 [[autodoc]] utils.replace_return_docstrings
-
-## Special Properties
-
-[[autodoc]] utils.cached_property
 
 ## Other Utilities
 

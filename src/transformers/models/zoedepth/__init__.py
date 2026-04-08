@@ -19,6 +19,7 @@ from ...utils.import_utils import define_import_structure
 
 if TYPE_CHECKING:
     from .configuration_zoedepth import *
+    from .image_processing_pil_zoedepth import *
     from .image_processing_zoedepth import *
     from .modeling_zoedepth import *
 else:

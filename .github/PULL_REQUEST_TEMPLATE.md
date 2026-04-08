@@ -14,6 +14,21 @@ Once you're done, someone will review your PR shortly (see the section "Who can 
 
 Fixes # (issue)
 
+## Code Agent Policy
+
+The Transformers repo is currently being overwhelmed by a large number of PRs and issue comments written by
+code agents. We are currently bottlenecked by our ability to review and respond to them. As a result, 
+**we ask that new users do not submit pure code agent PRs** at this time. 
+You may use code agents in drafting or to help you diagnose issues. We'd also ask autonomous "OpenClaw"-like agents
+not to open any PRs or issues for the moment.
+
+PRs that appear to be fully agent-written will probably be closed without review, and we may block users who do this
+repeatedly or maliciously. 
+
+This is a rapidly-evolving situation that's causing significant shockwaves in the open-source community. As a result, 
+this policy is likely to be updated regularly in the near future. For more information, please read [`CONTRIBUTING.md`](https://github.com/huggingface/transformers/blob/main/CONTRIBUTING.md).
+
+- [ ] I confirm that this is not a pure code agent PR.
 
 ## Before submitting
 - [ ] This PR fixes a typo or improves the docs (you can dismiss the other checks if that's the case).
@@ -39,41 +54,40 @@ members/contributors who may be interested in your PR.
 
 Models:
 
-- text models: @ArthurZucker
-- vision models: @amyeroberts, @qubvel
-- speech models: @eustlb
+- text models: @ArthurZucker @Cyrilvallez
+- vision models: @yonigozlan @molbap
+- audio models: @eustlb @ebezzam @vasqu
+- multimodal models: @zucchini-nlp
 - graph models: @clefourrier
 
 Library:
 
-- flax: @gante and @Rocketknight1
 - generate: @zucchini-nlp (visual-language models) or @gante (all others)
+- continuous batching: @remi-or @ArthurZucker @McPatate
 - pipelines: @Rocketknight1
-- tensorflow: @gante and @Rocketknight1
-- tokenizers: @ArthurZucker
-- trainer: @muellerzr and @SunMarc
-- chat templates: @Rocketknight1
+- tokenizers: @ArthurZucker and @itazap
+- trainer: @SunMarc
+- attention: @vasqu @ArthurZucker @CyrilVallez
+- model loading (from pretrained, etc): @CyrilVallez
+- distributed: @3outeille @ArthurZucker
+- CIs: @ydshieh
 
 Integrations:
 
-- deepspeed: HF Trainer/Accelerate: @muellerzr
 - ray/raytune: @richardliaw, @amogkam
 - Big Model Inference: @SunMarc
-- quantization (bitsandbytes, autogpt): @SunMarc @MekkCyber
+- quantization: @SunMarc
+- kernels: @drbh
+- peft: @BenjaminBossan @githubnemo
+
+Devices/Backends:
+
+- AMD ROCm: @ivarflakstad
+- Intel XPU: @IlyasMoutawwakil
+- Ascend NPU: @ivarflakstad 
 
 Documentation: @stevhliu
 
-HF projects:
-
-- accelerate: [different repo](https://github.com/huggingface/accelerate)
-- datasets: [different repo](https://github.com/huggingface/datasets)
-- diffusers: [different repo](https://github.com/huggingface/diffusers)
-- rust tokenizers: [different repo](https://github.com/huggingface/tokenizers)
-
-Maintained examples (not research project or legacy):
-
-- Flax: @Rocketknight1
-- PyTorch: See Models above and tag the person corresponding to the modality of the example.
-- TensorFlow: @Rocketknight1
+Research projects are not maintained and should be taken as is.
 
  -->
