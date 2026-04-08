@@ -130,18 +130,15 @@ class AudioFlamingo3Attention(nn.Module):
         # for the decoder
         is_cross_attention = key_value_states is not None
 
-        # determine input shapes
-        bsz, tgt_len = hidden_states.shape[:-1]
-        q_input_shape = (bsz, tgt_len, -1, self.head_dim)
+        input_shape = hidden_states.shape[:-1]
+        hidden_shape = (*input_shape, -1, self.head_dim)
 
         # Scaling is susceptible to floating point arithmetics' inprecisions
         # which can lead to different results (this is dependent from model
         # to model, e.g. audioflamingo3 is one such case). We therefore keep the
         # original order of scaling to follow the original implementation
         # and enforce no scaling (1.0) in the attention call below.
-        query_states = self.q_proj(hidden_states) * self.scaling
-        query_states = query_states.view(*q_input_shape)
-        query_states = query_states.transpose(1, 2).contiguous()
+        query_states = (self.q_proj(hidden_states) * self.scaling).view(hidden_shape).transpose(1, 2).contiguous()
 
         # Check is encoder-decoder model is being used. Otherwise we'll get `DynamicCache`
         if past_key_values is not None and isinstance(past_key_values, EncoderDecoderCache):
@@ -160,10 +157,12 @@ class AudioFlamingo3Attention(nn.Module):
             key_states = past_key_values.layers[self.layer_idx].keys
             value_states = past_key_values.layers[self.layer_idx].values
         else:
-            key_states = self.k_proj(current_states).view(bsz, -1, self.num_heads, self.head_dim)
-            value_states = self.v_proj(current_states).view(bsz, -1, self.num_heads, self.head_dim)
-            key_states = key_states.transpose(1, 2).contiguous()
-            value_states = value_states.transpose(1, 2).contiguous()
+            # Use the query's batch dimension for kv view so that a different-batch
+            # encoder output (e.g. in tests) gets absorbed into the sequence axis,
+            # preserving backward-compatible behaviour.
+            kv_shape = (input_shape[0], -1, self.num_heads, self.head_dim)
+            key_states = self.k_proj(current_states).view(kv_shape).transpose(1, 2).contiguous()
+            value_states = self.v_proj(current_states).view(kv_shape).transpose(1, 2).contiguous()
             if past_key_values is not None:
                 key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx)
 
@@ -183,7 +182,7 @@ class AudioFlamingo3Attention(nn.Module):
             **kwargs,
         )
 
-        attn_output = attn_output.reshape(bsz, tgt_len, -1).contiguous()
+        attn_output = attn_output.reshape(*input_shape, -1).contiguous()
         attn_output = self.out_proj(attn_output)
 
         return attn_output, attn_weights
