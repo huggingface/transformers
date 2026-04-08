@@ -1,3 +1,26 @@
+# Copyright 2021 The HuggingFace Team. All rights reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+"""
+This script downloads files from the HuggingFace Hub to be used for CI tests.
+
+When the `huggingface/transformers-torch-light` docker image is built daily,
+it will fetch and store the locally.
+
+Notice that the Docker image is updated every 24h so if you change the list of
+files to download you might get errors until it's updated.
+"""
+
 import os
 import re
 
@@ -6,7 +29,6 @@ from huggingface_hub import hf_hub_download, snapshot_download
 
 from transformers.testing_utils import _run_pipeline_tests, _run_staging
 from transformers.utils.import_utils import is_mistral_common_available
-
 
 URLS_FOR_TESTING_DATA = [
     "http://images.cocodataset.org/val2017/000000000139.jpg",
