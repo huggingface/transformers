@@ -23,8 +23,9 @@ import re
 # huggingface_hub reads HUGGINGFACE_CO_STAGING at import time and hardcodes hub-ci.huggingface.co.
 _staging_mode = os.environ.pop("HUGGINGFACE_CO_STAGING", None)
 
-import httpx
-from huggingface_hub import hf_hub_download, snapshot_download
+import httpx  # noqa: E402
+from huggingface_hub import hf_hub_download, snapshot_download  # noqa: E402
+
 
 # Restore so transformers.testing_utils._run_staging can still read it.
 if _staging_mode is not None:
