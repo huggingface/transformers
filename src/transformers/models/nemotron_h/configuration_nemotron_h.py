@@ -261,7 +261,7 @@ class NemotronHConfig(PreTrainedConfig):
     @staticmethod
     def _list_to_pattern(layers_list: list) -> str:
         """Convert list of layer types back to pattern string (for backward compatibility)."""
-        reverse_mapping = {"mamba": "M", "moe": "E", "attention": "*"}
+        reverse_mapping = {"mamba": "M", "moe": "E", "attention": "*", "mlp": "-"}
         return "".join(reverse_mapping[layer_type] for layer_type in layers_list)
 
     @staticmethod
