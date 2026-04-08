@@ -18,6 +18,7 @@ This script downloads files from the HuggingFace Hub to be used for CI tests.
 import os
 import re
 
+
 # Ensure we always download from the public HuggingFace Hub, not the CI staging endpoint
 # that may be configured via HF_ENDPOINT in the CI environment.
 os.environ.pop("HF_ENDPOINT", None)
