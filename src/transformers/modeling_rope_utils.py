@@ -143,7 +143,7 @@ def _compute_linear_scaling_rope_parameters(
             The model configuration. This function assumes that the config will provide at least the following
             properties:
 
-            *   rope_theta (`float`): The base wavelength from which the inverse frequencies will be derived.
+            *   rope_theta (`float`, *optional*): The base wavelength from which the inverse frequencies will be derived. Defaults to `config.default_theta` if omitted.
             *   hidden_size (`int`): The numerator when deriving a head_dim, if not provided directly.
             *   num_attention_heads (`int`): The denominator when deriving a head_dim, if not provided directly.
 
@@ -199,7 +199,7 @@ def _compute_proportional_rope_parameters(
             The model configuration. This function assumes that the config will provide at least the following
             properties:
 
-            *   rope_theta (`float`): The base wavelength from which the inverse frequencies will be derived.
+            *   rope_theta (`float`, *optional*): The base wavelength from which the inverse frequencies will be derived. Defaults to `config.default_theta` if omitted.
             *   hidden_size (`int`): The numerator when deriving a head_dim, if not provided directly.
             *   num_attention_heads (`int`): The denominator when deriving a head_dim, if not provided directly.
 
@@ -268,7 +268,7 @@ def _compute_dynamic_ntk_parameters(
             The model configuration. This function assumes that the config will provide at least the following
             properties:
 
-            *   rope_theta (`float`): The base wavelength from which the inverse frequencies will be derived.
+            *   rope_theta (`float`, *optional*): The base wavelength from which the inverse frequencies will be derived. Defaults to `config.default_theta` if omitted.
             *   hidden_size (`int`): The numerator when deriving a head_dim, if not provided directly.
             *   num_attention_heads (`int`): The denominator when deriving a head_dim, if not provided directly.
             *   max_position_embeddings (`int`): The default sequence length used to update the dynamic RoPE at
@@ -339,7 +339,7 @@ def _compute_yarn_parameters(
             The model configuration. This function assumes that the config will provide at least the following
             properties:
 
-            *   rope_theta (`float`): The base wavelength from which the inverse frequencies will be derived.
+            *   rope_theta (`float`, *optional*): The base wavelength from which the inverse frequencies will be derived. Defaults to `config.default_theta` if omitted.
             *   hidden_size (`int`): The numerator when deriving a head_dim, if not provided directly.
             *   num_attention_heads (`int`): The denominator when deriving a head_dim, if not provided directly.
             *   max_position_embeddings (`int`): The maximum length of the positional embeddings.
@@ -474,7 +474,7 @@ def _compute_longrope_parameters(
             The model configuration. This function assumes that the config will provide at least the following
             properties:
 
-            *   rope_theta (`float`): The base wavelength from which the inverse frequencies will be derived.
+            *   rope_theta (`float`, *optional*): The base wavelength from which the inverse frequencies will be derived. Defaults to `config.default_theta` if omitted.
             *   hidden_size (`int`): The numerator when deriving a head_dim, if not provided directly.
             *   num_attention_heads (`int`): The denominator when deriving a head_dim, if not provided directly.
             *   max_position_embeddings (`int`): The maximum length of the positional embeddings.
@@ -561,7 +561,7 @@ def _compute_llama3_parameters(
             The model configuration. This function assumes that the config will provide at least the following
             properties:
 
-            *   rope_theta (`float`): The base wavelength from which the inverse frequencies will be derived.
+            *   rope_theta (`float`, *optional*): The base wavelength from which the inverse frequencies will be derived. Defaults to `config.default_theta` if omitted.
             *   hidden_size (`int`): The numerator when deriving a head_dim, if not provided directly.
             *   num_attention_heads (`int`): The denominator when deriving a head_dim, if not provided directly.
             *   rope_parameters (`dict[str, float | int]`): The standard RoPE scaling parameters, from which the following
@@ -642,8 +642,9 @@ ROPE_INIT_FUNCTIONS: dict[str, Callable[..., tuple["torch.Tensor", float]]] = {
 class RopeParameters(TypedDict):
     """
     Args:
-        rope_theta (`float`):
-            The base period of the RoPE embeddings.
+        rope_theta (`float`, *optional*, defaults to `RotaryEmbeddingConfigMixin.default_theta`):
+            The base period of the RoPE embeddings. Optional in serialized configs — if omitted,
+            the model's `default_theta` (typically 10000.0) is used.
         rope_type (`str`, *optional*, defaults to "default"):
             The sub-variant of RoPE to use. Can be one of ['default', 'linear', 'dynamic', 'yarn', 'longrope',
             'llama3'], with 'default' being the original RoPE implementation.
@@ -680,7 +681,7 @@ class RopeParameters(TypedDict):
             Only used with 'llama3'. Scaling factor applied to high frequency components of the RoPE
     """
 
-    rope_theta: float
+    rope_theta: float | None
     rope_type: str | None
     partial_rotary_factor: float | None
     factor: float | None
