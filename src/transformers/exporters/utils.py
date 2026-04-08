@@ -303,23 +303,11 @@ def _precompute_vision_inputs(model: torch.nn.Module, inputs: dict[str, Any]) ->
     # Vision submodule level: precompute from grid_thw
     grid_thw = inputs.get("grid_thw")
     if grid_thw is None:
-        # PaddleOCR: uses image_grid_thw (list) and passes cu_seqlens directly
-        if "image_grid_thw" in inputs:
-            inner = getattr(model, "vision_model", model)
-            # Precompute vision position encoding (data-dependent per-image interpolation loop)
-            embeddings_module = getattr(inner, "embeddings", None)
-            if embeddings_module is not None and hasattr(embeddings_module, "get_position_encoding"):
-                inputs["position_encoding"] = embeddings_module.get_position_encoding(inputs["image_grid_thw"])
-            # Precompute rotary position embeddings for the encoder
-            encoder = getattr(inner, "encoder", None)
-            if encoder is not None and hasattr(encoder, "rot_pos_emb_vision"):
-                device = inputs.get("cu_seqlens", inputs.get("pixel_values")).device
-                inputs["position_embeddings"] = encoder.rot_pos_emb_vision(inputs["image_grid_thw"], device)
         return
 
     # Only precompute for models whose forward accepts optional precomputed params
     forward_params = set(inspect.signature(model.forward).parameters)
-    precompute_keys = {"rotary_pos_emb", "image_type_ids", "cu_seqlens", "position_embeddings", "pos_embeds"}
+    precompute_keys = {"rotary_pos_emb", "image_type_ids", "cu_seqlens", "pos_embeds"}
     if not (precompute_keys & forward_params):
         return
 

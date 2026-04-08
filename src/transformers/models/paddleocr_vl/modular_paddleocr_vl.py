@@ -533,7 +533,7 @@ class PaddleOCRVLConfig(Qwen2VLConfig):
     video_token_id: int = 100296
     vision_start_token_id: int = 101305
     vision_end_token_id: int = 101306
-    tie_word_embeddings: bool = True
+    tie_word_embeddings: int = True
 
 
 class PaddleOCRProjector(nn.Module):
@@ -726,22 +726,10 @@ class PaddleOCRVisionEmbeddings(SiglipVisionEmbeddings):
         patch_pos_embed = patch_pos_embed.permute(0, 2, 3, 1).view(1, -1, dim)
         return patch_pos_embed
 
-    def get_position_encoding(self, image_grid_thw):
-        """Compute per-image interpolated position encodings (data-dependent loop)."""
-        hidden_dim = self.position_embedding.weight.shape[-1]
-        dummy = torch.empty(1, hidden_dim, device=self.position_embedding.weight.device)
-        pos_encodings = []
-        for image_grid in image_grid_thw:
-            t, h, w = image_grid
-            pos_enc = self.interpolate_pos_encoding(dummy, h, w).squeeze(0).repeat(t, 1)
-            pos_encodings.append(pos_enc)
-        return torch.concat(pos_encodings, dim=0)
-
     def forward(
         self,
         pixel_values: torch.FloatTensor,
         image_grid_thw: list[tuple[int, int, int] | list[tuple[int, int, int]]] | None = None,
-        position_encoding: torch.Tensor | None = None,
     ) -> torch.Tensor:
         """
         Args:
@@ -749,20 +737,28 @@ class PaddleOCRVisionEmbeddings(SiglipVisionEmbeddings):
                 The tensors corresponding to the input images.
             image_grid_thw (`torch.LongTensor` of shape `(num_images, 3)`, *optional*):
                 The temporal, height and width of feature shape of each image in LLM.
-            position_encoding (`torch.Tensor`, *optional*):
-                Precomputed position encoding (needed for export).
         """
         batch_size, squence_len, channel, height, width = pixel_values.shape
         target_dtype = self.patch_embedding.weight.dtype
         pixel_values = pixel_values.reshape(batch_size * squence_len, channel, height, width)
-        patch_embeds = self.patch_embedding(pixel_values.to(dtype=target_dtype))
+        patch_embeds = self.patch_embedding(pixel_values.to(dtype=target_dtype))  # shape = [*, width, grid, grid]
         embeddings = patch_embeds.flatten(-2).squeeze(-1)
-        embeddings = embeddings.reshape(batch_size, squence_len, -1).squeeze(0)
+        embeddings = embeddings.reshape(batch_size, squence_len, -1)
 
-        if position_encoding is None:
-            position_encoding = self.get_position_encoding(image_grid_thw)
+        start = 0
+        embeddings = embeddings.squeeze(0)
+        tmp_embeddings = []
+        for image_grid in image_grid_thw:
+            t, h, w = image_grid
+            end = start + t * h * w
+            image_embeddings = embeddings[start:end, :]
+            position_embedding = self.interpolate_pos_encoding(image_embeddings, h, w).squeeze(0).repeat(t, 1)
+            image_embeddings = image_embeddings + position_embedding
+            tmp_embeddings.append(image_embeddings)
+            start = end
+        embeddings = torch.concat(tmp_embeddings, dim=0)
 
-        return embeddings + position_encoding
+        return embeddings
 
 
 class PaddleOCRVisionAttention(VideoLlama3VisionAttention):
@@ -788,24 +784,12 @@ class PaddleOCRVisionEncoder(VideoLlama3VisionEncoder):
         head_dim = embed_dim // num_heads
         self.rotary_pos_emb = PaddleOCRVisionRotaryEmbedding(head_dim // 2)
 
-    def rot_pos_emb_vision(self, image_grid_thw, device):
-        split_hids = []
-        split_wids = []
-        for t, h, w in image_grid_thw:
-            image_pids = torch.arange(t * h * w, device=device) % (h * w)
-            split_hids.append(image_pids // w)
-            split_wids.append(image_pids % w)
-        pids = torch.stack([torch.concat(split_hids), torch.concat(split_wids)], dim=-1)
-        rotary_embeddings = self.rotary_pos_emb(pids.max() + 1)[pids].flatten(1).repeat(1, 2)
-        return (rotary_embeddings.cos(), rotary_embeddings.sin())
-
     def forward(
         self,
         inputs_embeds: torch.FloatTensor,
         cu_seqlens: torch.Tensor,
         attention_mask: torch.Tensor | None = None,
         image_grid_thw: list[tuple[int, int, int] | list[tuple[int, int, int]]] | None = None,
-        position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutput:
         r"""
@@ -819,8 +803,6 @@ class PaddleOCRVisionEncoder(VideoLlama3VisionEncoder):
             The attention_mask used in forward function shape [batch_size X sequence_length] if not None.
         image_grid_thw (`torch.LongTensor` of shape `(num_images, 3)`, *optional*):
             The temporal, height and width of feature shape of each image in LLM.
-        position_embeddings (`tuple[torch.Tensor, torch.Tensor]`, *optional*):
-            Precomputed (cos, sin) rotary position embeddings (needed for export).
         """
         device = inputs_embeds.device
         hidden_states = inputs_embeds
@@ -829,9 +811,23 @@ class PaddleOCRVisionEncoder(VideoLlama3VisionEncoder):
             inputs_embeds=inputs_embeds,
             attention_mask=attention_mask,
         )
+        split_hids = []
+        split_wids = []
+        for t, h, w in image_grid_thw:
+            image_pids = torch.arange(t * h * w, device=device) % (h * w)
+            sample_hids = image_pids // w
+            sample_wids = image_pids % w
+            split_hids.append(sample_hids)
+            split_wids.append(sample_wids)
+        width_position_ids = torch.concat(split_wids, dim=0)
+        height_position_ids = torch.concat(split_hids, dim=0)
 
-        if position_embeddings is None:
-            position_embeddings = self.rot_pos_emb_vision(image_grid_thw, device)
+        pids = torch.stack([height_position_ids, width_position_ids], dim=-1)
+        max_grid_size = pids.max() + 1
+        rotary_embeddings_max_grid = self.rotary_pos_emb(max_grid_size)
+        rotary_embeddings = rotary_embeddings_max_grid[pids].flatten(1)
+        rotary_embeddings = rotary_embeddings.repeat(1, 2)
+        position_embeddings = (rotary_embeddings.cos(), rotary_embeddings.sin())
 
         for encoder_layer in self.layers:
             hidden_states = encoder_layer(
@@ -874,8 +870,6 @@ class PaddleOCRVisionTransformer(PaddleOCRVLPreTrainedModel):
         cu_seqlens: torch.Tensor,
         attention_mask: torch.Tensor | None = None,
         image_grid_thw: list[tuple[int, int, int] | list[tuple[int, int, int]]] | None = None,
-        position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
-        position_encoding: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutputWithPooling:
         """
@@ -888,21 +882,14 @@ class PaddleOCRVisionTransformer(PaddleOCRVLPreTrainedModel):
                 The attention_mask used in forward function shape [batch_size X sequence_length] if not None.
             image_grid_thw (`torch.LongTensor` of shape `(num_images, 3)`, *optional*):
                 The temporal, height and width of feature shape of each image in LLM.
-            position_embeddings (`tuple[torch.Tensor, torch.Tensor]`, *optional*):
-                Precomputed (cos, sin) rotary position embeddings (needed for export).
-            position_encoding (`torch.Tensor`, *optional*):
-                Precomputed vision position encoding (needed for export).
         """
-        hidden_states = self.embeddings(
-            pixel_values, image_grid_thw=image_grid_thw, position_encoding=position_encoding
-        )
+        hidden_states = self.embeddings(pixel_values, image_grid_thw=image_grid_thw)
 
         encoder_outputs: BaseModelOutput = self.encoder(
             inputs_embeds=hidden_states,
             cu_seqlens=cu_seqlens,
             attention_mask=attention_mask,
             image_grid_thw=image_grid_thw,
-            position_embeddings=position_embeddings,
             **kwargs,
         )
 
@@ -1033,11 +1020,12 @@ class PaddleOCRVLModel(Qwen2VLModel):
         else:
             special_image_mask = input_ids == self.config.image_token_id
 
-        image_tokens = inputs_embeds[special_image_mask]
+        n_image_tokens = special_image_mask.sum()
         special_image_mask = special_image_mask.unsqueeze(-1).expand_as(inputs_embeds).to(inputs_embeds.device)
+        n_image_features = image_features.shape[0] * image_features.shape[1]
         torch_compilable_check(
-            image_tokens.numel() == image_features.numel(),
-            f"Image features and image tokens do not match: tokens: {image_tokens.numel()}, features: {image_features.numel()}.",
+            inputs_embeds[special_image_mask].numel() == image_features.numel(),
+            f"Image features and image tokens do not match: tokens: {n_image_tokens}, features {n_image_features}",
         )
         return special_image_mask
 
