@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import inspect
 import math
 import warnings
 from collections.abc import Callable
@@ -626,10 +627,30 @@ def _compute_llama3_parameters(
     return inv_freq_llama, attention_factor
 
 
+def _compute_default_rope_parameters(
+    config: Optional["PreTrainedConfig"] = None,
+    device: Optional["torch.device"] = None,
+    seq_len: int | None = None,
+    layer_type: str | None = None,
+) -> tuple["torch.Tensor", float]:
+    """
+    Computes the inverse frequencies for the default RoPE implementation.
+    """
+    config.standardize_rope_params()
+    rope_parameters_dict = config.rope_parameters[layer_type] if layer_type is not None else config.rope_parameters
+    base = rope_parameters_dict["rope_theta"]
+    partial_rotary_factor = rope_parameters_dict.get("partial_rotary_factor", 1.0)
+    head_dim = getattr(config, "head_dim", None) or config.hidden_size // config.num_attention_heads
+    dim = int(head_dim * partial_rotary_factor)
+    inv_freq = 1.0 / (base ** (torch.arange(0, dim, 2, dtype=torch.int64).to(device=device, dtype=torch.float) / dim))
+    return inv_freq, 1.0
+
+
 # This maps the "rope_type" string field in rope config to the corresponding function to compute the RoPE parameters
 # from the model config. You can append new {'rope_type': callable} pairs to this rope_parameters to enable custom RoPE
 # parameterizations, as long as the callable has the same signature.
 ROPE_INIT_FUNCTIONS: dict[str, Callable[..., tuple["torch.Tensor", float]]] = {
+    "default": _compute_default_rope_parameters,
     "linear": _compute_linear_scaling_rope_parameters,
     "dynamic": _compute_dynamic_ntk_parameters,
     "yarn": _compute_yarn_parameters,
@@ -771,15 +792,23 @@ class RotaryEmbeddingConfigMixin:
 
         self.rope_parameters = rope_parameters
 
-    def validate_rope(self: "PreTrainedConfig"):
+    def validate_rope(self, **kwargs):
         """
-        Validate the RoPE config arguments, given a `"PreTrainedConfig"` object
+        Validate the RoPE config arguments, given a `"PreTrainedConfig"` object.
+
+        Accepts an optional `ignore_keys` keyword argument (set of keys to suppress warnings for),
+        for backward compatibility with vllm and other consumers.
         """
+        ignore_keys = kwargs.get("ignore_keys", None)
         # Don't validate if no rope_parameters found (`None`) or if it's an empty dict
         # Note that validation runs every time a new config is created, even if config is non-RoPE
         rope_parameters_dict = getattr(self, "rope_parameters", None)
         if not rope_parameters_dict:
             return
+
+        combined_ignore_keys = set(getattr(self, "ignore_keys_at_rope_validation", set()) or set())
+        if ignore_keys:
+            combined_ignore_keys |= ignore_keys
 
         if getattr(self, "layer_types", None) is not None and set(rope_parameters_dict.keys()).issubset(
             self.layer_types
@@ -794,11 +823,17 @@ class RotaryEmbeddingConfigMixin:
             rope_parameters["rope_type"] = rope_type
 
             if validation_fn is not None:
-                validation_fn(rope_parameters, ignore_keys=self.ignore_keys_at_rope_validation)
+                validation_fn(rope_parameters, ignore_keys=combined_ignore_keys)
             else:
                 logger.warning(
                     f"Missing validation function in 'RotaryEmbeddingConfigMixin' for 'rope_type'='{rope_type}'"
                 )
+
+    # Hide **kwargs from inspect.signature so huggingface_hub's @strict decorator
+    # (which requires validate_* methods to take only `self`) doesn't reject the class.
+    validate_rope.__signature__ = inspect.Signature(
+        [inspect.Parameter("self", inspect.Parameter.POSITIONAL_OR_KEYWORD)]
+    )
 
     def _validate_default_rope_parameters(self, rope_parameters: dict, ignore_keys: set | None = None):
         required_keys = {"rope_type"}

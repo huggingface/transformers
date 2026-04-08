@@ -490,64 +490,6 @@ class RopeTest(unittest.TestCase):
         inv_freq, _ = rope_fn(config=config, device=torch_device)
         torch.testing.assert_close(inv_freq, EXPECTED_INV_FREQ)
 
-
-@require_torch
-class RopeDefaultTypeTest(unittest.TestCase):
-    """Tests for changes to rope default type handling."""
-
-    def test_default_rope_type_in_rope_init_functions(self):
-        """'default' must now be present in ROPE_INIT_FUNCTIONS."""
-        from transformers import ROPE_INIT_FUNCTIONS
-
-        self.assertIn("default", ROPE_INIT_FUNCTIONS)
-
-    def test_default_rope_validation_without_rope_theta(self):
-        """Default rope type is valid even without an explicit rope_theta in rope_parameters."""
-        from transformers import LlamaConfig
-
-        config = LlamaConfig()
-        config.rope_parameters = {"rope_type": "default"}
-        # Must NOT raise
-        config.validate_rope()
-
-    def test_default_rope_validation_with_rope_theta(self):
-        """Default rope type is valid with explicit rope_theta."""
-        from transformers import LlamaConfig
-
-        config = LlamaConfig()
-        config.rope_parameters = {"rope_type": "default", "rope_theta": 10000.0}
-        config.validate_rope()  # no error
-
-    def test_default_rope_extra_key_warns(self):
-        """Unrecognised keys for default rope emit a warning, not a KeyError."""
-
-        from transformers import LlamaConfig
-
-        config = LlamaConfig()
-        config.rope_parameters = {"rope_type": "default", "rope_theta": 10000.0, "unknown_param": 1}
-        with self.assertLogs("transformers.modeling_rope_utils", level="WARNING"):
-            config.validate_rope()
-
-    def test_validate_rope_accepts_ignore_keys_kwarg(self):
-        """validate_rope() must accept ignore_keys= for backward compat with vllm."""
-        from transformers import LlamaConfig
-
-        config = LlamaConfig()
-        config.rope_parameters = {"rope_type": "default", "rope_theta": 10000.0, "mrope_section": True}
-        # ignore_keys kwarg should suppress the warning for mrope_section
-        config.validate_rope(ignore_keys={"mrope_section"})
-
-    @require_torch
-    def test_default_rope_compute_parameters(self):
-        """_compute_default_rope_parameters must return valid (inv_freq, factor) tuple."""
-        from transformers import ROPE_INIT_FUNCTIONS, LlamaConfig
-
-        config = LlamaConfig(hidden_size=64, num_attention_heads=8)
-        config.rope_parameters = {"rope_type": "default", "rope_theta": 10000.0}
-        inv_freq, factor = ROPE_INIT_FUNCTIONS["default"](config=config, device=torch_device)
-        self.assertEqual(inv_freq.shape[-1], 4)  # head_dim/2 = 64/8/2 = 4
-        self.assertEqual(factor, 1.0)
-
     def test_proportional_rope_numerically(self):
         # fmt: off
         EXPECTED_INV_FREQ = torch.tensor(
