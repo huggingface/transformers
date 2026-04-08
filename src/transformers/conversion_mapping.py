@@ -90,9 +90,7 @@ def _build_checkpoint_conversion_mapping():
         ],
         "molmo2": [
             # text backbone: `transformer.*` -> `language_model.*` (exclude vit's `image_vit.transformer.`)
-            WeightRenaming(
-                source_patterns=r"(?<!image_vit\.)transformer\.", target_patterns="language_model."
-            ),
+            WeightRenaming(source_patterns=r"(?<!image_vit\.)transformer\.", target_patterns="language_model."),
             # vision ViT: `vision_backbone.image_vit.transformer.resblocks.N.*` -> `...encoder.layers.N.*`
             WeightRenaming(
                 source_patterns=r"vision_backbone\.image_vit\.transformer\.resblocks\.",
