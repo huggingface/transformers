@@ -539,16 +539,22 @@ class ContinuousBatchingIOs:
         return 3 tensors to have the same interface as when using async batching."""
         return self.carry_over_ids, self.output_ids, self.output_ids
 
+    def _get_graph_key(self) -> tuple[int, ...]:
+        return (self.num_q_tokens, self.max_kv_read, *self.max_seqlen_k.values())
+
     def get_graph(self) -> torch.cuda.CUDAGraph | None:
-        graph = self.graphs.get_graph(self.num_q_tokens, self.max_kv_read)
+        key = self._get_graph_key()
+        graph = self.graphs.get_graph(key)
         # If this point is reached, it means the next step will be a new graph capture
         if graph is None:
             self.graphs.plan_for_new_graph()
-            logger.info(f"Creating graph for {(self.num_q_tokens, self.max_kv_read) = }")
+            logger.info(f"Creating graph for (num_q_tokens, max_kv_read, max_seqlen_k[...]) = {key}")
         return graph
 
     def set_graph(self, graph: torch.cuda.CUDAGraph) -> None:
-        self.graphs.set_graph(self.num_q_tokens, self.max_kv_read, graph)
+        key = self._get_graph_key()
+        self.graphs.set_graph(key, graph)
+        logger.info(f"Setting graph for (num_q_tokens, max_kv_read, max_seqlen_k[...]) = {key}")
 
 
 class HostDeviceIOPair:
