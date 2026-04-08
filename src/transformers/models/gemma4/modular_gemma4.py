@@ -954,7 +954,8 @@ class Gemma4TextAttention(nn.Module):
         hidden_states: torch.Tensor,
         position_embeddings: torch.Tensor,
         attention_mask: torch.Tensor | None,
-        past_key_values: Cache | None = None,
+        past_key_values: Cache,
+        use_cache: bool = True,
         **kwargs: Unpack[FlashAttentionKwargs],
     ) -> tuple[torch.Tensor, torch.Tensor | None]:
         input_shape = hidden_states.shape[:-1]
@@ -968,7 +969,7 @@ class Gemma4TextAttention(nn.Module):
         query_states = query_states.transpose(1, 2)
 
         # For layers with shared KV (from kv sharing point onwards), we reuse the same keys/values states as the last non-sharing layer
-        if self.is_kv_shared_layer and past_key_values is not None:
+        if self.is_kv_shared_layer:
             key_states, value_states = past_key_values.shared_layers[self.kv_shared_layer_index]
             # Device of past layer may be different from current one
             key_states = key_states.to(query_states.device)
@@ -984,13 +985,14 @@ class Gemma4TextAttention(nn.Module):
             value_states = self.v_norm(value_states)
             value_states = value_states.transpose(1, 2)
 
-        if past_key_values is not None:
-            if not self.is_kv_shared_layer:
-                key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx)
-            if self.store_full_length_kv:
-                if not hasattr(past_key_values, "shared_layers"):
-                    past_key_values.shared_layers = {}
-                past_key_values.shared_layers[self.layer_idx] = key_states, value_states
+        # We check use_cache here, as `past_key_values` will always be provided anyway for the Cache sharing - if
+        # `use_cache=False`, we don't want to `update` the Cache, only use it for sharing
+        if use_cache and not self.is_kv_shared_layer:
+            key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx)
+        if self.store_full_length_kv:
+            if not hasattr(past_key_values, "shared_layers"):
+                past_key_values.shared_layers = {}
+            past_key_values.shared_layers[self.layer_idx] = key_states, value_states
 
         attention_interface: Callable = eager_attention_forward
         if self.config._attn_implementation != "eager":
@@ -1087,6 +1089,7 @@ class Gemma4TextDecoderLayer(Gemma3DecoderLayer):
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
         past_key_values: Cache | None = None,
+        use_cache: bool | None = None,
         **kwargs,
     ) -> torch.Tensor:
         residual = hidden_states
@@ -1098,6 +1101,7 @@ class Gemma4TextDecoderLayer(Gemma3DecoderLayer):
             attention_mask=attention_mask,
             position_ids=position_ids,
             past_key_values=past_key_values,
+            use_cache=use_cache,
             **kwargs,
         )
         hidden_states = self.post_attention_layernorm(hidden_states)
@@ -1337,7 +1341,8 @@ class Gemma4TextModel(Gemma3TextModel):
                 per_layer_inputs = self.get_per_layer_inputs(input_ids, inputs_embeds)
             per_layer_inputs = self.project_per_layer_inputs(inputs_embeds, per_layer_inputs)
 
-        if use_cache and past_key_values is None:
+        # Independently of the value of `use_cache` here, we create a Cache object to be able to use Cache sharing
+        if past_key_values is None:
             past_key_values = DynamicCache(config=self.config)
 
         if position_ids is None:
@@ -1378,6 +1383,7 @@ class Gemma4TextModel(Gemma3TextModel):
                 attention_mask=causal_mask_mapping[self.config.layer_types[i]],
                 position_ids=position_ids,
                 past_key_values=past_key_values,
+                use_cache=use_cache,
                 **kwargs,
             )
 
@@ -1385,7 +1391,8 @@ class Gemma4TextModel(Gemma3TextModel):
 
         return BaseModelOutputWithPast(
             last_hidden_state=hidden_states,
-            past_key_values=past_key_values,
+            # we use a Cache even with `use_cache=False` to allow cache sharing, so adapt the return here if False
+            past_key_values=past_key_values if use_cache else None,
         )
 
 
