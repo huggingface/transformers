@@ -659,3 +659,8 @@ There are four timelines for model additions depending on the model contributor 
 - **Hub-first release**: Transformers [remote-code](./models#custom-models) feature allows Transformers-based projects to be shared directly on the Hub. This is a good option if you don't have the bandwidth to add a model directly to Transformers.
 
   If a model ends up being very popular, then it's very likely that we'll integrate it in Transformers ourselves to enable better support (documentation, maintenance, optimization, etc.) for it. A Hub-first release is the most frictionless way to add a model.
+
+## See also
+
+- [Model structure rules](./modeling_rules) — static rules enforced on all `modeling_*.py` and `configuration_*.py` files. Run `make typing` to check them before opening a PR.
+- [Pull request checks](./pr_checks) — full reference for what CI checks run on your PR and how to pass them.
