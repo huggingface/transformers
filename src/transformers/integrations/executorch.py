@@ -877,7 +877,7 @@ class Seq2SeqLMDecoderExportableModuleWithStaticCache(torch.nn.Module):
         for i, layer in enumerate(self.static_cache.layers):
             if isinstance(layer, StaticSlidingWindowLayer):
                 self.static_cache.layers[i] = StaticLayer(max_static_cache_length)
-        num_heads, head_dim = get_head_shapes(config)
+        num_heads, head_dim = get_head_shapes(self.config)
         self.static_cache.early_initialization(batch_size, num_heads, head_dim, torch.float32, model_device)
         self.cache = EncoderDecoderCache(self.static_cache, DynamicCache(config=self.config))
 

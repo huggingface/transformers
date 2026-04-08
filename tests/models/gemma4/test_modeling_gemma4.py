@@ -495,11 +495,14 @@ class Gemma4IntegrationTest(unittest.TestCase):
 
         EXPECTED_TEXTS = Expectations(
             {
-                ("cuda", 8):
+                ("cuda", (8, 0)):
                     [
                         'This image shows a **brown and white cow** standing on a **sandy beach** with the **ocean and a blue sky** in the background',
                         'No, these images are not identical.\n\nThe first image is a photograph of a **cow** standing on a beach under a blue sky.\n\n'
                     ],
+                ("cuda", (8, 6)):
+                    ['This image shows a **brown and white cow** standing on a **sandy beach** with the **ocean and a blue sky** in the background',
+                     'No, these images are not identical.\n\nThe first image is a photograph of a **brown and white cow standing on a beach** under a blue']
             }
         )  # fmt: skip
         EXPECTED_TEXT = EXPECTED_TEXTS.get_expectation()
@@ -556,7 +559,8 @@ class Gemma4IntegrationTest(unittest.TestCase):
 
         EXPECTED_TEXTS = Expectations(
             {
-                ("cuda", 8): ['## The Algorithmic Mind\n\nA whisper starts, a seed unseen,\nOf data vast, a vibrant sheen.\nA sea of numbers,'],
+                ("cuda", (8, 0)): ['## The Algorithmic Mind\n\nA whisper starts, a seed unseen,\nOf data vast, a vibrant sheen.\nA sea of numbers,'],
+                ("cuda", (8, 6)): ['## The Algorithmic Mind\n\nA tapestry of data, vast and deep,\nWhere silent numbers in their slumber sleep.\nA sea of text'],
             }
         )  # fmt: skip
         EXPECTED_TEXT = EXPECTED_TEXTS.get_expectation()
