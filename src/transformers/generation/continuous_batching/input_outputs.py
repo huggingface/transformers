@@ -26,7 +26,7 @@ from ...utils.metrics import traced
 from .cache import PagedAttentionCache
 from .cb_logits_processors import ContinuousBatchingLogitsProcessorList
 from .requests import TMP_TOKEN_ID, FutureRequestState, logger
-from .utils import CudaGraphBuffer, aligned_divide, attn_mask_is_needed, build_attention_mask
+from .utils import CudaGraphBuffer, aligned_divide, attn_mask_is_needed, build_attention_mask, pad_to_pow2
 
 
 @dataclass
@@ -104,6 +104,7 @@ class ContinuousBatchingIOs:
         max_graphs: int,
         return_logprobs: bool,
         logit_processor: ContinuousBatchingLogitsProcessorList,
+        use_cuda_graph_varlen: bool = False,
     ) -> None:
         """Initialize the continuous batching I/O manager. Args:
         - cache: The [`PagedAttentionCache`] instance managing the KV cache. Meant to be unique.
@@ -113,12 +114,14 @@ class ContinuousBatchingIOs:
         - max_graphs: Maximum number of CUDA graphs to cache. Uses LRU eviction when full.
         - return_logprobs: Whether to return log probabilities along with the token IDs.
         - logit_processor: The [`ContinuousBatchingLogitsProcessorList`] object used to process the logits.
+        - use_cuda_graph_varlen: Whether CUDA graphs are enabled for the varlen (prefill) path.
         """
         # Memoize attributes
         self.cache = cache
         self.device = device
         self.config = config
         self.model_dtype = model_dtype
+        self.use_cuda_graph_varlen = use_cuda_graph_varlen
         self.sliding_window = 1 if getattr(config, "sliding_window", None) is None else config.sliding_window
         self.return_logprobs = return_logprobs
         # Setup input-related accumulators
@@ -479,19 +482,24 @@ class ContinuousBatchingIOs:
             use_cache=False,
         )
 
-        # If we use constant-sized slicing, there are some "padding" queries tokens which FA has some issues with. In
-        # some models like Qwen3-4B-Instruct-2507, if we don't include these tokens in cumulative_seqlens_q, there are
-        # some NaNs in the output logits even for non-padded tokens.
+        # If there is padding, make sure the padding sequences have length 0
         if use_padding:
-            self.max_seqlen_q = max(self.max_seqlen_q, q_size - self.total_seqlen_q)
-            kwargs.max_seqlen_q = self.max_seqlen_q
-            self.cumulative_seqlens_q[self.true_batch_size + 1 :] = q_size
-            # FIXME: is there another way to avoid this? It has a very slight impact on performance (~5 tok/s)
+            self.cumulative_seqlens_q[self.true_batch_size + 1 :] = 0
+            # Additionally, if there are CUDA graphs, we need to pad max_seqlen so graph catpure will work regardless of the future Q / KV lengths of the next batches
+            if self.use_cuda_graph_varlen:
+                self.max_seqlen_q = q_size
+                self.max_seqlen_k = {
+                    ltype: pad_to_pow2(max_seqlen_k, self.cache.num_pages, 1024)
+                    for ltype, max_seqlen_k in self.max_seqlen_k.items()
+                }
 
         # When using block table, max_seqlen_q and max_seqlen_k are not used by flash_attn_with_kvcache, so we set them
         # to constant `1` to avoid dynamo guards on these changing integer values. This applies throughout this method.
         if self.use_block_table:
             kwargs.max_seqlen_q = 1
+        # Otherwise, we set max_seqlen_q to the actual value
+        else:
+            kwargs.max_seqlen_q = self.max_seqlen_q
 
         # For the attributes that are lists of tensors, we construct list of tensor references
         for i in range(self.cache.num_groups):
@@ -553,13 +561,16 @@ class HostDeviceIOPair:
         max_graphs: int,
         return_logprobs: bool,
         logit_processor: ContinuousBatchingLogitsProcessorList,
+        use_cuda_graph_varlen: bool = False,
     ) -> None:
         # The host IO has automatic pinned memory because it is created on the CPU
         self.host_io = ContinuousBatchingIOs(
-            cache, config, torch.device("cpu"), model_dtype, max_graphs, return_logprobs, logit_processor
+            cache, config, torch.device("cpu"), model_dtype, max_graphs, return_logprobs, logit_processor,
+            use_cuda_graph_varlen=use_cuda_graph_varlen,
         )
         self.device_io = ContinuousBatchingIOs(
-            cache, config, device, model_dtype, max_graphs, return_logprobs, logit_processor
+            cache, config, device, model_dtype, max_graphs, return_logprobs, logit_processor,
+            use_cuda_graph_varlen=use_cuda_graph_varlen,
         )
         # Create events only on CUDA devices
         self.h2d_over = torch.cuda.Event() if torch.cuda.is_available() else None
@@ -637,6 +648,7 @@ class ContinuousBatchingAsyncIOs:
         max_graphs: int,
         return_logprobs: bool,
         logit_processor: ContinuousBatchingLogitsProcessorList,
+        use_cuda_graph_varlen: bool = False,
     ) -> None:
         # Async batching needs streams to function, so check is CUDA is available
         if not torch.cuda.is_available():
@@ -644,7 +656,10 @@ class ContinuousBatchingAsyncIOs:
         # IO pairs used to avoid race conditions
         self.current_pair = 0
         self.io_pairs = [
-            HostDeviceIOPair(cache, config, device, model_dtype, max_graphs, return_logprobs, logit_processor)
+            HostDeviceIOPair(
+                cache, config, device, model_dtype, max_graphs, return_logprobs, logit_processor,
+                use_cuda_graph_varlen=use_cuda_graph_varlen,
+            )
             for _ in range(2)
         ]
         # CUDA streams

@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 from collections import OrderedDict
-from math import ceil
+from math import ceil, log2, pow
 from typing import Any
 
 import torch
@@ -67,6 +67,14 @@ def pad_to_interval(size: int, interval_size: int, max_value: int) -> int:
     if interval_size <= 0:
         return max_value
     padded = ceil(size / interval_size) * interval_size if size > 0 else interval_size
+    return min(padded, max_value)
+
+
+def pad_to_pow2(value: int, max_value: int, min_value: int = 0) -> int:
+    """Return the smallest power of 2 >= (value), capped at (max_value). If a minimum value is provided, the value is at
+    least padded to that value."""
+    value = max(value, max(1, min_value))
+    padded = pow(2, ceil(log2(value)))
     return min(padded, max_value)
 
 

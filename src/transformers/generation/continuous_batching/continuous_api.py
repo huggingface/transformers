@@ -227,6 +227,7 @@ class ContinuousBatchProcessor:
                 max_graphs=max_cached_graphs,
                 return_logprobs=self.return_logprobs,
                 logit_processor=self.logit_processor,
+                use_cuda_graph_varlen=self.use_cuda_graph_varlen,
             )
         else:
             self.inputs_and_outputs = ContinuousBatchingIOs(
@@ -237,6 +238,7 @@ class ContinuousBatchProcessor:
                 max_graphs=self.max_cached_graphs,
                 return_logprobs=self.return_logprobs,
                 logit_processor=self.logit_processor,
+                use_cuda_graph_varlen=self.use_cuda_graph_varlen,
             )
         # Set up the graph pool. This allows all graphs to share the same memory pool, which is fine because they never
         # run concurrently. This greatly saves memory.
