@@ -13,12 +13,6 @@
 # limitations under the License.
 """
 This script downloads files from the HuggingFace Hub to be used for CI tests.
-
-When the `huggingface/transformers-torch-light` docker image is built daily,
-it will fetch and store the locally.
-
-Notice that the Docker image is updated every 24h so if you change the list of
-files to download you might get errors until it's updated.
 """
 
 import os
@@ -29,6 +23,7 @@ from huggingface_hub import hf_hub_download, snapshot_download
 
 from transformers.testing_utils import _run_pipeline_tests, _run_staging
 from transformers.utils.import_utils import is_mistral_common_available
+
 
 URLS_FOR_TESTING_DATA = [
     "http://images.cocodataset.org/val2017/000000000139.jpg",
@@ -325,5 +320,9 @@ if __name__ == "__main__":
             MistralTokenizer.from_hf_hub(repo_id, local_files_only=local_files_only)
 
     # Download files from URLs to local directory
+    # Ensure we always download from the public HuggingFace Hub, not the CI staging endpoint
+    # that may be configured via HF_ENDPOINT in the CI environment.
+    os.environ.pop("HF_ENDPOINT", None)
+
     for url in URLS_FOR_TESTING_DATA:
         download_test_file(url)
