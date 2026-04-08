@@ -576,7 +576,7 @@ class Gemma4IntegrationTest(unittest.TestCase):
         model = AutoModelForCausalLM.from_pretrained(self.model_name, device_map=torch_device)
         tokenizer = AutoTokenizer.from_pretrained(self.model_name, padding_side="left")
         inputs = tokenizer.apply_chat_template(
-            [{"role": "user", "content": "Write a poem about Machine Learning."}],
+            [{"role": "user", "content": "Who are you? What can you do?"}],
             tokenize=True,
             return_dict=True,
             return_tensors="pt",
