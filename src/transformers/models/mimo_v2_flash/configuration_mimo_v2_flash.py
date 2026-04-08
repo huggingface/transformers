@@ -103,13 +103,15 @@ class MiMoV2FlashConfig(PreTrainedConfig):
     rope_parameters: dict | None = None
 
     def __post_init__(self, **kwargs):
+        # Full attention: first layer and every 6th layer; rest are SWA
         hybrid_layer_pattern = kwargs.pop("hybrid_layer_pattern", None)
         if self.layer_types is None:
             if hybrid_layer_pattern is not None:
                 self.layer_types = ["sliding_attention" if p == 1 else "full_attention" for p in hybrid_layer_pattern]
             else:
                 self.layer_types = [
-                    "full_attention" if not (i % 6) else "sliding_attention" for i in range(self.num_hidden_layers)
+                    "full_attention" if (i == 0 or not ((i + 1) % 6)) else "sliding_attention"
+                    for i in range(self.num_hidden_layers)
                 ]
 
         # BC: hub-only fields not modeled in the config.
