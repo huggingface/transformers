@@ -936,7 +936,7 @@ class TrackioCallback(TrainerCallback):
     A [`TrainerCallback`] that logs metrics to Trackio.
 
     It records training metrics, model (including PEFT) configuration. When Trackio metrics are synced to a Hugging Face Space, by default
-    training **freezes** that Space at the end (converts it from a live Gradio Space to a static read-only dashboard). Set 
+    training **freezes** that Space at the end (converts it from a live Gradio Space to a static read-only dashboard). Set
     `trackio_freeze_space=False` in [`TrainingArguments`] to keep a live Space.
 
     **Requires**:
@@ -1000,9 +1000,9 @@ class TrackioCallback(TrainerCallback):
         if not state.is_world_process_zero or not self._initialized:
             return
         self._trackio.finish()
-        if args.trackio_space_id is None or not args.trackio_freeze_space:
-            return
-        if packaging.version.parse(self._trackio.__version__) < packaging.version.parse("0.21.0"):
+        if not args.trackio_freeze_space or packaging.version.parse(
+            self._trackio.__version__
+        ) < packaging.version.parse("0.21.0"):
             return  # trackio>=0.21.0 is required to freeze the Space after training
         try:
             space_id = self._trackio.context_vars.current_space_id.get() or args.trackio_space_id
@@ -1012,10 +1012,8 @@ class TrackioCallback(TrainerCallback):
                 sdk="static",
                 force=True,
             )
-        except Exception as e:
-            logger.warning(
-                "Trackio could not freeze the Hugging Face Space after training."
-            )
+        except Exception:
+            logger.warning("Trackio could not freeze the Hugging Face Space after training.")
 
     def on_log(self, args, state, control, model=None, logs=None, **kwargs):
         single_value_scalars = [
