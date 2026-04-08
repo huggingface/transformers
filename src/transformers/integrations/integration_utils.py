@@ -935,7 +935,9 @@ class TrackioCallback(TrainerCallback):
     """
     A [`TrainerCallback`] that logs metrics to Trackio.
 
-    It records training metrics, model (including PEFT) configuration.
+    It records training metrics, model (including PEFT) configuration. When a Hugging Face Space is used, by default
+    training **freezes** that Space at the end (converts it from a live Gradio Space to a static read-only dashboard
+    backed by an HF Bucket). Set `trackio_keep_live_space=True` in [`TrainingArguments`] to keep a live Space.
 
     **Requires**:
     ```bash
@@ -959,8 +961,8 @@ class TrackioCallback(TrainerCallback):
         """
         Setup the optional Trackio integration.
 
-        To customize the setup you can also set the arguments `project`, `trackio_space_id` and `hub_private_repo` in
-        [`TrainingArguments`]. Please refer to the docstring of for more details.
+        To customize the setup you can also set `project`, `trackio_space_id`, `trackio_bucket_id`,
+        `trackio_keep_live_space`, and `hub_private_repo` in [`TrainingArguments`].
         """
         if state.is_world_process_zero:
             combined_dict = {**args.to_dict()}
@@ -971,13 +973,16 @@ class TrackioCallback(TrainerCallback):
                 peft_config = model.peft_config
                 combined_dict = {"peft_config": peft_config, **combined_dict}
 
-            self._trackio.init(
-                project=args.project,
-                name=args.run_name,
-                space_id=args.trackio_space_id,
-                resume="allow",
-                private=args.hub_private_repo,
-            )
+            init_kw = {
+                "project": args.project,
+                "name": args.run_name,
+                "space_id": args.trackio_space_id,
+                "resume": "allow",
+                "private": args.hub_private_repo,
+            }
+            if args.trackio_bucket_id is not None:
+                init_kw["bucket_id"] = args.trackio_bucket_id
+            self._trackio.init(**init_kw)
 
             # Add config parameters (run may have been created manually)
             self._trackio.config.update(combined_dict, allow_val_change=True)
@@ -994,8 +999,32 @@ class TrackioCallback(TrainerCallback):
             self.setup(args, state, model, **kwargs)
 
     def on_train_end(self, args: TrainingArguments, state, control, model=None, processing_class=None, **kwargs):
-        if state.is_world_process_zero and self._initialized:
-            self._trackio.finish()
+        if not state.is_world_process_zero or not self._initialized:
+            return
+        self._trackio.finish()
+        if args.trackio_space_id is None or args.trackio_keep_live_space:
+            return
+        if packaging.version.parse(self._trackio.__version__) < packaging.version.parse("0.21.0"):
+            logger.warning(
+                "trackio>=0.21.0 is required to freeze the Space after training. "
+                "Install a newer trackio or set trackio_keep_live_space=True."
+            )
+            return
+        try:
+            space_id = self._trackio.context_vars.current_space_id.get() or args.trackio_space_id
+            self._trackio.sync(
+                args.project,
+                space_id=space_id,
+                sdk="static",
+                force=True,
+                private=args.hub_private_repo,
+                bucket_id=args.trackio_bucket_id,
+            )
+        except Exception as e:
+            logger.warning(
+                "Trackio could not freeze the Hugging Face Space after training (metrics remain in your local Trackio "
+                f"project). {e}"
+            )
 
     def on_log(self, args, state, control, model=None, logs=None, **kwargs):
         single_value_scalars = [
@@ -1031,11 +1060,10 @@ class TrackioCallback(TrainerCallback):
         if (current_project := self._trackio.context_vars.current_project.get()) is None:
             return
         trackio_version = packaging.version.parse(self._trackio.__version__)
-        if trackio_version < packaging.version.parse("0.13.0"):
+        if trackio_version < packaging.version.parse("0.21.0"):
             warnings.warn(
-                "The version of `trackio` that is installed is <=0.13.0, so "
-                "the local Trackio project will not be pushed to Hugging Face. Run "
-                "`pip install --upgrade trackio` to fix this."
+                "The installed `trackio` is older than 0.21.0, so the Hub integration may be incomplete. "
+                "Run `pip install --upgrade trackio`."
             )
             return
 
