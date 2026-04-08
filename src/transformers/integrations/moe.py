@@ -18,6 +18,7 @@ from functools import wraps
 from ..utils import logging
 from ..utils.generic import GeneralInterface
 from ..utils.import_utils import is_torch_available, is_torch_less_or_equal, is_torchdynamo_compiling
+from .sonicmoe import sonicmoe_experts_forward
 
 
 if is_torch_available():
@@ -25,6 +26,7 @@ if is_torch_available():
 
 
 logger = logging.get_logger(__name__)
+
 
 # Examples of experts class with its eager mm implementation
 # class Experts(torch.nn.Module):
@@ -433,6 +435,7 @@ class ExpertsInterface(GeneralInterface):
     """Interface for registering custom experts forward functions."""
 
     _global_mapping = {
+        "sonicmoe": sonicmoe_experts_forward,
         "batched_mm": batched_mm_experts_forward,
         "grouped_mm": grouped_mm_experts_forward,
     }

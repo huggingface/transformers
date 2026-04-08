@@ -1,0 +1,126 @@
+# Copyright 2026 The HuggingFace Team. All rights reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+"""SonicMoE integration: fused MoE using CuteDSL kernels from `kernels-community/sonic-moe`.
+
+Provides `sonicmoe_experts_forward` registered as "sonicmoe" in the ExpertsInterface.
+Requirements: CUDA, `kernels`, `nvidia-cutlass-dsl`, has_gate=True, is_transposed=False.
+"""
+
+import os
+
+import torch
+
+from ..utils import logging
+
+
+logger = logging.get_logger(__name__)
+
+_sonicmoe_module = None
+
+# Map activation function names from HF config to SonicMoE epilogue names
+ACT_MAP = {"silu": "swiglu", "gelu": "geglu", "relu": "reglu"}
+
+
+def _load_sonicmoe():
+    """Lazy-load the SonicMoE kernel from hub."""
+    global _sonicmoe_module
+    if _sonicmoe_module is None:
+        if "CUTE_DSL_ARCH" not in os.environ:
+            major, minor = torch.cuda.get_device_capability()
+            os.environ["CUTE_DSL_ARCH"] = f"sm_{major}{minor}a" if major >= 9 else f"sm_{major}{minor}"
+
+        from kernels import get_kernel
+
+        _sonicmoe_module = get_kernel("adarshxs/sonic-moe", revision="v1")
+
+    return _sonicmoe_module
+
+
+def sonicmoe_experts_forward(
+    self: torch.nn.Module,
+    hidden_states: torch.Tensor,
+    top_k_index: torch.Tensor,
+    top_k_weights: torch.Tensor,
+) -> torch.Tensor:
+    if self.is_transposed:
+        raise ValueError("sonicmoe requires non-transposed weights (is_transposed=False)")
+    if not self.has_gate:
+        raise ValueError("sonicmoe requires gated experts (has_gate=True)")
+    if hidden_states.device.type != "cuda":
+        raise ValueError("sonicmoe requires CUDA device")
+
+    kernel = _load_sonicmoe()
+    moe_general_routing = getattr(kernel, "moe_general_routing_inputs", None)
+    if moe_general_routing is None:
+        raise ImportError(
+            "moe_general_routing_inputs not found in adarshxs/sonic-moe. "
+            "Make sure you have the `kernels` package and `nvidia-cutlass-dsl` installed."
+        )
+
+    ActivationType = getattr(getattr(kernel, "enums", None), "ActivationType", None)
+    if ActivationType is None:
+        raise ImportError(
+            "ActivationType enum not found in adarshxs/sonic-moe. "
+            "Make sure you have the `kernels` package and `nvidia-cutlass-dsl` installed."
+        )
+
+    device = hidden_states.device
+    num_experts = self.num_experts
+    num_top_k = top_k_index.size(-1)
+    num_tokens = hidden_states.size(0)
+    grad_enabled = torch.is_grad_enabled()
+    cuda_device_stream = torch.cuda.current_stream(device).cuda_stream
+
+    # Flatten — token_indices must be int32, sorted ascending (required by sonic-moe)
+    token_idx = (
+        torch.arange(num_tokens, device=device, dtype=torch.int32).unsqueeze(1).expand(-1, num_top_k).reshape(-1)
+    )
+    router_scores = top_k_weights.reshape(-1).to(hidden_states.dtype)
+    expert_ids = top_k_index.reshape(-1).to(torch.int32)
+
+    # Map activation function
+    act_name = getattr(self, "act_fn", "silu").lower()
+    activation_type = getattr(ActivationType, ACT_MAP.get(act_name, "swiglu").upper(), ActivationType.SWIGLU)
+
+    # SonicMoE's CUTLASS epilogue reads accumulators as interleaved pairs: act(D[2i]) * D[2i+1].
+    # HuggingFace stores concatenated [gate; up]. Interleave and cache on first call.
+    if not hasattr(self, "is_interleaved"):
+        I = self.gate_up_proj.size(1) // 2
+        self.gate_up_proj = torch.stack([self.gate_up_proj[:, :I, :], self.gate_up_proj[:, I:, :]], dim=2).reshape(
+            self.gate_up_proj.shape
+        )
+        self.is_interleaved = True
+
+    w1 = self.gate_up_proj.permute(1, 2, 0)  # (2*I, H, E)
+    w2 = self.down_proj.permute(1, 2, 0)  # (I, H, E)
+    b1 = self.gate_up_proj_bias if self.has_bias else None
+    b2 = self.down_proj_bias if self.has_bias else None
+
+    output, _ = moe_general_routing(
+        hidden_states,
+        router_scores,
+        token_idx,
+        expert_ids,
+        w1,
+        b1,
+        w2,
+        b2,
+        num_experts,
+        cuda_device_stream,
+        activation_type,
+        grad_enabled,
+    )
+
+    return output
