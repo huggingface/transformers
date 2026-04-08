@@ -18,6 +18,10 @@ This script downloads files from the HuggingFace Hub to be used for CI tests.
 import os
 import re
 
+# Ensure we always download from the public HuggingFace Hub, not the CI staging endpoint
+# that may be configured via HF_ENDPOINT in the CI environment.
+os.environ.pop("HF_ENDPOINT", None)
+
 import httpx
 from huggingface_hub import hf_hub_download, snapshot_download
 
@@ -150,10 +154,6 @@ def download_test_file(url):
 
 
 if __name__ == "__main__":
-    # Ensure we always download from the public HuggingFace Hub, not the CI staging endpoint
-    # that may be configured via HF_ENDPOINT in the CI environment.
-    os.environ.pop("HF_ENDPOINT", None)
-
     from transformers.testing_utils import _run_pipeline_tests, _run_staging
     from transformers.utils.import_utils import is_mistral_common_available
 
