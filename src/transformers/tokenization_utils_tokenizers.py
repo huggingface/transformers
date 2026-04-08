@@ -100,7 +100,7 @@ class TokenizersBackend(PreTrainedTokenizerBase):
 
     @classmethod
     def convert_to_native_format(cls, trust_remote_code=False, **kwargs):
-        """s
+        """
         Build a `tokenizers.Tokenizer` backend from the available serialization files (tokenizer.json, sentencepiece
         models, tekken.json, vocab/merges).
         """

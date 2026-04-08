@@ -264,6 +264,7 @@ else:
             ("vit_msn", {"torchvision": "ViTImageProcessor", "pil": "ViTImageProcessorPil"}),
             ("vitmatte", {"torchvision": "VitMatteImageProcessor", "pil": "VitMatteImageProcessorPil"}),
             ("vitpose", {"torchvision": "VitPoseImageProcessor", "pil": "VitPoseImageProcessorPil"}),
+            ("vivit", {"torchvision": "VivitImageProcessor"}),
             ("xclip", {"torchvision": "CLIPImageProcessor", "pil": "CLIPImageProcessorPil"}),
             ("yolos", {"torchvision": "YolosImageProcessor", "pil": "YolosImageProcessorPil"}),
             ("zoedepth", {"torchvision": "ZoeDepthImageProcessor", "pil": "ZoeDepthImageProcessorPil"}),

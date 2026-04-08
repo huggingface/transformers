@@ -30,6 +30,9 @@ jobs:
       - run: pip install -e .[torch]
       - run: python -c "from transformers import pipeline; classifier = pipeline('text-classification'); assert classifier('What a nice release')[0]['score'] > 0"
 
+      - run: pip install twine
+      - run: twine check --strict dist/*
+
       - name: Upload build artifacts
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4
         with:
@@ -57,4 +60,6 @@ jobs:
 
       - name: Publish package distributions to TestPyPI
         uses: pypa/gh-action-pypi-publish@ed0c53931b1dc9bd32cbe73a98c7f6766f8a527e  # release/v1
+        with:
+          verbose: true
 
