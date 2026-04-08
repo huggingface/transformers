@@ -27,7 +27,6 @@ from transformers import (
 from transformers.testing_utils import (
     Expectations,
     cleanup,
-    is_flash_attn_2_available,
     require_torch,
     require_torch_accelerator,
     slow,
@@ -559,14 +558,12 @@ class Gemma4IntegrationTest(unittest.TestCase):
         EXPECTED_TEXT = EXPECTED_TEXTS.get_expectation()
         self.assertEqual(output_text, EXPECTED_TEXT)
 
+    # Note: we do not test FA2 as the head dim is 512 on some layers, which is not compatible with the kernels
     @parameterized.expand([("sdpa",), ("eager",)])
     def test_generation_beyond_sliding_window(self, attn_implementation: str):
         """Test that we can correctly generate beyond the sliding window. Outputs for every attention functions
         should be coherent and identical.
         """
-
-        if attn_implementation == "flash_attention_2" and not is_flash_attn_2_available():
-            self.skipTest("FlashAttention2 is required for this test.")
 
         input_text = [
             "This is a nice place. " * 800 + "I really enjoy the scenery,",  # This is larger than 4096 tokens
@@ -577,7 +574,6 @@ class Gemma4IntegrationTest(unittest.TestCase):
             tokenizer.apply_chat_template(
                 [{"role": "user", "content": item}],
                 tokenize=False,
-                return_dict=True,
                 add_generation_prompt=True,
             )
             for item in input_text
@@ -634,7 +630,6 @@ class Gemma4IntegrationTest(unittest.TestCase):
         prompt = tokenizer.apply_chat_template(
             [{"role": "user", "content": "What is the capital of France?"}],
             tokenize=False,
-            return_dict=True,
             add_generation_prompt=True,
         )
 
