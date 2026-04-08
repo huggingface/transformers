@@ -63,7 +63,7 @@ class PPLCNetConfig(BackboneConfigMixin, PreTrainedConfig):
     hidden_act: str = "hardswish"
     _out_features: list[str] | None = None
     _out_indices: list[int] | None = None
-    hidden_dropout_prob: float = 0.2
+    hidden_dropout_prob: float | int = 0.2
 
     def __post_init__(self, **kwargs):
         # Default block configs for PP-LCNet

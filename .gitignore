@@ -172,6 +172,7 @@ tags
 
 # modeling structure lint cache
 utils/mlinter/.mlinter_cache.json
+utils/.checkers_cache.json
 
 # modular conversion
 *.modular_backup

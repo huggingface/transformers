@@ -16,10 +16,10 @@ rendered properly in your Markdown viewer.
 
 # Serve CLI
 
-The `transformers serve` CLI is a lightweight option for local or self-hosted servers. It avoids the extra runtime and operational overhead of dedicated inference engines like vLLM. Use it for evaluation, experimentation, and moderate load deployments. Features like [continuous batching](../continuous_batching) increases throughput and lowers latency.
+The `transformers serve` CLI is a lightweight option for local or self-hosted servers. It avoids the extra runtime and operational overhead of dedicated inference engines like vLLM. Use it for evaluation, experimentation, and moderate load deployments. Features like [continuous batching](../continuous_batching) increase throughput and lower latency.
 
 > [!TIP]
-> For large scale production deployments, use vLLM, SGLang or TGI with a Transformer model as the backend. Learn more in the [Inference backends](../community_integrations/transformers_as_backend) guide.
+> For large scale production deployments, use vLLM or SGLang with a Transformer model as the backend. Learn more in the [Inference backends](../community_integrations/transformers_as_backend) guide.
 
 The `transformers serve` command spawns a local server compatible with the [OpenAI SDK](https://platform.openai.com/docs/overview). The server works with many third-party applications and supports the REST APIs below.
 
@@ -360,23 +360,23 @@ The command returns the following response.
 
 The `v1/models` endpoint scans your local Hugging Face cache and returns a list of downloaded models in the OpenAI-compatible format. Third-party tools use this endpoint to discover available models.
 
-Use the command below to download a model before running `transformers serve`.
+Download a model before running `transformers serve`.
 
 ```bash
 transformers download Qwen/Qwen2.5-0.5B-Instruct
 ```
 
-The model is now discoverable by the `/v1/models` endpoint.
+Once downloaded, the model appears in `/v1/models` responses.
 
 ```shell
 curl http://localhost:8000/v1/models
 ```
 
-This command returns a JSON object containing the list of models.
+The endpoint returns a JSON object with available models.
 
 ## Loading models
 
-The `/load_model` endpoint pre-loads a model and streams progress via [Server-Sent Events](https://developer.mozilla.org/en-US/docs/Web/API/Server-sent_events) (SSE). The `transformers chat` CLI uses it automatically so users see download and loading progress instead of a hanging prompt. It's also useful for warming up a model before sending inference requests.
+The `/load_model` endpoint pre-loads a model and streams progress via [Server-Sent Events](https://developer.mozilla.org/en-US/docs/Web/API/Server-sent_events) (SSE). The `transformers chat` CLI uses it automatically so users see download and loading progress instead of a hanging prompt. Use it to warm up a model before sending inference requests.
 
 ### Request
 
@@ -386,17 +386,17 @@ curl -N -X POST http://localhost:8000/load_model \
   -d '{"model": "Qwen/Qwen2.5-0.5B-Instruct"}'
 ```
 
-The `model` field is a Hugging Face model identifier, optionally with an `@revision` suffix (e.g., `meta-llama/Llama-3.2-1B-Instruct@main`). If no revision is specified, `main` is assumed.
+The `model` field is a Hugging Face model identifier, optionally with an `@revision` suffix (`Qwen/Qwen2.5-0.5B-Instruct@main`). Omitting the revision defaults to `main`.
 
 ### Response
 
-The response is an SSE stream (`Content-Type: text/event-stream`). Each frame is a JSON object on a `data:` line:
+The response is an SSE stream (`Content-Type: text/event-stream`). Each frame is a JSON object on a `data:` line.
 
 ```
 data: {"status": "loading", "model": "Qwen/Qwen2.5-0.5B-Instruct@main", "stage": "processor"}
 ```
 
-Every event contains at minimum a `status` and `model` field. Additional fields depend on the status:
+Every event contains at minimum a `status` and `model` field. Additional fields depend on the status.
 
 | Field | Present when | Description |
 |-------|-------------|-------------|
@@ -409,7 +409,7 @@ Every event contains at minimum a `status` and `model` field. Additional fields 
 
 ### Stages
 
-Loading progresses through these stages in order. Some may be skipped (e.g., `download` is skipped when files are already cached locally).
+Loading progresses through these stages in order. Some may be skipped (`download` is skipped when files are already cached locally).
 
 | Stage | Has progress? | Description |
 |-------|---------------|-------------|
@@ -418,11 +418,22 @@ Loading progresses through these stages in order. Some may be skipped (e.g., `do
 | `download` | Yes (bytes) | Downloading model files |
 | `weights` | Yes (items) | Loading weight tensors into memory |
 
-The stream ends with exactly one terminal event: `ready` (success) or `error` (failure).
+The stream ends with exactly one terminal event, `ready` (success) or `error` (failure).
 
-### Examples
+## Timeout
 
-**Fresh load with download:**
+`transformers serve` supports different requests by different models. Each model loads on demand and stays in GPU memory. Models unload automatically after 300 seconds of inactivity to free up GPU memory. Set `--model-timeout` to a different value in seconds, or `-1` to disable unloading entirely.
+
+```shell
+transformers serve --model-timeout 400
+```
+
+### Loading examples
+
+See the example responses below for a freshly downloaded model, a model loaded from your local cache (skips the download stage), and a model that already exists in memory.
+
+<hfoptions id="load-model-examples">
+<hfoption id="fresh load">
 
 ```
 data: {"status": "loading", "model": "org/model@main", "stage": "processor"}
@@ -435,7 +446,8 @@ data: {"status": "loading", "model": "org/model@main", "stage": "weights", "prog
 data: {"status": "ready", "model": "org/model@main", "cached": false}
 ```
 
-**Files already cached locally (no download stage):**
+</hfoption>
+<hfoption id="cached files">
 
 ```
 data: {"status": "loading", "model": "org/model@main", "stage": "processor"}
@@ -445,11 +457,15 @@ data: {"status": "loading", "model": "org/model@main", "stage": "weights", "prog
 data: {"status": "ready", "model": "org/model@main", "cached": false}
 ```
 
-**Model already in memory:**
+</hfoption>
+<hfoption id="in memory">
 
 ```
 data: {"status": "ready", "model": "org/model@main", "cached": true}
 ```
+
+</hfoption>
+</hfoptions>
 
 ## Tool calling
 
@@ -492,7 +508,7 @@ tools = [
 ]
 ```
 
-Pass a dictionary of parameters from [`GenerationConfig`] to the `extra_body` argument in [create](https://platform.openai.com/docs/api-reference/responses/create) to customize model generation.
+Customize generation by passing [`GenerationConfig`] parameters to the `extra_body` argument in [create](https://platform.openai.com/docs/api-reference/responses/create).
 
 ```py
 generation_config = {
@@ -520,7 +536,7 @@ for event in response:
 
 ## Port forwarding
 
-The `transformers serve` server supports port forwarding. This lets you serve models from a remote server. Make sure you have ssh access from your device to the server. Run the following command on your device to set up port forwarding.
+Port forwarding lets you serve models from a remote server. Make sure you have SSH access to the server, then run this command on your local machine.
 
 ```bash
 ssh -N -f -L 8000:localhost:8000 your_server_account@your_server_IP -p port_to_ssh_into_your_server
@@ -528,7 +544,7 @@ ssh -N -f -L 8000:localhost:8000 your_server_account@your_server_IP -p port_to_s
 
 ## Reproducibility
 
-Add the `--force-model <repo_id>` argument to avoid per-request model hints. This produces stable, repeatable runs.
+Use `--force-model <repo_id>` to avoid per-request model hints and produce stable, repeatable runs.
 
 ```sh
 transformers serve \
