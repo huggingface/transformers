@@ -954,7 +954,7 @@ class Gemma4TextAttention(nn.Module):
         hidden_states: torch.Tensor,
         position_embeddings: torch.Tensor,
         attention_mask: torch.Tensor | None,
-        shared_kv_states: dict,
+        shared_kv_states: dict[int, tuple[torch.Tensor, torch.Tensor]],
         past_key_values: Cache | None = None,
         **kwargs: Unpack[FlashAttentionKwargs],
     ) -> tuple[torch.Tensor, torch.Tensor | None]:
@@ -1082,7 +1082,7 @@ class Gemma4TextDecoderLayer(Gemma3DecoderLayer):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        shared_kv_states: dict,
+        shared_kv_states: dict[int, tuple[torch.Tensor, torch.Tensor]],
         per_layer_input: torch.Tensor = None,
         position_embeddings: torch.Tensor = None,
         attention_mask: torch.Tensor | None = None,
