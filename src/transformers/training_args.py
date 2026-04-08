@@ -400,9 +400,9 @@ class TrainingArguments:
         trackio_bucket_id (`str` or `None`, *optional*, defaults to `None`):
             Optional Hugging Face Bucket id (`namespace/name`) for Trackio metric storage when using a Space. If
             unset, Trackio derives a bucket from the Space id. Only used when `trackio_space_id` is set.
-        trackio_keep_live_space (`bool`, *optional*, defaults to `False`):
-            When `False` (default), after training the Space is **frozen** (converted from a live Gradio Space to a
-            static read-only dashboard backed by the HF Bucket). Set to `True` to keep a live Gradio Space for further
+        trackio_freeze_space (`bool`, *optional*, defaults to `True`):
+            When `True` (default), after training the Space is **frozen** (converted from a live Gradio Space to a
+            static read-only dashboard backed by the HF Bucket). Set to `False` to keep a live Gradio Space for further
             logging to the same Space.
 
         > Evaluation
@@ -1067,10 +1067,10 @@ class TrainingArguments:
             "help": "Optional Hugging Face Bucket id for Trackio when using a Space; if unset, Trackio picks a default."
         },
     )
-    trackio_keep_live_space: bool = field(
-        default=False,
+    trackio_freeze_space: bool = field(
+        default=True,
         metadata={
-            "help": "If False (default), freeze the Trackio Space after training (static dashboard). If True, keep a live Gradio Space."
+            "help": "If True (default), freeze the Trackio Space after training (static dashboard). If False, keep a live Gradio Space."
         },
     )
 

@@ -937,7 +937,7 @@ class TrackioCallback(TrainerCallback):
 
     It records training metrics, model (including PEFT) configuration. When a Hugging Face Space is used, by default
     training **freezes** that Space at the end (converts it from a live Gradio Space to a static read-only dashboard
-    backed by an HF Bucket). Set `trackio_keep_live_space=True` in [`TrainingArguments`] to keep a live Space.
+    backed by an HF Bucket). Set `trackio_freeze_space=False` in [`TrainingArguments`] to keep a live Space.
 
     **Requires**:
     ```bash
@@ -962,7 +962,7 @@ class TrackioCallback(TrainerCallback):
         Setup the optional Trackio integration.
 
         To customize the setup you can also set `project`, `trackio_space_id`, `trackio_bucket_id`,
-        `trackio_keep_live_space`, and `hub_private_repo` in [`TrainingArguments`].
+        `trackio_freeze_space`, and `hub_private_repo` in [`TrainingArguments`].
         """
         if state.is_world_process_zero:
             combined_dict = {**args.to_dict()}
@@ -1002,12 +1002,12 @@ class TrackioCallback(TrainerCallback):
         if not state.is_world_process_zero or not self._initialized:
             return
         self._trackio.finish()
-        if args.trackio_space_id is None or args.trackio_keep_live_space:
+        if args.trackio_space_id is None or not args.trackio_freeze_space:
             return
         if packaging.version.parse(self._trackio.__version__) < packaging.version.parse("0.21.0"):
             logger.warning(
                 "trackio>=0.21.0 is required to freeze the Space after training. "
-                "Install a newer trackio or set trackio_keep_live_space=True."
+                "Install a newer trackio or set trackio_freeze_space=False."
             )
             return
         try:
