@@ -28,15 +28,6 @@ MPS requires the entire model to fit in unified memory, so `device_map="auto"` c
 
 [`Trainer`] detects MPS automatically with `torch.backends.mps.is_available` and sets the device to `mps` without any configuration changes.
 
-```python
-from transformers import TrainingArguments
-
-training_args = TrainingArguments(
-    output_dir="./outputs",
-    # No extra flags needed
-)
-```
-
 ## Mixed precision
 
 MPS supports both bf16 and fp16 mixed precision (bf16 requires macOS 14.0 or later).
