@@ -93,6 +93,8 @@ class PPDocLayoutV3ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCa
         pass
 
     def test_post_process(self):
+        """Regression test that checks on samples where the cropped mask would result into and empty tensor, see #45281"""
+        # Dummy values
         outputs = SimpleNamespace(
             pred_boxes=torch.rand(1, 300, 4),
             logits=torch.rand(1, 300, 25),
