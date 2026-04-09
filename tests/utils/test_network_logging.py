@@ -20,6 +20,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import httpx
 
 from transformers.utils.network_logging import (
+    NetworkDebugPlugin,
     _clear_network_debug_report,
     _disable_network_debug_report,
     _enable_network_debug_report,
@@ -78,5 +79,38 @@ class NetworkLoggingTester(unittest.TestCase):
 
         summary = _format_network_debug_report()
         self.assertIn("Network debug report", summary)
+        self.assertIn("Slowest requests:", summary)
+        self.assertIn("/slow", summary)
+
+    def test_network_debug_plugin_collects_per_test_summary_for_slow_tests(self):
+        plugin = NetworkDebugPlugin()
+        plugin._slow_test_threshold_s = 0.0
+
+        _enable_network_debug_report()
+        _clear_network_debug_report()
+
+        nodeid = (
+            "tests/utils/test_network_logging.py::NetworkLoggingTester::"
+            "test_network_debug_plugin_collects_per_test_summary_for_slow_tests"
+        )
+        plugin.pytest_runtest_logstart(nodeid, None)
+
+        response = httpx.get(f"{self._base_url}/slow")
+        self.assertEqual(response.text, "ok")
+
+        plugin.pytest_runtest_logfinish(nodeid, None)
+
+        self.assertEqual(len(plugin._slow_tests), 1)
+        slow_test = plugin._slow_tests[0]
+        self.assertEqual(slow_test["nodeid"], nodeid)
+        self.assertEqual(slow_test["network_report"]["total_requests"], 1)
+
+        summary = _format_network_debug_report(
+            slow_test["network_report"],
+            title=f"{slow_test['nodeid']} ({slow_test['duration_s']:.1f}s)",
+            max_requests=10,
+            max_routes=5,
+        )
+        self.assertIn(nodeid, summary)
         self.assertIn("Slowest requests:", summary)
         self.assertIn("/slow", summary)
