@@ -388,7 +388,7 @@ class TrainerGradientAccumulationTest(TestCasePlus, TrainerIntegrationCommon):
                 args=args,
                 train_dataset=RegressionDataset(),
             )
-            
+
             # Simulate a modern model (Qwen3, Llama4, etc.) where num_items_in_batch is active
             trainer.model_accepts_loss_kwargs = True
             self.assertTrue(trainer.model_accepts_loss_kwargs)
