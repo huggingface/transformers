@@ -156,6 +156,7 @@ _INLINE_FILE_GLOBS = {
         "src/**/*.py",
         "utils/**/*.py",
         "scripts/**/*.py",
+        ".circleci/create_circleci_config.py",
         "benchmark/**/*.py",
         "benchmark_v2/**/*.py",
         "setup.py",
@@ -167,6 +168,7 @@ _INLINE_FILE_GLOBS = {
         "src/**/*.py",
         "utils/**/*.py",
         "scripts/**/*.py",
+        ".circleci/create_circleci_config.py",
         "benchmark/**/*.py",
         "benchmark_v2/**/*.py",
         "setup.py",
@@ -396,7 +398,18 @@ def run_imports_checker(fix=False, line_callback=None):
     return 0, output
 
 
-RUFF_TARGETS = ["examples", "tests", "src", "utils", "scripts", "benchmark", "benchmark_v2", "setup.py", "conftest.py"]
+RUFF_TARGETS = [
+    "examples",
+    "tests",
+    "src",
+    "utils",
+    "scripts",
+    ".circleci/create_circleci_config.py",
+    "benchmark",
+    "benchmark_v2",
+    "setup.py",
+    "conftest.py",
+]
 
 
 def run_ruff_check(fix=False, line_callback=None):
