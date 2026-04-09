@@ -1542,9 +1542,8 @@ class Gemma4TextModel(Gemma4PreTrainedModel):
         self._keys_to_ignore_on_load_unexpected = []
         for i, layer in enumerate(self.layers):
             if layer.self_attn.is_kv_shared_layer:
-                prefix = f"layers.{i}.self_attn."
                 self._keys_to_ignore_on_load_unexpected.extend(
-                    [prefix + "k_proj", prefix + "v_proj", prefix + "k_norm", prefix + "v_norm"]
+                    [f"layers.{i}.self_attn.{name}" for name in ("k_proj", "v_proj", "k_norm", "v_norm")]
                 )
 
         # Initialize weights and apply final processing
