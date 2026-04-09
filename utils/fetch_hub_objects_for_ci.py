@@ -38,6 +38,7 @@ if _staging_mode is not None:
 
 
 URLS_FOR_TESTING_DATA = [
+    # TODO: copy those to our hf-internal-testing dataset and fix all tests using them
     "http://images.cocodataset.org/val2017/000000000139.jpg",
     "http://images.cocodataset.org/val2017/000000000285.jpg",
     "http://images.cocodataset.org/val2017/000000000632.jpg",
@@ -51,12 +52,9 @@ URLS_FOR_TESTING_DATA = [
     "http://images.cocodataset.org/val2017/000000136466.jpg",
     "https://cdn.britannica.com/59/94459-050-DBA42467/Skyline-Chicago.jpg",
     "https://cdn.britannica.com/61/93061-050-99147DCE/Statue-of-Liberty-Island-New-York-Bay.jpg",
-    "https://huggingface.co/datasets/hf-internal-testing/dummy-audio-samples/resolve/main/bcn_weather.mp3",
-    "https://huggingface.co/datasets/hf-internal-testing/fixtures-captioning/resolve/main/bus.png",
-    "https://huggingface.co/datasets/hf-internal-testing/fixtures_videos/resolve/main/tennis.mp4",
+    "https://llava-vl.github.io/static/images/view.jpg",
+    "https://thumbs.dreamstime.com/b/golden-gate-bridge-san-francisco-purple-flowers-california-echium-candicans-36805947.jpg",
     "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/coco_sample.png",
-    "https://huggingface.co/datasets/hf-internal-testing/fixtures-captioning/resolve/main/cow_beach_1.png",
-    "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/tasks/australia.jpg",
     "https://huggingface.co/datasets/raushan-testing-hf/audio-test/resolve/main/f2641_0_throatclearing.wav",
     "https://huggingface.co/datasets/raushan-testing-hf/audio-test/resolve/main/glass-breaking-151256.mp3",
     "https://huggingface.co/datasets/raushan-testing-hf/images_test/resolve/main/picsum_237_200x300.jpg",
@@ -64,11 +62,15 @@ URLS_FOR_TESTING_DATA = [
     "https://huggingface.co/datasets/raushan-testing-hf/videos-test/resolve/main/sample_demo_1.mp4",
     "https://huggingface.co/microsoft/kosmos-2.5/resolve/main/receipt_00008.png",
     "https://huggingface.co/microsoft/kosmos-2-patch14-224/resolve/main/two_dogs.jpg",
-    "https://llava-vl.github.io/static/images/view.jpg",
+    "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/tasks/australia.jpg",
+    "https://huggingface.co/datasets/raushan-testing-hf/videos-test/resolve/main/tiny_video.mp4",
+    "https://huggingface.co/datasets/raushan-testing-hf/videos-test/resolve/main/tiny_video.mp4",
+    # we should rely on this single dataset for our tests
+    "https://huggingface.co/datasets/hf-internal-testing/dummy-audio-samples/resolve/main/bcn_weather.mp3",
+    "https://huggingface.co/datasets/hf-internal-testing/fixtures-captioning/resolve/main/bus.png",
     "https://huggingface.co/datasets/hf-internal-testing/fixtures_videos/resolve/main/tennis.mp4",
-    "https://huggingface.co/datasets/raushan-testing-hf/videos-test/resolve/main/tiny_video.mp4",
-    "https://thumbs.dreamstime.com/b/golden-gate-bridge-san-francisco-purple-flowers-california-echium-candicans-36805947.jpg",
-    "https://huggingface.co/datasets/raushan-testing-hf/videos-test/resolve/main/tiny_video.mp4",
+    "https://huggingface.co/datasets/hf-internal-testing/fixtures-captioning/resolve/main/cow_beach_1.png",
+    "https://huggingface.co/datasets/hf-internal-testing/fixtures_videos/resolve/main/tennis.mp4",
 ]
 
 
