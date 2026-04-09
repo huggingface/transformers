@@ -1541,7 +1541,7 @@ class Gemma4TextModel(Gemma4PreTrainedModel):
         # Update `_keys_to_ignore_on_load_unexpected` to drop all k/v proj and norms for the shared layers
         self._keys_to_ignore_on_load_unexpected = []
         for i, layer in enumerate(self.layers):
-            if layer.self_attn.is_shared_kv_layer:
+            if layer.self_attn.is_kv_shared_layer:
                 prefix = f"layers.{i}.self_attn."
                 self._keys_to_ignore_on_load_unexpected.extend(
                     [prefix + "k_proj", prefix + "v_proj", prefix + "k_norm", prefix + "v_norm"]
