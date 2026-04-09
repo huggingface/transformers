@@ -1946,8 +1946,25 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
 
     @classmethod
     def _can_set_attn_implementation(cls) -> bool:
-        """Detect whether the class supports setting its attention implementation dynamically. It is an ugly check based on
-        opening the file, but avoids maintaining yet another property flag.
+        """Detect whether the class supports setting its attention implementation dynamically.
+
+        This is a heuristic based on reading the module's source file as text and searching for
+        specific string patterns. It avoids maintaining a separate property flag on every model class,
+        but has the following known limitations:
+
+        - **False positives from comments or string literals**: The searched patterns
+          (``eager_attention_forward``, ``ALL_ATTENTION_FUNCTIONS.get_interface(``) may appear
+          inside docstrings, comments, or string constants rather than actual control-flow code,
+          causing this method to return ``True`` even when the model does not properly implement
+          the dynamic-attention interface.
+        - **Compiled modules**: If the model class is defined in a compiled extension (``.so`` /
+          ``.pyd``), the source file is not readable as text. This case is already handled: the
+          ``__file__`` guard returns ``False`` before attempting to open the file.
+        - **Non-standard import environments**: Environments such as PyInstaller bundles,
+          ``zipimport``, or custom module loaders may not expose a readable ``__file__`` path.
+          These also fall through the ``__file__`` guard and return ``False`` safely.
+        - **Jupyter notebooks and REPLs**: Models defined interactively have no associated source
+          file. This is also caught by the ``__file__`` guard.
         """
         class_module = sys.modules[cls.__module__]
         # This can happen for a custom model in a jupyter notebook or repl for example - simply do not allow to set it then
@@ -1965,8 +1982,24 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
 
     @classmethod
     def _can_set_experts_implementation(cls) -> bool:
-        """Detect whether the class supports setting its experts implementation dynamically. It is an ugly check based on
-        opening the file, but avoids maintaining yet another property flag.
+        """Detect whether the class supports setting its experts implementation dynamically.
+
+        This is a heuristic based on reading the module's source file as text and searching for
+        the ``@use_experts_implementation`` decorator string. It avoids maintaining a separate
+        property flag on every model class, but has the following known limitations:
+
+        - **False positives from comments or string literals**: The searched pattern
+          (``@use_experts_implementation``) may appear inside docstrings, comments, or string
+          constants rather than actual decorator usage, causing this method to return ``True``
+          even when the decorator is not applied to any function.
+        - **Compiled modules**: If the model class is defined in a compiled extension (``.so`` /
+          ``.pyd``), the source file is not readable as text. This case is already handled: the
+          ``__file__`` guard returns ``False`` before attempting to open the file.
+        - **Non-standard import environments**: Environments such as PyInstaller bundles,
+          ``zipimport``, or custom module loaders may not expose a readable ``__file__`` path.
+          These also fall through the ``__file__`` guard and return ``False`` safely.
+        - **Jupyter notebooks and REPLs**: Models defined interactively have no associated source
+          file. This is also caught by the ``__file__`` guard.
         """
         class_module = sys.modules[cls.__module__]
         # This can happen for a custom model in a jupyter notebook or repl for example - simply do not allow to set it then
