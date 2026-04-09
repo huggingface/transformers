@@ -52,21 +52,21 @@ class XCLIPOutput(CLIPOutput):
     r"""
     loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `return_loss` is `True`):
         Contrastive loss for video-text similarity.
-    logits_per_video (`torch.FloatTensor` of shape `(video_batch_size, text_batch_size)`):
-        The scaled dot product scores between `video_embeds` and `text_embeds`. This represents the video-text
-        similarity scores.
     logits_per_text (`torch.FloatTensor` of shape `(text_batch_size, video_batch_size)`):
         The scaled dot product scores between `text_embeds` and `video_embeds`. This represents the text-video
         similarity scores.
     text_embeds (`torch.FloatTensor` of shape `(batch_size, output_dim`):
         The text embeddings obtained by applying the projection layer to the pooled output of [`XCLIPTextModel`].
-    video_embeds (`torch.FloatTensor` of shape `(batch_size, output_dim`):
-        The video embeddings obtained by applying the projection layer to the pooled output of
-        [`XCLIPVisionModel`].
     text_model_output (`BaseModelOutputWithPooling`):
         The output of the [`XCLIPTextModel`].
     vision_model_output (`BaseModelOutputWithPooling`):
         The output of the [`XCLIPVisionModel`].
+    logits_per_video (`torch.FloatTensor` of shape `(video_batch_size, text_batch_size)`):
+        The scaled dot product scores between `video_embeds` and `text_embeds`. This represents the video-text
+        similarity scores.
+    video_embeds (`torch.FloatTensor` of shape `(batch_size, output_dim`):
+        The video embeddings obtained by applying the projection layer to the pooled output of
+        [`XCLIPVisionModel`].
     mit_output (`BaseModelOutputWithPooling`):
         The output of `XCLIPMultiframeIntegrationTransformer` (MIT for short).
     """
