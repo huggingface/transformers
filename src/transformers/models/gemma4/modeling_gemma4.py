@@ -22,6 +22,7 @@ import math
 from collections.abc import Callable
 from dataclasses import dataclass
 from functools import cached_property
+from typing import Optional
 
 import torch
 from torch import nn
@@ -31,28 +32,25 @@ from ... import initialization as init
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
 from ...configuration_utils import PreTrainedConfig
-from ...integrations import use_kernelized_func
+from ...generation import GenerationMixin
+from ...integrations import use_experts_implementation, use_kernelized_func
 from ...masking_utils import (
-    create_bidirectional_mask, create_causal_mask, create_masks_for_generate, create_sliding_window_causal_mask)
+    create_bidirectional_mask,
+    create_causal_mask,
+    create_masks_for_generate,
+    create_sliding_window_causal_mask,
+)
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
-from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPooling
+from ...modeling_layers import GradientCheckpointingLayer
+from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPooling, CausalLMOutputWithPast
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import (
-    TransformersKwargs, auto_docstring, can_return_tuple, torch_compilable_check)
+from ...utils import ModelOutput, TransformersKwargs, auto_docstring, can_return_tuple, torch_compilable_check
 from ...utils.generic import maybe_autocast, merge_with_config_defaults
 from ...utils.output_capturing import OutputRecorder, capture_outputs
 from ..auto.modeling_auto import AutoModel
 from .configuration_gemma4 import Gemma4AudioConfig, Gemma4Config, Gemma4TextConfig, Gemma4VisionConfig
-from typing import Optional
-from ...generation import GenerationMixin
-from ...modeling_layers import GradientCheckpointingLayer
-from ...modeling_outputs import (
-    CausalLMOutputWithPast)
-from ...utils import ModelOutput
-from ...integrations import (
-    use_experts_implementation)
 
 
 @dataclass
@@ -1965,8 +1963,7 @@ class Gemma4MultimodalEmbedder(nn.Module):
         self.embedding_projection = nn.Linear(self.multimodal_hidden_size, self.text_hidden_size, bias=False)
         self.embedding_pre_projection_norm = Gemma4RMSNorm(self.multimodal_hidden_size, eps=self.eps, with_scale=False)
 
-    def forward(
-        self, inputs_embeds: torch.Tensor) -> torch.Tensor:
+    def forward(self, inputs_embeds: torch.Tensor) -> torch.Tensor:
         """Embeds token ids or soft tokens for multimodal content into language model space.
         Args:
             inputs_embeds: A torch.Tensor containing the soft tokens to embed.
@@ -2411,7 +2408,8 @@ class Gemma4ForConditionalGeneration(Gemma4PreTrainedModel, GenerationMixin):
         self.model.set_input_embeddings(value)
 
     @auto_docstring
-    def get_image_features(self,
+    def get_image_features(
+        self,
         pixel_values: torch.FloatTensor,
         image_position_ids: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
@@ -2585,4 +2583,12 @@ class Gemma4ForConditionalGeneration(Gemma4PreTrainedModel, GenerationMixin):
             )
 
 
-__all__ = ["Gemma4AudioModel", "Gemma4ForCausalLM", "Gemma4ForConditionalGeneration", "Gemma4Model", "Gemma4PreTrainedModel", "Gemma4TextModel", "Gemma4VisionModel"]
+__all__ = [
+    "Gemma4AudioModel",
+    "Gemma4ForCausalLM",
+    "Gemma4ForConditionalGeneration",
+    "Gemma4Model",
+    "Gemma4PreTrainedModel",
+    "Gemma4TextModel",
+    "Gemma4VisionModel",
+]
