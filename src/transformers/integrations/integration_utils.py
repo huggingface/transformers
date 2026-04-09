@@ -935,17 +935,29 @@ class TrackioCallback(TrainerCallback):
     """
     A [`TrainerCallback`] that logs metrics to Trackio.
 
-    It records training metrics, model (including PEFT) configuration. When Trackio metrics are synced to a Hugging Face Space, by default
-    training **freezes** that Space at the end (converts it from a live Gradio Space to a static read-only dashboard). Set
-    `trackio_freeze_space=False` in [`TrainingArguments`] to keep a live Space.
+    With `trackio_space_id=None` (default), metrics stay **local** until the model is **pushed to the Hub**; the first
+    push runs `trackio.sync` with a **static** Space so the dashboard is linked from the model card. If you set
+    `trackio_space_id`, metrics stream to a **Gradio** Space during training; when `trackio_freeze_space` is True
+    (default), `trackio.freeze` runs at the end to create a **new** static Space from that Gradio Space (the model
+    card is updated to prefer the static URL when available).
 
     **Requires**:
     ```bash
-    pip install trackio
+    pip install trackio>=0.22.0
     ```
     """
 
     SPACE_URL = "https://huggingface.co/spaces/{space_id}"
+    _MIN_TRACKIO_FREEZE_VERSION = "0.22.0"
+
+    @staticmethod
+    def _space_repo_name_from_trackio_project(project: str) -> str:
+        s = project.strip().lower().replace("/", "-")
+        s = re.sub(r"[^a-z0-9._-]", "-", s)
+        s = re.sub(r"-+", "-", s).strip("-_.")
+        if not s:
+            s = "trackio-project"
+        return s[:96].rstrip("-")
 
     def __init__(self):
         has_trackio = is_trackio_available()
@@ -956,6 +968,7 @@ class TrackioCallback(TrainerCallback):
 
             self._trackio = trackio
         self._initialized = False
+        self._frozen_static_space_id: str | None = None
 
     def setup(self, args, state, model, **kwargs):
         """
@@ -973,14 +986,16 @@ class TrackioCallback(TrainerCallback):
                 peft_config = model.peft_config
                 combined_dict = {"peft_config": peft_config, **combined_dict}
 
-            self._trackio.init(
-                project=args.project,
-                name=args.run_name,
-                space_id=args.trackio_space_id,
-                resume="allow",
-                private=args.hub_private_repo,
-                bucket_id=args.trackio_bucket_id,
-            )
+            init_kw = {
+                "project": args.project,
+                "name": args.run_name,
+                "space_id": args.trackio_space_id,
+                "resume": "allow",
+                "private": args.hub_private_repo,
+            }
+            if args.trackio_space_id is not None and args.trackio_bucket_id is not None:
+                init_kw["bucket_id"] = args.trackio_bucket_id
+            self._trackio.init(**init_kw)
 
             # Add config parameters (run may have been created manually)
             self._trackio.config.update(combined_dict, allow_val_change=True)
@@ -992,6 +1007,50 @@ class TrackioCallback(TrainerCallback):
                 logger.info("Could not log the number of model parameters in Trackio due to an AttributeError.")
         self._initialized = True
 
+    def _resolve_trackio_space_id(self, args: TrainingArguments) -> str | None:
+        space_id = self._trackio.context_vars.current_space_id.get() or args.trackio_space_id
+        if space_id is not None:
+            return space_id
+        from trackio.sqlite_storage import SQLiteStorage
+
+        return SQLiteStorage.get_space_id(args.project)
+
+    def _trackio_space_badge_markdown(self, space_id: str) -> str:
+        space_url = self.SPACE_URL.format(space_id=space_id)
+        return (
+            f'<a href="{space_url}" target="_blank"><img src="https://raw.githubusercontent.com/gradio-app/trackio/refs/heads/main/trackio/assets/badge.png" alt="Visualize in Trackio"'
+            ' title="Visualize in Trackio" style="height: 40px;"/></a>'
+        )
+
+    def _prefer_trackio_static_tags(self, model, static_space_id: str) -> None:
+        space_url = self.SPACE_URL.format(space_id=static_space_id)
+        new_tag = f"trackio:{space_url}"
+        if getattr(model, "model_tags", None) is None:
+            model.model_tags = ["trackio", new_tag]
+            return
+        tags = list(model.model_tags)
+        out = []
+        replaced = False
+        for t in tags:
+            if isinstance(t, str) and t.startswith("trackio:https://"):
+                if not replaced:
+                    out.append(new_tag)
+                    replaced = True
+                continue
+            out.append(t)
+        if not replaced:
+            for extra in ("trackio", new_tag):
+                if extra not in out:
+                    out.append(extra)
+        model.model_tags = out
+
+    def _modelcard_replace_trackio_space_href(self, gradio_space_id: str, static_space_id: str) -> None:
+        old_url = self.SPACE_URL.format(space_id=gradio_space_id)
+        new_url = self.SPACE_URL.format(space_id=static_space_id)
+        c = modelcard.AUTOGENERATED_TRAINER_COMMENT or ""
+        if old_url in c:
+            modelcard.AUTOGENERATED_TRAINER_COMMENT = c.replace(old_url, new_url, 1)
+
     def on_train_begin(self, args, state, control, model=None, **kwargs):
         if not self._initialized:
             self.setup(args, state, model, **kwargs)
@@ -1000,20 +1059,34 @@ class TrackioCallback(TrainerCallback):
         if not state.is_world_process_zero or not self._initialized:
             return
         self._trackio.finish()
-        if not args.trackio_freeze_space or packaging.version.parse(
-            self._trackio.__version__
-        ) < packaging.version.parse("0.21.0"):
-            return  # trackio>=0.21.0 is required to freeze the Space after training
-        try:
-            space_id = self._trackio.context_vars.current_space_id.get() or args.trackio_space_id
-            self._trackio.sync(
-                args.project,
-                space_id=space_id,
-                sdk="static",
-                force=True,
+        if not args.trackio_freeze_space or args.trackio_space_id is None:
+            return
+        if packaging.version.parse(self._trackio.__version__) < packaging.version.parse(self._MIN_TRACKIO_FREEZE_VERSION):
+            logger.warning(
+                f"trackio>={self._MIN_TRACKIO_FREEZE_VERSION} is required for trackio.freeze() after training with "
+                "`trackio_space_id` set. Install a newer trackio or set `trackio_freeze_space=False`."
             )
-        except Exception:
-            logger.warning("Trackio could not freeze the Hugging Face Space after training.")
+            return
+        if not hasattr(self._trackio, "freeze"):
+            logger.warning("The installed trackio has no freeze(); upgrade trackio or set trackio_freeze_space=False.")
+            return
+        gradio_space_id = self._resolve_trackio_space_id(args)
+        if gradio_space_id is None:
+            return
+        try:
+            new_static_id = self._trackio.freeze(
+                gradio_space_id,
+                args.project,
+                private=args.hub_private_repo,
+                bucket_id=None,
+            )
+        except Exception as e:
+            logger.warning(f"Trackio could not freeze the Gradio Space after training: {e}")
+            return
+        self._frozen_static_space_id = new_static_id
+        if model is not None:
+            self._prefer_trackio_static_tags(model, new_static_id)
+            self._modelcard_replace_trackio_space_href(gradio_space_id, new_static_id)
 
     def on_log(self, args, state, control, model=None, logs=None, **kwargs):
         single_value_scalars = [
@@ -1059,13 +1132,22 @@ class TrackioCallback(TrainerCallback):
 
         space_id = self._trackio.context_vars.current_space_id.get()
         if space_id is None:
-            space_id = self._trackio.sync(current_project, force=True)
+            sync_kw = dict(
+                force=True,
+                private=args.hub_private_repo,
+                bucket_id=args.trackio_bucket_id,
+            )
+            if args.trackio_space_id is None:
+                sync_kw["sdk"] = "static"
+                sync_kw["space_id"] = self._space_repo_name_from_trackio_project(args.project)
+            else:
+                sync_kw["space_id"] = args.trackio_space_id
+            space_id = self._trackio.sync(current_project, **sync_kw)
+        if self._frozen_static_space_id is not None:
+            space_id = self._frozen_static_space_id
         space_url = self.SPACE_URL.format(space_id=space_id)
 
-        badge_markdown = (
-            f'<a href="{space_url}" target="_blank"><img src="https://raw.githubusercontent.com/gradio-app/trackio/refs/heads/main/trackio/assets/badge.png" alt="Visualize in Trackio"'
-            ' title="Visualize in Trackio" style="height: 40px;"/></a>'
-        )
+        badge_markdown = self._trackio_space_badge_markdown(space_id)
         if badge_markdown not in modelcard.AUTOGENERATED_TRAINER_COMMENT:
             modelcard.AUTOGENERATED_TRAINER_COMMENT += f"\n{badge_markdown}"
 
