@@ -102,12 +102,12 @@ def _configure_library_root_logger() -> None:
         library_root_logger.setLevel(_get_default_logging_level())
         # Always show lib when logging in non-verbose mode
         logging_format = "[transformers] %(message)s"
-        formatter = logging.Formatter(logging_format)
 
         # if logging level is debug, we add pathname and lineno to formatter for easy debugging
         if os.getenv("TRANSFORMERS_VERBOSITY", None) == "detail":
-            formatter = "%(levelname)s [%(name)s:%(lineno)s] %(asctime)s %(message)s"
+            logging_format = "%(levelname)s [%(name)s:%(lineno)s] %(asctime)s %(message)s"
 
+        formatter = logging.Formatter(logging_format)
         _default_handler.setFormatter(formatter)
 
         ci = os.getenv("CI")
