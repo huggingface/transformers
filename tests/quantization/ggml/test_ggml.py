@@ -397,7 +397,7 @@ class GgufModelTests(unittest.TestCase):
 
         text = tokenizer(self.example_text, return_tensors="pt").to(torch_device)
         out = model.generate(**text, max_new_tokens=10)
-        
+
         EXPECTED_TEXT = "Hello, I just want to say that I am just"
         self.assertEqual(tokenizer.decode(out[0], skip_special_tokens=True), EXPECTED_TEXT)
 
