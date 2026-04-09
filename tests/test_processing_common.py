@@ -1997,6 +1997,9 @@ class ProcessorTesterMixin:
         if processor.chat_template is None:
             self.skipTest("Processor has no chat template")
 
+        if "tool" not in processor.chat_template:  # good heuristic to check if template supports tools
+            self.skipTest("Chat template does not support tools")
+
         messages = [
             {
                 "role": "user",
@@ -2008,9 +2011,9 @@ class ProcessorTesterMixin:
             },
         ]
 
-        # Should not raise KeyError on missing "content"
-        result = processor.apply_chat_template(messages, tokenize=False)
-        self.assertIsInstance(result, str)
+        # Regression test for #45290: tokenize=True used to raise KeyError when "content" was missing
+        result = processor.apply_chat_template(messages, tokenize=True)
+        self.assertIsInstance(result, list)
 
     def test_get_num_multimodal_tokens_matches_processor_call(self):
         "Tests that the helper used internally in vLLM works correctly"
