@@ -47,7 +47,6 @@ Thanks to the weight conversion mapping, RfDetr is compatible with models from t
 [rf-detr](https://github.com/roboflow/rf-detr) library as well as models that you trained using the
 [Roboflow](https://roboflow.com/) platform. This means you can use Roboflow platform to train your model and use
 `RfDetr` in `transformers` to import the weights and deploy your model anywhere.
-You can also train your model using [`Trainer`] as described below.
 
 
 > [!TIP]
@@ -86,7 +85,7 @@ image_processor = AutoImageProcessor.from_pretrained("stevenbucaille/rf-detr-bas
 model = AutoModelForObjectDetection.from_pretrained("stevenbucaille/rf-detr-base", device_map="auto")
 
 # prepare image for the model
-inputs = image_processor(images=image, return_tensors="pt")
+inputs = image_processor(images=image, return_tensors="pt").to(model.device)
 
 with torch.no_grad():
     outputs = model(**inputs)

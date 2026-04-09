@@ -135,6 +135,7 @@ def sample_point(
     return point_features
 
 
+# Adapted from Mask2FormerLoss.sample_points_using_uncertainty
 def sample_points_using_uncertainty(
     logits: Tensor, num_points: int, oversample_ratio: int, importance_sample_ratio: float
 ) -> Tensor:

@@ -54,7 +54,7 @@ logger = logging.get_logger(__name__)
 
 
 @auto_docstring(checkpoint="stevenbucaille/rf-detr-base")
-@strict(accept_kwargs=True)
+@strict
 class RfDetrDinov2Config(Dinov2Config):
     r"""
     layerscale_value (`float`, *optional*, defaults to 1.0):
@@ -105,7 +105,7 @@ class RfDetrDinov2Config(Dinov2Config):
 
 
 @auto_docstring(checkpoint="stevenbucaille/rf-detr-base")
-@strict(accept_kwargs=True)
+@strict
 class RfDetrConfig(LwDetrConfig):
     r"""
     hidden_expansion (`float`, *optional*, defaults to 0.5):
@@ -202,7 +202,7 @@ class RfDetrConfig(LwDetrConfig):
         PreTrainedConfig.__post_init__(**kwargs)
 
     def validate_architecture(self):
-        raise NotImplementedError(
+        raise AttributeError(
             "validate_architecture is not used in RfDetrConfig because it does not rely on multiple scale layers."
         )
 
