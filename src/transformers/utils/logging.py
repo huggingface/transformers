@@ -82,22 +82,6 @@ def _get_library_root_logger() -> logging.Logger:
     return logging.getLogger(_get_library_name())
 
 
-class ColoredVerboseFormatter(logging.Formatter):
-    default_color = "\033[0m"
-    colors = {
-        logging.DEBUG: "\033[90m",  # gray
-        logging.INFO: "\033[96m",  # cyan
-        logging.WARNING: "\033[93m",  # yellow
-        logging.ERROR: "\033[91m",  # red
-        logging.CRITICAL: "\033[41m",  # red background
-    }
-
-    def format(self, record):
-        color = self.colors.get(record.levelno, "")
-        asctime = datetime.fromtimestamp(record.created).strftime("%H:%M:%S")
-        return f"{color}{record.levelname}{self.default_color} [{record.name}:{record.lineno}] {asctime} {record.getMessage()}"
-
-
 def _configure_library_root_logger() -> None:
     global _default_handler
 
@@ -117,12 +101,12 @@ def _configure_library_root_logger() -> None:
         library_root_logger.addHandler(_default_handler)
         library_root_logger.setLevel(_get_default_logging_level())
         # Always show lib when logging in non-verbose mode
-        logging_format = "\033[95m[transformers]\033[0m %(message)s"
+        logging_format = "[transformers] %(message)s"
         formatter = logging.Formatter(logging_format)
 
         # if logging level is debug, we add pathname and lineno to formatter for easy debugging
         if os.getenv("TRANSFORMERS_VERBOSITY", None) == "detail":
-            formatter = ColoredVerboseFormatter()
+            formatter = "%(levelname)s [%(name)s:%(lineno)s] %(asctime)s %(message)s"
 
         _default_handler.setFormatter(formatter)
 
