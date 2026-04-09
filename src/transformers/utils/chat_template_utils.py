@@ -543,9 +543,7 @@ def render_jinja_template(
             chat = deepcopy(chat)
             final_message = chat[-1].get("content")
             if final_message is None:
-                raise ValueError(
-                    "continue_final_message is set but the final message has no content to continue!"
-                )
+                raise ValueError("continue_final_message is set but the final message has no content to continue!")
             elif isinstance(final_message, (list, tuple)):
                 for content_block in reversed(final_message):
                     if "text" in content_block:

@@ -1990,6 +1990,28 @@ class ProcessorTesterMixin:
         ids_is_same = processor.tokenizer.encode(assistant_text, add_special_tokens=False), assistant_ids.tolist()
         self.assertTrue(text_is_same or ids_is_same)
 
+    @require_torch
+    def test_apply_chat_template_tool_calls_no_content(self):
+        processor = self.get_processor()
+
+        if processor.chat_template is None:
+            self.skipTest("Processor has no chat template")
+
+        messages = [
+            {
+                "role": "user",
+                "content": [{"type": "text", "text": "What is the weather?"}],
+            },
+            {
+                "role": "assistant",
+                "tool_calls": [{"type": "function", "function": {"name": "get_weather", "arguments": "{}"}}],
+            },
+        ]
+
+        # Should not raise KeyError on missing "content"
+        result = processor.apply_chat_template(messages, tokenize=False)
+        self.assertIsInstance(result, str)
+
     def test_get_num_multimodal_tokens_matches_processor_call(self):
         "Tests that the helper used internally in vLLM works correctly"
 
