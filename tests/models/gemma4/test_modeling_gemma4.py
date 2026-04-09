@@ -29,6 +29,7 @@ from transformers.testing_utils import (
     cleanup,
     require_torch,
     require_torch_accelerator,
+    require_torch_multi_gpu,
     slow,
     torch_device,
 )
@@ -543,6 +544,34 @@ class Gemma4IntegrationTest(unittest.TestCase):
         EXPECTED_TEXTS = Expectations(
             {
                 ("cuda", 8): ['Based on the image, here is a description of what I see:\n\n**Foreground & Street Scene:**\n* **Traffic Sign:** The most prominent'],
+            }
+        )  # fmt: skip
+        EXPECTED_TEXT = EXPECTED_TEXTS.get_expectation()
+        self.assertEqual(output_text, EXPECTED_TEXT)
+
+    @require_torch_multi_gpu
+    def test_model_text_only_multigpu(self):
+        """Accelerate destroys the input dict `shared_kv_states` if it's not passed as kwarg and part of
+        `_skip_keys_device_placement`, so test this to avoid regresions.
+        """
+        model = AutoModelForCausalLM.from_pretrained(self.model_name, device_map="auto")
+        tokenizer = AutoTokenizer.from_pretrained(self.model_name, padding_side="left")
+        inputs = tokenizer.apply_chat_template(
+            [{"role": "user", "content": "Write a poem about Machine Learning."}],
+            tokenize=True,
+            return_dict=True,
+            return_tensors="pt",
+            add_generation_prompt=True,
+        ).to(model.device)
+
+        output = model.generate(**inputs, max_new_tokens=30, do_sample=False)
+        input_size = inputs.input_ids.shape[-1]
+        output_text = self.processor.batch_decode(output[:, input_size:], skip_special_tokens=True)
+
+        EXPECTED_TEXTS = Expectations(
+            {
+                ("cuda", (8, 0)): ['## The Algorithmic Mind\n\nA whisper starts, a seed unseen,\nOf data vast, a vibrant sheen.\nA sea of numbers,'],
+                ("cuda", (8, 6)): ['## The Algorithmic Mind\n\nA tapestry of data, vast and deep,\nWhere silent numbers in their slumber sleep.\nA sea of text'],
             }
         )  # fmt: skip
         EXPECTED_TEXT = EXPECTED_TEXTS.get_expectation()
