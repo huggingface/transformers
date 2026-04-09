@@ -926,24 +926,25 @@ class BaseHandler:
         for message in messages:
             parsed = {"role": message["role"], "content": []}
 
+            content = message.get("content")
             if modality == Modality.LLM:
-                if isinstance(message["content"], str):
-                    parsed["content"] = message["content"]
-                elif isinstance(message["content"], list):
-                    texts = [c["text"] for c in message["content"] if c["type"] == "text"]
+                if isinstance(content, str):
+                    parsed["content"] = content
+                elif isinstance(content, list):
+                    texts = [c["text"] for c in content if c["type"] == "text"]
                     parsed["content"] = " ".join(texts)
 
             elif modality == Modality.VLM:
-                if isinstance(message["content"], str):
-                    parsed["content"].append({"type": "text", "text": message["content"]})
-                else:
-                    for content in message["content"]:
-                        if content["type"] == "text":
-                            parsed["content"].append(content)
-                        elif content["type"] == "image_url":
+                if isinstance(content, str):
+                    parsed["content"].append({"type": "text", "text": content})
+                elif isinstance(content, list):
+                    for content_block in content:
+                        if content_block["type"] == "text":
+                            parsed["content"].append(content_block)
+                        elif content_block["type"] == "image_url":
                             from PIL import Image
 
-                            url = content["image_url"]["url"]
+                            url = content_block["image_url"]["url"]
                             if "base64" in url:
                                 image_data = re.sub("^data:image/.+;base64,", "", url)
                                 image = Image.open(BytesIO(base64.b64decode(image_data)))
