@@ -26,7 +26,7 @@ from ..auto import AutoConfig
 
 
 @auto_docstring(checkpoint="stevenbucaille/rf-detr-base")
-@strict(accept_kwargs=True)
+@strict
 class RfDetrDinov2Config(BackboneConfigMixin, PreTrainedConfig):
     r"""
     layerscale_value (`float`, *optional*, defaults to 1.0):
@@ -99,7 +99,7 @@ class RfDetrDinov2Config(BackboneConfigMixin, PreTrainedConfig):
 
 
 @auto_docstring(checkpoint="stevenbucaille/rf-detr-base")
-@strict(accept_kwargs=True)
+@strict
 class RfDetrConfig(PreTrainedConfig):
     r"""
     hidden_expansion (`float`, *optional*, defaults to 0.5):

@@ -161,8 +161,10 @@ class RfDetrDinov2Embeddings(nn.Module):
         return embeddings
 
     def window_partition(self, embeddings: torch.Tensor, height: int, width: int) -> torch.Tensor:
-        # Splits each image’s patch-token grid into num_windows^2 local windows,
-        # replicates the [CLS] token per window, and returns window-local token sequences
+        """
+        Splits each image's patch-token grid into num_windows^2 local windows,
+        replicates the [CLS] token per window, and returns window-local token sequences
+        """
         batch_size = embeddings.shape[0]
         num_windows = self.config.num_windows
         patch_size = self.patch_size
@@ -440,8 +442,10 @@ class RfDetrDinov2Layer(GradientCheckpointingLayer):
         return hidden_states
 
     def window_unpartition_before_attention(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        # For layers configured to use global attention, merges the window-batched sequences back
-        # into one sequence per image so attention can be computed across all windows jointly.
+        """
+        For layers configured to use global attention, merges the window-batched sequences back
+        into one sequence per image so attention can be computed across all windows jointly.
+        """
         batch_size, seq_len, channels = hidden_states.shape
         num_windows_squared = self.num_windows**2
         hidden_states = hidden_states.view(batch_size // num_windows_squared, num_windows_squared * seq_len, channels)
@@ -450,8 +454,11 @@ class RfDetrDinov2Layer(GradientCheckpointingLayer):
     def window_partition_after_attention(
         self, hidden_state_shape: tuple[int, int, int], self_attention_output: torch.Tensor
     ) -> torch.Tensor:
-        # After global attention, reshapes the output sequence back into window-batched
-        # form so the model can continue in the same windowed pipeline.
+        """
+        After global attention, reshapes the output sequence back into window-batched
+        form so the model can continue in the same windowed pipeline.
+        """
+
         batch_size, seq_len, channels = hidden_state_shape
         num_windows_squared = self.num_windows**2
         self_attention_output = self_attention_output.view(
@@ -600,8 +607,10 @@ class RfDetrDinov2Backbone(BackboneMixin, RfDetrDinov2PreTrainedModel):
         )
 
     def window_unpartition(self, hidden_state: torch.Tensor, height: int, width: int) -> torch.Tensor:
-        # Reassembles windowed patch tokens into their original 2D patch layout (image-level grid structure)
-        # before converting backbone hidden states into spatial feature maps.
+        """
+        Reassembles windowed patch tokens into their original 2D patch layout (image-level grid structure)
+        before converting backbone hidden states into spatial feature maps.
+        """
         num_windows = self.config.num_windows
         patch_size = self.config.patch_size
         num_h_patches = height // patch_size
@@ -734,12 +743,12 @@ class RfDetrC2FLayer(nn.Module):
 class RfDetrScaleProjector(nn.Module):
     def __init__(self, config: RfDetrConfig):
         super().__init__()
-        projector_input_dim = config.backbone_config.hidden_size * len(config.backbone_config.out_indices)
+        projector_input_dim: int = config.backbone_config.hidden_size * len(config.backbone_config.out_indices)
         self.projector_layer = RfDetrC2FLayer(config, projector_input_dim)
         self.layer_norm = RfDetrLayerNorm(config.d_model, data_format="channels_first")
 
-    def forward(self, hidden_states_tuple: tuple[torch.Tensor]) -> torch.Tensor:
-        hidden_states = torch.cat(hidden_states_tuple, dim=1)
+    def forward(self, hidden_states: tuple[torch.Tensor]) -> torch.Tensor:
+        hidden_states = torch.cat(hidden_states, dim=1)
         hidden_states = self.projector_layer(hidden_states)
         hidden_states = self.layer_norm(hidden_states)
         return hidden_states
@@ -1170,8 +1179,8 @@ class RfDetrModelOutput(ModelOutput):
         Features from the backbone.
     """
 
-    init_reference_points: torch.FloatTensor | None = None
     last_hidden_state: torch.FloatTensor | None = None
+    init_reference_points: torch.FloatTensor | None = None
     intermediate_hidden_states: torch.FloatTensor | None = None
     intermediate_reference_points: torch.FloatTensor | None = None
     enc_outputs_class: torch.FloatTensor | None = None
@@ -1179,7 +1188,6 @@ class RfDetrModelOutput(ModelOutput):
     hidden_states: tuple[torch.FloatTensor, ...] | None = None
     attentions: tuple[torch.FloatTensor, ...] | None = None
     cross_attentions: tuple[torch.FloatTensor, ...] | None = None
-
     backbone_features: list[torch.Tensor] = None
 
 

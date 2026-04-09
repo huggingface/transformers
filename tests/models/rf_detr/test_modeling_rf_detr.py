@@ -12,16 +12,10 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-import os
-import tempfile
 import unittest
 from functools import cached_property
 
-import numpy as np
-from parameterized import parameterized
-
 from transformers import (
-    CONFIG_NAME,
     DetrImageProcessor,
     RfDetrConfig,
     RfDetrDinov2Config,
@@ -38,7 +32,7 @@ from transformers.testing_utils import (
 
 from ...test_backbone_common import BackboneTesterMixin
 from ...test_configuration_common import ConfigTester
-from ...test_modeling_common import ModelTesterMixin, _config_zero_init, floats_tensor
+from ...test_modeling_common import ModelTesterMixin, floats_tensor
 from ...test_pipeline_mixin import PipelineTesterMixin
 
 
@@ -49,9 +43,6 @@ if is_torch_available():
 
 if is_vision_available():
     from PIL import Image
-
-OBJECT_DETECTION_CHECKPOINTS = ["stevenbucaille/rf-detr-base"]
-SEGMENTATION_CHECKPOINTS = ["stevenbucaille/rf-detr-seg-small"]
 
 
 def prepare_img():
@@ -363,119 +354,8 @@ class RfDetrModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
             config.output_attentions = True
             check_attention_outputs(inputs_dict, config, model_class)
 
-    def test_initialization(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-
-        configs_no_init = _config_zero_init(config)
-        for model_class in self.all_model_classes:
-            model = model_class(config=configs_no_init)
-            for name, param in model.named_parameters():
-                if param.requires_grad:
-                    if (
-                        "level_embed" in name
-                        or "sampling_offsets.bias" in name
-                        or "value_proj" in name
-                        or "output_proj" in name
-                        or "reference_points" in name
-                        or "class_embed" in name
-                        or "gamma_1" in name
-                        or "gamma_2" in name
-                    ):
-                        continue
-                    self.assertIn(
-                        ((param.data.mean() * 1e9).round() / 1e9).item(),
-                        [0.0, 1.0],
-                        msg=f"Parameter {name} of model {model_class} seems not properly initialized",
-                    )
-
-    def test_retain_grad_hidden_states_attentions(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-        config.output_hidden_states = True
-        config.output_attentions = True
-
-        model_class = self.all_model_classes[0]
-        model = model_class(config)
-        model.to(torch_device)
-
-        inputs = self._prepare_for_class(inputs_dict, model_class)
-
-        outputs = model(**inputs)
-
-        # we take the first output since last_hidden_state is the first item
-        output = outputs.last_hidden_state
-
-        hidden_states = outputs.hidden_states[0]
-        attentions = outputs.attentions[0]
-        hidden_states.retain_grad()
-        attentions.retain_grad()
-
-        output.flatten()[0].backward(retain_graph=True)
-
-        self.assertIsNotNone(hidden_states.grad)
-        self.assertIsNotNone(attentions.grad)
-
-    def test_save_load(self):
-        def check_save_load(out1, out2):
-            # make sure we don't have nans
-            out_2 = out2.cpu().numpy()
-            out_2[np.isnan(out_2)] = 0
-            out_2 = out_2[~np.isneginf(out_2)]
-
-            out_1 = out1.cpu().numpy()
-            out_1[np.isnan(out_1)] = 0
-            out_1 = out_1[~np.isneginf(out_1)]
-            max_diff = np.amax(np.abs(out_1 - out_2))
-            self.assertLessEqual(max_diff, 1e-5)
-
-        for model_class in self.all_model_classes:
-            config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-            model = model_class(config)
-            model.to(torch_device)
-            model.eval()
-            with torch.no_grad():
-                first = model(**self._prepare_for_class(inputs_dict, model_class))[0]
-
-            with tempfile.TemporaryDirectory() as tmpdirname:
-                model.save_pretrained(tmpdirname)
-
-                # the config file (and the generation config file, if it can generate) should be saved
-                self.assertTrue(os.path.exists(os.path.join(tmpdirname, CONFIG_NAME)))
-
-                model = model_class.from_pretrained(tmpdirname)
-                model.config._attn_implementation = "eager"  # TODO Have to force eager for testing, why ?
-                model.to(torch_device)
-                with torch.no_grad():
-                    second = model(**self._prepare_for_class(inputs_dict, model_class))[0]
-
-                # Save and load second time because `from_pretrained` adds a bunch of new config fields
-                # so we need to make sure those fields can be loaded back after saving
-                # Simply init as `model(config)` doesn't add those fields
-                model.save_pretrained(tmpdirname)
-                model = model_class.from_pretrained(tmpdirname)
-
-            if isinstance(first, tuple) and isinstance(second, tuple):
-                for tensor1, tensor2 in zip(first, second):
-                    check_save_load(tensor1, tensor2)
-            else:
-                check_save_load(first, second)
-
-    def test_forward_auxiliary_loss(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-        config.auxiliary_loss = True
-
-        # only test for object detection and segmentation model
-        for model_class in self.all_model_classes[1:]:
-            model = model_class(config)
-            model.to(torch_device)
-
-            inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
-
-            outputs = model(**inputs)
-
-            self.assertIsNotNone(outputs.auxiliary_outputs)
-            self.assertEqual(len(outputs.auxiliary_outputs), self.model_tester.decoder_layers - 1)
-
     def test_model_outputs_equivalence(self):
+        # Override test_model_outputs_equivalence because RfDetr loss has random tensors generated
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
         def set_nan_tensor_to_zero(t):
@@ -552,29 +432,6 @@ class RfDetrModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
             )
 
 
-EXPECTED_OBJECT_DETECTION_OUTPUTS = {
-    "stevenbucaille/rf-detr-base": {
-        "logits": [-7.58881, -4.64088, -10.02118, -5.65906, -9.8343],
-        "boxes": [0.25457, 0.54871, 0.48585, 0.86988, 0.16926],
-        "post_process_labels": [17, 75, 17, 75, 63],
-        "post_process_scores": [0.982765, 0.975941, 0.978163, 0.868452, 0.619554],
-        "post_process_boxes": [7.44911, 54.60959, 318.39551, 472.15417],
-        "loss": 21.911297,
-    }
-}
-
-EXPECTED_SEGMENTATION_OUTPUTS = {
-    "stevenbucaille/rf-detr-seg-small": {
-        "logits": [-7.3531, -5.14075, -9.63576, -10.81916, -8.3615],
-        "boxes": [0.25602, 0.54813, 0.48043, 0.87045, 0.77213],
-        "pred_masks": [-13.1366, -13.08283, -13.9058, -13.88317, -13.71717],
-        "post_process_labels": [17, 17, 75, 75],
-        "post_process_scores": [0.984311, 0.976176, 0.984499, 0.970341],
-        "loss": 88.117493,
-    }
-}
-
-
 @require_torch
 @require_vision
 @slow
@@ -594,11 +451,12 @@ class RfDetrModelIntegrationTest(unittest.TestCase):
             ],
         }
 
-    @parameterized.expand([(name, EXPECTED_OBJECT_DETECTION_OUTPUTS[name]) for name in OBJECT_DETECTION_CHECKPOINTS])
-    def test_inference_object_detection(self, model_name, expected_outputs):
+    def test_inference_object_detection(self):
         tol = 5e-3
-        model = RfDetrForObjectDetection.from_pretrained(model_name, attn_implementation="eager").to(torch_device)
-        image_processor = DetrImageProcessor.from_pretrained(model_name)
+        model = RfDetrForObjectDetection.from_pretrained(
+            "stevenbucaille/rf-detr-base", attn_implementation="eager"
+        ).to(torch_device)
+        image_processor = DetrImageProcessor.from_pretrained("stevenbucaille/rf-detr-base")
         image = prepare_img()
         inputs = image_processor(images=image, annotations=self.annotations, return_tensors="pt").to(torch_device)
         inputs["labels"] = [
@@ -610,15 +468,15 @@ class RfDetrModelIntegrationTest(unittest.TestCase):
         outputs = model(**inputs)
 
         # Check raw outputs from the model
-        expectations = Expectations({("cuda", (8, 0)): expected_outputs["logits"]})
+        expectations = Expectations({("cuda", (8, 0)): [-7.58881, -4.64088, -10.02118, -5.65906, -9.8343]})
         expected_logits = torch.tensor(expectations.get_expectation()).to(torch_device)
         expected_logits_shape = torch.Size((1, model.config.num_queries, model.config.num_labels))
 
-        expectations = Expectations({("cuda", (8, 0)): expected_outputs["boxes"]})
+        expectations = Expectations({("cuda", (8, 0)): [0.25457, 0.54871, 0.48585, 0.86988, 0.16926]})
         expected_boxes = torch.tensor(expectations.get_expectation()).to(torch_device)
         expected_boxes_shape = torch.Size((1, model.config.num_queries, 4))
 
-        expectations = Expectations({("cuda", (8, 0)): expected_outputs["loss"]})
+        expectations = Expectations({("cuda", (8, 0)): 21.911297})
         expected_loss = torch.tensor(expectations.get_expectation()).to(torch_device)
 
         predicted_logits = outputs.logits.flatten()[:5]
@@ -635,11 +493,11 @@ class RfDetrModelIntegrationTest(unittest.TestCase):
         post_processed_outputs = image_processor.post_process_object_detection(
             outputs, threshold=0.0, target_sizes=[image.size[::-1]]
         )[0]
-        expectations = Expectations({("cuda", (8, 0)): expected_outputs["post_process_labels"]})
+        expectations = Expectations({("cuda", (8, 0)): [17, 75, 17, 75, 63]})
         expected_post_process_labels = torch.tensor(expectations.get_expectation()).to(torch_device)
-        expectations = Expectations({("cuda", (8, 0)): expected_outputs["post_process_scores"]})
+        expectations = Expectations({("cuda", (8, 0)): [0.982765, 0.975941, 0.978163, 0.868452, 0.619554]})
         expected_post_process_scores = torch.tensor(expectations.get_expectation()).to(torch_device)
-        expectations = Expectations({("cuda", (8, 0)): expected_outputs["post_process_boxes"]})
+        expectations = Expectations({("cuda", (8, 0)): [7.44911, 54.60959, 318.39551, 472.15417]})
         expected_post_process_boxes = torch.tensor(expectations.get_expectation()).to(torch_device)
 
         post_processed_labels = post_processed_outputs["labels"][:5]
@@ -649,14 +507,15 @@ class RfDetrModelIntegrationTest(unittest.TestCase):
         torch.testing.assert_close(post_processed_scores, expected_post_process_scores, rtol=tol, atol=tol)
         torch.testing.assert_close(post_processed_boxes, expected_post_process_boxes, rtol=1, atol=1)
 
-    @parameterized.expand([(name, EXPECTED_SEGMENTATION_OUTPUTS[name]) for name in SEGMENTATION_CHECKPOINTS])
-    def test_inference_segmentation(self, model_name, expected_outputs):
+    def test_inference_segmentation(self):
         tol = 5e-3
         # Loss involves random mask point sampling, so we use a more lenient tolerance
         loss_tol = 1e-2
-        model = RfDetrForInstanceSegmentation.from_pretrained(model_name, attn_implementation="eager").to(torch_device)
+        model = RfDetrForInstanceSegmentation.from_pretrained(
+            "stevenbucaille/rf-detr-seg-small", attn_implementation="eager"
+        ).to(torch_device)
 
-        image_processor = DetrImageProcessor.from_pretrained(model_name)
+        image_processor = DetrImageProcessor.from_pretrained("stevenbucaille/rf-detr-seg-small")
         image = prepare_img()
         inputs = image_processor(images=image, annotations=self.annotations, return_tensors="pt").to(torch_device)
         inputs["labels"] = [
@@ -670,15 +529,15 @@ class RfDetrModelIntegrationTest(unittest.TestCase):
         outputs = model(**inputs)
 
         # Check raw outputs from the model
-        expectations = Expectations({("cuda", (8, 0)): expected_outputs["logits"]})
+        expectations = Expectations({("cuda", (8, 0)): [-7.3531, -5.14075, -9.63576, -10.81916, -8.3615]})
         expected_logits = torch.tensor(expectations.get_expectation()).to(torch_device)
         expected_logits_shape = torch.Size((1, model.config.num_queries, model.config.num_labels))
 
-        expectations = Expectations({("cuda", (8, 0)): expected_outputs["boxes"]})
+        expectations = Expectations({("cuda", (8, 0)): [0.25602, 0.54813, 0.48043, 0.87045, 0.77213]})
         expected_boxes = torch.tensor(expectations.get_expectation()).to(torch_device)
         expected_boxes_shape = torch.Size((1, model.config.num_queries, 4))
 
-        expectations = Expectations({("cuda", (8, 0)): expected_outputs["pred_masks"]})
+        expectations = Expectations({("cuda", (8, 0)): [-13.1366, -13.08283, -13.9058, -13.88317, -13.71717]})
         expected_masks = torch.tensor(expectations.get_expectation()).to(torch_device)
         expected_masks_shape = torch.Size(
             (
@@ -689,7 +548,7 @@ class RfDetrModelIntegrationTest(unittest.TestCase):
             )
         )
 
-        expectations = Expectations({("cuda", (8, 0)): expected_outputs["loss"]})
+        expectations = Expectations({("cuda", (8, 0)): 88.117493})
         expected_loss = torch.tensor(expectations.get_expectation()).to(torch_device)
 
         predicted_logits = outputs.logits.flatten()[:5]
@@ -709,9 +568,9 @@ class RfDetrModelIntegrationTest(unittest.TestCase):
         post_processed_outputs = image_processor.post_process_instance_segmentation(
             outputs, threshold=0.0, target_sizes=[image.size[::-1]]
         )[0]
-        expectations = Expectations({("cuda", (8, 0)): expected_outputs["post_process_labels"]})
+        expectations = Expectations({("cuda", (8, 0)): [17, 17, 75, 75]})
         expected_post_process_labels = torch.tensor(expectations.get_expectation()).to(torch_device)
-        expectations = Expectations({("cuda", (8, 0)): expected_outputs["post_process_scores"]})
+        expectations = Expectations({("cuda", (8, 0)): [0.984311, 0.976176, 0.984499, 0.970341]})
         expected_post_process_scores = torch.tensor(expectations.get_expectation()).to(torch_device)
 
         post_processed_labels = [

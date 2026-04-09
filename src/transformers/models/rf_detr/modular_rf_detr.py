@@ -43,7 +43,6 @@ from ..lw_detr.modeling_lw_detr import (
     LwDetrForObjectDetection,
     LwDetrLayerNorm,
     LwDetrModel,
-    LwDetrModelOutput,
     LwDetrObjectDetectionOutput,
     LwDetrPreTrainedModel,
     refine_bboxes,
@@ -546,7 +545,13 @@ class RfDetrPreTrainedModel(LwDetrPreTrainedModel):
             nn.init.constant_(module.segmentation_bias, 0.0)
 
 
-class RfDetrModelOutput(LwDetrModelOutput):
+@dataclass
+@auto_docstring(
+    custom_intro="""
+    Base class for outputs of the RfDetr backbone-decoder model.
+    """
+)
+class RfDetrModelOutput(ModelOutput):
     r"""
     init_reference_points (`torch.FloatTensor` of shape  `(batch_size, num_queries, 4)`):
         Initial reference points sent through the Transformer decoder.
@@ -564,6 +569,15 @@ class RfDetrModelOutput(LwDetrModelOutput):
         Features from the backbone.
     """
 
+    last_hidden_state: torch.FloatTensor | None = None
+    init_reference_points: torch.FloatTensor | None = None
+    intermediate_hidden_states: torch.FloatTensor | None = None
+    intermediate_reference_points: torch.FloatTensor | None = None
+    enc_outputs_class: torch.FloatTensor | None = None
+    enc_outputs_coord_logits: torch.FloatTensor | None = None
+    hidden_states: tuple[torch.FloatTensor, ...] | None = None
+    attentions: tuple[torch.FloatTensor, ...] | None = None
+    cross_attentions: tuple[torch.FloatTensor, ...] | None = None
     backbone_features: list[torch.Tensor] = None
 
 
