@@ -734,9 +734,7 @@ class RfDetrC2FLayer(nn.Module):
 class RfDetrScaleProjector(nn.Module):
     def __init__(self, config: RfDetrConfig):
         super().__init__()
-        intermediate_dims = [config.backbone_config.hidden_size] * len(config.backbone_config.out_indices)
-        intermediate_dim = intermediate_dims[-1]
-        projector_input_dim = intermediate_dim * len(intermediate_dims)
+        projector_input_dim = config.backbone_config.hidden_size * len(config.backbone_config.out_indices)
         self.projector_layer = RfDetrC2FLayer(config, projector_input_dim)
         self.layer_norm = RfDetrLayerNorm(config.d_model, data_format="channels_first")
 
