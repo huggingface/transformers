@@ -132,6 +132,9 @@ class Gemma4TextConfig(PreTrainedConfig):
         "layers.*.mlp.gate_proj": "colwise",
         "layers.*.mlp.up_proj": "colwise",
         "layers.*.mlp.down_proj": "rowwise",
+        "layers.*.experts.gate_up_proj": "packed_colwise",
+        "layers.*.experts.down_proj": "rowwise",
+        "layers.*.experts": "moe_tp_experts",
     }
     base_model_pp_plan = {
         "embed_tokens": (["input_ids"], ["inputs_embeds"]),
