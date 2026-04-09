@@ -36,24 +36,6 @@ class DeepseekOcr2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     def test_image_processor_defaults(self):
         pass
 
-    def test_get_num_multimodal_tokens(self):
-        """Verify _get_num_multimodal_tokens computes correct token counts.
-
-        Formula: global_tokens + local_tokens * num_crops + 1 (separator)
-        - global_tokens = ceil(1024 / 16 / 4)^2 = 256
-        - local_tokens  = ceil(768 / 16 / 4)^2  = 144
-        """
-        processor = self.get_processor()
-
-        # No local patches: 256 + 0 + 1 = 257
-        self.assertEqual(processor._get_num_multimodal_tokens(0), 257)
-
-        # 2 crops: 256 + 144*2 + 1 = 545
-        self.assertEqual(processor._get_num_multimodal_tokens(2), 545)
-
-        # 6 crops: 256 + 144*6 + 1 = 1121
-        self.assertEqual(processor._get_num_multimodal_tokens(6), 1121)
-
     def test_image_token_expansion_small_image(self):
         """Small image (< tile_size) should produce no local patches → 257 image tokens."""
         processor = self.get_processor()
@@ -85,8 +67,8 @@ class DeepseekOcr2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         num_image_tokens = (inputs["input_ids"] == image_token_id).sum().item()
         num_local_patches = inputs["num_local_patches"][0]
 
-        # Token count must match formula
-        expected = processor._get_num_multimodal_tokens(num_local_patches)
-        self.assertEqual(num_image_tokens, expected)
-        self.assertGreater(num_local_patches, 0)
+        # 3264x2448 image produces 6 local patches (2x3 grid) + 1 global view = 7 total
+        # num_image_tokens = 256 global + 144*6 local + 1 separator = 1121
+        self.assertEqual(num_local_patches, 6)
+        self.assertEqual(num_image_tokens, 1121)
         self.assertIn("pixel_values_local", inputs)

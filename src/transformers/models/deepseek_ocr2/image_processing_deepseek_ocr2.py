@@ -285,7 +285,7 @@ class DeepseekOcr2ImageProcessor(TorchvisionBackend):
 
     def get_number_of_image_patches(self, height: int, width: int, images_kwargs=None) -> int:
         """
-        Returns the number of local patches for a given image size.
+        Returns the number of image patches for a given image size (1 global + local patches).
         """
         if images_kwargs is None:
             images_kwargs = {}
@@ -294,13 +294,14 @@ class DeepseekOcr2ImageProcessor(TorchvisionBackend):
         tile_size = images_kwargs.get("tile_size", self.tile_size)
         crop_to_patches = images_kwargs.get("crop_to_patches", self.crop_to_patches)
 
-        if not crop_to_patches or max(height, width) <= tile_size:
-            return 0
+        num_patches = 1  # global view
+        if crop_to_patches and max(height, width) > tile_size:
+            num_columns, num_rows = get_optimal_tiled_canvas(
+                (height, width), (tile_size, tile_size), min_patches, max_patches
+            )
+            num_patches += num_columns * num_rows
 
-        num_columns, num_rows = get_optimal_tiled_canvas(
-            (height, width), (tile_size, tile_size), min_patches, max_patches
-        )
-        return num_columns * num_rows
+        return num_patches
 
     def pad_to_square(
         self,
@@ -348,3 +349,6 @@ class DeepseekOcr2ImageProcessor(TorchvisionBackend):
             padded_images[:, :, :, start : start + width] = images
 
         return padded_images
+
+
+__all__ = ["DeepseekOcr2ImageProcessor"]

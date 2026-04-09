@@ -75,13 +75,12 @@ class DeepseekOcr2SamVisionConfig(PreTrainedConfig):
 
 @auto_docstring
 @strict
-class DeepseekOcr2VisionConfig(PreTrainedConfig):
+class DeepseekOcr2EncoderConfig(PreTrainedConfig):
     r"""
-    sam_config (`dict` or `PreTrainedConfig`, *optional*):
-        Configuration for the SAM ViT-B vision encoder. Defaults to `DeepseekOcr2SamVisionConfig()`.
+    Configuration for the DeepSeek-OCR-2 vision encoder.
     """
 
-    model_type = "deepseek_ocr2_vision"
+    model_type = "deepseek_ocr2_encoder"
     keys_to_ignore_at_inference = ["past_key_values"]
     base_model_tp_plan = {}
     base_model_pp_plan = {}
@@ -108,18 +107,9 @@ class DeepseekOcr2VisionConfig(PreTrainedConfig):
     bos_token_id: int | None = None
     eos_token_id: int | list[int] | None = None
 
-    base_config_key = "vision_config"
-    sub_configs = {
-        "sam_config": DeepseekOcr2SamVisionConfig,
-    }
-
-    sam_config: dict | PreTrainedConfig | None = None
+    base_config_key = "encoder_config"
 
     def __post_init__(self, **kwargs):
-        if self.sam_config is None:
-            self.sam_config = DeepseekOcr2SamVisionConfig()
-        elif isinstance(self.sam_config, dict):
-            self.sam_config = DeepseekOcr2SamVisionConfig(**self.sam_config)
         self.sliding_window = self.sliding_window if self.use_sliding_window else None
         if self.num_key_value_heads is None:
             self.num_key_value_heads = self.num_attention_heads
@@ -131,6 +121,43 @@ class DeepseekOcr2VisionConfig(PreTrainedConfig):
                 else "full_attention"
                 for i in range(self.num_hidden_layers)
             ]
+
+        super().__post_init__(**kwargs)
+
+
+@auto_docstring
+@strict
+class DeepseekOcr2VisionConfig(PreTrainedConfig):
+    r"""
+    sam_config (`dict` or `DeepseekOcr2SamVisionConfig`, *optional*):
+        Configuration for the SAM vision encoder. Defaults to `DeepseekOcr2SamVisionConfig()`.
+    encoder_config (`dict` or `DeepseekOcr2EncoderConfig`, *optional*):
+        Configuration for the DeepSeek-OCR-2 vision encoder. Defaults to `DeepseekOcr2EncoderConfig()`.
+    """
+
+    base_config_key = "vision_config"
+    sub_configs = {
+        "sam_config": DeepseekOcr2SamVisionConfig,
+        "encoder_config": DeepseekOcr2EncoderConfig,
+    }
+
+    sam_config: dict | PreTrainedConfig | None = None
+    encoder_config: dict | PreTrainedConfig | None = None
+
+    def __post_init__(self, **kwargs):
+        if self.sam_config is None:
+            self.sam_config = DeepseekOcr2SamVisionConfig()
+        elif isinstance(self.sam_config, dict):
+            self.sam_config = DeepseekOcr2SamVisionConfig(**self.sam_config)
+
+        if self.encoder_config is None:
+            self.encoder_config = DeepseekOcr2EncoderConfig()
+        elif isinstance(self.encoder_config, dict):
+            self.encoder_config = DeepseekOcr2EncoderConfig(**self.encoder_config)
+
+        # Propagate attn_implementation to encoder_config (not auto-propagated through nested sub_configs)
+        if hasattr(self, "_attn_implementation") and self._attn_implementation is not None:
+            self.encoder_config._attn_implementation = self._attn_implementation
 
         super().__post_init__(**kwargs)
 
@@ -225,7 +252,7 @@ class DeepseekOcr2TextConfig(PreTrainedConfig):
 class DeepseekOcr2Config(PreTrainedConfig):
     r"""
     vision_config (`dict` or `DeepseekOcr2VisionConfig`, *optional*):
-        Configuration for the vision encoders (SAM + hybrid encoder). Defaults to `DeepseekOcr2VisionConfig()`.
+        Configuration for the vision encoders. Defaults to `DeepseekOcr2VisionConfig()`.
     projector_input_dim (`int`, *optional*, defaults to 896):
         Input dimensionality of the visual projector.
     projector_n_embed (`int`, *optional*, defaults to 1280):

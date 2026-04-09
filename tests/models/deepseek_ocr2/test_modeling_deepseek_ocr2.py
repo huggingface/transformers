@@ -65,7 +65,7 @@ class DeepseekOcr2VisionText2TextModelTester:
             "global_attn_indexes": [1],
             "downsample_channels": [32, 64],
         },
-        vision_config={
+        encoder_config={
             "hidden_size": 64,
             "intermediate_size": 128,
             "num_hidden_layers": 2,
@@ -102,7 +102,7 @@ class DeepseekOcr2VisionText2TextModelTester:
         self.image_token_index = image_token_index
         self.is_training = is_training
         self.sam_config = sam_config
-        self.vision_config = vision_config
+        self.encoder_config = encoder_config
         self.text_config = text_config
 
         # VisionModel always selects query_768 (144 tokens) for small images + 1 separator
@@ -117,12 +117,12 @@ class DeepseekOcr2VisionText2TextModelTester:
         self.pad_token_id = text_config["pad_token_id"]
 
     def get_config(self):
-        vision_cfg = {**self.vision_config, "sam_config": self.sam_config}
+        vision_cfg = {"encoder_config": self.encoder_config, "sam_config": self.sam_config}
         return DeepseekOcr2Config(
             vision_config=vision_cfg,
             text_config=self.text_config,
             image_token_id=self.image_token_index,
-            projector_input_dim=self.vision_config["hidden_size"],  # 64
+            projector_input_dim=self.encoder_config["hidden_size"],  # 64
             projector_n_embed=self.text_config["hidden_size"],  # 128
             projector_type="linear",
         )

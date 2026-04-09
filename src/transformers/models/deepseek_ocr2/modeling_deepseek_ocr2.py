@@ -819,6 +819,21 @@ class DeepseekOcr2VisionDecoderLayer(GradientCheckpointingLayer):
         return hidden_states
 
 
+class DeepseekOcr2VisionPreTrainedModel(PreTrainedModel):
+    config: DeepseekOcr2VisionConfig
+    base_model_prefix = "model"
+    supports_gradient_checkpointing = True
+    _no_split_modules = ["DeepseekOcr2VisionDecoderLayer"]
+    _skip_keys_device_placement = ["past_key_values"]
+    _supports_flash_attn = False
+    _supports_sdpa = False
+    _supports_flex_attn = True
+    _can_record_outputs = {
+        "hidden_states": DeepseekOcr2VisionDecoderLayer,
+        "attentions": DeepseekOcr2VisionAttention,
+    }
+
+
 class DeepseekOcr2VisionRotaryEmbedding(nn.Module):
     inv_freq: torch.Tensor  # fix linting for `register_buffer`
 
@@ -884,26 +899,7 @@ class DeepseekOcr2VisionRotaryEmbedding(nn.Module):
         return cos.to(dtype=x.dtype), sin.to(dtype=x.dtype)
 
 
-@auto_docstring
-class DeepseekOcr2VisionPreTrainedModel(PreTrainedModel):
-    config: DeepseekOcr2VisionConfig
-    base_model_prefix = "model"
-    supports_gradient_checkpointing = True
-    _no_split_modules = ["DeepseekOcr2VisionDecoderLayer"]
-    _skip_keys_device_placement = ["past_key_values"]
-    _supports_flash_attn = True
-    _supports_sdpa = True
-    _supports_flex_attn = True
-
-    _can_compile_fullgraph = True
-    _supports_attention_backend = True
-    _can_record_outputs = {
-        "hidden_states": DeepseekOcr2VisionDecoderLayer,
-        "attentions": DeepseekOcr2VisionAttention,
-    }
-
-
-@auto_docstring(custom_intro="Qwen2 backbone used as vision encoder inside DeepEncoderV2.")
+@auto_docstring(custom_intro="Vision encoder for DeepSeek-OCR-2.")
 class DeepseekOcr2VisionEncoder(DeepseekOcr2VisionPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -984,16 +980,16 @@ def token_type_ids_mask_function(token_type_ids: torch.Tensor):
 
 
 class DeepseekOcr2VisionModel(DeepseekOcr2PreTrainedModel):
-    """Vision pipeline: SAM ViT-B (with neck) then DeepEncoder V2."""
+    """Vision pipeline: SAM ViT-B (with neck)"""
 
     def __init__(self, config: DeepseekOcr2VisionConfig):
         super().__init__(config)
         self.sam_encoder = DeepseekOcr2SamVisionEncoder(config.sam_config)
-        self.vision_encoder = DeepseekOcr2VisionEncoder(config)
+        self.vision_encoder = DeepseekOcr2VisionEncoder(config.encoder_config)
 
         # Resolution-specific learnable queries
-        self.query_768 = nn.Embedding(144, config.hidden_size)  # 12x12 for 768px
-        self.query_1024 = nn.Embedding(256, config.hidden_size)  # 16x16 for 1024px
+        self.query_768 = nn.Embedding(144, config.encoder_config.hidden_size)  # 12x12 for 768px
+        self.query_1024 = nn.Embedding(256, config.encoder_config.hidden_size)  # 16x16 for 1024px
         self.post_init()
 
     def forward(self, pixel_values: torch.Tensor, **kwargs) -> BaseModelOutput:
@@ -1022,7 +1018,7 @@ class DeepseekOcr2VisionModel(DeepseekOcr2PreTrainedModel):
         )
 
         hybrid_mask = create_causal_mask(
-            config=self.config,
+            config=self.config.encoder_config,
             inputs_embeds=combined,
             attention_mask=None,
             past_key_values=None,
@@ -1740,4 +1736,12 @@ class DeepseekOcr2ForConditionalGeneration(DeepseekOcr2PreTrainedModel, Generati
         return model_inputs
 
 
-__all__ = ["DeepseekOcr2PreTrainedModel", "DeepseekOcr2Model", "DeepseekOcr2ForConditionalGeneration"]
+__all__ = [
+    "DeepseekOcr2ForConditionalGeneration",
+    "DeepseekOcr2Model",
+    "DeepseekOcr2PreTrainedModel",
+    "DeepseekOcr2TextModel",
+    "DeepseekOcr2TextPreTrainedModel",
+    "DeepseekOcr2VisionModel",
+    "DeepseekOcr2VisionPreTrainedModel",
+]

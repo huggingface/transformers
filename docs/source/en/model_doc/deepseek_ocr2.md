@@ -13,7 +13,7 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was released on 2026-01-28 and added to Hugging Face Transformers on 2026-04-07.*
+*This model was released on 2026-01-28 and added to Hugging Face Transformers on 2026-04-09.*
 
 # DeepSeek-OCR-2
 
@@ -83,6 +83,14 @@ The `<|grounding|>` token enables coordinate-aware output with `<|ref|>` and `<|
 ## DeepseekOcr2Processor
 
 [[autodoc]] DeepseekOcr2Processor
+
+## DeepseekOcr2TextModel
+
+[[autodoc]] DeepseekOcr2TextModel
+
+## DeepseekOcr2VisionModel
+
+[[autodoc]] DeepseekOcr2VisionModel
 
 ## DeepseekOcr2Model
 

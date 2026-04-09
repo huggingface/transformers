@@ -25,9 +25,13 @@ import re
 import torch
 from safetensors import safe_open
 
-from transformers import DeepseekOcr2Config, DeepseekOcr2ForConditionalGeneration, PreTrainedTokenizerFast
-from transformers.models.deepseek_ocr2.image_processing_deepseek_ocr2 import DeepseekOcr2ImageProcessor
-from transformers.models.deepseek_ocr2.processing_deepseek_ocr2 import DeepseekOcr2Processor
+from transformers import (
+    DeepseekOcr2Config,
+    DeepseekOcr2ForConditionalGeneration,
+    DeepseekOcr2ImageProcessor,
+    DeepseekOcr2Processor,
+    PreTrainedTokenizerFast,
+)
 
 
 # fmt: off
@@ -101,14 +105,16 @@ def convert_config(config_dict: dict) -> dict:
             "downsample_channels": [512, 896],
         }
 
-        vision_config["hidden_size"] = orig_vision["width"]["qwen2-0-5b"]["dim"]
-        vision_config["num_hidden_layers"] = 24
-        vision_config["num_attention_heads"] = 14
-        vision_config["num_key_value_heads"] = 2
-        vision_config["intermediate_size"] = 4864
-        vision_config["rms_norm_eps"] = 1e-6
-        vision_config["rope_theta"] = 1000000.0
-        vision_config["vocab_size"] = 1
+        vision_config["encoder_config"] = {
+            "hidden_size": orig_vision["width"]["qwen2-0-5b"]["dim"],
+            "num_hidden_layers": 24,
+            "num_attention_heads": 14,
+            "num_key_value_heads": 2,
+            "intermediate_size": 4864,
+            "rms_norm_eps": 1e-6,
+            "rope_theta": 1000000.0,
+            "vocab_size": 1,
+        }
 
     proj = config_dict.pop("projector_config")
     config_dict["projector_input_dim"] = proj["input_dim"]
@@ -249,9 +255,6 @@ def test(output_dir: str):
     """Run a quick inference test on the converted model."""
     import requests
     from PIL import Image
-
-    from transformers.models.deepseek_ocr2.image_processing_deepseek_ocr2 import DeepseekOcr2ImageProcessor
-    from transformers.models.deepseek_ocr2.processing_deepseek_ocr2 import DeepseekOcr2Processor
 
     image_url = "https://huggingface.co/datasets/hf-internal-testing/fixtures_got_ocr/resolve/main/image_ocr.jpg"
 

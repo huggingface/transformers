@@ -145,5 +145,4 @@ class DeepseekOcr2Processor(ProcessorMixin):
         )
 
 
-
 __all__ = ["DeepseekOcr2Processor"]
