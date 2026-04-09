@@ -384,7 +384,7 @@ class TrainingArguments:
             The list of integrations to report the results and logs to. Supported platforms are `"azure_ml"`,
             `"clearml"`, `"codecarbon"`, `"comet_ml"`, `"dagshub"`, `"dvclive"`, `"flyte"`, `"mlflow"`, `"swanlab"`,
             `"tensorboard"`, `"trackio"` and `"wandb"`. Use `"all"` to report to all integrations installed, `"none"`
-            for no integrations.
+            for no integrations. Trackio requires `trackio>=0.21.1`.
         run_name (`str`, *optional*):
             A descriptor for the run. Typically used for [trackio](https://github.com/gradio-app/trackio),
             [wandb](https://www.wandb.com/), [mlflow](https://www.mlflow.org/), [comet](https://www.comet.com/site) and
