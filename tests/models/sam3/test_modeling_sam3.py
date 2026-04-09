@@ -91,6 +91,7 @@ class Sam3VisionModelTester:
         self.scale_factors = scale_factors
         self.batch_size = batch_size
         self.is_training = is_training
+        self.encoder_seq_length = 256
 
     def get_config(self):
         backbone_config = Sam3ViTConfig(
@@ -176,42 +177,6 @@ class Sam3VisionModelTest(ModelTesterMixin, unittest.TestCase):
     def test_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
-
-    def test_attention_outputs(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-        config.return_dict = True
-        # Force eager attention to support output attentions
-        config._attn_implementation = "eager"
-
-        for model_class in self.all_model_classes:
-            inputs_dict["output_attentions"] = True
-            inputs_dict["output_hidden_states"] = False
-            config.return_dict = True
-            model = model_class._from_config(config, attn_implementation="eager")
-            model.to(torch_device)
-            model.eval()
-            with torch.no_grad():
-                outputs = model(**self._prepare_for_class(inputs_dict, model_class))
-            attentions = outputs.attentions
-            self.assertEqual(len(attentions), self.model_tester.num_hidden_layers)
-
-            # Check that output_attentions also work using config
-            del inputs_dict["output_attentions"]
-            config.output_attentions = True
-            config.backbone_config.output_attentions = True
-
-            model = model_class(config)
-            model.to(torch_device)
-            model.eval()
-            with torch.no_grad():
-                outputs = model(**self._prepare_for_class(inputs_dict, model_class))
-            attentions = outputs.attentions
-            self.assertEqual(len(attentions), self.model_tester.num_hidden_layers)
-
-            # For windowed attention, check the attention shape
-            # Attention shape: (batch_size, num_heads, seq_len, seq_len) for global attention
-            # or windowed shape for local attention
-            self.assertIsNotNone(attentions[0])
 
     def test_hidden_states_output(self):
         def check_hidden_states_output(inputs_dict, config, model_class):

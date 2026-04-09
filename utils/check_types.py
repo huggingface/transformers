@@ -19,6 +19,7 @@ CHECKER_CONFIG = {
         "src/transformers/utils/**/*.py",
         "src/transformers/generation/**/*.py",
         "src/transformers/quantizers/**/*.py",
+        ".circleci/create_circleci_config.py",
     ],
     "check_args": [
         "src/transformers/_typing.py",
@@ -26,6 +27,7 @@ CHECKER_CONFIG = {
         "src/transformers/utils",
         "src/transformers/generation",
         "src/transformers/quantizers",
+        ".circleci/create_circleci_config.py",
     ],
     "fix_args": None,
 }

@@ -1617,9 +1617,9 @@ def set_config_for_less_flaky_test(config):
 
     # norm layers (layer/group norm, etc.) could cause flaky tests when the tensors have very small variance.
     # (We don't need the original epsilon values to check eager/sdpa matches)
-    attrs = ["text_config", "vision_config", "text_encoder", "audio_encoder", "decoder"]
+    attrs = ["text_config", "vision_config", "audio_config", "text_encoder", "audio_encoder", "decoder"]
     for attr in attrs:
-        if hasattr(config, attr):
+        if hasattr(config, attr) and getattr(config, attr) is not None:
             for target_attr in target_attrs:
                 setattr(getattr(config, attr), target_attr, 1.0)
 
@@ -2654,42 +2654,23 @@ def hub_retry(max_attempts: int = 5, wait_before_retry: float | None = 2):
     To decorate tests that download from the Hub. They can fail due to a
     variety of network issues such as timeouts, connection resets, etc.
 
+    Uses exponential backoff starting from `wait_before_retry`.
+
     Args:
         max_attempts (`int`, *optional*, defaults to 5):
             The maximum number of attempts to retry the flaky test.
         wait_before_retry (`float`, *optional*, defaults to 2):
-            If provided, will wait that number of seconds before retrying the test.
+            If provided, the initial delay in seconds before the first retry.
+            Subsequent retries use exponential backoff with jitter.
     """
+    from .utils.generic import retry
 
-    def decorator(test_func_ref):
-        @functools.wraps(test_func_ref)
-        def wrapper(*args, **kwargs):
-            retry_count = 1
-
-            while retry_count < max_attempts:
-                try:
-                    return test_func_ref(*args, **kwargs)
-                # We catch all exceptions related to network issues from httpx
-                except (
-                    httpx.HTTPError,
-                    httpx.RequestError,
-                    httpx.TimeoutException,
-                    httpx.ReadTimeout,
-                    httpx.ConnectError,
-                    httpx.NetworkError,
-                ) as err:
-                    logger.error(
-                        f"Test failed with {err} at try {retry_count}/{max_attempts} as it couldn't connect to the specified Hub repository."
-                    )
-                    if wait_before_retry is not None:
-                        time.sleep(wait_before_retry)
-                    retry_count += 1
-
-            return test_func_ref(*args, **kwargs)
-
-        return wrapper
-
-    return decorator
+    return retry(
+        max_retries=max_attempts,
+        initial_delay=wait_before_retry or 0,
+        jitter=wait_before_retry is not None,
+        exceptions=(httpx.HTTPError,),
+    )
 
 
 def run_first(test_case):

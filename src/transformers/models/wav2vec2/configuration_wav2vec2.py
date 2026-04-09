@@ -162,7 +162,7 @@ class Wav2Vec2Config(PreTrainedConfig):
 
     model_type = "wav2vec2"
 
-    vocab_size: int = 32
+    vocab_size: int | None = 32
     hidden_size: int = 768
     num_hidden_layers: int = 12
     num_attention_heads: int = 12
@@ -187,10 +187,10 @@ class Wav2Vec2Config(PreTrainedConfig):
     num_conv_pos_embedding_groups: int = 16
     do_stable_layer_norm: bool = False
     apply_spec_augment: bool = True
-    mask_time_prob: float = 0.05
+    mask_time_prob: float | int = 0.05
     mask_time_length: int = 10
     mask_time_min_masks: int = 2
-    mask_feature_prob: float = 0.0
+    mask_feature_prob: float | int = 0.0
     mask_feature_length: int = 10
     mask_feature_min_masks: int = 0
     num_codevectors_per_group: int = 320
