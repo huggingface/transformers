@@ -42,6 +42,10 @@ def patch_checkers_paths(repo_root: Path):
 
 
 class CheckersCacheTest(unittest.TestCase):
+    class _TTYStringIO(io.StringIO):
+        def isatty(self) -> bool:
+            return True
+
     def _create_fake_repo(self, tmpdir: str) -> Path:
         """Create a minimal repo layout for exercising checker cache inputs."""
         repo_root = Path(tmpdir)
@@ -51,14 +55,19 @@ class CheckersCacheTest(unittest.TestCase):
         (repo_root / "utils" / "fake_checker.py").write_text("# fake checker\n", encoding="utf-8")
         return repo_root
 
-    def _run_main(self, *args: str) -> str:
-        """Run `checkers.main()` with patched argv/stdout and return captured output."""
+    def _run_main(self, *args: str, stdout=None) -> tuple[int | None, str]:
+        """Run `checkers.main()` with patched argv/stdout and return the exit code and captured output."""
+        stdout = io.StringIO() if stdout is None else stdout
         with (
             patch.object(sys, "argv", ["checkers.py", *args]),
-            patch.object(sys, "stdout", new=io.StringIO()) as stdout,
+            patch.object(sys, "stdout", new=stdout),
         ):
-            checkers.main()
-            return stdout.getvalue()
+            exit_code = None
+            try:
+                checkers.main()
+            except SystemExit as e:
+                exit_code = e.code
+            return exit_code, stdout.getvalue()
 
     def test_checker_cache_detects_checker_script_changes(self):
         """Cache entries should become stale when the checker implementation file changes."""
@@ -86,10 +95,12 @@ class CheckersCacheTest(unittest.TestCase):
                     return_value=(0, "first run"),
                 ) as run_checker,
             ):
-                self._run_main("demo")
+                exit_code, _ = self._run_main("demo")
+                self.assertIsNone(exit_code)
                 self.assertEqual(run_checker.call_count, 1)
 
-                output = self._run_main("demo")
+                exit_code, output = self._run_main("demo")
+                self.assertIsNone(exit_code)
                 self.assertEqual(run_checker.call_count, 1)
                 self.assertIn("(cached)", output)
 
@@ -105,8 +116,83 @@ class CheckersCacheTest(unittest.TestCase):
                     side_effect=[(0, "first run"), (0, "forced rerun")],
                 ) as run_checker,
             ):
-                self._run_main("demo")
+                exit_code, _ = self._run_main("demo")
+                self.assertIsNone(exit_code)
                 self.assertEqual(run_checker.call_count, 1)
 
-                self._run_main("demo", "--no-cache")
+                exit_code, _ = self._run_main("demo", "--no-cache")
+                self.assertIsNone(exit_code)
                 self.assertEqual(run_checker.call_count, 2)
+
+    def test_main_prints_full_output_on_failure_without_tty(self):
+        """Local non-TTY failures should print the full checker output instead of a cropped tail."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            repo_root = self._create_fake_repo(tmpdir)
+            output = "\n".join(f"line {i}" for i in range(12)) + "\n"
+            with (
+                patch.dict(os.environ, {"GITHUB_ACTIONS": "false", "CIRCLECI": "false"}),
+                patch_checkers_paths(repo_root),
+                patch.object(checkers, "run_checker", return_value=(1, output)),
+            ):
+                exit_code, stdout = self._run_main("demo", "--keep-going")
+
+            self.assertEqual(exit_code, 1)
+            self.assertIn("line 0", stdout)
+            self.assertIn("line 11", stdout)
+
+    def test_main_prints_full_output_on_failure_with_tty(self):
+        """TTY failures should print the full checker output without reprinting the cropped window tail."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            repo_root = self._create_fake_repo(tmpdir)
+            output = "\n".join(f"line {i}" for i in range(12)) + "\n"
+
+            class FakeSlidingWindow:
+                def __init__(self, label, max_lines=10):
+                    self.label = label
+                    self.max_lines = max_lines
+
+                def add_line(self, line):
+                    pass
+
+                def finish(self, success, elapsed=None, show_lines=True):
+                    print(f"window finished: {self.label} ({success}, {show_lines})")
+
+            with (
+                patch.dict(os.environ, {"GITHUB_ACTIONS": "false", "CIRCLECI": "false"}),
+                patch_checkers_paths(repo_root),
+                patch.object(checkers, "run_checker", return_value=(1, output)),
+                patch.object(checkers, "SlidingWindow", FakeSlidingWindow),
+            ):
+                exit_code, stdout = self._run_main("demo", "--keep-going", stdout=self._TTYStringIO())
+
+            self.assertEqual(exit_code, 1)
+            self.assertIn("window finished: Demo checker (False, False)", stdout)
+            self.assertIn("line 0", stdout)
+            self.assertIn("line 11", stdout)
+
+    def test_main_prints_failure_suffix_in_ci(self):
+        """CI failures should still print any extra captured output that was not streamed live."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            repo_root = self._create_fake_repo(tmpdir)
+            streamed_output = "line 0\nline 1\n"
+            failure_suffix = "summary line\n"
+
+            def run_checker(name, fix=False, line_callback=None):
+                self.assertEqual(name, "demo")
+                self.assertFalse(fix)
+                self.assertIsNotNone(line_callback)
+                for line in streamed_output.splitlines(keepends=True):
+                    line_callback(line)
+                return 1, streamed_output + failure_suffix
+
+            with (
+                patch.dict(os.environ, {"GITHUB_ACTIONS": "true", "CIRCLECI": "false"}),
+                patch_checkers_paths(repo_root),
+                patch.object(checkers, "run_checker", side_effect=run_checker),
+            ):
+                exit_code, stdout = self._run_main("demo", "--keep-going")
+
+            self.assertEqual(exit_code, 1)
+            self.assertIn("line 0", stdout)
+            self.assertIn("line 1", stdout)
+            self.assertIn("summary line", stdout)
