@@ -1442,6 +1442,7 @@ class Gemma4PreTrainedModel(PreTrainedModel):
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
     _no_split_modules = ["Gemma4TextDecoderLayer", "Gemma4VisionEncoderLayer", "Gemma4AudioLayer"]
+    _skip_keys_device_placement = ["past_key_values", "shared_kv_states"]
     _supports_flash_attn = True
     _supports_sdpa = True
     _supports_flex_attn = True
@@ -1449,7 +1450,6 @@ class Gemma4PreTrainedModel(PreTrainedModel):
     _can_compile_fullgraph = True
     _supports_attention_backend = True
     _can_record_outputs = None  # override
-    _skip_keys_device_placement = ["past_key_values", "shared_kv_states"]
     input_modalities = ("image", "text", "video", "audio")
 
     @torch.no_grad()
@@ -2381,6 +2381,12 @@ class Gemma4Model(Gemma4PreTrainedModel):
             audio_hidden_states=audio_features if input_features is not None else None,
         )
 
+    def get_per_layer_input_embeddings(self):
+        return self.language_model.embed_tokens_per_layer
+
+    def set_per_layer_input_embeddings(self, value):
+        self.language_model.embed_tokens_per_layer = value
+
     @can_return_tuple
     @auto_docstring(custom_intro="Projects the last hidden state from the audio encoder into language model space.")
     def get_audio_features(
@@ -2405,12 +2411,6 @@ class Gemma4Model(Gemma4PreTrainedModel):
         audio_outputs.pooler_output = self.embed_audio(inputs_embeds=audio_outputs.last_hidden_state)
 
         return audio_outputs
-
-    def get_per_layer_input_embeddings(self):
-        return self.language_model.embed_tokens_per_layer
-
-    def set_per_layer_input_embeddings(self, value):
-        self.language_model.embed_tokens_per_layer = value
 
     @can_return_tuple
     @auto_docstring(custom_intro="Projects the last hidden state from the vision encoder into language model space.")
