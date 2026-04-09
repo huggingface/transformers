@@ -789,6 +789,7 @@ class Gemma3nVision2TextModelTest(ModelTesterMixin, GenerationTesterMixin, unitt
 
     test_missing_keys = False
     _is_stateful = True
+    has_attentions = False
     model_split_percents = [0.5, 0.6]
 
     # MP works but offload doesn't work when the SigLIP MultiheadAttention is offloaded
@@ -821,16 +822,8 @@ class Gemma3nVision2TextModelTest(ModelTesterMixin, GenerationTesterMixin, unitt
     def test_sdpa_padding_matches_padding_free_with_position_ids(self):
         pass
 
-    @unittest.skip("Cannot set `output_attentions` for timm models.")
-    def test_attention_outputs(self):
-        pass
-
-    @unittest.skip("Cannot set `output_attentions` for timm models.")
+    @unittest.skip("timm model has no gradient")
     def test_retain_grad_hidden_states_attentions(self):
-        pass
-
-    @unittest.skip("Cannot set `output_attentions` on timm models.")
-    def test_get_image_features_attentions(self):
         pass
 
     @unittest.skip("timm model has no gradient")
