@@ -145,6 +145,8 @@ class TokenizersBackend(PreTrainedTokenizerBase):
                 tok_from_file = TokenizerFast.from_file(fast_tokenizer_file)
 
             local_kwargs["post_processor"] = tok_from_file.post_processor
+            local_kwargs["pre_tokenizer"] = tok_from_file.pre_tokenizer
+            local_kwargs["decoder"] = tok_from_file.decoder
             local_kwargs["tokenizer_padding"] = tok_from_file.padding
             local_kwargs["tokenizer_truncation"] = tok_from_file.truncation
             # Preserve truncation and padding baked into tokenizer.json so that classes
@@ -337,6 +339,9 @@ class TokenizersBackend(PreTrainedTokenizerBase):
         tokenizer_object = kwargs.pop("tokenizer_object", None)
         gguf_file = kwargs.pop("gguf_file", None)
         fast_tokenizer_file = kwargs.pop("tokenizer_file", None)
+        # Pop Rust tokenizer objects before super().__init__ deepcopies kwargs.
+        kwargs.pop("pre_tokenizer", None)
+        kwargs.pop("decoder", None)
         # Note: added_tokens_decoder is NOT popped - it's passed to super().__init__() for processing
         added_tokens_decoder = kwargs.get("added_tokens_decoder", {})
         # Store add_prefix_space before super().__init__() to ensure it's not overridden

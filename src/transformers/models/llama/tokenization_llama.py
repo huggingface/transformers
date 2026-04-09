@@ -113,24 +113,35 @@ class LlamaTokenizer(TokenizersBackend):
             }
 
         self._merges = merges or []
+        # Detect whether the merges use ByteLevel encoding (Ġ markers) or
+        # SentencePiece (▁ markers). ByteLevel-BPE tokenizers need the
+        # pre_tokenizer/decoder from tokenizer.json, not the Metaspace defaults.
+        is_byte_level = any("Ġ" in "".join(m) for m in self._merges[:20])
+        file_pre_tokenizer = kwargs.pop("pre_tokenizer", None)
+        file_decoder = kwargs.pop("decoder", None)
         self._tokenizer = Tokenizer(
             BPE(vocab=self._vocab, merges=self._merges, fuse_unk=True, byte_fallback=True, dropout=None)
         )
         self._tokenizer.normalizer = None
-        self._tokenizer.pre_tokenizer = pre_tokenizers.Metaspace(
-            replacement="▁", prepend_scheme=_get_prepend_scheme(self.add_prefix_space, self), split=False
-        )
+        if is_byte_level and file_pre_tokenizer is not None:
+            self._tokenizer.pre_tokenizer = file_pre_tokenizer
+            if file_decoder is not None:
+                self._tokenizer.decoder = file_decoder
+        else:
+            self._tokenizer.pre_tokenizer = pre_tokenizers.Metaspace(
+                replacement="▁", prepend_scheme=_get_prepend_scheme(self.add_prefix_space, self), split=False
+            )
 
-        sequence = [
-            decoders.Replace("▁", " "),
-            decoders.ByteFallback(),
-            decoders.Fuse(),
-        ]
+            sequence = [
+                decoders.Replace("▁", " "),
+                decoders.ByteFallback(),
+                decoders.Fuse(),
+            ]
 
-        if self.add_prefix_space:
-            sequence += [decoders.Strip(content=" ", left=1)]
+            if self.add_prefix_space:
+                sequence += [decoders.Strip(content=" ", left=1)]
 
-        self._tokenizer.decoder = decoders.Sequence(sequence)
+            self._tokenizer.decoder = decoders.Sequence(sequence)
         self.use_default_system_prompt = use_default_system_prompt
         super().__init__(
             clean_up_tokenization_spaces=clean_up_tokenization_spaces,
