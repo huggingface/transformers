@@ -50,7 +50,6 @@ if is_torch_available():
     from torch import nn
 
     from transformers import SiglipForImageClassification, SiglipModel, SiglipTextModel, SiglipVisionModel
-    from transformers.models.siglip.modeling_siglip import SiglipVisionTransformer
 
 if is_vision_available():
     from PIL import Image
@@ -208,7 +207,7 @@ class SiglipVisionModelTest(SiglipModelTesterMixin, unittest.TestCase):
 
     def test_vision_transformer_get_set_input_embeddings(self):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
-        transformer = SiglipVisionTransformer(config)
+        transformer = SiglipVisionModel(config)
 
         self.assertIsInstance(transformer.get_input_embeddings(), nn.Conv2d)
 
