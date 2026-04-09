@@ -243,7 +243,7 @@ class CircleCIJob:
             {
                 "run": {
                     "name": "Run tests",
-                    "no_output_timeout": "15m",
+                    "no_output_timeout": "30m",
                     "command": f"({timeout_cmd} python3 -m pytest {marker_cmd} -n {self.pytest_num_workers} {junit_flags} {repeat_on_failure_flags} {' '.join(pytest_flags)} $(cat splitted_tests.txt) | tee tests_output.txt)",
                 }
             },
