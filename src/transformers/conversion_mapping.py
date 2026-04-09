@@ -139,6 +139,12 @@ def _build_checkpoint_conversion_mapping():
                 target_patterns="model.vlm.language_model.embed_tokens",
             ),
         ],
+        "esm": [
+            WeightRenaming(
+                "encoder.layer.*.attention.self.rotary_embeddings.inv_freq",
+                "rotary_embeddings.inv_freq",
+            ),
+        ],
         "dinov3_convnext": [WeightRenaming(r"(?<!model\.)stages", r"model.stages")],
         "dinov3_vit": [WeightRenaming(r"(?<!model\.)layer.", r"model.layer.")],
         "timesfm2_5": [
@@ -467,6 +473,9 @@ def _build_checkpoint_conversion_mapping():
             WeightRenaming(source_patterns="norm2", target_patterns="post_mlp_layernorm"),
         ],
     }
+    # The legacy mapping is added to the esm model here since the extra weight renaming do not apply to the esm model.
+    mapping["esm"] += mapping["legacy"].copy()
+
     mapping["legacy"] += [
         WeightRenaming(
             source_patterns=".weight_g$",
