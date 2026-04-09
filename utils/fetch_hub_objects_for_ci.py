@@ -49,7 +49,6 @@ URLS_FOR_TESTING_DATA = [
     "http://images.cocodataset.org/val2017/000000039769.jpg",
     "http://images.cocodataset.org/val2017/000000077595.jpg",
     "http://images.cocodataset.org/val2017/000000136466.jpg",
-    "https://www.ilankelman.org/stopsigns/australia.jpg",
     "https://cdn.britannica.com/59/94459-050-DBA42467/Skyline-Chicago.jpg",
     "https://cdn.britannica.com/61/93061-050-99147DCE/Statue-of-Liberty-Island-New-York-Bay.jpg",
     "https://huggingface.co/datasets/hf-internal-testing/dummy-audio-samples/resolve/main/bcn_weather.mp3",
