@@ -287,7 +287,8 @@ class GlmMoeDsaIndexer(nn.Module):
         if attention_mask is not None:
             index_score = index_score + attention_mask
 
-        topk_indices = index_score.topk(self.index_topk, dim=-1)[1]  # [B, S, topk]
+        actual_topk = min(self.index_topk, index_score.shape[-1])
+        topk_indices = index_score.topk(actual_topk, dim=-1)[1]  # [B, S, actual_topk]
         return topk_indices
 
 
