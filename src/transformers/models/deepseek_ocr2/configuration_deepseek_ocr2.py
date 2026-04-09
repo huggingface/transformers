@@ -25,7 +25,7 @@ from ...modeling_rope_utils import RopeParameters
 from ...utils import auto_docstring
 
 
-@auto_docstring
+@auto_docstring(checkpoint="thisisiron/DeepSeek-OCR-2-hf")
 @strict
 class DeepseekOcr2SamVisionConfig(PreTrainedConfig):
     r"""

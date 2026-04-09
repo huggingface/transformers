@@ -23,11 +23,15 @@ from ... import initialization as init
 from ...cache_utils import Cache
 from ...configuration_utils import PreTrainedConfig
 from ...generation import GenerationMixin
+from ...image_processing_backends import TorchvisionBackend
+from ...image_processing_utils import BatchFeature
+from ...image_transforms import group_images_by_shape, reorder_images
+from ...image_utils import PILImageResampling, SizeDict
 from ...masking_utils import create_causal_mask
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPast, BaseModelOutputWithPooling
 from ...modeling_utils import PreTrainedModel
-from ...processing_utils import Unpack
-from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
+from ...processing_utils import ImagesKwargs, Unpack
+from ...utils import TensorType, TransformersKwargs, auto_docstring, can_return_tuple, logging
 from ...utils.output_capturing import capture_outputs
 from ..deepseek_v2.configuration_deepseek_v2 import DeepseekV2Config
 from ..deepseek_v2.modeling_deepseek_v2 import (
@@ -45,6 +49,10 @@ from ..llava_next.modeling_llava_next import (
 from ..qwen2.configuration_qwen2 import Qwen2Config
 from ..qwen2.modeling_qwen2 import Qwen2Attention, Qwen2DecoderLayer, Qwen2Model
 from ..sam.configuration_sam import SamVisionConfig
+from ..got_ocr2.image_processing_got_ocr2 import (
+    GotOcr2ImageProcessor,
+    get_optimal_tiled_canvas,
+)
 from ..sam.modeling_sam import (
     SamPatchEmbeddings,
     SamVisionAttention,
@@ -55,6 +63,250 @@ from ..sam.modeling_sam import (
 
 
 logger = logging.get_logger(__name__)
+
+
+class DeepseekOcr2ImageProcessorKwargs(ImagesKwargs, total=False):
+    """
+    crop_to_patches (`bool`, *optional*, defaults to `True`):
+        Whether to crop the image into local patches. When `False`, only the global view is produced.
+    min_patches (`int`, *optional*, defaults to `2`):
+        The minimum number of patches to extract from the image for the local view.
+        Only has an effect if `crop_to_patches` is set to `True`.
+    max_patches (`int`, *optional*, defaults to `6`):
+        The maximum number of patches to extract from the image for the local view.
+        Only has an effect if `crop_to_patches` is set to `True`.
+    tile_size (`int`, *optional*, defaults to `768`):
+        The size of each local tile. Must match the model's query embedding size.
+    background_color (`list[int]`, *optional*, defaults to `[127, 127, 127]`):
+        The background color for padding.
+    """
+
+    crop_to_patches: bool
+    min_patches: int
+    max_patches: int
+    tile_size: int
+    background_color: list[int]
+
+
+@auto_docstring
+class DeepseekOcr2ImageProcessor(GotOcr2ImageProcessor):
+    valid_kwargs = DeepseekOcr2ImageProcessorKwargs
+    resample = PILImageResampling.BICUBIC
+    image_mean = (0.5, 0.5, 0.5)
+    image_std = (0.5, 0.5, 0.5)
+    size = {"height": 1024, "width": 1024}
+    tile_size = 768
+    do_rescale = True
+    do_normalize = True
+    do_convert_rgb = True
+    crop_to_patches = True
+    min_patches = 2
+    max_patches = 6
+    background_color = [127, 127, 127]
+    model_input_names = ["pixel_values", "num_local_patches"]
+
+    def __init__(self, **kwargs: Unpack[DeepseekOcr2ImageProcessorKwargs]):
+        super().__init__(**kwargs)
+
+    def pad_to_square(
+        self,
+        images: "torch.Tensor",
+        background_color: int | list[int] = 0,
+    ) -> "torch.Tensor":
+        """
+        Pads images to a square based on the longest edge.
+
+        Args:
+            images (`torch.Tensor`):
+                The images to pad, shape `(batch, channels, height, width)`.
+            background_color (`int` or `list[int]`, *optional*, defaults to 0):
+                The color to use for the padding.
+
+        Returns:
+            `torch.Tensor`: The padded images.
+        """
+        height, width = images.shape[-2:]
+        num_channels = images.shape[1]
+        batch_size = images.shape[0]
+
+        if height == width:
+            return images
+
+        max_dim = max(height, width)
+
+        if isinstance(background_color, int):
+            background_color = [background_color]
+        elif len(background_color) != num_channels:
+            raise ValueError(
+                f"background_color must have no more than {num_channels} elements to match the number of channels"
+            )
+
+        padded_images = torch.zeros(
+            (batch_size, num_channels, max_dim, max_dim), dtype=images.dtype, device=images.device
+        )
+        for i, color in enumerate(background_color):
+            padded_images[:, i, :, :] = color
+        if width > height:
+            start = (max_dim - height) // 2
+            padded_images[:, :, start : start + height, :] = images
+        else:
+            start = (max_dim - width) // 2
+            padded_images[:, :, :, start : start + width] = images
+
+        return padded_images
+
+    def crop_image_to_patches(
+        self,
+        images: "torch.Tensor",
+        min_patches: int,
+        max_patches: int,
+        tile_size: int,
+        resample: PILImageResampling | None = None,
+    ) -> tuple["torch.Tensor", int]:
+        """
+        Crop batched images to patches based on optimal tiling.
+
+        Args:
+            images (`torch.Tensor`):
+                The images to crop, shape `(batch, channels, height, width)`.
+            min_patches (`int`):
+                Minimum number of patches.
+            max_patches (`int`):
+                Maximum number of patches.
+            tile_size (`int`):
+                The size of each tile.
+            resample (`PILImageResampling`, *optional*):
+                Resampling filter for resizing.
+
+        Returns:
+            `tuple[torch.Tensor, int]`: Stacked patches `(batch, num_patches, channels, tile_size, tile_size)`
+            and number of patches per image.
+        """
+        original_height, original_width = images.shape[-2:]
+
+        num_columns, num_rows = get_optimal_tiled_canvas(
+            (original_height, original_width), (tile_size, tile_size), min_patches, max_patches
+        )
+
+        target_width = tile_size * num_columns
+        target_height = tile_size * num_rows
+        num_blocks = num_columns * num_rows
+
+        resized = self.resize(images, SizeDict(height=target_height, width=target_width), resample=resample)
+
+        patches = []
+        for i in range(num_blocks):
+            col = i % num_columns
+            row = i // num_columns
+            patch = resized[
+                ...,
+                row * tile_size : (row + 1) * tile_size,
+                col * tile_size : (col + 1) * tile_size,
+            ]
+            patches.append(patch)
+
+        stacked_patches = torch.stack(patches, dim=1)
+
+        return stacked_patches, num_blocks
+
+    def _preprocess(
+        self,
+        images: list["torch.Tensor"],
+        size: SizeDict,
+        crop_to_patches: bool,
+        min_patches: int,
+        max_patches: int,
+        tile_size: int,
+        resample: PILImageResampling | None,
+        do_rescale: bool,
+        rescale_factor: float,
+        do_normalize: bool,
+        image_mean: float | list[float] | None,
+        image_std: float | list[float] | None,
+        disable_grouping: bool | None,
+        return_tensors: str | TensorType | None,
+        **kwargs,
+    ) -> BatchFeature:
+        # --- Local patches (batched by shape group) ---
+        num_local_patches = {}
+        local_patches_grouped = {}
+
+        if crop_to_patches:
+            grouped_images, grouped_images_index = group_images_by_shape(images, disable_grouping=disable_grouping)
+
+            for shape, stacked_images in grouped_images.items():
+                h, w = shape[-2:]
+                if max(h, w) > tile_size:
+                    stacked_patches, n_patches = self.crop_image_to_patches(
+                        stacked_images,
+                        min_patches=min_patches,
+                        max_patches=max_patches,
+                        tile_size=tile_size,
+                        resample=resample,
+                    )
+                    flat_patches = stacked_patches.reshape(-1, *stacked_patches.shape[2:])
+                    flat_patches = self.rescale_and_normalize(
+                        flat_patches, do_rescale, rescale_factor, do_normalize, image_mean, image_std
+                    )
+                    local_patches_grouped[shape] = flat_patches.reshape(stacked_patches.shape)
+                    num_local_patches[shape] = [n_patches] * stacked_images.shape[0]
+                else:
+                    local_patches_grouped[shape] = [None] * stacked_images.shape[0]
+                    num_local_patches[shape] = [0] * stacked_images.shape[0]
+
+            num_local_patches = reorder_images(num_local_patches, grouped_images_index)
+            ordered_local = reorder_images(local_patches_grouped, grouped_images_index)
+        else:
+            num_local_patches = [0] * len(images)
+            ordered_local = []
+
+        flat_local_list = [patch for item in ordered_local if item is not None for patch in item]
+
+        # --- Global view (batched by shape group) ---
+        global_target_size = size.height if crop_to_patches else tile_size
+
+        grouped_images, grouped_images_index = group_images_by_shape(images, disable_grouping=disable_grouping)
+        processed_global_grouped = {}
+        for shape, stacked in grouped_images.items():
+            h, w = shape[-2:]
+            scale = global_target_size / max(h, w)
+            new_h = round(h * scale)
+            new_w = round(w * scale)
+            stacked = self.resize(stacked, SizeDict(height=new_h, width=new_w), resample=resample)
+            stacked = self.pad_to_square(stacked, background_color=self.background_color)
+            stacked = self.rescale_and_normalize(
+                stacked, do_rescale, rescale_factor, do_normalize, image_mean, image_std
+            )
+            processed_global_grouped[shape] = stacked
+        all_pixel_values_global = reorder_images(processed_global_grouped, grouped_images_index)
+
+        data = {
+            "pixel_values": all_pixel_values_global,
+            "num_local_patches": num_local_patches,
+        }
+        if flat_local_list:
+            data["pixel_values_local"] = flat_local_list
+
+        return BatchFeature(data=data, tensor_type=return_tensors)
+
+    def get_number_of_image_patches(self, height: int, width: int, images_kwargs=None) -> int:
+        """
+        Returns the number of local patches for a given image size.
+        """
+        if images_kwargs is None:
+            images_kwargs = {}
+        min_patches = images_kwargs.get("min_patches", self.min_patches)
+        max_patches = images_kwargs.get("max_patches", self.max_patches)
+        tile_size = images_kwargs.get("tile_size", self.tile_size)
+        crop_to_patches = images_kwargs.get("crop_to_patches", self.crop_to_patches)
+
+        if not crop_to_patches or max(height, width) <= tile_size:
+            return 0
+
+        num_columns, num_rows = get_optimal_tiled_canvas(
+            (height, width), (tile_size, tile_size), min_patches, max_patches
+        )
+        return num_columns * num_rows
 
 
 @auto_docstring(checkpoint="thisisiron/DeepSeek-OCR-2-hf")

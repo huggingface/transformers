@@ -94,23 +94,33 @@ class DeepseekOcr2ImageProcessorPil(PilBackend):
 
         return processed_images
 
+    # Copied from transformers.models.llava.image_processing_pil_llava.LlavaImageProcessorPil.pad_to_square
     def pad_to_square(
         self,
         image: np.ndarray,
-        background_color: list[int] | int = 0,
+        background_color: int | tuple[int, int, int] = 0,
     ) -> np.ndarray:
         """
         Pads an image to a square based on the longest edge.
+
+        Args:
+            image (`np.ndarray`):
+                The image to pad. Shape: (num_channels, height, width) - always channels_first in backend.
+            background_color (`int` or `tuple[int, int, int]`, *optional*, defaults to 0):
+                The color to use for the padding.
+
+        Returns:
+            `np.ndarray`: The padded image.
         """
-        input_data_format = infer_channel_dimension_format(image)
-        height, width = get_image_size(image, input_data_format)
-        num_channels = image.shape[0] if input_data_format == ChannelDimension.FIRST else image.shape[-1]
+        # Backend always uses channels_first format: (num_channels, height, width)
+        num_channels, height, width = image.shape
 
         if height == width:
             return image
 
         max_dim = max(height, width)
 
+        # Ensure background_color is the correct shape
         if isinstance(background_color, int):
             background_color = [background_color]
         elif len(background_color) != num_channels:
@@ -118,26 +128,15 @@ class DeepseekOcr2ImageProcessorPil(PilBackend):
                 f"background_color must have no more than {num_channels} elements to match the number of channels"
             )
 
-        if input_data_format == ChannelDimension.FIRST:
-            result = np.zeros((num_channels, max_dim, max_dim), dtype=image.dtype)
-            for i, color in enumerate(background_color):
-                result[i, :, :] = color
-            if width > height:
-                start = (max_dim - height) // 2
-                result[:, start : start + height, :] = image
-            else:
-                start = (max_dim - width) // 2
-                result[:, :, start : start + width] = image
+        result = np.zeros((num_channels, max_dim, max_dim), dtype=image.dtype)
+        for i, color in enumerate(background_color):
+            result[i, :, :] = color
+        if width > height:
+            start = (max_dim - height) // 2
+            result[:, start : start + height, :] = image
         else:
-            result = np.zeros((max_dim, max_dim, num_channels), dtype=image.dtype)
-            for i, color in enumerate(background_color):
-                result[:, :, i] = color
-            if width > height:
-                start = (max_dim - height) // 2
-                result[start : start + height, :, :] = image
-            else:
-                start = (max_dim - width) // 2
-                result[:, start : start + width, :] = image
+            start = (max_dim - width) // 2
+            result[:, :, start : start + width] = image
 
         return result
 

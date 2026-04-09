@@ -1477,6 +1477,7 @@ class DeepseekOcr2Model(DeepseekOcr2PreTrainedModel):
         self.language_model.set_input_embeddings(value)
 
     @can_return_tuple
+    @auto_docstring
     def get_image_features(
         self,
         pixel_values: torch.FloatTensor,
@@ -1484,16 +1485,11 @@ class DeepseekOcr2Model(DeepseekOcr2PreTrainedModel):
         num_local_patches: list[int] | torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutputWithPooling:
-        """Process global and local views through vision tower + projector.
-
-        Args:
-            pixel_values: Global view images `(batch_size, 3, H, W)`.
-            pixel_values_local: All local patches flat `(total_patches, 3, H, W)` or None.
-            num_local_patches: Number of local patches per image, e.g. `[6, 0, 4]`.
-
-        Returns:
-            `BaseModelOutputWithPooling` with `pooler_output` containing flattened image features
-            `(total_tokens, hidden_size)` for all images in the batch.
+        r"""
+        pixel_values_local (`torch.FloatTensor` of shape `(total_patches, 3, height, width)`, *optional*):
+            All local patches flattened across the batch, or `None` if no local views.
+        num_local_patches (`list[int]` or `torch.Tensor`, *optional*):
+            Number of local patches per image, e.g. `[6, 0, 4]`.
         """
         batch_size = pixel_values.shape[0]
 
