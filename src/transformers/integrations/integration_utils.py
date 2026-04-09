@@ -111,14 +111,8 @@ def is_wandb_available():
         return False
 
 
-def is_trackio_available(min_version: str | None = None) -> bool:
-    if importlib.util.find_spec("trackio") is None:
-        return False
-    if min_version is None:
-        return True
-    import trackio
-
-    return packaging.version.parse(trackio.__version__) >= packaging.version.parse(min_version)
+def is_trackio_available():
+    return importlib.util.find_spec("trackio") is not None
 
 
 def is_clearml_available():
@@ -945,16 +939,16 @@ class TrackioCallback(TrainerCallback):
     push runs `trackio.sync` with a **static** Space so the dashboard is linked from the model card. If you set
     `trackio_space_id`, metrics stream to a **Gradio** Space during training; when `trackio_freeze_space` is True
     (default), `trackio.freeze` runs at the end to create a **new** static Space from that Gradio Space (the model
-    card is updated to prefer the static URL when available).
+    card is updated to prefer the static URL when available), provided Trackio is new enough (see `trackio_freeze_space`).
 
     **Requires**:
     ```bash
-    pip install trackio>=0.22.0
+    pip install trackio
     ```
     """
 
     SPACE_URL = "https://huggingface.co/spaces/{space_id}"
-    _MIN_TRACKIO_VERSION = "0.22.0"
+    _MIN_TRACKIO_VERSION_FOR_FREEZE = "0.21.1"
 
     @staticmethod
     def _space_repo_name_from_trackio_project(project: str) -> str:
@@ -970,16 +964,8 @@ class TrackioCallback(TrainerCallback):
         return s[:96].rstrip("-")
 
     def __init__(self):
-        if not is_trackio_available(TrackioCallback._MIN_TRACKIO_VERSION):
-            ver_msg = ""
-            if importlib.util.find_spec("trackio") is not None:
-                import trackio
-
-                ver_msg = f" Found {trackio.__version__}."
-            raise RuntimeError(
-                f"TrackioCallback requires trackio>={TrackioCallback._MIN_TRACKIO_VERSION}.{ver_msg} "
-                f"Run `pip install trackio>={TrackioCallback._MIN_TRACKIO_VERSION}`."
-            )
+        if not is_trackio_available():
+            raise RuntimeError("TrackioCallback requires trackio to be installed. Run `pip install trackio`.")
         import trackio
 
         self._trackio = trackio
@@ -1086,6 +1072,22 @@ class TrackioCallback(TrainerCallback):
             return
         self._trackio.finish()
         if not args.trackio_freeze_space or args.trackio_space_id is None:
+            return
+        if packaging.version.parse(self._trackio.__version__) < packaging.version.parse(
+            self._MIN_TRACKIO_VERSION_FOR_FREEZE
+        ):
+            logger.warning(
+                "An older version of Trackio is installed; the post-training static snapshot Space (`trackio.freeze`) "
+                "will not be created. Upgrade with "
+                f"`pip install trackio>={self._MIN_TRACKIO_VERSION_FOR_FREEZE}` to enable it, or set "
+                "`trackio_freeze_space=False` to silence this warning."
+            )
+            return
+        if not hasattr(self._trackio, "freeze"):
+            logger.warning(
+                "The installed Trackio has no `freeze`; the static snapshot Space will not be created. Upgrade "
+                f"Trackio or set `trackio_freeze_space=False`."
+            )
             return
         gradio_space_id = self.get_trackio_space_id(args)
         if gradio_space_id is None:
