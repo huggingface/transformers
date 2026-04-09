@@ -120,6 +120,7 @@ def pytest_runtest_logreport(report):
         print(f"{report.nodeid} [{outcome}] {report.duration:.2f}s")
 
 
+
 def pytest_terminal_summary(terminalreporter):
     from transformers.testing_utils import pytest_terminal_summary_main
 
