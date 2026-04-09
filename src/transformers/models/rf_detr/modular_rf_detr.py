@@ -251,8 +251,10 @@ class RfDetrDinov2Embeddings(Dinov2Embeddings):
         return torch.cat((class_pos_embed, patch_pos_embed), dim=1)
 
     def window_partition(self, embeddings: torch.Tensor, height: int, width: int) -> torch.Tensor:
-        # Splits each image’s patch-token grid into num_windows^2 local windows,
-        # replicates the [CLS] token per window, and returns window-local token sequences
+        """
+        Splits each image's patch-token grid into num_windows^2 local windows,
+        replicates the [CLS] token per window, and returns window-local token sequences
+        """
         batch_size = embeddings.shape[0]
         num_windows = self.config.num_windows
         patch_size = self.patch_size
@@ -316,8 +318,10 @@ class RfDetrDinov2Layer(Dinov2Layer):
         self.global_attention = layer_idx not in config.window_block_indexes
 
     def window_unpartition_before_attention(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        # For layers configured to use global attention, merges the window-batched sequences back
-        # into one sequence per image so attention can be computed across all windows jointly.
+        """
+        For layers configured to use global attention, merges the window-batched sequences back
+        into one sequence per image so attention can be computed across all windows jointly.
+        """
         batch_size, seq_len, channels = hidden_states.shape
         num_windows_squared = self.num_windows**2
         hidden_states = hidden_states.view(batch_size // num_windows_squared, num_windows_squared * seq_len, channels)
@@ -326,8 +330,11 @@ class RfDetrDinov2Layer(Dinov2Layer):
     def window_partition_after_attention(
         self, hidden_state_shape: tuple[int, int, int], self_attention_output: torch.Tensor
     ) -> torch.Tensor:
-        # After global attention, reshapes the output sequence back into window-batched
-        # form so the model can continue in the same windowed pipeline.
+        """
+        After global attention, reshapes the output sequence back into window-batched
+        form so the model can continue in the same windowed pipeline.
+        """
+
         batch_size, seq_len, channels = hidden_state_shape
         num_windows_squared = self.num_windows**2
         self_attention_output = self_attention_output.view(
@@ -381,8 +388,10 @@ class RfDetrDinov2Encoder(Dinov2Encoder):
 
 class RfDetrDinov2Backbone(Dinov2Backbone):
     def window_unpartition(self, hidden_state: torch.Tensor, height: int, width: int) -> torch.Tensor:
-        # Reassembles windowed patch tokens into their original 2D patch layout (image-level grid structure)
-        # before converting backbone hidden states into spatial feature maps.
+        """
+        Reassembles windowed patch tokens into their original 2D patch layout (image-level grid structure)
+        before converting backbone hidden states into spatial feature maps.
+        """
         num_windows = self.config.num_windows
         patch_size = self.config.patch_size
         num_h_patches = height // patch_size
