@@ -40,7 +40,7 @@ This model was contributed by [thisisiron](https://huggingface.co/thisisiron).
 >>> from transformers import AutoProcessor, AutoModelForImageTextToText
 
 >>> model = AutoModelForImageTextToText.from_pretrained(
-...     "thisisiron/DeepSeek-OCR-2-hf", torch_dtype=torch.bfloat16, device_map="auto"
+...     "thisisiron/DeepSeek-OCR-2-hf", dtype=torch.bfloat16, device_map="auto"
 ... )
 >>> processor = AutoProcessor.from_pretrained("thisisiron/DeepSeek-OCR-2-hf")
 

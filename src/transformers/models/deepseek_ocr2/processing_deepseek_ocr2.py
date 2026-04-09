@@ -19,28 +19,12 @@ import math
 
 from ...feature_extraction_utils import BatchFeature
 from ...image_utils import ImageInput
-from ...processing_utils import ImagesKwargs, ProcessingKwargs, ProcessorMixin, Unpack
+from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
 from ...utils import auto_docstring
 
 
-class DeepseekOcr2ImagesKwargs(ImagesKwargs, total=False):
-    """
-    crop_to_patches (`bool`, *optional*):
-        Whether to crop the image into local patches.
-    min_patches (`int`, *optional*):
-        The minimum number of patches to extract from the image for the local view.
-    max_patches (`int`, *optional*):
-        The maximum number of patches to extract from the image for the local view.
-    """
-
-    crop_to_patches: bool
-    min_patches: int
-    max_patches: int
-
-
 class DeepseekOcr2ProcessorKwargs(ProcessingKwargs, total=False):
-    images_kwargs: DeepseekOcr2ImagesKwargs
     _defaults = {
         "text_kwargs": {
             "padding": False,
@@ -76,34 +60,6 @@ class DeepseekOcr2Processor(ProcessorMixin):
         self.image_token_id = tokenizer.convert_tokens_to_ids(self.image_token)
         super().__init__(image_processor, tokenizer, chat_template=chat_template, **kwargs)
 
-    def _get_num_multimodal_tokens(self, num_crops: int) -> int:
-        """
-        Calculate the total number of image tokens for a given number of crops.
-
-        The total is composed of:
-        - Global tokens: (ceil(size / patch_size / downsample_ratio))^2
-        - Local tokens per crop: (ceil(tile_size / patch_size / downsample_ratio))^2
-        - 1 separator token
-
-        Args:
-            num_crops (`int`):
-                The number of local patches the image was divided into.
-
-        Returns:
-            `int`: Total number of image tokens.
-        """
-        size = self.image_processor.size["height"]
-        tile_size = self.image_processor.tile_size
-
-        num_queries_global = math.ceil(size / self.patch_size / self.downsample_ratio)
-        global_tokens = num_queries_global * num_queries_global
-
-        num_queries_local = math.ceil(tile_size / self.patch_size / self.downsample_ratio)
-        local_tokens = num_queries_local * num_queries_local
-
-        total = global_tokens + local_tokens * num_crops + 1  # +1 for separator
-        return total
-
     def _expand_image_tokens(
         self,
         text: list[TextInput],
@@ -122,24 +78,23 @@ class DeepseekOcr2Processor(ProcessorMixin):
         Returns:
             `list[str]`: Text with expanded image token placeholders.
         """
+        size = self.image_processor.size["height"]
+        tile_size = self.image_processor.tile_size
+
+        num_queries_global = math.ceil(size / self.patch_size / self.downsample_ratio)
+        global_tokens = num_queries_global * num_queries_global
+
+        num_queries_local = math.ceil(tile_size / self.patch_size / self.downsample_ratio)
+        local_tokens = num_queries_local * num_queries_local
+
         crop_index = 0
-        processed_text = []
-        for sample in text:
-            parts = sample.split(self.image_token)
-            # N occurrences of image_token produce N+1 parts
-            expanded = parts[0]
-            for part in parts[1:]:
-                if crop_index >= len(num_crops_list):
-                    raise ValueError(
-                        f"Number of `{self.image_token}` tokens in text exceeds the number of images provided. "
-                        f"Found more placeholders than the {len(num_crops_list)} images given."
-                    )
-                num_crops = num_crops_list[crop_index]
-                num_tokens = self._get_num_multimodal_tokens(num_crops)
-                expanded += self.image_token * num_tokens + part
+        for i in range(len(text)):
+            while self.image_token in text[i]:
+                num_tokens = global_tokens + local_tokens * num_crops_list[crop_index] + 1
+                text[i] = text[i].replace(self.image_token, "<|placeholder|>" * num_tokens, 1)
                 crop_index += 1
-            processed_text.append(expanded)
-        return processed_text
+            text[i] = text[i].replace("<|placeholder|>", self.image_token)
+        return text
 
     @auto_docstring
     def __call__(
@@ -189,11 +144,6 @@ class DeepseekOcr2Processor(ProcessorMixin):
             tensor_type=return_tensors,
         )
 
-    @property
-    def model_input_names(self):
-        tokenizer_input_names = self.tokenizer.model_input_names
-        image_processor_input_names = self.image_processor.model_input_names
-        return list(dict.fromkeys(tokenizer_input_names + image_processor_input_names))
 
 
 __all__ = ["DeepseekOcr2Processor"]
