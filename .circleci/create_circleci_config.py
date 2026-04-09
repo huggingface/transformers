@@ -38,6 +38,8 @@ COMMON_PYTEST_OPTIONS = {
     "rsfE": None,
     "random-order-bucket": "module",
     "random-order-seed": "${CIRCLE_BUILD_NUM:-0}",
+    "durations": 10,
+    "durations-min": 60.0,
 }
 DEFAULT_DOCKER_IMAGE = [{"image": "cimg/python:3.8.12"}]
 
