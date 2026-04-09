@@ -147,9 +147,9 @@ class QianfanOCRProcessor(ProcessorMixin):
             - **pixel_values** -- Pixel values to be fed to a model. Returned when `images` is not `None`.
         """
         # QianfanOCR has no video or audio support. Drop those keys if they arrive
-        # from apply_chat_template's internal self(...) call, so that InternVLProcessor
-        # never sees them.
+        # from apply_chat_template's internal self(...) call
         kwargs.pop("audio", None)
+        videos = None  # QianfanOCR has no video support
         if text is None:
             raise ValueError("You have to specify text.")
 
@@ -258,6 +258,11 @@ class QianfanOCRProcessor(ProcessorMixin):
         tokenizer_input_names = self.tokenizer.model_input_names
         image_processor_input_names = self.image_processor.model_input_names
         return tokenizer_input_names + image_processor_input_names
+
+    @classmethod
+    def get_attributes(cls):
+        # QianfanOCR has no video support, exclude video_processor
+        return ["image_processor", "tokenizer"]
 
 
 __all__ = ["QianfanOCRProcessor"]

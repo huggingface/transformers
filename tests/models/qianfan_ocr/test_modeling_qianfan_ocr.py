@@ -41,10 +41,11 @@ from ...test_pipeline_mixin import PipelineTesterMixin
 
 if is_torch_available():
     import torch
-    from transformers import QianfanOCRForConditionalGeneration, QianfanOCRModel
 
+    from transformers import QianfanOCRForConditionalGeneration, QianfanOCRModel
 if is_vision_available():
     from PIL import Image
+
 
 class QianfanOCRVisionText2TextModelTester:
     def __init__(
@@ -87,10 +88,6 @@ class QianfanOCRVisionText2TextModelTester:
             "hidden_act": "quick_gelu",
             "use_absolute_position_embeddings": True,
             "drop_path_rate": 0.0,
-<<<<<<< HEAD
-=======
-            "use_qk_norm": True,
->>>>>>> eed35b703a9a8bd420ffe786b06c140bf5cccb7c
         },
     ):
         self.parent = parent
@@ -192,8 +189,6 @@ class QianfanOCRModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTeste
     def test_config(self):
         self.config_tester.run_common_tests()
 
-<<<<<<< HEAD
-=======
     def test_reverse_loading_mapping(self):
         # Conversion happens only for the `ConditionalGeneration` model, not the base model
         original_classes = self.all_model_classes
@@ -203,7 +198,6 @@ class QianfanOCRModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTeste
         finally:
             self.all_model_classes = original_classes
 
->>>>>>> eed35b703a9a8bd420ffe786b06c140bf5cccb7c
     @unittest.skip(reason="Compile not yet supported in multimodal models")
     @pytest.mark.torch_compile_test
     def test_sdpa_can_compile_dynamic(self):
@@ -323,7 +317,7 @@ class QianfanOCRIntegrationTest(unittest.TestCase):
         )
         processor = AutoProcessor.from_pretrained(self.model_checkpoint)
 
-        messages = [{"role": "user", "content": "What is 1 + 1?"}]
+        messages = [{"role": "user", "content": [{"type": "text", "text": "What is 1 + 1?"}]}]
         inputs = processor.apply_chat_template(
             messages, add_generation_prompt=True, tokenize=True, return_dict=True, return_tensors="pt"
         ).to(torch_device)

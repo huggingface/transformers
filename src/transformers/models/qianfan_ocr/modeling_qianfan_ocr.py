@@ -567,9 +567,6 @@ class QianfanOCRModel(QianfanOCRPreTrainedModel):
             Layer index or list of layer indices to extract features from.
         """
         # Use vision_tower parameter dtype instead of self.dtype for DataParallel compatibility.
-        # self.dtype calls next(self.parameters()) which raises StopIteration on replica
-        # modules that have no parameters on the non-primary device.
-        # Input tensors are always correctly scattered so pixel_values.dtype is safe as fallback.
         try:
             target_dtype = next(self.vision_tower.parameters()).dtype
         except StopIteration:

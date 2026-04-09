@@ -13,7 +13,7 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was released on 2026-03-18 and added to Hugging Face Transformers on 2026-04-03.*
+*This model was released on 2026-03-18 and added to Hugging Face Transformers on 2026-04-09.*
 
 # QianfanOCR
 
@@ -23,7 +23,7 @@ rendered properly in your Markdown viewer.
 
 ## Overview
 
-**Qianfan-OCR** is a 4B-parameter end-to-end document intelligence model developed by the Baidu Qianfan Team. It was proposed in [Qianfan-OCR: A Unified End-to-End Model for Document Intelligence](https://arxiv.org/abs/2603.13398) by Daxiang Dong et al.
+**Qianfan-OCR** is a 4B-parameter end-to-end document intelligence model developed by the Baidu Qianfan Team. It was proposed in [Qianfan-OCR: A Unified End-to-End Model for Document Intelligence](https://huggingface.co/papers/2603.13398) by Daxiang Dong et al.
 
 Unlike traditional multi-stage OCR pipelines, Qianfan-OCR performs **direct image-to-text conversion** and supports a broad range of prompt-driven tasks — from structured document parsing and table extraction to chart understanding, document question answering, and key information extraction — all within one model.
 
@@ -113,7 +113,7 @@ For documents with complex layouts, cluttered elements, or non-standard reading 
   eprint={2603.13398},
   archivePrefix={arXiv},
   primaryClass={cs.CV},
-  url={https://arxiv.org/abs/2603.13398},
+  url={https://huggingface.co/papers/2603.13398},
 }
 ```
 

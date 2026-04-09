@@ -19,8 +19,10 @@ import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+from huggingface_hub.dataclasses import strict
 
 from ...cache_utils import Cache
+from ...configuration_utils import PreTrainedConfig
 from ...image_processing_utils import BatchFeature
 from ...image_utils import ImageInput
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling, ModelOutput
@@ -30,6 +32,7 @@ from ...tokenization_utils_base import PreTokenizedInput, TextInput
 from ...utils import TransformersKwargs, auto_docstring
 from ...utils.generic import can_return_tuple, merge_with_config_defaults
 from ...utils.output_capturing import OutputRecorder, capture_outputs
+from ..auto import CONFIG_MAPPING, AutoConfig
 from ..beit.modeling_beit import BeitDropPath
 from ..internvl.modeling_internvl import (
     InternVLForConditionalGeneration,
@@ -42,7 +45,114 @@ from ..internvl.modeling_internvl import (
     InternVLVisionMLP,
 )
 from ..internvl.processing_internvl import InternVLProcessor
-from .configuration_qianfan_ocr import QianfanOCRConfig, QianfanOCRVisionConfig
+
+
+@strict
+@auto_docstring(checkpoint="baidu/Qianfan-OCR")
+class QianfanOCRVisionConfig(PreTrainedConfig):
+    r"""
+    drop_path_rate (`float`, *optional*, defaults to 0.1):
+        Dropout rate for stochastic depth.
+    projection_dropout (`float`, *optional*, defaults to 0.0):
+        Dropout probability for the projection layer.
+    norm_type (`str`, *optional*, defaults to `"layer_norm"`):
+        The type of normalization to use in the encoder. Can be `"layer_norm"` or `"rms_norm"`.
+    use_mask_token (`bool`, *optional*, defaults to `False`):
+        Whether to use a mask token for masked image modeling.
+    use_mean_pooling (`bool`, *optional*, defaults to `True`):
+        Whether to mean pool the final hidden states of the patches instead of using the final hidden state of the
+        CLS token, before applying the classification head.
+
+    Example:
+
+    ```python
+    >>> from transformers import QianfanOCRVisionConfig
+
+    >>> configuration = QianfanOCRVisionConfig()
+    >>> configuration.hidden_size
+    1024
+    ```"""
+
+    model_type = "qianfan_ocr_vision"
+    base_config_key = "vision_config"
+
+    hidden_size: int = 1024
+    num_hidden_layers: int = 24
+    num_attention_heads: int = 16
+
+    attention_bias: bool = True
+    use_qk_norm: bool = False
+    intermediate_size: int = 4096
+    hidden_act: str = "gelu"
+    hidden_dropout_prob: float | int = 0.0
+    attention_dropout: float | int = 0.0
+    projection_dropout: float | int = 0.0
+    initializer_range: float = 0.02
+    norm_type: str = "layer_norm"
+    layer_norm_eps: float = 1e-06
+    image_size: int | list[int] | tuple[int, ...] = (448, 448)
+    patch_size: int | list[int] | tuple[int, ...] = (14, 14)
+    num_channels: int = 3
+    use_mask_token: bool = False
+    use_absolute_position_embeddings: bool = True
+    layer_scale_init_value: float = 0.1
+    use_mean_pooling: bool = True
+    drop_path_rate: float = 0.1
+
+    def __post_init__(self, **kwargs):
+        self.image_size = (
+            self.image_size if isinstance(self.image_size, (list, tuple)) else (self.image_size, self.image_size)
+        )
+        self.patch_size = (
+            self.patch_size if isinstance(self.patch_size, (list, tuple)) else (self.patch_size, self.patch_size)
+        )
+        super().__post_init__(**kwargs)
+
+
+@strict
+@auto_docstring(checkpoint="baidu/Qianfan-OCR")
+class QianfanOCRConfig(PreTrainedConfig):
+    r"""
+    downsample_ratio (`float`, *optional*, defaults to 0.5):
+        Factor by which to downsample the image.
+
+    Example:
+
+    ```python
+    >>> from transformers import QianfanOCRConfig
+
+    >>> configuration = QianfanOCRConfig()
+    >>> configuration.downsample_ratio
+    0.5
+    ```"""
+
+    model_type = "qianfan_ocr"
+    sub_configs = {"text_config": AutoConfig, "vision_config": QianfanOCRVisionConfig}
+
+    vision_config: dict | PreTrainedConfig | None = None
+    text_config: dict | PreTrainedConfig | None = None
+    image_token_id: int = 151667
+    image_seq_length: int = 256
+    downsample_ratio: float = 0.5
+    projector_hidden_act: str = "gelu"
+    vision_feature_layer: int | list[int] = -1
+    vision_feature_select_strategy: str = "default"
+
+    tie_word_embeddings: bool = False
+
+    def __post_init__(self, **kwargs):
+        if isinstance(self.vision_config, dict):
+            self.vision_config = QianfanOCRVisionConfig(**self.vision_config)
+        elif self.vision_config is None:
+            self.vision_config = QianfanOCRVisionConfig()
+
+        if isinstance(self.text_config, dict):
+            self.text_config["model_type"] = self.text_config.get("model_type", "qwen3")
+            self.text_config = CONFIG_MAPPING[self.text_config["model_type"]](**self.text_config)
+        elif self.text_config is None:
+            self.text_config = CONFIG_MAPPING["qwen3"]()
+
+        super().__post_init__(**kwargs)
 
 
 class QianfanOCRDropPath(BeitDropPath):
@@ -153,6 +263,7 @@ class QianfanOCRVisionModelOutputWithPooling(BaseModelOutputWithPooling):
         *config.use_mean_pooling* is set to True. If set to False, then the final hidden state of the *[CLS]* token
         will be returned.
     """
+
     pass
 
 
@@ -270,9 +381,6 @@ class QianfanOCRModel(InternVLModel):
             Layer index or list of layer indices to extract features from.
         """
         # Use vision_tower parameter dtype instead of self.dtype for DataParallel compatibility.
-        # self.dtype calls next(self.parameters()) which raises StopIteration on replica
-        # modules that have no parameters on the non-primary device.
-        # Input tensors are always correctly scattered so pixel_values.dtype is safe as fallback.
         try:
             target_dtype = next(self.vision_tower.parameters()).dtype
         except StopIteration:
@@ -393,6 +501,11 @@ class QianfanOCRForConditionalGeneration(InternVLForConditionalGeneration):
 
 
 class QianfanOCRProcessor(InternVLProcessor):
+    @classmethod
+    def get_attributes(cls):
+        # QianfanOCR has no video support, exclude video_processor
+        return ["image_processor", "tokenizer"]
+
     def __init__(
         self,
         image_processor=None,
@@ -489,13 +602,15 @@ class QianfanOCRProcessor(InternVLProcessor):
         **kwargs,
     ) -> BatchFeature:
         # QianfanOCR has no video or audio support. Drop those keys if they arrive
-        # from apply_chat_template's internal self(...) call, so that InternVLProcessor
-        # never sees them.
+        # from apply_chat_template's internal self(...) call
         kwargs.pop("audio", None)
-        return super().__call__(images=images, text=text, videos=None, **kwargs)
+        videos = None  # QianfanOCR has no video support
+        return super().__call__(images=images, text=text, videos=videos, **kwargs)
 
 
 __all__ = [
+    "QianfanOCRVisionConfig",
+    "QianfanOCRConfig",
     "QianfanOCRVisionPreTrainedModel",
     "QianfanOCRVisionModel",
     "QianfanOCRPreTrainedModel",
