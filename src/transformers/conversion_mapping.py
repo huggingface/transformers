@@ -35,11 +35,9 @@ if TYPE_CHECKING:
 
 _MODEL_TO_CONVERSION_PATTERN = {
     # Mixtral-style MoE
-    "mixtral": "mixtral",
     "minimax": "mixtral",
     "minimax_m2": "mixtral",
     # Qwen2-style MoE
-    "qwen2_moe": "qwen2_moe",
     "afmoe": "qwen2_moe",
     "deepseek_v2": "qwen2_moe",
     "deepseek_v3": "qwen2_moe",
@@ -78,7 +76,9 @@ _MODEL_TO_CONVERSION_PATTERN = {
     "mllama": "llava",
     "qwen2_5_vl": "qwen2_vl",
     "sam3_tracker_video": "sam3_tracker",
-    "pp_chart2table": "got_ocr2",
+    "pp_chart2table": "llava",
+    "gemma3n_text": "qwen3_5_text",
+    "qwen3_5_moe_text": "qwen3_5_text",
 }
 
 
@@ -107,9 +107,6 @@ def _build_checkpoint_conversion_mapping():
         "colqwen2": [
             WeightRenaming(source_patterns=r"vlm.model", target_patterns="vlm"),
             WeightRenaming(source_patterns=r"vlm(?!\.(language_model|visual))", target_patterns="vlm.language_model"),
-        ],
-        "gemma3n_text": [
-            WeightRenaming(source_patterns=r"^model.language_model", target_patterns="model"),
         ],
         "timm_wrapper": [
             # Simply add the prefix `timm_model`. Similar to `base_model_prefix` but also removes prefix
@@ -153,7 +150,9 @@ def _build_checkpoint_conversion_mapping():
             WeightRenaming("feedforward_layer_norm", "post_attention_layernorm"),
         ],
         "qwen3_5_text": [
-            WeightRenaming(source_patterns=r"^model.language_model", target_patterns="model"),
+            # Note: the lookbehind on the target is to avoid replacing bigger matches when the model is a submodel of
+            # the ForConditionalGeneration model
+            WeightRenaming(source_patterns=r"^model.language_model.", target_patterns=r"^model.(?!language_model.)"),
         ],
         "sam3_tracker": [
             WeightRenaming(
@@ -517,9 +516,6 @@ def _build_checkpoint_conversion_mapping():
             operations=[MergeModulelist(dim=0)],
         ),
     ]
-
-    mapping["qwen3_5_moe_text"] = mapping["qwen3_5_text"].copy()
-    mapping["qwen3_5_moe_text"] += mapping["qwen2_moe"].copy()
 
     mapping["cohere_asr"] = [
         WeightRenaming(r"encoder\.pre_encode\.conv\.", r"encoder.subsampling.layers."),
