@@ -517,8 +517,8 @@ class RfDetrScaleProjector(nn.Module):
         self.projector_layer = RfDetrC2FLayer(config, projector_input_dim)
         self.layer_norm = RfDetrLayerNorm(config.d_model, data_format="channels_first")
 
-    def forward(self, hidden_states_tuple: tuple[torch.Tensor]) -> torch.Tensor:
-        hidden_states = torch.cat(hidden_states_tuple, dim=1)
+    def forward(self, hidden_states: tuple[torch.Tensor]) -> torch.Tensor:
+        hidden_states = torch.cat(hidden_states, dim=1)
         hidden_states = self.projector_layer(hidden_states)
         hidden_states = self.layer_norm(hidden_states)
         return hidden_states
