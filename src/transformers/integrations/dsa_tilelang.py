@@ -222,9 +222,14 @@ def _act_quant_pytorch(
         f"Last dimension size must be divisible by block_size (block_size={block_size})"
     )
     num_groups = N // block_size
-    # Compute per-group absmax → shape (..., num_groups)
-    x_grouped = x.view(*x.shape[:-1], num_groups, block_size)
-    amax = x_grouped.abs().amax(dim=-1).clamp(min=1e-4)
+    orig_shape = x.shape
+
+    # Flatten to 2D, then group — mirrors the TileLang kernel's (M, N) layout.
+    x_flat = x.reshape(-1, N)  # [M, N]
+    x_grouped = x_flat.reshape(-1, num_groups, block_size)  # [M, G, BS]
+
+    # Per-group absmax
+    amax = x_grouped.abs().amax(dim=-1).clamp(min=1e-4)  # [M, G]
 
     if scale_fmt is not None:
         # Power-of-2 rounded scale: scale = 2^(ceil(log2(amax / 448)))
@@ -232,8 +237,12 @@ def _act_quant_pytorch(
     else:
         scale = amax / 448.0
 
-    # Quantize: x_q = clamp(x / scale, -448, 448) cast to float8_e4m3fn
-    x_q = (x / scale.unsqueeze(-1)).clamp(-448.0, 448.0).to(torch.float8_e4m3fn)
+    # Quantize: divide each group by its scale, clamp to FP8 range
+    x_q = (x_grouped / scale.unsqueeze(-1)).clamp(-448.0, 448.0).to(torch.float8_e4m3fn)  # [M, G, BS]
+    x_q = x_q.reshape(orig_shape)
+
+    # Scale shape: (*x.shape[:-1], num_groups)
+    scale = scale.reshape(*orig_shape[:-1], num_groups)
     return x_q, scale
 
 
