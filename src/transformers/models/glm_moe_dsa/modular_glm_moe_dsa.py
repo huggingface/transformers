@@ -131,6 +131,7 @@ class GlmMoeDsaConfig(Glm4MoeLiteConfig):
     num_hidden_layers: int = 78
     num_attention_heads: int = 64
     num_key_value_heads: int = 64
+    num_experts: int = 256
     n_routed_experts: int = 256
     routed_scaling_factor: float = 2.5
     q_lora_rank: int = 2048
