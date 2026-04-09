@@ -2129,12 +2129,6 @@ class Gemma4Model(Gemma4PreTrainedModel):
     def set_input_embeddings(self, value):
         self.language_model.set_input_embeddings(value)
 
-    def get_per_layer_input_embeddings(self):
-        return self.language_model.embed_tokens_per_layer
-
-    def set_per_layer_input_embeddings(self, value):
-        self.language_model.embed_tokens_per_layer = value
-
     @can_return_tuple
     @auto_docstring(custom_intro="Projects the last hidden state from the vision model into language model space.")
     def get_image_features(
@@ -2385,6 +2379,12 @@ class Gemma4Model(Gemma4PreTrainedModel):
 
         return audio_outputs
 
+    def get_per_layer_input_embeddings(self):
+        return self.language_model.embed_tokens_per_layer
+
+    def set_per_layer_input_embeddings(self, value):
+        self.language_model.embed_tokens_per_layer = value
+
     @can_return_tuple
     @auto_docstring(custom_intro="Projects the last hidden state from the vision encoder into language model space.")
     def get_video_features(
@@ -2425,12 +2425,6 @@ class Gemma4ForConditionalGeneration(Gemma4PreTrainedModel, GenerationMixin):
         self.model = Gemma4Model(config)
         self.lm_head = nn.Linear(config.text_config.hidden_size, config.text_config.vocab_size, bias=False)
         self.post_init()
-
-    def get_per_layer_input_embeddings(self):
-        return self.model.get_per_layer_input_embeddings()
-
-    def set_per_layer_input_embeddings(self, value):
-        self.model.set_per_layer_input_embeddings(value)
 
     @auto_docstring
     def get_image_features(
@@ -2577,6 +2571,12 @@ class Gemma4ForConditionalGeneration(Gemma4PreTrainedModel, GenerationMixin):
             model_inputs["input_features_mask"] = input_features_mask
 
         return model_inputs
+
+    def get_per_layer_input_embeddings(self):
+        return self.model.get_per_layer_input_embeddings()
+
+    def set_per_layer_input_embeddings(self, value):
+        self.model.set_per_layer_input_embeddings(value)
 
     @staticmethod
     def create_masks_for_generate(
