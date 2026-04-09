@@ -21,19 +21,19 @@ from ...utils import auto_docstring
 
 
 @auto_docstring(checkpoint="google/bit-50")
-@strict(accept_kwargs=True)
+@strict
 class BitConfig(BackboneConfigMixin, PreTrainedConfig):
     r"""
     layer_type (`str`, *optional*, defaults to `"preactivation"`):
         The layer to use, it can be either `"preactivation"` or `"bottleneck"`.
-    embedding_dynamic_padding (`bool`, *optional*, defaults to `False`):
-        Whether or not to make use of dynamic padding for the embedding layer.
-    width_factor (`int`, *optional*, defaults to 1):
-        The width factor for the model.
     global_padding (`str`, *optional*):
         Padding strategy to use for the convolutional layers. Can be either `"valid"`, `"same"`, or `None`.
     num_groups (`int`, *optional*, defaults to 32):
         Number of groups used for the `BitGroupNormActivation` layers.
+    embedding_dynamic_padding (`bool`, *optional*, defaults to `False`):
+        Whether or not to make use of dynamic padding for the embedding layer.
+    width_factor (`int`, *optional*, defaults to 1):
+        The width factor for the model.
 
     Example:
     ```python
@@ -62,7 +62,7 @@ class BitConfig(BackboneConfigMixin, PreTrainedConfig):
     hidden_act: str = "relu"
     global_padding: str | None = None
     num_groups: int = 32
-    drop_path_rate: float = 0.0
+    drop_path_rate: float | int = 0.0
     embedding_dynamic_padding: bool = False
     output_stride: int = 32
     width_factor: int = 1

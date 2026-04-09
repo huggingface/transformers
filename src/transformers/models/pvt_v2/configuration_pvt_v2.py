@@ -23,9 +23,11 @@ from ...utils import auto_docstring
 
 
 @auto_docstring(checkpoint="OpenGVLab/pvt_v2_b0")
-@strict(accept_kwargs=True)
+@strict
 class PvtV2Config(BackboneConfigMixin, PreTrainedConfig):
     r"""
+    num_encoder_blocks (`[int]`, *optional*, defaults to 4):
+        The number of encoder blocks (i.e. stages in the Mix Transformer encoder).
     sr_ratios (`list[int]`, *optional*, defaults to `[8, 4, 2, 1]`):
         Spatial reduction ratios in each encoder block.
     patch_sizes (`list[int]`, *optional*, defaults to `[7, 3, 3, 3]`):
@@ -40,8 +42,6 @@ class PvtV2Config(BackboneConfigMixin, PreTrainedConfig):
     linear_attention (`bool`, *optional*, defaults to `False`):
         Use linear attention complexity. If set to True, `sr_ratio` is ignored and average pooling is used for
         dimensionality reduction in the attention layers rather than strided convolution.
-    num_encoder_blocks (`[int]`, *optional*, defaults to 4):
-        The number of encoder blocks (i.e. stages in the Mix Transformer encoder).
 
     Example:
 
@@ -71,10 +71,10 @@ class PvtV2Config(BackboneConfigMixin, PreTrainedConfig):
     num_attention_heads: list[int] | tuple[int, ...] = (1, 2, 5, 8)
     mlp_ratios: list[int] | tuple[int, ...] = (8, 8, 4, 4)
     hidden_act: str = "gelu"
-    hidden_dropout_prob: float = 0.0
-    attention_probs_dropout_prob: float = 0.0
+    hidden_dropout_prob: float | int = 0.0
+    attention_probs_dropout_prob: float | int = 0.0
     initializer_range: float = 0.02
-    drop_path_rate: float = 0.0
+    drop_path_rate: float | int = 0.0
     layer_norm_eps: float = 1e-6
     qkv_bias: bool = True
     linear_attention: bool = False

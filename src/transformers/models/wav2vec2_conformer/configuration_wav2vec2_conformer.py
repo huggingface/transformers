@@ -23,24 +23,22 @@ from ...utils import auto_docstring
 
 
 @auto_docstring(checkpoint="facebook/wav2vec2-conformer-rel-pos-large")
-@strict(accept_kwargs=True)
+@strict
 class Wav2Vec2ConformerConfig(PreTrainedConfig):
     r"""
-    num_codevectors_per_group (`int`, *optional*, defaults to 320):
-        Number of entries in each quantization codebook (group).
+    feat_proj_dropout (`float`, *optional*, defaults to 0.0):
+        The dropout probability for output of the feature encoder.
+    feat_quantizer_dropout (`float`, *optional*, defaults to 0.0):
+        The dropout probability for the output of the feature encoder that's used by the quantizer.
     final_dropout (`float`, *optional*, defaults to 0.1):
         The dropout probability for the final projection layer of [`Wav2Vec2ConformerForCTC`].
     feat_extract_norm (`str`, *optional*, defaults to `"group"`):
         The norm to be applied to 1D convolutional layers in feature encoder. One of `"group"` for group
         normalization of only the first 1D convolutional layer or `"layer"` for layer normalization of all 1D
         convolutional layers.
-    feat_proj_dropout (`float`, *optional*, defaults to 0.0):
-        The dropout probability for output of the feature encoder.
     feat_extract_activation (`str, `optional`, defaults to `"gelu"`):
         The non-linear activation function (function or string) in the 1D convolutional layers of the feature
         extractor. If string, `"gelu"`, `"relu"`, `"selu"` and `"gelu_new"` are supported.
-    feat_quantizer_dropout (`float`, *optional*, defaults to 0.0):
-        The dropout probability for quantized feature encoder states.
     conv_dim (`tuple[int]` or `list[int]`, *optional*, defaults to `(512, 512, 512, 512, 512, 512, 512)`):
         A tuple of integers defining the number of input and output channels of each 1D convolutional layer in the
         feature encoder. The length of *conv_dim* defines the number of 1D convolutional layers.
@@ -89,12 +87,12 @@ class Wav2Vec2ConformerConfig(PreTrainedConfig):
         ''mask_feature_prob*len(feature_axis)/mask_feature_length < mask_feature_min_masks''
     num_codevectors_per_group (`int`, *optional*, defaults to 320):
         Number of entries in each quantization codebook (group).
+    num_codevectors_per_group (`int`, *optional*, defaults to 320):
+        Number of entries in each quantization codebook (group).
     num_codevector_groups (`int`, *optional*, defaults to 2):
         Number of codevector groups for product codevector quantization.
     contrastive_logits_temperature (`float`, *optional*, defaults to 0.1):
         The temperature *kappa* in the contrastive loss.
-    feat_quantizer_dropout (`float`, *optional*, defaults to 0.0):
-        The dropout probability for the output of the feature encoder that's used by the quantizer.
     num_negatives (`int`, *optional*, defaults to 100):
         Number of negative samples for the contrastive loss.
     codevector_dim (`int`, *optional*, defaults to 256):
@@ -189,10 +187,10 @@ class Wav2Vec2ConformerConfig(PreTrainedConfig):
     num_conv_pos_embeddings: int = 128
     num_conv_pos_embedding_groups: int = 16
     apply_spec_augment: bool = True
-    mask_time_prob: float = 0.05
+    mask_time_prob: float | int = 0.05
     mask_time_length: int = 10
     mask_time_min_masks: int = 2
-    mask_feature_prob: float = 0.0
+    mask_feature_prob: float | int = 0.0
     mask_feature_length: int = 10
     mask_feature_min_masks: int = 0
     num_codevectors_per_group: int = 320
@@ -212,7 +210,7 @@ class Wav2Vec2ConformerConfig(PreTrainedConfig):
     xvector_output_dim: int = 512
     pad_token_id: int | None = 0
     bos_token_id: int | None = 1
-    eos_token_id: int | None = 2
+    eos_token_id: int | list[int] | None = 2
     add_adapter: bool = False
     adapter_kernel_size: int = 3
     adapter_stride: int = 2

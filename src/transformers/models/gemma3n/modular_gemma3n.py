@@ -46,7 +46,6 @@ from ..gemma3.modeling_gemma3 import (
     Gemma3Attention,
     Gemma3DecoderLayer,
     Gemma3ForCausalLM,
-    Gemma3RMSNorm,
     Gemma3RotaryEmbedding,
     Gemma3TextModel,
     Gemma3TextScaledWordEmbedding,
@@ -64,7 +63,7 @@ logger = logging.get_logger(__name__)
 
 
 @auto_docstring(checkpoint="google/gemma-3n-E4B")
-@strict(accept_kwargs=True)
+@strict
 class Gemma3nTextConfig(Gemma3TextConfig):
     r"""
     vocab_size_per_layer_input (`int`, *optional*, defaults to 262144):
@@ -204,7 +203,7 @@ class Gemma3nTextConfig(Gemma3TextConfig):
 
 
 @auto_docstring(checkpoint="google/gemma-3n-E4B")
-@strict(accept_kwargs=True)
+@strict
 class Gemma3nAudioConfig(PreTrainedConfig):
     r"""
     vocab_offset (`int`, *optional*, defaults to 262272):
@@ -304,7 +303,7 @@ class Gemma3nAudioConfig(PreTrainedConfig):
 
 
 @auto_docstring(checkpoint="google/gemma-3n-E4B")
-@strict(accept_kwargs=True)
+@strict
 class Gemma3nVisionConfig(TimmWrapperConfig):
     r"""
     architecture (`str`, *optional*, defaults to `"resnet50"`):
@@ -346,7 +345,7 @@ class Gemma3nVisionConfig(TimmWrapperConfig):
 
 
 @auto_docstring(checkpoint="google/gemma-3n-E4B")
-@strict(accept_kwargs=True)
+@strict
 class Gemma3nConfig(PreTrainedConfig):
     r"""
     audio_soft_tokens_per_image (`int`, *optional*, defaults to 188):
@@ -480,25 +479,25 @@ class Gemma3nCausalLMOutputWithPast(PaliGemmaCausalLMOutputWithPast):
     audio_hidden_states: torch.FloatTensor | None = None
 
 
-class Gemma3nRMSNorm(Gemma3RMSNorm):
+class Gemma3nRMSNorm(nn.Module):
     def __init__(self, dim: int, eps: float = 1e-6, with_scale: bool = True):
-        super().__init__(dim, eps=eps)
-        del self.weight
+        super().__init__()
+        self.eps = eps
         self.with_scale = with_scale
 
         if self.with_scale:
-            self.weight = nn.Parameter(torch.ones(dim))
-        else:
-            self.register_buffer("weight", torch.tensor(1.0), persistent=False)
+            self.weight = nn.Parameter(torch.ones(dim), requires_grad=True)
 
-    def _norm(self, x):
-        return x / torch.sqrt(x.pow(2).mean(-1, keepdim=True) + self.eps)
+    def _norm(self, hidden_states: torch.Tensor):
+        mean_squared = hidden_states.pow(2).mean(-1, keepdim=True) + self.eps
+        # Use torch.pow() (over torch.sqrt() or torch.rsqrt()) to addess compiler differences between Torch and JAX
+        return hidden_states * torch.pow(mean_squared, -0.5)
 
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
-        # Llama does x.to(float16) * w whilst Gemma2 is (x * w).to(float16)
-        # See https://github.com/huggingface/transformers/pull/29402
-        output = self._norm(x.float()) * self.weight.float()
-        return output.type_as(x)
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        normed_output = self._norm(hidden_states.float())
+        if self.with_scale:
+            normed_output = normed_output * self.weight.float()
+        return normed_output.type_as(hidden_states)
 
 
 # ==== Audio Encoder ====
@@ -1889,13 +1888,13 @@ class Gemma3nTextModel(Gemma3TextModel):
         for layer_type in self.config.layer_types:
             position_embeddings[layer_type] = self.rotary_emb(hidden_states, position_ids, layer_type)
 
-        for decoder_layer in self.layers[: self.config.num_hidden_layers]:
-            causal_mask = causal_mask_mapping[decoder_layer.attention_type]
-            per_layer_input = per_layer_inputs[:, :, decoder_layer.layer_idx, :]
+        for i, decoder_layer in enumerate(self.layers[: self.config.num_hidden_layers]):
+            causal_mask = causal_mask_mapping[self.config.layer_types[i]]
+            per_layer_input = per_layer_inputs[:, :, i, :]
 
             hidden_states = decoder_layer(
                 hidden_states,
-                position_embeddings[decoder_layer.attention_type],
+                position_embeddings[self.config.layer_types[i]],
                 per_layer_input,
                 attention_mask=causal_mask,
                 position_ids=position_ids,
@@ -1927,7 +1926,7 @@ class Gemma3nTextModel(Gemma3TextModel):
 
 @auto_docstring(custom_intro="The base Gemma 3n language model with a language modeling head.")
 class Gemma3nForCausalLM(Gemma3ForCausalLM):
-    _checkpoint_conversion_mapping = {"model.language_model": "model"}
+    pass
 
 
 class Gemma3nMultimodalEmbedder(nn.Module):
@@ -1987,8 +1986,6 @@ class Gemma3nMultimodalEmbedder(nn.Module):
     """
 )
 class Gemma3nModel(PaliGemmaModel):
-    _checkpoint_conversion_mapping = {}
-
     def __init__(self, config: Gemma3nConfig):
         super().__init__(config)
         del self.multi_modal_projector  # Replaced by Gemma3nVisionEmbedder
@@ -2231,8 +2228,6 @@ class Gemma3nModel(PaliGemmaModel):
     """
 )
 class Gemma3nForConditionalGeneration(PaliGemmaForConditionalGeneration):
-    _checkpoint_conversion_mapping = {}
-
     @can_return_tuple
     @auto_docstring
     def forward(

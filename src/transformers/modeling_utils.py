@@ -26,7 +26,6 @@ from collections import defaultdict
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass, field
-from enum import Enum
 from functools import partial, wraps
 from itertools import cycle
 from threading import Thread
@@ -260,7 +259,8 @@ def get_state_dict_dtype(state_dict):
     Returns the first found floating dtype in `state_dict` if there is one, otherwise returns the first dtype.
     """
     for t in state_dict.values():
-        if t.is_floating_point():
+        # We cannot instantiate a whole model under float4/8_xxx dtypes (torch does not allow setting them as default dtype)
+        if t.is_floating_point() and "float8_" not in str(t.dtype) and "float4_" not in str(t.dtype):
             return t.dtype
 
     # if no floating dtype was found return whatever the first dtype is
@@ -495,6 +495,7 @@ def _get_resolved_checkpoint_files(
     is_remote_code: bool,  # Because we can't determine this inside this function, we need it to be passed in
     transformers_explicit_filename: str | None = None,
     download_kwargs: DownloadKwargs | None = None,
+    tqdm_class: type | None = None,
 ) -> tuple[list[str] | None, dict | None]:
     """Get all the checkpoint filenames based on `pretrained_model_name_or_path`, and optional metadata if the
     checkpoints are sharded.
@@ -599,6 +600,7 @@ def _get_resolved_checkpoint_files(
                 "_raise_exceptions_for_gated_repo": False,
                 "_raise_exceptions_for_missing_entries": False,
                 "_commit_hash": commit_hash,
+                "tqdm_class": tqdm_class,
                 **has_file_kwargs,
             }
             can_auto_convert = (
@@ -744,6 +746,7 @@ def _get_resolved_checkpoint_files(
             revision=revision,
             subfolder=subfolder,
             _commit_hash=commit_hash,
+            tqdm_class=tqdm_class,
         )
     else:
         checkpoint_files = [resolved_archive_file] if pretrained_model_name_or_path is not None else None
@@ -830,11 +833,6 @@ def _get_dtype(
             sub_config.dtype = main_dtype
 
     return config, main_dtype
-
-
-class PipelineParallel(Enum):
-    inputs = 0
-    outputs = 1
 
 
 class ModuleUtilsMixin:
@@ -1155,7 +1153,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
     # A pipeline parallel plan specifying the layers which may not be present on all ranks when PP is enabled. For top-level
     # models, this attribute is currently defined in respective model code. For base models, it comes from
     # `config.base_model_pp_plan` during `post_init`.
-    _pp_plan: dict[str, PipelineParallel] | None = None
+    _pp_plan: dict[str, tuple[str, str]] = None
 
     # Advanced functionalities support
     supports_gradient_checkpointing: bool = False
@@ -1224,7 +1222,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         # otherwise we derive it from the annotated `config` attribute.
 
         # defined in this particular subclass
-        child_annotation = cls.__dict__.get("__annotations__", {}).get("config", None)
+        child_annotation = inspect.get_annotations(cls).get("config", None)
         child_attribute = cls.__dict__.get("config_class", None)
 
         # defined in the class (this subclass or any parent class)
@@ -1380,7 +1378,13 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         self._tp_plan = plan
 
     @pp_plan.setter
-    def pp_plan(self, plan: dict[str, tuple[str, str]]):
+    def pp_plan(self, plan: dict[str, tuple[str, str]] | None):
+        if plan is None:
+            self._pp_plan = {}
+            return
+        if not isinstance(plan, dict):
+            raise ValueError("Can only set a dictionary as `pp_plan`")
+
         self._pp_plan = plan
 
     def dequantize(self, dtype=None):
@@ -1810,10 +1814,6 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         if is_flash_attention_requested(requested_attention_implementation=attn_implementation):
             # If FA not installed, do not fail but use kernels instead if possible
             for fa_version in FLASH_ATTENTION_COMPATIBILITY_MATRIX.keys():
-                # No kernels support for FA4 for now
-                if fa_version == 4:
-                    continue
-
                 # Check whether we have an original FA requested but not available in the env
                 if requested_original_flash_attn := (
                     attn_implementation.removeprefix("paged|") == f"flash_attention_{fa_version}"
@@ -1925,10 +1925,11 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
 
     def get_correct_experts_implementation(self, requested_experts: str | None) -> str:
         applicable_experts = "grouped_mm" if requested_experts is None else requested_experts
-        if applicable_experts not in ["eager", "grouped_mm", "batched_mm"]:
+        if applicable_experts not in ["eager", "grouped_mm", "batched_mm", "deepgemm"]:
             message = (
                 f'Specified `experts_implementation="{applicable_experts}"` is not supported. The only possible arguments are '
-                '`experts_implementation="eager"`, `"experts_implementation=grouped_mm"` and `"experts_implementation=batched_mm"`.'
+                '`experts_implementation="eager"`, `"experts_implementation=grouped_mm"`, `"experts_implementation=batched_mm"` '
+                'and `"experts_implementation=deepgemm"`.'
             )
             raise ValueError(message)
 
@@ -2983,6 +2984,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                 new_lm_head, old_lm_head, num_tokens_to_copy, transposed, has_new_lm_head_bias
             )
 
+        new_lm_head._is_hf_initialized = True
         return new_lm_head
 
     def _init_added_embeddings_weights_with_mean(
@@ -3616,7 +3618,10 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             elif is_quantized:
                 init_contexts.extend([torch.device("meta"), set_quantized_state()])
         else:
-            init_contexts.append(torch.device("meta"))
+            # meta_device_safe_creation_ops patches torch.linspace to default to CPU
+            # so that custom models calling .item() during __init__ (e.g. drop-path
+            # schedules) don't crash on meta tensors.
+            init_contexts.extend([torch.device("meta"), init.meta_device_safe_creation_ops()])
 
         return init_contexts
 
@@ -3907,6 +3912,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         """
         state_dict = kwargs.pop("state_dict", None)
         proxies = kwargs.pop("proxies", None)
+        tqdm_class = kwargs.pop("tqdm_class", None)
         output_loading_info = kwargs.pop("output_loading_info", False)
         from_pipeline = kwargs.pop("_from_pipeline", None)
         from_auto_class = kwargs.pop("_from_auto", False)
@@ -4057,6 +4063,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             user_agent=user_agent,
             is_remote_code=cls.is_remote_code(),
             transformers_explicit_filename=getattr(config, "transformers_weights", None),
+            tqdm_class=tqdm_class,
         )
 
         is_quantized = hf_quantizer is not None
@@ -4098,7 +4105,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         # instantiated model, as the flags can be modified by instances sometimes)
         dtype_plan = model._get_dtype_plan(dtype)
 
-        # Obtain the weight conversion mapping for this model if any are registered
+        # Obtain the weight conversion mapping for this model if any are registered and apply to all submodels recursively
         weight_conversions = get_model_conversion_mapping(model, key_mapping, hf_quantizer)
 
         if _torch_distributed_available and device_mesh is not None:  # add hooks to nn.Modules: no weights
@@ -4385,12 +4392,14 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         """
         Returns whether the model has a tensor parallelism plan.
         """
-        if self._tp_plan is not None:
+        # Check if model has a TP plan
+        if self._tp_plan:
             return True
         # Check if base model has a TP plan
-        if getattr(self.base_model, "_tp_plan", None) is not None:
+        if self.base_model._tp_plan:
             return True
-        if self.config.base_model_tp_plan is not None:
+        # Check if config has TP plan
+        if self.config.base_model_tp_plan:
             return True
         return False
 
@@ -4404,10 +4413,14 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
 
     @property
     def supports_pp_plan(self):
-        if self._pp_plan is not None:
+        # Check if model has a PP plan
+        if self._pp_plan:
             return True
         # Check if base model has PP plan
-        if getattr(self.base_model, "_pp_plan", None) is not None:
+        if self.base_model._pp_plan:
+            return True
+        # Check if config has PP plan
+        if self.config.base_model_pp_plan:
             return True
         return False
 
@@ -4602,7 +4615,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         later as they will be tied (overwritten) anyway.
         This is very important as most embeddings are tied, and they are huge params (vocabularies are often 256k), so
         running inits on them is very costly."""
-        for tied_param in self.all_tied_weights_keys.keys():
+        for tied_param in getattr(self, "all_tied_weights_keys", {}).keys():
             param = self.get_parameter(tied_param)
             param._is_hf_initialized = True
 

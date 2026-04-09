@@ -20,6 +20,16 @@ from transformers.configuration_utils import PreTrainedConfig
 from transformers.utils import direct_transformers_import
 
 
+CHECKER_CONFIG = {
+    "name": "config_attributes",
+    "label": "Config attributes",
+    # Approximate: iterates CONFIG_MAPPING at runtime and also reads modeling_*.py files
+    # in each config's directory via os.listdir(). Deprecated models are skipped.
+    "file_globs": ["src/transformers/models/**/configuration_*.py", "src/transformers/models/**/modeling_*.py"],
+    "check_args": [],
+    "fix_args": None,
+}
+
 # All paths are set with the intent you should run this script from the root of the repo with the command
 # python utils/check_config_docstrings.py
 PATH_TO_TRANSFORMERS = "src/transformers"
@@ -49,7 +59,7 @@ SPECIAL_CASES_TO_ALLOW = {
     "Phi3Config": ["embd_pdrop"],
     "EncodecConfig": ["overlap"],
     "XcodecConfig": ["sample_rate", "audio_channels"],
-    "RecurrentGemmaConfig": ["block_types"],
+    "RecurrentGemmaConfig": ["block_types", "attention_window_size"],
     "MambaConfig": ["expand"],
     "FalconMambaConfig": ["expand"],
     "FSMTConfig": ["langs", "common_kwargs", "early_stopping", "length_penalty", "max_length", "num_beams"],
@@ -99,6 +109,7 @@ SPECIAL_CASES_TO_ALLOW = {
     "ConditionalDetrConfig": True,
     "DabDetrConfig": True,
     "SwitchTransformersConfig": True,
+    "MaskFormerDetrConfig": True,
     "DetrConfig": True,
     "DFineConfig": True,
     "GroundingDinoConfig": True,
@@ -138,11 +149,16 @@ SPECIAL_CASES_TO_ALLOW = {
     "GptOssConfig": True,
     "LwDetrConfig": True,
     "NemotronHConfig": True,
+    # Internally uses Got Ocr2 so no need to use in the modeling code as we remap in auto instead
+    "PPChart2TableConfig": True,
+    "PPChart2TableVisionConfig": True,
 }
 
 # Common and important attributes, even if they do not always appear in the modeling files (can be a regex pattern)
 ATTRIBUTES_TO_ALLOW = (
     # Attr in base `PreTrainedConfig`
+    "transformers_version",
+    "architectures",
     "chunk_size_feed_forward",
     "dtype",
     "id2label",

@@ -41,6 +41,16 @@ from huggingface_hub import hf_hub_download, upload_folder
 from transformers.utils import direct_transformers_import
 
 
+CHECKER_CONFIG = {
+    "name": "update_metadata",
+    "label": "Model metadata",
+    # Approximate: imports the transformers module and inspects pipeline/auto mappings
+    # at runtime. Does not iterate over files matching these globs directly.
+    "file_globs": ["src/transformers/models/**/*.py", "docs/**/*.md"],
+    "check_args": ["--check-only"],
+    "fix_args": [],
+}
+
 # All paths are set with the intent you should run this script from the root of the repo with the command
 # python utils/update_metadata.py
 TRANSFORMERS_PATH = "src/transformers"

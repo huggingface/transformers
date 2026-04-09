@@ -23,7 +23,7 @@ logger = logging.get_logger(__name__)
 
 
 @auto_docstring(checkpoint="nvidia/groupvit-gcc-yfcc")
-@strict(accept_kwargs=True)
+@strict
 class GroupViTTextConfig(PreTrainedConfig):
     r"""
     Example:
@@ -57,11 +57,11 @@ class GroupViTTextConfig(PreTrainedConfig):
     initializer_factor: float = 1.0
     pad_token_id: int | None = 1
     bos_token_id: int | None = 49406
-    eos_token_id: int | None = 49407
+    eos_token_id: int | list[int] | None = 49407
 
 
 @auto_docstring(checkpoint="nvidia/groupvit-gcc-yfcc")
-@strict(accept_kwargs=True)
+@strict
 class GroupViTVisionConfig(PreTrainedConfig):
     r"""
     depths (`list[int]`, *optional*, defaults to [6, 3, 3]):
@@ -121,7 +121,7 @@ class GroupViTVisionConfig(PreTrainedConfig):
 
 
 @auto_docstring(checkpoint="nvidia/groupvit-gcc-yfcc")
-@strict(accept_kwargs=True)
+@strict
 class GroupViTConfig(PreTrainedConfig):
     r"""
     projection_intermediate_dim (`int`, *optional*, defaults to 4096):

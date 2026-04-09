@@ -14,22 +14,19 @@
 
 import math
 from dataclasses import dataclass
-from typing import Optional
 
 import numpy as np
 import torch
 import torch.nn.functional as F
-import torchvision.transforms.v2.functional as tvF
 from huggingface_hub.dataclasses import strict
 from torch import nn
+from torchvision.transforms.v2 import functional as tvF
 
 from ... import initialization as init
 from ...backbone_utils import consolidate_backbone_kwargs_to_config
 from ...configuration_utils import PreTrainedConfig
-from ...image_processing_utils_fast import (
-    BaseImageProcessorFast,
-    BatchFeature,
-)
+from ...image_processing_backends import TorchvisionBackend
+from ...image_processing_utils import BatchFeature
 from ...image_transforms import (
     group_images_by_shape,
     reorder_images,
@@ -71,14 +68,12 @@ logger = logging.get_logger(__name__)
 
 
 @auto_docstring(checkpoint="PaddlePaddle/PP-DocLayoutV3_safetensors")
-@strict(accept_kwargs=True)
+@strict
 class PPDocLayoutV3Config(PreTrainedConfig):
     r"""
     initializer_bias_prior_prob (`float`, *optional*):
         The prior probability used by the bias initializer to initialize biases for `enc_score_head` and `class_embed`.
         If `None`, `prior_prob` computed as `prior_prob = 1 / (num_labels + 1)` while initializing model weights.
-    batch_norm_eps (`float`, *optional*, defaults to 1e-05):
-        The epsilon used by the batch normalization layers.
     freeze_backbone_batch_norms (`bool`, *optional*, defaults to `True`):
         Whether to freeze the batch normalization layers in the backbone.
     encoder_in_channels (`list`, *optional*, defaults to `[512, 1024, 2048]`):
@@ -208,7 +203,7 @@ class PPDocLayoutV3Config(PreTrainedConfig):
     disable_custom_kernels: bool = True
     is_encoder_decoder: bool = True
     global_pointer_head_size: int = 64
-    gp_dropout_value: float = 0.1
+    gp_dropout_value: float | int = 0.1
 
     def __post_init__(self, **kwargs):
         self.backbone_config, kwargs = consolidate_backbone_kwargs_to_config(
@@ -236,7 +231,7 @@ class PPDocLayoutV3Config(PreTrainedConfig):
 
 
 @auto_docstring
-class PPDocLayoutV3ImageProcessorFast(BaseImageProcessorFast):
+class PPDocLayoutV3ImageProcessor(TorchvisionBackend):
     resample = PILImageResampling.BICUBIC
     image_mean = [0, 0, 0]
     image_std = [1, 1, 1]
@@ -251,7 +246,7 @@ class PPDocLayoutV3ImageProcessorFast(BaseImageProcessorFast):
         images: list["torch.Tensor"],
         do_resize: bool,
         size: SizeDict,
-        interpolation: Optional["tvF.InterpolationMode"],
+        resample: "PILImageResampling | tvF.InterpolationMode | int | None",
         do_center_crop: bool,
         crop_size: SizeDict,
         do_rescale: bool,
@@ -270,9 +265,7 @@ class PPDocLayoutV3ImageProcessorFast(BaseImageProcessorFast):
         resized_images_grouped = {}
         for shape, stacked_images in grouped_images.items():
             if do_resize:
-                stacked_images = self.resize(
-                    image=stacked_images, size=size, interpolation=interpolation, antialias=False
-                )
+                stacked_images = self.resize(image=stacked_images, size=size, resample=resample, antialias=False)
             resized_images_grouped[shape] = stacked_images
         resized_images = reorder_images(resized_images_grouped, grouped_images_index)
 
@@ -404,6 +397,9 @@ class PPDocLayoutV3ImageProcessorFast(BaseImageProcessorFast):
             y_coordinates = [int(round((y_min * scale_height).item())), int(round((y_max * scale_height).item()))]
             y_start, y_end = np.clip(y_coordinates, 0, mask_height)
             cropped_mask = masks[i, y_start:y_end, x_start:x_end]
+            if cropped_mask.size == 0 or np.sum(cropped_mask) == 0:
+                polygon_points.append(rect)
+                continue
 
             # resize mask to match box size
             resized_mask = cv2.resize(cropped_mask.astype(np.uint8), (box_w, box_h), interpolation=cv2.INTER_NEAREST)
@@ -1030,12 +1026,6 @@ class PPDocLayoutV3Model(RTDetrModel):
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.FloatTensor] | PPDocLayoutV3ModelOutput:
         r"""
-        inputs_embeds (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
-            Optionally, instead of passing the flattened feature map (output of the backbone + projection layer), you
-            can choose to directly pass a flattened representation of an image.
-        decoder_inputs_embeds (`torch.FloatTensor` of shape `(batch_size, num_queries, hidden_size)`, *optional*):
-            Optionally, instead of initializing the queries with a tensor of zeros, you can choose to directly pass an
-            embedded representation.
         labels (`list[Dict]` of len `(batch_size,)`, *optional*):
             Labels for computing the bipartite matching loss. List of dicts, each dictionary containing at least the
             following 2 keys: 'class_labels' and 'boxes' (the class labels and bounding boxes of an image in the batch
@@ -1259,7 +1249,7 @@ class PPDocLayoutV3ForObjectDetectionOutput(ModelOutput):
     pred_boxes (`torch.FloatTensor` of shape `(batch_size, num_queries, 4)`):
         Normalized boxes coordinates for all queries, represented as (center_x, center_y, width, height). These
         values are normalized in [0, 1], relative to the size of each individual image in the batch (disregarding
-        possible padding). You can use [`~PPDocLayoutV3ImageProcessorFast.post_process_object_detection`] to retrieve the
+        possible padding). You can use [`~PPDocLayoutV3ImageProcessor.post_process_object_detection`] to retrieve the
         unnormalized (absolute) bounding boxes.
     order_logits (`tuple` of `torch.FloatTensor` of shape `(batch_size, num_queries, num_queries)`):
         Order logits of the final layer of the decoder.
@@ -1349,12 +1339,6 @@ class PPDocLayoutV3ForObjectDetection(RTDetrForObjectDetection, PPDocLayoutV3Pre
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.FloatTensor] | PPDocLayoutV3ForObjectDetectionOutput:
         r"""
-        inputs_embeds (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
-            Optionally, instead of passing the flattened feature map (output of the backbone + projection layer), you
-            can choose to directly pass a flattened representation of an image.
-        decoder_inputs_embeds (`torch.FloatTensor` of shape `(batch_size, num_queries, hidden_size)`, *optional*):
-            Optionally, instead of initializing the queries with a tensor of zeros, you can choose to directly pass an
-            embedded representation.
         labels (`list[Dict]` of len `(batch_size,)`, *optional*):
             Labels for computing the bipartite matching loss. List of dicts, each dictionary containing at least the
             following 2 keys: 'class_labels' and 'boxes' (the class labels and bounding boxes of an image in the batch
@@ -1454,7 +1438,7 @@ class PPDocLayoutV3ForObjectDetection(RTDetrForObjectDetection, PPDocLayoutV3Pre
 
 __all__ = [
     "PPDocLayoutV3ForObjectDetection",
-    "PPDocLayoutV3ImageProcessorFast",
+    "PPDocLayoutV3ImageProcessor",
     "PPDocLayoutV3Config",
     "PPDocLayoutV3Model",
     "PPDocLayoutV3PreTrainedModel",

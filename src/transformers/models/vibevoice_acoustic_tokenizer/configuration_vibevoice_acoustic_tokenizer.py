@@ -22,7 +22,7 @@ from ...utils import auto_docstring
 
 
 @auto_docstring(checkpoint="microsoft/VibeVoice-1.5B")
-@strict(accept_kwargs=True)
+@strict
 class VibeVoiceAcousticTokenizerConfig(PretrainedConfig):
     r"""
     channels (`int`, *optional*, defaults to 1):
@@ -88,7 +88,7 @@ class VibeVoiceAcousticTokenizerConfig(PretrainedConfig):
 
 
 @auto_docstring(checkpoint="microsoft/VibeVoice-1.5B")
-@strict(accept_kwargs=True)
+@strict
 class VibeVoiceAcousticTokenizerEncoderConfig(VibeVoiceAcousticTokenizerConfig):
     r"""
     channels (`int`, *optional*, defaults to 1):
@@ -118,7 +118,7 @@ class VibeVoiceAcousticTokenizerEncoderConfig(VibeVoiceAcousticTokenizerConfig):
 
 
 @auto_docstring(checkpoint="microsoft/VibeVoice-1.5B")
-@strict(accept_kwargs=True)
+@strict
 class VibeVoiceAcousticTokenizerDecoderConfig(VibeVoiceAcousticTokenizerConfig):
     r"""
     channels (`int`, *optional*, defaults to 1):

@@ -22,7 +22,7 @@ from ...utils import auto_docstring
 
 
 @auto_docstring(checkpoint="ai21labs/Jamba-v0.1")
-@strict(accept_kwargs=True)
+@strict
 class JambaConfig(PreTrainedConfig):
     r"""
     expert_layer_period (`int`, *optional*, defaults to 2):
@@ -33,12 +33,12 @@ class JambaConfig(PreTrainedConfig):
         Once in this many layers, we will have a vanilla attention layer
     attn_layer_offset (`int`, *optional*, defaults to 4):
         The first layer index that contains a vanilla attention mlp layer
-    mamba_dt_rank (`Union[int,str]`, *optional*, defaults to `"auto"`):
-        Rank of the mamba discretization projection matrix. `"auto"` means that it will default to `math.ceil(self.hidden_size / 16)`
     use_mamba_kernels (`bool`, *optional*, defaults to `True`):
         Flag indicating whether or not to use the fast mamba kernels. These are available only if `mamba-ssm` and
         `causal-conv1d` are installed, and the mamba modules are running on a CUDA device. Raises ValueError if
         `True` and kernels are not available
+    mamba_dt_rank (`Union[int,str]`, *optional*, defaults to `"auto"`):
+        Rank of the mamba discretization projection matrix. `"auto"` means that it will default to `math.ceil(self.hidden_size / 16)`
     """
 
     model_type = "jamba"
@@ -62,7 +62,7 @@ class JambaConfig(PreTrainedConfig):
     router_aux_loss_coef: float = 0.001
     pad_token_id: int | None = 0
     bos_token_id: int | None = 1
-    eos_token_id: int | None = 2
+    eos_token_id: int | list[int] | None = 2
     max_position_embeddings: int = 262144
     attention_dropout: float | int = 0.0
     num_experts_per_tok: int = 2
@@ -92,6 +92,12 @@ class JambaConfig(PreTrainedConfig):
             "attention" if i % self.attn_layer_period == self.attn_layer_offset else "mamba"
             for i in range(self.num_hidden_layers)
         ]
+
+    @property
+    def layer_types(self):
+        # Follow the `layer_types` conventions
+        layer_types = self.layers_block_type
+        return ["full_attention" if x == "attention" else x for x in layer_types]
 
     @property
     def layers_num_experts(self):

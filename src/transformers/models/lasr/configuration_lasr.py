@@ -25,7 +25,7 @@ from ...utils import auto_docstring
 
 
 @auto_docstring(checkpoint="google/medasr")
-@strict(accept_kwargs=True)
+@strict
 class LasrEncoderConfig(PreTrainedConfig):
     r"""
     convolution_bias (`bool`, *optional*, defaults to `False`):
@@ -62,7 +62,7 @@ class LasrEncoderConfig(PreTrainedConfig):
         ```
 
     This configuration class is based on the LasrEncoder architecture from Google Health AI. You can find more details
-    and pre-trained models at [TODO/TODO](https://huggingface.co/TODO/TODO).
+    and pre-trained models at [google/medasr](https://huggingface.co/google/medasr).
     """
 
     model_type = "lasr_encoder"
@@ -81,7 +81,7 @@ class LasrEncoderConfig(PreTrainedConfig):
     subsampling_conv_kernel_size: int = 5
     subsampling_conv_stride: int = 2
     dropout: float | int = 0.1
-    dropout_positions: float = 0.0
+    dropout_positions: float | int = 0.0
     layerdrop: float | int = 0.1
     activation_dropout: float | int = 0.1
     attention_dropout: float | int = 0.1
@@ -99,16 +99,16 @@ class LasrEncoderConfig(PreTrainedConfig):
 
 
 @auto_docstring(checkpoint="google/medasr")
-@strict(accept_kwargs=True)
+@strict
 class LasrCTCConfig(PreTrainedConfig):
     r"""
-        ctc_loss_reduction (`str`, *optional*, defaults to `"mean"`):
-            Specifies the reduction to apply to the output of `torch.nn.CTCLoss`. Only relevant when training an
-            instance of [`LasrForCTC`].
-        ctc_zero_infinity (`bool`, *optional*, defaults to `True`):
-            Whether to zero infinite losses and the associated gradients of `torch.nn.CTCLoss`. Infinite losses mainly
-            occur when the inputs are too short to be aligned to the targets. Only relevant when training an instance
-            of [`LasrForCTC`].
+    ctc_loss_reduction (`str`, *optional*, defaults to `"mean"`):
+        Specifies the reduction to apply to the output of `torch.nn.CTCLoss`. Only relevant when training an
+        instance of [`LasrForCTC`].
+    ctc_zero_infinity (`bool`, *optional*, defaults to `True`):
+        Whether to zero infinite losses and the associated gradients of `torch.nn.CTCLoss`. Infinite losses mainly
+        occur when the inputs are too short to be aligned to the targets. Only relevant when training an instance
+        of [`LasrForCTC`].
 
     Example:
         ```python
@@ -121,7 +121,7 @@ class LasrCTCConfig(PreTrainedConfig):
         >>> configuration = model.config
         ```
     This configuration class is based on the Lasr CTC architecture from Google Health AI. You can find more details
-    and pre-trained models at [TODO/TODO](https://huggingface.co/TODO/TODO).
+    and pre-trained models at [google/medasr](https://huggingface.co/google/medasr).
     """
 
     model_type = "lasr_ctc"

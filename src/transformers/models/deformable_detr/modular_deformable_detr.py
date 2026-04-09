@@ -23,10 +23,11 @@ from torch import Tensor
 from ... import initialization as init
 from ...backbone_utils import load_backbone
 from ...image_transforms import center_to_corners_format
+from ...image_utils import AnnotationFormat
 from ...integrations import use_kernel_forward_from_hub
 from ...modeling_outputs import BaseModelOutput
 from ...modeling_utils import PreTrainedModel
-from ...processing_utils import Unpack
+from ...processing_utils import ImagesKwargs, Unpack
 from ...utils import (
     ModelOutput,
     TensorType,
@@ -36,8 +37,10 @@ from ...utils import (
     torch_compilable_check,
 )
 from ...utils.generic import can_return_tuple, merge_with_config_defaults
+from ...utils.import_utils import requires, requires_backends
 from ...utils.output_capturing import OutputRecorder, capture_outputs
-from ..detr.image_processing_detr_fast import DetrImageProcessorFast
+from ..detr.image_processing_detr import DetrImageProcessor
+from ..detr.image_processing_pil_detr import DetrImageProcessorPil
 from ..detr.modeling_detr import (
     DetrConvEncoder,
     DetrDecoderLayer,
@@ -58,7 +61,21 @@ from .configuration_deformable_detr import DeformableDetrConfig
 logger = logging.get_logger(__name__)
 
 
-class DeformableDetrImageProcessorFast(DetrImageProcessorFast):
+class DeformableDetrImageProcessorKwargs(ImagesKwargs, total=False):
+    r"""
+    format (`str`, *optional*, defaults to `AnnotationFormat.COCO_DETECTION`):
+        Data format of the annotations. One of "coco_detection" or "coco_panoptic".
+    do_convert_annotations (`bool`, *optional*, defaults to `True`):
+        Controls whether to convert the annotations to the format expected by the DEFORMABLE_DETR model. Converts the
+        bounding boxes to the format `(center_x, center_y, width, height)` and in the range `[0, 1]`.
+        Can be overridden by the `do_convert_annotations` parameter in the `preprocess` method.
+    """
+
+    format: str | AnnotationFormat
+    do_convert_annotations: bool
+
+
+class DeformableDetrImageProcessor(DetrImageProcessor):
     def post_process_object_detection(
         self, outputs, threshold: float = 0.5, target_sizes: TensorType | list[tuple] = None, top_k: int = 100
     ):
@@ -81,6 +98,78 @@ class DeformableDetrImageProcessorFast(DetrImageProcessorFast):
             `list[Dict]`: A list of dictionaries, each dictionary containing the scores, labels and boxes for an image
             in the batch as predicted by the model.
         """
+        out_logits, out_bbox = outputs.logits, outputs.pred_boxes
+
+        if target_sizes is not None:
+            if len(out_logits) != len(target_sizes):
+                raise ValueError(
+                    "Make sure that you pass in as many target sizes as the batch dimension of the logits"
+                )
+
+        prob = out_logits.sigmoid()
+        prob = prob.view(out_logits.shape[0], -1)
+        k_value = min(top_k, prob.size(1))
+        topk_values, topk_indexes = torch.topk(prob, k_value, dim=1)
+        scores = topk_values
+        topk_boxes = torch.div(topk_indexes, out_logits.shape[2], rounding_mode="floor")
+        labels = topk_indexes % out_logits.shape[2]
+        boxes = center_to_corners_format(out_bbox)
+        boxes = torch.gather(boxes, 1, topk_boxes.unsqueeze(-1).repeat(1, 1, 4))
+
+        # and from relative [0, 1] to absolute [0, height] coordinates
+        if target_sizes is not None:
+            if isinstance(target_sizes, list):
+                img_h = torch.Tensor([i[0] for i in target_sizes])
+                img_w = torch.Tensor([i[1] for i in target_sizes])
+            else:
+                img_h, img_w = target_sizes.unbind(1)
+            scale_fct = torch.stack([img_w, img_h, img_w, img_h], dim=1).to(boxes.device)
+            boxes = boxes * scale_fct[:, None, :]
+
+        results = []
+        for s, l, b in zip(scores, labels, boxes):
+            score = s[s > threshold]
+            label = l[s > threshold]
+            box = b[s > threshold]
+            results.append({"scores": score, "labels": label, "boxes": box})
+
+        return results
+
+    def post_process_instance_segmentation(self):
+        raise NotImplementedError("Segmentation post-processing is not implemented for Deformable DETR yet.")
+
+    def post_process_semantic_segmentation(self):
+        raise NotImplementedError("Semantic segmentation post-processing is not implemented for Deformable DETR yet.")
+
+    def post_process_panoptic_segmentation(self):
+        raise NotImplementedError("Panoptic segmentation post-processing is not implemented for Deformable DETR yet.")
+
+
+class DeformableDetrImageProcessorPil(DetrImageProcessorPil):
+    @requires(backends=("torch",))
+    def post_process_object_detection(
+        self, outputs, threshold: float = 0.5, target_sizes: TensorType | list[tuple] = None, top_k: int = 100
+    ):
+        """
+        Converts the raw output of [`DeformableDetrForObjectDetection`] into final bounding boxes in (top_left_x,
+        top_left_y, bottom_right_x, bottom_right_y) format. Only supports PyTorch.
+
+        Args:
+            outputs ([`DetrObjectDetectionOutput`]):
+                Raw outputs of the model.
+            threshold (`float`, *optional*):
+                Score threshold to keep object detection predictions.
+            target_sizes (`torch.Tensor` or `list[tuple[int, int]]`, *optional*):
+                Tensor of shape `(batch_size, 2)` or list of tuples (`tuple[int, int]`) containing the target size
+                (height, width) of each image in the batch. If left to None, predictions will not be resized.
+            top_k (`int`, *optional*, defaults to 100):
+                Keep only top k bounding boxes before filtering by thresholding.
+
+        Returns:
+            `list[Dict]`: A list of dictionaries, each dictionary containing the scores, labels and boxes for an image
+            in the batch as predicted by the model.
+        """
+        requires_backends(self, ["torch"])
         out_logits, out_bbox = outputs.logits, outputs.pred_boxes
 
         if target_sizes is not None:
@@ -1462,7 +1551,8 @@ class DeformableDetrForObjectDetection(DeformableDetrPreTrainedModel):
 
 
 __all__ = [
-    "DeformableDetrImageProcessorFast",
+    "DeformableDetrImageProcessor",
+    "DeformableDetrImageProcessorPil",
     "DeformableDetrForObjectDetection",
     "DeformableDetrModel",
     "DeformableDetrPreTrainedModel",

@@ -23,7 +23,7 @@ logger = logging.get_logger(__name__)
 
 
 @auto_docstring(checkpoint="microsoft/xclip-base-patch32")
-@strict(accept_kwargs=True)
+@strict
 class XCLIPTextConfig(PreTrainedConfig):
     r"""
     Example:
@@ -57,15 +57,13 @@ class XCLIPTextConfig(PreTrainedConfig):
     initializer_factor: float = 1.0
     pad_token_id: int | None = 1
     bos_token_id: int | None = 0
-    eos_token_id: int | None = 2
+    eos_token_id: int | list[int] | None = 2
 
 
 @auto_docstring(checkpoint="microsoft/xclip-base-patch32")
-@strict(accept_kwargs=True)
+@strict
 class XCLIPVisionConfig(PreTrainedConfig):
     r"""
-    num_frames (`int`, *optional*, defaults to 8):
-        The number of frames in each video.
     mit_hidden_size (`int`, *optional*, defaults to 512):
         Dimensionality of the encoder layers of the Multiframe Integration Transformer (MIT).
     mit_intermediate_size (`int`, *optional*, defaults to 2048):
@@ -75,6 +73,8 @@ class XCLIPVisionConfig(PreTrainedConfig):
         Number of hidden layers in the Multiframe Integration Transformer (MIT).
     mit_num_attention_heads (`int`, *optional*, defaults to 8):
         Number of attention heads for each attention layer in the Multiframe Integration Transformer (MIT).
+    num_frames (`int`, *optional*, defaults to 8):
+        The number of frames in each video.
 
     Example:
 
@@ -111,11 +111,11 @@ class XCLIPVisionConfig(PreTrainedConfig):
     attention_dropout: float | int = 0.0
     initializer_range: float = 0.02
     initializer_factor: float = 1.0
-    drop_path_rate: float = 0.0
+    drop_path_rate: float | int = 0.0
 
 
 @auto_docstring(checkpoint="microsoft/xclip-base-patch32")
-@strict(accept_kwargs=True)
+@strict
 class XCLIPConfig(PreTrainedConfig):
     r"""
     prompt_layers (`int`, *optional*, defaults to 2):

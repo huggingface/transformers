@@ -53,6 +53,7 @@ else:
     VIDEO_PROCESSOR_MAPPING_NAMES = OrderedDict(
         [
             ("ernie4_5_vl_moe", "Ernie4_5_VLMoeVideoProcessor"),
+            ("gemma4", "Gemma4VideoProcessor"),
             ("glm46v", "Glm46VVideoProcessor"),
             ("glm4v", "Glm4vVideoProcessor"),
             ("instructblip", "InstructBlipVideoVideoProcessor"),
@@ -77,6 +78,7 @@ else:
             ("video_llama_3", "VideoLlama3VideoProcessor"),
             ("video_llava", "VideoLlavaVideoProcessor"),
             ("videomae", "VideoMAEVideoProcessor"),
+            ("videomt", "VideomtVideoProcessor"),
             ("vjepa2", "VJEPA2VideoProcessor"),
         ]
     )
@@ -273,7 +275,7 @@ class AutoVideoProcessor:
                 - a path to a *directory* containing a video processor file saved using the
                   [`~video_processing_utils.BaseVideoProcessor.save_pretrained`] method, e.g.,
                   `./my_model_directory/`.
-                - a path or url to a saved video processor JSON *file*, e.g.,
+                - a path to a saved video processor JSON *file*, e.g.,
                   `./my_model_directory/preprocessor_config.json`.
             cache_dir (`str` or `os.PathLike`, *optional*):
                 Path to a directory in which a downloaded pretrained model video processor should be cached if the
@@ -363,6 +365,9 @@ class AutoVideoProcessor:
 
         has_remote_code = video_processor_auto_map is not None
         has_local_code = video_processor_class is not None or type(config) in VIDEO_PROCESSOR_MAPPING
+        explicit_local_code = has_local_code and not (
+            video_processor_class or VIDEO_PROCESSOR_MAPPING[type(config)]
+        ).__module__.startswith("transformers.")
         if has_remote_code:
             if "--" in video_processor_auto_map:
                 upstream_repo = video_processor_auto_map.split("--")[0]
@@ -372,7 +377,7 @@ class AutoVideoProcessor:
                 trust_remote_code, pretrained_model_name_or_path, has_local_code, has_remote_code, upstream_repo
             )
 
-        if has_remote_code and trust_remote_code:
+        if has_remote_code and trust_remote_code and not explicit_local_code:
             class_ref = video_processor_auto_map
             video_processor_class = get_class_from_dynamic_module(class_ref, pretrained_model_name_or_path, **kwargs)
             _ = kwargs.pop("code_revision", None)

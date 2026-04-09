@@ -26,8 +26,8 @@ from ...utils import auto_docstring
 from ..auto import AutoConfig
 
 
-@auto_docstring(checkpoint="PaddlePaddle/PP-OCRv5-server-det")
-@strict(accept_kwargs=True)
+@auto_docstring(checkpoint="PaddlePaddle/PP-OCRv5_server_det_safetensors")
+@strict
 class PPOCRV5ServerDetConfig(PreTrainedConfig):
     r"""
     interpolate_mode (`str`, *optional*, defaults to `"nearest"`):
