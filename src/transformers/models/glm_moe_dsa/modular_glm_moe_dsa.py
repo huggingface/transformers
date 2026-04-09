@@ -258,7 +258,7 @@ class GlmMoeDsaIndexer(nn.Module):
         if use_cache:
             if self._cached_keys is not None:
                 k_cached = torch.cat([self._cached_keys, k_fp8], dim=1)  # [B, T, D]
-                k_scale_cached = torch.cat([self._cached_keys_scales, k_scale], dim=1)  # [B, T//block, scale]
+                k_scale_cached = torch.cat([self._cached_keys_scales, k_scale.squeeze(-1)], dim=1)  # [B, T]
             else:
                 k_cached = k_fp8
                 k_scale_cached = k_scale.squeeze(-1)
