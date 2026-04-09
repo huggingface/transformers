@@ -23,7 +23,7 @@ logger = logging.get_logger(__name__)
 
 
 @auto_docstring(checkpoint="google/pix2struct-base")
-@strict(accept_kwargs=True)
+@strict
 class Pix2StructTextConfig(PreTrainedConfig):
     r"""
     relative_attention_num_buckets (`int`, *optional*, defaults to 32):
@@ -68,7 +68,7 @@ class Pix2StructTextConfig(PreTrainedConfig):
     num_heads: int = 12
     relative_attention_num_buckets: int = 32
     relative_attention_max_distance: int = 128
-    dropout_rate: float = 0.1
+    dropout_rate: float | int = 0.1
     layer_norm_epsilon: float = 1e-6
     initializer_factor: float = 1.0
     dense_act_fn: str = "gelu_new"
@@ -83,11 +83,9 @@ class Pix2StructTextConfig(PreTrainedConfig):
 
 
 @auto_docstring(checkpoint="google/pix2struct-base")
-@strict(accept_kwargs=True)
+@strict
 class Pix2StructVisionConfig(PreTrainedConfig):
     r"""
-    dense_act_fn (`Union[Callable, str]`, *optional*, defaults to `"gelu_new"`):
-        The non-linear activation function (function or string).
     patch_embed_hidden_size (`int`, *optional*, defaults to 768):
         Dimensionality of the input patch_embedding layer in the Transformer encoder.
     d_ff (`int`, *optional*, defaults to 2048):
@@ -96,6 +94,8 @@ class Pix2StructVisionConfig(PreTrainedConfig):
         Dimensionality of the key, query, value projections per attention head.
     The non-linear activation function (function or string) in the encoder and pooler. If string, `"gelu"`,
         `"relu"`, `"selu"` and `"gelu_new"` `"gelu"` are supported.
+    dense_act_fn (`Union[Callable, str]`, *optional*, defaults to `"gelu_new"`):
+        The non-linear activation function (function or string).
     seq_len (`int`, *optional*, defaults to 4096):
         Maximum sequence length (here number of patches) supported by the model.
     relative_attention_num_buckets (`int`, *optional*, defaults to 32):
@@ -128,7 +128,7 @@ class Pix2StructVisionConfig(PreTrainedConfig):
     num_attention_heads: int = 12
     dense_act_fn: str = "gelu_new"
     layer_norm_eps: float = 1e-6
-    dropout_rate: float = 0.0
+    dropout_rate: float | int = 0.0
     attention_dropout: float | int = 0.0
     initializer_range: float = 1e-10
     initializer_factor: float = 1.0
@@ -138,7 +138,7 @@ class Pix2StructVisionConfig(PreTrainedConfig):
 
 
 @auto_docstring(checkpoint="google/pix2struct-base")
-@strict(accept_kwargs=True)
+@strict
 class Pix2StructConfig(PreTrainedConfig):
     r"""
     is_vqa (`bool`, *optional*, defaults to `False`):

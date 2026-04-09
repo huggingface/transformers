@@ -1280,7 +1280,9 @@ class PreTrainedTokenizerBase(PushToHubMixin):
 
         # Named special tokens (bos_token, eos_token, etc.)
         if key_without_id in self.SPECIAL_TOKENS_ATTRIBUTES:
-            token_value = self._special_tokens_map.get(key_without_id)
+            # Use __dict__.get to avoid recursive __getattr__ when _special_tokens_map
+            # is not yet initialized (e.g. during fast tokenizer __init__)
+            token_value = self.__dict__.get("_special_tokens_map", {}).get(key_without_id)
             if token_value is None:
                 if self.verbose:
                     logger.error(f"Using {key}, but it is not set yet.")
@@ -1289,10 +1291,16 @@ class PreTrainedTokenizerBase(PushToHubMixin):
 
         # Extra special tokens
         if key_without_id == "extra_special_tokens":
-            tokens = [str(tok) for tok in self._extra_special_tokens]
+            tokens = [str(tok) for tok in self.__dict__.get("_extra_special_tokens", [])]
             return self.convert_tokens_to_ids(tokens) if key != key_without_id else tokens
 
         if key not in self.__dict__:
+            # Also check the class hierarchy (handles class-level defaults, e.g. in
+            # dynamically loaded remote code where __getattr__ may be called before
+            # the instance attribute is set)
+            for cls in type(self).__mro__:
+                if key in vars(cls):
+                    return vars(cls)[key]
             raise AttributeError(f"{self.__class__.__name__} has no attribute {key}")
         return super().__getattr__(key)
 
@@ -1498,7 +1506,7 @@ class PreTrainedTokenizerBase(PushToHubMixin):
                 - A path to a *directory* containing vocabulary files required by the tokenizer, for instance saved
                   using the [`~tokenization_utils_base.PreTrainedTokenizerBase.save_pretrained`] method, e.g.,
                   `./my_model_directory/`.
-                - (**Deprecated**, not applicable to all derived classes) A path or url to a single saved vocabulary
+                - (**Deprecated**, not applicable to all derived classes) a path to a single saved vocabulary
                   file (if and only if the tokenizer only requires a single vocabulary file like Bert or XLNet), e.g.,
                   `./my_model_directory/vocab.txt`.
             cache_dir (`str` or `os.PathLike`, *optional*):
@@ -3298,9 +3306,6 @@ class PreTrainedTokenizerBase(PushToHubMixin):
         Converts an output string created by generating text from a model into a parsed message dictionary.
         This method is intended for use with chat models, and will read the tokenizer's `response_schema` attribute to
         control parsing, although this can be overridden by passing a `response_schema` argument directly.
-
-        This method is currently **highly experimental** and the schema specification is likely to change in future!
-        We recommend not building production code on top of it just yet.
 
         Args:
             response (`str`):

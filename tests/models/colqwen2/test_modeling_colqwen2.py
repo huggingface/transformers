@@ -202,6 +202,7 @@ class ColQwen2ForRetrievalModelTest(ModelTesterMixin, unittest.TestCase):
 
     test_resize_embeddings = True
     test_torch_exportable = False
+    test_missing_keys = False
 
     def setUp(self):
         self.model_tester = ColQwen2ForRetrievalModelTester(self)

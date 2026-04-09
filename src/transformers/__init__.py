@@ -18,7 +18,7 @@
 # to defer the actual importing for when the objects are requested. This way `import transformers` provides the names
 # in the namespace without actually importing anything (and especially none of the backends).
 
-__version__ = "5.3.0.dev0"
+__version__ = "5.6.0.dev0"
 
 import importlib
 import sys
@@ -330,7 +330,7 @@ except OptionalDependencyNotAvailable:
         name for name in dir(dummy_vision_objects) if not name.startswith("_")
     ]
 else:
-    _import_structure["image_processing_backends"] = ["PilBackend", "TorchvisionBackend"]
+    _import_structure["image_processing_backends"] = ["PilBackend"]
     _import_structure["image_processing_base"] = ["ImageProcessingMixin"]
     _import_structure["image_processing_utils"] = ["BaseImageProcessor"]
     _import_structure["image_utils"] = ["ImageFeatureExtractionMixin"]
@@ -345,6 +345,8 @@ except OptionalDependencyNotAvailable:
         name for name in dir(dummy_torchvision_objects) if not name.startswith("_")
     ]
 else:
+    _import_structure.setdefault("image_processing_backends", [])
+    _import_structure["image_processing_backends"] += ["TorchvisionBackend"]
     _import_structure["video_processing_utils"] = ["BaseVideoProcessor"]
 
 # PyTorch-backed objects
@@ -632,7 +634,6 @@ if TYPE_CHECKING:
     from .modeling_utils import AttentionInterface as AttentionInterface
     from .modeling_utils import PreTrainedModel as PreTrainedModel
     from .models import *
-    from .models.mamba.modeling_mamba import MambaCache as MambaCache
     from .models.timm_wrapper import TimmWrapperImageProcessor as TimmWrapperImageProcessor
 
     # Optimization
@@ -822,6 +823,28 @@ else:
     _create_module_alias(f"{__name__}.tokenization_utils", ".tokenization_utils_sentencepiece")
     _create_module_alias(f"{__name__}.image_processing_utils_fast", ".image_processing_backends")
 
+    for _proc_file in sorted((Path(__file__).parent / "models").rglob("image_processing_*.py")):
+        _model = _proc_file.parent.name
+        _module = _proc_file.stem
+        _target = f".models.{_model}.{_module}"
+        _create_module_alias(f"{__name__}.models.{_model}.{_module}_fast", _target)
+
+        # Also map XImageProcessorFast -> XImageProcessor for backward compat with old class names.
+        def getattr_factory(target):
+            def _getattr(name):
+                new_name = name.removesuffix("Fast")
+                logger.warning(
+                    "Accessing `%s` from `%s`. Returning `%s` instead. Behavior may be "
+                    "different and this alias will be removed in future versions.",
+                    name,
+                    target,
+                    new_name,
+                )
+                return getattr(importlib.import_module(target, __name__), new_name)
+
+            return _getattr
+
+        sys.modules[f"{__name__}.models.{_model}.{_module}_fast"].__getattr__ = getattr_factory(_target)
 
 if not is_torch_available():
     logger.warning_advice(

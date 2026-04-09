@@ -16,6 +16,63 @@ limitations under the License.
 
 # Contribute to 🤗 Transformers
 
+## Code agent policy
+
+>[!WARNING]
+>The Transformers repo is currently being overwhelmed by a large number of PRs and issue comments written by
+>code agents. We are currently bottlenecked by our ability to review and respond to them. As a result, 
+>**we ask that new users do not submit pure code agent PRs** at this time. 
+>You may use code agents in drafting or to help you diagnose issues. We'd also ask autonomous agents
+>not to open any PRs or issues for the moment.
+>
+>PRs that appear to be fully agent-written will probably be closed without review, and we may block users who do this
+>repeatedly or maliciously.
+
+<details>
+
+<summary> Our code agent philosophy in detail </summary>
+
+We understand that code agents are extremely powerful tools, and many people at Hugging Face use them in their work.
+However, it's important to realize that **if you simply run a code agent
+and generate a PR to an open-source project, you are merely a middleman between the reviewers and the agent**. 
+Although doing this creates something that looks very much like a useful contribution, in reality there was no reason 
+for you to be involved; the reviewers could have simply run the code agent themselves.
+
+If you want to contribute usefully to open-source in the agent era, **you need to do things that agents can't do on
+their own**. In particular, we've found the following to be very helpful:
+- Clear diagnosis of bugs. Code agents like to quickly fix problems with a workaround that often causes code bloat
+or incompatibilities with other models. Spending time to track down the exact cause of a problem, and in particular
+locating the first commit where it appeared (for example with [git bisect](https://git-scm.com/docs/git-bisect)) is valuable.
+- Minimize the diff. Check your PR to eliminate any unnecessary changes. Ensure that you did not commit any testing scripts
+or unrelated files. Add comments only if they're really necessary; code agents love adding three new functions and
+multi-line comments to draw attention to all the hard work they did. If your PR can be a 1-line fix,
+make it a 1-line fix. This makes the PR much easier to review and improves the chances that it will be accepted.
+- Take the time to reproduce the problem. Very often when a user reports an issue, the issue is actually caused by
+environment issues on their machine, or they misdiagnose the problem and suggest an invalid solution. Many code agents
+trust the user comments too much, which results in bad solutions, sometimes for problems that 
+do not exist! Writing a simple reproducer script and running it to make sure you see the problem is valuable.
+- Compare against other models. The Transformers repo is very large, and many models are doing similar things. When
+fixing a bug, it's valuable to see if the bug exists in other models. If your PR says
+"fixed by using the same approach as (other model)", with a link to the relevant code, that is very helpful for maintainers,
+because it tells us that the fix is likely to be correct and compatible with the rest of the codebase. Code agents often
+look at the code "narrowly", and make a fix that causes models to diverge from the rest of the codebase.
+- Avoid small or "busywork" PRs. In the past, we used to accept these, but given the current flood, we simply don't
+have time for small style changes or typo fixes in comments. You can provide value beyond a code
+agent simply by having good taste about what's really important.
+- Verify tests locally and in the CI. Before opening a PR, run `make fix-repo` and use `utils/tests_fetcher.py` to 
+see a list of tests that cover the files you have changed in your PR branch. Run those tests locally, and make sure 
+they pass before you open a PR. After you open your PR, please verify that the CI is green and fix any issues before 
+pinging anyone for review! This reduces notification spam a lot, which keeps maintainers sane.
+
+Please bear in mind that this is an exciting, rapidly-changing but challenging era for open-source development, and indeed
+for the software industry as a whole. We will likely be rapidly updating these guidelines as we learn more about
+dealing effectively with code agents. Have patience with us if reviews are slower than normal, or if some
+PRs are closed without review!
+
+</details>
+
+## Welcome to the 🤗 Transformers community!
+
 Everyone is welcome to contribute, and we value everybody's contribution. Code
 contributions are not the only way to help the community. Answering questions, helping
 others, and improving the documentation are also immensely valuable.
@@ -195,7 +252,7 @@ The library has 400+ models with many established patterns:
 - Search for similar models (e.g., other vision-language models)
 - Reuse attention mechanisms, layer implementations, and processing patterns
 - Check models like LLaVA, Idefics2, Fuyu for vision-language patterns
-- Use provided decorators like (`auto_docstring`, `can_return_tuple`, `check_model_inputs` and `_can_record_outputs`) where relevant.
+- Use provided decorators like (`auto_docstring`, `can_return_tuple`, `capture_outputs`, `merge_with_config_defaults` and `_can_record_outputs`) where relevant.
 - Don't reinvent the wheel
 
 ☐ **7. Run quality checks and read the output**
@@ -337,7 +394,7 @@ You'll need **[Python 3.9](https://github.com/huggingface/transformers/blob/main
    make sure you install the [documentation builder](https://github.com/huggingface/doc-builder).
 
    ```bash
-   pip install hf-doc-builder
+   pip install ".[docs]"
    ```
 
    Run the following command from the root of the repository:
@@ -348,6 +405,18 @@ You'll need **[Python 3.9](https://github.com/huggingface/transformers/blob/main
 
    This will build the documentation in the `~/tmp/test-build` folder where you can inspect the generated
    Markdown files with your favorite editor. You can also preview the docs on GitHub when you open a pull request.
+
+   If you're adding or editing runnable examples in Markdown docs, mark Python fences with `runnable` or
+   `runnable:<label>` and run them locally with `pytest`:
+
+   ```bash
+   pytest -q docs/source/en/my_page.md
+   pytest -q docs/source/en/
+   ```
+
+   For the full runnable syntax, including continuation blocks, `# pytest-decorator:`, and
+   `# doc-builder: hide`, see the
+   [doc-builder runnable code blocks guide](https://github.com/huggingface/doc-builder/blob/main/docs/runnable-code-blocks.md).
 
    Once you're happy with your changes, add the changed files with `git add` and
    record your changes locally with `git commit`:

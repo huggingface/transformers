@@ -23,7 +23,7 @@ logger = logging.get_logger(__name__)
 
 
 @auto_docstring(checkpoint="BAAI/AltCLIP")
-@strict(accept_kwargs=True)
+@strict
 class AltCLIPTextConfig(PreTrainedConfig):
     r"""
     project_dim (`int`, *optional*, defaults to 768):
@@ -52,8 +52,8 @@ class AltCLIPTextConfig(PreTrainedConfig):
     num_attention_heads: int = 16
     intermediate_size: int = 4096
     hidden_act: str = "gelu"
-    hidden_dropout_prob: float = 0.1
-    attention_probs_dropout_prob: float = 0.1
+    hidden_dropout_prob: float | int = 0.1
+    attention_probs_dropout_prob: float | int = 0.1
     max_position_embeddings: int = 514
     type_vocab_size: int = 1
     initializer_range: float = 0.02
@@ -66,7 +66,7 @@ class AltCLIPTextConfig(PreTrainedConfig):
 
 
 @auto_docstring(checkpoint="BAAI/AltCLIP")
-@strict(accept_kwargs=True)
+@strict
 class AltCLIPVisionConfig(PreTrainedConfig):
     r"""
     Example:
@@ -103,7 +103,7 @@ class AltCLIPVisionConfig(PreTrainedConfig):
 
 
 @auto_docstring(checkpoint="BAAI/AltCLIP")
-@strict(accept_kwargs=True)
+@strict
 class AltCLIPConfig(PreTrainedConfig):
     r"""
     Example:

@@ -18,7 +18,7 @@ from dataclasses import dataclass
 import torch
 from torch import nn
 
-from transformers import AutoModelForImageTextToText
+from transformers import AutoModel
 
 from ... import initialization as init
 from ...cache_utils import Cache
@@ -102,12 +102,14 @@ class ColPaliForRetrievalOutput(ModelOutput):
     """
 )
 class ColPaliForRetrieval(ColPaliPreTrainedModel):
+    base_model_prefix = "vlm"
+
     def __init__(self, config: ColPaliConfig):
         super().__init__(config)
         self.config = config
         self.vocab_size = config.vlm_config.text_config.vocab_size
 
-        self.vlm = AutoModelForImageTextToText.from_config(config.vlm_config)
+        self.vlm = AutoModel.from_config(config.vlm_config)
 
         self.embedding_dim = self.config.embedding_dim
         self.embedding_proj_layer = nn.Linear(
@@ -132,7 +134,7 @@ class ColPaliForRetrieval(ColPaliPreTrainedModel):
         if output_hidden_states is None:
             output_hidden_states = self.config.output_hidden_states
 
-        vlm_output = self.vlm.model(
+        vlm_output = self.vlm(
             input_ids=input_ids,
             attention_mask=attention_mask,
             pixel_values=pixel_values,
@@ -159,37 +161,6 @@ class ColPaliForRetrieval(ColPaliPreTrainedModel):
             attentions=vlm_output.attentions,
             image_hidden_states=vlm_image_hidden_states,
         )
-
-    def get_input_embeddings(self):
-        return self.vlm.get_input_embeddings()
-
-    def set_input_embeddings(self, value):
-        self.vlm.set_input_embeddings(value)
-
-    def get_output_embeddings(self):
-        return self.vlm.get_output_embeddings()
-
-    def set_output_embeddings(self, new_embeddings):
-        self.vlm.set_output_embeddings(new_embeddings)
-
-    def resize_token_embeddings(
-        self,
-        new_num_tokens: int | None = None,
-        pad_to_multiple_of: int | None = None,
-        mean_resizing: bool = True,
-    ) -> nn.Embedding:
-        model_embeds = self.vlm.resize_token_embeddings(
-            new_num_tokens=new_num_tokens,
-            pad_to_multiple_of=pad_to_multiple_of,
-            mean_resizing=mean_resizing,
-        )
-
-        self.config.vlm_config.text_config.vocab_size = model_embeds.num_embeddings
-        self.config.vlm_config.vocab_size = model_embeds.num_embeddings
-        self.vlm.vocab_size = model_embeds.num_embeddings
-        self.vocab_size = model_embeds.num_embeddings
-
-        return model_embeds
 
 
 __all__ = [

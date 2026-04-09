@@ -22,14 +22,14 @@ from ..auto import CONFIG_MAPPING, AutoConfig
 
 
 @auto_docstring(checkpoint="llava-hf/llava-onevision-qwen2-7b-ov-hf")
-@strict(accept_kwargs=True)
+@strict
 class LlavaOnevisionConfig(PreTrainedConfig):
     r"""
-    vision_aspect_ratio (`str`, *optional*, defaults to `"anyres_max_9"`):
-        Aspect ratio used when processong image features. The default value is "anyres_max_9".
     image_grid_pinpoints (`List`, *optional*):
         A list of possible resolutions to use for processing high resolution images. Each item in the list should be a tuple or list
         of the form `(height, width)`.
+    vision_aspect_ratio (`str`, *optional*, defaults to `"anyres_max_9"`):
+        Aspect ratio used when processong image features. The default value is "anyres_max_9".
 
     Example:
 

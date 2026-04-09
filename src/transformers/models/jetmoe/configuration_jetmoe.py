@@ -21,7 +21,7 @@ from ...utils import auto_docstring
 
 
 @auto_docstring(checkpoint="jetmoe/jetmoe-8b")
-@strict(accept_kwargs=True)
+@strict
 class JetMoeConfig(PreTrainedConfig):
     r"""
     kv_channels (`int`, *optional*, defaults to 128):
@@ -40,7 +40,8 @@ class JetMoeConfig(PreTrainedConfig):
 
     >>> # Accessing the model configuration
     >>> configuration = model.config
-    ```"""
+    ```
+    """
 
     model_type = "jetmoe"
     keys_to_ignore_at_inference = ["past_key_values"]

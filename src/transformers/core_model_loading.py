@@ -101,6 +101,17 @@ class ConversionOps:
         raise NotImplementedError
 
 
+class _IdentityOp(ConversionOps):
+    """Pass-through reverse op for dequantize operations.
+
+    Dequantized weights are already in their target dtype and should be
+    saved as-is without any conversion.
+    """
+
+    def convert(self, input_dict: dict[str, Any], **kwargs) -> dict[str, Any]:
+        return input_dict
+
+
 class Chunk(ConversionOps):
     """Split a tensor along ``dim`` into equally sized chunks."""
 
@@ -452,42 +463,6 @@ class ErnieSplitAndDecoupleTextVisionExperts(ConversionOps):
         return ErnieFuseAndSplitTextVisionExperts(stack_dim=self.stack_dim, concat_dim=self.concat_dim)
 
 
-class Force16BytesAlignment(ConversionOps):
-    """
-    Ensures that the given tensor is 16-bytes aligned in memory and clones it if not.
-    This guarantees 16-bytes alignment for kernels / implementations that use TMA or SIMD instructions like torch.nn.functional.grouped_mm.
-    """
-
-    @torch.no_grad()
-    def convert(
-        self, input_dict: dict[str, torch.Tensor], source_patterns: list[str], target_patterns: list[str], **kwargs
-    ) -> dict[str, torch.Tensor]:
-        target_pattern = self.get_target_pattern(input_dict, source_patterns, target_patterns)
-        tensors = next(iter(input_dict.values()))
-        tensor = tensors[0] if isinstance(tensors, list) else tensors
-        tensor = tensor.clone() if tensor.data_ptr() % 16 != 0 else tensor
-        return {target_pattern: tensor}
-
-    def get_target_pattern(
-        self, input_dict: dict[str, torch.Tensor], source_patterns: list[str], target_patterns: list[str]
-    ) -> str:
-        if len(input_dict) != 1:
-            raise ValueError("Undefined Operation encountered!")
-        # Here it's the first operation of a chain, so return the source
-        if len(target_patterns) > 1:
-            if len(source_patterns) == 1:
-                return source_patterns[0]
-            else:
-                raise ValueError("Undefined Operation encountered!")
-        # Here it's the only operation, or the last operation in a chain, so we return the target
-        else:
-            return target_patterns[0]
-
-    @property
-    def reverse_op(self) -> ConversionOps:
-        return Force16BytesAlignment()
-
-
 def process_target_pattern(pattern: str) -> tuple[str, str | None]:
     """
     Process a target pattern for reverse mapping (when targets become sources).
@@ -550,6 +525,10 @@ class WeightTransform:
     collected_tensors: dict[str, list[Future]] = field(default_factory=lambda: defaultdict(list), init=False)
     layer_targets: dict[str, set[str]] = field(default_factory=lambda: defaultdict(set), init=False)
 
+    # Those are needed to be able to reverse correctly the transform, as the patterns may be processed
+    _original_source_patterns: list[str] = field(init=False)
+    _original_target_patterns: list[str] = field(init=False)
+
     def __setattr__(self, name, value):
         if name in ("source_patterns", "target_patterns"):
             # We do not allow to re-set the patterns, as they are linked between each other and changing one
@@ -566,10 +545,13 @@ class WeightTransform:
         # when instantiating the reverse mapping (i.e. the targets become sources, and sources become targets)
         # The issues lie in the sources usually, so here we need to check the targets for the reversed mapping
 
+        # We need to copy the exact original patterns to later reverse (before processing may change them)
+        self._original_source_patterns = self.source_patterns.copy()
+        self._original_target_patterns = self.target_patterns.copy()
+
         # Process target_patterns: detect capturing groups and replace with \1
         # Store the original capturing group patterns for reverse mapping
         target_capturing_groups: list[str] = []
-        unprocess_targets = self.target_patterns.copy()
         for i, pattern in enumerate(self.target_patterns):
             self.target_patterns[i], captured_group = process_target_pattern(pattern)
             if captured_group is not None:
@@ -598,7 +580,7 @@ class WeightTransform:
                 pattern = pattern.replace(r"\1", unique_capturing_group, 1)
             # Potentially process a bit more for consistency - only if they are consistent pairs, i.e. the length is the same
             if len(self.source_patterns) == len(self.target_patterns):
-                pattern = process_source_pattern(pattern, unprocess_targets[i])
+                pattern = process_source_pattern(pattern, self._original_target_patterns[i])
             self.source_patterns[i] = pattern
 
         # Construct the regex we will use to rename keys from the sources to the targets
@@ -636,7 +618,7 @@ class WeightTransform:
             # inside that matched named group
             replaced_group_idx = self.compiled_sources.groupindex[matching_group_name] + 1
             replacement = replacement.replace(r"\1", match_object.group(replaced_group_idx))
-        renamed_key = source_key.replace(match_object.group(0), replacement)
+        renamed_key = source_key.replace(match_object.group(0), replacement, 1)
         return renamed_key, source_pattern_that_matched
 
     def reverse_transform(self) -> WeightTransform:
@@ -652,7 +634,7 @@ class WeightTransform:
             kwargs["operations"] = [op.reverse_op for op in self.operations[::-1]]
 
         reverse_transform = self.__class__(
-            source_patterns=self.target_patterns, target_patterns=self.source_patterns, **kwargs
+            source_patterns=self._original_target_patterns, target_patterns=self._original_source_patterns, **kwargs
         )
 
         return reverse_transform
