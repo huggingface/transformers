@@ -694,8 +694,17 @@ def replace_with_mxfp4_linear(model, quantization_config=None, modules_to_not_co
         if not should_convert_module(module_name, modules_to_not_convert):
             continue
         if module.__class__.__name__ == "GptOssExperts" and not quantization_config.dequantize:
+            if model.config.is_heterogeneous:
+                layer_idx_str = next((p for p in reversed(module_name.split(".")) if p.isdigit()), None)
+                if layer_idx_str is None:
+                    raise ValueError(f"Could not find layer index in module name: {module_name}")
+                layer_idx = int(layer_idx_str)
+                config = model.config.get_full_layer_config(layer_idx)
+            else:
+                config = model.config
+
             with torch.device("meta"):
-                model.set_submodule(module_name, Mxfp4GptOssExperts(model.config))
+                model.set_submodule(module_name, Mxfp4GptOssExperts(config))
                 has_been_replaced = True
         if module.__class__.__name__ == "GptOssMLP" and not quantization_config.dequantize:
             from types import MethodType

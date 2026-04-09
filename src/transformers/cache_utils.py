@@ -1224,13 +1224,25 @@ class DynamicCache(Cache):
         # If a config is passed, use it to infer the layer types and initialize accordingly
         if config is not None:
             decoder_config = config.get_text_config(decoder=True)
-            sliding_window = getattr(decoder_config, "sliding_window", None) or getattr(
-                decoder_config, "attention_chunk_size", None
-            )
+            if decoder_config.is_heterogeneous and (
+                {"sliding_window", "attention_chunk_size"} & decoder_config.per_layer_attributes
+            ):
+                sliding_windows = []
+                for layer_idx in range(decoder_config.num_hidden_layers):
+                    layer_config = decoder_config.get_full_layer_config(layer_idx)
+                    sliding_windows.append(
+                        getattr(layer_config, "sliding_window", None)
+                        or getattr(layer_config, "attention_chunk_size", None)
+                    )
+            else:
+                sliding_windows = [
+                    getattr(decoder_config, "sliding_window", None)
+                    or getattr(decoder_config, "attention_chunk_size", None)
+                ] * decoder_config.num_hidden_layers
             layer_types = getattr(decoder_config, "layer_types", None)
             if layer_types is None:
                 layer_types = []
-                for _ in range(decoder_config.num_hidden_layers):
+                for sliding_window in sliding_windows:
                     if sliding_window is not None:
                         layer_types.append("sliding_attention")
                     else:
@@ -1239,11 +1251,11 @@ class DynamicCache(Cache):
             if hasattr(decoder_config, "num_kv_shared_layers"):
                 layer_types = layer_types[: -decoder_config.num_kv_shared_layers]
 
-            for layer_type in layer_types:
+            for layer_idx, layer_type in enumerate(layer_types):
                 # From a cache point of view, both sliding and chunked are the same in how they should behave and how many
                 # states they should return - only the mask changes to make them different at the end!
                 if layer_type in ("sliding_attention", "chunked_attention"):
-                    layers.append(DynamicSlidingWindowLayer(sliding_window=sliding_window))
+                    layers.append(DynamicSlidingWindowLayer(sliding_window=sliding_windows[layer_idx]))
                 # Note: we want moe layers to be LinearAttentionLayer, so that we can correctly grab sequence length etc from attention layers.
                 # Since moe layers will stay empty (they don't need any cache), we don't want them to collide for mask creation etc
                 # TODO: maybe use a dummy layer in those cases, or a dictionary {idx: Layer} for self.layers, so that we can skip
@@ -1338,28 +1350,40 @@ class StaticCache(Cache):
         **kwargs,
     ):
         config = config.get_text_config(decoder=True)
+
+        if config.is_heterogeneous and ({"sliding_window", "attention_chunk_size"} & config.per_layer_attributes):
+            sliding_windows = []
+            for layer_idx in range(config.num_hidden_layers):
+                layer_config = config.get_full_layer_config(layer_idx)
+                sliding_windows.append(
+                    getattr(layer_config, "sliding_window", None)
+                    or getattr(layer_config, "attention_chunk_size", None)
+                )
+        else:
+            sliding_windows = [
+                getattr(config, "sliding_window", None) or getattr(config, "attention_chunk_size", None)
+            ] * config.num_hidden_layers
+
         layer_types = getattr(config, "layer_types", None)
-        # If `layer_types` is not explicitly provided, infer if the model is fully sliding
+        # If `layer_types` is not explicitly provided, infer from sliding windows
         if layer_types is None:
-            if getattr(config, "sliding_window", None) is not None:
-                layer_types = ["sliding_attention" for _ in range(config.num_hidden_layers)]
-            elif getattr(config, "attention_chunk_size", None) is not None:
-                layer_types = ["chunked_attention" for _ in range(config.num_hidden_layers)]
-            else:
-                layer_types = ["full_attention" for _ in range(config.num_hidden_layers)]
+            layer_types = []
+            for sliding_window in sliding_windows:
+                if sliding_window is not None:
+                    layer_types.append("sliding_attention")
+                else:
+                    layer_types.append("full_attention")
         # Some models have shared layers thus no cache is needed for them (e.g. Gemma3n)
         if hasattr(config, "num_kv_shared_layers"):
             layer_types = layer_types[: -config.num_kv_shared_layers]
 
         layers = []
-        for layer_type in layer_types:
-            if layer_type == "sliding_attention":
-                layer = StaticSlidingWindowLayer(max_cache_len=max_cache_len, sliding_window=config.sliding_window)
-            elif layer_type == "chunked_attention":
+        for layer_idx, layer_type in enumerate(layer_types):
+            if layer_type in ("sliding_attention", "chunked_attention"):
                 # From a cache point of view, both sliding and chunked are the same in how they should behave and how many
                 # states they should return - only the mask changes to make them different at the end!
                 layer = StaticSlidingWindowLayer(
-                    max_cache_len=max_cache_len, sliding_window=config.attention_chunk_size
+                    max_cache_len=max_cache_len, sliding_window=sliding_windows[layer_idx]
                 )
             # LinearAttention layers are static by essence - using `"moe"` as well is a trick, see the comment about it on DynamicCache
             elif layer_type in ("mamba", "conv", "linear_attention", "moe"):
