@@ -94,19 +94,10 @@ class Gemma4TextConfig(PreTrainedConfig):
         Vocabulary size for the per-layer input embeddings (PLE). Used by models with
         per-layer residual streams where a smaller embedding is added at each decoder layer.
     hidden_size_per_layer_input (`int`, defaults to 256):
-        Per-layer hidden dimension for the per-layer input embeddings (PLE). This is the
-        dimension of each layer's individual embedding slice. Note: the actual embedding
-        weight has shape `[vocab_size_per_layer_input, num_hidden_layers * hidden_size_per_layer_input]`
-        (e.g. `[262144, 8960]` for 35 layers x 256 dims) because all layers are packed into
-        a single embedding table. The embedding is also a `Gemma4TextScaledWordEmbedding`
-        that scales lookups by `sqrt(hidden_size_per_layer_input)`.
-
-        The full PLE pipeline in `Gemma4TextModel` combines two components:
-        1. **Token-identity**: `embed_tokens_per_layer(input_ids)` (scaled), reshaped to
-           `[batch, seq, num_hidden_layers, hidden_size_per_layer_input]`
-        2. **Context-aware**: `per_layer_model_projection(inputs_embeds)` scaled by
-           `1/sqrt(hidden_size)`, reshaped, then normalized by `per_layer_projection_norm`
-        These are summed and scaled by `1/sqrt(2)` before being passed to each decoder layer.
+        Per-layer hidden dimension for the PLE system. The actual embedding weight has shape
+        `[vocab_size_per_layer_input, num_hidden_layers * hidden_size_per_layer_input]`
+        because all layers are packed into a single table. See the [Gemma4](https://huggingface.co/docs/transformers/main/en/model_doc/gemma4#per-layer-embeddings-ple) docs
+        for a description of the full PLE pipeline.
     num_global_key_value_heads (`int`, *optional*):
         Number of key-value heads for global (full) attention layers. If `None`, defaults
         to `num_key_value_heads`.

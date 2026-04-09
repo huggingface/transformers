@@ -57,6 +57,24 @@ To encode positional information for each patch in the image, Gemma 4 uses a lea
 
 
 
+### Per-Layer Embeddings (PLE)
+
+Gemma 4 introduces a **Per-Layer Embeddings (PLE)** system that feeds an auxiliary residual signal into each decoder layer, rather than relying solely on a single shared embedding at the input.
+
+#### Key config parameters
+
+- `vocab_size_per_layer_input` (default 262144): vocabulary size for PLE.
+- `hidden_size_per_layer_input` (default 256): per-layer embedding dimension. The actual embedding weight has shape `[vocab_size_per_layer_input, num_hidden_layers * hidden_size_per_layer_input]` (e.g. `[262144, 8960]` for 35 layers × 256 dims) because all layers are packed into a single embedding table.
+
+#### Pipeline
+
+PLE combines two components that are summed and scaled by `1/√2` before being fed to each decoder layer:
+
+1. **Token-identity** (`get_per_layer_inputs`): looks up `input_ids` in `embed_tokens_per_layer`, a `Gemma4TextScaledWordEmbedding` that multiplies by `√(hidden_size_per_layer_input)`. The packed output is reshaped from `[batch, seq, num_hidden_layers * hidden_size_per_layer_input]` to `[batch, seq, num_hidden_layers, hidden_size_per_layer_input]`.
+2. **Context-aware** (`project_per_layer_inputs`): projects `inputs_embeds` through `per_layer_model_projection` (a Linear layer), scales by `1/√(hidden_size)`, reshapes to `[batch, seq, num_layers, ple_dim]`, and normalizes with `per_layer_projection_norm` (RMSNorm).
+
+When both components are available, the final per-layer input is `(token_identity + context_aware) * (1/√2)`. For multimodal inputs where `input_ids` are not available, only the context-aware projection is used.
+
 ## Usage examples
 
 The example below demonstrates how to generate text based on an image with [`Pipeline`] or the [`AutoModel`] class.
