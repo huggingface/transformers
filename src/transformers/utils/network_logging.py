@@ -343,7 +343,7 @@ _NETWORK_DEBUG_PROFILER = _NetworkDebugProfiler()
 
 
 _DEFAULT_REPORT_PATH = "network_debug_report.json"
-_DEFAULT_SLOW_TEST_THRESHOLD_S = 60.0
+_DEFAULT_SLOW_TEST_THRESHOLD_S = 30.0
 
 
 def _parse_network_debug_env() -> tuple[bool, str]:
