@@ -149,9 +149,9 @@ def _build_checkpoint_conversion_mapping():
             WeightRenaming("feedforward_layer_norm", "post_attention_layernorm"),
         ],
         "qwen3_5_text": [
-            # Mote: the lookbehind on the target is to avoid replacing bigger matches when the model is a submodel of
+            # Note: the lookbehind on the target is to avoid replacing bigger matches when the model is a submodel of
             # the ForConditionalGeneration model
-            WeightRenaming(source_patterns=r"^model.language_model", target_patterns=r"^model.(?!language_model)"),
+            WeightRenaming(source_patterns=r"^model.language_model.", target_patterns=r"^model.(?!language_model.)"),
         ],
         "sam3_tracker": [
             WeightRenaming(
