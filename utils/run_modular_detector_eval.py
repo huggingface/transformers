@@ -47,6 +47,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from modular_model_detector import (
     CodeSimilarityAnalyzer,
+    build_date_data,
     compute_model_class_match_summary,
 )
 
@@ -156,8 +157,11 @@ def clear_runtime_cache() -> None:
     """Best-effort memory cleanup between model evaluations."""
     gc.collect()
     if torch.cuda.is_available():
-        torch.cuda.empty_cache()
-        torch.cuda.ipc_collect()
+        try:
+            torch.cuda.empty_cache()
+            torch.cuda.ipc_collect()
+        except Exception as error:
+            logger.warning("Skipping CUDA cache cleanup due to CUDA runtime error: %s", error)
 
 
 def main():
@@ -261,6 +265,8 @@ def main():
         eval_entries = eval_entries[: args.limit]
         logger.info("Limited to first %d entries", args.limit)
 
+    dates = build_date_data()
+
     analyzer = None
     if not args.reload_analyzer_each_run:
         analyzer = CodeSimilarityAnalyzer(hub_dataset=args.hub_dataset)
@@ -273,12 +279,18 @@ def main():
         modeling_file: Path | None = None
         temp_dir: tempfile.TemporaryDirectory | None = None
 
-        if entry.get("original_modeling_code"):
+        # Prefer local originals_eval/ override if it exists — this ensures the eval
+        # uses the same file as a direct CLI run on originals_eval/modeling_{model_id}.py.
+        repo_root = Path(__file__).resolve().parent.parent
+        local_override = repo_root / "originals_eval" / f"modeling_{model_id}.py"
+
+        if local_override.exists():
+            modeling_file = local_override
+        elif entry.get("original_modeling_code"):
             temp_dir = tempfile.TemporaryDirectory(prefix=f"modular_eval_{model_id}_")
             modeling_file = Path(temp_dir.name) / f"modeling_{model_id}.py"
             modeling_file.write_text(entry["original_modeling_code"], encoding="utf-8")
         else:
-            repo_root = Path(__file__).resolve().parent.parent
             modular_file = Path(entry["modular_file"])
             if not modular_file.is_absolute():
                 modular_file = repo_root / modular_file
@@ -306,6 +318,7 @@ def main():
                 top_k_per_item=12,
                 allow_hub_fallback=True,
                 use_jaccard=True,
+                dates=dates,
             )
             total_classes, summary_list = compute_model_class_match_summary(raw_results)
         except Exception as e:

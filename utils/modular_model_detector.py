@@ -137,6 +137,10 @@ os.environ["TRANSFORMERS_VERBOSITY"] = "error"
 
 MODELS_ROOT = Path("src/transformers/models")
 DATASET_DIR = "code_index_dataset"
+
+# Models that exist under MODELS_ROOT but are not real model implementations.
+# They are excluded from both the index build and all similarity searches.
+NON_MODEL_DIRS: frozenset[str] = frozenset({"auto", "deprecated"})
 HUB_DATASET_DEFAULT = "itazap/transformers_code_embeddings_v3"
 
 EMBEDDING_MODEL = "Qwen/Qwen3-Embedding-4B"
@@ -309,15 +313,32 @@ class CodeSimilarityAnalyzer:
         self.models_root = MODELS_ROOT
         self.hub_dataset = hub_dataset
         self.tokenizer = AutoTokenizer.from_pretrained(EMBEDDING_MODEL)
-        self.model = AutoModel.from_pretrained(EMBEDDING_MODEL, torch_dtype="auto", device_map="auto").eval()
+        device_map = os.environ.get("MODULAR_DETECTOR_DEVICE_MAP")
+        if device_map:
+            # Optional override for advanced setups that explicitly want model sharding.
+            self.model = AutoModel.from_pretrained(EMBEDDING_MODEL, torch_dtype="auto", device_map=device_map).eval()
+            self.device = self.model.device
+        else:
+            # Default to a single device to avoid multi-GPU/NVLink peer-memory failures.
+            self.device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+            self.model = AutoModel.from_pretrained(EMBEDDING_MODEL, torch_dtype="auto")
+            try:
+                self.model = self.model.to(self.device).eval()
+            except Exception as error:
+                if self.device.type == "cuda":
+                    logging.warning(
+                        "failed to move embedding model to %s (%s); falling back to CPU",
+                        self.device,
+                        error,
+                    )
+                    self.device = torch.device("cpu")
+                    self.model = self.model.to(self.device).eval()
+                else:
+                    raise
 
-        self.device = self.model.device
         # Get dtype from model parameters
-        self.dtype = (
-            next(self.model.parameters()).dtype
-            if hasattr(self.model, "parameters") and len(list(self.model.parameters())) > 0
-            else torch.float32
-        )
+        first_param = next(self.model.parameters(), None)
+        self.dtype = first_param.dtype if first_param is not None else torch.float32
         self.dataset: Dataset | None = None
         self._gpu_lock = threading.Lock()
 
@@ -485,6 +506,8 @@ class CodeSimilarityAnalyzer:
 
         for file_path in tqdm(files, desc="Parsing modeling files", unit="file"):
             model_hint = self._infer_model_from_relative_path(file_path)
+            if model_hint in NON_MODEL_DIRS:
+                continue
             (
                 _,
                 definitions_sanitized,
@@ -531,6 +554,9 @@ class CodeSimilarityAnalyzer:
         for score, identifier in zip(scores_arr, examples["identifier"]):
             parent_relative_path, match_name = identifier.split(":", 1)
             parent_model = Path(parent_relative_path).parts[0]
+            # Skip non-model directories (e.g. auto, deprecated)
+            if parent_model in NON_MODEL_DIRS:
+                continue
             # Skip if same model
             if self_model_normalized and _normalize(parent_model) == self_model_normalized:
                 continue
@@ -579,6 +605,9 @@ class CodeSimilarityAnalyzer:
         for identifier, token_list in zip(self.dataset["identifier"], self.dataset["tokens"]):
             parent_relative_path, match_name = identifier.split(":", 1)
             parent_model = Path(parent_relative_path).parts[0]
+            # Skip non-model directories (e.g. auto, deprecated)
+            if parent_model in NON_MODEL_DIRS:
+                continue
             # Skip only if same model
             if self_model_normalized and _normalize(parent_model) == self_model_normalized:
                 continue
@@ -905,31 +934,31 @@ def _compare_models(
 ) -> int:
     """
     Comparison function for sorting models by:
-    1) number of matched classes (descending)
+    1) composite score = num_matched * mean_score (descending)
+       This balances coverage and quality: a model with fewer but higher-scoring
+       matches can rank above one with more weak matches.
     2) ancestry (base models before descendants)
-    3) mean score (descending)
-    4) lexicographic model id
+    3) lexicographic model id
     """
     model_a, classes_a = a
     model_b, classes_b = b
 
-    # Primary: number of matched classes (descending)
-    if len(classes_a) != len(classes_b):
-        return -1 if len(classes_a) > len(classes_b) else 1
+    scores_a = model_class_scores.get(model_a, {})
+    scores_b = model_class_scores.get(model_b, {})
+    mean_a = sum(scores_a.values()) / len(scores_a) if scores_a else 0.0
+    mean_b = sum(scores_b.values()) / len(scores_b) if scores_b else 0.0
+    composite_a = len(classes_a) * mean_a
+    composite_b = len(classes_b) * mean_b
+
+    # Primary: composite score (descending)
+    if composite_a != composite_b:
+        return -1 if composite_a > composite_b else 1
 
     # Secondary: ancestry-aware ordering (put ancestor first)
     if _is_descendant(model_a, model_b, inheritance_map):
         return 1  # a after b
     if _is_descendant(model_b, model_a, inheritance_map):
         return -1  # a before b
-
-    # Tertiary: mean score (descending)
-    scores_a = model_class_scores.get(model_a, {})
-    scores_b = model_class_scores.get(model_b, {})
-    mean_a = sum(scores_a.values()) / len(scores_a) if scores_a else 0.0
-    mean_b = sum(scores_b.values()) / len(scores_b) if scores_b else 0.0
-    if mean_a != mean_b:
-        return -1 if mean_a > mean_b else 1
 
     # Final: lexicographic model id for deterministic ordering
     if model_a < model_b:
@@ -1060,6 +1089,13 @@ def main():
         default=None,
         help="Comma-separated list of model IDs to exclude from results (e.g., 'bert,gpt2,llama').",
     )
+    parser.add_argument(
+        "--summary-only",
+        "--summaryonly",
+        dest="summary_only",
+        action="store_true",
+        help="Only print the model class match summary and skip the detailed per-symbol tables.",
+    )
     args = parser.parse_args()
 
     analyzer = CodeSimilarityAnalyzer(hub_dataset=args.hub_dataset)
@@ -1121,109 +1157,51 @@ def main():
         kind = data.get("kind", "function")
         grouped.setdefault(kind, []).append((query_name, data))
 
-    section_titles = [("class", "Classes"), ("function", "Functions")]
-    legend_shown = False
-    for kind, title in section_titles:
-        entries = grouped.get(kind, [])
-        if not entries:
-            continue
+    if not args.summary_only:
+        section_titles = [("class", "Classes"), ("function", "Functions")]
+        legend_shown = False
+        for kind, title in section_titles:
+            entries = grouped.get(kind, [])
+            if not entries:
+                continue
 
-        metrics_present: set[str] = set()
-        for _, data in entries:
-            if data.get("embedding"):
-                metrics_present.add("embedding")
-            if args.use_jaccard:
-                if data.get("jaccard"):
-                    metrics_present.add("jaccard")
-                if data.get("intersection"):
-                    metrics_present.add("intersection")
+            metrics_present: set[str] = set()
+            for _, data in entries:
+                if data.get("embedding"):
+                    metrics_present.add("embedding")
+                if args.use_jaccard:
+                    if data.get("jaccard"):
+                        metrics_present.add("jaccard")
+                    if data.get("intersection"):
+                        metrics_present.add("intersection")
 
-        include_metric_column = bool(metrics_present - {"embedding"})
-        headers = ["Symbol", "Path", "Score", "Release"]
-        if include_metric_column:
-            headers = ["Symbol", "Metric", "Path", "Score", "Release"]
+            include_metric_column = bool(metrics_present - {"embedding"})
+            headers = ["Symbol", "Path", "Score", "Release"]
+            if include_metric_column:
+                headers = ["Symbol", "Metric", "Path", "Score", "Release"]
 
-        table_rows: list[tuple[str, ...] | None] = []
-        row_styles: list[str] = []
-        has_metric_rows = False
+            table_rows: list[tuple[str, ...] | None] = []
+            row_styles: list[str] = []
+            has_metric_rows = False
 
-        logging.info(_colorize_heading(title))
+            logging.info(_colorize_heading(title))
 
-        for query_name, data in entries:
-            if table_rows:
-                table_rows.append(None)
+            for query_name, data in entries:
+                if table_rows:
+                    table_rows.append(None)
 
-            symbol_label = query_name
-            if release_date:
-                symbol_label = f"{symbol_label}"
+                symbol_label = query_name
+                if release_date:
+                    symbol_label = f"{symbol_label}"
 
-            symbol_row = (symbol_label,) + ("",) * (len(headers) - 1)
-            table_rows.append(symbol_row)
-            row_styles.append(ANSI_BOLD)
+                symbol_row = (symbol_label,) + ("",) * (len(headers) - 1)
+                table_rows.append(symbol_row)
+                row_styles.append(ANSI_BOLD)
 
-            embedding_details: list[tuple[str, str, str, float, str]] = []
-            embedding_style_indices: list[int] = []
+                embedding_details: list[tuple[str, str, str, float, str]] = []
+                embedding_style_indices: list[int] = []
 
-            for identifier, score in data.get("embedding", []):
-                try:
-                    relative_path, match_name = identifier.split(":", 1)
-                except ValueError:
-                    continue
-                model_id = Path(relative_path).parts[0] if Path(relative_path).parts else "?"
-                match_release = dates.get(model_id, "unknown release date")
-                full_path, line = _resolve_definition_location(relative_path, match_name)
-                display_path = f"{full_path}:{line} ({match_name})"
-
-                if include_metric_column:
-                    row = ("", "embedding", display_path, f"{score:.4f}", match_release)
-                else:
-                    row = ("", display_path, f"{score:.4f}", match_release)
-
-                table_rows.append(row)
-                row_styles.append(ANSI_ROW)
-                embedding_style_indices.append(len(row_styles) - 1)
-                embedding_details.append((relative_path, model_id, match_name, score, match_release))
-                has_metric_rows = True
-
-            if embedding_details:
-                highest_score = None
-                highest_idx = None
-                for idx, (_, _, _, score, _) in enumerate(embedding_details):
-                    if highest_score is None or score > highest_score:
-                        highest_score = score
-                        highest_idx = idx
-
-                if highest_idx is not None:
-                    row_styles[embedding_style_indices[highest_idx]] = ANSI_HIGHLIGHT_TOP
-
-                if highest_score is not None:
-                    oldest_idx = None
-                    oldest_date = None
-                    for idx, (_, model_id, _, score, release_value) in enumerate(embedding_details):
-                        if highest_score - score > 0.1:
-                            continue
-                        parsed = _parse_release_date(release_value)
-                        if parsed is None:
-                            continue
-                        if oldest_date is None or parsed < oldest_date:
-                            oldest_date = parsed
-                            oldest_idx = idx
-                    if (
-                        oldest_idx is not None
-                        and row_styles[embedding_style_indices[oldest_idx]] != ANSI_HIGHLIGHT_TOP
-                    ):
-                        row_styles[embedding_style_indices[oldest_idx]] = ANSI_HIGHLIGHT_OLD
-
-                if best_candidate_path is not None:
-                    for idx, (relative_path, _, _, _, _) in enumerate(embedding_details):
-                        style_position = embedding_style_indices[idx]
-                        if row_styles[style_position] != ANSI_ROW:
-                            continue
-                        if relative_path == best_candidate_path:
-                            row_styles[style_position] = ANSI_HIGHLIGHT_CANDIDATE
-
-            if args.use_jaccard:
-                for identifier, score in data.get("jaccard", []):
+                for identifier, score in data.get("embedding", []):
                     try:
                         relative_path, match_name = identifier.split(":", 1)
                     except ValueError:
@@ -1234,49 +1212,108 @@ def main():
                     display_path = f"{full_path}:{line} ({match_name})"
 
                     if include_metric_column:
-                        row = ("", "jaccard", display_path, f"{score:.4f}", match_release)
+                        row = ("", "embedding", display_path, f"{score:.4f}", match_release)
                     else:
                         row = ("", display_path, f"{score:.4f}", match_release)
 
                     table_rows.append(row)
                     row_styles.append(ANSI_ROW)
+                    embedding_style_indices.append(len(row_styles) - 1)
+                    embedding_details.append((relative_path, model_id, match_name, score, match_release))
                     has_metric_rows = True
-                    if best_candidate_path == relative_path:
-                        row_styles[-1] = ANSI_HIGHLIGHT_CANDIDATE
 
-                for identifier in sorted(data.get("intersection", [])):
-                    try:
-                        relative_path, match_name = identifier.split(":", 1)
-                    except ValueError:
-                        continue
-                    model_id = Path(relative_path).parts[0] if Path(relative_path).parts else "?"
-                    match_release = dates.get(model_id, "unknown release date")
-                    full_path, line = _resolve_definition_location(relative_path, match_name)
-                    display_path = f"{full_path}:{line} ({match_name})"
+                if embedding_details:
+                    highest_score = None
+                    highest_idx = None
+                    for idx, (_, _, _, score, _) in enumerate(embedding_details):
+                        if highest_score is None or score > highest_score:
+                            highest_score = score
+                            highest_idx = idx
 
-                    if include_metric_column:
-                        row = ("", "intersection", display_path, "--", match_release)
-                    else:
-                        row = ("", display_path, "--", match_release)
+                    if highest_idx is not None:
+                        row_styles[embedding_style_indices[highest_idx]] = ANSI_HIGHLIGHT_TOP
 
-                    table_rows.append(row)
-                    row_styles.append(ANSI_ROW)
-                    has_metric_rows = True
-                    if best_candidate_path == relative_path:
-                        row_styles[-1] = ANSI_HIGHLIGHT_CANDIDATE
+                    if highest_score is not None:
+                        oldest_idx = None
+                        oldest_date = None
+                        for idx, (_, model_id, _, score, release_value) in enumerate(embedding_details):
+                            if highest_score - score > 0.1:
+                                continue
+                            parsed = _parse_release_date(release_value)
+                            if parsed is None:
+                                continue
+                            if oldest_date is None or parsed < oldest_date:
+                                oldest_date = parsed
+                                oldest_idx = idx
+                        if (
+                            oldest_idx is not None
+                            and row_styles[embedding_style_indices[oldest_idx]] != ANSI_HIGHLIGHT_TOP
+                        ):
+                            row_styles[embedding_style_indices[oldest_idx]] = ANSI_HIGHLIGHT_OLD
 
-        if table_rows:
-            if not legend_shown and has_metric_rows:
-                logging.info(
-                    "Legend: "
-                    f"{ANSI_HIGHLIGHT_TOP}highest match{ANSI_RESET}, "
-                    f"{ANSI_HIGHLIGHT_OLD}oldest within 0.1{ANSI_RESET}, "
-                    f"{ANSI_HIGHLIGHT_CANDIDATE}closest overall candidate{ANSI_RESET}"
-                )
-                legend_shown = True
+                    if best_candidate_path is not None:
+                        for idx, (relative_path, _, _, _, _) in enumerate(embedding_details):
+                            style_position = embedding_style_indices[idx]
+                            if row_styles[style_position] != ANSI_ROW:
+                                continue
+                            if relative_path == best_candidate_path:
+                                row_styles[style_position] = ANSI_HIGHLIGHT_CANDIDATE
 
-            logging.info(_format_table(headers, table_rows, row_styles))
-            logging.info("")
+                if args.use_jaccard:
+                    for identifier, score in data.get("jaccard", []):
+                        try:
+                            relative_path, match_name = identifier.split(":", 1)
+                        except ValueError:
+                            continue
+                        model_id = Path(relative_path).parts[0] if Path(relative_path).parts else "?"
+                        match_release = dates.get(model_id, "unknown release date")
+                        full_path, line = _resolve_definition_location(relative_path, match_name)
+                        display_path = f"{full_path}:{line} ({match_name})"
+
+                        if include_metric_column:
+                            row = ("", "jaccard", display_path, f"{score:.4f}", match_release)
+                        else:
+                            row = ("", display_path, f"{score:.4f}", match_release)
+
+                        table_rows.append(row)
+                        row_styles.append(ANSI_ROW)
+                        has_metric_rows = True
+                        if best_candidate_path == relative_path:
+                            row_styles[-1] = ANSI_HIGHLIGHT_CANDIDATE
+
+                    for identifier in sorted(data.get("intersection", [])):
+                        try:
+                            relative_path, match_name = identifier.split(":", 1)
+                        except ValueError:
+                            continue
+                        model_id = Path(relative_path).parts[0] if Path(relative_path).parts else "?"
+                        match_release = dates.get(model_id, "unknown release date")
+                        full_path, line = _resolve_definition_location(relative_path, match_name)
+                        display_path = f"{full_path}:{line} ({match_name})"
+
+                        if include_metric_column:
+                            row = ("", "intersection", display_path, "--", match_release)
+                        else:
+                            row = ("", display_path, "--", match_release)
+
+                        table_rows.append(row)
+                        row_styles.append(ANSI_ROW)
+                        has_metric_rows = True
+                        if best_candidate_path == relative_path:
+                            row_styles[-1] = ANSI_HIGHLIGHT_CANDIDATE
+
+            if table_rows:
+                if not legend_shown and has_metric_rows:
+                    logging.info(
+                        "Legend: "
+                        f"{ANSI_HIGHLIGHT_TOP}highest match{ANSI_RESET}, "
+                        f"{ANSI_HIGHLIGHT_OLD}oldest within 0.1{ANSI_RESET}, "
+                        f"{ANSI_HIGHLIGHT_CANDIDATE}closest overall candidate{ANSI_RESET}"
+                    )
+                    legend_shown = True
+
+                logging.info(_format_table(headers, table_rows, row_styles))
+                logging.info("")
 
     # Model class match summary
     class_entries = grouped.get("class", [])
