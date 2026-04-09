@@ -1591,6 +1591,10 @@ class ContinuousBatchingConfig:
             Whether to return log probabilities along with the generated tokens.
         max_queue_size (`int`, *optional*, defaults to 0):
             Maximum request queue size for serving. 0 means unlimited.
+        per_request_processors (`bool`, *optional*, defaults to `False`):
+            Enable per-request logits processor parameters. Default is False.
+        drop_unsupported_processors (`bool`, *optional*, defaults to `True`):
+            Remove unsupported logits processors instead of erroring. Default is True.
     """
 
     # Size of each KV cache block
@@ -1641,6 +1645,13 @@ class ContinuousBatchingConfig:
 
     # The parameters below are mostly useful in the context of serving
     max_queue_size: int = 0
+
+    # Enables per-request logits processor parameters. When enabled, each request can specify its own values (e.g.,
+    # temperature) via logits_processor_kwargs. When disabled, all requests use the default values.
+    per_request_processors: bool = False
+    # When True, processors explicitly marked as unsupported are removed with a warning. When False, all processors
+    # are kept but warnings are logged for unsupported/unknown ones.
+    drop_unsupported_processors: bool = True
 
     def account_for_cb_deprecated_arguments(
         self,
@@ -1762,7 +1773,8 @@ class ContinuousBatchingConfig:
     def resolve_compile_configs(
         self, fallback_compile_config: CompileConfig | None, is_flash_attn: bool, decode_fast_path_available: bool
     ) -> None:
-        """Resolve if the compile configs for varlen and decode paths, modifying these attributes in place if needed."""
+        """Resolve if the compile configs for varlen and decode paths, modifying these attributes in place if needed.
+        Default config use full compile over regional compile, because the throughput is significantly higher (~15%)"""
         logger_ = logging.get_logger("ContinuousBatchingLogger")
 
         # For each config, priority is: explicit config, default config, fallback config, None

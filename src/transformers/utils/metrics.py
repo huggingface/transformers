@@ -285,19 +285,20 @@ class ContinuousBatchProcessorMetrics:
             logger.warning(f"Failed to record TTFT metric: {e}")
 
     @traced
-    def record_batch_metrics(self, requests_in_batch: list) -> None:
+    def record_batch_metrics(self, future_states: list) -> None:
         """Record metrics about the batch composition including decode/prefill ratio and batch fill percentage.
 
         Args:
             requests_in_batch: List of request states in the current batch
         """
-        if not _has_opentelemetry or not requests_in_batch:
+        if not _has_opentelemetry or not future_states:
             return
 
         decode_tokens = 0
         prefill_tokens = 0
 
-        for state in requests_in_batch:
+        for future_state in future_states:
+            state = future_state.state
             if state.status == RequestStatus.DECODING:
                 decode_tokens += 1
             elif state.status in [RequestStatus.PREFILLING, RequestStatus.PREFILLING_SPLIT]:

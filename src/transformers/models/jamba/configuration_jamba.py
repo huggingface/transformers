@@ -94,6 +94,12 @@ class JambaConfig(PreTrainedConfig):
         ]
 
     @property
+    def layer_types(self):
+        # Follow the `layer_types` conventions
+        layer_types = self.layers_block_type
+        return ["full_attention" if x == "attention" else x for x in layer_types]
+
+    @property
     def layers_num_experts(self):
         return [
             self.num_experts if i % self.expert_layer_period == self.expert_layer_offset else 1

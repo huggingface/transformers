@@ -71,9 +71,9 @@ class MgpstrConfig(PreTrainedConfig):
     qkv_bias: bool = True
     distilled: bool = False
     layer_norm_eps: float = 1e-5
-    drop_rate: float = 0.0
-    attn_drop_rate: float = 0.0
-    drop_path_rate: float = 0.0
+    drop_rate: float | int = 0.0
+    attn_drop_rate: float | int = 0.0
+    drop_path_rate: float | int = 0.0
     output_a3_attentions: bool = False
     initializer_range: float = 0.02
 
