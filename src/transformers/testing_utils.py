@@ -106,6 +106,7 @@ from .utils import (
     is_hadamard_available,
     is_hqq_available,
     is_huggingface_hub_greater_or_equal,
+    is_ipython_available,
     is_jinja_available,
     is_jmespath_available,
     is_jumanpp_available,
@@ -1177,6 +1178,11 @@ def require_detectron2(test_case):
 def require_faiss(test_case):
     """Decorator marking a test that requires faiss."""
     return unittest.skipUnless(is_faiss_available(), "test requires `faiss`")(test_case)
+
+
+def require_ipython(test_case):
+    """Decorator marking a test that requires IPython. These tests are skipped when IPython isn't installed."""
+    return unittest.skipUnless(is_ipython_available(), "test requires `IPython`")(test_case)
 
 
 def require_optuna(test_case):
