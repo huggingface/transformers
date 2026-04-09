@@ -943,12 +943,12 @@ class TrackioCallback(TrainerCallback):
 
     **Requires**:
     ```bash
-    pip install trackio>=0.22.0
+    pip install trackio>=0.21.1
     ```
     """
 
     SPACE_URL = "https://huggingface.co/spaces/{space_id}"
-    _MIN_TRACKIO_FREEZE_VERSION = "0.22.0"
+    _MIN_TRACKIO_VERSION = "0.21.1"
 
     @staticmethod
     def _space_repo_name_from_trackio_project(project: str) -> str:
@@ -962,11 +962,20 @@ class TrackioCallback(TrainerCallback):
     def __init__(self):
         has_trackio = is_trackio_available()
         if not has_trackio:
-            raise RuntimeError("TrackioCallback requires trackio to be installed. Run `pip install trackio`.")
-        if has_trackio:
-            import trackio
+            raise RuntimeError(
+                f"TrackioCallback requires trackio>={TrackioCallback._MIN_TRACKIO_VERSION}. "
+                f"Run `pip install trackio>={TrackioCallback._MIN_TRACKIO_VERSION}`."
+            )
+        import trackio
 
-            self._trackio = trackio
+        self._trackio = trackio
+        if packaging.version.parse(self._trackio.__version__) < packaging.version.parse(
+            TrackioCallback._MIN_TRACKIO_VERSION
+        ):
+            raise RuntimeError(
+                f"TrackioCallback requires trackio>={TrackioCallback._MIN_TRACKIO_VERSION}. "
+                f"Found {self._trackio.__version__}. Run `pip install trackio>={TrackioCallback._MIN_TRACKIO_VERSION}`."
+            )
         self._initialized = False
         self._frozen_static_space_id: str | None = None
 
@@ -1061,9 +1070,9 @@ class TrackioCallback(TrainerCallback):
         self._trackio.finish()
         if not args.trackio_freeze_space or args.trackio_space_id is None:
             return
-        if packaging.version.parse(self._trackio.__version__) < packaging.version.parse(self._MIN_TRACKIO_FREEZE_VERSION):
+        if packaging.version.parse(self._trackio.__version__) < packaging.version.parse(self._MIN_TRACKIO_VERSION):
             logger.warning(
-                f"trackio>={self._MIN_TRACKIO_FREEZE_VERSION} is required for trackio.freeze() after training with "
+                f"trackio>={self._MIN_TRACKIO_VERSION} is required for trackio.freeze() after training with "
                 "`trackio_space_id` set. Install a newer trackio or set `trackio_freeze_space=False`."
             )
             return
