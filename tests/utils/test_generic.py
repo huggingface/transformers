@@ -355,6 +355,8 @@ class CanReturnTupleDecoratorTester(unittest.TestCase):
 
 class RetryTest(unittest.TestCase):
     def test_succeeds_on_first_attempt(self):
+        """Test that retry returns immediately when the wrapped call succeeds."""
+
         @retry(max_retries=3, exceptions=(ValueError,))
         def succeed():
             return "ok"
@@ -363,6 +365,8 @@ class RetryTest(unittest.TestCase):
 
     @patch("transformers.utils.generic.time.sleep")
     def test_retries_then_succeeds(self, mock_sleep):
+        """Test that retry sleeps and eventually returns after transient failures."""
+
         call_count = 0
 
         @retry(max_retries=3, initial_delay=1.0, jitter=False, exceptions=(ValueError,))
@@ -379,6 +383,8 @@ class RetryTest(unittest.TestCase):
 
     @patch("transformers.utils.generic.time.sleep")
     def test_raises_after_max_retries(self, mock_sleep):
+        """Test that retry re-raises the configured exception after exhausting retries."""
+
         @retry(max_retries=2, initial_delay=0.1, jitter=False, exceptions=(RuntimeError,))
         def always_fail():
             raise RuntimeError("permanent")
@@ -387,16 +393,22 @@ class RetryTest(unittest.TestCase):
             always_fail()
         self.assertEqual(mock_sleep.call_count, 1)
 
-    def test_non_matching_exception_propagates_immediately(self):
+    @patch("transformers.utils.generic.time.sleep")
+    def test_non_matching_exception_propagates_immediately(self, mock_sleep):
+        """Test that retry does not intercept exceptions outside the configured set."""
+
         @retry(max_retries=5, exceptions=(ValueError,))
         def raise_type_error():
             raise TypeError("wrong type")
 
         with self.assertRaises(TypeError):
             raise_type_error()
+        self.assertEqual(mock_sleep.call_count, 0)
 
     @patch("transformers.utils.generic.time.sleep")
     def test_exponential_backoff(self, mock_sleep):
+        """Test that retry doubles the delay between attempts when jitter is disabled."""
+
         call_count = 0
 
         @retry(max_retries=4, initial_delay=1.0, max_delay=10.0, jitter=False, exceptions=(ValueError,))
@@ -413,6 +425,8 @@ class RetryTest(unittest.TestCase):
 
     @patch("transformers.utils.generic.time.sleep")
     def test_max_delay_cap(self, mock_sleep):
+        """Test that retry caps exponential backoff at the configured maximum delay."""
+
         call_count = 0
 
         @retry(max_retries=5, initial_delay=8.0, max_delay=10.0, jitter=False, exceptions=(ValueError,))
@@ -429,6 +443,8 @@ class RetryTest(unittest.TestCase):
         self.assertEqual(delays, [8.0, 10.0, 10.0, 10.0])
 
     def test_preserves_function_metadata(self):
+        """Test that retry preserves the wrapped function metadata."""
+
         @retry(exceptions=(ValueError,))
         def my_func():
             """My docstring."""
