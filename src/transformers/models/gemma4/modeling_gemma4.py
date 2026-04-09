@@ -1159,19 +1159,25 @@ class Gemma4TextAttention(nn.Module):
                 config.layer_types[layer_idx]
             )
 
-        self.q_norm = Gemma4RMSNorm(dim=self.head_dim, eps=config.rms_norm_eps)
-        self.k_norm = Gemma4RMSNorm(dim=self.head_dim, eps=config.rms_norm_eps)
-        self.v_norm = Gemma4RMSNorm(self.head_dim, eps=config.rms_norm_eps, with_scale=False)
-
-        self.k_proj = nn.Linear(config.hidden_size, num_key_value_heads * self.head_dim, bias=config.attention_bias)
         self.q_proj = nn.Linear(
             config.hidden_size, config.num_attention_heads * self.head_dim, bias=config.attention_bias
         )
-        self.v_proj = (
-            nn.Linear(config.hidden_size, num_key_value_heads * self.head_dim, bias=config.attention_bias)
-            if not self.use_alternative_attention
-            else None
-        )
+        self.q_norm = Gemma4RMSNorm(dim=self.head_dim, eps=config.rms_norm_eps)
+
+        # Layers sharing kv states don't need any weight matrices
+        if not self.is_kv_shared_layer:
+            self.k_norm = Gemma4RMSNorm(dim=self.head_dim, eps=config.rms_norm_eps)
+            self.v_norm = Gemma4RMSNorm(self.head_dim, eps=config.rms_norm_eps, with_scale=False)
+
+            self.k_proj = nn.Linear(
+                config.hidden_size, num_key_value_heads * self.head_dim, bias=config.attention_bias
+            )
+            self.v_proj = (
+                nn.Linear(config.hidden_size, num_key_value_heads * self.head_dim, bias=config.attention_bias)
+                if not self.use_alternative_attention
+                else None
+            )
+
         self.o_proj = nn.Linear(
             config.num_attention_heads * self.head_dim, config.hidden_size, bias=config.attention_bias
         )
@@ -1532,6 +1538,15 @@ class Gemma4TextModel(Gemma4PreTrainedModel):
             self.per_layer_model_projection_scale = config.hidden_size**-0.5
             self.per_layer_projection_norm = Gemma4RMSNorm(config.hidden_size_per_layer_input, eps=config.rms_norm_eps)
 
+        # Update `_keys_to_ignore_on_load_unexpected` to drop all k/v proj and norms for the shared layers
+        self._keys_to_ignore_on_load_unexpected = []
+        for i, layer in enumerate(self.layers):
+            if layer.self_attn.is_shared_kv_layer:
+                prefix = f"layers.{i}.self_attn."
+                self._keys_to_ignore_on_load_unexpected.extend(
+                    [prefix + "k_proj", prefix + "v_proj", prefix + "k_norm", prefix + "v_norm"]
+                )
+
         # Initialize weights and apply final processing
         self.post_init()
 
@@ -1695,6 +1710,10 @@ class Gemma4ForCausalLM(Gemma4PreTrainedModel, GenerationMixin):
         self.model = Gemma4TextModel(config)
         self.vocab_size = config.vocab_size
         self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
+        # Grab the ones from the child
+        self._keys_to_ignore_on_load_unexpected = [
+            f"model.{name}" for name in self.model._keys_to_ignore_on_load_unexpected
+        ]
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -2076,6 +2095,10 @@ class Gemma4Model(Gemma4PreTrainedModel):
             if config.audio_config is not None
             else None
         )
+        # Grab the ones from the child
+        self._keys_to_ignore_on_load_unexpected = [
+            f"language_model.{name}" for name in self.language_model._keys_to_ignore_on_load_unexpected
+        ]
         self.post_init()
 
     def get_input_embeddings(self):
@@ -2373,6 +2396,10 @@ class Gemma4ForConditionalGeneration(Gemma4PreTrainedModel, GenerationMixin):
         super().__init__(config)
         self.model = Gemma4Model(config)
         self.lm_head = nn.Linear(config.text_config.hidden_size, config.text_config.vocab_size, bias=False)
+        # Grab the ones from the child
+        self._keys_to_ignore_on_load_unexpected = [
+            f"model.{name}" for name in self.model._keys_to_ignore_on_load_unexpected
+        ]
         self.post_init()
 
     def get_input_embeddings(self):
