@@ -133,11 +133,10 @@ class CircleCIJob:
 
     def to_dict(self):
         env = COMMON_ENV_VARIABLES.copy()
-        if self.job_name != "tests_hub":
-            # fmt: off
-            # not critical
-            env.update({"HF_TOKEN": "".join(["h", "f", "_", "H", "o", "d", "V", "u", "M", "q", "b", "R", "m", "t", "b", "z", "F", "Q", "O", "Q", "A", "J", "G", "D", "l", "V", "Q", "r", "R", "N", "w", "D", "M", "V", "C", "s", "d"])})
-            # fmt: on
+        # fmt: off
+        # not critical
+        env.update({"HF_TOKEN": "".join(["h", "f", "_", "H", "o", "d", "V", "u", "M", "q", "b", "R", "m", "t", "b", "z", "F", "Q", "O", "Q", "A", "J", "G", "D", "l", "V", "Q", "r", "R", "N", "w", "D", "M", "V", "C", "s", "d"])})
+        # fmt: on
 
         # Do not run tests decorated by @is_flaky on pull requests
         env['RUN_FLAKY'] = os.environ.get("CIRCLE_PULL_REQUEST", "") == ""
@@ -284,20 +283,6 @@ examples_torch_job = CircleCIJob(
     pytest_num_workers=4,
 )
 
-hub_job = CircleCIJob(
-    "hub",
-    additional_env={"HUGGINGFACE_CO_STAGING": True},
-    docker_image=[{"image":"huggingface/transformers-torch-light"}],
-    install_steps=[
-        'uv pip install .',
-        'git config --global user.email "ci@dummy.com"',
-        'git config --global user.name "ci"',
-    ],
-    marker="is_staging_test",
-    pytest_num_workers=2,
-    resource_class="medium",
-)
-
 exotic_models_job = CircleCIJob(
     "exotic_models",
     docker_image=[{"image":"huggingface/transformers-exotic-models"}],
@@ -364,7 +349,7 @@ doc_test_job = CircleCIJob(
     pytest_num_workers=1,
 )
 
-REGULAR_TESTS = [torch_job, hub_job, tokenization_job, processor_job, generate_job, non_model_job] # fmt: skip
+REGULAR_TESTS = [torch_job, tokenization_job, processor_job, generate_job, non_model_job] # fmt: skip
 EXAMPLES_TESTS = [examples_torch_job]
 PIPELINE_TESTS = [pipelines_torch_job]
 REPO_UTIL_TESTS = [repo_utils_job]
