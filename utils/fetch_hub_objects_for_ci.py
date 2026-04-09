@@ -151,15 +151,29 @@ def download_test_file(url):
             raise
     else:
         # Use httpx for non-HF URLs (COCO, Britannica, etc.)
-        print(f"Downloading {filename} from external URL...")
-        with open(filename, "wb") as f:
-            with httpx.stream("GET", url, follow_redirects=True) as resp:
-                resp.raise_for_status()
-                f.writelines(resp.iter_bytes(chunk_size=8192))
+        import time
 
-        # Validate the downloaded content
-        validate_downloaded_content(filename)
-        print(f"Successfully downloaded: {filename}")
+        max_retries = 3
+        for attempt in range(max_retries):
+            try:
+                print(f"Downloading {filename} from {url}")
+                with open(filename, "wb") as f:
+                    with httpx.stream("GET", url, follow_redirects=True) as resp:
+                        resp.raise_for_status()
+                        f.writelines(resp.iter_bytes(chunk_size=8192))
+
+                validate_downloaded_content(filename)
+                print(f"Successfully downloaded: {filename}")
+                break
+            except Exception as e:
+                if attempt < max_retries - 1:
+                    wait = 2 ** (attempt + 1)
+                    print(f"Attempt {attempt + 1} failed for {filename}: {e}. Retrying in {wait}s...")
+                    if os.path.exists(filename):
+                        os.remove(filename)
+                    time.sleep(wait)
+                else:
+                    raise
 
     return filename
 
