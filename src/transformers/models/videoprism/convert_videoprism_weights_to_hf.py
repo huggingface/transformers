@@ -333,7 +333,7 @@ def convert_params(flax_state_dict, model_name):
     # Last step is to add the buffers named "scale", "positional_embedding" and "position_ids"
     if "lvt" in model_name:
         # scale (used inside VideoPrismMultiheadAttentionPoolingHead)
-        # dim is the dimension of a single attention head, which is hidden_size / num_attention_heads 
+        # dim is the dimension of a single attention head, which is hidden_size / num_attention_heads
         dim = int(vision_config["intermediate_size"] / vision_config["num_attention_heads"])
         r_softplus_0 = 1.442695041
         scale = torch.tensor(r_softplus_0 / (dim**0.5))
@@ -500,12 +500,13 @@ def convert_videoprism_checkpoint(
 def main():
     """
     Typical workflow
-    1.Select the models names from the keys of `ORIGINAL_CHECKPOINTS` dictionary,
-    
-    Select a model, convert=True (saves locally), load_model=True, from_pretrained=False (loads local checkpoint)
-    -> load_video=True -> inference=True (compares to expected outputs).
-    If outputs match perfectly, upload=True (uploads to Hugging Face hub).
-    If the checkpoint from hub needs to be teseted set convert=False, from_pretrained=True.
+    1. Convert and check a model out of the keys of `ORIGINAL_CHECKPOINTS` dictionary
+        - Set model_name="MODEL_NAME", convert=True (saves locally), load_model=True,
+        from_pretrained=False (loads local checkpoint), load_video=True, inference=True (compares to expected outputs).
+    2. If outputs match perfectly, upload the model to hub, run the script with
+        - upload=True, convert=False, inference=False.
+    3. If a checkpoint from hub needs to be teseted set
+        - convert=False, from_pretrained=True, load_video=True, inference=True
     """
     parser = argparse.ArgumentParser()
     parser.add_argument(
@@ -524,7 +525,7 @@ def main():
     parser.add_argument(
         "--convert",
         default=True,
-        
+        type=bool,
         help="Whether to convert the original Flax checkpoint to Hugging Face format.",
     )
     parser.add_argument(

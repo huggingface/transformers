@@ -32,7 +32,8 @@ VOCAB_FILES_NAMES = {"vocab_file": "spiece.model", "tokenizer_file": "tokenizer.
 
 class VideoPrismTokenizer(TokenizersBackend):
     r"""
-    Constructs a VideoPrism tokenizer, which is based on the T5 tokenizer.
+    Constructs a VideoPrism tokenizer, which is essentially a T5 tokenizer without its postprocessor
+    (appending an EOS token at the end of the sequence).
 
     This tokenizer inherits from [`T5Tokenizer`] which contains most of the main methods. Users should refer to this
     superclass for more information regarding those methods.
