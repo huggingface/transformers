@@ -111,7 +111,7 @@ def validate_downloaded_content(filepath):
         if header.lower().startswith(bad_sig):
             raise ValueError(
                 f"Downloaded file appears to be an HTML error page, not a valid media file. "
-                f"This may indicate rate limiting. File starts with: {header[:50]!r}"
+                f"This may indicate rate limiting. File starts with: {header[:200]!r}"
             )
 
     file_size = os.path.getsize(filepath)
