@@ -3220,6 +3220,8 @@ def get_device_properties() -> DeviceProperties:
     if IS_CUDA_SYSTEM or IS_ROCM_SYSTEM:
         import torch
 
+        if not torch.cuda.is_available():
+            return (torch_device, None, None)
         major, minor = torch.cuda.get_device_capability()
         if IS_ROCM_SYSTEM:
             return ("rocm", major, minor)
