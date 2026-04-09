@@ -1104,7 +1104,6 @@ class Gemma4TextDecoderLayer(Gemma3DecoderLayer):
             shared_kv_states=shared_kv_states,
             position_embeddings=position_embeddings,
             attention_mask=attention_mask,
-            shared_kv_states=shared_kv_states,
             position_ids=position_ids,
             past_key_values=past_key_values,
             **kwargs,
