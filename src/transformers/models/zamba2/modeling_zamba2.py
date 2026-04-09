@@ -470,7 +470,7 @@ class Zamba2MambaMixer(nn.Module):
         global selective_state_update, mamba_chunk_scan_combined, mamba_split_conv1d_scan_combined
         global is_fast_path_available
 
-        if getattr(config, "use_mamba_kernels", True):
+        if config.use_mamba_kernels:
             causal_conv1d = lazy_load_kernel("causal-conv1d")
             causal_conv1d_update = getattr(causal_conv1d, "causal_conv1d_update", None)
             causal_conv1d_fn = getattr(causal_conv1d, "causal_conv1d_fn", None)
