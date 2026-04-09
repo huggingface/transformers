@@ -104,6 +104,12 @@ class Wav2Vec2PhonemeCTCTokenizerTest(TokenizerTesterMixin, unittest.TestCase):
         token_ids = tokenizer("maɪ c", do_phonemize=False).input_ids
         self.assertEqual(token_ids, [3, 200])  # mai should be <unk> (=3)
 
+    def test_phonemizer_backend_not_clobbered(self):
+        tokenizer = self.tokenizer_class.from_pretrained("facebook/wav2vec2-lv-60-espeak-cv-ft")
+
+        phonemes = tokenizer.phonemize("Hello", phonemizer_lang="en-us")
+        self.assertTrue(len(phonemes) > 0)
+
     def test_phonemize(self):
         tokenizer = self.tokenizer_class.from_pretrained("facebook/wav2vec2-lv-60-espeak-cv-ft")
 
