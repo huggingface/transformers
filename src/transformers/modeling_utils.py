@@ -2910,7 +2910,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             )
         old_num_tokens = getattr(old_lm_head, "out_features", old_num_tokens)
         old_lm_head_dim = getattr(old_lm_head, "in_features", old_lm_head_dim)
-    
+
         if old_num_tokens == new_num_tokens and not is_deepspeed_zero3_enabled():
             return old_lm_head
 
