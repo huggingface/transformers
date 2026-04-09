@@ -618,7 +618,7 @@ class WeightTransform:
             # inside that matched named group
             replaced_group_idx = self.compiled_sources.groupindex[matching_group_name] + 1
             replacement = replacement.replace(r"\1", match_object.group(replaced_group_idx))
-        renamed_key = source_key.replace(match_object.group(0), replacement, count=1)
+        renamed_key = source_key.replace(match_object.group(0), replacement, 1)
         return renamed_key, source_pattern_that_matched
 
     def reverse_transform(self) -> WeightTransform:
