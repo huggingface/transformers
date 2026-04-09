@@ -65,7 +65,7 @@ class M2M100Config(PreTrainedConfig):
     activation_dropout: float | int = 0.0
     init_std: float = 0.02
     decoder_start_token_id: int | None = 2
-    scale_embedding: int = True
+    scale_embedding: bool = True
     pad_token_id: int | None = 1
     bos_token_id: int | None = 0
     eos_token_id: int | list[int] | None = 2

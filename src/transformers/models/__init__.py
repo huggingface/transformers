@@ -152,6 +152,7 @@ if TYPE_CHECKING:
     from .gemma2 import *
     from .gemma3 import *
     from .gemma3n import *
+    from .gemma4 import *
     from .git import *
     from .glm import *
     from .glm4 import *
@@ -273,6 +274,7 @@ if TYPE_CHECKING:
     from .mpt import *
     from .mra import *
     from .mt5 import *
+    from .musicflamingo import *
     from .musicgen import *
     from .musicgen_melody import *
     from .mvp import *
@@ -282,6 +284,7 @@ if TYPE_CHECKING:
     from .nemotron_h import *
     from .nllb import *
     from .nllb_moe import *
+    from .nomic_bert import *
     from .nougat import *
     from .nystromformer import *
     from .olmo import *

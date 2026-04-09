@@ -61,7 +61,7 @@ class MobileNetV2Config(PreTrainedConfig):
 
     num_channels: int = 3
     image_size: int | list[int] | tuple[int, int] = 224
-    depth_multiplier: float = 1.0
+    depth_multiplier: float | int = 1.0
     depth_divisible_by: int = 8
     min_depth: int = 8
     expand_ratio: float | int = 6.0
@@ -70,7 +70,7 @@ class MobileNetV2Config(PreTrainedConfig):
     finegrained_output: bool = True
     hidden_act: str = "relu6"
     tf_padding: bool = True
-    classifier_dropout_prob: float = 0.8
+    classifier_dropout_prob: float | int = 0.8
     initializer_range: float = 0.02
     layer_norm_eps: float = 0.001
     semantic_loss_ignore_index: int = 255
