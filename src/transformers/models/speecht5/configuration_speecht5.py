@@ -23,7 +23,7 @@ from ...utils import auto_docstring
 
 
 @auto_docstring(checkpoint="microsoft/speecht5_asr")
-@strict(accept_kwargs=True)
+@strict
 class SpeechT5Config(PreTrainedConfig):
     r"""
     positional_dropout (`float`, *optional*, defaults to 0.1):
@@ -167,10 +167,10 @@ class SpeechT5Config(PreTrainedConfig):
     num_conv_pos_embeddings: int = 128
     num_conv_pos_embedding_groups: int = 16
     apply_spec_augment: bool = True
-    mask_time_prob: float = 0.05
+    mask_time_prob: float | int = 0.05
     mask_time_length: int = 10
     mask_time_min_masks: int = 2
-    mask_feature_prob: float = 0.0
+    mask_feature_prob: float | int = 0.0
     mask_feature_length: int = 10
     mask_feature_min_masks: int = 0
     pad_token_id: int | None = 1
@@ -221,7 +221,7 @@ class SpeechT5Config(PreTrainedConfig):
 
 
 @auto_docstring(checkpoint="microsoft/speecht5_asr")
-@strict(accept_kwargs=True)
+@strict
 class SpeechT5HifiGanConfig(PreTrainedConfig):
     r"""
     model_in_dim (`int`, *optional*, defaults to 80):
@@ -242,8 +242,6 @@ class SpeechT5HifiGanConfig(PreTrainedConfig):
     resblock_dilation_sizes (`tuple[tuple[int]]` or `list[list[int]]`, *optional*, defaults to `[[1, 3, 5], [1, 3, 5], [1, 3, 5]]`):
         A nested tuple of integers defining the dilation rates of the dilated 1D convolutional layers in the
         multi-receptive field fusion (MRF) module.
-    initializer_range (`float`, *optional*, defaults to 0.01):
-        The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
     leaky_relu_slope (`float`, *optional*, defaults to 0.1):
         The angle of the negative slope used by the leaky ReLU activation.
     normalize_before (`bool`, *optional*, defaults to `True`):

@@ -289,14 +289,12 @@ class XLMRobertaXLCrossAttention(nn.Module):
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor]:
         # determine input shapes
-        bsz, tgt_len = hidden_states.shape[:-1]
-        src_len = encoder_hidden_states.shape[1]
+        input_shape = hidden_states.shape[:-1]
 
-        q_input_shape = (bsz, tgt_len, -1, self.attention_head_size)
-        kv_input_shape = (bsz, src_len, -1, self.attention_head_size)
+        hidden_shape = (*input_shape, -1, self.attention_head_size)
 
         # get query proj
-        query_layer = self.query(hidden_states).view(*q_input_shape).transpose(1, 2)
+        query_layer = self.query(hidden_states).view(hidden_shape).transpose(1, 2)
 
         is_updated = past_key_values.is_updated.get(self.layer_idx) if past_key_values is not None else False
         if past_key_values is not None and is_updated:
@@ -304,8 +302,9 @@ class XLMRobertaXLCrossAttention(nn.Module):
             key_layer = past_key_values.cross_attention_cache.layers[self.layer_idx].keys
             value_layer = past_key_values.cross_attention_cache.layers[self.layer_idx].values
         else:
-            key_layer = self.key(encoder_hidden_states).view(*kv_input_shape).transpose(1, 2)
-            value_layer = self.value(encoder_hidden_states).view(*kv_input_shape).transpose(1, 2)
+            kv_shape = (*encoder_hidden_states.shape[:-1], -1, self.attention_head_size)
+            key_layer = self.key(encoder_hidden_states).view(kv_shape).transpose(1, 2)
+            value_layer = self.value(encoder_hidden_states).view(kv_shape).transpose(1, 2)
 
             if past_key_values is not None:
                 # save all states to the cache
@@ -329,7 +328,7 @@ class XLMRobertaXLCrossAttention(nn.Module):
             scaling=self.scaling,
             **kwargs,
         )
-        attn_output = attn_output.reshape(bsz, tgt_len, -1).contiguous()
+        attn_output = attn_output.reshape(*input_shape, -1).contiguous()
         return attn_output, attn_weights
 
 

@@ -20,7 +20,7 @@ from ...utils import auto_docstring
 
 
 @auto_docstring(checkpoint="microsoft/udop-large")
-@strict(accept_kwargs=True)
+@strict
 class UdopConfig(PreTrainedConfig):
     r"""
     relative_attention_num_buckets (`int`, *optional*, defaults to 32):
@@ -34,8 +34,6 @@ class UdopConfig(PreTrainedConfig):
         `"gated-gelu"` feed forward projection. Original Udop uses `"relu"`.
     max_2d_position_embeddings (`int`, *optional*, defaults to 1024):
         The maximum absolute position embeddings for relative position encoding.
-    add_cross_attention (`bool`, *optional*, defaults to `False`):
-        Whether cross-attention layers should be added to the model.
     """
 
     model_type = "udop"
@@ -52,7 +50,7 @@ class UdopConfig(PreTrainedConfig):
     relative_attention_num_buckets: int = 32
     relative_attention_max_distance: int = 128
     relative_bias_args: list[dict] | None = None
-    dropout_rate: float = 0.1
+    dropout_rate: float | int = 0.1
     layer_norm_epsilon: float = 1e-6
     initializer_factor: float = 1.0
     feed_forward_proj: str = "relu"

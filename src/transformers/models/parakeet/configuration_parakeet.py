@@ -20,7 +20,7 @@ from ...utils import auto_docstring
 
 
 @auto_docstring(checkpoint="nvidia/parakeet-ctc-1.1b")
-@strict(accept_kwargs=True)
+@strict
 class ParakeetEncoderConfig(PreTrainedConfig):
     r"""
     convolution_bias (`bool`, *optional*, defaults to `True`):
@@ -77,7 +77,7 @@ class ParakeetEncoderConfig(PreTrainedConfig):
     subsampling_conv_kernel_size: int = 3
     subsampling_conv_stride: int = 2
     dropout: float | int = 0.1
-    dropout_positions: float = 0.0
+    dropout_positions: float | int = 0.0
     layerdrop: float | int = 0.1
     activation_dropout: float | int = 0.1
     attention_dropout: float | int = 0.1
@@ -91,7 +91,7 @@ class ParakeetEncoderConfig(PreTrainedConfig):
 
 
 @auto_docstring(checkpoint="nvidia/parakeet-ctc-1.1b")
-@strict(accept_kwargs=True)
+@strict
 class ParakeetCTCConfig(PreTrainedConfig):
     r"""
     ctc_loss_reduction (`str`, *optional*, defaults to `"mean"`):

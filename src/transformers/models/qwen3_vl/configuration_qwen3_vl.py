@@ -25,13 +25,13 @@ from ...utils import auto_docstring
 
 
 @auto_docstring(checkpoint="Qwen/Qwen3-VL-4B-Instruct")
-@strict(accept_kwargs=True)
+@strict
 class Qwen3VLVisionConfig(PreTrainedConfig):
     r"""
-    num_position_embeddings (`int`, *optional*, defaults to 2304):
-        The maximum sequence length that this model might ever be used with
     out_hidden_size (`int`, *optional*, defaults to 3584):
         The output hidden size of the vision model.
+    num_position_embeddings (`int`, *optional*, defaults to 2304):
+        The maximum sequence length that this model might ever be used with
     deepstack_visual_indexes (`list[int]`, *optional*, defaults to `[8, 16, 24]`):
         Indexed of layers for deepstack embeddings.
     """
@@ -55,7 +55,7 @@ class Qwen3VLVisionConfig(PreTrainedConfig):
 
 
 @auto_docstring(checkpoint="Qwen/Qwen3-VL-4B-Instruct")
-@strict(accept_kwargs=True)
+@strict
 class Qwen3VLTextConfig(PreTrainedConfig):
     r"""
     Example:
@@ -103,7 +103,7 @@ class Qwen3VLTextConfig(PreTrainedConfig):
 
 
 @auto_docstring(checkpoint="Qwen/Qwen3-VL-4B-Instruct")
-@strict(accept_kwargs=True)
+@strict
 class Qwen3VLConfig(PreTrainedConfig):
     r"""
     Example:

@@ -20,7 +20,7 @@ from ...utils import auto_docstring
 
 
 @auto_docstring(checkpoint="facebook/mms-tts-eng")
-@strict(accept_kwargs=True)
+@strict
 class VitsConfig(PreTrainedConfig):
     r"""
     window_size (`int`, *optional*, defaults to 4):
@@ -150,7 +150,7 @@ class VitsConfig(PreTrainedConfig):
     wavenet_kernel_size: int = 5
     wavenet_dilation_rate: int = 1
     wavenet_dropout: float | int = 0.0
-    speaking_rate: float = 1.0
+    speaking_rate: float | int = 1.0
     noise_scale: float = 0.667
     noise_scale_duration: float = 0.8
     sampling_rate: int = 16_000
