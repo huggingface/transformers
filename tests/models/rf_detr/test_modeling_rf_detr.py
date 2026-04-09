@@ -214,6 +214,7 @@ class RfDetrModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     is_encoder_decoder = False
     test_missing_keys = False
     test_resize_embeddings = False
+    model_split_percents = [0.5, 0.87, 0.9]
 
     # special case for head models
     def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
