@@ -594,27 +594,11 @@ def _build_checkpoint_conversion_mapping():
     ]
 
     mapping["qianfan_ocr"] = [
-        # Vision encoder prefix: vision_model.* → model.vision_tower.*
         WeightRenaming(r"^vision_model\.", r"model\.vision_tower\."),
-        # Encoder layer list: encoder.layers.N → encoder.layer.N
         WeightRenaming(r"encoder\.layers\.", r"encoder\.layer\."),
-        # Layer scale params: ls1/ls2 → lambda_1/lambda_2
         WeightRenaming(r"\.ls1", r"\.lambda_1"),
         WeightRenaming(r"\.ls2", r"\.lambda_2"),
-        # Attention submodules (specific before general).
-        # Use capturing group with `layers?` so the pattern matches both the original checkpoint format
-        # (encoder.layers.N) and the intermediate renamed format (encoder.layer.N after rule [1]).
-        # The captured prefix is carried into the reverse-mapping source pattern, ensuring that
-        # `.attention.` only matches vision-encoder keys and never LLM keys like post_attention_layernorm.
-        # `attn.qkv` is intentionally excluded here so the WeightConverter below can handle it directly
-        # using the original checkpoint key format, which makes the reverse mapping work correctly in
-        # test_reverse_loading_mapping (the reverse renaming `attention.` → `attn.` would otherwise
-        # run before the reverse converter, making the source pattern unmatchable).
         WeightRenaming(r"(encoder\.layers?\.\d+)\.attn\.proj\.", r"\1.attention.projection_layer."),
-        WeightRenaming(r"(encoder\.layers?\.\d+)\.attn\.(?!qkv)", r"\1.attention."),
-        # Fused QKV → separate q_proj / k_proj / v_proj.
-        # Source uses the original checkpoint key format (attn.qkv) so that the reverse converter's
-        # source pattern (attention.q_proj / k_proj / v_proj) is not clobbered by the reverse renaming.
         WeightConverter(
             source_patterns=["attn.qkv.weight"],
             target_patterns=["attention.q_proj.weight", "attention.k_proj.weight", "attention.v_proj.weight"],
@@ -625,17 +609,13 @@ def _build_checkpoint_conversion_mapping():
             target_patterns=["attention.q_proj.bias", "attention.k_proj.bias", "attention.v_proj.bias"],
             operations=[Chunk(dim=0)],
         ),
-        # Layer norms
         WeightRenaming(r"\.norm1\.", r"\.layernorm_before\."),
         WeightRenaming(r"\.norm2\.", r"\.layernorm_after\."),
-        # Vision embeddings: align original checkpoint keys to InternVLVisionEmbeddings naming
         WeightRenaming(r"\.embeddings\.class_embedding", r"\.embeddings\.cls_token"),
         WeightRenaming(r"\.embeddings\.position_embedding", r"\.embeddings\.position_embeddings"),
         WeightRenaming(r"\.embeddings\.patch_embedding\.", r"\.embeddings\.patch_embeddings\.projection\."),
-        # Language model prefixes
         WeightRenaming(r"^language_model\.model\.", r"model\.language_model\."),
         WeightRenaming(r"^language_model\.lm_head\.", r"lm_head\."),
-        # Multi-modal projector: mlp1.{0,1,3}.* → model.multi_modal_projector.*
         WeightRenaming(r"^mlp1\.0\.", r"model\.multi_modal_projector\.layer_norm\."),
         WeightRenaming(r"^mlp1\.1\.", r"model\.multi_modal_projector\.linear_1\."),
         WeightRenaming(r"^mlp1\.3\.", r"model\.multi_modal_projector\.linear_2\."),

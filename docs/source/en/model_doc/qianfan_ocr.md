@@ -125,16 +125,6 @@ For documents with complex layouts, cluttered elements, or non-standard reading 
 
 [[autodoc]] QianfanOCRVisionConfig
 
-## QianfanOCRImageProcessor
-
-[[autodoc]] QianfanOCRImageProcessor
-    - preprocess
-
-## QianfanOCRImageProcessorPil
-
-[[autodoc]] QianfanOCRImageProcessorPil
-    - preprocess
-
 ## QianfanOCRProcessor
 
 [[autodoc]] QianfanOCRProcessor

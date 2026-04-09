@@ -21,24 +21,17 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 from ...cache_utils import Cache
-from ...configuration_utils import PreTrainedConfig
-from ...generation import GenerationMixin
 from ...image_processing_utils import BatchFeature
 from ...image_utils import ImageInput
-from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling
+from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling, ModelOutput
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
 from ...utils import TransformersKwargs, auto_docstring
 from ...utils.generic import can_return_tuple, merge_with_config_defaults
 from ...utils.output_capturing import OutputRecorder, capture_outputs
-from ..auto import AutoConfig, AutoModel
-from ..auto.configuration_auto import CONFIG_MAPPING
 from ..beit.modeling_beit import BeitDropPath
-from ..internvl.configuration_internvl import InternVLConfig, InternVLVisionConfig
 from ..internvl.modeling_internvl import (
-    NORM2FN,
-    InternVLCausalLMOutputWithPast,
     InternVLForConditionalGeneration,
     InternVLModel,
     InternVLModelOutputWithPast,
@@ -49,73 +42,7 @@ from ..internvl.modeling_internvl import (
     InternVLVisionMLP,
 )
 from ..internvl.processing_internvl import InternVLProcessor
-
-
-@auto_docstring(checkpoint="baidu/Qianfan-OCR")
-class QianfanOCRVisionConfig(InternVLVisionConfig):
-    r"""
-    drop_path_rate (`float`, *optional*, defaults to 0.1):
-        Dropout rate for stochastic depth.
-    projection_dropout (`float`, *optional*, defaults to 0.0):
-        Dropout probability for the projection layer.
-    norm_type (`str`, *optional*, defaults to `"layer_norm"`):
-        The type of normalization to use in the encoder. Can be `"layer_norm"` or `"rms_norm"`.
-    use_mask_token (`bool`, *optional*, defaults to `False`):
-        Whether to use a mask token for masked image modeling.
-    use_mean_pooling (`bool`, *optional*, defaults to `True`):
-        Whether to mean pool the final hidden states of the patches instead of using the final hidden state of the
-        CLS token, before applying the classification head.
-
-    Example:
-
-    ```python
-    >>> from transformers import QianfanOCRVisionConfig
-
-    >>> configuration = QianfanOCRVisionConfig()
-    >>> configuration.hidden_size
-    1024
-    ```"""
-
-    model_type = "qianfan_ocr_vision"
-
-    attention_bias: bool = True
-    drop_path_rate: float = 0.1
-
-
-@auto_docstring(checkpoint="baidu/Qianfan-OCR")
-class QianfanOCRConfig(InternVLConfig):
-    r"""
-    downsample_ratio (`float`, *optional*, defaults to 0.5):
-        Factor by which to downsample the image.
-
-    Example:
-
-    ```python
-    >>> from transformers import QianfanOCRConfig
-
-    >>> configuration = QianfanOCRConfig()
-    >>> configuration.downsample_ratio
-    0.5
-    ```"""
-
-    model_type = "qianfan_ocr"
-    sub_configs = {"text_config": AutoConfig, "vision_config": QianfanOCRVisionConfig}
-
-    tie_word_embeddings: bool = False
-
-    def __post_init__(self, **kwargs):
-        if isinstance(self.vision_config, dict):
-            self.vision_config = QianfanOCRVisionConfig(**self.vision_config)
-        elif self.vision_config is None:
-            self.vision_config = QianfanOCRVisionConfig()
-
-        if isinstance(self.text_config, dict):
-            self.text_config["model_type"] = self.text_config.get("model_type", "qwen3")
-            self.text_config = CONFIG_MAPPING[self.text_config["model_type"]](**self.text_config)
-        elif self.text_config is None:
-            self.text_config = CONFIG_MAPPING["qwen3"]()
-
-        PreTrainedConfig.__post_init__(self, **kwargs)
+from .configuration_qianfan_ocr import QianfanOCRConfig, QianfanOCRVisionConfig
 
 
 class QianfanOCRDropPath(BeitDropPath):
@@ -297,6 +224,7 @@ class QianfanOCRVisionModel(QianfanOCRVisionPreTrainedModel):
 class QianfanOCRMultiModalProjector(InternVLMultiModalProjector):
     pass
 
+
 class QianfanOCRPreTrainedModel(PreTrainedModel):
     config_class = QianfanOCRConfig
     base_model_prefix = "model"
@@ -323,7 +251,59 @@ class QianfanOCRModelOutputWithPast(InternVLModelOutputWithPast):
 
 
 class QianfanOCRModel(InternVLModel):
-    pass
+    @merge_with_config_defaults
+    @can_return_tuple
+    @auto_docstring(
+        custom_intro="Obtains image last hidden states from the vision tower and apply multimodal projection."
+    )
+    def get_image_features(
+        self,
+        pixel_values: torch.FloatTensor,
+        vision_feature_layer: int | list[int] | list[int] | None = None,
+        vision_feature_select_strategy: str | None = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> tuple | BaseModelOutputWithPooling:
+        r"""
+        pixel_values (`torch.FloatTensor]` of shape `(batch_size, channels, height, width)`)
+            The tensors corresponding to the input images.
+        vision_feature_layer (`int` or `list[int]`):
+            Layer index or list of layer indices to extract features from.
+        """
+        # Use vision_tower parameter dtype instead of self.dtype for DataParallel compatibility.
+        # self.dtype calls next(self.parameters()) which raises StopIteration on replica
+        # modules that have no parameters on the non-primary device.
+        # Input tensors are always correctly scattered so pixel_values.dtype is safe as fallback.
+        try:
+            target_dtype = next(self.vision_tower.parameters()).dtype
+        except StopIteration:
+            target_dtype = pixel_values.dtype
+        pixel_values = pixel_values.to(dtype=target_dtype)  # fp16 compatibility
+
+        downsample_ratio = self.config.downsample_ratio
+        if vision_feature_layer != -1:
+            kwargs["output_hidden_states"] = True
+        vision_outputs = self.vision_tower(pixel_values=pixel_values, return_dict=True, **kwargs)
+        if vision_feature_layer == -1:
+            vision_features = vision_outputs.last_hidden_state
+        else:
+            vision_features = vision_outputs.hidden_states[vision_feature_layer]
+        if vision_feature_select_strategy == "default":
+            vision_features = vision_features[:, 1:, :]
+
+        channels = vision_features.shape[1]
+        feature_size = int(channels**0.5)
+        batch_size = vision_features.shape[0]
+
+        vision_features = vision_features.reshape(batch_size, feature_size, feature_size, -1)
+
+        vision_features = self.pixel_shuffle(vision_features, scale_factor=downsample_ratio)
+
+        vision_features = vision_features.reshape(batch_size, -1, vision_features.shape[-1])
+
+        vision_features = self.multi_modal_projector(vision_features)
+        vision_outputs.pooler_output = vision_features
+
+        return vision_outputs
 
 
 @dataclass
@@ -332,7 +312,7 @@ class QianfanOCRModel(InternVLModel):
     Base class for QianfanOCR causal language model outputs.
     """
 )
-class QianfanOCRCausalLMOutputWithPast(InternVLCausalLMOutputWithPast):
+class QianfanOCRCausalLMOutputWithPast(ModelOutput):
     r"""
     loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
         Language modeling loss (for next-token prediction).
@@ -342,6 +322,13 @@ class QianfanOCRCausalLMOutputWithPast(InternVLCausalLMOutputWithPast):
         A `torch.FloatTensor` of size `(batch_size, num_images, sequence_length, hidden_size)`.
         image_hidden_states of the model produced by the vision encoder and after projecting the last hidden state.
     """
+
+    loss: torch.FloatTensor | None = None
+    logits: torch.FloatTensor | None = None
+    past_key_values: Cache | None = None
+    hidden_states: tuple[torch.FloatTensor] | None = None
+    attentions: tuple[torch.FloatTensor] | None = None
+    image_hidden_states: torch.FloatTensor | None = None
 
 
 class QianfanOCRForConditionalGeneration(InternVLForConditionalGeneration):
@@ -509,8 +496,6 @@ class QianfanOCRProcessor(InternVLProcessor):
 
 
 __all__ = [
-    "QianfanOCRVisionConfig",
-    "QianfanOCRConfig",
     "QianfanOCRVisionPreTrainedModel",
     "QianfanOCRVisionModel",
     "QianfanOCRPreTrainedModel",
