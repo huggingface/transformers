@@ -84,6 +84,9 @@ _MODEL_TO_CONVERSION_PATTERN = {
 
 def _build_checkpoint_conversion_mapping():
     mapping = {
+        "altclip": [
+            WeightRenaming(source_patterns=r"layer\.", target_patterns="layers."),
+        ],
         "llava": [
             WeightRenaming(source_patterns=r"language_model.model", target_patterns="language_model"),
             WeightRenaming(source_patterns=r"language_model.lm_head", target_patterns="lm_head"),
