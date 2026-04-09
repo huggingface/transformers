@@ -372,6 +372,31 @@ class TrainerGradientAccumulationTest(TestCasePlus, TrainerIntegrationCommon):
             # max diff broken should be very off
             self.assertGreater(max(diff_broken), 3, f"Difference {max(diff_broken)} is not greater than 3")
 
+    def test_gradient_accumulation_steps_not_leaked_to_accelerator(self):
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            args = TrainingArguments(
+                output_dir=tmp_dir,
+                per_device_train_batch_size=4,
+                gradient_accumulation_steps=4,
+                max_steps=1,
+                learning_rate=0.1,
+                report_to="none",
+                save_strategy="no",
+            )
+            trainer = Trainer(
+                model=RegressionModel(),
+                args=args,
+                train_dataset=RegressionDataset(),
+            )
+            # The Accelerator's GAS must always be 1 — the Trainer handles accumulation itself
+            self.assertEqual(
+                trainer.accelerator.gradient_accumulation_steps,
+                1,
+                "Trainer should not leak gradient_accumulation_steps to the Accelerator. "
+                "This causes accelerator.backward() to spuriously divide loss by GAS "
+                "when num_items_in_batch is active.",
+            )
+
     @require_torch_multi_accelerator
     def test_num_batches_in_training_with_gradient_accumulation(self):
         with tempfile.TemporaryDirectory() as tmp_dir:
