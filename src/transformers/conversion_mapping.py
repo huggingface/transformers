@@ -78,6 +78,7 @@ _MODEL_TO_CONVERSION_PATTERN = {
     "sam3_tracker_video": "sam3_tracker",
     "pp_chart2table": "llava",
     "gemma3n_text": "qwen3_5_text",
+    "qwen3_5_moe_text": "qwen3_5_text",
 }
 
 
@@ -515,9 +516,6 @@ def _build_checkpoint_conversion_mapping():
             operations=[MergeModulelist(dim=0)],
         ),
     ]
-
-    mapping["qwen3_5_moe_text"] = mapping["qwen3_5_text"].copy()
-    mapping["qwen3_5_moe_text"] += mapping["qwen2_moe"].copy()
 
     mapping["cohere_asr"] = [
         WeightRenaming(r"encoder\.pre_encode\.conv\.", r"encoder.subsampling.layers."),
