@@ -262,7 +262,8 @@ def _fp8_index_pytorch(
     q_bf16 = q.to(torch.bfloat16)
     k_bf16 = k.to(torch.bfloat16)
     # q: [B, M, H, D], k: [B, T, D] -> logits: [B, M, T, H]
-    logits = torch.einsum("bmhd,btd->bmht", q_bf16, k_bf16)
+    # Matches TileLang kernel: logits[n, h] = k[n, :] @ q[h, :]^T
+    logits = torch.einsum("bmhd,btd->bmth", q_bf16, k_bf16)
     logits = logits.clamp(min=0) * q_s.unsqueeze(-2)  # q_s: [B,M,H] -> [B,M,1,H]
     result = logits.sum(dim=-1) * k_s.unsqueeze(-2)  # k_s: [B,T] -> [B,1,T]
     return result
