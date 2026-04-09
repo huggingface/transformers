@@ -502,7 +502,7 @@ class PeftAdapterMixin:
         from peft import PeftType
         from peft.utils.save_and_load import _maybe_shard_state_dict_for_tp
 
-        from ..modeling_utils import LoadStateDictConfig, _get_resolved_checkpoint_files
+        from ..modeling_utils import LoadStateDictConfig, _get_resolved_checkpoint_files, load_state_dict
 
         if local_files_only:
             kwargs["local_files_only"] = True
@@ -640,8 +640,6 @@ class PeftAdapterMixin:
             elif checkpoint_files is not None:
                 merged_state_dict = {}
                 for ckpt_file in checkpoint_files:
-                    from ..modeling_utils import load_state_dict
-
                     merged_state_dict.update(load_state_dict(ckpt_file))
             else:
                 raise ValueError("Neither a state dict nor checkpoint files were found.")
