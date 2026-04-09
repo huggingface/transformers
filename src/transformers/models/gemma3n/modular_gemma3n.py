@@ -31,7 +31,14 @@ from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPool
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging, torch_compilable_check
+from ...utils import (
+    TransformersKwargs,
+    auto_docstring,
+    can_return_tuple,
+    is_accelerate_available,
+    logging,
+    torch_compilable_check,
+)
 from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
 from ..auto import AutoModel
@@ -58,6 +65,9 @@ from ..paligemma.modeling_paligemma import (
 )
 from ..timm_wrapper.configuration_timm_wrapper import TimmWrapperConfig
 
+
+if is_accelerate_available():
+    from accelerate.hooks import add_hook_to_module
 
 logger = logging.get_logger(__name__)
 
@@ -1653,6 +1663,37 @@ class Gemma3nPreTrainedModel(Gemma2PreTrainedModel):
         if hasattr(module, "gradient_clipping"):
             init.constant_(module.gradient_clipping, self.config.gradient_clipping)
 
+    def resize_token_embeddings(
+        self,
+        new_num_tokens: int | None = None,
+        pad_to_multiple_of: int | None = None,
+        mean_resizing: bool = True,
+    ) -> nn.Embedding:
+        inputs_embeds = super().resize_token_embeddings(
+            new_num_tokens=new_num_tokens,
+            pad_to_multiple_of=pad_to_multiple_of,
+            mean_resizing=mean_resizing,
+        )
+        self._resize_per_layer_embeddings(new_num_tokens, pad_to_multiple_of, mean_resizing)
+        return inputs_embeds
+
+    def _resize_per_layer_embeddings(
+        self,
+        new_num_tokens: int | None = None,
+        pad_to_multiple_of: int | None = None,
+        mean_resizing: bool = True,
+    ):
+        self.config.vocab_size_per_layer_input = self.vocab_size
+        embed_tokens_per_layer = self.base_model.embed_tokens_per_layer
+        new_embeddings_per_layer = self._get_resized_embeddings(
+            embed_tokens_per_layer, new_num_tokens, pad_to_multiple_of, mean_resizing
+        )
+        if hasattr(embed_tokens_per_layer, "_hf_hook"):
+            hook = embed_tokens_per_layer._hf_hook
+            add_hook_to_module(new_embeddings_per_layer, hook)
+        new_embeddings_per_layer.requires_grad_(embed_tokens_per_layer.weight.requires_grad)
+        self.base_model.embed_tokens_per_layer = new_embeddings_per_layer
+
 
 class Gemma3nAudioEncoder(Gemma3nPreTrainedModel):
     """
@@ -2220,6 +2261,20 @@ class Gemma3nModel(PaliGemmaModel):
 
         return audio_outputs
 
+    def resize_token_embeddings(
+        self,
+        new_num_tokens: int | None = None,
+        pad_to_multiple_of: int | None = None,
+        mean_resizing: bool = True,
+    ) -> nn.Embedding:
+        inputs_embeds = super().resize_token_embeddings(
+            new_num_tokens=new_num_tokens,
+            pad_to_multiple_of=pad_to_multiple_of,
+            mean_resizing=mean_resizing,
+        )
+        # TODO: fix resizing for embeds per-layer by filtering out mm-soft-tokens
+        return inputs_embeds
+
 
 @auto_docstring(
     custom_intro="""
@@ -2394,6 +2449,20 @@ class Gemma3nForConditionalGeneration(PaliGemmaForConditionalGeneration):
 
     def create_masks_for_generate(self, **super_kwargs):
         raise AttributeError("Do not inherit create_masks_for_generate from PaliGemma")
+
+    def resize_token_embeddings(
+        self,
+        new_num_tokens: int | None = None,
+        pad_to_multiple_of: int | None = None,
+        mean_resizing: bool = True,
+    ) -> nn.Embedding:
+        inputs_embeds = super().resize_token_embeddings(
+            new_num_tokens=new_num_tokens,
+            pad_to_multiple_of=pad_to_multiple_of,
+            mean_resizing=mean_resizing,
+        )
+        # TODO: fix resizing for embeds per-layer by filtering out mm-soft-tokens
+        return inputs_embeds
 
 
 __all__ = [
