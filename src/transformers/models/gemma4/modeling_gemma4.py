@@ -1428,19 +1428,20 @@ class Gemma4TextScaledWordEmbedding(nn.Embedding):
         return super().forward(input_ids) * self.embed_scale.to(self.weight.dtype)
 
 
-# ---- Model Classes ----
-
-
+@auto_docstring
 class Gemma4PreTrainedModel(PreTrainedModel):
     config: Gemma4Config
+    base_model_prefix = "model"
     supports_gradient_checkpointing = True
+    _no_split_modules = ["Gemma4TextDecoderLayer", "Gemma4VisionEncoderLayer", "Gemma4AudioLayer"]
+    _skip_keys_device_placement = ["past_key_values"]
     _supports_flash_attn = True
     _supports_sdpa = True
     _supports_flex_attn = True
+
     _can_compile_fullgraph = True
     _supports_attention_backend = True
-    _no_split_modules = ["Gemma4TextDecoderLayer", "Gemma4VisionEncoderLayer", "Gemma4AudioLayer"]
-    _skip_keys_device_placement = ["past_key_values"]
+    _can_record_outputs = None  # override
     input_modalities = ("image", "text", "video", "audio")
 
     @torch.no_grad()

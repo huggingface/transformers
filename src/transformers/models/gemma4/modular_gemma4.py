@@ -63,6 +63,7 @@ from ..gemma3n.modeling_gemma3n import (
     Gemma3nModel,
     Gemma3nModelOutputWithPast,
     Gemma3nMultimodalEmbedder,
+    Gemma3nPreTrainedModel,
     Gemma3nRMSNorm,
     apply_rotary_pos_emb,
     eager_attention_forward,
@@ -74,7 +75,7 @@ from .configuration_gemma4 import Gemma4AudioConfig, Gemma4Config, Gemma4TextCon
 
 
 if is_accelerate_available():
-    from accelerate.hooks import add_hook_to_module
+    pass
 
 
 logger = logging.get_logger(__name__)
@@ -1149,21 +1150,14 @@ class Gemma4TextScaledWordEmbedding(Gemma3TextScaledWordEmbedding):
 # ---- Model Classes ----
 
 
-class Gemma4PreTrainedModel(PreTrainedModel):
-    config: Gemma4Config
-    supports_gradient_checkpointing = True
-    _supports_flash_attn = True
-    _supports_sdpa = True
-    _supports_flex_attn = True
-    _can_compile_fullgraph = True
-    _supports_attention_backend = True
+class Gemma4PreTrainedModel(Gemma3nPreTrainedModel):
     _no_split_modules = ["Gemma4TextDecoderLayer", "Gemma4VisionEncoderLayer", "Gemma4AudioLayer"]
-    _skip_keys_device_placement = ["past_key_values"]
     input_modalities = ("image", "text", "video", "audio")
+    _can_record_outputs = None  # override
 
     @torch.no_grad()
     def _init_weights(self, module):
-        super()._init_weights(module)
+        PreTrainedModel._init_weights(module)
         if isinstance(module, Gemma4VisionPatchEmbedder):
             init.ones_(module.position_embedding_table)
         elif isinstance(module, Gemma4AudioRelPositionalEncoding):
@@ -1213,44 +1207,6 @@ class Gemma4PreTrainedModel(PreTrainedModel):
         elif isinstance(module, Gemma4VisionModel) and module.config.standardize:
             init.zeros_(module.std_bias)
             init.ones_(module.std_scale)
-
-    def get_per_layer_input_embeddings(self):
-        return self.base_model.embed_tokens_per_layer
-
-    def set_per_layer_input_embeddings(self, value):
-        self.base_model.embed_tokens_per_layer = value
-
-    def resize_token_embeddings(
-        self,
-        new_num_tokens: int | None = None,
-        pad_to_multiple_of: int | None = None,
-        mean_resizing: bool = True,
-    ) -> nn.Embedding:
-        inputs_embeds = super().resize_token_embeddings(
-            new_num_tokens=new_num_tokens,
-            pad_to_multiple_of=pad_to_multiple_of,
-            mean_resizing=mean_resizing,
-        )
-        self._resize_per_layer_embeddings(new_num_tokens, pad_to_multiple_of, mean_resizing)
-        return inputs_embeds
-
-    def _resize_per_layer_embeddings(
-        self,
-        new_num_tokens: int | None = None,
-        pad_to_multiple_of: int | None = None,
-        mean_resizing: bool = True,
-    ):
-        self.config.get_text_config().vocab_size_per_layer_input = self.vocab_size
-        if self.config.get_text_config().hidden_size_per_layer_input:
-            embed_tokens_per_layer = self.get_per_layer_input_embeddings()
-            new_embeddings_per_layer = self._get_resized_embeddings(
-                embed_tokens_per_layer, new_num_tokens, pad_to_multiple_of, mean_resizing
-            )
-            if hasattr(embed_tokens_per_layer, "_hf_hook"):
-                hook = embed_tokens_per_layer._hf_hook
-                add_hook_to_module(new_embeddings_per_layer, hook)
-            new_embeddings_per_layer.requires_grad_(embed_tokens_per_layer.weight.requires_grad)
-            self.set_per_layer_input_embeddings(new_embeddings_per_layer)
 
 
 @auto_docstring(custom_intro="The base Gemma 4 language model without a language modeling head.")
