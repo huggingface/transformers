@@ -333,16 +333,3 @@ training_args = TrainingArguments(
     }
 )
 ```
-
-## NEFTune
-
-[NEFTune](https://hf.co/papers/2310.05914) adds noise to the embedding vectors during training to improve model performance. Enable it in [`Trainer`] with the `neftune_noise_alpha` parameter in [`TrainingArguments`] to control how much noise is added.
-
-```py
-from transformers import TrainingArguments, Trainer
-
-training_args = TrainingArguments(..., neftune_noise_alpha=0.1)
-trainer = Trainer(..., args=training_args)
-```
-
-The original embedding layer is restored after training to avoid any unexpected behavior.
