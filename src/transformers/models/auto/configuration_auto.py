@@ -237,6 +237,7 @@ CONFIG_MAPPING_NAMES = OrderedDict[str, str](
         ("instructblip", "InstructBlipConfig"),
         ("instructblipvideo", "InstructBlipVideoConfig"),
         ("internvl", "InternVLConfig"),
+        ("internvl_chat", "InternVLConfig"),
         ("internvl_vision", "InternVLVisionConfig"),
         ("jais2", "Jais2Config"),
         ("jamba", "JambaConfig"),
@@ -757,6 +758,7 @@ MODEL_NAMES_MAPPING = OrderedDict[str, str](
         ("instructblip", "InstructBLIP"),
         ("instructblipvideo", "InstructBlipVideo"),
         ("internvl", "InternVL"),
+        ("internvl_chat", "InternVL"),
         ("internvl_vision", "InternVLVision"),
         ("jais2", "Jais2"),
         ("jamba", "Jamba"),
@@ -1133,6 +1135,7 @@ SPECIAL_MODEL_TYPE_TO_MODULE_NAME = OrderedDict[str, str](
         ("rt_detr_resnet", "rt_detr"),
         ("granitevision", "llava_next"),
         ("internvl_vision", "internvl"),
+        ("internvl_chat", "internvl"),
         ("qwen2_5_vl_text", "qwen2_5_vl"),
         ("qwen2_vl_text", "qwen2_vl"),
         ("qwen3_vl_text", "qwen3_vl"),
@@ -1481,6 +1484,11 @@ class AutoConfig:
         code_revision = kwargs.pop("code_revision", None)
 
         config_dict, unused_kwargs = PreTrainedConfig.get_config_dict(pretrained_model_name_or_path, **kwargs)
+        if config_dict.get("model_type") == "internvl_chat":
+            # Legacy InternVL checkpoints still advertise remote code, but Transformers now supports
+            # loading them natively through the local InternVL implementation.
+            config_dict = dict(config_dict)
+            config_dict.pop("auto_map", None)
         has_remote_code = "auto_map" in config_dict and "AutoConfig" in config_dict["auto_map"]
         has_local_code = "model_type" in config_dict and config_dict["model_type"] in CONFIG_MAPPING
         explicit_local_code = has_local_code and not CONFIG_MAPPING[config_dict["model_type"]].__module__.startswith(

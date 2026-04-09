@@ -38,6 +38,7 @@ from transformers import (
     CLIPImageProcessor,
     FeatureExtractionMixin,
     ImageProcessingMixin,
+    InternVLProcessor,
     LlamaTokenizer,
     LlavaOnevisionVideoProcessor,
     LlavaProcessor,
@@ -69,6 +70,7 @@ from test_module.custom_tokenization import CustomTokenizer  # noqa E402
 SAMPLE_PROCESSOR_CONFIG = get_tests_dir("fixtures/dummy_feature_extractor_config.json")
 SAMPLE_VOCAB_LLAMA = get_tests_dir("fixtures/test_sentencepiece.model")
 SAMPLE_VOCAB = get_tests_dir("fixtures/vocab.json")
+SAMPLE_BERT_VOCAB = get_tests_dir("fixtures/vocab.txt")
 SAMPLE_CONFIG = get_tests_dir("fixtures/config.json")
 SAMPLE_PROCESSOR_CONFIG_DIR = get_tests_dir("fixtures")
 
@@ -220,6 +222,92 @@ class AutoFeatureExtractorTest(unittest.TestCase):
             processor = AutoProcessor.from_pretrained(tmpdirname)
 
         self.assertIsInstance(processor, Wav2Vec2Processor)
+
+    def test_legacy_internvl_chat_uses_local_processor(self):
+        with tempfile.TemporaryDirectory() as tmpdirname:
+            config_dict = {
+                "architectures": ["InternVLChatModel"],
+                "auto_map": {
+                    "AutoConfig": "configuration_internvl_chat.InternVLChatConfig",
+                    "AutoModel": "modeling_internvl_chat.InternVLChatModel",
+                },
+                "downsample_ratio": 0.5,
+                "llm_config": {
+                    "model_type": "qwen2",
+                    "hidden_size": 8,
+                    "intermediate_size": 16,
+                    "num_attention_heads": 2,
+                    "num_hidden_layers": 2,
+                    "num_key_value_heads": 1,
+                    "vocab_size": 32,
+                    "max_position_embeddings": 64,
+                },
+                "model_type": "internvl_chat",
+                "vision_config": {
+                    "hidden_act": "gelu",
+                    "hidden_size": 8,
+                    "image_size": 32,
+                    "initializer_range": 0.02,
+                    "intermediate_size": 16,
+                    "layer_norm_eps": 1e-6,
+                    "norm_type": "layer_norm",
+                    "num_attention_heads": 2,
+                    "num_channels": 3,
+                    "num_hidden_layers": 2,
+                    "patch_size": 4,
+                    "qkv_bias": True,
+                },
+            }
+            with open(os.path.join(tmpdirname, "config.json"), "w", encoding="utf-8") as f:
+                json.dump(config_dict, f)
+            with open(os.path.join(tmpdirname, FEATURE_EXTRACTOR_NAME), "w", encoding="utf-8") as f:
+                json.dump(
+                    {
+                        "crop_size": 32,
+                        "do_center_crop": True,
+                        "do_normalize": True,
+                        "do_resize": True,
+                        "feature_extractor_type": "CLIPFeatureExtractor",
+                        "image_mean": [0.5, 0.5, 0.5],
+                        "image_std": [0.5, 0.5, 0.5],
+                        "resample": 3,
+                        "size": 32,
+                    },
+                    f,
+                )
+            with open(os.path.join(tmpdirname, TOKENIZER_CONFIG_FILE), "w", encoding="utf-8") as f:
+                json.dump(
+                    {
+                        "tokenizer_class": "BertTokenizer",
+                        "unk_token": "[UNK]",
+                        "sep_token": "[SEP]",
+                        "pad_token": "[PAD]",
+                        "cls_token": "[CLS]",
+                        "mask_token": "[MASK]",
+                        "model_max_length": 128,
+                    },
+                    f,
+                )
+            with open(os.path.join(tmpdirname, "special_tokens_map.json"), "w", encoding="utf-8") as f:
+                json.dump(
+                    {
+                        "unk_token": "[UNK]",
+                        "sep_token": "[SEP]",
+                        "pad_token": "[PAD]",
+                        "cls_token": "[CLS]",
+                        "mask_token": "[MASK]",
+                    },
+                    f,
+                )
+            copyfile(SAMPLE_BERT_VOCAB, os.path.join(tmpdirname, "vocab.txt"))
+
+            processor = AutoProcessor.from_pretrained(tmpdirname, trust_remote_code=True)
+
+        self.assertIsInstance(processor, InternVLProcessor)
+        self.assertEqual(processor.start_image_token, "<img>")
+        self.assertEqual(processor.end_image_token, "</img>")
+        self.assertEqual(processor.image_token, "<IMG_CONTEXT>")
+        self.assertEqual(processor.video_token, "<video>")
 
     def test_from_pretrained_dynamic_processor(self):
         # If remote code is not set, we will time out when asking whether to load the model.

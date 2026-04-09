@@ -24,6 +24,7 @@ from transformers import (
     VIDEO_PROCESSOR_MAPPING,
     AutoConfig,
     AutoVideoProcessor,
+    InternVLVideoProcessor,
     LlavaOnevisionConfig,
     LlavaOnevisionVideoProcessor,
 )
@@ -77,6 +78,25 @@ class AutoVideoProcessorTest(unittest.TestCase):
 
             config = AutoVideoProcessor.from_pretrained(tmpdirname)
             self.assertIsInstance(config, LlavaOnevisionVideoProcessor)
+
+    def test_legacy_internvl_chat_without_video_preprocessor_config_uses_local_video_processor(self):
+        with tempfile.TemporaryDirectory() as tmpdirname:
+            config_tmpfile = Path(tmpdirname) / "config.json"
+            json.dump(
+                {
+                    "model_type": "internvl_chat",
+                    "auto_map": {"AutoConfig": "legacy.configuration_internvl_chat.InternVLChatConfig"},
+                    "force_image_size": 448,
+                    "select_layer": -1,
+                    "llm_config": {"model_type": "qwen2"},
+                    "vision_config": {"image_size": 448, "patch_size": 14},
+                },
+                open(config_tmpfile, "w"),
+            )
+
+            config = AutoVideoProcessor.from_pretrained(tmpdirname, trust_remote_code=True)
+            self.assertIsInstance(config, InternVLVideoProcessor)
+            self.assertEqual(config.size, {"height": 448, "width": 448})
 
     def test_video_processor_from_local_directory_from_config(self):
         with tempfile.TemporaryDirectory() as tmpdirname:

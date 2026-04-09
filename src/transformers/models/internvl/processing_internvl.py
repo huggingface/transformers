@@ -17,25 +17,35 @@ import numpy as np
 
 from ...image_processing_utils import BatchFeature
 from ...image_utils import ImageInput, concatenate_list, make_flat_list_of_images
-from ...processing_utils import MultiModalData, ProcessingKwargs, ProcessorMixin, Unpack
+from ...processing_utils import ImagesKwargs, MultiModalData, ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
 from ...utils import auto_docstring
 from ...video_utils import VideoInput
 
 
+class InternVLImagesKwargs(ImagesKwargs, total=False):
+    crop_to_patches: bool
+    min_patches: int
+    max_patches: int
+
+
 class InternVLProcessorKwargs(ProcessingKwargs, total=False):
+    images_kwargs: InternVLImagesKwargs
     _defaults = {
         "text_kwargs": {
             "padding_side": "left",
             "return_mm_token_type_ids": False,
         },
-        "images_kwargs": {
-            "crop_to_patches": True,
-        },
         "videos_kwargs": {
             "return_tensors": "pt",
         },
     }
+
+
+def _resolve_token_and_id(tokenizer, token_attr: str, token_id_attr: str, default_token: str) -> tuple[str, int]:
+    token = getattr(tokenizer, token_attr, default_token)
+    token_id = getattr(tokenizer, token_id_attr, tokenizer.convert_tokens_to_ids(token))
+    return token, token_id
 
 
 @auto_docstring
@@ -57,14 +67,20 @@ class InternVLProcessor(ProcessorMixin):
         super().__init__(image_processor, tokenizer, video_processor, chat_template=chat_template, **kwargs)
 
         self.image_seq_length = image_seq_length
-        self.start_image_token = tokenizer.start_image_token
-        self.end_image_token = tokenizer.end_image_token
-        self.start_image_token_id = tokenizer.start_image_token_id
-        self.end_image_token_id = tokenizer.end_image_token_id
-        self.image_token = tokenizer.context_image_token
-        self.video_token = tokenizer.video_token
-        self.image_token_id = tokenizer.context_image_token_id
+        self.start_image_token, self.start_image_token_id = _resolve_token_and_id(
+            tokenizer, "start_image_token", "start_image_token_id", "<img>"
+        )
+        self.end_image_token, self.end_image_token_id = _resolve_token_and_id(
+            tokenizer, "end_image_token", "end_image_token_id", "</img>"
+        )
+        self.image_token, self.image_token_id = _resolve_token_and_id(
+            tokenizer, "context_image_token", "context_image_token_id", "<IMG_CONTEXT>"
+        )
+        self.video_token, self.video_token_id = _resolve_token_and_id(
+            tokenizer, "video_token", "video_token_id", "<video>"
+        )
         self.image_ids = [self.image_token_id, self.start_image_token_id, self.end_image_token_id]
+        self.video_ids = [self.video_token_id]
 
     def _insert_media_placeholders(
         self,
