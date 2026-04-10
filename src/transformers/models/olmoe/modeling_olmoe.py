@@ -243,10 +243,8 @@ class OlmoeAttention(nn.Module):
         self.o_proj = nn.Linear(
             config.num_attention_heads * self.head_dim, config.hidden_size, bias=config.attention_bias
         )
-        self.q_norm = OlmoeRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        self.k_norm = OlmoeRMSNorm(
-            (config.hidden_size // config.num_attention_heads) * config.num_key_value_heads, eps=config.rms_norm_eps
-        )
+        self.q_norm = OlmoeRMSNorm(config.num_attention_heads * self.head_dim, eps=config.rms_norm_eps)
+        self.k_norm = OlmoeRMSNorm(config.num_key_value_heads * self.head_dim, eps=config.rms_norm_eps)
 
     def forward(
         self,
@@ -350,8 +348,8 @@ class OlmoeTopKRouter(nn.Module):
     def forward(self, hidden_states):
         hidden_states = hidden_states.reshape(-1, self.hidden_dim)
         router_logits = F.linear(hidden_states, self.weight)  # (seq_len, num_experts)
-        router_logits = torch.nn.functional.softmax(router_logits, dtype=torch.float, dim=-1)
-        router_top_value, router_indices = torch.topk(router_logits, self.top_k, dim=-1)  # (seq_len, top_k)
+        router_probs = torch.nn.functional.softmax(router_logits, dtype=torch.float, dim=-1)
+        router_top_value, router_indices = torch.topk(router_probs, self.top_k, dim=-1)  # (seq_len, top_k)
         if self.norm_topk_prob:
             router_top_value /= router_top_value.sum(dim=-1, keepdim=True)
         router_top_value = router_top_value.to(router_logits.dtype)

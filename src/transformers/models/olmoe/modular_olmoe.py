@@ -58,10 +58,8 @@ class OlmoeMLP(GemmaMLP):
 class OlmoeAttention(LlamaAttention):
     def __init__(self, config: OlmoeConfig, layer_idx: int | None = None):
         super().__init__(config, layer_idx)
-        self.q_norm = OlmoeRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        self.k_norm = OlmoeRMSNorm(
-            (config.hidden_size // config.num_attention_heads) * config.num_key_value_heads, eps=config.rms_norm_eps
-        )
+        self.q_norm = OlmoeRMSNorm(config.num_attention_heads * self.head_dim, eps=config.rms_norm_eps)
+        self.k_norm = OlmoeRMSNorm(config.num_key_value_heads * self.head_dim, eps=config.rms_norm_eps)
 
     def forward(
         self,

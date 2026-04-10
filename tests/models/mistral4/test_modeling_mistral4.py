@@ -39,6 +39,9 @@ if is_torch_available():
         Mistral4Model,
     )
 
+    from transformers.models.mistral4.configuration_mistral4 import Mistral4Config
+    from transformers.models.mistral4.modeling_mistral4 import Mistral4RotaryEmbedding
+
 
 from ...causal_lm_tester import CausalLMModelTest, CausalLMModelTester
 
@@ -80,6 +83,17 @@ class Mistral4ModelTest(CausalLMModelTest, unittest.TestCase):
 class Mistral4IntegrationTest(unittest.TestCase):
     def tearDown(self):
         cleanup(torch_device, gc_collect=True)
+
+    def test_default_rope_uses_rotary_head_dim(self):
+        config = Mistral4Config(
+            rope_parameters={"type": "default", "rope_theta": 10000.0},
+            qk_nope_head_dim=96,
+            qk_rope_head_dim=32,
+        )
+
+        rotary_embedding = Mistral4RotaryEmbedding(config)
+
+        self.assertEqual(rotary_embedding.inv_freq.shape[0] * 2, config.qk_rope_head_dim)
 
     @slow
     def test_mistral_small_4_logits(self):

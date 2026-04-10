@@ -39,6 +39,8 @@ if is_torch_available():
         OlmoeForCausalLM,
         OlmoeModel,
     )
+    from transformers.models.olmoe.modeling_olmoe import OlmoeAttention
+    from transformers.models.olmoe.modeling_olmoe import OlmoeTopKRouter
 
 
 class OlmoeModelTester:
@@ -192,6 +194,46 @@ class OlmoeModelTest(
     # Need to use `0.8` instead of `0.9` for `test_cpu_offload`
     # This is because we are hitting edge cases with the causal_mask buffer
     model_split_percents = [0.5, 0.7, 0.8]
+
+    def test_router_returns_raw_logits(self):
+        config = OlmoeConfig(hidden_size=4, num_experts=3, num_experts_per_tok=2, norm_topk_prob=False)
+        router = OlmoeTopKRouter(config)
+
+        with torch.no_grad():
+            router.weight.copy_(
+                torch.tensor([[1.0, 0.0, -1.0, 2.0], [0.5, 1.0, 0.0, -0.5], [-1.0, 0.5, 1.5, 0.0]])
+            )
+
+        hidden_states = torch.tensor([[[2.0, -1.0, 0.5, 3.0]]])
+        router_logits, router_scores, router_indices = router(hidden_states)
+
+        expected_logits = torch.nn.functional.linear(hidden_states.reshape(-1, 4), router.weight)
+        expected_probs = torch.nn.functional.softmax(expected_logits, dim=-1)
+        expected_top_values, expected_top_indices = torch.topk(expected_probs, 2, dim=-1)
+
+        self.assertTrue(torch.equal(router_logits, expected_logits))
+        self.assertTrue(torch.equal(router_indices, expected_top_indices))
+        self.assertTrue(torch.allclose(router_scores, expected_top_values.to(router_scores.dtype)))
+
+    def test_attention_uses_head_dim_in_norms(self):
+        config = OlmoeConfig(
+            hidden_size=8,
+            num_attention_heads=2,
+            num_key_value_heads=1,
+            num_hidden_layers=1,
+            intermediate_size=16,
+            vocab_size=32,
+        )
+        config.head_dim = 2
+        attention = OlmoeAttention(config, layer_idx=0)
+
+        hidden_states = torch.randn(1, 1, 8)
+        position_embeddings = (torch.ones(1, 1, 2), torch.zeros(1, 1, 2))
+
+        output, attn_weights = attention(hidden_states, position_embeddings, attention_mask=None)
+
+        self.assertEqual(output.shape, (1, 1, 8))
+        self.assertIsNone(attn_weights)
 
     def setUp(self):
         self.model_tester = OlmoeModelTester(self)
