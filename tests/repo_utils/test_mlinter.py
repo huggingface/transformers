@@ -886,6 +886,43 @@ class FooMainModel(WrapperPreTrainedModel):
             self.assertEqual(len(trf015), 1)
             self.assertIn("CompositeConfig", trf015[0].message)
 
+    def test_trf015_cache_invalidated_by_config_change(self):
+        """Changing the config file must change the cache digest even if the modeling file is unchanged."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            model_dir = Path(tmpdir)
+            modeling_source = """
+class FooPreTrainedModel(PreTrainedModel):
+    pass
+
+class FooForCausalLM(FooPreTrainedModel):
+    _tied_weights_keys = ["lm_head.weight"]
+"""
+            modeling_path = model_dir / "modeling_foo.py"
+            modeling_path.write_text(modeling_source)
+
+            config_v1 = """
+class FooConfig(PreTrainedConfig):
+    hidden_size: int = 768
+"""
+            config_path = model_dir / "configuration_foo.py"
+            config_path.write_text(config_v1)
+
+            companions = mlinter._find_companion_files(modeling_path)
+            digest_v1 = mlinter._content_hash(modeling_source, {mlinter.TRF015}, companions)
+
+            # Now add tie_word_embeddings to the config — modeling file unchanged
+            config_v2 = """
+class FooConfig(PreTrainedConfig):
+    hidden_size: int = 768
+    tie_word_embeddings: bool = True
+"""
+            config_path.write_text(config_v2)
+
+            companions = mlinter._find_companion_files(modeling_path)
+            digest_v2 = mlinter._content_hash(modeling_source, {mlinter.TRF015}, companions)
+
+            self.assertNotEqual(digest_v1, digest_v2)
+
 
 if __name__ == "__main__":
     unittest.main()
