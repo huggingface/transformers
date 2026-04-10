@@ -982,18 +982,38 @@ class Cache:
         return recurrent_states
 
     def early_initialization(
-        self, batch_size: int, num_heads: int, head_dim: int, dtype: torch.dtype, device: torch.device
+        self,
+        batch_size: int,
+        num_heads: int | list[int],
+        head_dim: int | list[int],
+        dtype: torch.dtype,
+        device: torch.device,
     ):
         """
         Initialize all the layers in advance (it's otherwise lazily initialized on the first `update` call).
         This is useful for our `export` recipes, as `export` needs everything in advance.
         """
-        # Note that the initialization needs all dimensions (except -2), as well as device and dtype, so we use
-        # this fake tensor approach. It has size 0 on the -2 dimension, so it does not allocate any data (it only
-        # creates an empty tensor with correct shape, dtype and device), which is very efficient and practical
-        fake_kv_tensor = torch.zeros((batch_size, num_heads, 0, head_dim), dtype=dtype, device=device)
-        # Init all layers
-        for layer in self.layers:
+        # To allow different num_heads and head_dim depending on layers, we accept lists
+        if isinstance(num_heads, int):
+            num_heads = [num_heads] * len(self)
+        if isinstance(head_dim, int):
+            head_dim = [head_dim] * len(self)
+
+        if len(num_heads) != len(self.layers):
+            raise ValueError(
+                f"`num_head` was provided as a list of length {len(num_heads)}, but the Cache currently has {len(self.layers)} layers"
+            )
+        if len(head_dim) != len(self.layers):
+            raise ValueError(
+                f"`head_dim` was provided as a list of length {len(num_heads)}, but the Cache currently has {len(self.layers)} layers"
+            )
+
+        for layer, layer_num_heads, layer_head_dim in zip(self.layers, num_heads, head_dim):
+            # Note that the initialization needs all dimensions (except -2), as well as device and dtype, so we use
+            # this fake tensor approach. It has size 0 on the -2 dimension, so it does not allocate any data (it only
+            # creates an empty tensor with correct shape, dtype and device), which is very efficient and practical
+            fake_kv_tensor = torch.zeros((batch_size, layer_num_heads, 0, layer_head_dim), dtype=dtype, device=device)
+            # Init the layer
             layer.lazy_initialization(fake_kv_tensor, fake_kv_tensor)
 
     def get_seq_length(self, layer_idx: int = 0) -> int:
@@ -1548,3 +1568,7 @@ class EncoderDecoderCache(Cache):
     @property
     def is_compileable(self) -> bool:
         return self.self_attention_cache.is_compileable
+
+
+# Deprecated alias: SlidingWindowCache was removed in transformers v5. StaticCache is the replacement.
+SlidingWindowCache = StaticCache

@@ -60,10 +60,10 @@ def contrastive_loss(logits: torch.Tensor) -> torch.Tensor:
     return nn.functional.cross_entropy(logits, torch.arange(len(logits), device=logits.device))
 
 
-# Copied from transformers.models.clip.modeling_clip.clip_loss with clip->clvp, image_loss->speech_loss
-def clvp_loss(similarity: torch.Tensor) -> torch.Tensor:
+# Copied from transformers.models.clip.modeling_clip.image_text_contrastive_loss with image->speech
+def speech_text_contrastive_loss(similarity: torch.Tensor) -> torch.Tensor:
     caption_loss = contrastive_loss(similarity)
-    speech_loss = contrastive_loss(similarity.t())
+    speech_loss = contrastive_loss(similarity.T)
     return (caption_loss + speech_loss) / 2.0
 
 
@@ -1544,7 +1544,7 @@ class ClvpModelForConditionalGeneration(ClvpPreTrainedModel, GenerationMixin):
 
         loss = None
         if return_loss:
-            loss = clvp_loss(logits_per_text)
+            loss = speech_text_contrastive_loss(logits_per_text)
 
         return ClvpOutput(
             loss=loss,
