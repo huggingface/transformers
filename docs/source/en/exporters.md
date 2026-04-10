@@ -28,11 +28,11 @@ Because the exporters live inside Transformers, they evolve with the models. Eve
 change, new attention pattern, or custom cache type is supported at export time from day one —
 no waiting for a downstream library to catch up.
 
-| Exporter               | Output                         | Runtime                              |
-| ---------------------- | ------------------------------ | ------------------------------------ |
-| [`DynamoExporter`]     | `ExportedProgram`          | Any PyTorch runtime, AOT compilation           |
-| [`OnnxExporter`]       | `ONNXProgram`              | Any ONNX runtime (ORT, TensorRT, OpenVINO, …)  |
-| [`ExecutorchExporter`] | `ExecutorchProgramManager` | Mobile and edge devices (ExecuTorch)            |
+| Exporter               | Output                     | Runtime                                       |
+| ---------------------- | -------------------------- | --------------------------------------------- |
+| [`DynamoExporter`]     | `ExportedProgram`          | Any PyTorch runtime, AOT compilation          |
+| [`OnnxExporter`]       | `ONNXProgram`              | Any ONNX runtime (ORT, TensorRT, OpenVINO, …) |
+| [`ExecutorchExporter`] | `ExecutorchProgramManager` | Mobile and edge devices (ExecuTorch)          |
 
 ## Installation
 
@@ -264,7 +264,7 @@ et_program = exporter.export(model, inputs)
 </hfoption>
 </hfoptions>
 
-## Generative models (prefill / decode)
+## Generative models
 
 For autoregressive generation, the model's `forward` has different shapes at the prefill step
 (full prompt, no KV cache) versus the decode step (single token, populated KV cache).
