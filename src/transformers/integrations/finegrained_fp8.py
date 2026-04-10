@@ -122,11 +122,6 @@ def _load_deepgemm_kernel():
 
     # DeepGEMM requires Hopper (SM90) or newer for FP8 WGMMA instructions
     major = torch.cuda.get_device_capability()[0]
-    if major >= 10:
-        raise ImportError(
-            "DeepGEMM is not yet supported on Blackwell (SM100+) GPUs. "
-            "Falling back to Triton finegrained-fp8 kernel."
-        )
     if major < 9:
         raise ImportError(
             f"DeepGEMM requires a Hopper (SM90+) or newer GPU, but the current device "
