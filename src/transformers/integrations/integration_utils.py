@@ -945,8 +945,8 @@ class TrackioCallback(TrainerCallback):
     )
 
     @staticmethod
-    def _space_repo_name_from_trackio_project(project: str, sdk: str = "gradio") -> str:
-        """Build a Hub-safe Space repo name from the Trackio project and a short random suffix."""
+    def _space_repo_name_from_project(project: str) -> str:
+        """Build a Hub-safe name for a static Space from the Trackio project and a short random suffix."""
         s = project.strip().lower().replace("/", "-")
         s = re.sub(r"[^a-z0-9._-]", "-", s)
         s = re.sub(r"-+", "-", s).strip("-_.")
@@ -954,9 +954,7 @@ class TrackioCallback(TrainerCallback):
             s = "trackio-project"
         base = s[:81].rstrip("-")
         suffix = secrets.token_hex(3)
-        if sdk == "static":
-            return f"{base}-static-{suffix}"
-        return f"{base}-{suffix}"
+        return f"{base}-static-{suffix}"
 
     def __init__(self):
         if not is_trackio_available():
@@ -1053,8 +1051,8 @@ class TrackioCallback(TrainerCallback):
                 "`trackio_static_space_id=False` to silence this warning."
             )
             return
-        static_space_id = args.trackio_static_space_id or self._space_repo_name_from_trackio_project(
-            args.project, sdk="static"
+        static_space_id = (
+            self._static_space_id or args.trackio_static_space_id or self._space_repo_name_from_project(args.project)
         )
         self._static_space_id = self._trackio.freeze(
             space_id=self._space_id,
@@ -1115,8 +1113,8 @@ class TrackioCallback(TrainerCallback):
             # If there's a Gradio space, it will be frozen after training is complete, so we don't need to sync it here.
             # If a user has explicitly set trackio_static_space_id to False, we also don't sync their logs.
             return
-        static_space_id = args.trackio_static_space_id or self._space_repo_name_from_trackio_project(
-            args.project, sdk="static"
+        static_space_id = (
+            self._static_space_id or args.trackio_static_space_id or self._space_repo_name_from_project(args.project)
         )
         self._static_space_id = self._trackio.sync(
             project=current_project,
