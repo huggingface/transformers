@@ -337,7 +337,6 @@ class TimesFm2_5ForwardInputVariantsTest(unittest.TestCase):
                     )
 
 
-
 @require_torch
 @slow
 class TimesFm2_5ModelIntegrationTests(unittest.TestCase):

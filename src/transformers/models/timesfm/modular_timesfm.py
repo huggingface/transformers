@@ -780,7 +780,9 @@ class TimesFmModelForPrediction(TimesFmPreTrainedModel):
         )
 
     @staticmethod
-    def _timesfm_moving_average(arr: torch.Tensor, window_size: int) -> list[torch.Tensor] | tuple[torch.Tensor, torch.Tensor]:
+    def _timesfm_moving_average(
+        arr: torch.Tensor, window_size: int
+    ) -> list[torch.Tensor] | tuple[torch.Tensor, torch.Tensor]:
         """Calculates the moving average using PyTorch's convolution function."""
         # arr shape: (T,) or (B, T)
         is_2d = arr.ndim == 2
