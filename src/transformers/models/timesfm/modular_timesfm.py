@@ -547,40 +547,62 @@ class TimesFmModelForPrediction(TimesFmPreTrainedModel):
         self.post_init()
 
     def _preprocess(
-        self, inputs: Sequence[torch.Tensor], freq: Sequence[int] | None = None, context_len: int | None = None
+        self,
+        inputs: Sequence[torch.Tensor] | torch.Tensor,
+        freq: Sequence[int] | None = None,
+        context_len: int | None = None,
     ) -> tuple[torch.Tensor, ...]:
         """Pad/truncate input time series to `context_len` and build a padding mask.
 
         Args:
-            inputs: A list of 1d Tensors. Each Tensor is the context time series of a single forecast task.
+            inputs: Either a list of 1D tensors (one per series, may differ in length) or a single
+                2D tensor of shape ``(batch, seq_len)`` where all rows share the same length.
+                The 2D path avoids Python loops and is ONNX-export friendly.
             freq: Optional list of frequencies (returned as a tensor when provided).
-            context_len: Optional context length override (defaults to `self.context_len`).
+            context_len: Optional context length override (defaults to ``self.context_len``).
 
         Returns:
-            Tuple of (padded_inputs, padding_mask) and optionally a freq tensor.
+            Tuple of ``(padded_inputs, padding_mask)`` and optionally a freq tensor.
         """
         if context_len is None:
             context_len = self.context_len
 
-        input_ts, input_padding = [], []
-
-        for ts in inputs:
-            ts = ts[-context_len:]
-            num_front_pad = context_len - ts.shape[0]
-            ts = torch.cat([torch.zeros(num_front_pad, dtype=ts.dtype, device=ts.device), ts], dim=0)
+        if isinstance(inputs, torch.Tensor) and inputs.ndim == 2:
+            x = inputs[:, -context_len:]
+            num_front_pad = context_len - x.shape[1]
+            x = F.pad(x, (num_front_pad, 0))
             padding = torch.cat(
                 [
-                    torch.ones(num_front_pad, dtype=ts.dtype, device=ts.device),
-                    torch.zeros(context_len + self.horizon_len - num_front_pad, dtype=ts.dtype, device=ts.device),
+                    torch.ones(x.shape[0], num_front_pad, dtype=x.dtype, device=x.device),
+                    torch.zeros(
+                        x.shape[0], context_len + self.horizon_len - num_front_pad, dtype=x.dtype, device=x.device
+                    ),
                 ],
-                dim=0,
+                dim=1,
             )
-            input_ts.append(ts)
-            input_padding.append(padding)
+            result = (x, padding)
+        else:
+            input_ts, input_padding = [], []
+            for ts in inputs:
+                ts = ts[-context_len:]
+                num_front_pad = context_len - ts.shape[0]
+                ts = torch.cat([torch.zeros(num_front_pad, dtype=ts.dtype, device=ts.device), ts], dim=0)
+                padding = torch.cat(
+                    [
+                        torch.ones(num_front_pad, dtype=ts.dtype, device=ts.device),
+                        torch.zeros(
+                            context_len + self.horizon_len - num_front_pad, dtype=ts.dtype, device=ts.device
+                        ),
+                    ],
+                    dim=0,
+                )
+                input_ts.append(ts)
+                input_padding.append(padding)
+            result = (torch.stack(input_ts, dim=0), torch.stack(input_padding, dim=0))
 
-        result = (torch.stack(input_ts, dim=0), torch.stack(input_padding, dim=0))
         if freq is not None:
-            result = result + (torch.tensor(freq[: len(inputs)], dtype=torch.int32).reshape(-1, 1),)
+            batch_size = inputs.shape[0] if isinstance(inputs, torch.Tensor) else len(inputs)
+            result = result + (torch.tensor(freq[:batch_size], dtype=torch.int32).reshape(-1, 1),)
         return result
 
     def _postprocess_output(
@@ -610,7 +632,7 @@ class TimesFmModelForPrediction(TimesFmPreTrainedModel):
     @auto_docstring
     def forward(
         self,
-        past_values: Sequence[torch.Tensor],
+        past_values: Sequence[torch.Tensor] | torch.Tensor,
         freq: Sequence[torch.Tensor | int] | None = None,
         window_size: int | None = None,
         future_values: torch.Tensor | None = None,
@@ -620,8 +642,9 @@ class TimesFmModelForPrediction(TimesFmPreTrainedModel):
         **kwargs: Unpack[TransformersKwargs],
     ) -> TimesFmOutputForPrediction:
         r"""
-        past_values (`torch.FloatTensor` of shape `(batch_size, sequence_length)`):
-            Past values of the time series that serves as input to the model.
+        past_values (`torch.FloatTensor` of shape `(batch_size, sequence_length)` or `Sequence[torch.Tensor]`):
+            Past values of the time series that serves as input to the model. Can be a 2D tensor
+            (ONNX-friendly, all rows same length) or a list of 1D tensors (variable-length series).
         freq (`torch.LongTensor` of shape `(batch_size,)`):
             Frequency indices for the time series data.
         window_size (`int`, *optional*):
@@ -658,12 +681,20 @@ class TimesFmModelForPrediction(TimesFmPreTrainedModel):
         else:
             fcontext_len = forecast_context_len
 
-        device = past_values[0].device
+        is_tensor = isinstance(past_values, torch.Tensor) and past_values.ndim == 2
 
-        inputs = [ts[-fcontext_len:] for ts in past_values]
-        inp_min = torch.min(torch.stack([torch.min(ts) for ts in inputs]))
+        if is_tensor:
+            device = past_values.device
+            inputs = past_values[:, -fcontext_len:]
+            inp_min = inputs.min()
+        else:
+            device = past_values[0].device
+            inputs = [ts[-fcontext_len:] for ts in past_values]
+            inp_min = torch.min(torch.stack([torch.min(ts) for ts in inputs]))
 
         if window_size is not None:
+            if is_tensor:
+                raise ValueError("window_size is not supported when past_values is a 2D tensor.")
             new_inputs = []
             new_freqs = []
             for i, ts in enumerate(inputs):
@@ -676,7 +707,10 @@ class TimesFmModelForPrediction(TimesFmPreTrainedModel):
 
         if freq is None:
             logger.info("No frequency provided via `freq`. Default to high (0).")
-            freq = [0] * len(inputs)
+            if is_tensor:
+                freq = [0] * past_values.shape[0]
+            else:
+                freq = [0] * len(inputs)
 
         input_ts, input_padding, inp_freq = self._preprocess(inputs, freq)
         input_ts = input_ts.to(device)
@@ -731,9 +765,9 @@ class TimesFmModelForPrediction(TimesFmPreTrainedModel):
         if window_size is not None:
             mean_outputs = mean_outputs[0::2, ...] + mean_outputs[1::2, ...]
             full_outputs = full_outputs[0::2, ...] + full_outputs[1::2, ...]
-        if inp_min >= 0 and truncate_negative:
-            mean_outputs = torch.maximum(mean_outputs, 0.0)
-            full_outputs = torch.maximum(full_outputs, 0.0)
+        if truncate_negative:
+            mean_outputs = torch.where(inp_min >= 0, mean_outputs.clamp(min=0), mean_outputs)
+            full_outputs = torch.where(inp_min >= 0, full_outputs.clamp(min=0), full_outputs)
 
         loss = None
         if future_values is not None:

@@ -532,7 +532,7 @@ class TimesFm2_5ModelForPrediction(TimesFmModelForPrediction):
     @auto_docstring
     def forward(
         self,
-        past_values: Sequence[torch.Tensor],
+        past_values: Sequence[torch.Tensor] | torch.Tensor,
         window_size: int | None = None,
         future_values: torch.Tensor | None = None,
         forecast_context_len: int | None = None,
@@ -541,8 +541,9 @@ class TimesFm2_5ModelForPrediction(TimesFmModelForPrediction):
         **kwargs: Unpack[TransformersKwargs],
     ) -> TimesFm2_5OutputForPrediction:
         r"""
-        past_values (`Sequence[torch.Tensor]`):
-            Past values of the time series that serves as input to the model. Each tensor is a 1D time series.
+        past_values (`Sequence[torch.Tensor]` or `torch.Tensor` of shape `(batch_size, sequence_length)`):
+            Past values of the time series that serves as input to the model. Can be a 2D tensor
+            (ONNX-friendly, all rows same length) or a list of 1D tensors (variable-length series).
         window_size (`int`, *optional*):
             Window size of trend + residual decomposition. If `None`, decomposition is not applied.
         future_values (`torch.Tensor`, *optional*):
@@ -556,12 +557,20 @@ class TimesFm2_5ModelForPrediction(TimesFmModelForPrediction):
             `config.force_flip_invariance`.
         """
         forecast_context_len = forecast_context_len or self.context_len
-        device = past_values[0].device
+        is_tensor = isinstance(past_values, torch.Tensor) and past_values.ndim == 2
 
-        inputs = [ts[-forecast_context_len:] for ts in past_values]
-        input_min = torch.min(torch.stack([torch.min(ts) for ts in inputs]))
+        if is_tensor:
+            device = past_values.device
+            inputs = past_values[:, -forecast_context_len:]
+            input_min = inputs.min()
+        else:
+            device = past_values[0].device
+            inputs = [ts[-forecast_context_len:] for ts in past_values]
+            input_min = torch.min(torch.stack([torch.min(ts) for ts in inputs]))
 
         if window_size is not None:
+            if is_tensor:
+                raise ValueError("window_size is not supported when past_values is a 2D tensor.")
             new_inputs: list[torch.Tensor] = []
             for ts in inputs:
                 new_inputs.extend(self._timesfm_moving_average(ts, window_size))
