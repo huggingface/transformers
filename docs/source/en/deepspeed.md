@@ -95,6 +95,9 @@ accelerate launch --num_processes 4 train.py
 </hfoption>
 <hfoption id="Accelerate config file">
 
+> [!NOTE]
+> Accelerate ignores the [`deepspeed`] argument in [`TrainingArguments`].
+
 Run the [accelerate config](https://huggingface.co/docs/accelerate/en/package_reference/cli#accelerate-config) command and answer questions about your hardware and training setup to create a `default_config.yaml` file in your cache.
 
 ```yaml
