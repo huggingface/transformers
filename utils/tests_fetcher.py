@@ -1096,7 +1096,6 @@ JOB_TO_TEST_FILE = {
     "tests_custom_tokenizers": r"tests/models/.*/test_tokenization_(?=bert_japanese|openai|clip).*",
     "tests_repo_utils": r"tests/repo_utils/test_.*\.py",
     "pipelines_torch": r"tests/models/.*/test_modeling_.*",
-    "tests_hub": r"tests/.*",
     "tests_non_model": r"tests/[^/]*?/test_.*\.py",
     "tests_training_ci": r"tests/models/.*/test_modeling_.*",
     "tests_tensor_parallel_ci": r"(tests/models/.*/test_modeling_.*|tests/tensor_parallel(?:/test_tensor_parallel\.py)?)",
@@ -1111,20 +1110,12 @@ def create_test_list_from_filter(full_test_list, out_path):
     to_output = []
     for job_name, _filter in JOB_TO_TEST_FILE.items():
         file_name = os.path.join(out_path, f"{job_name}_test_list.txt")
-        if job_name == "tests_hub":
-            files_to_test = ["tests"]
-        else:
-            files_to_test = list(re.findall(_filter, all_test_files))
+        files_to_test = list(re.findall(_filter, all_test_files))
 
         print(job_name, file_name, len(files_to_test))
 
         if len(files_to_test) > 0:  # No tests -> no file with test list
             to_output.append((job_name, file_name, files_to_test))
-
-    # Only get `tests_hub`, which means we have 0 test file for all other jobs --> No job at all to run.
-    if len(to_output) == 1:
-        print("No test file found for any job, skipping `tests_hub` as well.")
-        to_output = []
 
     for _, file_name, files_to_test in to_output:
         with open(file_name, "w") as f:

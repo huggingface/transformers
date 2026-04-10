@@ -581,3 +581,7 @@ class Emu3TextMLP(LlamaMLP):
 ## Config docstrings
 
 When inheriting a `Config` class or adding and deleting attributes, you may want to only redefine the new attributes in the docstring. However, the linter doesn't support this yet. You need to directly add the while docstring directly in the modular file under the class definition.
+
+## See also
+
+- [Model structure rules](./modeling_rules) — static rules enforced on all `modeling_*.py`, `modular_*.py`, and `configuration_*.py` files. Run `make typing` to check them before opening a PR.

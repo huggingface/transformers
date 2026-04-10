@@ -74,8 +74,8 @@ class FocalNetConfig(BackboneConfigMixin, PreTrainedConfig):
     focal_windows: list[int] | tuple[int, ...] = (3, 3, 3, 3)
     hidden_act: str = "gelu"
     mlp_ratio: float = 4.0
-    hidden_dropout_prob: float = 0.0
-    drop_path_rate: float = 0.1
+    hidden_dropout_prob: float | int = 0.0
+    drop_path_rate: float | int = 0.1
     use_layerscale: bool = False
     layerscale_value: float = 1e-4
     use_post_layernorm: bool = False
