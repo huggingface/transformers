@@ -432,7 +432,7 @@ def decompose_multimodal(model: PreTrainedModel, inputs: dict[str, Any]) -> dict
     language model, lm_head, …) and captures their forward kwargs during one
     `model(**inputs)` call.
 
-    Each submodule is returned as a separate `(name, (module, inputs))` entry for
+    Each submodule is returned as a separate `name: (module, inputs)` entry for
     independent export. The token-merge step (e.g. `masked_scatter` for multi-modal models)
     is intentionally left outside the exported graphs — it is the caller's responsibility
     to assemble `inputs_embeds` from the encoder outputs before running the decoder.
