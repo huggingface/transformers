@@ -250,10 +250,10 @@ For autoregressive generation, the model's `forward` has different shapes at the
 >>> inputs = dict(tokenizer("Hello, world!", return_tensors="pt"))
 
 >>> stages = decompose_prefill_decode(model, inputs)
->>> # stages = [("prefill", model_copy, prefill_inputs), ("decode", model_copy, decode_inputs)]
+>>> # stages = {"prefill": (model_copy, prefill_inputs), "decode": (model_copy, decode_inputs)}
 
 >>> exporter = DynamoExporter(export_config=DynamoConfig(dynamic=True))
->>> for name, stage_model, stage_inputs in stages:
+>>> for name, (stage_model, stage_inputs) in stages.items():
 ...     exported = exporter.export(stage_model, stage_inputs)
 ```
 
@@ -270,10 +270,10 @@ tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen3-0.6B")
 inputs = dict(tokenizer("Hello, world!", return_tensors="pt"))
 
 stages = decompose_prefill_decode(model, inputs)
-# stages = [("prefill", model_copy, prefill_inputs), ("decode", model_copy, decode_inputs)]
+# stages = {"prefill": (model_copy, prefill_inputs), "decode": (model_copy, decode_inputs)}
 
 exporter = OnnxExporter(export_config=OnnxConfig(dynamic=True))
-for name, stage_model, stage_inputs in stages:
+for name, (stage_model, stage_inputs) in stages.items():
     onnx_program = exporter.export(stage_model, stage_inputs)
 ```
 
@@ -290,10 +290,10 @@ tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen3-0.6B")
 inputs = dict(tokenizer("Hello, world!", return_tensors="pt"))
 
 stages = decompose_prefill_decode(model, inputs)
-# stages = [("prefill", model_copy, prefill_inputs), ("decode", model_copy, decode_inputs)]
+# stages = {"prefill": (model_copy, prefill_inputs), "decode": (model_copy, decode_inputs)}
 
 exporter = ExecutorchExporter(export_config=ExecutorchConfig(backend="xnnpack", dynamic=True))
-for name, stage_model, stage_inputs in stages:
+for name, (stage_model, stage_inputs) in stages.items():
     et_program = exporter.export(stage_model, stage_inputs)
 ```
 
@@ -322,14 +322,14 @@ into its submodules. The decode stage stays as a single graph.
 
 >>> # step 1: split into prefill and decode stages
 >>> stages = decompose_prefill_decode(model, inputs)
->>> _, prefill_model, prefill_inputs = stages[0]
+>>> prefill_model, prefill_inputs = stages["prefill"]
 
 >>> # step 2: decompose the prefill into vision encoder, projector, language model
 >>> components = decompose_vlm(prefill_model, prefill_inputs)
->>> components += stages[1:]  # add the decode stage
+>>> components["decode"] = stages["decode"]
 
 >>> exporter = DynamoExporter(export_config=DynamoConfig(dynamic=True))
->>> for name, submodel, subinputs in components:
+>>> for name, (submodel, subinputs) in components.items():
 ...     exported = exporter.export(submodel, subinputs)
 ```
 
@@ -346,14 +346,14 @@ processor = AutoProcessor.from_pretrained("Qwen/Qwen2-VL-2B-Instruct")
 
 # step 1: split into prefill and decode stages
 stages = decompose_prefill_decode(model, inputs)
-_, prefill_model, prefill_inputs = stages[0]
+prefill_model, prefill_inputs = stages["prefill"]
 
 # step 2: decompose the prefill into vision encoder, projector, language model
 components = decompose_vlm(prefill_model, prefill_inputs)
-components += stages[1:]  # add the decode stage
+components["decode"] = stages["decode"]
 
 exporter = OnnxExporter(export_config=OnnxConfig(dynamic=True))
-for name, submodel, subinputs in components:
+for name, (submodel, subinputs) in components.items():
     onnx_program = exporter.export(submodel, subinputs)
 ```
 
@@ -370,14 +370,14 @@ processor = AutoProcessor.from_pretrained("Qwen/Qwen2-VL-2B-Instruct")
 
 # step 1: split into prefill and decode stages
 stages = decompose_prefill_decode(model, inputs)
-_, prefill_model, prefill_inputs = stages[0]
+prefill_model, prefill_inputs = stages["prefill"]
 
 # step 2: decompose the prefill into vision encoder, projector, language model
 components = decompose_vlm(prefill_model, prefill_inputs)
-components += stages[1:]  # add the decode stage
+components["decode"] = stages["decode"]
 
 exporter = ExecutorchExporter(export_config=ExecutorchConfig(backend="xnnpack", dynamic=True))
-for name, submodel, subinputs in components:
+for name, (submodel, subinputs) in components.items():
     et_program = exporter.export(submodel, subinputs)
 ```
 

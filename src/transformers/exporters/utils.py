@@ -24,7 +24,7 @@ Backend-agnostic helpers used by Dynamo, ONNX, and ExecuTorch exporters:
   for the prefill and decode steps.
 - `decompose_vlm`: capture inputs to every known VLM submodule (vision tower,
   projector, language model, ...) via a single forward pass, returning one
-  `(name, module, inputs)` triplet per component for independent export.
+  `{name: (module, inputs)}` entry per component for independent export.
 """
 
 from __future__ import annotations
@@ -399,15 +399,15 @@ def _capture_forward(module: torch.nn.Module):
 def decompose_prefill_decode(
     model: PreTrainedModel,
     inputs: dict[str, Any],
-) -> list[tuple[str, torch.nn.Module, dict]]:
+) -> dict[str, tuple[torch.nn.Module, dict]]:
     """Run `model.generate()` for 2 tokens and capture prefill and decode inputs.
 
     Reuses the full generation machinery so every architecture (decoder-only, SSM,
     encoder-decoder, VLM, …) gets correct inputs without reimplementing the loop.
 
     Returns:
-        `list[tuple[str, torch.nn.Module, dict]]`:
-        `[("prefill", model, prefill_inputs), ("decode", model, decode_inputs)]`
+        `dict[str, tuple[torch.nn.Module, dict]]`:
+        `{"prefill": (model, prefill_inputs), "decode": (model, decode_inputs)}`
     """
     try:
         with _capture_forward(model) as calls, torch.no_grad():
@@ -419,27 +419,27 @@ def decompose_prefill_decode(
             f"Make sure the inputs are compatible with model.generate()."
         ) from e
 
-    return [
-        ("prefill", copy.copy(model), calls[0]),
-        ("decode", copy.copy(model), calls[1]),
-    ]
+    return {
+        "prefill": (copy.copy(model), calls[0]),
+        "decode": (copy.copy(model), calls[1]),
+    }
 
 
-def decompose_vlm(model: PreTrainedModel, inputs: dict[str, Any]) -> list[tuple[str, torch.nn.Module, dict]]:
+def decompose_vlm(model: PreTrainedModel, inputs: dict[str, Any]) -> dict[str, tuple[torch.nn.Module, dict]]:
     """Capture inputs to each VLM submodule via a single forward pass.
 
     Detects all known VLM submodules by attribute name (vision tower, projector,
     language model, lm_head, …) and captures their forward kwargs during one
     `model(**inputs)` call.
 
-    Each submodule is returned as a separate `(name, module, inputs)` triplet for
+    Each submodule is returned as a separate `(name, (module, inputs))` entry for
     independent export. The token-merge step (e.g. `masked_scatter` for VLMs) is
     intentionally left outside the exported graphs — it is the caller's responsibility
     to assemble `inputs_embeds` from the encoder outputs before running the decoder.
 
     Returns:
-        `list[tuple[str, torch.nn.Module, dict]]`: One `(attr_name, module, inputs)`
-        triplet per detected submodule, in the order they appear in `_VLM_SUBMODULE_NAMES`.
+        `dict[str, tuple[torch.nn.Module, dict]]`: One `name: (module, inputs)`
+        entry per detected submodule, in the order they appear in `_VLM_SUBMODULE_NAMES`.
 
     Raises:
         `ValueError`: if no known VLM submodules are found on the model.
@@ -462,8 +462,8 @@ def decompose_vlm(model: PreTrainedModel, inputs: dict[str, Any]) -> list[tuple[
             f"decompose_vlm failed for {type(model).__name__}. Inputs passed: {list(inputs.keys())}."
         ) from e
 
-    return [
-        (name, module, submodule_inputs[name][-1])
+    return {
+        name: (module, submodule_inputs[name][-1])
         for name, module in submodules.items()
         if submodule_inputs[name]  # skip submodules not called (e.g. lm_head on base models)
-    ]
+    }

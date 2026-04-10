@@ -188,7 +188,7 @@ class ExportTesterMixin:
         """Create model and forward inputs ready for export.
 
         Returns:
-            List of `(name, model, inputs)` triplets — one per component.
+            Dict of `{name: (model, inputs)}` — one entry per component.
         """
         if hasattr(self.model_tester, "prepare_config_and_inputs_for_model_class"):
             config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_model_class(model_class)
@@ -210,12 +210,12 @@ class ExportTesterMixin:
 
         if is_vlm(model):
             return decompose_vlm(model, inputs_dict)
-        return [("model", model, inputs_dict)]
+        return {"model": (model, inputs_dict)}
 
     def _collect_eager_outputs(self, components):
         """Run eager forward for each component and return a ``{name: leaf_tensors}`` dict."""
         eager_outputs = {}
-        for name, model, inputs in components:
+        for name, (model, inputs) in components.items():
             with torch.no_grad():
                 set_seed(1234)
                 eager_outputs[name] = get_leaf_tensors(model(**copy.deepcopy(inputs)))
@@ -253,7 +253,7 @@ class ExportTesterMixin:
             components = self._prepare_export_model_and_inputs(model_class)
             eager_outputs = self._collect_eager_outputs(components)
 
-            for name, model, inputs in components:
+            for name, (model, inputs) in components.items():
                 with self.subTest(f"{model_class.__name__}/{name}"):
                     exported_program = exporter.export(model, inputs)
 
@@ -286,7 +286,7 @@ class ExportTesterMixin:
             components = self._prepare_export_model_and_inputs(model_class)
             eager_outputs = self._collect_eager_outputs(components)
 
-            for name, model, inputs in components:
+            for name, (model, inputs) in components.items():
                 with self.subTest(f"{model_class.__name__}/{name}"):
                     onnx_program = exporter.export(model, inputs)
                     set_seed(1234)
@@ -297,6 +297,7 @@ class ExportTesterMixin:
     # ──────────────────── ExecuTorch tests ───────────────────────
 
     @slow
+    @DYNAMIC_EXPORT_PARAMS
     @require_executorch
     @pytest.mark.executorch_export_test
     @pytest.mark.timeout(EXPORT_TEST_TIMEOUT)
@@ -313,7 +314,7 @@ class ExportTesterMixin:
 
             components = self._prepare_export_model_and_inputs(model_class)
 
-            for name, model, inputs in components:
+            for name, (model, inputs) in components.items():
                 with self.subTest(f"{model_class.__name__}/{name}"):
                     exporter.export(model, inputs)
 
@@ -340,7 +341,7 @@ class ExportGenerateTesterMixin:
         For decoder-only models: returns prefill and decode components.
 
         Returns:
-            List of `(name, model, inputs)` triplets — one per component.
+            Dict of `{name: (model, inputs)}` — one entry per component.
         """
         config, inputs_dict = self.prepare_config_and_inputs_for_generate()
         inputs_dict = _clean_inputs_for_export(inputs_dict, config)
@@ -353,9 +354,10 @@ class ExportGenerateTesterMixin:
         stages = decompose_prefill_decode(model, inputs_dict)
 
         if is_vlm(model):
-            prefill_model, prefill_inputs = stages[0][1:]
+            prefill_model, prefill_inputs = stages["prefill"]
             components = decompose_vlm(prefill_model, prefill_inputs)
-            return components + stages[1:]  # encoder-decoder components + decode stage
+            components["decode"] = stages["decode"]
+            return components
 
         return stages
 
@@ -378,7 +380,7 @@ class ExportGenerateTesterMixin:
             components = self._prepare_export_generate_model_and_inputs(model_class)
             eager_outputs = self._collect_eager_outputs(components)
 
-            for name, model, inputs in components:
+            for name, (model, inputs) in components.items():
                 with self.subTest(f"{model_class.__name__}/{name}"):
                     exported_program = exporter.export(model, inputs)
 
@@ -411,7 +413,7 @@ class ExportGenerateTesterMixin:
             components = self._prepare_export_generate_model_and_inputs(model_class)
             eager_outputs = self._collect_eager_outputs(components)
 
-            for name, model, inputs in components:
+            for name, (model, inputs) in components.items():
                 with self.subTest(f"{model_class.__name__}/{name}"):
                     onnx_program = exporter.export(model, inputs)
                     set_seed(1234)
@@ -422,6 +424,7 @@ class ExportGenerateTesterMixin:
     # ──────────────────── ExecuTorch tests ───────────────────────
 
     @slow
+    @DYNAMIC_EXPORT_PARAMS
     @require_executorch
     @pytest.mark.executorch_export_test
     @pytest.mark.timeout(EXPORT_TEST_TIMEOUT)
@@ -438,6 +441,6 @@ class ExportGenerateTesterMixin:
 
             components = self._prepare_export_generate_model_and_inputs(model_class)
 
-            for name, model, inputs in components:
+            for name, (model, inputs) in components.items():
                 with self.subTest(f"{model_class.__name__}/{name}"):
                     exporter.export(model, inputs)
