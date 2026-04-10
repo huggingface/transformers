@@ -555,14 +555,12 @@ class TimesFmModelForPrediction(TimesFmPreTrainedModel):
         """Pad/truncate input time series to `context_len` and build a padding mask.
 
         Args:
-            inputs: Either a list of 1D tensors (one per series, may differ in length) or a single
-                2D tensor of shape ``(batch, seq_len)`` where all rows share the same length.
-                The 2D path avoids Python loops and is ONNX-export friendly.
+            inputs: A list of 1d Tensors. Each Tensor is the context time series of a single forecast task.
             freq: Optional list of frequencies (returned as a tensor when provided).
-            context_len: Optional context length override (defaults to ``self.context_len``).
+            context_len: Optional context length override (defaults to `self.context_len`).
 
         Returns:
-            Tuple of ``(padded_inputs, padding_mask)`` and optionally a freq tensor.
+            Tuple of (padded_inputs, padding_mask) and optionally a freq tensor.
         """
         if context_len is None:
             context_len = self.context_len
@@ -590,9 +588,7 @@ class TimesFmModelForPrediction(TimesFmPreTrainedModel):
                 padding = torch.cat(
                     [
                         torch.ones(num_front_pad, dtype=ts.dtype, device=ts.device),
-                        torch.zeros(
-                            context_len + self.horizon_len - num_front_pad, dtype=ts.dtype, device=ts.device
-                        ),
+                        torch.zeros(context_len + self.horizon_len - num_front_pad, dtype=ts.dtype, device=ts.device),
                     ],
                     dim=0,
                 )
@@ -646,9 +642,8 @@ class TimesFmModelForPrediction(TimesFmPreTrainedModel):
         **kwargs: Unpack[TransformersKwargs],
     ) -> TimesFmOutputForPrediction:
         r"""
-        past_values (`torch.FloatTensor` of shape `(batch_size, sequence_length)` or `Sequence[torch.Tensor]`):
-            Past values of the time series that serves as input to the model. Can be a 2D tensor
-            (ONNX-friendly, all rows same length) or a list of 1D tensors (variable-length series).
+        past_values (`torch.FloatTensor` of shape `(batch_size, sequence_length)`):
+            Past values of the time series that serves as input to the model.
         freq (`torch.LongTensor` of shape `(batch_size,)`):
             Frequency indices for the time series data.
         window_size (`int`, *optional*):

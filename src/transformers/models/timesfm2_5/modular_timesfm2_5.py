@@ -541,9 +541,8 @@ class TimesFm2_5ModelForPrediction(TimesFmModelForPrediction):
         **kwargs: Unpack[TransformersKwargs],
     ) -> TimesFm2_5OutputForPrediction:
         r"""
-        past_values (`Sequence[torch.Tensor]` or `torch.Tensor` of shape `(batch_size, sequence_length)`):
-            Past values of the time series that serves as input to the model. Can be a 2D tensor
-            (ONNX-friendly, all rows same length) or a list of 1D tensors (variable-length series).
+        past_values (`Sequence[torch.Tensor]`):
+            Past values of the time series that serves as input to the model. Each tensor is a 1D time series.
         window_size (`int`, *optional*):
             Window size of trend + residual decomposition. If `None`, decomposition is not applied.
         future_values (`torch.Tensor`, *optional*):

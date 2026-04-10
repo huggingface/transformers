@@ -361,9 +361,7 @@ class TimesFmForwardInputVariantsTest(unittest.TestCase):
             diff_freq = torch.zeros(3, 1, dtype=torch.int32)
             with torch.no_grad():
                 pt_out = self.model(past_values=diff_input, freq=diff_freq, truncate_negative=True)
-            onnx_mean, onnx_full = sess.run(
-                None, {"past_values": diff_input.numpy(), "freq": diff_freq.numpy()}
-            )
+            onnx_mean, onnx_full = sess.run(None, {"past_values": diff_input.numpy(), "freq": diff_freq.numpy()})
             np.testing.assert_allclose(onnx_mean, pt_out.mean_predictions.numpy(), rtol=1e-3, atol=1e-3)
             np.testing.assert_allclose(onnx_full, pt_out.full_predictions.numpy(), rtol=1e-3, atol=1e-3)
 
@@ -372,9 +370,7 @@ class TimesFmForwardInputVariantsTest(unittest.TestCase):
             pos_freq = torch.zeros(2, 1, dtype=torch.int32)
             with torch.no_grad():
                 pt_pos = self.model(past_values=pos_input, freq=pos_freq, truncate_negative=True)
-            onnx_mean_pos, onnx_full_pos = sess.run(
-                None, {"past_values": pos_input.numpy(), "freq": pos_freq.numpy()}
-            )
+            onnx_mean_pos, onnx_full_pos = sess.run(None, {"past_values": pos_input.numpy(), "freq": pos_freq.numpy()})
             np.testing.assert_allclose(onnx_mean_pos, pt_pos.mean_predictions.numpy(), rtol=1e-3, atol=1e-3)
             self.assertTrue((onnx_mean_pos >= 0).all())
 

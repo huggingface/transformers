@@ -690,14 +690,12 @@ class TimesFm2_5ModelForPrediction(TimesFm2_5PreTrainedModel):
         """Pad/truncate input time series to `context_len` and build a padding mask.
 
         Args:
-            inputs: Either a list of 1D tensors (one per series, may differ in length) or a single
-                2D tensor of shape ``(batch, seq_len)`` where all rows share the same length.
-                The 2D path avoids Python loops and is ONNX-export friendly.
+            inputs: A list of 1d Tensors. Each Tensor is the context time series of a single forecast task.
             freq: Optional list of frequencies (returned as a tensor when provided).
-            context_len: Optional context length override (defaults to ``self.context_len``).
+            context_len: Optional context length override (defaults to `self.context_len`).
 
         Returns:
-            Tuple of ``(padded_inputs, padding_mask)`` and optionally a freq tensor.
+            Tuple of (padded_inputs, padding_mask) and optionally a freq tensor.
         """
         if context_len is None:
             context_len = self.context_len
@@ -734,8 +732,12 @@ class TimesFm2_5ModelForPrediction(TimesFm2_5PreTrainedModel):
             result = (torch.stack(input_ts, dim=0), torch.stack(input_padding, dim=0))
 
         if freq is not None:
-            batch_size = inputs.shape[0] if isinstance(inputs, torch.Tensor) else len(inputs)
-            result = result + (torch.tensor(freq[:batch_size], dtype=torch.int32).reshape(-1, 1),)
+            if isinstance(freq, torch.Tensor):
+                inp_freq = freq if freq.ndim == 2 else freq.reshape(-1, 1)
+            else:
+                batch_size = inputs.shape[0] if isinstance(inputs, torch.Tensor) else len(inputs)
+                inp_freq = torch.tensor(freq[:batch_size], dtype=torch.int32).reshape(-1, 1)
+            result = result + (inp_freq,)
         return result
 
     def _postprocess_output(
@@ -774,9 +776,8 @@ class TimesFm2_5ModelForPrediction(TimesFm2_5PreTrainedModel):
         **kwargs: Unpack[TransformersKwargs],
     ) -> TimesFm2_5OutputForPrediction:
         r"""
-        past_values (`Sequence[torch.Tensor]` or `torch.Tensor` of shape `(batch_size, sequence_length)`):
-            Past values of the time series that serves as input to the model. Can be a 2D tensor
-            (ONNX-friendly, all rows same length) or a list of 1D tensors (variable-length series).
+        past_values (`Sequence[torch.Tensor]`):
+            Past values of the time series that serves as input to the model. Each tensor is a 1D time series.
         window_size (`int`, *optional*):
             Window size of trend + residual decomposition. If `None`, decomposition is not applied.
         future_values (`torch.Tensor`, *optional*):
