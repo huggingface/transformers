@@ -143,7 +143,7 @@ def _compute_linear_scaling_rope_parameters(
             The model configuration. This function assumes that the config will provide at least the following
             properties:
 
-            *   rope_theta (`float`): The base wavelength from which the inverse frequencies will be derived.
+            *   rope_theta (`float`, *optional*): The base wavelength from which the inverse frequencies will be derived. Defaults to `config.default_theta` if omitted.
             *   hidden_size (`int`): The numerator when deriving a head_dim, if not provided directly.
             *   num_attention_heads (`int`): The denominator when deriving a head_dim, if not provided directly.
 
@@ -199,7 +199,7 @@ def _compute_proportional_rope_parameters(
             The model configuration. This function assumes that the config will provide at least the following
             properties:
 
-            *   rope_theta (`float`): The base wavelength from which the inverse frequencies will be derived.
+            *   rope_theta (`float`, *optional*): The base wavelength from which the inverse frequencies will be derived. Defaults to `config.default_theta` if omitted.
             *   hidden_size (`int`): The numerator when deriving a head_dim, if not provided directly.
             *   num_attention_heads (`int`): The denominator when deriving a head_dim, if not provided directly.
 
@@ -268,7 +268,7 @@ def _compute_dynamic_ntk_parameters(
             The model configuration. This function assumes that the config will provide at least the following
             properties:
 
-            *   rope_theta (`float`): The base wavelength from which the inverse frequencies will be derived.
+            *   rope_theta (`float`, *optional*): The base wavelength from which the inverse frequencies will be derived. Defaults to `config.default_theta` if omitted.
             *   hidden_size (`int`): The numerator when deriving a head_dim, if not provided directly.
             *   num_attention_heads (`int`): The denominator when deriving a head_dim, if not provided directly.
             *   max_position_embeddings (`int`): The default sequence length used to update the dynamic RoPE at
@@ -339,7 +339,7 @@ def _compute_yarn_parameters(
             The model configuration. This function assumes that the config will provide at least the following
             properties:
 
-            *   rope_theta (`float`): The base wavelength from which the inverse frequencies will be derived.
+            *   rope_theta (`float`, *optional*): The base wavelength from which the inverse frequencies will be derived. Defaults to `config.default_theta` if omitted.
             *   hidden_size (`int`): The numerator when deriving a head_dim, if not provided directly.
             *   num_attention_heads (`int`): The denominator when deriving a head_dim, if not provided directly.
             *   max_position_embeddings (`int`): The maximum length of the positional embeddings.
@@ -474,7 +474,7 @@ def _compute_longrope_parameters(
             The model configuration. This function assumes that the config will provide at least the following
             properties:
 
-            *   rope_theta (`float`): The base wavelength from which the inverse frequencies will be derived.
+            *   rope_theta (`float`, *optional*): The base wavelength from which the inverse frequencies will be derived. Defaults to `config.default_theta` if omitted.
             *   hidden_size (`int`): The numerator when deriving a head_dim, if not provided directly.
             *   num_attention_heads (`int`): The denominator when deriving a head_dim, if not provided directly.
             *   max_position_embeddings (`int`): The maximum length of the positional embeddings.
@@ -561,7 +561,7 @@ def _compute_llama3_parameters(
             The model configuration. This function assumes that the config will provide at least the following
             properties:
 
-            *   rope_theta (`float`): The base wavelength from which the inverse frequencies will be derived.
+            *   rope_theta (`float`, *optional*): The base wavelength from which the inverse frequencies will be derived. Defaults to `config.default_theta` if omitted.
             *   hidden_size (`int`): The numerator when deriving a head_dim, if not provided directly.
             *   num_attention_heads (`int`): The denominator when deriving a head_dim, if not provided directly.
             *   rope_parameters (`dict[str, float | int]`): The standard RoPE scaling parameters, from which the following
@@ -642,8 +642,9 @@ ROPE_INIT_FUNCTIONS: dict[str, Callable[..., tuple["torch.Tensor", float]]] = {
 class RopeParameters(TypedDict):
     """
     Args:
-        rope_theta (`float`):
-            The base period of the RoPE embeddings.
+        rope_theta (`float`, *optional*, defaults to `RotaryEmbeddingConfigMixin.default_theta`):
+            The base period of the RoPE embeddings. Optional in serialized configs — if omitted,
+            the model's `default_theta` (typically 10000.0) is used.
         rope_type (`str`, *optional*, defaults to "default"):
             The sub-variant of RoPE to use. Can be one of ['default', 'linear', 'dynamic', 'yarn', 'longrope',
             'llama3'], with 'default' being the original RoPE implementation.
@@ -680,7 +681,7 @@ class RopeParameters(TypedDict):
             Only used with 'llama3'. Scaling factor applied to high frequency components of the RoPE
     """
 
-    rope_theta: float
+    rope_theta: float | None
     rope_type: str | None
     partial_rotary_factor: float | None
     factor: float | None
@@ -801,34 +802,44 @@ class RotaryEmbeddingConfigMixin:
                 )
 
     def _validate_default_rope_parameters(self, rope_parameters: dict, ignore_keys: set | None = None):
-        required_keys = {"rope_type", "rope_theta"}
+        required_keys = {"rope_type"}
+        optional_keys = {"rope_theta"}
         received_keys = set(rope_parameters.keys())
         rope_type = rope_parameters["rope_type"]
-        self._check_received_keys(rope_type, received_keys, required_keys, ignore_keys=ignore_keys)
+        self._check_received_keys(
+            rope_type, received_keys, required_keys, optional_keys=optional_keys, ignore_keys=ignore_keys
+        )
 
     def _validate_linear_rope_parameters(self, rope_parameters: dict, ignore_keys: set | None = None):
-        required_keys = {"rope_type", "factor", "rope_theta"}
+        required_keys = {"rope_type", "factor"}
+        optional_keys = {"rope_theta"}
         received_keys = set(rope_parameters.keys())
         rope_type = rope_parameters["rope_type"]
-        self._check_received_keys(rope_type, received_keys, required_keys, ignore_keys=ignore_keys)
+        self._check_received_keys(
+            rope_type, received_keys, required_keys, optional_keys=optional_keys, ignore_keys=ignore_keys
+        )
 
         factor = rope_parameters["factor"]
         if factor is None or not isinstance(factor, float) or factor < 1.0:
             logger.warning(f"`rope_parameters`'s factor field must be a float >= 1, got {factor}")
 
     def _validate_dynamic_rope_parameters(self, rope_parameters: dict, ignore_keys: set | None = None):
-        required_keys = {"rope_type", "factor", "rope_theta"}
+        required_keys = {"rope_type", "factor"}
+        optional_keys = {"rope_theta"}
         received_keys = set(rope_parameters.keys())
         rope_type = rope_parameters["rope_type"]
-        self._check_received_keys(rope_type, received_keys, required_keys, ignore_keys=ignore_keys)
+        self._check_received_keys(
+            rope_type, received_keys, required_keys, optional_keys=optional_keys, ignore_keys=ignore_keys
+        )
 
         factor = rope_parameters["factor"]
         if factor is None or not isinstance(factor, float) or factor < 1.0:
             logger.warning(f"`rope_parameters`'s factor field must be a float >= 1, got {factor}")
 
     def _validate_yarn_rope_parameters(self, rope_parameters: dict, ignore_keys: set | None = None):
-        required_keys = {"rope_type", "factor", "rope_theta", "original_max_position_embeddings"}
+        required_keys = {"rope_type", "factor", "original_max_position_embeddings"}
         optional_keys = {
+            "rope_theta",
             "attention_factor",
             "beta_fast",
             "beta_slow",
@@ -878,8 +889,8 @@ class RotaryEmbeddingConfigMixin:
             )
 
     def _validate_longrope_rope_parameters(self, rope_parameters: dict, ignore_keys: set | None = None):
-        required_keys = {"rope_type", "short_factor", "long_factor", "rope_theta", "original_max_position_embeddings"}
-        optional_keys = {"attention_factor", "factor"}
+        required_keys = {"rope_type", "short_factor", "long_factor", "original_max_position_embeddings"}
+        optional_keys = {"rope_theta", "attention_factor", "factor"}
         received_keys = set(rope_parameters.keys())
         rope_type = rope_parameters["rope_type"]
         self._check_received_keys(rope_type, received_keys, required_keys, optional_keys, ignore_keys=ignore_keys)
