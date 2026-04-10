@@ -935,21 +935,8 @@ class WandbCallback(TrainerCallback):
 class TrackioCallback(TrainerCallback):
     """
     A [`TrainerCallback`] that logs metrics to Trackio.
-
-    `trackio_space_id` only selects **live Gradio** logging: `None` (default) keeps metrics **local**; a string creates or uses
-    that Gradio Space and streams metrics there during training.
-
-    `trackio_static_space_id` controls **static** Spaces (read-only dashboard): `False` skips them entirely. Otherwise
-    (`None` or a string destination id), a static Space is created when you **push the model to the Hub** (local runs:
-    `trackio.sync` with `sdk="static"`), and/or at **end of training** when `trackio_space_id` was set (`trackio.freeze`
-    from the Gradio Space). `None` lets Trackio choose the static Space name; a string sets it. Requires
-    `trackio>=0.21.1` for `freeze`.
-
-    **Requires**:
-    ```bash
-    pip install trackio
-    ```
     """
+
 
     SPACE_URL = "https://huggingface.co/spaces/{space_id}"
     _TRACKIO_BADGE_IMG = (
