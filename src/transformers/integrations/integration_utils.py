@@ -1069,12 +1069,6 @@ class TrackioCallback(TrainerCallback):
                 "`trackio_freeze_space=False` to silence this warning."
             )
             return
-        if not hasattr(self._trackio, "freeze"):
-            logger.warning(
-                "The installed Trackio has no `freeze`; the static snapshot Space will not be created. Upgrade "
-                f"Trackio or set `trackio_freeze_space=False`."
-            )
-            return
         gradio_space_id = self._trackio_space_id(args)
         if gradio_space_id is None:
             return
