@@ -732,11 +732,8 @@ class TimesFm2_5ModelForPrediction(TimesFm2_5PreTrainedModel):
             result = (torch.stack(input_ts, dim=0), torch.stack(input_padding, dim=0))
 
         if freq is not None:
-            if isinstance(freq, torch.Tensor):
-                inp_freq = freq if freq.ndim == 2 else freq.reshape(-1, 1)
-            else:
-                batch_size = inputs.shape[0] if isinstance(inputs, torch.Tensor) else len(inputs)
-                inp_freq = torch.tensor(freq[:batch_size], dtype=torch.int32).reshape(-1, 1)
+            batch_size = inputs.shape[0] if isinstance(inputs, torch.Tensor) else len(inputs)
+            inp_freq = torch.tensor(freq[:batch_size], dtype=torch.int32).reshape(-1, 1)
             result = result + (inp_freq,)
         return result
 
