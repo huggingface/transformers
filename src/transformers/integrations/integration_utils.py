@@ -1094,15 +1094,15 @@ class TrackioCallback(TrainerCallback):
         if self._space_id is None:
             if args.trackio_static_space_id is False:
                 return
-            static_space_id = (
+            self._static_space_id = (
                 args.trackio_static_space_id
                 if isinstance(args.trackio_static_space_id, str)
                 else self._space_repo_name_from_trackio_project(args.project, sdk="static")
             )
-            self._static_space_id = self._trackio.sync(
+            self._trackio.sync(
                 project=current_project,
                 sdk="static",
-                space_id=static_space_id,
+                space_id=self._static_space_id,
                 private=args.hub_private_repo,
                 bucket_id=args.trackio_bucket_id,
                 force=True,
