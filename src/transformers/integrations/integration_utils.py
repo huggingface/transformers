@@ -936,12 +936,14 @@ class TrackioCallback(TrainerCallback):
     """
     A [`TrainerCallback`] that logs metrics to Trackio.
 
-    If `trackio_space_id=None` (default), metrics stay **local** unless and until the model is **pushed to the Hub**; the first
-    push runs `trackio.sync` with a **static** Space and links the static Space from the model card. If you set
-    `trackio_space_id`, metrics stream to a **Gradio** Space during training; `trackio_frozen_space_id` controls whether
-    and where `trackio.freeze` runs after training (`False` to disable, `None` for an auto static Space name, or a string
-    for an explicit static Space id). The model card is updated to prefer the static URL when available, provided
-    `trackio>=0.21.1` is installed.
+    `trackio_space_id` only selects **live Gradio** logging: `None` (default) keeps metrics **local**; a string creates or uses
+    that Gradio Space and streams metrics there during training.
+
+    `trackio_static_space_id` controls **static** Spaces (read-only dashboard): `False` skips them entirely. Otherwise
+    (`None` or a string destination id), a static Space is created when you **push the model to the Hub** (local runs:
+    `trackio.sync` with `sdk="static"`), and/or at **end of training** when `trackio_space_id` was set (`trackio.freeze`
+    from the Gradio Space). `None` lets Trackio choose the static Space name; a string sets it. Requires
+    `trackio>=0.21.1` for `freeze`.
 
     **Requires**:
     ```bash
@@ -981,7 +983,7 @@ class TrackioCallback(TrainerCallback):
         Setup the optional Trackio integration.
 
         To customize the setup you can also set `project`, `trackio_space_id`, `trackio_bucket_id`,
-        `trackio_frozen_space_id`, and `hub_private_repo` in [`TrainingArguments`].
+        `trackio_static_space_id`, and `hub_private_repo` in [`TrainingArguments`].
         """
         if state.is_world_process_zero:
             combined_dict = {**args.to_dict()}
@@ -1034,7 +1036,7 @@ class TrackioCallback(TrainerCallback):
         if not state.is_world_process_zero or not self._initialized:
             return
         self._trackio.finish()
-        if args.trackio_frozen_space_id is False or args.trackio_space_id is None:
+        if args.trackio_static_space_id is False or args.trackio_space_id is None:
             return
         if packaging.version.parse(self._trackio.__version__) < packaging.version.parse(
             self._MIN_TRACKIO_VERSION_FOR_FREEZE
@@ -1043,14 +1045,14 @@ class TrackioCallback(TrainerCallback):
                 "An older version of Trackio is installed; the post-training static snapshot Space (`trackio.freeze`) "
                 "will not be created. Upgrade with "
                 f"`pip install trackio>={self._MIN_TRACKIO_VERSION_FOR_FREEZE}` to enable it, or set "
-                "`trackio_frozen_space_id=False` to silence this warning."
+                "`trackio_static_space_id=False` to silence this warning."
             )
             return
         gradio_space_id = self._space_id or self._trackio.context_vars.current_space_id.get() or args.trackio_space_id
         if gradio_space_id is None:
             return
         new_space_id = (
-            args.trackio_frozen_space_id if isinstance(args.trackio_frozen_space_id, str) else None
+            args.trackio_static_space_id if isinstance(args.trackio_static_space_id, str) else None
         )
         try:
             new_static_id = self._trackio.freeze(
@@ -1101,10 +1103,17 @@ class TrackioCallback(TrainerCallback):
             return
 
         if self._space_id is None:
+            if args.trackio_static_space_id is False:
+                return
+            static_target = (
+                args.trackio_static_space_id
+                if isinstance(args.trackio_static_space_id, str)
+                else self._space_repo_name_from_trackio_project(args.project)
+            )
             self._space_id = self._trackio.sync(
                 project=current_project,
                 sdk="static",
-                space_id=self._space_repo_name_from_trackio_project(args.project),
+                space_id=static_target,
                 private=args.hub_private_repo,
                 bucket_id=args.trackio_bucket_id,
                 force=True,

@@ -392,17 +392,18 @@ class TrainingArguments:
         project (`str`, *optional*, defaults to `"huggingface"`):
             The name of the project to use for logging. Currently, only used by Trackio.
         trackio_space_id (`str` or `None`, *optional*, defaults to `None`):
-            If `None` (default), metrics stay local until you push the model to the Hub; the first push runs Trackio
-            `sync` with a **static** Space linked from the model card (the Space repo name is derived from `project`).
-            If set, metrics stream to a **Gradio** Space for the whole run. Should look like `'username/reponame'` or
-            `'reponame'` (your namespace). New Spaces follow `hub_private_repo` / org defaults for visibility.
+            Only affects **live Gradio** Spaces: `None` (default) logs metrics **locally** (no Gradio Space). If set,
+            that Space is used and metrics stream there for the run. Use `'username/reponame'` or `'reponame'` (namespace
+            inferred). Does not by itself create a static Space; see `trackio_static_space_id`.
         trackio_bucket_id (`str` or `None`, *optional*, defaults to `None`):
-            Optional Hugging Face Bucket id when metrics are synced to a Space. If unset, Trackio derives a bucket from
-            the Space id. Used when `trackio_space_id` is set and when syncing on Hub push.
-        trackio_frozen_space_id (`str`, `False`, or `None`, *optional*, defaults to `None`):
-            When `trackio_space_id` is set, controls the post-training `trackio.freeze` step. `False` disables freezing.
-            `None` (default) lets Trackio pick the new static Space name. Pass a string (e.g. `'user/my-static-space'`) to
-            set the destination Space id explicitly. Ignored when `trackio_space_id` is `None`.
+            Optional Hugging Face Bucket id for Trackio Spaces. If unset, Trackio derives one. Applies when using a
+            Gradio Space and when deploying a static Space (`trackio_static_space_id` not `False`).
+        trackio_static_space_id (`str`, `False`, or `None`, *optional*, defaults to `None`):
+            Controls **static** (read-only) Trackio Spaces. `False`: no static Space (no `sync(sdk="static")` on Hub push,
+            no `freeze` after training). `None` or `str`: allow static deployment — on **Hub push**, local-only runs use
+            `trackio.sync` with `sdk="static"` (auto Space name if `None`, or this string as the static Space id); if you
+            trained with a **Gradio** Space, **`trackio.freeze`** runs at the end of training (same `None` vs string
+            meaning for the static Space name). `str` sets the destination static Space id explicitly.
 
         > Evaluation
 
@@ -1053,8 +1054,8 @@ class TrainingArguments:
     trackio_space_id: str | None = field(
         default=None,
         metadata={
-            "help": "None (default): local logs until Hub push deploys a static Space. Set for live Gradio logging to "
-            "that Space."
+            "help": "None: local Trackio logs only. Set for live Gradio Space logging (does not control static Spaces; "
+            "see trackio_static_space_id)."
         },
     )
     trackio_bucket_id: str | None = field(
@@ -1063,11 +1064,11 @@ class TrainingArguments:
             "help": "Optional HF Bucket id when using a Trackio Space; if unset, Trackio picks a default."
         },
     )
-    trackio_frozen_space_id: str | None | Literal[False] = field(
+    trackio_static_space_id: str | None | Literal[False] = field(
         default=None,
         metadata={
-            "help": "When trackio_space_id is set: False skips freeze; None (default) uses Trackio's default static "
-            "Space name; str sets the new static Space id."
+            "help": "Static Spaces: False disables. None/str: Hub push syncs static for local runs; end-of-training "
+            "freeze when trackio_space_id is set. str sets static Space id."
         },
     )
 
@@ -1482,13 +1483,13 @@ class TrainingArguments:
         if self.output_dir is not None:
             self.output_dir = os.path.expanduser(self.output_dir)
 
-        if self.trackio_frozen_space_id is True:
+        if self.trackio_static_space_id is True:
             raise ValueError(
-                "trackio_frozen_space_id=True is invalid. Use None for default static Space naming, False to skip "
+                "trackio_static_space_id=True is invalid. Use None for default static Space naming, False to skip "
                 "freeze, or a string Space id."
             )
-        if isinstance(self.trackio_frozen_space_id, str) and self.trackio_frozen_space_id.strip().lower() == "false":
-            self.trackio_frozen_space_id = False
+        if isinstance(self.trackio_static_space_id, str) and self.trackio_static_space_id.strip().lower() == "false":
+            self.trackio_static_space_id = False
 
         if self.disable_tqdm is None:
             self.disable_tqdm = logger.getEffectiveLevel() > logging.WARN
