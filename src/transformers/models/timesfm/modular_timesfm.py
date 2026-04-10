@@ -565,36 +565,36 @@ class TimesFmModelForPrediction(TimesFmPreTrainedModel):
         if context_len is None:
             context_len = self.context_len
 
-        # if isinstance(inputs, torch.Tensor) and inputs.ndim == 2:
-        #     x = inputs[:, -context_len:]
-        #     num_front_pad = context_len - x.shape[1]
-        #     x = F.pad(x, (num_front_pad, 0))
-        #     padding = torch.cat(
-        #         [
-        #             torch.ones(x.shape[0], num_front_pad, dtype=x.dtype, device=x.device),
-        #             torch.zeros(
-        #                 x.shape[0], context_len + self.horizon_len - num_front_pad, dtype=x.dtype, device=x.device
-        #             ),
-        #         ],
-        #         dim=1,
-        #     )
-        #     result = (x, padding)
-        # else:
-        input_ts, input_padding = [], []
-        for ts in inputs:
-            ts = ts[-context_len:]
-            num_front_pad = context_len - ts.shape[0]
-            ts = torch.cat([torch.zeros(num_front_pad, dtype=ts.dtype, device=ts.device), ts], dim=0)
+        if isinstance(inputs, torch.Tensor) and inputs.ndim == 2:
+            x = inputs[:, -context_len:]
+            num_front_pad = context_len - x.shape[1]
+            x = F.pad(x, (num_front_pad, 0))
             padding = torch.cat(
                 [
-                    torch.ones(num_front_pad, dtype=ts.dtype, device=ts.device),
-                    torch.zeros(context_len + self.horizon_len - num_front_pad, dtype=ts.dtype, device=ts.device),
+                    torch.ones(x.shape[0], num_front_pad, dtype=x.dtype, device=x.device),
+                    torch.zeros(
+                        x.shape[0], context_len + self.horizon_len - num_front_pad, dtype=x.dtype, device=x.device
+                    ),
                 ],
-                dim=0,
+                dim=1,
             )
-            input_ts.append(ts)
-            input_padding.append(padding)
-        result = (torch.stack(input_ts, dim=0), torch.stack(input_padding, dim=0))
+            result = (x, padding)
+        else:
+            input_ts, input_padding = [], []
+            for ts in inputs:
+                ts = ts[-context_len:]
+                num_front_pad = context_len - ts.shape[0]
+                ts = torch.cat([torch.zeros(num_front_pad, dtype=ts.dtype, device=ts.device), ts], dim=0)
+                padding = torch.cat(
+                    [
+                        torch.ones(num_front_pad, dtype=ts.dtype, device=ts.device),
+                        torch.zeros(context_len + self.horizon_len - num_front_pad, dtype=ts.dtype, device=ts.device),
+                    ],
+                    dim=0,
+                )
+                input_ts.append(ts)
+                input_padding.append(padding)
+            result = (torch.stack(input_ts, dim=0), torch.stack(input_padding, dim=0))
 
         if freq is not None:
             batch_size = inputs.shape[0] if isinstance(inputs, torch.Tensor) else len(inputs)
