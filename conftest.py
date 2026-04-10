@@ -114,6 +114,12 @@ def pytest_addoption(parser):
     pytest_addoption_shared(parser)
 
 
+def pytest_runtest_logreport(report):
+    if report.when == "call":
+        outcome = "PASSED" if report.passed else "FAILED" if report.failed else "SKIPPED"
+        print(f"{report.nodeid} [{outcome}] {report.duration:.2f}s")
+
+
 def pytest_terminal_summary(terminalreporter):
     from transformers.testing_utils import pytest_terminal_summary_main
 
