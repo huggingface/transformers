@@ -19,6 +19,7 @@ import numpy as np
 import torch
 from huggingface_hub.dataclasses import strict
 from torch import nn
+from torchvision.transforms.v2 import functional as tvF
 
 from ... import initialization as init
 from ...cache_utils import Cache
@@ -109,47 +110,42 @@ class DeepseekOcr2ImageProcessor(GotOcr2ImageProcessor):
     def pad_to_square(
         self,
         images: "torch.Tensor",
-        background_color: int | list[int] = 0,
+        background_color: int | tuple[int, int, int] = 0,
     ) -> "torch.Tensor":
         """
-        Pads images to a square based on the longest edge.
+        Pads an image to a square based on the longest edge.
 
         Args:
             images (`torch.Tensor`):
-                The images to pad, shape `(batch, channels, height, width)`.
-            background_color (`int` or `list[int]`, *optional*, defaults to 0):
-                The color to use for the padding.
-
+                The images to pad. Shape: (batch_size, num_channels, height, width) or (num_channels, height, width).
+            background_color (`int` or `tuple[int, int, int]`, *optional*, defaults to 0):
+                The color to use for the padding. Can be an integer for single channel or a
+                tuple of integers representing for multi-channel images. If passed as integer
+                in multi-channel mode, it will default to `0` in subsequent channels.
         Returns:
             `torch.Tensor`: The padded images.
         """
         height, width = images.shape[-2:]
-        num_channels = images.shape[1]
-        batch_size = images.shape[0]
 
         if height == width:
             return images
 
-        max_dim = max(height, width)
-
+        num_channels = images.shape[1] if len(images.shape) == 4 else images.shape[0]
         if isinstance(background_color, int):
-            background_color = [background_color]
+            background_color = [background_color] + [0] * (num_channels - 1)
         elif len(background_color) != num_channels:
             raise ValueError(
                 f"background_color must have no more than {num_channels} elements to match the number of channels"
             )
 
-        padded_images = torch.zeros(
-            (batch_size, num_channels, max_dim, max_dim), dtype=images.dtype, device=images.device
+        max_dim = max(height, width)
+        paste_x_left = (max_dim - width) // 2
+        paste_y_left = (max_dim - height) // 2
+        paste_x_right = max_dim - width - paste_x_left
+        paste_y_right = max_dim - height - paste_y_left
+        padded_images = tvF.pad(
+            images, padding=[paste_x_left, paste_y_left, paste_x_right, paste_y_right], fill=background_color
         )
-        for i, color in enumerate(background_color):
-            padded_images[:, i, :, :] = color
-        if width > height:
-            start = (max_dim - height) // 2
-            padded_images[:, :, start : start + height, :] = images
-        else:
-            start = (max_dim - width) // 2
-            padded_images[:, :, :, start : start + width] = images
 
         return padded_images
 
@@ -536,7 +532,7 @@ class DeepseekOcr2SamVisionConfig(SamVisionConfig):
         super().__post_init__(**kwargs)
 
 
-@auto_docstring
+@auto_docstring(checkpoint="thisisiron/DeepSeek-OCR-2-hf")
 @strict
 class DeepseekOcr2EncoderConfig(Qwen2Config):
     r"""
@@ -557,7 +553,7 @@ class DeepseekOcr2EncoderConfig(Qwen2Config):
         super().__post_init__(**kwargs)
 
 
-@auto_docstring
+@auto_docstring(checkpoint="thisisiron/DeepSeek-OCR-2-hf")
 @strict
 class DeepseekOcr2VisionConfig(PreTrainedConfig):
     r"""
@@ -589,6 +585,7 @@ class DeepseekOcr2VisionConfig(PreTrainedConfig):
         elif isinstance(self.encoder_config, dict):
             self.encoder_config = DeepseekOcr2EncoderConfig(**self.encoder_config)
 
+        # TODO: remove sync and use property delegation instead (see PR review discussion)
         # Sync attributes from encoder_config for external access (tests, common utils)
         if self.hidden_size is None:
             self.hidden_size = self.encoder_config.hidden_size
@@ -600,14 +597,10 @@ class DeepseekOcr2VisionConfig(PreTrainedConfig):
         else:
             self.encoder_config.rms_norm_eps = self.rms_norm_eps
 
-        # Propagate attn_implementation to encoder_config (not auto-propagated through nested sub_configs)
-        if hasattr(self, "_attn_implementation") and self._attn_implementation is not None:
-            self.encoder_config._attn_implementation = self._attn_implementation
-
         super().__post_init__(**kwargs)
 
 
-@auto_docstring
+@auto_docstring(checkpoint="thisisiron/DeepSeek-OCR-2-hf")
 @strict
 class DeepseekOcr2TextConfig(DeepseekV2Config):
     r"""
@@ -663,9 +656,6 @@ class DeepseekOcr2Config(PreTrainedConfig):
         Input dimensionality of the visual projector.
     projector_n_embed (`int`, *optional*, defaults to 1280):
         Output dimensionality of the visual projector (language model embedding size).
-    projector_type (`str`, *optional*, defaults to `"linear"`):
-        Type of projector to use. Can be `"linear"` for a single linear layer or `"mlp"` for a two-layer MLP
-        with GELU activation.
     """
 
     model_type = "deepseek_ocr2"
@@ -679,7 +669,6 @@ class DeepseekOcr2Config(PreTrainedConfig):
     image_token_id: int = 128815
     projector_input_dim: int = 896
     projector_n_embed: int = 1280
-    projector_type: str = "linear"
 
     def __post_init__(self, **kwargs):
         if self.vision_config is None:
@@ -719,7 +708,7 @@ class DeepseekOcr2PreTrainedModel(LlavaNextPreTrainedModel):
     ]
     _can_compile_fullgraph = False
     _supports_flash_attn = False
-    _supports_sdpa = False
+    _supports_sdpa = True
     _supports_flex_attn = True
 
     @torch.no_grad()
@@ -826,23 +815,13 @@ class DeepseekOcr2VisionDecoderLayer(Qwen2DecoderLayer):
     pass
 
 
-class DeepseekOcr2VisionPreTrainedModel(PreTrainedModel):
-    config: DeepseekOcr2VisionConfig
-    base_model_prefix = "model"
-    supports_gradient_checkpointing = True
-    _no_split_modules = ["DeepseekOcr2VisionDecoderLayer"]
-    _skip_keys_device_placement = ["past_key_values"]
-    _supports_flash_attn = False
-    _supports_sdpa = False
-    _supports_flex_attn = True
+@auto_docstring(custom_intro="Vision encoder for DeepSeek-OCR-2.")
+class DeepseekOcr2VisionEncoder(Qwen2Model, DeepseekOcr2PreTrainedModel):
     _can_record_outputs = {
         "hidden_states": DeepseekOcr2VisionDecoderLayer,
         "attentions": DeepseekOcr2VisionAttention,
     }
 
-
-@auto_docstring(custom_intro="Vision encoder for DeepSeek-OCR-2.")
-class DeepseekOcr2VisionEncoder(Qwen2Model):
     def __init__(self, config):
         super().__init__(config)
         del self.embed_tokens
@@ -878,14 +857,7 @@ class DeepseekOcr2VisionEncoder(Qwen2Model):
 class DeepseekOcr2Projector(nn.Module):
     def __init__(self, config: DeepseekOcr2Config):
         super().__init__()
-        if config.projector_type == "linear":
-            self.proj = nn.Linear(config.projector_input_dim, config.projector_n_embed)
-        else:
-            self.proj = nn.Sequential(
-                nn.Linear(config.projector_input_dim, config.projector_n_embed),
-                nn.GELU(),
-                nn.Linear(config.projector_n_embed, config.projector_n_embed),
-            )
+        self.proj = nn.Linear(config.projector_input_dim, config.projector_n_embed)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         return self.proj(x)
@@ -923,13 +895,9 @@ class DeepseekOcr2VisionModel(DeepseekOcr2PreTrainedModel):
         self.query_1024 = nn.Embedding(256, config.encoder_config.hidden_size)  # 16x16 for 1024px
         self.post_init()
 
+    @can_return_tuple
+    @auto_docstring
     def forward(self, pixel_values: torch.Tensor, **kwargs) -> BaseModelOutput:
-        """
-        Args:
-            pixel_values: [B, 3, H, W] image tensor
-        Returns:
-            BaseModelOutput with query features as last_hidden_state
-        """
         sam_out = self.sam_encoder(pixel_values, return_dict=True).last_hidden_state
         x = sam_out.flatten(2).transpose(1, 2)
         bsz, n_patches, _ = x.shape
@@ -1090,6 +1058,7 @@ class DeepseekOcr2Model(LlavaNextModel):
 
         image_features = None
         if pixel_values is not None:
+            # torch.split requires list[int], not Tensor, for per-image variable-length splitting
             if isinstance(num_local_patches, torch.Tensor):
                 num_local_patches = num_local_patches.tolist()
             image_features = self.get_image_features(
@@ -1246,5 +1215,4 @@ __all__ = [
     "DeepseekOcr2TextModel",
     "DeepseekOcr2TextPreTrainedModel",
     "DeepseekOcr2VisionModel",
-    "DeepseekOcr2VisionPreTrainedModel",
 ]

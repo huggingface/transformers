@@ -21,7 +21,10 @@ from ...feature_extraction_utils import BatchFeature
 from ...image_utils import ImageInput
 from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
-from ...utils import auto_docstring
+from ...utils import auto_docstring, logging
+
+
+logger = logging.get_logger(__name__)
 
 
 class DeepseekOcr2ProcessorKwargs(ProcessingKwargs, total=False):
@@ -114,8 +117,13 @@ class DeepseekOcr2Processor(ProcessorMixin):
             - **pixel_values** -- Global view pixel values. Returned when `images` is not `None`.
             - **pixel_values_local** -- Local patch pixel values. Returned when `images` is not `None`.
         """
-        if text is None and images is None:
-            raise ValueError("You must provide at least one of `text` or `images`.")
+        if images is None:
+            raise ValueError("`images` are expected as arguments to a `DeepseekOcr2Processor` instance.")
+        if text is None:
+            logger.warning_once(
+                "You are using DeepseekOcr2Processor without a text prefix. Defaulting to `<image>\\nFree OCR.`."
+            )
+            text = "<image>\nFree OCR."
 
         output_kwargs = self._merge_kwargs(
             DeepseekOcr2ProcessorKwargs,
@@ -128,12 +136,18 @@ class DeepseekOcr2Processor(ProcessorMixin):
         elif not isinstance(text, list) and not isinstance(text[0], str):
             raise TypeError("Invalid input text. Please provide a string, or a list of strings")
 
-        image_inputs = {}
+        text = text.copy()  # below lines change text in-place
 
-        if images is not None:
-            image_inputs = self.image_processor(images, **output_kwargs["images_kwargs"])
-            num_crops_list = image_inputs["num_local_patches"]
-            text = self._expand_image_tokens(text, num_crops_list)
+        if not any(self.image_token in sample for sample in text):
+            logger.warning_once(
+                "No `<image>` token found in the text. Adding `<image>` prefix automatically. "
+                "It is recommended to add `<image>` tokens explicitly in your text."
+            )
+            text = [self.image_token + "\n" + t for t in text]
+
+        image_inputs = self.image_processor(images, **output_kwargs["images_kwargs"])
+        num_crops_list = image_inputs["num_local_patches"]
+        text = self._expand_image_tokens(text, num_crops_list)
 
         return_tensors = output_kwargs["text_kwargs"].pop("return_tensors", None)
         text_inputs = self.tokenizer(text, **output_kwargs["text_kwargs"])

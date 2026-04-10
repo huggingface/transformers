@@ -131,7 +131,7 @@ class DeepseekOcr2PreTrainedModel(PreTrainedModel):
     ]
     _skip_keys_device_placement = "past_key_values"
     _supports_flash_attn = False
-    _supports_sdpa = False
+    _supports_sdpa = True
     _can_compile_fullgraph = False
     _supports_flex_attn = True
     _supports_attention_backend = True
@@ -819,21 +819,6 @@ class DeepseekOcr2VisionDecoderLayer(GradientCheckpointingLayer):
         return hidden_states
 
 
-class DeepseekOcr2VisionPreTrainedModel(PreTrainedModel):
-    config: DeepseekOcr2VisionConfig
-    base_model_prefix = "model"
-    supports_gradient_checkpointing = True
-    _no_split_modules = ["DeepseekOcr2VisionDecoderLayer"]
-    _skip_keys_device_placement = ["past_key_values"]
-    _supports_flash_attn = False
-    _supports_sdpa = False
-    _supports_flex_attn = True
-    _can_record_outputs = {
-        "hidden_states": DeepseekOcr2VisionDecoderLayer,
-        "attentions": DeepseekOcr2VisionAttention,
-    }
-
-
 class DeepseekOcr2VisionRotaryEmbedding(nn.Module):
     inv_freq: torch.Tensor  # fix linting for `register_buffer`
 
@@ -900,7 +885,12 @@ class DeepseekOcr2VisionRotaryEmbedding(nn.Module):
 
 
 @auto_docstring(custom_intro="Vision encoder for DeepSeek-OCR-2.")
-class DeepseekOcr2VisionEncoder(DeepseekOcr2VisionPreTrainedModel):
+class DeepseekOcr2VisionEncoder(DeepseekOcr2PreTrainedModel):
+    _can_record_outputs = {
+        "hidden_states": DeepseekOcr2VisionDecoderLayer,
+        "attentions": DeepseekOcr2VisionAttention,
+    }
+
     def __init__(self, config):
         super().__init__(config)
         self.padding_idx = config.pad_token_id
@@ -947,14 +937,7 @@ class DeepseekOcr2VisionEncoder(DeepseekOcr2VisionPreTrainedModel):
 class DeepseekOcr2Projector(nn.Module):
     def __init__(self, config: DeepseekOcr2Config):
         super().__init__()
-        if config.projector_type == "linear":
-            self.proj = nn.Linear(config.projector_input_dim, config.projector_n_embed)
-        else:
-            self.proj = nn.Sequential(
-                nn.Linear(config.projector_input_dim, config.projector_n_embed),
-                nn.GELU(),
-                nn.Linear(config.projector_n_embed, config.projector_n_embed),
-            )
+        self.proj = nn.Linear(config.projector_input_dim, config.projector_n_embed)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         return self.proj(x)
@@ -992,13 +975,9 @@ class DeepseekOcr2VisionModel(DeepseekOcr2PreTrainedModel):
         self.query_1024 = nn.Embedding(256, config.encoder_config.hidden_size)  # 16x16 for 1024px
         self.post_init()
 
+    @can_return_tuple
+    @auto_docstring
     def forward(self, pixel_values: torch.Tensor, **kwargs) -> BaseModelOutput:
-        """
-        Args:
-            pixel_values: [B, 3, H, W] image tensor
-        Returns:
-            BaseModelOutput with query features as last_hidden_state
-        """
         sam_out = self.sam_encoder(pixel_values, return_dict=True).last_hidden_state
         x = sam_out.flatten(2).transpose(1, 2)
         bsz, n_patches, _ = x.shape
@@ -1572,6 +1551,7 @@ class DeepseekOcr2Model(DeepseekOcr2PreTrainedModel):
 
         image_features = None
         if pixel_values is not None:
+            # torch.split requires list[int], not Tensor, for per-image variable-length splitting
             if isinstance(num_local_patches, torch.Tensor):
                 num_local_patches = num_local_patches.tolist()
             image_features = self.get_image_features(
@@ -1743,5 +1723,4 @@ __all__ = [
     "DeepseekOcr2TextModel",
     "DeepseekOcr2TextPreTrainedModel",
     "DeepseekOcr2VisionModel",
-    "DeepseekOcr2VisionPreTrainedModel",
 ]

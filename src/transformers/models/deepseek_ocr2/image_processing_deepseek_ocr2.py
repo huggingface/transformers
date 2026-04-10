@@ -21,6 +21,7 @@
 from functools import lru_cache
 
 import torch
+from torchvision.transforms.v2 import functional as tvF
 
 from ...image_processing_backends import TorchvisionBackend
 from ...image_processing_utils import BatchFeature
@@ -306,47 +307,42 @@ class DeepseekOcr2ImageProcessor(TorchvisionBackend):
     def pad_to_square(
         self,
         images: "torch.Tensor",
-        background_color: int | list[int] = 0,
+        background_color: int | tuple[int, int, int] = 0,
     ) -> "torch.Tensor":
         """
-        Pads images to a square based on the longest edge.
+        Pads an image to a square based on the longest edge.
 
         Args:
             images (`torch.Tensor`):
-                The images to pad, shape `(batch, channels, height, width)`.
-            background_color (`int` or `list[int]`, *optional*, defaults to 0):
-                The color to use for the padding.
-
+                The images to pad. Shape: (batch_size, num_channels, height, width) or (num_channels, height, width).
+            background_color (`int` or `tuple[int, int, int]`, *optional*, defaults to 0):
+                The color to use for the padding. Can be an integer for single channel or a
+                tuple of integers representing for multi-channel images. If passed as integer
+                in multi-channel mode, it will default to `0` in subsequent channels.
         Returns:
             `torch.Tensor`: The padded images.
         """
         height, width = images.shape[-2:]
-        num_channels = images.shape[1]
-        batch_size = images.shape[0]
 
         if height == width:
             return images
 
-        max_dim = max(height, width)
-
+        num_channels = images.shape[1] if len(images.shape) == 4 else images.shape[0]
         if isinstance(background_color, int):
-            background_color = [background_color]
+            background_color = [background_color] + [0] * (num_channels - 1)
         elif len(background_color) != num_channels:
             raise ValueError(
                 f"background_color must have no more than {num_channels} elements to match the number of channels"
             )
 
-        padded_images = torch.zeros(
-            (batch_size, num_channels, max_dim, max_dim), dtype=images.dtype, device=images.device
+        max_dim = max(height, width)
+        paste_x_left = (max_dim - width) // 2
+        paste_y_left = (max_dim - height) // 2
+        paste_x_right = max_dim - width - paste_x_left
+        paste_y_right = max_dim - height - paste_y_left
+        padded_images = tvF.pad(
+            images, padding=[paste_x_left, paste_y_left, paste_x_right, paste_y_right], fill=background_color
         )
-        for i, color in enumerate(background_color):
-            padded_images[:, i, :, :] = color
-        if width > height:
-            start = (max_dim - height) // 2
-            padded_images[:, :, start : start + height, :] = images
-        else:
-            start = (max_dim - width) // 2
-            padded_images[:, :, :, start : start + width] = images
 
         return padded_images
 

@@ -119,7 +119,6 @@ def convert_config(config_dict: dict) -> dict:
     proj = config_dict.pop("projector_config")
     config_dict["projector_input_dim"] = proj["input_dim"]
     config_dict["projector_n_embed"] = proj["n_embed"]
-    config_dict["projector_type"] = proj["projector_type"]
 
     config_dict["vision_config"] = vision_config
     config_dict["model_type"] = "deepseek_ocr2"

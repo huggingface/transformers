@@ -73,7 +73,7 @@ class DeepseekOcr2SamVisionConfig(PreTrainedConfig):
         super().__post_init__(**kwargs)
 
 
-@auto_docstring
+@auto_docstring(checkpoint="thisisiron/DeepSeek-OCR-2-hf")
 @strict
 class DeepseekOcr2EncoderConfig(PreTrainedConfig):
     r"""
@@ -131,7 +131,7 @@ class DeepseekOcr2EncoderConfig(PreTrainedConfig):
         super().__post_init__(**kwargs)
 
 
-@auto_docstring
+@auto_docstring(checkpoint="thisisiron/DeepSeek-OCR-2-hf")
 @strict
 class DeepseekOcr2VisionConfig(PreTrainedConfig):
     r"""
@@ -163,6 +163,7 @@ class DeepseekOcr2VisionConfig(PreTrainedConfig):
         elif isinstance(self.encoder_config, dict):
             self.encoder_config = DeepseekOcr2EncoderConfig(**self.encoder_config)
 
+        # TODO: remove sync and use property delegation instead (see PR review discussion)
         # Sync attributes from encoder_config for external access (tests, common utils)
         if self.hidden_size is None:
             self.hidden_size = self.encoder_config.hidden_size
@@ -174,14 +175,10 @@ class DeepseekOcr2VisionConfig(PreTrainedConfig):
         else:
             self.encoder_config.rms_norm_eps = self.rms_norm_eps
 
-        # Propagate attn_implementation to encoder_config (not auto-propagated through nested sub_configs)
-        if hasattr(self, "_attn_implementation") and self._attn_implementation is not None:
-            self.encoder_config._attn_implementation = self._attn_implementation
-
         super().__post_init__(**kwargs)
 
 
-@auto_docstring
+@auto_docstring(checkpoint="thisisiron/DeepSeek-OCR-2-hf")
 @strict
 class DeepseekOcr2TextConfig(PreTrainedConfig):
     r"""
@@ -276,9 +273,6 @@ class DeepseekOcr2Config(PreTrainedConfig):
         Input dimensionality of the visual projector.
     projector_n_embed (`int`, *optional*, defaults to 1280):
         Output dimensionality of the visual projector (language model embedding size).
-    projector_type (`str`, *optional*, defaults to `"linear"`):
-        Type of projector to use. Can be `"linear"` for a single linear layer or `"mlp"` for a two-layer MLP
-        with GELU activation.
     """
 
     model_type = "deepseek_ocr2"
@@ -292,7 +286,6 @@ class DeepseekOcr2Config(PreTrainedConfig):
     image_token_id: int = 128815
     projector_input_dim: int = 896
     projector_n_embed: int = 1280
-    projector_type: str = "linear"
 
     def __post_init__(self, **kwargs):
         if self.vision_config is None:
