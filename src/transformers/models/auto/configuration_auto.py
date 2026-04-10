@@ -39,7 +39,6 @@ with open(f"{root_path}/auto_mappings.json", "r") as f:
 MISSING_CONFIG_MAPPING_NAMES = OrderedDict(
     [
         ("EvollaModel", "EvollaConfig"),
-        ("nougat", "VisionEncoderDecoderConfig"),
         ("vibevoice_acoustic_tokenizer_decoder", "VibeVoiceAcousticTokenizerDecoderConfig"),
         ("vibevoice_acoustic_tokenizer_encoder", "VibeVoiceAcousticTokenizerEncoderConfig"),
     ]
