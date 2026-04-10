@@ -405,8 +405,8 @@ class TrainingArguments:
         trackio_static_space_id (`str`, `False`, or `None`, *optional*, defaults to `None`):
             The Hugging Face Space ID to use for static Space created after training is complete. Should be a full
             Space name like `'username/reponame'` or `'orgname/reponame'`, or just `'reponame'` (the Space is created in
-            the currently logged-in user's namespace). If False, no static Space will be created. If None, and model is pushed to the Hub, 
-            a static Space will be created with a default name and this will be linked from the model card. The Space will be public 
+            the currently logged-in user's namespace). If False, no static Space will be created. If None, and model is pushed to the Hub,
+            a static Space will be created with a default name and this will be linked from the model card. The Space will be public
             unless you set `hub_private_repo=True` or your organization's default is to create private Spaces.
 
         > Evaluation
