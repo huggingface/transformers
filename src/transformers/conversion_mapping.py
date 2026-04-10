@@ -159,8 +159,9 @@ def _build_checkpoint_conversion_mapping():
             WeightRenaming("feedforward_layer_norm", "post_attention_layernorm"),
         ],
         "qwen3_5_text": [
-            # Note: the lookbehind on the target is to avoid replacing bigger matches during saving when the model is
-            # a submodel of the ForConditionalGeneration model
+            # Note: the lookbehind on the target is to avoid replacing the `model` part when saving with the
+            # ForConditionalGeneration (main) model - this is supposed to replace only when the ForCausalLM (submodel)
+            # is used, with keys coming from the ForConditionalGeneration model
             WeightRenaming(
                 source_patterns=r"^model.language_model.", target_patterns=r"^model.(?!(?:language_model.|visual.))"
             ),
