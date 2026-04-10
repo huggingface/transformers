@@ -1038,8 +1038,7 @@ class TrackioCallback(TrainerCallback):
                 "`trackio_static_space_id=False` to silence this warning."
             )
             return
-        gradio_space_id = self._space_id or self._trackio.context_vars.current_space_id.get() or args.trackio_space_id
-        if gradio_space_id is None:
+        if self._space_id is None:
             return
         new_space_id = args.trackio_static_space_id if isinstance(args.trackio_static_space_id, str) else None
         try:
