@@ -23,6 +23,7 @@ import json
 import numbers
 import os
 import re
+import secrets
 import shutil
 import sys
 import tempfile
@@ -955,12 +956,14 @@ class TrackioCallback(TrainerCallback):
 
     @staticmethod
     def _space_repo_name_from_trackio_project(project: str) -> str:
+        """Build a Hub-safe default static Space repo name from the Trackio project and append a short random suffix."""
         s = project.strip().lower().replace("/", "-")
         s = re.sub(r"[^a-z0-9._-]", "-", s)
         s = re.sub(r"-+", "-", s).strip("-_.")
         if not s:
             s = "trackio-project"
-        return s[:96].rstrip("-")
+        suffix = secrets.token_hex(3)
+        return f"{s[:89].rstrip('-')}-{suffix}"
 
     def __init__(self):
         if not is_trackio_available():
@@ -969,7 +972,8 @@ class TrackioCallback(TrainerCallback):
 
         self._trackio = trackio
         self._initialized = False
-        self._frozen_static_space_id: str | None = None
+        self._space_id: str | None = None
+        self._static_space_id: str | None = None
 
     def setup(self, args, state, model, **kwargs):
         """
@@ -999,6 +1003,7 @@ class TrackioCallback(TrainerCallback):
                 private=args.hub_private_repo,
                 bucket_id=bucket_id,
             )
+            self._space_id = self._trackio.context_vars.current_space_id.get() or args.trackio_space_id
             # Add config parameters (run may have been created manually)
             self._trackio.config.update(combined_dict, allow_val_change=True)
 
@@ -1008,32 +1013,6 @@ class TrackioCallback(TrainerCallback):
             except AttributeError:
                 logger.info("Could not log the number of model parameters in Trackio due to an AttributeError.")
         self._initialized = True
-
-    def _trackio_space_id(self, args: TrainingArguments) -> str | None:
-        space_id = self._trackio.context_vars.current_space_id.get() or args.trackio_space_id
-        if space_id is not None:
-            return space_id
-        from trackio.sqlite_storage import SQLiteStorage
-
-        return SQLiteStorage.get_space_id(args.project)
-
-    def _trackio_space_id_for_hub_push(self, args: TrainingArguments, current_project: str) -> str:
-        space_id = self._trackio.context_vars.current_space_id.get()
-        if space_id is None:
-            sync_kw = dict(
-                force=True,
-                private=args.hub_private_repo,
-                bucket_id=args.trackio_bucket_id,
-            )
-            if args.trackio_space_id is None:
-                sync_kw["sdk"] = "static"
-                sync_kw["space_id"] = self._space_repo_name_from_trackio_project(args.project)
-            else:
-                sync_kw["space_id"] = args.trackio_space_id
-            space_id = self._trackio.sync(current_project, **sync_kw)
-        if self._frozen_static_space_id is not None:
-            space_id = self._frozen_static_space_id
-        return space_id
 
     def _point_model_card_at_static_space(self, model, gradio_space_id: str, static_space_id: str) -> None:
         static_url = self.SPACE_URL.format(space_id=static_space_id)
@@ -1069,7 +1048,7 @@ class TrackioCallback(TrainerCallback):
                 "`trackio_freeze_space=False` to silence this warning."
             )
             return
-        gradio_space_id = self._trackio_space_id(args)
+        gradio_space_id = self._space_id or self._trackio.context_vars.current_space_id.get() or args.trackio_space_id
         if gradio_space_id is None:
             return
         try:
@@ -1082,7 +1061,7 @@ class TrackioCallback(TrainerCallback):
         except Exception as e:
             logger.warning(f"Trackio could not freeze the Gradio Space after training: {e}")
             return
-        self._frozen_static_space_id = new_static_id
+        self._static_space_id = new_static_id
         self._point_model_card_at_static_space(model, gradio_space_id, new_static_id)
 
     def on_log(self, args, state, control, model=None, logs=None, **kwargs):
@@ -1119,7 +1098,19 @@ class TrackioCallback(TrainerCallback):
         if (current_project := self._trackio.context_vars.current_project.get()) is None:
             return
 
-        space_id = self._trackio_space_id_for_hub_push(args, current_project)
+        if self._space_id is None:
+            sync_kw = dict(
+                force=True,
+                private=args.hub_private_repo,
+                bucket_id=args.trackio_bucket_id,
+            )
+            if args.trackio_space_id is None:
+                sync_kw["sdk"] = "static"
+                sync_kw["space_id"] = self._space_repo_name_from_trackio_project(args.project)
+            else:
+                sync_kw["space_id"] = args.trackio_space_id
+            self._space_id = self._trackio.sync(current_project, **sync_kw)
+        space_id = self._static_space_id or self._space_id
         space_url = self.SPACE_URL.format(space_id=space_id)
 
         badge_markdown = (
