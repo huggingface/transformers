@@ -799,12 +799,12 @@ class TimesFm2_5ModelForPrediction(TimesFm2_5PreTrainedModel):
 
         if window_size is not None:
             if is_tensor:
-                trend, residual = self._timesfm_moving_average(inputs, window_size)
+                trend, residual = self._timesfm2_5_moving_average(inputs, window_size)
                 inputs = torch.stack([trend, residual], dim=1).view(2 * inputs.shape[0], -1)
             else:
                 new_inputs: list[torch.Tensor] = []
                 for ts in inputs:
-                    new_inputs.extend(self._timesfm_moving_average(ts, window_size))
+                    new_inputs.extend(self._timesfm2_5_moving_average(ts, window_size))
                 inputs = new_inputs
 
         if truncate_negative is None:
