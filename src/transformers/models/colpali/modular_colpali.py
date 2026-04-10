@@ -105,7 +105,7 @@ class ColPaliProcessor(PaliGemmaProcessor):
             images = self.image_processor.fetch_images(images)
             images = make_flat_list_of_images(images)
             texts_doc = [self.visual_prompt_prefix] * len(images)
-            images = [image.convert("RGB") for image in images]
+            images = [self.image_processor.process_image(image) for image in images]
 
             input_strings = [
                 build_string_from_input(
