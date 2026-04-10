@@ -403,19 +403,9 @@ class TrainingArguments:
             Optional Hugging Face Bucket id for Trackio. If unset, Trackio derives one. Used together with a Gradio Space
             (`trackio_space_id`) and when deploying a static Space (`trackio_static_space_id` is not `False`).
         trackio_static_space_id (`str`, `False`, or `None`, *optional*, defaults to `None`):
-            Controls the **static** Trackio Space: a **read-only** frontend over the same Bucket—enough for viewing metrics
-            after training without the sleep-and-wake behavior of a Gradio Space.
-
-            - `False`: disable static Spaces entirely: no `sync(sdk="static")` when pushing the model to the Hub, and no
-              `trackio.freeze` after training.
-            - `None` or `str`: allow static deployment. On **Hub push**, when you did **not** use a live Gradio Space
-              (`trackio_space_id` is `None`), Trackio runs `trackio.sync(..., sdk="static")` with an auto-generated Space
-              name (`None`) or this string as the Space id—that **is** the static-only dashboard path. When **training
-              finishes**, `trackio.freeze` runs **only** if `trackio_space_id` was set (a Gradio Space existed): it turns
-              that Space into a static one (again `None` picks a name for the destination, `str` sets it explicitly).
-
-            The Space will be **public** unless you set `hub_private_repo=True` or your organization's default is to
-            create private Spaces.
+            Controls the **static** Trackio Space: a **read-only** frontend over the same Bucket, for viewing metrics
+            after training is complete. If provided and model is pushed to the Hub, this will be linked from the model card. 
+            The Space will be public unless you set `hub_private_repo=True` or your organization's default is to create private Spaces.
 
         > Evaluation
 
