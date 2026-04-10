@@ -1,9 +1,7 @@
-import logging
-from typing import Optional, Tuple
-
 import torch
 
 from ..utils import logging as transformers_logging
+
 
 logger = transformers_logging.get_logger(__name__)
 
@@ -46,9 +44,7 @@ if _tilelang_available:
         return fast_pow2(fast_log2_ceil(amax * fp8_max_inv))
 
     @tilelang.jit(pass_configs=pass_configs)
-    def act_quant_kernel(
-        N, in_dtype=BF16, out_dtype=FP8, scale_dtype=FP32, round_scale=False
-    ):
+    def act_quant_kernel(N, in_dtype=BF16, out_dtype=FP8, scale_dtype=FP32, round_scale=False):
         M = T.symbolic("M")
         fp8_min = -448.0
         fp8_max = 448.0
@@ -85,9 +81,7 @@ if _tilelang_available:
                         else:
                             s_local[i] = amax_local[i] * fp8_max_inv
                     for i, j in T.Parallel(blk_m, group_size):
-                        y_local[i, j] = T.clamp(
-                            x_local[i, j] / s_local[i], fp8_min, fp8_max
-                        )
+                        y_local[i, j] = T.clamp(x_local[i, j] / s_local[i], fp8_min, fp8_max)
                     for i in T.Parallel(blk_m):
                         S[pid_m * blk_m + i, pid_n] = s_local[i]
                     T.copy(y_local, y_shared)
@@ -210,17 +204,15 @@ if _tilelang_available:
 
 
 def _act_quant_pytorch(
-    x: torch.Tensor, block_size: int = 128, scale_fmt: Optional[str] = None
-) -> Tuple[torch.Tensor, torch.Tensor]:
+    x: torch.Tensor, block_size: int = 128, scale_fmt: str | None = None
+) -> tuple[torch.Tensor, torch.Tensor]:
     """Pure PyTorch implementation of block-wise FP8 activation quantization.
 
     Equivalent to the TileLang ``act_quant_kernel``: per-group absmax scaling,
     optional power-of-2 rounded scales, clamp to FP8 range.
     """
     N = x.size(-1)
-    assert N % block_size == 0, (
-        f"Last dimension size must be divisible by block_size (block_size={block_size})"
-    )
+    assert N % block_size == 0, f"Last dimension size must be divisible by block_size (block_size={block_size})"
     num_groups = N // block_size
     orig_shape = x.shape
 
@@ -278,8 +270,8 @@ _fp8_gemm_use_tilelang = _tilelang_available
 
 
 def act_quant(
-    x: torch.Tensor, block_size: int = 128, scale_fmt: Optional[str] = None
-) -> Tuple[torch.Tensor, torch.Tensor]:
+    x: torch.Tensor, block_size: int = 128, scale_fmt: str | None = None
+) -> tuple[torch.Tensor, torch.Tensor]:
     """
     Quantizes the input tensor `x` using block-wise quantization.
 
@@ -309,17 +301,13 @@ def act_quant(
             kernel(x.view(-1, N), y.view(-1, N), s.view(-1, N // block_size))
             return y, s
         except Exception:
-            logger.warning_once(
-                "TileLang act_quant compilation failed, falling back to PyTorch implementation"
-            )
+            logger.warning_once("TileLang act_quant compilation failed, falling back to PyTorch implementation")
             _act_quant_use_tilelang = False
 
     return _act_quant_pytorch(x, block_size, scale_fmt)
 
 
-def fp8_gemm(
-    a: torch.Tensor, a_s: torch.Tensor, b: torch.Tensor, b_s: torch.Tensor
-) -> torch.Tensor:
+def fp8_gemm(a: torch.Tensor, a_s: torch.Tensor, b: torch.Tensor, b_s: torch.Tensor) -> torch.Tensor:
     """
     Perform a matrix multiplication using FP8 precision.
 
@@ -333,9 +321,7 @@ def fp8_gemm(
         torch.Tensor: The result of the matrix multiplication.
     """
     assert a.is_contiguous() and b.is_contiguous(), "Input tensors must be contiguous"
-    assert a_s.is_contiguous() and b_s.is_contiguous(), (
-        "Scaling factor tensors must be contiguous"
-    )
+    assert a_s.is_contiguous() and b_s.is_contiguous(), "Scaling factor tensors must be contiguous"
 
     global _fp8_gemm_use_tilelang
     if _fp8_gemm_use_tilelang:
@@ -348,15 +334,15 @@ def fp8_gemm(
             kernel(a.view(M, K), b, c.view(M, N), a_s.view(M, -1), b_s)
             return c
         except Exception:
-            logger.warning_once(
-                "TileLang fp8_gemm compilation failed, falling back to PyTorch implementation"
-            )
+            logger.warning_once("TileLang fp8_gemm compilation failed, falling back to PyTorch implementation")
             _fp8_gemm_use_tilelang = False
 
     # PyTorch fallback: dequantize and matmul
     group_size = a.shape[-1] // a_s.shape[-1]
     a_deq = a.to(torch.bfloat16) * a_s.to(torch.bfloat16).repeat_interleave(group_size, dim=-1)
-    b_deq = b.to(torch.bfloat16) * b_s.to(torch.bfloat16).repeat_interleave(group_size, dim=-1).repeat_interleave(group_size, dim=0)
+    b_deq = b.to(torch.bfloat16) * b_s.to(torch.bfloat16).repeat_interleave(group_size, dim=-1).repeat_interleave(
+        group_size, dim=0
+    )
     return torch.matmul(a_deq, b_deq.T)
 
 
@@ -385,9 +371,7 @@ def fp8_index(
         try:
             return fp8_index_kernel(q.shape[2], q.shape[3])(q, q_s, k, k_s)
         except Exception:
-            logger.warning_once(
-                "TileLang fp8_index compilation failed, falling back to PyTorch implementation"
-            )
+            logger.warning_once("TileLang fp8_index compilation failed, falling back to PyTorch implementation")
             _fp8_index_use_tilelang = False
 
     return _fp8_index_pytorch(q, q_s, k, k_s)
