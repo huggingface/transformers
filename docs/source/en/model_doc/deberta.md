@@ -82,13 +82,6 @@ print(f"The predicted relation is: {labels[predicted_class]}")
 ```
 
 </hfoption>
-<hfoption id="transformers CLI">
-
-```bash
-echo -e '{"text": "A soccer game with multiple people playing.", "text_pair": "Some people are playing a sport."}' | transformers run --task text-classification --model microsoft/deberta-base-mnli --device 0
-```
-
-</hfoption>
 </hfoptions>
 
 ## Notes

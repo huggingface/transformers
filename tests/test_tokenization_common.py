@@ -445,6 +445,21 @@ Hey how are you doing"""  # noqa: W293
             if _type.__name__ == "BPE" or _type.__name__ == "WordPiece":
                 vocab = vocab_ids
 
+        # Extract precompiled SentencePiece charsmap from tokenizer.json normalizer
+        extra_kwargs = {}
+        normalizer_config = extractor.tokenizer_data.get("normalizer")
+        if normalizer_config:
+            if normalizer_config.get("type", None) == "Sequence":
+                normalizer_list = normalizer_config["normalizers"]
+            elif not isinstance(normalizer_config, list):
+                normalizer_list = [normalizer_config]
+            for normalizer in normalizer_list:
+                if normalizer.get("type") == "Precompiled" and "precompiled_charsmap" in normalizer:
+                    import base64
+
+                    extra_kwargs["_spm_precompiled_charsmap"] = base64.b64decode(normalizer["precompiled_charsmap"])
+                    break
+
         # Convert added_tokens list to added_tokens_decoder dict format
         # This matches the format used by from_pretrained() from tokenizer_config.jso
         tokenizer_from_extractor = self.tokenizer_class(
@@ -453,6 +468,7 @@ Hey how are you doing"""  # noqa: W293
             do_lower_case=False,
             keep_accents=True,
             added_tokens_decoder=added_tokens_decoder,
+            **extra_kwargs,
             **(self.from_pretrained_kwargs if self.from_pretrained_kwargs is not None else {}),
         )
 
@@ -637,6 +653,7 @@ Hey how are you doing"""  # noqa: W293
                 "vocab",
                 "merges",
                 "legacy",
+                "_spm_precompiled_charsmap",
                 "additional_special_tokens",  # V5: deprecated, converted to extra_special_tokens
             ]:
                 self.assertIn(parameter_name, tokenizer.init_kwargs)
@@ -866,6 +883,10 @@ Hey how are you doing"""  # noqa: W293
         tokenizer_from_extractor = self.get_extracted_tokenizer(reference_tokenizer=tokenizer_original)
         if tokenizer_from_extractor is None:
             self.fail("No tokenizer from TokenizersExtractor provided")
+
+        # Debug: print tokenizer class used by tokenizer_from_extractor
+        print("tokenizer_from_extractor class:", type(tokenizer_from_extractor))
+
         self._run_integration_checks(tokenizer_from_extractor, "from_extractor")
 
     def test_internal_consistency(self):

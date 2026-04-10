@@ -216,6 +216,21 @@ pytest --doctest-modules <path_to_file_or_dir>
 
 If the file has a markdown extension, you should add the `--doctest-glob="*.md"` argument.
 
+#### Run runnable Markdown blocks
+
+Markdown pages can also include runnable Python fences marked with `runnable` or `runnable:<label>`.
+When `hf-doc-builder` is installed, `pytest` can collect and execute those blocks directly from a documentation page
+or from the whole documentation tree:
+
+```bash
+pytest -q docs/source/en/my_page.md
+pytest -q docs/source/en/
+```
+
+For the full authoring syntax, including continuation blocks, `# pytest-decorator:`, and
+`# doc-builder: hide`, see the
+[doc-builder runnable code blocks guide](https://github.com/huggingface/doc-builder/blob/main/docs/runnable-code-blocks.md).
+
 ### Run only modified tests
 
 You can run the tests related to the unstaged files or the current branch (according to Git) by using [pytest-picked](https://github.com/anapaulagomes/pytest-picked). This is a great way of quickly testing your changes didn't break
@@ -541,7 +556,7 @@ spawns a normal process that then spawns off multiple workers and manages the IO
 
 Here are some tests that use it:
 
-- [test_trainer_distributed.py](https://github.com/huggingface/transformers/tree/main/tests/trainer/test_trainer_distributed.py)
+- [test_trainer_distributed.py](https://github.com/huggingface/transformers/tree/main/tests/trainer/distributed/test_trainer_distributed.py)
 - [test_deepspeed.py](https://github.com/huggingface/transformers/tree/main/tests/deepspeed/test_deepspeed.py)
 
 To jump right into the execution point, search for the `execute_subprocess_async` call in those tests.

@@ -601,11 +601,6 @@ def pipeline(
     >>> # Sentiment analysis pipeline
     >>> analyzer = pipeline("sentiment-analysis")
 
-    >>> # Question answering pipeline, specifying the checkpoint identifier
-    >>> oracle = pipeline(
-    ...     "question-answering", model="distilbert/distilbert-base-cased-distilled-squad", tokenizer="google-bert/bert-base-cased"
-    ... )
-
     >>> # Named entity recognition pipeline, passing in a specific model and tokenizer
     >>> model = AutoModelForTokenClassification.from_pretrained("dbmdz/bert-large-cased-finetuned-conll03-english")
     >>> tokenizer = AutoTokenizer.from_pretrained("google-bert/bert-base-cased")
@@ -694,7 +689,12 @@ def pipeline(
                 with open(maybe_adapter_path, "r", encoding="utf-8") as f:
                     adapter_config = json.load(f)
                     adapter_path = model
-                    model = adapter_config["base_model_name_or_path"]
+                    # Only override the model name/path if the current value doesn't point to a
+                    # complete model with an embedded adapter so that local models with embedded
+                    # adapters will load from the local base model rather than pull the base
+                    # model named in the adapter's config from the hub.
+                    if not os.path.exists(model) or not os.path.exists(os.path.join(model, CONFIG_NAME)):
+                        model = adapter_config["base_model_name_or_path"]
 
         config = AutoConfig.from_pretrained(
             model, _from_pipeline=task, code_revision=code_revision, **hub_kwargs, **model_kwargs

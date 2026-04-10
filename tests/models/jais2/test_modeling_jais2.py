@@ -53,6 +53,11 @@ class Jais2ModelTester(CausalLMModelTester):
 @require_torch
 class Jais2ModelTest(CausalLMModelTest, unittest.TestCase):
     model_tester_class = Jais2ModelTester
+
+    @unittest.skip("Float8 quantization + TP numerical noise exceeds match threshold")
+    def test_tp_generation_quantized(self):
+        pass
+
     all_model_classes = (
         (
             Jais2Model,

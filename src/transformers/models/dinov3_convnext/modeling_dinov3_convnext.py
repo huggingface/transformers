@@ -19,11 +19,13 @@ from torch import nn
 
 from ... import initialization as init
 from ...activations import ACT2FN
-from ...backbone_utils import BackboneMixin
-from ...modeling_outputs import BackboneOutput, BaseModelOutputWithPoolingAndNoAttention
+from ...backbone_utils import BackboneMixin, filter_output_hidden_states
+from ...modeling_outputs import BackboneOutput, BaseModelOutput, BaseModelOutputWithPoolingAndNoAttention
 from ...modeling_utils import PreTrainedModel
-from ...utils import auto_docstring, logging
-from ...utils.generic import can_return_tuple
+from ...processing_utils import Unpack
+from ...utils import TransformersKwargs, auto_docstring, logging
+from ...utils.generic import can_return_tuple, merge_with_config_defaults
+from ...utils.output_capturing import capture_outputs
 from .configuration_dinov3_convnext import DINOv3ConvNextConfig
 
 
@@ -134,8 +136,6 @@ class DINOv3ConvNextLayer(nn.Module):
 
 
 class DINOv3ConvNextStage(nn.Module):
-    """ """
-
     def __init__(self, config: DINOv3ConvNextConfig, stage_idx: int):
         super().__init__()
 
@@ -169,7 +169,7 @@ class DINOv3ConvNextStage(nn.Module):
             ]
         )
 
-    def forward(self, features: torch.Tensor) -> torch.Tensor:
+    def forward(self, features: torch.Tensor, **kwargs: Unpack[TransformersKwargs]) -> torch.Tensor:
         """
         Args:
             features: Tensor of shape (batch_size, channels, height, width)
@@ -184,10 +184,11 @@ class DINOv3ConvNextStage(nn.Module):
 @auto_docstring
 class DINOv3ConvNextPreTrainedModel(PreTrainedModel):
     config: DINOv3ConvNextConfig
-    base_model_prefix = "dinov3_convnext"
+    base_model_prefix = "model"
     main_input_name = "pixel_values"
     input_modalities = ("image",)
     _no_split_modules = ["DINOv3ConvNextLayer"]
+    _can_record_outputs = {"hidden_states": DINOv3ConvNextStage}
 
     @torch.no_grad()
     def _init_weights(self, module):
@@ -198,32 +199,42 @@ class DINOv3ConvNextPreTrainedModel(PreTrainedModel):
                 init.constant_(module.gamma, self.config.layer_scale_init_value)
 
 
+class DINOv3ConvNextEncoder(DINOv3ConvNextPreTrainedModel):
+    def __init__(self, config: DINOv3ConvNextConfig):
+        super().__init__(config)
+        self.stages = nn.ModuleList([DINOv3ConvNextStage(config, stage_idx) for stage_idx in range(config.num_stages)])
+        # Initialize weights and apply final processing
+        self.post_init()
+
+    @merge_with_config_defaults
+    @capture_outputs(tie_last_hidden_states=False)
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> BaseModelOutput:
+        for stage in self.stages:
+            hidden_states = stage(hidden_states, **kwargs)
+
+        return BaseModelOutput(last_hidden_state=hidden_states)
+
+
 @auto_docstring
 class DINOv3ConvNextModel(DINOv3ConvNextPreTrainedModel):
     def __init__(self, config: DINOv3ConvNextConfig):
         super().__init__(config)
-        self.config = config
-        self.stages = nn.ModuleList([DINOv3ConvNextStage(config, stage_idx) for stage_idx in range(config.num_stages)])
+        self.model = DINOv3ConvNextEncoder(config)
         self.layer_norm = nn.LayerNorm(config.hidden_sizes[-1], eps=config.layer_norm_eps)  # final norm layer
         self.pool = nn.AdaptiveAvgPool2d(1)
         self.post_init()
 
     @can_return_tuple
     @auto_docstring
-    def forward(
-        self, pixel_values: torch.FloatTensor, output_hidden_states: bool | None = None, **kwargs
-    ) -> BaseModelOutputWithPoolingAndNoAttention:
+    def forward(self, pixel_values: torch.FloatTensor, **kwargs) -> BaseModelOutputWithPoolingAndNoAttention:
         hidden_states = pixel_values
 
-        output_hidden_states = output_hidden_states or self.config.output_hidden_states
-        all_hidden_states = [hidden_states] if output_hidden_states else []
-
-        for stage in self.stages:
-            hidden_states = stage(hidden_states)
-
-            # store intermediate stage outputs
-            if output_hidden_states:
-                all_hidden_states.append(hidden_states)
+        output = self.model(hidden_states, **kwargs)
+        hidden_states = output.last_hidden_state
 
         # make global representation, a.k.a [CLS] token
         pooled_output = self.pool(hidden_states)
@@ -239,20 +250,20 @@ class DINOv3ConvNextModel(DINOv3ConvNextPreTrainedModel):
         return BaseModelOutputWithPoolingAndNoAttention(
             last_hidden_state=hidden_states,
             pooler_output=hidden_states[:, 0],
-            hidden_states=tuple(all_hidden_states) if output_hidden_states else None,
+            hidden_states=output.hidden_states,
         )
 
 
 @auto_docstring
 class DINOv3ConvNextBackbone(BackboneMixin, DINOv3ConvNextPreTrainedModel):
-    config: DINOv3ConvNextConfig
+    has_attentions = False
 
     def __init__(self, config: DINOv3ConvNextConfig):
         super().__init__(config)
 
         self.num_features = [config.num_channels] + list(config.hidden_sizes)
 
-        self.stages = nn.ModuleList([DINOv3ConvNextStage(config, s) for s in range(config.num_stages)])
+        self.model = DINOv3ConvNextEncoder(config)
 
         self.post_init()
 
@@ -260,33 +271,19 @@ class DINOv3ConvNextBackbone(BackboneMixin, DINOv3ConvNextPreTrainedModel):
         return None
 
     @can_return_tuple
+    @filter_output_hidden_states
     @auto_docstring
-    def forward(
-        self,
-        pixel_values: torch.FloatTensor,
-        output_hidden_states: bool | None = None,
-        **kwargs,
-    ) -> BackboneOutput:
-        if output_hidden_states is None:
-            output_hidden_states = self.config.output_hidden_states
-
-        hidden_states = pixel_values
-        all_hidden_states: list[torch.Tensor] = [hidden_states]
-
-        for stage in self.stages:
-            hidden_states = stage(hidden_states)
-            all_hidden_states.append(hidden_states)
+    def forward(self, pixel_values: torch.FloatTensor, **kwargs) -> BackboneOutput:
+        kwargs["output_hidden_states"] = True  # required to extract layers for the stages
+        output = self.model(pixel_values, **kwargs)
 
         # hidden_states are already in NCHW (batch_size, channels, height, width) format
         feature_maps: list[torch.Tensor] = []
-        for stage, hidden_states in zip(self.stage_names, all_hidden_states):
+        for stage, hidden_states in zip(self.stage_names, output.hidden_states):
             if stage in self.out_features:
                 feature_maps.append(hidden_states)
 
-        return BackboneOutput(
-            feature_maps=tuple(feature_maps),
-            hidden_states=tuple(all_hidden_states) if output_hidden_states else None,
-        )
+        return BackboneOutput(feature_maps=tuple(feature_maps), hidden_states=output.hidden_states)
 
 
 __all__ = ["DINOv3ConvNextModel", "DINOv3ConvNextPreTrainedModel", "DINOv3ConvNextBackbone"]

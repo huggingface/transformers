@@ -17,31 +17,58 @@ rendered properly in your Markdown viewer.
 
 <div style="float: right;">
     <div class="flex flex-wrap space-x-1">
-        <img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
         <img alt="FlashAttention" src="https://img.shields.io/badge/%E2%9A%A1%EF%B8%8E%20FlashAttention-eae0c8?style=flat">
-        <img alt="SDPA" src="https://img.shields.io/badge/SDPA-DE3412?style=flat&logo=pytorch&logoColor=white">
+        <img alt="Tensor parallelism" src="https://img.shields.io/badge/Tensor%20parallelism-06b6d4?style=flat&logoColor=white">
     </div>
 </div>
 
 # GptOss
 
-## Overview
+[GptOss](https://openai.com/index/introducing-gpt-oss/) is a sparse mixture-of-experts (MoE) language model from OpenAI that routes each token to 4 of 128 experts. It uses attention sinks — learnable auxiliary tokens appended to each attention head — and YaRN rotary embeddings for sequences up to 131k tokens.
 
-The GptOss model was proposed in [blog post](https://openai.com/index/introducing-gpt-oss/) by <INSERT AUTHORS HERE>.
-<INSERT SHORT SUMMARY HERE>
+The example below demonstrates how to generate text with [`Pipeline`] or the [`AutoModelForCausalLM`] class.
 
-The abstract from the paper is the following:
+<hfoptions id="usage">
+<hfoption id="Pipeline">
 
-*<INSERT PAPER ABSTRACT HERE>*
+```py
+import torch
+from transformers import pipeline
 
-Tips:
+pipe = pipeline(
+    task="text-generation",
+    model="openai/gpt-oss-20b",
+    dtype=torch.bfloat16,
+)
+pipe("Plants create energy through a process known as")
+```
 
-- **Attention Sinks with Flex Attention**: When using flex attention, attention sinks require special handling. Unlike with standard attention implementations where sinks can be added directly to attention scores, flex attention `score_mod` function operates on individual score elements rather than the full attention matrix. Therefore, attention sinks renormalization have to be applied after the flex attention computations by renormalizing the outputs using the log-sum-exp (LSE) values returned by flex attention.
+</hfoption>
+<hfoption id="AutoModelForCausalLM">
 
-<INSERT TIPS ABOUT MODEL HERE>
+```py
+import torch
+from transformers import AutoModelForCausalLM, AutoTokenizer
 
-This model was contributed by [INSERT YOUR HF USERNAME HERE](https://huggingface.co/<INSERT YOUR HF USERNAME HERE>).
-The original code can be found [here](<INSERT LINK TO GITHUB REPO HERE>).
+tokenizer = AutoTokenizer.from_pretrained("openai/gpt-oss-20b")
+model = AutoModelForCausalLM.from_pretrained(
+    "openai/gpt-oss-20b",
+    dtype=torch.bfloat16,
+    device_map="auto",
+)
+input_ids = tokenizer("Plants create energy through a process known as", return_tensors="pt").to(model.device)
+
+output = model.generate(**input_ids, max_new_tokens=50)
+print(tokenizer.decode(output[0], skip_special_tokens=True))
+```
+
+</hfoption>
+</hfoptions>
+
+## Notes
+
+- SDPA is not supported because attention sinks require direct access to the full attention logits before softmax. Use Flash Attention or Flex Attention instead.
+- When using Flex Attention, attention sinks require special handling. The `score_mod` function operates on individual score elements rather than the full attention matrix, so sink renormalization is applied after computation using the log-sum-exp (LSE) values returned by Flex Attention.
 
 ## GptOssConfig
 

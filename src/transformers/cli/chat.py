@@ -23,6 +23,7 @@ from typing import Annotated, Any
 from urllib.parse import urljoin, urlparse
 
 import httpx
+import requests
 import typer
 import yaml
 from huggingface_hub import AsyncInferenceClient, ChatCompletionStreamOutput
@@ -41,9 +42,12 @@ if platform.system() != "Windows":
     import pwd
 
 if is_rich_available():
+    from rich import filesize
     from rich.console import Console
     from rich.live import Live
     from rich.markdown import Markdown
+    from rich.progress import BarColumn, Progress, ProgressColumn, TextColumn, TimeElapsedColumn
+    from rich.text import Text
 
 DEFAULT_HTTP_ENDPOINT = {"hostname": "localhost", "port": 8000}
 ALLOWED_KEY_CHARS = set(string.ascii_letters + string.whitespace)
@@ -100,19 +104,26 @@ If you're a new user, check this basic flag guide: https://huggingface.co/docs/t
 
 
 class RichInterface:
-    def __init__(self, model_id: str, user_id: str):
+    def __init__(self, model_id: str, user_id: str, base_url: str):
         self._console = Console()
         self.model_id = model_id
         self.user_id = user_id
+        self.base_url = base_url
 
     async def stream_output(self, stream: AsyncIterator[ChatCompletionStreamOutput]) -> tuple[str, str | Any | None]:
         self._console.print(f"[bold blue]<{self.model_id}>:")
         with Live(console=self._console, refresh_per_second=4) as live:
             text = ""
+            completion_tokens = 0
+            start_time = time.time()
             finish_reason: str | None = None
             async for token in await stream:
                 outputs = token.choices[0].delta.content
                 finish_reason = getattr(token.choices[0], "finish_reason", finish_reason)
+
+                usage = getattr(token, "usage", None)
+                if usage is not None:
+                    completion_tokens = getattr(usage, "completion_tokens", completion_tokens)
 
                 if not outputs:
                     continue
@@ -149,6 +160,11 @@ class RichInterface:
                 # Update the Live console output
                 live.update(markdown, refresh=True)
 
+        elapsed = time.time() - start_time
+        if elapsed > 0 and completion_tokens > 0:
+            tok_per_sec = completion_tokens / elapsed
+            self._console.print()
+            self._console.print(f"[dim]{completion_tokens} tokens in {elapsed:.1f}s ({tok_per_sec:.1f} tok/s)[/dim]")
         self._console.print()
 
         return text, finish_reason
@@ -188,6 +204,88 @@ class RichInterface:
     def print_help(self, minimal: bool = False):
         """Prints the help message to the console."""
         self._console.print(Markdown(HELP_STRING_MINIMAL if minimal else HELP_STRING))
+        self._console.print()
+
+    def print_model_load(self, model: str):
+        response = requests.post(f"{self.base_url.rstrip('/')}/load_model", json={"model": model}, stream=True)
+        response.raise_for_status()
+
+        class StatsColumn(ProgressColumn):
+            def render(self, task):
+                if not task.total:
+                    return Text("")
+
+                if task.fields.get("unit") == "bytes":
+                    done = filesize.decimal(int(task.completed))
+                    tot = filesize.decimal(int(task.total))
+                    speed = f"  {filesize.decimal(int(task.speed))}/s" if task.speed else ""
+
+                    if task.time_remaining is not None:
+                        eta = f"  {int(task.time_remaining // 60)}:{int(task.time_remaining % 60):02d}"
+                    else:
+                        eta = ""
+
+                    return Text(f"{done}/{tot}{speed}{eta}", style="progress.download")
+                return Text(f"{int(task.completed)}/{int(task.total)}")
+
+        stage_labels = {
+            "processor": "Loading processor",
+            "config": "Loading config",
+            "download": "Downloading files",
+            "weights": "Loading into memory",
+        }
+
+        # Include the model name prefix in descriptions only when the terminal is wide enough.
+        # The bar, stats, and elapsed columns need ~70 chars; the model prefix needs len(model)+5.
+        show_model_prefix = self._console.width >= len(model) + 5 + 70
+
+        def _label(stage_key):
+            stage_text = stage_labels.get(stage_key, stage_key)
+            if show_model_prefix:
+                return f"{model}  →  {stage_text}"
+            return stage_text
+
+        progress = Progress(
+            TextColumn("[bold]{task.description}"),
+            BarColumn(bar_width=40),
+            StatsColumn(),
+            TimeElapsedColumn(),
+            console=self._console,
+        )
+        task_id = progress.add_task(_label("processor"), total=None)
+        cached = False
+
+        with Live(progress, console=self._console, transient=True):
+            for line in response.iter_lines():
+                if not line or not line.startswith(b"data: "):
+                    continue
+                event = json.loads(line[6:])
+                status = event.get("status")
+
+                if status == "ready":
+                    cached = event.get("cached", False)
+                    break
+
+                if status == "error":
+                    raise RuntimeError(event.get("message", "Unknown error"))
+
+                if status == "loading":
+                    stage = event.get("stage")
+                    prog = event.get("progress")
+                    label = _label(stage)
+
+                    if prog:
+                        unit = "bytes" if stage == "download" else "items"
+                        progress.update(
+                            task_id, description=label, completed=prog["current"], total=prog.get("total"), unit=unit
+                        )
+                    else:
+                        progress.update(task_id, description=label, completed=0, total=None)
+
+        if cached:
+            self._console.print(Markdown(f"_*{model} was already loaded.*_"))
+        else:
+            self._console.print(Markdown(f"_*{model} is warm.*_"))
         self._console.print()
 
     def print_status(self, config: GenerationConfig):
@@ -364,12 +462,13 @@ class Chat:
         return chat, valid_command, config
 
     async def _inner_run(self):
-        interface = RichInterface(model_id=self.model_id, user_id=self.user)
+        interface = RichInterface(model_id=self.model_id, user_id=self.user, base_url=self.base_url)
         interface.clear()
         chat = new_chat_history(self.system_prompt)
 
         # Starts the session with a minimal help message at the top, so that a user doesn't get stuck
         interface.print_help(minimal=True)
+        interface.print_model_load(self.model_id)
 
         config = self.config
 
@@ -456,14 +555,16 @@ class Chat:
                     else:
                         chat.append({"role": "user", "content": user_input})
 
+                    extra_body = {
+                        "generation_config": config.to_json_string(),
+                        "model": self.model_id,
+                    }
+
                     stream = client.chat_completion(
                         chat,
                         stream=True,
                         model=self.model_id,
-                        extra_body={
-                            "generation_config": config.to_json_string(),
-                            "model": self.model_id,
-                        },
+                        extra_body=extra_body,
                     )
 
                     model_output, finish_reason = await interface.stream_output(stream)

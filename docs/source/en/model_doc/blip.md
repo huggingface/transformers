@@ -106,9 +106,9 @@ Refer to this [notebook](https://github.com/huggingface/notebooks/blob/main/exam
 [[autodoc]] BlipImageProcessor
     - preprocess
 
-## BlipImageProcessorFast
+## BlipImageProcessorPil
 
-[[autodoc]] BlipImageProcessorFast
+[[autodoc]] BlipImageProcessorPil
     - preprocess
 
 ## BlipModel
