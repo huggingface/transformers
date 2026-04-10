@@ -669,6 +669,113 @@ class HQQQuantizedLayer(QuantizedLayer):
         return tensor
 
 
+class PolarQuantizedLayer(QuantizedLayer):
+    """A quantized cache layer using PolarQuant: Walsh-Hadamard rotation plus
+    Lloyd-Max optimal scalar quantization on the last (``head_dim``) axis.
+
+    Each ``head_dim``-sized vector is L2-normalized, rotated with a
+    Walsh-Hadamard matrix (which decorrelates the components so their marginal
+    distribution approximates a unit Gaussian), and then mapped to its nearest
+    Lloyd-Max centroid for ``N(0, 1)``. The per-vector norm is kept in
+    ``bfloat16`` and stored alongside the bit-packed codes.
+
+    Because the rotation operates on the last axis, the quantization is always
+    per-vector along ``head_dim``; the ``axis_key`` / ``axis_value`` arguments
+    are kept for interface parity with the other backends but ``0`` and ``-1``
+    are both interpreted as "the last dimension". The ``q_group_size`` argument
+    is likewise unused (the effective group is always the full head dimension).
+
+    Non-power-of-two head dimensions are handled by zero-padding each vector
+    to the next power of two before rotation and slicing the padding back off
+    during dequantization.
+
+    See :class:`QuantizedCache` for details on common methods.
+
+    Args:
+        nbits (`int`, *optional*, defaults to 3):
+            The number of bits per code. One of ``{2, 3, 4, 5}``.
+        axis_key (`int`, *optional*, defaults to 0):
+            Ignored by PolarQuant; the quantization always operates on the
+            last dimension. Accepts ``0`` or ``-1`` for interface parity.
+        axis_value (`int`, *optional*, defaults to 0):
+            Ignored by PolarQuant; the quantization always operates on the
+            last dimension. Accepts ``0`` or ``-1`` for interface parity.
+        q_group_size (`int`, *optional*, defaults to 64):
+            Unused by PolarQuant; kept for interface parity.
+        residual_length (`int`, *optional*, defaults to 128):
+            Maximum capacity of the full-precision residual buffer before
+            older tokens are compressed.
+    """
+
+    def __init__(
+        self,
+        nbits: int = 3,
+        axis_key: int = 0,
+        axis_value: int = 0,
+        q_group_size: int = 64,
+        residual_length: int = 128,
+    ):
+        super().__init__(
+            nbits=nbits,
+            axis_key=axis_key,
+            axis_value=axis_value,
+            q_group_size=q_group_size,
+            residual_length=residual_length,
+        )
+
+        if self.nbits not in (2, 3, 4, 5):
+            raise ValueError(f"`nbits` for `polarquant` backend must be one of [2, 3, 4, 5], got {self.nbits}")
+        if self.axis_key not in (0, -1):
+            raise ValueError(f"`axis_key` for `polarquant` backend must be 0 or -1, got {self.axis_key}")
+        if self.axis_value not in (0, -1):
+            raise ValueError(f"`axis_value` for `polarquant` backend must be 0 or -1, got {self.axis_value}")
+
+        self._head_dim: int | None = None
+        self._padded_dim: int | None = None
+        self._centroids: torch.Tensor | None = None
+        self._hadamard: torch.Tensor | None = None
+
+    def _lazy_init_polar(self, tensor: "torch.Tensor") -> None:
+        """Initialize the centroid table and Hadamard matrix on first use."""
+        from .integrations.polarquant import build_hadamard, get_centroids, next_power_of_two
+
+        if self._centroids is not None:
+            return
+
+        self._head_dim = int(tensor.shape[-1])
+        self._padded_dim = next_power_of_two(self._head_dim)
+        self._centroids = get_centroids(self.nbits, device=tensor.device, dtype=torch.float32)
+        self._hadamard = build_hadamard(self._padded_dim, device=tensor.device, dtype=torch.float32)
+
+    def _quantize(self, tensor, axis):
+        from .integrations.polarquant import polarquant_quantize
+
+        self._lazy_init_polar(tensor)
+        return polarquant_quantize(
+            tensor=tensor,
+            head_dim=self._head_dim,
+            padded_dim=self._padded_dim,
+            nbits=self.nbits,
+            centroids=self._centroids,
+            hadamard=self._hadamard,
+        )
+
+    def _dequantize(self, qtensor):
+        from .integrations.polarquant import polarquant_dequantize
+
+        # ``self.dtype`` is populated by :meth:`DynamicLayer.lazy_initialization`
+        # from the dtype of the first ``key_states`` tensor passed to ``update``,
+        # and is the canonical operating dtype of the layer.
+        return polarquant_dequantize(
+            qtensor=qtensor,
+            head_dim=self._head_dim,
+            padded_dim=self._padded_dim,
+            centroids=self._centroids,
+            hadamard=self._hadamard,
+            output_dtype=self.dtype,
+        )
+
+
 class LinearAttentionCacheLayerMixin(ABC):
     """Base, abstract class for a linear attention single layer's cache."""
 
@@ -1387,7 +1494,7 @@ class QuantizedCache(Cache):
 
     Args:
         backend (`str`):
-            The quantization backend to use. One of `("quanto", "hqq").
+            The quantization backend to use. One of `("quanto", "hqq", "polarquant")`.
         config (`PreTrainedConfig`):
             The config of the model for which this Cache will be used.
         nbits (`int`, *optional*, defaults to 4):
@@ -1416,6 +1523,8 @@ class QuantizedCache(Cache):
             layer_class = QuantoQuantizedLayer
         elif backend == "hqq":
             layer_class = HQQQuantizedLayer
+        elif backend == "polarquant":
+            layer_class = PolarQuantizedLayer
         else:
             raise ValueError(f"Unknown quantization backend `{backend}`")
 

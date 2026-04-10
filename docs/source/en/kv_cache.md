@@ -154,10 +154,11 @@ responses = tokenizer.batch_decode(out[:,-28:], skip_special_tokens=True)
 
 ## Quantized cache
 
-The [`QuantizedCache`] reduces memory requirements by quantizing the KV values to a lower precision. [`QuantizedCache`] currently supports two quantization backends:
+The [`QuantizedCache`] reduces memory requirements by quantizing the KV values to a lower precision. [`QuantizedCache`] currently supports three quantization backends:
 
 - `hqq` supports int2, int4, and int8 datatypes.
 - `quanto` supports int2 and int4 datatypes. This is the default quantization backend.
+- `polarquant` supports 2-, 3-, 4-, and 5-bit codes via Walsh-Hadamard rotation plus Lloyd-Max optimal scalar quantization. It is self-contained (no external quantization library) and does not require calibration data.
 
 > [!WARNING]
 > Quantizing the cache can harm latency if the context length is short and there is enough GPU memory available for generation without enabling cache quantization. Try to find a balance between memory efficiency and latency.
@@ -194,6 +195,20 @@ inputs = tokenizer("I like rock music because", return_tensors="pt").to(model.de
 out = model.generate(**inputs, do_sample=False, max_new_tokens=20, cache_implementation="quantized", cache_config={"nbits": 4, "backend": "quanto"})
 print(tokenizer.batch_decode(out, skip_special_tokens=True)[0])
 I like rock music because it's loud and energetic. It's a great way to express myself and rel
+```
+
+For the `polarquant` backend, 3-bit is the recommended default. It uses a deterministic Walsh-Hadamard rotation plus Lloyd-Max optimal centroids for `N(0, 1)` and requires no external library.
+
+```py
+import torch
+from transformers import AutoTokenizer, AutoModelForCausalLM
+
+tokenizer = AutoTokenizer.from_pretrained("meta-llama/Llama-2-7b-chat-hf")
+model = AutoModelForCausalLM.from_pretrained("meta-llama/Llama-2-7b-chat-hf", dtype=torch.float16, device_map="auto")
+inputs = tokenizer("I like rock music because", return_tensors="pt").to(model.device)
+
+out = model.generate(**inputs, do_sample=False, max_new_tokens=20, cache_implementation="quantized", cache_config={"nbits": 3, "backend": "polarquant"})
+print(tokenizer.batch_decode(out, skip_special_tokens=True)[0])
 ```
 
 ## Encoder-decoder cache

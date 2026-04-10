@@ -369,6 +369,7 @@ else:
         "StaticSlidingWindowLayer",
         "QuantoQuantizedLayer",
         "HQQQuantizedLayer",
+        "PolarQuantizedLayer",
         "Cache",
         "DynamicCache",
         "EncoderDecoderCache",
@@ -488,6 +489,7 @@ if TYPE_CHECKING:
     from .cache_utils import DynamicLayer as DynamicLayer
     from .cache_utils import EncoderDecoderCache as EncoderDecoderCache
     from .cache_utils import HQQQuantizedLayer as HQQQuantizedLayer
+    from .cache_utils import PolarQuantizedLayer as PolarQuantizedLayer
     from .cache_utils import QuantizedCache as QuantizedCache
     from .cache_utils import QuantoQuantizedLayer as QuantoQuantizedLayer
     from .cache_utils import StaticCache as StaticCache

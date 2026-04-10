@@ -243,6 +243,42 @@ class CacheIntegrationTest(unittest.TestCase):
 
         # Check that something is actually quantized
 
+    def test_polarquant_cache_generation(self):
+        """Tests that ``QuantizedCache`` works as expected for the
+        ``polarquant`` backend.
+
+        Mirrors :meth:`test_quantized_cache_generation` for the quanto / HQQ
+        backends. PolarQuant is fully self-contained (no external quantization
+        library), so unlike those cases we don't need an availability check.
+        We assert the generation completes without error and produces a
+        non-empty string beginning with the prompt — the exact token sequence
+        is covered by the numeric round-trip tests in
+        :class:`PolarQuantizedCacheUnitTest`.
+        """
+        inputs = self.tokenizer(["The cat"], return_tensors="pt").to(self.model.device)
+
+        gen_out = self.model.generate(
+            **inputs,
+            do_sample=False,
+            max_new_tokens=10,
+            return_dict_in_generate=True,
+            cache_implementation="quantized",
+            cache_config={
+                "backend": "polarquant",
+                "nbits": 3,
+                "q_group_size": 64,
+                "residual_length": 4,
+                "axis_key": 0,
+                "axis_value": 0,
+            },
+            disable_compile=True,
+        )
+
+        self.assertIsInstance(gen_out.past_key_values, QuantizedCache)
+        decoded = self.tokenizer.decode(gen_out.sequences[0], skip_special_tokens=True)
+        self.assertTrue(decoded.startswith("The cat"), f"unexpected generation: {decoded!r}")
+        self.assertGreater(len(decoded), len("The cat"))
+
     @parameterized.expand(TEST_CACHE_IMPLEMENTATIONS)
     def test_cache_extra_left_padding(self, cache_implementation):
         """Tests that adding extra left-padding does not affect the generation with the cache"""
@@ -1233,3 +1269,153 @@ class SyntheticCacheTest(unittest.TestCase):
 
         self.assertEqual(cache.layers[0].keys[0, 0, :, 0].tolist(), [20.0, 30.0, 40.0])
         self.assertEqual(returned_1[0][0, 0, :, 0].tolist(), [10.0, 20.0, 30.0, 40.0])
+
+
+@require_torch
+class PolarQuantizedCacheUnitTest(unittest.TestCase):
+    """Unit tests for the PolarQuant cache backend primitives.
+
+    These tests exercise the quantize / dequantize math in isolation so they
+    can run on CPU without loading a model. The end-to-end generation tests
+    live in :class:`CacheIntegrationTest` below.
+    """
+
+    def test_centroid_table_values(self):
+        """The hardcoded Lloyd-Max centroids must be sorted and symmetric."""
+        from transformers.integrations.polarquant import _CENTROIDS
+
+        for nbits, values in _CENTROIDS.items():
+            with self.subTest(nbits=nbits):
+                self.assertEqual(len(values), 1 << nbits)
+                self.assertEqual(values, sorted(values))
+                # N(0, 1) is symmetric around zero, so centroids should
+                # mirror each other (within the precompute tolerance).
+                for lo, hi in zip(values, reversed(values)):
+                    self.assertAlmostEqual(lo, -hi, places=4)
+
+    def test_hadamard_orthogonality(self):
+        """``build_hadamard(n)`` must produce an orthogonal matrix."""
+        from transformers.integrations.polarquant import build_hadamard
+
+        for n in (4, 8, 16, 32, 64, 128, 256):
+            with self.subTest(n=n):
+                H = build_hadamard(n, device="cpu", dtype=torch.float64)
+                eye = H @ H.t()
+                self.assertTrue(torch.allclose(eye, torch.eye(n, dtype=torch.float64), atol=1e-10))
+
+    def test_bitpacker_roundtrip(self):
+        """BitPacker must round-trip integer codes at every supported bit-width."""
+        from transformers.integrations.polarquant import BitPacker
+
+        torch.manual_seed(0)
+        for nbits in (2, 3, 4, 5):
+            for D in (8, 16, 32, 64, 128):
+                with self.subTest(nbits=nbits, D=D):
+                    codes = torch.randint(0, 1 << nbits, (7, D), dtype=torch.int64)
+                    packed = BitPacker.pack(codes, nbits)
+                    self.assertEqual(packed.dtype, torch.uint8)
+                    self.assertEqual(packed.shape[1], BitPacker.packed_bytes(D, nbits))
+                    unpacked = BitPacker.unpack(packed, nbits, D)
+                    self.assertTrue(torch.equal(unpacked, codes))
+
+    def test_quantize_dequantize_shape_preservation(self):
+        """Quantize then dequantize must return a tensor with the original shape."""
+        from transformers.cache_utils import PolarQuantizedLayer
+
+        torch.manual_seed(0)
+        layer = PolarQuantizedLayer(nbits=3, axis_key=0, axis_value=0, q_group_size=64, residual_length=128)
+        layer.lazy_initialization(
+            torch.zeros(1, 4, 0, 128, dtype=torch.bfloat16),
+            torch.zeros(1, 4, 0, 128, dtype=torch.bfloat16),
+        )
+
+        tensor = torch.randn(2, 8, 100, 128, dtype=torch.bfloat16)
+        qt = layer._quantize(tensor.contiguous(), axis=-1)
+        recon = layer._dequantize(qt)
+        self.assertEqual(tuple(recon.shape), tuple(tensor.shape))
+        self.assertEqual(recon.dtype, torch.bfloat16)
+
+    def test_quantize_dequantize_cosine_similarity(self):
+        """Round-trip cosine similarity must meet the per-bit-width minimum."""
+        from transformers.cache_utils import PolarQuantizedLayer
+
+        torch.manual_seed(0)
+        head_dim = 128
+        tensor = torch.randn(1, 4, 256, head_dim, dtype=torch.bfloat16)
+
+        # Lower bounds are conservative so the test is stable under minor
+        # numerical drift; the actual similarity is typically 1-3 points higher.
+        min_similarity = {2: 0.80, 3: 0.95, 4: 0.98, 5: 0.99}
+
+        for nbits, threshold in min_similarity.items():
+            with self.subTest(nbits=nbits):
+                layer = PolarQuantizedLayer(
+                    nbits=nbits, axis_key=0, axis_value=0, q_group_size=64, residual_length=128
+                )
+                layer.lazy_initialization(
+                    torch.zeros(1, 4, 0, head_dim, dtype=torch.bfloat16),
+                    torch.zeros(1, 4, 0, head_dim, dtype=torch.bfloat16),
+                )
+                qt = layer._quantize(tensor.contiguous(), axis=-1)
+                recon = layer._dequantize(qt)
+
+                flat_orig = tensor.reshape(-1, head_dim).to(torch.float32)
+                flat_recon = recon.reshape(-1, head_dim).to(torch.float32)
+                cos = torch.nn.functional.cosine_similarity(flat_orig, flat_recon, dim=-1)
+                self.assertGreaterEqual(
+                    cos.mean().item(),
+                    threshold,
+                    f"nbits={nbits} cos similarity {cos.mean().item():.4f} < {threshold}",
+                )
+
+    def test_quantize_non_power_of_two_head_dim(self):
+        """Non-power-of-two head dims should round-trip via zero-padding."""
+        from transformers.cache_utils import PolarQuantizedLayer
+
+        torch.manual_seed(0)
+        head_dim = 96  # Phi-3 mini uses 96
+        layer = PolarQuantizedLayer(nbits=3, axis_key=0, axis_value=0, q_group_size=64, residual_length=128)
+        layer.lazy_initialization(
+            torch.zeros(1, 4, 0, head_dim, dtype=torch.bfloat16),
+            torch.zeros(1, 4, 0, head_dim, dtype=torch.bfloat16),
+        )
+        tensor = torch.randn(1, 4, 32, head_dim, dtype=torch.bfloat16)
+        qt = layer._quantize(tensor.contiguous(), axis=-1)
+        recon = layer._dequantize(qt)
+        self.assertEqual(tuple(recon.shape), tuple(tensor.shape))
+
+    def test_invalid_nbits_raises(self):
+        """Bit-widths outside {2, 3, 4, 5} must raise a ValueError."""
+        from transformers.cache_utils import PolarQuantizedLayer
+
+        with self.assertRaises(ValueError):
+            PolarQuantizedLayer(nbits=8, axis_key=0, axis_value=0, q_group_size=64, residual_length=128)
+
+    def test_invalid_axis_raises(self):
+        """Only axis=0 or axis=-1 is supported for polarquant."""
+        from transformers.cache_utils import PolarQuantizedLayer
+
+        with self.assertRaises(ValueError):
+            PolarQuantizedLayer(nbits=3, axis_key=1, axis_value=0, q_group_size=64, residual_length=128)
+        with self.assertRaises(ValueError):
+            PolarQuantizedLayer(nbits=3, axis_key=0, axis_value=1, q_group_size=64, residual_length=128)
+
+    def test_axis_minus_one_is_accepted(self):
+        """axis=-1 should be accepted as an alias for axis=0."""
+        from transformers.cache_utils import PolarQuantizedLayer
+
+        # Should not raise
+        PolarQuantizedLayer(nbits=3, axis_key=-1, axis_value=-1, q_group_size=64, residual_length=128)
+        PolarQuantizedLayer(nbits=3, axis_key=0, axis_value=-1, q_group_size=64, residual_length=128)
+
+    def test_quantized_cache_dispatches_polarquant_backend(self):
+        """``QuantizedCache(backend="polarquant")`` must instantiate one
+        :class:`PolarQuantizedLayer` per transformer layer."""
+        from transformers.cache_utils import PolarQuantizedLayer, QuantizedCache
+
+        config = LlamaConfig(num_hidden_layers=4, hidden_size=256, num_attention_heads=4, num_key_value_heads=2)
+        cache = QuantizedCache(backend="polarquant", config=config, nbits=3)
+        self.assertEqual(len(cache.layers), config.num_hidden_layers)
+        for layer in cache.layers:
+            self.assertIsInstance(layer, PolarQuantizedLayer)
+            self.assertEqual(layer.nbits, 3)
