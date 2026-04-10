@@ -29,7 +29,9 @@ from transformers import (
     is_torch_available,
 )
 from transformers.testing_utils import (
+    Expectations,
     cleanup,
+    require_deterministic_for_xpu,
     require_torch,
     slow,
     torch_device,
@@ -345,16 +347,38 @@ class MusicFlamingoForConditionalGenerationIntegrationTest(unittest.TestCase):
         txt = self.processor.batch_decode(gen_ids, skip_special_tokens=True)
         self.assertListEqual(txt, exp_txt)
 
+    @require_deterministic_for_xpu
     @slow
     def test_fixture_batched_matches(self):
         """
         reproducer (creates JSON directly in repo): https://gist.github.com/ebezzam/a3226a0ba25e51be84a4808a79b59257#file-reproducer_hf-py
         """
-        path = Path(__file__).parent.parent.parent / "fixtures/musicflamingo/expected_results_batched.json"
-        with open(path, "r", encoding="utf-8") as f:
-            raw = json.load(f)
-        exp_ids = torch.tensor(raw["token_ids"])
-        exp_txt = raw["transcriptions"]
+        # fmt: off
+        exp_ids = Expectations(
+            {
+                ("cuda", None): torch.tensor([
+                    [1986, 3754, 374, 458, 94509, 19461, 98875, 55964, 3528, 1163, 681, 55964, 11598, 55564, 429, 57843, 279, 9842, 3040, 55964, 263, 55964, 1782, 55964, 30449, 27235, 315, 11416, 19461, 98875, 448, 279, 68897, 11, 10581, 52760, 42898, 975, 14260, 315, 6481, 97431, 55964, 13573, 2591, 2420, 13, 220, 576, 8090],
+                    [334, 68043, 220, 16, 1019, 33648, 9287, 88828, 304, 51454, 11, 12711, 28347, 261, 304, 279, 3054, 11, 24353, 20783, 18707, 30789, 11, 22502, 4614, 389, 279, 49293, 271, 334, 68043, 220, 17, 1019, 26843, 2367, 98091, 389, 279, 39612, 11, 304, 17172, 582, 6950, 11, 14697, 41315, 311, 279],
+                ]),
+                ("xpu", None): torch.tensor([
+                    [1986, 3754, 374, 458, 94509, 19461, 98875, 55964, 3528, 1163, 681, 55964, 11598, 55564, 429, 57843, 279, 9842, 3040, 55964, 263, 55964, 1782, 55964, 30449, 27235, 315, 11416, 19461, 98875, 448, 279, 68897, 11, 10581, 52760, 42898, 975, 14260, 315, 6481, 97431, 55964, 13573, 2591, 2420, 13, 220, 576, 8090],
+                    [334, 68043, 220, 16, 1019, 33648, 9287, 88828, 304, 51454, 11, 12711, 28347, 261, 304, 279, 3054, 11, 24353, 20783, 18707, 30789, 11, 22502, 4614, 389, 2518, 49293, 271, 334, 68043, 220, 17, 1019, 26843, 2367, 98091, 389, 279, 39612, 11, 304, 17172, 582, 6950, 11, 14697, 41315, 311, 279],
+                ]),
+            }
+        ).get_expectation()
+        exp_txt = Expectations(
+            {
+                ("cuda", None): [
+                    "This track is an uplifting Eurodance‑style Trance‑Pop anthem that blends the driving four‑on‑the‑floor pulse of classic Eurodance with the soaring, melodic synth work typical of modern trance‑infused pop.  The duration",
+                    "**Verse 1**\nMidnight cravings in bloom, lights flicker in the room, pepperoni dreams arise, pizza party on the skies\n\n**Verse 2**\nCheese melts on the crust, in flavor we trust, boxes stacked to the",
+                ],
+                ("xpu", None): [
+                    "This track is an uplifting Eurodance‑style Trance‑Pop anthem that blends the driving four‑on‑the‑floor pulse of classic Eurodance with the soaring, melodic synth work typical of modern trance‑infused pop.  The duration",
+                    "**Verse 1**\nMidnight cravings in bloom, lights flicker in the room, pepperoni dreams arise, pizza party on red skies\n\n**Verse 2**\nCheese melts on the crust, in flavor we trust, boxes stacked to the",
+                ],
+            }
+        ).get_expectation()
+        # fmt: on
 
         conversations = [
             [

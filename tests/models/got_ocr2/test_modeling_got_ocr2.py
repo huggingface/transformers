@@ -161,6 +161,9 @@ class GotOcr2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
     def test_config(self):
         self.config_tester.run_common_tests()
 
+    def test_reverse_loading_mapping(self):
+        super().test_reverse_loading_mapping(skip_base_model=True)
+
 
 @require_torch
 class GotOcr2IntegrationTest(unittest.TestCase):
