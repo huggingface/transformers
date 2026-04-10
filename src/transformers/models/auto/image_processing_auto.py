@@ -145,6 +145,7 @@ else:
             ("imagegpt", {"torchvision": "ImageGPTImageProcessor", "pil": "ImageGPTImageProcessorPil"}),
             ("instructblip", {"torchvision": "BlipImageProcessor", "pil": "BlipImageProcessorPil"}),
             ("internvl", {"torchvision": "GotOcr2ImageProcessor", "pil": "GotOcr2ImageProcessorPil"}),
+            ("isaac", {"torchvision": "IsaacImageProcessor"}),
             ("janus", {"torchvision": "JanusImageProcessor", "pil": "JanusImageProcessorPil"}),
             ("kosmos-2", {"torchvision": "CLIPImageProcessor", "pil": "CLIPImageProcessorPil"}),
             ("kosmos-2.5", {"torchvision": "Kosmos2_5ImageProcessor", "pil": "Kosmos2_5ImageProcessorPil"}),
