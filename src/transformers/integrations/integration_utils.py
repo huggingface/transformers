@@ -937,7 +937,6 @@ class TrackioCallback(TrainerCallback):
     A [`TrainerCallback`] that logs metrics to Trackio.
     """
 
-
     SPACE_URL = "https://huggingface.co/spaces/{space_id}"
     _TRACKIO_BADGE_IMG = (
         "https://raw.githubusercontent.com/gradio-app/trackio/refs/heads/main/trackio/assets/badge.png"
@@ -1042,9 +1041,7 @@ class TrackioCallback(TrainerCallback):
         gradio_space_id = self._space_id or self._trackio.context_vars.current_space_id.get() or args.trackio_space_id
         if gradio_space_id is None:
             return
-        new_space_id = (
-            args.trackio_static_space_id if isinstance(args.trackio_static_space_id, str) else None
-        )
+        new_space_id = args.trackio_static_space_id if isinstance(args.trackio_static_space_id, str) else None
         try:
             new_static_id = self._trackio.freeze(
                 gradio_space_id,

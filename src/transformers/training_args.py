@@ -1060,9 +1060,7 @@ class TrainingArguments:
     )
     trackio_bucket_id: str | None = field(
         default=None,
-        metadata={
-            "help": "Optional HF Bucket id when using a Trackio Space; if unset, Trackio picks a default."
-        },
+        metadata={"help": "Optional HF Bucket id when using a Trackio Space; if unset, Trackio picks a default."},
     )
     trackio_static_space_id: str | None | Literal[False] = field(
         default=None,
