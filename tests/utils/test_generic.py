@@ -14,6 +14,7 @@
 
 import unittest
 import warnings
+from unittest.mock import patch
 
 import numpy as np
 import pytest
@@ -32,6 +33,7 @@ from transformers.utils import (
     to_py_obj,
     transpose,
 )
+from transformers.utils.generic import retry
 
 
 if is_torch_available():
@@ -349,3 +351,104 @@ class CanReturnTupleDecoratorTester(unittest.TestCase):
                 hasattr(module, "_is_top_level_module"),
                 f"Module `{name}` should not have `_is_top_level_module` attribute",
             )
+
+
+class RetryTest(unittest.TestCase):
+    def test_succeeds_on_first_attempt(self):
+        """Test that retry returns immediately when the wrapped call succeeds."""
+
+        @retry(max_retries=3, exceptions=(ValueError,))
+        def succeed():
+            return "ok"
+
+        self.assertEqual(succeed(), "ok")
+
+    @patch("transformers.utils.generic.time.sleep")
+    def test_retries_then_succeeds(self, mock_sleep):
+        """Test that retry sleeps and eventually returns after transient failures."""
+
+        call_count = 0
+
+        @retry(max_retries=3, initial_delay=1.0, jitter=False, exceptions=(ValueError,))
+        def fail_twice():
+            nonlocal call_count
+            call_count += 1
+            if call_count < 3:
+                raise ValueError("transient")
+            return "recovered"
+
+        self.assertEqual(fail_twice(), "recovered")
+        self.assertEqual(call_count, 3)
+        self.assertEqual(mock_sleep.call_count, 2)
+
+    @patch("transformers.utils.generic.time.sleep")
+    def test_raises_after_max_retries(self, mock_sleep):
+        """Test that retry re-raises the configured exception after exhausting retries."""
+
+        @retry(max_retries=2, initial_delay=0.1, jitter=False, exceptions=(RuntimeError,))
+        def always_fail():
+            raise RuntimeError("permanent")
+
+        with self.assertRaises(RuntimeError, msg="permanent"):
+            always_fail()
+        self.assertEqual(mock_sleep.call_count, 1)
+
+    @patch("transformers.utils.generic.time.sleep")
+    def test_non_matching_exception_propagates_immediately(self, mock_sleep):
+        """Test that retry does not intercept exceptions outside the configured set."""
+
+        @retry(max_retries=5, exceptions=(ValueError,))
+        def raise_type_error():
+            raise TypeError("wrong type")
+
+        with self.assertRaises(TypeError):
+            raise_type_error()
+        self.assertEqual(mock_sleep.call_count, 0)
+
+    @patch("transformers.utils.generic.time.sleep")
+    def test_exponential_backoff(self, mock_sleep):
+        """Test that retry doubles the delay between attempts when jitter is disabled."""
+
+        call_count = 0
+
+        @retry(max_retries=4, initial_delay=1.0, max_delay=10.0, jitter=False, exceptions=(ValueError,))
+        def fail_thrice():
+            nonlocal call_count
+            call_count += 1
+            if call_count < 4:
+                raise ValueError("retry")
+            return "done"
+
+        fail_thrice()
+        delays = [call[0][0] for call in mock_sleep.call_args_list]
+        self.assertEqual(delays, [1.0, 2.0, 4.0])
+
+    @patch("transformers.utils.generic.time.sleep")
+    def test_max_delay_cap(self, mock_sleep):
+        """Test that retry caps exponential backoff at the configured maximum delay."""
+
+        call_count = 0
+
+        @retry(max_retries=5, initial_delay=8.0, max_delay=10.0, jitter=False, exceptions=(ValueError,))
+        def fail_four():
+            nonlocal call_count
+            call_count += 1
+            if call_count < 5:
+                raise ValueError("retry")
+            return "done"
+
+        fail_four()
+        delays = [call[0][0] for call in mock_sleep.call_args_list]
+        # 8.0, then min(16, 10)=10, min(20, 10)=10, min(20, 10)=10
+        self.assertEqual(delays, [8.0, 10.0, 10.0, 10.0])
+
+    def test_preserves_function_metadata(self):
+        """Test that retry preserves the wrapped function metadata."""
+
+        @retry(exceptions=(ValueError,))
+        def my_func():
+            """My docstring."""
+            pass
+
+        self.assertEqual(my_func.__name__, "my_func")
+        self.assertEqual(my_func.__doc__, "My docstring.")
