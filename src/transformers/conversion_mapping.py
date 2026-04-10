@@ -94,7 +94,7 @@ def _build_checkpoint_conversion_mapping():
         ],
         # Delete prefix when used in VLMs (when standalone model `base-model-prefix` is used)
         "clip_vision_model": [
-            WeightRenaming(source_patterns=r"vision_model\.(.+)$", target_patterns=r"\1"),
+            WeightRenaming(source_patterns=r"vision_model\.(.+)$", target_patterns=r"^(?!.*tower\.)\1$"),
         ],
         "llava": [
             WeightRenaming(source_patterns=r"language_model.model", target_patterns="language_model"),
