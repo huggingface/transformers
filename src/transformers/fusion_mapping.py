@@ -68,6 +68,30 @@ class ModuleFusionSpec:
         raise NotImplementedError
 
 
+class _FusedPatchEmbeddingMixin:
+
+    def __init__(self, *args, **kwargs):
+        # call the original_cls.__init__()
+        super().__init__(*args, **kwargs)
+        self.patch_volume = self.proj.in_channels * math.prod(self.proj.kernel_size)
+
+        self.linear_proj = nn.Linear(
+            self.patch_volume,
+            self.proj.out_channels,
+            bias=self.proj.bias is not None,
+            device=self.proj.weight.device,
+            dtype=self.proj.weight.dtype,
+        )
+
+        del self.proj
+
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        target_dtype = self.linear_proj.weight.dtype
+        hidden_states = hidden_states.view(-1, self.patch_volume)
+        hidden_states = self.linear_proj(hidden_states.to(dtype=target_dtype))
+        return hidden_states.view(-1, self.embed_dim)
+
+
 class PatchEmbeddingsFusionSpec(ModuleFusionSpec):
     """Fuse compatible Conv3d patch embeddings into flattened Linear projections."""
 
@@ -86,30 +110,9 @@ class PatchEmbeddingsFusionSpec(ModuleFusionSpec):
         )
 
     def make_fused_class(self, original_cls: type[nn.Module]) -> type[nn.Module]:
-        class FusedPatchEmbedding(original_cls):
-            def __init__(self, *args, **kwargs):
-                super().__init__(*args, **kwargs)
-                self.patch_volume = self.proj.in_channels * math.prod(self.proj.kernel_size)
-
-                self.linear_proj = nn.Linear(
-                    self.patch_volume,
-                    self.proj.out_channels,
-                    bias=self.proj.bias is not None,
-                    device=self.proj.weight.device,
-                    dtype=self.proj.weight.dtype,
-                )
-
-                del self.proj
-
-            def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-                target_dtype = self.linear_proj.weight.dtype
-                hidden_states = hidden_states.view(-1, self.patch_volume)
-                hidden_states = self.linear_proj(hidden_states.to(dtype=target_dtype))
-                return hidden_states.view(-1, self.embed_dim)
-
-        FusedPatchEmbedding.__name__ = f"Fused{original_cls.__name__}"
-        FusedPatchEmbedding.__qualname__ = f"Fused{original_cls.__qualname__}"
-        return FusedPatchEmbedding
+        fused_cls = type(f"Fused{original_cls.__name__}", (_FusedPatchEmbeddingMixin, original_cls), {})
+        fused_cls.__qualname__ = f"Fused{original_cls.__qualname__}"
+        return fused_cls
 
     def make_transforms(self, config: "PretrainedConfig") -> list[WeightTransform]:
         vision_config = getattr(config, "vision_config", config)
