@@ -211,6 +211,258 @@ class TimesFmModelTest(ModelTesterMixin, unittest.TestCase):
 
 
 @require_torch
+class TimesFmForwardInputVariantsTest(unittest.TestCase):
+    def setUp(self):
+        config = TimesFmConfig(
+            patch_length=32,
+            context_length=64,
+            horizon_length=32,
+            hidden_size=16,
+            intermediate_size=32,
+            head_dim=8,
+            num_hidden_layers=1,
+            num_attention_heads=2,
+        )
+        self.model = TimesFmModelForPrediction(config).to(torch_device).eval()
+        self.horizon_len = config.horizon_length
+
+    def test_different_length_series(self):
+        """forward() handles a list of series with different lengths."""
+        inputs = [
+            torch.randn(20, device=torch_device),
+            torch.randn(50, device=torch_device),
+            torch.randn(100, device=torch_device),
+        ]
+        with torch.no_grad():
+            out = self.model(past_values=inputs, freq=[0, 0, 0])
+        self.assertEqual(out.mean_predictions.shape, (3, self.horizon_len))
+
+    def test_very_short_and_very_long_series(self):
+        """forward() works when one series is tiny and another exceeds context_len."""
+        inputs = [
+            torch.randn(5, device=torch_device),
+            torch.randn(500, device=torch_device),
+        ]
+        with torch.no_grad():
+            out = self.model(past_values=inputs, freq=[0, 0])
+        self.assertEqual(out.mean_predictions.shape, (2, self.horizon_len))
+
+    def test_2d_tensor_input(self):
+        """forward() accepts a 2D tensor and produces correct output shape."""
+        inputs = torch.randn(4, 80, device=torch_device)
+        with torch.no_grad():
+            out = self.model(past_values=inputs, freq=[0, 0, 0, 0])
+        self.assertEqual(out.mean_predictions.shape, (4, self.horizon_len))
+
+    def test_list_vs_tensor_parity(self):
+        """forward() with list and 2D tensor of equal-length series gives identical output."""
+        raw = [torch.randn(50, device=torch_device) for _ in range(2)]
+        stacked = torch.stack(raw)
+        freq = [0, 0]
+        with torch.no_grad():
+            out_list = self.model(past_values=raw, freq=freq)
+            out_tensor = self.model(past_values=stacked, freq=freq)
+        self.assertTrue(torch.allclose(out_list.mean_predictions, out_tensor.mean_predictions, atol=1e-5))
+        self.assertTrue(torch.allclose(out_list.full_predictions, out_tensor.full_predictions, atol=1e-5))
+
+    def test_long_series_truncated(self):
+        """forward() with a long series produces the same output as passing only the tail."""
+        long_series = torch.randn(500, device=torch_device)
+        tail = long_series[-64:]
+        with torch.no_grad():
+            out_long = self.model(past_values=[long_series], freq=[0])
+            out_tail = self.model(past_values=[tail], freq=[0])
+        self.assertTrue(torch.allclose(out_long.mean_predictions, out_tail.mean_predictions, atol=1e-5))
+
+    def test_truncate_negative_with_positive_input(self):
+        """truncate_negative clamps outputs to zero when all inputs are non-negative."""
+        inputs = torch.rand(2, 80, device=torch_device).abs() + 1.0
+        with torch.no_grad():
+            out = self.model(past_values=inputs, freq=[0, 0], truncate_negative=True)
+        self.assertTrue((out.mean_predictions >= 0).all())
+        self.assertTrue((out.full_predictions >= 0).all())
+
+    def test_truncate_negative_with_negative_input(self):
+        """truncate_negative leaves outputs untouched when inputs contain negatives."""
+        inputs = torch.randn(2, 80, device=torch_device) - 5.0
+        with torch.no_grad():
+            out_trunc = self.model(past_values=inputs, freq=[0, 0], truncate_negative=True)
+            out_plain = self.model(past_values=inputs, freq=[0, 0], truncate_negative=False)
+        self.assertTrue(torch.allclose(out_trunc.mean_predictions, out_plain.mean_predictions))
+        self.assertTrue(torch.allclose(out_trunc.full_predictions, out_plain.full_predictions))
+
+    def test_onnx_export_and_inference(self):
+        """Export to ONNX, verify dynamic batch and truncate_negative both work."""
+        try:
+            import onnxruntime as ort
+        except ImportError:
+            self.skipTest("onnxruntime not installed")
+
+        import tempfile
+
+        from torch.export import Dim
+
+        class Wrapper(torch.nn.Module):
+            def __init__(self, m):
+                super().__init__()
+                self.m = m
+
+            def forward(self, past_values, freq):
+                o = self.m(past_values, freq=freq, truncate_negative=True)
+                return o.mean_predictions, o.full_predictions
+
+        wrapped = Wrapper(self.model).cpu().eval()
+        export_input = torch.randn(2, 80)
+        export_freq = torch.zeros(2, 1, dtype=torch.int32)
+        batch = Dim("batch", min=1, max=64)
+        seq = Dim("seq", min=1, max=512)
+        with tempfile.TemporaryDirectory() as tmp:
+            path = f"{tmp}/model.onnx"
+            torch.onnx.export(
+                wrapped,
+                (export_input, export_freq),
+                path,
+                input_names=["past_values", "freq"],
+                output_names=["mean_predictions", "full_predictions"],
+                dynamo=True,
+                dynamic_shapes={
+                    "past_values": {0: batch, 1: seq},
+                    "freq": {0: batch},
+                },
+            )
+            import onnx
+
+            onnx_model = onnx.load(path, load_external_data=False)
+            op_types = {n.op_type for n in onnx_model.graph.node}
+
+            # 1. Dynamic dims: input batch & seq must be symbolic strings, not fixed ints
+            inp = onnx_model.graph.input[0]
+            dims = [d.dim_param or d.dim_value for d in inp.type.tensor_type.shape.dim]
+            self.assertIsInstance(dims[0], str, f"batch dim should be symbolic, got {dims[0]}")
+            self.assertIsInstance(dims[1], str, f"seq dim should be symbolic, got {dims[1]}")
+            for out in onnx_model.graph.output:
+                out_batch = out.type.tensor_type.shape.dim[0]
+                self.assertTrue(out_batch.dim_param, f"output '{out.name}' batch dim not dynamic")
+
+            # 2. No If nodes: all Python branches (forecast_context_len, window_size,
+            #    freq is None, return_forecast_on_context, future_values) must be
+            #    frozen at export time, not traced as conditional ops
+            if_nodes = [n.name for n in onnx_model.graph.node if n.op_type == "If"]
+            self.assertEqual(len(if_nodes), 0, f"Graph has If nodes (unfrozen branches): {if_nodes}")
+
+            # 3. truncate_negative: the inp_min >= 0 check must be branchless (torch.where),
+            #    so we expect a Where op in the graph instead of an If
+            self.assertIn("Where", op_types, "Missing Where op — truncate_negative not branchless")
+
+            sess = ort.InferenceSession(path, providers=["CPUExecutionProvider"])
+
+            # (a) different batch size AND seq length to verify both dims are dynamic
+            diff_input = torch.randn(3, 50)
+            diff_freq = torch.zeros(3, 1, dtype=torch.int32)
+            with torch.no_grad():
+                pt_out = self.model(past_values=diff_input, freq=diff_freq, truncate_negative=True)
+            onnx_mean, onnx_full = sess.run(
+                None, {"past_values": diff_input.numpy(), "freq": diff_freq.numpy()}
+            )
+            np.testing.assert_allclose(onnx_mean, pt_out.mean_predictions.numpy(), rtol=1e-3, atol=1e-3)
+            np.testing.assert_allclose(onnx_full, pt_out.full_predictions.numpy(), rtol=1e-3, atol=1e-3)
+
+            # (b) all-positive input triggers the truncate_negative clamp path
+            pos_input = torch.rand(2, 80).abs() + 1.0
+            pos_freq = torch.zeros(2, 1, dtype=torch.int32)
+            with torch.no_grad():
+                pt_pos = self.model(past_values=pos_input, freq=pos_freq, truncate_negative=True)
+            onnx_mean_pos, onnx_full_pos = sess.run(
+                None, {"past_values": pos_input.numpy(), "freq": pos_freq.numpy()}
+            )
+            np.testing.assert_allclose(onnx_mean_pos, pt_pos.mean_predictions.numpy(), rtol=1e-3, atol=1e-3)
+            self.assertTrue((onnx_mean_pos >= 0).all())
+
+            # (c) freq=None path: wrapper does not pass freq, so `if freq is None` runs. Using
+            # `[0] * past_values.shape[0]` there bakes batch into the graph; this block fails
+            # if that regression returns. The (a)/(b) paths above never hit freq=None.
+            class WrapperNoFreq(torch.nn.Module):
+                def __init__(self, m):
+                    super().__init__()
+                    self.m = m
+
+                def forward(self, past_values):
+                    o = self.m(past_values, truncate_negative=True)
+                    return o.mean_predictions, o.full_predictions
+
+            path_nf = f"{tmp}/model_no_freq.onnx"
+            torch.onnx.export(
+                WrapperNoFreq(self.model).cpu().eval(),
+                (export_input,),
+                path_nf,
+                input_names=["past_values"],
+                output_names=["mean_predictions", "full_predictions"],
+                dynamo=True,
+                dynamic_shapes={"past_values": {0: batch, 1: seq}},
+            )
+            onnx_nf = onnx.load(path_nf, load_external_data=False)
+            inp_nf = onnx_nf.graph.input[0]
+            dims_nf = [d.dim_param or d.dim_value for d in inp_nf.type.tensor_type.shape.dim]
+            self.assertIsInstance(dims_nf[0], str, f"no-freq export: batch dim should be symbolic, got {dims_nf[0]}")
+            sess_nf = ort.InferenceSession(path_nf, providers=["CPUExecutionProvider"])
+            nf_input = torch.randn(3, 50)
+            with torch.no_grad():
+                pt_nf = self.model(past_values=nf_input, truncate_negative=True)
+            onnx_m_nf, onnx_f_nf = sess_nf.run(None, {"past_values": nf_input.numpy()})
+            np.testing.assert_allclose(onnx_m_nf, pt_nf.mean_predictions.numpy(), rtol=1e-3, atol=1e-3)
+            np.testing.assert_allclose(onnx_f_nf, pt_nf.full_predictions.numpy(), rtol=1e-3, atol=1e-3)
+
+    def test_onnx_export_with_forecast_context_len(self):
+        """Export with forecast_context_len baked in; verify ONNX uses truncated context."""
+        try:
+            import onnxruntime as ort
+        except ImportError:
+            self.skipTest("onnxruntime not installed")
+
+        import tempfile
+
+        from torch.export import Dim
+
+        short_ctx = 32
+
+        class Wrapper(torch.nn.Module):
+            def __init__(self, m, ctx):
+                super().__init__()
+                self.m = m
+                self.ctx = ctx
+
+            def forward(self, past_values):
+                o = self.m(past_values, forecast_context_len=self.ctx)
+                return o.mean_predictions, o.full_predictions
+
+        wrapped = Wrapper(self.model, short_ctx).cpu().eval()
+        export_input = torch.randn(2, 80)
+        with tempfile.TemporaryDirectory() as tmp:
+            path = f"{tmp}/model.onnx"
+            batch = Dim("batch", min=1, max=64)
+            seq = Dim("seq", min=1, max=512)
+            torch.onnx.export(
+                wrapped,
+                (export_input,),
+                path,
+                input_names=["past_values"],
+                output_names=["mean_predictions", "full_predictions"],
+                dynamo=True,
+                dynamic_shapes={"past_values": {0: batch, 1: seq}},
+            )
+            sess = ort.InferenceSession(path, providers=["CPUExecutionProvider"])
+
+            # ONNX graph has forecast_context_len=32 baked in, so passing 80 values
+            # should give the same result as PyTorch with the same override
+            test_input = torch.randn(2, 80)
+            with torch.no_grad():
+                pt_out = self.model(past_values=test_input, forecast_context_len=short_ctx)
+            onnx_mean, onnx_full = sess.run(None, {"past_values": test_input.numpy()})
+            np.testing.assert_allclose(onnx_mean, pt_out.mean_predictions.numpy(), rtol=1e-3, atol=1e-3)
+            np.testing.assert_allclose(onnx_full, pt_out.full_predictions.numpy(), rtol=1e-3, atol=1e-3)
+
+
+@require_torch
 @slow
 class TimesFmModelIntegrationTests(unittest.TestCase):
     def test_inference(self):

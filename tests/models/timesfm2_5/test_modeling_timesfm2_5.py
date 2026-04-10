@@ -284,6 +284,73 @@ class TimesFm2_5ModelTest(ModelTesterMixin, unittest.TestCase):
 
 
 @require_torch
+class TimesFm2_5ForwardInputVariantsTest(unittest.TestCase):
+    def setUp(self):
+        config = TimesFm2_5Config(
+            patch_length=32,
+            context_length=128,
+            horizon_length=8,
+            hidden_size=32,
+            intermediate_size=64,
+            head_dim=16,
+            num_hidden_layers=1,
+            num_attention_heads=2,
+            num_key_value_heads=2,
+            quantiles=[0.1, 0.5, 0.9],
+            output_quantile_len=16,
+        )
+        self.model = TimesFm2_5ModelForPrediction(config).to(torch_device).eval()
+        self.horizon_len = config.horizon_length
+
+    def test_different_length_series(self):
+        """forward() handles a list of series with different lengths."""
+        inputs = [
+            torch.randn(30, device=torch_device),
+            torch.randn(80, device=torch_device),
+            torch.randn(200, device=torch_device),
+        ]
+        with torch.no_grad():
+            out = self.model(past_values=inputs)
+        self.assertEqual(out.mean_predictions.shape, (3, self.horizon_len))
+
+    def test_very_short_and_very_long_series(self):
+        """forward() works when one series is tiny and another exceeds context_len."""
+        inputs = [
+            torch.randn(5, device=torch_device),
+            torch.randn(500, device=torch_device),
+        ]
+        with torch.no_grad():
+            out = self.model(past_values=inputs)
+        self.assertEqual(out.mean_predictions.shape, (2, self.horizon_len))
+
+    def test_2d_tensor_input(self):
+        """forward() accepts a 2D tensor and produces correct output shape."""
+        inputs = torch.randn(4, 150, device=torch_device)
+        with torch.no_grad():
+            out = self.model(past_values=inputs)
+        self.assertEqual(out.mean_predictions.shape, (4, self.horizon_len))
+
+    def test_list_vs_tensor_parity(self):
+        """forward() with list and 2D tensor of equal-length series gives identical output."""
+        raw = [torch.randn(60, device=torch_device) for _ in range(2)]
+        stacked = torch.stack(raw)
+        with torch.no_grad():
+            out_list = self.model(past_values=raw)
+            out_tensor = self.model(past_values=stacked)
+        self.assertTrue(torch.allclose(out_list.mean_predictions, out_tensor.mean_predictions, atol=1e-5))
+        self.assertTrue(torch.allclose(out_list.full_predictions, out_tensor.full_predictions, atol=1e-5))
+
+    def test_long_series_truncated(self):
+        """forward() with a long series produces the same output as passing only the tail."""
+        long_series = torch.randn(500, device=torch_device)
+        tail = long_series[-128:]
+        with torch.no_grad():
+            out_long = self.model(past_values=[long_series])
+            out_tail = self.model(past_values=[tail])
+        self.assertTrue(torch.allclose(out_long.mean_predictions, out_tail.mean_predictions, atol=1e-5))
+
+
+@require_torch
 @slow
 class TimesFm2_5ModelIntegrationTests(unittest.TestCase):
     def test_inference(self):

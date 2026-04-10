@@ -642,8 +642,12 @@ class TimesFmModelForPrediction(TimesFmPreTrainedModel):
             result = (torch.stack(input_ts, dim=0), torch.stack(input_padding, dim=0))
 
         if freq is not None:
-            batch_size = inputs.shape[0] if isinstance(inputs, torch.Tensor) else len(inputs)
-            result = result + (torch.tensor(freq[:batch_size], dtype=torch.int32).reshape(-1, 1),)
+            if isinstance(freq, torch.Tensor):
+                inp_freq = freq if freq.ndim == 2 else freq.reshape(-1, 1)
+            else:
+                batch_size = inputs.shape[0] if isinstance(inputs, torch.Tensor) else len(inputs)
+                inp_freq = torch.tensor(freq[:batch_size], dtype=torch.int32).reshape(-1, 1)
+            result = result + (inp_freq,)
         return result
 
     def _postprocess_output(
@@ -749,7 +753,8 @@ class TimesFmModelForPrediction(TimesFmPreTrainedModel):
         if freq is None:
             logger.info("No frequency provided via `freq`. Default to high (0).")
             if is_tensor:
-                freq = [0] * past_values.shape[0]
+                # Tensor path keeps batch symbolic for ONNX; `[0] * shape[0]` materializes batch as a Python int.
+                freq = torch.zeros(past_values.shape[0], 1, dtype=torch.int32, device=device)
             else:
                 freq = [0] * len(inputs)
 
