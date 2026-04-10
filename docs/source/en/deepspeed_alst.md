@@ -19,15 +19,21 @@ rendered properly in your Markdown viewer.
 Ulysses sequence parallelism (SP) trains on very long sequences by splitting them across multiple GPUs. To compute attention correctly, an all-to-all collective swaps the sharding dimension from sequence to attention heads. Each GPU then has the full sequence and computes attention locally over a subset of heads. A second all-to-all returns to the sequence-sharded layout so the rest of the forward pass continues locally on each chunk.
 
 ```text
-  G0  G1  G2  G3           G0  G1  G2  G3           G0  G1  G2  G3
-  ┌──┬──┬──┬──┐            ┌──────────────┐          ┌──┬──┬──┬──┐
-h │░░│▒▒│▓▓│██│         G0 │░░  ░░  ░░  ░░│        h │░░│▒▒│▓▓│██│
-e │░░│▒▒│▓▓│██│ ──────► G1 │▒▒  ▒▒  ▒▒  ▒▒│ ─────► e │░░│▒▒│▓▓│██│
-a │░░│▒▒│▓▓│██│         G2 │▓▓  ▓▓  ▓▓  ▓▓│        a │░░│▒▒│▓▓│██│
-d │░░│▒▒│▓▓│██│         G3 │██  ██  ██  ██│        d │░░│▒▒│▓▓│██│
-  └──┴──┴──┴──┘            └──────────────┘          └──┴──┴──┴──┘
-  seq sharded              heads sharded              seq sharded
-
+                        GPU 0                       GPU 1
+                   ┌───────────────┐          ┌───────────────┐
+  forward          │ tokens 0..N/2 │          │ tokens N/2..N │  ← each GPU holds half the sequence
+  (seq-sharded)    │  all H heads  │          │  all H heads  │
+                   └───────┬───────┘          └───────┬───────┘
+                           └───────── all-to-all ──────┘
+                   ┌───────────────┐          ┌───────────────┐
+  attention        │ all N tokens  │          │ all N tokens  │  ← now each GPU has the full sequence
+  (head-sharded)   │ heads 0..H/2  │          │ heads H/2..H  │  ← but only half the heads
+                   └───────┬───────┘          └───────┬───────┘
+                           └───────── all-to-all ──────┘
+                   ┌───────────────┐          ┌───────────────┐
+  forward          │ tokens 0..N/2 │          │ tokens N/2..N │  ← back to seq-sharded
+  (seq-sharded)    │  all H heads  │          │  all H heads  │
+                   └───────────────┘          └───────────────┘
 ```
 
 > [!NOTE]
@@ -35,7 +41,7 @@ d │░░│▒▒│▓▓│██│         G3 │██  ██  ██  
 
 ## Configure
 
-Sequence parallelism requires Accelerate v1.12.0 and at least 2 GPUs. Configure sequence parallelism in Accelerate's [`~accelerate.ParallelismConfig`] and pass it to [`~TrainingArguments.parallelism_config`] or an [Accelerate config file](./accelerate#accelerate-config-file).
+Sequence parallelism requires Accelerate v1.12.0 and at least 2 GPUs. Configure sequence parallelism in Accelerate's [`~accelerate.ParallelismConfig`] and pass it to [TrainingArguments.parallelism_config](https://huggingface.co/docs/transformers/main_classes/trainer#transformers.TrainingArguments.parallelism_config) or an [Accelerate config file](./accelerate#accelerate-config-file).
 
 <hfoptions id="launch">
 <hfoption id="parallelism_config">
@@ -125,9 +131,9 @@ The following fields are important for configuring sequence parallelism.
 
 - `sp_seq_length_is_variable` controls variable sequence length handling. Set it to `True` (recommended) for varying lengths between batches. Set it to `False` when all sequences pad to a fixed length specified by `sp_seq_length`.
 
-- `sp_attn_implementation` sets the attention backend. Supported values are `"sdpa"`, `"flash_attention_2"`, or `"flash_attention_3"`. FlashAttention is recommended, especially when packing multiple samples in a batch. SDPA can attend incorrectly across sample boundaries when samples are packed. Eager attention isn't supported because it doesn't handle `position_ids` correctly.
+- `sp_attn_implementation` sets the attention backend. Supported values are `"sdpa"`, `"flash_attention_2"`, or `"flash_attention_3"`. FlashAttention is recommended, especially when packing multiple samples in a batch. SDPA can attend incorrectly across sample boundaries when samples are packed. Eager attention isn't supported because its 4D `attention_mask` is discarded for memory and scaling reasons.
 
-### Combining with data parallelism
+## Combining with data parallelism
 
 Sequence parallelism and data parallelism use the same GPUs, and SP doesn't require additional hardware. To run both, set `dp_replicate_size` or `dp_shard_size` so that `dp_replicate_size × dp_shard_size × sp_size` equals your total GPU count.
 

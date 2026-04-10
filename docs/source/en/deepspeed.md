@@ -46,14 +46,19 @@ Install DeepSpeed from PyPI, or install Transformers with the `deepspeed` extra.
 
 ```shell
 pip install deepspeed
-# pip install transformers[deepspeed]
+pip install transformers[deepspeed]
 ```
 
 If you run into CUDA-related install errors, check the [DeepSpeed CUDA](./debugging#deepspeed-cuda) docs. [Installing from source](https://www.deepspeed.ai/tutorials/advanced-install/#install-deepspeed-from-source) is the more reliable option because it matches your exact hardware and includes features not yet available in the PyPI release.
 
-## Configure DeepSpeed
+## Configure
 
-[`Trainer`] integrates DeepSpeed through the [`~TrainingArguments.deepspeed`] argument, which accepts a JSON config file. Use `"auto"` in your config for values you want DeepSpeed to fill from [`TrainingArguments`]. If you want to explicitly specify a value, make sure you use the *same* value for both the DeepSpeed argument and [`TrainingArguments`].
+[`Trainer`] integrates DeepSpeed through the [TrainingArguments.deepspeed](https://huggingface.co/docs/transformers/main_classes/trainer#transformers.TrainingArguments.deepspeed) argument, which accepts a JSON config file. Alternatively, use an [Accelerate config file](./accelerate#accelerate-config-file) instead of [`TrainingArguments`].
+
+<hfoptions id="launch">
+<hfoption id="TrainingArguments">
+
+Use `"auto"` in your config for values you want DeepSpeed to fill from [`TrainingArguments`]. If you want to explicitly specify a value, make sure you use the *same* value for both the DeepSpeed argument and [`TrainingArguments`].
 
 > [!NOTE]
 > See the [DeepSpeed Configuration JSON](https://www.deepspeed.ai/docs/config-json/) reference for a complete list of DeepSpeed config options.
@@ -64,6 +69,53 @@ If you run into CUDA-related install errors, check the [DeepSpeed CUDA](./debugg
 "optimizer.params.lr": "auto",             // ← learning_rate in TrainingArguments
 "fp16.enabled": "auto",                    // ← fp16 flag in TrainingArguments
 ```
+
+Pass the config to the `deepspeed` argument.
+
+```py
+from transformers import TrainingArguments
+
+args = TrainingArguments(
+    deepspeed="path/to/deepspeed_config.json",
+    ...
+)
+```
+
+```cli
+# DeepSpeed launcher
+deepspeed --num_gpus 4 train.py
+
+# torchrun
+torchrun --nproc_per_node 4 train.py
+
+# Accelerate
+accelerate launch --num_processes 4 train.py
+```
+
+</hfoption>
+<hfoption id="Accelerate config file">
+
+Run the [accelerate config](https://huggingface.co/docs/accelerate/en/package_reference/cli#accelerate-config) command and answer questions about your hardware and training setup to create a `default_config.yaml` file in your cache.
+
+```yaml
+distributed_type: DEEPSPEED
+deepspeed_config:
+  deepspeed_config_file: path/to/ds_config.json
+machine_rank: 0
+num_machines: 1
+num_processes: 4
+```
+
+Run [accelerate launch](https://huggingface.co/docs/accelerate/en/package_reference/cli#accelerate-launch) with a [`Trainer`]-based script.
+
+```shell
+accelerate launch --config_file deepspeed_config.yaml train.py
+```
+
+</hfoption>
+</hfoptions>
+
+## ZeRO stages
 
 Select a ZeRO stage config to use as a starting point.
 
@@ -167,7 +219,7 @@ The following fields are important for customizing training.
     }
     ```
 
-- Set `overlap_comm` to `true` to hide all-reduce latency behind the backward pass. `allgather_bucket_size` and `reduce_bucket_size` trade communication speed for GPU memory. Lower values result in slower communication.
+- Set `overlap_comm` to `true` to hide all-reduce latency behind the backward pass. `allgather_bucket_size` and `reduce_bucket_size` trade communication speed for GPU memory. Lower values use less memory but slow communication.
 
     ```json
     {
@@ -216,30 +268,6 @@ The following fields are important for customizing training.
     }
     ```
 
-## Launch
-
-Pass your config to [`~TrainingArguments.deepspeed`] and launch with any distributed launcher. No additional DeepSpeed config flag is required.
-
-```py
-from transformers import TrainingArguments
-
-args = TrainingArguments(
-    deepspeed="path/to/deepspeed_config.json",
-    ...
-)
-```
-
-```cli
-# DeepSpeed launcher
-deepspeed --num_gpus 4 train.py
-
-# torchrun
-torchrun --nproc_per_node 4 train.py
-
-# Accelerate
-accelerate launch --num_processes 4 train.py
-```
-
 ## Checkpoints
 
 DeepSpeed saves checkpoints in a sharded format that can't be loaded directly with [`~PreTrainedModel.from_pretrained`]. Set [`~TrainingArguments.load_best_model_at_end`] to `True` to have Trainer track and reload the best checkpoint at the end of training.
@@ -256,7 +284,7 @@ args = TrainingArguments(
 trainer.save_model("./best-model")
 ```
 
-Setting `save_only_model=True` skips saving the full optimizer state, which means you can't reload the best model at the end of training. Also set `stage3_gather_16bit_weights_on_model_save: true` to reconstruct full weights from their shards when loading the best checkpoint.
+Setting `save_only_model=True` skips saving the full optimizer state, which means you can't reload the best model at the end of training. Also set `stage3_gather_16bit_weights_on_model_save: true` to reconstruct full weights from their shards. This is required for saving a consolidated 16-bit model artifact or 16-bit state dict with ZeRO-3. Transformers raises an error when `save_only_model=True` is combined with `load_best_model_at_end=True`.
 
 > [!TIP]
 > For resuming across different parallelism configurations, see DeepSpeed's [Universal Checkpointing](https://www.deepspeed.ai/tutorials/universal-checkpointing) guide.
