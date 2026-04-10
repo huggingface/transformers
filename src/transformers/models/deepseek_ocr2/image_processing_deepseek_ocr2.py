@@ -18,7 +18,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-
 from functools import lru_cache
 
 import torch
@@ -26,7 +25,7 @@ import torch
 from ...image_processing_backends import TorchvisionBackend
 from ...image_processing_utils import BatchFeature
 from ...image_transforms import group_images_by_shape, reorder_images
-from ...image_utils import PILImageResampling, SizeDict
+from ...image_utils import IMAGENET_STANDARD_MEAN, IMAGENET_STANDARD_STD, PILImageResampling, SizeDict
 from ...processing_utils import ImagesKwargs, Unpack
 from ...utils import TensorType, auto_docstring
 
@@ -132,8 +131,8 @@ def get_optimal_tiled_canvas(
 class DeepseekOcr2ImageProcessor(TorchvisionBackend):
     valid_kwargs = DeepseekOcr2ImageProcessorKwargs
     resample = PILImageResampling.BICUBIC
-    image_mean = (0.5, 0.5, 0.5)
-    image_std = (0.5, 0.5, 0.5)
+    image_mean = IMAGENET_STANDARD_MEAN
+    image_std = IMAGENET_STANDARD_STD
     size = {"height": 1024, "width": 1024}
     do_resize = True
     do_rescale = True
@@ -303,6 +302,7 @@ class DeepseekOcr2ImageProcessor(TorchvisionBackend):
 
         return num_patches
 
+    # Copied from transformers.models.llava.image_processing_llava.LlavaImageProcessor.pad_to_square
     def pad_to_square(
         self,
         images: "torch.Tensor",

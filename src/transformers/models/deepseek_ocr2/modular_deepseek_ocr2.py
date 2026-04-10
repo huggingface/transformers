@@ -15,6 +15,7 @@
 import math
 from dataclasses import dataclass
 
+import numpy as np
 import torch
 from huggingface_hub.dataclasses import strict
 from torch import nn
@@ -24,13 +25,22 @@ from ...cache_utils import Cache
 from ...configuration_utils import PreTrainedConfig
 from ...generation import GenerationMixin
 from ...image_processing_utils import BatchFeature
-from ...image_transforms import group_images_by_shape, reorder_images
-from ...image_utils import PILImageResampling, SizeDict
+from ...image_transforms import group_images_by_shape, reorder_images, to_channel_dimension_format
+from ...image_utils import (
+    IMAGENET_STANDARD_MEAN,
+    IMAGENET_STANDARD_STD,
+    ChannelDimension,
+    PILImageResampling,
+    SizeDict,
+    get_image_size,
+    infer_channel_dimension_format,
+)
 from ...masking_utils import create_causal_mask
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPast, BaseModelOutputWithPooling
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import ImagesKwargs, Unpack
 from ...utils import TensorType, TransformersKwargs, auto_docstring, can_return_tuple, logging
+from ...utils.import_utils import requires
 from ...utils.output_capturing import capture_outputs
 from ..deepseek_v2.configuration_deepseek_v2 import DeepseekV2Config
 from ..deepseek_v2.modeling_deepseek_v2 import (
@@ -40,8 +50,10 @@ from ..deepseek_v2.modeling_deepseek_v2 import (
 )
 from ..got_ocr2.image_processing_got_ocr2 import (
     GotOcr2ImageProcessor,
+    GotOcr2ImageProcessorKwargs,
     get_optimal_tiled_canvas,
 )
+from ..got_ocr2.image_processing_pil_got_ocr2 import GotOcr2ImageProcessorPil
 from ..llama.modeling_llama import LlamaAttention, LlamaRotaryEmbedding
 from ..llava_next.modeling_llava_next import (
     LlavaNextCausalLMOutputWithPast,
@@ -65,25 +77,14 @@ from ..sam.modeling_sam import (
 logger = logging.get_logger(__name__)
 
 
-class DeepseekOcr2ImageProcessorKwargs(ImagesKwargs, total=False):
+class DeepseekOcr2ImageProcessorKwargs(GotOcr2ImageProcessorKwargs, total=False):
     """
-    crop_to_patches (`bool`, *optional*, defaults to `True`):
-        Whether to crop the image into local patches. When `False`, only the global view is produced.
-    min_patches (`int`, *optional*, defaults to `2`):
-        The minimum number of patches to extract from the image for the local view.
-        Only has an effect if `crop_to_patches` is set to `True`.
-    max_patches (`int`, *optional*, defaults to `6`):
-        The maximum number of patches to extract from the image for the local view.
-        Only has an effect if `crop_to_patches` is set to `True`.
     tile_size (`int`, *optional*, defaults to `768`):
         The size of each local tile. Must match the model's query embedding size.
     background_color (`list[int]`, *optional*, defaults to `[127, 127, 127]`):
         The background color for padding.
     """
 
-    crop_to_patches: bool
-    min_patches: int
-    max_patches: int
     tile_size: int
     background_color: list[int]
 
@@ -91,14 +92,10 @@ class DeepseekOcr2ImageProcessorKwargs(ImagesKwargs, total=False):
 @auto_docstring
 class DeepseekOcr2ImageProcessor(GotOcr2ImageProcessor):
     valid_kwargs = DeepseekOcr2ImageProcessorKwargs
-    resample = PILImageResampling.BICUBIC
-    image_mean = (0.5, 0.5, 0.5)
-    image_std = (0.5, 0.5, 0.5)
+    image_mean = IMAGENET_STANDARD_MEAN
+    image_std = IMAGENET_STANDARD_STD
     size = {"height": 1024, "width": 1024}
     tile_size = 768
-    do_rescale = True
-    do_normalize = True
-    do_convert_rgb = True
     crop_to_patches = True
     min_patches = 2
     max_patches = 6
@@ -108,6 +105,7 @@ class DeepseekOcr2ImageProcessor(GotOcr2ImageProcessor):
     def __init__(self, **kwargs: Unpack[DeepseekOcr2ImageProcessorKwargs]):
         super().__init__(**kwargs)
 
+    # Copied from transformers.models.llava.image_processing_llava.LlavaImageProcessor.pad_to_square
     def pad_to_square(
         self,
         images: "torch.Tensor",
@@ -308,6 +306,205 @@ class DeepseekOcr2ImageProcessor(GotOcr2ImageProcessor):
             num_patches += num_columns * num_rows
 
         return num_patches
+
+
+class DeepseekOcr2ImageProcessorKwargs(ImagesKwargs, total=False):
+    """
+    crop_to_patches (`bool`, *optional*, defaults to `True`):
+        Whether to crop the image into local patches. When `False`, only the global view is produced.
+    min_patches (`int`, *optional*, defaults to `2`):
+        The minimum number of patches to extract from the image for the local view.
+        Only has an effect if `crop_to_patches` is set to `True`.
+    max_patches (`int`, *optional*, defaults to `6`):
+        The maximum number of patches to extract from the image for the local view.
+        Only has an effect if `crop_to_patches` is set to `True`.
+    tile_size (`int`, *optional*, defaults to `768`):
+        The size of each local tile. Must match the model's query embedding size.
+    background_color (`list[int]`, *optional*, defaults to `[127, 127, 127]`):
+        The background color for padding.
+    """
+
+    crop_to_patches: bool
+    min_patches: int
+    max_patches: int
+    tile_size: int
+    background_color: list[int]
+
+
+@requires(backends=("vision",))
+@auto_docstring
+class DeepseekOcr2ImageProcessorPil(GotOcr2ImageProcessorPil):
+    valid_kwargs = DeepseekOcr2ImageProcessorKwargs
+    image_mean = IMAGENET_STANDARD_MEAN
+    image_std = IMAGENET_STANDARD_STD
+    size = {"height": 1024, "width": 1024}
+    tile_size = 768
+    crop_to_patches = True
+    min_patches = 2
+    max_patches = 6
+    background_color = [127, 127, 127]
+    model_input_names = ["pixel_values", "num_local_patches"]
+
+    def __init__(self, **kwargs: Unpack[DeepseekOcr2ImageProcessorKwargs]):
+        super().__init__(**kwargs)
+
+    def crop_image_to_patches(
+        self,
+        image: np.ndarray,
+        min_patches: int,
+        max_patches: int,
+        tile_size: int,
+        resample: "PILImageResampling | int | None" = None,
+    ):
+        """
+        Crop the image to patches and return a list of cropped images.
+        """
+        input_data_format = infer_channel_dimension_format(image)
+        image = to_channel_dimension_format(image, ChannelDimension.FIRST, input_data_format)
+
+        original_height, original_width = get_image_size(image, channel_dim=ChannelDimension.FIRST)
+
+        num_columns, num_rows = get_optimal_tiled_canvas(
+            (original_height, original_width), (tile_size, tile_size), min_patches, max_patches
+        )
+
+        target_width = tile_size * num_columns
+        target_height = tile_size * num_rows
+        num_blocks = num_columns * num_rows
+
+        resized_image = self.resize(image, SizeDict(height=target_height, width=target_width), resample=resample)
+
+        processed_images = []
+        for i in range(num_blocks):
+            column = i % num_columns
+            row = i // num_columns
+            box = (
+                column * tile_size,
+                row * tile_size,
+                (column + 1) * tile_size,
+                (row + 1) * tile_size,
+            )
+            patch_image = resized_image[..., box[1] : box[3], box[0] : box[2]]
+            patch_image = to_channel_dimension_format(patch_image, input_data_format, ChannelDimension.FIRST)
+            processed_images.append(patch_image)
+
+        return processed_images
+
+    # Copied from transformers.models.llava.image_processing_pil_llava.LlavaImageProcessorPil.pad_to_square
+    def pad_to_square(
+        self,
+        image: np.ndarray,
+        background_color: int | tuple[int, int, int] = 0,
+    ) -> np.ndarray:
+        """
+        Pads an image to a square based on the longest edge.
+
+        Args:
+            image (`np.ndarray`):
+                The image to pad. Shape: (num_channels, height, width) - always channels_first in backend.
+            background_color (`int` or `tuple[int, int, int]`, *optional*, defaults to 0):
+                The color to use for the padding.
+
+        Returns:
+            `np.ndarray`: The padded image.
+        """
+        # Backend always uses channels_first format: (num_channels, height, width)
+        num_channels, height, width = image.shape
+
+        if height == width:
+            return image
+
+        max_dim = max(height, width)
+
+        # Ensure background_color is the correct shape
+        if isinstance(background_color, int):
+            background_color = [background_color]
+        elif len(background_color) != num_channels:
+            raise ValueError(
+                f"background_color must have no more than {num_channels} elements to match the number of channels"
+            )
+
+        result = np.zeros((num_channels, max_dim, max_dim), dtype=image.dtype)
+        for i, color in enumerate(background_color):
+            result[i, :, :] = color
+        if width > height:
+            start = (max_dim - height) // 2
+            result[:, start : start + height, :] = image
+        else:
+            start = (max_dim - width) // 2
+            result[:, :, start : start + width] = image
+
+        return result
+
+    def _preprocess(
+        self,
+        images: list[np.ndarray],
+        size: SizeDict,
+        resample: "PILImageResampling | int | None",
+        do_rescale: bool,
+        rescale_factor: float,
+        do_normalize: bool,
+        image_mean: float | list[float] | None,
+        image_std: float | list[float] | None,
+        return_tensors: str | TensorType | None,
+        crop_to_patches: bool = True,
+        min_patches: int = 2,
+        max_patches: int = 6,
+        tile_size: int = 768,
+        background_color: list[int] | None = None,
+        **kwargs,
+    ) -> BatchFeature:
+        if background_color is None:
+            background_color = self.background_color
+
+        all_pixel_values_local = []
+        all_pixel_values_global = []
+        num_local_patches = []
+
+        for image in images:
+            original_height, original_width = get_image_size(image)
+
+            # --- Local patches ---
+            if crop_to_patches and max(original_width, original_height) > tile_size:
+                local_patches = self.crop_image_to_patches(
+                    image,
+                    min_patches=min_patches,
+                    max_patches=max_patches,
+                    tile_size=tile_size,
+                    resample=resample,
+                )
+                for patch in local_patches:
+                    if do_rescale:
+                        patch = self.rescale(patch, rescale_factor)
+                    if do_normalize:
+                        patch = self.normalize(patch, image_mean, image_std)
+                    all_pixel_values_local.append(patch)
+                num_local_patches.append(len(local_patches))
+            else:
+                num_local_patches.append(0)
+
+            # --- Global view ---
+            global_target_size = size.height if crop_to_patches else tile_size
+            scale = global_target_size / max(original_width, original_height)
+            new_width = round(original_width * scale)
+            new_height = round(original_height * scale)
+
+            global_img = self.resize(image, SizeDict(height=new_height, width=new_width), resample=resample)
+            global_img = self.pad_to_square(global_img, background_color=background_color)
+            if do_rescale:
+                global_img = self.rescale(global_img, rescale_factor)
+            if do_normalize:
+                global_img = self.normalize(global_img, image_mean, image_std)
+            all_pixel_values_global.append(global_img)
+
+        data = {
+            "pixel_values": all_pixel_values_global,
+            "num_local_patches": num_local_patches,
+        }
+        if all_pixel_values_local:
+            data["pixel_values_local"] = all_pixel_values_local
+
+        return BatchFeature(data=data, tensor_type=return_tensors)
 
 
 @auto_docstring(checkpoint="thisisiron/DeepSeek-OCR-2-hf")
