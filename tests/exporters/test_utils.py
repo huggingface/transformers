@@ -301,12 +301,12 @@ class ExportTesterMixin:
     @require_executorch
     @pytest.mark.executorch_export_test
     @pytest.mark.timeout(EXPORT_TEST_TIMEOUT)
-    def test_executorch_export(self):
+    def test_executorch_export(self, dynamic):
         """Export each model class to ExecuTorch (xnnpack on CPU, cuda on GPU) and verify no errors."""
 
         self._skip_if_not_exportable()
         backend = "cuda" if torch_device == "cuda" else "xnnpack"
-        exporter = ExecutorchExporter(export_config=ExecutorchConfig(backend=backend))
+        exporter = ExecutorchExporter(export_config=ExecutorchConfig(backend=backend, dynamic=dynamic))
 
         for model_class in self.all_model_classes:
             if self._should_skip(model_class):
@@ -428,12 +428,12 @@ class ExportGenerateTesterMixin:
     @require_executorch
     @pytest.mark.executorch_export_test
     @pytest.mark.timeout(EXPORT_TEST_TIMEOUT)
-    def test_executorch_export_generate(self):
+    def test_executorch_export_generate(self, dynamic):
         """Export prefill and decode stages to ExecuTorch and verify no errors."""
 
         self._skip_if_not_exportable()
         backend = "cuda" if torch_device == "cuda" else "xnnpack"
-        exporter = ExecutorchExporter(export_config=ExecutorchConfig(backend=backend))
+        exporter = ExecutorchExporter(export_config=ExecutorchConfig(backend=backend, dynamic=dynamic))
 
         for model_class in self.all_generative_model_classes:
             if self._should_skip(model_class, generate=True):

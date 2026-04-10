@@ -83,12 +83,44 @@ class ExecutorchExporter(DynamoExporter):
 
         with patch_torch_ops():
             exported_program: ExportedProgram = super().export(model, sample_inputs)
+            _bound_range_constraints(exported_program)
             edge_program_manager: EdgeProgramManager = to_edge_transform_and_lower(
                 exported_program, partitioner=partitioner
             )
             executorch_programs_manager: ExecutorchProgramManager = edge_program_manager.to_executorch()
 
         return executorch_programs_manager
+
+
+# ── Range constraint bounding ─────────────────────────────────────────────────
+# ExecuTorch requires concrete upper bounds on every dynamic dimension.
+# Dim.AUTO leaves them as int_oo, which causes "Cannot evaluate the shape
+# upper bound" errors in to_edge_transform_and_lower.  This helper caps
+# unbounded dims after torch.export (preserving AUTO's static-vs-dynamic
+# inference and dimension sharing).
+
+_DEFAULT_MAX_DIM = 2**14  # 16384 — must stay small enough that dim*dim fits in int32 for XNNPACK
+
+
+def _bound_range_constraints(exported_program: ExportedProgram, max_dim: int = _DEFAULT_MAX_DIM) -> None:
+    """Cap ``int_oo`` upper bounds to *max_dim* for ExecuTorch compatibility."""
+
+    # Collect all range dicts that need patching: range_constraints (torch.export
+    # verifiers) + shape_env.var_to_range (ExecuTorch sym_shape_eval_pass).
+    from torch.utils._sympy.numbers import IntInfinity
+    from torch.utils._sympy.value_ranges import ValueRanges
+
+    range_dicts = [exported_program._range_constraints]
+    for node in exported_program.graph_module.graph.nodes:
+        val = node.meta.get("val")
+        if isinstance(val, torch.Tensor) and hasattr(val, "fake_mode"):
+            range_dicts.append(val.fake_mode.shape_env.var_to_range)
+            break  # all nodes share the same shape_env, so we only need one
+
+    for rd in range_dicts:
+        for sym, vr in rd.items():
+            if isinstance(vr.upper, IntInfinity):
+                rd[sym] = ValueRanges(vr.lower, max_dim)
 
 
 # ── Backend preparation ────────────────────────────────────────────────────────
@@ -257,6 +289,26 @@ def _patch_scaled_dot_product_attention(original):
     return patch
 
 
+def _patch_dropout(_original):
+    """No-op dropout for inference export."""
+
+    def patch(input, p=0.5, training=True, inplace=False):
+        return input
+
+    return patch
+
+
+def _patch_view(original):
+    """Force contiguity before view to avoid stride errors on transposed tensors."""
+
+    def patch(self, *shape):
+        if not self.is_contiguous():
+            self = self.contiguous()
+        return original(self, *shape)
+
+    return patch
+
+
 # (object, attribute, factory) triples installed by patch_torch_ops.
 _TORCH_PATCHES = []
 if is_torch_available():
@@ -271,6 +323,8 @@ if is_torch_available():
         (torch.Tensor, "detach", _patch_detach),
         (torch.nn.functional, "avg_pool2d", _patch_avg_pool2d),
         (torch.nn.functional, "scaled_dot_product_attention", _patch_scaled_dot_product_attention),
+        (torch.nn.functional, "dropout", _patch_dropout),
+        (torch.Tensor, "view", _patch_view),
     ]
 
 
