@@ -27,10 +27,22 @@ class DeepseekOcr2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     processor_class = DeepseekOcr2Processor
 
     @classmethod
+    def _setup_image_processor(cls):
+        image_processor_class = cls._get_component_class_from_processor("image_processor")
+        image_processor = image_processor_class()
+        image_processor.size = {"height": 64, "width": 64}
+        image_processor.tile_size = 512
+        return image_processor
+
+    @classmethod
     def _setup_tokenizer(cls):
         tokenizer_class = cls._get_component_class_from_processor("tokenizer")
         tokenizer = tokenizer_class.from_pretrained("thisisiron/DeepSeek-OCR-2-hf")
         return tokenizer
+
+    @classmethod
+    def _setup_test_attributes(cls, processor):
+        cls.image_token = processor.image_token
 
     @unittest.skip("DeepseekOcr2Processor pops the image processor output 'num_local_patches'")
     def test_image_processor_defaults(self):
@@ -39,6 +51,8 @@ class DeepseekOcr2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     def test_image_token_expansion_small_image(self):
         """Small image (< tile_size) should produce no local patches → 257 image tokens."""
         processor = self.get_processor()
+        processor.image_processor.size = {"height": 1024, "width": 1024}
+        processor.image_processor.tile_size = 768
 
         # Small image: max(200, 300) < 768 → no local patches
         image = torch.randint(0, 256, (3, 300, 200), dtype=torch.uint8)
@@ -56,6 +70,8 @@ class DeepseekOcr2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     def test_image_token_expansion_large_image(self):
         """Large image should produce local patches → more image tokens."""
         processor = self.get_processor()
+        processor.image_processor.size = {"height": 1024, "width": 1024}
+        processor.image_processor.tile_size = 768
 
         # Large image: max(2448, 3264) > 768 → local patches
         image = torch.randint(0, 256, (3, 3264, 2448), dtype=torch.uint8)
