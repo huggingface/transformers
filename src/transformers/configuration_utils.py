@@ -76,7 +76,6 @@ ALLOWED_LAYER_TYPES = (
 
 # copied from huggingface_hub.dataclasses.strict when `accept_kwargs=True`
 def wrap_init_to_accept_kwargs(cls: dataclass):
-
     # Get the original dataclass-generated __init__
     original_init = cls.__init__
 
