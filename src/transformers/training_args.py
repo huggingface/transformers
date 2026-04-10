@@ -1493,14 +1493,6 @@ class TrainingArguments:
         if self.output_dir is not None:
             self.output_dir = os.path.expanduser(self.output_dir)
 
-        if self.trackio_static_space_id is True:
-            raise ValueError(
-                "trackio_static_space_id=True is invalid. Use None for default static Space naming, False to skip "
-                "freeze, or a string Space id."
-            )
-        if isinstance(self.trackio_static_space_id, str) and self.trackio_static_space_id.strip().lower() == "false":
-            self.trackio_static_space_id = False
-
         if self.disable_tqdm is None:
             self.disable_tqdm = logger.getEffectiveLevel() > logging.WARN
 
