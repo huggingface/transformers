@@ -30,7 +30,7 @@ from ... import initialization as init
 from ...activations import ACT2FN
 from ...backbone_utils import BackboneMixin, filter_output_hidden_states
 from ...modeling_layers import GradientCheckpointingLayer
-from ...modeling_outputs import BackboneOutput, BaseModelOutput
+from ...modeling_outputs import BackboneOutput
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import ModelOutput, TransformersKwargs, auto_docstring, torch_int
@@ -69,7 +69,7 @@ class SwinDropPath(nn.Module):
     Swin encoder's outputs, with potential hidden states and attentions.
     """
 )
-class SwinEncoderOutput(BaseModelOutput):
+class SwinEncoderOutput(ModelOutput):
     r"""
     reshaped_hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
         Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each stage) of
@@ -79,6 +79,9 @@ class SwinEncoderOutput(BaseModelOutput):
         include the spatial dimensions.
     """
 
+    last_hidden_state: torch.FloatTensor | None = None
+    hidden_states: tuple[torch.FloatTensor, ...] | None = None
+    attentions: tuple[torch.FloatTensor, ...] | None = None
     reshaped_hidden_states: tuple[torch.FloatTensor, ...] | None = None
 
 
@@ -88,7 +91,7 @@ class SwinEncoderOutput(BaseModelOutput):
     Swin model's outputs that also contains a pooling of the last hidden states.
     """
 )
-class SwinModelOutput(BaseModelOutput):
+class SwinModelOutput(ModelOutput):
     r"""
     pooler_output (`torch.FloatTensor` of shape `(batch_size, hidden_size)`, *optional*, returned when `add_pooling_layer=True` is passed):
         Average pooling of the last layer hidden-state.
@@ -100,7 +103,10 @@ class SwinModelOutput(BaseModelOutput):
         include the spatial dimensions.
     """
 
+    last_hidden_state: torch.FloatTensor | None = None
     pooler_output: torch.FloatTensor | None = None
+    hidden_states: tuple[torch.FloatTensor, ...] | None = None
+    attentions: tuple[torch.FloatTensor, ...] | None = None
     reshaped_hidden_states: tuple[torch.FloatTensor, ...] | None = None
 
 
@@ -252,9 +258,7 @@ class SwinPatchEmbeddings(nn.Module):
         image_size = image_size if isinstance(image_size, collections.abc.Iterable) else (image_size, image_size)
         patch_size = patch_size if isinstance(patch_size, collections.abc.Iterable) else (patch_size, patch_size)
         num_patches = (image_size[1] // patch_size[1]) * (image_size[0] // patch_size[0])
-        self.image_size = image_size
         self.patch_size = patch_size
-        self.num_channels = num_channels
         self.num_patches = num_patches
         self.grid_size = (image_size[0] // patch_size[0], image_size[1] // patch_size[1])
 
@@ -327,16 +331,25 @@ class SwinRelativePositionBias(nn.Module):
     Relative position bias for Swin's window-based attention, following the style of BeitRelativePositionBias.
 
     Unlike BeiT, Swin has no CLS token, so the table covers exactly (2*ws_h-1)*(2*ws_w-1) unique
-    relative positions. The index is precomputed once as a buffer (window size is fixed at runtime).
+    relative positions. The lookup index is purely determined by window_size (static), so it is stored
+    as a non-persistent buffer (recomputed from config on load, never serialised). The table values
+    are learned parameters and must be re-read on every forward call.
     """
 
     def __init__(self, num_heads: int, window_size: tuple[int, int]):
         super().__init__()
         self.window_size = window_size
+        self.window_area = window_size[0] * window_size[1]
         self.relative_position_bias_table = nn.Parameter(
             torch.zeros((2 * window_size[0] - 1) * (2 * window_size[1] - 1), num_heads)
         )
-        self.register_buffer("relative_position_index", self._create_relative_position_index())
+        # Non-persistent: fully determined by window_size, no need to serialise.
+        # Stored flat so forward avoids an extra .view() call.
+        self.register_buffer(
+            "relative_position_index",
+            self._create_relative_position_index().view(-1),
+            persistent=False,
+        )
 
     def _create_relative_position_index(self) -> torch.Tensor:
         coords_h = torch.arange(self.window_size[0])
@@ -356,9 +369,8 @@ class SwinRelativePositionBias(nn.Module):
         return relative_coords.sum(-1)  # Wh*Ww, Wh*Ww
 
     def forward(self) -> torch.Tensor:
-        window_area = self.window_size[0] * self.window_size[1]
-        relative_position_bias = self.relative_position_bias_table[self.relative_position_index.view(-1)]
-        relative_position_bias = relative_position_bias.view(window_area, window_area, -1)
+        relative_position_bias = self.relative_position_bias_table[self.relative_position_index]
+        relative_position_bias = relative_position_bias.view(self.window_area, self.window_area, -1)
         return relative_position_bias.permute(2, 0, 1).contiguous().unsqueeze(0)  # 1, num_heads, Wh*Ww, Wh*Ww
 
 
@@ -711,7 +723,7 @@ class SwinPreTrainedModel(PreTrainedModel):
     _no_split_modules = ["SwinStage"]
     _supports_sdpa = True
     _supports_flash_attn = False
-    _supports_flex_attn = True
+    _supports_flex_attn = False
     _supports_attention_backend = True
     _can_compile_fullgraph = True
     _can_record_outputs = {
@@ -743,7 +755,7 @@ class SwinPreTrainedModel(PreTrainedModel):
                 init.zeros_(module.position_embeddings)
         elif isinstance(module, SwinRelativePositionBias):
             init.zeros_(module.relative_position_bias_table)
-            init.copy_(module.relative_position_index, module._create_relative_position_index())
+            init.copy_(module.relative_position_index, module._create_relative_position_index().view(-1))
 
 
 class SwinEncoder(SwinPreTrainedModel):
@@ -756,14 +768,14 @@ class SwinEncoder(SwinPreTrainedModel):
             [
                 SwinStage(
                     config=config,
-                    dim=int(config.embed_dim * 2**i_layer),
-                    input_resolution=(grid_size[0] // (2**i_layer), grid_size[1] // (2**i_layer)),
-                    depth=config.depths[i_layer],
-                    num_heads=config.num_heads[i_layer],
-                    drop_path=dpr[sum(config.depths[:i_layer]) : sum(config.depths[: i_layer + 1])],
-                    downsample=SwinPatchMerging if (i_layer < self.num_layers - 1) else None,
+                    dim=int(config.embed_dim * 2**layer_idx),
+                    input_resolution=(grid_size[0] // (2**layer_idx), grid_size[1] // (2**layer_idx)),
+                    depth=config.depths[layer_idx],
+                    num_heads=config.num_heads[layer_idx],
+                    drop_path=dpr[sum(config.depths[:layer_idx]) : sum(config.depths[: layer_idx + 1])],
+                    downsample=SwinPatchMerging if (layer_idx < self.num_layers - 1) else None,
                 )
-                for i_layer in range(self.num_layers)
+                for layer_idx in range(self.num_layers)
             ]
         )
         self.post_init()
@@ -1068,8 +1080,7 @@ class SwinBackbone(BackboneMixin, SwinPreTrainedModel):
         super().__init__(config)
 
         self.num_features = [config.embed_dim] + [int(config.embed_dim * 2**i) for i in range(len(config.depths))]
-        self.embeddings = SwinEmbeddings(config)
-        self.encoder = SwinEncoder(config, self.embeddings.patch_grid)
+        self.swin = SwinModel(config, add_pooling_layer=False)
 
         # Add layer norms to hidden states of out_features
         hidden_states_norms = {}
@@ -1114,22 +1125,18 @@ class SwinBackbone(BackboneMixin, SwinPreTrainedModel):
         [1, 768, 7, 7]
         ```
         """
-        embedding_output, input_dimensions = self.embeddings(pixel_values)
-
         kwargs["output_hidden_states"] = True  # required to extract layers for the stages
         # always_partition=True preserves shifted-window attention at all resolutions.
-        # output_hidden_states=True makes the encoder collect the stem + per-stage spatial states.
         # output_hidden_states_before_downsampling=True captures pre-downsampling feature maps per stage.
-        encoder_outputs = self.encoder(
-            embedding_output,
-            input_dimensions,
+        outputs = self.swin(
+            pixel_values,
             always_partition=True,
             output_hidden_states_before_downsampling=True,
             **kwargs,
         )
 
         feature_maps = ()
-        for stage, hidden_state in zip(self.stage_names, encoder_outputs.reshaped_hidden_states):
+        for stage, hidden_state in zip(self.stage_names, outputs.reshaped_hidden_states):
             if stage in self.out_features:
                 batch_size, num_channels, height, width = hidden_state.shape
                 hidden_state = hidden_state.permute(0, 2, 3, 1).contiguous()
@@ -1141,8 +1148,8 @@ class SwinBackbone(BackboneMixin, SwinPreTrainedModel):
 
         return BackboneOutput(
             feature_maps=feature_maps,
-            hidden_states=encoder_outputs.reshaped_hidden_states,
-            attentions=encoder_outputs.attentions,
+            hidden_states=outputs.reshaped_hidden_states,
+            attentions=outputs.attentions,
         )
 
 

@@ -24,7 +24,7 @@ from ... import initialization as init
 from ...activations import ACT2FN
 from ...backbone_utils import BackboneMixin, filter_output_hidden_states
 from ...modeling_layers import GradientCheckpointingLayer
-from ...modeling_outputs import BackboneOutput, BaseModelOutput
+from ...modeling_outputs import BackboneOutput
 from ...modeling_utils import PreTrainedModel
 from ...utils import ModelOutput, auto_docstring, logging, torch_int
 from ...utils.generic import can_return_tuple
@@ -44,7 +44,7 @@ logger = logging.get_logger(__name__)
     """
 )
 # Copied from transformers.models.swin.modeling_swin.SwinEncoderOutput with Swin->Swinv2
-class Swinv2EncoderOutput(BaseModelOutput):
+class Swinv2EncoderOutput(ModelOutput):
     r"""
     reshaped_hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
         Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each stage) of
@@ -54,6 +54,9 @@ class Swinv2EncoderOutput(BaseModelOutput):
         include the spatial dimensions.
     """
 
+    last_hidden_state: torch.FloatTensor | None = None
+    hidden_states: tuple[torch.FloatTensor, ...] | None = None
+    attentions: tuple[torch.FloatTensor, ...] | None = None
     reshaped_hidden_states: tuple[torch.FloatTensor, ...] | None = None
 
 
@@ -64,7 +67,7 @@ class Swinv2EncoderOutput(BaseModelOutput):
     """
 )
 # Copied from transformers.models.swin.modeling_swin.SwinModelOutput with Swin->Swinv2
-class Swinv2ModelOutput(BaseModelOutput):
+class Swinv2ModelOutput(ModelOutput):
     r"""
     pooler_output (`torch.FloatTensor` of shape `(batch_size, hidden_size)`, *optional*, returned when `add_pooling_layer=True` is passed):
         Average pooling of the last layer hidden-state.
@@ -76,7 +79,10 @@ class Swinv2ModelOutput(BaseModelOutput):
         include the spatial dimensions.
     """
 
+    last_hidden_state: torch.FloatTensor | None = None
     pooler_output: torch.FloatTensor | None = None
+    hidden_states: tuple[torch.FloatTensor, ...] | None = None
+    attentions: tuple[torch.FloatTensor, ...] | None = None
     reshaped_hidden_states: tuple[torch.FloatTensor, ...] | None = None
 
 
@@ -268,9 +274,7 @@ class Swinv2PatchEmbeddings(nn.Module):
         image_size = image_size if isinstance(image_size, collections.abc.Iterable) else (image_size, image_size)
         patch_size = patch_size if isinstance(patch_size, collections.abc.Iterable) else (patch_size, patch_size)
         num_patches = (image_size[1] // patch_size[1]) * (image_size[0] // patch_size[0])
-        self.image_size = image_size
         self.patch_size = patch_size
-        self.num_channels = num_channels
         self.num_patches = num_patches
         self.grid_size = (image_size[0] // patch_size[0], image_size[1] // patch_size[1])
 

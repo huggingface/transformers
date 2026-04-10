@@ -577,14 +577,18 @@ def _build_checkpoint_conversion_mapping():
         WeightRenaming(r"fpn\.fpn1\.1\.", "fpn.fpn1.bn."),
         WeightRenaming(r"fpn\.fpn1\.3\.", "fpn.fpn1.conv_transpose2."),
         WeightRenaming(r"fpn\.fpn2\.0\.", "fpn.fpn2."),
+        WeightRenaming("decode_head.bottleneck.", "decode_head.psp_bottleneck."),
         WeightRenaming(
-            r"decode_head\.psp_modules\.(\d+)\.1\.conv\.",
-            r"decode_head.psp_modules.blocks.\1.conv.conv.",
+            r"decode_head\.psp_modules\.(\d+)\.1\.conv\.weight",
+            r"decode_head.psp_modules.blocks.\1.conv.convolution.weight",
         ),
         WeightRenaming(
             r"decode_head\.psp_modules\.(\d+)\.1\.bn\.",
-            r"decode_head.psp_modules.blocks.\1.conv.bn.",
+            r"decode_head.psp_modules.blocks.\1.conv.normalization.",
         ),
+        WeightRenaming(r"bn\.", "normalization."),
+        WeightRenaming(r"conv\.weight", "convolution.weight"),
+        WeightRenaming(r"^encoder\.", "beit."),
     ]
 
     mapping["pixio"] = mapping["vit"].copy()

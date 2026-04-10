@@ -308,6 +308,12 @@ class BeitModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
                     return True
                 if "psp_modules" in src and "decode_head.psp_modules" not in keys_str:
                     return True
+                # Any decode_head-scoped pattern only applies to segmentation models
+                if src.startswith("decode_head.") and "decode_head." not in keys_str:
+                    return True
+                # bn. and conv.weight patterns only apply to decode_head conv layers (not present in backbone-only models)
+                if src in (r"bn\.", r"conv\.weight") and "decode_head." not in keys_str:
+                    return True
             return False
 
         def _mapping(model, key_mapping=None, hf_quantizer=None, add_legacy=True):

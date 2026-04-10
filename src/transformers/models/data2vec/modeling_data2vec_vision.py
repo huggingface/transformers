@@ -852,42 +852,39 @@ class Data2VecVisionForImageClassification(Data2VecVisionPreTrainedModel):
         )
 
 
-# Copied from transformers.models.beit.modeling_beit.BeitConvModule with Beit->Data2VecVision
-class Data2VecVisionConvModule(nn.Module):
-    """
-    A convolutional block that bundles conv/norm/activation layers. This block simplifies the usage of convolution
-    layers, which are commonly used with a norm layer (e.g., BatchNorm) and activation layer (e.g., ReLU).
-
-    Based on OpenMMLab's implementation, found in https://github.com/open-mmlab/mmsegmentation.
-    """
-
+# Copied from transformers.models.beit.modeling_beit.BeitConvLayer with Beit->Data2VecVision
+class Data2VecVisionConvLayer(nn.Module):
     def __init__(
         self,
         in_channels: int,
         out_channels: int,
-        kernel_size: int | tuple[int, int],
+        kernel_size: int | tuple[int, int] = 3,
+        stride: int = 1,
         padding: int | tuple[int, int] | str = 0,
         bias: bool = False,
         dilation: int | tuple[int, int] = 1,
-    ) -> None:
+        groups: int = 1,
+        activation: str = "relu",
+    ):
         super().__init__()
-        self.conv = nn.Conv2d(
+        self.convolution = nn.Conv2d(
             in_channels=in_channels,
             out_channels=out_channels,
             kernel_size=kernel_size,
+            stride=stride,
             padding=padding,
-            bias=bias,
             dilation=dilation,
+            groups=groups,
+            bias=bias,
         )
-        self.bn = nn.BatchNorm2d(out_channels)
-        self.activation = nn.ReLU()
+        self.normalization = nn.BatchNorm2d(out_channels)
+        self.activation = ACT2FN[activation] if activation is not None else nn.Identity()
 
-    def forward(self, input: torch.Tensor) -> torch.Tensor:
-        output = self.conv(input)
-        output = self.bn(output)
-        output = self.activation(output)
-
-        return output
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        hidden_states = self.convolution(hidden_states)
+        hidden_states = self.normalization(hidden_states)
+        hidden_states = self.activation(hidden_states)
+        return hidden_states
 
 
 # Copied from transformers.models.beit.modeling_beit.BeitPyramidPoolingBlock with Beit->Data2VecVision
@@ -895,11 +892,12 @@ class Data2VecVisionPyramidPoolingBlock(nn.Module):
     def __init__(self, pool_scale: int, in_channels: int, channels: int) -> None:
         super().__init__()
         self.pooling = nn.AdaptiveAvgPool2d(pool_scale)
-        self.conv = Data2VecVisionConvModule(in_channels, channels, kernel_size=1)
+        self.conv = Data2VecVisionConvLayer(in_channels, channels, kernel_size=1)
 
-    def forward(self, input: torch.Tensor) -> torch.Tensor:
+    def forward(self, input: torch.Tensor, size: tuple[int, int]) -> torch.Tensor:
         hidden_state = self.pooling(input)
         hidden_state = self.conv(hidden_state)
+        hidden_state = nn.functional.interpolate(hidden_state, size=size, mode="bilinear", align_corners=False)
         return hidden_state
 
 
@@ -930,14 +928,8 @@ class Data2VecVisionPyramidPoolingModule(nn.Module):
         )
 
     def forward(self, hidden_states: torch.Tensor) -> list[torch.Tensor]:
-        outputs = []
-        for block in self.blocks:
-            pooled = block(hidden_states)
-            upsampled = nn.functional.interpolate(
-                pooled, size=hidden_states.size()[2:], mode="bilinear", align_corners=False
-            )
-            outputs.append(upsampled)
-        return outputs
+        original_size = hidden_states.size()[2:]
+        return [block(hidden_states, size=original_size) for block in self.blocks]
 
 
 # Copied from transformers.models.beit.modeling_beit.BeitUperHead with Beit->Data2VecVision
@@ -963,7 +955,7 @@ class Data2VecVisionUperHead(nn.Module):
             self.in_channels[-1],
             self.channels,
         )
-        self.bottleneck = Data2VecVisionConvModule(
+        self.psp_bottleneck = Data2VecVisionConvLayer(
             self.in_channels[-1] + len(self.pool_scales) * self.channels,
             self.channels,
             kernel_size=3,
@@ -973,10 +965,10 @@ class Data2VecVisionUperHead(nn.Module):
         self.lateral_convs = nn.ModuleList()
         self.fpn_convs = nn.ModuleList()
         for in_channels in self.in_channels[:-1]:  # skip the top layer
-            self.lateral_convs.append(Data2VecVisionConvModule(in_channels, self.channels, kernel_size=1))
-            self.fpn_convs.append(Data2VecVisionConvModule(self.channels, self.channels, kernel_size=3, padding=1))
+            self.lateral_convs.append(Data2VecVisionConvLayer(in_channels, self.channels, kernel_size=1))
+            self.fpn_convs.append(Data2VecVisionConvLayer(self.channels, self.channels, kernel_size=3, padding=1))
 
-        self.fpn_bottleneck = Data2VecVisionConvModule(
+        self.fpn_bottleneck = Data2VecVisionConvLayer(
             len(self.in_channels) * self.channels,
             self.channels,
             kernel_size=3,
@@ -984,15 +976,15 @@ class Data2VecVisionUperHead(nn.Module):
         )
 
     def psp_forward(self, hidden_states: list[torch.Tensor]) -> torch.Tensor:
-        x = hidden_states[-1]
-        hidden_states = torch.cat([x, *self.psp_modules(x)], dim=1)
-        return self.bottleneck(hidden_states)
+        hidden_state = hidden_states[-1]
+        hidden_state = torch.cat([hidden_state, *self.psp_modules(hidden_state)], dim=1)
+        return self.psp_bottleneck(hidden_state)
 
     def forward(self, encoder_hidden_states: list[torch.Tensor]) -> torch.Tensor:
         # build laterals
-        laterals = [
-            lateral_conv(hidden_state) for lateral_conv, hidden_state in zip(self.lateral_convs, encoder_hidden_states)
-        ]
+        laterals = []
+        for lateral_conv, hidden_state in zip(self.lateral_convs, encoder_hidden_states):
+            laterals.append(lateral_conv(hidden_state))
 
         laterals.append(self.psp_forward(encoder_hidden_states))
 
@@ -1056,13 +1048,13 @@ class Data2VecVisionFCNHead(nn.Module):
         self.convs = nn.ModuleList()
         if self.num_convs > 0:
             self.convs.append(
-                Data2VecVisionConvModule(
+                Data2VecVisionConvLayer(
                     self.in_channels, self.channels, kernel_size=kernel_size, padding=conv_padding, dilation=dilation
                 )
             )
             for _ in range(self.num_convs - 1):
                 self.convs.append(
-                    Data2VecVisionConvModule(
+                    Data2VecVisionConvLayer(
                         self.channels,
                         self.channels,
                         kernel_size=kernel_size,
@@ -1071,22 +1063,21 @@ class Data2VecVisionFCNHead(nn.Module):
                     )
                 )
         if self.concat_input:
-            self.conv_cat = Data2VecVisionConvModule(
+            self.conv_cat = Data2VecVisionConvLayer(
                 self.in_channels + self.channels, self.channels, kernel_size=kernel_size, padding=kernel_size // 2
             )
 
         self.classifier = nn.Conv2d(self.channels, config.num_labels, kernel_size=1)
 
     def forward(self, encoder_hidden_states: list[torch.Tensor]) -> torch.Tensor:
-        # just take the relevant feature maps
-        hidden_states = encoder_hidden_states[self.in_index]
-        output = hidden_states
+        residual = encoder_hidden_states[self.in_index]
+        hidden_states = residual
         for conv in self.convs:
-            output = conv(output)
+            hidden_states = conv(hidden_states)
         if self.concat_input:
-            output = self.conv_cat(torch.cat([hidden_states, output], dim=1))
-        output = self.classifier(output)
-        return output
+            hidden_states = self.conv_cat(torch.cat([residual, hidden_states], dim=1))
+        hidden_states = self.classifier(hidden_states)
+        return hidden_states
 
 
 @auto_docstring

@@ -42,27 +42,30 @@ class PPLCNetV3ConvLayer(nn.Module):
         out_channels: int,
         kernel_size: int = 3,
         stride: int = 1,
-        activation: str = "hardswish",
+        bias: bool = False,
+        dilation: int | tuple[int, int] = 1,
         groups: int = 1,
+        activation: str = "hardswish",
     ):
         super().__init__()
         self.convolution = nn.Conv2d(
-            in_channels,
-            out_channels,
+            in_channels=in_channels,
+            out_channels=out_channels,
             kernel_size=kernel_size,
             stride=stride,
             padding=kernel_size // 2,
-            bias=False,
+            bias=bias,
+            dilation=dilation,
             groups=groups,
         )
         self.normalization = nn.BatchNorm2d(out_channels)
         self.activation = ACT2FN[activation] if activation is not None else nn.Identity()
 
-    def forward(self, input: Tensor) -> Tensor:
-        hidden_state = self.convolution(input)
-        hidden_state = self.normalization(hidden_state)
-        hidden_state = self.activation(hidden_state)
-        return hidden_state
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        hidden_states = self.convolution(hidden_states)
+        hidden_states = self.normalization(hidden_states)
+        hidden_states = self.activation(hidden_states)
+        return hidden_states
 
 
 class PPLCNetV3LearnableAffineBlock(nn.Module):

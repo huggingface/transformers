@@ -26,7 +26,6 @@ from torch import nn
 from ... import initialization as init
 from ...activations import ACT2FN
 from ...modeling_layers import GradientCheckpointingLayer
-from ...modeling_outputs import BaseModelOutput
 from ...modeling_utils import PreTrainedModel
 from ...utils import ModelOutput, auto_docstring, logging, torch_int
 from .configuration_donut_swin import DonutSwinConfig
@@ -42,7 +41,7 @@ logger = logging.get_logger(__name__)
     """
 )
 # Copied from transformers.models.swin.modeling_swin.SwinEncoderOutput with Swin->DonutSwin
-class DonutSwinEncoderOutput(BaseModelOutput):
+class DonutSwinEncoderOutput(ModelOutput):
     r"""
     reshaped_hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
         Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each stage) of
@@ -52,6 +51,9 @@ class DonutSwinEncoderOutput(BaseModelOutput):
         include the spatial dimensions.
     """
 
+    last_hidden_state: torch.FloatTensor | None = None
+    hidden_states: tuple[torch.FloatTensor, ...] | None = None
+    attentions: tuple[torch.FloatTensor, ...] | None = None
     reshaped_hidden_states: tuple[torch.FloatTensor, ...] | None = None
 
 
@@ -62,7 +64,7 @@ class DonutSwinEncoderOutput(BaseModelOutput):
     """
 )
 # Copied from transformers.models.swin.modeling_swin.SwinModelOutput with Swin->DonutSwin
-class DonutSwinModelOutput(BaseModelOutput):
+class DonutSwinModelOutput(ModelOutput):
     r"""
     pooler_output (`torch.FloatTensor` of shape `(batch_size, hidden_size)`, *optional*, returned when `add_pooling_layer=True` is passed):
         Average pooling of the last layer hidden-state.
@@ -74,7 +76,10 @@ class DonutSwinModelOutput(BaseModelOutput):
         include the spatial dimensions.
     """
 
+    last_hidden_state: torch.FloatTensor | None = None
     pooler_output: torch.FloatTensor | None = None
+    hidden_states: tuple[torch.FloatTensor, ...] | None = None
+    attentions: tuple[torch.FloatTensor, ...] | None = None
     reshaped_hidden_states: tuple[torch.FloatTensor, ...] | None = None
 
 
@@ -238,9 +243,7 @@ class DonutSwinPatchEmbeddings(nn.Module):
         image_size = image_size if isinstance(image_size, collections.abc.Iterable) else (image_size, image_size)
         patch_size = patch_size if isinstance(patch_size, collections.abc.Iterable) else (patch_size, patch_size)
         num_patches = (image_size[1] // patch_size[1]) * (image_size[0] // patch_size[0])
-        self.image_size = image_size
         self.patch_size = patch_size
-        self.num_channels = num_channels
         self.num_patches = num_patches
         self.grid_size = (image_size[0] // patch_size[0], image_size[1] // patch_size[1])
 
@@ -635,7 +638,7 @@ class DonutSwinStage(GradientCheckpointingLayer):
 
         # patch merging layer
         if downsample is not None:
-            self.downsample = downsample(input_resolution, dim=dim, norm_layer=nn.LayerNorm)
+            self.downsample = downsample(dim=dim)
         else:
             self.downsample = None
 

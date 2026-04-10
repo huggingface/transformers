@@ -455,8 +455,8 @@ class BeitPreTrainedModel(PreTrainedModel):
     supports_gradient_checkpointing = True
     _no_split_modules = ["BeitLayer"]
     _supports_sdpa = True
-    _supports_flash_attn = True
-    _supports_flex_attn = True
+    _supports_flash_attn = False
+    _supports_flex_attn = False
     _supports_attention_backend = True
     _can_compile_fullgraph = True
     _can_record_outputs = {
@@ -724,52 +724,50 @@ class BeitForImageClassification(BeitPreTrainedModel):
         )
 
 
-class BeitConvModule(nn.Module):
-    """
-    A convolutional block that bundles conv/norm/activation layers. This block simplifies the usage of convolution
-    layers, which are commonly used with a norm layer (e.g., BatchNorm) and activation layer (e.g., ReLU).
-
-    Based on OpenMMLab's implementation, found in https://github.com/open-mmlab/mmsegmentation.
-    """
-
+class BeitConvLayer(nn.Module):
     def __init__(
         self,
         in_channels: int,
         out_channels: int,
-        kernel_size: int | tuple[int, int],
+        kernel_size: int | tuple[int, int] = 3,
+        stride: int = 1,
         padding: int | tuple[int, int] | str = 0,
         bias: bool = False,
         dilation: int | tuple[int, int] = 1,
-    ) -> None:
+        groups: int = 1,
+        activation: str = "relu",
+    ):
         super().__init__()
-        self.conv = nn.Conv2d(
+        self.convolution = nn.Conv2d(
             in_channels=in_channels,
             out_channels=out_channels,
             kernel_size=kernel_size,
+            stride=stride,
             padding=padding,
-            bias=bias,
             dilation=dilation,
+            groups=groups,
+            bias=bias,
         )
-        self.bn = nn.BatchNorm2d(out_channels)
-        self.activation = nn.ReLU()
+        self.normalization = nn.BatchNorm2d(out_channels)
+        self.activation = ACT2FN[activation] if activation is not None else nn.Identity()
 
-    def forward(self, input: torch.Tensor) -> torch.Tensor:
-        output = self.conv(input)
-        output = self.bn(output)
-        output = self.activation(output)
-
-        return output
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        hidden_states = self.convolution(hidden_states)
+        hidden_states = self.normalization(hidden_states)
+        hidden_states = self.activation(hidden_states)
+        return hidden_states
 
 
 class BeitPyramidPoolingBlock(nn.Module):
     def __init__(self, pool_scale: int, in_channels: int, channels: int) -> None:
         super().__init__()
         self.pooling = nn.AdaptiveAvgPool2d(pool_scale)
-        self.conv = BeitConvModule(in_channels, channels, kernel_size=1)
+        self.conv = BeitConvLayer(in_channels, channels, kernel_size=1)
 
-    def forward(self, input: torch.Tensor) -> torch.Tensor:
+    def forward(self, input: torch.Tensor, size: tuple[int, int]) -> torch.Tensor:
         hidden_state = self.pooling(input)
         hidden_state = self.conv(hidden_state)
+        hidden_state = nn.functional.interpolate(hidden_state, size=size, mode="bilinear", align_corners=False)
         return hidden_state
 
 
@@ -799,14 +797,8 @@ class BeitPyramidPoolingModule(nn.Module):
         )
 
     def forward(self, hidden_states: torch.Tensor) -> list[torch.Tensor]:
-        outputs = []
-        for block in self.blocks:
-            pooled = block(hidden_states)
-            upsampled = nn.functional.interpolate(
-                pooled, size=hidden_states.size()[2:], mode="bilinear", align_corners=False
-            )
-            outputs.append(upsampled)
-        return outputs
+        original_size = hidden_states.size()[2:]
+        return [block(hidden_states, size=original_size) for block in self.blocks]
 
 
 class BeitUperHead(nn.Module):
@@ -831,7 +823,7 @@ class BeitUperHead(nn.Module):
             self.in_channels[-1],
             self.channels,
         )
-        self.bottleneck = BeitConvModule(
+        self.psp_bottleneck = BeitConvLayer(
             self.in_channels[-1] + len(self.pool_scales) * self.channels,
             self.channels,
             kernel_size=3,
@@ -841,10 +833,10 @@ class BeitUperHead(nn.Module):
         self.lateral_convs = nn.ModuleList()
         self.fpn_convs = nn.ModuleList()
         for in_channels in self.in_channels[:-1]:  # skip the top layer
-            self.lateral_convs.append(BeitConvModule(in_channels, self.channels, kernel_size=1))
-            self.fpn_convs.append(BeitConvModule(self.channels, self.channels, kernel_size=3, padding=1))
+            self.lateral_convs.append(BeitConvLayer(in_channels, self.channels, kernel_size=1))
+            self.fpn_convs.append(BeitConvLayer(self.channels, self.channels, kernel_size=3, padding=1))
 
-        self.fpn_bottleneck = BeitConvModule(
+        self.fpn_bottleneck = BeitConvLayer(
             len(self.in_channels) * self.channels,
             self.channels,
             kernel_size=3,
@@ -852,15 +844,15 @@ class BeitUperHead(nn.Module):
         )
 
     def psp_forward(self, hidden_states: list[torch.Tensor]) -> torch.Tensor:
-        x = hidden_states[-1]
-        hidden_states = torch.cat([x, *self.psp_modules(x)], dim=1)
-        return self.bottleneck(hidden_states)
+        hidden_state = hidden_states[-1]
+        hidden_state = torch.cat([hidden_state, *self.psp_modules(hidden_state)], dim=1)
+        return self.psp_bottleneck(hidden_state)
 
     def forward(self, encoder_hidden_states: list[torch.Tensor]) -> torch.Tensor:
         # build laterals
-        laterals = [
-            lateral_conv(hidden_state) for lateral_conv, hidden_state in zip(self.lateral_convs, encoder_hidden_states)
-        ]
+        laterals = []
+        for lateral_conv, hidden_state in zip(self.lateral_convs, encoder_hidden_states):
+            laterals.append(lateral_conv(hidden_state))
 
         laterals.append(self.psp_forward(encoder_hidden_states))
 
@@ -919,13 +911,13 @@ class BeitFCNHead(nn.Module):
         self.convs = nn.ModuleList()
         if self.num_convs > 0:
             self.convs.append(
-                BeitConvModule(
+                BeitConvLayer(
                     self.in_channels, self.channels, kernel_size=kernel_size, padding=conv_padding, dilation=dilation
                 )
             )
             for _ in range(self.num_convs - 1):
                 self.convs.append(
-                    BeitConvModule(
+                    BeitConvLayer(
                         self.channels,
                         self.channels,
                         kernel_size=kernel_size,
@@ -934,37 +926,36 @@ class BeitFCNHead(nn.Module):
                     )
                 )
         if self.concat_input:
-            self.conv_cat = BeitConvModule(
+            self.conv_cat = BeitConvLayer(
                 self.in_channels + self.channels, self.channels, kernel_size=kernel_size, padding=kernel_size // 2
             )
 
         self.classifier = nn.Conv2d(self.channels, config.num_labels, kernel_size=1)
 
     def forward(self, encoder_hidden_states: list[torch.Tensor]) -> torch.Tensor:
-        # just take the relevant feature maps
-        hidden_states = encoder_hidden_states[self.in_index]
-        output = hidden_states
+        residual = encoder_hidden_states[self.in_index]
+        hidden_states = residual
         for conv in self.convs:
-            output = conv(output)
+            hidden_states = conv(hidden_states)
         if self.concat_input:
-            output = self.conv_cat(torch.cat([hidden_states, output], dim=1))
-        output = self.classifier(output)
-        return output
+            hidden_states = self.conv_cat(torch.cat([residual, hidden_states], dim=1))
+        hidden_states = self.classifier(hidden_states)
+        return hidden_states
 
 
 class BeitFPNUpBlock(nn.Module):
     """4x upsampling block: ConvTranspose → BN → GELU → ConvTranspose."""
 
-    def __init__(self, hidden_size: int) -> None:
+    def __init__(self, hidden_size: int, kernel_size: int = 2, stride: int = 2) -> None:
         super().__init__()
-        self.conv_transpose1 = nn.ConvTranspose2d(hidden_size, hidden_size, kernel_size=2, stride=2)
-        self.bn = nn.BatchNorm2d(hidden_size)
+        self.conv_transpose1 = nn.ConvTranspose2d(hidden_size, hidden_size, kernel_size=kernel_size, stride=stride)
+        self.normalization = nn.BatchNorm2d(hidden_size)
         self.activation = nn.GELU()
-        self.conv_transpose2 = nn.ConvTranspose2d(hidden_size, hidden_size, kernel_size=2, stride=2)
+        self.conv_transpose2 = nn.ConvTranspose2d(hidden_size, hidden_size, kernel_size=kernel_size, stride=stride)
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         hidden_states = self.conv_transpose1(hidden_states)
-        hidden_states = self.bn(hidden_states)
+        hidden_states = self.normalization(hidden_states)
         hidden_states = self.activation(hidden_states)
         hidden_states = self.conv_transpose2(hidden_states)
         return hidden_states
@@ -978,9 +969,8 @@ class BeitFPNNeck(nn.Module):
 
     def __init__(self, config: BeitConfig):
         super().__init__()
-        hidden_size = config.hidden_size
-        self.fpn1 = BeitFPNUpBlock(hidden_size)
-        self.fpn2 = nn.ConvTranspose2d(hidden_size, hidden_size, kernel_size=2, stride=2)
+        self.fpn1 = BeitFPNUpBlock(config.hidden_size)
+        self.fpn2 = nn.ConvTranspose2d(config.hidden_size, config.hidden_size, kernel_size=2, stride=2)
         self.fpn4 = nn.MaxPool2d(kernel_size=2, stride=2)
 
     def forward(self, feature_maps: tuple[torch.Tensor, ...]) -> tuple[torch.Tensor, ...]:
@@ -1065,7 +1055,7 @@ class BeitForSemanticSegmentation(BeitPreTrainedModel):
         # out_indices are 1-based into encoder_hidden_states (index 0 is the initial patch embedding).
         # Remove the CLS token ([:, 1:]) and reshape from sequence to 2D spatial feature maps.
         feature_maps = tuple(
-            encoder_hidden_states[i - 1][:, 1:].permute(0, 2, 1).reshape(batch_size, -1, patch_height, patch_width)
+            encoder_hidden_states[i - 1][:, 1:].transpose(1, 2).reshape(batch_size, -1, patch_height, patch_width)
             for i in self.config.out_indices
         )
         feature_maps = self.fpn(feature_maps)
@@ -1103,16 +1093,11 @@ class BeitBackbone(BackboneMixin, BeitPreTrainedModel):
         super().__init__(config)
 
         self.num_features = [config.hidden_size for _ in range(config.num_hidden_layers + 1)]
-        self.encoder = BeitModel(config, add_pooling_layer=False)
-
-        if config.add_fpn:
-            self.fpn = BeitFPNNeck(config)
+        self.beit = BeitModel(config, add_pooling_layer=False)
+        self.fpn = BeitFPNNeck(config) if config.add_fpn else nn.Identity()
 
         # initialize weights and apply final processing
         self.post_init()
-
-    def get_input_embeddings(self):
-        return self.encoder.embeddings.patch_embeddings
 
     @can_return_tuple
     @filter_output_hidden_states
@@ -1150,7 +1135,7 @@ class BeitBackbone(BackboneMixin, BeitPreTrainedModel):
         patch_height = height // self.config.patch_size
         patch_width = width // self.config.patch_size
         kwargs["output_hidden_states"] = True  # required to extract per-stage feature maps from hidden_states
-        outputs = self.encoder(pixel_values, **kwargs)
+        outputs = self.beit(pixel_values, **kwargs)
 
         hidden_states = outputs.hidden_states
         feature_maps = ()
@@ -1158,13 +1143,12 @@ class BeitBackbone(BackboneMixin, BeitPreTrainedModel):
             if stage in self.out_features:
                 if self.config.reshape_hidden_states:
                     hidden_state = hidden_state[:, 1:, :]
-                    hidden_state = hidden_state.permute(0, 2, 1)
+                    hidden_state = hidden_state.transpose(1, 2)
                     hidden_state = hidden_state.reshape(batch_size, -1, patch_height, patch_width)
 
                 feature_maps += (hidden_state,)
 
-        if self.config.add_fpn:
-            feature_maps = self.fpn(feature_maps)
+        feature_maps = self.fpn(feature_maps)
 
         return BackboneOutput(
             feature_maps=feature_maps,
