@@ -76,7 +76,6 @@ class DeepseekOcr2SamVisionConfig(PreTrainedConfig):
 @auto_docstring
 @strict
 class DeepseekOcr2EncoderConfig(PreTrainedConfig):
-
     model_type = "deepseek_ocr2_encoder"
     keys_to_ignore_at_inference = ["past_key_values"]
     base_model_tp_plan = {}
