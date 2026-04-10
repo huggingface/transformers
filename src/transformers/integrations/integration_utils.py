@@ -935,11 +935,11 @@ class TrackioCallback(TrainerCallback):
     """
     A [`TrainerCallback`] that logs metrics to Trackio.
 
-    With `trackio_space_id=None` (default), metrics stay **local** until the model is **pushed to the Hub**; the first
-    push runs `trackio.sync` with a **static** Space so the dashboard is linked from the model card. If you set
+    If `trackio_space_id=None` (default), metrics stay **local** unless and until the model is **pushed to the Hub**; the first
+    push runs `trackio.sync` with a **static** Space and links the static Space from the model card. If you set
     `trackio_space_id`, metrics stream to a **Gradio** Space during training; when `trackio_freeze_space` is True
     (default), `trackio.freeze` runs at the end to create a **new** static Space from that Gradio Space (the model
-    card is updated to prefer the static URL when available), provided Trackio is new enough (see `trackio_freeze_space`).
+    card is updated to prefer the static URL when available), provided `trackio>=0.21.1` is installed.
 
     **Requires**:
     ```bash
