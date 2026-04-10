@@ -89,7 +89,7 @@ def _build_checkpoint_conversion_mapping():
         ],
         # Delete prefix when used in VLMs. This should be in each VLM where needed because not all
         # VLMs with CLIP/SigLip as backbone need to delete the prefix. If we add it in CLIP, it
-        # will be applied recursively in models when not needed (e.g.) T5Gemma2
+        # will be applied recursively in models when not needed (e.g. T5Gemma2, PI0)
         "llava": [
             WeightRenaming(source_patterns=r"vision_tower.vision_model", target_patterns=r"vision_tower"),
             WeightRenaming(source_patterns=r"language_model.model", target_patterns="language_model"),
