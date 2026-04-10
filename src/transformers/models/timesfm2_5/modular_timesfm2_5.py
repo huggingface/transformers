@@ -569,11 +569,13 @@ class TimesFm2_5ModelForPrediction(TimesFmModelForPrediction):
 
         if window_size is not None:
             if is_tensor:
-                raise ValueError("window_size is not supported when past_values is a 2D tensor.")
-            new_inputs: list[torch.Tensor] = []
-            for ts in inputs:
-                new_inputs.extend(self._timesfm_moving_average(ts, window_size))
-            inputs = new_inputs
+                trend, residual = self._timesfm_moving_average(inputs, window_size)
+                inputs = torch.stack([trend, residual], dim=1).view(2 * inputs.shape[0], -1)
+            else:
+                new_inputs: list[torch.Tensor] = []
+                for ts in inputs:
+                    new_inputs.extend(self._timesfm_moving_average(ts, window_size))
+                inputs = new_inputs
 
         if truncate_negative is None:
             truncate_negative = self.config.infer_is_positive
@@ -657,6 +659,29 @@ class TimesFm2_5ModelForPrediction(TimesFmModelForPrediction):
             full_predictions=full_predictions,
             loss=loss,
         )
+
+    @staticmethod
+    def _timesfm_moving_average(arr: torch.Tensor, window_size: int) -> list[torch.Tensor] | tuple[torch.Tensor, torch.Tensor]:
+        """Calculates the moving average using PyTorch's convolution function."""
+        # arr shape: (T,) or (B, T)
+        is_2d = arr.ndim == 2
+        if not is_2d:
+            arr = arr.unsqueeze(0)  # (1, T)
+
+        # Pad with zeros to handle initial window positions
+        arr_padded = F.pad(arr, (window_size - 1, 0), "constant", 0)  # (B, T + window_size - 1)
+
+        # Create a convolution kernel
+        kernel = torch.ones(window_size, dtype=arr.dtype, device=arr.device) / window_size
+        kernel = kernel.view(1, 1, -1)  # (1, 1, window_size)
+
+        # Apply convolution to calculate the moving average
+        # F.conv1d expects (N, C_in, L_in)
+        smoothed_arr = F.conv1d(arr_padded.unsqueeze(1), kernel).squeeze(1)  # (B, T)
+
+        if not is_2d:
+            return [smoothed_arr.squeeze(0), (arr - smoothed_arr).squeeze(0)]
+        return smoothed_arr, arr - smoothed_arr
 
 
 __all__ = [

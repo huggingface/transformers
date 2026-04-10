@@ -212,6 +212,56 @@ def run_dynamic_shape_checks(session: ort.InferenceSession, model: TimesFm2_5Mod
         print(f"ONNX vs PyTorch OK: batch_size=2, seq_len={seq_len}")
 
 
+def test_input_min_and_type_parity(model: TimesFm2_5ModelForPrediction) -> None:
+    """
+    Verifies the fix for tensor vs list inputs.
+    Checks that input_min is calculated across ALL rows, which affects truncate_negative.
+    """
+    ctx = model.context_len
+    # Row 0 is all positive, Row 1 has a negative value.
+    # If the model only checked the first row (or handled the list incorrectly),
+    # it might wrongly decide to clamp outputs.
+    s0 = torch.ones(ctx) * 10.0
+    s1 = torch.ones(ctx) * 10.0
+    s1[5] = -100.0  # The negative value is in the second row
+    
+    stacked = torch.stack([s0, s1], dim=0)
+    list_input = [s0, s1]
+    
+    # We need a case where the model WOULD produce a negative value to see if it gets clamped.
+    # Since we use random weights, we'll just check that outputs match between tensor and list paths.
+    with torch.no_grad():
+        out_tensor = model(past_values=stacked, truncate_negative=True)
+        out_list = model(past_values=list_input, truncate_negative=True)
+        
+    assert_close(
+        out_tensor.mean_predictions.numpy(),
+        out_list.mean_predictions.numpy(),
+        "Input type parity failed (tensor vs list with negative value)"
+    )
+    print("    OK: Tensor and List paths matched for mixed-sign inputs.")
+
+
+def test_window_size_tensor_vs_list_parity(model: TimesFm2_5ModelForPrediction) -> None:
+    """Verifies that the new batched window_size logic for tensors matches the list logic."""
+    ctx = model.context_len
+    batch = 3
+    window_size = 4
+    torch.manual_seed(123)
+    x = torch.randn(batch, ctx)
+    rows = [x[i].clone() for i in range(batch)]
+    
+    with torch.no_grad():
+        out_tensor = model(past_values=x, window_size=window_size)
+        out_list = model(past_values=rows, window_size=window_size)
+    
+    # We expect (batch, horizon_len) rows in the output
+    h = model.horizon_len
+    assert out_tensor.mean_predictions.shape == out_list.mean_predictions.shape == (batch, h)
+    torch.testing.assert_close(out_tensor.mean_predictions, out_list.mean_predictions, rtol=1e-5, atol=1e-5)
+    print(f"    OK: Tensor vs List window_size parity at B={batch}, W={window_size}")
+
+
 def main() -> None:
     if not ONNX_PATH.is_file():
         print(f"Missing {ONNX_PATH}", file=sys.stderr)
@@ -223,6 +273,8 @@ def main() -> None:
     print("PyTorch tests...")
     test_preprocess_2d_tensor_matches_list_of_rows(model)
     test_preprocess_short_2d_left_pad_and_mask_invariants(model)
+    test_input_min_and_type_parity(model)
+    test_window_size_tensor_vs_list_parity(model)
     print("  OK")
 
     session = ort.InferenceSession(str(ONNX_PATH), providers=["CPUExecutionProvider"])

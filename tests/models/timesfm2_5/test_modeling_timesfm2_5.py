@@ -349,6 +349,31 @@ class TimesFm2_5ForwardInputVariantsTest(unittest.TestCase):
             out_tail = self.model(past_values=[tail])
         self.assertTrue(torch.allclose(out_long.mean_predictions, out_tail.mean_predictions, atol=1e-5))
 
+    def test_window_size_parity(self):
+        """forward() with window_size works for both list and 2D tensor inputs and gives identical output across edge cases."""
+        batch_sizes = [1, 4]
+        seq_lengths = [32, 64]
+        window_sizes = [1, 4, 32, 128]
+
+        for b in batch_sizes:
+            for slen in seq_lengths:
+                for w in window_sizes:
+                    raw = [torch.randn(slen, device=torch_device) for _ in range(b)]
+                    stacked = torch.stack(raw)
+                    with torch.no_grad():
+                        out_list = self.model(past_values=raw, window_size=w)
+                        out_tensor = self.model(past_values=stacked, window_size=w)
+
+                    self.assertTrue(
+                        torch.allclose(out_list.mean_predictions, out_tensor.mean_predictions, atol=1e-5),
+                        f"Parity failed for b={b}, slen={slen}, w={w}",
+                    )
+                    self.assertTrue(
+                        torch.allclose(out_list.full_predictions, out_tensor.full_predictions, atol=1e-5),
+                        f"Full prediction parity failed for b={b}, slen={slen}, w={w}",
+                    )
+
+
 
 @require_torch
 @slow
