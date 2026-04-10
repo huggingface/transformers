@@ -21,7 +21,7 @@ from dataclasses import asdict, dataclass, field, fields
 from datetime import timedelta
 from enum import Enum
 from functools import cached_property
-from typing import Any
+from typing import Any, Literal
 
 from .debug_utils import DebugOption
 from .trainer_utils import (
@@ -399,10 +399,10 @@ class TrainingArguments:
         trackio_bucket_id (`str` or `None`, *optional*, defaults to `None`):
             Optional Hugging Face Bucket id when metrics are synced to a Space. If unset, Trackio derives a bucket from
             the Space id. Used when `trackio_space_id` is set and when syncing on Hub push.
-        trackio_freeze_space (`bool`, *optional*, defaults to `True`):
-            When `True` (default) and `trackio_space_id` is set, after training `trackio.freeze` creates a static Space
-            from the Gradio Space. Ignored when `trackio_space_id` is `None` (local-only runs do not freeze). Set to
-            `False` to keep the Gradio Space only.
+        trackio_frozen_space_id (`str`, `False`, or `None`, *optional*, defaults to `None`):
+            When `trackio_space_id` is set, controls the post-training `trackio.freeze` step. `False` disables freezing.
+            `None` (default) lets Trackio pick the new static Space name. Pass a string (e.g. `'user/my-static-space'`) to
+            set the destination Space id explicitly. Ignored when `trackio_space_id` is `None`.
 
         > Evaluation
 
@@ -1063,11 +1063,11 @@ class TrainingArguments:
             "help": "Optional HF Bucket id when using a Trackio Space; if unset, Trackio picks a default."
         },
     )
-    trackio_freeze_space: bool = field(
-        default=True,
+    trackio_frozen_space_id: str | None | Literal[False] = field(
+        default=None,
         metadata={
-            "help": "If True (default) and trackio_space_id is set, call trackio.freeze() after training; ignored if "
-            "trackio_space_id is None."
+            "help": "When trackio_space_id is set: False skips freeze; None (default) uses Trackio's default static "
+            "Space name; str sets the new static Space id."
         },
     )
 
@@ -1481,6 +1481,14 @@ class TrainingArguments:
         # Expand ~ in paths so os.makedirs works correctly (#10628)
         if self.output_dir is not None:
             self.output_dir = os.path.expanduser(self.output_dir)
+
+        if self.trackio_frozen_space_id is True:
+            raise ValueError(
+                "trackio_frozen_space_id=True is invalid. Use None for default static Space naming, False to skip "
+                "freeze, or a string Space id."
+            )
+        if isinstance(self.trackio_frozen_space_id, str) and self.trackio_frozen_space_id.strip().lower() == "false":
+            self.trackio_frozen_space_id = False
 
         if self.disable_tqdm is None:
             self.disable_tqdm = logger.getEffectiveLevel() > logging.WARN
