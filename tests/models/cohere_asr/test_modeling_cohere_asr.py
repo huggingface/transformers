@@ -175,15 +175,9 @@ class CohereAsrModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
     def test_config(self):
         self.config_tester.run_common_tests()
 
-    def test_reverse_loading_mapping(self, check_keys_were_modified=True):
+    def test_reverse_loading_mapping(self):
         # proj_out conversion only applies to ForConditionalGeneration, not the base model
-        try:
-            self.all_model_classes = (CohereAsrForConditionalGeneration,) if is_torch_available() else ()
-            super().test_reverse_loading_mapping(check_keys_were_modified)
-        finally:
-            self.all_model_classes = (
-                (CohereAsrModel, CohereAsrForConditionalGeneration) if is_torch_available() else ()
-            )
+        super().test_reverse_loading_mapping(skip_base_model=True)
 
     # Copied from tests.models.moonshine_streaming.test_modeling_moonshine_streaming.MoonshineStreamingModelTest.test_resize_tokens_embeddings
     def test_resize_tokens_embeddings(self):

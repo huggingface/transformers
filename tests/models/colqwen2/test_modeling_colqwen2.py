@@ -284,6 +284,9 @@ class ColQwen2ForRetrievalModelTest(ModelTesterMixin, unittest.TestCase):
     def test_load_save_without_tied_weights(self):
         pass
 
+    def test_reverse_loading_mapping(self):
+        super().test_reverse_loading_mapping(skip_base_model=True)
+
 
 @require_torch
 class ColQwen2ModelIntegrationTest(unittest.TestCase):
