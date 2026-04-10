@@ -382,7 +382,7 @@ class CohereAsrIntegrationTest(unittest.TestCase):
                     " yesterday it was 35 degrees in barcelona but today the temperature will go down to minus 20 degrees"
                 ],
                 ("cuda", None): [
-                    " yesterday it was thirty-five degrees in barcelona but today the temperature will go down to minus twenty degrees"
+                    " yesterday it was 35 degrees in barcelona but today the temperature will go down to minus 20 degrees"
                 ],
             }
         ).get_expectation()
