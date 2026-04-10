@@ -343,8 +343,14 @@ class DeepseekOcr2SamVisionConfig(SamVisionConfig):
 @strict
 class DeepseekOcr2EncoderConfig(Qwen2Config):
     r"""
-    Configuration for the DeepSeek-OCR-2 vision encoder.
-    """
+    Example:
+
+    ```python
+    >>> from transformers import DeepseekOcr2Config
+
+    >>> config = DeepseekOcr2Config()
+    >>> encoder_config = config.vision_config.encoder_config
+    ```"""
 
     base_config_key = "encoder_config"
     base_model_tp_plan = {}

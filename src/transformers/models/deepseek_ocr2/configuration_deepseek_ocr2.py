@@ -76,6 +76,16 @@ class DeepseekOcr2SamVisionConfig(PreTrainedConfig):
 @auto_docstring
 @strict
 class DeepseekOcr2EncoderConfig(PreTrainedConfig):
+    r"""
+    Example:
+
+    ```python
+    >>> from transformers import DeepseekOcr2Config
+
+    >>> config = DeepseekOcr2Config()
+    >>> encoder_config = config.vision_config.encoder_config
+    ```"""
+
     model_type = "deepseek_ocr2_encoder"
     keys_to_ignore_at_inference = ["past_key_values"]
     base_model_tp_plan = {}
