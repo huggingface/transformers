@@ -737,6 +737,11 @@ class SwinPreTrainedModel(PreTrainedModel):
         "attentions": OutputRecorder(SwinStage, index=2, capture_initial_hidden_state=False),
     }
     _input_embed_layer = "patch_embeddings"
+    # relative_position_index is now a non-persistent buffer (recomputed from window_size in __init__).
+    _keys_to_ignore_on_load_unexpected = [
+        r"attention\.self\.relative_position_index",
+        r"attention\.relative_position_bias\.relative_position_index",
+    ]
 
     @torch.no_grad()
     def _init_weights(self, module):

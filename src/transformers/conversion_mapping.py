@@ -135,9 +135,6 @@ def _build_checkpoint_conversion_mapping():
                 "attention.self.relative_position_bias_table",
                 "attention.relative_position_bias.relative_position_bias_table",
             ),
-            WeightRenaming(
-                "attention.self.relative_position_index", "attention.relative_position_bias.relative_position_index"
-            ),
             # Output projection rename (SwinSelfOutput.dense → SwinAttention.o_proj)
             WeightRenaming("attention.output.dense", "attention.o_proj"),
             # MLP renames (SwinIntermediate.dense → SwinMLP.fc1, SwinOutput.dense → SwinMLP.fc2)

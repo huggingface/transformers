@@ -679,6 +679,11 @@ class SwinPreTrainedModel(ViTPreTrainedModel):
     _no_split_modules = ["SwinStage"]
     _supports_flash_attn = False
     _supports_flex_attn = False
+    # relative_position_index is now a non-persistent buffer (recomputed from window_size in __init__).
+    _keys_to_ignore_on_load_unexpected = [
+        r"attention\.self\.relative_position_index",
+        r"attention\.relative_position_bias\.relative_position_index",
+    ]
     _can_record_outputs = {
         # capture_initial_hidden_state=True: prepend the embedding input (args[0] of SwinStage 0) so that
         # hidden_states[0] has the same shape as the patch embeddings (num_patches, embed_dim).
