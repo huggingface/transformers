@@ -69,7 +69,6 @@ class ModuleFusionSpec:
 
 
 class _FusedPatchEmbeddingMixin:
-
     def __init__(self, *args, **kwargs):
         # call the original_cls.__init__()
         super().__init__(*args, **kwargs)
@@ -169,7 +168,9 @@ def _discover_fusable_modules(
 
     seen_classes = set()
     patch_mapping = {}
-    target_module_pattern = re.compile("|".join(spec.target_modules_patterns)) if spec.target_modules_patterns else None
+    target_module_pattern = (
+        re.compile("|".join(spec.target_modules_patterns)) if spec.target_modules_patterns else None
+    )
     for module_name, module in model.named_modules():
         module_cls = type(module)
         if module_cls in seen_classes:
