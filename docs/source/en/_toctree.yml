@@ -215,8 +215,6 @@
     sections:
     - local: perf_train_cpu
       title: CPU
-    - local: perf_train_cpu_many
-      title: Distributed CPUs
     - local: perf_train_special
       title: Apple Silicon
     - local: perf_train_gaudi
