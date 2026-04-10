@@ -12,11 +12,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from collections.abc import Callable
 
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+from collections.abc import Callable
 from huggingface_hub.dataclasses import strict
 
 from ...integrations.dsa_tilelang import act_quant, fp8_index
