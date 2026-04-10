@@ -1236,9 +1236,9 @@ class Qwen3_5MoeVisionModel(Qwen3_5MoePreTrainedModel):
         self,
         hidden_states: torch.Tensor,
         grid_thw: torch.Tensor,
+        cu_seqlens: torch.Tensor | None = None,
         rotary_pos_emb: torch.Tensor | None = None,
         pos_embeds: torch.Tensor | None = None,
-        cu_seqlens: torch.Tensor | None = None,
         **kwargs,
     ) -> torch.Tensor:
         """
@@ -1247,12 +1247,12 @@ class Qwen3_5MoeVisionModel(Qwen3_5MoePreTrainedModel):
                 The final hidden states of the model.
             grid_thw (`torch.Tensor` of shape `(num_images_or_videos, 3)`):
                 The temporal, height and width of feature shape of each image in LLM.
-            rotary_pos_emb (`torch.Tensor`, *optional*):
-                Precomputed rotary position embeddings (needed for export).
-            pos_embeds (`torch.Tensor`, *optional*):
-                Precomputed interpolated position embeddings (needed for export).
             cu_seqlens (`torch.Tensor`, *optional*):
-                Precomputed cumulative sequence lengths (needed for export).
+                Precomputed cumulative sequence lengths (from `get_cu_seqlens`).
+            rotary_pos_emb (`torch.Tensor`, *optional*):
+                Precomputed rotary positional embeddings (from `rot_pos_emb`).
+            pos_embeds (`torch.Tensor`, *optional*):
+                Precomputed interpolated position embeddings (from `fast_pos_embed_interpolate`).
 
         Returns:
             `torch.Tensor`: hidden_states.

@@ -464,10 +464,10 @@ class Qwen2_5_VisionTransformerPretrainedModel(Qwen2_5_VLPreTrainedModel):
         self,
         hidden_states: torch.Tensor,
         grid_thw: torch.Tensor,
-        rotary_pos_emb: torch.Tensor | None = None,
         cu_seqlens: torch.Tensor | None = None,
-        cu_window_seqlens: torch.Tensor | None = None,
         window_index: torch.Tensor | None = None,
+        cu_window_seqlens: torch.Tensor | None = None,
+        rotary_pos_emb: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
         """
@@ -476,14 +476,14 @@ class Qwen2_5_VisionTransformerPretrainedModel(Qwen2_5_VLPreTrainedModel):
                 The final hidden states of the model.
             grid_thw (`torch.Tensor` of shape `(num_images_or_videos, 3)`):
                 The temporal, height and width of feature shape of each image in LLM.
-            rotary_pos_emb (`torch.Tensor`, *optional*):
-                Precomputed rotary position embeddings (needed for export).
             cu_seqlens (`torch.Tensor`, *optional*):
-                Precomputed cumulative sequence lengths (needed for export).
+                Precomputed cumulative sequence lengths (from `get_cu_seqlens`).
             cu_window_seqlens (`torch.Tensor`, *optional*):
-                Precomputed window cumulative sequence lengths (needed for export).
+                Precomputed window cumulative sequence lengths (from `get_window_index`).
             window_index (`torch.Tensor`, *optional*):
-                Precomputed window reordering index (needed for export).
+                Precomputed window reordering index (from `get_window_index`).
+            rotary_pos_emb (`torch.Tensor`, *optional*):
+                Precomputed rotary positional embeddings (from `rot_pos_emb`).
 
         Returns:
             `torch.Tensor`: hidden_states.
@@ -493,11 +493,11 @@ class Qwen2_5_VisionTransformerPretrainedModel(Qwen2_5_VLPreTrainedModel):
         if rotary_pos_emb is None:
             rotary_pos_emb = self.rot_pos_emb(grid_thw)
 
-        if window_index is None:
-            window_index, cu_window_seqlens = self.get_window_index(grid_thw)
-
         if cu_seqlens is None:
             cu_seqlens = self.get_cu_seqlens(grid_thw)
+
+        if window_index is None:
+            window_index, cu_window_seqlens = self.get_window_index(grid_thw)
 
         reverse_indices = torch.argsort(window_index)
 

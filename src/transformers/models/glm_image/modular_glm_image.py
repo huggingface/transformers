@@ -479,9 +479,9 @@ class GlmImageVisionModel(Glm4vVisionModel):
         grid_thw (`torch.Tensor` of shape `(num_images, 3)`):
             The temporal, height and width of feature shape of each image.
         cu_seqlens (`torch.Tensor`, *optional*):
-            Precomputed cumulative sequence lengths (needed for export).
+            Precomputed cumulative sequence lengths (from `get_cu_seqlens`).
         image_type_ids (`torch.Tensor`, *optional*):
-            Precomputed image type ids / coordinates (needed for export).
+            Precomputed image type ids / coordinates (from `rot_pos_emb`).
 
         Returns:
             `torch.Tensor` of shape `(total_patches, hidden_size)`: Hidden states.

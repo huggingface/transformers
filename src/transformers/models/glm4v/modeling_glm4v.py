@@ -770,8 +770,8 @@ class Glm4vVisionModel(Glm4vPreTrainedModel):
         self,
         hidden_states: torch.Tensor,
         grid_thw: torch.Tensor,
-        rotary_pos_emb: tuple[torch.Tensor, torch.Tensor] | None = None,
         cu_seqlens: torch.Tensor | None = None,
+        rotary_pos_emb: tuple[torch.Tensor, torch.Tensor] | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
         r"""
@@ -779,10 +779,10 @@ class Glm4vVisionModel(Glm4vPreTrainedModel):
             The final hidden states of the model.
         grid_thw (`torch.Tensor` of shape `(num_images_or_videos, 3)`):
             The temporal, height and width of feature shape of each image in LLM.
-        rotary_pos_emb (`tuple`, *optional*):
-            Precomputed output of `rot_pos_emb(grid_thw)` (needed for export).
         cu_seqlens (`torch.Tensor`, *optional*):
-            Precomputed cumulative sequence lengths (needed for export).
+            Precomputed cumulative sequence lengths (from `get_cu_seqlens`).
+        rotary_pos_emb (`tuple`, *optional*):
+            Precomputed rotary positional embeddings (from `rot_pos_emb`).
 
         Returns:
             `torch.Tensor`: hidden_states.
@@ -1149,12 +1149,12 @@ class Glm4vModel(Glm4vPreTrainedModel):
         """
         pixel_values_videos = pixel_values_videos.type(self.visual.dtype)
         # reshape video_grid_thw -> [b, 3] -> [1, h, w] * frames
-        temp_frames_hw = []
-        video_grid_thw_list = video_grid_thw.tolist()
-        for t, h, w in video_grid_thw_list:
-            repeated_row = torch.tensor([1, h, w]).unsqueeze(0).repeat(t, 1)
-            temp_frames_hw.append(repeated_row)
-        flattened_video_grid_thw = torch.cat(temp_frames_hw, dim=0)
+        t = video_grid_thw[:, 0]
+        hw = video_grid_thw[:, 1:]
+        # repeat each (h,w) row `t` times
+        flattened_hw = torch.repeat_interleave(hw, t, dim=0)
+        prefix_ones = video_grid_thw.new_ones(flattened_hw.shape[0], 1)
+        flattened_video_grid_thw = torch.cat([prefix_ones, flattened_hw], dim=1)
         vision_outputs = self.visual(
             pixel_values_videos, grid_thw=flattened_video_grid_thw, return_dict=True, **kwargs
         )

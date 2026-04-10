@@ -268,9 +268,9 @@ class GlmOcrVisionModel(Glm4vVisionModel):
         grid_thw (`torch.Tensor` of shape `(num_images_or_videos, 3)`):
             The temporal, height and width of feature shape of each image in LLM.
         cu_seqlens (`torch.Tensor`, *optional*):
-            Precomputed cumulative sequence lengths (needed for export).
+            Precomputed cumulative sequence lengths (from `get_cu_seqlens`).
         rotary_pos_emb (`tuple`, *optional*):
-            Precomputed output of `rot_pos_emb(grid_thw)` (needed for export).
+            Precomputed rotary positional embeddings (from `rot_pos_emb`).
 
         Returns:
             `torch.Tensor`: hidden_states.
