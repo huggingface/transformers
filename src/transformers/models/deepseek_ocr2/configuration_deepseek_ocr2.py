@@ -76,9 +76,6 @@ class DeepseekOcr2SamVisionConfig(PreTrainedConfig):
 @auto_docstring
 @strict
 class DeepseekOcr2EncoderConfig(PreTrainedConfig):
-    r"""
-    Configuration for the DeepSeek-OCR-2 vision encoder.
-    """
 
     model_type = "deepseek_ocr2_encoder"
     keys_to_ignore_at_inference = ["past_key_values"]
