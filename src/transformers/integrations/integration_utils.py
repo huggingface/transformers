@@ -945,15 +945,18 @@ class TrackioCallback(TrainerCallback):
     _MIN_TRACKIO_VERSION_FOR_FREEZE = "0.21.1"
 
     @staticmethod
-    def _space_repo_name_from_trackio_project(project: str) -> str:
-        """Build a Hub-safe default static Space repo name from the Trackio project and append a short random suffix."""
+    def _space_repo_name_from_trackio_project(project: str, sdk: str = "gradio") -> str:
+        """Build a Hub-safe Space repo name from the Trackio project and a short random suffix."""
         s = project.strip().lower().replace("/", "-")
         s = re.sub(r"[^a-z0-9._-]", "-", s)
         s = re.sub(r"-+", "-", s).strip("-_.")
         if not s:
             s = "trackio-project"
+        base = s[:81].rstrip("-")
         suffix = secrets.token_hex(3)
-        return f"{s[:89].rstrip('-')}-{suffix}"
+        if sdk == "static":
+            return f"{base}-static-{suffix}"
+        return f"{base}-{suffix}"
 
     def __init__(self):
         if not is_trackio_available():
@@ -1095,7 +1098,7 @@ class TrackioCallback(TrainerCallback):
             static_target = (
                 args.trackio_static_space_id
                 if isinstance(args.trackio_static_space_id, str)
-                else self._space_repo_name_from_trackio_project(args.project)
+                else self._space_repo_name_from_trackio_project(args.project, sdk="static")
             )
             self._space_id = self._trackio.sync(
                 project=current_project,
