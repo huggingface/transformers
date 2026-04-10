@@ -85,13 +85,6 @@ class DynamoExporter(HfExporter):
         if self.export_config.dynamic and dynamic_shapes is None:
             dynamic_shapes = get_auto_dynamic_shapes(sample_inputs)
 
-        # Explicit dynamic_shapes often trigger model-internal guards (e.g. RoPE constraints)
-        # that the symbolic solver can't prove at trace time. Defer them to runtime automatically.
-        prefer_deferred = (
-            self.export_config.prefer_deferred_runtime_asserts_over_guards
-            or self.export_config.dynamic_shapes is not None
-        )
-
         register_cache_pytrees_for_model(model)
         with patch_untraceable_patterns(model), patch_forward_signature(model, sample_inputs):
             exported_program: ExportedProgram = torch.export.export(
@@ -100,7 +93,7 @@ class DynamoExporter(HfExporter):
                 dynamic_shapes=dynamic_shapes,
                 strict=self.export_config.strict,
                 kwargs=copy.deepcopy(sample_inputs),
-                prefer_deferred_runtime_asserts_over_guards=prefer_deferred,
+                prefer_deferred_runtime_asserts_over_guards=self.export_config.prefer_deferred_runtime_asserts_over_guards,
             )
 
         return exported_program
