@@ -5206,9 +5206,6 @@ class ModelTesterMixin:
                     vision_config.backbone_config if hasattr(vision_config, "backbone_config") else vision_config
                 )
                 vision_config = vision_config.vq_config if hasattr(vision_config, "vq_config") else vision_config
-                vision_config = (
-                    vision_config.encoder_config if hasattr(vision_config, "encoder_config") else vision_config
-                )
                 vision_config = vision_config.model_args if hasattr(vision_config, "model_args") else vision_config
                 attribute_candidates = [
                     "embed_dim_per_stage",

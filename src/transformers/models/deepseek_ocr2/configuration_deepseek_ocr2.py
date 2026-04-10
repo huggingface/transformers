@@ -143,6 +143,8 @@ class DeepseekOcr2VisionConfig(PreTrainedConfig):
 
     sam_config: dict | PreTrainedConfig | None = None
     encoder_config: dict | PreTrainedConfig | None = None
+    hidden_size: int | None = None
+    rms_norm_eps: float | None = None
 
     def __post_init__(self, **kwargs):
         if self.sam_config is None:
@@ -154,6 +156,17 @@ class DeepseekOcr2VisionConfig(PreTrainedConfig):
             self.encoder_config = DeepseekOcr2EncoderConfig()
         elif isinstance(self.encoder_config, dict):
             self.encoder_config = DeepseekOcr2EncoderConfig(**self.encoder_config)
+
+        # Sync attributes from encoder_config for external access (tests, common utils)
+        if self.hidden_size is None:
+            self.hidden_size = self.encoder_config.hidden_size
+        else:
+            self.encoder_config.hidden_size = self.hidden_size
+
+        if self.rms_norm_eps is None:
+            self.rms_norm_eps = self.encoder_config.rms_norm_eps
+        else:
+            self.encoder_config.rms_norm_eps = self.rms_norm_eps
 
         # Propagate attn_implementation to encoder_config (not auto-propagated through nested sub_configs)
         if hasattr(self, "_attn_implementation") and self._attn_implementation is not None:
