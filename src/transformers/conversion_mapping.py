@@ -79,6 +79,11 @@ _MODEL_TO_CONVERSION_PATTERN = {
     "pp_chart2table": "llava",
     "gemma3n_text": "qwen3_5_text",
     "qwen3_5_moe_text": "qwen3_5_text",
+    "altclip_vision_model": "clip_vision_model",
+    "clipseg_vision_model": "clip_vision_model",
+    "chinese_clip_vision_model": "clip_vision_model",
+    "siglip_vision_model": "clip_vision_model",
+    "siglips_vision_model": "clip_vision_model",
 }
 
 
@@ -86,6 +91,10 @@ def _build_checkpoint_conversion_mapping():
     mapping = {
         "altclip": [
             WeightRenaming(source_patterns=r"layer\.", target_patterns="layers."),
+        ],
+        # Delete prefix when used in VLMs (when standalone model `base-model-prefix` is used)
+        "clip_vision_model": [
+            WeightRenaming(source_patterns=r"vision_model.(.*)", target_patterns="\1"),
         ],
         "llava": [
             WeightRenaming(source_patterns=r"language_model.model", target_patterns="language_model"),
