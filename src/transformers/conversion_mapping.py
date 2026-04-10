@@ -83,7 +83,7 @@ _MODEL_TO_CONVERSION_PATTERN = {
     "clipseg_vision_model": "clip_vision_model",
     "chinese_clip_vision_model": "clip_vision_model",
     "siglip_vision_model": "clip_vision_model",
-    "siglips_vision_model": "clip_vision_model",
+    "siglip2_vision_model": "clip_vision_model",
 }
 
 
@@ -94,7 +94,10 @@ def _build_checkpoint_conversion_mapping():
         ],
         # Delete prefix when used in VLMs (when standalone model `base-model-prefix` is used)
         "clip_vision_model": [
-            WeightRenaming(source_patterns=r"vision_model\.(.+)$", target_patterns=r"^(?!.*tower\.)\1$"),
+            WeightRenaming(
+                source_patterns=r"vision_model\.(.+)$",
+                target_patterns=r"^(?!.*backbone\.)(?!.*model\.)(?!.*encoder\.)(?!.*tower\.)\1$",
+            ),
         ],
         "llava": [
             WeightRenaming(source_patterns=r"language_model.model", target_patterns="language_model"),

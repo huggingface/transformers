@@ -13,13 +13,19 @@
 # limitations under the License.
 """Testing suite for the PyTorch Chinese-CLIP model."""
 
+import copy
 import inspect
+import os
+import re
+import tempfile
 import unittest
 
 import requests
 from parameterized import parameterized
 
 from transformers import ChineseCLIPConfig, ChineseCLIPTextConfig, ChineseCLIPVisionConfig
+from transformers.conversion_mapping import get_model_conversion_mapping
+from transformers.core_model_loading import WeightRenaming, process_target_pattern
 from transformers.models.auto import get_values
 from transformers.testing_utils import is_flaky, require_torch, require_vision, slow, torch_device
 from transformers.utils import is_torch_available, is_vision_available
@@ -37,6 +43,7 @@ from ...test_pipeline_mixin import PipelineTesterMixin
 
 if is_torch_available():
     import torch
+    from safetensors.torch import load_file
     from torch import nn
 
     from transformers import (
@@ -560,6 +567,54 @@ class ChineseCLIPModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestC
         model_name = "OFA-Sys/chinese-clip-vit-base-patch16"
         model = ChineseCLIPModel.from_pretrained(model_name)
         self.assertIsNotNone(model)
+
+    def test_reverse_loading_mapping(self, check_keys_were_modified=True):
+        # Same as AltCLIP, this model applies legacy conversion which is never reversed
+        # so we won't get matching state dict keys after re-saving it back
+
+        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+
+        for model_class in self.all_model_classes:
+            # Each individual model is a subtest
+            with self.subTest(model_class.__name__):
+                model = model_class(copy.deepcopy(config))
+                # Skip if no conversions
+                conversions = get_model_conversion_mapping(model, add_legacy=False)
+                if len(conversions) == 0:
+                    self.skipTest(f"No conversion found for {model_class}")
+
+                # Find the model keys, so the targets according to the conversions
+                model_keys = list(model.state_dict().keys())
+
+                with tempfile.TemporaryDirectory() as tmpdirname:
+                    # Serialize with reverse mapping
+                    model.save_pretrained(tmpdirname)
+                    state_dict = load_file(os.path.join(tmpdirname, "model.safetensors"))
+                    # Get all the serialized keys that we just saved according to the reverse mapping
+                    serialized_keys = list(state_dict.keys())
+
+                if check_keys_were_modified:
+                    # They should be different, otherwise we did not perform any mapping
+                    self.assertNotEqual(sorted(serialized_keys), sorted(model_keys), "No key mapping was performed!")
+
+                # Check that for each conversion entry, we at least map to one key
+                for conversion in conversions:
+                    for source_pattern in conversion.source_patterns:
+                        # Sometimes the mappings specify keys that are tied, so absent from the saved state dict
+                        if isinstance(conversion, WeightRenaming):
+                            # We need to revert the target pattern to make it compatible with regex search
+                            target_pattern_reversed = conversion.target_patterns[0]
+                            captured_group = process_target_pattern(source_pattern)[1]
+                            if captured_group:
+                                target_pattern_reversed = target_pattern_reversed.replace(r"\1", captured_group)
+                            if any(re.search(target_pattern_reversed, k) for k in model.all_tied_weights_keys.keys()):
+                                continue
+                        num_matches = sum(re.search(source_pattern, key) is not None for key in serialized_keys)
+                        self.assertTrue(
+                            num_matches > 0,
+                            f"`{source_pattern}` in `{conversion}` did not match any of the source keys. "
+                            "This indicates whether that the pattern is not properly written, or that it could not be reversed correctly",
+                        )
 
 
 # We will verify our results on an image of Pikachu
