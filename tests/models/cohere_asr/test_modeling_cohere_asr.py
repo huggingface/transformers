@@ -334,7 +334,7 @@ class CohereAsrIntegrationTest(unittest.TestCase):
                     " Yesterday it was 35 degrees in Barcelona, but today the temperature will go down to minus 20 degrees."
                 ],
                 ("cuda", None): [
-                    " Yesterday it was thirty-five degrees in Barcelona, but today the temperature will go down to minus twenty degrees."
+                    " Yesterday it was 35 degrees in Barcelona, but today the temperature will go down to minus 20 degrees."
                 ],
             }
         ).get_expectation()
@@ -372,7 +372,7 @@ class CohereAsrIntegrationTest(unittest.TestCase):
                     " Yesterday it was 35 degrees in Barcelona, but today the temperature will go down to minus 20 degrees."
                 ],
                 ("cuda", None): [
-                    " Yesterday it was thirty-five degrees in Barcelona, but today the temperature will go down to minus twenty degrees."
+                    " Yesterday it was 35 degrees in Barcelona, but today the temperature will go down to minus 20 degrees."
                 ],
             }
         ).get_expectation()
@@ -450,8 +450,8 @@ class CohereAsrIntegrationTest(unittest.TestCase):
                     " This week, I traveled to Chicago to deliver my final farewell address to the nation, following in the tradition of presidents before me. It was an opportunity to say thank you. Whether we've seen eye to eye or rarely agreed at all, my conversations with you, the American people, in living rooms and schools, at farms and on factory floors, at diners and on distant military outposts, all these conversations are what have kept me honest, kept me inspired, and kept me going. Every day I learned from you. You made me a better president and you made me a better man. Over the course of these eight years, I've seen the goodness, the resilience, and the hope of the American.",
                 ],
                 ("cuda", None): [
-                    " Yesterday it was thirty-five degrees in Barcelona, but today the temperature will go down to minus twenty degrees.",
-                    " This week, I traveled to Chicago to deliver my final farewell address to the nation, following in the tradition of presidents before me. It was an opportunity to say thank you. Whether we've seen eye to eye or rarely agreed at all, my conversations with you, the American people, in living rooms and schools, at farms and on factory floors, at diners and on distant military outposts, all these conversations are what have kept me honest, kept me inspired, and kept me going. Every day I learned from you. You made me a better president and you made me a better man. Over the course of these eight years, I've seen the goodness, the resilience, and the hope of the American.",
+                    " Yesterday it was 35 degrees in Barcelona, but today the temperature will go down to minus 20 degrees.",
+                    " This week, I traveled to Chicago to deliver my final farewell address to the nation, following in the tradition of presidents before me. It was an opportunity to say thank you. Whether we've seen eye to eye or rarely agreed at all, my conversations with you, the American people, in living rooms and schools, at farms and on factory floors, at diners and on distant military outposts, all these conversations are what have kept me honest, kept me inspired, and kept me going. Every day I learned from you. You made me a better president and you made me a better man. Over the course of these eight years, I've seen the goodness, the resilience, and the hope of the American."
                 ],
             }
         ).get_expectation()
