@@ -76,7 +76,7 @@ _MODEL_TO_CONVERSION_PATTERN = {
     "mllama": "llava",
     "qwen2_5_vl": "qwen2_vl",
     "sam3_tracker_video": "sam3_tracker",
-    "hyperclovax_vision_v2": "llava"
+    "hyperclovax_vision_v2": "llava",
     "pp_chart2table": "llava",
     "gemma3n_text": "qwen3_5_text",
     "qwen3_5_moe_text": "qwen3_5_text",
