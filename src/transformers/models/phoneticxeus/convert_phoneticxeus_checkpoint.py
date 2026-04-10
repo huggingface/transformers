@@ -20,7 +20,6 @@ Usage:
 """
 
 import argparse
-import json
 import re
 import sys
 
@@ -172,7 +171,9 @@ def main():
 
     # Create config
     config = PhoneticXeusConfig()
-    print(f"Config: hidden_size={config.hidden_size}, num_layers={config.num_hidden_layers}, vocab={config.vocab_size}")
+    print(
+        f"Config: hidden_size={config.hidden_size}, num_layers={config.num_hidden_layers}, vocab={config.vocab_size}"
+    )
 
     # Create model and load weights
     print("Creating HuggingFace model...")
@@ -189,7 +190,9 @@ def main():
         output = model(dummy_input)
         logits = output.logits
         print(f"Output shape: {logits.shape}")  # Should be (1, T, 428)
-        assert logits.shape[-1] == config.vocab_size, f"Expected vocab_size={config.vocab_size}, got {logits.shape[-1]}"
+        assert logits.shape[-1] == config.vocab_size, (
+            f"Expected vocab_size={config.vocab_size}, got {logits.shape[-1]}"
+        )
         print("Verification passed!")
 
     # Save

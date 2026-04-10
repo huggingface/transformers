@@ -575,7 +575,7 @@ class PhoneticXeusModel(PhoneticXeusPreTrainedModel):
         )
 
 
-_HIDDEN_STATES_START_POSITION = 2
+_HIDDEN_STATES_START_POSITION = 1
 
 
 class PhoneticXeusForCTC(PhoneticXeusPreTrainedModel):

@@ -30,7 +30,7 @@ from ..wav2vec2.modeling_wav2vec2 import Wav2Vec2FeatureEncoder
 from .configuration_phoneticxeus import PhoneticXeusConfig
 
 
-_HIDDEN_STATES_START_POSITION = 2
+_HIDDEN_STATES_START_POSITION = 1
 
 
 class PhoneticXeusFeatureEncoder(Wav2Vec2FeatureEncoder):
@@ -155,8 +155,12 @@ class PhoneticXeusConvolutionalSpatialGatingUnit(nn.Module):
         n_channels = config.cgmlp_linear_units // 2
         self.norm = nn.LayerNorm(n_channels)
         self.conv = nn.Conv1d(
-            n_channels, n_channels, config.cgmlp_conv_kernel,
-            stride=1, padding=(config.cgmlp_conv_kernel - 1) // 2, groups=n_channels,
+            n_channels,
+            n_channels,
+            config.cgmlp_conv_kernel,
+            stride=1,
+            padding=(config.cgmlp_conv_kernel - 1) // 2,
+            groups=n_channels,
         )
         self.linear = nn.Linear(n_channels, n_channels) if config.use_linear_after_conv else None
 
@@ -206,10 +210,13 @@ class PhoneticXeusEBranchformerEncoderLayer(GradientCheckpointingLayer):
         self.norm_mlp = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
 
         self.depthwise_conv_fusion = nn.Conv1d(
-            2 * config.hidden_size, 2 * config.hidden_size,
-            kernel_size=config.merge_conv_kernel, stride=1,
+            2 * config.hidden_size,
+            2 * config.hidden_size,
+            kernel_size=config.merge_conv_kernel,
+            stride=1,
             padding=(config.merge_conv_kernel - 1) // 2,
-            groups=2 * config.hidden_size, bias=True,
+            groups=2 * config.hidden_size,
+            bias=True,
         )
         self.merge_proj = nn.Linear(2 * config.hidden_size, config.hidden_size)
 
@@ -238,7 +245,9 @@ class PhoneticXeusEBranchformerEncoderLayer(GradientCheckpointingLayer):
     ) -> tuple[torch.Tensor, torch.Tensor | None]:
         if self.feed_forward_macaron is not None:
             residual = hidden_states
-            hidden_states = residual + self.ff_scale * self.dropout(self.feed_forward_macaron(self.norm_ff_macaron(hidden_states)))
+            hidden_states = residual + self.ff_scale * self.dropout(
+                self.feed_forward_macaron(self.norm_ff_macaron(hidden_states))
+            )
 
         x1 = self.norm_mha(hidden_states)
         x1, attn_weights = self.self_attn(x1, attention_mask=attention_mask, output_attentions=output_attentions)
@@ -313,7 +322,9 @@ class PhoneticXeusEncoder(nn.Module):
 
             if not skip_the_layer or synced_gpus:
                 layer_outputs = layer(
-                    hidden_states, attention_mask=attention_mask, output_attentions=output_attentions,
+                    hidden_states,
+                    attention_mask=attention_mask,
+                    output_attentions=output_attentions,
                 )
                 hidden_states = layer_outputs[0]
 
