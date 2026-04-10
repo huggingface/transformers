@@ -116,6 +116,45 @@ class KernelConfig(PushToHubMixin):
             }
         }
 
+    def apply_fusions(self, model):
+        """
+        For each n-to-1 entry (tuple key) in the kernel mapping, find the fusion patterns
+        registered on the model, fuse the corresponding modules in-place, then replace the
+        tuple key with the resolved kernel layer name so the rest of the pipeline is unchanged.
+        """
+        from ..module_fusion import fuse_modules
+
+        new_mapping = {}
+        for layer_name, kernel in self.kernel_mapping.items():
+            if not isinstance(layer_name, tuple):
+                new_mapping[layer_name] = kernel
+                continue
+
+            # Parse the target kernel layer name from the repo string (the part after ':')
+            repo_str = kernel if isinstance(kernel, str) else next(iter(kernel.values()))
+            if isinstance(repo_str, dict):
+                repo_str = next(iter(repo_str.values()))
+            kernel_layer_name = repo_str.split(":")[1] if ":" in repo_str else repo_str.split("/")[-1]
+
+            # Only fuse if a kernel is available for the current device
+            current_device = infer_device(model)
+            has_kernel_for_device = isinstance(kernel, str) or current_device in kernel
+            if not has_kernel_for_device:
+                continue
+
+            # Look up fusion patterns registered on the model class
+            fusion_patterns = getattr(model, "_kernel_fusion_patterns", {})
+            if kernel_layer_name not in fusion_patterns:
+                raise ValueError(
+                    f"{type(model).__name__} does not define fusion patterns for '{kernel_layer_name}'. "
+                    f'Add `_kernel_fusion_patterns = {{"{kernel_layer_name}": [...]}}` to the model class.'
+                )
+
+            fuse_modules(model, fusion_patterns[kernel_layer_name], kernel_layer_name)
+            new_mapping[kernel_layer_name] = kernel
+
+        self.kernel_mapping = new_mapping
+
     def store_registered_layer_names(self, model):
         for name, module in model.named_modules():
             if hasattr(module, "kernel_layer_name"):

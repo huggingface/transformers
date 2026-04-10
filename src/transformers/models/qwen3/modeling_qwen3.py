@@ -67,6 +67,7 @@ class Qwen3RMSNorm(nn.Module):
         return f"{tuple(self.weight.shape)}, eps={self.variance_epsilon}"
 
 
+@use_kernel_forward_from_hub("MLP")
 class Qwen3MLP(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -443,6 +444,9 @@ class Qwen3ForCausalLM(Qwen3PreTrainedModel, GenerationMixin):
     _tied_weights_keys = {"lm_head.weight": "model.embed_tokens.weight"}
     _tp_plan = {"lm_head": "colwise_gather_output"}
     _pp_plan = {"lm_head": (["hidden_states"], ["logits"])}
+    _kernel_fusion_patterns = {
+        "RMSNormMLP": ["model.layers.*.post_attention_layernorm", "model.layers.*.mlp"],
+    }
 
     def __init__(self, config):
         super().__init__(config)
