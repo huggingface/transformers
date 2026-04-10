@@ -15,15 +15,27 @@
 
 Self-contained, pure PyTorch, no external dependencies beyond torch.
 
-PolarQuant compresses KV cache vectors by:
-1. Rotating each `head_dim`-sized vector with a Walsh-Hadamard matrix, which
-   decorrelates the components and approximates a Gaussian distribution.
-2. Mapping each rotated component to its closest Lloyd-Max optimal centroid for
-   the unit Gaussian N(0, 1), which is provably MSE-optimal under that prior.
-3. Bit-packing the integer codes into dense uint8 tensors.
+PolarQuant compresses KV cache vectors in three steps:
 
-The per-vector L2 norm is stored separately in bfloat16, giving the backend
-roughly ``nbits + 16/head_dim`` bits per value on average.
+1. Per-channel z-score normalization: subtract the per-channel mean and divide
+   by the per-channel standard deviation across the batch of vectors being
+   quantized. This handles the heavy outliers and per-channel scale variance
+   that real attention K/V tensors typically exhibit (the same problem that
+   SmoothQuant, AWQ, and KIVI all address with per-channel handling).
+2. Walsh-Hadamard rotation: an orthogonal transform that decorrelates the
+   per-channel components. After step 1 the components are roughly per-channel
+   Gaussian; after the rotation each rotated coordinate is a linear combination
+   of unit-variance Gaussians, so the marginal of every output coordinate is
+   itself approximately ``N(0, 1)``.
+3. Lloyd-Max scalar quantization: each rotated coordinate is mapped to its
+   nearest centroid in a hardcoded Lloyd-Max codebook for ``N(0, 1)``. The
+   resulting integer codes are bit-packed into dense uint8 tensors.
+
+Per-channel ``mean`` and ``std`` are stored as ``bfloat16`` alongside the
+packed codes. They contribute a constant ``2 * head_dim * 2`` byte overhead
+per quantize call, independent of how many vectors are being compressed -
+unlike a per-vector L2-norm scheme whose overhead grows linearly with batch
+size.
 
 This module implements only the stateless quantize/dequantize primitives; the
 residual-buffer and update bookkeeping live in :class:`PolarQuantizedLayer` in
@@ -334,15 +346,18 @@ class PolarQTensor:
     Attributes:
         packed: uint8 tensor of shape ``(N, packed_bytes)`` holding the bit-packed
             Lloyd-Max indices for every ``head_dim``-length vector.
-        norms: bfloat16 tensor of shape ``(N,)`` with the per-vector L2 norm of
-            the pre-rotation input.
+        mean: bfloat16 tensor of shape ``(padded_dim,)`` with the per-channel
+            mean computed over the batch of vectors being quantized.
+        std: bfloat16 tensor of shape ``(padded_dim,)`` with the per-channel
+            standard deviation. Used to invert the z-score during dequantization.
         shape: The original tensor shape prior to flattening (used to restore the
             output to the expected ``(B, H, S, D)`` layout after dequantization).
         nbits: The bit-width used to encode ``packed``. One of ``{2, 3, 4, 5}``.
     """
 
     packed: torch.Tensor
-    norms: torch.Tensor
+    mean: torch.Tensor
+    std: torch.Tensor
     shape: tuple
     nbits: int
 
@@ -363,10 +378,16 @@ def polarquant_quantize(
 ) -> PolarQTensor:
     """Quantize a KV tensor to a :class:`PolarQTensor`.
 
-    The tensor is reshaped to ``(N, head_dim)`` (zero-padded to ``padded_dim`` if
-    ``head_dim`` is not a power of two), each row is L2-normalized and rotated
-    with ``hadamard``, and every rotated component is mapped to its nearest
-    Lloyd-Max centroid for ``N(0, 1)``. The integer codes are then bit-packed.
+    Pipeline:
+    1. Reshape to ``(N, head_dim)`` and zero-pad to ``padded_dim`` when
+       ``head_dim`` is not a power of two.
+    2. Per-channel z-score: subtract the per-channel mean, divide by the
+       per-channel standard deviation. Each channel becomes ``~ N(0, 1)``.
+    3. Hadamard rotation: linearly mixes the components so each rotated
+       coordinate has approximately the unit-Gaussian marginal that the
+       Lloyd-Max codebook expects.
+    4. Lloyd-Max nearest-centroid mapping per coordinate.
+    5. Bit-pack the integer codes.
 
     Args:
         tensor: Input float tensor whose last dimension equals ``head_dim``.
@@ -381,29 +402,42 @@ def polarquant_quantize(
             a space / time tradeoff during quantization.
 
     Returns:
-        A :class:`PolarQTensor` capturing the packed codes, per-vector norms, and
-        original shape.
+        A :class:`PolarQTensor` capturing the packed codes, per-channel mean and
+        standard deviation, and the original shape.
     """
     orig_shape = tuple(tensor.shape)
     device = tensor.device
 
     flat = tensor.reshape(-1, head_dim).to(torch.float32)
+    N = flat.shape[0]
 
     if padded_dim != head_dim:
-        pad = torch.zeros(flat.shape[0], padded_dim - head_dim, device=device, dtype=flat.dtype)
+        pad = torch.zeros(N, padded_dim - head_dim, device=device, dtype=flat.dtype)
         flat = torch.cat([flat, pad], dim=1)
 
-    scale = math.sqrt(padded_dim)
+    if N == 0:
+        return PolarQTensor(
+            packed=torch.empty((0, BitPacker.packed_bytes(padded_dim, nbits)), dtype=torch.uint8, device=device),
+            mean=torch.zeros(padded_dim, dtype=torch.bfloat16, device=device),
+            std=torch.ones(padded_dim, dtype=torch.bfloat16, device=device),
+            shape=orig_shape,
+            nbits=nbits,
+        )
 
-    # L2 normalize, rotate, rescale to unit variance so the post-rotation
-    # distribution matches the N(0, 1) prior that the Lloyd-Max centroids
-    # are optimized for.
-    norms = flat.norm(dim=1, keepdim=True).clamp(min=1e-10)
-    rotated = (flat / norms) @ hadamard * scale
+    # Per-channel z-score. ``unbiased=False`` so the std reduces to zero (and
+    # is then clamped to a small constant) when there is only one vector,
+    # rather than producing NaN.
+    mean = flat.mean(dim=0)
+    std = flat.std(dim=0, unbiased=False).clamp(min=1e-6)
+    normalized = (flat - mean) / std
+
+    # Hadamard rotation. With per-channel-Gaussian inputs and ``H`` having
+    # entries ``±1/sqrt(padded_dim)``, every rotated coordinate has variance 1
+    # by linearity, so the codebook prior matches without an extra rescale.
+    rotated = normalized @ hadamard
 
     # Nearest-centroid search in chunks to keep the temporary
-    # (N, padded_dim, 2^nbits) distance tensor bounded in memory.
-    N = rotated.shape[0]
+    # (chunk, padded_dim, 2^nbits) distance tensor bounded in memory.
     codes = torch.empty(N, padded_dim, dtype=torch.int64, device=device)
     ct = centroids.view(1, 1, -1).to(device=device, dtype=torch.float32)
     for i in range(0, N, chunk_size):
@@ -414,7 +448,8 @@ def polarquant_quantize(
 
     return PolarQTensor(
         packed=packed,
-        norms=norms.to(torch.bfloat16).squeeze(1),
+        mean=mean.to(torch.bfloat16),
+        std=std.to(torch.bfloat16),
         shape=orig_shape,
         nbits=nbits,
     )
@@ -430,25 +465,35 @@ def polarquant_dequantize(
 ) -> torch.Tensor:
     """Reconstruct a dense tensor from a :class:`PolarQTensor`.
 
+    The inverse pipeline is:
+    1. Unpack and look up Lloyd-Max centroids.
+    2. Apply the Hadamard matrix again. Walsh-Hadamard is symmetric and
+       orthogonal so the inverse equals the matrix itself.
+    3. Invert the per-channel z-score by multiplying by the stored std and
+       adding the stored mean.
+    4. Slice off the zero padding (if any) and reshape to the original shape.
+
     Args:
         qtensor: Packed representation produced by :func:`polarquant_quantize`.
         head_dim: Original head dimension.
         padded_dim: Padded dimension used during quantization.
         centroids: Lloyd-Max centroid lookup table.
-        hadamard: Hadamard matrix used during quantization (the inverse is
-            the transpose, but since Hadamard is symmetric it's equal to itself
-            so we reuse the same tensor).
+        hadamard: Hadamard matrix used during quantization.
         output_dtype: Dtype of the returned dense tensor.
 
     Returns:
         A dense tensor with shape equal to ``qtensor.shape`` and dtype
         ``output_dtype``.
     """
-    scale = math.sqrt(padded_dim)
+    if qtensor.packed.shape[0] == 0:
+        return torch.empty(qtensor.shape, dtype=output_dtype, device=qtensor.packed.device)
 
     codes = BitPacker.unpack(qtensor.packed, qtensor.nbits, padded_dim)
-    values = centroids[codes] / scale
-    values = (values @ hadamard) * qtensor.norms.to(torch.float32).unsqueeze(1)
+    values = centroids[codes]
+
+    # Inverse Hadamard (orthogonal symmetric matrix), then inverse z-score.
+    values = values @ hadamard
+    values = values * qtensor.std.to(torch.float32) + qtensor.mean.to(torch.float32)
 
     if padded_dim != head_dim:
         values = values[:, :head_dim]
