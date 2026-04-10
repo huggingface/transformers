@@ -66,19 +66,24 @@ _MODEL_TO_CONVERSION_PATTERN = {
     "got_ocr2": "llava",
     "shieldgemma2": "llava",
     "gemma3": "llava",
-    "internvl": "got_ocr2",
+    "internvl": "llava",
     "llava_next": "llava",
     "llava_next_video": "llava",
     "llava_onevision": "llava",
     "vipllava": "llava",
     "video_llava": "llava",
-    "mistral3": "got_ocr2",
+    "mistral3": "llava",
     "mllama": "llava",
     "qwen2_5_vl": "qwen2_vl",
     "sam3_tracker_video": "sam3_tracker",
-    "pp_chart2table": "got_ocr2",
+    "pp_chart2table": "llava",
     "gemma3n_text": "qwen3_5_text",
     "qwen3_5_moe_text": "qwen3_5_text",
+    "altclip_vision_model": "clip_vision_model",
+    "clipseg_vision_model": "clip_vision_model",
+    "chinese_clip_vision_model": "clip_vision_model",
+    "siglip2_vision_model": "clip_vision_model",
+    "siglip_vision_model": "clip_vision_model",
 }
 
 
@@ -87,15 +92,15 @@ def _build_checkpoint_conversion_mapping():
         "altclip": [
             WeightRenaming(source_patterns=r"layer\.", target_patterns="layers."),
         ],
-        # Delete prefix when used in VLMs. This should be in each VLM where needed because not all
-        # VLMs with CLIP/SigLip as backbone need to delete the prefix. If we add it in CLIP, it
-        # will be applied recursively in models when not needed (e.g. T5Gemma2, PI0)
-        "llava": [
-            WeightRenaming(source_patterns=r"vision_tower.vision_model", target_patterns=r"vision_tower"),
-            WeightRenaming(source_patterns=r"language_model.model", target_patterns="language_model"),
-            WeightRenaming(source_patterns=r"language_model.lm_head", target_patterns="lm_head"),
+        # Delete prefix when used in VLMs. Note that it doesn't add back the prefix when saving
+        # Regex isn't powerful enough to inject back `vision_model` between arbitrary strings
+        "clip_vision_model": [
+            WeightRenaming(
+                source_patterns=r"vision_model\.(.+)$",
+                target_patterns=r"(?!.*backbone\.)(?!.*model\.)(?!.*encoder\.)(?!.*tower\.)\1$",
+            ),
         ],
-        "got_ocr2": [
+        "llava": [
             WeightRenaming(source_patterns=r"language_model.model", target_patterns="language_model"),
             WeightRenaming(source_patterns=r"language_model.lm_head", target_patterns="lm_head"),
         ],
