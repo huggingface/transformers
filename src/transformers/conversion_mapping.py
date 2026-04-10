@@ -161,7 +161,7 @@ def _build_checkpoint_conversion_mapping():
         "qwen3_5_text": [
             # Note: the lookbehind on the target is to avoid replacing bigger matches when the model is a submodel of
             # the ForConditionalGeneration model
-            WeightRenaming(source_patterns=r"^model.language_model.", target_patterns=r"^model.(?!language_model.)"),
+            WeightRenaming(source_patterns=r"^model.language_model.", target_patterns=r"^model.(?!(?:language_model.|visual.))"),
         ],
         "sam3_tracker": [
             WeightRenaming(
