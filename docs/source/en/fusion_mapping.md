@@ -56,6 +56,8 @@ Fusion registration happens before the model is instantiated:
 
 This lets a fusion use a different runtime module structure while still loading from the original checkpoint format, and by default saving back to it as well.
 
+Note: With the current monkey-patching mechanism, fusion registration is class-level: one compatible module class maps to one fused replacement class.
+
 ## Current fusion families
 
 Currently, `fusion_config` supports one fusion family:

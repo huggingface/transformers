@@ -21,7 +21,10 @@ from unittest.mock import patch
 
 import torch.nn as nn
 
-from transformers import PretrainedConfig, conversion_mapping, fusion_mapping, monkey_patching
+import transformers.conversion_mapping as conversion_mapping
+import transformers.fusion_mapping as fusion_mapping
+import transformers.monkey_patching as monkey_patching
+from transformers import PretrainedConfig
 from transformers.conversion_mapping import get_checkpoint_conversion_mapping, register_checkpoint_conversion_mapping
 from transformers.core_model_loading import Conv3dToLinear, WeightConverter
 from transformers.fusion_mapping import register_fusion_patches
@@ -30,7 +33,9 @@ from transformers.monkey_patching import apply_patches, get_patch_mapping
 
 
 DUMMY_TRANSFORMERS_MODULE_NAME = "transformers.test_fusion_mapping_dummy"
-# `apply_patches()` only rewrites classes exposed from `transformers.*` modules.
+# `apply_patches()` scans `sys.modules` and only rewrites class attributes exposed
+# from `transformers.*` modules, so this dummy class must be reachable through a
+# fake `transformers` module instead of only through a local symbol.
 DUMMY_TRANSFORMERS_MODULE = types.ModuleType(DUMMY_TRANSFORMERS_MODULE_NAME)
 sys.modules[DUMMY_TRANSFORMERS_MODULE_NAME] = DUMMY_TRANSFORMERS_MODULE
 
@@ -86,7 +91,8 @@ class DummyFusionModel(PreTrainedModel):
 
     def __init__(self, config):
         super().__init__(config)
-        # Instantiate through the fake module so `apply_patches()` sees the replacement.
+        # Resolve the class through the fake `transformers.*` module so monkey patching
+        # can replace it before instantiation.
         self.patch_embed = DUMMY_TRANSFORMERS_MODULE.DummyPatchEmbedding(
             stride=config.vision_config.patch_embed_stride, bias=True
         )

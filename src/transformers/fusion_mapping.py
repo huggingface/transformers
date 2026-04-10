@@ -153,9 +153,11 @@ def _discover_fusable_modules(
     - scans `named_modules()` for candidate modules
     - optionally pre-filters them with `target_modules_patterns`
     - uses `is_fusable(...)` as the final structural check
-    - builds the patch mapping used by monkey patching
+    - builds the class-level patch mapping used by monkey patching
 
     Results are cached per `(fusion_name, cls)` to avoid repeated meta-initialization.
+    This matches the current class-level fusion behavior, where one compatible
+    module class maps to one fused replacement class.
     """
 
     cache = _FUSION_DISCOVERY_CACHE.setdefault(fusion_name, {})
@@ -167,13 +169,12 @@ def _discover_fusable_modules(
 
     seen_classes = set()
     patch_mapping = {}
+    target_module_pattern = re.compile("|".join(spec.target_modules_patterns)) if spec.target_modules_patterns else None
     for module_name, module in model.named_modules():
         module_cls = type(module)
         if module_cls in seen_classes:
             continue
-        if spec.target_modules_patterns and all(
-            re.search(pattern, module_name) is None for pattern in spec.target_modules_patterns
-        ):
+        if target_module_pattern is not None and target_module_pattern.search(module_name) is None:
             continue
         if not spec.is_fusable(module):
             continue
