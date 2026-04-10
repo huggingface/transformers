@@ -35,7 +35,11 @@ _CallableT = TypeVar("_CallableT", bound=Callable[..., Any])
 # New models should follow consistent naming instead of being added here!
 CONFIG_MAPPING_NAMES.update(
     {
+        "code_llama": "LlamaConfig",
         "EvollaModel": "EvollaConfig",
+        "gpt-sw3": "GPT2Config",
+        "granitevision": "LlavaNextConfig",
+        "mlcd": "MLCDVisionConfig",
         "vibevoice_acoustic_tokenizer_decoder": "VibeVoiceAcousticTokenizerDecoderConfig",
         "vibevoice_acoustic_tokenizer_encoder": "VibeVoiceAcousticTokenizerEncoderConfig",
     }
@@ -43,6 +47,7 @@ CONFIG_MAPPING_NAMES.update(
 
 SPECIAL_MODEL_TYPE_TO_MODULE_NAME.update(
     {
+        "granitevision": "llava_next",
         "vibevoice_acoustic_tokenizer_encoder": "vibevoice_acoustic_tokenizer",
         "vibevoice_acoustic_tokenizer_decoder": "vibevoice_acoustic_tokenizer",
     }

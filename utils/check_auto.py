@@ -65,13 +65,16 @@ def build_config_mapping_names() -> tuple[dict, dict]:
                 model_type = None
                 for stmt in node.body:
                     if isinstance(stmt, ast.Assign):
-                        model_types = [
+                        if model_types := [
                             stmt.value.value
                             for target in stmt.targets
                             if isinstance(target, ast.Name) and target.id == "model_type"
-                        ]
-                        if model_types:
+                        ]:
                             model_type = model_types[0]
+                            break
+                    elif isinstance(stmt, ast.AnnAssign):
+                        if stmt.target.id == "model_type":
+                            model_type = stmt.value.value
                             break
 
                 if not model_type:
