@@ -351,6 +351,8 @@ class NotebookProgressCallback(TrainerCallback):
             tt.write_line(values)
 
     def on_evaluate(self, args, state, control, metrics=None, **kwargs):
+        # Recompute first_column here since on_evaluate can be called before on_train_begin,
+        # where it is normally initialized.
         self.first_column = "Epoch" if args.eval_strategy == IntervalStrategy.EPOCH else "Step"
 
         values = {"Training Loss": "No log", "Validation Loss": "No log"}
@@ -374,6 +376,8 @@ class NotebookProgressCallback(TrainerCallback):
         _ = metrics.pop(f"{metric_key_prefix}_runtime", None)
         _ = metrics.pop(f"{metric_key_prefix}_samples_per_second", None)
         _ = metrics.pop(f"{metric_key_prefix}_steps_per_second", None)
+        _ = metrics.pop(f"{metric_key_prefix}_model_preparation_time", None)
+
         for k, v in metrics.items():
             splits = k.split("_")
             name = " ".join([part.capitalize() for part in splits[1:]])
