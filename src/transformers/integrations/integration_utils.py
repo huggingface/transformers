@@ -992,6 +992,7 @@ class TrackioCallback(TrainerCallback):
                 private=args.hub_private_repo,
                 bucket_id=args.trackio_bucket_id,
             )
+            # The Trackio space_id may have been set by an environment variable
             self._space_id = self._trackio.context_vars.current_space_id.get() or args.trackio_space_id
             # Add config parameters (run may have been created manually)
             self._trackio.config.update(combined_dict, allow_val_change=True)
