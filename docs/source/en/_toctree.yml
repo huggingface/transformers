@@ -1075,6 +1075,8 @@
         title: Parakeet
       - local: model_doc/pe_audio
         title: PE Audio
+      - local: model_doc/phoneticxeus
+        title: PhoneticXeus
       - local: model_doc/pop2piano
         title: Pop2Piano
       - local: model_doc/seamless_m4t
