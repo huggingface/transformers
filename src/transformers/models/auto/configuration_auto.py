@@ -14,39 +14,33 @@
 """Auto Config class."""
 
 import importlib
-import json
 import os
 import re
 from collections import OrderedDict
 from collections.abc import Callable, Iterator, KeysView, ValuesView
-from pathlib import Path
 from typing import Any, TypeVar
 
 from ...configuration_utils import PreTrainedConfig
 from ...dynamic_module_utils import get_class_from_dynamic_module, resolve_trust_remote_code
 from ...utils import CONFIG_NAME, logging
+from .auto_mappings import CONFIG_MAPPING_NAMES, SPECIAL_MODEL_TYPE_TO_MODULE_NAME
 
 
 logger = logging.get_logger(__name__)
 
 _CallableT = TypeVar("_CallableT", bound=Callable[..., Any])
 
-root_path = Path(__file__).resolve().parents[0]
-with open(f"{root_path}/auto_mappings.json", "r") as f:
-    all_mappings = json.load(f)
 
-# Non-standard models that can't be inferred from parsing the code
-MISSING_CONFIG_MAPPING_NAMES = OrderedDict(
-    [
-        ("EvollaModel", "EvollaConfig"),
-        ("vibevoice_acoustic_tokenizer_decoder", "VibeVoiceAcousticTokenizerDecoderConfig"),
-        ("vibevoice_acoustic_tokenizer_encoder", "VibeVoiceAcousticTokenizerEncoderConfig"),
-    ]
+# Add non-standard models that can't be inferred from parsing the code
+# New models should follow consistent naming instead of being added here!
+CONFIG_MAPPING_NAMES.update(
+    {
+        "EvollaModel": "EvollaConfig",
+        "vibevoice_acoustic_tokenizer_decoder": "VibeVoiceAcousticTokenizerDecoderConfig",
+        "vibevoice_acoustic_tokenizer_encoder": "VibeVoiceAcousticTokenizerEncoderConfig",
+    }
 )
 
-CONFIG_MAPPING_NAMES = OrderedDict({**MISSING_CONFIG_MAPPING_NAMES, **all_mappings["CONFIG_MAPPING_NAMES"]})
-
-SPECIAL_MODEL_TYPE_TO_MODULE_NAME = OrderedDict(**all_mappings["SPECIAL_MODEL_TYPE_TO_MODULE_NAME"])
 SPECIAL_MODEL_TYPE_TO_MODULE_NAME.update(
     {
         "vibevoice_acoustic_tokenizer_encoder": "vibevoice_acoustic_tokenizer",

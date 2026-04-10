@@ -14,10 +14,8 @@
 """AutoImageProcessor class."""
 
 import importlib
-import json
 import os
 from collections import OrderedDict
-from pathlib import Path
 from typing import TYPE_CHECKING
 
 # Build the list of all image processors
@@ -37,6 +35,7 @@ from ...utils import (
 )
 from ...utils.import_utils import requires
 from .auto_factory import _LazyAutoMapping
+from .auto_mappings import IMAGE_PROCESSOR_MAPPING_NAMES
 from .configuration_auto import (
     CONFIG_MAPPING_NAMES,
     AutoConfig,
@@ -62,11 +61,8 @@ if TYPE_CHECKING:
     # the transformers package is used with Microsoft's Pylance language server.
     IMAGE_PROCESSOR_MAPPING_NAMES: OrderedDict[str, dict[str, str | None]] = OrderedDict()
 else:
-    root_path = Path(__file__).resolve().parents[0]
-    with open(f"{root_path}/auto_mappings.json", "r") as f:
-        all_mappings = json.load(f)
-
-    IMAGE_PROCESSOR_MAPPING_NAMES = OrderedDict(
+    # Merge non-standard mapping names with auto-inferred `IMAGE_PROCESSOR_MAPPING_NAMES`
+    MISSING_IMAGE_PROCESSOR_MAPPING_NAMES = OrderedDict(
         [
             ("aimv2", {"torchvision": "CLIPImageProcessor", "pil": "CLIPImageProcessorPil"}),
             ("aimv2_vision_model", {"torchvision": "CLIPImageProcessor", "pil": "CLIPImageProcessorPil"}),
@@ -151,7 +147,7 @@ else:
         ]
     )
 
-    IMAGE_PROCESSOR_MAPPING_NAMES.update(**all_mappings["IMAGE_PROCESSOR_MAPPING_NAMES"])
+    IMAGE_PROCESSOR_MAPPING_NAMES.update(MISSING_IMAGE_PROCESSOR_MAPPING_NAMES)
 
 IMAGE_PROCESSOR_MAPPING = _LazyAutoMapping(CONFIG_MAPPING_NAMES, IMAGE_PROCESSOR_MAPPING_NAMES)
 
