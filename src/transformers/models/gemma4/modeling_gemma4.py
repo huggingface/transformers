@@ -1354,8 +1354,8 @@ class Gemma4TextDecoderLayer(GradientCheckpointingLayer):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        shared_kv_states: dict[int, tuple[torch.Tensor, torch.Tensor]],
         per_layer_input: torch.Tensor = None,
+        shared_kv_states: dict[int, tuple[torch.Tensor, torch.Tensor]] | None = None,
         position_embeddings: torch.Tensor = None,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
@@ -1437,7 +1437,7 @@ class Gemma4PreTrainedModel(PreTrainedModel):
     _can_compile_fullgraph = True
     _supports_attention_backend = True
     _no_split_modules = ["Gemma4TextDecoderLayer", "Gemma4VisionEncoderLayer", "Gemma4AudioLayer"]
-    _skip_keys_device_placement = ["past_key_values"]
+    _skip_keys_device_placement = ["past_key_values", "shared_kv_states"]
     input_modalities = ("image", "text", "video", "audio")
 
     @torch.no_grad()
@@ -1621,8 +1621,8 @@ class Gemma4TextModel(Gemma4PreTrainedModel):
 
             hidden_states = decoder_layer(
                 hidden_states,
-                shared_kv_states,
                 per_layer_input,
+                shared_kv_states=shared_kv_states,
                 position_embeddings=position_embeddings[self.config.layer_types[i]],
                 attention_mask=causal_mask_mapping[self.config.layer_types[i]],
                 position_ids=position_ids,
@@ -2389,6 +2389,7 @@ class Gemma4Model(Gemma4PreTrainedModel):
 )
 class Gemma4ForConditionalGeneration(Gemma4PreTrainedModel, GenerationMixin):
     _tied_weights_keys = {"lm_head.weight": "model.language_model.embed_tokens.weight"}
+    accepts_loss_kwargs = False
     base_model_prefix = "model"
 
     def __init__(self, config: Gemma4Config):
@@ -2482,25 +2483,7 @@ class Gemma4ForConditionalGeneration(Gemma4PreTrainedModel, GenerationMixin):
 
         loss = None
         if labels is not None:
-            # Upcast to float if we need to compute the loss to avoid potential precision issues
-            logits = logits.float()
-            shift_logits = logits[..., :-1, :]
-            shift_labels = labels[..., 1:]
-            if attention_mask is not None:
-                # we use the input attention mask to shift the logits and labels, because it is 2D.
-                # we also crop attn mask in case it is longer, which happens in PrefixTuning with peft
-                shift_attention_mask = attention_mask[:, -shift_logits.shape[1] :].to(logits.device)
-                shift_logits = shift_logits[shift_attention_mask.to(logits.device) != 0].contiguous()
-                shift_labels = shift_labels[shift_attention_mask.to(shift_labels.device) != 0].contiguous()
-            else:
-                shift_logits = shift_logits.contiguous()
-                shift_labels = shift_labels.contiguous()
-            # Flatten the tokens
-            loss_fct = nn.CrossEntropyLoss()
-
-            flat_logits = shift_logits.view(-1, self.config.get_text_config().vocab_size)
-            flat_labels = shift_labels.view(-1).to(shift_logits.device)
-            loss = loss_fct(flat_logits, flat_labels)
+            loss = self.loss_function(logits, labels, self.config.get_text_config().vocab_size, **kwargs)
 
         return Gemma4CausalLMOutputWithPast(
             loss=loss,
