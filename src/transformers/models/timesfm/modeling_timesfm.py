@@ -718,21 +718,33 @@ class TimesFmModelForPrediction(TimesFmPreTrainedModel):
         else:
             fcontext_len = forecast_context_len
 
-        device = past_values[0].device
+        is_tensor = isinstance(past_values, torch.Tensor) and past_values.ndim == 2
 
-        inputs = [ts[-fcontext_len:] for ts in past_values]
-        inp_min = torch.min(torch.stack([torch.min(ts) for ts in inputs]))
+        if is_tensor:
+            device = past_values.device
+            inputs = past_values[:, -fcontext_len:]
+            inp_min = inputs.min()
+        else:
+            device = past_values[0].device
+            inputs = [ts[-fcontext_len:] for ts in past_values]
+            inp_min = torch.min(torch.stack([torch.min(ts) for ts in inputs]))
 
         if window_size is not None:
-            new_inputs = []
-            new_freqs = []
-            for i, ts in enumerate(inputs):
-                new_inputs.extend(self._timesfm_moving_average(ts, window_size))
+            if is_tensor:
+                trend, residual = self._timesfm_moving_average(inputs, window_size)
+                inputs = torch.stack([trend, residual], dim=1).view(2 * inputs.shape[0], -1)
                 if freq is not None:
-                    new_freqs.extend([freq[i]] * 2)
-            inputs = new_inputs
-            if freq is not None:
-                freq = new_freqs
+                    freq = torch.repeat_interleave(freq, 2, dim=0)
+            else:
+                new_inputs = []
+                new_freqs = []
+                for i, ts in enumerate(inputs):
+                    new_inputs.extend(self._timesfm_moving_average(ts, window_size))
+                    if freq is not None:
+                        new_freqs.extend([freq[i]] * 2)
+                inputs = new_inputs
+                if freq is not None:
+                    freq = new_freqs
 
         if freq is None:
             logger.info("No frequency provided via `freq`. Default to high (0).")
@@ -811,15 +823,29 @@ class TimesFmModelForPrediction(TimesFmPreTrainedModel):
         )
 
     @staticmethod
-    def _timesfm_moving_average(arr: torch.Tensor, window_size: int) -> list[torch.Tensor]:
+    def _timesfm_moving_average(
+        arr: torch.Tensor, window_size: int
+    ) -> list[torch.Tensor] | tuple[torch.Tensor, torch.Tensor]:
         """Calculates the moving average using PyTorch's convolution function."""
+        # arr shape: (T,) or (B, T)
+        is_2d = arr.ndim == 2
+        if not is_2d:
+            arr = arr.unsqueeze(0)  # (1, T)
+
         # Pad with zeros to handle initial window positions
-        arr_padded = F.pad(arr, (window_size - 1, 0), "constant", 0)
+        arr_padded = F.pad(arr, (window_size - 1, 0), "constant", 0)  # (B, T + window_size - 1)
+
         # Create a convolution kernel
         kernel = torch.ones(window_size, dtype=arr.dtype, device=arr.device) / window_size
+        kernel = kernel.view(1, 1, -1)  # (1, 1, window_size)
+
         # Apply convolution to calculate the moving average
-        smoothed_arr = F.conv1d(arr_padded.view(1, 1, -1), kernel.view(1, 1, -1)).squeeze()
-        return [smoothed_arr, arr - smoothed_arr]
+        # F.conv1d expects (N, C_in, L_in)
+        smoothed_arr = F.conv1d(arr_padded.unsqueeze(1), kernel).squeeze(1)  # (B, T)
+
+        if not is_2d:
+            return [smoothed_arr.squeeze(0), (arr - smoothed_arr).squeeze(0)]
+        return smoothed_arr, arr - smoothed_arr
 
 
 __all__ = ["TimesFmModelForPrediction", "TimesFmPreTrainedModel", "TimesFmModel"]

@@ -891,15 +891,29 @@ class TimesFm2_5ModelForPrediction(TimesFm2_5PreTrainedModel):
         )
 
     @staticmethod
-    def _timesfm2_5_moving_average(arr: torch.Tensor, window_size: int) -> list[torch.Tensor]:
+    def _timesfm2_5_moving_average(
+        arr: torch.Tensor, window_size: int
+    ) -> list[torch.Tensor] | tuple[torch.Tensor, torch.Tensor]:
         """Calculates the moving average using PyTorch's convolution function."""
+        # arr shape: (T,) or (B, T)
+        is_2d = arr.ndim == 2
+        if not is_2d:
+            arr = arr.unsqueeze(0)  # (1, T)
+
         # Pad with zeros to handle initial window positions
-        arr_padded = F.pad(arr, (window_size - 1, 0), "constant", 0)
+        arr_padded = F.pad(arr, (window_size - 1, 0), "constant", 0)  # (B, T + window_size - 1)
+
         # Create a convolution kernel
         kernel = torch.ones(window_size, dtype=arr.dtype, device=arr.device) / window_size
+        kernel = kernel.view(1, 1, -1)  # (1, 1, window_size)
+
         # Apply convolution to calculate the moving average
-        smoothed_arr = F.conv1d(arr_padded.view(1, 1, -1), kernel.view(1, 1, -1)).squeeze()
-        return [smoothed_arr, arr - smoothed_arr]
+        # F.conv1d expects (N, C_in, L_in)
+        smoothed_arr = F.conv1d(arr_padded.unsqueeze(1), kernel).squeeze(1)  # (B, T)
+
+        if not is_2d:
+            return [smoothed_arr.squeeze(0), (arr - smoothed_arr).squeeze(0)]
+        return smoothed_arr, arr - smoothed_arr
 
     def _decode_and_project(
         self,
@@ -943,31 +957,6 @@ class TimesFm2_5ModelForPrediction(TimesFm2_5PreTrainedModel):
         quantile_spreads = quantile_spreads.to(point_forecast.device)
 
         return point_forecast, quantile_spreads, model_outputs
-
-    @staticmethod
-    def _timesfm_moving_average(
-        arr: torch.Tensor, window_size: int
-    ) -> list[torch.Tensor] | tuple[torch.Tensor, torch.Tensor]:
-        """Calculates the moving average using PyTorch's convolution function."""
-        # arr shape: (T,) or (B, T)
-        is_2d = arr.ndim == 2
-        if not is_2d:
-            arr = arr.unsqueeze(0)  # (1, T)
-
-        # Pad with zeros to handle initial window positions
-        arr_padded = F.pad(arr, (window_size - 1, 0), "constant", 0)  # (B, T + window_size - 1)
-
-        # Create a convolution kernel
-        kernel = torch.ones(window_size, dtype=arr.dtype, device=arr.device) / window_size
-        kernel = kernel.view(1, 1, -1)  # (1, 1, window_size)
-
-        # Apply convolution to calculate the moving average
-        # F.conv1d expects (N, C_in, L_in)
-        smoothed_arr = F.conv1d(arr_padded.unsqueeze(1), kernel).squeeze(1)  # (B, T)
-
-        if not is_2d:
-            return [smoothed_arr.squeeze(0), (arr - smoothed_arr).squeeze(0)]
-        return smoothed_arr, arr - smoothed_arr
 
 
 __all__ = ["TimesFm2_5ModelForPrediction", "TimesFm2_5PreTrainedModel", "TimesFm2_5Model"]
