@@ -53,7 +53,7 @@ class FusedModuleBase(nn.Module):
 
     def __repr__(self):
         names = ", ".join(self._fused_module_names)
-        return f"{self.__class__.__name__}(fused={names})"
+        return f"{self.__class__.__name__}(fused=({names}))"
 
 
 @functools.cache
