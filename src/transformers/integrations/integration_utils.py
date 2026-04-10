@@ -1040,20 +1040,22 @@ class TrackioCallback(TrainerCallback):
             return
         if self._space_id is None:
             return
-        new_space_id = args.trackio_static_space_id if isinstance(args.trackio_static_space_id, str) else None
+        self._static_space_id = (
+            args.trackio_static_space_id
+            if isinstance(args.trackio_static_space_id, str)
+            else self._space_repo_name_from_trackio_project(args.project, sdk="static")
+        )
         try:
-            new_static_id = self._trackio.freeze(
-                gradio_space_id,
-                args.project,
-                new_space_id=new_space_id,
+            self._trackio.freeze(
+                space_id=self._space_id,
+                project=args.project,
+                new_space_id=self._static_space_id,
                 private=args.hub_private_repo,
-                bucket_id=None,
             )
         except Exception as e:
             logger.warning(f"Trackio could not freeze the Gradio Space after training: {e}")
             return
-        self._static_space_id = new_static_id
-        self._point_model_card_at_static_space(model, gradio_space_id, new_static_id)
+        self._point_model_card_at_static_space(model, self._space_id, self._static_space_id)
 
     def on_log(self, args, state, control, model=None, logs=None, **kwargs):
         single_value_scalars = [
@@ -1092,21 +1094,21 @@ class TrackioCallback(TrainerCallback):
         if self._space_id is None:
             if args.trackio_static_space_id is False:
                 return
-            static_target = (
+            static_space_id = (
                 args.trackio_static_space_id
                 if isinstance(args.trackio_static_space_id, str)
                 else self._space_repo_name_from_trackio_project(args.project, sdk="static")
             )
-            self._space_id = self._trackio.sync(
+            self._static_space_id = self._trackio.sync(
                 project=current_project,
                 sdk="static",
-                space_id=static_target,
+                space_id=static_space_id,
                 private=args.hub_private_repo,
                 bucket_id=args.trackio_bucket_id,
                 force=True,
             )
-        space_id = self._static_space_id or self._space_id
-        space_url = self.SPACE_URL.format(space_id=space_id)
+        preferred_space_id = self._static_space_id or self._space_id
+        space_url = self.SPACE_URL.format(space_id=preferred_space_id)
 
         badge_markdown = (
             f'<a href="{space_url}" target="_blank"><img src="{self._TRACKIO_BADGE_IMG}" alt="Visualize in Trackio"'
