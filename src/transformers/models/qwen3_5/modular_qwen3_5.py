@@ -414,7 +414,7 @@ class Qwen3_5VisionModel(Qwen3VLVisionModel):
     _no_split_modules = ["Qwen3_5VisionBlock"]
 
     def get_cu_seqlens(self, grid_thw):
-        """Compute cumulative sequence lengths from vision grid info (pure, no model weights)."""
+        """Compute cumulative sequence lengths from vision grid info."""
         cu_seqlens = torch.repeat_interleave(grid_thw[:, 1] * grid_thw[:, 2], grid_thw[:, 0]).cumsum(
             dim=0, dtype=grid_thw.dtype if torch.jit.is_tracing() else torch.int32
         )
@@ -433,7 +433,8 @@ class Qwen3_5VisionModel(Qwen3VLVisionModel):
         grid_thw: torch.Tensor,
         cu_seqlens: torch.Tensor | None = None,
         rotary_pos_emb: torch.Tensor | None = None,
-        pos_embeds: torch.Tensor | None = None,
+        embed_indices: torch.Tensor | None = None,
+        bilinear_weights: torch.Tensor | None = None,
         **kwargs,
     ) -> torch.Tensor:
         """
@@ -446,17 +447,20 @@ class Qwen3_5VisionModel(Qwen3VLVisionModel):
                 Precomputed cumulative sequence lengths (from `get_cu_seqlens`).
             rotary_pos_emb (`torch.Tensor`, *optional*):
                 Precomputed rotary positional embeddings (from `rot_pos_emb`).
-            pos_embeds (`torch.Tensor`, *optional*):
-                Precomputed interpolated position embeddings (from `fast_pos_embed_interpolate`).
+            embed_indices (`torch.Tensor` of shape `(4, total_thw)`, *optional*):
+                Bilinear corner indices into the position embedding table (from `get_pos_embed_indices`).
+            bilinear_weights (`torch.Tensor` of shape `(4, total_thw)`, *optional*):
+                Interpolation weights for the four bilinear corners (from `get_pos_embed_indices`).
 
         Returns:
             `torch.Tensor`: hidden_states.
         """
         hidden_states = self.patch_embed(hidden_states)
 
-        if pos_embeds is None:
-            pos_embeds = self.fast_pos_embed_interpolate(grid_thw)
+        if embed_indices is None or bilinear_weights is None:
+            embed_indices, bilinear_weights = self.get_pos_embed_indices(grid_thw)
 
+        pos_embeds = (self.pos_embed(embed_indices) * bilinear_weights[:, :, None]).sum(0)
         hidden_states = hidden_states + pos_embeds
 
         if rotary_pos_emb is None:

@@ -763,7 +763,7 @@ class Glm4vMoeVisionModel(Glm4vMoePreTrainedModel):
     }
 
     def get_cu_seqlens(self, grid_thw):
-        """Compute cumulative sequence lengths from vision grid info (pure, no model weights)."""
+        """Compute cumulative sequence lengths from vision grid info."""
         cu_seqlens = torch.repeat_interleave(grid_thw[:, 1] * grid_thw[:, 2], grid_thw[:, 0]).cumsum(
             dim=0, dtype=grid_thw.dtype if torch.jit.is_tracing() else torch.int32
         )

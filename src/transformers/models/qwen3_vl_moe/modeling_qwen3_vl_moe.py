@@ -606,13 +606,6 @@ class Qwen3VLMoeVisionModel(Qwen3VLMoePreTrainedModel):
         "attentions": Qwen3VLMoeVisionAttention,
     }
 
-    def get_cu_seqlens(self, grid_thw):
-        """Compute cumulative sequence lengths from vision grid info (pure, no model weights)."""
-        cu_seqlens = torch.repeat_interleave(grid_thw[:, 1] * grid_thw[:, 2], grid_thw[:, 0]).cumsum(
-            dim=0, dtype=grid_thw.dtype if torch.jit.is_tracing() else torch.int32
-        )
-        return F.pad(cu_seqlens, (1, 0), value=0)
-
     def __init__(self, config, *inputs, **kwargs) -> None:
         super().__init__(config, *inputs, **kwargs)
         self.spatial_merge_size = config.spatial_merge_size
@@ -649,6 +642,71 @@ class Qwen3VLMoeVisionModel(Qwen3VLMoePreTrainedModel):
         self.gradient_checkpointing = False
 
         self.post_init()
+
+    def get_cu_seqlens(self, grid_thw):
+        """Compute cumulative sequence lengths from vision grid info."""
+        cu_seqlens = torch.repeat_interleave(grid_thw[:, 1] * grid_thw[:, 2], grid_thw[:, 0]).cumsum(
+            dim=0, dtype=grid_thw.dtype if torch.jit.is_tracing() else torch.int32
+        )
+        return F.pad(cu_seqlens, (1, 0), value=0)
+
+    def get_pos_embed_indices(self, grid_thw):
+        """Compute bilinear interpolation indices and weights for position embeddings.
+
+        Returns:
+            embed_indices: (4, total_thw) long — indices into the pos_embed table.
+            bilinear_weights: (4, total_thw) float — interpolation weights, same dtype as pos_embed.
+        """
+        N = self.num_grid_per_side
+        m = self.config.spatial_merge_size
+        device = self.pos_embed.weight.device
+        dtype = self.pos_embed.weight.dtype
+
+        idx_parts: list[list[torch.Tensor]] = [[] for _ in range(4)]
+        weight_parts: list[list[torch.Tensor]] = [[] for _ in range(4)]
+
+        for t, h, w in grid_thw.tolist():
+            t, h, w = int(t), int(h), int(w)
+
+            h_idxs = torch.linspace(0, N - 1, h, device=device)
+            w_idxs = torch.linspace(0, N - 1, w, device=device)
+
+            h_floor = h_idxs.int()
+            w_floor = w_idxs.int()
+            h_ceil = (h_floor + 1).clamp(max=N - 1)
+            w_ceil = (w_floor + 1).clamp(max=N - 1)
+
+            dh = h_idxs - h_floor
+            dw = w_idxs - w_floor
+
+            bh_f = h_floor * N
+            bh_c = h_ceil * N
+
+            raw_idx = [
+                (bh_f[:, None] + w_floor[None, :]).flatten(),
+                (bh_f[:, None] + w_ceil[None, :]).flatten(),
+                (bh_c[:, None] + w_floor[None, :]).flatten(),
+                (bh_c[:, None] + w_ceil[None, :]).flatten(),
+            ]
+            raw_w = [
+                ((1 - dh)[:, None] * (1 - dw)[None, :]).flatten(),
+                ((1 - dh)[:, None] * dw[None, :]).flatten(),
+                (dh[:, None] * (1 - dw)[None, :]).flatten(),
+                (dh[:, None] * dw[None, :]).flatten(),
+            ]
+
+            # Compose spatial merge reorder into the indices
+            h_idx = torch.arange(h, device=device).view(h // m, m)
+            w_idx = torch.arange(w, device=device).view(w // m, m)
+            reorder = (h_idx[:, :, None, None] * w + w_idx[None, None, :, :]).permute(0, 2, 1, 3).flatten().repeat(t)
+
+            for i in range(4):
+                idx_parts[i].append(raw_idx[i][reorder])
+                weight_parts[i].append(raw_w[i][reorder])
+
+        embed_indices = torch.stack([torch.cat(p) for p in idx_parts])
+        bilinear_weights = torch.stack([torch.cat(p) for p in weight_parts]).to(dtype)
+        return embed_indices, bilinear_weights
 
     def rot_pos_emb(self, grid_thw: torch.Tensor) -> torch.Tensor:
         merge_size = self.spatial_merge_size
@@ -690,69 +748,6 @@ class Qwen3VLMoeVisionModel(Qwen3VLMoePreTrainedModel):
         embeddings = embeddings.flatten(1)
         return embeddings
 
-    def fast_pos_embed_interpolate(self, grid_thw):
-        grid_thw_list = grid_thw.tolist()
-        grid_ts = [row[0] for row in grid_thw_list]
-        grid_hs = [row[1] for row in grid_thw_list]
-        grid_ws = [row[2] for row in grid_thw_list]
-        device = self.pos_embed.weight.device
-
-        idx_list = [[] for _ in range(4)]
-        weight_list = [[] for _ in range(4)]
-
-        for t, h, w in grid_thw_list:
-            h_idxs = torch.linspace(0, self.num_grid_per_side - 1, h)
-            w_idxs = torch.linspace(0, self.num_grid_per_side - 1, w)
-
-            h_idxs_floor = h_idxs.int()
-            w_idxs_floor = w_idxs.int()
-            h_idxs_ceil = (h_idxs.int() + 1).clip(max=self.num_grid_per_side - 1)
-            w_idxs_ceil = (w_idxs.int() + 1).clip(max=self.num_grid_per_side - 1)
-
-            dh = h_idxs - h_idxs_floor
-            dw = w_idxs - w_idxs_floor
-
-            base_h = h_idxs_floor * self.num_grid_per_side
-            base_h_ceil = h_idxs_ceil * self.num_grid_per_side
-
-            indices = [
-                (base_h[None].T + w_idxs_floor[None]).flatten(),
-                (base_h[None].T + w_idxs_ceil[None]).flatten(),
-                (base_h_ceil[None].T + w_idxs_floor[None]).flatten(),
-                (base_h_ceil[None].T + w_idxs_ceil[None]).flatten(),
-            ]
-
-            weights = [
-                ((1 - dh)[None].T * (1 - dw)[None]).flatten(),
-                ((1 - dh)[None].T * dw[None]).flatten(),
-                (dh[None].T * (1 - dw)[None]).flatten(),
-                (dh[None].T * dw[None]).flatten(),
-            ]
-
-            for i in range(4):
-                idx_list[i].extend(indices[i].tolist())
-                weight_list[i].extend(weights[i].tolist())
-
-        idx_tensor = torch.tensor(idx_list, dtype=torch.long, device=device)
-        weight_tensor = torch.tensor(weight_list, dtype=self.pos_embed.weight.dtype, device=device)
-        pos_embeds = self.pos_embed(idx_tensor).to(device) * weight_tensor[:, :, None]
-        patch_pos_embeds = pos_embeds[0] + pos_embeds[1] + pos_embeds[2] + pos_embeds[3]
-
-        patch_pos_embeds = patch_pos_embeds.split([h * w for h, w in zip(grid_hs, grid_ws)])
-
-        patch_pos_embeds_permute = []
-        merge_size = self.config.spatial_merge_size
-        for pos_embed, t, h, w in zip(patch_pos_embeds, grid_ts, grid_hs, grid_ws):
-            pos_embed = pos_embed.repeat(t, 1)
-            pos_embed = (
-                pos_embed.view(t, h // merge_size, merge_size, w // merge_size, merge_size, -1)
-                .permute(0, 1, 3, 2, 4, 5)
-                .flatten(0, 4)
-            )
-            patch_pos_embeds_permute.append(pos_embed)
-        patch_pos_embeds = torch.cat(patch_pos_embeds_permute)
-        return patch_pos_embeds
-
     @merge_with_config_defaults
     @capture_outputs
     def forward(
@@ -761,7 +756,8 @@ class Qwen3VLMoeVisionModel(Qwen3VLMoePreTrainedModel):
         grid_thw: torch.Tensor,
         cu_seqlens: torch.Tensor | None = None,
         rotary_pos_emb: torch.Tensor | None = None,
-        pos_embeds: torch.Tensor | None = None,
+        embed_indices: torch.Tensor | None = None,
+        bilinear_weights: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithDeepstackFeatures:
         """
@@ -774,17 +770,20 @@ class Qwen3VLMoeVisionModel(Qwen3VLMoePreTrainedModel):
                 Precomputed cumulative sequence lengths (from `get_cu_seqlens`).
             rotary_pos_emb (`torch.Tensor`, *optional*):
                 Precomputed rotary positional embeddings (from `rot_pos_emb`).
-            pos_embeds (`torch.Tensor`, *optional*):
-                Precomputed interpolated position embeddings (from `fast_pos_embed_interpolate`).
+            embed_indices (`torch.Tensor` of shape `(4, total_thw)`, *optional*):
+                Bilinear corner indices into the position embedding table (from `get_pos_embed_indices`).
+            bilinear_weights (`torch.Tensor` of shape `(4, total_thw)`, *optional*):
+                Interpolation weights for the four bilinear corners (from `get_pos_embed_indices`).
 
         Returns:
             `torch.Tensor`: hidden_states.
         """
         hidden_states = self.patch_embed(hidden_states)
 
-        if pos_embeds is None:
-            pos_embeds = self.fast_pos_embed_interpolate(grid_thw)
+        if embed_indices is None or bilinear_weights is None:
+            embed_indices, bilinear_weights = self.get_pos_embed_indices(grid_thw)
 
+        pos_embeds = (self.pos_embed(embed_indices) * bilinear_weights[:, :, None]).sum(0)
         hidden_states = hidden_states + pos_embeds
 
         if rotary_pos_emb is None:

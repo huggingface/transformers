@@ -314,7 +314,7 @@ def _precompute_vision_inputs(model: torch.nn.Module, inputs: dict[str, Any]) ->
 
     # Only precompute for models whose forward accepts optional precomputed params
     forward_params = set(inspect.signature(model.forward).parameters)
-    precompute_keys = {"rotary_pos_emb", "image_type_ids", "cu_seqlens", "pos_embeds"}
+    precompute_keys = {"rotary_pos_emb", "image_type_ids", "cu_seqlens", "embed_indices"}
     if not (precompute_keys & forward_params):
         return
 
@@ -334,9 +334,9 @@ def _precompute_vision_inputs(model: torch.nn.Module, inputs: dict[str, Any]) ->
     if hasattr(model, "get_window_index"):
         inputs["window_index"], inputs["cu_window_seqlens"] = model.get_window_index(grid_thw)
 
-    # fast_pos_embed_interpolate (loops over grid_thw)
-    if hasattr(model, "fast_pos_embed_interpolate"):
-        inputs["pos_embeds"] = model.fast_pos_embed_interpolate(grid_thw)
+    # get_pos_embed_indices (loops over grid_thw)
+    if hasattr(model, "get_pos_embed_indices"):
+        inputs["embed_indices"], inputs["bilinear_weights"] = model.get_pos_embed_indices(grid_thw)
 
 
 def _precompute_audio_inputs(model: torch.nn.Module, inputs: dict[str, Any]) -> None:
