@@ -991,17 +991,13 @@ class TrackioCallback(TrainerCallback):
                 peft_config = model.peft_config
                 combined_dict = {"peft_config": peft_config, **combined_dict}
 
-            bucket_id = None
-            if args.trackio_space_id is not None and args.trackio_bucket_id is not None:
-                bucket_id = args.trackio_bucket_id
-            
             self._trackio.init(
                 project=args.project,
                 name=args.run_name,
                 space_id=args.trackio_space_id,
                 resume="allow",
                 private=args.hub_private_repo,
-                bucket_id=bucket_id,
+                bucket_id=args.trackio_bucket_id,
             )
             self._space_id = self._trackio.context_vars.current_space_id.get() or args.trackio_space_id
             # Add config parameters (run may have been created manually)
