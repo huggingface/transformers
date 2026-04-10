@@ -25,10 +25,10 @@ from transformers.exporters.exporter_dynamo import DynamoConfig, DynamoExporter
 from transformers.exporters.exporter_executorch import ExecutorchConfig, ExecutorchExporter
 from transformers.exporters.exporter_onnx import OnnxConfig, OnnxExporter
 from transformers.exporters.utils import (
+    decompose_multimodal,
     decompose_prefill_decode,
-    decompose_vlm,
     get_leaf_tensors,
-    is_vlm,
+    is_multimodal,
 )
 from transformers.testing_utils import (
     require_executorch,
@@ -81,7 +81,7 @@ ONNX_DISABLE_OPTIMIZE_MODEL_CLASSES = {
 
 # Model classes skipped for generate export tests only.
 EXPORT_GENERATE_SKIP_MODEL_CLASSES = {
-    # These VLMs override generate() and delegate to an inner language model without ever calling
+    # These multi-modal models override generate() and delegate to an inner language model without ever calling
     # the top-level forward(), so decompose_prefill_decode can't capture prefill/decode inputs.
     # TODO: refactor these models to call the top-level forward() instead of using internal submodules
     "Blip2ForConditionalGeneration",
@@ -161,7 +161,7 @@ class ExportTesterMixin:
     - `_prepare_for_class(inputs_dict, model_class)` — adjusts inputs per model class.
 
     Tests are parameterised over `dynamic=True` / `dynamic=False` via `DYNAMIC_EXPORT_PARAMS`.
-    VLMs (detected by `is_vlm`) are automatically decomposed and each
+    Multi-modal models (detected by `is_multimodal`) are automatically decomposed and each
     submodule is tested independently.
     """
 
@@ -208,8 +208,8 @@ class ExportTesterMixin:
         except StopIteration:
             pass
 
-        if is_vlm(model):
-            return decompose_vlm(model, inputs_dict)
+        if is_multimodal(model):
+            return decompose_multimodal(model, inputs_dict)
         return {"model": (model, inputs_dict)}
 
     def _collect_eager_outputs(self, components):
@@ -330,14 +330,14 @@ class ExportGenerateTesterMixin:
       for ``model.generate()``.
 
     Each generative model is decomposed into prefill and decode components via
-    :func:`decompose_prefill_decode`.  VLMs additionally decompose the prefill
-    stage into individual submodules via :func:`decompose_vlm`.
+    :func:`decompose_prefill_decode`.  Multi-modal models additionally decompose the prefill
+    stage into individual submodules via :func:`decompose_multimodal`.
     """
 
     def _prepare_export_generate_model_and_inputs(self, model_class):
         """Decompose a generative model into exportable components.
 
-        For VLMs: decomposes the prefill stage into individual submodules plus the decode stage.
+        For multi-modal models: decomposes the prefill stage into individual submodules plus the decode stage.
         For decoder-only models: returns prefill and decode components.
 
         Returns:
@@ -353,9 +353,9 @@ class ExportGenerateTesterMixin:
         # create prefill/decode copies of the model
         stages = decompose_prefill_decode(model, inputs_dict)
 
-        if is_vlm(model):
+        if is_multimodal(model):
             prefill_model, prefill_inputs = stages["prefill"]
-            components = decompose_vlm(prefill_model, prefill_inputs)
+            components = decompose_multimodal(prefill_model, prefill_inputs)
             components["decode"] = stages["decode"]
             return components
 

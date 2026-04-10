@@ -69,18 +69,18 @@ Switch between runtimes by swapping the exporter class — nothing else changes.
 <hfoption id="Dynamo">
 
 ```python
-from transformers import AutoModelForCausalLM, AutoTokenizer
-from transformers.exporters.exporter_dynamo import DynamoExporter, DynamoConfig
+>>> from transformers import AutoModelForCausalLM, AutoTokenizer
+>>> from transformers.exporters.exporter_dynamo import DynamoExporter, DynamoConfig
 
-model = AutoModelForCausalLM.from_pretrained("Qwen/Qwen3-0.6B").eval()
-tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen3-0.6B")
-inputs = dict(tokenizer("Hello, world!", return_tensors="pt"))
+>>> model = AutoModelForCausalLM.from_pretrained("Qwen/Qwen3-0.6B").eval()
+>>> tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen3-0.6B")
+>>> inputs = dict(tokenizer("Hello, world!", return_tensors="pt"))
 
-exporter = DynamoExporter(export_config=DynamoConfig(dynamic=True))
-exported = exporter.export(model, inputs)
+>>> exporter = DynamoExporter(export_config=DynamoConfig(dynamic=True))
+>>> exported = exporter.export(model, inputs)
 
-# run the exported graph directly
-outputs = exported.module()(**inputs)
+>>> # run the exported graph directly
+>>> outputs = exported.module()(**inputs)
 ```
 
 </hfoption>
@@ -118,7 +118,7 @@ model = AutoModelForCausalLM.from_pretrained("Qwen/Qwen3-0.6B").eval()
 tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen3-0.6B")
 inputs = dict(tokenizer("Hello, world!", return_tensors="pt"))
 
-exporter = ExecutorchExporter(export_config=ExecutorchConfig(backend="xnnpack"))
+exporter = ExecutorchExporter(export_config=ExecutorchConfig(backend="xnnpack", dynamic=True))
 et_program = exporter.export(model, inputs)
 
 # save for on-device deployment
@@ -138,35 +138,50 @@ runtime without retracing.
 <hfoption id="Dynamo">
 
 ```python
+>>> from transformers import AutoModelForCausalLM, AutoTokenizer
 >>> from transformers.exporters.exporter_dynamo import DynamoExporter, DynamoConfig
+
+>>> model = AutoModelForCausalLM.from_pretrained("Qwen/Qwen3-0.6B").eval()
+>>> tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen3-0.6B")
+>>> inputs = dict(tokenizer(["Hello, world!", "Hi"], padding=True, return_tensors="pt"))
 
 >>> exporter = DynamoExporter(export_config=DynamoConfig(dynamic=True))
 >>> exported = exporter.export(model, inputs)
 
->>> # works with any sequence length
->>> exported.module()(**dict(tokenizer("Hi", return_tensors="pt")))
->>> exported.module()(**dict(tokenizer("A much longer input sequence.", return_tensors="pt")))
+>>> # works with any batch size or sequence length
+>>> outputs = exported.module()(**dict(tokenizer("A single input", return_tensors="pt")))
+>>> outputs = exported.module()(**dict(tokenizer(["One", "Two", "Three"], padding=True, return_tensors="pt")))
 ```
 
 </hfoption>
 <hfoption id="ONNX">
 
 ```python
+from transformers import AutoModelForCausalLM, AutoTokenizer
 from transformers.exporters.exporter_onnx import OnnxExporter, OnnxConfig
+
+model = AutoModelForCausalLM.from_pretrained("Qwen/Qwen3-0.6B").eval()
+tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen3-0.6B")
+inputs = dict(tokenizer(["Hello, world!", "Hi"], padding=True, return_tensors="pt"))
 
 exporter = OnnxExporter(export_config=OnnxConfig(dynamic=True))
 onnx_program = exporter.export(model, inputs)
 
-# works with any sequence length
-onnx_program(**dict(tokenizer("Hi", return_tensors="pt")))
-onnx_program(**dict(tokenizer("A much longer input sequence.", return_tensors="pt")))
+# works with any batch size or sequence length
+onnx_program(**dict(tokenizer("A single input", return_tensors="pt")))
+onnx_program(**dict(tokenizer(["One", "Two", "Three"], padding=True, return_tensors="pt")))
 ```
 
 </hfoption>
 <hfoption id="ExecuTorch">
 
 ```python
+from transformers import AutoModelForCausalLM, AutoTokenizer
 from transformers.exporters.exporter_executorch import ExecutorchExporter, ExecutorchConfig
+
+model = AutoModelForCausalLM.from_pretrained("Qwen/Qwen3-0.6B").eval()
+tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen3-0.6B")
+inputs = dict(tokenizer(["Hello, world!", "Hi"], padding=True, return_tensors="pt"))
 
 exporter = ExecutorchExporter(export_config=ExecutorchConfig(backend="xnnpack", dynamic=True))
 et_program = exporter.export(model, inputs)
@@ -184,13 +199,19 @@ This is passed directly to `torch.export.export` — see the
 
 ```python
 >>> import torch
+>>> from transformers import AutoModelForCausalLM, AutoTokenizer
 >>> from transformers.exporters.exporter_dynamo import DynamoExporter, DynamoConfig
+
+>>> model = AutoModelForCausalLM.from_pretrained("Qwen/Qwen3-0.6B").eval()
+>>> tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen3-0.6B")
+>>> inputs = dict(tokenizer(["Hello, world!", "Hi"], padding=True, return_tensors="pt"))
 
 >>> batch = torch.export.Dim("batch", min=1, max=32)
 >>> seq = torch.export.Dim("seq", min=1, max=2048)
 
 >>> exporter = DynamoExporter(export_config=DynamoConfig(
-...     dynamic_shapes={"input_ids": {0: batch, 1: seq}, "attention_mask": {0: batch, 1: seq}}
+...     dynamic_shapes={"input_ids": {0: batch, 1: seq}, "attention_mask": {0: batch, 1: seq}},
+...     prefer_deferred_runtime_asserts_over_guards=True,
 ... ))
 >>> exported = exporter.export(model, inputs)
 ```
@@ -200,13 +221,19 @@ This is passed directly to `torch.export.export` — see the
 
 ```python
 import torch
+from transformers import AutoModelForCausalLM, AutoTokenizer
 from transformers.exporters.exporter_onnx import OnnxExporter, OnnxConfig
+
+model = AutoModelForCausalLM.from_pretrained("Qwen/Qwen3-0.6B").eval()
+tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen3-0.6B")
+inputs = dict(tokenizer(["Hello, world!", "Hi"], padding=True, return_tensors="pt"))
 
 batch = torch.export.Dim("batch", min=1, max=32)
 seq = torch.export.Dim("seq", min=1, max=2048)
 
 exporter = OnnxExporter(export_config=OnnxConfig(
-    dynamic_shapes={"input_ids": {0: batch, 1: seq}, "attention_mask": {0: batch, 1: seq}}
+    dynamic_shapes={"input_ids": {0: batch, 1: seq}, "attention_mask": {0: batch, 1: seq}},
+    prefer_deferred_runtime_asserts_over_guards=True,
 ))
 onnx_program = exporter.export(model, inputs)
 ```
@@ -216,14 +243,20 @@ onnx_program = exporter.export(model, inputs)
 
 ```python
 import torch
+from transformers import AutoModelForCausalLM, AutoTokenizer
 from transformers.exporters.exporter_executorch import ExecutorchExporter, ExecutorchConfig
+
+model = AutoModelForCausalLM.from_pretrained("Qwen/Qwen3-0.6B").eval()
+tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen3-0.6B")
+inputs = dict(tokenizer(["Hello, world!", "Hi"], padding=True, return_tensors="pt"))
 
 batch = torch.export.Dim("batch", min=1, max=32)
 seq = torch.export.Dim("seq", min=1, max=2048)
 
 exporter = ExecutorchExporter(export_config=ExecutorchConfig(
     backend="xnnpack",
-    dynamic_shapes={"input_ids": {0: batch, 1: seq}, "attention_mask": {0: batch, 1: seq}}
+    dynamic_shapes={"input_ids": {0: batch, 1: seq}, "attention_mask": {0: batch, 1: seq}},
+    prefer_deferred_runtime_asserts_over_guards=True,
 ))
 et_program = exporter.export(model, inputs)
 ```
@@ -300,32 +333,35 @@ for name, (stage_model, stage_inputs) in stages.items():
 </hfoption>
 </hfoptions>
 
-## Vision-language models (VLMs)
+## Multi-modal generative models
 
-VLMs are exported as separate components — vision encoder, projector, language model — each as
-an independent graph. [`decompose_vlm`] detects VLM submodules automatically and captures their
-inputs via a single forward pass with hooks.
+Multi-modal models (vision-language, audio-language, etc.) are exported as separate components —
+encoder, projector, language model — each as an independent graph. [`decompose_multimodal`] detects
+multi-modal submodules automatically and captures their inputs via a single forward pass with hooks.
 
-For generative VLMs, first decompose into prefill/decode, then decompose the prefill stage
-into its submodules. The decode stage stays as a single graph.
+For generative multi-modal models, first decompose into prefill/decode, then decompose the prefill
+stage into its submodules. The decode stage stays as a single graph.
 
 <hfoptions id="multicomponent">
 <hfoption id="Dynamo">
 
 ```python
->>> from transformers import AutoModelForVision2Seq, AutoProcessor
+>>> from transformers import AutoModelForImageTextToText, AutoProcessor
 >>> from transformers.exporters.exporter_dynamo import DynamoExporter, DynamoConfig
->>> from transformers.exporters.utils import decompose_vlm, decompose_prefill_decode
+>>> from transformers.exporters.utils import decompose_multimodal, decompose_prefill_decode
 
->>> model = AutoModelForVision2Seq.from_pretrained("Qwen/Qwen2-VL-2B-Instruct").eval()
+>>> model = AutoModelForImageTextToText.from_pretrained("Qwen/Qwen2-VL-2B-Instruct").eval()
 >>> processor = AutoProcessor.from_pretrained("Qwen/Qwen2-VL-2B-Instruct")
+>>> messages = [{"role": "user", "content": [{"type": "image", "url": "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg"}, {"type": "text", "text": "Describe this image."}]}]
+>>> text = processor.apply_chat_template(messages, add_generation_prompt=True, tokenize=False)
+>>> inputs = processor(text=text, images=messages[0]["content"][0]["url"], return_tensors="pt").to(model.device)
 
 >>> # step 1: split into prefill and decode stages
 >>> stages = decompose_prefill_decode(model, inputs)
 >>> prefill_model, prefill_inputs = stages["prefill"]
 
 >>> # step 2: decompose the prefill into vision encoder, projector, language model
->>> components = decompose_vlm(prefill_model, prefill_inputs)
+>>> components = decompose_multimodal(prefill_model, prefill_inputs)
 >>> components["decode"] = stages["decode"]
 
 >>> exporter = DynamoExporter(export_config=DynamoConfig(dynamic=True))
@@ -337,19 +373,22 @@ into its submodules. The decode stage stays as a single graph.
 <hfoption id="ONNX">
 
 ```python
-from transformers import AutoModelForVision2Seq, AutoProcessor
+from transformers import AutoModelForImageTextToText, AutoProcessor
 from transformers.exporters.exporter_onnx import OnnxExporter, OnnxConfig
-from transformers.exporters.utils import decompose_vlm, decompose_prefill_decode
+from transformers.exporters.utils import decompose_multimodal, decompose_prefill_decode
 
-model = AutoModelForVision2Seq.from_pretrained("Qwen/Qwen2-VL-2B-Instruct").eval()
+model = AutoModelForImageTextToText.from_pretrained("Qwen/Qwen2-VL-2B-Instruct").eval()
 processor = AutoProcessor.from_pretrained("Qwen/Qwen2-VL-2B-Instruct")
+messages = [{"role": "user", "content": [{"type": "image", "url": "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg"}, {"type": "text", "text": "Describe this image."}]}]
+text = processor.apply_chat_template(messages, add_generation_prompt=True, tokenize=False)
+inputs = processor(text=text, images=messages[0]["content"][0]["url"], return_tensors="pt").to(model.device)
 
 # step 1: split into prefill and decode stages
 stages = decompose_prefill_decode(model, inputs)
 prefill_model, prefill_inputs = stages["prefill"]
 
 # step 2: decompose the prefill into vision encoder, projector, language model
-components = decompose_vlm(prefill_model, prefill_inputs)
+components = decompose_multimodal(prefill_model, prefill_inputs)
 components["decode"] = stages["decode"]
 
 exporter = OnnxExporter(export_config=OnnxConfig(dynamic=True))
@@ -361,19 +400,22 @@ for name, (submodel, subinputs) in components.items():
 <hfoption id="ExecuTorch">
 
 ```python
-from transformers import AutoModelForVision2Seq, AutoProcessor
+from transformers import AutoModelForImageTextToText, AutoProcessor
 from transformers.exporters.exporter_executorch import ExecutorchExporter, ExecutorchConfig
-from transformers.exporters.utils import decompose_vlm, decompose_prefill_decode
+from transformers.exporters.utils import decompose_multimodal, decompose_prefill_decode
 
-model = AutoModelForVision2Seq.from_pretrained("Qwen/Qwen2-VL-2B-Instruct").eval()
+model = AutoModelForImageTextToText.from_pretrained("Qwen/Qwen2-VL-2B-Instruct").eval()
 processor = AutoProcessor.from_pretrained("Qwen/Qwen2-VL-2B-Instruct")
+messages = [{"role": "user", "content": [{"type": "image", "url": "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg"}, {"type": "text", "text": "Describe this image."}]}]
+text = processor.apply_chat_template(messages, add_generation_prompt=True, tokenize=False)
+inputs = processor(text=text, images=messages[0]["content"][0]["url"], return_tensors="pt").to(model.device)
 
 # step 1: split into prefill and decode stages
 stages = decompose_prefill_decode(model, inputs)
 prefill_model, prefill_inputs = stages["prefill"]
 
 # step 2: decompose the prefill into vision encoder, projector, language model
-components = decompose_vlm(prefill_model, prefill_inputs)
+components = decompose_multimodal(prefill_model, prefill_inputs)
 components["decode"] = stages["decode"]
 
 exporter = ExecutorchExporter(export_config=ExecutorchConfig(backend="xnnpack", dynamic=True))
@@ -384,8 +426,9 @@ for name, (submodel, subinputs) in components.items():
 </hfoption>
 </hfoptions>
 
-Supported submodule attribute names are listed in [`~transformers.exporters.utils._VLM_SUBMODULE_NAMES`].
-If a new architecture uses a different attribute name, add it to that tuple.
+Supported submodule attribute names (encoders, projectors, language models) are listed in
+[`~transformers.exporters.utils._MULTIMODAL_SUBMODULE_NAMES`]. If a new architecture uses a different
+attribute name, add it to that tuple.
 
 <Tip warning={true}>
 
@@ -424,6 +467,6 @@ the generation loop. We are actively working to reduce the glue required between
 
 [[autodoc]] transformers.exporters.utils.decompose_prefill_decode
 
-[[autodoc]] transformers.exporters.utils.decompose_vlm
+[[autodoc]] transformers.exporters.utils.decompose_multimodal
 
-[[autodoc]] transformers.exporters.utils.is_vlm
+[[autodoc]] transformers.exporters.utils.is_multimodal

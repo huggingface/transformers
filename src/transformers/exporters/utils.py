@@ -22,8 +22,8 @@ Backend-agnostic helpers used by Dynamo, ONNX, and ExecuTorch exporters:
   and patch non-exportable module behaviours before any export.
 - `decompose_prefill_decode`: run `model.generate()` and capture the forward kwargs
   for the prefill and decode steps.
-- `decompose_vlm`: capture inputs to every known VLM submodule (vision tower,
-  projector, language model, ...) via a single forward pass, returning one
+- `decompose_multimodal`: capture inputs to every known multi-modal submodule (vision
+  tower, projector, language model, ...) via a single forward pass, returning one
   `{name: (module, inputs)}` entry per component for independent export.
 """
 
@@ -241,14 +241,14 @@ def prepare_for_export(
     return model, inputs
 
 
-# ── VLM decomposition ────────────────────────────────────────────────────────
-# Split VLMs into independently exportable submodules (vision encoder, projector,
-# language model) by capturing each submodule's forward inputs during a single pass.
+# ── Multi-modal decomposition ─────────────────────────────────────────────────
+# Split multi-modal models into independently exportable submodules (vision encoder,
+# projector, language model) by capturing each submodule's forward inputs during a single pass.
 
-# Well-known submodule attribute names for VLM architectures.
-_VLM_LM_NAMES = ("language_model", "text_model", "lm_head")
-_VLM_PROJECTOR_NAMES = ("multi_modal_projector", "connector", "embed_vision", "embed_audio")
-_VLM_ENCODER_NAMES = (
+# Well-known submodule attribute names for multi-modal architectures.
+_MULTIMODAL_LM_NAMES = ("language_model", "text_model", "lm_head")
+_MULTIMODAL_PROJECTOR_NAMES = ("multi_modal_projector", "connector", "embed_vision", "embed_audio")
+_MULTIMODAL_ENCODER_NAMES = (
     "vision_encoder",
     "image_encoder",
     "audio_encoder",
@@ -257,35 +257,35 @@ _VLM_ENCODER_NAMES = (
     "audio_tower",
     "visual",
 )
-_VLM_SUBMODULE_NAMES = _VLM_ENCODER_NAMES + _VLM_PROJECTOR_NAMES + _VLM_LM_NAMES
+_MULTIMODAL_SUBMODULE_NAMES = _MULTIMODAL_ENCODER_NAMES + _MULTIMODAL_PROJECTOR_NAMES + _MULTIMODAL_LM_NAMES
 
 
-def _find_vlm_submodules(model: PreTrainedModel) -> dict[str, torch.nn.Module]:
-    """Return `{attr_name: module}` for all known VLM submodule names found on the model.
+def _find_multimodal_submodules(model: PreTrainedModel) -> dict[str, torch.nn.Module]:
+    """Return `{attr_name: module}` for all known multi-modal submodule names found on the model.
 
     Checks `model` first, then `model.model` (common wrapper pattern).
     Only returns results when at least one modal encoder AND one language model are
-    found — otherwise the model is not a VLM and should be exported as a single unit.
+    found — otherwise the model is not multi-modal and should be exported as a single unit.
     """
     found: dict[str, torch.nn.Module] = {}
     for root in (model, getattr(model, "model", None)):
         if root is None:
             continue
-        for name in _VLM_SUBMODULE_NAMES:
+        for name in _MULTIMODAL_SUBMODULE_NAMES:
             if name not in found and getattr(root, name, None) is not None:
                 found[name] = getattr(root, name)
 
-    has_encoder = any(name in found for name in _VLM_ENCODER_NAMES)
-    has_lm = any(name in found for name in _VLM_LM_NAMES)
+    has_encoder = any(name in found for name in _MULTIMODAL_ENCODER_NAMES)
+    has_lm = any(name in found for name in _MULTIMODAL_LM_NAMES)
     if not (has_encoder and has_lm):
         return {}
 
     return found
 
 
-def is_vlm(model: PreTrainedModel) -> bool:
-    """Returns `True` if the model is a VLM with modal encoders and a language model."""
-    return bool(_find_vlm_submodules(model))
+def is_multimodal(model: PreTrainedModel) -> bool:
+    """Returns `True` if the model is multi-modal with modal encoders and a language model."""
+    return bool(_find_multimodal_submodules(model))
 
 
 def _precompute_vision_inputs(model: torch.nn.Module, inputs: dict[str, Any]) -> None:
@@ -403,7 +403,7 @@ def decompose_prefill_decode(
     """Run `model.generate()` for 2 tokens and capture prefill and decode inputs.
 
     Reuses the full generation machinery so every architecture (decoder-only, SSM,
-    encoder-decoder, VLM, …) gets correct inputs without reimplementing the loop.
+    encoder-decoder, multi-modal, …) gets correct inputs without reimplementing the loop.
 
     Returns:
         `dict[str, tuple[torch.nn.Module, dict]]`:
@@ -425,30 +425,30 @@ def decompose_prefill_decode(
     }
 
 
-def decompose_vlm(model: PreTrainedModel, inputs: dict[str, Any]) -> dict[str, tuple[torch.nn.Module, dict]]:
-    """Capture inputs to each VLM submodule via a single forward pass.
+def decompose_multimodal(model: PreTrainedModel, inputs: dict[str, Any]) -> dict[str, tuple[torch.nn.Module, dict]]:
+    """Capture inputs to each multi-modal submodule via a single forward pass.
 
-    Detects all known VLM submodules by attribute name (vision tower, projector,
+    Detects all known multi-modal submodules by attribute name (vision tower, projector,
     language model, lm_head, …) and captures their forward kwargs during one
     `model(**inputs)` call.
 
     Each submodule is returned as a separate `(name, (module, inputs))` entry for
-    independent export. The token-merge step (e.g. `masked_scatter` for VLMs) is
-    intentionally left outside the exported graphs — it is the caller's responsibility
+    independent export. The token-merge step (e.g. `masked_scatter` for multi-modal models)
+    is intentionally left outside the exported graphs — it is the caller's responsibility
     to assemble `inputs_embeds` from the encoder outputs before running the decoder.
 
     Returns:
         `dict[str, tuple[torch.nn.Module, dict]]`: One `name: (module, inputs)`
-        entry per detected submodule, in the order they appear in `_VLM_SUBMODULE_NAMES`.
+        entry per detected submodule, in the order they appear in `_MULTIMODAL_SUBMODULE_NAMES`.
 
     Raises:
-        `ValueError`: if no known VLM submodules are found on the model.
+        `ValueError`: if no known multi-modal submodules are found on the model.
     """
-    submodules = _find_vlm_submodules(model)
+    submodules = _find_multimodal_submodules(model)
     if not submodules:
         raise ValueError(
-            f"decompose_vlm found no VLM submodules on {type(model).__name__}. "
-            f"Expected one or more of: {_VLM_SUBMODULE_NAMES}."
+            f"decompose_multimodal found no multi-modal submodules on {type(model).__name__}. "
+            f"Expected one or more of: {_MULTIMODAL_SUBMODULE_NAMES}."
         )
 
     try:
@@ -459,7 +459,7 @@ def decompose_vlm(model: PreTrainedModel, inputs: dict[str, Any]) -> dict[str, t
             model(**copy.deepcopy(inputs))
     except Exception as e:
         raise RuntimeError(
-            f"decompose_vlm failed for {type(model).__name__}. Inputs passed: {list(inputs.keys())}."
+            f"decompose_multimodal failed for {type(model).__name__}. Inputs passed: {list(inputs.keys())}."
         ) from e
 
     return {
