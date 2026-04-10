@@ -19,7 +19,6 @@ import os
 import sys
 import threading
 from collections.abc import Callable
-from datetime import datetime
 from logging import (
     CRITICAL,  # NOQA
     DEBUG,
@@ -100,8 +99,10 @@ def _configure_library_root_logger() -> None:
         library_root_logger = _get_library_root_logger()
         library_root_logger.addHandler(_default_handler)
         library_root_logger.setLevel(_get_default_logging_level())
-        # Always show lib when logging in non-verbose mode
-        logging_format = "[transformers] %(message)s"
+        # Always show lib when logging in non-verbose mode. Note, other libs
+        # use `transformers.logger` directly, so we check `lib_name` to be safe
+        lib_name = _get_library_name()
+        logging_format = f"[{lib_name}] %(message)s"
 
         # if logging level is debug, we add pathname and lineno to formatter for easy debugging
         if os.getenv("TRANSFORMERS_VERBOSITY", None) == "detail":
