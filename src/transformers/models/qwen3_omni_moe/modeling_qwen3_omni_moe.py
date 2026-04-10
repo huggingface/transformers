@@ -681,7 +681,7 @@ class Qwen3OmniMoeAudioEncoder(Qwen3OmniMoePreTrainedModel):
         variable-length split — not traceable by ``torch.export``.
 
         Returns:
-            ``padded_feature``: padded chunks ``(num_chunks, 1, mel_bins, max_chunk_len)``
+            ``padded_feature``: padded chunks ``(num_chunks, channels, max_chunk_len)``
             ``chunk_lengths``: actual length of each chunk ``(num_chunks,)``
         """
         chunk_num = torch.ceil(feature_lens / (self.n_window * 2)).long()
@@ -691,7 +691,7 @@ class Qwen3OmniMoeAudioEncoder(Qwen3OmniMoePreTrainedModel):
         chunk_lengths[chunk_lengths == 0] = self.n_window * 2
 
         chunk_list = input_features.T.split(chunk_lengths.tolist(), dim=0)
-        padded_feature = nn.utils.rnn.pad_sequence(chunk_list, batch_first=True).transpose(1, 2).unsqueeze(1)
+        padded_feature = nn.utils.rnn.pad_sequence(chunk_list, batch_first=True).transpose(1, 2)
         return padded_feature, chunk_lengths
 
     def get_valid_indices(self, chunk_lengths):
@@ -755,11 +755,15 @@ class Qwen3OmniMoeAudioEncoder(Qwen3OmniMoePreTrainedModel):
         """
         if padded_feature is None:
             padded_feature, chunk_lengths = self.chunk_and_pad_features(input_features, feature_lens)
+
         if valid_indices is None:
             valid_indices = self.get_valid_indices(chunk_lengths)
+
         if cu_seqlens is None:
             cu_seqlens = self.get_cu_seqlens(chunk_lengths, feature_lens)
 
+        # Add channel dim for Conv2d: (num_chunks, mel_bins, time) -> (num_chunks, 1, mel_bins, time)
+        padded_feature = padded_feature.unsqueeze(1)
         padded_embed = F.gelu(self.conv2d1(padded_feature))
         padded_embed = F.gelu(self.conv2d2(padded_embed))
         padded_embed = F.gelu(self.conv2d3(padded_embed))

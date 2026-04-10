@@ -1262,16 +1262,10 @@ class Qwen2_5OmniAudioEncoder(Qwen2_5OmniPreTrainedModel):
         chunk_lengths = torch.full((chunk_num.sum(),), self.n_window * 2, dtype=torch.long, device=feature_lens.device)
         tail_chunk_index = F.pad(chunk_num, (1, 0), value=-1).cumsum(0)[1:]
         chunk_lengths[tail_chunk_index] = feature_lens % (self.n_window * 2)
-        chunk_lengths = torch.where(chunk_lengths == 0, self.n_window * 2, chunk_lengths)
+        chunk_lengths[chunk_lengths == 0] = self.n_window * 2
 
-        chunk_list = input_features.split(chunk_lengths.tolist(), dim=1)
-        max_len = chunk_lengths.max()
-        dim = chunk_list[0].shape[0]
-        padded_feature = torch.full(
-            (len(chunk_list), dim, max_len), fill_value=0, dtype=self.dtype, device=feature_lens.device
-        )
-        for i in range(len(chunk_list)):
-            padded_feature[i, :, : chunk_list[i].shape[-1]] = chunk_list[i]
+        chunk_list = input_features.T.split(chunk_lengths.tolist(), dim=0)
+        padded_feature = nn.utils.rnn.pad_sequence(chunk_list, batch_first=True).transpose(1, 2)
         return padded_feature, chunk_lengths
 
     def get_valid_indices(self, chunk_lengths):
@@ -1337,8 +1331,10 @@ class Qwen2_5OmniAudioEncoder(Qwen2_5OmniPreTrainedModel):
         """
         if padded_feature is None:
             padded_feature, chunk_lengths = self.chunk_and_pad_features(input_features, feature_lens)
+
         if valid_indices is None:
             valid_indices = self.get_valid_indices(chunk_lengths)
+
         if pool_indices is None:
             pool_indices = self.get_pool_indices(feature_lens)
 
