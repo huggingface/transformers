@@ -336,6 +336,23 @@ class TimesFm2_5ForwardInputVariantsTest(unittest.TestCase):
                         f"Full prediction parity failed for b={b}, slen={slen}, w={w}",
                     )
 
+    def test_input_min_parity(self):
+        """forward() with truncate_negative=True gives identical results for list and tensor inputs, even with mixed signs."""
+        # Create sequences where one is all positive and another has negative values
+        raw = [
+            torch.tensor([1.0, 2.0, 3.0], device=torch_device),
+            torch.tensor([-1.0, 0.0, 1.0], device=torch_device),
+        ]
+        stacked = torch.stack(raw)
+
+        with torch.no_grad():
+            # truncate_negative=True will use input_min to decide whether to clamp
+            out_list = self.model(past_values=raw, truncate_negative=True)
+            out_tensor = self.model(past_values=stacked, truncate_negative=True)
+
+        self.assertTrue(torch.allclose(out_list.mean_predictions, out_tensor.mean_predictions, atol=1e-5))
+        self.assertTrue(torch.allclose(out_list.full_predictions, out_tensor.full_predictions, atol=1e-5))
+
 
 @require_torch
 @slow
