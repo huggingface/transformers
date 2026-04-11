@@ -214,6 +214,9 @@ class InternVLModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterM
     def test_flash_attn_2_fp32_ln(self):
         pass
 
+    def test_reverse_loading_mapping(self):
+        super().test_reverse_loading_mapping(skip_base_model=True)
+
 
 @slow
 @require_torch_accelerator

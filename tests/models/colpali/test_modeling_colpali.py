@@ -226,6 +226,10 @@ class ColPaliForRetrievalModelTest(ModelTesterMixin, unittest.TestCase):
     def test_sdpa_can_compile_dynamic(self):
         pass
 
+    @unittest.skip(reason="Some weight mappings from paligemma are unreachable here as they use a `^` pattern")
+    def test_reverse_loading_mapping(self):
+        pass
+
 
 @require_torch
 class ColPaliModelIntegrationTest(unittest.TestCase):
