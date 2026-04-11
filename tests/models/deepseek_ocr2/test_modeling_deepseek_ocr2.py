@@ -173,10 +173,6 @@ class DeepseekOcr2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTes
         self.model_tester = DeepseekOcr2VisionText2TextModelTester(self)
         self.config_tester = ConfigTester(self, config_class=DeepseekOcr2Config, has_text_modality=False)
 
-    @unittest.skip("SDPA/FlexAttn not yet supported")
-    def test_can_set_attention_dynamically_composite_model(self):
-        pass
-
     def test_config(self):
         self.config_tester.run_common_tests()
 
