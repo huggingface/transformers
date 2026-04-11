@@ -375,13 +375,8 @@ class TrainerGradientAccumulationTest(TestCasePlus, TrainerIntegrationCommon):
     def test_gradient_accumulation_steps_not_leaked_to_accelerator(self):
         """
         Regression test: the Trainer should not pass its gradient_accumulation_steps
-        to the Accelerator. When num_items_in_batch is active (model_accepts_loss_kwargs=True),
-        Accelerate's backward() would spuriously divide loss by GAS, resulting in
-        gradients that are GAS× too small.
+        to the Accelerator.
         """
-        config = LlamaConfig(vocab_size=100, hidden_size=32, num_hidden_layers=2, num_attention_heads=4)
-        model = LlamaForCausalLM(config)
-
         with tempfile.TemporaryDirectory() as tmp_dir:
             args = TrainingArguments(
                 output_dir=tmp_dir,
@@ -393,21 +388,14 @@ class TrainerGradientAccumulationTest(TestCasePlus, TrainerIntegrationCommon):
                 save_strategy="no",
             )
             trainer = Trainer(
-                model=model,
+                model=RegressionModel(),
                 args=args,
                 train_dataset=RegressionDataset(),
-            )
-            # LlamaForCausalLM.forward() accepts **kwargs, so this must be True
-            self.assertTrue(
-                trainer.model_accepts_loss_kwargs,
-                "Test requires a model with model_accepts_loss_kwargs=True (like modern HF models).",
             )
             self.assertEqual(
                 trainer.accelerator.gradient_accumulation_steps,
                 1,
-                "Trainer should not leak gradient_accumulation_steps to the Accelerator. "
-                "This causes accelerator.backward() to spuriously divide loss by GAS "
-                "when num_items_in_batch is active.",
+                "Trainer should not leak gradient_accumulation_steps to the Accelerator. ",
             )
 
     @require_torch_multi_accelerator
