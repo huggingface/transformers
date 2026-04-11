@@ -3198,9 +3198,9 @@ def get_device_properties() -> DeviceProperties:
     """
     Get environment device properties.
     """
-    if IS_CUDA_SYSTEM or IS_ROCM_SYSTEM:
-        import torch
-
+    import torch
+    
+    if (IS_CUDA_SYSTEM or IS_ROCM_SYSTEM) and torch.cuda.is_available():
         major, minor = torch.cuda.get_device_capability()
         if IS_ROCM_SYSTEM:
             return ("rocm", major, minor)
