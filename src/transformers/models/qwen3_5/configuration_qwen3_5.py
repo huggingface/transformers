@@ -121,6 +121,8 @@ class Qwen3_5VisionConfig(PreTrainedConfig):
         The output hidden size of the vision model.
     num_position_embeddings (`int`, *optional*, defaults to 2304):
         The maximum sequence length that this model might ever be used with
+    deepstack_visual_indexes (`list[int]`, *optional*, defaults to `[]`):
+        Indexed of layers for deepstack embeddings. Defaults to empty for Qwen3.5.
     """
 
     model_type = "qwen3_5"
@@ -137,6 +139,8 @@ class Qwen3_5VisionConfig(PreTrainedConfig):
     temporal_patch_size: int | list[int] | tuple[int, int] = 2
     out_hidden_size: int = 3584
     num_position_embeddings: int = 2304
+
+    deepstack_visual_indexes: list[int] | tuple[int, ...] = ()
     initializer_range: float = 0.02
 
 

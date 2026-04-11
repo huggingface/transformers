@@ -129,9 +129,11 @@ class Qwen3_5VisionConfig(Qwen3VLVisionConfig):
         The output hidden size of the vision model.
     num_position_embeddings (`int`, *optional*, defaults to 2304):
         The maximum sequence length that this model might ever be used with
+    deepstack_visual_indexes (`list[int]`, *optional*, defaults to `[]`):
+        Indexed of layers for deepstack embeddings. Defaults to empty for Qwen3.5.
     """
 
-    deepstack_visual_indexes = AttributeError()
+    deepstack_visual_indexes: list[int] | tuple[int, ...] = ()
 
 
 @auto_docstring(checkpoint="Qwen/Qwen3.5-27B")
