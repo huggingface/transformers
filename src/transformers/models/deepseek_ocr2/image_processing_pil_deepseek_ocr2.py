@@ -351,3 +351,6 @@ class DeepseekOcr2ImageProcessorPil(PilBackend):
             result[:, :, start : start + width] = image
 
         return result
+
+
+__all__ = ["DeepseekOcr2ImageProcessorPil"]

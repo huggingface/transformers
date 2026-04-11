@@ -1211,6 +1211,7 @@ __all__ = [
     "DeepseekOcr2Config",
     "DeepseekOcr2ForConditionalGeneration",
     "DeepseekOcr2ImageProcessor",
+    "DeepseekOcr2ImageProcessorPil",
     "DeepseekOcr2Model",
     "DeepseekOcr2PreTrainedModel",
     "DeepseekOcr2TextModel",
