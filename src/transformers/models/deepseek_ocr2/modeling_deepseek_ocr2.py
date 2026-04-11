@@ -125,8 +125,7 @@ class DeepseekOcr2PreTrainedModel(PreTrainedModel):
     supports_gradient_checkpointing = True
     _no_split_modules = [
         "DeepseekOcr2SamVisionLayer",
-        "DeepseekOcr2SamVisionEncoder",
-        "DeepseekOcr2VisionModel",
+        "DeepseekOcr2VisionDecoderLayer",
         "DeepseekOcr2TextDecoderLayer",
     ]
     _skip_keys_device_placement = "past_key_values"

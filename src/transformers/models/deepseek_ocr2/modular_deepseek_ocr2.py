@@ -702,8 +702,7 @@ class DeepseekOcr2CausalLMOutputWithPast(LlavaNextCausalLMOutputWithPast):
 class DeepseekOcr2PreTrainedModel(LlavaNextPreTrainedModel):
     _no_split_modules = [
         "DeepseekOcr2SamVisionLayer",
-        "DeepseekOcr2SamVisionEncoder",
-        "DeepseekOcr2VisionModel",
+        "DeepseekOcr2VisionDecoderLayer",
         "DeepseekOcr2TextDecoderLayer",
     ]
     _can_compile_fullgraph = False
