@@ -1010,14 +1010,15 @@ class DeepseekOcr2Model(LlavaNextModel):
             per_image_local = [None] * batch_size
 
         all_features = []
+        view_sep = self.view_separator.to(global_features.device).unsqueeze(0)
         for idx in range(batch_size):
             global_flat = global_features[idx].reshape(-1, global_features.shape[-1])
 
             if per_image_local[idx] is not None:
                 local_flat = per_image_local[idx].reshape(-1, per_image_local[idx].shape[-1])
-                all_features.append(torch.cat([local_flat, global_flat, self.view_separator.unsqueeze(0)], dim=0))
+                all_features.append(torch.cat([local_flat, global_flat, view_sep], dim=0))
             else:
-                all_features.append(torch.cat([global_flat, self.view_separator.unsqueeze(0)], dim=0))
+                all_features.append(torch.cat([global_flat, view_sep], dim=0))
 
         image_features = torch.cat(all_features, dim=0)
         return DeepseekOcr2ModelOutputWithPooling(
