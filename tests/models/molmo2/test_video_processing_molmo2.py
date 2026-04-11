@@ -45,9 +45,7 @@ class Molmo2VideoProcessingTester:
         patch_size=14,
         pooling_size=[3, 3],
         do_sample_frames=True,
-        frame_sample_mode="uniform_last_frame",
         max_fps=2,
-        sampling_fps=2,
     ):
         size = size if size is not None else {"height": 378, "width": 378}
         self.parent = parent
@@ -65,9 +63,7 @@ class Molmo2VideoProcessingTester:
         self.patch_size = patch_size
         self.pooling_size = pooling_size
         self.do_sample_frames = do_sample_frames
-        self.frame_sample_mode = frame_sample_mode
         self.max_fps = max_fps
-        self.sampling_fps = sampling_fps
 
     def prepare_video_processor_dict(self):
         return {
@@ -80,9 +76,7 @@ class Molmo2VideoProcessingTester:
             "patch_size": self.patch_size,
             "pooling_size": self.pooling_size,
             "do_sample_frames": False,
-            "frame_sample_mode": self.frame_sample_mode,
             "max_fps": self.max_fps,
-            "sampling_fps": self.sampling_fps,
         }
 
     def prepare_video_inputs(self, equal_resolution=False, numpify=False, torchify=False, return_tensors="pil"):
