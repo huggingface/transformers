@@ -63,14 +63,6 @@ print(tokenizer.decode(outputs[0], skip_special_tokens=True))
 ```
 
 </hfoption>
-<hfoption id="transformers CLI">
-
-```bash
-echo -e "The future of AI is" | transformers run --task text-generation --model openai-community/openai-gpt --device 0
-
-```
-
-</hfoption>
 </hfoptions>
 
 ## Notes

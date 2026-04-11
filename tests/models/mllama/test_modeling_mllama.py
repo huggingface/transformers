@@ -61,7 +61,6 @@ class MllamaText2TextModelTester:
         seq_length=7,
         is_training=True,
         text_config={
-            "model_type": "mllama",
             "vocab_size": 99,
             "hidden_size": 32,
             "num_hidden_layers": 2,
@@ -143,7 +142,6 @@ class MllamaVisionText2TextModelTester:
         seq_length=7,
         is_training=True,
         text_config={
-            "model_type": "mllama",
             "vocab_size": 99,
             "hidden_size": 32,
             "num_hidden_layers": 2,
@@ -453,6 +451,9 @@ class MllamaForConditionalGenerationModelTest(ModelTesterMixin, GenerationTester
         super().test_left_padding_compatibility(
             unpadded_custom_inputs=unpadded_custom_inputs, padded_custom_inputs=padded_custom_inputs
         )
+
+    def test_reverse_loading_mapping(self):
+        super().test_reverse_loading_mapping(skip_base_model=True)
 
 
 @require_torch

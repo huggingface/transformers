@@ -106,9 +106,9 @@ The model is identical to [Donut](donut) in terms of architecture.
 [[autodoc]] NougatImageProcessor
     - preprocess
 
-## NougatImageProcessorFast
+## NougatImageProcessorPil
 
-[[autodoc]] NougatImageProcessorFast
+[[autodoc]] NougatImageProcessorPil
     - preprocess
 
 ## NougatTokenizer

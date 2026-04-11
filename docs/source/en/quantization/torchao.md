@@ -72,7 +72,7 @@ pip install torchao --index-url https://download.pytorch.org/whl/cu126 # options
 </hfoption>
 </hfoptions>
 
-If your torchao version is below 0.10.0, you need to upgrade it, please refer to the [deprecation notice](#deprecation-notice) for more details.
+torchao >= 0.15.0 is required. The string-based API (e.g., `TorchAoConfig("int4_weight_only")`) has been removed — use `AOBaseConfig` objects instead (see examples below).
 
 ## Quantization examples
 
@@ -712,36 +712,6 @@ output = reloaded_model.generate(**input_ids, max_new_tokens=10)
 print(tokenizer.decode(output[0], skip_special_tokens=True))
 
 ```
-
-## ⚠️ Deprecation Notice
-
-> Starting with version 0.10.0, the string-based API for quantization configuration (e.g., `TorchAoConfig("int4_weight_only", group_size=128)`) is **deprecated** and will be removed in a future release.
->
-> Please use the new `AOBaseConfig`-based approach instead:
->
-> ```python
-> # Old way (deprecated)
-> quantization_config = TorchAoConfig("int4_weight_only", group_size=128)
->
-> # New way (recommended)
-> from torchao.quantization import Int4WeightOnlyConfig
-> quant_config = Int4WeightOnlyConfig(group_size=128)
-> quantization_config = TorchAoConfig(quant_type=quant_config)
-> ```
->
-> The new API offers greater flexibility, better type safety, and access to the full range of features available in torchao.
->
-> [Migration Guide](#migration-guide)
->
-> Here's how to migrate from common string identifiers to their `AOBaseConfig` equivalents:
->
-> | Old String API | New `AOBaseConfig` API |
-> |----------------|------------------------|
-> | `"int4_weight_only"` | `Int4WeightOnlyConfig()` |
-> | `"int8_weight_only"` | `Int8WeightOnlyConfig()` |
-> | `"int8_dynamic_activation_int8_weight"` | `Int8DynamicActivationInt8WeightConfig()` |
->
-> All configuration objects accept parameters for customization (e.g., `group_size`, `scheme`, `layout`).
 
 ## Resources
 

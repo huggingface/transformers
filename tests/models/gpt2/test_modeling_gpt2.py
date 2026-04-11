@@ -23,6 +23,7 @@ from transformers.testing_utils import (
     require_flash_attn,
     require_torch,
     require_torch_accelerator,
+    require_torch_gpu,
     slow,
     torch_device,
 )
@@ -245,6 +246,59 @@ class GPT2ModelTest(CausalLMModelTest, unittest.TestCase):
             (self.model_tester.batch_size, self.model_tester.seq_length, self.model_tester.vocab_size),
         )
         result.loss.backward()
+
+    def test_gpt2_sdpa_matches_eager_with_scaling_configs(self):
+        """Test that SDPA and eager produce equivalent outputs when scaling configs differ from defaults.
+
+        Regression test for https://github.com/huggingface/transformers/issues/44380
+        """
+        config_and_inputs = self.model_tester.prepare_config_and_inputs(scale_attn_by_inverse_layer_idx=True)
+        config, input_ids, token_type_ids, _, _, _, _ = config_and_inputs
+        config.scale_attn_weights = False
+        config.scale_attn_by_inverse_layer_idx = True
+
+        model = GPT2LMHeadModel(config).to(torch_device).eval()
+
+        # Eager attention (known-correct reference)
+        model.set_attn_implementation("eager")
+        with torch.no_grad():
+            output_eager = model(input_ids, token_type_ids=token_type_ids).logits
+
+        # SDPA attention (was buggy: ignored scaling configs)
+        model.set_attn_implementation("sdpa")
+        with torch.no_grad():
+            output_sdpa = model(input_ids, token_type_ids=token_type_ids).logits
+
+        torch.testing.assert_close(output_eager, output_sdpa, atol=1e-4, rtol=1e-4)
+
+    @require_torch_gpu
+    @require_flash_attn
+    @pytest.mark.flash_attn_test
+    def test_gpt2_fa2_matches_eager_with_scaling_configs(self):
+        """Test that FlashAttention2 and eager produce equivalent outputs when scaling configs differ.
+
+        Regression test for https://github.com/huggingface/transformers/issues/44380
+        """
+        config_and_inputs = self.model_tester.prepare_config_and_inputs(scale_attn_by_inverse_layer_idx=True)
+        config, input_ids, token_type_ids, _, _, _, _ = config_and_inputs
+        config.scale_attn_weights = False
+        config.scale_attn_by_inverse_layer_idx = True
+
+        model = GPT2LMHeadModel(config).to(torch_device).eval().to(torch.float16)
+        input_ids = input_ids.to(torch_device)
+        token_type_ids = token_type_ids.to(torch_device)
+
+        # Eager attention (known-correct reference)
+        model.set_attn_implementation("eager")
+        with torch.no_grad():
+            output_eager = model(input_ids, token_type_ids=token_type_ids).logits
+
+        # Flash Attention 2 (was buggy: ignored scaling configs)
+        model.set_attn_implementation("flash_attention_2")
+        with torch.no_grad():
+            output_fa2 = model(input_ids, token_type_ids=token_type_ids).logits
+
+        torch.testing.assert_close(output_eager, output_fa2, atol=1e-2, rtol=1e-2)
 
     def test_gpt2_reorder_and_upcast_attn(self):
         # extra test: model-specific flag

@@ -87,6 +87,13 @@ class Phi3ModelTester(CausalLMModelTester):
     if is_torch_available():
         base_model_class = Phi3Model
 
+    def __init__(self, parent):
+        super().__init__(parent=parent)
+        # NOTE(3outeille): must be 0.0 for TP backward tests. In train mode, non-zero dropout causes
+        # different RNG states between the non-TP and TP model forward passes (they run sequentially),
+        # leading to different dropout masks and mismatched losses.
+        self.attention_dropout = 0.0
+
 
 @require_torch
 class Phi3ModelTest(CausalLMModelTest, unittest.TestCase):
@@ -132,11 +139,11 @@ class Phi3IntegrationTest(unittest.TestCase):
         ]
         inputs = tokenizer.apply_chat_template(messages, add_generation_prompt=True, return_tensors="pt")
 
-        outputs = model.generate(inputs, max_new_tokens=32)
+        outputs = model.generate(**inputs, max_new_tokens=32)
         output_text = tokenizer.batch_decode(outputs)
 
         EXPECTED_OUTPUT = [
-            "<|system|> You are a helpful digital assistant. Please provide safe, ethical and accurate information to the user.<|end|><|user|> Can you provide ways to eat combinations of bananas and dragonfruits?<|end|><|assistant|> Certainly! Bananas and dragonfruits can be combined in various delicious ways. Here are some ideas for incorporating these fruits into your"
+            "<|system|> You are a helpful digital assistant. Please provide safe, ethical and accurate information to the user.<|end|><|user|> Can you provide ways to eat combinations of bananas and dragonfruits?<|end|><|assistant|> Certainly! Bananas and dragonfruits can be combined in various delicious and healthy ways. Here are some creative ideas to enjoy these"
         ]
 
         self.assertListEqual(output_text, EXPECTED_OUTPUT)
@@ -154,7 +161,7 @@ class Phi3IntegrationTest(unittest.TestCase):
         ]
         inputs = tokenizer.apply_chat_template(messages, add_generation_prompt=True, return_tensors="pt")
 
-        response_tokens = Phi3MiniWithStaticCache.generate(model, inputs, 64)
+        response_tokens = Phi3MiniWithStaticCache.generate(model, inputs["input_ids"], 64)
 
         output_text = tokenizer.batch_decode(torch.tensor([response_tokens], dtype=torch.long, device=torch_device))
 
@@ -200,7 +207,7 @@ class Phi3IntegrationTest(unittest.TestCase):
         ]
         inputs = tokenizer.apply_chat_template(messages, add_generation_prompt=True, return_tensors="pt")
 
-        outputs = model.generate(inputs, max_new_tokens=32)
+        outputs = model.generate(**inputs, max_new_tokens=32)
         output_text = tokenizer.batch_decode(outputs)
 
         EXPECTED_OUTPUT = [
@@ -222,7 +229,7 @@ class Phi3IntegrationTest(unittest.TestCase):
         ]
         inputs = tokenizer.apply_chat_template(messages, add_generation_prompt=True, return_tensors="pt")
 
-        response_tokens = Phi3MiniWithStaticCache.generate(model, inputs, 64)
+        response_tokens = Phi3MiniWithStaticCache.generate(model, inputs["input_ids"], 64)
 
         output_text = tokenizer.batch_decode(torch.tensor([response_tokens], dtype=torch.long, device=torch_device))
 
@@ -317,7 +324,7 @@ class Phi3IntegrationTest(unittest.TestCase):
         outputs = model.generate(**inputs, max_new_tokens=100)
         output_text = tokenizer.batch_decode(outputs[:, inputs.input_ids.shape[1] :], skip_special_tokens=True)
         EXPECTED_OUTPUT = [
-            '1. Coq au Vin: Coq au Vin is a classic French dish that translates to "rooster in wine." The dish consists of chicken braised with wine, lardons, mushrooms, and garlic. It is a hearty and flavorful dish that is often served with potatoes or rice.\n\n            2. Boeuf Bourguignon: Boeuf Bourguignon is a traditional French beef stew that'
+            '1. Coq au Vin: Coq au Vin is a classic French dish that translates to "rooster in wine." The dish consists of chicken braised in red wine, typically Burgundy, along with mushrooms, onions, and sometimes bacon. The dish is known for its rich, savory flavor and tender chicken.\n\n            2. Boeuf Bourguignon: Boeuf Bourguignon is a hearty'
         ]
 
         self.assertListEqual(output_text, EXPECTED_OUTPUT)

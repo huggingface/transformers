@@ -44,7 +44,7 @@ class FourOverSixQuantize(ConversionOps):
 
         # Delete the high-precision parameters from the module after we used them to create
         # the quantized parameters
-        for parameter_name in module.parameters_to_quantize:
+        if hasattr(module, parameter_name):
             delattr(module, parameter_name)
 
         # Remove these keys from the missing_keys list since we've deleted them from the model

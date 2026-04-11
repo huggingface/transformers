@@ -1,0 +1,9 @@
+distributed_type: DEEPSPEED
+deepspeed_config:
+  deepspeed_config_file: tests/trainer/distributed/scripts/ds_config_zero2.json
+num_processes: 2
+parallelism_config:
+  parallelism_config_sp_size: 2
+  parallelism_config_sp_backend: deepspeed
+  parallelism_config_sp_seq_length_is_variable: true
+  parallelism_config_sp_attn_implementation: sdpa

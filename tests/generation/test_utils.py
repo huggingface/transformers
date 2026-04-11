@@ -43,6 +43,7 @@ from transformers.testing_utils import (
     require_accelerate,
     require_flash_attn,
     require_flash_attn_3,
+    require_flash_attn_4,
     require_optimum_quanto,
     require_torch,
     require_torch_accelerator,
@@ -61,6 +62,7 @@ from transformers.utils.generic import is_flash_attention_requested
 if is_torch_available():
     import torch
     import torch.nn.functional as F
+    from torch.nn.attention import SDPBackend, sdpa_kernel
 
     from transformers import (
         AutoModelForCausalLM,
@@ -79,6 +81,8 @@ if is_torch_available():
         Cache,
         DynamicCache,
         EncoderDecoderCache,
+        LinearAttentionAndFullAttentionLayer,
+        LinearAttentionLayer,
         QuantoQuantizedLayer,
         StaticCache,
     )
@@ -969,9 +973,6 @@ class GenerationTesterMixin:
                 position_ids = torch.cumsum(model_inputs["attention_mask"], dim=-1) - 1
                 position_ids.masked_fill_(model_inputs["attention_mask"] == 0, 1)
                 model_kwargs["position_ids"] = position_ids
-            if "cache_position" in signature:
-                cache_position = torch.arange(model_inputs["input_ids"].shape[1], device=torch_device)
-                model_kwargs["cache_position"] = cache_position
             # forward all other inputs, if they are in the signature
             model_kwargs.update({k: v for k, v in model_inputs.items() if k not in model_kwargs and k in signature})
             return model_kwargs
@@ -996,32 +997,35 @@ class GenerationTesterMixin:
             # Prepare padding on common inputs (pad length 32)
             input_ids = inputs_dict["input_ids"]
             attention_mask = inputs_dict["attention_mask"]
-            token_type_ids = inputs_dict.get("token_type_ids", None)
             pad_token_id = getattr(config.get_text_config(decoder=True), "pad_token_id", None) or 0
             pad_size = (input_ids.shape[0], 32, *input_ids.shape[2:])
             padding = torch.ones(pad_size, dtype=input_ids.dtype, device=torch_device) * pad_token_id
-            padded_input_ids = torch.cat((padding, input_ids), dim=1)
-            padded_attention_mask = torch.cat(
+
+            padded_inputs_dict = copy.deepcopy(inputs_dict)
+            padded_inputs_dict["input_ids"] = torch.cat((padding, input_ids), dim=1)
+            padded_inputs_dict["attention_mask"] = torch.cat(
                 (torch.zeros(pad_size[:2], dtype=input_ids.dtype, device=torch_device), attention_mask), dim=1
             )
-            if token_type_ids is not None:
-                padded_token_type_ids = torch.cat(
+            if inputs_dict.get("token_type_ids") is not None:
+                padded_inputs_dict["token_type_ids"] = torch.cat(
                     (
                         # Assumption: `0` is a good default value for padding token type ids
                         torch.zeros(pad_size[:2], dtype=input_ids.dtype, device=torch_device),
-                        token_type_ids,
+                        inputs_dict["token_type_ids"],
                     ),
                     dim=1,
                 )
-            else:
-                padded_token_type_ids = None
 
-            # Get output logits from inputs with left-padding (pad length 32)
-            padded_inputs_dict = copy.deepcopy(inputs_dict)
-            padded_inputs_dict["input_ids"] = padded_input_ids
-            padded_inputs_dict["attention_mask"] = padded_attention_mask
-            if padded_token_type_ids is not None:
-                padded_inputs_dict["token_type_ids"] = padded_token_type_ids
+            if inputs_dict.get("mm_token_type_ids") is not None:
+                padded_inputs_dict["mm_token_type_ids"] = torch.cat(
+                    (
+                        # `0` is a default value of text-modality type ids
+                        torch.zeros(pad_size[:2], dtype=input_ids.dtype, device=torch_device),
+                        inputs_dict["mm_token_type_ids"],
+                    ),
+                    dim=1,
+                )
+
             padded_inputs_dict.update(padded_custom_inputs)
 
             model_kwargs_with_padding = _prepare_model_kwargs(padded_inputs_dict, signature)
@@ -1762,7 +1766,6 @@ class GenerationTesterMixin:
 
             input_args = {
                 "input_ids": input_ids,
-                "cache_position": torch.tensor([9]).to(torch_device),
                 "position_ids": torch.tensor([[0, 1, 2], [0, 1, 2]]).to(torch_device),
             }
             arbitrary_kwargs = {
@@ -1796,6 +1799,7 @@ class GenerationTesterMixin:
             "sdpa": "_supports_sdpa",
             "flash_attention_2": "_supports_flash_attn",
             "flash_attention_3": "_supports_flash_attn",
+            "flash_attention_4": "_supports_flash_attn",
         }
 
         for model_class in self.all_generative_model_classes:
@@ -1894,6 +1898,14 @@ class GenerationTesterMixin:
     def test_eager_matches_fa3_generate(self):
         """Tests that generate has equivalent outputs with FA3 and eager attention implementations."""
         self._test_attention_implementation("flash_attention_3")
+
+    @pytest.mark.flash_attn_4_test
+    @require_flash_attn_4
+    @require_torch_gpu
+    @slow
+    def test_eager_matches_fa4_generate(self):
+        """Tests that generate has equivalent outputs with FA4 and eager attention implementations."""
+        self._test_attention_implementation("flash_attention_4")
 
     @require_flash_attn
     @require_torch_accelerator
@@ -2005,6 +2017,7 @@ class GenerationTesterMixin:
             "sdpa": "_supports_sdpa",
             "flash_attention_2": "_supports_flash_attn",
             "flash_attention_3": "_supports_flash_attn",
+            "flash_attention_4": "_supports_flash_attn",
         }
 
         for model_class in self.all_generative_model_classes:
@@ -2150,6 +2163,22 @@ class GenerationTesterMixin:
     def test_flash_attention_3_padding_matches_padding_free_with_position_ids_and_fa_kwargs(self):
         self.attention_mask_padding_matches_padding_free_with_position_ids(
             attn_implementation="flash_attention_3", fa_kwargs=True
+        )
+
+    @require_flash_attn_4
+    @require_torch_gpu
+    @pytest.mark.flash_attn_4_test
+    @slow
+    def test_flash_attention_4_padding_matches_padding_free_with_position_ids(self):
+        self.attention_mask_padding_matches_padding_free_with_position_ids(attn_implementation="flash_attention_4")
+
+    @require_flash_attn_4
+    @require_torch_gpu
+    @pytest.mark.flash_attn_4_test
+    @slow
+    def test_flash_attention_4_padding_matches_padding_free_with_position_ids_and_fa_kwargs(self):
+        self.attention_mask_padding_matches_padding_free_with_position_ids(
+            attn_implementation="flash_attention_4", fa_kwargs=True
         )
 
     def _get_custom_4d_mask_test_data(self):
@@ -2511,6 +2540,24 @@ class GenerationTesterMixin:
             [encoder_expected_shape] * len(hidden_states),
         )
 
+    def _get_conv_state_shape(self, batch_size: int, config):
+        # Default conv state shape, for linear attention models - can vary based on models so this function is convenient
+        # to easily check caches
+        # Note that non-mamba models will NOT have the config fields - it does not matter as they will only use attention
+        # cache layers, so the None default values will not be used
+        intermediate_size = getattr(config, "intermediate_size", None)
+        conv_kernel = getattr(config, "conv_kernel", None)
+        return (batch_size, intermediate_size, conv_kernel)
+
+    def _get_recurrent_state_shape(self, batch_size: int, config):
+        # Default recurrent state shape, for linear attention models - can vary based on models so this function is convenient
+        # to easily check caches
+        # Note that non-mamba models will NOT have the config fields - it does not matter as they will only use attention
+        # cache layers, so the None default values will not be used
+        intermediate_size = getattr(config, "intermediate_size", None)
+        state_size = getattr(config, "state_size", None)
+        return (batch_size, intermediate_size, state_size)
+
     def _check_past_key_values_for_generate(self, batch_size, past_key_values, seq_length, config):
         # Raise a useful error, asking to explicitly override the method
         if not isinstance(past_key_values, Cache):
@@ -2529,16 +2576,22 @@ class GenerationTesterMixin:
         config = config.get_text_config(decoder=True)
 
         # (batch, kv heads, seq_length, head_dim)
-        num_heads = getattr(config, "num_key_value_heads", config.num_attention_heads)
+        # Only pure mamba models do not have num_attention_heads defined in config, so it can never be 1 in practice for attention models
+        num_attention_heads = getattr(config, "num_attention_heads", 1)
+        num_kv_heads = getattr(config, "num_key_value_heads", num_attention_heads)
         hidden_size = getattr(config, "d_model", config.hidden_size)
-        head_dim = getattr(config, "head_dim", hidden_size // config.num_attention_heads)
+        head_dim = getattr(config, "head_dim", hidden_size // num_attention_heads)
 
         # For cross attention cache, the seq_length depends on the model, so we remove that dim
-        expected_shape = (
-            (batch_size, num_heads, seq_length, head_dim)
+        attention_shape = (
+            (batch_size, num_kv_heads, seq_length, head_dim)
             if seq_length is not None
-            else (batch_size, num_heads, head_dim)
+            else (batch_size, num_kv_heads, head_dim)
         )
+
+        # For mamba layers
+        conv_shape = self._get_conv_state_shape(batch_size, config)
+        recurrent_shape = self._get_recurrent_state_shape(batch_size, config)
 
         # Check the size is coherent
         num_hidden_layers = config.num_hidden_layers
@@ -2548,11 +2601,30 @@ class GenerationTesterMixin:
 
         # Check each layer has the correct shape
         for layer in past_key_values.layers:
-            # Remove the seq_length dim for cross-attention cache (it changes based on the model)
-            keys = layer.keys if seq_length is not None else layer.keys[:, :, 0, :]
-            values = layer.values if seq_length is not None else layer.values[:, :, 0, :]
-            self.assertEqual(keys.shape, expected_shape)
-            self.assertEqual(values.shape, expected_shape)
+            # Mamba + Attention layer cache
+            if type(layer) is LinearAttentionAndFullAttentionLayer:
+                # Remove the seq_length dim for cross-attention cache (it changes based on the model)
+                keys = layer.keys if seq_length is not None else layer.keys[:, :, 0, :]
+                values = layer.values if seq_length is not None else layer.values[:, :, 0, :]
+                self.assertEqual(keys.shape, attention_shape)
+                self.assertEqual(values.shape, attention_shape)
+                self.assertEqual(layer.conv_states.shape, conv_shape)
+                # May not be used (e.g. lfm2)
+                if layer.is_recurrent_states_initialized:
+                    self.assertEqual(layer.recurrent_states.shape, recurrent_shape)
+            # Mamba only layer cache
+            elif type(layer) is LinearAttentionLayer:
+                self.assertEqual(layer.conv_states.shape, conv_shape)
+                # May not be used (e.g. lfm2)
+                if layer.is_recurrent_states_initialized:
+                    self.assertEqual(layer.recurrent_states.shape, recurrent_shape)
+            # Attention only layer type
+            else:
+                # Remove the seq_length dim for cross-attention cache (it changes based on the model)
+                keys = layer.keys if seq_length is not None else layer.keys[:, :, 0, :]
+                values = layer.values if seq_length is not None else layer.values[:, :, 0, :]
+                self.assertEqual(keys.shape, attention_shape)
+                self.assertEqual(values.shape, attention_shape)
 
     def _check_sequence_inside_sequence(self, tensor_1, tensor_2):
         # check if tensor_1 inside tensor_2 or tensor_2 inside tensor_1.
@@ -2592,8 +2664,30 @@ class GenerationTesterMixin:
 
         num_layers = len(cache1)
         for idx in range(num_layers):
-            torch.testing.assert_close(cache1.layers[idx].keys, cache2.layers[idx].keys)
-            torch.testing.assert_close(cache1.layers[idx].values, cache2.layers[idx].values)
+            self.assertEqual(type(cache1.layers[idx]), type(cache2.layers[idx]))
+
+            # Mamba + Attention layer
+            if type(cache1.layers[idx]) is LinearAttentionAndFullAttentionLayer:
+                torch.testing.assert_close(cache1.layers[idx].keys, cache2.layers[idx].keys)
+                torch.testing.assert_close(cache1.layers[idx].values, cache2.layers[idx].values)
+                torch.testing.assert_close(cache1.layers[idx].conv_states, cache2.layers[idx].conv_states)
+                # May not be used (e.g. lfm2)
+                if cache1.layers[idx].is_recurrent_states_initialized:
+                    torch.testing.assert_close(
+                        cache1.layers[idx].recurrent_states, cache2.layers[idx].recurrent_states
+                    )
+            # Mamba layer
+            elif type(cache1.layers[idx]) is LinearAttentionLayer:
+                torch.testing.assert_close(cache1.layers[idx].conv_states, cache2.layers[idx].conv_states)
+                # May not be used (e.g. lfm2)
+                if cache1.layers[idx].is_recurrent_states_initialized:
+                    torch.testing.assert_close(
+                        cache1.layers[idx].recurrent_states, cache2.layers[idx].recurrent_states
+                    )
+            # Attention layer
+            else:
+                torch.testing.assert_close(cache1.layers[idx].keys, cache2.layers[idx].keys)
+                torch.testing.assert_close(cache1.layers[idx].values, cache2.layers[idx].values)
 
 
 @require_torch
@@ -3392,29 +3486,30 @@ class GenerationIntegrationTests(unittest.TestCase):
         tokenized_inputs = tokenizer([text], return_tensors="pt")
         input_ids = tokenized_inputs.input_ids.to(torch_device)
 
-        # Traditional way of generating text
-        outputs_normal = model.generate(input_ids)
-        self.assertEqual(outputs_normal.shape, (1, 20 + input_ids.shape[1]))
+        with sdpa_kernel([SDPBackend.EFFICIENT_ATTENTION, SDPBackend.MATH]):
+            # Traditional way of generating text
+            outputs_normal = model.generate(input_ids)
+            self.assertEqual(outputs_normal.shape, (1, 20 + input_ids.shape[1]))
 
-        # Should be different with token_type_ids
-        outputs_tti = model.generate(
-            input_ids,
-            token_type_ids=torch.zeros(input_ids.shape, dtype=torch.long).to(torch_device),
-        )
-        with self.assertRaises(AssertionError):
-            self.assertListEqual(outputs_tti.tolist(), outputs_normal.tolist())
+            # Should be different with token_type_ids
+            outputs_tti = model.generate(
+                input_ids,
+                token_type_ids=torch.zeros(input_ids.shape, dtype=torch.long).to(torch_device),
+            )
+            with self.assertRaises(AssertionError):
+                self.assertListEqual(outputs_tti.tolist(), outputs_normal.tolist())
 
-        # Assistant model
-        assistant = AutoModelForCausalLM.from_pretrained("hf-internal-testing/tiny-random-gpt2").to(torch_device)
-        assistant.config.pad_token_id = tokenizer.eos_token_id
+            # Assistant model
+            assistant = AutoModelForCausalLM.from_pretrained("hf-internal-testing/tiny-random-gpt2").to(torch_device)
+            assistant.config.pad_token_id = tokenizer.eos_token_id
 
-        # If assisted generation passes model_kwargs correctly, should be same as previous
-        outputs_assisted = model.generate(
-            input_ids,
-            token_type_ids=torch.zeros(input_ids.shape, dtype=torch.long).to(torch_device),
-            assistant_model=assistant,
-        )
-        self.assertListEqual(outputs_assisted.tolist(), outputs_tti.tolist())
+            # If assisted generation passes model_kwargs correctly, should be same as previous
+            outputs_assisted = model.generate(
+                input_ids,
+                token_type_ids=torch.zeros(input_ids.shape, dtype=torch.long).to(torch_device),
+                assistant_model=assistant,
+            )
+            self.assertListEqual(outputs_assisted.tolist(), outputs_tti.tolist())
 
     def test_assisted_decoding_num_assistant_tokens_heuristic_schedule(self):
         # This test ensures that the assisted generation num_assistant_tokens 'heuristic' schedule works properly.
@@ -3668,6 +3763,9 @@ class GenerationIntegrationTests(unittest.TestCase):
         draft_name = "double7/vicuna-68m"
         target_name = "Qwen/Qwen2-0.5B-Instruct"
 
+        # TODO Matt: Slightly flaky (~1%) without set_seed - if anyone wants to do
+        #            a deep dive on why, feel free!
+        set_seed(42)
         draft_model = AutoModelForCausalLM.from_pretrained(draft_name)
         target_model = AutoModelForCausalLM.from_pretrained(target_name)
 
@@ -3806,8 +3904,7 @@ class GenerationIntegrationTests(unittest.TestCase):
         input_ids = torch.tensor([[1, 2, 3], [4, 5, 6]]).to(torch_device)
         attention_mask = torch.tensor([[1, 1, 1], [1, 1, 1]]).to(torch_device)
         dynamic_cache = DynamicCache(config=config)
-        cache_position = torch.arange(input_ids.shape[-1], dtype=torch.long).to(torch_device)
-        position_ids = cache_position[None, ...]
+        position_ids = torch.arange(input_ids.shape[-1], dtype=torch.long).to(torch_device)[None, ...]
 
         # 1. Sanity check: the model's `prepare_inputs_for_generation` comes from `GenerationMixin`
         self.assertTrue("GenerationMixin" in str(model.prepare_inputs_for_generation))
@@ -3825,21 +3922,17 @@ class GenerationIntegrationTests(unittest.TestCase):
         # 4. We never discard data from input ids and expect it to be already slice
         init_input_ids = input_ids[:, :2]
         init_dynamic_cache = model(init_input_ids, past_key_values=dynamic_cache).past_key_values
-        init_cache_position = cache_position[dynamic_cache.get_seq_length() :]
         model_inputs = model.prepare_inputs_for_generation(
             input_ids,
             past_key_values=init_dynamic_cache,
-            cache_position=init_cache_position,
             attention_mask=attention_mask,
             position_ids=position_ids,
         )
         self.assertTrue("past_key_values" in model_inputs)
-        self.assertListEqual(model_inputs["cache_position"].tolist(), init_cache_position.tolist())
         self.assertEqual(model_inputs["input_ids"].shape[-1], input_ids.shape[1])
         self.assertEqual(model_inputs["position_ids"].shape[-1], input_ids.shape[1])
         self.assertEqual(model_inputs["attention_mask"].shape[-1], input_ids.shape[1])
 
-        # 4.1: We do not have to pass prepared `cache_positions` to slice the data!
         # Data is sliced based on input ids length
         model_inputs = model.prepare_inputs_for_generation(
             init_input_ids,
@@ -3848,7 +3941,6 @@ class GenerationIntegrationTests(unittest.TestCase):
             position_ids=position_ids,
         )
         self.assertTrue("past_key_values" in model_inputs)
-        self.assertEqual(model_inputs["cache_position"], None)
         self.assertEqual(model_inputs["input_ids"].shape[-1], init_input_ids.shape[1])
         self.assertEqual(model_inputs["position_ids"].shape[-1], init_input_ids.shape[1])
         self.assertEqual(model_inputs["attention_mask"].shape[-1], 3)  # attn mask is never sliced, we need PAD mask
@@ -3858,7 +3950,9 @@ class GenerationIntegrationTests(unittest.TestCase):
         static_cache = StaticCache(config=config, max_cache_len=max_cache_len)
         static_cache = model(init_input_ids, past_key_values=static_cache).past_key_values
         model_inputs = model.prepare_inputs_for_generation(
-            init_input_ids, past_key_values=static_cache, attention_mask=attention_mask, cache_position=cache_position
+            init_input_ids,
+            past_key_values=static_cache,
+            attention_mask=attention_mask,
         )
         self.assertTrue("past_key_values" in model_inputs)
         self.assertListEqual(
@@ -3933,13 +4027,14 @@ class GenerationIntegrationTests(unittest.TestCase):
         inputs = tokenizer(prompt, return_tensors="pt").to(torch_device)
 
         model = AutoModelForCausalLM.from_pretrained(checkpoint).to(torch_device)
-        original_outputs = model.generate(**inputs, do_sample=False, max_new_tokens=20)
-        original_decoded = tokenizer.batch_decode(original_outputs, skip_special_tokens=True)
-        self.assertEqual(original_decoded, [expected_output])
+        with sdpa_kernel([SDPBackend.EFFICIENT_ATTENTION, SDPBackend.MATH]):
+            original_outputs = model.generate(**inputs, do_sample=False, max_new_tokens=20)
+            original_decoded = tokenizer.batch_decode(original_outputs, skip_special_tokens=True)
+            self.assertEqual(original_decoded, [expected_output])
 
-        outputs_assisted = model.generate(**inputs, assistant_early_exit=4, do_sample=False, max_new_tokens=20)
-        decoded_assisted = tokenizer.batch_decode(outputs_assisted, skip_special_tokens=True)
-        self.assertEqual(decoded_assisted, [expected_output])
+            outputs_assisted = model.generate(**inputs, assistant_early_exit=4, do_sample=False, max_new_tokens=20)
+            decoded_assisted = tokenizer.batch_decode(outputs_assisted, skip_special_tokens=True)
+            self.assertEqual(decoded_assisted, [expected_output])
 
     @slow
     def test_beam_search_advanced_stopping_criteria(self):
@@ -4554,7 +4649,7 @@ class GenerationIntegrationTests(unittest.TestCase):
         self.assertEqual(value, "callable_success")
 
     @pytest.mark.generate
-    def test_generate_custom_cache_position(self):
+    def test_generate_can_restart_from_cache_and_new_tokens_only(self):
         """
         Test that we can continue generating from past key values, returned from a previous `generate` call, without
         the tokens that correspond to the cached part IF the `attention_mask` is the mask for the FULL sequence

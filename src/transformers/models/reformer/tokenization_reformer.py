@@ -73,6 +73,7 @@ class ReformerTokenizer(TokenizersBackend):
         merges: str | list[str] | None = None,
         eos_token: str = "</s>",
         unk_token: str = "<unk>",
+        _spm_precompiled_charsmap: str | None = None,
         additional_special_tokens: list | None = None,
         **kwargs,
     ):
@@ -90,13 +91,13 @@ class ReformerTokenizer(TokenizersBackend):
             )
         )
 
-        self._tokenizer.normalizer = normalizers.Sequence(
-            [
-                normalizers.Replace(Regex(r"\s{2,}|[\n\r\t]"), " "),
-                normalizers.NFC(),
-                normalizers.Strip(left=False, right=True),
-            ]
-        )
+        if _spm_precompiled_charsmap is not None:
+            self._tokenizer.normalizer = normalizers.Sequence(
+                [
+                    normalizers.Precompiled(_spm_precompiled_charsmap),
+                    normalizers.Replace(pattern=Regex(" {2,}"), content=" "),
+                ]
+            )
 
         self._tokenizer.pre_tokenizer = pre_tokenizers.Metaspace(replacement="▁", prepend_scheme="always")
         self._tokenizer.decoder = decoders.Metaspace(replacement="▁", prepend_scheme="always")

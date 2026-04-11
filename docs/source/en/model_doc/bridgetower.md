@@ -148,9 +148,9 @@ Tips:
 [[autodoc]] BridgeTowerImageProcessor
     - preprocess
 
-## BridgeTowerImageProcessorFast
+## BridgeTowerImageProcessorPil
 
-[[autodoc]] BridgeTowerImageProcessorFast
+[[autodoc]] BridgeTowerImageProcessorPil
     - preprocess
 
 ## BridgeTowerProcessor

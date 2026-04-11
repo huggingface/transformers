@@ -299,6 +299,59 @@ class Lfm2TensorProcessor(TensorProcessor):
         return GGUFTensor(weights, name, {})
 
 
+class MiniMaxM2TensorProcessor(TensorProcessor):
+    HF_EXPERT_RENAME_PATTERN = re.compile(r"mlp\.experts\.\d+\.")
+    HF_MOE_W13_PATTERN = re.compile(r"(?:model\.)?layers\.(?P<bid>\d+)\.mlp\.experts\.gate_up_proj")
+    GGUF_MOE_WEIGHTS_PATTERN = re.compile(r"(?P<name>.*\.ffn_(?P<w>gate|down|up)_exps)\.weight$")
+    HF_BIAS_PATTERN = re.compile(r"(?:model\.)?layers\.(?P<bid>\d+)\.mlp\.e_score_correction_bias")
+
+    def __init__(self, config=None):
+        super().__init__(config=config)
+
+    def preprocess_name(self, hf_name: str) -> str:
+        return re.sub(self.HF_EXPERT_RENAME_PATTERN, "mlp.experts.", hf_name)
+
+    def perform_fallback_tensor_mapping(
+        self, gguf_to_hf_name_map: dict[str, str], suffix: str, qual_name: str, hf_name: str
+    ):
+        # Map merged gate_up_proj to both ffn_gate_exps and ffn_up_exps GGUF tensors.
+        if m := re.fullmatch(self.HF_MOE_W13_PATTERN, hf_name):
+            full_hf_name = qual_name + hf_name
+            gguf_to_hf_name_map[f"blk.{m['bid']}.ffn_gate_exps{suffix}"] = full_hf_name
+            gguf_to_hf_name_map[f"blk.{m['bid']}.ffn_up_exps{suffix}"] = full_hf_name
+        # Map e_score_correction_bias to GGUF exp_probs_b.bias.
+        elif m := re.fullmatch(self.HF_BIAS_PATTERN, hf_name):
+            gguf_to_hf_name_map[f"blk.{m['bid']}.exp_probs_b.bias"] = qual_name + hf_name
+
+    def process(self, weights, name: str, **kwargs):
+        if m := re.fullmatch(self.GGUF_MOE_WEIGHTS_PATTERN, name):
+            tensor_key_mapping = kwargs.get("tensor_key_mapping")
+            parsed_parameters = kwargs.get("parsed_parameters")
+            if tensor_key_mapping:
+                self._set_moe_expert_tensor(weights, parsed_parameters, tensor_key_mapping[m["name"]], m["w"])
+            return GGUFTensor(weights, None, {})
+        return GGUFTensor(weights, name, {})
+
+    def _set_moe_expert_tensor(self, weights: np.ndarray, parsed_parameters: dict[str, dict], hf_name: str, w: str):
+        torch_weights = torch.from_numpy(np.copy(weights))
+        if w == "down":
+            parsed_parameters["tensors"][hf_name] = torch_weights
+        else:
+            # Merge gate and up into gate_up_proj [num_experts, 2*intermediate, hidden]
+            shape = list(weights.shape)
+            shard_dim = 1
+            shard_size = shape[shard_dim]
+            shape[shard_dim] = shard_size * 2
+            if hf_name not in parsed_parameters["tensors"]:
+                parsed_parameters["tensors"][hf_name] = torch.zeros(shape, dtype=torch_weights.dtype)
+            out: torch.Tensor = parsed_parameters["tensors"][hf_name]
+            if w == "gate":
+                out = out.narrow(shard_dim, 0, shard_size)
+            else:  # w == "up"
+                out = out.narrow(shard_dim, shard_size, shard_size)
+            out.copy_(torch_weights)
+
+
 TENSOR_PROCESSORS = {
     "llama": LlamaTensorProcessor,
     "qwen2moe": Qwen2MoeTensorProcessor,
@@ -312,6 +365,7 @@ TENSOR_PROCESSORS = {
     "gemma2": Gemma2TensorProcessor,
     "gemma3": Gemma2TensorProcessor,
     "lfm2": Lfm2TensorProcessor,
+    "minimax-m2": MiniMaxM2TensorProcessor,
 }
 
 
@@ -360,6 +414,8 @@ def get_gguf_hf_weights_map(
         model_type = "gemma3"
     elif model_type == "umt5":
         model_type = "t5"
+    elif model_type == "minimax_m2":
+        model_type = "minimax-m2"
     arch = None
     for key, value in MODEL_ARCH_NAMES.items():
         if value == model_type:
@@ -462,6 +518,8 @@ def load_gguf_checkpoint(gguf_checkpoint_path, return_tensors=False, model_to_lo
         updated_architecture = "qwen2_moe"
     elif "qwen3moe" in architecture:
         updated_architecture = "qwen3_moe"
+    elif "minimax-m2" in architecture:
+        updated_architecture = "minimax_m2"
 
     # For stablelm architecture, we need to set qkv_bias and use_parallel_residual from tensors
     # If `qkv_bias=True`, qkv_proj with bias will be present in the tensors
@@ -524,6 +582,13 @@ def load_gguf_checkpoint(gguf_checkpoint_path, return_tensors=False, model_to_lo
     # Gemma3 GGUF checkpoint only contains weights of text backbone
     if parsed_parameters["config"]["model_type"] == "gemma3":
         parsed_parameters["config"]["model_type"] = "gemma3_text"
+
+    # MiniMax-M2: convert expert_gating_func integer to scoring_func string
+    if parsed_parameters["config"].get("model_type") == "minimax_m2":
+        _gating_func_map = {0: "none", 1: "softmax", 2: "sigmoid"}
+        _scoring = parsed_parameters["config"].get("scoring_func")
+        if isinstance(_scoring, int):
+            parsed_parameters["config"]["scoring_func"] = _gating_func_map.get(_scoring, "softmax")
 
     if parsed_parameters["config"]["model_type"] == "lfm2":
         gguf_num_key_value_heads = parsed_parameters["config"]["num_key_value_heads"]

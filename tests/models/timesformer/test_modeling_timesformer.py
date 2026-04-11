@@ -42,7 +42,7 @@ if is_torch_available():
 
 
 if is_vision_available():
-    from transformers import VideoMAEImageProcessor
+    from transformers import VideoMAEImageProcessorPil
 
 
 class TimesformerModelTester:
@@ -168,7 +168,7 @@ class TimesformerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestC
     def setUp(self):
         self.model_tester = TimesformerModelTester(self)
         self.config_tester = ConfigTester(
-            self, config_class=TimesformerConfig, has_text_modality=False, hidden_size=37
+            self, config_class=TimesformerConfig, has_text_modality=False, hidden_size=32
         )
 
     def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
@@ -324,7 +324,7 @@ class TimesformerModelIntegrationTest(unittest.TestCase):
     def default_image_processor(self):
         # logits were tested with a different mean and std, so we use the same here
         return (
-            VideoMAEImageProcessor(image_mean=[0.5, 0.5, 0.5], image_std=[0.5, 0.5, 0.5])
+            VideoMAEImageProcessorPil(image_mean=[0.5, 0.5, 0.5], image_std=[0.5, 0.5, 0.5])
             if is_vision_available()
             else None
         )
