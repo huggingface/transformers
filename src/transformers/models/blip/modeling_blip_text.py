@@ -137,12 +137,9 @@ class BlipTextSelfAttention(nn.Module):
         past_key_values: Cache | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor, torch.Tensor]:
-        batch_size, seq_length, _ = hidden_states.shape
-        query_layer = (
-            self.query(hidden_states)
-            .view(batch_size, -1, self.num_attention_heads, self.attention_head_size)
-            .transpose(1, 2)
-        )
+        input_shape = hidden_states.shape[:-1]
+        hidden_shape = (*input_shape, -1, self.attention_head_size)
+        query_layer = self.query(hidden_states).view(hidden_shape).transpose(1, 2)
 
         # If this is instantiated as a cross-attention module, the keys
         # and values come from an encoder; the attention mask needs to be
@@ -168,16 +165,9 @@ class BlipTextSelfAttention(nn.Module):
             key_layer = curr_past_key_values.layers[self.layer_idx].keys
             value_layer = curr_past_key_values.layers[self.layer_idx].values
         else:
-            key_layer = (
-                self.key(current_states)
-                .view(batch_size, -1, self.num_attention_heads, self.attention_head_size)
-                .transpose(1, 2)
-            )
-            value_layer = (
-                self.value(current_states)
-                .view(batch_size, -1, self.num_attention_heads, self.attention_head_size)
-                .transpose(1, 2)
-            )
+            kv_shape = (*current_states.shape[:-1], -1, self.attention_head_size)
+            key_layer = self.key(current_states).view(kv_shape).transpose(1, 2)
+            value_layer = self.value(current_states).view(kv_shape).transpose(1, 2)
 
             if past_key_values is not None:
                 key_layer, value_layer = curr_past_key_values.update(key_layer, value_layer, self.layer_idx)

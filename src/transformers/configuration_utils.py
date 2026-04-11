@@ -26,6 +26,7 @@ from typing import TYPE_CHECKING, Any, ClassVar, Literal, TypeVar, Union
 from huggingface_hub import create_repo
 from huggingface_hub.dataclasses import strict
 from packaging import version
+from typing_extensions import dataclass_transform
 
 from . import __version__
 from .dynamic_module_utils import custom_object_save
@@ -75,6 +76,7 @@ ALLOWED_LAYER_TYPES = (
 
 # copied from huggingface_hub.dataclasses.strict when `accept_kwargs=True`
 def wrap_init_to_accept_kwargs(cls: dataclass):
+    # Get the original dataclass-generated __init__
     original_init = cls.__init__
 
     @wraps(original_init)
@@ -113,6 +115,7 @@ def wrap_init_to_accept_kwargs(cls: dataclass):
     return cls
 
 
+@dataclass_transform(kw_only_default=True)
 @strict(accept_kwargs=True)
 @dataclass(repr=False)
 class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin):
@@ -298,7 +301,10 @@ class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin):
     def __init_subclass__(cls, *args, **kwargs):
         super().__init_subclass__(*args, **kwargs)
         cls_has_custom_init = "__init__" in cls.__dict__
-        cls = dataclass(cls, repr=False)
+        # kw_only=True ensures fields without defaults in subclasses can follow
+        # parent fields that have defaults (Python dataclass ordering rule).
+        # Config fields are always passed as keyword arguments, so this is safe.
+        cls = dataclass(cls, repr=False, kw_only=True)
 
         if not cls_has_custom_init:
             # Wrap all subclasses to accept arbitrary kwargs for BC
