@@ -388,9 +388,6 @@ class TrainerGradientAccumulationTest(TestCasePlus, TrainerIntegrationCommon):
                 per_device_train_batch_size=4,
                 gradient_accumulation_steps=4,
                 max_steps=1,
-                learning_rate=0.1,
-                report_to="none",
-                save_strategy="no",
             )
             trainer = Trainer(
                 model=model,
