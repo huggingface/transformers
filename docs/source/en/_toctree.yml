@@ -213,18 +213,16 @@
     title: Distributed training
   - isExpanded: false
     sections:
-    - local: perf_train_gpu_one
-      title: GPU
     - local: perf_train_cpu
       title: CPU
-    - local: perf_train_cpu_many
-      title: Distributed CPUs
     - local: perf_train_special
       title: Apple Silicon
     - local: perf_train_gaudi
       title: Intel Gaudi
     - local: perf_hardware
-      title: Build your own machine
+      title: Building a GPU workstation
+    - local: model_memory_anatomy
+      title: Model training anatomy
     title: Hardware
   title: Training
 - isExpanded: false
