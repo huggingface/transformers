@@ -284,6 +284,13 @@ class TestFetcherTester(unittest.TestCase):
                 "tests/repo_utils/test_tests_fetcher.py",
             ]
 
+    def test_create_test_list_from_filter_does_not_create_hub_job(self):
+        with tempfile.TemporaryDirectory() as tmp_folder:
+            create_test_list_from_filter(["tests/models/bert/test_modeling_bert.py"], out_path=tmp_folder)
+
+            assert (Path(tmp_folder) / "tests_torch_test_list.txt").exists()
+            assert not (Path(tmp_folder) / "tests_hub_test_list.txt").exists()
+
     def test_infer_tests_to_run_adds_repo_utils_for_utils_changes(self):
         with ExitStack() as stack:
             stack.enter_context(patch.object(tests_fetcher, "commit_flags", {"test_all": False}, create=True))
