@@ -21,55 +21,10 @@ Usage:
 
 import argparse
 import re
-import sys
 
 import torch
 
 from transformers import PhoneticXeusConfig, PhoneticXeusForCTC, PhoneticXeusTokenizer, Wav2Vec2FeatureExtractor
-
-
-def load_checkpoint(checkpoint_path: str) -> dict:
-    """Load ESPnet/Lightning checkpoint, handling pickled module references."""
-    import types
-
-    # Stub modules that may be pickled in the checkpoint
-    for mod_name in ["src", "lightning"]:
-        if mod_name not in sys.modules:
-            m = types.ModuleType(mod_name)
-            m.__path__ = []
-            m.__file__ = ""
-            sys.modules[mod_name] = m
-
-    # Recursively stub submodules
-    class _StubFinder:
-        def find_module(self, fullname, path=None):
-            if fullname.startswith(("src.", "lightning.")):
-                return self
-            return None
-
-        def load_module(self, fullname):
-            if fullname in sys.modules:
-                return sys.modules[fullname]
-            m = types.ModuleType(fullname)
-            m.__path__ = []
-            m.__file__ = ""
-            m.__loader__ = self
-            sys.modules[fullname] = m
-            return m
-
-    sys.meta_path.insert(0, _StubFinder())
-
-    state = torch.load(checkpoint_path, map_location="cpu", weights_only=False)
-
-    # Extract state_dict from Lightning checkpoint
-    if "state_dict" in state:
-        sd = state["state_dict"]
-        # Strip "net." prefix from Lightning module wrapping
-        sd = {k.replace("net.", "", 1): v for k, v in sd.items() if k.startswith("net.")}
-    else:
-        sd = state
-
-    return sd
 
 
 _PREFIX = PhoneticXeusForCTC.base_model_prefix
@@ -153,16 +108,16 @@ def main():
 
     # Resolve checkpoint path
     ckpt_path = args.checkpoint_path
-    if not ckpt_path.endswith(".ckpt") and not ckpt_path.endswith(".pth"):
+    if not ckpt_path.endswith((".pt", ".bin", ".ckpt", ".pth")):
         # Assume HuggingFace repo
         from huggingface_hub import hf_hub_download
 
-        ckpt_path = hf_hub_download(ckpt_path, "checkpoint-22000.ckpt")
+        ckpt_path = hf_hub_download(ckpt_path, "phoneticxeus_state_dict.pt")
         print(f"Downloaded checkpoint to: {ckpt_path}")
 
-    # Load and convert
+    # Load state dict (expects a plain dict of tensors, not a Lightning checkpoint)
     print("Loading checkpoint...")
-    sd = load_checkpoint(ckpt_path)
+    sd = torch.load(ckpt_path, map_location="cpu", weights_only=True)
     print(f"Loaded {len(sd)} keys from checkpoint")
 
     print("Converting state dict...")
