@@ -39,7 +39,11 @@ from transformers.utils.import_utils import is_mistral_common_available, is_torc
 
 
 if is_mistral_common_available():
-    from mistral_common.protocol.instruct.request import ChatCompletionRequest, ReasoningEffort
+    from mistral_common.protocol.instruct.request import ChatCompletionRequest
+    try:
+        from mistral_common.protocol.instruct.request import ReasoningEffort
+    except ImportError:
+        from typing import Any as ReasoningEffort  # type: ignore[assignment]
     from mistral_common.protocol.instruct.validator import ValidationMode
     from mistral_common.tokens.tokenizers.base import SpecialTokenPolicy, SpecialTokens
     from mistral_common.tokens.tokenizers.mistral import MistralTokenizer
