@@ -3694,6 +3694,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         revision: str = "main",
         use_safetensors: bool | None = None,
         weights_only: bool = True,
+        fuse_layers: bool = False,
         **kwargs,
     ) -> SpecificPreTrainedModelType:
         r"""
@@ -3872,6 +3873,8 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                 Indicates whether unpickler should be restricted to loading only tensors, primitive types,
                 dictionaries and any types added via torch.serialization.add_safe_globals().
                 When set to False, we can load wrapper tensor subclass weights.
+            fuse_layers (`bool`, *optional*, defaults to `False`):
+                Whether or not to fuse some layers of the model when loading it. This should only be used as an inference optimization.
             key_mapping (`dict[str, str], *optional*):
                 A potential mapping of the weight names if using a model on the Hub which is compatible to a Transformers
                 architecture, but was not converted accordingly.
@@ -4085,6 +4088,13 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         )
 
         config.name_or_path = pretrained_model_name_or_path
+
+        # Register any fusion patch mappings necessary to fuse layers at initializzation for inference performance 
+        if fuse_layers:
+            from .fusion_mapping import register_fusion_patches
+
+            register_fusion_patches(cls, config)
+
         model_init_context = cls.get_init_context(dtype, is_quantized, _is_ds_init_called, allow_all_kernels)
 
         config = copy.deepcopy(config)  # We do not want to modify the config inplace in from_pretrained.
