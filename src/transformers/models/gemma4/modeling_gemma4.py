@@ -1513,9 +1513,6 @@ class Gemma4TextModel(Gemma4PreTrainedModel):
         self.gradient_checkpointing = False
         self.unique_layer_types = set(self.config.layer_types)
 
-        # Per-Layer Embeddings (PLE): auxiliary embedding that feeds a residual signal
-        # into each decoder layer. See `get_per_layer_inputs()` and `project_per_layer_inputs()`
-        # for the full pipeline. The embedding is packed: total dim = num_layers * per_layer_dim.
         self.hidden_size_per_layer_input = config.hidden_size_per_layer_input
         if self.hidden_size_per_layer_input:
             self.embed_tokens_per_layer = Gemma4TextScaledWordEmbedding(
@@ -1623,16 +1620,6 @@ class Gemma4TextModel(Gemma4PreTrainedModel):
         )
 
     def get_per_layer_inputs(self, input_ids: torch.Tensor | None, inputs_embeds: torch.Tensor | None) -> torch.Tensor:
-        """Compute the token-identity component of Per-Layer Embeddings (PLE).
-
-        Looks up `input_ids` in `embed_tokens_per_layer` (a scaled embedding that multiplies
-        by `sqrt(hidden_size_per_layer_input)`) and reshapes the packed output from
-        `[batch, seq, num_hidden_layers * hidden_size_per_layer_input]` to
-        `[batch, seq, num_hidden_layers, hidden_size_per_layer_input]`.
-
-        If only `inputs_embeds` is provided (no `input_ids`), reverses the main embedding
-        to recover `input_ids` for the PLE lookup.
-        """
         if not self.hidden_size_per_layer_input:
             raise RuntimeError(
                 "Attempting to call get_per_layer_inputs() from a model initialized with a config that does not support"
@@ -1671,17 +1658,6 @@ class Gemma4TextModel(Gemma4PreTrainedModel):
         inputs_embeds: torch.Tensor,
         per_layer_inputs: torch.Tensor | None = None,
     ) -> torch.Tensor:
-        """Compute the context-aware component of PLE and combine with token-identity.
-
-        Projects `inputs_embeds` through `per_layer_model_projection` (Linear), scales by
-        `1/sqrt(hidden_size)`, reshapes to `[batch, seq, num_layers, ple_dim]`, and normalizes
-        with `per_layer_projection_norm` (RMSNorm).
-
-        If `per_layer_inputs` (the token-identity component from `get_per_layer_inputs()`)
-        is provided, combines both: `(context_projection + token_identity) * (1/sqrt(2))`.
-        If `per_layer_inputs` is None (e.g. for multimodal inputs where input_ids are not
-        available), returns just the context projection.
-        """
         if not self.hidden_size_per_layer_input:
             raise RuntimeError(
                 "Attempting to call project_per_layer_inputs() from a model initialized with a config that does not"
