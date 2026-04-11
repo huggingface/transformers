@@ -948,8 +948,11 @@ class BaseHandler:
                                 image_data = re.sub("^data:image/.+;base64,", "", url)
                                 image = Image.open(BytesIO(base64.b64decode(image_data)))
                                 file = tempfile.NamedTemporaryFile(suffix=".png", delete=False)
+                                file.close()  # close handle immediately after creation
                                 image.save(file.name)
                                 url = file.name
+                            # We don't delete the file as tne caller need it (via the `url` key).
+                            # TODO: Better approach to avoid file accumulation.
                             parsed["content"].append({"type": "image", "url": url})
 
             processor_inputs.append(parsed)
