@@ -119,7 +119,12 @@ class Qwen3_5MoeTextConfig(Qwen3NextConfig):
 @auto_docstring(checkpoint="Qwen/Qwen3.5-35B-A3B")
 @strict
 class Qwen3_5MoeVisionConfig(Qwen3_5VisionConfig):
-    pass
+    r"""
+    deepstack_visual_indexes (`list[int]`, *optional*, defaults to `[]`):
+        Indexes of layers for deepstack embeddings.
+    """
+
+    deepstack_visual_indexes: list[int] | tuple[int, ...] = ()
 
 
 @auto_docstring(checkpoint="Qwen/Qwen3.5-35B-A3B")
