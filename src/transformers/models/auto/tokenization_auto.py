@@ -250,6 +250,7 @@ TOKENIZER_MAPPING_NAMES = OrderedDict[str, str | None](
         ("perceiver", "PerceiverTokenizer"),
         ("phi", "GPT2Tokenizer" if is_tokenizers_available() else None),
         ("phobert", "PhobertTokenizer"),
+        ("phoneticxeus", "PhoneticXeusTokenizer"),
         ("pix2struct", "T5Tokenizer" if is_tokenizers_available() else None),
         (
             "pixtral",

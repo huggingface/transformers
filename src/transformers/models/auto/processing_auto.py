@@ -135,6 +135,7 @@ else:
             ("paligemma", "PaliGemmaProcessor"),
             ("perception_lm", "PerceptionLMProcessor"),
             ("phi4_multimodal", "Phi4MultimodalProcessor"),
+            ("phoneticxeus", "PhoneticXeusProcessor"),
             ("pi0", "PI0Processor"),
             ("pix2struct", "Pix2StructProcessor"),
             ("pixtral", "PixtralProcessor"),
