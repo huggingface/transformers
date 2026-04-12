@@ -99,17 +99,21 @@ class ExecutorchExporter(DynamoExporter):
 # unbounded dims after torch.export (preserving AUTO's static-vs-dynamic
 # inference and dimension sharing).
 
-_DEFAULT_MAX_DIM = 2**14  # 16384 — must stay small enough that dim*dim fits in int32 for XNNPACK
+_MAX_DIM_MULTIPLIER = 4  # upper bound = max(lower * multiplier, floor)
+_MAX_DIM_FLOOR = 1024  # minimum upper bound for any dynamic dim
 
 
-def _bound_range_constraints(exported_program: ExportedProgram, max_dim: int = _DEFAULT_MAX_DIM) -> None:
-    """Cap ``int_oo`` upper bounds to *max_dim* for ExecuTorch compatibility."""
+def _bound_range_constraints(exported_program: ExportedProgram) -> None:
+    """Cap ``int_oo`` upper bounds for ExecuTorch compatibility.
 
-    # Collect all range dicts that need patching: range_constraints (torch.export
-    # verifiers) + shape_env.var_to_range (ExecuTorch sym_shape_eval_pass).
+    Uses ``max(lower * 4, 1024)`` per dim — keeps bounds proportional to the
+    actual sample sizes so XNNPACK memory planning doesn't overflow.
+    """
     from torch.utils._sympy.numbers import IntInfinity
     from torch.utils._sympy.value_ranges import ValueRanges
 
+    # Collect all range dicts that need patching: range_constraints (torch.export
+    # verifiers) + shape_env.var_to_range (ExecuTorch sym_shape_eval_pass).
     range_dicts = [exported_program._range_constraints]
     for node in exported_program.graph_module.graph.nodes:
         val = node.meta.get("val")
@@ -120,7 +124,9 @@ def _bound_range_constraints(exported_program: ExportedProgram, max_dim: int = _
     for rd in range_dicts:
         for sym, vr in rd.items():
             if isinstance(vr.upper, IntInfinity):
-                rd[sym] = ValueRanges(vr.lower, max_dim)
+                lower = int(vr.lower) if hasattr(vr.lower, "__int__") else 2
+                upper = max(lower * _MAX_DIM_MULTIPLIER, _MAX_DIM_FLOOR)
+                rd[sym] = ValueRanges(vr.lower, upper)
 
 
 # ── Backend preparation ────────────────────────────────────────────────────────
@@ -298,13 +304,11 @@ def _patch_dropout(_original):
     return patch
 
 
-def _patch_view(original):
-    """Force contiguity before view to avoid stride errors on transposed tensors."""
+def _patch_view(_original):
+    """Replace view with reshape to avoid stride errors on non-contiguous tensors."""
 
     def patch(self, *shape):
-        if not self.is_contiguous():
-            self = self.contiguous()
-        return original(self, *shape)
+        return self.reshape(*shape)
 
     return patch
 
