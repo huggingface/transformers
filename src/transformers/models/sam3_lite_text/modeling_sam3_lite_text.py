@@ -19,7 +19,7 @@
 # limitations under the License.
 
 import math
-from collections.abc import Callable
+from collections.abc import Callable, Iterable
 from dataclasses import dataclass
 
 import numpy as np
@@ -47,6 +47,7 @@ from .configuration_sam3_lite_text import (
     Sam3LiteTextGeometryEncoderConfig,
     Sam3LiteTextMaskDecoderConfig,
     Sam3LiteTextTextConfig,
+    Sam3LiteTextViTConfig,
 )
 
 
@@ -108,8 +109,8 @@ class Sam3LiteTextMobileOneBlock(nn.Module):
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         residual = hidden_states
-        hidden_states = self.batchnorm_skip(hidden_states)
-        hidden_states = hidden_states + self.batchnorm_conv(self.conv(residual))
+        hidden_states = self.batchnorm_conv(self.conv(hidden_states))
+        hidden_states = hidden_states + self.batchnorm_skip(residual)
         return hidden_states
 
 
@@ -118,7 +119,7 @@ class Sam3LiteTextConvMLP(nn.Module):
 
     def __init__(self, config: Sam3LiteTextTextConfig):
         super().__init__()
-        self.activation_fn = nn.GELU()
+        self.activation_fn = ACT2FN[config.hidden_act]
         self.fc1 = nn.Conv2d(config.hidden_size, config.intermediate_size, kernel_size=1)
         self.fc2 = nn.Conv2d(config.intermediate_size, config.hidden_size, kernel_size=1)
 
@@ -134,17 +135,15 @@ class Sam3LiteTextConvolutionalFeedForward(nn.Module):
 
     def __init__(self, config: Sam3LiteTextTextConfig):
         super().__init__()
-        hidden_size = config.hidden_size
-        kernel_size = config.repmixer_kernel_size
         self.depthwise_conv = nn.Conv2d(
-            hidden_size,
-            hidden_size,
-            kernel_size=(1, kernel_size),
-            padding=(0, kernel_size // 2),
-            groups=hidden_size,
+            config.hidden_size,
+            config.hidden_size,
+            kernel_size=(1, config.repmixer_kernel_size),
+            padding=(0, config.repmixer_kernel_size // 2),
+            groups=config.hidden_size,
             bias=False,
         )
-        self.depthwise_batchnorm = nn.BatchNorm2d(hidden_size)
+        self.depthwise_batchnorm = nn.BatchNorm2d(config.hidden_size)
         self.mlp = Sam3LiteTextConvMLP(config)
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
@@ -152,40 +151,49 @@ class Sam3LiteTextConvolutionalFeedForward(nn.Module):
         return self.mlp(hidden_states)
 
 
-class Sam3LiteTextRepMixer(nn.Module):
+class Sam3LiteTextLayerScaledResidual(nn.Module):
+    """Common layer-scale residual pattern shared by the RepMixer and feed-forward branches."""
+
+    def __init__(self, hidden_size: int, layer_scale_init_value: float):
+        super().__init__()
+        self.layer_scale = nn.Parameter(layer_scale_init_value * torch.ones((hidden_size, 1, 1)), requires_grad=True)
+
+    def layer_scale_residual(self, hidden_states: torch.Tensor, update: torch.Tensor) -> torch.Tensor:
+        return hidden_states + self.layer_scale * update
+
+
+class Sam3LiteTextRepMixer(Sam3LiteTextLayerScaledResidual):
     """Re-parameterisable depthwise-conv token mixer operating on 1D sequence data."""
 
     def __init__(self, config: Sam3LiteTextTextConfig):
-        super().__init__()
-        hidden_size = config.hidden_size
-        kernel_size = config.repmixer_kernel_size
-        self.reference_batchnorm = nn.BatchNorm2d(hidden_size)
-        self.mixer = Sam3LiteTextMobileOneBlock(hidden_size, kernel_size=kernel_size)
-        self.layer_scale = nn.Parameter(
-            config.layer_scale_init_value * torch.ones((hidden_size, 1, 1)), requires_grad=True
-        )
+        super().__init__(config.hidden_size, config.layer_scale_init_value)
+        self.reference_batchnorm = nn.BatchNorm2d(config.hidden_size)
+        self.mixer = Sam3LiteTextMobileOneBlock(config.hidden_size, kernel_size=config.repmixer_kernel_size)
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        return hidden_states + self.layer_scale * (self.mixer(hidden_states) - self.reference_batchnorm(hidden_states))
+        return self.layer_scale_residual(
+            hidden_states, self.mixer(hidden_states) - self.reference_batchnorm(hidden_states)
+        )
 
 
-class Sam3LiteTextRepMixerBlock(nn.Module):
+class Sam3LiteTextRepMixerBlock(Sam3LiteTextLayerScaledResidual):
     """Token-mixing RepMixer plus a convolutional feed-forward path, each with layer scale."""
 
     def __init__(self, config: Sam3LiteTextTextConfig):
-        super().__init__()
-        hidden_size = config.hidden_size
-        self.layer_scale = nn.Parameter(
-            config.layer_scale_init_value * torch.ones((hidden_size, 1, 1)), requires_grad=True
-        )
+        super().__init__(config.hidden_size, config.layer_scale_init_value)
         self.token_mixer = Sam3LiteTextRepMixer(config)
         self.conv_feed_forward = Sam3LiteTextConvolutionalFeedForward(config)
 
-    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        hidden_states = hidden_states.permute(0, 2, 1).unsqueeze(2)
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        attention_mask: torch.Tensor | None = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> torch.Tensor:
+        hidden_states = hidden_states.transpose(1, 2).unsqueeze(2)
         hidden_states = self.token_mixer(hidden_states)
-        hidden_states = hidden_states + self.layer_scale * self.conv_feed_forward(hidden_states)
-        return hidden_states.squeeze(2).permute(0, 2, 1)
+        hidden_states = self.layer_scale_residual(hidden_states, self.conv_feed_forward(hidden_states))
+        return hidden_states.squeeze(2).transpose(1, 2)
 
 
 def eager_attention_forward(
@@ -242,15 +250,12 @@ class Sam3LiteTextTextAttention(nn.Module):
     ) -> tuple[torch.Tensor, torch.Tensor | None]:
         """Input shape: Batch x Time x Channel"""
 
-        batch_size, seq_length, embed_dim = hidden_states.shape
+        input_shape = hidden_states.shape[:-1]
 
-        queries = self.q_proj(hidden_states)
-        keys = self.k_proj(hidden_states)
-        values = self.v_proj(hidden_states)
-
-        queries = queries.view(batch_size, seq_length, self.num_heads, self.head_dim).transpose(1, 2)
-        keys = keys.view(batch_size, seq_length, self.num_heads, self.head_dim).transpose(1, 2)
-        values = values.view(batch_size, seq_length, self.num_heads, self.head_dim).transpose(1, 2)
+        hidden_shape = (*input_shape, -1, self.head_dim)
+        queries = self.q_proj(hidden_states).view(hidden_shape).transpose(1, 2)
+        keys = self.k_proj(hidden_states).view(hidden_shape).transpose(1, 2)
+        values = self.v_proj(hidden_states).view(hidden_shape).transpose(1, 2)
 
         attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
             self.config._attn_implementation, eager_attention_forward
@@ -267,7 +272,7 @@ class Sam3LiteTextTextAttention(nn.Module):
             dropout=0.0 if not self.training else self.dropout,
         )
 
-        attn_output = attn_output.reshape(batch_size, seq_length, embed_dim).contiguous()
+        attn_output = attn_output.reshape(*input_shape, -1).contiguous()
         attn_output = self.out_proj(attn_output)
 
         return attn_output, attn_weights
@@ -336,21 +341,170 @@ class Sam3LiteTextTextEmbeddings(nn.Module):
         return hidden_states
 
 
+class Sam3LiteTextViTRotaryEmbedding(nn.Module):
+    """
+    Vision Rotary Position Embedding for SAM3_LITE_TEXT, following transformers library standards.
+    Supports 2D (axial) rotary embeddings for spatial dimensions.
+    """
+
+    def __init__(self, config: Sam3LiteTextViTConfig, end_x: int, end_y: int, scale: float = 1.0):
+        super().__init__()
+        dim = config.hidden_size // config.num_attention_heads
+        # Ensure even dimension for proper axial splitting
+        if dim % 4 != 0:
+            raise ValueError("Dimension must be divisible by 4 for axial RoPE")
+        self.end_x, self.end_y = end_x, end_y
+        self.dim = dim
+        self.rope_theta = config.rope_theta
+        self.scale = scale
+        freqs = 1.0 / (config.rope_theta ** (torch.arange(0, dim, 4)[: (dim // 4)].float() / dim))
+
+        flattened_indices = torch.arange(end_x * end_y, dtype=torch.long)
+        x_positions = (flattened_indices % end_x) * scale
+        y_positions = torch.div(flattened_indices, end_x, rounding_mode="floor") * scale
+        freqs_x = torch.outer(x_positions, freqs).float()
+        freqs_y = torch.outer(y_positions, freqs).float()
+        inv_freq = torch.cat([freqs_x, freqs_y], dim=-1)
+        inv_freq = inv_freq.repeat_interleave(2, dim=-1)
+        # directly register the cos and sin embeddings as we have a fixed feature shape
+        self.register_buffer("rope_embeddings_cos", inv_freq.cos(), persistent=False)
+        self.register_buffer("rope_embeddings_sin", inv_freq.sin(), persistent=False)
+
+    @torch.no_grad()
+    def forward(self) -> tuple[torch.Tensor, torch.Tensor]:
+        # As the feature map size is fixed for each stage, we can just return the pre-computed embeddings.
+        return self.rope_embeddings_cos, self.rope_embeddings_sin
+
+
+class Sam3LiteTextViTPatchEmbeddings(nn.Module):
+    """
+    This class turns `pixel_values` of shape `(batch_size, num_channels, height, width)` into the initial
+    `hidden_states` (patch embeddings) of shape `(batch_size, seq_length, hidden_size)` to be consumed by a
+    Transformer.
+    """
+
+    def __init__(self, config: Sam3LiteTextViTConfig):
+        super().__init__()
+        image_size, patch_size = config.pretrain_image_size, config.patch_size
+        num_channels, hidden_size = config.num_channels, config.hidden_size
+
+        image_size = image_size if isinstance(image_size, Iterable) else (image_size, image_size)
+        patch_size = patch_size if isinstance(patch_size, Iterable) else (patch_size, patch_size)
+        num_patches = (image_size[1] // patch_size[1]) * (image_size[0] // patch_size[0])
+        self.image_size = image_size
+        self.patch_size = patch_size
+        self.num_channels = num_channels
+        self.num_patches = num_patches
+
+        self.projection = nn.Conv2d(num_channels, hidden_size, kernel_size=patch_size, stride=patch_size, bias=False)
+
+    def forward(self, pixel_values: torch.Tensor) -> torch.Tensor:
+        embeddings = self.projection(pixel_values.to(self.projection.weight.dtype)).flatten(2).transpose(1, 2)
+        return embeddings
+
+
+class Sam3LiteTextViTEmbeddings(nn.Module):
+    """
+    Construct the patch embeddings and position embeddings for SAM3_LITE_TEXT ViT.
+
+    Position embeddings are tiled (not interpolated) when resizing to match different input sizes.
+    """
+
+    def __init__(self, config: Sam3LiteTextViTConfig):
+        super().__init__()
+
+        self.patch_embeddings = Sam3LiteTextViTPatchEmbeddings(config)
+        num_patches = self.patch_embeddings.num_patches
+        self.position_embeddings = nn.Parameter(
+            torch.randn(1, num_patches, config.hidden_size)
+        )  # !Remove cls token in convert weights!
+
+        self.dropout = nn.Dropout(config.hidden_dropout)
+        self.patch_size = config.patch_size
+
+    def _tile_position_embeddings(
+        self,
+        position_embeddings: torch.Tensor,
+        height: int,
+        width: int,
+    ) -> torch.Tensor:
+        """
+        Tile position embeddings to match target spatial dimensions.
+        Args:
+            position_embeddings: Shape [1, num_pretrain_patches, hidden_size]
+            height: Target height in patches
+            width: Target width in patches
+
+        Returns:
+            Shape [1, height * width, hidden_size]
+        """
+        pretrain_size = int(position_embeddings.shape[1] ** 0.5)
+
+        # Skip tiling if sizes match (but always tile during tracing for consistent graph)
+        if not torch.jit.is_tracing() and pretrain_size == height and pretrain_size == width:
+            return position_embeddings.reshape(1, height * width, -1)
+
+        # Tile position embeddings to match target spatial dimensions
+        hidden_size = position_embeddings.shape[-1]
+        pos_embed = position_embeddings.reshape(1, pretrain_size, pretrain_size, hidden_size).permute(0, 3, 1, 2)
+        repeat_h = height // pretrain_size + 1
+        repeat_w = width // pretrain_size + 1
+        pos_embed = pos_embed.tile([1, 1, repeat_h, repeat_w])[:, :, :height, :width]
+        return pos_embed.permute(0, 2, 3, 1).reshape(1, height * width, hidden_size)
+
+    def forward(
+        self,
+        pixel_values: torch.Tensor,
+        interpolate_pos_encoding: bool = False,
+    ) -> torch.Tensor:
+        height, width = pixel_values.shape[-2:]
+        embeddings = self.patch_embeddings(pixel_values)
+
+        # Calculate spatial dimensions in patches
+        height_patches = height // self.patch_size
+        width_patches = width // self.patch_size
+
+        position_embeddings = self._tile_position_embeddings(
+            self.position_embeddings,
+            height_patches,
+            width_patches,
+        )
+        embeddings = embeddings + position_embeddings
+        embeddings = self.dropout(embeddings)
+
+        return embeddings
+
+
 @auto_docstring
 class Sam3LiteTextPreTrainedModel(PreTrainedModel):
     config_class = Sam3LiteTextConfig
     base_model_prefix = "model"
     main_input_name = "pixel_values"
     input_modalities = ["image", "text"]
-    supports_gradient_checkpointing = True
     _supports_sdpa = True
     _supports_flash_attn = True
     _supports_flex_attn = True
     _supports_attention_backend = True
+    supports_gradient_checkpointing = True
 
     @torch.no_grad()
     def _init_weights(self, module):
         super()._init_weights(module)
+        if isinstance(module, Sam3LiteTextViTEmbeddings):
+            init.normal_(module.position_embeddings, mean=0.0, std=self.config.initializer_range)
+        elif isinstance(module, Sam3LiteTextViTRotaryEmbedding):
+            end_x, end_y = module.end_x, module.end_y
+            dim = module.dim
+            freqs = 1.0 / (module.rope_theta ** (torch.arange(0, dim, 4)[: (dim // 4)].float() / dim))
+            flattened_indices = torch.arange(end_x * end_y, dtype=torch.long)
+            x_positions = (flattened_indices % end_x) * module.scale
+            y_positions = torch.div(flattened_indices, end_x, rounding_mode="floor") * module.scale
+            freqs_x = torch.outer(x_positions, freqs).float()
+            freqs_y = torch.outer(y_positions, freqs).float()
+            inv_freq = torch.cat([freqs_x, freqs_y], dim=-1)
+            inv_freq = inv_freq.repeat_interleave(2, dim=-1)
+            init.copy_(module.rope_embeddings_cos, inv_freq.cos())
+            init.copy_(module.rope_embeddings_sin, inv_freq.sin())
         if isinstance(module, Sam3LiteTextTextPositionEmbedding):
             init.normal_(module.position_embedding, std=module.position_embedding.shape[-1] ** -0.5)
         elif isinstance(module, Sam3LiteTextTextModel):
@@ -400,10 +554,7 @@ class Sam3LiteTextTextModel(Sam3LiteTextPreTrainedModel):
         attention_mask = create_bidirectional_mask(self.config, hidden_states, attention_mask)
 
         for layer in self.layers:
-            if isinstance(layer, Sam3LiteTextRepMixerBlock):
-                hidden_states = layer(hidden_states)
-            else:
-                hidden_states = layer(hidden_states, attention_mask=attention_mask, **kwargs)
+            hidden_states = layer(hidden_states, attention_mask=attention_mask, **kwargs)
 
         hidden_states = self.final_layer_norm(hidden_states)
 
@@ -1892,6 +2043,7 @@ class Sam3LiteTextModel(Sam3LiteTextPreTrainedModel):
         r"^tracker_model.",
         r"^tracker_neck.",
     ]
+    # DETR components create float masks from features, so flash/flex attention cannot be dispatched safely.
     _supports_flash_attn = False
     _supports_flex_attn = False
 

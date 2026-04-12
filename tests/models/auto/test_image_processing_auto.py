@@ -27,6 +27,7 @@ from transformers import (
     AutoImageProcessor,
     CLIPConfig,
     CLIPImageProcessor,
+    Sam3ImageProcessor,
     ViTImageProcessor,
     ViTImageProcessorPil,
 )
@@ -125,6 +126,20 @@ class AutoImageProcessorTest(unittest.TestCase):
             self.assertTrue("_processor_class" not in dict_as_saved)
 
         self.assertIsInstance(config, CLIPImageProcessor)
+
+    @require_torchvision
+    def test_image_processor_from_local_directory_from_sam3_lite_text_config(self):
+        with tempfile.TemporaryDirectory() as tmpdirname:
+            processor_tmpfile = Path(tmpdirname) / "preprocessor_config.json"
+            config_tmpfile = Path(tmpdirname) / "config.json"
+            processor_config = Sam3ImageProcessor().to_dict()
+            processor_config.pop("image_processor_type")
+            json.dump(processor_config, open(processor_tmpfile, "w"))
+            json.dump({"model_type": "sam3_lite_text"}, open(config_tmpfile, "w"))
+
+            config = AutoImageProcessor.from_pretrained(tmpdirname)
+
+        self.assertIsInstance(config, Sam3ImageProcessor)
 
     @require_torchvision
     def test_image_processor_from_local_file(self):

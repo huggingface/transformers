@@ -77,6 +77,8 @@ class Sam3LiteTextModelTester:
         detr_decoder_num_queries=5,  # Reduced from 10 to 5
         mask_decoder_hidden_size=32,
         batch_size=2,
+        text_seq_length=16,
+        vocab_size=100,
         is_training=True,
     ):
         if global_attn_indexes is None:
@@ -97,6 +99,8 @@ class Sam3LiteTextModelTester:
         self.fpn_hidden_size = fpn_hidden_size
         self.scale_factors = scale_factors
         self.batch_size = batch_size
+        self.text_seq_length = text_seq_length
+        self.vocab_size = vocab_size
         self.is_training = is_training
 
         # Geometry encoder
@@ -116,7 +120,7 @@ class Sam3LiteTextModelTester:
     def prepare_config_and_inputs(self):
         pixel_values = floats_tensor([self.batch_size, self.num_channels, self.image_size, self.image_size])
         # Simple text input (will be processed by text encoder)
-        input_ids = torch.randint(0, 1000, (self.batch_size, 16), device=torch_device)
+        input_ids = torch.randint(0, self.vocab_size, (self.batch_size, self.text_seq_length), device=torch_device)
         attention_mask = torch.ones_like(input_ids)
 
         config = self.get_config()
@@ -146,13 +150,13 @@ class Sam3LiteTextModelTester:
         # use_repmixer_blocks=False ensures all layers are standard TransformerLayers so
         # attention output, hidden state, and SDPA dispatch tests pass correctly.
         text_config = {
-            "vocab_size": 1000,
+            "vocab_size": self.vocab_size,
             "hidden_size": 32,
             "intermediate_size": 64,
             "projection_dim": 32,
             "num_hidden_layers": self.num_hidden_layers,
             "num_attention_heads": 4,
-            "max_position_embeddings": 32,
+            "max_position_embeddings": self.text_seq_length,
             "hidden_act": "gelu",
             "use_repmixer_blocks": False,
         }
@@ -270,17 +274,6 @@ class Sam3LiteTextModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Test
 
     def test_batching_equivalence(self, atol=5e-4, rtol=5e-4):
         super().test_batching_equivalence(atol=atol, rtol=rtol)
-
-    @unittest.skip(
-        reason="Sam3LiteTextModel creates attention masks from features (with gradients), "
-        "which is incompatible with eager/SDPA output parity checks"
-    )
-    def test_eager_matches_sdpa_inference(self, *args):
-        pass
-
-    @unittest.skip(reason="SAM3LiteTextModel does not support SDPA")
-    def test_flash_attn_2_can_dispatch_composite_models(self):
-        pass
 
     # Override as SAM3Model has component-specific attention outputs
     def test_attention_outputs(self):
@@ -647,7 +640,12 @@ class Sam3LiteTextModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Test
         pixel_values = floats_tensor([self.model_tester.batch_size, self.model_tester.num_channels, 560, 560]).to(
             torch_device
         )
-        input_ids = torch.randint(0, 1000, (self.model_tester.batch_size, 16), device=torch_device)
+        input_ids = torch.randint(
+            0,
+            config.text_config.vocab_size,
+            (self.model_tester.batch_size, self.model_tester.text_seq_length),
+            device=torch_device,
+        )
 
         with torch.no_grad():
             outputs = model(pixel_values=pixel_values, input_ids=input_ids, attention_mask=torch.ones_like(input_ids))
@@ -792,7 +790,7 @@ class Sam3LiteTextModelIntegrationTest(unittest.TestCase):
     def setUp(self):
         super().setUp()
         model_name = "yonigozlan/sam3-litetext-s0"
-        self.model = Sam3LiteTextModel.from_pretrained(model_name).to(torch.float32)
+        self.model = Sam3LiteTextModel.from_pretrained(model_name, dtype=torch.float32)
         self.processor = Sam3LiteTextProcessor.from_pretrained(model_name)
         self.model.to(torch_device)
         self.model.eval()

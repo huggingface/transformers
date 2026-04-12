@@ -16,7 +16,7 @@ limitations under the License.
 ⚠️ Note that this file is in Markdown but contain specific syntax for our doc-builder (similar to MDX) that may not be rendered properly in your Markdown viewer.
 
 -->
-*This model was released on 2026-02-12 and added to Hugging Face Transformers on 2026-04-06.*
+*This model was released on 2026-02-12 and added to Hugging Face Transformers on 2026-04-12.*
 
 # SAM3-LiteText
 
@@ -52,15 +52,17 @@ The original code can be found [here](https://github.com/SimonZeng7108/efficient
 SAM3-LiteText is a drop-in replacement for SAM3 with a lightweight text encoder. It uses the same processor ([`Sam3Processor`]) and supports the same prompting interface. Refer to the [SAM3 documentation](sam3) for detailed usage examples including text prompts, box prompts, batched inference, and more.
 
 ```python
+from io import BytesIO
+
+import httpx
 from transformers import AutoModel, AutoProcessor
 from PIL import Image
-import requests
 
 model = AutoModel.from_pretrained("yonigozlan/sam3-litetext-s0", device_map="auto")
 processor = AutoProcessor.from_pretrained("yonigozlan/sam3-litetext-s0")
 
 image_url = "http://images.cocodataset.org/val2017/000000077595.jpg"
-image = Image.open(requests.get(image_url, stream=True).raw).convert("RGB")
+image = Image.open(BytesIO(httpx.get(image_url).content)).convert("RGB")
 
 inputs = processor(images=image, text="ear", return_tensors="pt").to(model.device)
 
