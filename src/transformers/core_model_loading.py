@@ -525,6 +525,10 @@ class WeightTransform:
     collected_tensors: dict[str, list[Future]] = field(default_factory=lambda: defaultdict(list), init=False)
     layer_targets: dict[str, set[str]] = field(default_factory=lambda: defaultdict(set), init=False)
 
+    # Those are needed to be able to reverse correctly the transform, as the patterns may be processed
+    _original_source_patterns: list[str] = field(init=False)
+    _original_target_patterns: list[str] = field(init=False)
+
     def __setattr__(self, name, value):
         if name in ("source_patterns", "target_patterns"):
             # We do not allow to re-set the patterns, as they are linked between each other and changing one
@@ -541,10 +545,13 @@ class WeightTransform:
         # when instantiating the reverse mapping (i.e. the targets become sources, and sources become targets)
         # The issues lie in the sources usually, so here we need to check the targets for the reversed mapping
 
+        # We need to copy the exact original patterns to later reverse (before processing may change them)
+        self._original_source_patterns = self.source_patterns.copy()
+        self._original_target_patterns = self.target_patterns.copy()
+
         # Process target_patterns: detect capturing groups and replace with \1
         # Store the original capturing group patterns for reverse mapping
         target_capturing_groups: list[str] = []
-        unprocess_targets = self.target_patterns.copy()
         for i, pattern in enumerate(self.target_patterns):
             self.target_patterns[i], captured_group = process_target_pattern(pattern)
             if captured_group is not None:
@@ -573,7 +580,7 @@ class WeightTransform:
                 pattern = pattern.replace(r"\1", unique_capturing_group, 1)
             # Potentially process a bit more for consistency - only if they are consistent pairs, i.e. the length is the same
             if len(self.source_patterns) == len(self.target_patterns):
-                pattern = process_source_pattern(pattern, unprocess_targets[i])
+                pattern = process_source_pattern(pattern, self._original_target_patterns[i])
             self.source_patterns[i] = pattern
 
         # Construct the regex we will use to rename keys from the sources to the targets
@@ -611,7 +618,7 @@ class WeightTransform:
             # inside that matched named group
             replaced_group_idx = self.compiled_sources.groupindex[matching_group_name] + 1
             replacement = replacement.replace(r"\1", match_object.group(replaced_group_idx))
-        renamed_key = source_key.replace(match_object.group(0), replacement)
+        renamed_key = source_key.replace(match_object.group(0), replacement, 1)
         return renamed_key, source_pattern_that_matched
 
     def reverse_transform(self) -> WeightTransform:
@@ -627,7 +634,7 @@ class WeightTransform:
             kwargs["operations"] = [op.reverse_op for op in self.operations[::-1]]
 
         reverse_transform = self.__class__(
-            source_patterns=self.target_patterns, target_patterns=self.source_patterns, **kwargs
+            source_patterns=self._original_target_patterns, target_patterns=self._original_source_patterns, **kwargs
         )
 
         return reverse_transform
