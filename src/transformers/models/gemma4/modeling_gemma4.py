@@ -125,16 +125,22 @@ class Gemma4AudioModelOutput(BaseModelOutputWithPooling):
     attention_mask: torch.BoolTensor | None = None
 
 
-class Gemma4ClippableLinear(nn.Module):
+class Gemma4ClippableLinear(nn.Linear):
+    """Linear layer with optional input/output clamping.
+
+    Inherits from ``nn.Linear`` so that parameter-efficient fine-tuning
+    libraries (PEFT/LoRA) can discover and target these layers via the standard
+    ``isinstance(module, nn.Linear)`` check.
+    """
+
     def __init__(
         self,
         config: Gemma4VisionConfig | Gemma4AudioConfig,
         in_features: int,
         out_features: int,
     ) -> None:
-        super().__init__()
+        super().__init__(in_features, out_features, bias=False)
         self.use_clipped_linears = config.use_clipped_linears
-        self.linear = nn.Linear(in_features, out_features, bias=False)
 
         if self.use_clipped_linears:
             self.register_buffer("input_min", torch.tensor(-float("inf")))
@@ -142,11 +148,22 @@ class Gemma4ClippableLinear(nn.Module):
             self.register_buffer("output_min", torch.tensor(-float("inf")))
             self.register_buffer("output_max", torch.tensor(float("inf")))
 
+        # Backward compat: older checkpoints store the weight under "linear.weight"
+        # (the previous implementation wrapped an nn.Linear as self.linear).
+        self._register_load_state_dict_pre_hook(self._remap_legacy_keys)
+
+    @staticmethod
+    def _remap_legacy_keys(state_dict, prefix, *args, **kwargs):
+        old_key = prefix + "linear.weight"
+        new_key = prefix + "weight"
+        if old_key in state_dict:
+            state_dict[new_key] = state_dict.pop(old_key)
+
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         if self.use_clipped_linears:
             hidden_states = torch.clamp(hidden_states, self.input_min, self.input_max)
 
-        hidden_states = self.linear(hidden_states)
+        hidden_states = nn.Linear.forward(self, hidden_states)
 
         if self.use_clipped_linears:
             hidden_states = torch.clamp(hidden_states, self.output_min, self.output_max)
@@ -309,7 +326,7 @@ class Gemma4AudioAttention(nn.Module):
         attn_output = attn_weights @ value_states.permute(0, 3, 1, 2, 4)
         attn_output = attn_output.permute(0, 2, 3, 1, 4).reshape(batch_size, num_blocks * self.chunk_size, -1)
         attn_output = attn_output[:, :seq_length].contiguous()
-        attn_output = self.post(attn_output.to(dtype=self.post.linear.weight.dtype))
+        attn_output = self.post(attn_output.to(dtype=self.post.weight.dtype))
 
         return attn_output, attn_weights
 
@@ -389,7 +406,7 @@ class Gemma4AudioFeedForward(nn.Module):
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         # This is needed to avoid any underflow/overflow issues when clipping
-        gradient_clipping = min(self.gradient_clipping, torch.finfo(self.ffw_layer_1.linear.weight.dtype).max)
+        gradient_clipping = min(self.gradient_clipping, torch.finfo(self.ffw_layer_1.weight.dtype).max)
 
         residual = hidden_states
         hidden_states = torch.clamp(hidden_states, -gradient_clipping, gradient_clipping)
@@ -472,7 +489,7 @@ class Gemma4AudioLightConv1d(nn.Module):
         hidden_states = self.depthwise_conv1d(hidden_states.transpose(1, 2)).transpose(1, 2)
 
         # This is needed to avoid any underflow/overflow issues when clipping
-        gradient_clipping = min(self.gradient_clipping, torch.finfo(self.linear_start.linear.weight.dtype).max)
+        gradient_clipping = min(self.gradient_clipping, torch.finfo(self.linear_start.weight.dtype).max)
         hidden_states = torch.clamp(hidden_states, -gradient_clipping, gradient_clipping)
         hidden_states = self.conv_norm(hidden_states)
 

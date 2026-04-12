@@ -371,10 +371,10 @@ def convert_audio_encoder_weights(
                     converted_paths.append(f"{base}.ffw_layer_2.{param.removeprefix('clip_')}")
                     converted_weights.append(matrix)
                 elif path.endswith("ffn_layer1"):
-                    converted_paths.append(f"{base}.ffw_layer_1.linear.weight")
+                    converted_paths.append(f"{base}.ffw_layer_1.weight")
                     converted_weights.append(matrix.transpose())
                 elif path.endswith("ffn_layer2"):
-                    converted_paths.append(f"{base}.ffw_layer_2.linear.weight")
+                    converted_paths.append(f"{base}.ffw_layer_2.weight")
                     converted_weights.append(matrix.transpose())
                 elif path.endswith("post_layer_norm"):
                     converted_paths.append(f"{base}.post_layer_norm.weight")
@@ -392,10 +392,10 @@ def convert_audio_encoder_weights(
                     converted_paths.append(f"{base}.ffw_layer_2.{param.removeprefix('clip_')}")
                     converted_weights.append(matrix)
                 elif path.endswith("ffn_layer1"):
-                    converted_paths.append(f"{base}.ffw_layer_1.linear.weight")
+                    converted_paths.append(f"{base}.ffw_layer_1.weight")
                     converted_weights.append(matrix.transpose())
                 elif path.endswith("ffn_layer2"):
-                    converted_paths.append(f"{base}.ffw_layer_2.linear.weight")
+                    converted_paths.append(f"{base}.ffw_layer_2.weight")
                     converted_weights.append(matrix.transpose())
                 elif path.endswith("post_layer_norm"):
                     converted_paths.append(f"{base}.post_layer_norm.weight")
@@ -422,10 +422,10 @@ def convert_audio_encoder_weights(
                     converted_paths.append(f"{base}.depthwise_conv1d.weight")
                     converted_weights.append(matrix.transpose())
                 elif path.endswith("linear_end"):
-                    converted_paths.append(f"{base}.linear_end.linear.weight")
+                    converted_paths.append(f"{base}.linear_end.weight")
                     converted_weights.append(matrix.transpose())
                 elif path.endswith("linear_start"):
-                    converted_paths.append(f"{base}.linear_start.linear.weight")
+                    converted_paths.append(f"{base}.linear_start.weight")
                     converted_weights.append(matrix.transpose())
                 elif path.endswith("ln"):
                     converted_paths.append(f"{base}.pre_layer_norm.weight")
@@ -451,9 +451,9 @@ def convert_audio_encoder_weights(
                 if path.endswith("query_key_value_projection"):
                     converted_paths.extend(
                         [
-                            f"{base}.self_attn.q_proj.linear.weight",
-                            f"{base}.self_attn.k_proj.linear.weight",
-                            f"{base}.self_attn.v_proj.linear.weight",
+                            f"{base}.self_attn.q_proj.weight",
+                            f"{base}.self_attn.k_proj.weight",
+                            f"{base}.self_attn.v_proj.weight",
                         ]
                     )
                     converted_weights.extend(
@@ -466,7 +466,7 @@ def convert_audio_encoder_weights(
                     converted_paths.append(f"{base}.self_attn.relative_k_proj.weight")
                     converted_weights.append(matrix.reshape(config.hidden_size, config.hidden_size).transpose())
                 elif path.endswith("post"):
-                    converted_paths.append(f"{base}.self_attn.post.linear.weight")
+                    converted_paths.append(f"{base}.self_attn.post.weight")
                     converted_weights.append(matrix.transpose(2, 0, 1).reshape(config.hidden_size, config.hidden_size))
                 elif path.endswith("post_norm"):
                     converted_paths.append(f"{base}.norm_post_attn.weight")
@@ -620,7 +620,7 @@ def convert_vision_encoder_weights(
 
             if path.endswith("attn/attn_vec_einsum"):
                 # Shape: (12, 64, 768) -> reshape to (768, 768) for o_proj
-                converted_paths.append(f"{base_path}.self_attn.o_proj.linear.weight")
+                converted_paths.append(f"{base_path}.self_attn.o_proj.weight")
                 converted_weights.append(
                     matrix.transpose(2, 0, 1).reshape(config.hidden_size, config.num_attention_heads * config.head_dim)
                 )
@@ -628,8 +628,8 @@ def convert_vision_encoder_weights(
                 # Shape: (2, 12, 768, 64) -> split into k_proj and v_proj
                 converted_paths.extend(
                     [
-                        f"{base_path}.self_attn.k_proj.linear.weight",
-                        f"{base_path}.self_attn.v_proj.linear.weight",
+                        f"{base_path}.self_attn.k_proj.weight",
+                        f"{base_path}.self_attn.v_proj.weight",
                     ]
                 )
                 k_proj_weights, v_proj_weights = matrix.transpose(0, 2, 1, 3)
@@ -642,7 +642,7 @@ def convert_vision_encoder_weights(
                 )
             elif path.endswith("attn/q_einsum"):
                 # Shape: (12, 768, 64) -> reshape to (768, 768) for q_proj
-                converted_paths.append(f"{base_path}.self_attn.q_proj.linear.weight")
+                converted_paths.append(f"{base_path}.self_attn.q_proj.weight")
                 converted_weights.append(
                     matrix.transpose(1, 0, 2)
                     .reshape(config.hidden_size, config.num_attention_heads * config.head_dim)
@@ -652,15 +652,15 @@ def convert_vision_encoder_weights(
                 # Shape: (2, 3072, 768) -> split into gate_proj and up_proj
                 converted_paths.extend(
                     [
-                        f"{base_path}.mlp.gate_proj.linear.weight",
-                        f"{base_path}.mlp.up_proj.linear.weight",
+                        f"{base_path}.mlp.gate_proj.weight",
+                        f"{base_path}.mlp.up_proj.weight",
                     ]
                 )
                 gate_proj_weight, up_proj_weight = matrix
                 converted_weights.extend([gate_proj_weight, up_proj_weight])
             elif path.endswith("mlp/linear"):
                 # Shape: (3072, 768) -> transpose for down_proj
-                converted_paths.append(f"{base_path}.mlp.down_proj.linear.weight")
+                converted_paths.append(f"{base_path}.mlp.down_proj.weight")
                 converted_weights.append(matrix.transpose())
             elif path.endswith("post_attention_norm"):
                 converted_paths.append(f"{base_path}.post_attention_layernorm.weight")
