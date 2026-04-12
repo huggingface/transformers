@@ -570,6 +570,17 @@ class CLIPModelTest(CLIPModelTesterMixin, PipelineTesterMixin, unittest.TestCase
         model = CLIPModel.from_pretrained(model_name)
         self.assertIsNotNone(model)
 
+    @slow
+    def test_model_from_pretrained_ignores_position_ids_unexpected_keys(self):
+        _, loading_info = CLIPModel.from_pretrained(
+            "openai/clip-vit-base-patch32",
+            output_loading_info=True,
+        )
+
+        unexpected_keys = loading_info["unexpected_keys"]
+        self.assertNotIn("text_model.embeddings.position_ids", unexpected_keys)
+        self.assertNotIn("vision_model.embeddings.position_ids", unexpected_keys)
+
     @parameterized.expand(TEST_EAGER_MATCHES_SDPA_INFERENCE_PARAMETERIZATION)
     @slow
     @is_flaky()
