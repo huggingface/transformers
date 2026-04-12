@@ -963,13 +963,23 @@ def is_flash_attn_2_available() -> bool:
 
 @lru_cache
 def is_flash_attn_3_available() -> bool:
-    # Universally available under `flash_attn_interface`
-    is_available = _is_package_available("flash_attn_interface")[0]
-    # Resolving and ensuring the proper name of FA3 being associated
-    is_available = is_available and "flash-attn-3" in [
-        pkg.replace("_", "-") for pkg in PACKAGE_DISTRIBUTION_MAPPING["flash_attn_interface"]
-    ]
-    return is_available and is_torch_cuda_available()
+    if not is_torch_cuda_available():
+        return False
+
+    # FA3 Hopper kernels can live under different module paths depending on
+    # how they were installed:
+    #   1. "flash_attn_interface"          — standalone flash-attn-3 wheel
+    #   2. "hopper.flash_attn_interface"   — built from flash-attention/hopper/
+    # The previous check only looked at package distribution metadata which
+    # doesn't match most real-world installs. Try the actual imports instead.
+    for mod_name in ("flash_attn_interface", "hopper.flash_attn_interface"):
+        try:
+            mod = __import__(mod_name, fromlist=["flash_attn_func"])
+            if hasattr(mod, "flash_attn_func"):
+                return True
+        except Exception:
+            continue
+    return False
 
 
 @lru_cache

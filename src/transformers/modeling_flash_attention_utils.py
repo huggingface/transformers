@@ -93,10 +93,9 @@ FLASH_ATTENTION_COMPATIBILITY_MATRIX = {
     3: {
         "flash_attn_version": 3,
         "general_availability_check": is_flash_attn_3_available,
-        "pkg_availability_check": lambda *args, **kwargs: importlib.util.find_spec("flash_attn_interface") is not None
-        and "flash-attn-3" in [pkg.replace("_", "-") for pkg in PACKAGE_DISTRIBUTION_MAPPING["flash_attn_interface"]],
+        "pkg_availability_check": is_flash_attn_3_available,  # defers to actual import probing
         "supported_devices": ((is_torch_cuda_available, "cuda"),),
-        "cuda_min_major_version": 8,  # Ampere
+        "cuda_min_major_version": 9,  # Hopper (sm90+) — FA3 does NOT run on Ampere
     },
     4: {
         "flash_attn_version": 4,
@@ -163,7 +162,14 @@ def _lazy_imports(
         from .integrations.npu_flash_attention import npu_flash_attn_with_kvcache as flash_attn_with_kvcache
     else:
         if implementation == "flash_attention_3" or (implementation is None and is_fa3 and not is_fa4):
-            from flash_attn_interface import flash_attn_func, flash_attn_varlen_func, flash_attn_with_kvcache
+            # FA3 Hopper kernels live under different module paths depending on
+            # install method.  Try standalone wheel first, then hopper subpackage.
+            try:
+                from flash_attn_interface import flash_attn_func, flash_attn_varlen_func, flash_attn_with_kvcache
+            except ImportError:
+                from hopper.flash_attn_interface import flash_attn_func, flash_attn_varlen_func  # type: ignore[no-redef]
+
+                flash_attn_with_kvcache = None  # hopper wheel may not expose this
         elif implementation == "flash_attention_4" or (implementation is None and is_fa4):
             from flash_attn.cute import flash_attn_func, flash_attn_varlen_func
 
