@@ -120,6 +120,7 @@ if TYPE_CHECKING:
     from .edgetam_video import *
     from .efficientloftr import *
     from .efficientnet import *
+    from .efficientvitsam import *
     from .electra import *
     from .emu3 import *
     from .encodec import *

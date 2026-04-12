@@ -73,6 +73,8 @@ else:
             ("deepseek_vl_hybrid", "DeepseekVLHybridProcessor"),
             ("dia", "DiaProcessor"),
             ("edgetam", "Sam2Processor"),
+            ("efficientvitsam", "EfficientvitsamProcessor"),
+            ("efficientvitsam", "EfficientvitsamProcessor"),
             ("emu3", "Emu3Processor"),
             ("ernie4_5_vl_moe", "Ernie4_5_VLMoeProcessor"),
             ("evolla", "EvollaProcessor"),
