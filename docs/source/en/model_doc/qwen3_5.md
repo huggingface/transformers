@@ -66,6 +66,11 @@ TODO
 [[autodoc]] Qwen3_5ForCausalLM
     - forward
 
+## Qwen3_5ForSequenceClassification
+
+[[autodoc]] Qwen3_5ForSequenceClassification
+    - forward
+
 ## Qwen3_5ForConditionalGeneration
 
 [[autodoc]] Qwen3_5ForConditionalGeneration

@@ -12,18 +12,26 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import Optional
 
 import numpy as np
 import torch
-import torchvision.transforms.v2.functional as tvF
 
 from ...image_processing_utils import BatchFeature, get_size_dict
-from ...image_utils import IMAGENET_STANDARD_MEAN, IMAGENET_STANDARD_STD, PILImageResampling, SizeDict
+from ...image_utils import (
+    IMAGENET_STANDARD_MEAN,
+    IMAGENET_STANDARD_STD,
+    PILImageResampling,
+    SizeDict,
+    pil_torch_interpolation_mapping,
+)
 from ...processing_utils import Unpack, VideosKwargs
-from ...utils import TensorType, logging
+from ...utils import TensorType, is_torchvision_available, logging
 from ...video_processing_utils import BaseVideoProcessor
 from ...video_utils import VideoMetadata, group_videos_by_shape, reorder_videos
+
+
+if is_torchvision_available():
+    from torchvision.transforms.v2 import functional as tvF
 
 
 logger = logging.get_logger(__name__)
@@ -124,7 +132,7 @@ class SmolVLMVideoProcessor(BaseVideoProcessor):
         self,
         video: "torch.Tensor",
         size: SizeDict,
-        interpolation: Optional["tvF.InterpolationMode"] = None,
+        resample: "PILImageResampling | tvF.InterpolationMode | int | None" = None,
         antialias: bool = True,
         **kwargs,
     ) -> "torch.Tensor":
@@ -135,12 +143,18 @@ class SmolVLMVideoProcessor(BaseVideoProcessor):
                 Video to resize.
             size (`SizeDict`):
                 Dictionary in the format `{"height": int, "width": int}` specifying the size of the output video.
-            resample (`InterpolationMode`, *optional*, defaults to `InterpolationMode.BILINEAR`):
-                `InterpolationMode` filter to use when resizing the video e.g. `InterpolationMode.BICUBIC`.
+            resample (`PILImageResampling` or `InterpolationMode`, *optional*, defaults to `InterpolationMode.BILINEAR`):
+                Resampling filter to use when resizing the video.
         Returns:
             `torch.Tensor`: The resized video.
         """
-        interpolation = interpolation if interpolation is not None else tvF.InterpolationMode.BILINEAR
+        if resample is not None:
+            if isinstance(resample, (PILImageResampling, int)):
+                interpolation = pil_torch_interpolation_mapping[resample]
+            else:
+                interpolation = resample
+        else:
+            interpolation = tvF.InterpolationMode.BILINEAR
         if interpolation == tvF.InterpolationMode.LANCZOS:
             logger.warning_once(
                 "You have used fast image processor with LANCZOS resample which not yet supported for torch.Tensor. "
@@ -283,7 +297,7 @@ class SmolVLMVideoProcessor(BaseVideoProcessor):
         do_convert_rgb: bool,
         do_resize: bool,
         size: SizeDict,
-        interpolation: Optional["tvF.InterpolationMode"],
+        resample: "PILImageResampling | tvF.InterpolationMode | int | None",
         do_rescale: bool,
         rescale_factor: float,
         do_normalize: bool,
@@ -299,7 +313,7 @@ class SmolVLMVideoProcessor(BaseVideoProcessor):
             if do_convert_rgb:
                 stacked_videos = self.convert_to_rgb(stacked_videos)
             if do_resize:
-                stacked_videos = self.resize(stacked_videos, size=size, interpolation=interpolation)
+                stacked_videos = self.resize(stacked_videos, size=size, resample=resample)
             resized_videos_grouped[shape] = stacked_videos
         resized_videos = reorder_videos(resized_videos_grouped, grouped_videos_index)
 

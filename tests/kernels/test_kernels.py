@@ -17,6 +17,7 @@
 
 import copy
 import os
+import tempfile
 import types
 from unittest.mock import MagicMock, patch
 
@@ -343,6 +344,42 @@ class TestKernelUtilities(TestCasePlus):
 
 @require_kernels
 class TestAttentionKernelRegistration(TestCasePlus):
+    def test_trust_remote_code_for_attention_kernels(self):
+        """
+        Test that using an untrusted kernel (any repo outside `kernels-community`) as attention requires
+        passing an expplicit `allow_all_kernels=True`
+        """
+        from transformers import LlamaConfig, LlamaModel
+
+        config = LlamaConfig(num_hidden_layers=2, hidden_size=32, intermediate_size=64, vocab_size=100)
+        model = LlamaModel(copy.deepcopy(config))
+        untrusted_kernel = "untrusted/flash_attention_2"
+        trusted_kernel = "kernels-community/flash-attn2"
+
+        with tempfile.TemporaryDirectory() as tmpdirname:
+            model.save_pretrained(tmpdirname)
+
+            # Test that an untrusted kernel will raise an error without the flag
+            with self.assertRaisesRegex(
+                ValueError,
+                "You need to specify `allow_all_kernels=True` to use kernels outside of the `kernels-community` repository",
+            ):
+                _ = LlamaModel.from_pretrained(tmpdirname, attn_implementation=untrusted_kernel)
+
+            def dummy_lazy_import(*args, **kwargs):
+                pass
+
+            # Test that it works with the flag - though the repo does not exist, so patch the dispatch
+            with patch("transformers.modeling_utils.lazy_import_flash_attention", dummy_lazy_import):
+                model = LlamaModel.from_pretrained(
+                    tmpdirname, attn_implementation=untrusted_kernel, allow_all_kernels=True
+                )
+                self.assertEqual(model.config._attn_implementation, untrusted_kernel)
+
+            # Test that a trusted kernel does not need trust_remote_code
+            model = LlamaModel.from_pretrained(tmpdirname, attn_implementation=trusted_kernel)
+            self.assertEqual(model.config._attn_implementation, trusted_kernel)
+
     def test_load_and_register_flash_attn_like_kernel(self):
         kernel_obj = types.SimpleNamespace(flash_attn_varlen_func=lambda *a, **k: None)
 

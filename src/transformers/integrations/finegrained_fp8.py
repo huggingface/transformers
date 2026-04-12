@@ -11,270 +11,155 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+import torch
+import torch.nn as nn
+import triton
+from torch.nn import functional as F
 
-from ..core_model_loading import ConversionOps
+from ..activations import ACT2FN
+from ..core_model_loading import ConversionOps, _IdentityOp
 from ..quantizers.quantizers_utils import should_convert_module
-from ..utils import is_kernels_available, is_torch_accelerator_available, is_torch_available, logging
-
-
-if is_torch_available():
-    import torch
-    import torch.nn as nn
-    import triton
-    import triton.language as tl
-    from torch.nn import functional as F
+from ..utils import logging
+from ..utils.import_utils import get_cuda_runtime_version, resolve_internal_import
+from .hub_kernels import lazy_load_kernel
+from .moe import ExpertsInterface, use_experts_implementation
 
 
 logger = logging.get_logger(__name__)
-
-# Global for the CUTLASS quantization kernel (lazily loaded)
-_quantization_kernel = None
-
-
-def _get_quantization_kernel():
-    """Lazily load the CUTLASS quantization kernel from HuggingFace Hub."""
-    global _quantization_kernel
-    if _quantization_kernel is None:
-        try:
-            from .hub_kernels import get_kernel
-
-            _quantization_kernel = get_kernel("RedHatAI/quantization")
-        except Exception as e:
-            logger.warning_once(f"Failed to load CUTLASS quantization kernel: {e}. Falling back to Triton.")
-            _quantization_kernel = False  # Mark as unavailable
-    return _quantization_kernel if _quantization_kernel else None
-
-
-def _supports_cutlass(block_size: list[int] | None, output_dtype: torch.dtype) -> bool:
-    """
-    Check if CUTLASS blockwise FP8 matmul is supported for the given block size and output dtype.
-
-    CUTLASS blockwise kernels require:
-    - SM90+ (Hopper or newer)
-    - Block size [128, 128] for weights
-    - Block size [1, 128] for activations (handled implicitly)
-    - Output dtype bfloat16 or float16
-    """
-
-    if not is_torch_available() or not torch.cuda.is_available() or not is_kernels_available():
-        return False
-
-    # CUTLASS only supports bfloat16/float16 output
-    if output_dtype not in (torch.bfloat16, torch.float16):
-        return False
-
-    # Check block size compatibility - CUTLASS only supports [128, 128]
-    if block_size is None:
-        return False
-    if len(block_size) != 2 or block_size[0] != 128 or block_size[1] != 128:
-        return False
-
-    # Check GPU capability (SM90+)
-    capability = torch.cuda.get_device_capability()
-    cuda_capability = capability[0] * 10 + capability[1]
-
-    # Try to load the kernel and check if blockwise FP8 is supported
-    kernel = _get_quantization_kernel()
-    if kernel is None:
-        return False
-
-    try:
-        return kernel.cutlass_scaled_mm_supports_block_fp8(cuda_capability)
-    except Exception:
-        return False
 
 
 _FP8_DTYPE = torch.float8_e4m3fn
 _FP8_MIN = torch.finfo(_FP8_DTYPE).min
 _FP8_MAX = torch.finfo(_FP8_DTYPE).max
 
+# DeepGEMM requires M-dimension alignment to 128 for TMA-based contiguous grouped GEMM
+# TMA is an H100 hardware addition that allows applications to asynchronously and
+# bi-directionally transfer 1D-5D tensors between GPU global and shared memory
+_DEEPGEMM_M_ALIGNMENT = 128
 
-# Copied from https://huggingface.co/deepseek-ai/DeepSeek-V3/blob/main/inference/kernel.py
-@triton.jit
-def act_quant_kernel(x_ptr, y_ptr, s_ptr, BLOCK_SIZE: tl.constexpr):
-    pid = tl.program_id(axis=0)
-    offs = pid * BLOCK_SIZE + tl.arange(0, BLOCK_SIZE)
-    x = tl.load(x_ptr + offs).to(tl.float32)
-    s = tl.max(tl.abs(x)) / 448.0
-    y = x / s
-    y = y.to(y_ptr.dtype.element_ty)
-    tl.store(y_ptr + offs, y)
-    tl.store(s_ptr + pid, s)
+# Lazily-loaded finegrained-fp8 Triton kernel functions (populated by _load_triton_kernel)
+triton_fp8_matmul = None
+triton_fp8_act_quant = None
+triton_batched_fp8_matmul = None
+triton_grouped_fp8_matmul = None
+# _triton_available: None = not yet attempted, True = loaded, False = failed (won't retry)
+_triton_available = None
 
-
-def act_quant(x: torch.Tensor, block_size: int = 128) -> tuple[torch.Tensor, torch.Tensor]:
-    assert x.is_contiguous()
-    assert x.shape[-1] % block_size == 0
-    y = torch.empty_like(x, dtype=torch.float8_e4m3fn)
-    s = x.new_empty(*x.size()[:-1], x.size(-1) // block_size, dtype=torch.float32)
-
-    def grid(meta):
-        return (triton.cdiv(x.numel(), meta["BLOCK_SIZE"]),)
-
-    act_quant_kernel[grid](x, y, s, BLOCK_SIZE=block_size)
-    return y, s
+# Lazily-loaded DeepGEMM kernel functions (populated by _load_deepgemm_kernel)
+deepgemm_fp8_matmul = None
+deepgemm_grouped_fp8_matmul = None
+deepgemm_per_token_cast_to_fp8 = None
+# _deepgemm_available: None = not yet attempted, True = loaded, False = failed (won't retry)
+_deepgemm_available = None
 
 
-# Adapted from https://github.com/sgl-project/sglang/blob/main/python/sglang/srt/layers/quantization/fp8_kernel.py
-@triton.jit
-def _w8a8_block_fp8_matmul(
-    # Pointers to inputs and output
-    A,
-    B,
-    C,
-    As,
-    Bs,
-    # Shape for matmul
-    M,
-    N,
-    K,
-    # Block size for block-wise quantization
-    group_n,
-    group_k,
-    # Stride for inputs and output
-    stride_am,
-    stride_ak,
-    stride_bk,
-    stride_bn,
-    stride_cm,
-    stride_cn,
-    stride_As_m,
-    stride_As_k,
-    stride_Bs_k,
-    stride_Bs_n,
-    # Meta-parameters
-    BLOCK_SIZE_M: tl.constexpr,
-    BLOCK_SIZE_N: tl.constexpr,
-    BLOCK_SIZE_K: tl.constexpr,
-    GROUP_SIZE_M: tl.constexpr,
-):
-    """Triton-accelerated function used to perform linear operations (dot
-    product) on input tensors `A` and `B` with block-wise quantization, and
-    store the result in output tensor `C`.
+def _load_triton_kernel():
+    """Lazily load the finegrained-fp8 Triton kernel and extract functions.
+
+    Uses the hub kernels lazy loading pattern. Raises an error if the kernel
+    cannot be loaded or required functions are missing. Only attempts loading once.
     """
+    global \
+        _triton_available, \
+        triton_fp8_act_quant, \
+        triton_fp8_matmul, \
+        triton_batched_fp8_matmul, \
+        triton_grouped_fp8_matmul
 
-    pid = tl.program_id(axis=0)
-    num_pid_m = tl.cdiv(M, BLOCK_SIZE_M)
-    num_pid_n = tl.cdiv(N, BLOCK_SIZE_N)
-    num_pid_in_group = GROUP_SIZE_M * num_pid_n
-    group_id = pid // num_pid_in_group
-    first_pid_m = group_id * GROUP_SIZE_M
-    group_size_m = min(num_pid_m - first_pid_m, GROUP_SIZE_M)
-    pid_m = first_pid_m + (pid % group_size_m)
-    pid_n = (pid % num_pid_in_group) // group_size_m
+    if _triton_available is not None:
+        if not _triton_available:
+            raise ImportError("finegrained-fp8 kernel is not available (previous load attempt failed).")
+        return
 
-    offs_am = (pid_m * BLOCK_SIZE_M + tl.arange(0, BLOCK_SIZE_M)) % M
-    offs_bn = (pid_n * BLOCK_SIZE_N + tl.arange(0, BLOCK_SIZE_N)) % N
-    offs_k = tl.arange(0, BLOCK_SIZE_K)
-    a_ptrs = A + (offs_am[:, None] * stride_am + offs_k[None, :] * stride_ak)
-    b_ptrs = B + (offs_k[:, None] * stride_bk + offs_bn[None, :] * stride_bn)
+    _triton_available = False  # mark attempted before any early exit
 
-    As_ptrs = As + offs_am * stride_As_m
-    offs_bsn = offs_bn // group_n
-    Bs_ptrs = Bs + offs_bsn * stride_Bs_n
+    kernel = lazy_load_kernel("finegrained-fp8")
+    triton_fp8_matmul = getattr(kernel, "w8a8_fp8_matmul")
+    triton_fp8_act_quant = getattr(kernel, "fp8_act_quant")
+    triton_batched_fp8_matmul = getattr(kernel, "w8a8_fp8_matmul_batched")
+    triton_grouped_fp8_matmul = getattr(kernel, "w8a8_fp8_matmul_grouped")
 
-    accumulator = tl.zeros((BLOCK_SIZE_M, BLOCK_SIZE_N), dtype=tl.float32)
-    for k in range(0, tl.cdiv(K, BLOCK_SIZE_K)):
-        a = tl.load(a_ptrs, mask=offs_k[None, :] < K - k * BLOCK_SIZE_K, other=0.0)
-        b = tl.load(b_ptrs, mask=offs_k[:, None] < K - k * BLOCK_SIZE_K, other=0.0)
+    missing = [
+        name
+        for name, attr in [
+            ("w8a8_fp8_matmul", triton_fp8_matmul),
+            ("fp8_act_quant", triton_fp8_act_quant),
+            ("w8a8_fp8_matmul_batched", triton_batched_fp8_matmul),
+            ("w8a8_fp8_matmul_grouped", triton_grouped_fp8_matmul),
+        ]
+        if attr is None
+    ]
+    if missing:
+        raise ImportError(
+            f"finegrained-fp8 kernel is missing required functions: {', '.join(missing)}. "
+            "Please update the `kernels` package (`pip install -U kernels`)."
+        )
 
-        k_start = k * BLOCK_SIZE_K
-        offs_ks = k_start // group_k
-        a_s = tl.load(As_ptrs + offs_ks * stride_As_k)
-        b_s = tl.load(Bs_ptrs + offs_ks * stride_Bs_k)
-
-        accumulator += tl.dot(a, b) * a_s[:, None] * b_s[None, :]
-        a_ptrs += BLOCK_SIZE_K * stride_ak
-        b_ptrs += BLOCK_SIZE_K * stride_bk
-
-    if C.dtype.element_ty == tl.bfloat16:
-        c = accumulator.to(tl.bfloat16)
-    elif C.dtype.element_ty == tl.float16:
-        c = accumulator.to(tl.float16)
-    else:
-        c = accumulator.to(tl.float32)
-
-    offs_cm = pid_m * BLOCK_SIZE_M + tl.arange(0, BLOCK_SIZE_M)
-    offs_cn = pid_n * BLOCK_SIZE_N + tl.arange(0, BLOCK_SIZE_N)
-    c_ptrs = C + stride_cm * offs_cm[:, None] + stride_cn * offs_cn[None, :]
-    c_mask = (offs_cm[:, None] < M) & (offs_cn[None, :] < N)
-    tl.store(c_ptrs, c, mask=c_mask)
+    _triton_available = True
 
 
-@triton.jit
-def _w8a8_block_fp8_matmul_per_tensor(
-    # Pointers to inputs and output
-    A,
-    B,
-    C,
-    As,
-    Bs,
-    # Shape for matmul
-    M,
-    N,
-    K,
-    # Block size for block-wise quantization
-    group_n,
-    group_k,
-    # Stride for inputs and output
-    stride_am,
-    stride_ak,
-    stride_bk,
-    stride_bn,
-    stride_cm,
-    stride_cn,
-    # Meta-parameters
-    BLOCK_SIZE_M: tl.constexpr,
-    BLOCK_SIZE_N: tl.constexpr,
-    BLOCK_SIZE_K: tl.constexpr,
-    GROUP_SIZE_M: tl.constexpr,
-):
-    """Triton-accelerated function used to perform linear operations (dot
-    product) on input tensors `A` and `B` with per-tensor quantization, and
-    store the result in output tensor `C`.
+def _load_deepgemm_kernel():
+    """Lazily load the DeepGEMM kernel and extract functions with proper names.
+
+    Uses the hub kernels lazy loading pattern. Raises an error if the kernel
+    cannot be loaded, required functions are missing, or the hardware is insufficient.
+    Only attempts loading once.
     """
+    global _deepgemm_available, deepgemm_fp8_matmul, deepgemm_grouped_fp8_matmul, deepgemm_per_token_cast_to_fp8
 
-    pid = tl.program_id(axis=0)
-    num_pid_m = tl.cdiv(M, BLOCK_SIZE_M)
-    num_pid_n = tl.cdiv(N, BLOCK_SIZE_N)
-    num_pid_in_group = GROUP_SIZE_M * num_pid_n
-    group_id = pid // num_pid_in_group
-    first_pid_m = group_id * GROUP_SIZE_M
-    group_size_m = min(num_pid_m - first_pid_m, GROUP_SIZE_M)
-    pid_m = first_pid_m + (pid % group_size_m)
-    pid_n = (pid % num_pid_in_group) // group_size_m
+    if _deepgemm_available is not None:
+        if not _deepgemm_available:
+            raise ImportError("DeepGEMM kernel is not available (previous load attempt failed).")
+        return
 
-    offs_am = (pid_m * BLOCK_SIZE_M + tl.arange(0, BLOCK_SIZE_M)) % M
-    offs_bn = (pid_n * BLOCK_SIZE_N + tl.arange(0, BLOCK_SIZE_N)) % N
-    offs_k = tl.arange(0, BLOCK_SIZE_K)
-    a_ptrs = A + (offs_am[:, None] * stride_am + offs_k[None, :] * stride_ak)
-    b_ptrs = B + (offs_k[:, None] * stride_bk + offs_bn[None, :] * stride_bn)
-    scale_a = tl.load(As)
-    scale_b = tl.load(Bs)
-    accumulator = tl.zeros((BLOCK_SIZE_M, BLOCK_SIZE_N), dtype=tl.float32)
-    for k in range(0, tl.cdiv(K, BLOCK_SIZE_K)):
-        a = tl.load(a_ptrs, mask=offs_k[None, :] < K - k * BLOCK_SIZE_K, other=0.0)
-        b = tl.load(b_ptrs, mask=offs_k[:, None] < K - k * BLOCK_SIZE_K, other=0.0)
+    _deepgemm_available = False  # mark attempted before any early exit
 
-        accumulator += tl.dot(a, b) * scale_a * scale_b
-        a_ptrs += BLOCK_SIZE_K * stride_ak
-        b_ptrs += BLOCK_SIZE_K * stride_bk
+    # DeepGEMM requires CUDA and a compatible GPU
+    if not torch.cuda.is_available():
+        raise ImportError(
+            "DeepGEMM kernel requires CUDA, but CUDA is not available. Use a different `experts_implementation`."
+        )
 
-    if C.dtype.element_ty == tl.bfloat16:
-        c = accumulator.to(tl.bfloat16)
-    elif C.dtype.element_ty == tl.float16:
-        c = accumulator.to(tl.float16)
-    else:
-        c = accumulator.to(tl.float32)
+    # DeepGEMM requires Hopper (SM90) or newer for FP8 WGMMA instructions
+    major = torch.cuda.get_device_capability()[0]
+    if major < 9:
+        raise ImportError(
+            f"DeepGEMM requires a Hopper (SM90+) or newer GPU, but the current device "
+            f"has compute capability {major}.x. Use a different `experts_implementation`."
+        )
 
-    offs_cm = pid_m * BLOCK_SIZE_M + tl.arange(0, BLOCK_SIZE_M)
-    offs_cn = pid_n * BLOCK_SIZE_N + tl.arange(0, BLOCK_SIZE_N)
-    c_ptrs = C + stride_cm * offs_cm[:, None] + stride_cn * offs_cn[None, :]
-    c_mask = (offs_cm[:, None] < M) & (offs_cn[None, :] < N)
-    tl.store(c_ptrs, c, mask=c_mask)
+    # DeepGEMM requires CUDA runtime ≥ 12.3.
+    cuda_major, cuda_minor = get_cuda_runtime_version()
+    if cuda_major < 12 or (cuda_major == 12 and cuda_minor < 3):
+        raise ImportError(
+            f"DeepGEMM requires CUDA runtime 12.3+, but found {cuda_major}.{cuda_minor}. "
+            "Please upgrade your CUDA toolkit or use a different `experts_implementation`."
+        )
+
+    kernel = lazy_load_kernel("deep-gemm")
+    deepgemm_fp8_matmul = getattr(kernel, "fp8_gemm_nt")
+    deepgemm_grouped_fp8_matmul = getattr(kernel, "m_grouped_fp8_gemm_nt_contiguous")
+    deepgemm_per_token_cast_to_fp8 = resolve_internal_import(kernel, chained_path="utils.per_token_cast_to_fp8")
+
+    missing = [
+        name
+        for name, attr in [
+            ("fp8_gemm_nt", deepgemm_fp8_matmul),
+            ("m_grouped_fp8_gemm_nt_contiguous", deepgemm_grouped_fp8_matmul),
+            ("utils.per_token_cast_to_fp8", deepgemm_per_token_cast_to_fp8),
+        ]
+        if attr is None
+    ]
+    if missing:
+        raise ImportError(
+            f"DeepGEMM kernel is missing required functions: {', '.join(missing)}. "
+            "Please update the `kernels` package (`pip install -U kernels`)."
+        )
+
+    _deepgemm_available = True
 
 
-def w8a8_block_fp8_matmul_triton(
+def w8a8_fp8_matmul(
     A: torch.Tensor,
     B: torch.Tensor,
     As: torch.Tensor,
@@ -282,255 +167,45 @@ def w8a8_block_fp8_matmul_triton(
     block_size: list[int],
     output_dtype: torch.dtype = torch.float32,
 ) -> torch.Tensor:
-    """This function performs matrix multiplication with block-wise
-    quantization.
-    It takes two input tensors `A` and `B` with scales `As` and `Bs`.
-    The output is returned in the specified `output_dtype`.
-    Args:
-        A: The input tensor, e.g., activation.
-        B: The input tensor, e.g., weight.
-        As: The per-token-group quantization scale for `A`.
-        Bs: The per-block quantization scale for `B`.
-        block_size: The block size for per-block quantization. It should
-        be 2-dim, e.g., [128, 128].
-        output_dytpe: The dtype of the returned tensor.
-    Returns:
-        torch.Tensor: The result of matmul.
-    """
-    if block_size is None:
-        block_n, block_k = 128, 128
-    else:
-        assert len(block_size) == 2
-        block_n, block_k = block_size[0], block_size[1]
+    """FP8 matmul: C = dequant(A, As) @ dequant(B, Bs)^T.
 
-    # if we have per-tensor quantization, we use 128x128 block size for tiled matmul multiplication
-    if block_n == B.shape[-2] and block_k == B.shape[-1]:
-        block_n = 128
-        block_k = 128
+    Supports both per-tensor and block-wise quantization:
+      - block_size=None or block_size=[N, K]: per-tensor mode (As is scalar/per-row, Bs is scalar)
+      - block_size=[block_n, block_k]: block-wise mode (As and Bs are per-block scale grids)
 
-    assert A.shape[-1] == B.shape[-1]
-
-    if As.numel() != 1:
-        assert A.shape[:-1] == As.shape[:-1] and A.is_contiguous()
-        assert triton.cdiv(A.shape[-1], block_k) == As.shape[-1]
-
-    M = A.numel() // A.shape[-1]
-
-    N, K = B.shape
-    assert B.ndim == 2 and B.is_contiguous()
-    if Bs.numel() != 1:
-        assert Bs.ndim == 2
-        assert triton.cdiv(N, block_n) == Bs.shape[0], f"{N}, {block_n}, {Bs.shape}"
-        assert triton.cdiv(K, block_k) == Bs.shape[1], f"{K}, {block_k}, {Bs.shape}"
-
-    C_shape = A.shape[:-1] + (N,)
-    C = A.new_empty(C_shape, dtype=output_dtype)
-
-    BLOCK_SIZE_M = 128
-    if M < BLOCK_SIZE_M:
-        BLOCK_SIZE_M = triton.next_power_of_2(M)
-        BLOCK_SIZE_M = max(BLOCK_SIZE_M, 16)
-    BLOCK_SIZE_K = block_k
-    assert block_k % BLOCK_SIZE_K == 0
-    BLOCK_SIZE_N = block_n
-
-    def grid(META):
-        return (triton.cdiv(M, META["BLOCK_SIZE_M"]) * triton.cdiv(N, META["BLOCK_SIZE_N"]),)
-
-    if As.numel() == 1 and Bs.numel() == 1:
-        _w8a8_block_fp8_matmul_per_tensor[grid](
-            A,
-            B,
-            C,
-            As,
-            Bs,
-            M,
-            N,
-            K,
-            block_n,
-            block_k,
-            A.stride(-2),
-            A.stride(-1),
-            B.stride(1),
-            B.stride(0),
-            C.stride(-2),
-            C.stride(-1),
-            BLOCK_SIZE_M=BLOCK_SIZE_M,
-            BLOCK_SIZE_N=BLOCK_SIZE_N,
-            BLOCK_SIZE_K=BLOCK_SIZE_K,
-            GROUP_SIZE_M=8,
-        )
-    else:
-        _w8a8_block_fp8_matmul[grid](
-            A,
-            B,
-            C,
-            As,
-            Bs,
-            M,
-            N,
-            K,
-            block_n,
-            block_k,
-            A.stride(-2),
-            A.stride(-1),
-            B.stride(1),
-            B.stride(0),
-            C.stride(-2),
-            C.stride(-1),
-            As.stride(-2),
-            As.stride(-1),
-            Bs.stride(1),
-            Bs.stride(0),
-            BLOCK_SIZE_M=BLOCK_SIZE_M,
-            BLOCK_SIZE_N=BLOCK_SIZE_N,
-            BLOCK_SIZE_K=BLOCK_SIZE_K,
-            GROUP_SIZE_M=8,
-        )
-
-    return C
-
-
-def w8a8_block_fp8_matmul(
-    A: torch.Tensor,
-    B: torch.Tensor,
-    As: torch.Tensor,
-    Bs: torch.Tensor,
-    block_size: list[int],
-    output_dtype: torch.dtype = torch.float32,
-) -> torch.Tensor:
-    """
-    Dispatch to CUTLASS or Triton for block-wise FP8 matmul.
-
-    Uses CUTLASS when:
-    - Block size is [128, 128] (the only size CUTLASS supports)
-    - Running on SM90+ (Hopper or newer)
-    - The CUTLASS kernel is available
-    - Output dtype is bfloat16 or float16 (CUTLASS requirement)
-    - Tensor dimensions are compatible (divisible by 16)
-
-    Otherwise falls back to Triton.
-    """
-
-    if _supports_cutlass(block_size, output_dtype):
-        kernel = _get_quantization_kernel()
-        if kernel is not None:
-            try:
-                # CUTLASS expects:
-                # - A: [M, K] row-major, float8_e4m3fn
-                # - B: [K, N] column-major, float8_e4m3fn
-                # - As: [M, K//128] M-major (activation scales)
-                # - Bs: [K//128, N//128] K-major (weight scales)
-
-                # Reshape A to 2D if needed
-                original_shape = A.shape
-                M = A.numel() // A.shape[-1]
-                K = A.shape[-1]
-                N = B.shape[0]
-
-                # CUTLASS requires dimensions divisible by 16
-                if K % 16 != 0 or N % 16 != 0:
-                    raise ValueError(f"CUTLASS requires K ({K}) and N ({N}) divisible by 16")
-
-                A_2d = A.view(M, K).contiguous()
-                # B needs to be column-major for CUTLASS: [K, N] with stride(0)==1
-                # Our B is [N, K] row-major. Make it contiguous first, then transpose.
-                # B.contiguous() gives [N, K] with stride=(K,1)
-                # B.contiguous().t() gives [K, N] with stride=(1,K) which is column-major
-                # Do NOT call .contiguous() after .t() as it would make it row-major!
-                B_col_major = B.contiguous().t()
-
-                # Scales need proper layout for CUTLASS blockwise:
-                # As should be [M, K//128] with M-major layout (stride(0)==1)
-                # Bs should be [K//128, N//128] with K-major layout (stride(0)==1)
-
-                # As: reshape to [M, K//128], then make M-major via t().contiguous().t()
-                As_2d = As.view(M, -1).contiguous()
-                As_2d = As_2d.t().contiguous().t()  # [M, K//128] with stride(0)==1
-
-                # Bs: our input is [N//128, K//128], need [K//128, N//128] with stride(0)==1
-                # Transpose to get [K//128, N//128], then make K-major via t().contiguous().t()
-                Bs_km = Bs.contiguous().t()  # [K//128, N//128]
-                Bs_km = Bs_km.t().contiguous().t()  # Make K-major (stride(0)==1)
-
-                # Call CUTLASS kernel - it returns the output tensor
-                # Signature: cutlass_scaled_mm(a, b, scale_a, scale_b, out_dtype, bias=None) -> Tensor
-                C = kernel.cutlass_scaled_mm(A_2d, B_col_major, As_2d, Bs_km, output_dtype, None)
-                # Reshape output back
-                C_shape = original_shape[:-1] + (N,)
-                return C.view(C_shape)
-            except Exception as e:
-                logger.warning_once(f"CUTLASS kernel failed: {e}. Falling back to Triton.")
-
-    # Fall back to Triton
-    return w8a8_block_fp8_matmul_triton(A, B, As, Bs, block_size, output_dtype)
-
-
-# Python version of the above triton function, it's much slower than the triton version, for testing
-@torch.compile
-def w8a8_block_fp8_matmul_compile(
-    input_q: torch.Tensor,  # [batch, seq_len, hidden_dim]
-    weight_q: torch.Tensor,  # [out_features, hidden_dim]
-    input_scale: torch.Tensor,  # [batch * seq_len, num_input_groups]
-    weight_scale: torch.Tensor,  # [num_weight_blocks_m, num_weight_blocks_n]
-    block_size: tuple[int, int] | None = None,  # (M=128, N=128) for weights for example
-    output_dtype: torch.dtype = torch.float32,
-) -> torch.Tensor:
-    """
-    Performs blocked matrix multiplication with FP8 quantized matrices.
+    Dispatch order:
+      1. DeepGEMM (Hopper+, block_size 128x128) if available
+      2. Triton finegrained-fp8 kernel (universal fallback)
 
     Args:
-        input_q: Quantized input tensor with 1x128 block quantization
-        weight_q: Quantized weight tensor with 128x128 block quantization
-        input_scale: Scaling factors for input blocks
-        weight_scale: Scaling factors for weight blocks
-        block_size: Tuple of (M, N) for weight block dimensions
-        output_dtype: Desired output dtype
+        A:  (M, K) float8_e4m3fn — quantized activations
+        B:  (N, K) float8_e4m3fn — quantized weights
+        As: block-wise: (M, K//block_k) float32; per-tensor: (M,) per-row scales
+        Bs: block-wise: (N//block_n, K//block_k) float32; per-tensor: scalar or (1,) single weight scale
+        block_size: [block_n, block_k] for block-wise quantization, or None/[N, K] for per-tensor
+        output_dtype: desired output dtype
     """
-    batch_size, seq_len, hidden_dim = input_q.shape if input_q.ndim == 3 else (1, input_q.shape[0], input_q.shape[1])
-    out_features = weight_q.shape[0]
-
-    # Reshape input for batched matmul
-    input_reshaped = input_q.view(-1, hidden_dim)  # [batch*seq_len, hidden_dim]
-    input_scale_reshaped = input_scale.view(input_scale.shape[0], -1)  # [batch*seq_len, 1]
-    # Calculate number of blocks
-    num_weight_blocks_m = out_features // block_size[0]
-    num_weight_blocks_n = hidden_dim // block_size[1]
-
-    output = torch.zeros((batch_size * seq_len, out_features), dtype=torch.float32, device=input_q.device)
-
-    for i in range(num_weight_blocks_m):
-        m_start = i * block_size[0]
-        m_end = m_start + block_size[0]
-
-        for j in range(num_weight_blocks_n):
-            n_start = j * block_size[1]
-            n_end = n_start + block_size[1]
-
-            # Extract current blocks
-            input_block = input_reshaped[:, n_start:n_end]
-            weight_block = weight_q[m_start:m_end, n_start:n_end]
-
-            # Get corresponding scales
-            curr_input_scale = input_scale_reshaped[:, j : j + 1]  # [batch*seq_len, 1]
-            curr_weight_scale = weight_scale[i, j]  # scalar
-
-            block_result = (
-                torch._scaled_mm(
-                    input_block,
-                    weight_block.t(),
-                    scale_a=torch.tensor(1, dtype=torch.float32, device=input_q.device),
-                    scale_b=curr_weight_scale,
-                    out_dtype=output_dtype,
-                )
-                * curr_input_scale
+    if block_size is not None and block_size[0] == block_size[1] == 128:
+        try:
+            _load_deepgemm_kernel()
+            global deepgemm_fp8_matmul
+        except ImportError:
+            logger.warning_once(
+                "DeepGEMM kernel is not available or compatible, falling back to Triton finegrained-fp8 kernel. "
+                "To use DeepGEMM FP8 matmul, ensure you have a Hopper (SM90+) or newer GPU with CUDA runtime 12.3+, "
+                "and that the `kernels` package is installed and up to date (`pip install -U kernels`)."
             )
+        else:
+            # 3-6x faster than Triton
+            A_2d = A.view(-1, A.shape[-1])
+            As_2d = As.view(-1, As.shape[-1])
+            output = torch.empty(A_2d.shape[0], B.shape[0], device=A.device, dtype=output_dtype)
+            deepgemm_fp8_matmul((A_2d, As_2d.float()), (B, Bs.float()), output)
+            return output.view(A.shape[:-1] + (B.shape[0],))
 
-            output[:, m_start:m_end] += block_result
-
-    output = output.view(batch_size, seq_len, out_features)
-
-    return output.to(output_dtype)
+    _load_triton_kernel()
+    global triton_fp8_matmul
+    return triton_fp8_matmul(A, B, As, Bs, block_size, output_dtype)
 
 
 class FP8Linear(nn.Linear):
@@ -538,20 +213,20 @@ class FP8Linear(nn.Linear):
         self,
         in_features: int,
         out_features: int,
-        bias: bool = False,
-        dtype=torch.float8_e4m3fn,
         block_size: tuple[int, int] | None = None,
-        activation_scheme="dynamic",
+        activation_scheme: str = "dynamic",
+        has_bias: bool = False,
+        dtype=_FP8_DTYPE,
     ):
         super().__init__(in_features, out_features)
 
-        # If block size is None, it means that we are doing per-tensor quantization
+        self.has_bias = has_bias
         self.block_size = block_size
         self.activation_scheme = activation_scheme
-
         self.weight = torch.nn.Parameter(torch.empty(out_features, in_features, dtype=dtype))
 
         if self.block_size is None:
+            # If block size is None, it means that we are doing per-tensor quantization
             self.weight_scale_inv = nn.Parameter(torch.tensor(1.0, dtype=torch.float32))
         else:
             scale_out_features = (out_features + self.block_size[0] - 1) // self.block_size[0]
@@ -562,8 +237,10 @@ class FP8Linear(nn.Linear):
 
         if self.activation_scheme == "static":
             self.activation_scale = nn.Parameter(torch.tensor(1.0, dtype=torch.float32))
+        else:
+            self.register_parameter("activation_scale", None)
 
-        if bias:
+        if self.has_bias:
             self.bias = nn.Parameter(torch.empty(self.out_features))
         else:
             self.register_parameter("bias", None)
@@ -571,148 +248,478 @@ class FP8Linear(nn.Linear):
     def forward(self, input: torch.Tensor) -> torch.Tensor:
         if self.weight.element_size() > 1:
             return F.linear(input, self.weight, self.bias)
+
+        if isinstance(self.weight, torch.distributed.tensor.DTensor):
+            weight = self.weight._local_tensor.contiguous()
+            scale_inv = self.weight_scale_inv._local_tensor.contiguous()
         else:
-            if isinstance(self.weight, torch.distributed.tensor.DTensor):
-                weight = self.weight._local_tensor.contiguous()
-                scale_inv = self.weight_scale_inv._local_tensor.contiguous()
-            else:
-                weight = self.weight.contiguous()
-                scale_inv = self.weight_scale_inv.contiguous()
-            # Context manager used to switch among the available accelerators
-            device_type = torch.accelerator.current_accelerator().type if is_torch_accelerator_available() else "cuda"
-            torch_accelerator_module = getattr(torch, device_type, torch.cuda)
-            with torch_accelerator_module.device(input.device):
-                if self.activation_scheme == "dynamic":
-                    qinput, scale = act_quant(input, self.block_size[1])
-                elif self.activation_scheme == "static":
-                    scale = self.activation_scale.to(torch.float32)
-                    qinput = (input / scale).clamp(min=_FP8_MIN, max=_FP8_MAX).to(torch.float8_e4m3fn)
+            # why wouldn't it be contiguous?
+            weight = self.weight.contiguous()
+            scale_inv = self.weight_scale_inv.contiguous()
 
-                else:
-                    raise NotImplementedError("Not supported")
+        if self.activation_scheme == "dynamic":
+            _load_triton_kernel()
+            global triton_fp8_act_quant
+            qinput, scale = triton_fp8_act_quant(
+                input, self.block_size[1] if self.block_size is not None else input.shape[-1]
+            )
+        elif self.activation_scheme == "static":
+            scale = self.activation_scale.to(torch.float32)
+            qinput = (input / scale).clamp(min=_FP8_MIN, max=_FP8_MAX).to(_FP8_DTYPE)
+        else:
+            raise NotImplementedError(f"Unsupported activation scheme: {self.activation_scheme}")
 
-                output = w8a8_block_fp8_matmul(
-                    qinput,
-                    weight,
-                    scale,
-                    scale_inv,
-                    self.block_size,
-                    output_dtype=input.dtype,
-                )
+        output = w8a8_fp8_matmul(
+            qinput,
+            weight,
+            scale,
+            scale_inv,
+            self.block_size,
+            output_dtype=input.dtype,
+        )
 
-            # Blocks the CPU until all accelerator operations on the specified device are complete. It is used to ensure that the results of the
-            # preceding operations are ready before proceeding
-            torch_accelerator_module.synchronize()
-            if self.bias is not None:
-                output = output + self.bias
+        if self.bias is not None:
+            output = output + self.bias
 
-            return output.to(dtype=input.dtype)
+        return output.to(dtype=input.dtype)
 
 
-def _ceil_div(a, b):
-    return (a + b - 1) // b
+def fp8_batched_mm_experts_forward(
+    self: torch.nn.Module,
+    hidden_states: torch.Tensor,
+    top_k_index: torch.Tensor,
+    top_k_weights: torch.Tensor,
+) -> torch.Tensor:
+    if self.activation_scheme == "static":
+        raise NotImplementedError(
+            "batched_mm experts dispatch does not support activation_scheme='static'. "
+            "Use the default eager dispatch or switch to activation_scheme='dynamic'."
+        )
+
+    _load_triton_kernel()
+    global triton_batched_fp8_matmul
+
+    device = hidden_states.device
+    num_top_k = top_k_index.size(-1)
+    num_tokens = hidden_states.size(0)
+    hidden_dim = hidden_states.size(-1)
+
+    # S is the number of selected tokens-experts pairs (S = num_tokens * num_top_k)
+    token_idx = torch.arange(num_tokens, device=device).unsqueeze(1).expand(-1, num_top_k).reshape(-1)  # (S,)
+    sample_weights = top_k_weights.reshape(-1)  # (S,)
+    expert_ids = top_k_index.reshape(-1)  # (S,)
+
+    # Get current hidden states for selected samples
+    selected_hidden_states = hidden_states[token_idx]
+
+    # --- Up projection per expert (FP8 batched) ---
+    proj_out = triton_batched_fp8_matmul(
+        selected_hidden_states,
+        self.gate_up_proj if self.has_gate else self.up_proj,
+        self.gate_up_proj_scale_inv if self.has_gate else self.up_proj_scale_inv,
+        block_size=self.block_size,
+        expert_ids=expert_ids,
+    )  # (S, 2 * intermediate_dim) or (S, intermediate_dim) depending on gating
+
+    # Apply gating or activation
+    if self.has_gate:
+        # for gated experts we apply the custom/default gating mechanism
+        proj_out = self._apply_gate(proj_out)  # (S, intermediate_dim)
+    else:
+        # for non-gated experts we just apply the activation function
+        proj_out = self.act_fn(proj_out)  # (S, intermediate_dim)
+
+    # --- Down projection per expert (FP8 batched) ---
+    proj_out = triton_batched_fp8_matmul(
+        proj_out,
+        self.down_proj,
+        self.down_proj_scale_inv,
+        block_size=self.block_size,
+        expert_ids=expert_ids,
+    )  # (S, hidden_dim)
+
+    # Apply routing weights
+    weighted_out = proj_out * sample_weights.to(proj_out.dtype).unsqueeze(-1)  # (S, hidden_dim)
+
+    # Accumulate results using deterministic reshape+sum instead of index_add_
+    # (index_add_ with duplicate indices is non-deterministic on CUDA due to atomicAdd)
+    final_hidden_states = weighted_out.view(num_tokens, num_top_k, hidden_dim).sum(dim=1)
+
+    return final_hidden_states.to(hidden_states.dtype)
 
 
-class FP8Expert(nn.Module):
-    def __init__(self, config, block_size, dtype=torch.float8_e4m3fn):
+def fp8_grouped_mm_experts_forward(
+    self: torch.nn.Module,
+    hidden_states: torch.Tensor,
+    top_k_index: torch.Tensor,
+    top_k_weights: torch.Tensor,
+) -> torch.Tensor:
+    if self.activation_scheme == "static":
+        raise NotImplementedError(
+            "grouped_mm experts dispatch does not support activation_scheme='static'. "
+            "Use the default eager dispatch or switch to activation_scheme='dynamic'."
+        )
+
+    _load_triton_kernel()
+    global triton_grouped_fp8_matmul
+
+    device = hidden_states.device
+    num_top_k = top_k_index.size(-1)
+    num_tokens = hidden_states.size(0)
+    hidden_dim = hidden_states.size(-1)
+
+    # S is the number of selected token-expert pairs (S = num_tokens * num_top_k)
+    token_idx = torch.arange(num_tokens, device=device).unsqueeze(1).expand(-1, num_top_k).reshape(-1)  # (S,)
+    sample_weights = top_k_weights.reshape(-1)  # (S,)
+    expert_ids = top_k_index.reshape(-1)  # (S,)
+
+    # Sort by expert for grouped processing
+    perm = torch.argsort(expert_ids)
+    inv_perm = torch.empty_like(perm)
+    inv_perm[perm] = torch.arange(perm.size(0), device=device)
+
+    expert_ids_g = expert_ids[perm]
+    sample_weights_g = sample_weights[perm]
+    selected_hidden_states_g = hidden_states[token_idx[perm]]
+
+    # Compute offsets for grouped processing.
+    # histc instead of bincount avoids cuda-graph issues;
+    # CPU requires float input, CUDA requires int input (deterministic mode).
+    histc_input = expert_ids_g.float() if device.type == "cpu" else expert_ids_g.int()
+    tokens_per_expert = torch.histc(histc_input, bins=self.num_experts, min=0, max=self.num_experts - 1)
+    offsets = torch.cumsum(tokens_per_expert, dim=0, dtype=torch.int32)
+
+    # --- Up projection per expert (FP8 grouped) ---
+    proj_out = triton_grouped_fp8_matmul(
+        selected_hidden_states_g,
+        self.gate_up_proj if self.has_gate else self.up_proj,
+        self.gate_up_proj_scale_inv if self.has_gate else self.up_proj_scale_inv,
+        tokens_per_expert=tokens_per_expert,
+        block_size=self.block_size,
+        offsets=offsets,
+    )  # (S, 2 * intermediate_dim)
+
+    # Apply gating or activation
+    if self.has_gate:
+        # for gated experts we apply the custom/default gating mechanism
+        proj_out = self._apply_gate(proj_out)  # (S, intermediate_dim)
+    else:
+        # for non-gated experts we just apply the activation function
+        proj_out = self.act_fn(proj_out)  # (S, intermediate_dim)
+
+    # --- Down projection per expert (FP8 grouped) ---
+    proj_out = triton_grouped_fp8_matmul(
+        proj_out,
+        self.down_proj,
+        self.down_proj_scale_inv,
+        tokens_per_expert=tokens_per_expert,
+        block_size=self.block_size,
+        offsets=offsets,
+    )  # (S, hidden_dim)
+
+    # Apply routing weights
+    weighted_out = proj_out * sample_weights_g.to(proj_out.dtype).unsqueeze(-1)  # (S, hidden_dim)
+
+    # Restore original order
+    weighted_out = weighted_out[inv_perm]
+
+    # Accumulate results using deterministic reshape+sum instead of index_add_
+    # (index_add_ with duplicate indices is non-deterministic on CUDA due to atomicAdd)
+    final_hidden_states = weighted_out.view(num_tokens, num_top_k, hidden_dim).sum(dim=1)
+
+    return final_hidden_states.to(hidden_states.dtype)
+
+
+def _build_deepgemm_contiguous_layout(expert_ids_sorted: torch.Tensor, num_experts: int, alignment: int) -> tuple:
+    """Build a TMA-aligned contiguous layout for DeepGEMM grouped GEMM.
+
+    DeepGEMM requires M-dimension alignment per expert for TMA. This computes
+    the mapping from sorted token positions to padded row positions, and the
+    layout tensor that DeepGEMM uses to identify expert boundaries.
+
+    Returns:
+        sorted_to_padded: (num_tokens,) index map from sorted position to padded row
+        grouped_layout: expert layout tensor (format depends on GPU architecture)
+        total_padded_rows: total number of rows including alignment padding
+    """
+    device = expert_ids_sorted.device
+    num_tokens = expert_ids_sorted.size(0)
+    tokens_per_expert = torch.histc(expert_ids_sorted.int(), bins=num_experts, min=0, max=num_experts - 1).long()
+    aligned_tokens_per_expert = ((tokens_per_expert + alignment - 1) // alignment) * alignment
+    # Upper bound avoids GPU→CPU sync; padding rows are skipped by DeepGEMM.
+    total_padded_rows = num_tokens + min(num_tokens, num_experts) * (alignment - 1)
+
+    padding_per_expert = aligned_tokens_per_expert - tokens_per_expert
+    cumulative_padding = padding_per_expert.cumsum(0) - padding_per_expert
+    sorted_to_padded = torch.arange(num_tokens, device=device) + cumulative_padding[expert_ids_sorted]
+
+    if torch.cuda.get_device_capability(device)[0] >= 10:  # Blackwell (SM100+)
+        grouped_layout = tokens_per_expert.cumsum(0).int()
+    else:
+        # Hopper: per-row expert id, -1 for padding rows
+        grouped_layout = torch.full((total_padded_rows,), -1, device=device, dtype=torch.int32)
+        grouped_layout[sorted_to_padded] = expert_ids_sorted.int()
+
+    return sorted_to_padded, grouped_layout, total_padded_rows
+
+
+def _pad_to_deepgemm_contiguous_layout(
+    hidden_states: torch.Tensor,
+    scales: torch.Tensor,
+    sorted_to_padded: torch.Tensor,
+    total_padded_rows: int,
+) -> tuple[torch.Tensor, torch.Tensor]:
+    """Pad sorted hidden states and scales into the TMA-aligned contiguous layout."""
+    hidden_padded = torch.zeros(
+        total_padded_rows, hidden_states.shape[1], device=hidden_states.device, dtype=hidden_states.dtype
+    )
+    hidden_padded[sorted_to_padded] = hidden_states
+    scales_padded = torch.zeros(total_padded_rows, scales.shape[1], device=hidden_states.device, dtype=torch.float32)
+    scales_padded[sorted_to_padded] = scales
+    return hidden_padded, scales_padded
+
+
+def _unpad_from_deepgemm_contiguous_layout(
+    hidden_states_padded: torch.Tensor, sorted_to_padded: torch.Tensor
+) -> torch.Tensor:
+    """Remove padding rows from the TMA-aligned contiguous layout."""
+    return hidden_states_padded[sorted_to_padded]
+
+
+def fp8_deepgemm_experts_forward(
+    self: torch.nn.Module,
+    hidden_states: torch.Tensor,
+    top_k_index: torch.Tensor,
+    top_k_weights: torch.Tensor,
+) -> torch.Tensor:
+    if self.activation_scheme == "static":
+        raise NotImplementedError(
+            "deepgemm experts dispatch does not support activation_scheme='static'. "
+            "Use the default eager dispatch or switch to activation_scheme='dynamic'."
+        )
+    if self.block_size is None:
+        raise ValueError(
+            "DeepGEMM requires block-wise quantization (block_size=[128, 128]), "
+            "but got per-tensor quantization (block_size=None)."
+        )
+    if self.block_size[0] != 128 or self.block_size[1] != 128:
+        raise ValueError(f"DeepGEMM requires block_size=(128, 128), got {self.block_size}")
+
+    _load_deepgemm_kernel()
+    global deepgemm_grouped_fp8_matmul, deepgemm_per_token_cast_to_fp8
+
+    device = hidden_states.device
+    num_top_k = top_k_index.size(-1)
+    num_tokens = hidden_states.size(0)
+    hidden_dim = hidden_states.size(-1)
+
+    # S is the number of selected token-expert pairs (S = num_tokens * num_top_k)
+    token_idx = torch.arange(num_tokens, device=device).unsqueeze(1).expand(-1, num_top_k).reshape(-1)  # (S,)
+    sample_weights = top_k_weights.reshape(-1)  # (S,)
+    expert_ids = top_k_index.reshape(-1)  # (S,)
+
+    # Sort by expert for grouped processing
+    perm = torch.argsort(expert_ids)
+    inv_perm = torch.empty_like(perm)
+    inv_perm[perm] = torch.arange(perm.size(0), device=device)
+
+    expert_ids_g = expert_ids[perm]
+    sample_weights_g = sample_weights[perm]
+    selected_hidden_states_g = hidden_states[token_idx[perm]]
+
+    # Build TMA-aligned contiguous layout for DeepGEMM
+    sorted_to_padded, grouped_layout, total_padded_rows = _build_deepgemm_contiguous_layout(
+        expert_ids_g, self.num_experts, alignment=_DEEPGEMM_M_ALIGNMENT
+    )
+
+    # --- Up projection per expert (DeepGEMM grouped contiguous) ---
+    w_up = self.gate_up_proj if self.has_gate else self.up_proj
+    ws_up = self.gate_up_proj_scale_inv if self.has_gate else self.up_proj_scale_inv
+    act_fp8, act_scales = deepgemm_per_token_cast_to_fp8(selected_hidden_states_g, use_ue8m0=False)
+    act_fp8, act_scales = _pad_to_deepgemm_contiguous_layout(act_fp8, act_scales, sorted_to_padded, total_padded_rows)
+    proj_out = torch.zeros(total_padded_rows, w_up.shape[1], device=device, dtype=torch.bfloat16)
+    use_psum_layout = torch.cuda.get_device_capability(device)[0] >= 10
+    deepgemm_grouped_fp8_matmul(
+        (act_fp8, act_scales), (w_up, ws_up.float()), proj_out, grouped_layout, use_psum_layout=use_psum_layout
+    )
+
+    # Apply gating or activation
+    if self.has_gate:
+        proj_out = self._apply_gate(proj_out)
+    else:
+        proj_out = self.act_fn(proj_out)
+
+    # --- Down projection per expert (DeepGEMM grouped contiguous) ---
+    w_down = self.down_proj
+    ws_down = self.down_proj_scale_inv
+    proj_fp8, proj_scales = deepgemm_per_token_cast_to_fp8(proj_out, use_ue8m0=False)
+    proj_out = torch.zeros(total_padded_rows, hidden_dim, device=device, dtype=torch.bfloat16)
+    deepgemm_grouped_fp8_matmul(
+        (proj_fp8, proj_scales), (w_down, ws_down.float()), proj_out, grouped_layout, use_psum_layout=use_psum_layout
+    )
+
+    # Remove padding rows
+    proj_out = _unpad_from_deepgemm_contiguous_layout(proj_out, sorted_to_padded)
+
+    # Apply routing weights
+    weighted_out = proj_out * sample_weights_g.to(proj_out.dtype).unsqueeze(-1)  # (S, hidden_dim)
+
+    # Restore original order
+    weighted_out = weighted_out[inv_perm]
+
+    # Accumulate results using deterministic reshape+sum instead of index_add_
+    # (index_add_ with duplicate indices is non-deterministic on CUDA due to atomicAdd)
+    final_hidden_states = weighted_out.view(num_tokens, num_top_k, hidden_dim).sum(dim=1)
+
+    return final_hidden_states.to(hidden_states.dtype)
+
+
+class FP8Experts(nn.Module):
+    def __init__(
+        self,
+        config,
+        block_size: tuple[int, int] | None = None,
+        activation_scheme: str = "dynamic",
+        has_bias: bool = False,
+        has_gate: bool = True,
+        dtype=_FP8_DTYPE,
+    ):
         super().__init__()
 
-        from ..activations import ACT2FN
+        assert has_bias is False, (
+            "FP8Experts does not support bias for now, please open an issue if you want this feature"
+        )
 
+        self.config = config
+        self.has_bias = has_bias
+        self.has_gate = has_gate
         self.block_size = block_size
-        # TODO we don't need exact expert count here but only in forward
-        self.num_experts = config.num_local_experts if hasattr(config, "num_local_experts") else config.num_experts
         self.hidden_dim = config.hidden_size
-        self.intermediate_dim = (
-            config.moe_intermediate_size if hasattr(config, "moe_intermediate_size") else config.intermediate_size
-        )
+        self.activation_scheme = activation_scheme
+        self.num_experts = getattr(config, "num_local_experts", config.num_experts)
+        self.intermediate_dim = getattr(config, "moe_intermediate_size", config.intermediate_size)
+        self.act_fn = ACT2FN[getattr(config, "hidden_activation", config.hidden_act)]
 
-        Wg_out, Wg_in = 2 * self.intermediate_dim, self.hidden_dim
-        Wd_out, Wd_in = self.hidden_dim, self.intermediate_dim
+        if self.has_gate:
+            gu_proj_out, gu_proj_in = 2 * self.intermediate_dim, self.hidden_dim
+            self.gate_up_proj = nn.Parameter(torch.empty(self.num_experts, gu_proj_out, gu_proj_in, dtype=dtype))
+            gu_scale_out = triton.cdiv(gu_proj_out, self.block_size[0]) if self.block_size is not None else 1
+            gu_scale_in = triton.cdiv(gu_proj_in, self.block_size[1]) if self.block_size is not None else 1
+            self.gate_up_proj_scale_inv = nn.Parameter(
+                torch.empty(self.num_experts, gu_scale_out, gu_scale_in, dtype=torch.float32)
+            )
+            self.register_parameter("gate_up_proj_bias", None)
+        else:
+            u_proj_out, u_proj_in = self.intermediate_dim, self.hidden_dim
+            self.up_proj = nn.Parameter(torch.empty(self.num_experts, u_proj_out, u_proj_in, dtype=dtype))
+            u_scale_out = triton.cdiv(u_proj_out, self.block_size[0]) if self.block_size is not None else 1
+            u_scale_in = triton.cdiv(u_proj_in, self.block_size[1]) if self.block_size is not None else 1
+            self.up_proj_scale_inv = nn.Parameter(
+                torch.empty(self.num_experts, u_scale_out, u_scale_in, dtype=torch.float32)
+            )
+            self.register_parameter("up_proj_bias", None)
 
-        self.gate_up_proj = nn.Parameter(torch.zeros(self.num_experts, Wg_out, Wg_in, dtype=dtype))
-        self.down_proj = nn.Parameter(torch.zeros(self.num_experts, Wd_out, Wd_in, dtype=dtype))
-
-        bo, bi = self.block_size
-
-        # gate_up tiles: ceil(Wg_out/bo) x ceil(Wg_in/bi)
-        gu_scale_o = _ceil_div(Wg_out, bo)
-        gu_scale_i = _ceil_div(Wg_in, bi)
-        self.gate_up_proj_scale_inv = nn.Parameter(
-            torch.zeros(self.num_experts, gu_scale_o, gu_scale_i, dtype=torch.float32)
-        )
-
-        # down tiles: ceil(Wd_out/bo) x ceil(Wd_in/bi)
-        dp_scale_o = _ceil_div(Wd_out, bo)
-        dp_scale_i = _ceil_div(Wd_in, bi)
+        d_proj_out, d_proj_in = self.hidden_dim, self.intermediate_dim
+        self.down_proj = nn.Parameter(torch.empty(self.num_experts, d_proj_out, d_proj_in, dtype=dtype))
+        d_scale_out = triton.cdiv(d_proj_out, self.block_size[0]) if self.block_size is not None else 1
+        d_scale_in = triton.cdiv(d_proj_in, self.block_size[1]) if self.block_size is not None else 1
         self.down_proj_scale_inv = nn.Parameter(
-            torch.zeros(self.num_experts, dp_scale_o, dp_scale_i, dtype=torch.float32)
+            torch.empty(self.num_experts, d_scale_out, d_scale_in, dtype=torch.float32)
         )
+        self.register_parameter("down_proj_bias", None)
 
-        # (Optional) bias per projection — many MoEs omit bias; keep None to match your FP8Linear default
-        self.register_parameter("gate_up_bias", None)
-        self.register_parameter("down_bias", None)
+        if self.activation_scheme == "static":
+            self.gate_up_proj_activation_scale = nn.Parameter(torch.ones(self.num_experts, dtype=torch.float32))
+            self.down_proj_activation_scale = nn.Parameter(torch.ones(self.num_experts, dtype=torch.float32))
 
-        # Activation used in the MLP (same as your config / ACT2FN)
-        # Keep a handle here; actual usage happens in forward of your MoE block
-        self.act_fn = ACT2FN[config.hidden_act]
+    def _apply_gate(self, gate_up: torch.Tensor) -> torch.Tensor:
+        gate, up = gate_up.chunk(2, dim=-1)
+        return self.act_fn(gate) * up
 
-    # We follow the mixtral "eager" moe implementation at
-    # https://github.com/huggingface/transformers/blob/457048fbfdba9a7dee8bd03328c62f49e57b95f9/src/transformers/models/mixtral/modular_mixtral.py#L148
-    # The core changes in this FP8 version should only relate to how we call the linear projections
     def forward(
-        self,
-        hidden_states: torch.Tensor,
-        top_k_index: torch.Tensor,
-        top_k_weights: torch.Tensor,
+        self, hidden_states: torch.Tensor, top_k_index: torch.Tensor, top_k_weights: torch.Tensor
     ) -> torch.Tensor:
-        final_hidden_states = torch.zeros_like(hidden_states)
+        # index_add_ will accumulate using the dtype of the tensor we write into
+        # so we use float32 for the accumulation to avoid numerical issues in bf16/fp16
+        final_hidden_states = torch.zeros_like(hidden_states, dtype=torch.float32)
+
         with torch.no_grad():
             expert_mask = torch.nn.functional.one_hot(top_k_index, num_classes=self.num_experts)
             expert_mask = expert_mask.permute(2, 1, 0)
-            expert_hit = torch.greater(expert_mask.sum(dim=(-1, -2)), 0).nonzero()
+            expert_hit = torch.greater(expert_mask.sum(dim=(-1, -2)), 0).nonzero(as_tuple=False).view(-1)
 
         for expert_idx in expert_hit:
-            expert_idx = expert_idx[0]
-            if expert_idx == len(self.gate_up_proj):  # weights will load fine
+            if expert_idx == self.num_experts:
                 continue
+
             top_k_pos, token_idx = torch.where(expert_mask[expert_idx])
             current_state = hidden_states[token_idx]
-            gate, up = self.linear(
-                current_state, self.gate_up_proj[expert_idx], self.gate_up_proj_scale_inv[expert_idx]
-            ).chunk(2, dim=-1)
-            current_hidden_states = self.act_fn(gate) * up
-            current_hidden_states = self.linear(
-                current_hidden_states, self.down_proj[expert_idx], self.down_proj_scale_inv[expert_idx]
+            gate_up_act_scale = (
+                self.gate_up_proj_activation_scale[expert_idx] if self.activation_scheme == "static" else None
             )
-
+            proj_out = self.linear(
+                current_state,
+                self.gate_up_proj[expert_idx] if self.has_gate else self.up_proj[expert_idx],
+                self.gate_up_proj_scale_inv[expert_idx] if self.has_gate else self.up_proj_scale_inv[expert_idx],
+                activation_scale=gate_up_act_scale,
+            )
+            proj_out = self._apply_gate(proj_out) if self.has_gate else self.act_fn(proj_out)
+            down_act_scale = (
+                self.down_proj_activation_scale[expert_idx] if self.activation_scheme == "static" else None
+            )
+            proj_out = self.linear(
+                proj_out,
+                self.down_proj[expert_idx],
+                self.down_proj_scale_inv[expert_idx],
+                activation_scale=down_act_scale,
+            )
             routing_weights = top_k_weights[token_idx, top_k_pos, None]
-            current_hidden_states = current_hidden_states * routing_weights.to(current_hidden_states.dtype)
-            final_hidden_states.index_add_(0, token_idx, current_hidden_states.to(final_hidden_states.dtype))
+            weighted_out = proj_out * routing_weights.to(proj_out.dtype)
+            final_hidden_states.index_add_(0, token_idx, weighted_out.to(final_hidden_states.dtype))
+        return final_hidden_states.to(hidden_states.dtype)
 
-        return final_hidden_states
-
-    def linear(self, input: torch.Tensor, weight: torch.Tensor, weight_scale_inv: torch.Tensor) -> torch.Tensor:
+    def linear(
+        self,
+        input: torch.Tensor,
+        weight: torch.Tensor,
+        weight_scale_inv: torch.Tensor,
+        activation_scale: torch.Tensor | None = None,
+    ) -> torch.Tensor:
         if weight.element_size() > 1:
             return F.linear(input, weight, None)
+
+        if self.activation_scheme == "static" and activation_scale is not None:
+            scale = activation_scale.to(torch.float32)
+            qinput = (input / scale).clamp(min=_FP8_MIN, max=_FP8_MAX).to(_FP8_DTYPE)
         else:
-            # Context manager used to switch among the available accelerators
-            device_type = torch.accelerator.current_accelerator().type if is_torch_accelerator_available() else "cuda"
-            torch_accelerator_module = getattr(torch, device_type, torch.cuda)
-            with torch_accelerator_module.device(input.device):
-                qinput, scale = act_quant(input, self.block_size[1])
-                output = w8a8_block_fp8_matmul(
-                    qinput,
-                    weight,
-                    scale,
-                    weight_scale_inv,
-                    self.block_size,
-                    output_dtype=input.dtype,
-                )
-            # Blocks the CPU until all accelerator operations on the specified device are complete. It is used to ensure that the results of the
-            # preceding operations are ready before proceeding
-            torch_accelerator_module.synchronize()
-            return output.to(dtype=input.dtype)
+            _load_triton_kernel()
+            global triton_fp8_act_quant
+            qinput, scale = triton_fp8_act_quant(
+                input, self.block_size[1] if self.block_size is not None else input.shape[-1]
+            )
+
+        output = w8a8_fp8_matmul(
+            qinput,
+            weight,
+            scale,
+            weight_scale_inv,
+            self.block_size,
+            output_dtype=input.dtype,
+        )
+        return output.to(dtype=input.dtype)
+
+
+class FP8ExpertsInterface(ExpertsInterface):
+    """Interface for registering custom FP8 experts forward functions."""
+
+    _global_mapping = {
+        "batched_mm": fp8_batched_mm_experts_forward,
+        "grouped_mm": fp8_grouped_mm_experts_forward,
+        "deepgemm": fp8_deepgemm_experts_forward,
+    }
+
+
+ALL_FP8_EXPERTS_FUNCTIONS = FP8ExpertsInterface()
 
 
 def replace_with_fp8_linear(
@@ -739,23 +746,36 @@ def replace_with_fp8_linear(
     for module_name, module in model.named_modules():
         if not should_convert_module(module_name, modules_to_not_convert):
             continue
+
         # we need this to correctly materialize the weights during quantization
         module_kwargs = {} if pre_quantized else {"dtype": None}
         new_module = None
         with torch.device("meta"):
             if module_name.endswith(".experts"):
-                new_module = FP8Expert(
-                    config=model.config.get_text_config(),
+                has_gate = getattr(module, "has_gate", True)
+                has_bias = getattr(module, "has_bias", False)
+                config = getattr(module, "config", model.config.get_text_config())
+                new_class = use_experts_implementation(
+                    experts_class=FP8Experts,
+                    experts_interface=ALL_FP8_EXPERTS_FUNCTIONS,
+                    has_bias=has_bias,
+                    has_gate=has_gate,
+                )
+                new_module = new_class(
+                    config=config,
                     block_size=quantization_config.weight_block_size,
+                    activation_scheme=quantization_config.activation_scheme,
+                    has_bias=has_bias,
+                    has_gate=has_gate,
                     **module_kwargs,
                 )
             elif isinstance(module, nn.Linear):
                 new_module = FP8Linear(
                     in_features=module.in_features,
                     out_features=module.out_features,
-                    bias=module.bias is not None,
-                    activation_scheme=quantization_config.activation_scheme,
                     block_size=quantization_config.weight_block_size,
+                    activation_scheme=quantization_config.activation_scheme,
+                    has_bias=module.bias is not None,
                     **module_kwargs,
                 )
             if new_module is not None:
@@ -883,3 +903,7 @@ class Fp8Dequantize(ConversionOps):
         return {
             full_layer_name: dequantized.reshape(quantized.shape),
         }
+
+    @property
+    def reverse_op(self) -> "ConversionOps":
+        return _IdentityOp()

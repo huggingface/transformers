@@ -20,8 +20,13 @@ import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-import torchvision
 from torch import Tensor
+
+from ...utils import is_torchvision_available
+
+
+if is_torchvision_available():
+    import torchvision
 
 from transformers import CLIPTextModelWithProjection
 
@@ -43,6 +48,7 @@ from ...utils.generic import (
     is_flash_attention_requested,
     merge_with_config_defaults,
 )
+from ...utils.import_utils import requires
 from ...utils.output_capturing import capture_outputs
 from ..auto import AutoModel
 from .configuration_sam3 import (
@@ -761,6 +767,7 @@ class Sam3ViTLayer(GradientCheckpointingLayer):
 
 
 @auto_docstring
+@requires(backends=("torch", "torchvision"))
 class Sam3PreTrainedModel(PreTrainedModel):
     config_class = Sam3Config
     base_model_prefix = "sam3"
@@ -792,6 +799,7 @@ class Sam3PreTrainedModel(PreTrainedModel):
 
 @auto_docstring
 class Sam3ViTModel(Sam3PreTrainedModel):
+    config: Sam3ViTConfig
     _can_record_outputs = {
         "hidden_states": Sam3ViTLayer,
         "attentions": Sam3ViTRoPEAttention,
@@ -2111,9 +2119,7 @@ class Sam3MaskDecoder(Sam3PreTrainedModel):
 
 class Sam3Model(Sam3PreTrainedModel):
     input_modalities = ["image", "text"]
-    _checkpoint_conversion_mapping = {
-        r"detector_model.(.+)": r"\1"  # the regex allows to remove the prefix, and add it back in revert mode
-    }
+    base_model_prefix = "detector_model"
     _keys_to_ignore_on_load_unexpected = [
         r"^tracker_model.",
         r"^tracker_neck.",
