@@ -498,6 +498,8 @@ class StoppingCriteriaList(list):
         is_done = torch.full((input_ids.shape[0],), False, device=input_ids.device, dtype=torch.bool)
         for criteria in self:
             is_done = is_done | criteria(input_ids, scores, **kwargs)
+            if is_done.all():
+                break
         return is_done
 
     @property
