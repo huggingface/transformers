@@ -4072,9 +4072,19 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             # passed directly as a kwarg from now on
             with torch.device("meta"):
                 dummy_model = cls(config)
-            state_dict = load_gguf_checkpoint(checkpoint_files[0], return_tensors=True, model_to_load=dummy_model)[
-                "tensors"
-            ]
+            # Resolve torch_dtype for GGUF loading to reduce peak RAM (dequantized float32 can exceed memory)
+            gguf_dtype = None
+            if isinstance(dtype, torch.dtype) and dtype != torch.float32:
+                gguf_dtype = dtype
+            elif dtype == "auto" and hasattr(config, "dtype") and config.dtype is not None:
+                resolved = config.dtype
+                if isinstance(resolved, str):
+                    resolved = getattr(torch, resolved, None)
+                if isinstance(resolved, torch.dtype) and resolved != torch.float32:
+                    gguf_dtype = resolved
+            state_dict = load_gguf_checkpoint(
+                checkpoint_files[0], return_tensors=True, model_to_load=dummy_model, torch_dtype=gguf_dtype
+            )["tensors"]
 
         # Find the correct dtype based on current state
         config, dtype = _get_dtype(

@@ -463,7 +463,7 @@ def get_gguf_hf_weights_map(
     return gguf_to_hf_name_map
 
 
-def load_gguf_checkpoint(gguf_checkpoint_path, return_tensors=False, model_to_load=None):
+def load_gguf_checkpoint(gguf_checkpoint_path, return_tensors=False, model_to_load=None, torch_dtype=None):
     """
     Load a GGUF file and return a dictionary of parsed parameters containing tensors, the parsed
     tokenizer and config attributes.
@@ -474,6 +474,12 @@ def load_gguf_checkpoint(gguf_checkpoint_path, return_tensors=False, model_to_lo
         return_tensors (`bool`, defaults to `False`):
             Whether to read the tensors from the file and return them. Not doing so is faster
             and only loads the metadata in memory.
+        model_to_load (`nn.Module`, *optional*):
+            The model to load the weights into. This is used to map GGUF tensor names to
+            Transformers parameter names.
+        torch_dtype (`torch.dtype`, *optional*):
+            The desired `torch.dtype` for the loaded tensors. If provided, tensors will be
+            converted to this dtype immediately after dequantization to save memory.
     """
     if is_gguf_available() and is_torch_available():
         from gguf import GGUFReader, dequantize
@@ -644,7 +650,10 @@ def load_gguf_checkpoint(gguf_checkpoint_path, return_tensors=False, model_to_lo
 
             name = tensor_key_mapping[name]
 
-            parsed_parameters["tensors"][name] = torch.from_numpy(np.copy(weights))
+            tensor = torch.from_numpy(np.copy(weights))
+            if torch_dtype is not None and torch_dtype != torch.float32:
+                tensor = tensor.to(torch_dtype)
+            parsed_parameters["tensors"][name] = tensor
 
     if len(reader_keys) > 0:
         logger.info(f"Some keys of the GGUF file were not considered: {reader_keys}")
