@@ -312,6 +312,9 @@ class LlavaOnevisionForConditionalGenerationModelTest(ModelTesterMixin, Generati
         inputs_dict = {"pixel_values": pixel_values_videos}
         return config, inputs_dict
 
+    def test_reverse_loading_mapping(self):
+        super().test_reverse_loading_mapping(skip_base_model=True)
+
 
 @require_torch
 class LlavaOnevisionForConditionalGenerationIntegrationTest(unittest.TestCase):
