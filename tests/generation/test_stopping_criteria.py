@@ -63,6 +63,29 @@ class StoppingCriteriaTestCase(unittest.TestCase):
         input_ids, scores = self._get_tensors(10)
         self.assertTrue(all(criteria(input_ids, scores)))
 
+    def test_list_criteria_short_circuits_when_all_done(self):
+        """Verify that StoppingCriteriaList stops evaluating remaining criteria once all
+        sequences are already marked done, avoiding unnecessary computation."""
+        call_count = 0
+
+        class CountingCriteria(StoppingCriteria):
+            def __call__(self, input_ids, scores, **kwargs):
+                nonlocal call_count
+                call_count += 1
+                return torch.zeros(input_ids.shape[0], dtype=torch.bool, device=input_ids.device)
+
+        # MaxLengthCriteria fires immediately (length == max_length), so CountingCriteria should be skipped
+        input_ids, scores = self._get_tensors(10)
+        criteria = StoppingCriteriaList(
+            [
+                MaxLengthCriteria(max_length=10),
+                CountingCriteria(),
+            ]
+        )
+        result = criteria(input_ids, scores)
+        self.assertTrue(all(result))
+        self.assertEqual(call_count, 0, "CountingCriteria should not be called when first criterion marks all done")
+
     def test_max_length_criteria(self):
         criteria = MaxLengthCriteria(max_length=10)
 
