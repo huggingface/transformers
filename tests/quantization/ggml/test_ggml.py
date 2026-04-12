@@ -1139,7 +1139,9 @@ class GgufModelTests(unittest.TestCase):
         self.assertEqual(tokenizer.decode(out[0], skip_special_tokens=True), EXPECTED_TEXT)
 
     def test_gemma4_26b_it_q4_k_m(self):
-        tokenizer = AutoTokenizer.from_pretrained(self.gemma4_26b_it_model_id, gguf_file=self.q4_k_m_gemma4_26b_it_model_id)
+        tokenizer = AutoTokenizer.from_pretrained(
+            self.gemma4_26b_it_model_id, gguf_file=self.q4_k_m_gemma4_26b_it_model_id
+        )
         model = AutoModelForCausalLM.from_pretrained(
             self.gemma4_26b_it_model_id,
             gguf_file=self.q4_k_m_gemma4_26b_it_model_id,
@@ -1153,7 +1155,9 @@ class GgufModelTests(unittest.TestCase):
         self.assertEqual(tokenizer.decode(out[0], skip_special_tokens=True), EXPECTED_TEXT)
 
     def test_gemma4_26b_it_q8_0(self):
-        tokenizer = AutoTokenizer.from_pretrained(self.gemma4_26b_it_model_id, gguf_file=self.q8_0_gemma4_26b_it_model_id)
+        tokenizer = AutoTokenizer.from_pretrained(
+            self.gemma4_26b_it_model_id, gguf_file=self.q8_0_gemma4_26b_it_model_id
+        )
         model = AutoModelForCausalLM.from_pretrained(
             self.gemma4_26b_it_model_id,
             gguf_file=self.q8_0_gemma4_26b_it_model_id,
@@ -1167,7 +1171,9 @@ class GgufModelTests(unittest.TestCase):
         self.assertEqual(tokenizer.decode(out[0], skip_special_tokens=True), EXPECTED_TEXT)
 
     def test_gemma4_31b_it_q4_k_m(self):
-        tokenizer = AutoTokenizer.from_pretrained(self.gemma4_31b_it_model_id, gguf_file=self.q4_k_m_gemma4_31b_it_model_id)
+        tokenizer = AutoTokenizer.from_pretrained(
+            self.gemma4_31b_it_model_id, gguf_file=self.q4_k_m_gemma4_31b_it_model_id
+        )
         model = AutoModelForCausalLM.from_pretrained(
             self.gemma4_31b_it_model_id,
             gguf_file=self.q4_k_m_gemma4_31b_it_model_id,
@@ -1181,7 +1187,9 @@ class GgufModelTests(unittest.TestCase):
         self.assertEqual(tokenizer.decode(out[0], skip_special_tokens=True), EXPECTED_TEXT)
 
     def test_gemma4_31b_it_q8_0(self):
-        tokenizer = AutoTokenizer.from_pretrained(self.gemma4_31b_it_model_id, gguf_file=self.q8_0_gemma4_31b_it_model_id)
+        tokenizer = AutoTokenizer.from_pretrained(
+            self.gemma4_31b_it_model_id, gguf_file=self.q8_0_gemma4_31b_it_model_id
+        )
         model = AutoModelForCausalLM.from_pretrained(
             self.gemma4_31b_it_model_id,
             gguf_file=self.q8_0_gemma4_31b_it_model_id,
