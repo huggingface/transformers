@@ -474,7 +474,7 @@ def _load_state_dict_into_zero3_model(model_to_load, state_dict, load_config=Non
 
     # PyTorch's `_load_from_state_dict` does not copy parameters in a module's descendants
     # so we need to apply the function recursively.
-    def load(module: nn.Module, state_dict, prefix="", assign_to_params_buffers=False):
+def load(module: nn.Module, state_dict, prefix="", assign_to_params_buffers=False):
         local_metadata = {} if metadata is None else metadata.get(prefix[:-1], {})
         local_metadata["assign_to_params_buffers"] = assign_to_params_buffers
 
@@ -504,13 +504,22 @@ def _load_state_dict_into_zero3_model(model_to_load, state_dict, load_config=Non
                     if torch.distributed.get_rank() == 0:
                         module._load_from_state_dict(*args)
 
+            # Buffers are not partitioned by ZeRO-3, load them directly
+            named_buffers = dict(module.named_buffers(prefix=prefix[:-1], recurse=False))
+            for k, buf in named_buffers.items():
+                if k in state_dict and buf is not None:
+                    missing_keys.discard(k)
+                    if torch.distributed.get_rank() == 0:
+                        with torch.no_grad():
+                            buf.copy_(state_dict[k])
+
         for name, child in module._modules.items():
             if child is not None:
                 load(child, state_dict, prefix + name + ".", assign_to_params_buffers)
 
-    load(model_to_load, state_dict, assign_to_params_buffers=False)
+        load(model_to_load, state_dict, assign_to_params_buffers=False)
 
-    return error_msgs, missing_keys
+        return error_msgs, missing_keys
 
 
 def deepspeed_optim_sched(trainer, hf_deepspeed_config, args, num_training_steps, model_parameters):
