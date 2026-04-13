@@ -18,7 +18,6 @@ import tempfile
 import unittest
 
 import pytest
-import requests
 
 from transformers import (
     AutoProcessor,
@@ -32,7 +31,6 @@ from transformers.image_utils import load_image
 from transformers.testing_utils import (
     Expectations,
     cleanup,
-    require_torchcodec,
     require_flash_attn,
     require_torch,
     require_torch_accelerator,
@@ -52,14 +50,14 @@ from ...test_processing_common import url_to_local_path
 
 
 if is_cv2_available():
-    import cv2
+    pass
 
 if is_torch_available():
     import torch
 
 
 if is_vision_available():
-    from PIL import Image
+    pass
 
 
 class Qwen2_5_VLVisionText2TextModelTester:
