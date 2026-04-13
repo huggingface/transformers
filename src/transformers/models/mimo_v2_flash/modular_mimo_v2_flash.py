@@ -49,10 +49,10 @@ from ..qwen2_moe.modeling_qwen2_moe import Qwen2MoeMLP
 @strict
 class MiMoV2FlashConfig(PreTrainedConfig):
     r"""
-    qk_head_dim (`int`, *optional*, defaults to 192):
+    head_dim (`int`, *optional*, defaults to 192):
         Dimension of query and key heads.
     v_head_dim (`int`, *optional*, defaults to 128):
-        Dimension of value heads.
+        Dimension of value heads (special case because MiMo uses a smaller v head dim than (qk) head dim )
     n_group (`int`, *optional*, defaults to 1):
         Number of expert groups for group-based top-k routing.
     topk_group (`int`, *optional*, defaults to 1):
@@ -71,7 +71,6 @@ class MiMoV2FlashConfig(PreTrainedConfig):
     attribute_map = {
         "num_local_experts": "n_routed_experts",
         "layernorm_epsilon": "rms_norm_eps",
-        "head_dim": "qk_head_dim",  # NOTE @casinca: vasqu wants to be explicit about head dims, so we remap to qk_*
     }
 
     vocab_size: int = 152576
@@ -81,7 +80,7 @@ class MiMoV2FlashConfig(PreTrainedConfig):
     num_hidden_layers: int = 48
     num_attention_heads: int = 64
     num_key_value_heads: int = 4
-    qk_head_dim: int = 192
+    head_dim: int = 192
     v_head_dim: int = 128
     pad_token_id: int | None = None
     bos_token_id: int | None = 1
@@ -217,7 +216,7 @@ class MiMoV2FlashRotaryEmbedding(Gemma3RotaryEmbedding):
         rope_params = config.rope_parameters[layer_type]
         base = rope_params["rope_theta"]
         partial_rotary_factor = rope_params.get("partial_rotary_factor", 0.334)
-        dim = int(config.qk_head_dim * partial_rotary_factor)
+        dim = int(config.head_dim * partial_rotary_factor)
         attention_factor = 1.0
         inv_freq = 1.0 / (
             base ** (torch.arange(0, dim, 2, dtype=torch.int64).to(device=device, dtype=torch.float) / dim)
@@ -391,20 +390,20 @@ class MiMoV2FlashAttention(nn.Module):
         # SWA layers double the kv heads vs full-attention layers
         num_kv_heads = config.num_key_value_heads * 2 if is_swa else config.num_key_value_heads
         num_attn_heads = config.num_attention_heads
-        qk_head_dim = config.qk_head_dim
+        head_dim = config.head_dim
         v_head_dim = config.v_head_dim
 
         self.config = config
         self.layer_idx = layer_idx
-        self.qk_head_dim = qk_head_dim
+        self.head_dim = head_dim
         self.v_head_dim = v_head_dim
         self.num_key_value_groups = num_attn_heads // num_kv_heads
-        self.scaling = qk_head_dim**-0.5
+        self.scaling = head_dim**-0.5
         self.attention_dropout = config.attention_dropout
         self.is_causal = True
 
-        self.q_proj = nn.Linear(config.hidden_size, num_attn_heads * qk_head_dim, bias=config.attention_bias)
-        self.k_proj = nn.Linear(config.hidden_size, num_kv_heads * qk_head_dim, bias=config.attention_bias)
+        self.q_proj = nn.Linear(config.hidden_size, num_attn_heads * head_dim, bias=config.attention_bias)
+        self.k_proj = nn.Linear(config.hidden_size, num_kv_heads * head_dim, bias=config.attention_bias)
         self.v_proj = nn.Linear(config.hidden_size, num_kv_heads * v_head_dim, bias=config.attention_bias)
         self.o_proj = nn.Linear(num_attn_heads * v_head_dim, config.hidden_size, bias=False)
 
@@ -427,7 +426,7 @@ class MiMoV2FlashAttention(nn.Module):
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor, torch.Tensor | None]:
         input_shape = hidden_states.shape[:-1]
-        qk_hidden_shape = (*input_shape, -1, self.qk_head_dim)
+        qk_hidden_shape = (*input_shape, -1, self.head_dim)
         v_hidden_shape = (*input_shape, -1, self.v_head_dim)
 
         query_states = self.q_proj(hidden_states).view(qk_hidden_shape).transpose(1, 2)

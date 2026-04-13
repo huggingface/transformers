@@ -81,7 +81,7 @@ class MiMoV2FlashModelTester(CausalLMModelTester):
             eos_token_id=eos_token_id,
         )
         # MiMo-V2-Flash specific test config
-        self.qk_head_dim = 8
+        self.head_dim = 8
         self.v_head_dim = 8
         self.add_swa_attention_sink_bias = True
         self.add_full_attention_sink_bias = False
@@ -139,7 +139,7 @@ class MiMoV2FlashModelTest(CausalLMModelTest, unittest.TestCase):
         for layer_idx, layer in enumerate(past_key_values.layers):
             is_swa = config.layer_types[layer_idx] == "sliding_attention"
             num_kv_heads = config.num_key_value_heads * 2 if is_swa else config.num_key_value_heads
-            expected_shape = (batch_size, num_kv_heads, seq_length, config.qk_head_dim)
+            expected_shape = (batch_size, num_kv_heads, seq_length, config.head_dim)
             self.assertEqual(layer.keys.shape, expected_shape)
             self.assertEqual(layer.values.shape, expected_shape)
 
@@ -303,7 +303,7 @@ class MiMoV2FlashModelTest(CausalLMModelTest, unittest.TestCase):
 
         # attribute_map aliases resolved
         self.assertEqual(config.rms_norm_eps, 1e-5)
-        self.assertEqual(config.qk_head_dim, 192)
+        self.assertEqual(config.head_dim, 192)
 
         # None -> default
         self.assertEqual(config.routed_scaling_factor, 1.0)
@@ -315,7 +315,7 @@ class MiMoV2FlashModelTest(CausalLMModelTest, unittest.TestCase):
             layer_types=["full_attention", "sliding_attention"],
             vocab_size=100,
             hidden_size=32,
-            qk_head_dim=8,
+            head_dim=8,
             num_attention_heads=4,
             num_key_value_heads=2,
         )
@@ -385,7 +385,7 @@ class MiMoV2FlashModelTest(CausalLMModelTest, unittest.TestCase):
             hidden_size=8,
             num_attention_heads=2,
             num_key_value_heads=1,
-            qk_head_dim=4,
+            head_dim=4,
             v_head_dim=4,
             layer_types=["full_attention", "sliding_attention"],
             moe_layer_freq=[0, 1],
@@ -416,7 +416,7 @@ class MiMoV2FlashModelTest(CausalLMModelTest, unittest.TestCase):
             layer_types=["full_attention", "sliding_attention"],
             vocab_size=100,
             hidden_size=32,
-            qk_head_dim=8,
+            head_dim=8,
             v_head_dim=8,
             num_attention_heads=4,
             num_key_value_heads=2,

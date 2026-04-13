@@ -29,10 +29,10 @@ from ...utils import auto_docstring
 @strict
 class MiMoV2FlashConfig(PreTrainedConfig):
     r"""
-    qk_head_dim (`int`, *optional*, defaults to 192):
+    head_dim (`int`, *optional*, defaults to 192):
         Dimension of query and key heads.
     v_head_dim (`int`, *optional*, defaults to 128):
-        Dimension of value heads.
+        Dimension of value heads (special case because MiMo uses a smaller v head dim than (qk) head dim )
     n_group (`int`, *optional*, defaults to 1):
         Number of expert groups for group-based top-k routing.
     topk_group (`int`, *optional*, defaults to 1):
@@ -51,7 +51,6 @@ class MiMoV2FlashConfig(PreTrainedConfig):
     attribute_map = {
         "num_local_experts": "n_routed_experts",
         "layernorm_epsilon": "rms_norm_eps",
-        "head_dim": "qk_head_dim",  # NOTE @casinca: vasqu wants to be explicit about head dims, so we remap to qk_*
     }
 
     vocab_size: int = 152576
@@ -61,7 +60,7 @@ class MiMoV2FlashConfig(PreTrainedConfig):
     num_hidden_layers: int = 48
     num_attention_heads: int = 64
     num_key_value_heads: int = 4
-    qk_head_dim: int = 192
+    head_dim: int = 192
     v_head_dim: int = 128
     pad_token_id: int | None = None
     bos_token_id: int | None = 1
