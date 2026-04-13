@@ -67,10 +67,15 @@ _import_structure = {
     ],
     "hqq": ["prepare_for_hqq_linear"],
     "hub_kernels": [
+        "FusedModuleBase",
         "LayerRepository",
+        "fuse_modules",
         "lazy_load_kernel",
+        "make_fused_module_class",
+        "register_fusion_patterns",
         "register_kernel_mapping",
         "replace_kernel_forward_from_hub",
+        "unfuse_modules",
         "use_kernel_forward_from_hub",
         "use_kernel_func_from_hub",
         "use_kernelized_func",
@@ -221,10 +226,15 @@ if TYPE_CHECKING:
     from .higgs import HiggsLinear, dequantize_higgs, quantize_with_higgs, replace_with_higgs_linear
     from .hqq import prepare_for_hqq_linear
     from .hub_kernels import (
+        FusedModuleBase,
         LayerRepository,
+        fuse_modules,
         lazy_load_kernel,
+        make_fused_module_class,
+        register_fusion_patterns,
         register_kernel_mapping,
         replace_kernel_forward_from_hub,
+        unfuse_modules,
         use_kernel_forward_from_hub,
         use_kernel_func_from_hub,
         use_kernelized_func,

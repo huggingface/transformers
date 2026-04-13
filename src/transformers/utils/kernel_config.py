@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from ..integrations.hub_kernels import _FUSION_PATTERNS_REGISTRY, fuse_modules
 from ..utils import PushToHubMixin
 
 
@@ -122,8 +123,6 @@ class KernelConfig(PushToHubMixin):
         registered on the model, fuse the corresponding modules in-place, then replace the
         tuple key with the resolved kernel layer name so the rest of the pipeline is unchanged.
         """
-        from ..module_fusion import fuse_modules
-
         new_mapping = {}
         for layer_name, kernel in self.kernel_mapping.items():
             if not isinstance(layer_name, tuple):
@@ -151,8 +150,6 @@ class KernelConfig(PushToHubMixin):
                 fuse_modules(model, patterns, kernel_layer_name, source_layer_names=source_names)
             else:
                 # Legacy format: ("RMSNorm", "MLP") — look up patterns from model class or registry.
-                from ..module_fusion import _FUSION_PATTERNS_REGISTRY
-
                 fusion_patterns = getattr(model, "_kernel_fusion_patterns", None) or _FUSION_PATTERNS_REGISTRY.get(
                     type(model), {}
                 )

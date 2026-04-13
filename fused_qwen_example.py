@@ -2,7 +2,7 @@ import copy
 import torch
 
 from transformers import AutoModelForCausalLM, AutoTokenizer, KernelConfig
-from transformers.module_fusion import unfuse_modules
+from transformers.integrations import unfuse_modules
 
 
 model_id = "michaelbenayoun/qwen3-tiny-4kv-heads-4layers-random"
