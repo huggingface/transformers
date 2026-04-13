@@ -75,7 +75,6 @@ _MODEL_TO_CONVERSION_PATTERN = {
     "pp_chart2table": "llava",
     "gemma3n_text": "qwen3_5_text",
     "qwen3_5_moe_text": "qwen3_5_text",
-
 }
 
 

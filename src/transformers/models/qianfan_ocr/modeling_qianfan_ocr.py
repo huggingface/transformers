@@ -32,10 +32,10 @@ from ...cache_utils import Cache
 from ...generation import GenerationMixin
 from ...integrations import use_kernel_forward_from_hub
 from ...modeling_layers import GradientCheckpointingLayer
-from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPast, BaseModelOutputWithPooling, ModelOutput
+from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPast, BaseModelOutputWithPooling
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import TransformersKwargs, auto_docstring, torch_compilable_check, torch_int
+from ...utils import ModelOutput, TransformersKwargs, auto_docstring, torch_compilable_check, torch_int
 from ...utils.generic import can_return_tuple, merge_with_config_defaults
 from ...utils.output_capturing import OutputRecorder, capture_outputs
 from ..auto import AutoModel
@@ -583,12 +583,7 @@ class QianfanOCRModel(QianfanOCRPreTrainedModel):
         vision_feature_layer (`int` or `list[int]`):
             Layer index or list of layer indices to extract features from.
         """
-        # Use vision_tower parameter dtype instead of self.dtype for DataParallel compatibility.
-        try:
-            target_dtype = next(self.vision_tower.parameters()).dtype
-        except StopIteration:
-            target_dtype = pixel_values.dtype
-        pixel_values = pixel_values.to(dtype=target_dtype)  # fp16 compatibility
+        pixel_values = pixel_values.to(dtype=self.dtype)  # fp16 compatibility
 
         downsample_ratio = self.config.downsample_ratio
         if vision_feature_layer != -1:
@@ -601,16 +596,21 @@ class QianfanOCRModel(QianfanOCRPreTrainedModel):
         if vision_feature_select_strategy == "default":
             vision_features = vision_features[:, 1:, :]
 
+        # Calculate dimensions based on vision features
         channels = vision_features.shape[1]
         feature_size = int(channels**0.5)
         batch_size = vision_features.shape[0]
 
+        # Reshape tensor to spatial dimensions
         vision_features = vision_features.reshape(batch_size, feature_size, feature_size, -1)
 
+        # Apply downsampling using pixel shuffle
         vision_features = self.pixel_shuffle(vision_features, scale_factor=downsample_ratio)
 
+        # Reshape tensor to prepare for projection
         vision_features = vision_features.reshape(batch_size, -1, vision_features.shape[-1])
 
+        # Project features through multi-modal projector
         vision_features = self.multi_modal_projector(vision_features)
         vision_outputs.pooler_output = vision_features
 
@@ -762,6 +762,7 @@ class QianfanOCRCausalLMOutputWithPast(ModelOutput):
 )
 class QianfanOCRForConditionalGeneration(QianfanOCRPreTrainedModel, GenerationMixin):
     _tied_weights_keys = {"lm_head.weight": "model.language_model.embed_tokens.weight"}
+    _can_compile_fullgraph = False
 
     def __init__(self, config: QianfanOCRConfig):
         super().__init__(config)

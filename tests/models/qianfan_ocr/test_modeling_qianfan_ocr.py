@@ -211,6 +211,10 @@ class QianfanOCRModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTeste
     def test_flash_attn_2_fp32_ln(self):
         pass
 
+    @unittest.skip("DataParallel is a deprecated legacy API and not officially supported")
+    def test_multi_gpu_data_parallel_forward(self):
+        pass
+
     def test_model_fp16_forward(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         self.model_tester.create_and_check_model_fp16_forward(

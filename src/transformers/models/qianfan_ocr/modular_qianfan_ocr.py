@@ -18,15 +18,12 @@ from dataclasses import dataclass
 import numpy as np
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
 from huggingface_hub.dataclasses import strict
 
 from ...cache_utils import Cache
-from ...configuration_utils import PreTrainedConfig
 from ...image_processing_utils import BatchFeature
 from ...image_utils import ImageInput
-from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling, ModelOutput
-from ...modeling_utils import PreTrainedModel
+from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling
 from ...processing_utils import ProcessorMixin, Unpack
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
 from ...utils import TransformersKwargs, auto_docstring
@@ -34,14 +31,14 @@ from ...utils.generic import can_return_tuple, merge_with_config_defaults
 from ...utils.output_capturing import OutputRecorder, capture_outputs
 from ..auto import CONFIG_MAPPING, AutoConfig
 from ..beit.modeling_beit import BeitDropPath
-from ..internvl.configuration_internvl import InternVLConfig, InternVLVisionConfig
+from ..internvl import InternVLConfig, InternVLVisionConfig
 from ..internvl.modeling_internvl import (
-    InternVLForConditionalGeneration,
-    InternVLPreTrainedModel,
-    InternVLModel,
     InternVLCausalLMOutputWithPast,
+    InternVLForConditionalGeneration,
+    InternVLModel,
     InternVLModelOutputWithPast,
     InternVLMultiModalProjector,
+    InternVLPreTrainedModel,
     InternVLVisionAttention,
     InternVLVisionEmbeddings,
     InternVLVisionLayer,
@@ -58,6 +55,15 @@ class QianfanOCRVisionConfig(InternVLVisionConfig):
     r"""
     drop_path_rate (`float`, *optional*, defaults to 0.1):
         Dropout rate for stochastic depth.
+    projection_dropout (`float`, *optional*, defaults to 0.0):
+        Dropout probability for the projection layer.
+    norm_type (`str`, *optional*, defaults to `"layer_norm"`):
+        The type of normalization to use in the encoder. Can be `"layer_norm"` or `"rms_norm"`.
+    use_mask_token (`bool`, *optional*, defaults to `False`):
+        Whether to use a mask token for masked image modeling.
+    use_mean_pooling (`bool`, *optional*, defaults to `True`):
+        Whether to mean pool the final hidden states of the patches instead of using the final hidden state of the
+        CLS token, before applying the classification head.
 
     Example:
 
@@ -168,7 +174,9 @@ class QianfanOCRVisionEncoder(nn.Module):
         self.gradient_checkpointing = False
 
         dpr = [x.item() for x in torch.linspace(0, config.drop_path_rate, config.num_hidden_layers, device="cpu")]
-        self.layer = nn.ModuleList([QianfanOCRVisionLayer(config, drop_path_rate=dpr[i]) for i in range(config.num_hidden_layers)])
+        self.layer = nn.ModuleList(
+            [QianfanOCRVisionLayer(config, drop_path_rate=dpr[i]) for i in range(config.num_hidden_layers)]
+        )
 
     def forward(
         self,
@@ -254,62 +262,16 @@ class QianfanOCRModelOutputWithPast(InternVLModelOutputWithPast):
 
 
 class QianfanOCRModel(InternVLModel):
-    @merge_with_config_defaults
-    @can_return_tuple
-    @auto_docstring(
-        custom_intro="Obtains image last hidden states from the vision tower and apply multimodal projection."
-    )
-    def get_image_features(
-        self,
-        pixel_values: torch.FloatTensor,
-        vision_feature_layer: int | list[int] | list[int] | None = None,
-        vision_feature_select_strategy: str | None = None,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | BaseModelOutputWithPooling:
-        r"""
-        pixel_values (`torch.FloatTensor]` of shape `(batch_size, channels, height, width)`)
-            The tensors corresponding to the input images.
-        vision_feature_layer (`int` or `list[int]`):
-            Layer index or list of layer indices to extract features from.
-        """
-        # Use vision_tower parameter dtype instead of self.dtype for DataParallel compatibility.
-        try:
-            target_dtype = next(self.vision_tower.parameters()).dtype
-        except StopIteration:
-            target_dtype = pixel_values.dtype
-        pixel_values = pixel_values.to(dtype=target_dtype)  # fp16 compatibility
+    pass
 
-        downsample_ratio = self.config.downsample_ratio
-        if vision_feature_layer != -1:
-            kwargs["output_hidden_states"] = True
-        vision_outputs = self.vision_tower(pixel_values=pixel_values, return_dict=True, **kwargs)
-        if vision_feature_layer == -1:
-            vision_features = vision_outputs.last_hidden_state
-        else:
-            vision_features = vision_outputs.hidden_states[vision_feature_layer]
-        if vision_feature_select_strategy == "default":
-            vision_features = vision_features[:, 1:, :]
-
-        channels = vision_features.shape[1]
-        feature_size = int(channels**0.5)
-        batch_size = vision_features.shape[0]
-
-        vision_features = vision_features.reshape(batch_size, feature_size, feature_size, -1)
-
-        vision_features = self.pixel_shuffle(vision_features, scale_factor=downsample_ratio)
-
-        vision_features = vision_features.reshape(batch_size, -1, vision_features.shape[-1])
-
-        vision_features = self.multi_modal_projector(vision_features)
-        vision_outputs.pooler_output = vision_features
-
-        return vision_outputs
 
 class QianfanOCRCausalLMOutputWithPast(InternVLCausalLMOutputWithPast):
     pass
 
 
 class QianfanOCRForConditionalGeneration(InternVLForConditionalGeneration):
+    _can_compile_fullgraph = False
+
     @can_return_tuple
     @auto_docstring
     def forward(
