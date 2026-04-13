@@ -37,7 +37,6 @@ from transformers.testing_utils import (
     slow,
     torch_device,
 )
-from transformers.utils import is_cv2_available
 
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
@@ -48,9 +47,6 @@ from ...test_modeling_common import (
 )
 from ...test_processing_common import url_to_local_path
 
-
-if is_cv2_available():
-    pass
 
 if is_torch_available():
     import torch
