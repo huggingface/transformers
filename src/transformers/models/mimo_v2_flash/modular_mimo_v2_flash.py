@@ -50,17 +50,9 @@ from ..qwen2_moe.modeling_qwen2_moe import Qwen2MoeMLP
 class MiMoV2FlashConfig(PreTrainedConfig):
     r"""
     qk_head_dim (`int`, *optional*, defaults to 192):
-        Dimension of query and key heads for full attention layers.
+        Dimension of query and key heads.
     v_head_dim (`int`, *optional*, defaults to 128):
-        Dimension of value heads for full attention layers.
-    swa_num_attention_heads (`int`, *optional*, defaults to 64):
-        Number of attention heads for sliding window attention layers.
-    swa_num_key_value_heads (`int`, *optional*, defaults to 8):
-        Number of key-value heads for sliding window attention layers.
-    swa_qk_head_dim (`int`, *optional*, defaults to 192):
-        Dimension of query and key heads for sliding window attention layers.
-    swa_v_head_dim (`int`, *optional*, defaults to 128):
-        Dimension of value heads for sliding window attention layers.
+        Dimension of value heads.
     n_group (`int`, *optional*, defaults to 1):
         Number of expert groups for group-based top-k routing.
     topk_group (`int`, *optional*, defaults to 1):
@@ -80,7 +72,6 @@ class MiMoV2FlashConfig(PreTrainedConfig):
         "num_local_experts": "n_routed_experts",
         "layernorm_epsilon": "rms_norm_eps",
         "head_dim": "qk_head_dim",  # NOTE @casinca: vasqu wants to be explicit about head dims, so we remap to qk_*
-        "swa_head_dim": "swa_qk_head_dim",
     }
 
     vocab_size: int = 152576
@@ -95,10 +86,6 @@ class MiMoV2FlashConfig(PreTrainedConfig):
     pad_token_id: int | None = None
     bos_token_id: int | None = 1
     eos_token_id: int | list[int] | None = None
-    swa_num_attention_heads: int = 64
-    swa_num_key_value_heads: int = 8
-    swa_qk_head_dim: int = 192
-    swa_v_head_dim: int = 128
     hidden_act: str = "silu"
     max_position_embeddings: int = 131072
     initializer_range: float = 0.02
@@ -134,7 +121,7 @@ class MiMoV2FlashConfig(PreTrainedConfig):
                     for i in range(self.num_hidden_layers)
                 ]
 
-        # BC: hub-only fields not modeled in the config.
+        # BC: hub-only fields not modeled in the config or redundant that can be derived.
         for _hub_only in (
             "scoring_func",
             "topk_method",
@@ -142,6 +129,11 @@ class MiMoV2FlashConfig(PreTrainedConfig):
             "attention_chunk_size",
             "sliding_window_size",
             "n_shared_experts",
+            "swa_num_attention_heads",
+            "swa_num_key_value_heads",
+            "swa_qk_head_dim",
+            "swa_v_head_dim",
+            "swa_head_dim",
         ):
             kwargs.pop(_hub_only, None)
 
@@ -225,8 +217,7 @@ class MiMoV2FlashRotaryEmbedding(Gemma3RotaryEmbedding):
         rope_params = config.rope_parameters[layer_type]
         base = rope_params["rope_theta"]
         partial_rotary_factor = rope_params.get("partial_rotary_factor", 0.334)
-        qk_head_dim = config.swa_qk_head_dim if layer_type == "sliding_attention" else config.qk_head_dim
-        dim = int(qk_head_dim * partial_rotary_factor)
+        dim = int(config.qk_head_dim * partial_rotary_factor)
         attention_factor = 1.0
         inv_freq = 1.0 / (
             base ** (torch.arange(0, dim, 2, dtype=torch.int64).to(device=device, dtype=torch.float) / dim)
@@ -397,10 +388,11 @@ class MiMoV2FlashAttention(nn.Module):
         super().__init__()
         is_swa = config.layer_types[layer_idx] == "sliding_attention"
 
-        num_kv_heads = config.swa_num_key_value_heads if is_swa else config.num_key_value_heads
-        num_attn_heads = config.swa_num_attention_heads if is_swa else config.num_attention_heads
-        qk_head_dim = config.swa_qk_head_dim if is_swa else config.qk_head_dim
-        v_head_dim = config.swa_v_head_dim if is_swa else config.v_head_dim
+        # SWA layers double the kv heads vs full-attention layers
+        num_kv_heads = config.num_key_value_heads * 2 if is_swa else config.num_key_value_heads
+        num_attn_heads = config.num_attention_heads
+        qk_head_dim = config.qk_head_dim
+        v_head_dim = config.v_head_dim
 
         self.config = config
         self.layer_idx = layer_idx

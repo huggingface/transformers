@@ -83,10 +83,6 @@ class MiMoV2FlashModelTester(CausalLMModelTester):
         # MiMo-V2-Flash specific test config
         self.qk_head_dim = 8
         self.v_head_dim = 8
-        self.swa_qk_head_dim = 8
-        self.swa_v_head_dim = 8
-        self.swa_num_attention_heads = 4
-        self.swa_num_key_value_heads = 2
         self.add_swa_attention_sink_bias = True
         self.add_full_attention_sink_bias = False
         self.layer_types = ["full_attention", "sliding_attention"]
@@ -136,6 +132,16 @@ class MiMoV2FlashModelTest(CausalLMModelTest, unittest.TestCase):
 
     def test_reverse_loading_mapping(self, check_keys_were_modified=True):
         super().test_reverse_loading_mapping(check_keys_were_modified=check_keys_were_modified)
+
+    def _check_past_key_values_for_generate(self, batch_size, past_key_values, seq_length, config):
+        # SWA layers double the kv heads (see MiMoV2FlashAttention.__init__), so the per-layer
+        # kv head count is layer-type dependent. Same override pattern as MiniMax.
+        for layer_idx, layer in enumerate(past_key_values.layers):
+            is_swa = config.layer_types[layer_idx] == "sliding_attention"
+            num_kv_heads = config.num_key_value_heads * 2 if is_swa else config.num_key_value_heads
+            expected_shape = (batch_size, num_kv_heads, seq_length, config.qk_head_dim)
+            self.assertEqual(layer.keys.shape, expected_shape)
+            self.assertEqual(layer.values.shape, expected_shape)
 
     # NOTE: @casinca this is copy pasta tests from Gemma3, useful for MiMo RoPE
     @parameterized.expand([("linear",), ("dynamic",), ("yarn",)])
@@ -256,10 +262,14 @@ class MiMoV2FlashModelTest(CausalLMModelTest, unittest.TestCase):
                 "attention_chunk_size": 128,
                 "sliding_window_size": 128,
                 "n_shared_experts": None,
-                # attribute_map aliases (hub uses layernorm_epsilon, head_dim, swa_head_dim)
+                # attribute_map aliases (hub uses layernorm_epsilon, head_dim)
                 "layernorm_epsilon": 1e-5,
                 "head_dim": 192,
+                # Legacy SWA-prefixed fields that should be stripped (redundant with non-SWA counterparts)
+                "swa_num_attention_heads": 64,
+                "swa_num_key_value_heads": 8,
                 "swa_head_dim": 192,
+                "swa_v_head_dim": 128,
                 # None -> default
                 "routed_scaling_factor": None,
             }
@@ -284,13 +294,16 @@ class MiMoV2FlashModelTest(CausalLMModelTest, unittest.TestCase):
             "attention_chunk_size",
             "sliding_window_size",
             "n_shared_experts",
+            "swa_num_attention_heads",
+            "swa_num_key_value_heads",
+            "swa_head_dim",
+            "swa_v_head_dim",
         ):
             self.assertNotIn(key, config_dict)
 
         # attribute_map aliases resolved
         self.assertEqual(config.rms_norm_eps, 1e-5)
         self.assertEqual(config.qk_head_dim, 192)
-        self.assertEqual(config.swa_qk_head_dim, 192)
 
         # None -> default
         self.assertEqual(config.routed_scaling_factor, 1.0)
@@ -303,11 +316,8 @@ class MiMoV2FlashModelTest(CausalLMModelTest, unittest.TestCase):
             vocab_size=100,
             hidden_size=32,
             qk_head_dim=8,
-            swa_qk_head_dim=8,
             num_attention_heads=4,
-            swa_num_attention_heads=4,
             num_key_value_heads=2,
-            swa_num_key_value_heads=2,
         )
         config.rope_parameters["full_attention"]["partial_rotary_factor"] = 0.5
         config.rope_parameters["sliding_attention"]["partial_rotary_factor"] = 0.5
@@ -377,10 +387,6 @@ class MiMoV2FlashModelTest(CausalLMModelTest, unittest.TestCase):
             num_key_value_heads=1,
             qk_head_dim=4,
             v_head_dim=4,
-            swa_num_attention_heads=2,
-            swa_num_key_value_heads=1,
-            swa_qk_head_dim=4,
-            swa_v_head_dim=4,
             layer_types=["full_attention", "sliding_attention"],
             moe_layer_freq=[0, 1],
             n_routed_experts=4,
@@ -414,10 +420,6 @@ class MiMoV2FlashModelTest(CausalLMModelTest, unittest.TestCase):
             v_head_dim=8,
             num_attention_heads=4,
             num_key_value_heads=2,
-            swa_qk_head_dim=8,
-            swa_v_head_dim=8,
-            swa_num_attention_heads=4,
-            swa_num_key_value_heads=2,
             moe_layer_freq=[0, 1],
             moe_intermediate_size=16,
             n_routed_experts=4,

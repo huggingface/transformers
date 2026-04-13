@@ -116,8 +116,7 @@ class MiMoV2FlashRotaryEmbedding(nn.Module):
         rope_params = config.rope_parameters[layer_type]
         base = rope_params["rope_theta"]
         partial_rotary_factor = rope_params.get("partial_rotary_factor", 0.334)
-        qk_head_dim = config.swa_qk_head_dim if layer_type == "sliding_attention" else config.qk_head_dim
-        dim = int(qk_head_dim * partial_rotary_factor)
+        dim = int(config.qk_head_dim * partial_rotary_factor)
         attention_factor = 1.0
         inv_freq = 1.0 / (
             base ** (torch.arange(0, dim, 2, dtype=torch.int64).to(device=device, dtype=torch.float) / dim)
@@ -434,10 +433,11 @@ class MiMoV2FlashAttention(nn.Module):
         super().__init__()
         is_swa = config.layer_types[layer_idx] == "sliding_attention"
 
-        num_kv_heads = config.swa_num_key_value_heads if is_swa else config.num_key_value_heads
-        num_attn_heads = config.swa_num_attention_heads if is_swa else config.num_attention_heads
-        qk_head_dim = config.swa_qk_head_dim if is_swa else config.qk_head_dim
-        v_head_dim = config.swa_v_head_dim if is_swa else config.v_head_dim
+        # SWA layers double the kv heads vs full-attention layers
+        num_kv_heads = config.num_key_value_heads * 2 if is_swa else config.num_key_value_heads
+        num_attn_heads = config.num_attention_heads
+        qk_head_dim = config.qk_head_dim
+        v_head_dim = config.v_head_dim
 
         self.config = config
         self.layer_idx = layer_idx
