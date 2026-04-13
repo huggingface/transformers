@@ -113,6 +113,9 @@ FILTERED_MODELS: set[str] = {
     "unispeech_sat",
     "wavlm",
     "xlm_roberta",
+    "qwen3_5",
+    "qwen3_5_moe",
+    "qwen3_omni_moe",
 }
 
 
@@ -126,14 +129,31 @@ def load_eval_dataset(path: Path) -> list[dict]:
 
 def load_eval_dataset_from_hub(dataset_repo: str, split: str) -> list[dict]:
     """Load and filter hub dataset rows into eval entries."""
-    ds = load_dataset(dataset_repo, split=split)
+    # Use parquet directly to avoid datasets cache issues
+    from huggingface_hub import hf_hub_download
+    import pandas as pd
+    import numpy as np
+
+    parquet_path = hf_hub_download(
+        repo_id=dataset_repo,
+        filename="data/train-00000-of-00001.parquet",
+        repo_type="dataset",
+    )
+    df = pd.read_parquet(parquet_path)
+    rows = df.to_dict('records')
 
     entries = []
-    for row in ds:
+    for row in rows:
         model_id = row.get("model_name")
         original_modeling_code = row.get("original_modeling_code")
         current_modular_code = row.get("current_modular_code")
-        bases = row.get("bases") or []
+        bases = row.get("bases")
+
+        # Convert numpy array to list if needed
+        if isinstance(bases, np.ndarray):
+            bases = bases.tolist()
+        if not isinstance(bases, list):
+            bases = []
 
         if not model_id or not original_modeling_code or not current_modular_code or not bases:
             continue
