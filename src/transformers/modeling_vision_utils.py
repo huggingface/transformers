@@ -19,8 +19,14 @@ precomputed before ``torch.export`` tracing since they use untraceable ops
 (``repeat_interleave``, ``.tolist()``, ``nonzero()``, loops).
 """
 
-import torch
-import torch.nn.functional as F
+from __future__ import annotations
+
+from .utils.import_utils import is_torch_available
+
+
+if is_torch_available():
+    import torch
+    import torch.nn.functional as F
 
 
 def get_vision_cu_seqlens(grid_thw: torch.Tensor) -> torch.Tensor:
