@@ -16,6 +16,7 @@
 import unittest
 
 from datasets import load_dataset
+import numpy as np
 
 from transformers.testing_utils import require_torch, require_vision
 from transformers.utils import is_torch_available
@@ -251,6 +252,26 @@ class SegformerImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
             image, map = prepare_semantic_batch_inputs()
             encoding = image_processing(image, map, return_tensors="pt")
             self.assertTrue(len(encoding["labels"]) == len(map))
+
+    def test_reduce_labels_keeps_void_label(self):
+        image = np.zeros((2, 2, 3), dtype=np.uint8)
+        segmentation_map = np.array([[0, 1], [2, 255]], dtype=np.uint8)
+        expected_labels = torch.tensor([[[255, 0], [1, 255]]], dtype=torch.long)
+        image_processor_kwargs = self.image_processor_dict.copy()
+        image_processor_kwargs.update(
+            {
+                "do_resize": False,
+                "do_rescale": False,
+                "do_normalize": False,
+                "do_reduce_labels": True,
+            }
+        )
+
+        for image_processing_class in self.image_processing_classes.values():
+            image_processing = image_processing_class(**image_processor_kwargs)
+
+            encoding = image_processing(image, segmentation_map, return_tensors="pt")
+            self.assertTrue(torch.equal(encoding["labels"], expected_labels))
 
     def test_backends_equivalence(self):
         if len(self.image_processing_classes) < 2:

@@ -120,10 +120,10 @@ class BeitImageProcessorPil(PilBackend):
 
     def reduce_label(self, image: np.ndarray) -> np.ndarray:
         """Reduce label values by 1, replacing 0 with 255."""
-        # Avoid using underflow conversion
-        image[image == 0] = 255
-        image = image - 1
-        image[image == 254] = 255
+        image = image.copy()
+        ignore_mask = (image == 0) | (image == 255)
+        image[ignore_mask] = 255
+        image[~ignore_mask] = image[~ignore_mask] - 1
         return image
 
     def _preprocess(
