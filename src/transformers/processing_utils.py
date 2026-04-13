@@ -1804,7 +1804,10 @@ class ProcessorMixin(PushToHubMixin):
             for conversation in conversations:
                 images, videos = [], []
                 for message in conversation:
-                    visuals = [content for content in (message.get("content") or []) if content["type"] in ["image", "video"]]
+                    visuals = [
+                        content for content in (message.get("content") or [])
+                        if content["type"] in ["image", "video"]
+                    ]
                     audio_fnames = [
                         content[key]
                         for content in (message.get("content") or [])
