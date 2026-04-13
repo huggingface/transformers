@@ -132,15 +132,14 @@ def get_pool_indices(feature_lens: torch.Tensor) -> torch.Tensor:
         feature_lens: ``(batch_size,)`` mel spectrogram lengths.
 
     Returns:
-        ``(total_pooled,)`` flat index of first element of each pair.
+        ``(total_pooled,)`` flat index of first element of each stride-2 pair.
     """
     after_conv1 = (feature_lens - 1) // 2 + 1
-    after_conv2 = (after_conv1 - 2) // 2 + 1
-    num_pairs = after_conv2 // 2
-    offsets = F.pad(after_conv2[:-1].cumsum(0), (1, 0), value=0)
-    pair_offsets = torch.repeat_interleave(offsets, num_pairs)
-    local_indices = torch.arange(num_pairs.sum(), device=feature_lens.device)
-    local_indices -= torch.repeat_interleave(F.pad(num_pairs[:-1].cumsum(0), (1, 0), value=0), num_pairs)
+    num_pooled = (after_conv1 - 2) // 2 + 1
+    offsets = F.pad(after_conv1[:-1].cumsum(0), (1, 0), value=0)
+    pair_offsets = torch.repeat_interleave(offsets, num_pooled)
+    local_indices = torch.arange(num_pooled.sum(), device=feature_lens.device)
+    local_indices -= torch.repeat_interleave(F.pad(num_pooled[:-1].cumsum(0), (1, 0), value=0), num_pooled)
     return pair_offsets + local_indices * 2
 
 
