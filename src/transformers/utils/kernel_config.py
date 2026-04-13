@@ -142,15 +142,29 @@ class KernelConfig(PushToHubMixin):
             if not has_kernel_for_device:
                 continue
 
-            # Look up fusion patterns registered on the model class
-            fusion_patterns = getattr(model, "_kernel_fusion_patterns", {})
-            if kernel_layer_name not in fusion_patterns:
-                raise ValueError(
-                    f"{type(model).__name__} does not define fusion patterns for '{kernel_layer_name}'. "
-                    f'Add `_kernel_fusion_patterns = {{"{kernel_layer_name}": [...]}}` to the model class.'
-                )
+            # Detect inline format: tuple of (kernel_layer_name, glob_pattern) pairs.
+            # e.g. (("RMSNorm", "model.layers.*.post_attention_layernorm"), ("MLP", "model.layers.*.mlp"))
+            is_inline = all(isinstance(item, tuple) and len(item) == 2 for item in layer_name)
+            if is_inline:
+                source_names = [item[0] for item in layer_name]
+                patterns = [item[1] for item in layer_name]
+                fuse_modules(model, patterns, kernel_layer_name, source_layer_names=source_names)
+            else:
+                # Legacy format: ("RMSNorm", "MLP") — look up patterns from model class or registry.
+                from ..module_fusion import _FUSION_PATTERNS_REGISTRY
 
-            fuse_modules(model, fusion_patterns[kernel_layer_name], kernel_layer_name)
+                fusion_patterns = getattr(model, "_kernel_fusion_patterns", None) or _FUSION_PATTERNS_REGISTRY.get(
+                    type(model), {}
+                )
+                if kernel_layer_name not in fusion_patterns:
+                    raise ValueError(
+                        f"{type(model).__name__} does not define fusion patterns for '{kernel_layer_name}'. "
+                        f'Either add `_kernel_fusion_patterns = {{"{kernel_layer_name}": [...]}}` to the model class, '
+                        f"call `register_fusion_patterns({type(model).__name__}, ...)` before loading the model, "
+                        f"or use the inline pattern format: "
+                        f'(("{kernel_layer_name}", "<glob_path>"), ...).'
+                    )
+                fuse_modules(model, fusion_patterns[kernel_layer_name], kernel_layer_name)
             new_mapping[kernel_layer_name] = kernel
 
         self.kernel_mapping = new_mapping

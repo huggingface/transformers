@@ -22,8 +22,72 @@ if is_torch_available():
     import torch.nn as nn
 
 
+# Module-level registry: model class → {kernel_layer_name → [glob patterns]}
+# Populated via `register_fusion_patterns` for models that cannot be modified directly.
+_FUSION_PATTERNS_REGISTRY: dict[type, dict[str, list[str]]] = {}
+
+
+def register_fusion_patterns(
+    model_class_or_instance,
+    patterns: dict[str, list[str]],
+) -> None:
+    """
+    Register kernel fusion patterns for a model class without modifying it directly.
+
+    This is an alternative to setting ``_kernel_fusion_patterns`` as a class attribute,
+    useful when the model class is frozen or comes from an external library.
+
+    Args:
+        model_class_or_instance:
+            The model class (or an instance of it) for which patterns are being registered.
+        patterns (`dict[str, list[str]]`):
+            Mapping from ``kernel_layer_name`` to a list of glob-style module paths,
+            identical in format to ``_kernel_fusion_patterns``. For example::
+
+                {
+                    "RMSNormMLP": [
+                        "model.layers.*.post_attention_layernorm",
+                        "model.layers.*.mlp",
+                    ]
+                }
+
+    Example::
+
+        from transformers.module_fusion import register_fusion_patterns
+        from transformers.models.qwen3 import Qwen3ForCausalLM
+
+        register_fusion_patterns(
+            Qwen3ForCausalLM,
+            {
+                "RMSNormMLP": [
+                    "model.layers.*.post_attention_layernorm",
+                    "model.layers.*.mlp",
+                ]
+            },
+        )
+    """
+    if not isinstance(model_class_or_instance, type):
+        model_class_or_instance = type(model_class_or_instance)
+    _FUSION_PATTERNS_REGISTRY[model_class_or_instance] = patterns
+
+
 class FusedModuleBase(nn.Module):
-    def __init__(self, modules_to_fuse: list[nn.Module], source_names: list[str]):
+    def __init__(
+        self,
+        modules_to_fuse: list[nn.Module],
+        source_names: list[str],
+        fused_module_names: list[str] | None = None,
+    ):
+        """
+        Args:
+            modules_to_fuse: The source modules to fuse together.
+            source_names: The attribute names under which each module lives in its parent
+                (used to restore them on ``unfuse_modules``).
+            fused_module_names: The names under which each source module is registered as a
+                child of this container (i.e. ``self.<name>``). When ``None``, the
+                ``kernel_layer_name`` attribute of each source module is used. Pass this
+                explicitly when the source modules do not carry ``@use_kernel_forward_from_hub``.
+        """
         super().__init__()
         if len(modules_to_fuse) == 0:
             raise ValueError("At least one module must be provided for fusion.")
@@ -32,13 +96,24 @@ class FusedModuleBase(nn.Module):
 
         self._source_names = source_names
 
-        for module in modules_to_fuse:
-            attr_name = getattr(module, "kernel_layer_name", None)
-            if attr_name is None:
-                raise ValueError(f"Module {module} does not have a 'kernel_layer_name' attribute.")
-            self.add_module(attr_name, module)
-
-        self._fused_module_names = [m.kernel_layer_name for m in modules_to_fuse]
+        if fused_module_names is not None:
+            if len(fused_module_names) != len(modules_to_fuse):
+                raise ValueError("Length of fused_module_names and modules_to_fuse must match.")
+            for module, name in zip(modules_to_fuse, fused_module_names):
+                self.add_module(name, module)
+            self._fused_module_names = list(fused_module_names)
+        else:
+            for module in modules_to_fuse:
+                attr_name = getattr(module, "kernel_layer_name", None)
+                if attr_name is None:
+                    raise ValueError(
+                        f"Module {module} does not have a 'kernel_layer_name' attribute. "
+                        f"Either decorate it with @use_kernel_forward_from_hub or provide "
+                        f"explicit names via the inline pattern format: "
+                        f'(("<name>", "<glob_path>"), ...).'
+                    )
+                self.add_module(attr_name, module)
+            self._fused_module_names = [m.kernel_layer_name for m in modules_to_fuse]
 
         # `kernelize` validates the kernel's forward signature against the class being replaced.
         # Since the fused container sits at the position of the first module in the chain, the
@@ -84,6 +159,7 @@ def fuse_modules(
     model: nn.Module,
     module_names_to_fuse: list[str],
     kernel_layer_name: str,
+    source_layer_names: list[str] | None = None,
 ) -> None:
     """
     Fuse a sequence of submodules into a single `FusedModuleBase` subclass in-place.
@@ -130,9 +206,12 @@ def fuse_modules(
         child_names = [generic_children[p][0] for p in module_names_to_fuse]
         modules_to_fuse = [generic_children[p][1] for p in module_names_to_fuse]
 
-        source_layer_names = tuple(getattr(m, "kernel_layer_name") for m in modules_to_fuse)
-        FusedClass = make_fused_module_class(source_layer_names, kernel_layer_name)
-        fused_instance = FusedClass(modules_to_fuse, child_names)
+        if source_layer_names is not None:
+            resolved_names = tuple(source_layer_names)
+        else:
+            resolved_names = tuple(getattr(m, "kernel_layer_name") for m in modules_to_fuse)
+        FusedClass = make_fused_module_class(resolved_names, kernel_layer_name)
+        fused_instance = FusedClass(modules_to_fuse, child_names, fused_module_names=list(resolved_names))
 
         module.add_module(child_names[0], fused_instance)
         for child_name in child_names[1:]:
