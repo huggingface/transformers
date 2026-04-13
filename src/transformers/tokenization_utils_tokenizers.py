@@ -1277,20 +1277,26 @@ class TokenizersBackend(PreTrainedTokenizerBase):
                 >> Tags including `base_model:.*mistralai`
         """
         import re
+        from functools import lru_cache
 
         from huggingface_hub import model_info
         from packaging import version
 
         from transformers.utils.hub import cached_file
 
+        @lru_cache(maxsize=128)
         def is_base_mistral(model_id: str) -> bool:
-            model = model_info(model_id)
+            try:
+                model = model_info(model_id)
+            except Exception:
+                # Never block tokenizer init on a Hub error — assume non-Mistral.
+                return False
             if model.tags is not None:
                 if re.search("base_model:.*mistralai", "".join(model.tags)):
                     return True
             return False
 
-        if is_offline_mode():
+        if local_files_only or is_offline_mode():
             is_local = True
 
         if pretrained_model_name_or_path is not None and (
