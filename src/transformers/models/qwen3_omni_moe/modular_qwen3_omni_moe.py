@@ -1011,10 +1011,15 @@ class Qwen3OmniMoeAudioEncoder(Qwen2_5OmniAudioEncoder):
             cu_seqlens = get_audio_cu_seqlens(chunk_lengths, feature_lens, self.n_window_infer, self.n_window)
 
         # Add channel dim for Conv2d: (num_chunks, mel_bins, time) -> (num_chunks, 1, mel_bins, time)
-        padded_feature = padded_feature.unsqueeze(1)
-        padded_embed = F.gelu(self.conv2d1(padded_feature))
-        padded_embed = F.gelu(self.conv2d2(padded_embed))
-        padded_embed = F.gelu(self.conv2d3(padded_embed))
+        # Split to chunk to avoid OOM during convolution
+        padded_embeds = []
+        for chunk in padded_feature.split(self.conv_chunksize, dim=0):
+            padded_embed = F.gelu(self.conv2d1(chunk))
+            padded_embed = F.gelu(self.conv2d2(padded_embed))
+            padded_embed = F.gelu(self.conv2d3(padded_embed))
+            padded_embeds.append(padded_embed)
+        padded_embed = torch.cat(padded_embeds, dim=0)
+
         b, c, f, t = padded_embed.size()
         padded_embed = self.conv_out(padded_embed.permute(0, 3, 1, 2).contiguous().view(b, t, c * f))
 
