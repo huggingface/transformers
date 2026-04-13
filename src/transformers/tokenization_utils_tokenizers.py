@@ -1290,7 +1290,9 @@ class TokenizersBackend(PreTrainedTokenizerBase):
                     return True
             return False
 
-        if is_offline_mode():
+        if is_offline_mode() or local_files_only or (
+            pretrained_model_name_or_path is not None and os.path.isdir(pretrained_model_name_or_path)
+        ):
             is_local = True
 
         if pretrained_model_name_or_path is not None and (
