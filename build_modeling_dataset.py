@@ -36,6 +36,11 @@ NOISE_REPOS = {
 
 GITHUB_TOKEN = os.environ.get("GITHUB_TOKEN", "")
 
+BASE_EXCLUDE_BY_MODEL = {
+    "qwen3_5": {"qwen3"},
+    "qwen3_omni_moe": {"mimi", "qwen2_5_omni", "qwen2_moe"},
+}
+
 
 def _github_get(url: str) -> dict | list | None:
     headers = {"User-Agent": "Mozilla/5.0"}
@@ -213,7 +218,7 @@ def get_modeling_file_path(model_name: str) -> Path | None:
     return None
 
 
-def get_modular_bases(modular_code: str) -> list[str]:
+def get_modular_bases(modular_code: str, model_name: str | None = None) -> list[str]:
     """
     Extract the model names inherited from in a modular file.
     Looks for imports of the form:
@@ -226,6 +231,10 @@ def get_modular_bases(modular_code: str) -> list[str]:
     for m in pattern.finditer(modular_code):
         # group(2) is the model name part after "modeling_"
         bases.add(m.group(2))
+
+    if model_name in BASE_EXCLUDE_BY_MODEL:
+        bases -= BASE_EXCLUDE_BY_MODEL[model_name]
+
     return sorted(bases)
 
 
@@ -319,7 +328,7 @@ def build_dataset(use_github: bool = True):
                 original_modeling_code = content
                 original_source = f"https://github.com/huggingface/transformers/blob/{commit}/{rel}"
 
-        bases = get_modular_bases(current_modular_code) if current_modular_code else []
+        bases = get_modular_bases(current_modular_code, model_name) if current_modular_code else []
         date_released = release_dates.get(model_name)
 
         rows.append({

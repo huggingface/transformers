@@ -756,6 +756,10 @@ class CodeSimilarityAnalyzer:
 _RELEASE_RE = re.compile(
     r"(?:^|[\*_`\s>])(?:this|the)\s+model\s+was\s+released\s+on\s+(\d{4}-\d{2}-\d{2})\b", re.IGNORECASE
 )
+# Fallback: "added to Hugging Face Transformers on YYYY-MM-DD"
+_ADDED_TO_TRANSFORMERS_RE = re.compile(
+    r"added\s+to\s+(?:Hugging\s+Face\s+)?[Tt]ransformers\s+on\s+(\d{4}-\d{2}-\d{2})\b", re.IGNORECASE
+)
 
 
 def build_date_data() -> dict[str, str]:
@@ -764,11 +768,13 @@ def build_date_data() -> dict[str, str]:
 
     - model_id is the filename without extension (e.g., "llama" for "llama.md")
     - date_released is the first YYYY-MM-DD matched after "...was released on ..."
+    - Falls back to the "added to Hugging Face Transformers on" date when the
+      release date is missing or still a template placeholder (e.g. {release_date}).
     - Ignores non-*.md files and directories.
 
     Returns:
         dict[str, str]: mapping of model_id -> ISO date string (YYYY-MM-DD).
-                        Files without a match are simply omitted.
+                        Files without any parseable date are omitted.
     """
 
     root_dir = transformers.__file__.split("src/transformers")[0]
@@ -781,11 +787,20 @@ def build_date_data() -> dict[str, str]:
         except Exception:
             # Skip unreadable files quietly
             logging.info(f"Failed to read md for {md_path}")
+            continue
 
         m = _RELEASE_RE.search(text)
         if m:
             model_id = md_path.stem  # e.g., "llama" from "llama.md"
             result[model_id] = m.group(1)
+        else:
+            # Fall back to "added to Transformers on" date — if the model code
+            # wasn't in transformers yet when the query model was released, it
+            # can't have been a source (handles unfilled {release_date} placeholders).
+            m2 = _ADDED_TO_TRANSFORMERS_RE.search(text)
+            if m2:
+                model_id = md_path.stem
+                result[model_id] = m2.group(1)
 
     return result
 
@@ -1027,7 +1042,11 @@ def compute_model_class_match_summary(
         for j, (model_j, classes_j) in enumerate(model_items):
             if i == j:
                 continue
-            if classes_i.issubset(classes_j) and len(classes_j) > len(classes_i):
+            if (
+                classes_i.issubset(classes_j)
+                and len(classes_j) > len(classes_i)
+                and _is_descendant(model_j, model_i, inheritance_map)
+            ):
                 redundant_models.add(model_i)
                 break
 
@@ -1118,17 +1137,24 @@ def main():
     if os.sep not in modeling_file:
         modeling_file = os.path.join("src", "transformers", "models", modeling_file, f"modeling_{modeling_file}.py")
 
+    modeling_filename = Path(modeling_file).name
+    release_key = modeling_filename.split("modeling_")[-1][:-3]
+    release_date = dates.get(release_key, "unknown release date")
+
     # Parse ignore models from comma-separated list
     ignore_models_set = set()
     if args.ignore_models:
         ignore_models_set = {_normalize(model.strip()) for model in args.ignore_models.split(",") if model.strip()}
 
+    # Exclude models released after the query model — do this before any embedding comparison
+    if release_date != "unknown release date":
+        for model_id, model_date in dates.items():
+            if model_date >= release_date:
+                ignore_models_set.add(_normalize(model_id))
+
     results = analyzer.analyze_file(
         Path(modeling_file), top_k_per_item=12, allow_hub_fallback=True, use_jaccard=args.use_jaccard, dates=dates, ignore_models=ignore_models_set
     )
-    modeling_filename = Path(modeling_file).name
-    release_key = modeling_filename.split("modeling_")[-1][:-3]
-    release_date = dates.get(release_key, "unknown release date")
 
     aggregate_scores: dict[str, float] = {}
     for data in results.values():
