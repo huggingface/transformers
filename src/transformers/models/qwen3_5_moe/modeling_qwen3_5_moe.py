@@ -1157,7 +1157,7 @@ class Qwen3_5MoeVisionModel(Qwen3_5MoePreTrainedModel):
                 grid_thw, self.num_grid_per_side, self.config.spatial_merge_size
             )
         pos_embeds = (self.pos_embed(embed_indices) * bilinear_weights[:, :, None]).sum(0)
-        hidden_states = hidden_states + pos_embeds
+        hidden_states = hidden_states + pos_embeds.to(hidden_states.dtype)
 
         if rotary_pos_ids is None:
             rotary_pos_ids = get_rotary_pos_ids(grid_thw, self.spatial_merge_size)
