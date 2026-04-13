@@ -1136,13 +1136,13 @@ class Qwen3OmniMoeVisionEncoder(Qwen3OmniMoePreTrainedModel):
             grid_thw (`torch.Tensor` of shape `(num_images_or_videos, 3)`):
                 The temporal, height and width of feature shape of each image in LLM.
             cu_seqlens (`torch.Tensor`, *optional*):
-                Precomputed cumulative sequence lengths (from `compute_cu_seqlens`).
+                Precomputed cumulative sequence lengths (from `get_vision_cu_seqlens`).
             rotary_pos_ids (`torch.Tensor` of shape `(total_tokens, 2)`, *optional*):
                 Precomputed (row, col) position IDs (from `get_rotary_pos_ids`).
             embed_indices (`torch.Tensor` of shape `(4, total_thw)`, *optional*):
-                Bilinear corner indices into the position embedding table (from `compute_pos_embed_indices`).
+                Bilinear corner indices into the position embedding table (from `get_pos_embed_indices`).
             bilinear_weights (`torch.Tensor` of shape `(4, total_thw)`, *optional*):
-                Interpolation weights for the four bilinear corners (from `compute_pos_embed_indices`).
+                Interpolation weights for the four bilinear corners (from `get_pos_embed_indices`).
 
         Returns:
             `torch.Tensor`: hidden_states.

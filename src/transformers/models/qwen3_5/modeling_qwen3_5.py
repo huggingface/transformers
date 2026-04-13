@@ -293,7 +293,7 @@ def torch_chunk_gated_delta_rule(
     # for each chunk
     for i in range(0, total_sequence_length // chunk_size):
         q_i, k_i, v_i = query[:, :, i], key[:, :, i], value[:, :, i]
-        attn = q_i @ k_i.transpose(-1, -2) * decay_mask[:, :, i]
+        attn = (q_i @ k_i.transpose(-1, -2) * decay_mask[:, :, i]).masked_fill_(mask, 0)
         v_prime = (k_cumdecay[:, :, i]) @ last_recurrent_state
         v_new = v_i - v_prime
         attn_inter = (q_i * g[:, :, i, :, None].exp()) @ last_recurrent_state
@@ -1046,13 +1046,13 @@ class Qwen3_5VisionModel(Qwen3_5PreTrainedModel):
             grid_thw (`torch.Tensor` of shape `(num_images_or_videos, 3)`):
                 The temporal, height and width of feature shape of each image in LLM.
             cu_seqlens (`torch.Tensor`, *optional*):
-                Precomputed cumulative sequence lengths (from `compute_cu_seqlens`).
+                Precomputed cumulative sequence lengths (from `get_vision_cu_seqlens`).
             rotary_pos_ids (`torch.Tensor` of shape `(total_tokens, 2)`, *optional*):
                 Precomputed (row, col) position IDs (from `get_rotary_pos_ids`).
             embed_indices (`torch.Tensor` of shape `(4, total_thw)`, *optional*):
-                Bilinear corner indices into the position embedding table (from `compute_pos_embed_indices`).
+                Bilinear corner indices into the position embedding table (from `get_pos_embed_indices`).
             bilinear_weights (`torch.Tensor` of shape `(4, total_thw)`, *optional*):
-                Interpolation weights for the four bilinear corners (from `compute_pos_embed_indices`).
+                Interpolation weights for the four bilinear corners (from `get_pos_embed_indices`).
 
         Returns:
             `torch.Tensor`: hidden_states.

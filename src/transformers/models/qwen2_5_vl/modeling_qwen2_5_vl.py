@@ -396,11 +396,11 @@ class Qwen2_5_VisionTransformerPretrainedModel(Qwen2_5_VLPreTrainedModel):
             grid_thw (`torch.Tensor` of shape `(num_images_or_videos, 3)`):
                 The temporal, height and width of feature shape of each image in LLM.
             cu_seqlens (`torch.Tensor`, *optional*):
-                Precomputed cumulative sequence lengths (from `compute_cu_seqlens`).
+                Precomputed cumulative sequence lengths (from `get_vision_cu_seqlens`).
             window_index (`torch.Tensor`, *optional*):
-                Precomputed window reordering index (from `compute_window_index`).
+                Precomputed window reordering index (from `get_window_index`).
             cu_window_seqlens (`torch.Tensor`, *optional*):
-                Precomputed window cumulative sequence lengths (from `compute_window_index`).
+                Precomputed window cumulative sequence lengths (from `get_window_index`).
             rotary_pos_ids (`torch.Tensor` of shape `(total_tokens, 2)`, *optional*):
                 Precomputed (row, col) position IDs (from `get_rotary_pos_ids`).
 
