@@ -797,7 +797,6 @@ class Glm4vModel(Qwen2VLModel):
         video_grid_thw (`torch.LongTensor` of shape `(num_videos, 3)`, *optional*):
             The temporal, height and width of feature shape of each video in LLM.
         """
-        video_kwargs = kwargs.pop("video_kwargs", None) or {}
         pixel_values_videos = pixel_values_videos.type(self.visual.dtype)
         # reshape video_grid_thw -> [b, 3] -> [1, h, w] * frames
         t = video_grid_thw[:, 0]
@@ -807,7 +806,12 @@ class Glm4vModel(Qwen2VLModel):
         prefix_ones = video_grid_thw.new_ones(flattened_hw.shape[0], 1)
         flattened_video_grid_thw = torch.cat([prefix_ones, flattened_hw], dim=1)
         vision_outputs = self.visual(
-            pixel_values_videos, grid_thw=flattened_video_grid_thw, return_dict=True, **video_kwargs, **kwargs
+            pixel_values_videos,
+            grid_thw=flattened_video_grid_thw,
+            cu_seqlens=kwargs.pop("video_cu_seqlens", None),
+            rotary_pos_ids=kwargs.pop("video_rotary_pos_ids", None),
+            return_dict=True,
+            **kwargs,
         )
         split_sizes = (video_grid_thw.prod(-1) // self.visual.spatial_merge_size**2).tolist()
         video_embeds = torch.split(vision_outputs.pooler_output, split_sizes)
@@ -1273,6 +1277,7 @@ class Glm4vProcessor(Qwen2VLProcessor):
             - **image_grid_thw** -- List of image 3D grid in LLM. Returned when `images` is not `None`.
             - **video_grid_thw** -- List of video 3D grid in LLM. Returned when `videos` is not `None`.
         """
+        return_extra_tensors = kwargs.pop("return_extra_tensors", False)
         output_kwargs = self._merge_kwargs(
             Glm4vProcessorKwargs,
             tokenizer_init_kwargs=self.tokenizer.init_kwargs,
@@ -1281,6 +1286,10 @@ class Glm4vProcessor(Qwen2VLProcessor):
         if images is not None:
             image_inputs = self.image_processor(images=images, **output_kwargs["images_kwargs"])
             image_grid_thw = image_inputs["image_grid_thw"]
+            if return_extra_tensors:
+                spatial_merge_size = self.image_processor.merge_size
+                image_inputs["image_cu_seqlens"] = get_vision_cu_seqlens(image_grid_thw)
+                image_inputs["image_rotary_pos_ids"] = get_rotary_pos_ids(image_grid_thw, spatial_merge_size)
         else:
             image_inputs = {}
             image_grid_thw = None
@@ -1293,6 +1302,10 @@ class Glm4vProcessor(Qwen2VLProcessor):
             else:
                 video_metadata = videos_inputs["video_metadata"]
             video_grid_thw = videos_inputs["video_grid_thw"]
+            if return_extra_tensors:
+                spatial_merge_size = self.video_processor.merge_size
+                videos_inputs["video_cu_seqlens"] = get_vision_cu_seqlens(video_grid_thw)
+                videos_inputs["video_rotary_pos_ids"] = get_rotary_pos_ids(video_grid_thw, spatial_merge_size)
         else:
             videos_inputs = {}
             video_grid_thw = None

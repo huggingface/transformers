@@ -762,14 +762,24 @@ class Qwen2_5_VLProcessor(Qwen2VLProcessor):
             **kwargs,
         )
 
+        return_extra_tensors = kwargs.pop("return_extra_tensors", False)
+
         image_inputs = videos_inputs = {}
         if images is not None:
             image_inputs = self.image_processor(images=images, **output_kwargs["images_kwargs"])
             image_grid_thw = image_inputs["image_grid_thw"]
+            if return_extra_tensors:
+                spatial_merge_size = self.image_processor.merge_size
+                image_inputs["image_cu_seqlens"] = get_vision_cu_seqlens(image_grid_thw)
+                image_inputs["image_rotary_pos_ids"] = get_rotary_pos_ids(image_grid_thw, spatial_merge_size)
 
         if videos is not None:
             videos_inputs = self.video_processor(videos=videos, **output_kwargs["videos_kwargs"])
             video_grid_thw = videos_inputs["video_grid_thw"]
+            if return_extra_tensors:
+                spatial_merge_size = self.video_processor.merge_size
+                videos_inputs["video_cu_seqlens"] = get_vision_cu_seqlens(video_grid_thw)
+                videos_inputs["video_rotary_pos_ids"] = get_rotary_pos_ids(video_grid_thw, spatial_merge_size)
 
             # Get video metadata
             if not kwargs.get("return_metadata"):

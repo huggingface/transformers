@@ -698,10 +698,14 @@ class Qwen3VLModel(Qwen2VLModel):
         image_grid_thw (`torch.LongTensor` of shape `(num_images, 3)`, *optional*):
             The temporal, height and width of feature shape of each image in LLM.
         """
-        image_kwargs = kwargs.pop("image_kwargs", None) or {}
         pixel_values = pixel_values.type(self.visual.dtype)
         vision_output: BaseModelOutputWithDeepstackFeatures = self.visual(
-            pixel_values, grid_thw=image_grid_thw, return_dict=True, **image_kwargs, **kwargs
+            pixel_values,
+            grid_thw=image_grid_thw,
+            cu_seqlens=kwargs.pop("image_cu_seqlens", None),
+            rotary_pos_ids=kwargs.pop("image_rotary_pos_ids", None),
+            return_dict=True,
+            **kwargs,
         )
         image_embeds = vision_output.pooler_output
         split_sizes = (image_grid_thw.prod(-1) // self.visual.spatial_merge_size**2).tolist()
@@ -1132,6 +1136,7 @@ class Qwen3VLProcessor(Qwen2VLProcessor):
             - **image_grid_thw** -- List of image 3D grid in LLM. Returned when `images` is not `None`.
             - **video_grid_thw** -- List of video 3D grid in LLM. Returned when `videos` is not `None`.
         """
+        return_extra_tensors = kwargs.pop("return_extra_tensors", False)
         output_kwargs = self._merge_kwargs(
             Qwen3VLProcessorKwargs,
             tokenizer_init_kwargs=self.tokenizer.init_kwargs,
@@ -1140,6 +1145,10 @@ class Qwen3VLProcessor(Qwen2VLProcessor):
         if images is not None:
             image_inputs = self.image_processor(images=images, **output_kwargs["images_kwargs"])
             image_grid_thw = image_inputs["image_grid_thw"]
+            if return_extra_tensors:
+                spatial_merge_size = self.image_processor.merge_size
+                image_inputs["image_cu_seqlens"] = get_vision_cu_seqlens(image_grid_thw)
+                image_inputs["image_rotary_pos_ids"] = get_rotary_pos_ids(image_grid_thw, spatial_merge_size)
         else:
             image_inputs = {}
             image_grid_thw = None
@@ -1147,6 +1156,10 @@ class Qwen3VLProcessor(Qwen2VLProcessor):
         if videos is not None:
             videos_inputs = self.video_processor(videos=videos, **output_kwargs["videos_kwargs"])
             video_grid_thw = videos_inputs["video_grid_thw"]
+            if return_extra_tensors:
+                spatial_merge_size = self.video_processor.merge_size
+                videos_inputs["video_cu_seqlens"] = get_vision_cu_seqlens(video_grid_thw)
+                videos_inputs["video_rotary_pos_ids"] = get_rotary_pos_ids(video_grid_thw, spatial_merge_size)
             # If user has not requested video metadata, pop it
             if not kwargs.get("return_metadata"):
                 video_metadata = videos_inputs.pop("video_metadata")

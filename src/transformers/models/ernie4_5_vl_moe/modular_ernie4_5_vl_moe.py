@@ -972,9 +972,13 @@ class Ernie4_5_VLMoeModel(Qwen2VLModel):
         video_grid_thw: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
-        video_kwargs = kwargs.pop("video_kwargs", None) or {}
         video_outputs = self.vision_tower(
-            pixel_values_videos, video_grid_thw, return_dict=True, **video_kwargs, **kwargs
+            pixel_values_videos,
+            video_grid_thw,
+            cu_seqlens=kwargs.pop("video_cu_seqlens", None),
+            rotary_pos_ids=kwargs.pop("video_rotary_pos_ids", None),
+            return_dict=True,
+            **kwargs,
         )
         video_embeds = self.resampler_model(video_outputs.last_hidden_state, video_grid_thw)
         split_sizes = (
@@ -994,8 +998,14 @@ class Ernie4_5_VLMoeModel(Qwen2VLModel):
         image_grid_thw: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
-        image_kwargs = kwargs.pop("image_kwargs", None) or {}
-        image_outputs = self.vision_tower(pixel_values, image_grid_thw, return_dict=True, **image_kwargs, **kwargs)
+        image_outputs = self.vision_tower(
+            pixel_values,
+            image_grid_thw,
+            cu_seqlens=kwargs.pop("image_cu_seqlens", None),
+            rotary_pos_ids=kwargs.pop("image_rotary_pos_ids", None),
+            return_dict=True,
+            **kwargs,
+        )
         image_embeds = self.resampler_model(image_outputs.last_hidden_state, image_grid_thw)
         split_sizes = (image_grid_thw.prod(-1) // self.vision_tower.spatial_merge_size**2).tolist()
         image_embeds = torch.split(image_embeds, split_sizes)

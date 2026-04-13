@@ -1210,9 +1210,14 @@ class Qwen3OmniMoeThinkerForConditionalGeneration(Qwen2_5OmniThinkerForCondition
         video_grid_thw (`torch.LongTensor` of shape `(num_videos, 3)`, *optional*):
             The temporal, height and width of feature shape of each video in LLM.
         """
-        video_kwargs = kwargs.pop("video_kwargs", None) or {}
         pixel_values_videos = pixel_values_videos.type(self.visual.dtype)
-        return self.visual(pixel_values_videos, grid_thw=video_grid_thw, **video_kwargs, **kwargs)
+        return self.visual(
+            pixel_values_videos,
+            grid_thw=video_grid_thw,
+            cu_seqlens=kwargs.pop("video_cu_seqlens", None),
+            rotary_pos_ids=kwargs.pop("video_rotary_pos_ids", None),
+            **kwargs,
+        )
 
     @can_return_tuple
     @auto_docstring
@@ -1228,9 +1233,14 @@ class Qwen3OmniMoeThinkerForConditionalGeneration(Qwen2_5OmniThinkerForCondition
         image_grid_thw (`torch.LongTensor` of shape `(num_images, 3)`, *optional*):
             The temporal, height and width of feature shape of each image in LLM.
         """
-        image_kwargs = kwargs.pop("image_kwargs", None) or {}
         pixel_values = pixel_values.type(self.visual.dtype)
-        return self.visual(pixel_values, grid_thw=image_grid_thw, **image_kwargs, **kwargs)
+        return self.visual(
+            pixel_values,
+            grid_thw=image_grid_thw,
+            cu_seqlens=kwargs.pop("image_cu_seqlens", None),
+            rotary_pos_ids=kwargs.pop("image_rotary_pos_ids", None),
+            **kwargs,
+        )
 
     @can_return_tuple
     @auto_docstring
@@ -1256,10 +1266,7 @@ class Qwen3OmniMoeThinkerForConditionalGeneration(Qwen2_5OmniThinkerForCondition
             audio_feature_lengths = None
 
         feature_lens = audio_feature_lengths if audio_feature_lengths is not None else feature_attention_mask.sum(-1)
-        audio_kwargs = kwargs.pop("audio_kwargs", None) or {}
-        audio_outputs = self.audio_tower(
-            input_features, feature_lens=feature_lens, return_dict=True, **audio_kwargs, **kwargs
-        )
+        audio_outputs = self.audio_tower(input_features, feature_lens=feature_lens, return_dict=True, **kwargs)
 
         return audio_outputs
 

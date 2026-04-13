@@ -522,13 +522,13 @@ class VideoLlama3Model(Qwen2VLModel):
         image_merge_sizes (`torch.Tensor` of shape `(num_images,)`):
             The spatial downsampling ratio of each image feature.
         """
-        image_kwargs = kwargs.pop("image_kwargs", None) or {}
         vision_outputs = self.vision_model(
             pixel_values=pixel_values,
             grid_thw=image_grid_thw,
             merge_sizes=image_merge_sizes,
+            cu_seqlens=kwargs.pop("image_cu_seqlens", None),
+            rotary_pos_ids=kwargs.pop("image_rotary_pos_ids", None),
             return_dict=True,
-            **image_kwargs,
             **kwargs,
         )
         last_hidden_state = vision_outputs.last_hidden_state
@@ -1007,11 +1007,16 @@ class VideoLlama3Processor(Qwen2VLProcessor):
             **kwargs,
         )
 
+        return_extra_tensors = kwargs.pop("return_extra_tensors", False)
+
         image_inputs = videos_inputs = {}
         if images is not None:
             image_inputs = self.image_processor(images=images, **output_kwargs["images_kwargs"])
             image_grid_thw = image_inputs["image_grid_thw"]
             image_merge_sizes = image_inputs["image_merge_sizes"]
+            if return_extra_tensors:
+                image_inputs["image_cu_seqlens"] = get_vision_cu_seqlens(image_grid_thw)
+                image_inputs["image_rotary_pos_ids"] = get_rotary_pos_ids(image_grid_thw, image_merge_sizes)
         else:
             image_grid_thw = image_merge_sizes = []
 

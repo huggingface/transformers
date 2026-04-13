@@ -19,6 +19,7 @@
 # limitations under the License.
 from ...feature_extraction_utils import BatchFeature
 from ...image_utils import ImageInput
+from ...modeling_vision_utils import get_rotary_pos_ids, get_vision_cu_seqlens
 from ...processing_utils import MultiModalData, ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
 from ...utils import auto_docstring, logging
@@ -82,11 +83,16 @@ class VideoLlama3Processor(ProcessorMixin):
             **kwargs,
         )
 
+        return_extra_tensors = kwargs.pop("return_extra_tensors", False)
+
         image_inputs = videos_inputs = {}
         if images is not None:
             image_inputs = self.image_processor(images=images, **output_kwargs["images_kwargs"])
             image_grid_thw = image_inputs["image_grid_thw"]
             image_merge_sizes = image_inputs["image_merge_sizes"]
+            if return_extra_tensors:
+                image_inputs["image_cu_seqlens"] = get_vision_cu_seqlens(image_grid_thw)
+                image_inputs["image_rotary_pos_ids"] = get_rotary_pos_ids(image_grid_thw, image_merge_sizes)
         else:
             image_grid_thw = image_merge_sizes = []
 

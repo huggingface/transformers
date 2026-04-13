@@ -792,10 +792,6 @@ class TransformersKwargs(TypedDict, total=False):
             Indices of positions of each input sequence tokens.
         is_causal (`bool`, *optional*)
             Can be set to False to enable bi-directional attention, i.e. use decoder Attention modules as encoders.
-        image_kwargs (`dict`, *optional*):
-            Precomputed vision tensors for images (from the processor), passed to the vision encoder.
-        video_kwargs (`dict`, *optional*):
-            Precomputed vision tensors for videos (from the processor), passed to the vision encoder.
     """
 
     num_items_in_batch: torch.Tensor | None
@@ -808,9 +804,6 @@ class TransformersKwargs(TypedDict, total=False):
     max_length_k: int | None
     position_ids: torch.LongTensor | None
     is_causal: bool | None
-    image_kwargs: dict | None
-    video_kwargs: dict | None
-    audio_kwargs: dict | None
 
 
 def is_timm_config_dict(config_dict: dict[str, Any]) -> bool:

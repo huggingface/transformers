@@ -299,7 +299,12 @@ class Glm46VModel(Glm46VPreTrainedModel):
         prefix_ones = video_grid_thw.new_ones(flattened_hw.shape[0], 1)
         flattened_video_grid_thw = torch.cat([prefix_ones, flattened_hw], dim=1)
         vision_outputs = self.visual(
-            pixel_values_videos, grid_thw=flattened_video_grid_thw, return_dict=True, **kwargs
+            pixel_values_videos,
+            grid_thw=flattened_video_grid_thw,
+            cu_seqlens=kwargs.pop("video_cu_seqlens", None),
+            rotary_pos_ids=kwargs.pop("video_rotary_pos_ids", None),
+            return_dict=True,
+            **kwargs,
         )
         split_sizes = (video_grid_thw.prod(-1) // self.visual.spatial_merge_size**2).tolist()
         video_embeds = torch.split(vision_outputs.pooler_output, split_sizes)
@@ -322,7 +327,13 @@ class Glm46VModel(Glm46VPreTrainedModel):
             The temporal, height and width of feature shape of each image in LLM.
         """
         pixel_values = pixel_values.type(self.visual.dtype)
-        vision_outputs = self.visual(pixel_values, grid_thw=image_grid_thw, **kwargs)
+        vision_outputs = self.visual(
+            pixel_values,
+            grid_thw=image_grid_thw,
+            cu_seqlens=kwargs.pop("image_cu_seqlens", None),
+            rotary_pos_ids=kwargs.pop("image_rotary_pos_ids", None),
+            **kwargs,
+        )
         split_sizes = (image_grid_thw.prod(-1) // self.visual.spatial_merge_size**2).tolist()
         image_embeds = torch.split(vision_outputs.pooler_output, split_sizes)
         vision_outputs.pooler_output = image_embeds

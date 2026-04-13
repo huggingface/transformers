@@ -1078,9 +1078,14 @@ class Qwen2VLModel(Qwen2VLPreTrainedModel):
         video_grid_thw (`torch.LongTensor` of shape `(num_videos, 3)`, *optional*):
             The temporal, height and width of feature shape of each video in LLM.
         """
-        video_kwargs = kwargs.pop("video_kwargs", None) or {}
         pixel_values_videos = pixel_values_videos.type(self.visual.dtype)
-        vision_outputs = self.visual(pixel_values_videos, grid_thw=video_grid_thw, **video_kwargs, **kwargs)
+        vision_outputs = self.visual(
+            pixel_values_videos,
+            grid_thw=video_grid_thw,
+            cu_seqlens=kwargs.pop("video_cu_seqlens", None),
+            rotary_pos_ids=kwargs.pop("video_rotary_pos_ids", None),
+            **kwargs,
+        )
         split_sizes = (video_grid_thw.prod(-1) // self.visual.spatial_merge_size**2).tolist()
         video_embeds = torch.split(vision_outputs.pooler_output, split_sizes)
         vision_outputs.pooler_output = video_embeds
@@ -1101,9 +1106,14 @@ class Qwen2VLModel(Qwen2VLPreTrainedModel):
         image_grid_thw (`torch.LongTensor` of shape `(num_images, 3)`, *optional*):
             The temporal, height and width of feature shape of each image in LLM.
         """
-        image_kwargs = kwargs.pop("image_kwargs", None) or {}
         pixel_values = pixel_values.type(self.visual.dtype)
-        vision_outputs = self.visual(pixel_values, grid_thw=image_grid_thw, **image_kwargs, **kwargs)
+        vision_outputs = self.visual(
+            pixel_values,
+            grid_thw=image_grid_thw,
+            cu_seqlens=kwargs.pop("image_cu_seqlens", None),
+            rotary_pos_ids=kwargs.pop("image_rotary_pos_ids", None),
+            **kwargs,
+        )
         split_sizes = (image_grid_thw.prod(-1) // self.visual.spatial_merge_size**2).tolist()
         image_embeds = torch.split(vision_outputs.pooler_output, split_sizes)
         vision_outputs.pooler_output = image_embeds
