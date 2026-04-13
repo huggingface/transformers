@@ -783,10 +783,13 @@ def _get_dtype(
                     elif state_dict is not None:
                         dtype = get_state_dict_dtype(state_dict)
                     else:
-                        state_dict = load_state_dict(
-                            checkpoint_files[0], map_location="meta", weights_only=weights_only
-                        )
-                        dtype = get_state_dict_dtype(state_dict)
+                        if checkpoint_files is not None and checkpoint_files[0].endswith(".gguf"):
+                            dtype = torch.float32
+                        else:
+                            state_dict = load_state_dict(
+                                checkpoint_files[0], map_location="meta", weights_only=weights_only
+                            )
+                            dtype = get_state_dict_dtype(state_dict)
                     logger.info(
                         "Since the `dtype` attribute can't be found in model's config object, "
                         "will use dtype={dtype} as derived from model's weights"
@@ -4068,6 +4071,11 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
 
         is_quantized = hf_quantizer is not None
 
+        # Find the correct dtype based on current state
+        config, dtype = _get_dtype(
+            dtype, checkpoint_files, config, sharded_metadata, state_dict, weights_only, hf_quantizer
+        )
+
         if gguf_file:
             from .modeling_gguf_pytorch_utils import load_gguf_checkpoint
 
@@ -4075,24 +4083,10 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             # passed directly as a kwarg from now on
             with torch.device("meta"):
                 dummy_model = cls(config)
-            # Resolve torch_dtype for GGUF loading to reduce peak RAM (dequantized float32 can exceed memory)
-            gguf_dtype = None
-            if isinstance(dtype, torch.dtype) and dtype != torch.float32:
-                gguf_dtype = dtype
-            elif dtype == "auto" and hasattr(config, "dtype") and config.dtype is not None:
-                resolved = config.dtype
-                if isinstance(resolved, str):
-                    resolved = getattr(torch, resolved, None)
-                if isinstance(resolved, torch.dtype) and resolved != torch.float32:
-                    gguf_dtype = resolved
-            state_dict = load_gguf_checkpoint(
-                checkpoint_files[0], return_tensors=True, model_to_load=dummy_model, torch_dtype=gguf_dtype
-            )["tensors"]
 
-        # Find the correct dtype based on current state
-        config, dtype = _get_dtype(
-            dtype, checkpoint_files, config, sharded_metadata, state_dict, weights_only, hf_quantizer
-        )
+            state_dict = load_gguf_checkpoint(
+                checkpoint_files[0], return_tensors=True, model_to_load=dummy_model, torch_dtype=dtype
+            )["tensors"]
 
         config.name_or_path = pretrained_model_name_or_path
         model_init_context = cls.get_init_context(dtype, is_quantized, _is_ds_init_called, allow_all_kernels)

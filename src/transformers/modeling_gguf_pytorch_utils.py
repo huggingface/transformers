@@ -651,7 +651,7 @@ def load_gguf_checkpoint(gguf_checkpoint_path, return_tensors=False, model_to_lo
             name = tensor_key_mapping[name]
 
             tensor = torch.from_numpy(np.copy(weights))
-            if torch_dtype is not None and torch_dtype != torch.float32:
+            if torch_dtype is not None:
                 tensor = tensor.to(torch_dtype)
             parsed_parameters["tensors"][name] = tensor
 
