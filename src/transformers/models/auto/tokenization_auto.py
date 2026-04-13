@@ -814,6 +814,7 @@ class AutoTokenizer:
         if model_type is not None:
             tokenizer_class = TOKENIZER_MAPPING.get(type(config), TokenizersBackend)
             if tokenizer_class is not None:
+                print("tokenizer_class", tokenizer_class)
                 return tokenizer_class.from_pretrained(pretrained_model_name_or_path, *inputs, **kwargs)
 
         # Fallback: try tokenizer_class from tokenizer_config.json

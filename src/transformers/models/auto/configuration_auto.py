@@ -37,17 +37,19 @@ CONFIG_MAPPING_NAMES.update(
     {
         "code_llama": "LlamaConfig",
         "EvollaModel": "EvollaConfig",
-        "gpt-sw3": "GPT2Config",
-        "granitevision": "LlavaNextConfig",
         "mlcd": "MLCDVisionConfig",
         "vibevoice_acoustic_tokenizer_decoder": "VibeVoiceAcousticTokenizerDecoderConfig",
         "vibevoice_acoustic_tokenizer_encoder": "VibeVoiceAcousticTokenizerEncoderConfig",
     }
 )
 
+# TODO: depecate and remove `gpt-sw3`, old model. And prohibit mapping the same config to different model types
+# Auto-classes rely a lot on these, and it is much easier when we have 1-1 mapping
+CONFIG_MAPPING_NAMES = OrderedDict(**{"gpt-sw3": "GPT2Config"}, **CONFIG_MAPPING_NAMES)
+
 SPECIAL_MODEL_TYPE_TO_MODULE_NAME.update(
     {
-        "granitevision": "llava_next",
+        "EvollaModel": "evolla",
         "vibevoice_acoustic_tokenizer_encoder": "vibevoice_acoustic_tokenizer",
         "vibevoice_acoustic_tokenizer_decoder": "vibevoice_acoustic_tokenizer",
     }
