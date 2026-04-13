@@ -134,6 +134,7 @@ class IsaacConfig(PretrainedConfig):
         Rescale factor applied by the image processor before normalization.
     max_sequence_length (`int`, *optional*, defaults to 16384):
         Maximum multimodal sequence length produced by the processor and expected by the model.
+
     Example:
 
     ```python
