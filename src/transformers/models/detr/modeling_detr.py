@@ -1435,6 +1435,8 @@ class DetrForObjectDetection(DetrPreTrainedModel):
     """
 )
 class DetrForSegmentation(DetrPreTrainedModel):
+    base_model_prefix = "detr"
+
     def __init__(self, config: DetrConfig):
         super().__init__(config)
 
