@@ -685,10 +685,6 @@ class VideoLlama3ForConditionalGeneration(Qwen2VLForConditionalGeneration):
             The temporal, height and width of feature shape of each image in LLM.
         image_merge_sizes (`torch.Tensor` of shape `(num_images,)`, *optional*):
             The spatial downsampling ratio of each image feature.
-        image_cu_seqlens (`torch.IntTensor`, *optional*):
-            Precomputed cumulative sequence lengths for images.
-        image_rotary_pos_ids (`torch.LongTensor`, *optional*):
-            Precomputed (row, col) position IDs for image rotary embeddings.
         """
         return self.model.get_image_features(
             pixel_values,
@@ -717,10 +713,6 @@ class VideoLlama3ForConditionalGeneration(Qwen2VLForConditionalGeneration):
             The temporal, height and width of feature shape of each video in LLM.
         video_merge_sizes (`torch.Tensor` of shape `(num_videos,)`, *optional*):
             The spatial downsampling ratio of each video feature.
-        video_cu_seqlens (`torch.IntTensor`, *optional*):
-            Precomputed cumulative sequence lengths for videos.
-        video_rotary_pos_ids (`torch.LongTensor`, *optional*):
-            Precomputed (row, col) position IDs for video rotary embeddings.
         """
         return self.model.get_video_features(
             pixel_values_videos,
