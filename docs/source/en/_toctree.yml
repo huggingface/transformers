@@ -165,12 +165,33 @@
     - local: data_collators
       title: Data collators
     - local: optimizers
-      title: Optimizers
+      title: Optimizers and schedulers
     - local: hpo_train
       title: Hyperparameter search
+    - local: trainer_recipes
+      title: Trainer features
     title: Customization
   - local: peft
     title: Parameter-efficient fine-tuning
+  - isExpanded: false
+    sections:
+    - sections:
+      - local: grad_accumulation
+        title: Gradient accumulation
+      - local: grad_checkpointing
+        title: Gradient checkpointing
+      - local: model_memory_anatomy
+        title: GPU memory usage
+      title: Memory optimization
+    - sections:
+      - local: mixed_precision_training
+        title: Mixed precision training
+      - local: torch_compile
+        title: torch.compile
+      - local: kernels
+        title: Kernels
+      title: Speed optimization
+    title: Performance
   - isExpanded: false
     sections:
     - local: accelerator_selection
@@ -180,18 +201,18 @@
     - local: fsdp
       title: FullyShardedDataParallel
     - local: deepspeed
-      title: DeepSpeed
+      title: DeepSpeed ZeRO
+    - local: deepspeed_alst
+      title: Ulysses sequence parallelism
+    - local: tensor_parallelism
+      title: Tensor parallelism
     - local: debugging
-      title: Multi-GPU debugging
-    - local: perf_train_cpu_many
-      title: Distributed CPUs
+      title: Debugging
     - local: perf_train_gpu_many
       title: Parallelism methods
     title: Distributed training
   - isExpanded: false
     sections:
-    - local: perf_train_gpu_one
-      title: GPU
     - local: perf_train_cpu
       title: CPU
     - local: perf_train_special
@@ -199,7 +220,7 @@
     - local: perf_train_gaudi
       title: Intel Gaudi
     - local: perf_hardware
-      title: Build your own machine
+      title: Building a GPU workstation
     - local: model_memory_anatomy
       title: Model training anatomy
     title: Hardware
@@ -403,6 +424,8 @@
     title: Contribute to Transformers
   - local: testing
     title: Transformers model tests
+  - local: modeling_rules
+    title: Model structure rules
   - local: pr_checks
     title: Pull request checks
   title: Contribute
