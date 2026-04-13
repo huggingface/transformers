@@ -21,20 +21,6 @@ from .utils import ModelOutput
 
 
 @dataclass
-class MoERouting:
-    """
-    Structured routing payload for Mixture-of-Experts models.
-
-    Args:
-        selected_experts (`tuple(torch.LongTensor, ...)`):
-            Per-layer tuple of selected expert indices. Each tensor is typically shaped
-            `(batch_size * sequence_length, top_k)` for decoder-only MoE models.
-    """
-
-    selected_experts: tuple[torch.LongTensor, ...]
-
-
-@dataclass
 class BaseModelOutput(ModelOutput):
     """
     Base class for model's outputs, with potential hidden states and attentions.
@@ -402,8 +388,6 @@ class MoeModelOutputWithPast(ModelOutput):
 
             Raw router logtis (post-softmax) that are computed by MoE routers, these terms are used to compute the auxiliary
             loss for Mixture of Experts models.
-        moe_routing (`MoERouting`, *optional*, returned when `output_moe_routing=True` is passed):
-            Structured routing payload containing the exact selected experts used by each MoE layer.
     """
 
     last_hidden_state: torch.FloatTensor | None = None
@@ -411,7 +395,6 @@ class MoeModelOutputWithPast(ModelOutput):
     hidden_states: tuple[torch.FloatTensor, ...] | None = None
     attentions: tuple[torch.FloatTensor, ...] | None = None
     router_logits: tuple[torch.FloatTensor] | None = None
-    moe_routing: MoERouting | None = None
 
 
 @dataclass
@@ -434,8 +417,6 @@ class MoeCausalLMOutputWithPast(ModelOutput):
 
             Raw router logtis (post-softmax) that are computed by MoE routers, these terms are used to compute the auxiliary
             loss for Mixture of Experts models.
-        moe_routing (`MoERouting`, *optional*, returned when `output_moe_routing=True` is passed):
-            Structured routing payload containing the exact selected experts used by each MoE layer.
 
         past_key_values (`Cache`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
             It is a [`~cache_utils.Cache`] instance. For more details, see our [kv cache guide](https://huggingface.co/docs/transformers/en/kv_cache).
@@ -462,7 +443,6 @@ class MoeCausalLMOutputWithPast(ModelOutput):
     hidden_states: tuple[torch.FloatTensor, ...] | None = None
     attentions: tuple[torch.FloatTensor, ...] | None = None
     router_logits: tuple[torch.FloatTensor] | None = None
-    moe_routing: MoERouting | None = None
 
 
 @dataclass

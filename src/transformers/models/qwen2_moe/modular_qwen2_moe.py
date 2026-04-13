@@ -25,20 +25,15 @@ from torch import nn
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationMixin
-from ...integrations.moe_routing import (
-    gather_forced_routing_scores,
-    normalize_moe_routing,
-    validate_forced_selected_experts,
-)
 from ...masking_utils import create_causal_mask, create_sliding_window_causal_mask
 from ...modeling_layers import (
     GenericForQuestionAnswering,
     GenericForSequenceClassification,
     GenericForTokenClassification,
 )
-from ...modeling_outputs import MoeCausalLMOutputWithPast, MoeModelOutputWithPast, MoERouting
+from ...modeling_outputs import MoeModelOutputWithPast
 from ...processing_utils import Unpack
-from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
+from ...utils import TransformersKwargs, auto_docstring
 from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import OutputRecorder, capture_outputs
 from ..gemma.modeling_gemma import GemmaMLP
@@ -49,7 +44,6 @@ from ..mixtral.modeling_mixtral import (
     MixtralForCausalLM,
     MixtralModel,
     MixtralPreTrainedModel,
-    load_balancing_loss_func,
 )
 from .configuration_qwen2_moe import Qwen2MoeConfig
 
@@ -102,35 +96,15 @@ class Qwen2MoeTopKRouter(nn.Module):
         self.hidden_dim = config.hidden_size
         self.weight = nn.Parameter(torch.zeros(self.num_experts, self.hidden_dim))
 
-    def _compute_router_probabilities(self, hidden_states):
+    def forward(self, hidden_states):
         hidden_states = hidden_states.reshape(-1, self.hidden_dim)
         router_logits = F.linear(hidden_states, self.weight)  # (seq_len, num_experts)
-        return torch.nn.functional.softmax(router_logits, dtype=torch.float, dim=-1)
-
-    def _compute_routing_scores(self, router_logits, selected_experts=None):
-        if selected_experts is None:
-            router_top_value, router_indices = torch.topk(router_logits, self.top_k, dim=-1)  # (seq_len, top_k)
-        else:
-            selected_experts = validate_forced_selected_experts(
-                selected_experts.to(device=router_logits.device),
-                num_tokens=router_logits.shape[0],
-                top_k=self.top_k,
-                num_experts=self.num_experts,
-                model_name="Qwen2Moe",
-            )
-            return gather_forced_routing_scores(
-                router_logits,
-                selected_experts,
-                renormalize=self.norm_topk_prob,
-            )
-
+        router_logits = torch.nn.functional.softmax(router_logits, dtype=torch.float, dim=-1)
+        router_top_value, router_indices = torch.topk(router_logits, self.top_k, dim=-1)  # (seq_len, top_k)
         if self.norm_topk_prob:
             router_top_value /= router_top_value.sum(dim=-1, keepdim=True)
-        return router_top_value.to(router_logits.dtype), router_indices
-
-    def forward(self, hidden_states, selected_experts=None):
-        router_logits = self._compute_router_probabilities(hidden_states)
-        router_scores, router_indices = self._compute_routing_scores(router_logits, selected_experts=selected_experts)
+        router_top_value = router_top_value.to(router_logits.dtype)
+        router_scores = router_top_value
         return router_logits, router_scores, router_indices
 
 
@@ -142,13 +116,11 @@ class Qwen2MoeSparseMoeBlock(nn.Module):
         self.shared_expert = Qwen2MoeMLP(config, intermediate_size=config.shared_expert_intermediate_size)
         self.shared_expert_gate = torch.nn.Linear(config.hidden_size, 1, bias=False)
 
-    def forward(
-        self, hidden_states: torch.Tensor, selected_experts: torch.LongTensor | None = None
-    ) -> tuple[torch.Tensor, torch.Tensor]:
+    def forward(self, hidden_states: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
         batch_size, sequence_length, hidden_dim = hidden_states.shape
         hidden_states_reshaped = hidden_states.view(-1, hidden_dim)
         shared_expert_output = self.shared_expert(hidden_states_reshaped)
-        _, routing_weights, selected_experts = self.gate(hidden_states_reshaped, selected_experts=selected_experts)
+        _, routing_weights, selected_experts = self.gate(hidden_states_reshaped)
         expert_output = self.experts(hidden_states_reshaped, selected_experts, routing_weights)
 
         shared_expert_output = F.sigmoid(self.shared_expert_gate(hidden_states_reshaped)) * shared_expert_output
@@ -161,7 +133,6 @@ class Qwen2MoeSparseMoeBlock(nn.Module):
 class Qwen2MoeDecoderLayer(LlamaDecoderLayer):
     def __init__(self, config: Qwen2MoeConfig, layer_idx: int):
         nn.Module.__init__(self)
-        self.layer_idx = layer_idx
         self.self_attn = Qwen2MoeAttention(config, layer_idx)
         if (layer_idx not in config.mlp_only_layers) and (
             config.num_experts > 0 and (layer_idx + 1) % config.decoder_sparse_step == 0
@@ -173,50 +144,11 @@ class Qwen2MoeDecoderLayer(LlamaDecoderLayer):
         self.post_attention_layernorm = Qwen2MoeRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.hidden_size = config.hidden_size
 
-    def forward(
-        self,
-        hidden_states: torch.Tensor,
-        attention_mask: torch.Tensor | None = None,
-        position_ids: torch.LongTensor | None = None,
-        past_key_values: Cache | None = None,
-        use_cache: bool | None = False,
-        position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> torch.Tensor:
-        layer_moe_routing = None
-        if (moe_routing := kwargs.pop("moe_routing", None)) is not None:
-            layer_moe_routing = moe_routing.get(self.layer_idx)
-
-        # Self Attention
-        residual = hidden_states
-        hidden_states = self.input_layernorm(hidden_states)
-        hidden_states, _ = self.self_attn(
-            hidden_states=hidden_states,
-            attention_mask=attention_mask,
-            position_ids=position_ids,
-            past_key_values=past_key_values,
-            use_cache=use_cache,
-            position_embeddings=position_embeddings,
-            **kwargs,
-        )
-        hidden_states = residual + hidden_states
-
-        # Fully Connected
-        residual = hidden_states
-        hidden_states = self.post_attention_layernorm(hidden_states)
-        if isinstance(self.mlp, Qwen2MoeSparseMoeBlock):
-            hidden_states = self.mlp(hidden_states, selected_experts=layer_moe_routing)
-        else:
-            hidden_states = self.mlp(hidden_states)
-        hidden_states = residual + hidden_states
-        return hidden_states
-
 
 @auto_docstring
 class Qwen2MoePreTrainedModel(MixtralPreTrainedModel):
     _can_record_outputs = {
         "router_logits": OutputRecorder(Qwen2MoeTopKRouter, index=0),
-        "moe_routing": OutputRecorder(Qwen2MoeTopKRouter, index=2),
         "hidden_states": Qwen2MoeDecoderLayer,
         "attentions": Qwen2MoeAttention,
     }
@@ -234,7 +166,6 @@ class Qwen2MoeModel(MixtralModel):
 
     @merge_with_config_defaults
     @capture_outputs
-    @can_return_tuple
     @auto_docstring
     def forward(
         self,
@@ -244,16 +175,8 @@ class Qwen2MoeModel(MixtralModel):
         past_key_values: Cache | None = None,
         inputs_embeds: torch.FloatTensor | None = None,
         use_cache: bool | None = None,
-        moe_routing: MoERouting | dict[int, torch.LongTensor] | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> MoeModelOutputWithPast:
-        r"""
-        moe_routing (`MoERouting` or `dict[int, torch.LongTensor]`, *optional*):
-            Optional MoE routing override. `MoERouting` is the preferred public API. Each per-layer tensor must contain
-            the forced expert indices for the flattened tokens of that sparse layer, with shape
-            `(batch_size * sequence_length, config.num_experts_per_tok)`.
-        """
-        moe_routing = normalize_moe_routing(moe_routing)
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
 
@@ -295,7 +218,6 @@ class Qwen2MoeModel(MixtralModel):
                 past_key_values=past_key_values,
                 use_cache=use_cache,
                 position_embeddings=position_embeddings,
-                moe_routing=moe_routing,
                 **kwargs,
             )
 
@@ -315,101 +237,6 @@ class Qwen2MoeForCausalLM(MixtralForCausalLM, GenerationMixin):
         super().__init__(config)
         self.num_experts = config.num_experts
         self.model = Qwen2MoeModel(config)
-
-    @can_return_tuple
-    @auto_docstring
-    def forward(
-        self,
-        input_ids: torch.LongTensor | None = None,
-        attention_mask: torch.Tensor | None = None,
-        position_ids: torch.LongTensor | None = None,
-        past_key_values: Cache | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
-        labels: torch.LongTensor | None = None,
-        use_cache: bool | None = None,
-        output_router_logits: bool | None = None,
-        logits_to_keep: int | torch.Tensor = 0,
-        moe_routing: MoERouting | dict[int, torch.LongTensor] | None = None,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> MoeCausalLMOutputWithPast:
-        r"""
-        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
-            config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
-            (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
-
-        moe_routing (`MoERouting` or `dict[int, torch.LongTensor]`, *optional*):
-            Optional MoE routing override. `MoERouting` is the preferred public API. Each per-layer tensor must contain
-            the forced expert indices for the flattened tokens of that sparse layer, with shape
-            `(batch_size * sequence_length, config.num_experts_per_tok)`.
-
-        Example:
-
-        ```python
-        >>> from transformers import AutoTokenizer, Qwen2MoeForCausalLM
-
-        >>> model = Qwen2MoeForCausalLM.from_pretrained("mistralai/Qwen2Moe-8x7B-v0.1")
-        >>> tokenizer = AutoTokenizer.from_pretrained("mistralai/Qwen2Moe-8x7B-v0.1")
-
-        >>> prompt = "Hey, are you conscious? Can you talk to me?"
-        >>> inputs = tokenizer(prompt, return_tensors="pt")
-
-        >>> # Generate
-        >>> generate_ids = model.generate(inputs.input_ids, max_length=30)
-        >>> tokenizer.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0]
-        "Hey, are you conscious? Can you talk to me?\nI'm not conscious, but I can talk to you."
-        ```
-        """
-        output_router_logits = (
-            output_router_logits if output_router_logits is not None else self.config.output_router_logits
-        )
-
-        # decoder outputs consists of (dec_features, layer_state, dec_hidden, dec_attn)
-        outputs: MoeModelOutputWithPast = self.model(
-            input_ids=input_ids,
-            attention_mask=attention_mask,
-            position_ids=position_ids,
-            past_key_values=past_key_values,
-            inputs_embeds=inputs_embeds,
-            use_cache=use_cache,
-            output_router_logits=output_router_logits,
-            moe_routing=moe_routing,
-            **kwargs,
-        )
-        if hasattr(outputs, "moe_routing") and not isinstance(outputs.moe_routing, MoERouting):
-            outputs["moe_routing"] = MoERouting(selected_experts=outputs.moe_routing)
-
-        hidden_states = outputs.last_hidden_state
-        # Only compute necessary logits, and do not upcast them to float if we are not computing the loss
-        slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
-        logits = self.lm_head(hidden_states[:, slice_indices, :])
-
-        loss = None
-        if labels is not None:
-            loss = self.loss_function(logits, labels, self.vocab_size, **kwargs)
-
-        aux_loss = None
-        if output_router_logits:
-            aux_loss = load_balancing_loss_func(
-                outputs.router_logits,
-                self.num_experts,
-                self.num_experts_per_tok,
-                attention_mask,
-            )
-            if labels is not None:
-                loss += self.router_aux_loss_coef * aux_loss.to(loss.device)
-
-        causal_lm_output = MoeCausalLMOutputWithPast(
-            loss=loss,
-            aux_loss=aux_loss,
-            logits=logits,
-            past_key_values=outputs.past_key_values,
-            hidden_states=outputs.hidden_states,
-            attentions=outputs.attentions,
-            router_logits=outputs.router_logits,
-            moe_routing=outputs.moe_routing if hasattr(outputs, "moe_routing") else None,
-        )
-        return causal_lm_output
 
 
 class Qwen2MoeForSequenceClassification(GenericForSequenceClassification, Qwen2MoePreTrainedModel): ...

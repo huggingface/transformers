@@ -35,8 +35,6 @@ if is_torch_available():
     import torch
 
     from transformers import (
-        MoERouting,
-        Qwen2MoeConfig,
         Qwen2MoeForCausalLM,
         Qwen2MoeModel,
     )
@@ -111,120 +109,6 @@ class Qwen2MoeModelTest(CausalLMModelTest, unittest.TestCase):
 
         # This is to mimic torch.testing.assert_not_close
         self.assertNotAlmostEqual(include_padding_result.aux_loss.item(), result.aux_loss.item())
-
-    def test_moe_routing_is_exposed_via_output_capture(self):
-        config = Qwen2MoeConfig(
-            vocab_size=99,
-            hidden_size=32,
-            intermediate_size=64,
-            moe_intermediate_size=64,
-            shared_expert_intermediate_size=32,
-            num_hidden_layers=2,
-            num_attention_heads=4,
-            num_key_value_heads=4,
-            num_experts=4,
-            num_experts_per_tok=2,
-            decoder_sparse_step=1,
-            mlp_only_layers=[],
-            pad_token_id=0,
-        )
-        model = Qwen2MoeForCausalLM(config).to(torch_device)
-        model.eval()
-
-        input_ids = torch.tensor([[1, 2, 3, 4], [4, 3, 2, 1]], device=torch_device)
-        with torch.no_grad():
-            outputs = model(input_ids=input_ids, output_moe_routing=True)
-
-        self.assertIsInstance(outputs.moe_routing, MoERouting)
-        self.assertEqual(len(outputs.moe_routing.selected_experts), config.num_hidden_layers)
-        expected_shape = (input_ids.shape[0] * input_ids.shape[1], config.num_experts_per_tok)
-        self.assertEqual(outputs.moe_routing.selected_experts[0].shape, expected_shape)
-
-    def test_moe_routing_replays_selected_experts(self):
-        config = Qwen2MoeConfig(
-            vocab_size=99,
-            hidden_size=32,
-            intermediate_size=64,
-            moe_intermediate_size=64,
-            shared_expert_intermediate_size=32,
-            num_hidden_layers=2,
-            num_attention_heads=4,
-            num_key_value_heads=4,
-            num_experts=4,
-            num_experts_per_tok=2,
-            decoder_sparse_step=1,
-            mlp_only_layers=[],
-            pad_token_id=0,
-        )
-        model = Qwen2MoeForCausalLM(config).to(torch_device)
-        model.eval()
-
-        input_ids = torch.tensor([[1, 2, 3, 4], [4, 3, 2, 1]], device=torch_device)
-
-        with torch.no_grad():
-            recorded_outputs = model(input_ids=input_ids, output_moe_routing=True)
-
-        recorded_routing = MoERouting(
-            selected_experts=tuple(experts.clone() for experts in recorded_outputs.moe_routing.selected_experts)
-        )
-
-        with torch.no_grad():
-            for decoder_layer in model.model.layers:
-                decoder_layer.mlp.gate.weight.mul_(-1.0)
-
-            natural_outputs = model(input_ids=input_ids, output_moe_routing=True)
-            replay_outputs = model(
-                input_ids=input_ids,
-                output_moe_routing=True,
-                moe_routing=recorded_routing,
-            )
-
-        natural_mismatch = any(
-            not torch.equal(
-                natural_outputs.moe_routing.selected_experts[layer_idx],
-                recorded_routing.selected_experts[layer_idx],
-            )
-            for layer_idx in range(len(recorded_routing.selected_experts))
-        )
-        self.assertTrue(natural_mismatch)
-        for layer_idx in range(len(recorded_routing.selected_experts)):
-            self.assertTrue(
-                torch.equal(
-                    replay_outputs.moe_routing.selected_experts[layer_idx],
-                    recorded_routing.selected_experts[layer_idx],
-                )
-            )
-
-    def test_moe_routing_validation_fails_closed_on_shape_mismatch(self):
-        config = Qwen2MoeConfig(
-            vocab_size=99,
-            hidden_size=32,
-            intermediate_size=64,
-            moe_intermediate_size=64,
-            shared_expert_intermediate_size=32,
-            num_hidden_layers=2,
-            num_attention_heads=4,
-            num_key_value_heads=4,
-            num_experts=4,
-            num_experts_per_tok=2,
-            decoder_sparse_step=1,
-            mlp_only_layers=[],
-            pad_token_id=0,
-        )
-        model = Qwen2MoeForCausalLM(config).to(torch_device)
-        model.eval()
-
-        input_ids = torch.tensor([[1, 2, 3, 4], [4, 3, 2, 1]], device=torch_device)
-        bad_routing = MoERouting(
-            selected_experts=tuple(
-                torch.zeros((input_ids.numel(), config.num_experts_per_tok + 1), dtype=torch.long, device=torch_device)
-                for _ in range(config.num_hidden_layers)
-            )
-        )
-
-        with self.assertRaisesRegex(ValueError, "Forced Qwen2Moe routing must match"):
-            with torch.no_grad():
-                model(input_ids=input_ids, moe_routing=bad_routing)
 
 
 @require_torch
