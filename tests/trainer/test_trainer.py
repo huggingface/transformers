@@ -372,6 +372,93 @@ class TrainerGradientAccumulationTest(TestCasePlus, TrainerIntegrationCommon):
             # max diff broken should be very off
             self.assertGreater(max(diff_broken), 3, f"Difference {max(diff_broken)} is not greater than 3")
 
+    def test_gradient_accumulation_steps_not_leaked_to_accelerator(self):
+        """
+        Regression test: the Trainer should not pass its gradient_accumulation_steps
+        to the Accelerator.
+        """
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            args = TrainingArguments(
+                output_dir=tmp_dir,
+                per_device_train_batch_size=4,
+                gradient_accumulation_steps=4,
+                max_steps=1,
+            )
+            trainer = Trainer(
+                model=RegressionModel(),
+                args=args,
+                train_dataset=RegressionDataset(),
+            )
+            self.assertEqual(
+                trainer.accelerator.gradient_accumulation_steps,
+                1,
+                "Trainer should not leak gradient_accumulation_steps to the Accelerator. ",
+            )
+
+    def test_gradient_accumulation_grad_norm_consistency(self):
+        """
+        Verify that gradient norms are consistent with and without gradient accumulation.
+        Training with per_device_train_batch_size=8, GAS=1 should produce the same
+        grad_norm as per_device_train_batch_size=1, GAS=8 (same effective batch).
+
+        This catches regressions where accelerator.backward() spuriously divides
+        loss by GAS when num_items_in_batch already handles the averaging.
+        """
+        config = LlamaConfig(vocab_size=100, hidden_size=32, num_hidden_layers=2, num_attention_heads=4)
+
+        x = torch.randint(0, 100, (128,))
+        train_dataset = RepeatDataset(x)
+
+        args_kwargs = {
+            "logging_steps": 1,
+            "max_steps": 3,
+            "learning_rate": 1e-4,
+            "max_grad_norm": 0.0,  # disable clipping so raw grad norms are visible
+        }
+
+        # Baseline: large batch, no accumulation
+        set_seed(42)
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            model = LlamaForCausalLM(config)
+            base_callback = StoreLossCallback()
+            args = TrainingArguments(
+                tmp_dir, per_device_train_batch_size=8, gradient_accumulation_steps=1, **args_kwargs
+            )
+            trainer = Trainer(model, args, train_dataset=train_dataset, callbacks=[base_callback])
+            trainer.train()
+            base_grad_norms = [h["grad_norm"] for h in trainer.state.log_history if "grad_norm" in h]
+
+        # GAS run: small batch, accumulation to match effective batch
+        set_seed(42)
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            model = LlamaForCausalLM(config)
+            gas_callback = StoreLossCallback()
+            args = TrainingArguments(
+                tmp_dir, per_device_train_batch_size=1, gradient_accumulation_steps=8, **args_kwargs
+            )
+            trainer = Trainer(model, args, train_dataset=train_dataset, callbacks=[gas_callback])
+            trainer.train()
+            gas_grad_norms = [h["grad_norm"] for h in trainer.state.log_history if "grad_norm" in h]
+
+        # Grad norms should be close (not exactly equal due to padding/token count differences)
+        for step, (base_gn, gas_gn) in enumerate(zip(base_grad_norms, gas_grad_norms)):
+            ratio = gas_gn / base_gn if base_gn > 0 else float("inf")
+            self.assertAlmostEqual(
+                ratio,
+                1.0,
+                delta=0.3,
+                msg=f"Step {step}: grad_norm ratio {ratio:.2f} (base={base_gn:.4f}, gas={gas_gn:.4f}). "
+                f"A ratio near {args_kwargs.get('gradient_accumulation_steps', 8)} indicates GAS leak.",
+            )
+
+        # Losses should also be close
+        diff = [abs(b - g) for b, g in zip(base_callback.losses, gas_callback.losses)]
+        self.assertLess(
+            max(diff),
+            0.1,
+            f"Loss difference {max(diff)} between base and GAS runs is too large.",
+        )
+
     @require_torch_multi_accelerator
     def test_num_batches_in_training_with_gradient_accumulation(self):
         with tempfile.TemporaryDirectory() as tmp_dir:
