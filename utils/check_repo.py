@@ -186,6 +186,7 @@ IGNORE_NON_TESTED = (
         "Sam3TrackerVideoModel",  # Partly tested in Sam3TrackerModel, not regular model.
         "Sam2VideoModel",  # Partly tested in Sam2Model, not regular model.
         "Sam3ViTModel",  # Building part of bigger (tested) model.
+        "Sam3LiteTextViTModel",  # Building part of bigger (tested) model.
         "Sam3VideoModel",  # Partly tested in Sam3Model, not regular model.
         "EdgeTamVisionModel",  # Building part of bigger (tested) model.
         "EdgeTamVideoModel",  # Partly tested in EdgeTamModel, not regular model.
