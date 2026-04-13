@@ -261,12 +261,85 @@ def _fp8_index_pytorch(
     return result
 
 
-# ---- Public API: TileLang with PyTorch fallback ----
+def _fp8_index_triton(
+    q: torch.Tensor,
+    q_s: torch.Tensor,
+    k: torch.Tensor,
+    k_s: torch.Tensor,
+) -> torch.Tensor:
+    """Triton FP8 GEMM implementation of FP8 index scoring.
 
-# One-time flags — once TileLang compilation fails, we stop retrying.
+    Uses the Triton fp8_gemm from the finegrained-fp8 hub kernel for the raw FP8
+    matmul (FP8 inputs, FP32 accumulation), matching vLLM's DeepGEMM fp8_mqa_logits
+    computation granularity. Post-processing (relu, scale, reduce) is done in FP32.
+
+    Equivalent to the TileLang ``fp8_index_kernel``:
+        logits = k_fp8 @ q_fp8^T          (raw FP8 matmul, no block-scale dequantization)
+        logits = relu(logits) * q_s       (per-head weights, already includes q_scale)
+        result = logits.sum(H) * k_s      (reduce heads, scale by k_scale)
+    """
+    global _triton_fp8_matmul
+    _load_triton_fallbacks()
+    if _triton_fp8_matmul is None:
+        raise ImportError("Triton fp8_matmul not available")
+
+    B, M, H, D = q.shape
+    T = k.shape[1]
+
+    if B == 1:
+        # Single batch: one matmul for all (M, H) query vectors against all T keys
+        q_flat = q.reshape(M * H, D).contiguous()
+        k_flat = k.reshape(T, D).contiguous()
+        ones_q = q_flat.new_ones(M * H, D // 128, dtype=torch.float32)
+        ones_k = k_flat.new_ones(T, D // 128, dtype=torch.float32)
+        logits_flat = _triton_fp8_matmul(q_flat, k_flat, ones_q, ones_k, [128, 128], torch.float32)
+        # logits_flat: [M*H, T] → reshape to [M, H, T] → transpose to [M, T, H]
+        logits = logits_flat.reshape(M, H, T).permute(0, 2, 1).unsqueeze(0)  # [1, M, T, H]
+    else:
+        # Multi-batch: loop over batches
+        results = []
+        for b in range(B):
+            q_b = q[b].reshape(M * H, D)
+            k_b = k[b].reshape(T, D)
+            ones_q_b = q_b.new_ones(M * H, D // 128, dtype=torch.float32)
+            ones_k_b = k_b.new_ones(T, D // 128, dtype=torch.float32)
+            logits_b = _triton_fp8_matmul(q_b, k_b, ones_q_b, ones_k_b, [128, 128], torch.float32)
+            logits_b = logits_b.reshape(M, H, T).permute(0, 2, 1)  # [M, T, H]
+            results.append(logits_b)
+        logits = torch.stack(results, dim=0)  # [B, M, T, H]
+
+    # Post-processing in FP32 — matches TileLang kernel
+    logits = logits.clamp(min=0) * q_s.unsqueeze(-2)  # relu * weights
+    result = logits.sum(dim=-1) * k_s.unsqueeze(-2)  # reduce heads * k_scale
+    return result
+
+
+# ---- Public API: TileLang → Triton → PyTorch fallback ----
+
+# One-time flags — once a backend fails, we stop retrying it.
 _act_quant_use_tilelang = _tilelang_available
 _fp8_index_use_tilelang = _tilelang_available
 _fp8_gemm_use_tilelang = _tilelang_available
+
+# Lazily-loaded Triton kernels from the finegrained-fp8 hub package.
+_triton_act_quant = None
+_triton_fp8_matmul = None
+_triton_fallbacks_loaded = False
+
+
+def _load_triton_fallbacks():
+    """Lazily load Triton FP8 kernels from the finegrained-fp8 hub package."""
+    global _triton_fallbacks_loaded, _triton_act_quant, _triton_fp8_matmul
+    if _triton_fallbacks_loaded:
+        return
+    _triton_fallbacks_loaded = True
+    try:
+        from .finegrained_fp8 import triton_fp8_act_quant, triton_fp8_matmul as _triton_gemm
+
+        _triton_act_quant = triton_fp8_act_quant
+        _triton_fp8_matmul = _triton_gemm
+    except ImportError:
+        pass
 
 
 def act_quant(
@@ -275,12 +348,16 @@ def act_quant(
     """
     Quantizes the input tensor `x` using block-wise quantization.
 
+    Fallback chain: TileLang → Triton (non-ue8m0 only) → PyTorch.
+
     Args:
         x (torch.Tensor): The input tensor to be quantized. Must be contiguous and its last
             dimension size must be divisible by `block_size`.
         block_size (int, optional): The size of the blocks to be used for quantization.
             Default is 128.
         scale_fmt (Optional[str], optional): The format of the scale. Default is None.
+            When set (e.g. ``"ue8m0"``), scales are rounded to powers of 2 — handled by
+            the PyTorch fallback since the Triton kernel does not support power-of-2 rounding.
     Returns:
         Tuple[torch.Tensor, torch.Tensor]: A tuple containing:
             - The quantized tensor with dtype `torch.float8_e4m3fn`.
@@ -303,6 +380,22 @@ def act_quant(
         except Exception:
             logger.warning_once("TileLang act_quant compilation failed, falling back to PyTorch implementation")
             _act_quant_use_tilelang = False
+
+    # Triton fallback — only for non-ue8m0 scales (Triton kernel lacks power-of-2 rounding)
+    if scale_fmt is None:
+        global _triton_act_quant
+        _load_triton_fallbacks()
+        if _triton_act_quant is not None:
+            try:
+                N = x.size(-1)
+                x_flat = x.reshape(-1, N).contiguous()
+                x_q_flat, scale_flat = _triton_act_quant(x_flat, block_size)
+                x_q = x_q_flat.reshape(x.shape)
+                scale = scale_flat.reshape(*x.shape[:-1], N // block_size)
+                return x_q, scale
+            except Exception:
+                logger.warning_once("Triton act_quant failed, falling back to PyTorch")
+                _triton_act_quant = None
 
     return _act_quant_pytorch(x, block_size, scale_fmt)
 
@@ -355,6 +448,12 @@ def fp8_index(
     """
     Perform index score using FP8 precision.
 
+    Fallback chain: TileLang → Triton fp8_gemm → PyTorch bf16 einsum.
+
+    The Triton path uses the fp8_gemm kernel from the finegrained-fp8 hub package
+    to compute raw FP8 dot products with FP32 accumulation, matching vLLM's
+    DeepGEMM fp8_mqa_logits computation granularity.
+
     Args:
         q (torch.Tensor): The Q tensor, must be contiguous.
         q_s (torch.Tensor): The scaling factor for Q (float), must be contiguous.
@@ -373,5 +472,13 @@ def fp8_index(
         except Exception:
             logger.warning_once("TileLang fp8_index compilation failed, falling back to PyTorch implementation")
             _fp8_index_use_tilelang = False
+
+    # Triton fallback: FP8 matmul with FP32 accumulation (matches vLLM granularity)
+    try:
+        return _fp8_index_triton(q, q_s, k, k_s)
+    except Exception:
+        logger.warning_once(
+            "Triton fp8_index failed, falling back to PyTorch bf16 implementation"
+        )
 
     return _fp8_index_pytorch(q, q_s, k, k_s)

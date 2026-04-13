@@ -19,7 +19,7 @@ import torch.nn.functional as F
 from collections.abc import Callable
 from huggingface_hub.dataclasses import strict
 
-from ...integrations.dsa_tilelang import act_quant, fp8_index
+from ...integrations.dsa_kernels import act_quant, fp8_index
 from ...cache_utils import Cache
 from ...configuration_utils import PreTrainedConfig
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
@@ -42,11 +42,13 @@ from ..glm4_moe_lite.modeling_glm4_moe_lite import (
 
 logger = logging.get_logger(__name__)
 
+
 def rotate_activation(x: torch.Tensor) -> torch.Tensor:
     assert x.dtype == torch.bfloat16
     from fast_hadamard_transform import hadamard_transform
+
     hidden_size = x.size(-1)
-    return hadamard_transform(x, scale=hidden_size ** -0.5)
+    return hadamard_transform(x, scale=hidden_size**-0.5)
 
 
 def apply_rotary_pos_emb(
@@ -282,7 +284,9 @@ class GlmMoeDsaIndexer(nn.Module):
         weights = self.weights_proj(hidden_states).float() * (self.n_heads**-0.5)  # [B, S, H]
         weights = weights * q_scale.squeeze(-1) * self.softmax_scale  # [B, S, H]
 
-        index_score = fp8_index(q_fp8.contiguous(), weights.contiguous(), k_cached.contiguous(), k_scale_cached.contiguous())  # [B, S, T]
+        index_score = fp8_index(
+            q_fp8.contiguous(), weights.contiguous(), k_cached.contiguous(), k_scale_cached.contiguous()
+        )  # [B, S, T]
 
         if attention_mask is not None:
             index_score = index_score + attention_mask
