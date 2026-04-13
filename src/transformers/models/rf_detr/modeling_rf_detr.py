@@ -1116,6 +1116,8 @@ class RfDetrPreTrainedModel(PreTrainedModel):
         "attentions": [RfDetrAttention, RfDetrMultiscaleDeformableAttention],
         "hidden_states": [RfDetrDecoderLayer],
     }
+    # Roboflow checkpoints use bare keys with no top-level prefix
+    _checkpoint_conversion_prefix_free = True
 
     @torch.no_grad()
     def _init_weights(self, module):
@@ -1998,38 +2000,6 @@ class RfDetrForInstanceSegmentation(RfDetrPreTrainedModel):
     # When using clones, all layers > 0 will be clones, but layer 0 *is* required
     # We can't initialize the model on meta device as some weights are modified during the initialization
     _no_split_modules = None
-    _checkpoint_conversion_mapping = {
-        # # rf_detr (RfDetrForObjectDetection)
-        # # backbone RfDetrConvEncoder
-        # "backbone.0.encoder.encoder": "model.model.backbone.backbone",
-        # "backbone.0.projector": "model.model.backbone.projector",
-        # # RfDetrDecoder
-        # "transformer.": "model.model.",
-        # # RfDetrForObjectDetection
-        # # "transformer.enc_out_bbox_embed": "model.model.enc_out_bbox_embed",
-        # # # Regex mappings for variable length strings
-        # # r"transformer.enc_output.(\d+)": r"model.model.enc_output.\1",
-        # # r"transformer.enc_output_norm.(\d+)": r"model.model.enc_output_norm.\1",
-        # # r"transformer.enc_out_class_embed.(\d+)": r"model.model.enc_out_class_embed.\1",
-        # r"refpoint_embed.weight$": r"model.model.reference_point_embed.weight",
-        # # Regex mappings for variable length strings
-        # r"^bbox_embed.layers": "model.bbox_embed.layers",
-        # r"^class_embed.(weight|bias)": r"model.class_embed.\1",
-        # r"^query_feat.(weight|bias)": r"model.model.query_feat.\1",
-        # segmentation head (specific rules first)
-        r"segmentation_head.query_features_block.layers.0": "query_features_block.mlp.fc1",
-        r"segmentation_head.query_features_block.layers.2": "query_features_block.mlp.fc2",
-        r"segmentation_head.query_features_block.norm_in": "query_features_block.norm",
-        r"segmentation_head.blocks.(\d+).norm": r"blocks.\1.layernorm",
-        # Generic prefix rules later
-        r"segmentation_head.spatial_features_proj": "spatial_features_proj",
-        r"^segmentation_head.query_features_block": "query_features_block",
-        r"^segmentation_head.query_features_proj": "query_features_proj",
-        r"segmentation_head.bias": "segmentation_bias",
-        r"segmentation_head.blocks.(\d+).dwconv": r"blocks.\1.depthwise_conv",
-        r"segmentation_head.blocks.(\d+).pwconv1": r"blocks.\1.pointwise_conv",
-        r"segmentation_head.blocks.(\d+)": r"blocks.\1",
-    }
 
     def __init__(self, config: RfDetrConfig):
         super().__init__(config)
