@@ -149,7 +149,6 @@ class KernelConfig(PushToHubMixin):
                 patterns = [item[1] for item in layer_name]
                 fuse_modules(model, patterns, kernel_layer_name, source_layer_names=source_names)
             else:
-                # Legacy format: ("RMSNorm", "MLP") — look up patterns from model class or registry.
                 fusion_patterns = getattr(model, "_kernel_fusion_patterns", None) or _FUSION_PATTERNS_REGISTRY.get(
                     type(model), {}
                 )
