@@ -17,6 +17,7 @@ import ast
 import glob
 import os
 import subprocess
+import tempfile
 from collections import Counter, OrderedDict
 from typing import Any
 
@@ -250,7 +251,15 @@ def main(overwrite: bool):
         new_content += format_ordered_dict(name=k, data=v)
 
     # 3. If the new auto-generate content is different, overwrite it
-    if old_content == new_content:
+    # Dirty hack to sort and apply ruff to the file content, for easier matching
+    with tempfile.NamedTemporaryFile(mode="w", suffix=".py") as tmpfile:
+        tmpfile.write(new_content)
+        tmpfile_path = tmpfile.name
+
+        run_ruff_and_sort(tmpfile_path)
+        new_content = open(tmpfile_path, "r").read()
+
+    if old_content != new_content:
         if not overwrite:
             raise Exception(
                 "Generated auto-mapping is not consistent with the contents of `models/auto/auto_mappings.py`:\n"
@@ -259,7 +268,6 @@ def main(overwrite: bool):
         else:
             with open(filename, "w") as f:
                 f.write(new_content)
-            run_ruff_and_sort(filename)
 
 
 if __name__ == "__main__":
