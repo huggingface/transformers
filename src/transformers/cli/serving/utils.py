@@ -562,7 +562,9 @@ class GenerateManager(BaseGenerateManager):
         """Start streaming generation via ``model.generate()`` on the inference thread."""
         loop = asyncio.get_running_loop()
         queue: asyncio.Queue = asyncio.Queue()
-        streamer = DirectStreamer(processor._tokenizer, loop, queue, skip_special_tokens=True)
+        # ProcessorMixin exposes the fast tokenizer as .tokenizer; PreTrainedTokenizerFast is already one.
+        rust_tokenizer = getattr(processor, "tokenizer", processor)._tokenizer
+        streamer = DirectStreamer(rust_tokenizer, loop, queue, skip_special_tokens=True)
         gen_kwargs = {**inputs, "streamer": streamer, "generation_config": gen_config, "tokenizer": processor}
 
         def _run() -> None:
@@ -661,7 +663,9 @@ class CBGenerateManager(BaseGenerateManager):
             max_new_tokens=gen_config.max_new_tokens,
             eos_token_id=gen_config.eos_token_id,
         )
-        streamer = CBStreamer(self._cb, request_id, processor._tokenizer, loop, text_queue)
+        # ProcessorMixin exposes the fast tokenizer as .tokenizer; PreTrainedTokenizerFast is already one.
+        rust_tokenizer = getattr(processor, "tokenizer", processor)._tokenizer
+        streamer = CBStreamer(self._cb, request_id, rust_tokenizer, loop, text_queue)
 
         # Register a direct callback: the dispatcher calls this on the event loop with each GenerationOutput.
         # This decodes tokens and pushes text straight to the SSE text_queue
@@ -948,8 +952,11 @@ class BaseHandler:
                                 image_data = re.sub("^data:image/.+;base64,", "", url)
                                 image = Image.open(BytesIO(base64.b64decode(image_data)))
                                 file = tempfile.NamedTemporaryFile(suffix=".png", delete=False)
+                                file.close()  # close handle immediately after creation
                                 image.save(file.name)
                                 url = file.name
+                            # We don't delete the file as tne caller need it (via the `url` key).
+                            # TODO: Better approach to avoid file accumulation.
                             parsed["content"].append({"type": "image", "url": url})
 
             processor_inputs.append(parsed)
