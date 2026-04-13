@@ -669,6 +669,70 @@ class VideoLlama3ForConditionalGeneration(Qwen2VLForConditionalGeneration):
 
     @can_return_tuple
     @auto_docstring
+    def get_image_features(
+        self,
+        pixel_values: torch.FloatTensor,
+        image_grid_thw: torch.LongTensor | None = None,
+        image_merge_sizes: torch.LongTensor | None = None,
+        image_cu_seqlens: torch.Tensor | None = None,
+        image_rotary_pos_ids: torch.Tensor | None = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> tuple | BaseModelOutputWithPooling:
+        r"""
+        pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, image_size, image_size)`):
+            The tensors corresponding to the input images.
+        image_grid_thw (`torch.LongTensor` of shape `(num_images, 3)`, *optional*):
+            The temporal, height and width of feature shape of each image in LLM.
+        image_merge_sizes (`torch.Tensor` of shape `(num_images,)`, *optional*):
+            The spatial downsampling ratio of each image feature.
+        image_cu_seqlens (`torch.IntTensor`, *optional*):
+            Precomputed cumulative sequence lengths for images.
+        image_rotary_pos_ids (`torch.LongTensor`, *optional*):
+            Precomputed (row, col) position IDs for image rotary embeddings.
+        """
+        return self.model.get_image_features(
+            pixel_values,
+            image_grid_thw,
+            image_merge_sizes,
+            image_cu_seqlens=image_cu_seqlens,
+            image_rotary_pos_ids=image_rotary_pos_ids,
+            **kwargs,
+        )
+
+    @can_return_tuple
+    @auto_docstring
+    def get_video_features(
+        self,
+        pixel_values_videos: torch.FloatTensor,
+        video_grid_thw: torch.LongTensor | None = None,
+        video_merge_sizes: torch.LongTensor | None = None,
+        video_cu_seqlens: torch.Tensor | None = None,
+        video_rotary_pos_ids: torch.Tensor | None = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> tuple | BaseModelOutputWithPooling:
+        r"""
+        pixel_values_videos (`torch.FloatTensor` of shape `(batch_size, num_channels, image_size, image_size)`):
+            The tensors corresponding to the input videos.
+        video_grid_thw (`torch.LongTensor` of shape `(num_videos, 3)`, *optional*):
+            The temporal, height and width of feature shape of each video in LLM.
+        video_merge_sizes (`torch.Tensor` of shape `(num_videos,)`, *optional*):
+            The spatial downsampling ratio of each video feature.
+        video_cu_seqlens (`torch.IntTensor`, *optional*):
+            Precomputed cumulative sequence lengths for videos.
+        video_rotary_pos_ids (`torch.LongTensor`, *optional*):
+            Precomputed (row, col) position IDs for video rotary embeddings.
+        """
+        return self.model.get_video_features(
+            pixel_values_videos,
+            video_grid_thw,
+            video_merge_sizes,
+            video_cu_seqlens=video_cu_seqlens,
+            video_rotary_pos_ids=video_rotary_pos_ids,
+            **kwargs,
+        )
+
+    @can_return_tuple
+    @auto_docstring
     def forward(
         self,
         input_ids: torch.LongTensor = None,
