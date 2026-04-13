@@ -147,7 +147,7 @@ class XCLIPVisionEncoderLayer(CLIPEncoderLayer):
         # add dummy sequence dimension
         msg_token = msg_token.view(-1, 1, hidden_size)
 
-        hidden_states = torch.cat([hidden_states, msg_token], dim=1)
+        hidden_states = torch.cat([hidden_states, msg_token.to(hidden_states.device)], dim=1)
 
         residual = hidden_states
 

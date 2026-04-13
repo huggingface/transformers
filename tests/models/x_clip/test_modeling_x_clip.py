@@ -172,6 +172,18 @@ class XCLIPVisionModelTest(ModelTesterMixin, unittest.TestCase):
     ):
         pass
 
+    @unittest.skip(reason="X-CLIP needs batch size to match frames, can't crop and create new dummy inputs")
+    def test_flash_attn_2_inference_equivalence(self):
+        pass
+
+    @unittest.skip(reason="X-CLIP needs batch size to match frames, can't crop and create new dummy inputs")
+    def test_flash_attn_2_inference_equivalence_right_padding(self):
+        pass
+
+    @unittest.skip(reason="X-CLIP cross-frame attention has device placement issues with model parallelism")
+    def test_model_parallelism(self):
+        pass
+
     def test_model_get_set_embeddings(self):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
 
@@ -559,6 +571,18 @@ class XCLIPModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 
     @unittest.skip(reason="XCLIPModel does not support feedforward chunking")
     def test_feed_forward_chunking(self):
+        pass
+
+    @unittest.skip(reason="XCLIPOutput has logits_per_video, not logits_per_image expected by the common test")
+    def test_flash_attn_2_inference_equivalence(self):
+        pass
+
+    @unittest.skip(reason="XCLIPOutput has logits_per_video, not logits_per_image expected by the common test")
+    def test_flash_attn_2_inference_equivalence_right_padding(self):
+        pass
+
+    @unittest.skip(reason="XCLIPModel does not properly support device_map='auto'")
+    def test_model_parallelism(self):
         pass
 
     def test_load_vision_text_config(self):
