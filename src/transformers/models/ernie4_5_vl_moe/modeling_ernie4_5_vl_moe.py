@@ -1429,14 +1429,6 @@ class Ernie4_5_VLMoeModel(Ernie4_5_VLMoePreTrainedModel):
             The temporal, height and width of feature shape of each video in LLM.
         rope_deltas (`torch.LongTensor` of shape `(batch_size, )`, *optional*):
             The rope index difference between sequence length and multimodal rope.
-        image_cu_seqlens (`torch.Tensor` of shape `(num_image_patches + 1,)`, *optional*):
-            Precomputed cumulative sequence lengths for image patches, used for packed variable-length attention.
-        image_rotary_pos_ids (`torch.Tensor` of shape `(num_image_tokens, 2)`, *optional*):
-            Precomputed (row, col) position IDs for image rotary embeddings.
-        video_cu_seqlens (`torch.Tensor` of shape `(num_video_patches + 1,)`, *optional*):
-            Precomputed cumulative sequence lengths for video patches, used for packed variable-length attention.
-        video_rotary_pos_ids (`torch.Tensor` of shape `(num_video_tokens, 2)`, *optional*):
-            Precomputed (row, col) position IDs for video rotary embeddings.
         """
         if inputs_embeds is None:
             inputs_embeds = self.get_input_embeddings()(input_ids)
@@ -1684,14 +1676,6 @@ class Ernie4_5_VLMoeForConditionalGeneration(Ernie4_5_VLMoePreTrainedModel, Gene
             The temporal, height and width of feature shape of each video in LLM.
         rope_deltas (`torch.LongTensor` of shape `(batch_size, )`, *optional*):
             The rope index difference between sequence length and multimodal rope.
-        image_cu_seqlens (`torch.Tensor` of shape `(num_image_patches + 1,)`, *optional*):
-            Precomputed cumulative sequence lengths for image patches, used for packed variable-length attention.
-        image_rotary_pos_ids (`torch.Tensor` of shape `(num_image_tokens, 2)`, *optional*):
-            Precomputed (row, col) position IDs for image rotary embeddings.
-        video_cu_seqlens (`torch.Tensor` of shape `(num_video_patches + 1,)`, *optional*):
-            Precomputed cumulative sequence lengths for video patches, used for packed variable-length attention.
-        video_rotary_pos_ids (`torch.Tensor` of shape `(num_video_tokens, 2)`, *optional*):
-            Precomputed (row, col) position IDs for video rotary embeddings.
         """
         output_router_logits = (
             output_router_logits if output_router_logits is not None else self.config.text_config.output_router_logits

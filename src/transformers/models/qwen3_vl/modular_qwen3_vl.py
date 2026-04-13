@@ -699,10 +699,6 @@ class Qwen3VLModel(Qwen2VLModel):
             The tensors corresponding to the input images.
         image_grid_thw (`torch.LongTensor` of shape `(num_images, 3)`, *optional*):
             The temporal, height and width of feature shape of each image in LLM.
-        image_cu_seqlens (`torch.Tensor` of shape `(num_image_patches + 1,)`, *optional*):
-            Precomputed cumulative sequence lengths for image patches, used for packed variable-length attention.
-        image_rotary_pos_ids (`torch.Tensor` of shape `(num_image_tokens, 2)`, *optional*):
-            Precomputed (row, col) position IDs for image rotary embeddings.
         """
         pixel_values = pixel_values.type(self.visual.dtype)
         vision_output: BaseModelOutputWithDeepstackFeatures = self.visual(
@@ -774,14 +770,6 @@ class Qwen3VLModel(Qwen2VLModel):
             The temporal, height and width of feature shape of each image in LLM.
         video_grid_thw (`torch.LongTensor` of shape `(num_videos, 3)`, *optional*):
             The temporal, height and width of feature shape of each video in LLM.
-        image_cu_seqlens (`torch.Tensor` of shape `(num_image_patches + 1,)`, *optional*):
-            Precomputed cumulative sequence lengths for image patches, used for packed variable-length attention.
-        image_rotary_pos_ids (`torch.Tensor` of shape `(num_image_tokens, 2)`, *optional*):
-            Precomputed (row, col) position IDs for image rotary embeddings.
-        video_cu_seqlens (`torch.Tensor` of shape `(num_video_patches + 1,)`, *optional*):
-            Precomputed cumulative sequence lengths for video patches, used for packed variable-length attention.
-        video_rotary_pos_ids (`torch.Tensor` of shape `(num_video_tokens, 2)`, *optional*):
-            Precomputed (row, col) position IDs for video rotary embeddings.
         """
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
