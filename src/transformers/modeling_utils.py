@@ -1925,10 +1925,11 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
 
     def get_correct_experts_implementation(self, requested_experts: str | None) -> str:
         applicable_experts = "grouped_mm" if requested_experts is None else requested_experts
-        if applicable_experts not in ["eager", "grouped_mm", "batched_mm"]:
+        if applicable_experts not in ["eager", "grouped_mm", "batched_mm", "deepgemm"]:
             message = (
                 f'Specified `experts_implementation="{applicable_experts}"` is not supported. The only possible arguments are '
-                '`experts_implementation="eager"`, `"experts_implementation=grouped_mm"` and `"experts_implementation=batched_mm"`.'
+                '`experts_implementation="eager"`, `"experts_implementation=grouped_mm"`, `"experts_implementation=batched_mm"` '
+                'and `"experts_implementation=deepgemm"`.'
             )
             raise ValueError(message)
 
@@ -2983,6 +2984,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                 new_lm_head, old_lm_head, num_tokens_to_copy, transposed, has_new_lm_head_bias
             )
 
+        new_lm_head._is_hf_initialized = True
         return new_lm_head
 
     def _init_added_embeddings_weights_with_mean(
@@ -3616,7 +3618,10 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             elif is_quantized:
                 init_contexts.extend([torch.device("meta"), set_quantized_state()])
         else:
-            init_contexts.append(torch.device("meta"))
+            # meta_device_safe_creation_ops patches torch.linspace to default to CPU
+            # so that custom models calling .item() during __init__ (e.g. drop-path
+            # schedules) don't crash on meta tensors.
+            init_contexts.extend([torch.device("meta"), init.meta_device_safe_creation_ops()])
 
         return init_contexts
 
@@ -4610,7 +4615,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         later as they will be tied (overwritten) anyway.
         This is very important as most embeddings are tied, and they are huge params (vocabularies are often 256k), so
         running inits on them is very costly."""
-        for tied_param in self.all_tied_weights_keys.keys():
+        for tied_param in getattr(self, "all_tied_weights_keys", {}).keys():
             param = self.get_parameter(tied_param)
             param._is_hf_initialized = True
 

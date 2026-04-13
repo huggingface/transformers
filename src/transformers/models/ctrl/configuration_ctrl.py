@@ -56,8 +56,8 @@ class CTRLConfig(PreTrainedConfig):
     dff: int = 8192
     n_layer: int = 48
     n_head: int = 16
-    resid_pdrop: float = 0.1
-    embd_pdrop: float = 0.1
+    resid_pdrop: float | int = 0.1
+    embd_pdrop: float | int = 0.1
     layer_norm_epsilon: float = 1e-6
     initializer_range: float = 0.02
     use_cache: bool = True

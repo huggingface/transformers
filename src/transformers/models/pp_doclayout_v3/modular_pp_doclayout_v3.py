@@ -203,7 +203,7 @@ class PPDocLayoutV3Config(PreTrainedConfig):
     disable_custom_kernels: bool = True
     is_encoder_decoder: bool = True
     global_pointer_head_size: int = 64
-    gp_dropout_value: float = 0.1
+    gp_dropout_value: float | int = 0.1
 
     def __post_init__(self, **kwargs):
         self.backbone_config, kwargs = consolidate_backbone_kwargs_to_config(
@@ -397,6 +397,9 @@ class PPDocLayoutV3ImageProcessor(TorchvisionBackend):
             y_coordinates = [int(round((y_min * scale_height).item())), int(round((y_max * scale_height).item()))]
             y_start, y_end = np.clip(y_coordinates, 0, mask_height)
             cropped_mask = masks[i, y_start:y_end, x_start:x_end]
+            if cropped_mask.size == 0 or np.sum(cropped_mask) == 0:
+                polygon_points.append(rect)
+                continue
 
             # resize mask to match box size
             resized_mask = cv2.resize(cropped_mask.astype(np.uint8), (box_w, box_h), interpolation=cv2.INTER_NEAREST)

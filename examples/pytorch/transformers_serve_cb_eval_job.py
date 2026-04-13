@@ -16,10 +16,9 @@ import time
 
 from inspect_ai import eval
 from inspect_ai.log import bundle_log_dir
-from inspect_evals.gpqa import gpqa_diamond
 
 
-def wait_for_server_up(server_process, timeout=600):
+def wait_for_server_up(server_process, port=8000, timeout=600):
     start_time = time.time()
 
     import urllib.error
@@ -27,7 +26,7 @@ def wait_for_server_up(server_process, timeout=600):
 
     while time.time() - start_time < timeout:
         try:
-            req = urllib.request.urlopen("http://127.0.0.1:8000/health", timeout=2)
+            req = urllib.request.urlopen(f"http://127.0.0.1:{port}/health", timeout=2)
             if req.status == 200:
                 elapsed = time.time() - start_time
                 print("\n" + "=" * 70)
@@ -70,16 +69,28 @@ def main():
         help="Disable continuous batching (enabled by default)",
     )
     parser.add_argument(
+        "--port",
+        type=int,
+        default=8000,
+        help="Port for the transformers serve server (default: 8000)",
+    )
+    parser.add_argument(
         "--limit",
         type=int,
         default=10,
-        help="Number of evaluation samples to run (default: 5)",
+        help="Number of evaluation samples to run (default: 10)",
     )
     parser.add_argument(
         "--max-connections",
         type=int,
         default=10,
-        help="Maximum concurrent connections for evaluation (default: 2)",
+        help="Maximum concurrent connections for evaluation (default: 10)",
+    )
+    parser.add_argument(
+        "--temperature",
+        type=float,
+        default=0,
+        help="Temperature for generation (default: 0)",
     )
     parser.add_argument(
         "--log-dir",
@@ -121,7 +132,7 @@ def main():
     )
     parser.add_argument(
         "--cb-use-cuda-graph",
-        action="store_true",
+        action=argparse.BooleanOptionalAction,
         help="Enable CUDA graphs for continuous batching performance",
     )
 
@@ -133,6 +144,7 @@ def main():
     serve_cmd = [
         "transformers",
         "serve",
+        args.model,
     ]
 
     # Add continuous batching if not disabled
@@ -150,10 +162,14 @@ def main():
 
         serve_cmd.extend(["--cb-max-memory-percent", str(args.cb_max_memory_percent)])
 
-        serve_cmd.append("--cb-use-cuda-graph")
+        if args.cb_use_cuda_graph is True:
+            serve_cmd.append("--cb-use-cuda-graph")
+        elif args.cb_use_cuda_graph is False:
+            serve_cmd.append("--no-cb-use-cuda-graph")
 
     # Always use sdpa attention implementation
     serve_cmd.extend(["--attn-implementation", "kernels-community/flash-attn2"])
+    serve_cmd.extend(["--port", str(args.port)])
 
     print("Starting transformers serve with continuous batching...")
     print(f"Model: {args.model}")
@@ -163,6 +179,7 @@ def main():
         print(f"CB Max Batch Tokens: {args.cb_max_batch_tokens if args.cb_max_batch_tokens else 'auto'}")
         print(f"CB Max Memory: {args.cb_max_memory_percent * 100}%")
         print(f"CB CUDA Graph: {args.cb_use_cuda_graph}")
+    print(f"Temperature: {args.temperature}")
     print(f"Command: {' '.join(serve_cmd)}")
     print("=" * 70)
     print("SERVER OUTPUT:")
@@ -171,16 +188,17 @@ def main():
     # Start server with output going directly to stdout/stderr
     server_process = subprocess.Popen(serve_cmd, stdout=None, stderr=None)
 
-    wait_for_server_up(server_process, timeout=600)
+    wait_for_server_up(server_process, port=args.port, timeout=600)
 
     eval(
-        gpqa_diamond,
+        "hf/Idavidrein/gpqa/diamond",
         model=f"openai-api/transformers-serve/{args.model}",
         log_dir=args.log_dir,
-        model_base_url="http://localhost:8000/v1",
+        model_base_url=f"http://localhost:{args.port}/v1",
         display="plain",
         limit=args.limit,
         model_args={"stream": False},
+        temperature=args.temperature,
         max_connections=args.max_connections,
         max_tokens=2048,
     )
