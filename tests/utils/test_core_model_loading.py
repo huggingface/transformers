@@ -22,7 +22,9 @@ from transformers.conversion_mapping import get_checkpoint_conversion_mapping, r
 from transformers.core_model_loading import (
     Chunk,
     Concatenate,
+    Conv3dToLinear,
     ErnieFuseAndSplitTextVisionExperts,
+    LinearToConv3d,
     MergeModulelist,
     PermuteForRope,
     WeightConverter,
@@ -718,6 +720,28 @@ class TestConvertAndLoadStateDict(unittest.TestCase):
 
 
 class TestConversionMapping(unittest.TestCase):
+    def test_conv3d_linear_conversion_ops(self):
+        weight_name = "patch_embed.proj.weight"
+        kernel_size = (2, 2, 2)
+
+        def convert(converter, weight):
+            return converter.convert({weight_name: weight}, [weight_name], [weight_name])[weight_name]
+
+        conv_to_linear = Conv3dToLinear(in_channels=3, kernel_size=kernel_size)
+        linear_to_conv = LinearToConv3d(in_channels=3, kernel_size=kernel_size)
+
+        conv_weight = torch.randn(2 * 3 * 2 * 2 * 2, dtype=torch.float32).reshape(2, 3, *kernel_size)
+        linear_weight = torch.randn(2 * 24, dtype=torch.float32).reshape(2, 24)
+
+        # test conv3d -> linear
+        torch.testing.assert_close(convert(conv_to_linear, conv_weight), conv_weight.reshape(2, 24))
+        # test linear -> conv3d
+        torch.testing.assert_close(convert(linear_to_conv, linear_weight), linear_weight.reshape(2, 3, *kernel_size))
+        # test conv3d -> linear -> conv3d round trip
+        torch.testing.assert_close(
+            convert(conv_to_linear.reverse_op, convert(conv_to_linear, conv_weight)), conv_weight
+        )
+
     def test_register_checkpoint_conversion_mapping(self):
         register_checkpoint_conversion_mapping(
             "foobar",

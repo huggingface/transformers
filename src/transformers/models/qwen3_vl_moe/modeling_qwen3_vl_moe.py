@@ -136,7 +136,7 @@ class Qwen3VLMoeTextSparseMoeBlock(nn.Module):
         self.experts = Qwen3VLMoeTextExperts(config)
         self.gate = Qwen3VLMoeTextTopKRouter(config)
 
-    def forward(self, hidden_states: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         batch_size, sequence_length, hidden_dim = hidden_states.shape
         hidden_states_reshaped = hidden_states.view(-1, hidden_dim)
         _, routing_weights, selected_experts = self.gate(hidden_states_reshaped)
