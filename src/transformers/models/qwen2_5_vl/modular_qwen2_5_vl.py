@@ -372,6 +372,61 @@ class Qwen2_5_VLModel(Qwen2VLModel):
         super().__init__(config)
         self.visual = Qwen2_5_VisionTransformerPretrainedModel._from_config(config.vision_config)
 
+    def get_vision_position_ids(
+        self,
+        start_position: int,
+        grid_thw: list[int, int, int] | torch.Tensor,
+        temp_merge_size: int = 1,
+        spatial_merge_size: int = 1,
+        time_interval: int = 1,
+        device: str | torch.device | None = None,
+    ):
+        """
+        Compute 3D positional indices for vision tokens derived from a single image or video input.
+
+        The positions are generated from the input grid defined by temporal (T), height (H), and
+        width (W) dimensions. Temporal and spatial dimensions can be downscaled according to the
+        merge sizes used in the vision backbone. The resulting positions are offset by `start_position`.
+
+        Args:
+            start_position (`int`):
+                Offset added to all computed positional indices.
+            grid_thw (`Sequence[int]` or `torch.Tensor` of shape `(3,)`):
+                The (T, H, W) grid representing the feature layout of the current image or video after patch embedding.
+            temp_merge_size (`int`, *optional*):
+                Factor by which the temporal dimension is reduced in the backbone. The temporal grid size is divided
+                by this value. Defaults to 1.
+            spatial_merge_size (`int`, *optional*):
+                Factor by which the spatial dimensions (H and W) are reduced in the backbone. Both H and W are divided
+                by this value. Defaults to 1.
+            time_interval (`int`, *optional*):
+                Spacing factor applied between consecutive temporal position indices.Defaults to 1.
+            device (`str` or `torch.device`, *optional*):
+                Device on which the resulting tensor is allocated. If `None`, uses the current default device.
+
+        Returns:
+            torch.LongTensor of shape (3, sequence_length):
+                Positional indices for temporal, height, and width dimensions,
+                flattened into sequence form and offset by `start_position`.
+        """
+        llm_grid_t, llm_grid_h, llm_grid_w = (
+            grid_thw[0].item() // temp_merge_size,
+            grid_thw[1].item() // spatial_merge_size,
+            grid_thw[2].item() // spatial_merge_size,
+        )
+
+        position_temporal = torch.arange(llm_grid_t, device=device, dtype=torch.long) * time_interval
+        position_width = torch.arange(start_position, start_position + llm_grid_w, device=device)
+        position_height = torch.arange(start_position, start_position + llm_grid_h, device=device)
+
+        # Repeat the positions per each grid and per video frame. Add start position for temporal grid
+        position_temporal = position_temporal.repeat_interleave(llm_grid_h * llm_grid_w) + start_position
+        position_width = position_width.repeat(llm_grid_h * llm_grid_t)
+        position_height = position_height.repeat_interleave(llm_grid_w).repeat(llm_grid_t)
+        vision_position_ids = torch.stack([position_temporal, position_height, position_width], dim=0)
+
+        return vision_position_ids
+
     def get_rope_index(
         self,
         input_ids: torch.LongTensor,
