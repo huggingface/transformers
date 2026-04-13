@@ -2437,6 +2437,20 @@ class GenerationMixin(ContinuousMixin):
         if not kwargs_has_position_ids and accepts_position_ids and not self.config.is_encoder_decoder:
             model_kwargs["position_ids"] = self._prepare_position_ids_for_generation(inputs_tensor, model_kwargs)
 
+        if (
+            not self.config.is_encoder_decoder
+            and model_input_name == "inputs_embeds"
+            and generation_config.repetition_penalty is not None
+            and generation_config.repetition_penalty != 1.0
+        ):
+            prompt_input_ids = model_kwargs.get("input_ids")
+            has_prompt_ids = isinstance(prompt_input_ids, torch.Tensor) and prompt_input_ids.numel() > 0
+            if not has_prompt_ids:
+                raise ValueError(
+                    "`repetition_penalty` requires the prompt token ids to be available. "
+                    "Pass in `input_ids` too or disable the penalty."
+                )
+
         if self.config.is_encoder_decoder and "encoder_outputs" not in model_kwargs:
             # if model is encoder decoder encoder_outputs are created and added to `model_kwargs`
             model_kwargs = self._prepare_encoder_decoder_kwargs_for_generation(

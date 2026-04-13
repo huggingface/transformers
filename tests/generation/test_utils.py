@@ -2893,6 +2893,24 @@ class GenerationIntegrationTests(unittest.TestCase):
         finally:
             logger.removeHandler(warningHandler)
 
+    def test_inputs_embeds_require_ids_for_repetition_penalty(self):
+        model = AutoModelForCausalLM.from_pretrained("hf-internal-testing/tiny-random-gpt2").to(torch_device).eval()
+        tokenizer = AutoTokenizer.from_pretrained("hf-internal-testing/tiny-random-gpt2")
+        inputs = tokenizer("Hello world", return_tensors="pt").to(torch_device)
+        embeds = model.get_input_embeddings()(inputs["input_ids"])
+
+        with self.assertRaisesRegex(ValueError, "repetition_penalty"):
+            model.generate(inputs_embeds=embeds, max_new_tokens=5, repetition_penalty=1.1)
+
+        outputs = model.generate(
+            input_ids=inputs["input_ids"],
+            inputs_embeds=embeds,
+            attention_mask=inputs.get("attention_mask"),
+            max_new_tokens=5,
+            repetition_penalty=1.1,
+        )
+        self.assertEqual(outputs.shape[0], inputs["input_ids"].shape[0])
+
     @slow
     def test_beam_search_early_stop_heuristic(self):
         """Regression test for #38778 (early stopping needs to be tracked at a batch level)"""
