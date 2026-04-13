@@ -3357,6 +3357,8 @@ class ModelTesterMixin:
                     outputs.hidden_states[-1]
                     if "hidden_states" in outputs
                     else outputs.logits_per_image
+                    if hasattr(outputs, "logits_per_image")
+                    else outputs.logits
                     if not model.config.is_encoder_decoder
                     else outputs.decoder_hidden_states[-1]
                 )
@@ -3366,6 +3368,8 @@ class ModelTesterMixin:
                     outputs.hidden_states[-1]
                     if "hidden_states" in outputs
                     else outputs.logits_per_image
+                    if hasattr(outputs, "logits_per_image")
+                    else outputs.logits
                     if not model.config.is_encoder_decoder
                     else outputs.decoder_hidden_states[-1]
                 )
@@ -3380,6 +3384,8 @@ class ModelTesterMixin:
                     outputs.hidden_states[-1]
                     if "hidden_states" in outputs
                     else outputs.logits_per_image
+                    if hasattr(outputs, "logits_per_image")
+                    else outputs.logits
                     if not model.config.is_encoder_decoder
                     else outputs.decoder_hidden_states[-1]
                 )
@@ -3389,6 +3395,8 @@ class ModelTesterMixin:
                     outputs.hidden_states[-1]
                     if "hidden_states" in outputs
                     else outputs.logits_per_image
+                    if hasattr(outputs, "logits_per_image")
+                    else outputs.logits
                     if not model.config.is_encoder_decoder
                     else outputs.decoder_hidden_states[-1]
                 )
