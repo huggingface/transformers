@@ -17,6 +17,7 @@
 from huggingface_hub.dataclasses import strict
 
 from ...configuration_utils import PreTrainedConfig
+from ...integrations.tensor_parallel import TPStyle
 from ...modeling_rope_utils import RopeParameters
 from ...utils import auto_docstring
 
@@ -46,12 +47,12 @@ class PhiConfig(PreTrainedConfig):
     model_type = "phi"
     keys_to_ignore_at_inference = ["past_key_values"]
     base_model_tp_plan = {
-        "layers.*.self_attn.q_proj": "colwise",
-        "layers.*.self_attn.k_proj": "colwise",
-        "layers.*.self_attn.v_proj": "colwise",
-        "layers.*.self_attn.dense": "rowwise",
-        "layers.*.mlp.fc1": "colwise",
-        "layers.*.mlp.fc2": "rowwise",
+        "layers.*.self_attn.q_proj": TPStyle("colwise", "none"),
+        "layers.*.self_attn.k_proj": TPStyle("colwise", "none"),
+        "layers.*.self_attn.v_proj": TPStyle("colwise", "none"),
+        "layers.*.self_attn.dense": TPStyle("rowwise", "allreduce"),
+        "layers.*.mlp.fc1": TPStyle("colwise", "none"),
+        "layers.*.mlp.fc2": TPStyle("rowwise", "allreduce"),
     }
     base_model_pp_plan = {
         "embed_tokens": (["input_ids"], ["inputs_embeds"]),
@@ -66,8 +67,8 @@ class PhiConfig(PreTrainedConfig):
     num_hidden_layers: int = 24
     num_attention_heads: int = 32
     num_key_value_heads: int | None = None
-    resid_pdrop: float | int = 0.0
-    embd_pdrop: float | int = 0.0
+    resid_pdrop: float = 0.0
+    embd_pdrop: float = 0.0
     attention_dropout: float | int | None = 0.0
     hidden_act: str = "gelu_new"
     max_position_embeddings: int = 2048
