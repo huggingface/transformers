@@ -33,14 +33,14 @@ from transformers.testing_utils import (
     torch_device,
 )
 
-from ...audio_tester import AudioModelTest, AudioModelTester
+from ...alm_tester import ALMModelTest, ALMModelTester
 
 
 if is_torch_available():
     import torch
 
 
-class Qwen2AudioModelTester(AudioModelTester):
+class Qwen2AudioModelTester(ALMModelTester):
     config_class = Qwen2AudioConfig
     conditional_generation_class = Qwen2AudioForConditionalGeneration
 
@@ -49,7 +49,7 @@ class Qwen2AudioModelTester(AudioModelTester):
 
 
 @require_torch
-class Qwen2AudioForConditionalGenerationModelTest(AudioModelTest, unittest.TestCase):
+class Qwen2AudioForConditionalGenerationModelTest(ALMModelTest, unittest.TestCase):
     """
     Model tester for `Qwen2AudioForConditionalGeneration`.
     """

@@ -34,7 +34,7 @@ from transformers.utils import (
     is_torch_available,
 )
 
-from ...audio_tester import AudioModelTest, AudioModelTester
+from ...alm_tester import ALMModelTest, ALMModelTester
 from ...test_modeling_common import floats_tensor
 
 
@@ -45,7 +45,7 @@ if is_datasets_available():
     from datasets import load_dataset
 
 
-class GraniteSpeechModelTester(AudioModelTester):
+class GraniteSpeechModelTester(ALMModelTester):
     config_class = GraniteSpeechConfig
     conditional_generation_class = GraniteSpeechForConditionalGeneration
     audio_config_key = "encoder_config"
@@ -176,7 +176,7 @@ class GraniteSpeechModelTester(AudioModelTester):
 
 
 @require_torch
-class GraniteSpeechForConditionalGenerationModelTest(AudioModelTest, unittest.TestCase):
+class GraniteSpeechForConditionalGenerationModelTest(ALMModelTest, unittest.TestCase):
     """
     Model tester for `GraniteSpeechForConditionalGeneration`.
     """

@@ -33,14 +33,14 @@ from transformers.testing_utils import (
     torch_device,
 )
 
-from ...audio_tester import AudioModelTest, AudioModelTester
+from ...alm_tester import ALMModelTest, ALMModelTester
 
 
 if is_torch_available():
     import torch
 
 
-class AudioFlamingo3ModelTester(AudioModelTester):
+class AudioFlamingo3ModelTester(ALMModelTester):
     config_class = AudioFlamingo3Config
     conditional_generation_class = AudioFlamingo3ForConditionalGeneration
 
@@ -68,7 +68,7 @@ class AudioFlamingo3ModelTester(AudioModelTester):
 
 
 @require_torch
-class AudioFlamingo3ForConditionalGenerationModelTest(AudioModelTest, unittest.TestCase):
+class AudioFlamingo3ForConditionalGenerationModelTest(ALMModelTest, unittest.TestCase):
     """
     Model tester for `AudioFlamingo3ForConditionalGeneration`.
     """

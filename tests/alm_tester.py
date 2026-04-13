@@ -33,7 +33,7 @@ if is_torch_available():
     import torch
 
 
-class AudioModelTester:
+class ALMModelTester:
     # If the model follows standard naming conventions, only `config_class` and
     # `conditional_generation_class` need to be set (others are optional).
     config_class = None
@@ -137,7 +137,7 @@ class AudioModelTester:
         for required_attribute in self._required_attributes:
             if getattr(self, required_attribute) is None:
                 raise ValueError(
-                    f"You have inherited from AudioModelTester but did not set the {required_attribute} attribute."
+                    f"You have inherited from ALMModelTester but did not set the {required_attribute} attribute."
                 )
 
     # Because audio-LMs have some different standards in how they handle audio tokens, we need
@@ -230,12 +230,12 @@ class AudioModelTester:
 
 
 @require_torch
-class AudioModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin):
+class ALMModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin):
     """
     Base test class for Audio-Language Models.
 
     Subclasses should set:
-    - `model_tester_class`: The tester class (subclass of AudioModelTester)
+    - `model_tester_class`: The tester class (subclass of ALMModelTester)
 
     Optional:
     - `all_model_classes`: Override if not using default from model_tester
@@ -252,7 +252,7 @@ class AudioModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
     def setUp(self):
         if self.model_tester_class is None:
             raise ValueError(
-                "You have inherited from AudioModelTest but did not set the model_tester_class attribute."
+                "You have inherited from ALMModelTest but did not set the model_tester_class attribute."
             )
         self.model_tester = self.model_tester_class(self)
         self.config_tester = ConfigTester(self, config_class=self.model_tester.config_class, has_text_modality=False)
@@ -260,7 +260,7 @@ class AudioModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
         if self.pipeline_model_mapping is None:
             if self.all_model_classes is not None:
                 raise ValueError(
-                    "Tests that inherit from `AudioModelTest` and set `all_model_classes` must manually set "
+                    "Tests that inherit from `ALMModelTest` and set `all_model_classes` must manually set "
                     "`pipeline_model_mapping`."
                 )
             else:
