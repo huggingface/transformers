@@ -81,7 +81,7 @@ class DabDetrConfig(PreTrainedConfig):
     decoder_layers: int = 6
     decoder_ffn_dim: int = 2048
     decoder_attention_heads: int = 8
-    is_encoder_decoder: int = True
+    is_encoder_decoder: bool = True
     activation_function: str = "prelu"
     hidden_size: int = 256
     dropout: float | int = 0.1

@@ -81,6 +81,7 @@ class NemotronHConfig(PreTrainedConfig):
     """
 
     model_type = "nemotron_h"
+    attribute_map = {"layer_types": "layers_block_type"}
     keys_to_ignore_at_inference = ["past_key_values"]
 
     vocab_size: int = 131072
@@ -97,7 +98,7 @@ class NemotronHConfig(PreTrainedConfig):
     head_dim: int = 128
     max_position_embeddings: int = 4096
     attention_bias: bool = False
-    attention_dropout: float = 0.0
+    attention_dropout: float | int = 0.0
     sliding_window: int | None = None
     intermediate_size: int = 21504
     mlp_hidden_act: str = "relu2"

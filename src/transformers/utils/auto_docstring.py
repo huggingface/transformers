@@ -3579,6 +3579,11 @@ def _process_kwargs_parameters(sig, func, parent_class, documented_kwargs, inden
         if kwarg_param.annotation == inspect.Parameter.empty:
             continue
 
+        if not hasattr(kwarg_param.annotation, "__args__") or not hasattr(
+            kwarg_param.annotation.__args__[0], "__name__"
+        ):
+            continue
+
         if kwarg_param.annotation.__args__[0].__name__ not in BASIC_KWARGS_TYPES:
             # Extract documentation for kwargs
             kwargs_documentation = kwarg_param.annotation.__args__[0].__doc__
@@ -4071,7 +4076,10 @@ def _process_example_section(
         else:
             # Check if the model is in a pipeline to get an example
             for name_model_list_for_task in MODELS_TO_PIPELINE:
-                model_list_for_task = getattr(auto_module.modeling_auto, name_model_list_for_task)
+                try:
+                    model_list_for_task = getattr(auto_module.modeling_auto, name_model_list_for_task)
+                except (ImportError, AttributeError):
+                    continue
                 if class_name in model_list_for_task.values():
                     pipeline_name = MODELS_TO_PIPELINE[name_model_list_for_task]
                     example_annotation = PIPELINE_TASKS_TO_SAMPLE_DOCSTRINGS[pipeline_name].format(
@@ -4248,6 +4256,9 @@ def auto_class_docstring(cls, custom_intro=None, custom_args=None, checkpoint=No
                 PLACEHOLDER_TO_AUTO_MODULE["model_class"][1],
             )[model_name_lowercase]
         except KeyError:
+            pass
+        except ImportError:
+            # In some environments, certain model classes might not be available. In that case, we can skip this part.
             pass
 
     if model_name_lowercase and model_name_lowercase not in getattr(

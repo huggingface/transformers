@@ -433,7 +433,9 @@ class GemmaTokenizer(LlamaTokenizer):
 
 By default, if you inherit from a class and override a method with one or more decorators in the parent method, the decorators are also added to the unraveled code *only if you don't add any yourself*. Otherwise, the redefined decorator is used.
 
-For example, if you had a parent class shown below and you overwrite it, the parent decorator is kept.
+Two decorators appear throughout the library. One enables [capturing model intermediate outputs](./model_output_tracing), and another for [auto-generating docstrings](./auto_docstring).
+
+In the example below, a subclass inherits from a decorated parent. The parent's decorator carries over to the unraveled code.
 
 ```py
 class DummyModel(nn.Module):
@@ -579,3 +581,7 @@ class Emu3TextMLP(LlamaMLP):
 ## Config docstrings
 
 When inheriting a `Config` class or adding and deleting attributes, you may want to only redefine the new attributes in the docstring. However, the linter doesn't support this yet. You need to directly add the while docstring directly in the modular file under the class definition.
+
+## See also
+
+- [Model structure rules](./modeling_rules) — static rules enforced on all `modeling_*.py`, `modular_*.py`, and `configuration_*.py` files. Run `make typing` to check them before opening a PR.

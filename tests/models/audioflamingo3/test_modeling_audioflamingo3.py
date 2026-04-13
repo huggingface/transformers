@@ -265,11 +265,11 @@ class AudioFlamingo3ForConditionalGenerationIntegrationTest(unittest.TestCase):
                 "content": [
                     {
                         "type": "text",
-                        "text": "Transcribe the input speech.",
+                        "text": "What is surprising about the relationship between the barking and the music?",
                     },
                     {
                         "type": "audio",
-                        "path": "https://huggingface.co/datasets/nvidia/AudioSkills/resolve/main/assets/Why_do_we_ask_questions_converted.wav",
+                        "path": "https://huggingface.co/datasets/nvidia/AudioSkills/resolve/main/assets/dogs_barking_in_sync_with_the_music.wav",
                     },
                 ],
             }
@@ -287,7 +287,7 @@ class AudioFlamingo3ForConditionalGenerationIntegrationTest(unittest.TestCase):
         gen_ids = seq[:, inp_len:] if seq.shape[1] >= inp_len else seq
 
         torch.testing.assert_close(gen_ids.cpu(), exp_ids)
-        txt = self.processor.batch_decode(gen_ids, skip_special_tokens=True)
+        txt = self.processor.decode(gen_ids, skip_special_tokens=True)
         self.assertListEqual(txt, exp_txt)
 
     @slow
@@ -350,5 +350,5 @@ class AudioFlamingo3ForConditionalGenerationIntegrationTest(unittest.TestCase):
         gen_ids = seq[:, inp_len:] if seq.shape[1] >= inp_len else seq
 
         torch.testing.assert_close(gen_ids.cpu(), exp_ids)
-        txt = self.processor.batch_decode(gen_ids, skip_special_tokens=True)
+        txt = self.processor.decode(gen_ids, skip_special_tokens=True)
         self.assertListEqual(txt, exp_txt)
