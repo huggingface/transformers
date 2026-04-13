@@ -167,7 +167,7 @@ class PaddleOCRVLConfig(PreTrainedConfig):
     video_token_id: int = 100296
     vision_start_token_id: int = 101305
     vision_end_token_id: int = 101306
-    tie_word_embeddings: int = True
+    tie_word_embeddings: bool = True
 
     def __post_init__(self, **kwargs):
         if isinstance(self.vision_config, dict):
