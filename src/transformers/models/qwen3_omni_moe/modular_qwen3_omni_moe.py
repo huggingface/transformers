@@ -50,6 +50,7 @@ from ...utils.generic import TransformersKwargs, is_flash_attention_requested, m
 from ...utils.output_capturing import OutputRecorder, capture_outputs
 from ...video_utils import VideoInput, make_batched_videos
 from ..mimi.modeling_mimi import MimiLayerScale
+from ..qwen2_5_omni.audio_utils import chunk_and_pad_features
 from ..qwen2_5_omni.configuration_qwen2_5_omni import (
     Qwen2_5OmniAudioEncoderConfig,
     Qwen2_5OmniThinkerConfig,
@@ -98,6 +99,7 @@ from ..qwen3_vl_moe.modeling_qwen3_vl_moe import (
     Qwen3VLMoeVisionModel,
     Qwen3VLMoeVisionRotaryEmbedding,
 )
+from .audio_utils import get_cu_seqlens, get_valid_indices
 
 
 logger = logging.get_logger(__name__)
@@ -892,41 +894,6 @@ class Qwen3OmniMoeAudioEncoder(Qwen2_5OmniAudioEncoder):
     def set_input_embeddings(self, value):
         self.conv2d1 = value
 
-    def get_valid_indices(self, chunk_lengths):
-        """Compute flat indices of valid (non-padding) positions after CNN downsampling.
-
-        ``torch.export`` cannot trace ``nonzero()`` (data-dependent output shape).
-
-        Returns:
-            ``valid_indices``: flat indices into the ``(num_chunks * max_after_cnn,)`` tensor
-        """
-        feature_lens_after_cnn = _get_feat_extract_output_lengths(chunk_lengths)
-        max_len_after_cnn = feature_lens_after_cnn.max().item()
-        mask = torch.arange(max_len_after_cnn, device=chunk_lengths.device) < feature_lens_after_cnn.unsqueeze(1)
-        return mask.flatten().nonzero().squeeze(-1)
-
-    def get_cu_seqlens(self, chunk_lengths, feature_lens):
-        """Compute cumulative sequence lengths for windowed attention.
-
-        Uses a Python loop over per-audio lengths — not traceable by ``torch.export``.
-
-        Returns:
-            ``cu_seqlens``: cumulative sequence boundaries ``(num_windows + 1,)``
-        """
-        aftercnn_lens = _get_feat_extract_output_lengths(feature_lens)
-        feature_lens_after_cnn = _get_feat_extract_output_lengths(chunk_lengths)
-        max_len_after_cnn = feature_lens_after_cnn.max().item()
-
-        cu_chunk_lens = [0]
-        n_window_ratio = self.n_window_infer // (self.n_window * 2)
-        window_aftercnn = max_len_after_cnn * n_window_ratio
-        for cnn_len in aftercnn_lens:
-            cu_chunk_lens += [window_aftercnn] * (cnn_len // window_aftercnn)
-            remainder = cnn_len % window_aftercnn
-            if remainder != 0:
-                cu_chunk_lens += [remainder]
-        return torch.tensor(cu_chunk_lens, device=feature_lens.device).cumsum(-1, dtype=torch.int32)
-
     @merge_with_config_defaults
     @capture_outputs(tie_last_hidden_states=False)
     @auto_docstring
@@ -953,13 +920,13 @@ class Qwen3OmniMoeAudioEncoder(Qwen2_5OmniAudioEncoder):
             Precomputed cumulative sequence lengths (from `get_cu_seqlens`).
         """
         if padded_feature is None:
-            padded_feature, chunk_lengths = self.chunk_and_pad_features(input_features, feature_lens)
+            padded_feature, chunk_lengths = chunk_and_pad_features(input_features, feature_lens, self.n_window)
 
         if valid_indices is None:
-            valid_indices = self.get_valid_indices(chunk_lengths)
+            valid_indices = get_valid_indices(chunk_lengths)
 
         if cu_seqlens is None:
-            cu_seqlens = self.get_cu_seqlens(chunk_lengths, feature_lens)
+            cu_seqlens = get_cu_seqlens(chunk_lengths, feature_lens, self.n_window_infer, self.n_window)
 
         # Add channel dim for Conv2d: (num_chunks, mel_bins, time) -> (num_chunks, 1, mel_bins, time)
         padded_feature = padded_feature.unsqueeze(1)
