@@ -162,6 +162,8 @@ def _compute_linear_scaling_rope_parameters(
         Tuple of (`torch.Tensor`, `float`), containing the inverse frequencies for the RoPE embeddings and the
         post-processing scaling factor applied to the computed cos/sin (unused in this type of RoPE).
     """
+    if config is None:
+        raise ValueError("config is required for RoPE parameter computation")
     # For backward compatibility standardize the `rope_parameters_dict` if it uses old format
     config.standardize_rope_params()
     rope_parameters_dict = config.rope_parameters[layer_type] if layer_type is not None else config.rope_parameters
@@ -220,6 +222,8 @@ def _compute_proportional_rope_parameters(
         Tuple of (`torch.Tensor`, `float`), containing the inverse frequencies for the RoPE embeddings and the
         post-processing scaling factor applied to the computed cos/sin (unused in this type of RoPE).
     """
+    if config is None:
+        raise ValueError("config is required for RoPE parameter computation")
     # For backward compatibility standardize the `rope_parameters_dict` if it uses old format
     config.standardize_rope_params()
     rope_parameters_dict = config.rope_parameters[layer_type] if layer_type is not None else config.rope_parameters
@@ -296,6 +300,8 @@ def _compute_dynamic_ntk_parameters(
         Tuple of (`torch.Tensor`, `float`), containing the inverse frequencies for the RoPE embeddings and the
         post-processing scaling factor applied to the computed cos/sin (unused in this type of RoPE).
     """
+    if config is None:
+        raise ValueError("config is required for RoPE parameter computation")
     # For backward compatibility standardize the `rope_parameters_dict` if it uses old format
     config.standardize_rope_params()
     rope_parameters_dict = config.rope_parameters[layer_type] if layer_type is not None else config.rope_parameters
@@ -702,6 +708,12 @@ class RotaryEmbeddingConfigMixin:
 
     default_theta = 10_000.0
     ignore_keys_at_rope_validation = set()
+
+    # These attributes are defined by model-specific configs that inherit from PreTrainedConfig.
+    # They are declared here so that the type checker can resolve them in the mixin methods.
+    max_position_embeddings: int
+    hidden_size: int
+    num_attention_heads: int
 
     def convert_rope_params_to_dict(self, **kwargs):
         rope_scaling = kwargs.pop("rope_scaling", None)

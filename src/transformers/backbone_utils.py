@@ -17,6 +17,7 @@
 import enum
 import functools
 import inspect
+from typing import Any
 
 from huggingface_hub import repo_exists
 
@@ -36,6 +37,10 @@ class BackboneConfigMixin:
     """
     A Mixin to support handling the `out_features` and `out_indices` attributes for the backbone configurations.
     """
+
+    stage_names: list[str]
+    _out_features: list[str] | None
+    _out_indices: list[int] | None
 
     def set_output_features_output_indices(
         self,
@@ -146,12 +151,12 @@ class BackboneConfigMixin:
         out_indices = list(out_indices) if out_indices is not None else out_indices
         self.set_output_features_output_indices(out_features=None, out_indices=out_indices)
 
-    def to_dict(self):
+    def to_dict(self) -> dict[str, Any]:
         """
         Serializes this instance to a Python dictionary. Override the default `to_dict()` from `PreTrainedConfig` to
         include the `out_features` and `out_indices` attributes.
         """
-        output = super().to_dict()
+        output: dict[str, Any] = getattr(super(), "to_dict")()
         output["out_features"] = output.pop("_out_features", None)
         output["out_indices"] = output.pop("_out_indices", None)
         return output
@@ -180,6 +185,9 @@ def filter_output_hidden_states(forward_function):
 
 class BackboneMixin:
     backbone_type: BackboneType | None = None
+    config: Any
+    stage_names: list[str]
+    num_features: list[int] | None
 
     # Attribute to indicate if the backbone has attention and can return attention outputs.
     # Should be set to `False` for conv-based models to be able to run `forward_with_filtered_kwargs`
@@ -213,7 +221,7 @@ class BackboneMixin:
         """
         # NOTE: Since this class is ALWAYS used as a Mixin with another PreTrainedModel class, this `super` call
         # will call the PreTrained's `post_init`
-        super().post_init()
+        getattr(super(), "post_init")()
         maybe_install_capturing_hooks(self)
 
     def _init_timm_backbone(self, backbone) -> None:
@@ -332,7 +340,7 @@ def consolidate_backbone_kwargs_to_config(
         and backbone_config is None
         and not backbone_kwargs
     ):
-        backbone_config = CONFIG_MAPPING["timm_backbone"](backbone=backbone, **timm_default_kwargs)
+        backbone_config = CONFIG_MAPPING["timm_backbone"](**{"backbone": backbone}, **timm_default_kwargs)
     elif backbone is not None and backbone_config is None:
         if repo_exists(backbone):
             config_dict, _ = PreTrainedConfig.get_config_dict(backbone)
@@ -340,7 +348,7 @@ def consolidate_backbone_kwargs_to_config(
             config_dict.update(backbone_kwargs)
             backbone_config = config_class(**config_dict)
         else:
-            backbone_config = CONFIG_MAPPING["timm_backbone"](backbone=backbone, **backbone_kwargs)
+            backbone_config = CONFIG_MAPPING["timm_backbone"](**{"backbone": backbone}, **backbone_kwargs)
     elif backbone_config is None and default_config_type is not None:
         logger.info(
             f"`backbone_config` is `None`. Initializing the config with the default `{default_config_type}` vision config."

@@ -36,6 +36,7 @@ from .utils.import_utils import (
 
 if is_vision_available():
     import PIL
+    import PIL.Image
 
     from .image_utils import PILImageResampling
 
@@ -90,7 +91,7 @@ def rescale(
     image: np.ndarray,
     scale: float,
     data_format: ChannelDimension | None = None,
-    dtype: np.dtype = np.float32,
+    dtype: np.dtype | type = np.float32,
     input_data_format: str | ChannelDimension | None = None,
 ) -> np.ndarray:
     """
@@ -182,7 +183,7 @@ def to_pil_image(
         return image
 
     # Convert all tensors to numpy arrays before converting to PIL image
-    if is_torch_tensor(image):
+    if is_torch_available() and isinstance(image, torch.Tensor):
         image = image.numpy()
     elif not isinstance(image, np.ndarray):
         raise ValueError(f"Input image type not supported: {type(image)}")

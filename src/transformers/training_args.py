@@ -96,9 +96,9 @@ if is_torch_neuroncore_available(check_device=False):
             )
             import torch_xla.distributed.xla_backend as xbn
 
-            if not isinstance(dist.group.WORLD, xbn.ProcessGroupXla):
-                dist.init_process_group(backend="xla")
-                if not isinstance(dist.group.WORLD, xbn.ProcessGroupXla):
+            if not isinstance(dist.group.WORLD, xbn.ProcessGroupXla):  # type: ignore[possibly-missing-attribute]
+                dist.init_process_group(backend="xla")  # type: ignore[possibly-missing-attribute]
+                if not isinstance(dist.group.WORLD, xbn.ProcessGroupXla):  # type: ignore[possibly-missing-attribute]
                     raise AssertionError("Failed to initialize torch.distributed process group using XLA backend.")
 
 
@@ -1575,7 +1575,7 @@ class TrainingArguments:
                     )
                 else:
                     self.accelerator_config = AcceleratorConfig.from_json_file(self.accelerator_config)
-            if self.accelerator_config.split_batches:
+            if isinstance(self.accelerator_config, AcceleratorConfig) and self.accelerator_config.split_batches:
                 logger.info(
                     "Using `split_batches=True` in `accelerator_config` will override the `per_device_train_batch_size` "
                     "Batches will be split across all processes equally when using `split_batches=True`."
@@ -1819,18 +1819,24 @@ class TrainingArguments:
             if use_deepspeed:
                 del os.environ["ACCELERATE_USE_DEEPSPEED"]
         if not is_sagemaker_mp_enabled():
+            if self.distributed_state is None:
+                raise RuntimeError("distributed_state was not initialized")
             device = self.distributed_state.device
-        if dist.is_available() and dist.is_initialized() and self.parallel_mode != ParallelMode.DISTRIBUTED:
+        if dist.is_available() and dist.is_initialized() and self.parallel_mode != ParallelMode.DISTRIBUTED:  # type: ignore[possibly-missing-attribute]
             logger.warning(
                 "torch.distributed process group is initialized, but parallel_mode != ParallelMode.DISTRIBUTED. "
                 "In order to use Torch DDP, launch your script with `python -m torch.distributed.launch"
             )
 
         if is_torch_xla_available():
+            if self.distributed_state is None:
+                raise RuntimeError("distributed_state was not initialized")
             device = self.distributed_state.device
             self._n_gpu = 0
         elif is_sagemaker_dp_enabled() or is_sagemaker_mp_enabled():
             pass  # _n_gpu already set above
+        elif self.distributed_state is None:
+            raise RuntimeError("distributed_state was not initialized")
         elif self.distributed_state.distributed_type == DistributedType.NO:
             if self.use_cpu:
                 device = torch.device("cpu")
@@ -1839,19 +1845,19 @@ class TrainingArguments:
             elif is_torch_xpu_available():
                 device = torch.device("xpu:0")
                 torch.xpu.set_device(device)
-            elif is_torch_mlu_available():
+            elif is_torch_mlu_available() and hasattr(torch, "mlu"):
                 device = torch.device("mlu:0")
                 torch.mlu.set_device(device)
-            elif is_torch_musa_available():
+            elif is_torch_musa_available() and hasattr(torch, "musa"):
                 device = torch.device("musa:0")
                 torch.musa.set_device(device)
-            elif is_torch_npu_available():
+            elif is_torch_npu_available() and hasattr(torch, "npu"):
                 device = torch.device("npu:0")
                 torch.npu.set_device(device)
-            elif is_torch_hpu_available():
+            elif is_torch_hpu_available() and hasattr(torch, "hpu"):
                 device = torch.device("hpu:0")
                 torch.hpu.set_device(device)
-            elif is_torch_neuron_available():
+            elif is_torch_neuron_available() and hasattr(torch, "neuron"):
                 device = torch.device("neuron:0")
                 torch.neuron.set_device(device)
             else:
@@ -2052,7 +2058,7 @@ class TrainingArguments:
                     if is_torch_xla_available():
                         xm.rendezvous(desc)
                     else:
-                        dist.barrier()
+                        dist.barrier()  # type: ignore[possibly-missing-attribute]
                 yield
             finally:
                 if is_main_process:
@@ -2061,7 +2067,7 @@ class TrainingArguments:
                     if is_torch_xla_available():
                         xm.rendezvous(desc)
                     else:
-                        dist.barrier()
+                        dist.barrier()  # type: ignore[possibly-missing-attribute]
         else:
             yield
 

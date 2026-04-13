@@ -125,14 +125,14 @@ class SequenceFeatureExtractor(FeatureExtractionMixin):
             }
 
         # The model's main input name, usually `input_values`, has be passed for padding
-        if self.model_input_names[0] not in processed_features:
+        if self.model_input_names[0] not in processed_features:  # type: ignore[unresolved-attribute]
             raise ValueError(
                 "You should supply an instance of `transformers.BatchFeature` or list of `transformers.BatchFeature`"
-                f" to this method that includes {self.model_input_names[0]}, but you provided"
-                f" {list(processed_features.keys())}"
+                f" to this method that includes {self.model_input_names[0]}, but you provided"  # type: ignore[unresolved-attribute]
+                f" {list(processed_features.keys())}"  # type: ignore[union-attr]
             )
 
-        required_input = processed_features[self.model_input_names[0]]
+        required_input = processed_features[self.model_input_names[0]]  # type: ignore[unresolved-attribute]
         return_attention_mask = (
             return_attention_mask if return_attention_mask is not None else self.return_attention_mask
         )
@@ -166,7 +166,7 @@ class SequenceFeatureExtractor(FeatureExtractionMixin):
                     "Should be one of a python, numpy, or pytorch object."
                 )
 
-        for key, value in processed_features.items():
+        for key, value in processed_features.items():  # type: ignore[union-attr]
             if isinstance(value[0], (int, float)):
                 processed_features[key] = to_numpy(value)
             else:
@@ -175,15 +175,15 @@ class SequenceFeatureExtractor(FeatureExtractionMixin):
         # Convert padding_strategy in PaddingStrategy
         padding_strategy = self._get_padding_strategies(padding=padding, max_length=max_length)
 
-        required_input = processed_features[self.model_input_names[0]]
+        required_input = processed_features[self.model_input_names[0]]  # type: ignore[unresolved-attribute]
 
         batch_size = len(required_input)
-        if not all(len(v) == batch_size for v in processed_features.values()):
+        if not all(len(v) == batch_size for v in processed_features.values()):  # type: ignore[union-attr]
             raise ValueError("Some items in the output dictionary have a different batch size than others.")
 
         truncated_inputs = []
         for i in range(batch_size):
-            inputs = {k: v[i] for k, v in processed_features.items()}
+            inputs = {k: v[i] for k, v in processed_features.items()}  # type: ignore[union-attr]
             # truncation
             inputs_slice = self._truncate(
                 inputs,
@@ -195,7 +195,7 @@ class SequenceFeatureExtractor(FeatureExtractionMixin):
 
         if padding_strategy == PaddingStrategy.LONGEST:
             # make sure that `max_length` cannot be longer than the longest truncated length
-            max_length = max(len(input_slice[self.model_input_names[0]]) for input_slice in truncated_inputs)
+            max_length = max(len(input_slice[self.model_input_names[0]]) for input_slice in truncated_inputs)  # type: ignore[unresolved-attribute]
             padding_strategy = PaddingStrategy.MAX_LENGTH
 
         batch_outputs = {}
@@ -252,7 +252,7 @@ class SequenceFeatureExtractor(FeatureExtractionMixin):
             return_attention_mask (`bool`, *optional*):
                 Set to False to avoid returning attention mask (default: set to model specifics)
         """
-        required_input = processed_features[self.model_input_names[0]]
+        required_input = processed_features[self.model_input_names[0]]  # type: ignore[unresolved-attribute]
 
         if padding_strategy == PaddingStrategy.LONGEST:
             max_length = len(required_input)
@@ -273,7 +273,7 @@ class SequenceFeatureExtractor(FeatureExtractionMixin):
                         processed_features["attention_mask"], (0, difference)
                     )
                 padding_shape = ((0, difference), (0, 0)) if self.feature_size > 1 else (0, difference)
-                processed_features[self.model_input_names[0]] = np.pad(
+                processed_features[self.model_input_names[0]] = np.pad(  # type: ignore[unresolved-attribute]
                     required_input, padding_shape, "constant", constant_values=self.padding_value
                 )
             elif self.padding_side == "left":
@@ -282,7 +282,7 @@ class SequenceFeatureExtractor(FeatureExtractionMixin):
                         processed_features["attention_mask"], (difference, 0)
                     )
                 padding_shape = ((difference, 0), (0, 0)) if self.feature_size > 1 else (difference, 0)
-                processed_features[self.model_input_names[0]] = np.pad(
+                processed_features[self.model_input_names[0]] = np.pad(  # type: ignore[unresolved-attribute]
                     required_input, padding_shape, "constant", constant_values=self.padding_value
                 )
             else:
@@ -318,7 +318,7 @@ class SequenceFeatureExtractor(FeatureExtractionMixin):
         elif truncation and max_length is None:
             raise ValueError("When setting ``truncation=True``, make sure that ``max_length`` is defined.")
 
-        required_input = processed_features[self.model_input_names[0]]
+        required_input = processed_features[self.model_input_names[0]]  # type: ignore[unresolved-attribute]
 
         # find `max_length` that fits `pad_to_multiple_of`
         if max_length is not None and pad_to_multiple_of is not None and (max_length % pad_to_multiple_of != 0):
@@ -327,7 +327,7 @@ class SequenceFeatureExtractor(FeatureExtractionMixin):
         needs_to_be_truncated = len(required_input) > max_length
 
         if needs_to_be_truncated:
-            processed_features[self.model_input_names[0]] = processed_features[self.model_input_names[0]][:max_length]
+            processed_features[self.model_input_names[0]] = processed_features[self.model_input_names[0]][:max_length]  # type: ignore[unresolved-attribute]
             if "attention_mask" in processed_features:
                 processed_features["attention_mask"] = processed_features["attention_mask"][:max_length]
 

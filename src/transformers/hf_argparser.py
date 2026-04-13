@@ -23,13 +23,13 @@ from copy import copy
 from enum import Enum
 from inspect import isclass
 from pathlib import Path
-from typing import Any, Literal, NewType, Union, get_type_hints
+from typing import Any, Literal, TypeAlias, Union, get_type_hints
 
 import yaml
 
 
-DataClass = NewType("DataClass", Any)
-DataClassType = NewType("DataClassType", Any)
+DataClass: TypeAlias = Any
+DataClassType: TypeAlias = Any
 
 
 # From https://stackoverflow.com/questions/15008758/parsing-boolean-values-with-argparse
@@ -66,7 +66,7 @@ def HfArg(
     aliases: str | list[str] | None = None,
     help: str | None = None,
     default: Any = dataclasses.MISSING,
-    default_factory: Callable[[], Any] = dataclasses.MISSING,
+    default_factory: Any = dataclasses.MISSING,
     metadata: dict | None = None,
     **kwargs,
 ) -> dataclasses.Field:
@@ -191,9 +191,9 @@ class HfArgumentParser(ArgumentParser):
         bool_kwargs = {}
         if origin_type is Literal or (isinstance(field.type, type) and issubclass(field.type, Enum)):
             if origin_type is Literal:
-                kwargs["choices"] = field.type.__args__
+                kwargs["choices"] = field.type.__args__  # type: ignore[unresolved-attribute]
             else:
-                kwargs["choices"] = [x.value for x in field.type]
+                kwargs["choices"] = [x.value for x in field.type]  # type: ignore[unresolved-attribute]
 
             kwargs["type"] = make_choice_type_function(kwargs["choices"])
 
@@ -218,7 +218,7 @@ class HfArgumentParser(ArgumentParser):
                 # This is the value that will get picked if we do --{field.name} (without value)
                 kwargs["const"] = True
         elif isclass(origin_type) and issubclass(origin_type, list):
-            kwargs["type"] = field.type.__args__[0]
+            kwargs["type"] = field.type.__args__[0]  # type: ignore[unresolved-attribute]
             kwargs["nargs"] = "+"
             if field.default_factory is not dataclasses.MISSING:
                 kwargs["default"] = field.default_factory()

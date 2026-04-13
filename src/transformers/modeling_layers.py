@@ -98,14 +98,14 @@ class GenericForSequenceClassification:
     base_model_prefix = "model"
 
     def __init__(self, config):
-        super().__init__(config)
+        super().__init__(config)  # type: ignore[too-many-positional-arguments]
         self.num_labels = config.num_labels
         # Similar to `self.model = AutoModel.from_config(config)` but allows to change the base model name if needed in the child class
         setattr(self, self.base_model_prefix, AutoModel.from_config(config))
         self.score = nn.Linear(config.hidden_size, self.num_labels, bias=False)
 
         # Initialize weights and apply final processing
-        self.post_init()
+        self.post_init()  # type: ignore[unresolved-attribute]
 
     @can_return_tuple
     @auto_docstring
@@ -135,15 +135,15 @@ class GenericForSequenceClassification:
         if input_ids is not None:
             batch_size = input_ids.shape[0]
         else:
-            batch_size = inputs_embeds.shape[0]
+            batch_size = inputs_embeds.shape[0]  # type: ignore[union-attr]
 
-        if self.config.pad_token_id is None and batch_size != 1:
+        if self.config.pad_token_id is None and batch_size != 1:  # type: ignore[unresolved-attribute]
             raise ValueError("Cannot handle batch sizes > 1 if no padding token is defined.")
-        if self.config.pad_token_id is None:
+        if self.config.pad_token_id is None:  # type: ignore[unresolved-attribute]
             last_non_pad_token = -1
         elif input_ids is not None:
             # To handle both left- and right- padding, we take the rightmost token that is not equal to pad_token_id
-            non_pad_mask = (input_ids != self.config.pad_token_id).to(logits.device, torch.int32)
+            non_pad_mask = (input_ids != self.config.pad_token_id).to(logits.device, torch.int32)  # type: ignore[unresolved-attribute]
             token_indices = torch.arange(input_ids.shape[-1], device=logits.device, dtype=torch.int32)
             last_non_pad_token = (token_indices * non_pad_mask).argmax(-1)
         else:
@@ -157,7 +157,7 @@ class GenericForSequenceClassification:
 
         loss = None
         if labels is not None:
-            loss = self.loss_function(logits=logits, labels=labels, pooled_logits=pooled_logits, config=self.config)
+            loss = self.loss_function(logits=logits, labels=labels, pooled_logits=pooled_logits, config=self.config)  # type: ignore[unresolved-attribute]
 
         return SequenceClassifierOutputWithPast(
             loss=loss,
@@ -173,13 +173,13 @@ class GenericForQuestionAnswering:
     base_model_prefix = "model"
 
     def __init__(self, config):
-        super().__init__(config)
+        super().__init__(config)  # type: ignore[too-many-positional-arguments]
         # Similar to `self.model = AutoModel.from_config(config)` but allows to change the base model name if needed in the child class
         setattr(self, self.base_model_prefix, AutoModel.from_config(config))
         self.qa_outputs = nn.Linear(config.hidden_size, 2)
 
         # Initialize weights and apply final processing
-        self.post_init()
+        self.post_init()  # type: ignore[unresolved-attribute]
 
     def get_input_embeddings(self):
         return getattr(self, self.base_model_prefix).embed_tokens
@@ -218,7 +218,7 @@ class GenericForQuestionAnswering:
 
         loss = None
         if start_positions is not None and end_positions is not None:
-            loss = self.loss_function(start_logits, end_logits, start_positions, end_positions, **kwargs)
+            loss = self.loss_function(start_logits, end_logits, start_positions, end_positions, **kwargs)  # type: ignore[unresolved-attribute]
 
         return QuestionAnsweringModelOutput(
             loss=loss,
@@ -234,7 +234,7 @@ class GenericForTokenClassification:
     base_model_prefix = "model"
 
     def __init__(self, config):
-        super().__init__(config)
+        super().__init__(config)  # type: ignore[too-many-positional-arguments]
         self.num_labels = config.num_labels
         # Similar to `self.model = AutoModel.from_config(config)` but allows to change the base model name if needed in the child class
         setattr(self, self.base_model_prefix, AutoModel.from_config(config))
@@ -248,7 +248,7 @@ class GenericForTokenClassification:
         self.score = nn.Linear(config.hidden_size, config.num_labels)
 
         # Initialize weights and apply final processing
-        self.post_init()
+        self.post_init()  # type: ignore[unresolved-attribute]
 
     @can_return_tuple
     @auto_docstring
@@ -278,7 +278,7 @@ class GenericForTokenClassification:
 
         loss = None
         if labels is not None:
-            loss = self.loss_function(logits, labels, self.config)
+            loss = self.loss_function(logits, labels, self.config)  # type: ignore[unresolved-attribute]
 
         return TokenClassifierOutput(
             loss=loss,

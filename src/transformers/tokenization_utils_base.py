@@ -1299,7 +1299,7 @@ class PreTrainedTokenizerBase(PushToHubMixin):
                 if key in vars(cls):
                     return vars(cls)[key]
             raise AttributeError(f"{self.__class__.__name__} has no attribute {key}")
-        return super().__getattr__(key)
+        return super().__getattr__(key)  # type: ignore[unresolved-attribute]
 
     def get_special_tokens_mask(
         self, token_ids_0: list[int], token_ids_1: list[int] | None = None, already_has_special_tokens: bool = False
@@ -2011,7 +2011,7 @@ class PreTrainedTokenizerBase(PushToHubMixin):
 
         if push_to_hub:
             commit_message = kwargs.pop("commit_message", None)
-            repo_id = kwargs.pop("repo_id", save_directory.split(os.path.sep)[-1])
+            repo_id = kwargs.pop("repo_id", str(save_directory).split(os.path.sep)[-1])
             repo_id = create_repo(repo_id, exist_ok=True, **kwargs).repo_id
             files_timestamps = self._get_files_timestamps(save_directory)
 
@@ -2641,7 +2641,7 @@ class PreTrainedTokenizerBase(PushToHubMixin):
         if self.model_input_names[0] not in encoded_inputs:
             raise ValueError(
                 "You should supply an encoding or a list of encodings to this method "
-                f"that includes {self.model_input_names[0]}, but you provided {list(encoded_inputs.keys())}"
+                f"that includes {self.model_input_names[0]}, but you provided {list(encoded_inputs.keys())}"  # type: ignore[union-attr]
             )
 
         required_input = encoded_inputs[self.model_input_names[0]]
@@ -2674,7 +2674,7 @@ class PreTrainedTokenizerBase(PushToHubMixin):
                     "Should be one of a python, numpy, or pytorch object."
                 )
 
-            for key, value in encoded_inputs.items():
+            for key, value in encoded_inputs.items():  # type: ignore[union-attr]
                 encoded_inputs[key] = to_py_obj(value)
 
         # Convert padding_strategy in PaddingStrategy
@@ -2695,7 +2695,7 @@ class PreTrainedTokenizerBase(PushToHubMixin):
             return BatchEncoding(encoded_inputs, tensor_type=return_tensors)
 
         batch_size = len(required_input)
-        assert all(len(v) == batch_size for v in encoded_inputs.values()), (
+        assert all(len(v) == batch_size for v in encoded_inputs.values()), (  # type: ignore[union-attr]
             "Some items in the output dictionary have a different batch size than others."
         )
 
@@ -2705,7 +2705,7 @@ class PreTrainedTokenizerBase(PushToHubMixin):
 
         batch_outputs = {}
         for i in range(batch_size):
-            inputs = {k: v[i] for k, v in encoded_inputs.items()}
+            inputs = {k: v[i] for k, v in encoded_inputs.items()}  # type: ignore[union-attr]
             outputs = self._pad(
                 inputs,
                 max_length=max_length,

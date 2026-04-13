@@ -202,7 +202,7 @@ class ImageProcessingMixin(PushToHubMixin):
 
         if push_to_hub:
             commit_message = kwargs.pop("commit_message", None)
-            repo_id = kwargs.pop("repo_id", save_directory.split(os.path.sep)[-1])
+            repo_id = kwargs.pop("repo_id", str(save_directory).split(os.path.sep)[-1])
             repo_id = create_repo(repo_id, exist_ok=True, **kwargs).repo_id
             files_timestamps = self._get_files_timestamps(save_directory)
 
@@ -366,13 +366,13 @@ class ImageProcessingMixin(PushToHubMixin):
         """
         image_processor_dict = image_processor_dict.copy()
         return_unused_kwargs = kwargs.pop("return_unused_kwargs", False)
-        image_processor_dict.update({k: v for k, v in kwargs.items() if k in cls.valid_kwargs.__annotations__})
+        image_processor_dict.update({k: v for k, v in kwargs.items() if k in cls.valid_kwargs.__annotations__})  # type: ignore[unresolved-attribute]
         image_processor = cls(**image_processor_dict)
 
         # Apply extra kwargs to instance (BC for remote code, e.g. phi4_multimodal)
         extra_keys = []
         for key in reversed(list(kwargs.keys())):
-            if hasattr(image_processor, key) and key not in cls.valid_kwargs.__annotations__:
+            if hasattr(image_processor, key) and key not in cls.valid_kwargs.__annotations__:  # type: ignore[unresolved-attribute]
                 setattr(image_processor, key, kwargs.pop(key, None))
                 extra_keys.append(key)
         if extra_keys:

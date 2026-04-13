@@ -57,7 +57,7 @@ from transformers import logging as transformers_logging
 if TYPE_CHECKING:
     from .trainer import Trainer
 else:
-    Trainer = Any  # type: ignore
+    Trainer = Any
 
 from .integrations import (
     is_clearml_available,
@@ -924,7 +924,7 @@ def require_torch_multi_npu(test_case):
     if not is_torch_npu_available():
         return unittest.skip(reason="test requires PyTorch NPU")(test_case)
 
-    return unittest.skipUnless(torch.npu.device_count() > 1, "test requires multiple NPUs")(test_case)
+    return unittest.skipUnless(torch.npu.device_count() > 1, "test requires multiple NPUs")(test_case)  # type: ignore[unresolved-attribute]
 
 
 def require_non_hpu(test_case):
@@ -973,7 +973,7 @@ def require_torch_multi_hpu(test_case):
     if not is_torch_hpu_available():
         return unittest.skip(reason="test requires PyTorch HPU")(test_case)
 
-    return unittest.skipUnless(torch.hpu.device_count() > 1, "test requires multiple HPUs")(test_case)
+    return unittest.skipUnless(torch.hpu.device_count() > 1, "test requires multiple HPUs")(test_case)  # type: ignore[unresolved-attribute]
 
 
 if is_torch_available():
@@ -1044,7 +1044,7 @@ def require_torchao(test_case):
 def require_torchao_version_greater_or_equal(torchao_version):
     def decorator(test_case):
         correct_torchao_version = is_torchao_available() and version.parse(
-            version.parse(importlib.metadata.version("torchao")).base_version
+            version.parse(importlib.metadata.version("torchao")).base_version  # type: ignore[possibly-missing-attribute]
         ) >= version.parse(torchao_version)
         return unittest.skipUnless(
             correct_torchao_version, f"Test requires torchao with the version greater than {torchao_version}."
@@ -2746,7 +2746,7 @@ def run_test_using_subprocess(func):
         if os.getenv("_INSIDE_SUB_PROCESS", None) == "1":
             func(*args, **kwargs)
         else:
-            test = " ".join(os.environ.get("PYTEST_CURRENT_TEST").split(" ")[:-1])
+            test = " ".join(os.environ.get("PYTEST_CURRENT_TEST").split(" ")[:-1])  # type: ignore[unresolved-attribute]
             try:
                 env = copy.deepcopy(os.environ)
                 env["_INSIDE_SUB_PROCESS"] = "1"
@@ -2760,7 +2760,7 @@ def run_test_using_subprocess(func):
                     command = list(kwargs["pytestconfig"].invocation_params.args)
                     for idx, x in enumerate(command):
                         if x in kwargs["pytestconfig"].args:
-                            test = test.split("::")[1:]
+                            test = test.split("::")[1:]  # type: ignore[unresolved-attribute]
                             command[idx] = "::".join([f"{func.__globals__['__file__']}"] + test)
                     command = [f"{sys.executable}", "-m", "pytest"] + command
                     command = [x for x in command if x != "--no-summary"]
@@ -2787,7 +2787,7 @@ def run_test_using_subprocess(func):
                     text = "(subprocess) " + text
                     lines = [text] + lines
                 exception_message = "\n".join(lines)
-                raise pytest.fail(exception_message, pytrace=False)
+                raise pytest.fail(exception_message, pytrace=False)  # type: ignore[parameter-already-assigned]
 
     return wrapper
 
@@ -2877,7 +2877,7 @@ class HfDocTestParser(doctest.DocTestParser):
         return super().parse(string, name)
 
 
-class HfDoctestModule(Module):
+class HfDoctestModule(Module):  # type: ignore[unsupported-base]
     """
     Overwrites the `DoctestModule` of the pytest package to make sure the HFDocTestParser is used when discovering
     tests.
@@ -2927,14 +2927,14 @@ class HfDoctestModule(Module):
             )
         else:
             try:
-                module = import_path(
+                module = import_path(  # type: ignore[missing-argument]
                     self.path,
                     root=self.config.rootpath,
                     mode=self.config.getoption("importmode"),
                 )
             except ImportError:
                 if self.config.getvalue("doctest_ignore_import_errors"):
-                    skip("unable to import module %r" % self.path)
+                    skip("unable to import module %r" % self.path)  # type: ignore[too-many-positional-arguments]
                 else:
                     raise
 
@@ -2950,7 +2950,7 @@ class HfDoctestModule(Module):
         )
         for test in finder.find(module, module.__name__):
             if test.examples:  # skip empty doctests and cuda
-                yield DoctestItem.from_parent(self, name=test.name, runner=runner, dtest=test)
+                yield DoctestItem.from_parent(self, name=test.name, runner=runner, dtest=test)  # type: ignore[unresolved-attribute]
 
 
 def _device_agnostic_dispatch(device: str, dispatch_table: dict[str, Callable], *args, **kwargs):
@@ -3030,21 +3030,21 @@ else:
 
 
 if is_torch_hpu_available():
-    BACKEND_MANUAL_SEED["hpu"] = torch.hpu.manual_seed
-    BACKEND_DEVICE_COUNT["hpu"] = torch.hpu.device_count
-    BACKEND_TORCH_ACCELERATOR_MODULE["hpu"] = torch.hpu
+    BACKEND_MANUAL_SEED["hpu"] = torch.hpu.manual_seed  # type: ignore[unresolved-attribute]
+    BACKEND_DEVICE_COUNT["hpu"] = torch.hpu.device_count  # type: ignore[unresolved-attribute]
+    BACKEND_TORCH_ACCELERATOR_MODULE["hpu"] = torch.hpu  # type: ignore[unresolved-attribute]
 
 if is_torch_mlu_available():
-    BACKEND_EMPTY_CACHE["mlu"] = torch.mlu.empty_cache
-    BACKEND_MANUAL_SEED["mlu"] = torch.mlu.manual_seed
-    BACKEND_DEVICE_COUNT["mlu"] = torch.mlu.device_count
-    BACKEND_TORCH_ACCELERATOR_MODULE["mlu"] = torch.mlu
+    BACKEND_EMPTY_CACHE["mlu"] = torch.mlu.empty_cache  # type: ignore[unresolved-attribute]
+    BACKEND_MANUAL_SEED["mlu"] = torch.mlu.manual_seed  # type: ignore[unresolved-attribute]
+    BACKEND_DEVICE_COUNT["mlu"] = torch.mlu.device_count  # type: ignore[unresolved-attribute]
+    BACKEND_TORCH_ACCELERATOR_MODULE["mlu"] = torch.mlu  # type: ignore[unresolved-attribute]
 
 if is_torch_npu_available():
-    BACKEND_EMPTY_CACHE["npu"] = torch.npu.empty_cache
-    BACKEND_MANUAL_SEED["npu"] = torch.npu.manual_seed
-    BACKEND_DEVICE_COUNT["npu"] = torch.npu.device_count
-    BACKEND_TORCH_ACCELERATOR_MODULE["npu"] = torch.npu
+    BACKEND_EMPTY_CACHE["npu"] = torch.npu.empty_cache  # type: ignore[unresolved-attribute]
+    BACKEND_MANUAL_SEED["npu"] = torch.npu.manual_seed  # type: ignore[unresolved-attribute]
+    BACKEND_DEVICE_COUNT["npu"] = torch.npu.device_count  # type: ignore[unresolved-attribute]
+    BACKEND_TORCH_ACCELERATOR_MODULE["npu"] = torch.npu  # type: ignore[unresolved-attribute]
 
 if is_torch_xpu_available():
     BACKEND_EMPTY_CACHE["xpu"] = torch.xpu.empty_cache
@@ -3410,7 +3410,7 @@ def _get_test_info():
         tb_next = tb
     test_traceback = tb
 
-    origin_method_being_patched = frame_of_patched_obj.frame.f_locals["orig_method"]
+    origin_method_being_patched = frame_of_patched_obj.frame.f_locals["orig_method"]  # type: ignore[unresolved-attribute]
 
     # An iterable of type `traceback.StackSummary` with each element of type `FrameSummary`
     stack = traceback.extract_stack()
@@ -3421,8 +3421,8 @@ def _get_test_info():
         if origin_method_being_patched.__name__ in frame.line:
             caller_frame = frame
 
-    caller_path = os.path.relpath(caller_frame.filename)
-    caller_lineno = caller_frame.lineno
+    caller_path = os.path.relpath(caller_frame.filename)  # type: ignore[unresolved-attribute]
+    caller_lineno = caller_frame.lineno  # type: ignore[unresolved-attribute]
 
     test_lineno = line_number
 
@@ -3579,7 +3579,7 @@ def _patched_tearDown(self, *args, **kwargs):
 
     # reset back to the original tearDown method, so `_patched_tearDown` won't be run by the subsequent tests if they
     # have only test failures that are not handle by the patched methods (or no test failure at all).
-    orig_tearDown = _patched_tearDown.orig_tearDown
+    orig_tearDown = _patched_tearDown.orig_tearDown  # type: ignore[unresolved-attribute]
     type(self).tearDown = orig_tearDown
 
     # Call the original tearDown
@@ -3703,7 +3703,7 @@ def _patch_with_call_info(module_or_class, attr_name, _parse_call_info_func, tar
             # `_patched_tearDown`.
             if not hasattr(type(test_obj).tearDown, "orig_tearDown"):
                 orig_tearDown = type(test_obj).tearDown
-                _patched_tearDown.orig_tearDown = orig_tearDown
+                _patched_tearDown.orig_tearDown = orig_tearDown  # type: ignore[unresolved-attribute]
                 type(test_obj).tearDown = _patched_tearDown
 
     setattr(module_or_class, attr_name, patched)
@@ -4300,7 +4300,7 @@ class CPUMemoryMonitor:
 
         self._update_peak()
 
-        mem_info = self._process.memory_info()
+        mem_info = self._process.memory_info()  # type: ignore[unresolved-attribute]
         sys_mem = psutil.virtual_memory()
 
         return MemoryStats(

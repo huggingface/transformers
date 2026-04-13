@@ -75,7 +75,7 @@ ALLOWED_LAYER_TYPES = (
 
 
 # copied from huggingface_hub.dataclasses.strict when `accept_kwargs=True`
-def wrap_init_to_accept_kwargs(cls: dataclass):
+def wrap_init_to_accept_kwargs(cls: type):
     # Get the original dataclass-generated __init__
     original_init = cls.__init__
 
@@ -92,7 +92,7 @@ def wrap_init_to_accept_kwargs(cls: dataclass):
                 f"{cls.__name__} accepts only keyword arguments, but found `{len(args)}` positional args."
             )
 
-        for f in fields(cls):  # type: ignore
+        for f in fields(cls):
             if f.name in standard_kwargs:
                 setattr(self, f.name, standard_kwargs[f.name])
             elif f.default is not MISSING:
@@ -508,7 +508,7 @@ class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin):
 
         if push_to_hub:
             commit_message = kwargs.pop("commit_message", None)
-            repo_id = kwargs.pop("repo_id", save_directory.split(os.path.sep)[-1])
+            repo_id = kwargs.pop("repo_id", str(save_directory).split(os.path.sep)[-1])
             repo_id = create_repo(repo_id, exist_ok=True, **kwargs).repo_id
             files_timestamps = self._get_files_timestamps(save_directory)
 

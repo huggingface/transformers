@@ -294,7 +294,10 @@ class XIELUActivation(nn.Module):
                 original_shape,
                 x.shape,
             )
-        result = self._xielu_cuda_obj.forward(
+        xielu_cuda_obj = self._xielu_cuda_obj
+        if xielu_cuda_obj is None:
+            raise RuntimeError("CUDA xIELU object not initialized")
+        result = xielu_cuda_obj.forward(
             x,
             self.alpha_p.to(x.dtype),
             self.alpha_n.to(x.dtype),

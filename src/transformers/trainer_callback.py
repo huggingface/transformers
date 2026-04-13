@@ -646,7 +646,7 @@ class ProgressCallback(TrainerCallback):
         self.current_step = 0
 
     def on_step_end(self, args, state, control, **kwargs):
-        if state.is_world_process_zero:
+        if state.is_world_process_zero and self.training_bar is not None:
             self.training_bar.update(state.global_step - self.current_step)
             self.current_step = state.global_step
 
@@ -671,7 +671,7 @@ class ProgressCallback(TrainerCallback):
             self.prediction_bar = None
 
     def on_log(self, args, state, control, logs=None, **kwargs):
-        if state.is_world_process_zero and self.training_bar is not None:
+        if state.is_world_process_zero and self.training_bar is not None and logs is not None:
             # make a shallow copy of logs so we can mutate the fields copied
             # but avoid doing any value pickling.
             shallow_logs = {}
@@ -690,7 +690,7 @@ class ProgressCallback(TrainerCallback):
             self.training_bar.write(str(shallow_logs))
 
     def on_train_end(self, args, state, control, **kwargs):
-        if state.is_world_process_zero:
+        if state.is_world_process_zero and self.training_bar is not None:
             self.training_bar.close()
             self.training_bar = None
 
@@ -701,6 +701,8 @@ class PrinterCallback(TrainerCallback):
     """
 
     def on_log(self, args, state, control, logs=None, **kwargs):
+        if logs is None:
+            return
         _ = logs.pop("total_flos", None)
         if state.is_local_process_zero:
             if logs is not None:

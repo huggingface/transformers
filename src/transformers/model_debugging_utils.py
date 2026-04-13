@@ -43,9 +43,9 @@ logger = logging.get_logger(__name__)
 
 def _is_rank_zero():
     """Return True if rank=0 or we aren't running distributed."""
-    if not (_torch_distributed_available and torch.distributed.is_initialized()):
+    if not (_torch_distributed_available and torch.distributed.is_initialized()):  # type: ignore[possibly-missing-attribute]
         return True
-    return torch.distributed.get_rank() == 0
+    return torch.distributed.get_rank() == 0  # type: ignore[possibly-missing-attribute]
 
 
 MEMORY_ADDRESS_REGEX = re.compile(r"object at 0x[0-9A-Fa-f]+")

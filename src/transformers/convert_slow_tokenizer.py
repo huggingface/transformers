@@ -202,7 +202,7 @@ class GemmaSentencePieceExtractor(SentencePieceExtractor):
         By default will return vocab and merges with respect to their order, by sending `vocab_scores` we're going to
         order the merges with respect to the piece scores instead.
         """
-        sp = self.sp
+        sp = self.sp  # type: ignore[unresolved-attribute]
         vocab = {sp.id_to_piece(index): index for index in range(sp.GetPieceSize())}
 
         # If "\t" is missing in the vocab, we have to do this to support merges

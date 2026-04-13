@@ -237,11 +237,11 @@ class TokenizersBackend(PreTrainedTokenizerBase):
                 if "tokenizer_object" not in local_kwargs and (
                     cls is TokenizersBackend or "__init__" not in cls.__dict__
                 ):
-                    vocab = local_kwargs.pop("vocab", None)
-                    merges = local_kwargs.pop("merges", None)
+                    vocab = local_kwargs.pop("vocab", None)  # type: ignore[union-attr]
+                    merges = local_kwargs.pop("merges", None)  # type: ignore[union-attr]
 
                     # Replace placeholder tokens as specified in added_tokens_decoder
-                    added_tokens_decoder = local_kwargs.get("added_tokens_decoder") or {}
+                    added_tokens_decoder = local_kwargs.get("added_tokens_decoder") or {}  # type: ignore[union-attr]
                     if vocab is not None and added_tokens_decoder:
                         id_to_token = {token_id: token for token, token_id in vocab.items()}
                         for token_id, new_token in added_tokens_decoder.items():
@@ -264,11 +264,11 @@ class TokenizersBackend(PreTrainedTokenizerBase):
                         # tokenizer_object does not have bos/eos set.
                         proto_spec = extractor.proto.trainer_spec
                         if proto_spec.bos_id >= 0:
-                            local_kwargs.setdefault("bos_token", proto_spec.bos_piece or "<s>")
+                            local_kwargs.setdefault("bos_token", proto_spec.bos_piece or "<s>")  # type: ignore[union-attr]
                         if proto_spec.eos_id >= 0:
-                            local_kwargs.setdefault("eos_token", proto_spec.eos_piece or "</s>")
+                            local_kwargs.setdefault("eos_token", proto_spec.eos_piece or "</s>")  # type: ignore[union-attr]
                         if proto_spec.unk_id >= 0:
-                            local_kwargs.setdefault("unk_token", proto_spec.unk_piece or "<unk>")
+                            local_kwargs.setdefault("unk_token", proto_spec.unk_piece or "<unk>")  # type: ignore[union-attr]
 
             except Exception as e:  # TODO only catch deserialization error here!
                 logger.warning(
@@ -278,7 +278,8 @@ class TokenizersBackend(PreTrainedTokenizerBase):
                 from .convert_slow_tokenizer import TikTokenConverter
 
                 converter = TikTokenConverter(
-                    vocab_file=vocab_file, extra_special_tokens=local_kwargs.get("extra_special_tokens")
+                    vocab_file=vocab_file,
+                    extra_special_tokens=local_kwargs.get("extra_special_tokens"),  # type: ignore[union-attr]
                 )
                 local_kwargs["tokenizer_object"] = converter.converted()
             return local_kwargs
@@ -592,7 +593,7 @@ class TokenizersBackend(PreTrainedTokenizerBase):
             # Ensure special tokens are added as such to the backend
             self.add_tokens(tokens_to_add, special_tokens=True)
 
-        if getattr(self, "_should_update_post_processor", True) or self._tokenizer.post_processor is None:
+        if getattr(self, "_should_update_post_processor", True) or self._tokenizer.post_processor is None:  # type: ignore[union-attr]
             self.update_post_processor()
 
     @property
@@ -600,10 +601,10 @@ class TokenizersBackend(PreTrainedTokenizerBase):
         """
         `int`: Size of the base vocabulary (without the added tokens).
         """
-        return self._tokenizer.get_vocab_size(with_added_tokens=False)
+        return self._tokenizer.get_vocab_size(with_added_tokens=False)  # type: ignore[union-attr]
 
     def get_vocab(self) -> dict[str, int]:
-        return self._tokenizer.get_vocab(with_added_tokens=True)
+        return self._tokenizer.get_vocab(with_added_tokens=True)  # type: ignore[union-attr]
 
     @property
     def vocab(self) -> dict[str, int]:
@@ -625,7 +626,7 @@ class TokenizersBackend(PreTrainedTokenizerBase):
         Returns:
             `dict[str, int]`: The added tokens.
         """
-        return self._tokenizer.get_added_tokens_decoder()
+        return self._tokenizer.get_added_tokens_decoder()  # type: ignore[union-attr]
 
     # BC v5: expose ``_added_tokens_encoder`` / ``_added_tokens_decoder`` attrs for custom tokenizers that expect
     # them from slow tokenizers. Only supports read, not write (won't sync to Rust backend, use add_tokens() instead
@@ -651,7 +652,7 @@ class TokenizersBackend(PreTrainedTokenizerBase):
         """
         Size of the full vocabulary with the added tokens.
         """
-        return self._tokenizer.get_vocab_size(with_added_tokens=True)
+        return self._tokenizer.get_vocab_size(with_added_tokens=True)  # type: ignore[union-attr]
 
     @property
     def backend_tokenizer(self) -> TokenizerFast:
@@ -665,7 +666,7 @@ class TokenizersBackend(PreTrainedTokenizerBase):
         """
         `tokenizers.decoders.Decoder`: The Rust decoder for this tokenizer.
         """
-        return self._tokenizer.decoder
+        return self._tokenizer.decoder  # type: ignore[union-attr]
 
     def _convert_encoding(
         self,
@@ -715,19 +716,19 @@ class TokenizersBackend(PreTrainedTokenizerBase):
         return encoding_dict, encodings
 
     def _convert_token_to_id_with_added_voc(self, token: str) -> int:
-        index = self._tokenizer.token_to_id(token)
+        index = self._tokenizer.token_to_id(token)  # type: ignore[union-attr]
         if index is None:
             return self.unk_token_id
         return index
 
     def _convert_id_to_token(self, index: int) -> str | None:
-        return self._tokenizer.id_to_token(int(index))
+        return self._tokenizer.id_to_token(int(index))  # type: ignore[union-attr]
 
     def _add_tokens(self, new_tokens: list[str | AddedToken], special_tokens=False) -> int:
         if special_tokens:
-            return self._tokenizer.add_special_tokens(new_tokens)
+            return self._tokenizer.add_special_tokens(new_tokens)  # type: ignore[union-attr]
 
-        return self._tokenizer.add_tokens(new_tokens)
+        return self._tokenizer.add_tokens(new_tokens)  # type: ignore[union-attr]
 
     def num_special_tokens_to_add(self, pair: bool = False) -> int:
         """
@@ -748,7 +749,7 @@ class TokenizersBackend(PreTrainedTokenizerBase):
         Returns:
             `int`: Number of special tokens added to sequences.
         """
-        return self._tokenizer.num_special_tokens_to_add(pair)
+        return self._tokenizer.num_special_tokens_to_add(pair)  # type: ignore[union-attr]
 
     def convert_ids_to_tokens(self, ids: int | list[int], skip_special_tokens: bool = False) -> str | list[str]:
         """
@@ -765,7 +766,7 @@ class TokenizersBackend(PreTrainedTokenizerBase):
             `str` or `list[str]`: The decoded token(s).
         """
         if isinstance(ids, int):
-            return self._tokenizer.id_to_token(ids)
+            return self._tokenizer.id_to_token(ids)  # type: ignore[union-attr]
         tokens = []
         # self.all_special_ids is an @property which may be slow, so only compute it once before the loop
         ids_to_skip = set(self.all_special_ids) if skip_special_tokens else set()
@@ -773,7 +774,7 @@ class TokenizersBackend(PreTrainedTokenizerBase):
             index = int(index)
             if index in ids_to_skip:
                 continue
-            tokens.append(self._tokenizer.id_to_token(index))
+            tokens.append(self._tokenizer.id_to_token(index))  # type: ignore[union-attr]
         return tokens
 
     def tokenize(self, text: str, pair: str | None = None, add_special_tokens: bool = False, **kwargs) -> list[str]:
@@ -812,12 +813,12 @@ class TokenizersBackend(PreTrainedTokenizerBase):
                 The side on which the model should have padding applied. Should be selected between ['right', 'left'].
                 Default value is picked from the class attribute of the same name.
         """
-        _truncation = self._tokenizer.truncation
-        _padding = self._tokenizer.padding
+        _truncation = self._tokenizer.truncation  # type: ignore[union-attr]
+        _padding = self._tokenizer.padding  # type: ignore[union-attr]
         # Set truncation and padding on the backend tokenizer
         if truncation_strategy == TruncationStrategy.DO_NOT_TRUNCATE:
             if _truncation is not None:
-                self._tokenizer.no_truncation()
+                self._tokenizer.no_truncation()  # type: ignore[union-attr]
         else:
             target = {
                 "max_length": max_length,
@@ -836,11 +837,11 @@ class TokenizersBackend(PreTrainedTokenizerBase):
                 current = {k: _truncation.get(k, None) for k in target}
 
             if current != target:
-                self._tokenizer.enable_truncation(**target)
+                self._tokenizer.enable_truncation(**target)  # type: ignore[union-attr]
 
         if padding_strategy == PaddingStrategy.DO_NOT_PAD:
             if _padding is not None:
-                self._tokenizer.no_padding()
+                self._tokenizer.no_padding()  # type: ignore[union-attr]
         else:
             length = max_length if padding_strategy == PaddingStrategy.MAX_LENGTH else None
             target = {
@@ -852,7 +853,7 @@ class TokenizersBackend(PreTrainedTokenizerBase):
                 "pad_to_multiple_of": pad_to_multiple_of,
             }
             if _padding != target:
-                self._tokenizer.enable_padding(**target)
+                self._tokenizer.enable_padding(**target)  # type: ignore[union-attr]
 
     def _encode_plus(
         self,
@@ -952,11 +953,11 @@ class TokenizersBackend(PreTrainedTokenizerBase):
         if split_special_tokens is None:
             split_special_tokens = self.split_special_tokens
 
-        if self._tokenizer.encode_special_tokens != split_special_tokens:
+        if self._tokenizer.encode_special_tokens != split_special_tokens:  # type: ignore[union-attr]
             self._tokenizer.encode_special_tokens = split_special_tokens
 
         # Direct rust backend call
-        encodings = self._tokenizer.encode_batch(
+        encodings = self._tokenizer.encode_batch(  # type: ignore[union-attr]
             batch_text_or_text_pairs,
             add_special_tokens=add_special_tokens,
             is_pretokenized=is_split_into_words,
@@ -1029,7 +1030,7 @@ class TokenizersBackend(PreTrainedTokenizerBase):
             token_ids = [token_ids]
         if isinstance(token_ids, dict):
             token_ids = token_ids["input_ids"]
-        text = self._tokenizer.decode(token_ids, skip_special_tokens=skip_special_tokens)
+        text = self._tokenizer.decode(token_ids, skip_special_tokens=skip_special_tokens)  # type: ignore[union-attr]
 
         clean_up_tokenization_spaces = (
             clean_up_tokenization_spaces
@@ -1092,7 +1093,7 @@ class TokenizersBackend(PreTrainedTokenizerBase):
             `text_iterator`.
 
         """
-        tokenizer_json = json.loads(self._tokenizer.to_str())
+        tokenizer_json = json.loads(self._tokenizer.to_str())  # type: ignore[union-attr]
         # Remove added tokens for now (uses IDs of tokens)
         added_tokens = tokenizer_json.pop("added_tokens")
         # Remove post processor for now (uses IDs of tokens)

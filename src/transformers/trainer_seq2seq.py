@@ -88,8 +88,8 @@ class Seq2SeqTrainer(Trainer):
 
         # Override self.model.generation_config if a GenerationConfig is specified in args.
         # Priority: args.generation_config > model.generation_config > default GenerationConfig.
-        if self.args.generation_config is not None:
-            gen_config = self.load_generation_config(self.args.generation_config)
+        if self.args.generation_config is not None:  # type: ignore[union-attr]
+            gen_config = self.load_generation_config(self.args.generation_config)  # type: ignore[union-attr]
             self.model.generation_config = gen_config
 
     @staticmethod
@@ -182,11 +182,11 @@ class Seq2SeqTrainer(Trainer):
         if (
             gen_kwargs.get("max_length") is None
             and gen_kwargs.get("max_new_tokens") is None
-            and self.args.generation_max_length is not None
+            and self.args.generation_max_length is not None  # type: ignore[union-attr]
         ):
-            gen_kwargs["max_length"] = self.args.generation_max_length
-        if gen_kwargs.get("num_beams") is None and self.args.generation_num_beams is not None:
-            gen_kwargs["num_beams"] = self.args.generation_num_beams
+            gen_kwargs["max_length"] = self.args.generation_max_length  # type: ignore[union-attr]
+        if gen_kwargs.get("num_beams") is None and self.args.generation_num_beams is not None:  # type: ignore[union-attr]
+            gen_kwargs["num_beams"] = self.args.generation_num_beams  # type: ignore[union-attr]
         # We don't want to drop samples in general
         self.gather_function = self.accelerator.gather
         self._gen_kwargs = gen_kwargs
@@ -246,11 +246,11 @@ class Seq2SeqTrainer(Trainer):
         if (
             gen_kwargs.get("max_length") is None
             and gen_kwargs.get("max_new_tokens") is None
-            and self.args.generation_max_length is not None
+            and self.args.generation_max_length is not None  # type: ignore[union-attr]
         ):
-            gen_kwargs["max_length"] = self.args.generation_max_length
-        if gen_kwargs.get("num_beams") is None and self.args.generation_num_beams is not None:
-            gen_kwargs["num_beams"] = self.args.generation_num_beams
+            gen_kwargs["max_length"] = self.args.generation_max_length  # type: ignore[union-attr]
+        if gen_kwargs.get("num_beams") is None and self.args.generation_num_beams is not None:  # type: ignore[union-attr]
+            gen_kwargs["num_beams"] = self.args.generation_num_beams  # type: ignore[union-attr]
         self.gather_function = self.accelerator.gather
         self._gen_kwargs = gen_kwargs
 
@@ -287,7 +287,7 @@ class Seq2SeqTrainer(Trainer):
             labels (each being optional).
         """
 
-        if not self.args.predict_with_generate or prediction_loss_only:
+        if not self.args.predict_with_generate or prediction_loss_only:  # type: ignore[union-attr]
             return super().prediction_step(
                 model, inputs, prediction_loss_only=prediction_loss_only, ignore_keys=ignore_keys
             )
@@ -326,25 +326,25 @@ class Seq2SeqTrainer(Trainer):
         )
 
         with summon_full_params_context:
-            generated_tokens = self.model.generate(**generation_inputs, **gen_kwargs)
+            generated_tokens = self.model.generate(**generation_inputs, **gen_kwargs)  # type: ignore[union-attr]
 
         # Temporary hack to ensure the generation config is not initialized for each iteration of the evaluation loop
         # TODO: remove this hack when the legacy code that initializes generation_config from a model config is
         # removed in https://github.com/huggingface/transformers/blob/98d88b23f54e5a23e741833f1e973fdf600cc2c5/src/transformers/generation/utils.py#L1183
-        if self.model.generation_config._from_model_config:
-            self.model.generation_config._from_model_config = False
+        if self.model.generation_config._from_model_config:  # type: ignore[union-attr]
+            self.model.generation_config._from_model_config = False  # type: ignore[union-attr]
 
         # Retrieves GenerationConfig from model.generation_config
         # Update with defaults because earlier the generation config used to be init
         # with default values. Now we init it with `None` and keep defaults for BC
-        gen_config = self.model.generation_config
-        default_gen_config = gen_config._get_default_generation_params()
-        gen_config.update(**default_gen_config, defaults_only=True)
+        gen_config = self.model.generation_config  # type: ignore[union-attr]
+        default_gen_config = gen_config._get_default_generation_params()  # type: ignore[union-attr]
+        gen_config.update(**default_gen_config, defaults_only=True)  # type: ignore[union-attr]
         # in case the batch is shorter than max length, the output should be padded
-        if generated_tokens.shape[-1] < gen_config.max_length:
-            generated_tokens = self._pad_tensors_to_max_len(generated_tokens, gen_config.max_length)
-        elif gen_config.max_new_tokens is not None and generated_tokens.shape[-1] < gen_config.max_new_tokens + 1:
-            generated_tokens = self._pad_tensors_to_max_len(generated_tokens, gen_config.max_new_tokens + 1)
+        if generated_tokens.shape[-1] < gen_config.max_length:  # type: ignore[union-attr]
+            generated_tokens = self._pad_tensors_to_max_len(generated_tokens, gen_config.max_length)  # type: ignore[union-attr]
+        elif gen_config.max_new_tokens is not None and generated_tokens.shape[-1] < gen_config.max_new_tokens + 1:  # type: ignore[union-attr]
+            generated_tokens = self._pad_tensors_to_max_len(generated_tokens, gen_config.max_new_tokens + 1)  # type: ignore[union-attr]
 
         with torch.no_grad():
             if has_labels:
@@ -362,10 +362,10 @@ class Seq2SeqTrainer(Trainer):
 
         if has_labels:
             labels = inputs["labels"]
-            if labels.shape[-1] < gen_config.max_length:
-                labels = self._pad_tensors_to_max_len(labels, gen_config.max_length)
-            elif gen_config.max_new_tokens is not None and labels.shape[-1] < gen_config.max_new_tokens + 1:
-                labels = self._pad_tensors_to_max_len(labels, gen_config.max_new_tokens + 1)
+            if labels.shape[-1] < gen_config.max_length:  # type: ignore[union-attr]
+                labels = self._pad_tensors_to_max_len(labels, gen_config.max_length)  # type: ignore[union-attr]
+            elif gen_config.max_new_tokens is not None and labels.shape[-1] < gen_config.max_new_tokens + 1:  # type: ignore[union-attr]
+                labels = self._pad_tensors_to_max_len(labels, gen_config.max_new_tokens + 1)  # type: ignore[union-attr]
         else:
             labels = None
 
@@ -377,11 +377,11 @@ class Seq2SeqTrainer(Trainer):
             pad_token_id = (
                 self.processing_class.pad_token_id
                 if self.processing_class.pad_token_id is not None
-                else self.processing_class.eos_token_id
+                else self.processing_class.eos_token_id  # type: ignore[union-attr]
             )
         else:
-            if getattr(self.model.config, "pad_token_id", None) is not None:
-                pad_token_id = self.model.config.pad_token_id
+            if getattr(self.model.config, "pad_token_id", None) is not None:  # type: ignore[union-attr]
+                pad_token_id = self.model.config.pad_token_id  # type: ignore[union-attr]
             else:
                 raise ValueError("Pad_token_id must be set in the configuration of the model, in order to pad tensors")
 

@@ -837,8 +837,8 @@ def _preprocess_mask_arguments(
         return True, None, None, None, None, None, None
 
     # Move the mask to correct device, and potentially switch dtype for efficiency
-    if attention_mask is not None and attention_mask.ndim == 2:
-        attention_mask = attention_mask.to(device=inputs_embeds.device, dtype=torch.bool)
+    if attention_mask is not None and attention_mask.ndim == 2:  # type: ignore[union-attr]
+        attention_mask = attention_mask.to(device=inputs_embeds.device, dtype=torch.bool)  # type: ignore[union-attr]
 
     q_length = inputs_embeds.shape[1]
     # If using a cache, it can give all information about mask sizes based on seen tokens
@@ -1570,7 +1570,7 @@ def tensor_to_mask_visual(original_tensor: torch.Tensor, grid_size=(20, 40), sty
 class AttentionMask(torch.Tensor):
     def __new__(cls, data, style=None):
         # Create a new instance of AttentionMask as a Tensor
-        cls.style = style
+        cls.style = style  # type: ignore[unresolved-attribute]
         return torch.Tensor._make_subclass(cls, data, require_grad=False)
 
     def __init__(self, data):
@@ -1589,7 +1589,7 @@ class AttentionMask(torch.Tensor):
                 total_vis.append("To print out more, set AttentionMask.to_string(limit=N)")
                 total_vis.append("You can also index (AttentionMask[batch, head]) to choose a specific batch or head")
                 break
-            block_vis = tensor_to_mask_visual(dense_mask[batch_idx], grid_size=grid_size, style=self.style)
+            block_vis = tensor_to_mask_visual(dense_mask[batch_idx], grid_size=grid_size, style=self.style)  # type: ignore[unresolved-attribute]
             total_vis.append(block_vis)
 
         total_vis.append(f"torch.Tensor(shape={tuple(self.shape)}, dtype={self.dtype})")
@@ -1604,5 +1604,5 @@ class AttentionMask(torch.Tensor):
     @classmethod
     def from_tensor(cls, tensor: torch.Tensor, style: str | None = None) -> "AttentionMask":
         res = cls(tensor)
-        res.style = style
+        res.style = style  # type: ignore[unresolved-attribute]
         return res

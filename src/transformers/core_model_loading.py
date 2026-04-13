@@ -118,7 +118,7 @@ class Chunk(ConversionOps):
     def __init__(self, dim: int = 0):
         self.dim = dim
 
-    @torch.no_grad
+    @torch.no_grad()
     def convert(
         self, input_dict: dict[str, torch.Tensor], source_patterns: list[str], target_patterns: list[str], **kwargs
     ) -> dict[str, torch.Tensor]:
@@ -146,7 +146,7 @@ class Concatenate(ConversionOps):
     def __init__(self, dim: int = 0):
         self.dim = dim
 
-    @torch.no_grad
+    @torch.no_grad()
     def convert(
         self,
         input_dict: dict[str, list[torch.Tensor]],
@@ -187,7 +187,7 @@ class MergeModulelist(ConversionOps):
     def __init__(self, dim: int = 0):
         self.dim = dim
 
-    @torch.no_grad
+    @torch.no_grad()
     def convert(
         self,
         input_dict: dict[str, list[torch.Tensor]],
@@ -223,7 +223,7 @@ class SplitModulelist(ConversionOps):
     def __init__(self, dim: int = 0):
         self.dim = dim
 
-    @torch.no_grad
+    @torch.no_grad()
     def convert(
         self, input_dict: dict[str, torch.Tensor], source_patterns: list[str], target_patterns: list[str], **kwargs
     ) -> dict[str, torch.Tensor]:
@@ -266,7 +266,7 @@ class Transpose(ConversionOps):
         self.dim1 = dim1
         self.check_dims = check_dims
 
-    @torch.no_grad
+    @torch.no_grad()
     def convert(
         self, input_dict: dict[str, torch.Tensor], source_patterns: list[str], target_patterns: list[str], **kwargs
     ) -> dict[str, torch.Tensor]:
@@ -322,7 +322,7 @@ class PermuteForRope(ConversionOps):
         tensor = tensor.transpose(1, 2).reshape(dim1, dim2)
         return tensor
 
-    @torch.no_grad
+    @torch.no_grad()
     def convert(
         self,
         input_dict: dict[str, list[torch.Tensor]],
@@ -546,8 +546,8 @@ class WeightTransform:
         # The issues lie in the sources usually, so here we need to check the targets for the reversed mapping
 
         # We need to copy the exact original patterns to later reverse (before processing may change them)
-        self._original_source_patterns = self.source_patterns.copy()
-        self._original_target_patterns = self.target_patterns.copy()
+        self._original_source_patterns = self.source_patterns.copy()  # type: ignore[union-attr]
+        self._original_target_patterns = self.target_patterns.copy()  # type: ignore[union-attr]
 
         # Process target_patterns: detect capturing groups and replace with \1
         # Store the original capturing group patterns for reverse mapping
@@ -932,7 +932,7 @@ def set_param_for_module(
             loading_info.mismatched_keys.add((target_name, param_value.shape, expected_shape))
         else:
             # super important otherwise _init_weight will re-init the param
-            param_value._is_hf_initialized = True
+            param_value._is_hf_initialized = True  # type: ignore[unresolved-attribute]
             setattr(module_obj, param_name, param_value)
             if distributed_operation is not None:
                 distributed_operation.update_module_attributes(module_obj)
@@ -1174,7 +1174,7 @@ def convert_and_load_state_dict_in_model(
                 and hf_quantizer.param_needs_quantization(model, renamed_key)
             )
             if needs_quantization:
-                mapping.quantization_operation = hf_quantizer.get_quantize_ops()
+                mapping.quantization_operation = hf_quantizer.get_quantize_ops()  # type: ignore[union-attr]
 
             _dtype = dtype
             if (
@@ -1185,7 +1185,7 @@ def convert_and_load_state_dict_in_model(
                     or not (
                         tensor.get_dtype().startswith(("F", "BF"))
                         if hasattr(tensor, "get_dtype")
-                        else tensor.is_floating_point()
+                        else tensor.is_floating_point()  # type: ignore[unresolved-attribute]
                     )
                 )
             ):
@@ -1208,7 +1208,9 @@ def convert_and_load_state_dict_in_model(
                     if getattr(mapping, "distributed_operation", None) is None:
                         tp_layer = ALL_PARALLEL_STYLES[model.tp_plan[matched_tp_pattern]].__class__
                         mapping.distributed_operation = tp_layer(
-                            device_mesh=device_mesh, rank=device_mesh.get_local_rank(), empty_param=empty_param.clone()
+                            device_mesh=device_mesh,
+                            rank=device_mesh.get_local_rank(),
+                            empty_param=empty_param.clone(),  # type: ignore[union-attr]
                         )
                     shard_index = (
                         len(mapping.collected_tensors.get(source_pattern, []))
@@ -1277,7 +1279,7 @@ def convert_and_load_state_dict_in_model(
             thread_pool.shutdown(wait=False, cancel_futures=True)
 
     # Keep the current weight conversion mapping for later saving (in case it was coming directly from the user)
-    model._weight_conversions = weight_mapping
+    model._weight_conversions = weight_mapping  # type: ignore[unresolved-attribute]
     return loading_info, disk_offload_index
 
 
