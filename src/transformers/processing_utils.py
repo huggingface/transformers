@@ -579,6 +579,9 @@ class ProcessorMixin(PushToHubMixin):
     # Names need to be attr_class for attr in attributes
     _auto_class = None
     valid_processor_kwargs = ProcessingKwargs
+    chat_template: str | dict[str, str] | None
+    tokenizer: Any
+    audio_tokenizer: Any
 
     # args have to match the attributes class attribute
     def __init__(self, *args, **kwargs):
@@ -663,7 +666,7 @@ class ProcessorMixin(PushToHubMixin):
 
         kwargs = self._merge_kwargs(
             self.valid_processor_kwargs,
-            tokenizer_init_kwargs=self.tokenizer.init_kwargs if hasattr(self, "tokenizer") else {},  # type: ignore[unresolved-attribute]
+            tokenizer_init_kwargs=self.tokenizer.init_kwargs if hasattr(self, "tokenizer") else {},
             **kwargs,
         )
 
@@ -750,8 +753,8 @@ class ProcessorMixin(PushToHubMixin):
         # Special case, add `audio_tokenizer` dict which points to model weights and path
         if "audio_tokenizer" in output:
             audio_tokenizer_dict = {
-                "audio_tokenizer_class": self.audio_tokenizer.__class__.__name__,  # type: ignore[unresolved-attribute]
-                "audio_tokenizer_name_or_path": self.audio_tokenizer.name_or_path,  # type: ignore[unresolved-attribute]
+                "audio_tokenizer_class": self.audio_tokenizer.__class__.__name__,
+                "audio_tokenizer_name_or_path": self.audio_tokenizer.name_or_path,
             }
             output["audio_tokenizer"] = audio_tokenizer_dict
 
@@ -866,18 +869,18 @@ class ProcessorMixin(PushToHubMixin):
 
         # Save `chat_template` in its own file. We can't get it from `processor_dict` as we popped it in `to_dict`
         # to avoid serializing chat template in json config file. So let's get it from `self` directly
-        if isinstance(self.chat_template, str):  # type: ignore[unresolved-attribute]
+        if isinstance(self.chat_template, str):
             # New format for single templates is to save them as chat_template.jinja
             with open(output_chat_template_file_jinja, "w", encoding="utf-8") as f:
-                f.write(self.chat_template)  # type: ignore[unresolved-attribute]
+                f.write(self.chat_template)
             logger.info(f"chat template saved in {output_chat_template_file_jinja}")
-        elif isinstance(self.chat_template, dict):  # type: ignore[unresolved-attribute]
+        elif isinstance(self.chat_template, dict):
             # New format for multiple templates is to save the default as chat_template.jinja
             # and the other templates in the chat_templates/ directory
-            for template_name, template in self.chat_template.items():  # type: ignore[unresolved-attribute]
+            for template_name, template in self.chat_template.items():
                 if template_name == "default":
                     with open(output_chat_template_file_jinja, "w", encoding="utf-8") as f:
-                        f.write(self.chat_template["default"])  # type: ignore[unresolved-attribute]
+                        f.write(self.chat_template["default"])
                     logger.info(f"chat template saved in {output_chat_template_file_jinja}")
                 else:
                     os.makedirs(chat_template_dir, exist_ok=True)
@@ -1290,8 +1293,8 @@ class ProcessorMixin(PushToHubMixin):
                 # init with tokenizer init kwargs if necessary
                 if tokenizer_init_kwargs is not None and modality_key in tokenizer_init_kwargs:
                     value = (
-                        getattr(self.tokenizer, modality_key)  # type: ignore[unresolved-attribute]
-                        if hasattr(self.tokenizer, modality_key)  # type: ignore[unresolved-attribute]
+                        getattr(self.tokenizer, modality_key)
+                        if hasattr(self.tokenizer, modality_key)
                         else tokenizer_init_kwargs[modality_key]
                     )
                     default_kwargs[modality][modality_key] = value
@@ -1613,7 +1616,7 @@ class ProcessorMixin(PushToHubMixin):
         """
         if not hasattr(self, "tokenizer"):
             raise ValueError(f"Cannot batch decode text: {self.__class__.__name__} has no tokenizer.")
-        return self.tokenizer.batch_decode(*args, **kwargs)  # type: ignore[unresolved-attribute]
+        return self.tokenizer.batch_decode(*args, **kwargs)
 
     def decode(self, *args, **kwargs):
         """
@@ -1622,7 +1625,7 @@ class ProcessorMixin(PushToHubMixin):
         """
         if not hasattr(self, "tokenizer"):
             raise ValueError(f"Cannot decode text: {self.__class__.__name__} has no tokenizer.")
-        return self.tokenizer.decode(*args, **kwargs)  # type: ignore[unresolved-attribute]
+        return self.tokenizer.decode(*args, **kwargs)
 
     @property
     def model_input_names(self):
@@ -1704,24 +1707,24 @@ class ProcessorMixin(PushToHubMixin):
         processor_kwargs = processor_kwargs or {}
 
         if chat_template is None:
-            if isinstance(self.chat_template, dict) and "default" in self.chat_template:  # type: ignore[unresolved-attribute]
-                chat_template = self.chat_template["default"]  # type: ignore[unresolved-attribute]
-            elif isinstance(self.chat_template, dict):  # type: ignore[unresolved-attribute]
+            if isinstance(self.chat_template, dict) and "default" in self.chat_template:
+                chat_template = self.chat_template["default"]
+            elif isinstance(self.chat_template, dict):
                 raise ValueError(
                     'The processor has multiple chat templates but none of them are named "default". You need to specify'
                     " which one to use by passing the `chat_template` argument. Available templates are: "
-                    f"{', '.join(self.chat_template.keys())}"  # type: ignore[unresolved-attribute]
+                    f"{', '.join(self.chat_template.keys())}"
                 )
-            elif self.chat_template is not None:  # type: ignore[unresolved-attribute]
-                chat_template = self.chat_template  # type: ignore[unresolved-attribute]
+            elif self.chat_template is not None:
+                chat_template = self.chat_template
             else:
                 raise ValueError(
                     "Cannot use apply_chat_template because this processor does not have a chat template."
                 )
         else:
-            if isinstance(self.chat_template, dict) and chat_template in self.chat_template:  # type: ignore[unresolved-attribute]
+            if isinstance(self.chat_template, dict) and chat_template in self.chat_template:
                 # It's the name of a template, not a full template string
-                chat_template = self.chat_template[chat_template]  # type: ignore[unresolved-attribute]
+                chat_template = self.chat_template[chat_template]
             else:
                 # It's a template string, render it directly
                 pass
@@ -1843,7 +1846,7 @@ class ProcessorMixin(PushToHubMixin):
                 batch_videos.append(videos)
 
         # `kwargs` overwrite special tokens if both are present
-        template_kwargs = {**self.tokenizer.special_tokens_map, **kwargs}  # type: ignore[unresolved-attribute]
+        template_kwargs = {**self.tokenizer.special_tokens_map, **kwargs}
         prompt, generation_indices = render_jinja_template(
             conversations=conversations,
             tools=tools,
@@ -1866,7 +1869,7 @@ class ProcessorMixin(PushToHubMixin):
             # special tokens in the template (consistent with tokenizers). We dont want to raise warning, it will flood command line
             # without actionable solution for users
             single_prompt = prompt[0] if is_batched else prompt
-            if self.tokenizer.bos_token is not None and single_prompt.startswith(self.tokenizer.bos_token):  # type: ignore[unresolved-attribute]
+            if self.tokenizer.bos_token is not None and single_prompt.startswith(self.tokenizer.bos_token):
                 processor_kwargs["add_special_tokens"] = False
 
             # Always sample frames by default unless explicitly set to `False` by users. If users do not pass `num_frames`/`fps`
@@ -1943,7 +1946,7 @@ class ProcessorMixin(PushToHubMixin):
         """
         if not hasattr(self, "tokenizer"):
             raise ValueError("Can't use parse_response on a processor class without a tokenizer!")
-        return self.tokenizer.parse_response(response, schema)  # type: ignore[unresolved-attribute]
+        return self.tokenizer.parse_response(response, schema)
 
     def post_process_multimodal_output(
         self, generated_outputs, skip_special_tokens=True, generation_mode=None, **kwargs
@@ -1990,7 +1993,7 @@ class ProcessorMixin(PushToHubMixin):
         Returns:
             `list[str]`: The decoded text.
         """
-        return self.tokenizer.decode(generated_outputs, skip_special_tokens=skip_special_tokens, **kwargs)  # type: ignore[unresolved-attribute]
+        return self.tokenizer.decode(generated_outputs, skip_special_tokens=skip_special_tokens, **kwargs)
 
     def _check_special_mm_tokens(self, text: list[str], text_inputs: "BatchFeature", modalities: list[str]):
         """

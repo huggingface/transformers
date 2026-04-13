@@ -29,7 +29,7 @@ from dataclasses import dataclass, field
 from functools import partial, wraps
 from itertools import cycle
 from threading import Thread
-from typing import Optional, TypeVar, get_type_hints
+from typing import Any, Optional, TypeVar, get_type_hints
 from zipfile import is_zipfile
 
 import torch
@@ -840,20 +840,26 @@ class ModuleUtilsMixin:
     A few utilities for `torch.nn.Modules`, to be used as a mixin.
     """
 
+    # These are provided by nn.Module when used as a mixin
+    config: Any
+    parameters: Callable
+    named_modules: Callable
+    named_parameters: Callable
+
     @property
     def device(self) -> torch.device:
         """
         `torch.device`: The device on which the module is (assuming that all the module parameters are on the same
         device).
         """
-        return next(param.device for param in self.parameters())  # type: ignore[unresolved-attribute]
+        return next(param.device for param in self.parameters())
 
     @property
     def dtype(self) -> torch.dtype:
         """
         `torch.dtype`: The dtype of the module (assuming that all the module parameters have the same dtype).
         """
-        return next(param.dtype for param in self.parameters() if param.is_floating_point())  # type: ignore[unresolved-attribute]
+        return next(param.dtype for param in self.parameters() if param.is_floating_point())
 
     def invert_attention_mask(self, encoder_attention_mask: Tensor) -> Tensor:
         """
@@ -928,7 +934,7 @@ class ModuleUtilsMixin:
             # Provided a padding mask of dimensions [batch_size, seq_length]
             # - if the model is a decoder, apply a causal mask in addition to the padding mask
             # - if the model is an encoder, make the mask broadcastable to [batch_size, num_heads, seq_length, seq_length]
-            if getattr(self.config, "is_decoder", None):  # type: ignore[unresolved-attribute]
+            if getattr(self.config, "is_decoder", None):
                 extended_attention_mask = ModuleUtilsMixin.create_extended_attention_mask_for_decoder(
                     input_shape, attention_mask
                 )
@@ -965,9 +971,7 @@ class ModuleUtilsMixin:
 
         if exclude_embeddings:
             embedding_param_names = [
-                f"{name}.weight"
-                for name, module_type in self.named_modules()  # type: ignore[unresolved-attribute]
-                if isinstance(module_type, nn.Embedding)
+                f"{name}.weight" for name, module_type in self.named_modules() if isinstance(module_type, nn.Embedding)
             ]
 
         is_loaded_in_4bit = getattr(self, "is_loaded_in_4bit", False)
@@ -975,7 +979,7 @@ class ModuleUtilsMixin:
             import bitsandbytes as bnb
 
         total_params = 0
-        for name, param in self.named_parameters():  # type: ignore[unresolved-attribute]
+        for name, param in self.named_parameters():
             if exclude_embeddings and name in embedding_param_names:
                 continue
             if param.requires_grad or not only_trainable:

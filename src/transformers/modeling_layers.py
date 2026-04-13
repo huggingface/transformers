@@ -11,7 +11,9 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+from collections.abc import Callable
 from functools import partial
+from typing import Any
 
 import torch
 import torch.nn as nn
@@ -96,6 +98,10 @@ class GradientCheckpointingLayer(nn.Module):
 @auto_docstring
 class GenericForSequenceClassification:
     base_model_prefix = "model"
+    # Provided by PreTrainedModel when used as a mixin
+    config: Any
+    post_init: Callable
+    loss_function: Callable
 
     def __init__(self, config):
         super().__init__(config)  # type: ignore[too-many-positional-arguments]
@@ -105,7 +111,7 @@ class GenericForSequenceClassification:
         self.score = nn.Linear(config.hidden_size, self.num_labels, bias=False)
 
         # Initialize weights and apply final processing
-        self.post_init()  # type: ignore[unresolved-attribute]
+        self.post_init()
 
     @can_return_tuple
     @auto_docstring
@@ -137,13 +143,13 @@ class GenericForSequenceClassification:
         else:
             batch_size = inputs_embeds.shape[0]  # type: ignore[union-attr]
 
-        if self.config.pad_token_id is None and batch_size != 1:  # type: ignore[unresolved-attribute]
+        if self.config.pad_token_id is None and batch_size != 1:
             raise ValueError("Cannot handle batch sizes > 1 if no padding token is defined.")
-        if self.config.pad_token_id is None:  # type: ignore[unresolved-attribute]
+        if self.config.pad_token_id is None:
             last_non_pad_token = -1
         elif input_ids is not None:
             # To handle both left- and right- padding, we take the rightmost token that is not equal to pad_token_id
-            non_pad_mask = (input_ids != self.config.pad_token_id).to(logits.device, torch.int32)  # type: ignore[unresolved-attribute]
+            non_pad_mask = (input_ids != self.config.pad_token_id).to(logits.device, torch.int32)
             token_indices = torch.arange(input_ids.shape[-1], device=logits.device, dtype=torch.int32)
             last_non_pad_token = (token_indices * non_pad_mask).argmax(-1)
         else:
@@ -157,7 +163,7 @@ class GenericForSequenceClassification:
 
         loss = None
         if labels is not None:
-            loss = self.loss_function(logits=logits, labels=labels, pooled_logits=pooled_logits, config=self.config)  # type: ignore[unresolved-attribute]
+            loss = self.loss_function(logits=logits, labels=labels, pooled_logits=pooled_logits, config=self.config)
 
         return SequenceClassifierOutputWithPast(
             loss=loss,
@@ -171,6 +177,10 @@ class GenericForSequenceClassification:
 @auto_docstring
 class GenericForQuestionAnswering:
     base_model_prefix = "model"
+    # Provided by PreTrainedModel when used as a mixin
+    config: Any
+    post_init: Callable
+    loss_function: Callable
 
     def __init__(self, config):
         super().__init__(config)  # type: ignore[too-many-positional-arguments]
@@ -179,7 +189,7 @@ class GenericForQuestionAnswering:
         self.qa_outputs = nn.Linear(config.hidden_size, 2)
 
         # Initialize weights and apply final processing
-        self.post_init()  # type: ignore[unresolved-attribute]
+        self.post_init()
 
     def get_input_embeddings(self):
         return getattr(self, self.base_model_prefix).embed_tokens
@@ -218,7 +228,7 @@ class GenericForQuestionAnswering:
 
         loss = None
         if start_positions is not None and end_positions is not None:
-            loss = self.loss_function(start_logits, end_logits, start_positions, end_positions, **kwargs)  # type: ignore[unresolved-attribute]
+            loss = self.loss_function(start_logits, end_logits, start_positions, end_positions, **kwargs)
 
         return QuestionAnsweringModelOutput(
             loss=loss,
@@ -232,6 +242,10 @@ class GenericForQuestionAnswering:
 @auto_docstring
 class GenericForTokenClassification:
     base_model_prefix = "model"
+    # Provided by PreTrainedModel when used as a mixin
+    config: Any
+    post_init: Callable
+    loss_function: Callable
 
     def __init__(self, config):
         super().__init__(config)  # type: ignore[too-many-positional-arguments]
@@ -248,7 +262,7 @@ class GenericForTokenClassification:
         self.score = nn.Linear(config.hidden_size, config.num_labels)
 
         # Initialize weights and apply final processing
-        self.post_init()  # type: ignore[unresolved-attribute]
+        self.post_init()
 
     @can_return_tuple
     @auto_docstring
@@ -278,7 +292,7 @@ class GenericForTokenClassification:
 
         loss = None
         if labels is not None:
-            loss = self.loss_function(logits, labels, self.config)  # type: ignore[unresolved-attribute]
+            loss = self.loss_function(logits, labels, self.config)
 
         return TokenClassifierOutput(
             loss=loss,
