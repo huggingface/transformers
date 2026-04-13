@@ -837,8 +837,8 @@ class PaddleOCRVisionEncoder(nn.Module):
         attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
             The attention_mask used in forward function shape [batch_size X sequence_length] if not None.
         rotary_pos_ids (`torch.Tensor` of shape `(sequence_length, 2)`, *optional*):
-            Precomputed rotary position ids for the row and column coordinates. If not provided, will be computed
-            based on `image_grid_thw`.
+            Precomputed rotary position ids as `(row, column)` pairs. If not provided, will be computed based on
+            `image_grid_thw`.
         """
         hidden_states = inputs_embeds
         attention_mask = create_bidirectional_mask(
