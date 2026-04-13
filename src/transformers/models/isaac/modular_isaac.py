@@ -42,6 +42,7 @@ from ...utils.import_utils import (
     is_torch_available,
     is_torchdynamo_compiling,
     is_torchvision_available,
+    requires,
 )
 from ...utils.output_capturing import capture_outputs
 from ..qwen3_vl.modeling_qwen3_vl import (
@@ -1091,6 +1092,7 @@ def get_image_size_for_max_num_patches(
 
 
 @auto_docstring
+@requires(backends=("vision",))
 class IsaacImageProcessor(TorchvisionBackend):
     model_input_names = ["pixel_values", "image_grid_thw"]
     valid_kwargs = IsaacImageProcessorKwargs
@@ -1334,6 +1336,7 @@ _coord_re = re.compile(r"\(\s*(\d+)\s*,\s*(\d+)\s*\)")
 
 
 @auto_docstring
+@requires(backends=("vision",))
 class IsaacProcessor(ProcessorMixin):
     def __init__(
         self,

@@ -29,7 +29,7 @@ from ...image_utils import ImageInput, PILImageResampling, SizeDict, make_nested
 from ...processing_utils import ImagesKwargs, Unpack
 from ...utils import TensorType, auto_docstring
 from ...utils.constants import IMAGENET_STANDARD_MEAN, IMAGENET_STANDARD_STD
-from ...utils.import_utils import is_torch_available
+from ...utils.import_utils import is_torch_available, requires
 
 
 if is_torch_available():
@@ -174,6 +174,7 @@ def get_image_size_for_max_num_patches(
 
 
 @auto_docstring
+@requires(backends=("vision",))
 class IsaacImageProcessor(TorchvisionBackend):
     model_input_names = ["pixel_values", "image_grid_thw"]
     valid_kwargs = IsaacImageProcessorKwargs

@@ -26,7 +26,7 @@ from ...feature_extraction_utils import BatchFeature
 from ...image_utils import ImageInput, make_nested_list_of_images
 from ...processing_utils import MultiModalData, ProcessingKwargs, ProcessorMixin
 from ...utils import auto_docstring
-from ...utils.import_utils import is_torch_available
+from ...utils.import_utils import is_torch_available, requires
 from .image_processing_isaac import IsaacImageProcessorKwargs
 from .modeling_isaac import BoundingBox, Polygon, SinglePoint
 
@@ -61,6 +61,7 @@ _coord_re = re.compile(r"\(\s*(\d+)\s*,\s*(\d+)\s*\)")
 
 
 @auto_docstring
+@requires(backends=("vision",))
 class IsaacProcessor(ProcessorMixin):
     def __init__(
         self,
