@@ -561,11 +561,13 @@ class VideoLlama3Model(VideoLlama3PreTrainedModel):
         image_merge_sizes (`torch.Tensor` of shape `(num_images,)`):
             The spatial downsampling ratio of each image feature.
         """
+        image_kwargs = kwargs.pop("image_kwargs", None) or {}
         vision_outputs = self.vision_model(
             pixel_values=pixel_values,
             grid_thw=image_grid_thw,
             merge_sizes=image_merge_sizes,
             return_dict=True,
+            **image_kwargs,
             **kwargs,
         )
         last_hidden_state = vision_outputs.last_hidden_state

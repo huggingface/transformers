@@ -1877,8 +1877,9 @@ class Qwen3OmniMoeThinkerForConditionalGeneration(
         video_grid_thw (`torch.LongTensor` of shape `(num_videos, 3)`, *optional*):
             The temporal, height and width of feature shape of each video in LLM.
         """
+        video_kwargs = kwargs.pop("video_kwargs", None) or {}
         pixel_values_videos = pixel_values_videos.type(self.visual.dtype)
-        return self.visual(pixel_values_videos, grid_thw=video_grid_thw, **kwargs)
+        return self.visual(pixel_values_videos, grid_thw=video_grid_thw, **video_kwargs, **kwargs)
 
     @can_return_tuple
     @auto_docstring
@@ -1894,8 +1895,9 @@ class Qwen3OmniMoeThinkerForConditionalGeneration(
         image_grid_thw (`torch.LongTensor` of shape `(num_images, 3)`, *optional*):
             The temporal, height and width of feature shape of each image in LLM.
         """
+        image_kwargs = kwargs.pop("image_kwargs", None) or {}
         pixel_values = pixel_values.type(self.visual.dtype)
-        return self.visual(pixel_values, grid_thw=image_grid_thw, **kwargs)
+        return self.visual(pixel_values, grid_thw=image_grid_thw, **image_kwargs, **kwargs)
 
     @can_return_tuple
     @auto_docstring
@@ -1921,10 +1923,12 @@ class Qwen3OmniMoeThinkerForConditionalGeneration(
             audio_feature_lengths = None
 
         feature_lens = audio_feature_lengths if audio_feature_lengths is not None else feature_attention_mask.sum(-1)
+        audio_kwargs = kwargs.pop("audio_kwargs", None) or {}
         audio_outputs = self.audio_tower(
             input_features,
             feature_lens=feature_lens,
             return_dict=True,
+            **audio_kwargs,
             **kwargs,
         )
 
