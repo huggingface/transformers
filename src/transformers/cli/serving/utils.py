@@ -930,6 +930,12 @@ class BaseHandler:
         for message in messages:
             parsed = {"role": message["role"], "content": []}
 
+            # Forward tool-use fields so apply_chat_template can handle multi-turn tool conversations
+            if "tool_calls" in message:
+                parsed["tool_calls"] = message["tool_calls"]
+            if "tool_call_id" in message:
+                parsed["tool_call_id"] = message["tool_call_id"]
+
             content = message.get("content")
             if modality == Modality.LLM:
                 if isinstance(content, str):
