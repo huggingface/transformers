@@ -79,13 +79,12 @@ class Qwen2VLProcessor(ProcessorMixin):
             - **image_grid_thw** -- List of image 3D grid in LLM. Returned when `images` is not `None`.
             - **video_grid_thw** -- List of video 3D grid in LLM. Returned when `videos` is not `None`.
         """
+        return_extra_tensors = kwargs.pop("return_extra_tensors", False)
         output_kwargs = self._merge_kwargs(
             Qwen2VLProcessorKwargs,
             tokenizer_init_kwargs=self.tokenizer.init_kwargs,
             **kwargs,
         )
-
-        return_extra_tensors = kwargs.pop("return_extra_tensors", False)
 
         image_inputs = videos_inputs = {}
         if images is not None:

@@ -1001,13 +1001,12 @@ class VideoLlama3Processor(Qwen2VLProcessor):
         videos: VideoInput = None,
         **kwargs: Unpack[VideoLlama3ProcessorKwargs],
     ) -> BatchFeature:
+        return_extra_tensors = kwargs.pop("return_extra_tensors", False)
         output_kwargs = self._merge_kwargs(
             VideoLlama3ProcessorKwargs,
             tokenizer_init_kwargs=self.tokenizer.init_kwargs,
             **kwargs,
         )
-
-        return_extra_tensors = kwargs.pop("return_extra_tensors", False)
 
         image_inputs = videos_inputs = {}
         if images is not None:
