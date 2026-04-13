@@ -89,6 +89,7 @@ def get_pos_embed_indices(
     """
     N = num_grid_per_side
     m = spatial_merge_size
+    device = grid_thw.device
 
     idx_parts: list[list[torch.Tensor]] = [[] for _ in range(4)]
     weight_parts: list[list[torch.Tensor]] = [[] for _ in range(4)]
@@ -96,8 +97,8 @@ def get_pos_embed_indices(
     for t, h, w in grid_thw.tolist():
         t, h, w = int(t), int(h), int(w)
 
-        h_idxs = torch.linspace(0, N - 1, h)
-        w_idxs = torch.linspace(0, N - 1, w)
+        h_idxs = torch.linspace(0, N - 1, h, device=device)
+        w_idxs = torch.linspace(0, N - 1, w, device=device)
 
         h_floor = h_idxs.int()
         w_floor = w_idxs.int()
@@ -124,8 +125,8 @@ def get_pos_embed_indices(
         ]
 
         # Compose spatial merge reorder into the indices
-        h_idx = torch.arange(h).view(h // m, m)
-        w_idx = torch.arange(w).view(w // m, m)
+        h_idx = torch.arange(h, device=device).view(h // m, m)
+        w_idx = torch.arange(w, device=device).view(w // m, m)
         reorder = (h_idx[:, :, None, None] * w + w_idx[None, None, :, :]).permute(0, 2, 1, 3).flatten().repeat(t)
 
         for i in range(4):
