@@ -184,8 +184,8 @@ class MiMoV2FlashModelTest(CausalLMModelTest, unittest.TestCase):
         rope_params = _make_rope_params()
         config.rope_parameters = {"full_attention": rope_params.copy(), "sliding_attention": rope_params.copy()}
         original_rope = rope_class(config=config).to(torch_device)
-        original_cos_short, original_sin_short = original_rope(x, position_ids_short)
-        original_cos_long, original_sin_long = original_rope(x, position_ids_long)
+        original_cos_short, original_sin_short = original_rope(x, position_ids_short, layer_type="full_attention")
+        original_cos_long, original_sin_long = original_rope(x, position_ids_long, layer_type="full_attention")
         torch.testing.assert_close(original_cos_short, original_cos_long[:, :short_input_length, :])
         torch.testing.assert_close(original_sin_short, original_sin_long[:, :short_input_length, :])
 
@@ -194,8 +194,8 @@ class MiMoV2FlashModelTest(CausalLMModelTest, unittest.TestCase):
         rope_params = _make_rope_params(rope_type="linear", factor=scaling_factor)
         config.rope_parameters = {"full_attention": rope_params.copy(), "sliding_attention": rope_params.copy()}
         linear_scaling_rope = rope_class(config=config).to(torch_device)
-        linear_cos_short, linear_sin_short = linear_scaling_rope(x, position_ids_short)
-        linear_cos_long, linear_sin_long = linear_scaling_rope(x, position_ids_long)
+        linear_cos_short, linear_sin_short = linear_scaling_rope(x, position_ids_short, layer_type="full_attention")
+        linear_cos_long, linear_sin_long = linear_scaling_rope(x, position_ids_long, layer_type="full_attention")
         torch.testing.assert_close(linear_cos_short, linear_cos_long[:, :short_input_length, :])
         torch.testing.assert_close(linear_sin_short, linear_sin_long[:, :short_input_length, :])
         for new_position in range(0, long_input_length, scaling_factor):
@@ -209,23 +209,24 @@ class MiMoV2FlashModelTest(CausalLMModelTest, unittest.TestCase):
         rope_params = _make_rope_params(rope_type="dynamic", factor=scaling_factor)
         config.rope_parameters = {"full_attention": rope_params.copy(), "sliding_attention": rope_params.copy()}
         ntk_scaling_rope = rope_class(config=config).to(torch_device)
-        ntk_cos_short, ntk_sin_short = ntk_scaling_rope(x, position_ids_short)
-        ntk_cos_long, ntk_sin_long = ntk_scaling_rope(x, position_ids_long)
+        ntk_cos_short, ntk_sin_short = ntk_scaling_rope(x, position_ids_short, layer_type="full_attention")
+        ntk_cos_long, ntk_sin_long = ntk_scaling_rope(x, position_ids_long, layer_type="full_attention")
         torch.testing.assert_close(ntk_cos_short, original_cos_short)
         torch.testing.assert_close(ntk_sin_short, original_sin_short)
         with self.assertRaises(AssertionError):
             torch.testing.assert_close(ntk_cos_long, original_cos_long)
         with self.assertRaises(AssertionError):
             torch.testing.assert_close(ntk_sin_long, original_sin_long)
-        self.assertTrue((ntk_scaling_rope.inv_freq <= original_rope.inv_freq).all())
+        inv_freq_attr = "full_attention_inv_freq"
+        self.assertTrue((getattr(ntk_scaling_rope, inv_freq_attr) <= getattr(original_rope, inv_freq_attr)).all())
 
         # Sanity check Yarn RoPE scaling
         # Scaling should be over the entire input
         rope_params = _make_rope_params(rope_type="yarn", factor=scaling_factor)
         config.rope_parameters = {"full_attention": rope_params.copy(), "sliding_attention": rope_params.copy()}
         yarn_scaling_rope = rope_class(config=config).to(torch_device)
-        yarn_cos_short, yarn_sin_short = yarn_scaling_rope(x, position_ids_short)
-        yarn_cos_long, yarn_sin_long = yarn_scaling_rope(x, position_ids_long)
+        yarn_cos_short, yarn_sin_short = yarn_scaling_rope(x, position_ids_short, layer_type="full_attention")
+        yarn_cos_long, yarn_sin_long = yarn_scaling_rope(x, position_ids_long, layer_type="full_attention")
         torch.testing.assert_close(yarn_cos_short, yarn_cos_long[:, :short_input_length, :])
         torch.testing.assert_close(yarn_sin_short, yarn_sin_long[:, :short_input_length, :])
         with self.assertRaises(AssertionError):
@@ -316,8 +317,8 @@ class MiMoV2FlashModelTest(CausalLMModelTest, unittest.TestCase):
         hidden_states = model.embed_tokens(input_ids)
         position_ids = torch.arange(input_ids.shape[1]).unsqueeze(0)
 
-        full_cos, _ = model.rotary_emb(hidden_states, position_ids)
-        swa_cos, _ = model.swa_rotary_emb(hidden_states, position_ids)
+        full_cos, _ = model.rotary_emb(hidden_states, position_ids, layer_type="full_attention")
+        swa_cos, _ = model.rotary_emb(hidden_states, position_ids, layer_type="sliding_attention")
 
         self.assertEqual(full_cos.shape[-1], 4)
         self.assertEqual(swa_cos.shape[-1], 4)

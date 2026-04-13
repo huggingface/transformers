@@ -13,9 +13,6 @@
 # limitations under the License.
 
 
-import copy
-from collections.abc import Callable
-
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -29,12 +26,13 @@ from ...generation import GenerationMixin
 from ...integrations import use_experts_implementation, use_kernelized_func
 from ...masking_utils import create_causal_mask, create_sliding_window_causal_mask
 from ...modeling_outputs import MoeCausalLMOutputWithPast, MoeModelOutputWithPast
-from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
+from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
-from ...utils.generic import maybe_autocast, merge_with_config_defaults
+from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import OutputRecorder, capture_outputs
+from ..gemma3.modeling_gemma3 import Gemma3RotaryEmbedding
 from ..glm4_moe.modeling_glm4_moe import apply_rotary_pos_emb  # noqa: F401
 from ..llama.modeling_llama import LlamaDecoderLayer, eager_attention_forward, repeat_kv
 from ..mixtral.modeling_mixtral import (
@@ -213,75 +211,27 @@ class MiMoV2FlashRMSNorm(MixtralRMSNorm):
     pass
 
 
-# NOTE @casinca I kept a `MiMoV2FlashRotaryEmbedding` because MiMo is unique in the repo (afaik didn't find exact
-# similar case), in the sense that:
-# it combines asymmetric/dual theta RoPE but also asymmetric/dual head dims.
-# So inheritance from `Glm4MoeRotaryEmbedding` or `Gemma3RotaryEmbedding` wasn't clean and I reverted.
-class MiMoV2FlashRotaryEmbedding(nn.Module):
-    """RoPE module parameterized per attention type and per head dim."""
-
-    inv_freq: torch.Tensor  # fix linting for `register_buffer`
-
-    def __init__(self, config: MiMoV2FlashConfig, layer_type: str = "full_attention", device=None):
-        super().__init__()
-        # flattening for `config.rope_parameters` for compatibility with `dynamic_rope_update`
-        attention_config = copy.copy(config)
-        attention_config.rope_parameters = dict(config.rope_parameters[layer_type])
-        attention_config.rope_parameters.setdefault("rope_type", "default")
-
-        # Only SWA layers need to be overridden, full attention values are already present in `attention_config`
-        if layer_type == "sliding_attention":
-            attention_config.qk_head_dim = config.swa_qk_head_dim
-            attention_config.num_attention_heads = config.swa_num_attention_heads
-            attention_config.num_key_value_heads = config.swa_num_key_value_heads
-
-        # Rest of the code is ~inspired by the `Gemma3RotaryEmbedding` class
-        self.max_seq_len_cached = attention_config.max_position_embeddings
-        self.original_max_seq_len = attention_config.max_position_embeddings
-
-        self.config = attention_config
-
-        self.rope_type = self.config.rope_parameters["rope_type"]
-        rope_init_fn: Callable = self.compute_default_rope_parameters
-        if self.rope_type != "default":
-            rope_init_fn = ROPE_INIT_FUNCTIONS[self.rope_type]
-        inv_freq, self.attention_scaling = rope_init_fn(self.config, device)
-
-        self.register_buffer("inv_freq", inv_freq, persistent=False)
-        self.register_buffer("original_inv_freq", inv_freq.clone(), persistent=False)
-        self.layer_type = layer_type
+class MiMoV2FlashRotaryEmbedding(Gemma3RotaryEmbedding):
+    def __init__(self, config: MiMoV2FlashConfig, device=None):
+        super().__init__(config, device=device)
 
     @staticmethod
     def compute_default_rope_parameters(
         config: MiMoV2FlashConfig | None = None,
         device=None,
         seq_len: int | None = None,
+        layer_type: str | None = None,
     ):
-        config.standardize_rope_params()
-        base = config.rope_parameters["rope_theta"]
-        partial_rotary_factor = config.rope_parameters.get("partial_rotary_factor", 0.334)
-        qk_head_dim = config.qk_head_dim
+        rope_params = config.rope_parameters[layer_type]
+        base = rope_params["rope_theta"]
+        partial_rotary_factor = rope_params.get("partial_rotary_factor", 0.334)
+        qk_head_dim = config.swa_qk_head_dim if layer_type == "sliding_attention" else config.qk_head_dim
         dim = int(qk_head_dim * partial_rotary_factor)
         attention_factor = 1.0
         inv_freq = 1.0 / (
             base ** (torch.arange(0, dim, 2, dtype=torch.int64).to(device=device, dtype=torch.float) / dim)
         )
         return inv_freq, attention_factor
-
-    @torch.no_grad()
-    @dynamic_rope_update  # power user: used with advanced RoPE types (e.g. dynamic rope)
-    def forward(self, x, position_ids):
-        inv_freq_expanded = self.inv_freq[None, :, None].float().expand(position_ids.shape[0], -1, 1).to(x.device)
-        position_ids_expanded = position_ids[:, None, :].float()
-
-        device_type = x.device.type if isinstance(x.device.type, str) and x.device.type != "mps" else "cpu"
-        with maybe_autocast(device_type=device_type, enabled=False):
-            freqs = (inv_freq_expanded.float() @ position_ids_expanded.float()).transpose(1, 2)
-            emb = torch.cat((freqs, freqs), dim=-1)
-            cos = emb.cos() * self.attention_scaling
-            sin = emb.sin() * self.attention_scaling
-
-        return cos.to(dtype=x.dtype), sin.to(dtype=x.dtype)
 
 
 # NOTE @casinca: Concerning this TopKRouter:
@@ -578,6 +528,14 @@ class MiMoV2FlashPreTrainedModel(MixtralPreTrainedModel):
         elif isinstance(module, MiMoV2FlashTopKRouter):
             init.normal_(module.weight, mean=0.0, std=std)
             init.zeros_(module.e_score_correction_bias)
+        elif isinstance(module, MiMoV2FlashRotaryEmbedding):
+            for layer_type in module.layer_types:
+                rope_init_fn = module.compute_default_rope_parameters
+                if module.rope_type[layer_type] != "default":
+                    rope_init_fn = ROPE_INIT_FUNCTIONS[module.rope_type[layer_type]]
+                curr_inv_freq, _ = rope_init_fn(module.config, layer_type=layer_type)
+                init.copy_(getattr(module, f"{layer_type}_inv_freq"), curr_inv_freq)
+                init.copy_(getattr(module, f"{layer_type}_original_inv_freq"), curr_inv_freq)
 
 
 @auto_docstring
@@ -593,10 +551,8 @@ class MiMoV2FlashModel(MixtralModel):
         )
         self.norm = MiMoV2FlashRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
-        self.has_sliding_layers = any(lt == "sliding_attention" for lt in config.layer_types)
-        self.rotary_emb = MiMoV2FlashRotaryEmbedding(config=config, layer_type="full_attention")
-        if self.has_sliding_layers:
-            self.swa_rotary_emb = MiMoV2FlashRotaryEmbedding(config=config, layer_type="sliding_attention")
+        self.rotary_emb = MiMoV2FlashRotaryEmbedding(config=config)
+        self.has_sliding_layers = "sliding_attention" in self.rotary_emb.layer_types
 
         self.gradient_checkpointing = False
 
@@ -645,10 +601,9 @@ class MiMoV2FlashModel(MixtralModel):
                 causal_mask_mapping["sliding_attention"] = create_sliding_window_causal_mask(**mask_kwargs)
 
         hidden_states = inputs_embeds
-        position_embeddings = self.rotary_emb(hidden_states, position_ids)
-        position_embeddings_mapping = {"full_attention": position_embeddings}
-        if self.has_sliding_layers:
-            position_embeddings_mapping["sliding_attention"] = self.swa_rotary_emb(hidden_states, position_ids)
+        position_embeddings_mapping = {
+            lt: self.rotary_emb(hidden_states, position_ids, layer_type=lt) for lt in self.rotary_emb.layer_types
+        }
 
         for layer_idx, decoder_layer in enumerate(self.layers[: self.config.num_hidden_layers]):
             layer_type = self.config.layer_types[layer_idx]
