@@ -494,6 +494,9 @@ class BaseGenerateManager(ABC):
     - :class:`CBGenerateManager` — continuous batching with paged attention.
     """
 
+    def init_cb(self, model: "PreTrainedModel", gen_config: "GenerationConfig") -> None:
+        """Initialize continuous batching. No-op for non-CB managers."""
+
     @abstractmethod
     def generate_streaming(
         self,

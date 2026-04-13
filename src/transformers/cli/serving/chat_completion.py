@@ -40,7 +40,6 @@ from transformers import BatchEncoding
 from .utils import (
     BaseGenerateManager,
     BaseHandler,
-    CBGenerateManager,
     ToolCallParser,
     _StreamError,
     detect_tool_format,
@@ -130,8 +129,6 @@ class ChatCompletionHandler(BaseHandler):
         gen_config = self._build_generation_config(body, model.generation_config, use_cb=use_cb)
         # TODO: remove when CB supports per-request generation config
         if use_cb:
-            if not isinstance(gen_manager, CBGenerateManager):
-                raise TypeError("Expected CBGenerateManager when use_cb is True")
             gen_manager.init_cb(model, gen_config)
 
         # Detect tool support for the loaded model
