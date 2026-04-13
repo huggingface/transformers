@@ -201,21 +201,56 @@ def add_model_to_auto_mappings(
     filenames_to_add = [
         (filename.replace(old_lowercase_name, "auto"), to_add) for filename, to_add in filenames_to_add[1:]
     ]
-    # fast tokenizer/image processor have the same auto mappings as normal ones
+    # fast tokenizer has the same auto mappings as normal ones
     corrected_filenames_to_add = []
+    has_image_processor = has_video_processor = False
     for file, to_add in filenames_to_add:
-        if re.search(r"(?:tokenization)|(?:image_processing)_auto_fast.py", file):
+        if "image_processing" in file:
+            has_image_processor = True
+        elif "video_processing" in file:
+            has_video_processor = True
+        elif re.search(r"(?:tokenization)|(?:image_processing)_auto_fast.py", file):
             previous_file, previous_to_add = corrected_filenames_to_add[-1]
             corrected_filenames_to_add[-1] = (previous_file, previous_to_add or to_add)
         else:
             corrected_filenames_to_add.append((file, to_add))
 
-    # Add the config mappings directly as the handling for config is a bit different
+    # Add the config and image/video processor mappings directly as the handling is a bit different
     add_content_to_file(
-        repo_path / "src" / "transformers" / "models" / "auto" / "configuration_auto.py",
-        new_content=f'        ("{new_lowercase_name}", "{new_cased_name}Config"),\n',
-        add_after="CONFIG_MAPPING_NAMES = OrderedDict[str, str](\n    [\n        # Add configs here\n",
+        repo_path / "src" / "transformers" / "models" / "auto" / "auto_mappings.py",
+        new_content=f'("{new_lowercase_name}", "{new_cased_name}Config"),\n        ',
+        add_after="CONFIG_MAPPING_NAMES = OrderedDict(\n    [\n        ",
     )
+    autofile = (repo_path / "src" / "transformers" / "models" / "auto" / "auto_mappings.py").read_text()
+    if has_image_processor:
+        matching_lines = re.findall(rf'^\s+\("{old_lowercase_name}",\s+{{[^}}]+}}\),?$', autofile, re.MULTILINE)
+        if matching_lines:
+            match = matching_lines[0]
+            add_content_to_file(
+                repo_path / "src" / "transformers" / "models" / "auto" / "auto_mappings.py",
+                new_content=match.replace(old_lowercase_name, new_lowercase_name).replace(
+                    old_cased_name, new_cased_name
+                )
+                + "\n",
+                add_after="IMAGE_PROCESSOR_MAPPING_NAMES = OrderedDict(\n    [\n",
+            )
+    if has_video_processor:
+        # Extract the VIDEO_PROCESSOR_MAPPING_NAMES block first
+        block_match = re.search(
+            r"VIDEO_PROCESSOR_MAPPING_NAMES\s*=\s*OrderedDict\(\s*\[(.*?)\]\s*\)", autofile, re.DOTALL
+        )
+        block = block_match.group(1)
+        matching_lines = re.findall(rf'^\s+\("{old_lowercase_name}",\s+"[^"]+"\),?$', block, re.MULTILINE)
+        if matching_lines:
+            match = matching_lines[0]
+            add_content_to_file(
+                repo_path / "src" / "transformers" / "models" / "auto" / "auto_mappings.py",
+                new_content=match.replace(old_lowercase_name, new_lowercase_name).replace(
+                    old_cased_name, new_cased_name
+                )
+                + "\n",
+                add_after="VIDEO_PROCESSOR_MAPPING_NAMES = OrderedDict(\n    [\n",
+            )
 
     for filename, to_add in corrected_filenames_to_add:
         if to_add:
