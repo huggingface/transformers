@@ -474,7 +474,7 @@ def _load_state_dict_into_zero3_model(model_to_load, state_dict, load_config=Non
 
     # PyTorch's `_load_from_state_dict` does not copy parameters in a module's descendants
     # so we need to apply the function recursively.
-def load(module: nn.Module, state_dict, prefix="", assign_to_params_buffers=False):
+    def load(module: nn.Module, state_dict, prefix="", assign_to_params_buffers=False):
         local_metadata = {} if metadata is None else metadata.get(prefix[:-1], {})
         local_metadata["assign_to_params_buffers"] = assign_to_params_buffers
 
@@ -491,7 +491,7 @@ def load(module: nn.Module, state_dict, prefix="", assign_to_params_buffers=Fals
             for k in named_parameters:
                 if k in state_dict:
                     param = named_parameters[k]
-                    # crutial to not init the weight again
+                    # crucial to not init the weight again
                     param._is_hf_initialized = True
                     params_to_gather.append(param)
                     missing_keys.discard(k)
@@ -517,9 +517,9 @@ def load(module: nn.Module, state_dict, prefix="", assign_to_params_buffers=Fals
             if child is not None:
                 load(child, state_dict, prefix + name + ".", assign_to_params_buffers)
 
-        load(model_to_load, state_dict, assign_to_params_buffers=False)
+    load(model_to_load, state_dict, assign_to_params_buffers=False)
 
-        return error_msgs, missing_keys
+    return error_msgs, missing_keys
 
 
 def deepspeed_optim_sched(trainer, hf_deepspeed_config, args, num_training_steps, model_parameters):
