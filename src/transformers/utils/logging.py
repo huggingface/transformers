@@ -30,7 +30,7 @@ from logging import (
     WARNING,
 )
 from logging import captureWarnings as _captureWarnings
-from typing import Any
+from typing import Any, cast
 
 import huggingface_hub.utils as hf_hub_utils
 from tqdm import auto as tqdm_lib
@@ -325,7 +325,7 @@ def warning_advice(self, *args, **kwargs):
     self.warning(*args, **kwargs)
 
 
-logging.Logger.warning_advice = warning_advice  # type: ignore[unresolved-attribute]
+cast(Any, logging.Logger).warning_advice = warning_advice
 
 
 @functools.lru_cache(None)
@@ -340,7 +340,7 @@ def warning_once(self, *args, **kwargs):
     self.warning(*args, **kwargs)
 
 
-logging.Logger.warning_once = warning_once  # type: ignore[unresolved-attribute]
+cast(Any, logging.Logger).warning_once = warning_once
 
 
 @functools.lru_cache(None)
@@ -355,7 +355,7 @@ def info_once(self, *args, **kwargs):
     self.info(*args, **kwargs)
 
 
-logging.Logger.info_once = info_once  # type: ignore[unresolved-attribute]
+cast(Any, logging.Logger).info_once = info_once
 
 
 class EmptyTqdm:

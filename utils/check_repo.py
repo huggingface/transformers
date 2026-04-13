@@ -327,6 +327,7 @@ IGNORE_NON_AUTO_CONFIGURED = PRIVATE_MODELS.copy() + [
     "BridgeTowerForImageAndTextRetrieval",
     "BridgeTowerForMaskedLM",
     "BridgeTowerForContrastiveLearning",
+    "Sam3_1ViTModel",  # Building part of bigger (tested) model.
     "CLIPSegForImageSegmentation",
     "CLIPSegVisionModel",
     "CLIPSegTextModel",

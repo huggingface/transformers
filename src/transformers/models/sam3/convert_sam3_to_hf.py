@@ -20,17 +20,39 @@ Original repository: https://github.com/facebookresearch/segment-anything-3
 
 import argparse
 import gc
+import json
 import os
+from pathlib import Path
 
+import numpy as np
 import regex as re
 import torch
+from PIL import Image
 
-from transformers import CLIPTokenizerFast, Sam3Config, Sam3ImageProcessorFast, Sam3Model, Sam3Processor
-from transformers.utils import logging
+from transformers import CLIPTokenizerFast, Sam3Config, Sam3ImageProcessor, Sam3Model
+from transformers.utils import PROCESSOR_NAME, logging
 
 
 logging.set_verbosity_info()
 logger = logging.get_logger(__name__)
+
+SAM3_1_DETECTOR_ONLY_EXCLUDED_SUBSTRINGS = (
+    ".interactive_convs.",
+    ".propagation_convs.",
+)
+
+SAM3_1_UNUSED_FPN_LAYER_KEYS = (
+    "vision_encoder.neck.fpn_layers.3.proj1.weight",
+    "vision_encoder.neck.fpn_layers.3.proj1.bias",
+    "vision_encoder.neck.fpn_layers.3.proj2.weight",
+    "vision_encoder.neck.fpn_layers.3.proj2.bias",
+)
+
+UNUSED_CONVERTED_KEY_PREFIXES = (
+    "geometry_encoder.points_direct_project.",
+    "geometry_encoder.points_pool_project.",
+    "geometry_encoder.points_pos_enc_project.",
+)
 
 # fmt: off
 ORIGINAL_TO_CONVERTED_KEY_MAPPING = {
@@ -246,11 +268,25 @@ def split_qkv(state_dict: dict) -> dict:
     return state_dict
 
 
-def load_original_state_dict(checkpoint_path: str) -> dict[str, torch.Tensor]:
-    """Load the original SAM3 checkpoint."""
+def _normalize_original_state_dict(state_dict: dict[str, torch.Tensor]) -> tuple[dict[str, torch.Tensor], str]:
+    if any(key.startswith("detector.") for key in state_dict):
+        print("Detected merged SAM 3.1 checkpoint; extracting detector weights for Sam3Model conversion.")
+        normalized_state_dict = {
+            key.removeprefix("detector."): value
+            for key, value in state_dict.items()
+            if key.startswith("detector.")
+            and not any(excluded_substring in key for excluded_substring in SAM3_1_DETECTOR_ONLY_EXCLUDED_SUBSTRINGS)
+        }
+        return normalized_state_dict, "sam3.1_detector"
+
+    return state_dict, "sam3"
+
+
+def load_original_state_dict(checkpoint_path: str) -> tuple[dict[str, torch.Tensor], str]:
+    """Load the original SAM3 or SAM 3.1 detector checkpoint."""
     print(f"Loading original checkpoint from {checkpoint_path}")
 
-    checkpoint = torch.load(checkpoint_path, map_location="cpu")
+    checkpoint = torch.load(checkpoint_path, map_location="cpu", weights_only=True)
 
     # Handle different checkpoint formats
     if "model" in checkpoint:
@@ -260,8 +296,10 @@ def load_original_state_dict(checkpoint_path: str) -> dict[str, torch.Tensor]:
     else:
         state_dict = checkpoint
 
-    print(f"Loaded {len(state_dict)} keys from checkpoint")
-    return state_dict
+    state_dict, checkpoint_variant = _normalize_original_state_dict(state_dict)
+
+    print(f"Loaded {len(state_dict)} keys from checkpoint ({checkpoint_variant})")
+    return state_dict, checkpoint_variant
 
 
 def get_sam3_config(
@@ -293,12 +331,129 @@ def get_sam3_config(
     return config
 
 
+def save_sam3_processor(
+    output_path: str,
+    image_processor: Sam3ImageProcessor,
+    tokenizer: CLIPTokenizerFast,
+    target_size: int,
+    point_pad_value: int = -10,
+):
+    image_processor.save_pretrained(output_path)
+    tokenizer.save_pretrained(output_path)
+
+    processor_config = {
+        "processor_class": "Sam3Processor",
+        "image_processor": image_processor.to_dict(),
+        "target_size": target_size,
+        "point_pad_value": point_pad_value,
+    }
+    processor_config_path = os.path.join(output_path, PROCESSOR_NAME)
+    with open(processor_config_path, "w", encoding="utf-8") as processor_file:
+        json.dump(processor_config, processor_file, indent=2, sort_keys=True)
+        processor_file.write("\n")
+
+    print(f"Processor config saved in {processor_config_path}")
+
+
+def _compare_outputs(
+    name: str, reference: torch.Tensor, reloaded: torch.Tensor, atol: float = 1e-5, rtol: float = 1e-5
+):
+    if reference.shape != reloaded.shape:
+        raise AssertionError(f"{name} shape mismatch: {reference.shape} != {reloaded.shape}")
+    if not torch.allclose(reference, reloaded, atol=atol, rtol=rtol):
+        max_abs_diff = (reference - reloaded).abs().max().item()
+        raise AssertionError(f"{name} mismatch after save/load round-trip. max_abs_diff={max_abs_diff}")
+
+
+def verify_image_preprocessing_against_upstream(
+    image_processor: Sam3ImageProcessor, sam3_repo_path: str = "/Users/nielsrogge/Documents/python_projecten/sam3"
+):
+    from torchvision.transforms import v2
+
+    upstream_processor_path = Path(sam3_repo_path) / "sam3" / "model" / "sam3_image_processor.py"
+    if not upstream_processor_path.exists():
+        raise FileNotFoundError(f"Could not find upstream SAM 3 image processor at {upstream_processor_path}")
+
+    source = upstream_processor_path.read_text(encoding="utf-8")
+    required_snippets = (
+        "v2.ToDtype(torch.uint8, scale=True)",
+        "v2.Resize(size=(resolution, resolution))",
+        "v2.ToDtype(torch.float32, scale=True)",
+        "v2.Normalize(mean=[0.5, 0.5, 0.5], std=[0.5, 0.5, 0.5])",
+    )
+    missing_snippets = [snippet for snippet in required_snippets if snippet not in source]
+    if missing_snippets:
+        raise AssertionError(
+            "The upstream SAM 3 preprocessing source changed and the local parity helper needs an update. "
+            f"Missing snippets: {missing_snippets}"
+        )
+
+    resolution = image_processor.size["height"]
+    sample_image = Image.fromarray(np.arange(32 * 48 * 3, dtype=np.uint8).reshape(32, 48, 3))
+    hf_pixel_values = image_processor(images=sample_image, return_tensors="pt")["pixel_values"][0]
+
+    upstream_transform = v2.Compose(
+        [
+            v2.ToDtype(torch.uint8, scale=True),
+            v2.Resize(size=(resolution, resolution)),
+            v2.ToDtype(torch.float32, scale=True),
+            v2.Normalize(mean=[0.5, 0.5, 0.5], std=[0.5, 0.5, 0.5]),
+        ]
+    )
+    upstream_pixel_values = upstream_transform(v2.functional.to_image(sample_image))
+
+    _compare_outputs("pixel_values", upstream_pixel_values, hf_pixel_values, atol=1e-6, rtol=1e-6)
+
+
+def verify_conversion(
+    model: Sam3Model,
+    output_path: str,
+    tokenizer: CLIPTokenizerFast,
+    image_processor: Sam3ImageProcessor,
+    sam3_repo_path: str = "/Users/nielsrogge/Documents/python_projecten/sam3",
+):
+    config = model.config
+    image_size = config.vision_config.backbone_config.image_size
+
+    generator = torch.Generator(device="cpu")
+    generator.manual_seed(0)
+
+    pixel_values = torch.randn(1, 3, image_size, image_size, generator=generator)
+    text_inputs = tokenizer("cat", return_tensors="pt", padding="max_length", max_length=32)
+
+    model = model.to("cpu").eval()
+    reloaded_model = Sam3Model.from_pretrained(output_path).to("cpu").eval()
+
+    with torch.no_grad():
+        reference_outputs = model(
+            pixel_values=pixel_values,
+            input_ids=text_inputs["input_ids"],
+            attention_mask=text_inputs["attention_mask"],
+        )
+        reloaded_outputs = reloaded_model(
+            pixel_values=pixel_values,
+            input_ids=text_inputs["input_ids"],
+            attention_mask=text_inputs["attention_mask"],
+        )
+
+    _compare_outputs("pred_masks", reference_outputs.pred_masks, reloaded_outputs.pred_masks)
+    _compare_outputs("pred_boxes", reference_outputs.pred_boxes, reloaded_outputs.pred_boxes)
+    _compare_outputs("pred_logits", reference_outputs.pred_logits, reloaded_outputs.pred_logits)
+    _compare_outputs("presence_logits", reference_outputs.presence_logits, reloaded_outputs.presence_logits)
+    verify_image_preprocessing_against_upstream(image_processor=image_processor, sam3_repo_path=sam3_repo_path)
+
+    del reloaded_model
+    gc.collect()
+
+
 def convert_sam3_checkpoint(
     checkpoint_path: str,
     output_path: str,
     config: Sam3Config | None = None,
     push_to_hub: bool = False,
     repo_id: str | None = None,
+    verify: bool = True,
+    sam3_repo_path: str = "/Users/nielsrogge/Documents/python_projecten/sam3",
 ):
     """
     Convert SAM3 checkpoint from original format to HuggingFace format.
@@ -309,6 +464,7 @@ def convert_sam3_checkpoint(
         config: Optional Sam3Config to use (otherwise creates default)
         push_to_hub: Whether to push the model to the Hub
         repo_id: Repository ID for pushing to Hub
+        verify: Whether to verify the saved checkpoint by reloading it and running a deterministic forward pass
     """
     # Create output directory
     os.makedirs(output_path, exist_ok=True)
@@ -323,7 +479,7 @@ def convert_sam3_checkpoint(
 
     # Load and convert weights
     print("Loading original checkpoint...")
-    state_dict_old = load_original_state_dict(checkpoint_path)
+    state_dict_old, checkpoint_variant = load_original_state_dict(checkpoint_path)
 
     print("Converting checkpoint keys...")
     all_keys = list(state_dict_old.keys())
@@ -349,10 +505,29 @@ def convert_sam3_checkpoint(
     print("Splitting QKV projections...")
     state_dict_new = split_qkv(state_dict_new)
 
+    rope_embedding_keys = [key for key in state_dict_new if key.endswith(".rotary_emb.rope_embeddings")]
+    for key in rope_embedding_keys:
+        state_dict_new.pop(key)
+
+    unused_converted_keys = [
+        key for key in state_dict_new if any(key.startswith(prefix) for prefix in UNUSED_CONVERTED_KEY_PREFIXES)
+    ]
+    for key in unused_converted_keys:
+        state_dict_new.pop(key)
+
     # Transpose CLIP text projection (stored transposed in original)
     if "text_encoder.text_projection.weight" in state_dict_new:
         print("Transposing CLIP text_projection...")
         state_dict_new["text_encoder.text_projection.weight"] = state_dict_new["text_encoder.text_projection.weight"].T
+
+    if checkpoint_variant == "sam3.1_detector":
+        reference_model = Sam3Model(config)
+        reference_state_dict = reference_model.state_dict()
+        for key in SAM3_1_UNUSED_FPN_LAYER_KEYS:
+            state_dict_new[key] = torch.zeros_like(reference_state_dict[key])
+        del reference_model, reference_state_dict
+        gc.collect()
+        print("Initialized the unused 0.5x FPN layer to zeros for deterministic SAM 3.1 detector conversion.")
 
     # Load into HF model
     print("Loading weights into Sam3Model...")
@@ -363,11 +538,15 @@ def convert_sam3_checkpoint(
         logger.warning(f"Missing keys ({len(missing_keys)}):")
         for key in missing_keys:  # Show more keys for debugging
             logger.warning(f"  - {key}")
+    else:
+        print("No missing keys while loading the converted checkpoint.")
 
     if unexpected_keys:
         logger.warning(f"Unexpected keys ({len(unexpected_keys)}):")
         for key in unexpected_keys:  # Show more keys for debugging
             logger.warning(f"  - {key}")
+    else:
+        print("No unexpected keys while loading the converted checkpoint.")
 
     # Note: Some missing/unexpected keys are expected:
     # - vision_encoder.backbone.embeddings.patch_embeddings.projection.bias: patch projection has bias=False
@@ -383,10 +562,14 @@ def convert_sam3_checkpoint(
 
     # Save processor
     print("Creating and saving processor...")
-    image_processor = Sam3ImageProcessorFast()
+    image_processor = Sam3ImageProcessor()
     tokenizer = CLIPTokenizerFast.from_pretrained("openai/clip-vit-base-patch32", max_length=32, model_max_length=32)
-    processor = Sam3Processor(image_processor=image_processor, tokenizer=tokenizer)
-    processor.save_pretrained(output_path)
+    save_sam3_processor(
+        output_path=output_path,
+        image_processor=image_processor,
+        tokenizer=tokenizer,
+        target_size=image_processor.size["height"],
+    )
 
     # Push to hub if requested
     if push_to_hub:
@@ -394,7 +577,22 @@ def convert_sam3_checkpoint(
             raise ValueError("repo_id must be provided when push_to_hub=True")
         print(f"Pushing model to Hub: {repo_id}")
         model.push_to_hub(repo_id)
-        processor.push_to_hub(repo_id)
+        image_processor.push_to_hub(repo_id)
+        tokenizer.push_to_hub(repo_id)
+
+    if verify:
+        print("\nRunning conversion verification...")
+        verify_conversion(
+            model,
+            output_path=output_path,
+            tokenizer=tokenizer,
+            image_processor=image_processor,
+            sam3_repo_path=sam3_repo_path,
+        )
+        print(
+            "Verification passed: the saved SAM3 checkpoint reloads and matches the in-memory model, "
+            "and image preprocessing matches the upstream SAM 3 implementation."
+        )
 
     print("Conversion complete!")
     print(f"Model saved successfully to: {output_path}")
@@ -402,17 +600,6 @@ def convert_sam3_checkpoint(
     # Cleanup
     del state_dict_new, model
     gc.collect()
-
-    # Verify the conversion by reloading
-    print("\nVerifying converted checkpoint can be loaded...")
-    try:
-        model = Sam3Model.from_pretrained(output_path)
-        param_count = sum(p.numel() for p in model.parameters())
-        print(f"✓ Successfully loaded model with {param_count:,} parameters")
-        del model
-        gc.collect()
-    except Exception as e:
-        print(f"✗ Failed to reload model: {e}")
 
     print("\n" + "=" * 80)
     print("Conversion finished!")
@@ -449,6 +636,14 @@ def main():
         default=None,
         help="Repository ID for pushing to Hub (e.g., 'facebook/sam3-large')",
     )
+    parser.add_argument("--no_verify", dest="verify", action="store_false")
+    parser.set_defaults(verify=True)
+    parser.add_argument(
+        "--sam3_repo_path",
+        type=str,
+        default="/Users/nielsrogge/Documents/python_projecten/sam3",
+        help="Path to the upstream SAM 3 repository used for preprocessing parity verification",
+    )
 
     args = parser.parse_args()
 
@@ -457,6 +652,8 @@ def main():
         output_path=args.output_path,
         push_to_hub=args.push_to_hub,
         repo_id=args.repo_id,
+        verify=args.verify,
+        sam3_repo_path=args.sam3_repo_path,
     )
 
 
