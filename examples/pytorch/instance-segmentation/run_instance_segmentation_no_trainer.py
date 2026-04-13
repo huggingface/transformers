@@ -14,7 +14,7 @@
 
 # /// script
 # dependencies = [
-#     "transformers==5.5.3",
+#     "transformers==5.5.4",
 #     "albumentations >= 1.4.16",
 #     "timm",
 #     "datasets",

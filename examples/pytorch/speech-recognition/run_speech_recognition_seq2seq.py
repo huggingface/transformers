@@ -15,7 +15,7 @@
 
 # /// script
 # dependencies = [
-#     "transformers==5.5.3",
+#     "transformers==5.5.4",
 #     "datasets[audio] >= 1.18.0",
 #     "torch >= 1.5",
 #     "torchaudio",
