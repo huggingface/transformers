@@ -94,7 +94,7 @@ def _build_checkpoint_conversion_mapping():
         # almost unmatchable regex (i doubt any sd has `/` char), We NEVER revert back, even accidentally
         "clip_vision_model": [
             WeightRenaming(
-                source_patterns=r"vision_model\.(.+)$",
+                source_patterns=r"(?<=\.)vision_model\.(.+)$",
                 target_patterns=r"(?<=\/)\1(?<=\/)",
             ),
         ],
