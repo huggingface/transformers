@@ -488,7 +488,7 @@ class Qwen3VLVisionModel(Qwen3VLPreTrainedModel):
         if rotary_pos_ids is None:
             rotary_pos_ids = get_rotary_pos_ids(grid_thw, self.spatial_merge_size)
 
-        rotary_pos_emb = self.rotary_pos_emb(rotary_pos_ids)
+        rotary_pos_emb = self.rotary_pos_emb(rotary_pos_ids).to(hidden_states.dtype)
 
         if cu_seqlens is None:
             cu_seqlens = get_vision_cu_seqlens(grid_thw)
@@ -699,6 +699,10 @@ class Qwen3VLModel(Qwen2VLModel):
             The tensors corresponding to the input images.
         image_grid_thw (`torch.LongTensor` of shape `(num_images, 3)`, *optional*):
             The temporal, height and width of feature shape of each image in LLM.
+        image_cu_seqlens (<fill_type>):
+            <fill_docstring>
+        image_rotary_pos_ids (<fill_type>):
+            <fill_docstring>
         """
         pixel_values = pixel_values.type(self.visual.dtype)
         vision_output: BaseModelOutputWithDeepstackFeatures = self.visual(
@@ -731,9 +735,19 @@ class Qwen3VLModel(Qwen2VLModel):
             The tensors corresponding to the input videos.
         video_grid_thw (`torch.LongTensor` of shape `(num_videos, 3)`, *optional*):
             The temporal, height and width of feature shape of each video in LLM.
+        video_cu_seqlens (<fill_type>):
+            <fill_docstring>
+        video_rotary_pos_ids (<fill_type>):
+            <fill_docstring>
         """
         # Same implementation as for images
-        return self.get_image_features(pixel_values_videos, video_grid_thw, image_cu_seqlens=video_cu_seqlens, image_rotary_pos_ids=video_rotary_pos_ids, **kwargs)
+        return self.get_image_features(
+            pixel_values_videos,
+            video_grid_thw,
+            image_cu_seqlens=video_cu_seqlens,
+            image_rotary_pos_ids=video_rotary_pos_ids,
+            **kwargs,
+        )
 
     @auto_docstring
     @can_return_tuple
@@ -772,7 +786,10 @@ class Qwen3VLModel(Qwen2VLModel):
 
         if pixel_values is not None:
             image_outputs: BaseModelOutputWithDeepstackFeatures = self.get_image_features(
-                pixel_values, image_grid_thw, image_cu_seqlens, image_rotary_pos_ids,
+                pixel_values,
+                image_grid_thw,
+                image_cu_seqlens,
+                image_rotary_pos_ids,
                 return_dict=True,
             )
             image_embeds = image_outputs.pooler_output
@@ -785,7 +802,10 @@ class Qwen3VLModel(Qwen2VLModel):
 
         if pixel_values_videos is not None:
             video_outputs: BaseModelOutputWithDeepstackFeatures = self.get_video_features(
-                pixel_values_videos, video_grid_thw, video_cu_seqlens, video_rotary_pos_ids,
+                pixel_values_videos,
+                video_grid_thw,
+                video_cu_seqlens,
+                video_rotary_pos_ids,
                 return_dict=True,
             )
             video_embeds = video_outputs.pooler_output

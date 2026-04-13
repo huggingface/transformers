@@ -253,7 +253,7 @@ class Qwen2_5_VisionTransformerPretrainedModel(Qwen2_5_VLPreTrainedModel):
         if rotary_pos_ids is None:
             rotary_pos_ids = get_rotary_pos_ids(grid_thw, self.spatial_merge_size)
 
-        rotary_pos_emb = self.rotary_pos_emb(rotary_pos_ids)
+        rotary_pos_emb = self.rotary_pos_emb(rotary_pos_ids).to(hidden_states.dtype)
 
         if cu_seqlens is None:
             cu_seqlens = get_vision_cu_seqlens(grid_thw)
@@ -508,6 +508,14 @@ class Qwen2_5_VLModel(Qwen2VLModel):
             The rope index difference between sequence length and multimodal rope.
         second_per_grid_ts (`torch.Tensor` of shape `(num_videos)`, *optional*):
             The time interval (in seconds) for each grid along the temporal dimension in the 3D position IDs.
+        image_cu_seqlens (<fill_type>):
+            <fill_docstring>
+        image_rotary_pos_ids (<fill_type>):
+            <fill_docstring>
+        video_cu_seqlens (<fill_type>):
+            <fill_docstring>
+        video_rotary_pos_ids (<fill_type>):
+            <fill_docstring>
         """
 
         if inputs_embeds is None:
@@ -515,7 +523,10 @@ class Qwen2_5_VLModel(Qwen2VLModel):
 
         if pixel_values is not None:
             image_embeds = self.get_image_features(
-                pixel_values, image_grid_thw, image_cu_seqlens, image_rotary_pos_ids,
+                pixel_values,
+                image_grid_thw,
+                image_cu_seqlens,
+                image_rotary_pos_ids,
             ).pooler_output
             image_embeds = torch.cat(image_embeds, dim=0).to(inputs_embeds.device, inputs_embeds.dtype)
             image_mask, _ = self.get_placeholder_mask(
@@ -525,7 +536,10 @@ class Qwen2_5_VLModel(Qwen2VLModel):
 
         if pixel_values_videos is not None:
             video_embeds = self.get_video_features(
-                pixel_values_videos, video_grid_thw, video_cu_seqlens, video_rotary_pos_ids,
+                pixel_values_videos,
+                video_grid_thw,
+                video_cu_seqlens,
+                video_rotary_pos_ids,
             ).pooler_output
             video_embeds = torch.cat(video_embeds, dim=0).to(inputs_embeds.device, inputs_embeds.dtype)
             _, video_mask = self.get_placeholder_mask(

@@ -718,6 +718,10 @@ class GlmImageModel(Glm4vModel):
             The tensors corresponding to the input images.
         image_grid_thw (`torch.LongTensor` of shape `(num_images, 3)`, *optional*):
             The temporal, height and width of feature shape of each image in LLM.
+        image_cu_seqlens (<fill_type>):
+            <fill_docstring>
+        image_rotary_pos_ids (<fill_type>):
+            <fill_docstring>
         """
         pixel_values = pixel_values.type(self.visual.dtype)
         vision_outputs = self.visual(

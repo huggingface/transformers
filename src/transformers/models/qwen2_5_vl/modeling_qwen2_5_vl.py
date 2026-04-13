@@ -412,7 +412,7 @@ class Qwen2_5_VisionTransformerPretrainedModel(Qwen2_5_VLPreTrainedModel):
         if rotary_pos_ids is None:
             rotary_pos_ids = get_rotary_pos_ids(grid_thw, self.spatial_merge_size)
 
-        rotary_pos_emb = self.rotary_pos_emb(rotary_pos_ids)
+        rotary_pos_emb = self.rotary_pos_emb(rotary_pos_ids).to(hidden_states.dtype)
 
         if cu_seqlens is None:
             cu_seqlens = get_vision_cu_seqlens(grid_thw)
@@ -1264,6 +1264,14 @@ class Qwen2_5_VLModel(Qwen2_5_VLPreTrainedModel):
             The rope index difference between sequence length and multimodal rope.
         second_per_grid_ts (`torch.Tensor` of shape `(num_videos)`, *optional*):
             The time interval (in seconds) for each grid along the temporal dimension in the 3D position IDs.
+        image_cu_seqlens (`torch.Tensor` of shape `(num_image_patches + 1,)`, *optional*):
+            Precomputed cumulative sequence lengths for image patches, used for packed variable-length attention.
+        image_rotary_pos_ids (`torch.Tensor` of shape `(num_image_tokens, 2)`, *optional*):
+            Precomputed (row, col) position IDs for image rotary embeddings.
+        video_cu_seqlens (`torch.Tensor` of shape `(num_video_patches + 1,)`, *optional*):
+            Precomputed cumulative sequence lengths for video patches, used for packed variable-length attention.
+        video_rotary_pos_ids (`torch.Tensor` of shape `(num_video_tokens, 2)`, *optional*):
+            Precomputed (row, col) position IDs for video rotary embeddings.
         """
 
         if inputs_embeds is None:
@@ -1387,6 +1395,10 @@ class Qwen2_5_VLForConditionalGeneration(Qwen2_5_VLPreTrainedModel, GenerationMi
             The tensors corresponding to the input videos.
         video_grid_thw (`torch.LongTensor` of shape `(num_videos, 3)`, *optional*):
             The temporal, height and width of feature shape of each video in LLM.
+        video_cu_seqlens (`torch.IntTensor`, *optional*):
+            Precomputed cumulative sequence lengths for videos (from `get_cu_seqlens`).
+        video_rotary_pos_ids (`torch.LongTensor`, *optional*):
+            Precomputed (row, col) position IDs for video rotary embeddings (from `get_rotary_pos_ids`).
         """
         return self.model.get_video_features(
             pixel_values_videos,
@@ -1410,6 +1422,10 @@ class Qwen2_5_VLForConditionalGeneration(Qwen2_5_VLPreTrainedModel, GenerationMi
             The tensors corresponding to the input images.
         image_grid_thw (`torch.LongTensor` of shape `(num_images, 3)`, *optional*):
             The temporal, height and width of feature shape of each image in LLM.
+        image_cu_seqlens (`torch.IntTensor`, *optional*):
+            Precomputed cumulative sequence lengths for images (from `get_cu_seqlens`).
+        image_rotary_pos_ids (`torch.LongTensor`, *optional*):
+            Precomputed (row, col) position IDs for image rotary embeddings (from `get_rotary_pos_ids`).
         """
         return self.model.get_image_features(
             pixel_values,

@@ -643,7 +643,7 @@ class Glm4vVisionModel(Glm4vPreTrainedModel):
         if cu_seqlens is None:
             cu_seqlens = get_vision_cu_seqlens(grid_thw)
 
-        rotary_emb = self.rotary_pos_emb(rotary_pos_ids)
+        rotary_emb = self.rotary_pos_emb(rotary_pos_ids).to(hidden_states.dtype)
         emb = torch.cat((rotary_emb, rotary_emb), dim=-1)
         position_embeddings = (emb.cos(), emb.sin())
 
@@ -798,6 +798,10 @@ class Glm4vModel(Qwen2VLModel):
             The tensors corresponding to the input videos.
         video_grid_thw (`torch.LongTensor` of shape `(num_videos, 3)`, *optional*):
             The temporal, height and width of feature shape of each video in LLM.
+        video_cu_seqlens (<fill_type>):
+            <fill_docstring>
+        video_rotary_pos_ids (<fill_type>):
+            <fill_docstring>
         """
         pixel_values_videos = pixel_values_videos.type(self.visual.dtype)
         # reshape video_grid_thw -> [b, 3] -> [1, h, w] * frames

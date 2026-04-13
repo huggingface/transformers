@@ -1398,6 +1398,8 @@ class PaddleOCRVLForConditionalGeneration(PaddleOCRVLPreTrainedModel, Generation
         self,
         pixel_values: torch.FloatTensor,
         image_grid_thw: torch.LongTensor | None = None,
+        image_cu_seqlens: torch.Tensor | None = None,
+        image_rotary_pos_ids: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
         r"""
@@ -1405,8 +1407,18 @@ class PaddleOCRVLForConditionalGeneration(PaddleOCRVLPreTrainedModel, Generation
             The tensors corresponding to the input images.
         image_grid_thw (`torch.LongTensor` of shape `(num_images, 3)`, *optional*):
             The temporal, height and width of feature shape of each image in LLM.
+        image_cu_seqlens (`torch.IntTensor`, *optional*):
+            Precomputed cumulative sequence lengths for images (from `get_cu_seqlens`).
+        image_rotary_pos_ids (`torch.LongTensor`, *optional*):
+            Precomputed (row, col) position IDs for image rotary embeddings (from `get_rotary_pos_ids`).
         """
-        return self.model.get_image_features(pixel_values=pixel_values, image_grid_thw=image_grid_thw, **kwargs)
+        return self.model.get_image_features(
+            pixel_values,
+            image_grid_thw,
+            image_cu_seqlens,
+            image_rotary_pos_ids,
+            **kwargs,
+        )
 
     @can_return_tuple
     @auto_docstring

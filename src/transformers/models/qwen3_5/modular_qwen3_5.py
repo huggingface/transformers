@@ -462,7 +462,7 @@ class Qwen3_5VisionModel(Qwen3VLVisionModel):
         if rotary_pos_ids is None:
             rotary_pos_ids = get_rotary_pos_ids(grid_thw, self.spatial_merge_size)
 
-        rotary_pos_emb = self.rotary_pos_emb(rotary_pos_ids)
+        rotary_pos_emb = self.rotary_pos_emb(rotary_pos_ids).to(hidden_states.dtype)
 
         if cu_seqlens is None:
             cu_seqlens = get_vision_cu_seqlens(grid_thw)

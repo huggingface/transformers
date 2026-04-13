@@ -1211,6 +1211,10 @@ class Qwen3OmniMoeThinkerForConditionalGeneration(Qwen2_5OmniThinkerForCondition
             The tensors corresponding to the input videos.
         video_grid_thw (`torch.LongTensor` of shape `(num_videos, 3)`, *optional*):
             The temporal, height and width of feature shape of each video in LLM.
+        video_cu_seqlens (<fill_type>):
+            <fill_docstring>
+        video_rotary_pos_ids (<fill_type>):
+            <fill_docstring>
         """
         pixel_values_videos = pixel_values_videos.type(self.visual.dtype)
         return self.visual(
@@ -1236,6 +1240,10 @@ class Qwen3OmniMoeThinkerForConditionalGeneration(Qwen2_5OmniThinkerForCondition
             The tensors corresponding to the input images.
         image_grid_thw (`torch.LongTensor` of shape `(num_images, 3)`, *optional*):
             The temporal, height and width of feature shape of each image in LLM.
+        image_cu_seqlens (<fill_type>):
+            <fill_docstring>
+        image_rotary_pos_ids (<fill_type>):
+            <fill_docstring>
         """
         pixel_values = pixel_values.type(self.visual.dtype)
         return self.visual(

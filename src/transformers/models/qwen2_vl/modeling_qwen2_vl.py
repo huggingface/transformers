@@ -744,7 +744,7 @@ class Qwen2VisionTransformerPretrainedModel(Qwen2VLPreTrainedModel):
         if rotary_pos_ids is None:
             rotary_pos_ids = get_rotary_pos_ids(grid_thw, self.spatial_merge_size)
 
-        rotary_pos_emb = self.rotary_pos_emb(rotary_pos_ids)
+        rotary_pos_emb = self.rotary_pos_emb(rotary_pos_ids).to(hidden_states.dtype)
 
         emb = torch.cat((rotary_pos_emb, rotary_pos_emb), dim=-1)
         position_embeddings = (emb.cos(), emb.sin())
@@ -1266,7 +1266,10 @@ class Qwen2VLModel(Qwen2VLPreTrainedModel):
 
         if pixel_values is not None:
             image_embeds = self.get_image_features(
-                pixel_values, image_grid_thw, image_cu_seqlens, image_rotary_pos_ids,
+                pixel_values,
+                image_grid_thw,
+                image_cu_seqlens,
+                image_rotary_pos_ids,
             ).pooler_output
             image_embeds = torch.cat(image_embeds, dim=0).to(inputs_embeds.device, inputs_embeds.dtype)
             image_mask, _ = self.get_placeholder_mask(
@@ -1276,7 +1279,10 @@ class Qwen2VLModel(Qwen2VLPreTrainedModel):
 
         if pixel_values_videos is not None:
             video_embeds = self.get_video_features(
-                pixel_values_videos, video_grid_thw, video_cu_seqlens, video_rotary_pos_ids,
+                pixel_values_videos,
+                video_grid_thw,
+                video_cu_seqlens,
+                video_rotary_pos_ids,
             ).pooler_output
             video_embeds = torch.cat(video_embeds, dim=0).to(inputs_embeds.device, inputs_embeds.dtype)
             _, video_mask = self.get_placeholder_mask(
@@ -1343,9 +1349,17 @@ class Qwen2VLForConditionalGeneration(Qwen2VLPreTrainedModel, GenerationMixin):
             The tensors corresponding to the input videos.
         video_grid_thw (`torch.LongTensor` of shape `(num_videos, 3)`, *optional*):
             The temporal, height and width of feature shape of each video in LLM.
+        video_cu_seqlens (`torch.IntTensor`, *optional*):
+            Precomputed cumulative sequence lengths for videos (from `get_cu_seqlens`).
+        video_rotary_pos_ids (`torch.LongTensor`, *optional*):
+            Precomputed (row, col) position IDs for video rotary embeddings (from `get_rotary_pos_ids`).
         """
         return self.model.get_video_features(
-            pixel_values_videos, video_grid_thw, video_cu_seqlens, video_rotary_pos_ids, **kwargs,
+            pixel_values_videos,
+            video_grid_thw,
+            video_cu_seqlens,
+            video_rotary_pos_ids,
+            **kwargs,
         )
 
     @auto_docstring
@@ -1362,9 +1376,17 @@ class Qwen2VLForConditionalGeneration(Qwen2VLPreTrainedModel, GenerationMixin):
             The tensors corresponding to the input images.
         image_grid_thw (`torch.LongTensor` of shape `(num_images, 3)`, *optional*):
             The temporal, height and width of feature shape of each image in LLM.
+        image_cu_seqlens (`torch.IntTensor`, *optional*):
+            Precomputed cumulative sequence lengths for images (from `get_cu_seqlens`).
+        image_rotary_pos_ids (`torch.LongTensor`, *optional*):
+            Precomputed (row, col) position IDs for image rotary embeddings (from `get_rotary_pos_ids`).
         """
         return self.model.get_image_features(
-            pixel_values, image_grid_thw, image_cu_seqlens, image_rotary_pos_ids, **kwargs,
+            pixel_values,
+            image_grid_thw,
+            image_cu_seqlens,
+            image_rotary_pos_ids,
+            **kwargs,
         )
 
     @can_return_tuple
@@ -1402,6 +1424,14 @@ class Qwen2VLForConditionalGeneration(Qwen2VLPreTrainedModel, GenerationMixin):
             The temporal, height and width of feature shape of each video in LLM.
         rope_deltas (`torch.LongTensor` of shape `(batch_size, )`, *optional*):
             The rope index difference between sequence length and multimodal rope.
+        image_cu_seqlens (`torch.IntTensor`, *optional*):
+            Precomputed cumulative sequence lengths for images (from `get_cu_seqlens`).
+        image_rotary_pos_ids (`torch.LongTensor`, *optional*):
+            Precomputed (row, col) position IDs for image rotary embeddings (from `get_rotary_pos_ids`).
+        video_cu_seqlens (`torch.IntTensor`, *optional*):
+            Precomputed cumulative sequence lengths for videos (from `get_cu_seqlens`).
+        video_rotary_pos_ids (`torch.LongTensor`, *optional*):
+            Precomputed (row, col) position IDs for video rotary embeddings (from `get_rotary_pos_ids`).
 
         Example:
 

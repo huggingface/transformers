@@ -282,6 +282,8 @@ class Glm46VModel(Glm46VPreTrainedModel):
         self,
         pixel_values_videos: torch.FloatTensor,
         video_grid_thw: torch.LongTensor | None = None,
+        video_cu_seqlens: torch.Tensor | None = None,
+        video_rotary_pos_ids: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
         r"""
@@ -289,6 +291,10 @@ class Glm46VModel(Glm46VPreTrainedModel):
             The tensors corresponding to the input videos.
         video_grid_thw (`torch.LongTensor` of shape `(num_videos, 3)`, *optional*):
             The temporal, height and width of feature shape of each video in LLM.
+        video_cu_seqlens (`torch.Tensor` of shape `(num_video_patches + 1,)`, *optional*):
+            Precomputed cumulative sequence lengths for video patches, used for packed variable-length attention.
+        video_rotary_pos_ids (`torch.Tensor` of shape `(num_video_tokens, 2)`, *optional*):
+            Precomputed (row, col) position IDs for video rotary embeddings.
         """
         pixel_values_videos = pixel_values_videos.type(self.visual.dtype)
         # reshape video_grid_thw -> [b, 3] -> [1, h, w] * frames
@@ -301,8 +307,8 @@ class Glm46VModel(Glm46VPreTrainedModel):
         vision_outputs = self.visual(
             pixel_values_videos,
             grid_thw=flattened_video_grid_thw,
-            cu_seqlens=kwargs.pop("video_cu_seqlens", None),
-            rotary_pos_ids=kwargs.pop("video_rotary_pos_ids", None),
+            cu_seqlens=video_cu_seqlens,
+            rotary_pos_ids=video_rotary_pos_ids,
             return_dict=True,
             **kwargs,
         )
@@ -318,6 +324,8 @@ class Glm46VModel(Glm46VPreTrainedModel):
         self,
         pixel_values: torch.FloatTensor,
         image_grid_thw: torch.LongTensor | None = None,
+        image_cu_seqlens: torch.Tensor | None = None,
+        image_rotary_pos_ids: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
         r"""
@@ -325,13 +333,17 @@ class Glm46VModel(Glm46VPreTrainedModel):
             The tensors corresponding to the input images.
         image_grid_thw (`torch.LongTensor` of shape `(num_images, 3)`, *optional*):
             The temporal, height and width of feature shape of each image in LLM.
+        image_cu_seqlens (`torch.Tensor`, *optional*):
+            Precomputed cumulative sequence lengths (from the processor).
+        image_rotary_pos_ids (`torch.Tensor`, *optional*):
+            Precomputed rotary position IDs (from the processor).
         """
         pixel_values = pixel_values.type(self.visual.dtype)
         vision_outputs = self.visual(
             pixel_values,
             grid_thw=image_grid_thw,
-            cu_seqlens=kwargs.pop("image_cu_seqlens", None),
-            rotary_pos_ids=kwargs.pop("image_rotary_pos_ids", None),
+            cu_seqlens=image_cu_seqlens,
+            rotary_pos_ids=image_rotary_pos_ids,
             **kwargs,
         )
         split_sizes = (image_grid_thw.prod(-1) // self.visual.spatial_merge_size**2).tolist()
@@ -552,6 +564,8 @@ class Glm46VForConditionalGeneration(Glm46VPreTrainedModel, GenerationMixin):
         self,
         pixel_values_videos: torch.FloatTensor,
         video_grid_thw: torch.LongTensor | None = None,
+        video_cu_seqlens: torch.Tensor | None = None,
+        video_rotary_pos_ids: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
         r"""
@@ -559,9 +573,17 @@ class Glm46VForConditionalGeneration(Glm46VPreTrainedModel, GenerationMixin):
             The tensors corresponding to the input videos.
         video_grid_thw (`torch.LongTensor` of shape `(num_videos, 3)`, *optional*):
             The temporal, height and width of feature shape of each video in LLM.
+        video_cu_seqlens (`torch.IntTensor`, *optional*):
+            Precomputed cumulative sequence lengths for videos (from `get_cu_seqlens`).
+        video_rotary_pos_ids (`torch.LongTensor`, *optional*):
+            Precomputed (row, col) position IDs for video rotary embeddings (from `get_rotary_pos_ids`).
         """
         return self.model.get_video_features(
-            pixel_values_videos=pixel_values_videos, video_grid_thw=video_grid_thw, **kwargs
+            pixel_values_videos,
+            video_grid_thw,
+            video_cu_seqlens,
+            video_rotary_pos_ids,
+            **kwargs,
         )
 
     @auto_docstring
@@ -569,6 +591,8 @@ class Glm46VForConditionalGeneration(Glm46VPreTrainedModel, GenerationMixin):
         self,
         pixel_values: torch.FloatTensor,
         image_grid_thw: torch.LongTensor | None = None,
+        image_cu_seqlens: torch.Tensor | None = None,
+        image_rotary_pos_ids: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
         r"""
@@ -576,8 +600,18 @@ class Glm46VForConditionalGeneration(Glm46VPreTrainedModel, GenerationMixin):
             The tensors corresponding to the input images.
         image_grid_thw (`torch.LongTensor` of shape `(num_images, 3)`, *optional*):
             The temporal, height and width of feature shape of each image in LLM.
+        image_cu_seqlens (`torch.IntTensor`, *optional*):
+            Precomputed cumulative sequence lengths for images (from `get_cu_seqlens`).
+        image_rotary_pos_ids (`torch.LongTensor`, *optional*):
+            Precomputed (row, col) position IDs for image rotary embeddings (from `get_rotary_pos_ids`).
         """
-        return self.model.get_image_features(pixel_values=pixel_values, image_grid_thw=image_grid_thw, **kwargs)
+        return self.model.get_image_features(
+            pixel_values,
+            image_grid_thw,
+            image_cu_seqlens,
+            image_rotary_pos_ids,
+            **kwargs,
+        )
 
     @can_return_tuple
     @auto_docstring

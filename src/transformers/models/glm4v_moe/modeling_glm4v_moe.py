@@ -822,7 +822,7 @@ class Glm4vMoeVisionModel(Glm4vMoePreTrainedModel):
         if cu_seqlens is None:
             cu_seqlens = get_vision_cu_seqlens(grid_thw)
 
-        rotary_emb = self.rotary_pos_emb(rotary_pos_ids)
+        rotary_emb = self.rotary_pos_emb(rotary_pos_ids).to(hidden_states.dtype)
         emb = torch.cat((rotary_emb, rotary_emb), dim=-1)
         position_embeddings = (emb.cos(), emb.sin())
 
@@ -1279,6 +1279,10 @@ class Glm4vMoeModel(Glm4vMoePreTrainedModel):
             The tensors corresponding to the input videos.
         video_grid_thw (`torch.LongTensor` of shape `(num_videos, 3)`, *optional*):
             The temporal, height and width of feature shape of each video in LLM.
+        video_cu_seqlens (`torch.Tensor` of shape `(num_video_patches + 1,)`, *optional*):
+            Precomputed cumulative sequence lengths for video patches, used for packed variable-length attention.
+        video_rotary_pos_ids (`torch.Tensor` of shape `(num_video_tokens, 2)`, *optional*):
+            Precomputed (row, col) position IDs for video rotary embeddings.
         """
         pixel_values_videos = pixel_values_videos.type(self.visual.dtype)
         # reshape video_grid_thw -> [b, 3] -> [1, h, w] * frames
@@ -1612,6 +1616,10 @@ class Glm4vMoeForConditionalGeneration(Glm4vMoePreTrainedModel, GenerationMixin)
             The tensors corresponding to the input videos.
         video_grid_thw (`torch.LongTensor` of shape `(num_videos, 3)`, *optional*):
             The temporal, height and width of feature shape of each video in LLM.
+        video_cu_seqlens (`torch.IntTensor`, *optional*):
+            Precomputed cumulative sequence lengths for videos (from `get_cu_seqlens`).
+        video_rotary_pos_ids (`torch.LongTensor`, *optional*):
+            Precomputed (row, col) position IDs for video rotary embeddings (from `get_rotary_pos_ids`).
         """
         return self.model.get_video_features(
             pixel_values_videos,
@@ -1635,6 +1643,10 @@ class Glm4vMoeForConditionalGeneration(Glm4vMoePreTrainedModel, GenerationMixin)
             The tensors corresponding to the input images.
         image_grid_thw (`torch.LongTensor` of shape `(num_images, 3)`, *optional*):
             The temporal, height and width of feature shape of each image in LLM.
+        image_cu_seqlens (`torch.IntTensor`, *optional*):
+            Precomputed cumulative sequence lengths for images (from `get_cu_seqlens`).
+        image_rotary_pos_ids (`torch.LongTensor`, *optional*):
+            Precomputed (row, col) position IDs for image rotary embeddings (from `get_rotary_pos_ids`).
         """
         return self.model.get_image_features(
             pixel_values,

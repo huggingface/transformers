@@ -776,20 +776,17 @@ def get_valid_indices(chunk_lengths: torch.Tensor) -> torch.Tensor:
 
 
 def get_pool_indices(feature_lens: torch.Tensor) -> torch.Tensor:
-    """Compute indices for stride-2 pooling over post-CNN audio features.
-
-    Selects every other position (even indices) from each sample's post-CNN
-    features, accounting for two convolution stages and variable-length samples.
+    """Compute indices for post-encoder stride-2 average pooling.
 
     Args:
-        feature_lens: ``(batch_size,)`` per-sample raw frame counts.
+        feature_lens: ``(batch_size,)`` mel spectrogram lengths.
 
     Returns:
-        ``(total_pairs,)`` flat indices for stride-2 pooling across concatenated samples.
+        ``(total_pooled,)`` flat index of first element of each pair.
     """
     after_conv1 = (feature_lens - 1) // 2 + 1
     after_conv2 = (after_conv1 - 2) // 2 + 1
-    num_pairs = (after_conv2 - 1 + 1) // 2
+    num_pairs = after_conv2 // 2
     offsets = F.pad(after_conv2[:-1].cumsum(0), (1, 0), value=0)
     pair_offsets = torch.repeat_interleave(offsets, num_pairs)
     local_indices = torch.arange(num_pairs.sum(), device=feature_lens.device)
@@ -853,6 +850,7 @@ class Qwen2_5OmniAudioEncoder(Qwen2_5OmniPreTrainedModel):
         self,
         input_features=None,
         feature_lens=None,
+        aftercnn_lens=None,
         padded_feature=None,
         chunk_lengths=None,
         valid_indices=None,
@@ -863,6 +861,8 @@ class Qwen2_5OmniAudioEncoder(Qwen2_5OmniPreTrainedModel):
         r"""
         feature_lens (`torch.LongTensor` of shape `(batch_size,)`):
             mel length
+        aftercnn_lens (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
+            mel length after cnn
         padded_feature (`torch.FloatTensor`, *optional*):
             Precomputed padded audio chunks (from `chunk_and_pad_features`).
         chunk_lengths (`torch.LongTensor`, *optional*):
@@ -870,9 +870,9 @@ class Qwen2_5OmniAudioEncoder(Qwen2_5OmniPreTrainedModel):
         valid_indices (`torch.LongTensor`, *optional*):
             Precomputed flat indices of valid post-CNN positions (from `get_valid_indices`).
         pool_indices (`torch.LongTensor`, *optional*):
-            Precomputed pair indices for post-encoder average pooling (from `get_pool_indices`).
+            Precomputed pair indices for stride-2 average pooling (from `get_pool_indices`).
         cu_seqlens (`torch.IntTensor`, *optional*):
-            Precomputed cumulative sequence lengths (from `get_vision_cu_seqlens`).
+            Precomputed cumulative sequence lengths (from `get_audio_cu_seqlens`).
         """
         if padded_feature is None:
             padded_feature, chunk_lengths = chunk_and_pad_features(input_features, feature_lens, self.n_window)
@@ -883,7 +883,11 @@ class Qwen2_5OmniAudioEncoder(Qwen2_5OmniPreTrainedModel):
         if pool_indices is None:
             pool_indices = get_pool_indices(feature_lens)
 
+        if aftercnn_lens is None and feature_lens is not None:
+            aftercnn_lens, _ = self._get_feat_extract_output_lengths(feature_lens)
+
         # Derive masks from chunk_lengths (traceable arithmetic + arange broadcasting)
+        padded_feature = padded_feature.to(self.conv1.weight.dtype)
         padded_mask = (
             (torch.arange(padded_feature.shape[2], device=padded_feature.device) < chunk_lengths.unsqueeze(1))
             .unsqueeze(1)
@@ -926,11 +930,10 @@ class Qwen2_5OmniAudioEncoder(Qwen2_5OmniPreTrainedModel):
             )
             hidden_states = layer_outputs[0]
 
-        # Post-process: average consecutive pairs per audio, then project
-        pooled = (hidden_states[pool_indices] + hidden_states[pool_indices + 1]) / 2
-        pooled = self.ln_post(pooled)
-        token_audio = self.proj(pooled)
-        return BaseModelOutputWithPooling(last_hidden_state=token_audio)
+        # Post-process: stride-2 average pooling using precomputed indices, then project
+        hidden_states = (hidden_states[pool_indices] + hidden_states[pool_indices + 1]) / 2
+        hidden_states = self.proj(self.ln_post(hidden_states))
+        return BaseModelOutputWithPooling(last_hidden_state=hidden_states)
 
     # Ignore copy
     def _get_feat_extract_output_lengths(self, input_lengths: torch.LongTensor):
@@ -1240,7 +1243,7 @@ class Qwen2_5OmniVisionEncoder(Qwen2_5OmniPreTrainedModel):
         if rotary_pos_ids is None:
             rotary_pos_ids = get_rotary_pos_ids(grid_thw, self.spatial_merge_size)
 
-        rotary_pos_emb = self.rotary_pos_emb(rotary_pos_ids)
+        rotary_pos_emb = self.rotary_pos_emb(rotary_pos_ids).to(hidden_states.dtype)
 
         if cu_seqlens is None:
             cu_seqlens = get_vision_cu_seqlens(grid_thw)
@@ -1719,6 +1722,10 @@ class Qwen2_5OmniThinkerForConditionalGeneration(Qwen2_5OmniPreTrainedModelForCo
             The tensors corresponding to the input videos.
         video_grid_thw (`torch.LongTensor` of shape `(num_videos, 3)`, *optional*):
             The temporal, height and width of feature shape of each video in LLM.
+        video_cu_seqlens (`torch.Tensor` of shape `(num_video_patches + 1,)`, *optional*):
+            Precomputed cumulative sequence lengths for video patches, used for packed variable-length attention.
+        video_rotary_pos_ids (`torch.Tensor` of shape `(num_video_tokens, 2)`, *optional*):
+            Precomputed (row, col) position IDs for video rotary embeddings.
         """
         pixel_values_videos = pixel_values_videos.type(self.visual.dtype)
         return self.visual(
@@ -1744,6 +1751,10 @@ class Qwen2_5OmniThinkerForConditionalGeneration(Qwen2_5OmniPreTrainedModelForCo
             The tensors corresponding to the input images.
         image_grid_thw (`torch.LongTensor` of shape `(num_images, 3)`, *optional*):
             The temporal, height and width of feature shape of each image in LLM.
+        image_cu_seqlens (`torch.Tensor` of shape `(num_image_patches + 1,)`, *optional*):
+            Precomputed cumulative sequence lengths for image patches, used for packed variable-length attention.
+        image_rotary_pos_ids (`torch.Tensor` of shape `(num_image_tokens, 2)`, *optional*):
+            Precomputed (row, col) position IDs for image rotary embeddings.
         """
         pixel_values = pixel_values.type(self.visual.dtype)
         return self.visual(
@@ -1781,7 +1792,9 @@ class Qwen2_5OmniThinkerForConditionalGeneration(Qwen2_5OmniPreTrainedModelForCo
             audio_feature_lengths if audio_feature_lengths is not None else feature_attention_mask.sum(-1)
         )
         feature_lens = audio_feature_lengths if audio_feature_lengths is not None else feature_attention_mask.sum(-1)
-        audio_outputs = self.audio_tower(input_features, feature_lens=feature_lens, return_dict=True, **kwargs)
+        audio_outputs = self.audio_tower(
+            input_features, feature_lens=feature_lens, aftercnn_lens=audio_feat_lengths, return_dict=True, **kwargs
+        )
         if audio_outputs.last_hidden_state.shape[0] != sum(audio_output_lengths.tolist()):
             raise ValueError("length of audio_features should match audio_output_lengths")
 

@@ -390,17 +390,19 @@ class VideoLlama3VisionModel(VideoLlama3PreTrainedModel):
         rotary_pos_ids (`torch.Tensor`, *optional*):
             Precomputed (row, col) position IDs (from `get_rotary_pos_ids`).
         """
+
+        hidden_states = self.embeddings(pixel_values.type(self.dtype))
+
         if rotary_pos_ids is None:
             rotary_pos_ids = get_rotary_pos_ids(grid_thw, merge_sizes)
 
-        rotary_pos_emb = self.rotary_pos_emb(rotary_pos_ids)
+        rotary_pos_emb = self.rotary_pos_emb(rotary_pos_ids).to(hidden_states.dtype)
         emb = torch.cat((rotary_pos_emb, rotary_pos_emb), dim=-1)
         position_embeddings = (emb.cos(), emb.sin())
 
         if cu_seqlens is None:
             cu_seqlens = get_vision_cu_seqlens(grid_thw)
 
-        hidden_states = self.embeddings(pixel_values.type(self.dtype))
         encoder_outputs: BaseModelOutput = self.encoder(
             hidden_states,
             cu_seqlens=cu_seqlens,
@@ -499,6 +501,10 @@ class VideoLlama3Model(Qwen2VLModel):
             The temporal, height and width of feature shape of each video in LLM.
         video_merge_sizes (`torch.Tensor` of shape `(num_videos,)`):
             The spatial downsampling ratio of each video feature.
+        video_cu_seqlens (<fill_type>):
+            <fill_docstring>
+        video_rotary_pos_ids (<fill_type>):
+            <fill_docstring>
         """
         return self.get_image_features(
             pixel_values=pixel_values_videos,
@@ -527,6 +533,10 @@ class VideoLlama3Model(Qwen2VLModel):
             The temporal, height and width of feature shape of each image in LLM.
         image_merge_sizes (`torch.Tensor` of shape `(num_images,)`):
             The spatial downsampling ratio of each image feature.
+        image_cu_seqlens (<fill_type>):
+            <fill_docstring>
+        image_rotary_pos_ids (<fill_type>):
+            <fill_docstring>
         """
         vision_outputs = self.vision_model(
             pixel_values=pixel_values,
