@@ -91,7 +91,7 @@ def _build_checkpoint_conversion_mapping():
         # Delete prefix when used in VLMs. Note that it doesn't add back the prefix when saving
         # Regex isn't powerful enough to inject back `vision_model` between arbitrary strings
         # Since lookbehinds aren't safe enough and we can't write all patterns, the target is an
-        # almost unmatchable regex (i doubt any sd has `/` char), We NEVER revert back, even accidentally
+        # almost unmatchable regex (i doubt any sd has `/` char), So we NEVER revert back, even accidentally
         "clip_vision_model": [
             WeightRenaming(
                 source_patterns=r"(?<=\.)vision_model\.(.+)$",

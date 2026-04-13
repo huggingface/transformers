@@ -4794,12 +4794,25 @@ class ModelTesterMixin:
                     # Get all the serialized keys that we just saved according to the reverse mapping
                     serialized_keys = list(state_dict.keys())
 
-                if check_keys_were_modified:
-                    # They should be different, otherwise we did not perform any mapping
-                    self.assertNotEqual(sorted(serialized_keys), sorted(model_keys), "No key mapping was performed!")
+                has_clip_prefix_conversion = any(
+                    r"(?<=\/)\1(?<=\/)" in pattern
+                    for conversion in conversions
+                    for pattern in conversion._original_target_patterns
+                )
+                if not (has_clip_prefix_conversion and len(conversions) == 1):
+                    # CLIP model conversions are not applied in reverse, pass
+                    if check_keys_were_modified:
+                        # They should be different, otherwise we did not perform any mapping
+                        self.assertNotEqual(
+                            sorted(serialized_keys), sorted(model_keys), "No key mapping was performed!"
+                        )
 
                 # Check that for each conversion entry, we at least map to one key
                 for conversion in conversions:
+                    # CLIP conversion is not reverted when saving back, skip and check other conversions
+                    is_clip_prefix_conversion = any(
+                        r"(?<=\/)\1(?<=\/)" in pattern for pattern in conversion._original_target_patterns
+                    )
                     for source_pattern in conversion.source_patterns:
                         # Some patterns are written for gen-model only and won't be applied on base model
                         if "lm_head" in source_pattern and model_class not in [
@@ -4818,11 +4831,12 @@ class ModelTesterMixin:
                             if any(re.search(target_pattern_reversed, k) for k in model.all_tied_weights_keys.keys()):
                                 continue
                         num_matches = sum(re.search(source_pattern, key) is not None for key in serialized_keys)
-                        self.assertTrue(
-                            num_matches > 0,
-                            f"`{source_pattern}` in `{conversion}` did not match any of the source keys. "
-                            "This indicates whether that the pattern is not properly written, or that it could not be reversed correctly",
-                        )
+                        if not is_clip_prefix_conversion:
+                            self.assertTrue(
+                                num_matches > 0,
+                                f"`{source_pattern}` in `{conversion}` did not match any of the source keys. "
+                                "This indicates whether that the pattern is not properly written, or that it could not be reversed correctly",
+                            )
 
                 # If everything is still good at this point, let's test that we perform the same operations both when
                 # reverting ops from `from_pretrained` and from `__init__`

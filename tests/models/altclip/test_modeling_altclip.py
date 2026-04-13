@@ -503,6 +503,9 @@ class AltCLIPModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
 
                 # Check that for each conversion entry, we at least map to one key
                 for conversion in conversions:
+                    is_clip_prefix_conversion = any(
+                        r"(?<=\/)\1(?<=\/)" in pattern for pattern in conversion._original_target_patterns
+                    )
                     for source_pattern in conversion.source_patterns:
                         # Sometimes the mappings specify keys that are tied, so absent from the saved state dict
                         if isinstance(conversion, WeightRenaming):
@@ -514,11 +517,12 @@ class AltCLIPModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
                             if any(re.search(target_pattern_reversed, k) for k in model.all_tied_weights_keys.keys()):
                                 continue
                         num_matches = sum(re.search(source_pattern, key) is not None for key in serialized_keys)
-                        self.assertTrue(
-                            num_matches > 0,
-                            f"`{source_pattern}` in `{conversion}` did not match any of the source keys. "
-                            "This indicates whether that the pattern is not properly written, or that it could not be reversed correctly",
-                        )
+                        if not is_clip_prefix_conversion:
+                            self.assertTrue(
+                                num_matches > 0,
+                                f"`{source_pattern}` in `{conversion}` did not match any of the source keys. "
+                                "This indicates whether that the pattern is not properly written, or that it could not be reversed correctly",
+                            )
 
 
 @require_vision
