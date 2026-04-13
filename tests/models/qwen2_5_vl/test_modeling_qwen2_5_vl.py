@@ -32,7 +32,7 @@ from transformers.image_utils import load_image
 from transformers.testing_utils import (
     Expectations,
     cleanup,
-    require_cv2,
+    require_torchcodec,
     require_flash_attn,
     require_torch,
     require_torch_accelerator,
@@ -709,49 +709,35 @@ class Qwen2_5_VLIntegrationTest(unittest.TestCase):
         self.assertEqual(decoded_text, EXPECTED_DECODED_TEXT)
 
     @slow
-    @require_cv2
     def test_small_model_integration_test_with_video(self):
         model = Qwen2_5_VLForConditionalGeneration.from_pretrained(
             "Qwen/Qwen2.5-VL-7B-Instruct", dtype="auto", device_map="auto"
         )
 
         video_url = "https://huggingface.co/datasets/hf-internal-testing/fixtures_videos/resolve/main/tennis.mp4"
-        messages2 = [
+        messages = [
             {
                 "role": "user",
                 "content": [
-                    {
-                        "type": "video",
-                    },
+                    {"type": "video", "url": video_url},
                     {"type": "text", "text": "What is shown in this video?"},
                 ],
             }
         ]
-        text = self.processor.apply_chat_template(messages2, tokenize=False, add_generation_prompt=True)
+        inputs = self.processor.apply_chat_template(
+            messages,
+            tokenize=True,
+            return_dict=True,
+            add_generation_prompt=True,
+            return_tensors="pt",
+            num_frames=10,
+        ).to(torch_device)
 
-        with tempfile.NamedTemporaryFile(suffix=".mp4") as f:
-            f.write(requests.get(video_url).content)
-            f.flush()
-            cap = cv2.VideoCapture(f.name)
-
-            frames = []
-            while True:
-                ret, frame = cap.read()
-                if not ret:
-                    break
-                frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-                frames.append(Image.fromarray(frame_rgb).resize((224, 224), Image.BICUBIC))
-
-            cap.release()
-
-        inputs = self.processor(text=[text], videos=[frames], return_tensors="pt").to(torch_device)
-
-        # it should not matter whether two images are the same size or not
         output = model.generate(**inputs, max_new_tokens=30, do_sample=False)
         expected_decoded_texts = Expectations(
             {
                 (None, None): [
-                    'system\nYou are a helpful assistant.\nuser\nWhat is shown in this video?\nassistant\nThe video shows an indoor tennis court with a person standing on the service line, preparing to serve. The individual is wearing athletic attire, including a white',
+                    'system\nYou are a helpful assistant.\nuser\nWhat is shown in this video?\nassistant\nThe video shows two individuals playing tennis on an indoor court. The player in the foreground, dressed in a white shirt and black shorts, is preparing to',
                 ],
                 ("rocm", (9, 4)): [
                     'system\nYou are a helpful assistant.\nuser\nWhat is shown in this video?\nassistant\nThe video shows an indoor tennis court with a person standing on the service line, preparing to serve. The individual appears to be practicing or warming up,',
