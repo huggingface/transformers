@@ -1013,6 +1013,7 @@ class Qwen2_5_VLModel(Qwen2_5_VLPreTrainedModel):
         position_height = torch.arange(start_position, start_position + llm_grid_h, device=device)
 
         # Repeat the positions per each grid and per video frame. Add start position for temporal grid
+        # Important to add start positions after applying `time_interval`, order matters
         position_temporal = position_temporal.repeat_interleave(llm_grid_h * llm_grid_w) + start_position
         position_width = position_width.repeat(llm_grid_h * llm_grid_t)
         position_height = position_height.repeat_interleave(llm_grid_w).repeat(llm_grid_t)
