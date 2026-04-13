@@ -59,8 +59,8 @@ class BlipTextConfig(PreTrainedConfig):
     max_position_embeddings: int = 512
     hidden_act: str = "gelu"
     layer_norm_eps: float = 1e-12
-    hidden_dropout_prob: float = 0.0
-    attention_probs_dropout_prob: float = 0.0
+    hidden_dropout_prob: float | int = 0.0
+    attention_probs_dropout_prob: float | int = 0.0
     initializer_range: float = 0.02
     bos_token_id: int | None = 30522
     eos_token_id: int | list[int] | None = 2

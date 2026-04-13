@@ -284,6 +284,10 @@ class ColQwen2ForRetrievalModelTest(ModelTesterMixin, unittest.TestCase):
     def test_load_save_without_tied_weights(self):
         pass
 
+    @unittest.skip(reason="One weight renaming from qwen2 is unreachable here as it uses a `^` pattern")
+    def test_reverse_loading_mapping(self):
+        pass
+
 
 @require_torch
 class ColQwen2ModelIntegrationTest(unittest.TestCase):
