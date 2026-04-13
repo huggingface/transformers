@@ -13,7 +13,7 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was released on {release_date} and added to Hugging Face Transformers on 2026-03-31.*
+*This model was released on {release_date} and added to Hugging Face Transformers on 2026-04-13.*
 
 <div style="float: right;">
     <div class="flex flex-wrap space-x-1">
@@ -35,77 +35,60 @@ long multimodal prompts manageable. For more information, refer to the [technica
 Isaac checkpoints are distributed under Perceptron's Non-Production license; please review the license that ships with the
 weights before using them in commercial settings.
 
-## Usage
+## Usage tips
 
-Isaac uses explicit image placeholders in the rendered prompt. Every occurrence of `processor.image_token` (usually
-`<image>`) must have a matching image in the `images` argument.
-
-```py
-import torch
-from PIL import Image
-from transformers import AutoProcessor, IsaacForConditionalGeneration
-
-model_id = "Perceptron/isaac-base"
-processor = AutoProcessor.from_pretrained(model_id)
-model = IsaacForConditionalGeneration.from_pretrained(
-    model_id,
-    torch_dtype=torch.bfloat16,
-    device_map="auto",
-    attn_implementation="flash_attention_2",
-)
-
-images = [Image.open("chart.png"), Image.open("panel.jpg")]
-messages = [
-    {"role": "user", "content": "Compare the two figures and explain what changed."},
-    {"role": "user", "content": f"{processor.image_token}{processor.image_token}"},
-]
-
-prompt = processor.apply_chat_template(
-    messages,
-    tokenize=False,
-    add_generation_prompt=True,
-).strip()
-
-inputs = processor(text=prompt, images=images, return_tensors="pt")
-model_inputs = {
-    key: value.to(model.device)
-    for key, value in inputs.items()
-    if value is not None
-}
-
-with torch.inference_mode():
-    generated_ids = model.generate(
-        **model_inputs,
-        max_new_tokens=256,
-        do_sample=False,
-        eos_token_id=processor.tokenizer.eos_token_id,
-        pad_token_id=processor.tokenizer.eos_token_id,
-    )
-
-generated_ids = generated_ids[:, model_inputs["input_ids"].shape[1] :]
-response = processor.batch_decode(generated_ids, skip_special_tokens=True)[0]
-print(response)
-```
-
-`IsaacProcessor` returns the standard text tensors plus Isaac's batch-major visual tensors:
-
-- `pixel_values`: `(batch_size, max_images, max_patches, patch_dim)`
-- `image_grid_thw`: `(batch_size, max_images, 3)`
-- `image_metadata`: `(batch_size, max_images, 2)` storing `(offset, length)` for each image slot
-- `mm_token_type_ids`: `(batch_size, sequence_length)`
-
-Important notes:
-
-- Pass the full processor output to `generate()`. Isaac uses the multimodal tensors during prefill and handles cached
-  decoding internally.
-- For fully text-only batches, `pixel_values`, `image_grid_thw`, and `image_metadata` are `None`. When moving inputs to
-  the model, keep only non-`None` values as shown above.
 - Batched inputs can mix text-only and multimodal samples. For direct processor/model batching, pass images as a nested
   list such as `[[], [image_a], [image_b, image_c]]`.
 - `image_grid_thw[batch_idx, image_slot] == (0, 0, 0)` marks a padded empty slot. Real image slots have
   `(T=1, H>0, W>0)`.
 - If truncation is enabled, the processor keeps the rightmost part of the multimodal prompt and updates the slot-local
   `image_metadata[..., 0]` and `image_metadata[..., 1]` values automatically.
+
+## Usage example
+
+Isaac uses explicit image placeholders in the rendered prompt. Every occurrence of `processor.image_token` (usually `<image>`) must have a matching image in the `images` argument.
+
+```py
+import torch
+from PIL import Image
+from transformers import AutoProcessor, IsaacForConditionalGeneration
+
+model_id = "PerceptronAI/Isaac-0.1"
+processor = AutoProcessor.from_pretrained(model_id)
+model = IsaacForConditionalGeneration.from_pretrained(
+    model_id,
+    dtype=torch.bfloat16,
+    device_map="auto",
+    attn_implementation="flash_attention_2",
+)
+
+conversation = [
+    {
+
+        "role": "user",
+        "content": [
+            {"type": "text", "text": "Compare the two figures and explain what changed."},
+            {"type": "image", "path": "first_image.png"},
+            {"type": "image", "path": "second_image.png"},
+            ],
+    },
+]
+
+prompt = processor.apply_chat_template(
+    conversation,
+    tokenize=True,
+    return_dict=True,
+    add_generation_prompt=True,
+    return_tensors="pt",
+)
+
+inputs = processor(text=prompt, images=images, return_tensors="pt").to(model.device)
+generated_ids = model.generate(**inputs, max_new_tokens=256, do_sample=False,)
+
+generated_ids = generated_ids[:, inputs["input_ids"].shape[1] :]
+response = processor.batch_decode(generated_ids, skip_special_tokens=True)[0]
+print(response)
+```
 
 ### Post-processing grounded outputs
 
@@ -132,9 +115,9 @@ Set `expected="point"` to extract point annotations, or leave `expected=None` to
 
 [[autodoc]] IsaacConfig
 
-## IsaacVisionTransformer
+## IsaacVisionModel
 
-[[autodoc]] IsaacVisionTransformer
+[[autodoc]] IsaacVisionModel
 
 ## IsaacTextModel
 

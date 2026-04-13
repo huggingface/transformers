@@ -30,16 +30,18 @@ from ...integrations import use_kernel_forward_from_hub, use_kernel_func_from_hu
 from ...masking_utils import create_bidirectional_mask, create_causal_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import GradientCheckpointingLayer
-from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPast, BaseModelOutputWithPooling, ModelOutput
+from ...modeling_outputs import (
+    BaseModelOutput,
+    BaseModelOutputWithPast,
+    BaseModelOutputWithPooling,
+    CausalLMOutputWithPast,
+)
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import auto_docstring, torch_compilable_check
 from ...utils.generic import TransformersKwargs, can_return_tuple, maybe_autocast, merge_with_config_defaults
-from ...utils.import_utils import (
-    is_torch_available,
-    is_torchdynamo_compiling,
-)
+from ...utils.import_utils import is_torch_available, is_torchdynamo_compiling
 from ...utils.output_capturing import capture_outputs
 from .configuration_isaac import IsaacConfig, IsaacTextConfig, IsaacVisionConfig
 
@@ -228,15 +230,12 @@ class IsaacVisionAttention(nn.Module):
     ) -> tuple[torch.Tensor, torch.Tensor | None]:
         """Input shape: Batch x Time x Channel"""
 
-        batch_size, seq_length, embed_dim = hidden_states.shape
+        input_shape = hidden_states.shape[:-1]
 
-        queries = self.q_proj(hidden_states)
-        keys = self.k_proj(hidden_states)
-        values = self.v_proj(hidden_states)
-
-        queries = queries.view(batch_size, seq_length, self.num_heads, self.head_dim).transpose(1, 2)
-        keys = keys.view(batch_size, seq_length, self.num_heads, self.head_dim).transpose(1, 2)
-        values = values.view(batch_size, seq_length, self.num_heads, self.head_dim).transpose(1, 2)
+        hidden_shape = (*input_shape, -1, self.head_dim)
+        queries = self.q_proj(hidden_states).view(hidden_shape).transpose(1, 2)
+        keys = self.k_proj(hidden_states).view(hidden_shape).transpose(1, 2)
+        values = self.v_proj(hidden_states).view(hidden_shape).transpose(1, 2)
 
         attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
             self.config._attn_implementation, eager_attention_forward
@@ -253,7 +252,7 @@ class IsaacVisionAttention(nn.Module):
             dropout=0.0 if not self.training else self.dropout,
         )
 
-        attn_output = attn_output.reshape(batch_size, seq_length, embed_dim).contiguous()
+        attn_output = attn_output.reshape(*input_shape, -1).contiguous()
         attn_output = self.out_proj(attn_output)
 
         return attn_output, attn_weights
@@ -338,78 +337,8 @@ class IsaacVisionEncoder(nn.Module):
         return BaseModelOutput(last_hidden_state=hidden_states)
 
 
-def pixel_shuffle_padded(
-    hidden_states: torch.Tensor,
-    token_grids: torch.Tensor,
-    scale_factor: int = 1,
-) -> torch.Tensor:
-    """Apply pixel shuffle per image on padded batched vision embeddings.
-
-    Args:
-        x (`torch.Tensor`):
-            Vision embeddings of shape `(num_images, max_patches, hidden_size)`.
-        token_grids (`torch.Tensor`):
-            Grid sizes `(height, width)` per image, shape `(num_images, 2)`.
-        scale_factor (`int`, *optional*, defaults to 1):
-            Spatial down-sampling factor.
-
-    Returns:
-        `torch.Tensor`: Pixel-shuffled embeddings of shape
-        `(num_images, max_tokens, hidden_size * scale_factor**2)`.
-    """
-    num_images, max_patches, embed_dim = hidden_states.shape
-    output_dim = embed_dim * scale_factor * scale_factor
-
-    token_grids = token_grids.to(device=hidden_states.device, dtype=torch.long)
-    heights = token_grids[:, 0]
-    widths = token_grids[:, 1]
-    full_lengths = heights * widths
-
-    non_empty = full_lengths > 0
-    if not is_torchdynamo_compiling():
-        divisible = ((heights % scale_factor) == 0) & ((widths % scale_factor) == 0)
-        torch_compilable_check(
-            (~non_empty) | divisible,
-            f"Every non-empty (H, W) grid must be divisible by pixel_shuffle_scale={scale_factor}.",
-        )
-
-    output_lengths = (heights // scale_factor) * (widths // scale_factor)
-    max_output_tokens = output_lengths.max()
-    shuffled_4d = hidden_states.new_zeros((num_images, max_output_tokens, scale_factor * scale_factor, embed_dim))
-
-    token_positions = (
-        torch.arange(max_patches, device=hidden_states.device, dtype=torch.long).unsqueeze(0).expand(num_images, -1)
-    )
-    valid_token_mask = token_positions < full_lengths.unsqueeze(1)
-
-    safe_widths = torch.where(widths > 0, widths, torch.ones_like(widths))
-    row_index = torch.div(token_positions, safe_widths.unsqueeze(1), rounding_mode="floor")
-    col_index = token_positions.remainder(safe_widths.unsqueeze(1))
-
-    output_widths = widths.div(scale_factor, rounding_mode="floor")
-    output_index = row_index.div(scale_factor, rounding_mode="floor") * output_widths.unsqueeze(1)
-    output_index = output_index + col_index.div(scale_factor, rounding_mode="floor")
-    sub_index = row_index.remainder(scale_factor) * scale_factor + col_index.remainder(scale_factor)
-
-    batch_index = (
-        torch.arange(num_images, device=hidden_states.device, dtype=torch.long).unsqueeze(1).expand_as(token_positions)
-    )
-    shuffled_4d[batch_index[valid_token_mask], output_index[valid_token_mask], sub_index[valid_token_mask]] = (
-        hidden_states[valid_token_mask]
-    )
-
-    shuffled = shuffled_4d.view(num_images, max_output_tokens, output_dim)
-    return shuffled
-
-
-class IsaacVisionTransformer(PreTrainedModel):
-    """Vision tower for padded variable-resolution patches with per-image masks.
-
-    Args:
-        config (IsaacVisionConfig): Vision configuration with pixel-shuffle and patching parameters.
-
-    """
-
+@auto_docstring
+class IsaacVisionModel(PreTrainedModel):
     config: IsaacVisionConfig
     _supports_sdpa = True
     _supports_flash_attn = True
@@ -420,7 +349,6 @@ class IsaacVisionTransformer(PreTrainedModel):
 
     def __init__(self, config: IsaacVisionConfig):
         super().__init__(config)
-        self.config = config
         self.embeddings = IsaacVisionEmbeddings(config)
         self.encoder = IsaacVisionEncoder(config)
         self.post_layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
@@ -434,26 +362,86 @@ class IsaacVisionTransformer(PreTrainedModel):
         if isinstance(module, IsaacVisionEmbeddings):
             init.zeros_(module.position_embedding)
 
+    def pixel_shuffle_padded(
+        self,
+        hidden_states: torch.Tensor,
+        token_grids: torch.Tensor,
+    ) -> torch.Tensor:
+        """Apply pixel shuffle per image on padded batched vision embeddings.
+
+        Args:
+            hidden_states (`torch.Tensor`):
+                Vision embeddings of shape `(num_images, max_patches, hidden_size)`.
+            token_grids (`torch.Tensor`):
+                Grid sizes `(height, width)` per image, shape `(num_images, 2)`.
+
+        Returns:
+            `torch.Tensor`: Pixel-shuffled embeddings of shape
+            `(num_images, max_tokens, hidden_size * scale_factor**2)`.
+        """
+        scale_factor = self.pixel_shuffle_scale_factor
+        num_images, max_patches, embed_dim = hidden_states.shape
+        output_dim = embed_dim * scale_factor * scale_factor
+
+        token_grids = token_grids.to(device=hidden_states.device, dtype=torch.long)
+        heights = token_grids[:, 0]
+        widths = token_grids[:, 1]
+        full_lengths = heights * widths
+
+        non_empty = full_lengths > 0
+        if not is_torchdynamo_compiling():
+            divisible = ((heights % scale_factor) == 0) & ((widths % scale_factor) == 0)
+            torch_compilable_check(
+                (~non_empty) | divisible,
+                f"Every non-empty (H, W) grid must be divisible by pixel_shuffle_scale={scale_factor}.",
+            )
+
+        output_lengths = (heights // scale_factor) * (widths // scale_factor)
+        max_output_tokens = output_lengths.max()
+        shuffled_4d = hidden_states.new_zeros((num_images, max_output_tokens, scale_factor * scale_factor, embed_dim))
+
+        token_positions = (
+            torch.arange(max_patches, device=hidden_states.device, dtype=torch.long)
+            .unsqueeze(0)
+            .expand(num_images, -1)
+        )
+        valid_token_mask = token_positions < full_lengths.unsqueeze(1)
+
+        safe_widths = torch.where(widths > 0, widths, torch.ones_like(widths))
+        row_index = torch.div(token_positions, safe_widths.unsqueeze(1), rounding_mode="floor")
+        col_index = token_positions.remainder(safe_widths.unsqueeze(1))
+
+        output_widths = widths.div(scale_factor, rounding_mode="floor")
+        output_index = row_index.div(scale_factor, rounding_mode="floor") * output_widths.unsqueeze(1)
+        output_index = output_index + col_index.div(scale_factor, rounding_mode="floor")
+        sub_index = row_index.remainder(scale_factor) * scale_factor + col_index.remainder(scale_factor)
+
+        batch_index = (
+            torch.arange(num_images, device=hidden_states.device, dtype=torch.long)
+            .unsqueeze(1)
+            .expand_as(token_positions)
+        )
+        shuffled_4d[batch_index[valid_token_mask], output_index[valid_token_mask], sub_index[valid_token_mask]] = (
+            hidden_states[valid_token_mask]
+        )
+
+        shuffled = shuffled_4d.view(num_images, max_output_tokens, output_dim)
+        return shuffled
+
     @merge_with_config_defaults
     @capture_outputs(tie_last_hidden_states=False)
+    @auto_docstring
     def forward(
         self,
         pixel_values: torch.Tensor,
         image_grid_thw: torch.Tensor,
         **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutputWithPooling:
+        r"""
+        image_grid_thw (`torch.LongTensor`, *optional*):
+            Batch-major per-slot grids shaped `(batch_size, max_images, 3)` with `(T=1, H, W)` entries.
         """
-        Inputs:
-            pixel_values (`torch.Tensor`):
-                Patches shaped `(num_images, max_patches, patch_dim)`.
-            image_grid_thw (`torch.Tensor`):
-                Grid tensor shaped `(num_images, 3)` with per-image `(T=1, H_tokens, W_tokens)`.
-
-        Returns:
-            `BaseModelOutputWithPooling` with pixel-shuffled embeddings in `last_hidden_state`.
-        """
-        vision_token_grids = image_grid_thw[:, 1:].to(dtype=torch.long)
-        full_lengths = vision_token_grids[:, 0] * vision_token_grids[:, 1]
+        full_lengths = image_grid_thw[:, 1] * image_grid_thw[:, 2]
         token_positions = torch.arange(pixel_values.shape[1], device=pixel_values.device, dtype=torch.long)
         image_patch_attention_mask = token_positions.unsqueeze(0) < full_lengths.unsqueeze(1)
         image_patch_attention_mask = image_patch_attention_mask.to(dtype=torch.long)
@@ -471,10 +459,9 @@ class IsaacVisionTransformer(PreTrainedModel):
         encoder_outputs = self.encoder(inputs_embeds=hidden_states, attention_mask=encoder_attention_mask, **kwargs)
         hidden_states = self.post_layernorm(encoder_outputs.last_hidden_state)
 
-        hidden_states = pixel_shuffle_padded(
+        hidden_states = self.pixel_shuffle_padded(
             hidden_states=hidden_states,
-            token_grids=vision_token_grids,
-            scale_factor=self.pixel_shuffle_scale_factor,
+            token_grids=image_grid_thw[:, 1:],
         )
 
         return BaseModelOutputWithPooling(
@@ -485,51 +472,11 @@ class IsaacVisionTransformer(PreTrainedModel):
         )
 
 
-class IsaacMultiModalProjector(nn.Module):
-    """Maps vision tower outputs to the text hidden size with a SiLU MLP."""
-
-    def __init__(self, config: IsaacConfig):
-        super().__init__()
-        text_config = config.get_text_config()
-        vision_hidden_size = config.vision_config.hidden_size * (config.vision_config.pixel_shuffle_scale_factor**2)
-        backbone_hidden_size = text_config.hidden_size
-        self.linear_1 = nn.Linear(vision_hidden_size, 4 * vision_hidden_size, bias=False)
-        self.silu = nn.SiLU()
-        self.linear_2 = nn.Linear(4 * vision_hidden_size, backbone_hidden_size, bias=False)
-
-    def forward(self, image_features):
-        hidden_states = self.linear_1(image_features)
-        hidden_states = self.silu(hidden_states)
-        hidden_states = self.linear_2(hidden_states)
-        return hidden_states
-
-
-class _SinglePoint(NamedTuple):
-    x: int
-    y: int
-    mention: str | None = None
-    t: float | None = None
-
-
-class _BoundingBox(NamedTuple):
-    top_left: Any
-    bottom_right: Any
-    mention: str | None = None
-    t: float | None = None
-
-
-class _Polygon(NamedTuple):
-    points: tuple[Any, ...]
-    mention: str | None = None
-    t: float | None = None
-
-
 class IsaacRotaryEmbedding(nn.Module):
     inv_freq: torch.Tensor  # fix linting for `register_buffer`
 
     def __init__(self, config: IsaacTextConfig, device=None):
         super().__init__()
-        rope_parameters = config.rope_parameters
         self.max_seq_len_cached = config.max_position_embeddings
         self.original_max_seq_len = config.max_position_embeddings
 
@@ -543,9 +490,11 @@ class IsaacRotaryEmbedding(nn.Module):
 
         self.register_buffer("inv_freq", inv_freq, persistent=False)
         self.register_buffer("original_inv_freq", inv_freq.clone(), persistent=False)
-
-        self.mrope_section = self._resolve_mrope_section(rope_parameters.get("mrope_section"), self.inv_freq.shape[0])
-        self.hidden_size = config.hidden_size
+        self.mrope_section = config.rope_parameters.get("mrope_section")
+        if self.mrope_section is None:
+            weights = (2, 1, 1)
+            self.mrope_section = [self.inv_freq.shape[0] * w // sum(weights) for w in weights]
+            self.mrope_section[0] += self.inv_freq.shape[0] - sum(self.mrope_section)
 
     @staticmethod
     def compute_default_rope_parameters(
@@ -609,17 +558,6 @@ class IsaacRotaryEmbedding(nn.Module):
         """
         chunks = freqs.split(tuple(mrope_section), dim=-1)
         return torch.cat([chunk[i % 3] for i, chunk in enumerate(chunks)], dim=-1)
-
-    @staticmethod
-    def _resolve_mrope_section(section: list[int] | None, rotary_half_dim: int) -> list[int]:
-        if section is None:
-            weights = (2, 1, 1)
-            base = [rotary_half_dim * w // sum(weights) for w in weights]
-            base[0] += rotary_half_dim - sum(base)
-            return base
-
-        section = [int(v) for v in section]
-        return section
 
 
 @use_kernel_forward_from_hub("RMSNorm")
@@ -987,6 +925,25 @@ class IsaacTextModel(IsaacPreTrainedModel):
         return hidden_states
 
 
+class IsaacMultiModalProjector(nn.Module):
+    """Maps vision tower outputs to the text hidden size with a SiLU MLP."""
+
+    def __init__(self, config: IsaacConfig):
+        super().__init__()
+        text_config = config.get_text_config()
+        vision_hidden_size = config.vision_config.hidden_size * (config.vision_config.pixel_shuffle_scale_factor**2)
+        backbone_hidden_size = text_config.hidden_size
+        self.linear_1 = nn.Linear(vision_hidden_size, 4 * vision_hidden_size, bias=False)
+        self.silu = nn.SiLU()
+        self.linear_2 = nn.Linear(4 * vision_hidden_size, backbone_hidden_size, bias=False)
+
+    def forward(self, image_features):
+        hidden_states = self.linear_1(image_features)
+        hidden_states = self.silu(hidden_states)
+        hidden_states = self.linear_2(hidden_states)
+        return hidden_states
+
+
 @auto_docstring
 class IsaacModel(IsaacPreTrainedModel):
     base_model_prefix = "model"
@@ -1004,7 +961,7 @@ class IsaacModel(IsaacPreTrainedModel):
     def __init__(self, config: IsaacConfig):
         super().__init__(config)
         self.language_model = IsaacTextModel._from_config(config.text_config)
-        self.visual = IsaacVisionTransformer(config.vision_config)
+        self.visual = IsaacVisionModel(config.vision_config)
         self.multimodal_projector = IsaacMultiModalProjector(config)
         self.max_sequence_length = config.max_sequence_length
         self.vision_rescale_factor = config.vision_rescale_factor
@@ -1070,11 +1027,11 @@ class IsaacModel(IsaacPreTrainedModel):
 
     def get_rope_index(
         self,
-        input_ids: torch.LongTensor | None,
+        input_ids: torch.LongTensor,
         mm_token_type_ids: torch.Tensor,
-        image_grid_thw: torch.Tensor | None = None,
+        image_grid_thw: torch.Tensor,
+        image_metadata: torch.Tensor,
         attention_mask: torch.Tensor | None = None,
-        image_metadata: torch.Tensor | None = None,
         **kwargs,
     ) -> tuple[torch.Tensor, torch.Tensor]:
         """
@@ -1101,9 +1058,6 @@ class IsaacModel(IsaacPreTrainedModel):
             position_ids (`torch.LongTensor` of shape `(3, batch_size, sequence_length)`)
             mrope_position_deltas (`torch.Tensor` of shape `(batch_size)`)
         """
-        if image_grid_thw is None or image_metadata is None:
-            raise ValueError("Isaac multimodal RoPE requires both `image_grid_thw` and `image_metadata`.")
-
         if attention_mask is None:
             if input_ids is None:
                 attention_mask = mm_token_type_ids.new_ones(mm_token_type_ids.shape, dtype=torch.long)
@@ -1187,22 +1141,6 @@ class IsaacModel(IsaacPreTrainedModel):
 
     @can_return_tuple
     @auto_docstring
-    def get_video_features(
-        self,
-        pixel_values_videos: torch.FloatTensor,
-        video_grid_thw: torch.LongTensor | None = None,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | BaseModelOutputWithPooling:
-        r"""
-        pixel_values_videos (`torch.FloatTensor` of shape `(batch_size, num_channels, image_size, image_size)`):
-            The tensors corresponding to the input videos.
-        video_grid_thw (`torch.LongTensor` of shape `(num_videos, 3)`, *optional*):
-            The temporal, height and width of feature shape of each video in LLM.
-        """
-        raise ValueError("Isaac is image-only and does not support `pixel_values_videos` or `video_grid_thw`.")
-
-    @can_return_tuple
-    @auto_docstring
     def get_image_features(
         self,
         pixel_values: torch.Tensor,
@@ -1210,37 +1148,18 @@ class IsaacModel(IsaacPreTrainedModel):
         image_metadata: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
+        r"""
+        pixel_values (`torch.FloatTensor`, *optional*):
+            Batch-major patch vectors shaped `(batch_size, max_images, max_patches, patch_dim)`.
+        image_grid_thw (`torch.LongTensor`, *optional*):
+            Batch-major per-slot grids shaped `(batch_size, max_images, 3)` with `(T=1, H, W)` entries.
+        image_metadata (`torch.Tensor`, *optional*):
+            Batch-major per-slot metadata `(offset, length)` shaped `(batch_size, max_images, 2)`.
         """
-        Args:
-            pixel_values (`torch.Tensor`):
-                Batch-major patch vectors with shape `(batch_size, max_images, max_patches, patch_dim)`.
-            image_grid_thw (`torch.Tensor`):
-                Batch-major grids shaped `(batch_size, max_images, 3)` with `(T=1, H, W)` entries.
-            image_metadata (`torch.Tensor`, *optional*):
-                Batch-major per-slot metadata `(offset, length)` shaped `(batch_size, max_images, 2)`.
-        """
-        if pixel_values.shape[0] == 0:
-            hidden_size = self.config.get_text_config().hidden_size
-            return BaseModelOutputWithPooling(
-                last_hidden_state=pixel_values.new_zeros((0, 0, hidden_size)),
-                pooler_output=(),
-                hidden_states=None,
-                attentions=None,
-            )
-
-        image_grid_thw = image_grid_thw.to(dtype=torch.long)
         active_slot_mask = image_grid_thw[..., 0].eq(1)
-        if not active_slot_mask.any():
-            hidden_size = self.config.get_text_config().hidden_size
-            return BaseModelOutputWithPooling(
-                last_hidden_state=pixel_values.new_zeros((0, 0, hidden_size)),
-                pooler_output=(),
-                hidden_states=None,
-                attentions=None,
-            )
-
         flat_pixel_values = pixel_values[active_slot_mask]
         flat_image_grid_thw = image_grid_thw[active_slot_mask]
+
         vision_outputs: BaseModelOutputWithPooling = self.visual(
             pixel_values=flat_pixel_values,
             image_grid_thw=flat_image_grid_thw,
@@ -1249,21 +1168,20 @@ class IsaacModel(IsaacPreTrainedModel):
         )
         projected_features = self.multimodal_projector(vision_outputs.last_hidden_state)
 
-        pixel_shuffle_scale = self.config.vision_config.pixel_shuffle_scale_factor
-        full_lengths = flat_image_grid_thw[:, 1].div(pixel_shuffle_scale, rounding_mode="floor") * flat_image_grid_thw[
-            :, 2
-        ].div(pixel_shuffle_scale, rounding_mode="floor")
+        # Truncate image features using offset and length
         if image_metadata is None:
-            offsets = torch.zeros_like(full_lengths)
-            lengths = full_lengths
+            pixel_shuffle_scale = self.config.vision_config.pixel_shuffle_scale_factor
+            downsampled_height = flat_image_grid_thw[:, 1].div(pixel_shuffle_scale, rounding_mode="floor")
+            downsampled_width = flat_image_grid_thw[:, 2].div(pixel_shuffle_scale, rounding_mode="floor")
+            lengths = downsampled_height * downsampled_width
+            offsets = torch.zeros_like(lengths)
         else:
             torch_compilable_check(
                 image_metadata.shape[:2] == image_grid_thw.shape[:2],
                 "IsaacModel.get_image_features expects batch-major metadata aligned with `image_grid_thw`.",
             )
-            active_metadata = image_metadata[active_slot_mask]
-            offsets = active_metadata[:, 0].to(device=projected_features.device, dtype=torch.long)
-            lengths = active_metadata[:, 1].to(device=projected_features.device, dtype=torch.long)
+            offsets = image_metadata[active_slot_mask][:, 0]
+            lengths = image_metadata[active_slot_mask][:, 1]
 
         image_features = tuple(
             projected_features[image_idx, offset : offset + length]
@@ -1307,7 +1225,6 @@ class IsaacModel(IsaacPreTrainedModel):
         past_key_values: Cache | None = None,
     ) -> torch.Tensor:
         past_seen_tokens = 0 if past_key_values is None else past_key_values.get_seq_length()
-
         has_multimodal = (
             image_grid_thw is not None
             and image_metadata is not None
@@ -1315,8 +1232,9 @@ class IsaacModel(IsaacPreTrainedModel):
         )
         if has_multimodal and mm_token_type_ids is None and input_ids is not None:
             raise ValueError(
-                "Multimodal data was passed (via `image_grid_thw`) but `mm_token_type_ids` is missing. "
-                "Please pass `mm_token_type_ids` so Isaac can build multimodal RoPE positions."
+                "Multimodal data was passed (via `image_grid_thw` or `image_metadata`) but `mm_token_type_ids` is "
+                "missing. Please pass `mm_token_type_ids` to the model so that multimodal RoPE (M-RoPE) can be "
+                "computed correctly. `mm_token_type_ids` is returned by the processor alongside `input_ids`."
             )
 
         if has_multimodal and past_seen_tokens == 0:
@@ -1379,16 +1297,15 @@ class IsaacModel(IsaacPreTrainedModel):
         use_cache: bool | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPast:
-        """
-        Args:
-            mm_token_type_ids (`torch.LongTensor`, *optional*):
-                Multimodal token type ids aligned with the token sequence, using `0 -> text` and `1 -> image`.
-            pixel_values (`torch.FloatTensor`, *optional*):
-                Batch-major patch vectors shaped `(batch_size, max_images, max_patches, patch_dim)`.
-            image_grid_thw (`torch.LongTensor`, *optional*):
-                Batch-major per-slot grids shaped `(batch_size, max_images, 3)` with `(T=1, H, W)` entries.
-            image_metadata (`torch.LongTensor`, *optional*):
-                Batch-major per-slot metadata shaped `(batch_size, max_images, 2)` with `(offset, length)`.
+        r"""
+        mm_token_type_ids (`torch.LongTensor`, *optional*):
+            Multimodal token type ids aligned with the token sequence, using `0 -> text` and `1 -> image`.
+        pixel_values (`torch.FloatTensor`, *optional*):
+            Batch-major patch vectors shaped `(batch_size, max_images, max_patches, patch_dim)`.
+        image_grid_thw (`torch.LongTensor`, *optional*):
+            Batch-major per-slot grids shaped `(batch_size, max_images, 3)` with `(T=1, H, W)` entries.
+        image_metadata (`torch.LongTensor`, *optional*):
+            Batch-major per-slot metadata shaped `(batch_size, max_images, 2)` with `(offset, length)`.
         """
         if (input_ids is None) == (inputs_embeds is None):
             raise ValueError("You must specify exactly one of `input_ids` or `inputs_embeds`.")
@@ -1396,25 +1313,8 @@ class IsaacModel(IsaacPreTrainedModel):
         if inputs_embeds is None:
             inputs_embeds = self.get_input_embeddings()(input_ids)
 
-        batch_size, seq_len = inputs_embeds.shape[:2]
-        if mm_token_type_ids is None:
-            mm_token_type_ids = torch.full((batch_size, seq_len), 0, device=inputs_embeds.device, dtype=torch.long)
-        else:
-            mm_token_type_ids = mm_token_type_ids.to(device=inputs_embeds.device, dtype=torch.long)
-            if mm_token_type_ids.shape[1] < seq_len:
-                padding = mm_token_type_ids.new_zeros((batch_size, seq_len - mm_token_type_ids.shape[1]))
-                mm_token_type_ids = torch.cat([mm_token_type_ids, padding], dim=1)
-            elif mm_token_type_ids.shape[1] > seq_len:
-                mm_token_type_ids = mm_token_type_ids[:, -seq_len:]
-
-        if image_metadata is not None:
-            image_metadata = image_metadata.to(device=inputs_embeds.device, dtype=torch.long)
-
         image_mask = None
-        has_active_images = (
-            pixel_values is not None and image_grid_thw is not None and bool(image_grid_thw[..., 0].eq(1).any().item())
-        )
-        if has_active_images:
+        if pixel_values is not None and image_grid_thw is not None:
             image_outputs = self.get_image_features(
                 pixel_values=pixel_values,
                 image_grid_thw=image_grid_thw,
@@ -1467,14 +1367,25 @@ class IsaacModel(IsaacPreTrainedModel):
             **kwargs,
         )
 
-        outputs_with_rope = BaseModelOutputWithPast(
+        return BaseModelOutputWithPast(
             last_hidden_state=outputs.last_hidden_state,
             past_key_values=outputs.past_key_values,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
-        outputs_with_rope["rope_deltas"] = self.rope_deltas
-        return outputs_with_rope
+
+
+@dataclass
+class IsaacCausalLMOutputWithPast(CausalLMOutputWithPast):
+    """
+    Base class for Isaac causal language model (or autoregressive) outputs.
+
+    Args:
+        rope_deltas (`torch.LongTensor` of shape `(batch_size, )`, *optional*):
+            The rope index difference between sequence length and multimodal rope.
+    """
+
+    rope_deltas: torch.LongTensor | None = None
 
 
 @dataclass
@@ -1486,35 +1397,6 @@ class BaseModelOutputWithDeepstackFeatures(BaseModelOutputWithPooling):
     """
 
     deepstack_features: list[torch.FloatTensor] | None = None
-
-
-@dataclass
-@auto_docstring(
-    custom_intro="""
-    Base class for Isaac causal language model (or autoregressive) outputs.
-    """
-)
-class IsaacCausalLMOutputWithPast(ModelOutput):
-    r"""
-    loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
-        Language modeling loss (for next-token prediction).
-    logits (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.vocab_size)`):
-        Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
-    past_key_values (`Cache`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
-        It is a [`~cache_utils.Cache`] instance. For more details, see our [kv cache guide](https://huggingface.co/docs/transformers/en/kv_cache).
-
-        Contains pre-computed hidden-states (key and values in the self-attention blocks) that can be used (see
-        `past_key_values` input) to speed up sequential decoding.
-    rope_deltas (`torch.LongTensor` of shape `(batch_size, )`, *optional*):
-        The rope index difference between sequence length and multimodal rope.
-    """
-
-    loss: torch.FloatTensor | None = None
-    logits: torch.FloatTensor | None = None
-    past_key_values: Cache | None = None
-    hidden_states: tuple[torch.FloatTensor] | None = None
-    attentions: tuple[torch.FloatTensor] | None = None
-    rope_deltas: torch.LongTensor | None = None
 
 
 @auto_docstring
@@ -1636,7 +1518,6 @@ class IsaacForConditionalGeneration(IsaacPreTrainedModel, GenerationMixin):
         >>> print(output_text)
         ```
         """
-
         outputs = self.model(
             input_ids=input_ids,
             pixel_values=pixel_values,
@@ -1652,8 +1533,6 @@ class IsaacForConditionalGeneration(IsaacPreTrainedModel, GenerationMixin):
         )
 
         hidden_states = outputs[0]
-
-        # Only compute necessary logits, and do not upcast them to float if we are not computing the loss
         slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
         logits = self.lm_head(hidden_states[:, slice_indices, :])
 
@@ -1667,13 +1546,13 @@ class IsaacForConditionalGeneration(IsaacPreTrainedModel, GenerationMixin):
             past_key_values=outputs.past_key_values,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
-            rope_deltas=outputs.rope_deltas,
+            rope_deltas=self.model.rope_deltas,
         )
 
     def prepare_inputs_for_generation(
         self,
         input_ids,
-        past_key_values=None,
+        past_key_values: Cache = None,
         attention_mask: torch.Tensor | None = None,
         inputs_embeds: torch.FloatTensor | None = None,
         mm_token_type_ids: torch.LongTensor | None = None,
@@ -1681,8 +1560,8 @@ class IsaacForConditionalGeneration(IsaacPreTrainedModel, GenerationMixin):
         image_grid_thw: torch.LongTensor | None = None,
         image_metadata: torch.LongTensor | None = None,
         position_ids: torch.LongTensor | None = None,
-        is_first_iteration=False,
-        use_cache=True,
+        is_first_iteration: bool = False,
+        use_cache: bool = True,
         **kwargs,
     ) -> dict[str, Any]:
         model_inputs = super().prepare_inputs_for_generation(
@@ -1697,13 +1576,14 @@ class IsaacForConditionalGeneration(IsaacPreTrainedModel, GenerationMixin):
             use_cache=use_cache,
             **kwargs,
         )
-        is_prefill = is_first_iteration or not use_cache
+
         multimodal_inputs = {
             "mm_token_type_ids": mm_token_type_ids,
             "pixel_values": pixel_values,
             "image_grid_thw": image_grid_thw,
             "image_metadata": image_metadata,
         }
+        is_prefill = is_first_iteration or not use_cache
         for key, value in multimodal_inputs.items():
             model_inputs[key] = value if is_prefill else None
         if model_inputs["mm_token_type_ids"] is not None:
@@ -1722,6 +1602,7 @@ class IsaacForConditionalGeneration(IsaacPreTrainedModel, GenerationMixin):
                     model_inputs["mm_token_type_ids"] = torch.cat([model_inputs["mm_token_type_ids"], padding], dim=1)
                 elif current_length > sequence_length:
                     model_inputs["mm_token_type_ids"] = model_inputs["mm_token_type_ids"][:, -sequence_length:]
+
         return model_inputs
 
     def _prepare_position_ids_for_generation(self, inputs_tensor, model_kwargs):
@@ -1839,10 +1720,24 @@ class IsaacForConditionalGeneration(IsaacPreTrainedModel, GenerationMixin):
         return input_ids, model_kwargs
 
 
-__all__ = [
-    "IsaacTextModel",
-    "IsaacVisionTransformer",
-    "IsaacModel",
-    "IsaacPreTrainedModel",
-    "IsaacForConditionalGeneration",
-]
+class SinglePoint(NamedTuple):
+    x: int
+    y: int
+    mention: str | None = None
+    t: float | None = None
+
+
+class BoundingBox(NamedTuple):
+    top_left: Any
+    bottom_right: Any
+    mention: str | None = None
+    t: float | None = None
+
+
+class Polygon(NamedTuple):
+    points: tuple[Any, ...]
+    mention: str | None = None
+    t: float | None = None
+
+
+__all__ = ["IsaacTextModel", "IsaacVisionModel", "IsaacModel", "IsaacPreTrainedModel", "IsaacForConditionalGeneration"]

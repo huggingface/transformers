@@ -218,7 +218,7 @@ IGNORE_NON_TESTED = (
         "Qwen3_5TextModel",  # Building part of bigger (tested) model. Tested implicitly through Qwen3_5ForConditionalGeneration.
         "Qwen3_5MoeTextModel",  # Building part of bigger (tested) model. Tested implicitly through Qwen3_5MoeForConditionalGeneration.
         "IsaacTextModel",  # Building part of bigger (tested) model. Tested implicitly through IsaacForConditionalGeneration.
-        "IsaacVisionTransformer",  # Building part of bigger (tested) model. Tested implicitly through IsaacForConditionalGeneration.
+        "IsaacVisionModel",  # Building part of bigger (tested) model. Tested implicitly through IsaacForConditionalGeneration.
         "Qwen2_5OmniForConditionalGeneration",  # Not a regular model. Testted in Qwen2_5OmniModelIntergrationTest
         "Qwen2_5OmniTalkerForConditionalGeneration",  #  Building part of bigger (tested) model. Tested implicitly through Qwen2_5OmniModelIntergrationTest.
         "Qwen2_5OmniTalkerModel",  # Building part of bigger (tested) model. Tested implicitly through Qwen2_5OmniModelIntergrationTest.
@@ -470,7 +470,7 @@ IGNORE_NON_AUTO_CONFIGURED = PRIVATE_MODELS.copy() + [
     "PaddleOCRVisionTransformer",  # Building part of bigger (tested) model
     "PaddleOCRTextModel",  # Building part of bigger (tested) model
     "IsaacTextModel",  # Building part of a bigger model
-    "IsaacVisionTransformer",  # Building part of a bigger model
+    "IsaacVisionModel",  # Building part of a bigger model
     "Qwen2_5OmniTalkerForConditionalGeneration",  # Building part of a bigger model
     "Qwen2_5OmniTalkerModel",  # Building part of a bigger model
     "Qwen2_5OmniThinkerForConditionalGeneration",  # Building part of a bigger model
@@ -1134,6 +1134,7 @@ UNDOCUMENTED_OBJECTS = [
     "Ernie4_5_VL_MoeImageProcessorFast",  # BC Alias
     "Ernie4_5_VL_MoeImageProcessorPil",  # BC Alias
     "Ernie4_5_VL_MoeModel",  # BC Alias
+    "IsaacVisionModel",  # Internal building block tested implicitly through IsaacForConditionalGeneration.
     "Ernie4_5_VL_MoeTextConfig",  # BC Alias
     "Ernie4_5_VL_MoeTextModel",  # BC Alias
     "Ernie4_5_VL_MoeVariableResolutionResamplerModel",  # BC Alias

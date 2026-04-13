@@ -20,23 +20,25 @@
 
 
 import math
-from collections.abc import Sequence
 from typing import Any
 
 from ... import TorchvisionBackend
 from ...feature_extraction_utils import BatchFeature
 from ...image_transforms import group_images_by_shape, reorder_images
 from ...image_utils import ImageInput, PILImageResampling, SizeDict, make_nested_list_of_images
-from ...processing_utils import ImagesKwargs
+from ...processing_utils import ImagesKwargs, Unpack
 from ...utils import TensorType, auto_docstring
-from ...utils.constants import IMAGENET_STANDARD_MEAN as VISION_MEAN
-from ...utils.constants import IMAGENET_STANDARD_STD as VISION_STD
+from ...utils.constants import IMAGENET_STANDARD_MEAN, IMAGENET_STANDARD_STD
 from ...utils.import_utils import is_torch_available
 
 
 if is_torch_available():
     import torch
     import torch.nn.functional as F
+    from torchvision.transforms.v2 import functional as tvF
+
+
+# --------------------------------Isaac Image Processor--------------------------------
 
 
 class IsaacImageProcessorKwargs(ImagesKwargs, total=False):
@@ -173,28 +175,26 @@ def get_image_size_for_max_num_patches(
 
 @auto_docstring
 class IsaacImageProcessor(TorchvisionBackend):
-    MAX_PIXELS = 60_000_000  # 60‑megapixel ceiling ≈ 8200 × 7300 px
-
-    resample = PILImageResampling.BILINEAR
-    model_input_names = [
-        "pixel_values",
-        "image_grid_thw",
-    ]
+    model_input_names = ["pixel_values", "image_grid_thw"]
     valid_kwargs = IsaacImageProcessorKwargs
 
+    resample = PILImageResampling.BILINEAR
     do_resize = True
     do_center_crop = False
-    patch_size: int | None = 16
-    max_num_patches: int | None = 256
-    min_num_patches: int | None = None
-    pixel_shuffle_scale: int | None = 1
+    patch_size = 16
+    max_num_patches = 256
+    min_num_patches = None
+    pixel_shuffle_scale = 1
     do_pad = True
     do_rescale = True
     do_normalize = True
-    image_mean = list(VISION_MEAN)
-    image_std = list(VISION_STD)
+    image_mean = IMAGENET_STANDARD_MEAN
+    image_std = IMAGENET_STANDARD_STD
     do_convert_rgb = True
     disable_grouping = False
+
+    def __init__(self, **kwargs: Unpack[IsaacImageProcessorKwargs]):
+        super().__init__(**kwargs)
 
     def _validate_preprocess_kwargs(self, **kwargs):
         # Allow callers to omit resize-related placeholders that BaseImageProcessorFast checks for.
@@ -220,55 +220,28 @@ class IsaacImageProcessor(TorchvisionBackend):
             return image.clamp(0, 255).round().to(torch.uint8)
         return F.interpolate(image, size=(size.height, size.width), mode="bilinear", align_corners=False)
 
-    def get_number_of_image_patches(
-        self,
-        image_height: int,
-        image_width: int,
-        images_kwargs: dict[str, Any] | None = None,
-    ) -> int:
-        images_kwargs = images_kwargs or {}
-        patch_size = images_kwargs.get("patch_size", self.patch_size)
-        max_num_patches = images_kwargs.get("max_num_patches", self.max_num_patches)
-        min_num_patches = images_kwargs.get("min_num_patches", self.min_num_patches)
-        pixel_shuffle_scale = images_kwargs.get("pixel_shuffle_scale", self.pixel_shuffle_scale)
-
-        target_height, target_width = get_image_size_for_max_num_patches(
-            image_height,
-            image_width,
-            patch_size,
-            max_num_patches,
-            min_num_patches=min_num_patches,
-            pixel_shuffle_scale=pixel_shuffle_scale,
-        )
-        return (target_height // patch_size) * (target_width // patch_size)
-
     def pack_images(
         self,
         vision_patches: list[list[torch.Tensor]],
         vision_token_grids: list[list[torch.Tensor]],
     ) -> dict[str, torch.Tensor | None]:
         batch_size = len(vision_patches)
-        max_images = max((len(sample_patches) for sample_patches in vision_patches), default=0)
         flat_patches = [patches for sample_patches in vision_patches for patches in sample_patches]
-        if max_images == 0 or not flat_patches:
-            return {
-                "pixel_values": None,
-                "image_grid_thw": None,
-            }
+        if len(flat_patches) == 0:
+            return {"pixel_values": None, "image_grid_thw": None}
 
         first_patch = flat_patches[0]
         max_patches = max(patches.shape[0] for patches in flat_patches)
-        patch_dim = first_patch.shape[-1]
-        patch_dtype = first_patch.dtype
-        patch_device = first_patch.device
+        max_images = max((len(sample_patches) for sample_patches in vision_patches), default=0)
 
+        patch_dim = first_patch.shape[-1]
         tensors = {
             "pixel_values": torch.zeros(
                 (batch_size, max_images, max_patches, patch_dim),
-                device=patch_device,
-                dtype=patch_dtype,
+                device=first_patch.device,
+                dtype=first_patch.dtype,
             ),
-            "image_grid_thw": torch.zeros((batch_size, max_images, 3), device=patch_device, dtype=torch.long),
+            "image_grid_thw": torch.zeros((batch_size, max_images, 3), device=first_patch.device, dtype=torch.long),
         }
 
         for batch_idx, (sample_patches, sample_token_grids) in enumerate(
@@ -286,48 +259,39 @@ class IsaacImageProcessor(TorchvisionBackend):
         self,
         images: list[list[torch.Tensor]],
         do_resize: bool,
-        resample: Any | None,
-        do_rescale: bool | None,
-        rescale_factor: float | None,
-        do_normalize: bool | None,
-        image_mean: float | Sequence[float] | None,
-        image_std: float | Sequence[float] | None,
-        do_pad: bool | None = None,
-        disable_grouping: bool | None = None,
-        return_tensors: str | TensorType | None = None,
-        patch_size: int | None = None,
-        max_num_patches: int | None = None,
-        min_num_patches: int | None = None,
-        pixel_shuffle_scale: int | None = None,
+        resample: PILImageResampling | tvF.InterpolationMode | int | None,
+        do_rescale: bool,
+        rescale_factor: float,
+        do_normalize: bool,
+        image_mean: float | list[float] | None,
+        image_std: float | list[float] | None,
+        do_pad: bool,
+        patch_size: int,
+        max_num_patches: int,
+        min_num_patches: int,
+        pixel_shuffle_scale: int,
+        disable_grouping: bool | None,
+        return_tensors: str | TensorType | None,
         **kwargs,
     ) -> BatchFeature:
-        resample = kwargs.pop("interpolation", resample)
-        # IsaacProcessor routes text-only calls here as an empty image list per sample.
-        # Return `None` visual fields so text-only batches skip multimodal codepaths like other VLMs.
         if all(len(sample_images) == 0 for sample_images in images):
-            tensors = {
-                "pixel_values": None,
-                "image_grid_thw": None,
-            }
-            return BatchFeature(data=tensors, tensor_type=return_tensors)
+            return BatchFeature(data={"pixel_values": None, "image_grid_thw": None}, tensor_type=return_tensors)
 
         grouped_images, grouped_images_index = group_images_by_shape(
             images, disable_grouping=disable_grouping, is_nested=True
         )
-
         grouped_outputs = {}
-
         for shape, stacked_images in grouped_images.items():
             grouped_batch_size, channels, original_height, original_width = stacked_images.shape
-            target_height, target_width = get_image_size_for_max_num_patches(
-                original_height,
-                original_width,
-                patch_size,
-                max_num_patches,
-                min_num_patches=min_num_patches,
-                pixel_shuffle_scale=pixel_shuffle_scale,
-            )
             if do_resize:
+                target_height, target_width = get_image_size_for_max_num_patches(
+                    original_height,
+                    original_width,
+                    patch_size,
+                    max_num_patches,
+                    min_num_patches=min_num_patches,
+                    pixel_shuffle_scale=pixel_shuffle_scale,
+                )
                 image_batch = self.resize(
                     stacked_images, SizeDict(height=target_height, width=target_width), resample=resample
                 )
@@ -356,7 +320,8 @@ class IsaacImageProcessor(TorchvisionBackend):
 
             if (height_tokens % pixel_shuffle_scale) or (width_tokens % pixel_shuffle_scale):
                 raise ValueError(
-                    f"Token grid (h={height_tokens}, w={width_tokens}) must be divisible by pixel_shuffle_scale={pixel_shuffle_scale}; adjust resize/patch parameters or disable pixel shuffle."
+                    f"Token grid (h={height_tokens}, w={width_tokens}) must be divisible by pixel_shuffle_scale={pixel_shuffle_scale};"
+                    f" adjust resize/patch parameters or disable pixel shuffle."
                 )
 
             grouped_outputs[shape] = (
@@ -382,6 +347,28 @@ class IsaacImageProcessor(TorchvisionBackend):
         )
 
         return BatchFeature(data=tensors, tensor_type=return_tensors)
+
+    def get_number_of_image_patches(
+        self,
+        image_height: int,
+        image_width: int,
+        images_kwargs: dict[str, Any] | None = None,
+    ) -> int:
+        images_kwargs = images_kwargs or {}
+        patch_size = images_kwargs.get("patch_size", self.patch_size)
+        max_num_patches = images_kwargs.get("max_num_patches", self.max_num_patches)
+        min_num_patches = images_kwargs.get("min_num_patches", self.min_num_patches)
+        pixel_shuffle_scale = images_kwargs.get("pixel_shuffle_scale", self.pixel_shuffle_scale)
+
+        target_height, target_width = get_image_size_for_max_num_patches(
+            image_height,
+            image_width,
+            patch_size,
+            max_num_patches,
+            min_num_patches=min_num_patches,
+            pixel_shuffle_scale=pixel_shuffle_scale,
+        )
+        return (target_height // patch_size) * (target_width // patch_size)
 
 
 __all__ = ["IsaacImageProcessor"]
