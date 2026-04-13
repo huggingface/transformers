@@ -25,6 +25,7 @@ from .core_model_loading import (
     Transpose,
     WeightConverter,
     WeightRenaming,
+    rename_source_key,
 )
 
 
@@ -94,8 +95,9 @@ def _build_checkpoint_conversion_mapping():
         # almost unmatchable regex (i doubt any sd has `/` char), So we NEVER revert back, even accidentally
         "clip_vision_model": [
             WeightRenaming(
-                source_patterns=r"(?<=\.)vision_model\.(.+)$",
-                target_patterns=r"(?<=\/)\1(?<=\/)",
+                source_patterns=r"vision_model\.(.+)$",
+                target_patterns=r"\1",
+                # target_patterns=r"(?<=\/)\1(?<=\/)",
             ),
         ],
         "llava": [
@@ -638,11 +640,27 @@ def register_checkpoint_conversion_mapping(
     _checkpoint_conversion_mapping_cache[model_type] = mapping
 
 
-def extract_weight_conversions_for_model(model: PreTrainedModel) -> list[WeightConverter | WeightRenaming] | None:
+def extract_weight_conversions_for_model(
+    model: PreTrainedModel, prefix_name: str = ""
+) -> list[WeightConverter | WeightRenaming] | None:
     model_type = getattr(model.config, "model_type", None)
     if model_type is not None:
+        model_specific_conversions_with_prefix = None
         model_specific_conversions = get_checkpoint_conversion_mapping(model_type)
-        return model_specific_conversions
+        if model_specific_conversions:
+            model_specific_conversions_with_prefix = []
+            for conversion in model_specific_conversions:
+                sources, targets = conversion.source_patterns, conversion.target_patterns
+                if prefix_name:
+                    sources = [f"{prefix_name}.{source.lstrip('^')}" for source in sources]
+                    targets = [f"{prefix_name}.{target.lstrip('^')}" for target in targets]
+
+                kwargs = {}
+                if hasattr(conversion, "operations"):
+                    kwargs["operations"] = conversion.operations
+                conversion = type(conversion)(sources, targets, **kwargs)
+                model_specific_conversions_with_prefix.append(conversion)
+        return model_specific_conversions_with_prefix
     return None
 
 
@@ -675,15 +693,18 @@ def get_model_conversion_mapping(
         seen_model_types.add(model.config.model_type)
 
     # Recurse over submodules and collect all conversions
-    for submodule in model.modules():
+    reverse_weight_conversions = [conversion.reverse_transform() for conversion in weight_conversions]
+    for name, submodule in model.named_modules():
         if (
             submodule is not model
             and isinstance(submodule, PreTrainedModel)
             and submodule.config.model_type not in seen_model_types
         ):
-            conversions = extract_weight_conversions_for_model(submodule)
+            prefix_name = rename_source_key(name, reverse_weight_conversions, weight_converters=[])[0]
+            conversions = extract_weight_conversions_for_model(submodule, prefix_name=prefix_name)
             if conversions is not None:
                 weight_conversions.extend(conversions)
+                reverse_weight_conversions.extend([conversion.reverse_transform() for conversion in conversions])
                 seen_model_types.add(submodule.config.model_type)
 
     if add_legacy:
