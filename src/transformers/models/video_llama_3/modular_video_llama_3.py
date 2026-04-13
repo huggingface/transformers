@@ -501,10 +501,10 @@ class VideoLlama3Model(Qwen2VLModel):
             The temporal, height and width of feature shape of each video in LLM.
         video_merge_sizes (`torch.Tensor` of shape `(num_videos,)`):
             The spatial downsampling ratio of each video feature.
-        video_cu_seqlens (<fill_type>):
-            <fill_docstring>
-        video_rotary_pos_ids (<fill_type>):
-            <fill_docstring>
+        video_cu_seqlens (`torch.Tensor` of shape `(num_video_patches + 1,)`, *optional*):
+            Precomputed cumulative sequence lengths for video patches, used for packed variable-length attention.
+        video_rotary_pos_ids (`torch.Tensor` of shape `(num_video_tokens, 2)`, *optional*):
+            Precomputed (row, col) position IDs for video rotary embeddings.
         """
         return self.get_image_features(
             pixel_values=pixel_values_videos,
@@ -533,10 +533,10 @@ class VideoLlama3Model(Qwen2VLModel):
             The temporal, height and width of feature shape of each image in LLM.
         image_merge_sizes (`torch.Tensor` of shape `(num_images,)`):
             The spatial downsampling ratio of each image feature.
-        image_cu_seqlens (<fill_type>):
-            <fill_docstring>
-        image_rotary_pos_ids (<fill_type>):
-            <fill_docstring>
+        image_cu_seqlens (`torch.Tensor` of shape `(num_image_patches + 1,)`, *optional*):
+            Precomputed cumulative sequence lengths for image patches, used for packed variable-length attention.
+        image_rotary_pos_ids (`torch.Tensor` of shape `(num_image_tokens, 2)`, *optional*):
+            Precomputed (row, col) position IDs for image rotary embeddings.
         """
         vision_outputs = self.vision_model(
             pixel_values=pixel_values,
