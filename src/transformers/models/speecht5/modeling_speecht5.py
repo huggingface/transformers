@@ -877,7 +877,7 @@ class SpeechT5Attention(nn.Module):
         attention_mask: torch.Tensor | None = None,
         position_bias: torch.Tensor | None = None,
         output_attentions: bool = False,
-        cache_position: torch.Tensor | None = None,
+        **kwargs,
     ) -> tuple[torch.Tensor, torch.Tensor | None, Cache | None]:
         """Input shape: Batch x Time x Channel"""
 
@@ -915,10 +915,7 @@ class SpeechT5Attention(nn.Module):
 
             if past_key_values is not None:
                 # save all key/value_states to cache to be re-used for fast auto-regressive generation
-                cache_position = cache_position if not is_cross_attention else None
-                key_states, value_states = curr_past_key_values.update(
-                    key_states, value_states, self.layer_idx, {"cache_position": cache_position}
-                )
+                key_states, value_states = curr_past_key_values.update(key_states, value_states, self.layer_idx)
                 # set flag that curr layer for cross-attn is already updated so we can re-use in subsequent calls
                 if is_cross_attention and isinstance(past_key_values, EncoderDecoderCache):
                     past_key_values.is_updated[self.layer_idx] = True
@@ -1104,7 +1101,7 @@ class SpeechT5DecoderLayer(GradientCheckpointingLayer):
         past_key_values: Cache | None = None,
         output_attentions: bool | None = False,
         use_cache: bool | None = True,
-        cache_position: torch.Tensor | None = None,
+        **kwargs,
     ):
         """
         Args:
@@ -1128,7 +1125,6 @@ class SpeechT5DecoderLayer(GradientCheckpointingLayer):
             past_key_values=past_key_values,
             attention_mask=attention_mask,
             output_attentions=output_attentions,
-            cache_position=cache_position,
         )
         hidden_states = self.dropout(hidden_states)
         hidden_states = residual + hidden_states
@@ -1145,7 +1141,6 @@ class SpeechT5DecoderLayer(GradientCheckpointingLayer):
                 attention_mask=encoder_attention_mask,
                 past_key_values=past_key_values,
                 output_attentions=output_attentions,
-                cache_position=cache_position,
             )
             hidden_states = self.dropout(hidden_states)
             hidden_states = residual + hidden_states
@@ -1286,7 +1281,7 @@ class SpeechT5Encoder(SpeechT5PreTrainedModel):
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         attention_mask = create_bidirectional_mask(
             config=self.config,
@@ -1478,7 +1473,6 @@ class SpeechT5Decoder(SpeechT5PreTrainedModel):
         output_attentions: bool | None = None,
         output_hidden_states: bool | None = None,
         return_dict: bool | None = None,
-        cache_position: torch.Tensor | None = None,
         **kwargs,
     ) -> tuple | BaseModelOutputWithPastAndCrossAttentions:
         r"""
@@ -1530,7 +1524,7 @@ class SpeechT5Decoder(SpeechT5PreTrainedModel):
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
         use_cache = use_cache if use_cache is not None else self.config.use_cache
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         if self.gradient_checkpointing and self.training:
             if use_cache:
@@ -1542,17 +1536,10 @@ class SpeechT5Decoder(SpeechT5PreTrainedModel):
         if use_cache and past_key_values is None:
             past_key_values = EncoderDecoderCache(DynamicCache(config=self.config), DynamicCache(config=self.config))
 
-        past_key_values_length = past_key_values.get_seq_length() if past_key_values is not None else 0
-        if cache_position is None:
-            cache_position = torch.arange(
-                past_key_values_length, past_key_values_length + hidden_states.shape[1], device=hidden_states.device
-            )
-
         attention_mask = create_causal_mask(
             config=self.config,
             inputs_embeds=hidden_states,
             attention_mask=attention_mask,
-            cache_position=cache_position,
             past_key_values=past_key_values,
         )
 
@@ -1592,7 +1579,6 @@ class SpeechT5Decoder(SpeechT5PreTrainedModel):
                 past_key_values=past_key_values,
                 output_attentions=output_attentions,
                 use_cache=use_cache,
-                cache_position=cache_position,
             )
             hidden_states = layer_outputs[0]
             if output_attentions:
@@ -1646,7 +1632,6 @@ class SpeechT5DecoderWithSpeechPrenet(SpeechT5PreTrainedModel):
         output_attentions: bool | None = None,
         output_hidden_states: bool | None = None,
         return_dict: bool | None = None,
-        cache_position: torch.Tensor | None = None,
         **kwargs,
     ) -> tuple | BaseModelOutputWithPastAndCrossAttentions:
         decoder_hidden_states = self.prenet(input_values, speaker_embeddings)
@@ -1661,7 +1646,6 @@ class SpeechT5DecoderWithSpeechPrenet(SpeechT5PreTrainedModel):
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
-            cache_position=cache_position,
         )
 
         return outputs
@@ -1697,7 +1681,6 @@ class SpeechT5DecoderWithTextPrenet(SpeechT5PreTrainedModel):
         output_attentions: bool | None = None,
         output_hidden_states: bool | None = None,
         return_dict: bool | None = None,
-        cache_position: torch.Tensor | None = None,
         **kwargs,
     ) -> tuple | BaseModelOutputWithPastAndCrossAttentions:
         decoder_hidden_states, attention_mask = self.prenet(input_values, attention_mask, past_key_values)
@@ -1712,7 +1695,6 @@ class SpeechT5DecoderWithTextPrenet(SpeechT5PreTrainedModel):
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
-            cache_position=cache_position,
         )
 
         return outputs
@@ -1742,7 +1724,6 @@ class SpeechT5DecoderWithoutPrenet(SpeechT5PreTrainedModel):
         output_attentions: bool | None = None,
         output_hidden_states: bool | None = None,
         return_dict: bool | None = None,
-        cache_position: torch.Tensor | None = None,
         **kwargs,
     ) -> tuple | BaseModelOutputWithPastAndCrossAttentions:
         outputs = self.wrapped_decoder(
@@ -1755,7 +1736,6 @@ class SpeechT5DecoderWithoutPrenet(SpeechT5PreTrainedModel):
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
-            cache_position=cache_position,
         )
         return outputs
 
@@ -1941,7 +1921,6 @@ class SpeechT5Model(SpeechT5PreTrainedModel):
         output_attentions: bool | None = None,
         output_hidden_states: bool | None = None,
         return_dict: bool | None = None,
-        cache_position: torch.Tensor | None = None,
         **kwargs,
     ) -> tuple[torch.FloatTensor] | Seq2SeqModelOutput:
         r"""
@@ -1967,7 +1946,7 @@ class SpeechT5Model(SpeechT5PreTrainedModel):
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
         use_cache = use_cache if use_cache is not None else self.config.use_cache
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         # Encode if needed (training, first prediction pass)
         if encoder_outputs is None:
@@ -2009,7 +1988,6 @@ class SpeechT5Model(SpeechT5PreTrainedModel):
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
-            cache_position=cache_position,
             **decoder_args,
         )
 
@@ -2083,7 +2061,6 @@ class SpeechT5ForSpeechToText(SpeechT5PreTrainedModel, GenerationMixin):
         output_hidden_states: bool | None = None,
         return_dict: bool | None = None,
         labels: torch.LongTensor | None = None,
-        cache_position: torch.Tensor | None = None,
         **kwargs,
     ) -> tuple | Seq2SeqLMOutput:
         r"""
@@ -2153,7 +2130,7 @@ class SpeechT5ForSpeechToText(SpeechT5PreTrainedModel, GenerationMixin):
         19.68
         ```
         """
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         if labels is not None:
             if decoder_input_ids is None:
@@ -2172,7 +2149,6 @@ class SpeechT5ForSpeechToText(SpeechT5PreTrainedModel, GenerationMixin):
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=True,
-            cache_position=cache_position,
         )
 
         logits = self.text_decoder_postnet(outputs[0])
@@ -2394,7 +2370,6 @@ class SpeechT5ForTextToSpeech(SpeechT5PreTrainedModel):
         speaker_embeddings: torch.FloatTensor | None = None,
         labels: torch.FloatTensor | None = None,
         stop_labels: torch.Tensor | None = None,
-        cache_position: torch.Tensor | None = None,
         **kwargs,
     ) -> tuple | Seq2SeqSpectrogramOutput:
         r"""
@@ -2448,7 +2423,7 @@ class SpeechT5ForTextToSpeech(SpeechT5PreTrainedModel):
         torch.Size([15872])
         ```
         """
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         if labels is not None:
             if decoder_input_values is None:
@@ -2470,7 +2445,6 @@ class SpeechT5ForTextToSpeech(SpeechT5PreTrainedModel):
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=True,
-            cache_position=cache_position,
         )
 
         outputs_before_postnet, outputs_after_postnet, logits = self.speech_decoder_postnet(outputs[0])
@@ -2733,7 +2707,6 @@ class SpeechT5ForSpeechToSpeech(SpeechT5PreTrainedModel):
         speaker_embeddings: torch.FloatTensor | None = None,
         labels: torch.FloatTensor | None = None,
         stop_labels: torch.Tensor | None = None,
-        cache_position: torch.Tensor | None = None,
         **kwargs,
     ) -> tuple | Seq2SeqSpectrogramOutput:
         r"""
@@ -2794,7 +2767,7 @@ class SpeechT5ForSpeechToSpeech(SpeechT5PreTrainedModel):
         torch.Size([77824])
         ```
         """
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         if labels is not None:
             if decoder_input_values is None:
@@ -2814,7 +2787,6 @@ class SpeechT5ForSpeechToSpeech(SpeechT5PreTrainedModel):
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=True,
-            cache_position=cache_position,
         )
 
         _, spectrogram, logits = self.speech_decoder_postnet(outputs[0])

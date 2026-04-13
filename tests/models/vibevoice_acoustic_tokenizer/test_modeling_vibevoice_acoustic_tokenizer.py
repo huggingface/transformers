@@ -288,7 +288,7 @@ class VibeVoiceAcousticTokenizerModelTest(ModelTesterMixin, unittest.TestCase):
 
 class VibeVoiceAcousticTokenizerIntegrationTest(unittest.TestCase):
     def setUp(self):
-        self.model_checkpoint = "bezzam/VibeVoice-AcousticTokenizer"
+        self.model_checkpoint = "microsoft/VibeVoice-AcousticTokenizer"
         self.sampling_rate = 24000
 
     def tearDown(self):
@@ -310,8 +310,12 @@ class VibeVoiceAcousticTokenizerIntegrationTest(unittest.TestCase):
         )
         with open(RESULTS_PATH, "r") as f:
             expected_results = json.load(f)
-        expected_encoder = torch.tensor(expected_results["encoder"]).to(dtype)
-        expected_decoder = torch.tensor(expected_results["decoder"]).to(dtype)
+
+        # Get device-specific expected results
+        device_key = torch_device if torch_device in expected_results else "cuda"
+        device_results = expected_results[device_key]
+        expected_encoder = torch.tensor(device_results["encoder"]).to(dtype)
+        expected_decoder = torch.tensor(device_results["decoder"]).to(dtype)
 
         # Prepare inputs
         audio_paths = [

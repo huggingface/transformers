@@ -195,17 +195,17 @@ print(output_text)
 ## Glm4vImageProcessor
 
 [[autodoc]] Glm4vImageProcessor
-- preprocess
+    - preprocess
 
 ## Glm4vVideoProcessor
 
 [[autodoc]] Glm4vVideoProcessor
 - preprocess
 
-## Glm4vImageProcessorFast
+## Glm4vImageProcessorPil
 
-[[autodoc]] Glm4vImageProcessorFast
-- preprocess
+[[autodoc]] Glm4vImageProcessorPil
+    - preprocess
 
 ## Glm4vProcessor
 

@@ -30,8 +30,7 @@ from ...integrations import use_kernelized_func
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import ModelOutput, TransformersKwargs, auto_docstring
-from ...utils.generic import can_return_tuple
+from ...utils import ModelOutput, TransformersKwargs, auto_docstring, can_return_tuple
 from ..auto.modeling_auto import AutoModelForKeypointDetection
 from .configuration_lightglue import LightGlueConfig
 
@@ -503,9 +502,7 @@ class LightGlueForKeypointMatching(LightGluePreTrainedModel):
 
     def __init__(self, config: LightGlueConfig):
         super().__init__(config)
-        self.keypoint_detector = AutoModelForKeypointDetection.from_config(
-            config.keypoint_detector_config, trust_remote_code=config.trust_remote_code
-        )
+        self.keypoint_detector = AutoModelForKeypointDetection.from_config(config.keypoint_detector_config)
 
         self.keypoint_detector_descriptor_dim = config.keypoint_detector_config.descriptor_decoder_dim
         self.descriptor_dim = config.descriptor_dim

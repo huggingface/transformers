@@ -87,6 +87,7 @@ from transformers.utils import (
 from transformers.utils.import_utils import (
     is_flash_attn_2_available,
     is_flash_attn_3_available,
+    is_flash_attn_4_available,
     is_kernels_available,
     is_torch_npu_available,
 )
@@ -652,6 +653,15 @@ class ModelUtilsTest(TestCasePlus):
                 TINY_LLAVA, dtype={"text_config": "float32", "vision_config": "int64", "": "float16"}
             )
 
+        # Check that `from_config` also works and uses the same dtype for all modules
+        config = AutoConfig.from_pretrained(TINY_LLAVA)
+        config.text_config.dtype = torch.float16
+        config.dtype = torch.float32
+        model = LlavaForConditionalGeneration._from_config(config)
+        self.assertEqual(model.model.language_model.dtype, torch.float32)
+        self.assertEqual(model.model.vision_tower.dtype, torch.float32)
+        self.assertEqual(model.dtype, torch.float32)
+
     def test_model_from_pretrained_dtype(self):
         # test that the model can be instantiated with dtype of either
         # 1. explicit from_pretrained's dtype argument
@@ -751,6 +761,9 @@ class ModelUtilsTest(TestCasePlus):
         if is_flash_attn_3_available():
             attn_implementation_available.append("flash_attention_3")
 
+        if is_flash_attn_4_available():
+            attn_implementation_available.append("flash_attention_4")
+
         for requested_attn_implementation in attn_implementation_available:
             model = AutoModelForCausalLM.from_pretrained(
                 TINY_MISTRAL, attn_implementation=requested_attn_implementation
@@ -775,6 +788,9 @@ class ModelUtilsTest(TestCasePlus):
 
         if is_flash_attn_3_available():
             attn_implementation_available.append("flash_attention_3")
+
+        if is_flash_attn_4_available():
+            attn_implementation_available.append("flash_attention_4")
 
         for requested_attn_implementation in attn_implementation_available:
             config = AutoConfig.from_pretrained(TINY_MISTRAL, attn_implementation=requested_attn_implementation)
@@ -1476,9 +1492,39 @@ class ModelUtilsTest(TestCasePlus):
                     # Make sure both state dict are the same
                     compare_state_dicts(model.state_dict(), new_model.state_dict())
 
-    def test_tied_weights_are_not_tied_if_both_present(self):
-        """Test that if both the source and target of tied weights are present, we do NOT tie them, and instead
+    def test_tied_weights_are_not_tied_if_both_present_but_different(self):
+        """Test that if both the source and target of tied weights are present and different, we do NOT tie them, and instead
         raise a warning"""
+        model = BaseModelWithTiedWeights(PreTrainedConfig(tie_word_embeddings=True))
+        # Just to be sure it's actually tied
+        self.assertIs(model.linear.weight, model.linear_2.weight, msg="Weights are not tied!")
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            # Save the config
+            with open(os.path.join(tmp_dir, "config.json"), "w") as f:
+                f.write(json.dumps(model.config.to_dict()))
+
+            state_dict = model.state_dict()
+            # Clone every param to make sure nothing is tied -> we save everything
+            state_dict = {k: v.clone() for k, v in state_dict.items()}
+            # Make sure the target tied weights has a different value than the source
+            state_dict["linear_2.weight"] = state_dict["linear_2.weight"] + 2
+            safe_save_file(state_dict, os.path.join(tmp_dir, "model.safetensors"))
+
+            logger = logging.get_logger("transformers.modeling_utils")
+            with CaptureLogger(logger) as cl:
+                new_model, load_info = BaseModelWithTiedWeights.from_pretrained(tmp_dir, output_loading_info=True)
+
+            # We should have raised a warning here saying that we will NOT tie the weights
+            self.assertIn("both are present in the checkpoints with different values, so we will NOT tie them", cl.out)
+            # Assert no missing keys
+            self.assertSetEqual(load_info["missing_keys"], set(), msg=f"{load_info['missing_keys']} are missing!")
+            # It should not be the same weight anymore
+            self.assertIsNot(
+                new_model.linear.weight, new_model.linear_2.weight, msg="Weights are tied but they should not!"
+            )
+
+    def test_tied_weights_are_tied_if_both_present_and_similar(self):
+        """Test that if both the source and target of tied weights are present but have same values, we tie them"""
         model = BaseModelWithTiedWeights(PreTrainedConfig(tie_word_embeddings=True))
         # Just to be sure it's actually tied
         self.assertIs(model.linear.weight, model.linear_2.weight, msg="Weights are not tied!")
@@ -1492,20 +1538,16 @@ class ModelUtilsTest(TestCasePlus):
             state_dict = {k: v.clone() for k, v in state_dict.items()}
             safe_save_file(state_dict, os.path.join(tmp_dir, "model.safetensors"))
 
-            logger = logging.get_logger("transformers.modeling_utils")
-            with CaptureLogger(logger) as cl:
-                new_model, load_info = BaseModelWithTiedWeights.from_pretrained(tmp_dir, output_loading_info=True)
+            new_model, load_info = BaseModelWithTiedWeights.from_pretrained(tmp_dir, output_loading_info=True)
 
-            # We should have raised a warning here saying that we will NOT tie the weights
-            self.assertIn("both are present in the checkpoints, so we will NOT tie them.", cl.out)
             # Assert no missing keys
             self.assertSetEqual(load_info["missing_keys"], set(), msg=f"{load_info['missing_keys']} are missing!")
-            # It should not be the same weight anymore
-            self.assertIsNot(
-                new_model.linear.weight, new_model.linear_2.weight, msg="Weights are tied but they should not!"
+            # It should still be the same weight
+            self.assertIs(
+                new_model.linear.weight, new_model.linear_2.weight, msg="Weights are NOT tied but they should be!"
             )
 
-            # Make sure both state dict are the same (the values are still the same, it's just not tied)
+            # Make sure both state dict are the same
             compare_state_dicts(model.state_dict(), new_model.state_dict())
 
     def test_tied_weights_are_missing_if_both_absent(self):
@@ -1764,22 +1806,6 @@ class ModelUtilsTest(TestCasePlus):
             outputs = model(input_ids)
             outputs_from_saved = new_model(input_ids)
             torch.testing.assert_close(outputs_from_saved["logits"], outputs["logits"])
-
-    def test_warning_for_beta_gamma_parameters(self):
-        config = PreTrainedConfig()
-        model = TestModelGammaBeta(config)
-
-        with tempfile.TemporaryDirectory() as tmp_dir:
-            model.save_pretrained(tmp_dir)
-            with LoggingLevel(logging.INFO):
-                _, loading_info = TestModelGammaBeta.from_pretrained(tmp_dir, config=config, output_loading_info=True)
-
-        missing_keys = loading_info["missing_keys"]
-        unexpected_keys = loading_info["unexpected_keys"]
-        self.assertIn("LayerNorm.gamma", missing_keys)
-        self.assertIn("LayerNorm.weight", unexpected_keys)
-        self.assertIn("LayerNorm.beta", missing_keys)
-        self.assertIn("LayerNorm.bias", unexpected_keys)
 
     def test_can_generate(self):
         """Tests the behavior of `PreTrainedModel.can_generate` method."""
@@ -2290,6 +2316,9 @@ class ModelUtilsTest(TestCasePlus):
 
         config = LlamaConfig(
             num_hidden_layers=2,
+            num_attention_heads=2,
+            num_key_value_heads=1,
+            head_dim=16,
             hidden_size=32,
             intermediate_size=64,
             vocab_size=100,
@@ -2810,7 +2839,7 @@ class TestAttentionImplementation(unittest.TestCase):
             _ = AutoModel.from_pretrained(
                 "hf-internal-testing/tiny-random-GPTBigCodeModel", attn_implementation="flash_attention_2"
             )
-        self.assertTrue("the package flash_attn seems to be not installed" in str(cm.exception))
+        self.assertTrue("the package for FlashAttention2 doesn't seem to be installed." in str(cm.exception))
 
     def test_not_available_flash_with_config(self):
         if is_flash_attn_2_available():
@@ -2833,7 +2862,7 @@ class TestAttentionImplementation(unittest.TestCase):
                 attn_implementation="flash_attention_2",
             )
 
-        self.assertTrue("the package flash_attn seems to be not installed" in str(cm.exception))
+        self.assertTrue("the package for FlashAttention2 doesn't seem to be installed." in str(cm.exception))
 
     def test_kernels_fallback(self):
         if not is_kernels_available():
@@ -2957,9 +2986,6 @@ class TestTensorSharing(TestCasePlus):
 
 
 @require_torch
-@unittest.skip(
-    "These tests are currently failing and need to be fixed, but not sure we want to support this/not sure its even used! Fix this line:https://github.com/huggingface/transformers/blob/b750e6b9eeed5fb9adc2f8c7adb46639c8e41963/src/transformers/core_model_loading.py#L512"
-)
 class TestSaveAndLoadModelWithExtraState(TestCasePlus):
     """
     This test checks that a model can be saved and loaded that uses the torch extra state API.
@@ -2991,6 +3017,7 @@ class TestSaveAndLoadModelWithExtraState(TestCasePlus):
             def __init__(self, config: MyConfig):
                 super().__init__(config)
                 self.my_layer = MyModule()
+                self.post_init()
 
             def forward(self, hidden_states, attention_mask):
                 return self.my_layer(hidden_states, attention_mask)
@@ -3001,8 +3028,13 @@ class TestSaveAndLoadModelWithExtraState(TestCasePlus):
 
         with tempfile.TemporaryDirectory() as tmpdirname:
             model.save_pretrained(tmpdirname)
-            model = MyModel.from_pretrained(tmpdirname)
+            del model
+            model, loading_info = MyModel.from_pretrained(tmpdirname, output_loading_info=True)
             self.assertEqual(model.my_layer.some_counter, 42)
+            self.assertEqual(len(loading_info["missing_keys"]), 0)
+            self.assertEqual(len(loading_info["unexpected_keys"]), 0)
+            self.assertEqual(len(loading_info["mismatched_keys"]), 0)
+            self.assertEqual(len(loading_info["error_msgs"]), 0)
 
     @mark.xfail(reason="save and from_pretrained currently only supports tensor extra_state")
     def test_save_and_load_model_with_dict_extra_state(self):
@@ -3038,8 +3070,13 @@ class TestSaveAndLoadModelWithExtraState(TestCasePlus):
 
         with tempfile.TemporaryDirectory() as tmpdirname:
             model.save_pretrained(tmpdirname)
-            model = MyModel.from_pretrained(tmpdirname)
+            del model
+            model, loading_info = MyModel.from_pretrained(tmpdirname, output_loading_info=True)
             self.assertEqual(model.my_layer.some_counter, 42)
+            self.assertEqual(len(loading_info["missing_keys"]), 0)
+            self.assertEqual(len(loading_info["unexpected_keys"]), 0)
+            self.assertEqual(len(loading_info["mismatched_keys"]), 0)
+            self.assertEqual(len(loading_info["error_msgs"]), 0)
 
 
 class TestGetDecoder(unittest.TestCase):

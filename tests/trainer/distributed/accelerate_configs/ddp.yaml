@@ -1,0 +1,3 @@
+distributed_type: MULTI_GPU
+num_machines: 1
+num_processes: 2

@@ -114,9 +114,9 @@ for score, label, box in zip(filtered_scores, filtered_labels, pixel_boxes):
 [[autodoc]] YolosImageProcessor
     - preprocess
 
-## YolosImageProcessorFast
+## YolosImageProcessorPil
 
-[[autodoc]] YolosImageProcessorFast
+[[autodoc]] YolosImageProcessorPil
     - preprocess
     - pad
     - post_process_object_detection

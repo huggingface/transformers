@@ -86,13 +86,6 @@ for token_id in top_k[0]:
 ```
 
 </hfoption>
-<hfoption id="transformers CLI">
-
-```bash
-echo -e "Plants create [MASK] through a process known as photosynthesis." | transformers run --task fill-mask --model albert-base-v2 --device 0
-```
-
-</hfoption>
 
 </hfoptions>
 

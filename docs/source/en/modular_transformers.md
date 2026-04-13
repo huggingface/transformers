@@ -213,7 +213,6 @@ class Olmo2Attention(OlmoAttention):
         position_embeddings: tuple[torch.Tensor, torch.Tensor],
         attention_mask: Optional[torch.Tensor],
         past_key_values: Optional[Cache] = None,
-        cache_position: Optional[torch.LongTensor] = None,
         **kwargs,
     ) -> tuple[torch.Tensor, Optional[torch.Tensor], Optional[tuple[torch.Tensor]]]:
         input_shape = hidden_states.shape[:-1]
@@ -231,9 +230,7 @@ class Olmo2Attention(OlmoAttention):
         query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
 
         if past_key_values is not None:
-            # sin and cos are specific to RoPE models; cache_position needed for the static cache
-            cache_kwargs = {"sin": sin, "cos": cos, "cache_position": cache_position}
-            key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx, cache_kwargs)
+            key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx)
 
         attention_interface: Callable = eager_attention_forward
         if self.config._attn_implementation != "eager":
@@ -287,7 +284,6 @@ class Olmo2DecoderLayer(OlmoDecoderLayer):
         past_key_values: Optional[Cache] = None,
         output_attentions: Optional[bool] = False,
         use_cache: Optional[bool] = False,
-        cache_position: Optional[torch.LongTensor] = None,
         position_embeddings: Optional[tuple[torch.Tensor, torch.Tensor]] = None,
         **kwargs,
     ) -> tuple[torch.FloatTensor, Optional[tuple[torch.FloatTensor, torch.FloatTensor]]]:
@@ -301,7 +297,6 @@ class Olmo2DecoderLayer(OlmoDecoderLayer):
             past_key_values=past_key_values,
             output_attentions=output_attentions,
             use_cache=use_cache,
-            cache_position=cache_position,
             position_embeddings=position_embeddings,
             **kwargs,
         )
@@ -438,7 +433,9 @@ class GemmaTokenizer(LlamaTokenizer):
 
 By default, if you inherit from a class and override a method with one or more decorators in the parent method, the decorators are also added to the unraveled code *only if you don't add any yourself*. Otherwise, the redefined decorator is used.
 
-For example, if you had a parent class shown below and you overwrite it, the parent decorator is kept.
+Two decorators appear throughout the library. One enables [capturing model intermediate outputs](./model_output_tracing), and another for [auto-generating docstrings](./auto_docstring).
+
+In the example below, a subclass inherits from a decorated parent. The parent's decorator carries over to the unraveled code.
 
 ```py
 class DummyModel(nn.Module):
@@ -495,7 +492,6 @@ class LlamaForCausalLM(nn.Module):
       output_attentions: Optional[bool] = None,
       output_hidden_states: Optional[bool] = None,
       return_dict: Optional[bool] = None,
-      cache_position: Optional[torch.LongTensor] = None,
       num_logits_to_keep: int = 0,
       **kwargs: Unpack[KwargsForCausalLM],
   ) -> Union[Tuple, CausalLMOutputWithPast]:
@@ -521,7 +517,6 @@ class NewModelForCausalLM(LlamaForCausalLM):    |    class LlamaForCausalLM(nn.M
                                                 |         output_attentions: Optional[bool] = None,
                                                 |         output_hidden_states: Optional[bool] = None,
                                                 |         return_dict: Optional[bool] = None,
-                                                |         cache_position: Optional[torch.LongTensor] = None,
                                                 |         num_logits_to_keep: int = 0,
                                                 |         **kwargs: Unpack[KwargsForCausalLM],
                                                 |     ) -> Union[Tuple, CausalLMOutputWithPast]:
@@ -586,3 +581,7 @@ class Emu3TextMLP(LlamaMLP):
 ## Config docstrings
 
 When inheriting a `Config` class or adding and deleting attributes, you may want to only redefine the new attributes in the docstring. However, the linter doesn't support this yet. You need to directly add the while docstring directly in the modular file under the class definition.
+
+## See also
+
+- [Model structure rules](./modeling_rules) — static rules enforced on all `modeling_*.py`, `modular_*.py`, and `configuration_*.py` files. Run `make typing` to check them before opening a PR.
