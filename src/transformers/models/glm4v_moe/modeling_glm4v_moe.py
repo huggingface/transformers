@@ -1613,7 +1613,7 @@ class Glm4vMoeForConditionalGeneration(Glm4vMoePreTrainedModel, GenerationMixin)
         video_grid_thw (`torch.LongTensor` of shape `(num_videos, 3)`, *optional*):
             The temporal, height and width of feature shape of each video in LLM.
         video_cu_seqlens (`torch.IntTensor`, *optional*):
-            Precomputed cumulative sequence lengths for videos (from `get_cu_seqlens`).
+            Precomputed cumulative sequence lengths for videos (from `get_vision_cu_seqlens`).
         video_rotary_pos_ids (`torch.LongTensor`, *optional*):
             Precomputed (row, col) position IDs for video rotary embeddings (from `get_rotary_pos_ids`).
         """
@@ -1640,7 +1640,7 @@ class Glm4vMoeForConditionalGeneration(Glm4vMoePreTrainedModel, GenerationMixin)
         image_grid_thw (`torch.LongTensor` of shape `(num_images, 3)`, *optional*):
             The temporal, height and width of feature shape of each image in LLM.
         image_cu_seqlens (`torch.IntTensor`, *optional*):
-            Precomputed cumulative sequence lengths for images (from `get_cu_seqlens`).
+            Precomputed cumulative sequence lengths for images (from `get_vision_cu_seqlens`).
         image_rotary_pos_ids (`torch.LongTensor`, *optional*):
             Precomputed (row, col) position IDs for image rotary embeddings (from `get_rotary_pos_ids`).
         """

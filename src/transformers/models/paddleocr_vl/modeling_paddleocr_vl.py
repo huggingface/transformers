@@ -1403,7 +1403,7 @@ class PaddleOCRVLForConditionalGeneration(PaddleOCRVLPreTrainedModel, Generation
         image_grid_thw (`torch.LongTensor` of shape `(num_images, 3)`, *optional*):
             The temporal, height and width of feature shape of each image in LLM.
         image_cu_seqlens (`torch.IntTensor`, *optional*):
-            Precomputed cumulative sequence lengths for images (from `get_cu_seqlens`).
+            Precomputed cumulative sequence lengths for images (from `get_vision_cu_seqlens`).
         image_rotary_pos_ids (`torch.LongTensor`, *optional*):
             Precomputed (row, col) position IDs for image rotary embeddings (from `get_rotary_pos_ids`).
         """

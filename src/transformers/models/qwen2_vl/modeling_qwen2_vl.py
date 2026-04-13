@@ -1350,7 +1350,7 @@ class Qwen2VLForConditionalGeneration(Qwen2VLPreTrainedModel, GenerationMixin):
         video_grid_thw (`torch.LongTensor` of shape `(num_videos, 3)`, *optional*):
             The temporal, height and width of feature shape of each video in LLM.
         video_cu_seqlens (`torch.IntTensor`, *optional*):
-            Precomputed cumulative sequence lengths for videos (from `get_cu_seqlens`).
+            Precomputed cumulative sequence lengths for videos (from `get_vision_cu_seqlens`).
         video_rotary_pos_ids (`torch.LongTensor`, *optional*):
             Precomputed (row, col) position IDs for video rotary embeddings (from `get_rotary_pos_ids`).
         """
@@ -1377,7 +1377,7 @@ class Qwen2VLForConditionalGeneration(Qwen2VLPreTrainedModel, GenerationMixin):
         image_grid_thw (`torch.LongTensor` of shape `(num_images, 3)`, *optional*):
             The temporal, height and width of feature shape of each image in LLM.
         image_cu_seqlens (`torch.IntTensor`, *optional*):
-            Precomputed cumulative sequence lengths for images (from `get_cu_seqlens`).
+            Precomputed cumulative sequence lengths for images (from `get_vision_cu_seqlens`).
         image_rotary_pos_ids (`torch.LongTensor`, *optional*):
             Precomputed (row, col) position IDs for image rotary embeddings (from `get_rotary_pos_ids`).
         """
@@ -1425,11 +1425,11 @@ class Qwen2VLForConditionalGeneration(Qwen2VLPreTrainedModel, GenerationMixin):
         rope_deltas (`torch.LongTensor` of shape `(batch_size, )`, *optional*):
             The rope index difference between sequence length and multimodal rope.
         image_cu_seqlens (`torch.IntTensor`, *optional*):
-            Precomputed cumulative sequence lengths for images (from `get_cu_seqlens`).
+            Precomputed cumulative sequence lengths for images (from `get_vision_cu_seqlens`).
         image_rotary_pos_ids (`torch.LongTensor`, *optional*):
             Precomputed (row, col) position IDs for image rotary embeddings (from `get_rotary_pos_ids`).
         video_cu_seqlens (`torch.IntTensor`, *optional*):
-            Precomputed cumulative sequence lengths for videos (from `get_cu_seqlens`).
+            Precomputed cumulative sequence lengths for videos (from `get_vision_cu_seqlens`).
         video_rotary_pos_ids (`torch.LongTensor`, *optional*):
             Precomputed (row, col) position IDs for video rotary embeddings (from `get_rotary_pos_ids`).
 
