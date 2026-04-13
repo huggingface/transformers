@@ -4516,10 +4516,10 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         # In this case we need to move everything back
         if is_fsdp_enabled() and not is_local_dist_rank_0() and not is_quantized:
             for key, param in self.named_parameters():
-                value = torch.empty_like(param, device="cpu")
+                value = torch.zeros_like(param, device="cpu")
                 _load_parameter_into_model(self, key, value)
             for key, buffer in self.named_buffers():
-                value = torch.empty_like(buffer, device="cpu")
+                value = torch.zeros_like(buffer, device="cpu")
                 _load_parameter_into_model(self, key, value)
             return
 
