@@ -42,6 +42,7 @@ from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPast, BaseModelOutputWithPooling, ModelOutput
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
+from ...modeling_vision_utils import get_rotary_pos_ids, get_vision_cu_seqlens
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging, torch_compilable_check, torch_int
 from ...utils.generic import is_flash_attention_requested, maybe_autocast, merge_with_config_defaults
@@ -586,7 +587,7 @@ class PaddleOCRVisionEmbeddings(nn.Module):
     def forward(
         self,
         pixel_values: torch.FloatTensor,
-        image_grid_thw: list[tuple[int, int, int] | list[tuple[int, int, int]]] | None = None,
+        image_grid_thw: torch.LongTensor | None = None,
     ) -> torch.Tensor:
         """
         Args:
@@ -819,9 +820,10 @@ class PaddleOCRVisionEncoder(nn.Module):
     def forward(
         self,
         inputs_embeds: torch.FloatTensor,
-        cu_seqlens: torch.Tensor,
+        grid_thw: torch.LongTensor | None = None,
+        cu_seqlens: torch.Tensor | None = None,
         attention_mask: torch.Tensor | None = None,
-        image_grid_thw: list[tuple[int, int, int] | list[tuple[int, int, int]]] | None = None,
+        rotary_pos_ids: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutput:
         r"""
@@ -829,35 +831,31 @@ class PaddleOCRVisionEncoder(nn.Module):
             Optionally, instead of passing `input_ids` you can choose to directly pass an embedded representation.
             This is useful if you want more control over how to convert `input_ids` indices into associated vectors
             than the model's internal embedding lookup matrix.
-        cu_seqlens (`torch.Tensor` of shape `(num_images + 1,)`):
+        grid_thw (`torch.LongTensor` of shape `(num_images, 3)`, *optional*):
+            The temporal, height and width of feature shape of each image in LLM.
+        cu_seqlens (`torch.Tensor` of shape `(num_images + 1,)`, *optional*):
             The cumulative sequence lengths of each image or video feature.
         attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
             The attention_mask used in forward function shape [batch_size X sequence_length] if not None.
-        image_grid_thw (`torch.LongTensor` of shape `(num_images, 3)`, *optional*):
-            The temporal, height and width of feature shape of each image in LLM.
+        rotary_pos_ids (`torch.Tensor` of shape `(sequence_length,)`, *optional*):
+            Precomputed rotary position ids. If not provided, will be computed based on `grid_thw`.
         """
-        device = inputs_embeds.device
         hidden_states = inputs_embeds
         attention_mask = create_bidirectional_mask(
             config=self.config,
             inputs_embeds=inputs_embeds,
             attention_mask=attention_mask,
         )
-        split_hids = []
-        split_wids = []
-        for t, h, w in image_grid_thw:
-            image_pids = torch.arange(t * h * w, device=device) % (h * w)
-            sample_hids = image_pids // w
-            sample_wids = image_pids % w
-            split_hids.append(sample_hids)
-            split_wids.append(sample_wids)
-        width_position_ids = torch.concat(split_wids, dim=0)
-        height_position_ids = torch.concat(split_hids, dim=0)
 
-        pids = torch.stack([height_position_ids, width_position_ids], dim=-1)
+        if rotary_pos_ids is None:
+            pids = get_rotary_pos_ids(grid_thw, self.config.spatial_merge_size)
+
         rotary_embeddings = self.rotary_pos_emb(pids)
         rotary_embeddings = rotary_embeddings.repeat(1, 2)
         position_embeddings = (rotary_embeddings.cos(), rotary_embeddings.sin())
+
+        if cu_seqlens is None:
+            cu_seqlens = get_vision_cu_seqlens(grid_thw)
 
         for encoder_layer in self.layers:
             hidden_states = encoder_layer(
@@ -897,29 +895,30 @@ class PaddleOCRVisionTransformer(PaddleOCRVLPreTrainedModel):
     def forward(
         self,
         pixel_values: torch.FloatTensor,
-        cu_seqlens: torch.Tensor,
+        grid_thw: torch.LongTensor | None = None,
+        cu_seqlens: torch.Tensor | None = None,
         attention_mask: torch.Tensor | None = None,
-        image_grid_thw: list[tuple[int, int, int] | list[tuple[int, int, int]]] | None = None,
+        rotary_pos_ids: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutputWithPooling:
         """
         Args:
             pixel_values (`torch.FloatTensor` of shape `(batch_size, sequence_length, patch_size * patch_size * image_channels)`):
                 The tensors corresponding to the input images.
-            cu_seqlens (`torch.Tensor` of shape `(num_images + 1,)`):
-                The cumulative sequence lengths of each image or video feature.
             attention_mask (`torch.Tensor`, *optional*):
                 The attention_mask used in forward function shape [batch_size X sequence_length] if not None.
-            image_grid_thw (`torch.LongTensor` of shape `(num_images, 3)`, *optional*):
+            grid_thw (`torch.LongTensor` of shape `(num_images, 3)`, *optional*):
                 The temporal, height and width of feature shape of each image in LLM.
+            cu_seqlens (`torch.Tensor` of shape `(num_images + 1,)`, *optional*):
+                Precomputed cumulative sequence lengths.
         """
-        hidden_states = self.embeddings(pixel_values, image_grid_thw=image_grid_thw)
-
+        hidden_states = self.embeddings(pixel_values, grid_thw=grid_thw)
         encoder_outputs: BaseModelOutput = self.encoder(
             inputs_embeds=hidden_states,
+            grid_thw=grid_thw,
             cu_seqlens=cu_seqlens,
             attention_mask=attention_mask,
-            image_grid_thw=image_grid_thw,
+            rotary_pos_ids=rotary_pos_ids,
             **kwargs,
         )
 
@@ -948,23 +947,25 @@ class PaddleOCRVisionModel(PaddleOCRVLPreTrainedModel):
     def forward(
         self,
         pixel_values: torch.FloatTensor,
-        cu_seqlens: torch.Tensor,
-        image_grid_thw: list[tuple[int, int, int] | list[tuple[int, int, int]]] | None = None,
+        grid_thw: torch.LongTensor | None = None,
+        cu_seqlens: torch.Tensor | None = None,
+        rotary_pos_ids: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
         """
         Args:
             pixel_values (`torch.FloatTensor` of shape `(batch_size, sequence_length, image_channels, patch_size, patch_size)`):
                 The tensors corresponding to the input images.
+            grid_thw (`torch.LongTensor` of shape `(num_images, 3)`, *optional*):
+                The temporal, height and width of feature shape of each image in LLM.
             cu_seqlens (`torch.Tensor` of shape `(num_images + 1,)`):
                 The cumulative sequence lengths of each image or video feature.
-            image_grid_thw (`torch.LongTensor` of shape `(num_images, 3)`, *optional*):
-                The temporal, height and width of feature shape of each image in LLM.
         """
         return self.vision_model(
             pixel_values=pixel_values,
-            cu_seqlens=cu_seqlens,
-            image_grid_thw=image_grid_thw,
+            image_grid_thw=grid_thw,
+            image_cu_seqlens=cu_seqlens,
+            image_rotary_pos_ids=rotary_pos_ids,
             **kwargs,
         )
 
@@ -1211,6 +1212,8 @@ class PaddleOCRVLModel(PaddleOCRVLPreTrainedModel):
         self,
         pixel_values: torch.FloatTensor,
         image_grid_thw: torch.LongTensor | None = None,
+        image_cu_seqlens: torch.Tensor | None = None,
+        image_rotary_pos_ids: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
         r"""
@@ -1220,19 +1223,11 @@ class PaddleOCRVLModel(PaddleOCRVLPreTrainedModel):
             The temporal, height and width of feature shape of each image in LLM.
         """
         pixel_values = pixel_values.type(self.visual.dtype).unsqueeze(0)
-        cu_seqlens = torch.repeat_interleave(image_grid_thw[:, 1] * image_grid_thw[:, 2], image_grid_thw[:, 0]).cumsum(
-            dim=0,
-            # Select dtype based on the following factors:
-            #  - FA2 requires that cu_seqlens_q must have dtype int32
-            #  - torch.onnx.export requires that cu_seqlens_q must have same dtype as grid_thw
-            # See https://github.com/huggingface/transformers/pull/34852 for more information
-            dtype=image_grid_thw.dtype if torch.jit.is_tracing() else torch.int32,
-        )
-        cu_seqlens = torch.nn.functional.pad(cu_seqlens, (1, 0), value=0)
         vision_outputs = self.visual(
             pixel_values=pixel_values,
             image_grid_thw=image_grid_thw,
-            cu_seqlens=cu_seqlens,
+            image_cu_seqlens=image_cu_seqlens,
+            image_rotary_pos_ids=image_rotary_pos_ids,
             return_dict=True,
             **kwargs,
         )
