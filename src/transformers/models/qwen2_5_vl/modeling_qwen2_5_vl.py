@@ -1072,13 +1072,6 @@ class Qwen2_5_VLModel(Qwen2_5_VLPreTrainedModel):
             position_ids (`torch.LongTensor` of shape `(3, batch_size, sequence_length)`)
             mrope_position_deltas (`torch.Tensor` of shape `(batch_size)`)
         """
-        _ = self.get_rope_index_old(
-            input_ids,
-            image_grid_thw,
-            video_grid_thw,
-            second_per_grid_ts,
-            attention_mask,
-        )
         spatial_merge_size = self.config.vision_config.spatial_merge_size
         tokens_per_second = self.config.vision_config.tokens_per_second
 
