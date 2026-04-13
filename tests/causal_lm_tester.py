@@ -29,6 +29,7 @@ from transformers.testing_utils import (
 )
 
 from .test_configuration_common import ConfigTester
+from .test_fsdp_mixin import FSDPTesterMixin
 from .test_modeling_common import (
     GenerationTesterMixin,
     ModelTesterMixin,
@@ -307,7 +308,12 @@ class CausalLMModelTester:
 
 @require_torch
 class CausalLMModelTest(
-    ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, TrainingTesterMixin, TensorParallelTesterMixin
+    ModelTesterMixin,
+    GenerationTesterMixin,
+    PipelineTesterMixin,
+    TrainingTesterMixin,
+    TensorParallelTesterMixin,
+    FSDPTesterMixin,
 ):
     model_tester_class = None
     all_model_classes = None
