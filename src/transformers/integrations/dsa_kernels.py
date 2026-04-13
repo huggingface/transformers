@@ -269,19 +269,16 @@ def _fp8_index_triton(
 ) -> torch.Tensor:
     """Triton FP8 GEMM implementation of FP8 index scoring.
 
-    Uses the Triton fp8_gemm from the finegrained-fp8 hub kernel for the raw FP8
-    matmul (FP8 inputs, FP32 accumulation), matching vLLM's DeepGEMM fp8_mqa_logits
-    computation granularity. Post-processing (relu, scale, reduce) is done in FP32.
+    Uses ``w8a8_fp8_matmul`` from the finegrained-fp8 integration (which dispatches
+    to Triton on Blackwell) for FP8→FP32 matmul, matching vLLM's computation
+    granularity. Post-processing (relu, scale, reduce) is done in FP32.
 
     Equivalent to the TileLang ``fp8_index_kernel``:
-        logits = k_fp8 @ q_fp8^T          (raw FP8 matmul, no block-scale dequantization)
+        logits = dequant(q_fp8, q_scale) @ dequant(k_fp8, k_scale)^T   (FP8 dequant + FP32 matmul)
         logits = relu(logits) * q_s       (per-head weights, already includes q_scale)
         result = logits.sum(H) * k_s      (reduce heads, scale by k_scale)
     """
-    global _triton_fp8_matmul
-    _load_triton_fallbacks()
-    if _triton_fp8_matmul is None:
-        raise ImportError("Triton fp8_matmul not available")
+    from .finegrained_fp8 import w8a8_fp8_matmul
 
     B, M, H, D = q.shape
     T = k.shape[1]
@@ -290,20 +287,22 @@ def _fp8_index_triton(
         # Single batch: one matmul for all (M, H) query vectors against all T keys
         q_flat = q.reshape(M * H, D).contiguous()
         k_flat = k.reshape(T, D).contiguous()
+        # Create unit scales: fp8_gemm will compute raw FP8 dot products
+        # (dequant with scale=1 is equivalent to using FP8 values directly)
         ones_q = q_flat.new_ones(M * H, D // 128, dtype=torch.float32)
         ones_k = k_flat.new_ones(T, D // 128, dtype=torch.float32)
-        logits_flat = _triton_fp8_matmul(q_flat, k_flat, ones_q, ones_k, [128, 128], torch.float32)
+        logits_flat = w8a8_fp8_matmul(q_flat, k_flat, ones_q, ones_k, [128, 128], torch.float32)
         # logits_flat: [M*H, T] → reshape to [M, H, T] → transpose to [M, T, H]
         logits = logits_flat.reshape(M, H, T).permute(0, 2, 1).unsqueeze(0)  # [1, M, T, H]
     else:
         # Multi-batch: loop over batches
         results = []
         for b in range(B):
-            q_b = q[b].reshape(M * H, D)
-            k_b = k[b].reshape(T, D)
+            q_b = q[b].reshape(M * H, D).contiguous()
+            k_b = k[b].reshape(T, D).contiguous()
             ones_q_b = q_b.new_ones(M * H, D // 128, dtype=torch.float32)
             ones_k_b = k_b.new_ones(T, D // 128, dtype=torch.float32)
-            logits_b = _triton_fp8_matmul(q_b, k_b, ones_q_b, ones_k_b, [128, 128], torch.float32)
+            logits_b = w8a8_fp8_matmul(q_b, k_b, ones_q_b, ones_k_b, [128, 128], torch.float32)
             logits_b = logits_b.reshape(M, H, T).permute(0, 2, 1)  # [M, T, H]
             results.append(logits_b)
         logits = torch.stack(results, dim=0)  # [B, M, T, H]
@@ -323,21 +322,19 @@ _fp8_gemm_use_tilelang = _tilelang_available
 
 # Lazily-loaded Triton kernels from the finegrained-fp8 hub package.
 _triton_act_quant = None
-_triton_fp8_matmul = None
 _triton_fallbacks_loaded = False
 
 
 def _load_triton_fallbacks():
     """Lazily load Triton FP8 kernels from the finegrained-fp8 hub package."""
-    global _triton_fallbacks_loaded, _triton_act_quant, _triton_fp8_matmul
+    global _triton_fallbacks_loaded, _triton_act_quant
     if _triton_fallbacks_loaded:
         return
     _triton_fallbacks_loaded = True
     try:
-        from .finegrained_fp8 import triton_fp8_act_quant, triton_fp8_matmul as _triton_gemm
+        from .finegrained_fp8 import triton_fp8_act_quant
 
         _triton_act_quant = triton_fp8_act_quant
-        _triton_fp8_matmul = _triton_gemm
     except ImportError:
         pass
 
