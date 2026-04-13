@@ -51,6 +51,22 @@ from transformers.testing_utils import _COMMON_MODEL_NAMES_MAP, _VLM_COMMON_MODE
 from transformers.utils import ENV_VARS_TRUE_VALUES, direct_transformers_import
 
 
+CHECKER_CONFIG = {
+    "name": "repo",
+    "label": "Repository structure",
+    # Approximate: the checker also introspects the live transformers module at runtime
+    # (e.g. dir(transformers.models), CONFIG_MAPPING_NAMES) and walks tests/ broadly.
+    "file_globs": [
+        "src/transformers/models/**/*.py",
+        "src/transformers/models/auto/*.py",
+        "src/transformers/**/__init__.py",
+        "tests/**/test_modeling_*.py",
+        "docs/**/*.md",
+    ],
+    "check_args": [],
+    "fix_args": None,
+}
+
 # All paths are set with the intent you should run this script from the root of the repo with the command
 # python utils/check_repo.py
 PATH_TO_TRANSFORMERS = "src/transformers"
@@ -95,8 +111,6 @@ PRIVATE_MODELS = [
     "Kosmos2_5TextForCausalLM",
     "Kosmos2_5VisionModel",
     "SmolVLMVisionTransformer",
-    "SiglipVisionTransformer",
-    "Siglip2VisionTransformer",
     "AriaTextForCausalLM",
     "AriaTextModel",
     "Phi4MultimodalAudioModel",
@@ -118,19 +132,13 @@ PRIVATE_MODELS = [
     "Owlv2VisionTransformer",
     "OwlViTTextTransformer",
     "OwlViTVisionTransformer",
-    "XCLIPTextTransformer",
     "CLIPSegTextTransformer",
     "DetrDecoder",
     "GroupViTTextTransformer",
     "CLIPTextTransformer",
-    "CLIPVisionTransformer",
-    "MetaClip2TextTransformer",
-    "MetaClip2VisionTransformer",
-    "MLCDVisionTransformer",
     "Kosmos2TextTransformer",
     "Kosmos2VisionTransformer",
     "Kosmos2_5TextTransformer",
-    "XCLIPVisionTransformer",
     # end of should have beens
     "VoxtralRealtimeTextModel",
     "VoxtralRealtimeTextForCausalLM",
@@ -262,6 +270,8 @@ IGNORE_NON_TESTED = (
         "VibeVoiceAcousticTokenizerDecoderModel",  # Tested through VibeVoiceAcousticTokenizerModel
         "PI0Model",  # special arch, tested through PI0ForConditionalGeneration
         "UVDocBridge",  # Building part of a bigger model, tested implicitly through UVDocModel
+        "Gemma4VisionModel",  # Building part of a bigger model, tested implicitly
+        "Gemma4AudioModel",  # Building part of a bigger model, tested implicitly
     ]
 )
 
@@ -433,9 +443,7 @@ IGNORE_NON_AUTO_CONFIGURED = PRIVATE_MODELS.copy() + [
     "SegGptForImageSegmentation",
     "SiglipVisionModel",
     "SiglipTextModel",
-    "SiglipVisionTransformer",
     "Siglip2VisionModel",
-    "Siglip2VisionTransformer",
     "Siglip2TextModel",
     "ChameleonVQVAE",  # no autoclass for VQ-VAE models
     "VitPoseForPoseEstimation",
@@ -1341,7 +1349,7 @@ def check_models_have_kwargs():
             with open(modeling_file, "r", encoding="utf-8") as f:
                 tree = ast.parse(f.read())
 
-            # Map all classes in the file to their base classes (only top-level classes)
+            # Map all classes in the file to their base classes
             class_bases = {}
             all_class_nodes = {}
 

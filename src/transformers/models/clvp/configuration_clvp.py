@@ -159,8 +159,8 @@ class ClvpDecoderConfig(PreTrainedConfig):
     n_inner: int | None = None
     num_mel_attn_blocks: int = 6
     activation_function: str = "gelu_new"
-    resid_pdrop: float = 0.1
-    embd_pdrop: float = 0.1
+    resid_pdrop: float | int = 0.1
+    embd_pdrop: float | int = 0.1
     attention_dropout: float | int = 0.1
     layer_norm_epsilon: float = 1e-5
     initializer_range: float = 0.02

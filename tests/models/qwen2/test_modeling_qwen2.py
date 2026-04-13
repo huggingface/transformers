@@ -81,14 +81,16 @@ class Qwen2IntegrationTest(unittest.TestCase):
             out = model(input_ids).logits.float().cpu()
         # Expected mean on dim = -1
         EXPECTED_MEAN = Expectations({
-            (None, None): torch.tensor([[-2.2121, -1.6335, -1.4816, -1.5035, -1.9110, -1.8979, -1.9682, -2.1980]]),
+            ("cuda", 8): torch.tensor([[-2.2463, -1.6463, -1.4748, -1.4913, -1.9213, -1.9016, -1.9969, -2.1761]]),
+            ("rocm", (9, 4)): torch.tensor([[-2.2121, -1.6335, -1.4816, -1.5035, -1.9110, -1.8979, -1.9682, -2.1980]]),
             ("xpu", 3): torch.tensor([[-2.2419, -1.6216, -1.4517, -1.4963, -1.9229, -1.8966, -1.9580, -2.1484]]),
         })  # fmt: off
 
         torch.testing.assert_close(out.mean(-1), EXPECTED_MEAN.get_expectation(), rtol=1e-2, atol=1e-2)
         # slicing logits[0, 0, 0:30]
         EXPECTED_SLICE = Expectations({
-            (None, None): torch.tensor([2.7344, 4.2812, 4.1562, 2.3906, 1.1875, 2.1562, 3.1719, 3.1406, 1.2891, 3.6094, 3.3125, 1.8203, 2.9219, 3.2344, 1.5938, 6.2500, 7.4062, 7.2188, 6.5938, 6.0312, 6.1562, 5.3750, 5.9688, 5.5938, 6.1250, 1.2656, 1.6016, 3.4062, 1.7891, 3.6406]),
+            ("cuda", 8): torch.tensor([2.6406, 4.3125, 3.9531, 2.2656, 1.0000, 2.0312, 3.2344, 2.9219, 1.1953, 3.3750, 3.1875, 2.0156, 2.8281, 3.2656, 1.4453, 6.0625, 7.2188, 7.0312, 6.4375, 5.8750, 6.0312, 5.2500, 5.8438, 5.5000, 5.9688, 1.2734, 1.5312, 3.2344, 1.6406, 3.4375]),
+            ("rocm", (9, 4)): torch.tensor([2.7344, 4.2812, 4.1562, 2.3906, 1.1875, 2.1562, 3.1719, 3.1406, 1.2891, 3.6094, 3.3125, 1.8203, 2.9219, 3.2344, 1.5938, 6.2500, 7.4062, 7.2188, 6.5938, 6.0312, 6.1562, 5.3750, 5.9688, 5.5938, 6.1250, 1.2656, 1.6016, 3.4062, 1.7891, 3.6406]),
             ("xpu", 3): torch.tensor([2.7500, 4.4062, 4.0625, 2.2656, 1.0859, 2.1094, 3.1719, 3.0781, 1.2656, 3.5312, 3.1719, 1.9062, 2.8750, 3.2812, 1.5156, 6.1562, 7.3125, 7.1250, 6.5312, 5.9688, 6.0938, 5.3438, 5.9375, 5.5938, 6.0938, 1.2344, 1.5391, 3.2969, 1.7266, 3.5312]),
         })  # fmt: skip
         torch.testing.assert_close(out[0, 0, :30], EXPECTED_SLICE.get_expectation(), rtol=1e-4, atol=1e-4)
@@ -185,7 +187,7 @@ class Qwen2IntegrationTest(unittest.TestCase):
     def test_speculative_generation(self):
         EXPECTED_TEXT_COMPLETION = Expectations(
             {
-                ("cuda", 8): "My favourite condiment is 100% real, organic, vegan and gluten free. I use it in my recipes and",
+                ("cuda", 8): "My favourite condiment is 100% natural, organic, gluten-free, vegan, and vegetarian. I have been making",
                 ("rocm", (9, 4)): "My favourite condiment is 100% natural, organic, gluten-free, vegan, and vegetarian. I have been making",
                 ("xpu", 3): "My favourite condiment is 100% natural, organic, gluten-free, vegan, and vegetarian. I have been making",
             }

@@ -62,7 +62,7 @@ class BitConfig(BackboneConfigMixin, PreTrainedConfig):
     hidden_act: str = "relu"
     global_padding: str | None = None
     num_groups: int = 32
-    drop_path_rate: float = 0.0
+    drop_path_rate: float | int = 0.0
     embedding_dynamic_padding: bool = False
     output_stride: int = 32
     width_factor: int = 1

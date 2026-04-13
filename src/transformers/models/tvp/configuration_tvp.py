@@ -70,11 +70,11 @@ class TvpConfig(PreTrainedConfig):
     max_position_embeddings: int = 512
     max_grid_col_position_embeddings: int = 100
     max_grid_row_position_embeddings: int = 100
-    hidden_dropout_prob: float = 0.1
+    hidden_dropout_prob: float | int = 0.1
     hidden_act: str = "gelu"
     layer_norm_eps: float = 1e-12
     initializer_range: float = 0.02
-    attention_probs_dropout_prob: float = 0.1
+    attention_probs_dropout_prob: float | int = 0.1
     pad_token_id: int | None = None
 
     def __post_init__(self, **kwargs):
