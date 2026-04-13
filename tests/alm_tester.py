@@ -75,8 +75,11 @@ class ALMModelTester:
 
         # Standard defaults
         kwargs.setdefault("batch_size", 3)
-        kwargs.setdefault("seq_length", 25)
-        kwargs.setdefault("feat_seq_length", 60)
+
+        # TODO: explain here specifically why these values are chosen
+        kwargs.setdefault("seq_length", 32)
+        kwargs.setdefault("feat_seq_length", 128)
+
         kwargs.setdefault("num_mel_bins", 80)
         kwargs.setdefault("is_training", True)
         kwargs.setdefault("use_labels", True)
@@ -84,42 +87,17 @@ class ALMModelTester:
         kwargs.setdefault("bos_token_id", 1)
         kwargs.setdefault("eos_token_id", 2)
         kwargs.setdefault("audio_token_id", 0)
-        kwargs.setdefault("audio_token_index", 0)  # Alias for models that use this name
         kwargs.setdefault("ignore_index", -100)
         kwargs.setdefault("scope", None)
-
-        # Text config defaults (small Qwen2-style backbone)
-        kwargs.setdefault(
-            "text_config",
-            {
-                "model_type": "qwen2",
-                "intermediate_size": 36,
-                "initializer_range": 0.02,
-                "hidden_size": 32,
-                "max_position_embeddings": 52,
-                "num_hidden_layers": 2,
-                "num_attention_heads": 4,
-                "num_key_value_heads": 2,
-                "vocab_size": 99,
-                "pad_token_id": 1,
-            },
-        )
-
-        # Audio config defaults (small Whisper-style encoder)
-        kwargs.setdefault(
-            "audio_config",
-            {
-                "model_type": "qwen2_audio_encoder",
-                "d_model": 16,
-                "encoder_attention_heads": 4,
-                "encoder_ffn_dim": 16,
-                "encoder_layers": 2,
-                "num_mel_bins": 80,
-                "max_source_positions": 30,
-                "initializer_range": 0.02,
-            },
-        )
-
+        kwargs.setdefault("vocab_size", 99)
+        kwargs.setdefault("hidden_size", 32)
+        kwargs.setdefault("num_hidden_layers", 2)
+        kwargs.setdefault("num_attention_heads", 2)
+        kwargs.setdefault("num_key_value_heads", 2)
+        kwargs.setdefault("intermediate_size", 32)  # Keep this divisible by 8 for fp16/bf16/fp32 16-bytes alignment
+        kwargs.setdefault("hidden_act", "gelu")
+        kwargs.setdefault("max_position_embeddings", 512)
+    
         # Optional projector config (e.g. GraniteSpeech uses a Q-Former projector)
         kwargs.setdefault("projector_config", None)
 
@@ -127,14 +105,20 @@ class ALMModelTester:
         for key, value in kwargs.items():
             setattr(self, key, value)
 
-        # Derived from text config (needed by ModelTesterMixin)
-        self.vocab_size = self.text_config.get("vocab_size", 99)
-        self.hidden_size = self.text_config.get("hidden_size", 32)
-        self.num_hidden_layers = self.text_config.get("num_hidden_layers", 2)
-        self.num_attention_heads = self.text_config.get("num_attention_heads", 4)
-        self.encoder_seq_length = self.seq_length
+        # # Derived from text config (needed by ModelTesterMixin)
+        # self.vocab_size = self.text_config.get("vocab_size", 99)
+        # self.hidden_size = self.text_config.get("hidden_size", 32)
+        # self.num_hidden_layers = self.text_config.get("num_hidden_layers", 2)
+        # self.num_attention_heads = self.text_config.get("num_attention_heads", 4)
+        # self.encoder_seq_length = self.seq_length
 
-        for required_attribute in self._required_attributes:
+        for required_attribute in [
+            # "base_model_class", # TODO: @eustlb, there is a discrepancy here between ALMs/ VLMs. XXModel and XXForConditionalGeneration
+            "config_class",
+            "conditional_generation_class",
+            "text_config_class",
+            "audio_config_class",
+        ]:
             if getattr(self, required_attribute) is None:
                 raise ValueError(
                     f"You have inherited from ALMModelTester but did not set the {required_attribute} attribute."
@@ -148,22 +132,23 @@ class ALMModelTester:
         return floats_tensor([self.batch_size, self.num_mel_bins, self.feat_seq_length])
 
     def create_attention_mask(self, input_ids):
-        """Create text attention mask. Override for models without a padding sentinel."""
-        attention_mask = torch.ones_like(input_ids, dtype=torch.long).to(torch_device)
-        attention_mask[:, :1] = 0  # Padding sentinel
-        return attention_mask
+        # TODO: check, this looks strange to force as default behavior
+        # Override for bidirectional attention models like Gemma3
+        return torch.tril(torch.ones_like(input_ids).to(torch_device))
 
-    def get_num_audio_tokens(self, audio_features):
-        """Compute number of audio placeholder tokens from features. Override for different subsampling."""
-        # Default: 2-stage pooling (common for Whisper-style encoders)
-        input_length = (audio_features.shape[-1] - 1) // 2 + 1
-        return (input_length - 2) // 2 + 1
+    def get_audio_embeds_mask(self, audio_embeds_mask):
+        """Get audio embeds mask from audio mask. Override for different shapes."""
+        raise NotImplementedError("This method should be overridden in the subclass")
 
     def place_audio_tokens(self, input_ids, config, num_audio_tokens):
-        """Place audio placeholder tokens in input_ids. Override for different placement."""
+        """Place audio placeholder tokens at random positions in input_ids. Override for different placement."""
         input_ids = input_ids.clone()
         input_ids[input_ids == self.audio_token_id] = self.pad_token_id
-        input_ids[:, 1 : 1 + num_audio_tokens] = self.audio_token_id
+        for i in range(input_ids.shape[0]):
+            n = num_audio_tokens[i].item() if isinstance(num_audio_tokens, torch.Tensor) else num_audio_tokens
+            available_positions = torch.arange(1, input_ids.shape[1])  # skip position 0 (BOS)
+            perm = torch.randperm(len(available_positions))[:n]
+            input_ids[i, available_positions[perm]] = self.audio_token_id
         return input_ids
 
     def get_audio_feature_key(self):
@@ -174,9 +159,20 @@ class ALMModelTester:
         """Key name for audio attention mask. Return None if no audio mask needed."""
         return None
 
-    def create_audio_mask(self, audio_features):
-        """Create audio-level attention mask. Override for bool masks or different shapes."""
-        return torch.ones([self.batch_size, self.feat_seq_length], dtype=torch.long).to(torch_device)
+    def create_audio_mask(self):
+        """Create audio-level attention mask with contiguous valid regions per batch element.
+
+        Each element gets a random offset and length, producing masks like [0, 0, 1, 1, 1, 0, 0].
+        """
+        # Sample lengths in [1, feat_seq_length] and offsets in [0, feat_seq_length - length]
+        lengths = ids_tensor([self.batch_size], vocab_size=self.feat_seq_length).abs() + 1
+        lengths = lengths.clamp(max=self.feat_seq_length)
+        offsets = ids_tensor([self.batch_size], vocab_size=self.feat_seq_length).abs()
+        offsets = offsets % (self.feat_seq_length - lengths + 1)
+
+        positions = torch.arange(self.feat_seq_length, device=torch_device)[None, :]
+        audio_mask = ((positions >= offsets[:, None]) & (positions < offsets[:, None] + lengths[:, None])).long()
+        return audio_mask
 
     def get_additional_inputs(self, config, input_ids, audio_features):
         """Return dict of model-specific extra inputs (e.g. image_sizes for multi-modal)."""
@@ -184,49 +180,114 @@ class ALMModelTester:
 
     # End of overridable methods
 
-    @property
-    def config_args(self):
-        return list(signature(self.config_class.__init__).parameters.keys())
-
-    def get_config(self):
-        kwargs = {}
-        skip_keys = {"self", "text_config", self.audio_config_key, "projector_config"}
-        attribute_map = getattr(self.config_class, "attribute_map", {})
-        model_name_to_common_name = {v: k for k, v in attribute_map.items()}
-        for k in self.config_args + self.forced_config_args:
-            if k in skip_keys:
-                continue
-            if hasattr(self, k) and k != "self":
-                kwargs[k] = getattr(self, k)
-            elif k in model_name_to_common_name and hasattr(self, model_name_to_common_name[k]):
-                kwargs[k] = getattr(self, model_name_to_common_name[k])
-        kwargs["text_config"] = self.text_config
-        kwargs[self.audio_config_key] = self.audio_config
-        if self.projector_config is not None:
-            kwargs["projector_config"] = self.projector_config
-        return self.config_class(**kwargs)
-
     def prepare_config_and_inputs_for_common(self):
-        config = self.get_config()
-        audio_features = self.create_audio_features()
-        num_audio_tokens = self.get_num_audio_tokens(audio_features)
+        # TODO: add a clear diagram that explains input prep
 
-        input_ids = ids_tensor([self.batch_size, self.seq_length], config.text_config.vocab_size - 2) + 2
+        audio_features = self.create_audio_features()
+        audio_mask = self.create_audio_mask()
+        audio_embeds_mask = self.get_audio_embeds_mask(audio_mask)
+
+        if audio_embeds_mask.shape[1] > self.seq_length:
+            raise ValueError(
+                f"`audio_embeds_mask` has more tokens per sequence than `seq_length` allows "
+                f"({audio_embeds_mask.shape[1]} > {self.seq_length}). "
+                "This likely indicates a mismatch between your feature extraction/configuration and your sequence length. "
+                "Please ensure `seq_length` is >= the number of audio embedding positions."
+            )
+         
+        input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
+
+        special_tokens = [self.pad_token_id, self.bos_token_id, self.eos_token_id, self.audio_token_id]
+        for i in range(self.vocab_size):
+            if i not in special_tokens:
+                safe_token_id = i
+                break
+        else:
+            raise ValueError("vocab_size is too small and there is no token ID that is not a special token!")
+
+        # Avoid flaky tests, clear any special tokens in ids_tensor
+        # audio_token_id is handled separately by place_audio_tokens()
+        input_ids[input_ids == self.pad_token_id] = safe_token_id
+        input_ids[input_ids == self.eos_token_id] = safe_token_id
+
+        config = self.get_config()
+        num_audio_tokens = audio_embeds_mask.sum(dim=1)
         input_ids = self.place_audio_tokens(input_ids, config, num_audio_tokens)
         attention_mask = self.create_attention_mask(input_ids)
 
         inputs_dict = {
-            self.get_audio_feature_key(): audio_features,
             "input_ids": input_ids,
             "attention_mask": attention_mask,
+            self.get_audio_feature_key(): audio_features,
         }
 
         audio_mask_key = self.get_audio_mask_key()
         if audio_mask_key is not None:
-            inputs_dict[audio_mask_key] = self.create_audio_mask(audio_features)
+            inputs_dict[audio_mask_key] = audio_mask
 
         inputs_dict.update(self.get_additional_inputs(config, input_ids, audio_features))
         return config, inputs_dict
+
+    @property
+    def config_args(self):
+        return list(signature(self.config_class.__init__).parameters.keys())
+    
+    @property
+    def text_config_args(self):
+        args = list(signature(self.text_config_class.__init__).parameters.keys())
+        for token_arg in ["pad_token_id", "bos_token_id", "eos_token_id"]:  # Not always explicitly in the sig
+            if token_arg not in args:
+                args.append(token_arg)
+        return args
+
+    @property
+    def audio_config_args(self):
+        return list(signature(self.audio_config_class.__init__).parameters.keys())
+
+    def get_config(self):
+        kwargs = {}
+        attribute_map = getattr(self.config_class, "attribute_map", {})
+        model_name_to_common_name = {v: k for k, v in attribute_map.items()}
+        for k in self.config_args + self.forced_config_args:
+            if hasattr(self, k) and k != "self":
+                kwargs[k] = getattr(self, k)
+            elif k in model_name_to_common_name and hasattr(self, model_name_to_common_name[k]):
+                kwargs[k] = getattr(self, model_name_to_common_name[k])
+        kwargs["text_config"] = self.get_text_config()
+        kwargs["audio_config"] = self.get_audio_config()
+        return self.config_class(**kwargs)
+
+    def get_text_config(self):
+        kwargs = {}
+        attribute_map = getattr(self.text_config_class, "attribute_map", {})
+        model_name_to_common_name = {v: k for k, v in attribute_map.items()}
+        for k in self.text_config_args:
+            if hasattr(self, k) and k != "self":
+                kwargs[k] = getattr(self, k)
+            elif k in model_name_to_common_name and hasattr(self, model_name_to_common_name[k]):
+                kwargs[k] = getattr(self, model_name_to_common_name[k])
+        return self.text_config_class(**kwargs)
+
+    def get_audio_config(self):
+        kwargs = {}
+        attribute_map = getattr(self.audio_config_class, "attribute_map", {})
+        model_name_to_common_name = {v: k for k, v in attribute_map.items()}
+        for k in self.audio_config_args:
+            if hasattr(self, k) and k != "self":
+                kwargs[k] = getattr(self, k)
+            elif k in model_name_to_common_name and hasattr(self, model_name_to_common_name[k]):
+                kwargs[k] = getattr(self, model_name_to_common_name[k])
+        return self.audio_config_class(**kwargs)
+
+    def create_and_check_model(
+        self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
+    ):
+        model = self.base_model_class(config=config)
+        model.to(torch_device)
+        model.eval()
+        model(input_ids, attention_mask=input_mask)
+        result = model(input_ids)
+        self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
 
 
 @require_torch
