@@ -362,8 +362,8 @@ def _prepare_4d_causal_attention_mask(
         else:
             # if the 4D mask has correct shape - invert it and fill with negative infinity
             inverted_mask = 1.0 - attention_mask
-            attention_mask = inverted_mask.masked_fill(
-                inverted_mask.to(torch.bool), torch.finfo(inputs_embeds.dtype).min
+            attention_mask = inverted_mask.masked_fill(  # type: ignore[unresolved-attribute]
+                inverted_mask.to(torch.bool), torch.finfo(inputs_embeds.dtype).min  # type: ignore[unresolved-attribute]
             )
     else:
         attention_mask = attn_mask_converter.to_causal_4d(
