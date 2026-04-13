@@ -1318,7 +1318,7 @@ class Trainer:
                 last_lr = self.lr_scheduler.get_last_lr()[0]  # type: ignore[unresolved-attribute]
 
         if torch.is_tensor(last_lr):
-            last_lr = last_lr.item()
+            last_lr = last_lr.item()  # type: ignore[unresolved-attribute]
         return last_lr
 
     # ---- Training ----

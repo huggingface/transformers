@@ -72,7 +72,7 @@ class SentencePieceBackend(PreTrainedTokenizer):
 
         # Load the SentencePiece model before calling parent __init__
         # This is needed because parent __init__ may call methods that depend on sp_model
-        tokenizer = spm.SentencePieceProcessor(**self.sp_model_kwargs)
+        tokenizer = spm.SentencePieceProcessor(**self.sp_model_kwargs)  # type: ignore[unresolved-attribute]
         tokenizer.Load(self.vocab_file)
 
         if not self.legacy:
