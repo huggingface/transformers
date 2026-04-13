@@ -43,7 +43,7 @@ from transformers import (
     is_torch_available,
 )
 from transformers.integrations.integration_utils import KubeflowCallback, SwanLabCallback
-from transformers.testing_utils import require_torch
+from transformers.testing_utils import require_ipython, require_torch
 from transformers.trainer_callback import CallbackHandler, ExportableState, TrainerControl
 
 
@@ -1269,3 +1269,75 @@ class ExportableStateTest(unittest.TestCase):
 
         self.assertEqual(instance.name, "test")
         self.assertEqual(instance.counter, 5)
+
+
+@require_torch
+@require_ipython
+class NotebookProgressCallbackTest(unittest.TestCase):
+    """Tests for NotebookProgressCallback behavior in notebook environments."""
+
+    def setUp(self):
+        self.output_dir = tempfile.mkdtemp()
+
+    def tearDown(self):
+        shutil.rmtree(self.output_dir)
+
+    def _create_trainer(self):
+        train_dataset = RegressionDataset(length=16)
+        eval_dataset = RegressionDataset(length=16)
+        config = RegressionModelConfig(a=0, b=0)
+        model = RegressionPreTrainedModel(config)
+
+        args = TrainingArguments(
+            self.output_dir,
+            per_device_train_batch_size=2,
+            per_device_eval_batch_size=2,
+            num_train_epochs=1,
+            logging_strategy="no",
+            report_to=[],
+            eval_strategy="epoch",
+            disable_tqdm=True,
+        )
+
+        from transformers.utils.notebook import NotebookProgressCallback
+
+        trainer = Trainer(
+            model=model,
+            args=args,
+            train_dataset=train_dataset,
+            eval_dataset=eval_dataset,
+            callbacks=[NotebookProgressCallback()],  # force it
+        )
+        return trainer
+
+    def test_evaluate_before_training(self):
+        """Calling evaluate() before training does not crash and returns metrics."""
+        trainer = self._create_trainer()
+        metrics = trainer.evaluate()
+        self.assertIn("eval_loss", metrics)
+        # Check that the notebook callback exists in callback handler
+        from transformers.utils.notebook import NotebookProgressCallback
+
+        cb = next(
+            (c for c in trainer.callback_handler.callbacks if isinstance(c, NotebookProgressCallback)),
+            None,
+        )
+        self.assertIsNotNone(cb)
+
+    def test_evaluate_after_training(self):
+        """Calling evaluate() after training does not crash and returns metrics."""
+        trainer = self._create_trainer()
+        trainer.train()
+        metrics = trainer.evaluate()
+        self.assertIn("eval_loss", metrics)
+
+    def test_multiple_evaluate_calls(self):
+        """Calling evaluate() multiple times in a row works in notebook environment."""
+        trainer = self._create_trainer()
+        metrics1 = trainer.evaluate()
+        trainer.train()
+        metrics2 = trainer.evaluate()
+        metrics3 = trainer.evaluate()
+        self.assertIn("eval_loss", metrics1)
+        self.assertIn("eval_loss", metrics2)
+        self.assertIn("eval_loss", metrics3)
