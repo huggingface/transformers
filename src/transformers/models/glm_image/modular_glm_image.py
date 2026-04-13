@@ -28,6 +28,7 @@ from ...generation import GenerationMixin
 from ...image_utils import ImageInput
 from ...modeling_outputs import BaseModelOutputWithPooling
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
+from ...modeling_vision_utils import get_rotary_pos_ids, get_vision_cu_seqlens
 from ...processing_utils import ImagesKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
@@ -52,7 +53,6 @@ from ..glm4v_moe.modeling_glm4v_moe import Glm4vMoeTextAttention, eager_attentio
 from ..qwen2_vl.image_processing_pil_qwen2_vl import Qwen2VLImageProcessorPil
 from ..qwen2_vl.image_processing_qwen2_vl import Qwen2VLImageProcessor
 from ..qwen2_vl.processing_qwen2_vl import Qwen2VLProcessorKwargs
-from ..qwen2_vl.vision_utils import get_cu_seqlens, get_rotary_pos_ids
 from ..siglip.modeling_siglip import SiglipMLP
 
 
@@ -446,7 +446,7 @@ class GlmImageVisionModel(Glm4vVisionModel):
         grid_thw (`torch.Tensor` of shape `(num_images, 3)`):
             The temporal, height and width of feature shape of each image.
         cu_seqlens (`torch.Tensor`, *optional*):
-            Precomputed cumulative sequence lengths (from `get_cu_seqlens`).
+            Precomputed cumulative sequence lengths (from `get_vision_cu_seqlens`).
         rotary_pos_ids (`torch.Tensor`, *optional*):
             Precomputed (row, col) position IDs (from `get_rotary_pos_ids`).
 
@@ -459,7 +459,7 @@ class GlmImageVisionModel(Glm4vVisionModel):
             rotary_pos_ids = get_rotary_pos_ids(grid_thw, self.spatial_merge_size)
 
         if cu_seqlens is None:
-            cu_seqlens = get_cu_seqlens(grid_thw)
+            cu_seqlens = get_vision_cu_seqlens(grid_thw)
 
         seqlens = cu_seqlens[1:] - cu_seqlens[:-1]
         hidden_states = self.embeddings(

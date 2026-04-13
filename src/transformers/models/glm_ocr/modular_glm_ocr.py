@@ -20,6 +20,7 @@ from huggingface_hub.dataclasses import strict
 
 from ...modeling_outputs import BaseModelOutputWithPooling
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
+from ...modeling_vision_utils import get_rotary_pos_ids, get_vision_cu_seqlens
 from ...utils import auto_docstring
 from ..glm4v.configuration_glm4v import Glm4vConfig, Glm4vTextConfig, Glm4vVisionConfig
 from ..glm4v.modeling_glm4v import (
@@ -40,7 +41,6 @@ from ..glm4v.modeling_glm4v import (
     eager_attention_forward,
     is_flash_attention_requested,
 )
-from ..qwen2_vl.vision_utils import get_cu_seqlens, get_rotary_pos_ids
 
 
 class GlmOcrRMSNorm(Glm4vRMSNorm):
@@ -261,7 +261,7 @@ class GlmOcrVisionModel(Glm4vVisionModel):
         grid_thw (`torch.Tensor` of shape `(num_images_or_videos, 3)`):
             The temporal, height and width of feature shape of each image in LLM.
         cu_seqlens (`torch.Tensor`, *optional*):
-            Precomputed cumulative sequence lengths (from `get_cu_seqlens`).
+            Precomputed cumulative sequence lengths (from `get_vision_cu_seqlens`).
         rotary_pos_ids (`torch.Tensor`, *optional*):
             Precomputed (row, col) position IDs (from `get_rotary_pos_ids`).
 
@@ -274,7 +274,7 @@ class GlmOcrVisionModel(Glm4vVisionModel):
             rotary_pos_ids = get_rotary_pos_ids(grid_thw, self.spatial_merge_size)
 
         if cu_seqlens is None:
-            cu_seqlens = get_cu_seqlens(grid_thw)
+            cu_seqlens = get_vision_cu_seqlens(grid_thw)
 
         rotary_emb = self.rotary_pos_emb(rotary_pos_ids)
         emb = torch.cat((rotary_emb, rotary_emb), dim=-1)

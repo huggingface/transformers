@@ -33,6 +33,8 @@ from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPooling
 from ...modeling_rope_utils import RopeParameters, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
+from ...modeling_vision_utils import get_pos_embed_indices, get_vision_cu_seqlens
+from ...modeling_vision_utils import get_rotary_pos_ids_interleaved as get_rotary_pos_ids
 from ...processing_utils import ProcessingKwargs, Unpack
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
 from ...utils import auto_docstring, can_return_tuple, logging
@@ -62,7 +64,6 @@ from ..qwen3.modeling_qwen3 import (
     apply_rotary_pos_emb,
     eager_attention_forward,
 )
-from .vision_utils import get_cu_seqlens, get_pos_embed_indices, get_rotary_pos_ids
 
 
 logger = logging.get_logger(__name__)
@@ -490,7 +491,7 @@ class Qwen3VLVisionModel(Qwen3VLPreTrainedModel):
         rotary_pos_emb = self.rotary_pos_emb(rotary_pos_ids)
 
         if cu_seqlens is None:
-            cu_seqlens = get_cu_seqlens(grid_thw)
+            cu_seqlens = get_vision_cu_seqlens(grid_thw)
 
         seq_len, _ = hidden_states.size()
         hidden_states = hidden_states.reshape(seq_len, -1)

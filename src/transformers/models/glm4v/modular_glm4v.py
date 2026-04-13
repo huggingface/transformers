@@ -33,6 +33,7 @@ from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPooling
 from ...modeling_rope_utils import RopeParameters
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
+from ...modeling_vision_utils import get_rotary_pos_ids, get_vision_cu_seqlens
 from ...processing_utils import Unpack
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
 from ...utils import (
@@ -63,7 +64,6 @@ from ..qwen2_vl.processing_qwen2_vl import (
     Qwen2VLProcessor,
     Qwen2VLProcessorKwargs,
 )
-from ..qwen2_vl.vision_utils import get_cu_seqlens, get_rotary_pos_ids
 
 
 logger = logging.get_logger(__name__)
@@ -627,7 +627,7 @@ class Glm4vVisionModel(Glm4vPreTrainedModel):
         grid_thw (`torch.Tensor` of shape `(num_images_or_videos, 3)`):
             The temporal, height and width of feature shape of each image in LLM.
         cu_seqlens (`torch.Tensor`, *optional*):
-            Precomputed cumulative sequence lengths (from `get_cu_seqlens`).
+            Precomputed cumulative sequence lengths (from `get_vision_cu_seqlens`).
         rotary_pos_ids (`torch.Tensor`, *optional*):
             Precomputed (row, col) position IDs (from `get_rotary_pos_ids`).
 
@@ -641,7 +641,7 @@ class Glm4vVisionModel(Glm4vPreTrainedModel):
             rotary_pos_ids = get_rotary_pos_ids(grid_thw, self.spatial_merge_size)
 
         if cu_seqlens is None:
-            cu_seqlens = get_cu_seqlens(grid_thw)
+            cu_seqlens = get_vision_cu_seqlens(grid_thw)
 
         rotary_emb = self.rotary_pos_emb(rotary_pos_ids)
         emb = torch.cat((rotary_emb, rotary_emb), dim=-1)

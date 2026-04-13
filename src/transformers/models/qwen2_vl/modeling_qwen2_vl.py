@@ -38,6 +38,7 @@ from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPooling, ModelOutput
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
+from ...modeling_vision_utils import get_rotary_pos_ids, get_vision_cu_seqlens
 from ...processing_utils import Unpack
 from ...utils import (
     TransformersKwargs,
@@ -53,7 +54,6 @@ from ...utils.generic import (
 )
 from ...utils.output_capturing import capture_outputs
 from .configuration_qwen2_vl import Qwen2VLConfig, Qwen2VLTextConfig, Qwen2VLVisionConfig
-from .vision_utils import get_cu_seqlens, get_rotary_pos_ids
 
 
 logger = logging.get_logger(__name__)
@@ -735,7 +735,7 @@ class Qwen2VisionTransformerPretrainedModel(Qwen2VLPreTrainedModel):
         grid_thw (`torch.LongTensor` of shape `(num_images, 3)`):
             The temporal, height and width dimensions of feature shape for each image. Each row contains [t, h, w] values.
         cu_seqlens (`torch.IntTensor`, *optional*):
-            Precomputed cumulative sequence lengths (from `get_cu_seqlens`).
+            Precomputed cumulative sequence lengths (from `get_vision_cu_seqlens`).
         rotary_pos_ids (`torch.Tensor` of shape `(total_tokens, 2)`, *optional*):
             Precomputed (row, col) position IDs (from `get_rotary_pos_ids`).
         """
@@ -750,7 +750,7 @@ class Qwen2VisionTransformerPretrainedModel(Qwen2VLPreTrainedModel):
         position_embeddings = (emb.cos(), emb.sin())
 
         if cu_seqlens is None:
-            cu_seqlens = get_cu_seqlens(grid_thw)
+            cu_seqlens = get_vision_cu_seqlens(grid_thw)
 
         for blk in self.blocks:
             hidden_states = blk(

@@ -26,6 +26,8 @@ from ...masking_utils import create_causal_mask
 from ...modeling_layers import GenericForSequenceClassification, GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPooling
 from ...modeling_utils import PreTrainedModel
+from ...modeling_vision_utils import get_pos_embed_indices, get_vision_cu_seqlens
+from ...modeling_vision_utils import get_rotary_pos_ids_interleaved as get_rotary_pos_ids
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
 from ...utils.generic import merge_with_config_defaults
@@ -50,7 +52,6 @@ from ..qwen3_vl.modeling_qwen3_vl import (
     Qwen3VLVisionModel,
     Qwen3VLVisionRotaryEmbedding,
 )
-from ..qwen3_vl.vision_utils import get_cu_seqlens, get_pos_embed_indices, get_rotary_pos_ids
 
 
 logger = logging.get_logger(__name__)
@@ -464,7 +465,7 @@ class Qwen3_5VisionModel(Qwen3VLVisionModel):
         rotary_pos_emb = self.rotary_pos_emb(rotary_pos_ids)
 
         if cu_seqlens is None:
-            cu_seqlens = get_cu_seqlens(grid_thw)
+            cu_seqlens = get_vision_cu_seqlens(grid_thw)
 
         seq_len, _ = hidden_states.size()
         hidden_states = hidden_states.reshape(seq_len, -1)

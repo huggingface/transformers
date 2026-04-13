@@ -330,8 +330,8 @@ def _precompute_vision_inputs(model: torch.nn.Module, inputs: dict[str, Any]) ->
     model_mod = sys.modules[type(model).__module__]
 
     # cu_seqlens from repeat_interleave (data-dependent output size)
-    if "cu_seqlens" in forward_params and hasattr(model_mod, "get_cu_seqlens"):
-        inputs["cu_seqlens"] = model_mod.get_cu_seqlens(grid_thw)
+    if "cu_seqlens" in forward_params and hasattr(model_mod, "get_vision_cu_seqlens"):
+        inputs["cu_seqlens"] = model_mod.get_vision_cu_seqlens(grid_thw)
 
     # rotary pos IDs
     if "rotary_pos_ids" in forward_params and hasattr(model_mod, "get_rotary_pos_ids"):
@@ -352,7 +352,9 @@ def _precompute_vision_inputs(model: torch.nn.Module, inputs: dict[str, Any]) ->
 
 def _precompute_audio_inputs(model: torch.nn.Module, inputs: dict[str, Any]) -> None:
     """Precompute audio encoder inputs that use untraceable ops (.tolist(), nonzero(), loops)."""
-    if not hasattr(model, "chunk_and_pad_features"):
+    model_mod = sys.modules[type(model).__module__]
+
+    if not hasattr(model_mod, "chunk_and_pad_features"):
         return
 
     if "input_features" not in inputs or "feature_lens" not in inputs:
@@ -361,18 +363,25 @@ def _precompute_audio_inputs(model: torch.nn.Module, inputs: dict[str, Any]) -> 
     feature_lens = inputs.pop("feature_lens")
     input_features = inputs.pop("input_features")
 
-    padded_feature, chunk_lengths = model.chunk_and_pad_features(input_features, feature_lens)
+    padded_feature, chunk_lengths = model_mod.chunk_and_pad_features(input_features, feature_lens, model.n_window)
     inputs["padded_feature"] = padded_feature
     inputs["chunk_lengths"] = chunk_lengths
 
-    if hasattr(model, "get_cu_seqlens"):
-        inputs["cu_seqlens"] = model.get_cu_seqlens(chunk_lengths, feature_lens)
+    forward_params = set(inspect.signature(model.forward).parameters)
 
-    if hasattr(model, "get_valid_indices"):
-        inputs["valid_indices"] = model.get_valid_indices(chunk_lengths)
+    if "cu_seqlens" in forward_params and hasattr(model_mod, "get_audio_cu_seqlens"):
+        fn = model_mod.get_audio_cu_seqlens
+        fn_params = set(inspect.signature(fn).parameters)
+        if "feature_lens" in fn_params:
+            inputs["cu_seqlens"] = fn(chunk_lengths, feature_lens, model.n_window_infer, model.n_window)
+        else:
+            inputs["cu_seqlens"] = fn(chunk_lengths)
 
-    if hasattr(model, "get_pool_indices"):
-        inputs["pool_indices"] = model.get_pool_indices(feature_lens)
+    if "valid_indices" in forward_params and hasattr(model_mod, "get_valid_indices"):
+        inputs["valid_indices"] = model_mod.get_valid_indices(chunk_lengths)
+
+    if "pool_indices" in forward_params and hasattr(model_mod, "get_pool_indices"):
+        inputs["pool_indices"] = model_mod.get_pool_indices(feature_lens)
 
 
 @contextlib.contextmanager

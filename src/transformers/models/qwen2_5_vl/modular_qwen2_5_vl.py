@@ -33,6 +33,7 @@ from ...image_utils import ImageInput
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutputWithPooling
 from ...modeling_utils import PreTrainedModel
+from ...modeling_vision_utils import get_rotary_pos_ids, get_vision_cu_seqlens, get_window_index
 from ...processing_utils import MultiModalData, ProcessingKwargs, Unpack
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
 from ...utils import auto_docstring, can_return_tuple, logging
@@ -54,7 +55,6 @@ from ..qwen2_vl.modeling_qwen2_vl import (
     VisionRotaryEmbedding,
 )
 from ..qwen2_vl.processing_qwen2_vl import Qwen2VLProcessor
-from ..qwen2_vl.vision_utils import get_cu_seqlens, get_rotary_pos_ids, get_window_index
 
 
 logger = logging.get_logger(__name__)
@@ -256,7 +256,7 @@ class Qwen2_5_VisionTransformerPretrainedModel(Qwen2_5_VLPreTrainedModel):
         rotary_pos_emb = self.rotary_pos_emb(rotary_pos_ids)
 
         if cu_seqlens is None:
-            cu_seqlens = get_cu_seqlens(grid_thw)
+            cu_seqlens = get_vision_cu_seqlens(grid_thw)
 
         if window_index is None:
             window_index, cu_window_seqlens = get_window_index(

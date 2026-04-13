@@ -37,11 +37,11 @@ from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutputWithPooling, MoeCausalLMOutputWithPast, MoeModelOutputWithPast
 from ...modeling_rope_utils import dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
+from ...modeling_vision_utils import get_rotary_pos_ids, get_vision_cu_seqlens
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging, torch_compilable_check
 from ...utils.generic import is_flash_attention_requested, maybe_autocast, merge_with_config_defaults
 from ...utils.output_capturing import OutputRecorder, capture_outputs
-from ..qwen2_vl.vision_utils import get_cu_seqlens, get_rotary_pos_ids
 from .configuration_ernie4_5_vl_moe import Ernie4_5_VLMoeConfig, Ernie4_5_VLMoeTextConfig, Ernie4_5_VLMoeVisionConfig
 
 
@@ -906,7 +906,7 @@ class Ernie4_5_VLMoeVisionTransformerPretrainedModel(Ernie4_5_VLMoePreTrainedMod
         grid_thw (`torch.LongTensor` of shape `(num_images, 3)`):
             The temporal, height and width dimensions of feature shape for each image. Each row contains [t, h, w] values.
         cu_seqlens (`torch.IntTensor`, *optional*):
-            Precomputed cumulative sequence lengths (from `get_cu_seqlens`).
+            Precomputed cumulative sequence lengths (from `get_vision_cu_seqlens`).
         rotary_pos_ids (`torch.Tensor` of shape `(total_tokens, 2)`, *optional*):
             Precomputed (row, col) position IDs (from `get_rotary_pos_ids`).
         """
@@ -920,7 +920,7 @@ class Ernie4_5_VLMoeVisionTransformerPretrainedModel(Ernie4_5_VLMoePreTrainedMod
         position_embeddings = (emb.cos(), emb.sin())
 
         if cu_seqlens is None:
-            cu_seqlens = get_cu_seqlens(grid_thw)
+            cu_seqlens = get_vision_cu_seqlens(grid_thw)
 
         for block in self.blocks:
             hidden_states = block(

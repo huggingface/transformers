@@ -33,6 +33,7 @@ from ...generation import GenerationMixin
 from ...modeling_outputs import BaseModelOutputWithPooling, ModelOutput
 from ...modeling_rope_utils import RopeParameters
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
+from ...modeling_vision_utils import get_rotary_pos_ids, get_vision_cu_seqlens, get_window_index
 from ...processing_utils import Unpack
 from ...utils import (
     TransformersKwargs,
@@ -61,12 +62,89 @@ from ..qwen2_5_vl.modeling_qwen2_5_vl import (
 from ..qwen2_audio.configuration_qwen2_audio import Qwen2AudioEncoderConfig
 from ..qwen2_audio.modeling_qwen2_audio import Qwen2AudioEncoderLayer
 from ..qwen2_vl.modeling_qwen2_vl import Qwen2VLRotaryEmbedding
-from ..qwen2_vl.vision_utils import get_cu_seqlens, get_rotary_pos_ids, get_window_index
-from .audio_utils import chunk_and_pad_features, get_pool_indices, get_valid_indices
-from .audio_utils import get_cu_seqlens as get_audio_cu_seqlens
 
 
 logger = logging.get_logger(__name__)
+
+
+def chunk_and_pad_features(
+    input_features: torch.Tensor, feature_lens: torch.Tensor, n_window: int
+) -> tuple[torch.Tensor, torch.Tensor]:
+    """Split audio features into fixed-size chunks and pad to uniform length.
+
+    Each audio sample is split into chunks of ``n_window * 2`` frames (the last
+    chunk may be shorter), then all chunks are right-padded to the longest chunk.
+
+    Args:
+        input_features: ``(feature_dim, total_frames)`` concatenated audio features.
+        feature_lens: ``(batch_size,)`` per-sample frame counts.
+        n_window: half the target chunk size in frames.
+
+    Returns:
+        ``padded_feature``: ``(num_chunks, feature_dim, max_chunk_len)`` padded chunks.
+        ``chunk_lengths``: ``(num_chunks,)`` actual length of each chunk before padding.
+    """
+    chunk_num = torch.ceil(feature_lens / (n_window * 2)).long()
+    chunk_lengths = torch.full((chunk_num.sum(),), n_window * 2, dtype=torch.long, device=feature_lens.device)
+    tail_chunk_index = F.pad(chunk_num, (1, 0), value=-1).cumsum(0)[1:]
+    chunk_lengths[tail_chunk_index] = feature_lens % (n_window * 2)
+    chunk_lengths = torch.where(chunk_lengths == 0, n_window * 2, chunk_lengths)
+    chunk_list = input_features.T.split(chunk_lengths.tolist(), dim=0)
+    padded_feature = nn.utils.rnn.pad_sequence(chunk_list, batch_first=True).transpose(1, 2)
+    return padded_feature, chunk_lengths
+
+
+def get_audio_cu_seqlens(chunk_lengths: torch.Tensor) -> torch.Tensor:
+    """Compute cumulative sequence lengths for audio attention from chunk lengths.
+
+    Applies one stride-2 convolution length reduction, then returns cumulative
+    boundaries for flash-attention-style sequence packing.
+
+    Args:
+        chunk_lengths: ``(num_chunks,)`` pre-CNN chunk lengths.
+
+    Returns:
+        ``(num_chunks + 1,)`` int32 cumulative sequence boundaries.
+    """
+    after_conv1 = (chunk_lengths - 1) // 2 + 1
+    return F.pad(after_conv1.cumsum(0), (1, 0), value=0).to(torch.int32)
+
+
+def get_valid_indices(chunk_lengths: torch.Tensor) -> torch.Tensor:
+    """Compute flat indices of valid (non-padding) positions after one stride-2 conv.
+
+    Args:
+        chunk_lengths: ``(num_chunks,)`` pre-CNN chunk lengths.
+
+    Returns:
+        ``(total_valid,)`` flat indices into the ``(num_chunks * max_len_after_conv)`` grid.
+    """
+    after_conv1 = (chunk_lengths - 1) // 2 + 1
+    max_len = after_conv1.max().item()
+    mask = torch.arange(max_len, device=chunk_lengths.device) < after_conv1.unsqueeze(1)
+    return mask.flatten().nonzero().squeeze(-1)
+
+
+def get_pool_indices(feature_lens: torch.Tensor) -> torch.Tensor:
+    """Compute indices for stride-2 pooling over post-CNN audio features.
+
+    Selects every other position (even indices) from each sample's post-CNN
+    features, accounting for two convolution stages and variable-length samples.
+
+    Args:
+        feature_lens: ``(batch_size,)`` per-sample raw frame counts.
+
+    Returns:
+        ``(total_pairs,)`` flat indices for stride-2 pooling across concatenated samples.
+    """
+    after_conv1 = (feature_lens - 1) // 2 + 1
+    after_conv2 = (after_conv1 - 2) // 2 + 1
+    num_pairs = (after_conv2 - 1 + 1) // 2
+    offsets = F.pad(after_conv2[:-1].cumsum(0), (1, 0), value=0)
+    pair_offsets = torch.repeat_interleave(offsets, num_pairs)
+    local_indices = torch.arange(num_pairs.sum(), device=feature_lens.device)
+    local_indices -= torch.repeat_interleave(F.pad(num_pairs[:-1].cumsum(0), (1, 0), value=0), num_pairs)
+    return pair_offsets + local_indices * 2
 
 
 @auto_docstring(checkpoint="Qwen/Qwen2.5-Omni-7B")
@@ -1276,7 +1354,7 @@ class Qwen2_5OmniAudioEncoder(Qwen2_5OmniPreTrainedModel):
         pool_indices (`torch.LongTensor`, *optional*):
             Precomputed pair indices for post-encoder average pooling (from `get_pool_indices`).
         cu_seqlens (`torch.IntTensor`, *optional*):
-            Precomputed cumulative sequence lengths (from `get_cu_seqlens`).
+            Precomputed cumulative sequence lengths (from `get_vision_cu_seqlens`).
         """
         if padded_feature is None:
             padded_feature, chunk_lengths = chunk_and_pad_features(input_features, feature_lens, self.n_window)
@@ -1501,7 +1579,7 @@ class Qwen2_5OmniVisionEncoder(Qwen2_5_VisionTransformerPretrainedModel):
             grid_thw (`torch.Tensor` of shape `(num_images_or_videos, 3)`):
                 The temporal, height and width of feature shape of each image in LLM.
             cu_seqlens (`torch.Tensor`, *optional*):
-                Precomputed cumulative sequence lengths (from `get_cu_seqlens`).
+                Precomputed cumulative sequence lengths (from `get_vision_cu_seqlens`).
             cu_window_seqlens (`torch.Tensor`, *optional*):
                 Precomputed window cumulative sequence lengths (from `get_window_index`).
             window_index (`torch.Tensor`, *optional*):
@@ -1520,7 +1598,7 @@ class Qwen2_5OmniVisionEncoder(Qwen2_5_VisionTransformerPretrainedModel):
         rotary_pos_emb = self.rotary_pos_emb(rotary_pos_ids)
 
         if cu_seqlens is None:
-            cu_seqlens = get_cu_seqlens(grid_thw)
+            cu_seqlens = get_vision_cu_seqlens(grid_thw)
 
         if window_index is None:
             window_index, cu_window_seqlens = get_window_index(

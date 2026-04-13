@@ -37,6 +37,7 @@ from ...image_utils import (
 )
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling, ModelOutput
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
+from ...modeling_vision_utils import get_rotary_pos_ids, get_vision_cu_seqlens
 from ...processing_utils import ImagesKwargs, Unpack
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
 from ...utils import (
@@ -73,7 +74,6 @@ from ..qwen2_vl.video_processing_qwen2_vl import (
     Qwen2VLVideoProcessor,
     Qwen2VLVideoProcessorInitKwargs,
 )
-from ..qwen2_vl.vision_utils import get_cu_seqlens, get_rotary_pos_ids
 from ..siglip.configuration_siglip import SiglipVisionConfig
 from ..siglip.modeling_siglip import (
     SiglipAttention,
@@ -386,7 +386,7 @@ class VideoLlama3VisionModel(VideoLlama3PreTrainedModel):
         merge_sizes (`torch.Tensor` of shape `(num_images_or_videos,)`):
             The spatial downsampling ratio of each image or video feature.
         cu_seqlens (`torch.IntTensor`, *optional*):
-            Precomputed cumulative sequence lengths (from `get_cu_seqlens`).
+            Precomputed cumulative sequence lengths (from `get_vision_cu_seqlens`).
         rotary_pos_ids (`torch.Tensor`, *optional*):
             Precomputed (row, col) position IDs (from `get_rotary_pos_ids`).
         """
@@ -398,7 +398,7 @@ class VideoLlama3VisionModel(VideoLlama3PreTrainedModel):
         position_embeddings = (emb.cos(), emb.sin())
 
         if cu_seqlens is None:
-            cu_seqlens = get_cu_seqlens(grid_thw)
+            cu_seqlens = get_vision_cu_seqlens(grid_thw)
 
         hidden_states = self.embeddings(pixel_values.type(self.dtype))
         encoder_outputs: BaseModelOutput = self.encoder(

@@ -32,12 +32,12 @@ from ...generation import GenerationMixin
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling, ModelOutput
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
+from ...modeling_vision_utils import get_rotary_pos_ids, get_vision_cu_seqlens
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, torch_compilable_check
 from ...utils.generic import is_flash_attention_requested, merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
 from ..auto.modeling_auto import AutoModel
-from ..qwen2_vl.vision_utils import get_cu_seqlens, get_rotary_pos_ids
 from .configuration_video_llama_3 import VideoLlama3Config, VideoLlama3VisionConfig
 
 
@@ -424,7 +424,7 @@ class VideoLlama3VisionModel(VideoLlama3PreTrainedModel):
         merge_sizes (`torch.Tensor` of shape `(num_images_or_videos,)`):
             The spatial downsampling ratio of each image or video feature.
         cu_seqlens (`torch.IntTensor`, *optional*):
-            Precomputed cumulative sequence lengths (from `get_cu_seqlens`).
+            Precomputed cumulative sequence lengths (from `get_vision_cu_seqlens`).
         rotary_pos_ids (`torch.Tensor`, *optional*):
             Precomputed (row, col) position IDs (from `get_rotary_pos_ids`).
         """
@@ -436,7 +436,7 @@ class VideoLlama3VisionModel(VideoLlama3PreTrainedModel):
         position_embeddings = (emb.cos(), emb.sin())
 
         if cu_seqlens is None:
-            cu_seqlens = get_cu_seqlens(grid_thw)
+            cu_seqlens = get_vision_cu_seqlens(grid_thw)
 
         hidden_states = self.embeddings(pixel_values.type(self.dtype))
         encoder_outputs: BaseModelOutput = self.encoder(

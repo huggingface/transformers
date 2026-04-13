@@ -42,6 +42,7 @@ from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutputWithPooling, MoeCausalLMOutputWithPast, MoeModelOutputWithPast
 from ...modeling_rope_utils import dynamic_rope_update
 from ...modeling_utils import PreTrainedModel
+from ...modeling_vision_utils import get_rotary_pos_ids, get_vision_cu_seqlens
 from ...processing_utils import ImagesKwargs, Unpack
 from ...utils import (
     TensorType,
@@ -76,7 +77,6 @@ from ..qwen2_5_vl.modeling_qwen2_5_vl import (
 from ..qwen2_vl.configuration_qwen2_vl import Qwen2VLVisionConfig
 from ..qwen2_vl.image_processing_qwen2_vl import smart_resize
 from ..qwen2_vl.modeling_qwen2_vl import Qwen2VisionTransformerPretrainedModel, Qwen2VLModel, VisionMlp
-from ..qwen2_vl.vision_utils import get_cu_seqlens, get_rotary_pos_ids
 
 
 logger = logging.get_logger(__name__)
@@ -716,7 +716,7 @@ class Ernie4_5_VLMoeVisionTransformerPretrainedModel(Qwen2VisionTransformerPretr
         position_embeddings = (emb.cos(), emb.sin())
 
         if cu_seqlens is None:
-            cu_seqlens = get_cu_seqlens(grid_thw)
+            cu_seqlens = get_vision_cu_seqlens(grid_thw)
 
         for block in self.blocks:
             hidden_states = block(
