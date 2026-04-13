@@ -26,6 +26,8 @@ from ...masking_utils import create_causal_mask
 from ...modeling_layers import GenericForSequenceClassification, GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPooling
 from ...modeling_utils import PreTrainedModel
+from ...modeling_vision_utils import get_pos_embed_indices, get_vision_cu_seqlens
+from ...modeling_vision_utils import get_rotary_pos_ids_interleaved as get_rotary_pos_ids
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
 from ...utils.generic import merge_with_config_defaults
@@ -420,39 +422,56 @@ class Qwen3_5VisionModel(Qwen3VLVisionModel):
 
     @merge_with_config_defaults
     @capture_outputs
-    def forward(self, hidden_states: torch.Tensor, grid_thw: torch.Tensor, **kwargs) -> torch.Tensor:
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        grid_thw: torch.Tensor,
+        cu_seqlens: torch.Tensor | None = None,
+        rotary_pos_ids: torch.Tensor | None = None,
+        embed_indices: torch.Tensor | None = None,
+        bilinear_weights: torch.Tensor | None = None,
+        **kwargs,
+    ) -> torch.Tensor:
         """
         Args:
             hidden_states (`torch.Tensor` of shape `(seq_len, hidden_size)`):
                 The final hidden states of the model.
             grid_thw (`torch.Tensor` of shape `(num_images_or_videos, 3)`):
                 The temporal, height and width of feature shape of each image in LLM.
+            cu_seqlens (`torch.Tensor`, *optional*):
+                Precomputed cumulative sequence lengths (from `compute_cu_seqlens`).
+            rotary_pos_ids (`torch.Tensor` of shape `(total_tokens, 2)`, *optional*):
+                Precomputed (row, col) position IDs (from `get_rotary_pos_ids`).
+            embed_indices (`torch.Tensor` of shape `(4, total_thw)`, *optional*):
+                Bilinear corner indices into the position embedding table (from `compute_pos_embed_indices`).
+            bilinear_weights (`torch.Tensor` of shape `(4, total_thw)`, *optional*):
+                Interpolation weights for the four bilinear corners (from `compute_pos_embed_indices`).
 
         Returns:
             `torch.Tensor`: hidden_states.
         """
         hidden_states = self.patch_embed(hidden_states)
 
-        pos_embeds = self.fast_pos_embed_interpolate(grid_thw)
+        if embed_indices is None or bilinear_weights is None:
+            embed_indices, bilinear_weights = get_pos_embed_indices(
+                grid_thw, self.num_grid_per_side, self.config.spatial_merge_size
+            )
+        pos_embeds = (self.pos_embed(embed_indices) * bilinear_weights[:, :, None]).sum(0)
         hidden_states = hidden_states + pos_embeds
 
-        rotary_pos_emb = self.rot_pos_emb(grid_thw)
+        if rotary_pos_ids is None:
+            rotary_pos_ids = get_rotary_pos_ids(grid_thw, self.spatial_merge_size)
+
+        rotary_pos_emb = self.rotary_pos_emb(rotary_pos_ids)
+
+        if cu_seqlens is None:
+            cu_seqlens = get_vision_cu_seqlens(grid_thw)
 
         seq_len, _ = hidden_states.size()
         hidden_states = hidden_states.reshape(seq_len, -1)
         rotary_pos_emb = rotary_pos_emb.reshape(seq_len, -1)
         emb = torch.cat((rotary_pos_emb, rotary_pos_emb), dim=-1)
         position_embeddings = (emb.cos(), emb.sin())
-
-        cu_seqlens = torch.repeat_interleave(grid_thw[:, 1] * grid_thw[:, 2], grid_thw[:, 0]).cumsum(
-            dim=0,
-            # Select dtype based on the following factors:
-            #  - FA2 requires that cu_seqlens_q must have dtype int32
-            #  - torch.onnx.export requires that cu_seqlens_q must have same dtype as grid_thw
-            # See https://github.com/huggingface/transformers/pull/34852 for more information
-            dtype=grid_thw.dtype if torch.jit.is_tracing() else torch.int32,
-        )
-        cu_seqlens = F.pad(cu_seqlens, (1, 0), value=0)
 
         for blk in self.blocks:
             hidden_states = blk(
