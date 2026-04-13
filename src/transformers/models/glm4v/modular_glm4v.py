@@ -789,6 +789,8 @@ class Glm4vModel(Qwen2VLModel):
         self,
         pixel_values_videos: torch.FloatTensor,
         video_grid_thw: torch.LongTensor | None = None,
+        video_cu_seqlens: torch.Tensor | None = None,
+        video_rotary_pos_ids: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
         r"""
@@ -808,8 +810,8 @@ class Glm4vModel(Qwen2VLModel):
         vision_outputs = self.visual(
             pixel_values_videos,
             grid_thw=flattened_video_grid_thw,
-            cu_seqlens=kwargs.pop("video_cu_seqlens", None),
-            rotary_pos_ids=kwargs.pop("video_rotary_pos_ids", None),
+            cu_seqlens=video_cu_seqlens,
+            rotary_pos_ids=video_rotary_pos_ids,
             return_dict=True,
             **kwargs,
         )

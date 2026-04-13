@@ -1170,6 +1170,8 @@ class GlmImageModel(GlmImagePreTrainedModel):
         self,
         pixel_values: torch.FloatTensor,
         image_grid_thw: torch.LongTensor | None = None,
+        image_cu_seqlens: torch.Tensor | None = None,
+        image_rotary_pos_ids: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
         r"""
@@ -1182,8 +1184,8 @@ class GlmImageModel(GlmImagePreTrainedModel):
         vision_outputs = self.visual(
             pixel_values,
             grid_thw=image_grid_thw,
-            cu_seqlens=kwargs.pop("image_cu_seqlens", None),
-            rotary_pos_ids=kwargs.pop("image_rotary_pos_ids", None),
+            cu_seqlens=image_cu_seqlens,
+            rotary_pos_ids=image_rotary_pos_ids,
             return_dict=True,
             **kwargs,
         )

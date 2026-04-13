@@ -488,6 +488,8 @@ class VideoLlama3Model(Qwen2VLModel):
         pixel_values_videos: torch.FloatTensor,
         video_grid_thw: torch.LongTensor,
         video_merge_sizes: torch.LongTensor,
+        video_cu_seqlens: torch.Tensor | None = None,
+        video_rotary_pos_ids: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
         r"""
@@ -502,6 +504,8 @@ class VideoLlama3Model(Qwen2VLModel):
             pixel_values=pixel_values_videos,
             image_grid_thw=video_grid_thw,
             image_merge_sizes=video_merge_sizes,
+            image_cu_seqlens=video_cu_seqlens,
+            image_rotary_pos_ids=video_rotary_pos_ids,
             **kwargs,
         )
 
@@ -512,6 +516,8 @@ class VideoLlama3Model(Qwen2VLModel):
         pixel_values: torch.FloatTensor,
         image_grid_thw: torch.LongTensor,
         image_merge_sizes: torch.LongTensor,
+        image_cu_seqlens: torch.Tensor | None = None,
+        image_rotary_pos_ids: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
         r"""
@@ -526,8 +532,8 @@ class VideoLlama3Model(Qwen2VLModel):
             pixel_values=pixel_values,
             grid_thw=image_grid_thw,
             merge_sizes=image_merge_sizes,
-            cu_seqlens=kwargs.pop("image_cu_seqlens", None),
-            rotary_pos_ids=kwargs.pop("image_rotary_pos_ids", None),
+            cu_seqlens=image_cu_seqlens,
+            rotary_pos_ids=image_rotary_pos_ids,
             return_dict=True,
             **kwargs,
         )

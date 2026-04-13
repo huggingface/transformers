@@ -527,6 +527,8 @@ class VideoLlama3Model(VideoLlama3PreTrainedModel):
         pixel_values_videos: torch.FloatTensor,
         video_grid_thw: torch.LongTensor,
         video_merge_sizes: torch.LongTensor,
+        video_cu_seqlens: torch.Tensor | None = None,
+        video_rotary_pos_ids: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
         r"""
@@ -541,6 +543,8 @@ class VideoLlama3Model(VideoLlama3PreTrainedModel):
             pixel_values=pixel_values_videos,
             image_grid_thw=video_grid_thw,
             image_merge_sizes=video_merge_sizes,
+            image_cu_seqlens=video_cu_seqlens,
+            image_rotary_pos_ids=video_rotary_pos_ids,
             **kwargs,
         )
 
@@ -551,6 +555,8 @@ class VideoLlama3Model(VideoLlama3PreTrainedModel):
         pixel_values: torch.FloatTensor,
         image_grid_thw: torch.LongTensor,
         image_merge_sizes: torch.LongTensor,
+        image_cu_seqlens: torch.Tensor | None = None,
+        image_rotary_pos_ids: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
         r"""
@@ -565,8 +571,8 @@ class VideoLlama3Model(VideoLlama3PreTrainedModel):
             pixel_values=pixel_values,
             grid_thw=image_grid_thw,
             merge_sizes=image_merge_sizes,
-            cu_seqlens=kwargs.pop("image_cu_seqlens", None),
-            rotary_pos_ids=kwargs.pop("image_rotary_pos_ids", None),
+            cu_seqlens=image_cu_seqlens,
+            rotary_pos_ids=image_rotary_pos_ids,
             return_dict=True,
             **kwargs,
         )
@@ -755,6 +761,8 @@ class VideoLlama3ForConditionalGeneration(VideoLlama3PreTrainedModel, Generation
         self,
         pixel_values_videos: torch.FloatTensor,
         video_grid_thw: torch.LongTensor | None = None,
+        video_cu_seqlens: torch.Tensor | None = None,
+        video_rotary_pos_ids: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
         r"""
@@ -764,7 +772,11 @@ class VideoLlama3ForConditionalGeneration(VideoLlama3PreTrainedModel, Generation
             The temporal, height and width of feature shape of each video in LLM.
         """
         return self.model.get_video_features(
-            pixel_values_videos=pixel_values_videos, video_grid_thw=video_grid_thw, **kwargs
+            pixel_values_videos,
+            video_grid_thw,
+            video_cu_seqlens,
+            video_rotary_pos_ids,
+            **kwargs,
         )
 
     @auto_docstring
@@ -772,6 +784,8 @@ class VideoLlama3ForConditionalGeneration(VideoLlama3PreTrainedModel, Generation
         self,
         pixel_values: torch.FloatTensor,
         image_grid_thw: torch.LongTensor | None = None,
+        image_cu_seqlens: torch.Tensor | None = None,
+        image_rotary_pos_ids: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
         r"""
@@ -780,7 +794,13 @@ class VideoLlama3ForConditionalGeneration(VideoLlama3PreTrainedModel, Generation
         image_grid_thw (`torch.LongTensor` of shape `(num_images, 3)`, *optional*):
             The temporal, height and width of feature shape of each image in LLM.
         """
-        return self.model.get_image_features(pixel_values=pixel_values, image_grid_thw=image_grid_thw, **kwargs)
+        return self.model.get_image_features(
+            pixel_values,
+            image_grid_thw,
+            image_cu_seqlens,
+            image_rotary_pos_ids,
+            **kwargs,
+        )
 
     @can_return_tuple
     @auto_docstring
