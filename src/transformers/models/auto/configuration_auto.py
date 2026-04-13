@@ -1113,6 +1113,7 @@ SPECIAL_MODEL_TYPE_TO_MODULE_NAME = OrderedDict[str, str](
         ("gemma4_audio", "gemma4"),
         ("gemma4_text", "gemma4"),
         ("gemma4_vision", "gemma4"),
+        ("isaac_vision", "isaac"),
         ("glm4v_vision", "glm4v"),
         ("glm4v_moe_vision", "glm4v_moe"),
         ("glm4v_text", "glm4v"),
