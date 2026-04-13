@@ -14,7 +14,7 @@ rendered properly in your Markdown viewer.
 
 -->
 
-*This model was released on 2026-04-07 and added to Hugging Face Transformers on 2026-04-07.*
+*This model was released on 2026-04-13 and added to Hugging Face Transformers on 2026-04-13.*
 
 # Audio Flamingo Next
 
@@ -71,11 +71,11 @@ conversation = [
         "content": [
             {
                 "type": "text",
-                "text": "What is surprising about the relationship between the barking and the music?",
+                "text": "Transcribe the input speech.",
             },
             {
                 "type": "audio",
-                "path": "https://huggingface.co/datasets/nvidia/AudioSkills/resolve/main/assets/dogs_barking_in_sync_with_the_music.wav",
+                "path": "https://huggingface.co/datasets/nvidia/AudioSkills/resolve/main/assets/WhDJDIviAOg_120_10.mp3",
             },
         ],
     }
@@ -110,22 +110,22 @@ conversation = [
         "content": [
             {
                 "type": "text",
-                "text": "Instruction: How does the tone of female speech change throughout the audio? Choose the correct option among the options below: (A) Sad to happy (B) Happy to sad (C) Neutral to happy (D) Happy to neutral.",
+                "text": "Transcribe the input speech.",
             },
             {
                 "type": "audio",
-                "path": "https://huggingface.co/datasets/nvidia/AudioSkills/resolve/main/assets/000000786159.31.wav",
+                "path": "https://huggingface.co/datasets/nvidia/AudioSkills/resolve/main/assets/WhDJDIviAOg_120_10.mp3",
             },
         ],
     },
     {
         "role": "assistant",
-        "content": [{"type": "text", "text": "(A) Sad to happy"}],
+        "content": [{"type": "text", "text": "Summer follows spring, the days grow longer, and the nights are warm."}],
     },
     {
         "role": "user",
         "content": [
-            {"type": "text", "text": "Why do you think so?"},
+            {"type": "text", "text": "Summarize the content in one sentence."},
         ],
     },
 ]
@@ -160,11 +160,11 @@ conversations = [
             "content": [
                 {
                     "type": "text",
-                    "text": "What is surprising about the relationship between the barking and the music?",
+                    "text": "Transcribe the input speech.",
                 },
                 {
                     "type": "audio",
-                    "path": "https://huggingface.co/datasets/nvidia/AudioSkills/resolve/main/assets/dogs_barking_in_sync_with_the_music.wav",
+                    "path": "https://huggingface.co/datasets/nvidia/AudioSkills/resolve/main/assets/WhDJDIviAOg_120_10.mp3",
                 },
             ],
         }
@@ -175,15 +175,11 @@ conversations = [
             "content": [
                 {
                     "type": "text",
-                    "text": "Why is the philosopher's name mentioned in the lyrics? "
-                    "(A) To express a sense of nostalgia "
-                    "(B) To indicate that language cannot express clearly, satirizing the inversion of black and white in the world "
-                    "(C) To add depth and complexity to the lyrics "
-                    "(D) To showcase the wisdom and influence of the philosopher",
+                    "text": "Compose a detailed caption integrating all audio elements, describing sound effects, speech, and music.",
                 },
                 {
                     "type": "audio",
-                    "path": "https://huggingface.co/datasets/nvidia/AudioSkills/resolve/main/assets/Ch6Ae9DT6Ko_00-04-03_00-04-31.wav",
+                    "path": "https://huggingface.co/datasets/nvidia/AudioSkills/resolve/main/assets/dogs_barking_in_sync_with_the_music.wav",
                 },
             ],
         }
@@ -225,7 +221,7 @@ conversation = [
         },
         {
             "role": "assistant", 
-            "content": [{"type": "text", "text": "Summer follows spring. The days grow longer and the nights are warm."}],
+            "content": [{"type": "text", "text": "Summer follows spring, the days grow longer, and the nights are warm."}],
         }
     ],
     [
@@ -234,7 +230,7 @@ conversation = [
             "content": [
                 {
                     "type": "text",
-                    "text": "What is surprising about the relationship between the barking and the music?",
+                    "text": "Compose a detailed caption integrating all audio elements, describing sound effects, speech, and music.",
                 },
                 {
                     "type": "audio",
@@ -244,7 +240,7 @@ conversation = [
         },
         {
             "role": "assistant", 
-            "content": [{"type": "text", "text": "The barking is surprisingly synchronized with the beat and timing of the music, almost like the dogs are part of the performance rather than incidental background noise."}],
+            "content": [{"type": "text", "text": "A low-fidelity recording begins with a brief, sharp electronic buzz, followed by high-energy electronic dance music with a driving beat, pulsing synth bass, and a bright repetitive melody. Over the music, a small dog's sharp barks cut through repeatedly, creating a lively and chaotic soundscape."}],
         }
 
     ]
