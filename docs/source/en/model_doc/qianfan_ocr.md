@@ -49,7 +49,7 @@ This model was contributed by the [Baidu Qianfan Team](https://github.com/baidub
 >>> import torch
 >>> from transformers import AutoProcessor, AutoModelForImageTextToText
 
->>> model = AutoModelForImageTextToText.from_pretrained("baidu/Qianfan-OCR", torch_dtype=torch.bfloat16, device_map="auto")
+>>> model = AutoModelForImageTextToText.from_pretrained("baidu/Qianfan-OCR", dtype=torch.bfloat16, device_map="auto")
 >>> processor = AutoProcessor.from_pretrained("baidu/Qianfan-OCR")
 
 >>> image = "https://huggingface.co/datasets/hf-internal-testing/fixtures_got_ocr/resolve/main/image_ocr.jpg"
@@ -69,7 +69,7 @@ For documents with complex layouts, cluttered elements, or non-standard reading 
 >>> import torch
 >>> from transformers import AutoProcessor, AutoModelForImageTextToText
 
->>> model = AutoModelForImageTextToText.from_pretrained("baidu/Qianfan-OCR", torch_dtype=torch.bfloat16, device_map="auto")
+>>> model = AutoModelForImageTextToText.from_pretrained("baidu/Qianfan-OCR", dtype=torch.bfloat16, device_map="auto")
 >>> processor = AutoProcessor.from_pretrained("baidu/Qianfan-OCR")
 
 >>> image = "https://huggingface.co/datasets/hf-internal-testing/fixtures_got_ocr/resolve/main/image_ocr.jpg"
@@ -87,7 +87,7 @@ For documents with complex layouts, cluttered elements, or non-standard reading 
 >>> import torch
 >>> from transformers import AutoProcessor, AutoModelForImageTextToText
 
->>> model = AutoModelForImageTextToText.from_pretrained("baidu/Qianfan-OCR", torch_dtype=torch.bfloat16, device_map="auto")
+>>> model = AutoModelForImageTextToText.from_pretrained("baidu/Qianfan-OCR", dtype=torch.bfloat16, device_map="auto")
 >>> processor = AutoProcessor.from_pretrained("baidu/Qianfan-OCR")
 
 >>> image1 = "https://huggingface.co/datasets/hf-internal-testing/fixtures_got_ocr/resolve/main/image_ocr.jpg"
@@ -101,20 +101,6 @@ For documents with complex layouts, cluttered elements, or non-standard reading 
 
 >>> generate_ids = model.generate(**inputs, max_new_tokens=4096)
 >>> processor.batch_decode(generate_ids[:, inputs["input_ids"].shape[1]:], skip_special_tokens=True)
-```
-
-## Citation
-
-```bibtex
-@misc{dong2026qianfanocrunifiedendtoendmodel,
-  title={Qianfan-OCR: A Unified End-to-End Model for Document Intelligence},
-  author={Daxiang Dong and Mingming Zheng and Dong Xu and Chunhua Luo and Bairong Zhuang and Yuxuan Li and Ruoyun He and Haoran Wang and Wenyu Zhang and Wenbo Wang and Yicheng Wang and Xue Xiong and Ayong Zheng and Xiaoying Zuo and Ziwei Ou and Jingnan Gu and Quanhao Guo and Jianmin Wu and Dawei Yin and Dou Shen},
-  year={2026},
-  eprint={2603.13398},
-  archivePrefix={arXiv},
-  primaryClass={cs.CV},
-  url={https://huggingface.co/papers/2603.13398},
-}
 ```
 
 ## QianfanOCRConfig

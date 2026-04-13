@@ -25,8 +25,8 @@ from dataclasses import dataclass
 
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
 
+from ... import initialization as init
 from ...activations import ACT2FN
 from ...cache_utils import Cache
 from ...generation import GenerationMixin
@@ -35,7 +35,7 @@ from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPast, BaseModelOutputWithPooling, ModelOutput
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import TransformersKwargs, auto_docstring, torch_compilable_check
+from ...utils import TransformersKwargs, auto_docstring, torch_compilable_check, torch_int
 from ...utils.generic import can_return_tuple, merge_with_config_defaults
 from ...utils.output_capturing import OutputRecorder, capture_outputs
 from ..auto import AutoModel
@@ -263,14 +263,10 @@ class QianfanOCRVisionEncoder(nn.Module):
         self.config = config
         self.gradient_checkpointing = False
 
-        n = config.num_hidden_layers
-        rate = float(config.drop_path_rate)
-        if n <= 1:
-            dpr = [0.0] * n
-        else:
-            dpr = [rate * i / (n - 1) for i in range(n)]
-
-        self.layer = nn.ModuleList([QianfanOCRVisionLayer(config, drop_path_rate=dpr[i]) for i in range(n)])
+        dpr = [x.item() for x in torch.linspace(0, config.drop_path_rate, config.num_hidden_layers, device="cpu")]
+        self.layer = nn.ModuleList(
+            [QianfanOCRVisionLayer(config, drop_path_rate=dpr[i]) for i in range(config.num_hidden_layers)]
+        )
 
     def forward(
         self,
@@ -358,28 +354,36 @@ class QianfanOCRVisionEmbeddings(nn.Module):
         - https://github.com/facebookresearch/dino/blob/de9ee3df6cf39fac952ab558447af1fa1365362a/vision_transformer.py#L174-L194, and
         - https://github.com/facebookresearch/dinov2/blob/e1277af2ba9496fbadf7aec6eba56e8d882d1e35/dinov2/models/vision_transformer.py#L179-L211
         """
-        patch_size = self.patch_size
-        base_h = self.image_size[0] // patch_size[0]
-        base_w = self.image_size[1] // patch_size[1]
-        new_h = height // patch_size[0]
-        new_w = width // patch_size[1]
+
+        num_patches = embeddings.shape[1] - 1
+        num_positions = self.position_embeddings.shape[1] - 1
+
+        # always interpolate when tracing to ensure the exported model works for dynamic input shapes
+        if not torch.jit.is_tracing() and num_patches == num_positions and height == width:
+            return self.position_embeddings
 
         class_pos_embed = self.position_embeddings[:, :1]
         patch_pos_embed = self.position_embeddings[:, 1:]
+
         dim = embeddings.shape[-1]
 
-        if new_h == base_h and new_w == base_w:
-            return self.position_embeddings
+        new_height = height // self.patch_size[0]
+        new_width = width // self.patch_size[1]
 
-        patch_pos_embed = patch_pos_embed.float().reshape(1, base_h, base_w, dim).permute(0, 3, 1, 2)
-        patch_pos_embed = (
-            F.interpolate(patch_pos_embed, size=(new_h, new_w), mode="bicubic", align_corners=False)
-            .reshape(1, -1, new_h * new_w)
-            .permute(0, 2, 1)
-            .to(embeddings.dtype)
+        sqrt_num_positions = torch_int(num_positions**0.5)
+        patch_pos_embed = patch_pos_embed.reshape(1, sqrt_num_positions, sqrt_num_positions, dim)
+        patch_pos_embed = patch_pos_embed.permute(0, 3, 1, 2)
+
+        patch_pos_embed = nn.functional.interpolate(
+            patch_pos_embed,
+            size=(new_height, new_width),
+            mode="bicubic",
+            align_corners=False,
         )
-        class_pos_embed = class_pos_embed.to(embeddings.dtype)
-        return torch.cat([class_pos_embed, patch_pos_embed], dim=1)
+
+        patch_pos_embed = patch_pos_embed.permute(0, 2, 3, 1).view(1, -1, dim)
+
+        return torch.cat((class_pos_embed, patch_pos_embed), dim=1)
 
     def forward(
         self,
@@ -420,9 +424,10 @@ class QianfanOCRVisionModelOutputWithPooling(BaseModelOutputWithPooling):
 
 @auto_docstring
 class QianfanOCRVisionPreTrainedModel(PreTrainedModel):
-    config_class = QianfanOCRVisionConfig
+    config: QianfanOCRVisionConfig
     base_model_prefix = "vision_model"
     main_input_name = "pixel_values"
+    input_modalities = ("image", "video")
     supports_gradient_checkpointing = True
     _no_split_modules = ["QianfanOCRVisionLayer"]
     _supports_sdpa = True
@@ -433,16 +438,21 @@ class QianfanOCRVisionPreTrainedModel(PreTrainedModel):
         "hidden_states": OutputRecorder(QianfanOCRVisionLayer, index=0),
         "attentions": OutputRecorder(QianfanOCRVisionAttention, index=1),
     }
+    config_class = QianfanOCRVisionConfig
 
     @torch.no_grad()
     def _init_weights(self, module):
+        """Initialize the weights"""
         super()._init_weights(module)
         if isinstance(module, QianfanOCRVisionEmbeddings):
-            nn.init.zeros_(module.cls_token)
-            nn.init.zeros_(module.position_embeddings)
+            init.zeros_(module.cls_token)
+            if module.mask_token is not None:
+                init.zeros_(module.mask_token)
+            if module.position_embeddings is not None:
+                init.zeros_(module.position_embeddings)
         elif isinstance(module, QianfanOCRVisionLayer):
-            nn.init.constant_(module.lambda_1, self.config.layer_scale_init_value)
-            nn.init.constant_(module.lambda_2, self.config.layer_scale_init_value)
+            init.constant_(module.lambda_1, self.config.layer_scale_init_value)
+            init.constant_(module.lambda_2, self.config.layer_scale_init_value)
 
 
 @auto_docstring
@@ -458,10 +468,11 @@ class QianfanOCRVisionModel(QianfanOCRVisionPreTrainedModel):
             nn.Identity() if config.use_mean_pooling else nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         )
 
+        # Initialize weights and apply final processing
         self.post_init()
 
     def get_input_embeddings(self):
-        return self.embeddings.patch_embeddings.projection
+        return self.embeddings.patch_embeddings
 
     @merge_with_config_defaults
     @capture_outputs(tie_last_hidden_states=False)
@@ -501,15 +512,21 @@ class QianfanOCRMultiModalProjector(nn.Module):
         return hidden_states
 
 
+@auto_docstring
 class QianfanOCRPreTrainedModel(PreTrainedModel):
-    config_class = QianfanOCRConfig
+    config: QianfanOCRConfig
     base_model_prefix = "model"
     input_modalities = ("image", "text")
     supports_gradient_checkpointing = True
     _skip_keys_device_placement = "past_key_values"
+
     _supports_flash_attn = True
     _supports_sdpa = True
-    _no_split_modules = ["QianfanOCRVisionLayer", "Qwen3DecoderLayer"]
+
+    _can_compile_fullgraph = True
+    _supports_flex_attn = True
+    _supports_attention_backend = True
+    config_class = QianfanOCRConfig
 
 
 @dataclass
@@ -711,7 +728,7 @@ class QianfanOCRModel(QianfanOCRPreTrainedModel):
 @dataclass
 @auto_docstring(
     custom_intro="""
-    Base class for QianfanOCR causal language model outputs.
+    Base class for QianfanOCR causal language model (or autoregressive) outputs.
     """
 )
 class QianfanOCRCausalLMOutputWithPast(ModelOutput):
@@ -720,6 +737,11 @@ class QianfanOCRCausalLMOutputWithPast(ModelOutput):
         Language modeling loss (for next-token prediction).
     logits (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.vocab_size)`):
         Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
+    past_key_values (`Cache`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
+        It is a [`~cache_utils.Cache`] instance. For more details, see our [kv cache guide](https://huggingface.co/docs/transformers/en/kv_cache).
+
+        Contains pre-computed hidden-states (key and values in the self-attention blocks) that can be used (see
+        `past_key_values` input) to speed up sequential decoding.
     image_hidden_states (`torch.FloatTensor`, *optional*):
         A `torch.FloatTensor` of size `(batch_size, num_images, sequence_length, hidden_size)`.
         image_hidden_states of the model produced by the vision encoder and after projecting the last hidden state.

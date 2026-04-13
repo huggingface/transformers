@@ -32,15 +32,6 @@ class QianfanOCRVisionConfig(PreTrainedConfig):
     r"""
     drop_path_rate (`float`, *optional*, defaults to 0.1):
         Dropout rate for stochastic depth.
-    projection_dropout (`float`, *optional*, defaults to 0.0):
-        Dropout probability for the projection layer.
-    norm_type (`str`, *optional*, defaults to `"layer_norm"`):
-        The type of normalization to use in the encoder. Can be `"layer_norm"` or `"rms_norm"`.
-    use_mask_token (`bool`, *optional*, defaults to `False`):
-        Whether to use a mask token for masked image modeling.
-    use_mean_pooling (`bool`, *optional*, defaults to `True`):
-        Whether to mean pool the final hidden states of the patches instead of using the final hidden state of the
-        CLS token, before applying the classification head.
 
     Example:
 
@@ -130,6 +121,16 @@ class QianfanOCRConfig(PreTrainedConfig):
             self.text_config = CONFIG_MAPPING[self.text_config["model_type"]](**self.text_config)
         elif self.text_config is None:
             self.text_config = CONFIG_MAPPING["qwen3"]()
+        if isinstance(self.vision_config, dict):
+            self.vision_config = QianfanOCRVisionConfig(**self.vision_config)
+        elif self.vision_config is None:
+            self.vision_config = QianfanOCRVisionConfig()
+
+        if isinstance(self.text_config, dict):
+            self.text_config["model_type"] = self.text_config.get("model_type", "qwen2")
+            self.text_config = CONFIG_MAPPING[self.text_config["model_type"]](**self.text_config)
+        elif self.text_config is None:
+            self.text_config = CONFIG_MAPPING["qwen2"]()
 
         super().__post_init__(**kwargs)
 
