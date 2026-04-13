@@ -201,20 +201,18 @@
     - local: fsdp
       title: FullyShardedDataParallel
     - local: deepspeed
-      title: DeepSpeed
+      title: DeepSpeed ZeRO
+    - local: deepspeed_alst
+      title: Ulysses sequence parallelism
     - local: tensor_parallelism
       title: Tensor parallelism
     - local: debugging
-      title: Multi-GPU debugging
-    - local: perf_train_cpu_many
-      title: Distributed CPUs
+      title: Debugging
     - local: perf_train_gpu_many
       title: Parallelism methods
     title: Distributed training
   - isExpanded: false
     sections:
-    - local: perf_train_gpu_one
-      title: GPU
     - local: perf_train_cpu
       title: CPU
     - local: perf_train_special
@@ -222,7 +220,9 @@
     - local: perf_train_gaudi
       title: Intel Gaudi
     - local: perf_hardware
-      title: Build your own machine
+      title: Building a GPU workstation
+    - local: model_memory_anatomy
+      title: Model training anatomy
     title: Hardware
   title: Training
 - isExpanded: false
