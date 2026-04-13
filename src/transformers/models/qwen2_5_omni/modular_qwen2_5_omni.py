@@ -1732,10 +1732,6 @@ class Qwen2_5OmniThinkerForConditionalGeneration(Qwen2_5OmniPreTrainedModelForCo
             The tensors corresponding to the input videos.
         video_grid_thw (`torch.LongTensor` of shape `(num_videos, 3)`, *optional*):
             The temporal, height and width of feature shape of each video in LLM.
-        video_cu_seqlens (`torch.Tensor` of shape `(num_video_patches + 1,)`, *optional*):
-            Precomputed cumulative sequence lengths for video patches, used for packed variable-length attention.
-        video_rotary_pos_ids (`torch.Tensor` of shape `(num_video_tokens, 2)`, *optional*):
-            Precomputed (row, col) position IDs for video rotary embeddings.
         """
         pixel_values_videos = pixel_values_videos.type(self.visual.dtype)
         return self.visual(

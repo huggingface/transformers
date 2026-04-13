@@ -501,10 +501,6 @@ class VideoLlama3Model(Qwen2VLModel):
             The temporal, height and width of feature shape of each video in LLM.
         video_merge_sizes (`torch.Tensor` of shape `(num_videos,)`):
             The spatial downsampling ratio of each video feature.
-        video_cu_seqlens (`torch.Tensor` of shape `(num_video_patches + 1,)`, *optional*):
-            Precomputed cumulative sequence lengths for video patches, used for packed variable-length attention.
-        video_rotary_pos_ids (`torch.Tensor` of shape `(num_video_tokens, 2)`, *optional*):
-            Precomputed (row, col) position IDs for video rotary embeddings.
         """
         return self.get_image_features(
             pixel_values=pixel_values_videos,
