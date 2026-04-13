@@ -1322,6 +1322,7 @@ class Qwen3VLProcessor(Qwen2VLProcessor):
 __all__ = [
     "Qwen3VLConfig",
     "Qwen3VLTextConfig",
+    "Qwen3VLVisionConfig",
     "Qwen3VLVisionModel",
     "Qwen3VLForConditionalGeneration",
     "Qwen3VLModel",

@@ -511,7 +511,42 @@ MODEL_TYPE_TO_DOC_MAPPING = OrderedDict(
     ]
 )
 
-DOC_MODEL_NAMES_NOT_IN_AUTO = {}
+DOC_MODEL_NAMES_NOT_IN_AUTO = {
+    "llama2",
+    "myt5",
+    "ul2",
+    "phobert",
+    "herbert",
+    "dit",
+    "lasr",
+    "mluke",
+    "xlsr_wav2vec2",
+    "xls_r",
+    "wav2vec2_phoneme",
+    "llama3",
+    "deplot",
+    "t5v1.1",
+    "matcha",
+    "barthez",
+    "byt5",
+    "flan-ul2",
+    "cpm",
+    "bertweet",
+    "nllb",
+    "xlm-v",
+    "dialogpt",
+    "flan-t5",
+    "bert-japanese",
+    "mms",
+    "depth_anything_v2",
+    "bartpho",
+    "parakeet",
+    "madlad-400",
+    "granitevision",
+    "falcon3",
+    "megatron_gpt2",
+    "code_llama",
+}
 
 
 # This is to make sure the transformers module imported is the one in the repo.

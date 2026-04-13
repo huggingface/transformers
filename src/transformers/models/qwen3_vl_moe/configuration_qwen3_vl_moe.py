@@ -185,4 +185,4 @@ class Qwen3VLMoeConfig(PreTrainedConfig):
         super().__post_init__(**kwargs)
 
 
-__all__ = ["Qwen3VLMoeConfig", "Qwen3VLMoeTextConfig"]
+__all__ = ["Qwen3VLMoeConfig", "Qwen3VLMoeTextConfig", "Qwen3VLMoeVisionConfig"]

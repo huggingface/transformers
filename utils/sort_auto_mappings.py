@@ -35,8 +35,8 @@ import re
 
 
 CHECKER_CONFIG = {
-    "name": "auto_mappings",
-    "label": "Auto mappings",
+    "name": "sort_auto_mappings",
+    "label": "Sort auto mappings",
     "file_globs": ["src/transformers/models/auto/*.py"],
     "check_args": ["--check_only"],
     "fix_args": [],

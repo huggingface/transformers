@@ -452,6 +452,7 @@ class Qwen3VLMoeForConditionalGeneration(Qwen3VLForConditionalGeneration):
 __all__ = [
     "Qwen3VLMoeConfig",
     "Qwen3VLMoeTextConfig",
+    "Qwen3VLMoeVisionConfig",
     "Qwen3VLMoeVisionModel",
     "Qwen3VLMoeForConditionalGeneration",
     "Qwen3VLMoeModel",  # noqa

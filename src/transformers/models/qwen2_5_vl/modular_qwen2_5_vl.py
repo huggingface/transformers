@@ -923,6 +923,7 @@ class Qwen2_5_VLProcessor(Qwen2VLProcessor):
 
 __all__ = [
     "Qwen2_5_VLConfig",
+    "Qwen2_5_VLVisionConfig",
     "Qwen2_5_VLTextConfig",
     "Qwen2_5_VLForConditionalGeneration",
     "Qwen2_5_VLModel",

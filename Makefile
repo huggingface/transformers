@@ -10,7 +10,7 @@ style:
 		ruff_check,\
 		ruff_format,\
 		init_isort,\
-		auto_mappings \
+		sort_auto_mappings \
 		--fix
 
 # Runs ty type checker and model structure rules
@@ -27,7 +27,7 @@ check-code-quality:
 		ruff_check,\
 		ruff_format,\
 		init_isort,\
-		auto_mappings
+		sort_auto_mappings
 
 # Runs a full repository consistency check.
 check-repository-consistency:
