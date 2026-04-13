@@ -1621,6 +1621,8 @@ class ConditionalDetrForObjectDetection(ConditionalDetrPreTrainedModel):
     """
 )
 class ConditionalDetrForSegmentation(ConditionalDetrPreTrainedModel):
+    base_model_prefix = "conditional_detr"
+
     def __init__(self, config: ConditionalDetrConfig):
         super().__init__(config)
 
