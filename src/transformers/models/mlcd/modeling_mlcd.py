@@ -370,7 +370,8 @@ class MLCDEncoder(nn.Module):
 @auto_docstring
 class MLCDPreTrainedModel(PreTrainedModel):
     config: MLCDVisionConfig
-    base_model_prefix = "mlcd"
+    base_model_prefix = "vision_model"
+    _no_split_modules = ["MLCDEncoderLayer"]
     supports_gradient_checkpointing = True
     accepts_loss_kwargs = False
     _supports_flash_attn = True
@@ -405,7 +406,7 @@ class MLCDPreTrainedModel(PreTrainedModel):
             fc_std = (2 * module.config.hidden_size) ** -0.5 * factor
             init.normal_(module.fc1.weight, std=fc_std)
             init.normal_(module.fc2.weight, std=in_proj_std)
-        elif isinstance(module, MLCDVisionTransformer):
+        elif isinstance(module, MLCDVisionModel):
             factor = self.config.initializer_factor
             pos_emb_std = (module.config.hidden_size // module.config.num_attention_heads // 2) ** -0.5 * factor
             init.normal_(module.class_pos_emb, mean=0.0, std=pos_emb_std)
@@ -419,15 +420,19 @@ class MLCDPreTrainedModel(PreTrainedModel):
             init.copy_(module.inv_freq, inv_freq)
 
 
-class MLCDVisionTransformer(MLCDPreTrainedModel):
+@auto_docstring(
+    custom_intro="""
+    The vision model from M_L_C_D without any head or projection on top.
+    """
+)
+class MLCDVisionModel(MLCDPreTrainedModel):
     config: MLCDVisionConfig
     main_input_name = "pixel_values"
     input_modalities = ("image",)
-    _no_split_modules = ["MLCDEncoderLayer"]
+    _input_embed_layer = "patch_embedding"
 
     def __init__(self, config: MLCDVisionConfig):
         super().__init__(config)
-        self.config = config
         embed_dim = config.hidden_size
 
         self.embeddings = MLCDVisionEmbeddings(config)
@@ -446,6 +451,30 @@ class MLCDVisionTransformer(MLCDPreTrainedModel):
         pixel_values: torch.FloatTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
+        r"""
+        Example:
+
+        ```python
+        >>> import httpx
+        >>> from io import BytesIO
+        >>> from PIL import Image
+        >>> from transformers import AutoProcessor, MLCDVisionModel
+        >>> model = MLCDVisionModel.from_pretrained("DeepGlint-AI/mlcd-vit-bigG-patch14-448")
+        >>> processor = AutoProcessor.from_pretrained("DeepGlint-AI/mlcd-vit-bigG-patch14-448")
+
+        >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
+        >>> with httpx.stream("GET", url) as response:
+        ...     image = Image.open(BytesIO(response.read()))
+        >>> inputs = processor(images=image, return_tensors="pt")
+
+        >>> with torch.no_grad():
+        ...     outputs = model(**inputs, output_attentions=True)
+
+        >>> features = outputs.last_hidden_state
+        >>> print(f"Extracted features shape: {features.shape}")
+        >>> print(f"Number of attention layers: {len(outputs.attentions)}")
+        >>> print(f"Attention shape: {outputs.attentions[0].shape}")
+        ```"""
         if pixel_values is None:
             raise ValueError("You have to specify pixel_values")
 
@@ -479,62 +508,6 @@ class MLCDVisionTransformer(MLCDPreTrainedModel):
         return BaseModelOutputWithPooling(
             last_hidden_state=last_hidden_state,
             pooler_output=pooled_output,
-        )
-
-
-@auto_docstring(
-    custom_intro="""
-    The vision model from M_L_C_D without any head or projection on top.
-    """
-)
-class MLCDVisionModel(MLCDPreTrainedModel):
-    config: MLCDVisionConfig
-    main_input_name = "pixel_values"
-    input_modalities = ("image",)
-    _no_split_modules = ["MLCDEncoderLayer"]
-
-    def __init__(self, config: MLCDVisionConfig):
-        super().__init__(config)
-        self.vision_model = MLCDVisionTransformer(config)
-        # Initialize weights and apply final processing
-        self.post_init()
-
-    def get_input_embeddings(self) -> nn.Module:
-        return self.vision_model.embeddings.patch_embedding
-
-    @auto_docstring
-    def forward(
-        self,
-        pixel_values: torch.FloatTensor | None = None,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | BaseModelOutputWithPooling:
-        r"""
-        Example:
-
-        ```python
-        >>> import httpx
-        >>> from io import BytesIO
-        >>> from PIL import Image
-        >>> from transformers import AutoProcessor, MLCDVisionModel
-        >>> model = MLCDVisionModel.from_pretrained("DeepGlint-AI/mlcd-vit-bigG-patch14-448")
-        >>> processor = AutoProcessor.from_pretrained("DeepGlint-AI/mlcd-vit-bigG-patch14-448")
-
-        >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-        >>> with httpx.stream("GET", url) as response:
-        ...     image = Image.open(BytesIO(response.read()))
-        >>> inputs = processor(images=image, return_tensors="pt")
-
-        >>> with torch.no_grad():
-        ...     outputs = model(**inputs, output_attentions=True)
-
-        >>> features = outputs.last_hidden_state
-        >>> print(f"Extracted features shape: {features.shape}")
-        >>> print(f"Number of attention layers: {len(outputs.attentions)}")
-        >>> print(f"Attention shape: {outputs.attentions[0].shape}")
-        ```"""
-        return self.vision_model(
-            pixel_values=pixel_values,
-            **kwargs,
         )
 
 
