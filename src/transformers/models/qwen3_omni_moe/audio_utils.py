@@ -19,7 +19,7 @@ tensors from ``feature_lens`` + config scalars.
 
 import torch
 
-from ..qwen2_5_omni.audio_utils import get_chunk_lengths  # noqa: F401 — re-export
+from ..qwen2_5_omni.audio_utils import chunk_and_pad_features  # noqa: F401 — re-export
 
 
 def _get_feat_extract_output_lengths(input_lengths: torch.Tensor) -> torch.Tensor:
