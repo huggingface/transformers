@@ -1312,7 +1312,7 @@ class PreTrainedTokenizerBase(PushToHubMixin):
                 if key in vars(cls):
                     return vars(cls)[key]
             raise AttributeError(f"{self.__class__.__name__} has no attribute {key}")
-        return self.__dict__[key]
+        return object.__getattribute__(self, key)
 
     def get_special_tokens_mask(
         self, token_ids_0: list[int], token_ids_1: list[int] | None = None, already_has_special_tokens: bool = False

@@ -51,6 +51,8 @@ if is_serve_available():
     from openai.types.responses.response_create_params import ResponseCreateParamsStreaming
     from openai.types.responses.response_usage import InputTokensDetails, OutputTokensDetails, ResponseUsage
 
+from transformers import BatchEncoding
+
 from .utils import (
     BaseGenerateManager,
     BaseHandler,
@@ -129,15 +131,15 @@ class ResponseHandler(BaseHandler):
             tokenize=True,
         )
         if not use_cb:
-            from transformers import BatchEncoding
-
             if not isinstance(inputs, BatchEncoding):
                 raise TypeError("Expected BatchEncoding from apply_chat_template with return_tensors='pt'")
             inputs = inputs.to(model.device)
 
         gen_config = self._build_generation_config(body, model.generation_config, use_cb=use_cb)
         # TODO: remove when CB supports per-request generation config
-        if use_cb and isinstance(gen_manager, CBGenerateManager):
+        if use_cb:
+            if not isinstance(gen_manager, CBGenerateManager):
+                raise TypeError("Expected CBGenerateManager when use_cb is True")
             gen_manager.init_cb(model, gen_config)
         tool_format = detect_tool_format(model) if body.get("tools") else None
 

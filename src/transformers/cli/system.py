@@ -47,6 +47,7 @@ def env(
     """Print information about the environment."""
     import safetensors
 
+    # TODO: remove hasattr guard once safetensors >= 0.8.0 is released (adds __version__)
     safetensors_version = safetensors.__version__ if hasattr(safetensors, "__version__") else "unknown"
 
     accelerate_version = "not installed"

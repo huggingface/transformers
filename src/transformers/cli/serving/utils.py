@@ -652,7 +652,7 @@ class CBGenerateManager(BaseGenerateManager):
         """Start streaming CB generation. Registers a per-request output handler."""
         cb = self._cb
         if cb is None:
-            raise RuntimeError("CB manager not initialized. Call init_cb() first.")
+            raise RuntimeError("CB manager not initialized. Call `init_cb()` first.")
 
         loop = asyncio.get_running_loop()
         text_queue: asyncio.Queue = asyncio.Queue()
@@ -691,7 +691,7 @@ class CBGenerateManager(BaseGenerateManager):
         """Run non-streaming CB generation. Registers a handler that resolves an asyncio.Future on completion."""
         cb = self._cb
         if cb is None:
-            raise RuntimeError("CB manager not initialized. Call init_cb() first.")
+            raise RuntimeError("CB manager not initialized. Call `init_cb()` first.")
 
         input_ids = inputs["input_ids"]
         input_len = len(input_ids)
