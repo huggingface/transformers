@@ -48,6 +48,7 @@ from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, loggi
 from ...utils.generic import is_flash_attention_requested, maybe_autocast, merge_with_config_defaults
 from ...utils.import_utils import is_causal_conv1d_available, is_flash_linear_attention_available
 from ...utils.output_capturing import capture_outputs
+from ..qwen3_vl.vision_utils import get_cu_seqlens, get_pos_embed_indices, get_rotary_pos_ids
 from .configuration_qwen3_5 import Qwen3_5Config, Qwen3_5TextConfig, Qwen3_5VisionConfig
 
 
@@ -76,10 +77,8 @@ class Qwen3_5VisionRotaryEmbedding(nn.Module):
         inv_freq = 1.0 / (theta ** (torch.arange(0, dim, 2, dtype=torch.float) / dim))
         self.register_buffer("inv_freq", inv_freq, persistent=False)
 
-    def forward(self, seqlen: int) -> torch.Tensor:
-        seq = torch.arange(seqlen, device=self.inv_freq.device, dtype=self.inv_freq.dtype)
-        freqs = torch.outer(seq, self.inv_freq)
-        return freqs
+    def forward(self, pos_ids: torch.Tensor) -> torch.Tensor:
+        return (pos_ids.unsqueeze(-1) * self.inv_freq).flatten(1)
 
 
 class Qwen3_5TextRotaryEmbedding(nn.Module):
@@ -1027,111 +1026,6 @@ class Qwen3_5VisionModel(Qwen3_5PreTrainedModel):
 
         self.post_init()
 
-    def get_cu_seqlens(self, grid_thw):
-        """Compute cumulative sequence lengths from vision grid info."""
-        cu_seqlens = torch.repeat_interleave(grid_thw[:, 1] * grid_thw[:, 2], grid_thw[:, 0]).cumsum(
-            dim=0, dtype=grid_thw.dtype if torch.jit.is_tracing() else torch.int32
-        )
-        return F.pad(cu_seqlens, (1, 0), value=0)
-
-    def get_pos_embed_indices(self, grid_thw):
-        """Compute bilinear interpolation indices and weights for position embeddings.
-
-        Returns:
-            embed_indices: (4, total_thw) long — indices into the pos_embed table.
-            bilinear_weights: (4, total_thw) float — interpolation weights, same dtype as pos_embed.
-        """
-        N = self.num_grid_per_side
-        m = self.config.spatial_merge_size
-        device = self.pos_embed.weight.device
-        dtype = self.pos_embed.weight.dtype
-
-        idx_parts: list[list[torch.Tensor]] = [[] for _ in range(4)]
-        weight_parts: list[list[torch.Tensor]] = [[] for _ in range(4)]
-
-        for t, h, w in grid_thw.tolist():
-            t, h, w = int(t), int(h), int(w)
-
-            h_idxs = torch.linspace(0, N - 1, h, device=device)
-            w_idxs = torch.linspace(0, N - 1, w, device=device)
-
-            h_floor = h_idxs.int()
-            w_floor = w_idxs.int()
-            h_ceil = (h_floor + 1).clamp(max=N - 1)
-            w_ceil = (w_floor + 1).clamp(max=N - 1)
-
-            dh = h_idxs - h_floor
-            dw = w_idxs - w_floor
-
-            bh_f = h_floor * N
-            bh_c = h_ceil * N
-
-            raw_idx = [
-                (bh_f[:, None] + w_floor[None, :]).flatten(),
-                (bh_f[:, None] + w_ceil[None, :]).flatten(),
-                (bh_c[:, None] + w_floor[None, :]).flatten(),
-                (bh_c[:, None] + w_ceil[None, :]).flatten(),
-            ]
-            raw_w = [
-                ((1 - dh)[:, None] * (1 - dw)[None, :]).flatten(),
-                ((1 - dh)[:, None] * dw[None, :]).flatten(),
-                (dh[:, None] * (1 - dw)[None, :]).flatten(),
-                (dh[:, None] * dw[None, :]).flatten(),
-            ]
-
-            # Compose spatial merge reorder into the indices
-            h_idx = torch.arange(h, device=device).view(h // m, m)
-            w_idx = torch.arange(w, device=device).view(w // m, m)
-            reorder = (h_idx[:, :, None, None] * w + w_idx[None, None, :, :]).permute(0, 2, 1, 3).flatten().repeat(t)
-
-            for i in range(4):
-                idx_parts[i].append(raw_idx[i][reorder])
-                weight_parts[i].append(raw_w[i][reorder])
-
-        embed_indices = torch.stack([torch.cat(p) for p in idx_parts])
-        bilinear_weights = torch.stack([torch.cat(p) for p in weight_parts]).to(dtype)
-        return embed_indices, bilinear_weights
-
-    def rot_pos_emb(self, grid_thw: torch.Tensor) -> torch.Tensor:
-        merge_size = self.spatial_merge_size
-        grid_thw_list = grid_thw.tolist()
-
-        max_hw = max(max(h, w) for _, h, w in grid_thw_list)
-        freq_table = self.rotary_pos_emb(max_hw)  # (max_hw, dim // 2)
-        device = freq_table.device
-
-        total_tokens = sum(t * h * w for t, h, w in grid_thw_list)
-        pos_ids = torch.empty((total_tokens, 2), dtype=torch.long, device=device)
-
-        offset = 0
-        for num_frames, height, width in grid_thw_list:
-            merged_h, merged_w = height // merge_size, width // merge_size
-
-            block_rows = torch.arange(merged_h, device=device)  # block row indices
-            block_cols = torch.arange(merged_w, device=device)  # block col indices
-            intra_row = torch.arange(merge_size, device=device)  # intra-block row offsets
-            intra_col = torch.arange(merge_size, device=device)  # intra-block col offsets
-
-            # Compute full-resolution positions
-            row_idx = block_rows[:, None, None, None] * merge_size + intra_row[None, None, :, None]
-            col_idx = block_cols[None, :, None, None] * merge_size + intra_col[None, None, None, :]
-
-            row_idx = row_idx.expand(merged_h, merged_w, merge_size, merge_size).reshape(-1)
-            col_idx = col_idx.expand(merged_h, merged_w, merge_size, merge_size).reshape(-1)
-
-            coords = torch.stack((row_idx, col_idx), dim=-1)
-
-            if num_frames > 1:
-                coords = coords.repeat(num_frames, 1)
-
-            num_tokens = coords.shape[0]
-            pos_ids[offset : offset + num_tokens] = coords
-            offset += num_tokens
-
-        embeddings = freq_table[pos_ids]  # lookup rotary embeddings
-        embeddings = embeddings.flatten(1)
-        return embeddings
-
     @merge_with_config_defaults
     @capture_outputs
     def forward(
@@ -1139,7 +1033,7 @@ class Qwen3_5VisionModel(Qwen3_5PreTrainedModel):
         hidden_states: torch.Tensor,
         grid_thw: torch.Tensor,
         cu_seqlens: torch.Tensor | None = None,
-        rotary_pos_emb: torch.Tensor | None = None,
+        rotary_pos_ids: torch.Tensor | None = None,
         embed_indices: torch.Tensor | None = None,
         bilinear_weights: torch.Tensor | None = None,
         **kwargs,
@@ -1151,13 +1045,13 @@ class Qwen3_5VisionModel(Qwen3_5PreTrainedModel):
             grid_thw (`torch.Tensor` of shape `(num_images_or_videos, 3)`):
                 The temporal, height and width of feature shape of each image in LLM.
             cu_seqlens (`torch.Tensor`, *optional*):
-                Precomputed cumulative sequence lengths (from `get_cu_seqlens`).
-            rotary_pos_emb (`torch.Tensor`, *optional*):
-                Precomputed rotary positional embeddings (from `rot_pos_emb`).
+                Precomputed cumulative sequence lengths (from `compute_cu_seqlens`).
+            rotary_pos_ids (`torch.Tensor` of shape `(total_tokens, 2)`, *optional*):
+                Precomputed (row, col) position IDs (from `get_rotary_pos_ids`).
             embed_indices (`torch.Tensor` of shape `(4, total_thw)`, *optional*):
-                Bilinear corner indices into the position embedding table (from `get_pos_embed_indices`).
+                Bilinear corner indices into the position embedding table (from `compute_pos_embed_indices`).
             bilinear_weights (`torch.Tensor` of shape `(4, total_thw)`, *optional*):
-                Interpolation weights for the four bilinear corners (from `get_pos_embed_indices`).
+                Interpolation weights for the four bilinear corners (from `compute_pos_embed_indices`).
 
         Returns:
             `torch.Tensor`: hidden_states.
@@ -1165,16 +1059,19 @@ class Qwen3_5VisionModel(Qwen3_5PreTrainedModel):
         hidden_states = self.patch_embed(hidden_states)
 
         if embed_indices is None or bilinear_weights is None:
-            embed_indices, bilinear_weights = self.get_pos_embed_indices(grid_thw)
-
+            embed_indices, bilinear_weights = get_pos_embed_indices(
+                grid_thw, self.num_grid_per_side, self.config.spatial_merge_size
+            )
         pos_embeds = (self.pos_embed(embed_indices) * bilinear_weights[:, :, None]).sum(0)
         hidden_states = hidden_states + pos_embeds
 
-        if rotary_pos_emb is None:
-            rotary_pos_emb = self.rot_pos_emb(grid_thw)
+        if rotary_pos_ids is None:
+            rotary_pos_ids = get_rotary_pos_ids(grid_thw, self.spatial_merge_size)
+
+        rotary_pos_emb = self.rotary_pos_emb(rotary_pos_ids)
 
         if cu_seqlens is None:
-            cu_seqlens = self.get_cu_seqlens(grid_thw)
+            cu_seqlens = get_cu_seqlens(grid_thw)
 
         seq_len, _ = hidden_states.size()
         hidden_states = hidden_states.reshape(seq_len, -1)

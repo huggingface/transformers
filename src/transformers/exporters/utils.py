@@ -34,6 +34,7 @@ import copy
 import enum
 import functools
 import inspect
+import sys
 from typing import Any
 
 from ..utils import logging
@@ -314,29 +315,39 @@ def _precompute_vision_inputs(model: torch.nn.Module, inputs: dict[str, Any]) ->
 
     # Only precompute for models whose forward accepts optional precomputed params
     forward_params = set(inspect.signature(model.forward).parameters)
-    precompute_keys = {"rotary_pos_emb", "image_type_ids", "cu_seqlens", "embed_indices"}
+    precompute_keys = {
+        "rotary_pos_ids",
+        "cu_seqlens",
+        "embed_indices",
+        "bilinear_weights",
+        "window_index",
+        "cu_window_seqlens",
+    }
     if not (precompute_keys & forward_params):
         return
 
+    # Import vision functions from the model's module (they're imported at the top of each modeling file)
+    model_mod = sys.modules[type(model).__module__]
+
     # cu_seqlens from repeat_interleave (data-dependent output size)
-    if hasattr(model, "get_cu_seqlens"):
-        inputs["cu_seqlens"] = model.get_cu_seqlens(grid_thw)
+    if "cu_seqlens" in forward_params and hasattr(model_mod, "get_cu_seqlens"):
+        inputs["cu_seqlens"] = model_mod.get_cu_seqlens(grid_thw)
 
-    # rot_pos_emb (loops over grid_thw values) — inject with the key the forward expects
-    if hasattr(model, "rot_pos_emb"):
-        rot_result = model.rot_pos_emb(grid_thw)
-        if "rotary_pos_emb" in forward_params:
-            inputs["rotary_pos_emb"] = rot_result
-        elif "image_type_ids" in forward_params:
-            inputs["image_type_ids"] = rot_result
+    # rotary pos IDs
+    if "rotary_pos_ids" in forward_params and hasattr(model_mod, "get_rotary_pos_ids"):
+        inputs["rotary_pos_ids"] = model_mod.get_rotary_pos_ids(grid_thw, model.spatial_merge_size)
 
-    # get_window_index (loops + .tolist())
-    if hasattr(model, "get_window_index"):
-        inputs["window_index"], inputs["cu_window_seqlens"] = model.get_window_index(grid_thw)
+    # window_index (Qwen2.5-VL only)
+    if "window_index" in forward_params and hasattr(model_mod, "get_window_index"):
+        inputs["window_index"], inputs["cu_window_seqlens"] = model_mod.get_window_index(
+            grid_thw, model.spatial_merge_size, model.window_size, model.patch_size, model.spatial_merge_unit
+        )
 
-    # get_pos_embed_indices (loops over grid_thw)
-    if hasattr(model, "get_pos_embed_indices"):
-        inputs["embed_indices"], inputs["bilinear_weights"] = model.get_pos_embed_indices(grid_thw)
+    # pos_embed_indices (Qwen3-VL only)
+    if "embed_indices" in forward_params and hasattr(model_mod, "get_pos_embed_indices"):
+        inputs["embed_indices"], inputs["bilinear_weights"] = model_mod.get_pos_embed_indices(
+            grid_thw, model.num_grid_per_side, model.config.spatial_merge_size
+        )
 
 
 def _precompute_audio_inputs(model: torch.nn.Module, inputs: dict[str, Any]) -> None:

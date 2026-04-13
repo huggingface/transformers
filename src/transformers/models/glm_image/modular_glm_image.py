@@ -52,6 +52,7 @@ from ..glm4v_moe.modeling_glm4v_moe import Glm4vMoeTextAttention, eager_attentio
 from ..qwen2_vl.image_processing_pil_qwen2_vl import Qwen2VLImageProcessorPil
 from ..qwen2_vl.image_processing_qwen2_vl import Qwen2VLImageProcessor
 from ..qwen2_vl.processing_qwen2_vl import Qwen2VLProcessorKwargs
+from ..qwen2_vl.vision_utils import get_cu_seqlens, get_rotary_pos_ids
 from ..siglip.modeling_siglip import SiglipMLP
 
 
@@ -416,13 +417,6 @@ class GlmImageVisionModel(Glm4vVisionModel):
     main_input_name = "pixel_values"
     input_modalities = ("image",)
 
-    def get_cu_seqlens(self, grid_thw):
-        """Compute cumulative sequence lengths from vision grid info."""
-        cu_seqlens = torch.repeat_interleave(grid_thw[:, 1] * grid_thw[:, 2], grid_thw[:, 0]).cumsum(
-            dim=0, dtype=grid_thw.dtype if torch.jit.is_tracing() else torch.int32
-        )
-        return F.pad(cu_seqlens, (1, 0), value=0)
-
     def __init__(self, config: GlmImageVisionConfig):
         super().__init__(config)
 
@@ -435,33 +429,6 @@ class GlmImageVisionModel(Glm4vVisionModel):
         del self.downsample
         del self.post_layernorm
 
-    def rot_pos_emb(self, grid_thw):
-        pos_ids = []
-        device = grid_thw.device
-        for t, h, w in grid_thw:
-            hpos_ids = torch.arange(h, device=device).unsqueeze(1).expand(-1, w)
-            hpos_ids = hpos_ids.reshape(
-                h // self.spatial_merge_size,
-                self.spatial_merge_size,
-                w // self.spatial_merge_size,
-                self.spatial_merge_size,
-            )
-            hpos_ids = hpos_ids.permute(0, 2, 1, 3)
-            hpos_ids = hpos_ids.flatten()
-
-            wpos_ids = torch.arange(w, device=device).unsqueeze(0).expand(h, -1)
-            wpos_ids = wpos_ids.reshape(
-                h // self.spatial_merge_size,
-                self.spatial_merge_size,
-                w // self.spatial_merge_size,
-                self.spatial_merge_size,
-            )
-            wpos_ids = wpos_ids.permute(0, 2, 1, 3)
-            wpos_ids = wpos_ids.flatten()
-            pos_ids.append(torch.stack([hpos_ids, wpos_ids], dim=-1).repeat(t, 1))
-        pos_ids = torch.cat(pos_ids, dim=0)
-        return pos_ids
-
     @merge_with_config_defaults
     @capture_outputs
     @auto_docstring
@@ -470,7 +437,7 @@ class GlmImageVisionModel(Glm4vVisionModel):
         pixel_values: torch.Tensor,
         grid_thw: torch.Tensor,
         cu_seqlens: torch.Tensor | None = None,
-        image_type_ids: torch.Tensor | None = None,
+        rotary_pos_ids: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
         r"""
@@ -480,27 +447,27 @@ class GlmImageVisionModel(Glm4vVisionModel):
             The temporal, height and width of feature shape of each image.
         cu_seqlens (`torch.Tensor`, *optional*):
             Precomputed cumulative sequence lengths (from `get_cu_seqlens`).
-        image_type_ids (`torch.Tensor`, *optional*):
-            Precomputed image type ids / coordinates (from `rot_pos_emb`).
+        rotary_pos_ids (`torch.Tensor`, *optional*):
+            Precomputed (row, col) position IDs (from `get_rotary_pos_ids`).
 
         Returns:
             `torch.Tensor` of shape `(total_patches, hidden_size)`: Hidden states.
         """
         hidden_states = self.patch_embed(pixel_values)
 
-        if image_type_ids is None:
-            image_type_ids = self.rot_pos_emb(grid_thw)
+        if rotary_pos_ids is None:
+            rotary_pos_ids = get_rotary_pos_ids(grid_thw, self.spatial_merge_size)
 
         if cu_seqlens is None:
-            cu_seqlens = self.get_cu_seqlens(grid_thw)
+            cu_seqlens = get_cu_seqlens(grid_thw)
 
         seqlens = cu_seqlens[1:] - cu_seqlens[:-1]
         hidden_states = self.embeddings(
             hidden_states,
             seqlens,
             grid_thw,
-            image_type_ids[:, 0].to(hidden_states.device),
-            image_type_ids[:, 1].to(hidden_states.device),
+            rotary_pos_ids[:, 0].to(hidden_states.device),
+            rotary_pos_ids[:, 1].to(hidden_states.device),
         )
 
         # Transformer blocks (no position_embeddings needed, already added above)

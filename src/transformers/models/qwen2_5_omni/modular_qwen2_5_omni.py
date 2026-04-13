@@ -61,6 +61,7 @@ from ..qwen2_5_vl.modeling_qwen2_5_vl import (
 from ..qwen2_audio.configuration_qwen2_audio import Qwen2AudioEncoderConfig
 from ..qwen2_audio.modeling_qwen2_audio import Qwen2AudioEncoderLayer
 from ..qwen2_vl.modeling_qwen2_vl import Qwen2VLRotaryEmbedding
+from ..qwen2_vl.vision_utils import get_cu_seqlens, get_rotary_pos_ids, get_window_index
 
 
 logger = logging.get_logger(__name__)
@@ -1531,13 +1532,6 @@ class Qwen2_5OmniVisionEncoder(Qwen2_5_VisionTransformerPretrainedModel):
         "attentions": Qwen2_5OmniVisionAttention,
     }
 
-    def get_cu_seqlens(self, grid_thw):
-        """Compute cumulative sequence lengths from vision grid info."""
-        cu_seqlens = torch.repeat_interleave(grid_thw[:, 1] * grid_thw[:, 2], grid_thw[:, 0]).cumsum(
-            dim=0, dtype=grid_thw.dtype if torch.jit.is_tracing() else torch.int32
-        )
-        return F.pad(cu_seqlens, (1, 0), value=0)
-
     def __init__(self, config: Qwen2_5OmniVisionEncoderConfig, *inputs, **kwargs) -> None:
         super().__init__(config, *inputs, **kwargs)
         self.blocks = nn.ModuleList([Qwen2_5OmniVisionBlock(config) for _ in range(config.depth)])
@@ -1551,7 +1545,7 @@ class Qwen2_5OmniVisionEncoder(Qwen2_5_VisionTransformerPretrainedModel):
         cu_seqlens: torch.Tensor | None = None,
         window_index: torch.Tensor | None = None,
         cu_window_seqlens: torch.Tensor | None = None,
-        rotary_pos_emb: torch.Tensor | None = None,
+        rotary_pos_ids: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
         """
@@ -1566,22 +1560,26 @@ class Qwen2_5OmniVisionEncoder(Qwen2_5_VisionTransformerPretrainedModel):
                 Precomputed window cumulative sequence lengths (from `get_window_index`).
             window_index (`torch.Tensor`, *optional*):
                 Precomputed window reordering index (from `get_window_index`).
-            rotary_pos_emb (`torch.Tensor`, *optional*):
-                Precomputed rotary positional embeddings (from `rot_pos_emb`).
+            rotary_pos_ids (`torch.Tensor`, *optional*):
+                Precomputed (row, col) position IDs (from `get_rotary_pos_ids`).
 
         Returns:
             `torch.Tensor`: hidden_states.
         """
         hidden_states = self.patch_embed(hidden_states)
 
-        if rotary_pos_emb is None:
-            rotary_pos_emb = self.rot_pos_emb(grid_thw)
+        if rotary_pos_ids is None:
+            rotary_pos_ids = get_rotary_pos_ids(grid_thw, self.spatial_merge_size)
+
+        rotary_pos_emb = self.rotary_pos_emb(rotary_pos_ids)
 
         if cu_seqlens is None:
-            cu_seqlens = self.get_cu_seqlens(grid_thw)
+            cu_seqlens = get_cu_seqlens(grid_thw)
 
         if window_index is None:
-            window_index, cu_window_seqlens = self.get_window_index(grid_thw)
+            window_index, cu_window_seqlens = get_window_index(
+                grid_thw, self.spatial_merge_size, self.window_size, self.patch_size, self.spatial_merge_unit
+            )
 
         seq_len, _ = hidden_states.size()
         reverse_indices = torch.argsort(window_index)

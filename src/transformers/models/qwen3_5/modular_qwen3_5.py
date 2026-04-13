@@ -50,6 +50,7 @@ from ..qwen3_vl.modeling_qwen3_vl import (
     Qwen3VLVisionModel,
     Qwen3VLVisionRotaryEmbedding,
 )
+from ..qwen3_vl.vision_utils import get_cu_seqlens, get_pos_embed_indices, get_rotary_pos_ids
 
 
 logger = logging.get_logger(__name__)
@@ -413,13 +414,6 @@ class Qwen3_5VisionModel(Qwen3VLVisionModel):
     config: Qwen3_5VisionConfig
     _no_split_modules = ["Qwen3_5VisionBlock"]
 
-    def get_cu_seqlens(self, grid_thw):
-        """Compute cumulative sequence lengths from vision grid info."""
-        cu_seqlens = torch.repeat_interleave(grid_thw[:, 1] * grid_thw[:, 2], grid_thw[:, 0]).cumsum(
-            dim=0, dtype=grid_thw.dtype if torch.jit.is_tracing() else torch.int32
-        )
-        return F.pad(cu_seqlens, (1, 0), value=0)
-
     def __init__(self, config, *inputs, **kwargs) -> None:
         super().__init__(config, *inputs, **kwargs)
         del self.deepstack_visual_indexes
@@ -432,7 +426,7 @@ class Qwen3_5VisionModel(Qwen3VLVisionModel):
         hidden_states: torch.Tensor,
         grid_thw: torch.Tensor,
         cu_seqlens: torch.Tensor | None = None,
-        rotary_pos_emb: torch.Tensor | None = None,
+        rotary_pos_ids: torch.Tensor | None = None,
         embed_indices: torch.Tensor | None = None,
         bilinear_weights: torch.Tensor | None = None,
         **kwargs,
@@ -444,13 +438,13 @@ class Qwen3_5VisionModel(Qwen3VLVisionModel):
             grid_thw (`torch.Tensor` of shape `(num_images_or_videos, 3)`):
                 The temporal, height and width of feature shape of each image in LLM.
             cu_seqlens (`torch.Tensor`, *optional*):
-                Precomputed cumulative sequence lengths (from `get_cu_seqlens`).
-            rotary_pos_emb (`torch.Tensor`, *optional*):
-                Precomputed rotary positional embeddings (from `rot_pos_emb`).
+                Precomputed cumulative sequence lengths (from `compute_cu_seqlens`).
+            rotary_pos_ids (`torch.Tensor` of shape `(total_tokens, 2)`, *optional*):
+                Precomputed (row, col) position IDs (from `get_rotary_pos_ids`).
             embed_indices (`torch.Tensor` of shape `(4, total_thw)`, *optional*):
-                Bilinear corner indices into the position embedding table (from `get_pos_embed_indices`).
+                Bilinear corner indices into the position embedding table (from `compute_pos_embed_indices`).
             bilinear_weights (`torch.Tensor` of shape `(4, total_thw)`, *optional*):
-                Interpolation weights for the four bilinear corners (from `get_pos_embed_indices`).
+                Interpolation weights for the four bilinear corners (from `compute_pos_embed_indices`).
 
         Returns:
             `torch.Tensor`: hidden_states.
@@ -458,16 +452,19 @@ class Qwen3_5VisionModel(Qwen3VLVisionModel):
         hidden_states = self.patch_embed(hidden_states)
 
         if embed_indices is None or bilinear_weights is None:
-            embed_indices, bilinear_weights = self.get_pos_embed_indices(grid_thw)
-
+            embed_indices, bilinear_weights = get_pos_embed_indices(
+                grid_thw, self.num_grid_per_side, self.config.spatial_merge_size
+            )
         pos_embeds = (self.pos_embed(embed_indices) * bilinear_weights[:, :, None]).sum(0)
         hidden_states = hidden_states + pos_embeds
 
-        if rotary_pos_emb is None:
-            rotary_pos_emb = self.rot_pos_emb(grid_thw)
+        if rotary_pos_ids is None:
+            rotary_pos_ids = get_rotary_pos_ids(grid_thw, self.spatial_merge_size)
+
+        rotary_pos_emb = self.rotary_pos_emb(rotary_pos_ids)
 
         if cu_seqlens is None:
-            cu_seqlens = self.get_cu_seqlens(grid_thw)
+            cu_seqlens = get_cu_seqlens(grid_thw)
 
         seq_len, _ = hidden_states.size()
         hidden_states = hidden_states.reshape(seq_len, -1)

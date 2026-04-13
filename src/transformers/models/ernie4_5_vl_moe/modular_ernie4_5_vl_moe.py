@@ -20,7 +20,6 @@ from typing import Optional
 import numpy as np
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
 from huggingface_hub.dataclasses import strict
 from torchvision.transforms.v2 import functional as tvF
 
@@ -77,6 +76,7 @@ from ..qwen2_5_vl.modeling_qwen2_5_vl import (
 from ..qwen2_vl.configuration_qwen2_vl import Qwen2VLVisionConfig
 from ..qwen2_vl.image_processing_qwen2_vl import smart_resize
 from ..qwen2_vl.modeling_qwen2_vl import Qwen2VisionTransformerPretrainedModel, Qwen2VLModel, VisionMlp
+from ..qwen2_vl.vision_utils import get_cu_seqlens, get_rotary_pos_ids
 
 
 logger = logging.get_logger(__name__)
@@ -674,13 +674,6 @@ class Ernie4_5_VLMoeVisionTransformerPretrainedModel(Qwen2VisionTransformerPretr
         "attentions": Ernie4_5_VLMoeVisionAttention,
     }
 
-    def get_cu_seqlens(self, grid_thw):
-        """Compute cumulative sequence lengths from vision grid info."""
-        cu_seqlens = torch.repeat_interleave(grid_thw[:, 1] * grid_thw[:, 2], grid_thw[:, 0]).cumsum(
-            dim=0, dtype=grid_thw.dtype if torch.jit.is_tracing() else torch.int32
-        )
-        return F.pad(cu_seqlens, (1, 0), value=0)
-
     def __init__(self, config) -> None:
         super().__init__(config)
 
@@ -710,15 +703,20 @@ class Ernie4_5_VLMoeVisionTransformerPretrainedModel(Qwen2VisionTransformerPretr
         hidden_states: torch.Tensor,
         grid_thw: torch.Tensor,
         cu_seqlens: torch.Tensor | None = None,
+        rotary_pos_ids: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
         hidden_states = self.patch_embed(hidden_states)
-        rotary_pos_emb = self.rot_pos_emb(grid_thw)
+
+        if rotary_pos_ids is None:
+            rotary_pos_ids = get_rotary_pos_ids(grid_thw, self.spatial_merge_size)
+
+        rotary_pos_emb = self.rotary_pos_emb(rotary_pos_ids)
         emb = torch.cat((rotary_pos_emb, rotary_pos_emb), dim=-1)
         position_embeddings = (emb.cos(), emb.sin())
 
         if cu_seqlens is None:
-            cu_seqlens = self.get_cu_seqlens(grid_thw)
+            cu_seqlens = get_cu_seqlens(grid_thw)
 
         for block in self.blocks:
             hidden_states = block(

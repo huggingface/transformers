@@ -16,7 +16,6 @@ from collections.abc import Callable
 
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
 from huggingface_hub.dataclasses import strict
 
 from ...modeling_outputs import BaseModelOutputWithPooling
@@ -41,6 +40,7 @@ from ..glm4v.modeling_glm4v import (
     eager_attention_forward,
     is_flash_attention_requested,
 )
+from ..qwen2_vl.vision_utils import get_cu_seqlens, get_rotary_pos_ids
 
 
 class GlmOcrRMSNorm(Glm4vRMSNorm):
@@ -237,13 +237,6 @@ class GlmOcrVisionPatchMerger(Glm4vVisionPatchMerger):
 
 
 class GlmOcrVisionModel(Glm4vVisionModel):
-    def get_cu_seqlens(self, grid_thw):
-        """Compute cumulative sequence lengths from vision grid info."""
-        cu_seqlens = torch.repeat_interleave(grid_thw[:, 1] * grid_thw[:, 2], grid_thw[:, 0]).cumsum(
-            dim=0, dtype=grid_thw.dtype if torch.jit.is_tracing() else torch.int32
-        )
-        return F.pad(cu_seqlens, (1, 0), value=0)
-
     def __init__(self, config) -> None:
         super().__init__(config)
         del self.embeddings
@@ -259,7 +252,7 @@ class GlmOcrVisionModel(Glm4vVisionModel):
         hidden_states: torch.Tensor,
         grid_thw: torch.Tensor,
         cu_seqlens: torch.Tensor | None = None,
-        rotary_pos_emb: tuple[torch.Tensor, torch.Tensor] | None = None,
+        rotary_pos_ids: torch.Tensor | None = None,
         **kwargs,
     ) -> torch.Tensor:
         r"""
@@ -269,21 +262,21 @@ class GlmOcrVisionModel(Glm4vVisionModel):
             The temporal, height and width of feature shape of each image in LLM.
         cu_seqlens (`torch.Tensor`, *optional*):
             Precomputed cumulative sequence lengths (from `get_cu_seqlens`).
-        rotary_pos_emb (`tuple`, *optional*):
-            Precomputed rotary positional embeddings (from `rot_pos_emb`).
+        rotary_pos_ids (`torch.Tensor`, *optional*):
+            Precomputed (row, col) position IDs (from `get_rotary_pos_ids`).
 
         Returns:
             `torch.Tensor`: hidden_states.
         """
         hidden_states = self.patch_embed(hidden_states)
 
-        if rotary_pos_emb is None:
-            rotary_pos_emb = self.rot_pos_emb(grid_thw)
+        if rotary_pos_ids is None:
+            rotary_pos_ids = get_rotary_pos_ids(grid_thw, self.spatial_merge_size)
 
         if cu_seqlens is None:
-            cu_seqlens = self.get_cu_seqlens(grid_thw)
+            cu_seqlens = get_cu_seqlens(grid_thw)
 
-        rotary_emb, image_type_ids = rotary_pos_emb
+        rotary_emb = self.rotary_pos_emb(rotary_pos_ids)
         emb = torch.cat((rotary_emb, rotary_emb), dim=-1)
         position_embeddings = (emb.cos(), emb.sin())
 

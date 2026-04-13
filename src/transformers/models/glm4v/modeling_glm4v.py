@@ -42,6 +42,7 @@ from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, torch_compilable_check
 from ...utils.generic import is_flash_attention_requested, maybe_autocast, merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
+from ..qwen2_vl.vision_utils import get_cu_seqlens, get_rotary_pos_ids
 from .configuration_glm4v import Glm4vConfig, Glm4vTextConfig, Glm4vVisionConfig
 
 
@@ -110,10 +111,8 @@ class Glm4vVisionRotaryEmbedding(nn.Module):
         inv_freq = 1.0 / (theta ** (torch.arange(0, dim, 2, dtype=torch.float) / dim))
         self.register_buffer("inv_freq", inv_freq, persistent=False)
 
-    def forward(self, seqlen: int) -> torch.Tensor:
-        seq = torch.arange(seqlen, device=self.inv_freq.device, dtype=self.inv_freq.dtype)
-        freqs = torch.outer(seq, self.inv_freq)
-        return freqs
+    def forward(self, pos_ids: torch.Tensor) -> torch.Tensor:
+        return (pos_ids.unsqueeze(-1) * self.inv_freq).flatten(1)
 
 
 class Glm4vVisionPatchMerger(nn.Module):
@@ -698,13 +697,6 @@ class Glm4vVisionModel(Glm4vPreTrainedModel):
         "attentions": Glm4vVisionAttention,
     }
 
-    def get_cu_seqlens(self, grid_thw):
-        """Compute cumulative sequence lengths from vision grid info."""
-        cu_seqlens = torch.repeat_interleave(grid_thw[:, 1] * grid_thw[:, 2], grid_thw[:, 0]).cumsum(
-            dim=0, dtype=grid_thw.dtype if torch.jit.is_tracing() else torch.int32
-        )
-        return F.pad(cu_seqlens, (1, 0), value=0)
-
     def __init__(self, config) -> None:
         super().__init__(config)
         self.spatial_merge_size = config.spatial_merge_size
@@ -733,36 +725,6 @@ class Glm4vVisionModel(Glm4vPreTrainedModel):
         self.gradient_checkpointing = False
         self.post_init()
 
-    def rot_pos_emb(self, grid_thw):
-        pos_ids = []
-        device = grid_thw.device
-        for t, h, w in grid_thw:
-            hpos_ids = torch.arange(h, device=device).unsqueeze(1).expand(-1, w)
-            hpos_ids = hpos_ids.reshape(
-                h // self.spatial_merge_size,
-                self.spatial_merge_size,
-                w // self.spatial_merge_size,
-                self.spatial_merge_size,
-            )
-            hpos_ids = hpos_ids.permute(0, 2, 1, 3)
-            hpos_ids = hpos_ids.flatten()
-
-            wpos_ids = torch.arange(w, device=device).unsqueeze(0).expand(h, -1)
-            wpos_ids = wpos_ids.reshape(
-                h // self.spatial_merge_size,
-                self.spatial_merge_size,
-                w // self.spatial_merge_size,
-                self.spatial_merge_size,
-            )
-            wpos_ids = wpos_ids.permute(0, 2, 1, 3)
-            wpos_ids = wpos_ids.flatten()
-            pos_ids.append(torch.stack([hpos_ids, wpos_ids], dim=-1).repeat(t, 1))
-        pos_ids = torch.cat(pos_ids, dim=0)
-        max_grid_size = grid_thw[:, 1:].max()
-        rotary_pos_emb_full = self.rotary_pos_emb(max_grid_size)
-        rotary_pos_emb = rotary_pos_emb_full[pos_ids].flatten(1)
-        return rotary_pos_emb, pos_ids
-
     @merge_with_config_defaults
     @capture_outputs
     @auto_docstring
@@ -771,7 +733,7 @@ class Glm4vVisionModel(Glm4vPreTrainedModel):
         hidden_states: torch.Tensor,
         grid_thw: torch.Tensor,
         cu_seqlens: torch.Tensor | None = None,
-        rotary_pos_emb: tuple[torch.Tensor, torch.Tensor] | None = None,
+        rotary_pos_ids: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
         r"""
@@ -781,8 +743,8 @@ class Glm4vVisionModel(Glm4vPreTrainedModel):
             The temporal, height and width of feature shape of each image in LLM.
         cu_seqlens (`torch.Tensor`, *optional*):
             Precomputed cumulative sequence lengths (from `get_cu_seqlens`).
-        rotary_pos_emb (`tuple`, *optional*):
-            Precomputed rotary positional embeddings (from `rot_pos_emb`).
+        rotary_pos_ids (`torch.Tensor`, *optional*):
+            Precomputed (row, col) position IDs (from `get_rotary_pos_ids`).
 
         Returns:
             `torch.Tensor`: hidden_states.
@@ -790,13 +752,13 @@ class Glm4vVisionModel(Glm4vPreTrainedModel):
         hidden_states = self.patch_embed(hidden_states)
         hidden_states = self.post_conv_layernorm(hidden_states)
 
-        if rotary_pos_emb is None:
-            rotary_pos_emb = self.rot_pos_emb(grid_thw)
+        if rotary_pos_ids is None:
+            rotary_pos_ids = get_rotary_pos_ids(grid_thw, self.spatial_merge_size)
 
         if cu_seqlens is None:
-            cu_seqlens = self.get_cu_seqlens(grid_thw)
+            cu_seqlens = get_cu_seqlens(grid_thw)
 
-        rotary_emb, image_type_ids = rotary_pos_emb
+        rotary_emb = self.rotary_pos_emb(rotary_pos_ids)
         emb = torch.cat((rotary_emb, rotary_emb), dim=-1)
         position_embeddings = (emb.cos(), emb.sin())
 
@@ -805,8 +767,8 @@ class Glm4vVisionModel(Glm4vPreTrainedModel):
             hidden_states,
             seqlens,
             grid_thw,
-            image_type_ids[:, 0].to(hidden_states.device),
-            image_type_ids[:, 1].to(hidden_states.device),
+            rotary_pos_ids[:, 0].to(hidden_states.device),
+            rotary_pos_ids[:, 1].to(hidden_states.device),
         )
 
         for blk in self.blocks:
