@@ -434,6 +434,10 @@ def _test_eager_matches_sdpa_inference(
                 outputs_eager = outputs_eager["language_model_outputs"]
                 outputs_sdpa = outputs_sdpa["language_model_outputs"]
                 key = "hidden_states" if "hidden_states" in outputs_eager else "decoder_hidden_states"
+            elif "decoder_output" in outputs_eager and "clipseg" in model_class.__name__.lower():
+                outputs_eager = outputs_eager["decoder_output"]
+                outputs_sdpa = outputs_sdpa["decoder_output"]
+                key = "hidden_states" if "hidden_states" in outputs_eager else "decoder_hidden_states"
             else:
                 key = "hidden_states"
 
@@ -1301,7 +1305,7 @@ class ModelTesterMixin:
             config.scale = 0
         for sub_key in config.sub_configs:
             subconfig = getattr(config, sub_key)
-            if hasattr(subconfig, "scale"):
+            if subconfig is not None and hasattr(subconfig, "scale"):
                 subconfig.scale = 0
 
         for model_class in self.all_model_classes:
@@ -1750,7 +1754,10 @@ class ModelTesterMixin:
         """Helper function to recursively set a config attr to a given value"""
         for k in config.sub_configs:
             if (
-                self._is_composite and attribute_name == "output_attentions" and k == "vision_config"
+                self._is_composite
+                and attribute_name == "output_attentions"
+                and k == "vision_config"
+                and "Timm" in getattr(config, k).__class__.__name__
             ):  # skip because it's not needed and causes errors e.g with Timm
                 continue
             if getattr(config, k) is not None:
@@ -2397,6 +2404,55 @@ class ModelTesterMixin:
         }
         with _deepspeed_zero3(ds_config):
             self.test_resize_embeddings_untied()
+
+    def test_resize_embeddings_untied_no_reinit_on_post_init(self):
+        if not self.test_resize_embeddings:
+            self.skipTest(reason="test_resize_embeddings is set to `False`")
+
+        original_config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        original_config.tie_word_embeddings = False
+        try:
+            original_config.get_text_config().tie_word_embeddings = False
+        except Exception as e:
+            model_type = getattr(original_config, "model_type", "unknown")
+            print(f"Could not set text config's `tie_word_embeddings` for model type `{model_type}`: {e}")
+
+        if original_config.tie_word_embeddings:
+            self.skipTest(reason="Model cannot untie embeddings")
+
+        for model_class in self.all_model_classes:
+            with self.subTest(model_class):
+                config = copy.deepcopy(original_config)
+                model = model_class(config).to(torch_device)
+                model.eval()
+
+                # The bug only affects nn.Linear LM heads created by _get_resized_lm_head
+                output_embeds = model.get_output_embeddings()
+                if not isinstance(output_embeds, nn.Linear):
+                    continue
+
+                model_vocab_size = config.get_text_config().vocab_size
+                try:
+                    model.resize_token_embeddings(model_vocab_size + 10)
+                except (NotImplementedError, AttributeError):
+                    continue
+
+                output_embeds = model.get_output_embeddings()
+                weights_before = output_embeds.weight.data.clone()
+                bias_before = output_embeds.bias.data.clone() if output_embeds.bias is not None else None
+
+                model.post_init()
+
+                output_embeds_after = model.get_output_embeddings()
+                self.assertTrue(
+                    torch.equal(weights_before, output_embeds_after.weight.data),
+                    "Output embedding weights were reinitialized by post_init() after resize_token_embeddings()",
+                )
+                if bias_before is not None:
+                    self.assertTrue(
+                        torch.equal(bias_before, output_embeds_after.bias.data),
+                        "Output embedding bias was reinitialized by post_init() after resize_token_embeddings()",
+                    )
 
     def test_model_get_set_embeddings(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -3612,6 +3668,7 @@ class ModelTesterMixin:
                     "PaliGemma-like models currently (transformers==4.41.0) requires an attention_mask input"
                 )
             if config.model_type in [
+                "evolla",
                 "modernbert",
                 "gemma3",
                 "t5gemma",
@@ -3623,6 +3680,9 @@ class ModelTesterMixin:
                 "kosmos-2",
                 "mllama",
                 "lighton_ocr",
+                "parakeet_encoder",
+                "parakeet_ctc",
+                "pi0",
                 "pixtral",
                 "sam",
                 "sam_hq",
@@ -4683,7 +4743,7 @@ class ModelTesterMixin:
                 len(unused_entries) == 0, f"The following entries of the TP-plan are not valid: {unused_entries}"
             )
 
-    def test_reverse_loading_mapping(self, check_keys_were_modified=True):
+    def test_reverse_loading_mapping(self, check_keys_were_modified=True, skip_base_model=False):
         """Make sure we can load and save correctly the models having any weight renaming mapping or weight conversion
         mapping.
         Note that this test would be better if we could start from the serialized keys, and check that the model
@@ -4697,6 +4757,11 @@ class ModelTesterMixin:
             check_keys_were_modified (`bool`, *optional*, defaults to `True`):
                 Whether to expect keys being modified or not. In some cases, models do not change keys but
                 their weights, e.g. via transpose, memory alignment, etc.
+            skip_base_model (`bool`, *optional*, defaults to `False`):
+                Sometimes, mappings are only visible when applied to the model with head, and not visible on the
+                base model. This allows to skip the check on the base model. See e.g. `llava` mapping where this
+                is the case. In practice, the mappings are still coherent and a base model can still be loaded from
+                the head model, thanks to the `base_model_prefix` which will remove the prefix automatically.
         """
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
 
@@ -4715,13 +4780,15 @@ class ModelTesterMixin:
         }
 
         for model_class in self.all_model_classes:
+            if skip_base_model and "For" not in model_class.__name__:
+                continue
             # Each individual model is a subtest
             with self.subTest(model_class.__name__):
                 model = model_class(copy.deepcopy(config))
                 # Skip if no conversions
                 conversions = get_model_conversion_mapping(model, add_legacy=False)
                 if len(conversions) == 0:
-                    self.skipTest("No conversion found for this model")
+                    self.skipTest(f"No conversion found for {model_class}")
 
                 # Find the model keys, so the targets according to the conversions
                 model_keys = list(model.state_dict().keys())
@@ -4774,7 +4841,7 @@ class ModelTesterMixin:
                         self.assertTrue(
                             num_matches > 0,
                             f"`{source_pattern}` in `{conversion}` did not match any of the source keys. "
-                            "This indicates whether that the pattern is not properly written, ot that it could not be reversed correctly",
+                            "This indicates whether that the pattern is not properly written, or that it could not be reversed correctly",
                         )
 
                 # If everything is still good at this point, let's test that we perform the same operations both when
@@ -4811,7 +4878,7 @@ class ModelTesterMixin:
                 # Skip if no conversions
                 conversions = get_model_conversion_mapping(model, add_legacy=False)
                 if len(conversions) == 0:
-                    self.skipTest("No conversion found for this model")
+                    self.skipTest(f"No conversion found for {model_class}")
 
                 with tempfile.TemporaryDirectory() as tmpdirname:
                     # Serialize without reverting the mapping
@@ -4877,6 +4944,7 @@ class ModelTesterMixin:
                 or "input_values" in key
                 or "input_features" in key
                 or key in ["padding_mask", "is_longer", "feature_attention_mask"]
+                or (config.model_type == "musicflamingo" and key == "input_ids")
             }
         return config, inputs_dict
 

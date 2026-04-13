@@ -33,9 +33,11 @@ check-code-quality:
 check-repository-consistency:
 	@python utils/checkers.py \
 		imports,\
+		import_complexity,\
 		copies,\
 		modular_conversion,\
 		doc_toc,\
+		modeling_rules_doc,\
 		docstrings,\
 		dummies,\
 		repo,\
@@ -58,9 +60,11 @@ check-repo:
 		init_isort,\
 		auto_mappings,\
 		imports,\
+		import_complexity,\
 		copies,\
 		modular_conversion,\
 		doc_toc,\
+		modeling_rules_doc,\
 		docstrings,\
 		dummies,\
 		repo,\
@@ -82,6 +86,7 @@ fix-repo:
 		init_isort,\
 		auto_mappings,\
 		doc_toc,\
+		modeling_rules_doc,\
 		copies,\
 		modular_conversion,\
 		dummies,\

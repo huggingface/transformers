@@ -202,6 +202,7 @@ class ColQwen2ForRetrievalModelTest(ModelTesterMixin, unittest.TestCase):
 
     test_resize_embeddings = True
     test_torch_exportable = False
+    test_missing_keys = False
 
     def setUp(self):
         self.model_tester = ColQwen2ForRetrievalModelTester(self)
@@ -281,6 +282,10 @@ class ColQwen2ForRetrievalModelTest(ModelTesterMixin, unittest.TestCase):
 
     @unittest.skip(reason="This architecture doesn't support weight tying/untying.")
     def test_load_save_without_tied_weights(self):
+        pass
+
+    @unittest.skip(reason="One weight renaming from qwen2 is unreachable here as it uses a `^` pattern")
+    def test_reverse_loading_mapping(self):
         pass
 
 

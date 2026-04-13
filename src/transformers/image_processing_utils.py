@@ -346,6 +346,9 @@ class BaseImageProcessor(ImageProcessingMixin):
 
         return kwargs
 
+    # Backwards compatibility for method that was renamed
+    _further_process_kwargs = _standardize_kwargs
+
     def _validate_preprocess_kwargs(
         self,
         do_rescale: bool | None = None,
