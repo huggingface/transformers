@@ -56,7 +56,6 @@ else:
         [
             ("instructblip", "InstructBlipVideoVideoProcessor"),
             ("pe_audio_video", "PeVideoVideoProcessor"),
-            ("pe_video", "PeVideoVideoProcessor"),
             ("qwen2_5_omni", "Qwen2VLVideoProcessor"),
             ("qwen2_5_vl", "Qwen2VLVideoProcessor"),
             ("qwen3_5", "Qwen3VLVideoProcessor"),

@@ -35,7 +35,6 @@ _CallableT = TypeVar("_CallableT", bound=Callable[..., Any])
 # New models should follow consistent naming instead of being added here!
 CONFIG_MAPPING_NAMES.update(
     {
-        "code_llama": "LlamaConfig",
         "EvollaModel": "EvollaConfig",
         "mlcd": "MLCDVisionConfig",
         "vibevoice_acoustic_tokenizer_decoder": "VibeVoiceAcousticTokenizerDecoderConfig",

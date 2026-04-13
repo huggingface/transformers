@@ -17,9 +17,14 @@ import ast
 import glob
 import os
 import subprocess
-from collections import OrderedDict
+from collections import Counter, OrderedDict
+from typing import Any
 
 from sort_auto_mappings import sort_auto_mapping
+
+from transformers.models.auto.configuration_auto import CONFIG_MAPPING_NAMES as COMPLETE_CONFIG_MAPPING_NAMES
+from transformers.models.auto.image_processing_auto import MISSING_IMAGE_PROCESSOR_MAPPING_NAMES
+from transformers.models.auto.video_processing_auto import MISSING_VIDEO_PROCESSOR_MAPPING_NAMES
 
 
 AUTO_GENERATED_HADER = """#                🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨
@@ -43,6 +48,9 @@ AUTO_GENERATED_HADER = """#                🚨🚨🚨🚨🚨🚨🚨🚨🚨�
 # limitations under the License.
 
 """
+
+# Some keys are duplicated due to incorrect naming at model shipping and BC
+IGNORE_DUPLICATE_CONFIG = ["GPT2Config", "EvollaConfig", "MLCDVisionConfig"]
 
 
 def build_config_mapping_names() -> tuple[dict, dict]:
@@ -185,9 +193,18 @@ def format_ordered_dict(name: str, data: OrderedDict):
     return "\n".join(lines)
 
 
-# TODO: check that auto-generated entry isn't duplicated in `missing-non-standard-mapping`
+def check_duplicates(mapping_for_special_models: dict[str, Any], auto_mapping: dict[str, Any]):
+    if intersections := (set(mapping_for_special_models.keys()) & set(auto_mapping.keys())):
+        raise ValueError(
+            "You have manually duplicated a model-type that is present in `auto_mappings.py`. "
+            f"Please, delete the entries for {intersections} if they are identical to auto-generated dict, "
+            "or use consistent naming across model files so that the names match."
+        )
+
+
 def main(overwrite: bool):
     filename = "src/transformers/models/auto/auto_mappings.py"
+
     # 1. Read existing file content if available
     old_content = ""
     if os.path.exists(filename):
@@ -197,6 +214,30 @@ def main(overwrite: bool):
     config_mapping, special_mapping = build_config_mapping_names()
     image_processor_mapping = build_image_processor_mapping(config_mapping=config_mapping)
     video_processor_mapping = build_video_processor_mapping(config_mapping=config_mapping)
+
+    # Make sure users aren't duplicating the same keys manually
+    check_duplicates(MISSING_IMAGE_PROCESSOR_MAPPING_NAMES, image_processor_mapping)
+    check_duplicates(MISSING_VIDEO_PROCESSOR_MAPPING_NAMES, video_processor_mapping)
+
+    # The config mapping has to be one-to-one for correct `AutoConfig.from_pretrained()` because `LazyMapping`
+    # reverts keys/values and creates a dict from it. Duplicate values will be overwritten by whatever comes at last
+    duplicate_keys = [n for n, c in Counter(COMPLETE_CONFIG_MAPPING_NAMES.keys()).items() if c > 1]
+    if duplicate_keys:
+        raise ValueError(
+            f"Keys in `CONFIG_MAPPING_NAMES` contain duplicates = {duplicate_keys}. "
+            "The mapping has to be one-to-one to ensure correct `AutoConfig` functionality!"
+        )
+
+    duplicate_values = [
+        n
+        for n, c in Counter(COMPLETE_CONFIG_MAPPING_NAMES.values()).items()
+        if c > 1 and n not in IGNORE_DUPLICATE_CONFIG
+    ]
+    if duplicate_values:
+        raise ValueError(
+            f"Values in `CONFIG_MAPPING_NAMES` contain duplicates = {duplicate_values}. "
+            "The mapping has to be one-to-one to ensure correct `AutoConfig` functionality!"
+        )
 
     new_mappings = {
         "CONFIG_MAPPING_NAMES": config_mapping,
@@ -209,7 +250,7 @@ def main(overwrite: bool):
         new_content += format_ordered_dict(name=k, data=v)
 
     # 3. If the new auto-generate content is different, overwrite it
-    if old_content != new_content:
+    if old_content == new_content:
         if not overwrite:
             raise Exception(
                 "Generated auto-mapping is not consistent with the contents of `models/auto/auto_mappings.py`:\n"
