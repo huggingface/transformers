@@ -13,17 +13,19 @@
 # limitations under the License.
 import unittest
 from types import SimpleNamespace
+from unittest.mock import patch
 
 import torch
 import torch.nn as nn
+from torch.distributed.tensor.placement_types import Replicate, Shard, _StridedShard
 
 from transformers import PretrainedConfig
 from transformers.conversion_mapping import get_checkpoint_conversion_mapping, register_checkpoint_conversion_mapping
 from transformers.core_model_loading import (
     Chunk,
     Concatenate,
+    DtensorShardOperation,
     ErnieFuseAndSplitTextVisionExperts,
-    FSDPShardOperation,
     MergeModulelist,
     PermuteForRope,
     WeightConverter,
@@ -217,24 +219,67 @@ class DummyRoot(nn.Module):
 
 
 class FakeMesh:
-    def __init__(self, world_size: int, rank: int):
-        self.shape = (world_size,)
-        self._rank = rank
+    """Fake multi-dimensional device mesh for testing DtensorShardOperation."""
+
+    def __init__(self, shape, rank, dim_names=None):
+        if isinstance(shape, int):
+            shape = (shape,)
+        self.shape = tuple(shape)
+        self.ndim = len(self.shape)
+        self.mesh_dim_names = dim_names or tuple(f"dim{i}" for i in range(self.ndim))
+        # Compute nD coordinate (row-major: last dim changes fastest)
+        self._coord = []
+        r = rank
+        for s in reversed(self.shape):
+            self._coord.insert(0, r % s)
+            r //= s
 
     def get_local_rank(self):
-        return self._rank
+        return self._coord[0]
 
     def get_coordinate(self):
-        return (self._rank,)
+        return tuple(self._coord)
+
+    def size(self):
+        result = 1
+        for s in self.shape:
+            result *= s
+        return result
+
+    def _is_current_rank_part_of_mesh(self):
+        return True
+
+    def _sym_get_coordinate(self, dim):
+        return self._coord[dim]
+
+    def __getitem__(self, name):
+        idx = self.mesh_dim_names.index(name)
+        return FakeMesh(
+            shape=(self.shape[idx],),
+            rank=self._coord[idx],
+            dim_names=(name,),
+        )
+
+
+def _make_dtensor_shard_op(mesh, placements, param_shape, local_shape):
+    """Build a DtensorShardOperation without requiring a real DTensor / distributed init."""
+    op = object.__new__(DtensorShardOperation)
+    op.device_mesh = mesh
+    op.placements = tuple(placements)
+    ns = SimpleNamespace(shape=torch.Size(param_shape), ndim=len(param_shape))
+    ns.dim = lambda: len(param_shape)
+    op.param = ns
+    op.local_shape = tuple(local_shape)
+    return op
 
 
 class TestConvertAndLoadStateDict(unittest.TestCase):
-    def test_fsdp_shard_aware_mixtral_conversion_uses_only_local_experts(self):
-        shard_op = FSDPShardOperation(
-            device_mesh=FakeMesh(world_size=2, rank=0),
-            rank=0,
-            empty_param=torch.empty((2, 4, 2)),
-            placements=(torch.distributed.tensor.placement_types.Shard(0),),
+    def test_dtensor_shard_aware_mixtral_conversion_uses_only_local_experts(self):
+        shard_op = _make_dtensor_shard_op(
+            FakeMesh(shape=(2,), rank=0),
+            [Shard(0)],
+            param_shape=(2, 4, 2),
+            local_shape=(1, 4, 2),
         )
         converter = WeightConverter(
             ["experts.*.w1.weight", "experts.*.w3.weight"],
@@ -242,39 +287,43 @@ class TestConvertAndLoadStateDict(unittest.TestCase):
             operations=[MergeModulelist(dim=0), Concatenate(dim=1)],
         )
 
-        for idx, tensor in enumerate(
-            [
-                torch.tensor([[0.0, 1.0], [2.0, 3.0]]),
-                torch.tensor([[10.0, 11.0], [12.0, 13.0]]),
-            ]
+        with patch(
+            "transformers.core_model_loading.compute_local_shape_and_global_offset",
+            return_value=(torch.Size([1, 4, 2]), torch.Size([0, 0, 0])),
         ):
-            converter.add_tensor(
-                "model.layers.0.experts.gate_up_proj.weight",
-                f"model.layers.0.experts.{idx}.w1.weight",
-                "experts.*.w1.weight",
-                spawn_parallel_materialize(None, tensor, shard_op, idx, device="cpu", dtype=None),
+            for idx, tensor in enumerate(
+                [
+                    torch.tensor([[0.0, 1.0], [2.0, 3.0]]),
+                    torch.tensor([[10.0, 11.0], [12.0, 13.0]]),
+                ]
+            ):
+                converter.add_tensor(
+                    "model.layers.0.experts.gate_up_proj.weight",
+                    f"model.layers.0.experts.{idx}.w1.weight",
+                    "experts.*.w1.weight",
+                    spawn_parallel_materialize(None, tensor, shard_op, idx, device="cpu", dtype=None),
+                )
+
+            for idx, tensor in enumerate(
+                [
+                    torch.tensor([[4.0, 5.0], [6.0, 7.0]]),
+                    torch.tensor([[14.0, 15.0], [16.0, 17.0]]),
+                ]
+            ):
+                converter.add_tensor(
+                    "model.layers.0.experts.gate_up_proj.weight",
+                    f"model.layers.0.experts.{idx}.w3.weight",
+                    "experts.*.w3.weight",
+                    spawn_parallel_materialize(None, tensor, shard_op, idx, device="cpu", dtype=None),
+                )
+
+            converted = converter.convert("model.layers.0.experts.gate_up_proj.weight")
+
+            self.assertEqual(list(converted), ["model.layers.0.experts.gate_up_proj.weight"])
+            torch.testing.assert_close(
+                converted["model.layers.0.experts.gate_up_proj.weight"],
+                torch.tensor([[[0.0, 1.0], [2.0, 3.0], [4.0, 5.0], [6.0, 7.0]]]),
             )
-
-        for idx, tensor in enumerate(
-            [
-                torch.tensor([[4.0, 5.0], [6.0, 7.0]]),
-                torch.tensor([[14.0, 15.0], [16.0, 17.0]]),
-            ]
-        ):
-            converter.add_tensor(
-                "model.layers.0.experts.gate_up_proj.weight",
-                f"model.layers.0.experts.{idx}.w3.weight",
-                "experts.*.w3.weight",
-                spawn_parallel_materialize(None, tensor, shard_op, idx, device="cpu", dtype=None),
-            )
-
-        converted = converter.convert("model.layers.0.experts.gate_up_proj.weight")
-
-        self.assertEqual(list(converted), ["model.layers.0.experts.gate_up_proj.weight"])
-        torch.testing.assert_close(
-            converted["model.layers.0.experts.gate_up_proj.weight"],
-            torch.tensor([[[0.0, 1.0], [2.0, 3.0], [4.0, 5.0], [6.0, 7.0]]]),
-        )
 
     def test_moe_and_qkv_conversion(self):
         model = DummyRoot()
@@ -783,6 +832,117 @@ class TestConvertAndLoadStateDict(unittest.TestCase):
 
         # Make sure both saved state_dict are identical
         self.assertTrue(compare_state_dicts(reversed_state_dict, state_dict))
+
+
+class TestDtensorShardOperation(unittest.TestCase):
+    """One test per code path in DtensorShardOperation.shard_tensor."""
+
+    def test_no_shard_returns_full_tensor(self):
+        """Replicate-only → full copy."""
+        mesh = FakeMesh(shape=(2,), rank=0)
+        op = _make_dtensor_shard_op(mesh, [Replicate()], param_shape=(4, 4), local_shape=(4, 4))
+        tensor = torch.arange(16).reshape(4, 4).float()
+        torch.testing.assert_close(op.shard_tensor(tensor), tensor)
+
+    def test_1d_shard_fast_path(self):
+        #TODO(3outeille): double check fast path
+        tensor = torch.arange(16).reshape(4, 4).float()
+        for rank, expected in [(0, tensor[:2]), (1, tensor[2:])]:
+            mesh = FakeMesh(shape=(2,), rank=rank)
+            op = _make_dtensor_shard_op(mesh, [Shard(0)], param_shape=(4, 4), local_shape=(2, 4))
+            torch.testing.assert_close(op.shard_tensor(tensor), expected, msg=f"rank {rank}")
+
+    def test_nd_contiguous_single_slice(self):
+        """nD Shard on different dims → single slice read per rank."""
+        tensor = torch.arange(64).reshape(8, 8).float()
+        expected = {0: tensor[:4, :4], 1: tensor[:4, 4:], 2: tensor[4:, :4], 3: tensor[4:, 4:]}
+        for rank in range(4):
+            mesh = FakeMesh(shape=(2, 2), rank=rank)
+            op = _make_dtensor_shard_op(mesh, [Shard(0), Shard(1)], param_shape=(8, 8), local_shape=(4, 4))
+            torch.testing.assert_close(op.shard_tensor(tensor), expected[rank], msg=f"rank {rank}")
+
+    def test_nd_strided_shard_disjoint_ranges(self):
+        """_StridedShard on its own dim → multiple slice reads + cat."""
+        tensor = torch.arange(64).reshape(8, 8).float()
+        # Shard(0) splits rows; _StridedShard(1, split_factor=2) produces disjoint col ranges
+        expected = {
+            0: torch.cat([tensor[:4, :2], tensor[:4, 4:6]], dim=1),
+            1: torch.cat([tensor[:4, 2:4], tensor[:4, 6:8]], dim=1),
+            2: torch.cat([tensor[4:, :2], tensor[4:, 4:6]], dim=1),
+            3: torch.cat([tensor[4:, 2:4], tensor[4:, 6:8]], dim=1),
+        }
+        for rank in range(4):
+            mesh = FakeMesh(shape=(2, 2), rank=rank)
+            op = _make_dtensor_shard_op(
+                mesh, [Shard(0), _StridedShard(dim=1, split_factor=2)],
+                param_shape=(8, 8), local_shape=(4, 4),
+            )
+            torch.testing.assert_close(op.shard_tensor(tensor), expected[rank], msg=f"rank {rank}")
+
+    def test_nd_strided_plus_shard_same_dim_fallback(self):
+        """_StridedShard + Shard on same dim → materialize-then-split fallback."""
+        tensor = torch.arange(16).reshape(4, 4).float()
+        expected = {0: tensor[[0]], 1: tensor[[2]], 2: tensor[[1]], 3: tensor[[3]]}
+        for rank in range(4):
+            mesh = FakeMesh(shape=(2, 2), rank=rank)
+            op = _make_dtensor_shard_op(
+                mesh, [_StridedShard(dim=0, split_factor=2), Shard(0)],
+                param_shape=(4, 4), local_shape=(1, 4),
+            )
+            torch.testing.assert_close(op.shard_tensor(tensor), expected[rank], msg=f"rank {rank}")
+
+    def test_prepacked_strided_shard_uses_contiguous_source_slice(self):
+        """Pre-concat w1/w3 tensors should shard contiguously before gate/up packing."""
+        tensor = torch.arange(8).reshape(4, 2).float()
+        for rank, expected in [(0, tensor[:2]), (1, tensor[2:])]:
+            mesh = FakeMesh(shape=(2,), rank=rank)
+            op = _make_dtensor_shard_op(
+                mesh,
+                [_StridedShard(dim=1, split_factor=2)],
+                param_shape=(8, 8, 2),
+                local_shape=(8, 4, 2),
+            )
+            torch.testing.assert_close(op.shard_tensor(tensor, tensor_idx=0), expected, msg=f"rank {rank}")
+
+    def test_expert_filtering(self):
+        """Mixtral-style experts: skip non-owned, return owned."""
+        mesh = FakeMesh(shape=(2,), rank=1)
+        op = _make_dtensor_shard_op(mesh, [Shard(0)], param_shape=(4, 2, 2), local_shape=(2, 2, 2))
+        expert_tensor = torch.ones(2, 2)
+        with patch(
+            "transformers.core_model_loading.compute_local_shape_and_global_offset",
+            return_value=(torch.Size([2, 2, 2]), torch.Size([2, 0, 0])),
+        ):
+            # rank 1 owns experts 2,3 (offset=2)
+            self.assertIsNone(op.shard_tensor(expert_tensor, tensor_idx=0))
+            torch.testing.assert_close(op.shard_tensor(expert_tensor, tensor_idx=2), expert_tensor)
+
+    def test_expert_filtering_preserves_inner_sharding(self):
+        """MoE expert ownership checks should still apply TP sharding on inner dims."""
+        tensor = torch.arange(8).reshape(4, 2).float()
+        expected = {
+            0: tensor[:2],
+            1: tensor[2:],
+            2: None,
+            3: None,
+        }
+        for rank in range(4):
+            mesh = FakeMesh(shape=(2, 2), rank=rank)
+            op = _make_dtensor_shard_op(mesh, [Shard(0), Shard(1)], param_shape=(4, 4, 2), local_shape=(2, 2, 2))
+
+            def fake_local_shape_and_offset(*args, **kwargs):
+                expert_rank, tp_rank = mesh.get_coordinate()
+                return torch.Size([2, 2, 2]), torch.Size([2 * expert_rank, 2 * tp_rank, 0])
+
+            with patch(
+                "transformers.core_model_loading.compute_local_shape_and_global_offset",
+                side_effect=fake_local_shape_and_offset,
+            ):
+                shard = op.shard_tensor(tensor, tensor_idx=1)
+                if expected[rank] is None:
+                    self.assertIsNone(shard)
+                else:
+                    torch.testing.assert_close(shard, expected[rank], msg=f"rank {rank}")
 
 
 class TestConversionMapping(unittest.TestCase):
