@@ -1876,7 +1876,7 @@ class Gemma4AudioModel(Gemma4PreTrainedModel):
 
     config: Gemma4AudioConfig
     main_input_name = "input_features"
-    base_model_prefix = "model.audio_tower"  # prefix for Gemma4ForConditionalGeneration saved checkpoints, required for Gemma4AudioModel.from_pretrained()
+    base_model_prefix = "audio_tower"
     _can_record_outputs = {
         "hidden_states": Gemma4AudioLayer,
         "attentions": Gemma4AudioAttention,
@@ -1959,6 +1959,7 @@ class Gemma4AudioModel(Gemma4PreTrainedModel):
 class Gemma4VisionModel(Gemma4PreTrainedModel):
     """The Gemma 4 Vision Encoder."""
 
+    base_model_prefix = "vision_tower"
     config = Gemma4VisionConfig
     _can_record_outputs = {
         "hidden_states": Gemma4VisionEncoderLayer,
