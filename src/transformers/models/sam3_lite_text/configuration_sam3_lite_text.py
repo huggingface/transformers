@@ -29,12 +29,6 @@ from ..auto import CONFIG_MAPPING, AutoConfig
 @strict
 class Sam3LiteTextViTConfig(PreTrainedConfig):
     r"""
-    rope_theta (`float`, *optional*, defaults to 10000.0):
-        Base frequency for RoPE.
-    window_size (`int`, *optional*, defaults to 24):
-        Window size for windowed attention.
-    global_attn_indexes (`list[int]`, *optional*, defaults to `[7, 15, 23, 31]`):
-        Indexes of layers with global attention.
     pretrain_image_size (`int`, *optional*, defaults to 336):
         Pretrained model image size for position embedding initialization.
     hidden_dropout (`float`, *optional*, defaults to 0.0):
