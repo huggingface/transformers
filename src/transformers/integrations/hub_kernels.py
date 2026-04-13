@@ -488,10 +488,6 @@ def allow_all_hub_kernels():
         ALLOW_ALL_KERNELS = False
 
 
-# ---------------------------------------------------------------------------
-# Module fusion helpers
-# ---------------------------------------------------------------------------
-
 # Model class → {kernel_layer_name → [glob patterns]}
 # Populated via `register_fusion_patterns` for models that cannot be modified directly.
 _FUSION_PATTERNS_REGISTRY: dict[type, dict[str, list[str]]] = {}
@@ -504,37 +500,15 @@ def register_fusion_patterns(
     """
     Register kernel fusion patterns for a model class without modifying it directly.
 
-    This is an alternative to setting ``_kernel_fusion_patterns`` as a class attribute,
+    This is an alternative to setting `_kernel_fusion_patterns` as a class attribute,
     useful when the model class is frozen or comes from an external library.
 
     Args:
         model_class_or_instance:
             The model class (or an instance of it) for which patterns are being registered.
         patterns (`dict[str, list[str]]`):
-            Mapping from ``kernel_layer_name`` to a list of glob-style module paths,
-            identical in format to ``_kernel_fusion_patterns``. For example::
-
-                {
-                    "RMSNormMLP": [
-                        "model.layers.*.post_attention_layernorm",
-                        "model.layers.*.mlp",
-                    ]
-                }
-
-    Example::
-
-        from transformers.integrations import register_fusion_patterns
-        from transformers.models.qwen3 import Qwen3ForCausalLM
-
-        register_fusion_patterns(
-            Qwen3ForCausalLM,
-            {
-                "RMSNormMLP": [
-                    "model.layers.*.post_attention_layernorm",
-                    "model.layers.*.mlp",
-                ]
-            },
-        )
+            Mapping from `kernel_layer_name` to a list of glob-style module paths,
+            identical in format to `_kernel_fusion_patterns`.
     """
     if not isinstance(model_class_or_instance, type):
         model_class_or_instance = type(model_class_or_instance)
@@ -552,11 +526,11 @@ class FusedModuleBase(nn.Module):
         Args:
             modules_to_fuse: The source modules to fuse together.
             source_names: The attribute names under which each module lives in its parent
-                (used to restore them on ``unfuse_modules``).
+                (used to restore them on `unfuse_modules`).
             fused_module_names: The names under which each source module is registered as a
-                child of this container (i.e. ``self.<name>``). When ``None``, the
-                ``kernel_layer_name`` attribute of each source module is used. Pass this
-                explicitly when the source modules do not carry ``@use_kernel_forward_from_hub``.
+                child of this container (i.e. `self.<name>`). When `None`, the
+                `kernel_layer_name` attribute of each source module is used. Pass this
+                explicitly when the source modules do not carry `@use_kernel_forward_from_hub`.
         """
         super().__init__()
         if len(modules_to_fuse) == 0:
@@ -609,11 +583,11 @@ def make_fused_module_class(source_layer_names: tuple[str, ...], kernel_layer_na
     Args:
         source_layer_names (`tuple[str, ...]`):
             Ordered tuple of `kernel_layer_name` values of the modules being fused
-            (e.g. ``("RMSNorm", "MLP")``). Used as the cache key — the same combination
+            (e.g. `("RMSNorm", "MLP")`). Used as the cache key — the same combination
             always returns the same class object.
         kernel_layer_name (`str`):
             The name assigned to the fused class, used by `kernelize` to look up the
-            kernel in the mapping (e.g. ``"RMSNormMLP"``).
+            kernel in the mapping (e.g. `"RMSNormMLP"`).
 
     Returns:
         A subclass of `FusedModuleBase` with `kernel_layer_name` set as a class attribute.
@@ -635,38 +609,30 @@ def fuse_modules(
     Fuse a sequence of submodules into a single `FusedModuleBase` subclass in-place.
 
     For every parent module whose immediate children match all entries in
-    ``module_names_to_fuse``, the function:
+    `module_names_to_fuse`, the function:
 
     - replaces the first module with a `FusedModuleBase` subclass instance that holds
       all source modules as named children,
     - replaces the remaining modules with `nn.Identity()` pass-throughs.
 
-    The fused container's ``forward`` signature is patched to match the first source
-    module's ``forward``, satisfying the ``kernelize`` signature check.
+    The fused container's `forward` signature is patched to match the first source
+    module's `forward`, satisfying the `kernelize` signature check.
 
     Args:
         model (`nn.Module`):
             The model to modify in-place.
         module_names_to_fuse (`list[str]`):
             Glob-style paths of the modules to fuse, e.g.
-            ``["model.layers.*.post_attention_layernorm", "model.layers.*.mlp"]``.
-            Integer indices are replaced with ``*`` so the same pattern applies to
+            `["model.layers.*.post_attention_layernorm", "model.layers.*.mlp"]`.
+            Integer indices are replaced with `*` so the same pattern applies to
             every repeated block.
         kernel_layer_name (`str`):
-            The ``kernel_layer_name`` assigned to the fused class, used by ``kernelize``
-            to look up the kernel in the mapping (e.g. ``"RMSNormMLP"``).
+            The `kernel_layer_name` assigned to the fused class, used by `kernelize`
+            to look up the kernel in the mapping (e.g. `"RMSNormMLP"`).
         source_layer_names (`list[str]`, *optional*):
             Explicit names for the child modules inside the fused container
-            (e.g. ``["RMSNorm", "MLP"]``). When ``None``, the ``kernel_layer_name``
+            (e.g. `["RMSNorm", "MLP"]`). When `None`, the `kernel_layer_name`
             attribute of each source module is used.
-
-    Example::
-
-        fuse_modules(
-            model,
-            ["model.layers.*.post_attention_layernorm", "model.layers.*.mlp"],
-            "RMSNormMLP",
-        )
     """
     pattern = re.compile(r"\d+")
     for module_name, module in model.named_modules():
@@ -704,12 +670,6 @@ def unfuse_modules(model: "nn.Module") -> None:
 
     Args:
         model (`nn.Module`): The model to restore in-place.
-
-    Example::
-
-        fuse_modules(model, ["model.layers.*.post_attention_layernorm", "model.layers.*.mlp"], "RMSNormMLP")
-        # ... kernelized forward pass ...
-        unfuse_modules(model)  # back to original
     """
     for parent in model.modules():
         for name, child in list(parent.named_children()):
