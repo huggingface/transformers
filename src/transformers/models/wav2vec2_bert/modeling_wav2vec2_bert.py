@@ -28,6 +28,7 @@ from ...modeling_outputs import (
 )
 from ...modeling_utils import PreTrainedModel
 from ...utils import auto_docstring, is_peft_available
+from ...utils.import_utils import is_torchdynamo_compiling
 from .configuration_wav2vec2_bert import Wav2Vec2BertConfig
 
 
@@ -506,7 +507,10 @@ class Wav2Vec2BertEncoder(nn.Module):
         else:
             relative_position_embeddings = None
 
-        synced_gpus = is_deepspeed_zero3_enabled() or is_fsdp_managed_module(self)
+        if is_torchdynamo_compiling():
+            synced_gpus = False
+        else:
+            synced_gpus = is_deepspeed_zero3_enabled() or is_fsdp_managed_module(self)
 
         for i, layer in enumerate(self.layers):
             if output_hidden_states:

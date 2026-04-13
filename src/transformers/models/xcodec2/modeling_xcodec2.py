@@ -712,7 +712,7 @@ class Xcodec2ISTFTHead(nn.Module):
         stft_pred = self.linear(hidden_states).transpose(1, 2)
         magnitude, phase = stft_pred.chunk(2, dim=1)
         magnitude = torch.exp(magnitude).clamp(max=1e2)
-        spectrogram_complex = torch.polar(magnitude, phase)
+        spectrogram_complex = magnitude * torch.exp(1j * phase)
 
         # Back to audio (ISTFT with "same" padding)
         time_frames = torch.fft.irfft(spectrogram_complex, self.n_fft, dim=1, norm="backward")

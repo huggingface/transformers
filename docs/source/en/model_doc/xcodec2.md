@@ -13,7 +13,7 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was released on 2025-02-06 and added to Hugging Face Transformers on 2026-03-19.*
+*This model was released on 2025-02-06 and added to Hugging Face Transformers on 2026-04-13.*
 
 # X-Codec2
 
@@ -108,6 +108,49 @@ print("Audio values shape:", audio_values.shape)
 model_output = model(**inputs)
 audio_codes = model_output.audio_codes
 audio_values = model_output.audio_values
+```
+
+### Speed-up with `torch.compile`
+
+You can speed up inference with [`torch.compile`](https://pytorch.org/docs/stable/generated/torch.compile.html). The first few calls will be slower due to compilation overhead, but subsequent calls will be faster.
+
+```python
+import torch
+from datasets import Audio, load_dataset
+from transformers import AutoFeatureExtractor, Xcodec2Model
+
+model_id = "bezzam/xcodec2"
+model = Xcodec2Model.from_pretrained(model_id, device_map="auto")
+feature_extractor = AutoFeatureExtractor.from_pretrained(model_id)
+
+dataset = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
+dataset = dataset.cast_column("audio", Audio(sampling_rate=feature_extractor.sampling_rate))
+audio = dataset[0]["audio"]["array"]
+inputs = feature_extractor(audio=audio, sampling_rate=feature_extractor.sampling_rate, return_tensors="pt").to(
+    model.device, model.dtype
+)
+
+compiled_model = torch.compile(model, fullgraph=True)
+
+# Warmup (includes compilation on first call)
+for _ in range(10):
+    with torch.inference_mode():
+        _ = compiled_model(**inputs)
+torch.cuda.synchronize()
+
+# Timed runs using CUDA events for accurate GPU timing
+num_iterations = 25
+start_event = torch.cuda.Event(enable_timing=True)
+end_event = torch.cuda.Event(enable_timing=True)
+start_event.record()
+for _ in range(num_iterations):
+    with torch.inference_mode():
+        _ = compiled_model(**inputs)
+end_event.record()
+torch.cuda.synchronize()
+avg_time_ms = start_event.elapsed_time(end_event) / num_iterations
+print(f"Average inference time: {avg_time_ms:.2f} ms")
+# Results on A100: ~51 ms compiled vs ~79 ms eager (1.54x speedup)
 ```
 
 ## Xcodec2Config
