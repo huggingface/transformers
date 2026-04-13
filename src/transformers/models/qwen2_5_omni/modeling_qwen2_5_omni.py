@@ -882,9 +882,6 @@ class Qwen2_5OmniAudioEncoder(Qwen2_5OmniPreTrainedModel):
         if pool_indices is None:
             pool_indices = get_pool_indices(feature_lens)
 
-        if aftercnn_lens is None and feature_lens is not None:
-            aftercnn_lens, _ = self._get_feat_extract_output_lengths(feature_lens)
-
         # Derive masks from chunk_lengths (traceable arithmetic + arange broadcasting)
         padded_feature = padded_feature.to(self.conv1.weight.dtype)
         padded_mask = (

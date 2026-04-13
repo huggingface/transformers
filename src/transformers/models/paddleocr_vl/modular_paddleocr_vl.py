@@ -815,9 +815,9 @@ class PaddleOCRVisionEncoder(VideoLlama3VisionEncoder):
         )
 
         if rotary_pos_ids is None:
-            pids = get_rotary_pos_ids(grid_thw, self.config.spatial_merge_size)
+            rotary_pos_ids = get_rotary_pos_ids(grid_thw, self.config.spatial_merge_size)
 
-        rotary_embeddings = self.rotary_pos_emb(pids)
+        rotary_embeddings = self.rotary_pos_emb(rotary_pos_ids)
         rotary_embeddings = rotary_embeddings.repeat(1, 2)
         position_embeddings = (rotary_embeddings.cos(), rotary_embeddings.sin())
 
