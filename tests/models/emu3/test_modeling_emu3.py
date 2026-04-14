@@ -133,7 +133,7 @@ class Emu3Text2TextModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTe
 
     def setUp(self):
         self.model_tester = Emu3Text2TextModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=Emu3TextConfig, hidden_size=37)
+        self.config_tester = ConfigTester(self, config_class=Emu3TextConfig, hidden_size=32)
 
     def test_config(self):
         self.config_tester.run_common_tests()
@@ -297,7 +297,7 @@ class Emu3Vision2TextModelTest(ModelTesterMixin, GenerationTesterMixin, Pipeline
 
     def setUp(self):
         self.model_tester = Emu3Vision2TextModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=Emu3Config, has_text_modality=False, hidden_size=37)
+        self.config_tester = ConfigTester(self, config_class=Emu3Config, has_text_modality=False, hidden_size=32)
 
     def test_config(self):
         self.config_tester.run_common_tests()
@@ -339,6 +339,9 @@ class Emu3Vision2TextModelTest(ModelTesterMixin, GenerationTesterMixin, Pipeline
         # up_down_blocks for down, 2 for middle, vq_num_res_blocks for Emu3VQVAETemporalResnetBlock
         up_down_blocks = len(model_tester.vq_channel_multiplier) * model_tester.vq_num_res_blocks
         return up_down_blocks + 2 + model_tester.vq_num_res_blocks + 1
+
+    def test_reverse_loading_mapping(self):
+        super().test_reverse_loading_mapping(skip_base_model=True)
 
 
 @require_torch

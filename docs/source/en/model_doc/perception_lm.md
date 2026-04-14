@@ -50,9 +50,10 @@ The original code can be found [here](https://github.com/facebookresearch/percep
 [[autodoc]] PerceptionLMProcessor
     - __call__
 
-## PerceptionLMImageProcessorFast
+## PerceptionLMImageProcessor
 
-[[autodoc]] PerceptionLMImageProcessorFast
+[[autodoc]] PerceptionLMImageProcessor
+    - preprocess
 
 ## PerceptionLMVideoProcessor
 

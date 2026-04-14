@@ -54,6 +54,18 @@ class FPQuantHfQuantizer(HfQuantizer):
                 "Using `fp_quant` with real quantization requires a **Blackwell GPU** and qutlass: `git clone https://github.com/IST-DASLab/qutlass.git && cd qutlass && pip install --no-build-isolation .`. You can use `FPQuantConfig(pseudoquantization=True, ...)` to use Triton-based pseudo-quantization. It doesn't provide any speedups but emulates the quantization behavior of the real quantization."
             )
 
+        if (
+            self.quantization_config.pseudoquantization
+            and self.quantization_config.forward_dtype == "nvfp4"
+            and torch.cuda.is_available()
+            and torch.cuda.get_device_capability()[0] < 9
+        ):
+            raise ValueError(
+                "NVFP4 pseudoquantization requires a GPU with compute capability >= 9.0 (Hopper or newer) "
+                "because the Triton kernel uses the `fp8e4nv` type. Please use `forward_dtype='mxfp4'` instead, "
+                "or use a GPU with compute capability >= 9.0."
+            )
+
         if self.quantization_config.pseudoquantization:
             logger.warning(
                 "Using pseudo-quantization for FP-Quant. This doesn't provide any speedups but emulates the quantization behavior of the real quantization."

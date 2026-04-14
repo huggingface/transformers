@@ -86,6 +86,7 @@ CONFIG_MAPPING_NAMES = OrderedDict[str, str](
         ("cohere", "CohereConfig"),
         ("cohere2", "Cohere2Config"),
         ("cohere2_vision", "Cohere2VisionConfig"),
+        ("cohere_asr", "CohereAsrConfig"),
         ("colmodernvbert", "ColModernVBertConfig"),
         ("colpali", "ColPaliConfig"),
         ("colqwen2", "ColQwen2Config"),
@@ -173,6 +174,10 @@ CONFIG_MAPPING_NAMES = OrderedDict[str, str](
         ("gemma3n_audio", "Gemma3nAudioConfig"),
         ("gemma3n_text", "Gemma3nTextConfig"),
         ("gemma3n_vision", "Gemma3nVisionConfig"),
+        ("gemma4", "Gemma4Config"),
+        ("gemma4_audio", "Gemma4AudioConfig"),
+        ("gemma4_text", "Gemma4TextConfig"),
+        ("gemma4_vision", "Gemma4VisionConfig"),
         ("git", "GitConfig"),
         ("glm", "GlmConfig"),
         ("glm4", "Glm4Config"),
@@ -237,6 +242,7 @@ CONFIG_MAPPING_NAMES = OrderedDict[str, str](
         ("jamba", "JambaConfig"),
         ("janus", "JanusConfig"),
         ("jetmoe", "JetMoeConfig"),
+        ("jina_embeddings_v3", "JinaEmbeddingsV3Config"),
         ("kosmos-2", "Kosmos2Config"),
         ("kosmos-2.5", "Kosmos2_5Config"),
         ("kyutai_speech_to_text", "KyutaiSpeechToTextConfig"),
@@ -287,8 +293,10 @@ CONFIG_MAPPING_NAMES = OrderedDict[str, str](
         ("ministral3", "Ministral3Config"),
         ("mistral", "MistralConfig"),
         ("mistral3", "Mistral3Config"),
+        ("mistral4", "Mistral4Config"),
         ("mixtral", "MixtralConfig"),
-        ("mlcd", "MLCDVisionConfig"),
+        ("mlcd", "MLCDVisionConfig"),  # Keep this to make some original hub repositories (from `DeepGlint-AI`) works
+        ("mlcd_vision_model", "MLCDVisionConfig"),
         ("mllama", "MllamaConfig"),
         ("mm-grounding-dino", "MMGroundingDinoConfig"),
         ("mobilebert", "MobileBertConfig"),
@@ -307,6 +315,8 @@ CONFIG_MAPPING_NAMES = OrderedDict[str, str](
         ("mpt", "MptConfig"),
         ("mra", "MraConfig"),
         ("mt5", "MT5Config"),
+        ("musicflamingo", "MusicFlamingoConfig"),
+        ("musicflamingo_encoder", "AudioFlamingo3EncoderConfig"),
         ("musicgen", "MusicgenConfig"),
         ("musicgen_melody", "MusicgenMelodyConfig"),
         ("mvp", "MvpConfig"),
@@ -314,6 +324,7 @@ CONFIG_MAPPING_NAMES = OrderedDict[str, str](
         ("nemotron", "NemotronConfig"),
         ("nemotron_h", "NemotronHConfig"),
         ("nllb-moe", "NllbMoeConfig"),
+        ("nomic_bert", "NomicBertConfig"),
         ("nougat", "VisionEncoderDecoderConfig"),
         ("nystromformer", "NystromformerConfig"),
         ("olmo", "OlmoConfig"),
@@ -349,15 +360,22 @@ CONFIG_MAPPING_NAMES = OrderedDict[str, str](
         ("phi3", "Phi3Config"),
         ("phi4_multimodal", "Phi4MultimodalConfig"),
         ("phimoe", "PhimoeConfig"),
+        ("pi0", "PI0Config"),
         ("pix2struct", "Pix2StructConfig"),
         ("pixio", "PixioConfig"),
         ("pixtral", "PixtralVisionConfig"),
         ("plbart", "PLBartConfig"),
         ("poolformer", "PoolFormerConfig"),
         ("pop2piano", "Pop2PianoConfig"),
+        ("pp_chart2table", "PPChart2TableConfig"),
         ("pp_doclayout_v2", "PPDocLayoutV2Config"),
         ("pp_doclayout_v3", "PPDocLayoutV3Config"),
+        ("pp_lcnet", "PPLCNetConfig"),
+        ("pp_lcnet_v3", "PPLCNetV3Config"),
+        ("pp_ocrv5_mobile_det", "PPOCRV5MobileDetConfig"),
+        ("pp_ocrv5_mobile_rec", "PPOCRV5MobileRecConfig"),
         ("pp_ocrv5_server_det", "PPOCRV5ServerDetConfig"),
+        ("pp_ocrv5_server_rec", "PPOCRV5ServerRecConfig"),
         ("prompt_depth_anything", "PromptDepthAnythingConfig"),
         ("prophetnet", "ProphetNetConfig"),
         ("pvt", "PvtConfig"),
@@ -403,6 +421,8 @@ CONFIG_MAPPING_NAMES = OrderedDict[str, str](
         ("sam2_video", "Sam2VideoConfig"),
         ("sam2_vision_model", "Sam2VisionConfig"),
         ("sam3", "Sam3Config"),
+        ("sam3_lite_text", "Sam3LiteTextConfig"),
+        ("sam3_lite_text_text_model", "Sam3LiteTextTextConfig"),
         ("sam3_tracker", "Sam3TrackerConfig"),
         ("sam3_tracker_video", "Sam3TrackerVideoConfig"),
         ("sam3_video", "Sam3VideoConfig"),
@@ -423,6 +443,7 @@ CONFIG_MAPPING_NAMES = OrderedDict[str, str](
         ("siglip2", "Siglip2Config"),
         ("siglip2_vision_model", "Siglip2VisionConfig"),
         ("siglip_vision_model", "SiglipVisionConfig"),
+        ("slanext", "SLANeXtConfig"),
         ("smollm3", "SmolLM3Config"),
         ("smolvlm", "SmolVLMConfig"),
         ("smolvlm_vision", "SmolVLMVisionConfig"),
@@ -462,6 +483,8 @@ CONFIG_MAPPING_NAMES = OrderedDict[str, str](
         ("unispeech-sat", "UniSpeechSatConfig"),
         ("univnet", "UnivNetConfig"),
         ("upernet", "UperNetConfig"),
+        ("uvdoc", "UVDocConfig"),
+        ("uvdoc_backbone", "UVDocBackboneConfig"),
         ("vaultgemma", "VaultGemmaConfig"),
         ("vibevoice_acoustic_tokenizer", "VibeVoiceAcousticTokenizerConfig"),
         ("vibevoice_acoustic_tokenizer_decoder", "VibeVoiceAcousticTokenizerDecoderConfig"),
@@ -471,6 +494,7 @@ CONFIG_MAPPING_NAMES = OrderedDict[str, str](
         ("video_llama_3_vision", "VideoLlama3VisionConfig"),
         ("video_llava", "VideoLlavaConfig"),
         ("videomae", "VideoMAEConfig"),
+        ("videomt", "VideomtConfig"),
         ("vilt", "ViltConfig"),
         ("vipllava", "VipLlavaConfig"),
         ("vision-encoder-decoder", "VisionEncoderDecoderConfig"),
@@ -575,6 +599,7 @@ MODEL_NAMES_MAPPING = OrderedDict[str, str](
         ("cohere", "Cohere"),
         ("cohere2", "Cohere2"),
         ("cohere2_vision", "Cohere2Vision"),
+        ("cohere_asr", "CohereASR"),
         ("colmodernvbert", "ColModernVBert"),
         ("colpali", "ColPali"),
         ("colqwen2", "ColQwen2"),
@@ -670,6 +695,10 @@ MODEL_NAMES_MAPPING = OrderedDict[str, str](
         ("gemma3n_audio", "Gemma3nAudioEncoder"),
         ("gemma3n_text", "Gemma3nForCausalLM"),
         ("gemma3n_vision", "TimmWrapperModel"),
+        ("gemma4", "Gemma4ForConditionalGeneration"),
+        ("gemma4_audio", "Gemma4AudioModel"),
+        ("gemma4_text", "Gemma4ForCausalLM"),
+        ("gemma4_vision", "Gemma4VisionModel"),
         ("git", "GIT"),
         ("glm", "GLM"),
         ("glm4", "GLM4"),
@@ -735,6 +764,7 @@ MODEL_NAMES_MAPPING = OrderedDict[str, str](
         ("jamba", "Jamba"),
         ("janus", "Janus"),
         ("jetmoe", "JetMoe"),
+        ("jina_embeddings_v3", "JinaEmbeddingsV3"),
         ("kosmos-2", "KOSMOS-2"),
         ("kosmos-2.5", "KOSMOS-2.5"),
         ("kyutai_speech_to_text", "KyutaiSpeechToText"),
@@ -792,8 +822,10 @@ MODEL_NAMES_MAPPING = OrderedDict[str, str](
         ("ministral3", "Ministral3"),
         ("mistral", "Mistral"),
         ("mistral3", "Mistral3"),
+        ("mistral4", "Mistral4"),
         ("mixtral", "Mixtral"),
-        ("mlcd", "MLCD"),
+        ("mlcd", "MLCD"),  # Keep this to make some original hub repositories (from `DeepGlint-AI`) works
+        ("mlcd_vision_model", "MLCD"),
         ("mllama", "Mllama"),
         ("mluke", "mLUKE"),
         ("mm-grounding-dino", "MM Grounding DINO"),
@@ -814,6 +846,8 @@ MODEL_NAMES_MAPPING = OrderedDict[str, str](
         ("mpt", "MPT"),
         ("mra", "MRA"),
         ("mt5", "MT5"),
+        ("musicflamingo", "MusicFlamingo"),
+        ("musicflamingo_encoder", "AudioFlamingo3Encoder"),
         ("musicgen", "MusicGen"),
         ("musicgen_melody", "MusicGen Melody"),
         ("mvp", "MVP"),
@@ -823,6 +857,7 @@ MODEL_NAMES_MAPPING = OrderedDict[str, str](
         ("nemotron_h", "NemotronH"),
         ("nllb", "NLLB"),
         ("nllb-moe", "NLLB-MOE"),
+        ("nomic_bert", "NomicBERT"),
         ("nougat", "Nougat"),
         ("nystromformer", "Nyströmformer"),
         ("olmo", "OLMo"),
@@ -860,15 +895,22 @@ MODEL_NAMES_MAPPING = OrderedDict[str, str](
         ("phi4_multimodal", "Phi4Multimodal"),
         ("phimoe", "Phimoe"),
         ("phobert", "PhoBERT"),
+        ("pi0", "PI0"),
         ("pix2struct", "Pix2Struct"),
         ("pixio", "Pixio"),
         ("pixtral", "Pixtral"),
         ("plbart", "PLBart"),
         ("poolformer", "PoolFormer"),
         ("pop2piano", "Pop2Piano"),
+        ("pp_chart2table", "PPChart2Table"),
         ("pp_doclayout_v2", "PPDocLayoutV2"),
         ("pp_doclayout_v3", "PPDocLayoutV3"),
+        ("pp_lcnet", "PPLCNet"),
+        ("pp_lcnet_v3", "PPLCNetV3"),
+        ("pp_ocrv5_mobile_det", "PPOCRV5MobileDet"),
+        ("pp_ocrv5_mobile_rec", "PPOCRV5MobileRec"),
         ("pp_ocrv5_server_det", "PPOCRV5ServerDet"),
+        ("pp_ocrv5_server_rec", "PPOCRV5ServerRec"),
         ("prompt_depth_anything", "PromptDepthAnything"),
         ("prophetnet", "ProphetNet"),
         ("pvt", "PVT"),
@@ -914,6 +956,8 @@ MODEL_NAMES_MAPPING = OrderedDict[str, str](
         ("sam2_video", "Sam2VideoModel"),
         ("sam2_vision_model", "Sam2VisionModel"),
         ("sam3", "SAM3"),
+        ("sam3_lite_text", "SAM3-LiteText"),
+        ("sam3_lite_text_text_model", "SAM3-LiteText Text Model"),
         ("sam3_tracker", "Sam3Tracker"),
         ("sam3_tracker_video", "Sam3TrackerVideo"),
         ("sam3_video", "Sam3VideoModel"),
@@ -934,6 +978,7 @@ MODEL_NAMES_MAPPING = OrderedDict[str, str](
         ("siglip2", "SigLIP2"),
         ("siglip2_vision_model", "Siglip2VisionModel"),
         ("siglip_vision_model", "SiglipVisionModel"),
+        ("slanext", "SLANeXt"),
         ("smollm3", "SmolLM3"),
         ("smolvlm", "SmolVLM"),
         ("smolvlm_vision", "SmolVLMVisionTransformer"),
@@ -975,6 +1020,8 @@ MODEL_NAMES_MAPPING = OrderedDict[str, str](
         ("unispeech-sat", "UniSpeechSat"),
         ("univnet", "UnivNet"),
         ("upernet", "UPerNet"),
+        ("uvdoc", "UVDoc"),
+        ("uvdoc_backbone", "UVDocBackbone"),
         ("vaultgemma", "VaultGemma"),
         ("vibevoice_acoustic_tokenizer", "VibeVoiceAcousticTokenizer"),
         ("vibevoice_acoustic_tokenizer_decoder", "VibeVoiceAcousticTokenizerDecoderConfig"),
@@ -984,6 +1031,7 @@ MODEL_NAMES_MAPPING = OrderedDict[str, str](
         ("video_llama_3_vision", "VideoLlama3Vision"),
         ("video_llava", "VideoLlava"),
         ("videomae", "VideoMAE"),
+        ("videomt", "VidEoMT"),
         ("vilt", "ViLT"),
         ("vipllava", "VipLlava"),
         ("vision-encoder-decoder", "Vision Encoder decoder"),
@@ -1038,6 +1086,7 @@ DEPRECATED_MODELS = []
 SPECIAL_MODEL_TYPE_TO_MODULE_NAME = OrderedDict[str, str](
     [
         ("audioflamingo3_encoder", "audioflamingo3"),
+        ("musicflamingo_encoder", "musicflamingo"),
         ("openai-gpt", "openai"),
         ("blip-2", "blip_2"),
         ("data2vec-audio", "data2vec"),
@@ -1046,6 +1095,7 @@ SPECIAL_MODEL_TYPE_TO_MODULE_NAME = OrderedDict[str, str](
         ("donut-swin", "donut"),
         ("kosmos-2", "kosmos2"),
         ("kosmos-2.5", "kosmos2_5"),
+        ("mlcd_vision_model", "mlcd"),
         ("omdet-turbo", "omdet_turbo"),
         ("maskformer-swin", "maskformer"),
         ("xclip", "x_clip"),
@@ -1060,6 +1110,9 @@ SPECIAL_MODEL_TYPE_TO_MODULE_NAME = OrderedDict[str, str](
         ("gemma3n_audio", "gemma3n"),
         ("gemma3n_text", "gemma3n"),
         ("gemma3n_vision", "gemma3n"),
+        ("gemma4_audio", "gemma4"),
+        ("gemma4_text", "gemma4"),
+        ("gemma4_vision", "gemma4"),
         ("glm4v_vision", "glm4v"),
         ("glm4v_moe_vision", "glm4v_moe"),
         ("glm4v_text", "glm4v"),
@@ -1093,6 +1146,7 @@ SPECIAL_MODEL_TYPE_TO_MODULE_NAME = OrderedDict[str, str](
         ("sam_vision_model", "sam"),
         ("sam2_vision_model", "sam2"),
         ("sam2_hiera_det_model", "sam2"),
+        ("sam3_lite_text_text_model", "sam3_lite_text"),
         ("sam3_vit_model", "sam3"),
         ("sam3_vision_model", "sam3"),
         ("edgetam_vision_model", "edgetam"),
@@ -1114,6 +1168,7 @@ SPECIAL_MODEL_TYPE_TO_MODULE_NAME = OrderedDict[str, str](
         ("wav2vec2-bert", "wav2vec2_bert"),
         ("vibevoice_acoustic_tokenizer_encoder", "vibevoice_acoustic_tokenizer"),
         ("vibevoice_acoustic_tokenizer_decoder", "vibevoice_acoustic_tokenizer"),
+        ("uvdoc_backbone", "uvdoc"),
     ]
 )
 
@@ -1363,7 +1418,7 @@ class AutoConfig:
                     - A path to a *directory* containing a configuration file saved using the
                       [`~PreTrainedConfig.save_pretrained`] method, or the [`~PreTrainedModel.save_pretrained`] method,
                       e.g., `./my_model_directory/`.
-                    - A path or url to a saved configuration JSON *file*, e.g.,
+                    - a path to a saved configuration JSON *file*, e.g.,
                       `./my_model_directory/configuration.json`.
             cache_dir (`str` or `os.PathLike`, *optional*):
                 Path to a directory in which a downloaded pretrained model configuration should be cached if the
@@ -1433,6 +1488,9 @@ class AutoConfig:
         config_dict, unused_kwargs = PreTrainedConfig.get_config_dict(pretrained_model_name_or_path, **kwargs)
         has_remote_code = "auto_map" in config_dict and "AutoConfig" in config_dict["auto_map"]
         has_local_code = "model_type" in config_dict and config_dict["model_type"] in CONFIG_MAPPING
+        explicit_local_code = has_local_code and not CONFIG_MAPPING[config_dict["model_type"]].__module__.startswith(
+            "transformers."
+        )
         if has_remote_code:
             class_ref = config_dict["auto_map"]["AutoConfig"]
             if "--" in class_ref:
@@ -1443,7 +1501,7 @@ class AutoConfig:
                 trust_remote_code, pretrained_model_name_or_path, has_local_code, has_remote_code, upstream_repo
             )
 
-        if has_remote_code and trust_remote_code:
+        if has_remote_code and trust_remote_code and not explicit_local_code:
             config_class = get_class_from_dynamic_module(
                 class_ref, pretrained_model_name_or_path, code_revision=code_revision, **kwargs
             )

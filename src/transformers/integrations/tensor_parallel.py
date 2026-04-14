@@ -1218,6 +1218,7 @@ class ParallelInterface(GeneralInterface):
     _global_mapping = (
         {
             "embedding_rowwise": EmbeddingParallel(embedding_dim_sharding=0),
+            "embedding_colwise": EmbeddingParallel(embedding_dim_sharding=1),
             "colwise_gather_output": ColwiseParallel(gather_output=True),
             "colwise": ColwiseParallel(),
             "rowwise": RowwiseParallel(),
@@ -1247,6 +1248,7 @@ class ParallelInterface(GeneralInterface):
         "rowwise_split_input": -1,
         "packed_rowwise": -1,
         "embedding_rowwise": 0,
+        "embedding_colwise": 1,
         "sequence_parallel": None,
         "replicated_with_grad_allreduce": None,
         "mla_kv_a_proj": None,
@@ -1261,10 +1263,19 @@ class ParallelInterface(GeneralInterface):
         "rowwise_split_input": None,
         "packed_rowwise": None,
         "embedding_rowwise": None,
+        "embedding_colwise": None,
         "sequence_parallel": None,
         "replicated_with_grad_allreduce": None,
         "mla_kv_a_proj": None,
     }
+
+    @classmethod
+    def register_plan_to_weight_dim(cls, key: str, value: int | None):
+        cls.plan_to_weight_dim[key] = value
+
+    @classmethod
+    def register_plan_to_bias_dim(cls, key: str, value: int | None):
+        cls.plan_to_bias_dim[key] = value
 
 
 ALL_PARALLEL_STYLES: ParallelInterface = ParallelInterface()
@@ -1377,7 +1388,11 @@ def gather_state_dict_for_save(
 
 
 def add_tensor_parallel_hooks_to_module(
-    model, module, tp_plan, layer_name, current_module_plan, device_mesh, parameter_name=None
+    model,
+    module,
+    current_module_plan,
+    layer_name,
+    device_mesh,
 ):
     r"""
     This function is called in `PretrainedModel.post_init()`. It is responsible of adding hooks
@@ -1386,14 +1401,22 @@ def add_tensor_parallel_hooks_to_module(
     This is the place where we add the `pre_forward` and `post_forwards` hooks. These are defined
     for each `TensorParallelLayer` as `_prepare_input_fn` and `_prepare_output_fn`.
 
+    Args:
+        model (`PretrainedModel`): The model containing the modules.
+        module (`nn.Module`): The current module to which we want to add the hooks.
+        current_module_plan (`str` or `None`): The tensor parallel plan for the current module, if any.
+        layer_name (`str`): The qualified name of the current module.
+        device_mesh (`dist.device_mesh.DeviceMesh`): The device mesh for distributed communication.
+
     """
     if current_module_plan is not None:
         tp_layer = ALL_PARALLEL_STYLES[current_module_plan]
         try:
             tp_layer.prepare_module_tp(module, device_mesh, config=model.config)
         except NotImplementedError as e:
-            print(
-                f"Trying to prepare {layer_name}, but it's not supported. Corresponding module: {module} Fix it's TP plan: {e}"
+            logger.warning(
+                f"Trying to prepare {layer_name}, but it's not supported. Corresponding module: {module} Fix it's TP "
+                f"plan: {e}"
             )
 
         module._hf_tp_plan = current_module_plan
@@ -1503,12 +1526,11 @@ def distribute_model(model, tp_plan, distributed_config, device_mesh, tp_size):
             if not getattr(module, "_is_hooked", False):
                 plan = _get_parameter_tp_plan(parameter_name=name, tp_plan=model_plan, is_weight=False)
                 add_tensor_parallel_hooks_to_module(
-                    model=model,
-                    module=module,
-                    tp_plan=model_plan,
-                    layer_name="",
-                    current_module_plan=plan,
-                    device_mesh=device_mesh,
+                    model,
+                    module,
+                    plan,
+                    name,
+                    device_mesh,
                 )
             module._is_hooked = True
     return model

@@ -1,0 +1,230 @@
+# Copyright 2024 The Rhymes-AI Teams Authors and The HuggingFace Inc. team. All rights reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+"""Image processor class for Aria."""
+
+import numpy as np
+
+from ...image_processing_backends import PilBackend
+from ...image_processing_utils import BatchFeature, get_patch_output_size, select_best_resolution
+from ...image_transforms import divide_to_patches
+from ...image_utils import (
+    ChannelDimension,
+    PILImageResampling,
+    SizeDict,
+    get_image_size,
+)
+from ...processing_utils import ImagesKwargs, Unpack
+from ...utils import TensorType, auto_docstring
+
+
+# Adapted from transformers.models.aria.image_processing_aria.AriaImageProcessorKwargs
+class AriaImageProcessorKwargs(ImagesKwargs, total=False):
+    r"""
+    max_image_size (`int`, *optional*, defaults to `self.max_image_size`):
+        Maximum image size. Must be either 490 or 980.
+    min_image_size (`int`, *optional*, defaults to `self.min_image_size`):
+        Minimum image size. Images smaller than this in any dimension will be scaled up.
+    split_resolutions (`list[list[int]]`, *optional*, defaults to `self.split_resolutions`):
+        A list of possible resolutions as (height, width) pairs for splitting high-resolution images into patches.
+    split_image (`bool`, *optional*, defaults to `self.split_image`):
+        Whether to split the image into patches using the best matching resolution from `split_resolutions`.
+    """
+
+    max_image_size: int
+    min_image_size: int
+    split_resolutions: list[list[int]]
+    split_image: bool
+
+
+@auto_docstring
+class AriaImageProcessorPil(PilBackend):
+    model_input_names = ["pixel_values", "pixel_mask", "num_crops"]
+    valid_kwargs = AriaImageProcessorKwargs
+
+    resample = PILImageResampling.BICUBIC
+    image_mean = [0.5, 0.5, 0.5]
+    image_std = [0.5, 0.5, 0.5]
+    max_image_size = 980
+    min_image_size = 336
+    split_image = False
+    split_resolutions = None
+    do_convert_rgb = True
+    do_rescale = True
+    do_normalize = True
+
+    def __init__(self, **kwargs: Unpack[AriaImageProcessorKwargs]):
+        if kwargs.get("split_resolutions") is None:
+            default_resolutions = [(1, 2), (1, 3), (1, 4), (1, 5), (1, 6), (1, 7), (1, 8), (2, 4), (2, 3), (2, 2), (2, 1), (3, 1), (3, 2), (4, 1), (4, 2), (5, 1), (6, 1), (7, 1), (8, 1)]  # fmt: skip
+            kwargs["split_resolutions"] = [[el[0] * 490, el[1] * 490] for el in default_resolutions]
+        super().__init__(**kwargs)
+
+    def _get_padding_size(self, original_resolution: tuple, target_resolution: tuple):
+        """Get padding size for patching, returns ((before_h, after_h), (before_w, after_w)) for np.pad."""
+        original_height, original_width = original_resolution
+        target_height, target_width = target_resolution
+        paste_x, r_x = divmod(target_width - original_width, 2)
+        paste_y, r_y = divmod(target_height - original_height, 2)
+        return (paste_y, paste_y + r_y), (paste_x, paste_x + r_x)
+
+    def _resize_for_patching(
+        self,
+        image: np.ndarray,
+        target_resolution: tuple,
+        resample: "PILImageResampling | None",
+    ) -> np.ndarray:
+        """Resize an image to a target resolution while maintaining aspect ratio."""
+        new_height, new_width = get_patch_output_size(
+            image, target_resolution, input_data_format=ChannelDimension.FIRST
+        )
+        return self.resize(image, SizeDict(height=new_height, width=new_width), resample)
+
+    def _pad_for_patching(
+        self,
+        image: np.ndarray,
+        target_resolution: tuple,
+    ) -> np.ndarray:
+        """Pad an image to a target resolution while maintaining aspect ratio."""
+        new_resolution = get_patch_output_size(image, target_resolution, input_data_format=ChannelDimension.FIRST)
+        padding_hw = self._get_padding_size(new_resolution, target_resolution)
+        # CHW format: pad channel dim with zeros, then height/width
+        padding = ((0, 0), padding_hw[0], padding_hw[1])
+        return np.pad(image, padding, mode="constant", constant_values=0)
+
+    def get_image_patches(
+        self,
+        image: np.ndarray,
+        grid_pinpoints: list[list[int]],
+        patch_size: int,
+        resample: "PILImageResampling | None",
+    ) -> list[np.ndarray]:
+        """
+        Process an image with variable resolutions by dividing it into patches.
+
+        Args:
+            image (`np.ndarray`):
+                The input image to be processed (channels-first format).
+            grid_pinpoints (`list[list[int]]`):
+                A list of possible resolutions as (height, width) pairs.
+            patch_size (`int`):
+                Size of each square patch to divide the image into.
+            resample (`PILImageResampling | int | None`):
+                Resampling filter to use when resizing.
+
+        Returns:
+            `list[np.ndarray]`: A list of image patches in channels-first format.
+        """
+        if not isinstance(grid_pinpoints, list):
+            raise TypeError("grid_pinpoints must be a list of possible resolutions.")
+
+        image_size = get_image_size(image, channel_dim=ChannelDimension.FIRST)
+        best_resolution = select_best_resolution(image_size, grid_pinpoints)
+        resized_image = self._resize_for_patching(image, best_resolution, resample)
+        padded_image = self._pad_for_patching(resized_image, best_resolution)
+        patches = divide_to_patches(padded_image, patch_size=patch_size)
+        return patches
+
+    def _preprocess(
+        self,
+        images: list[np.ndarray],
+        do_rescale: bool,
+        rescale_factor: float,
+        do_normalize: bool,
+        image_mean: float | list[float] | None,
+        image_std: float | list[float] | None,
+        return_tensors: str | TensorType | None,
+        max_image_size: int = 980,
+        min_image_size: int = 336,
+        split_resolutions: list[list[int]] | None = None,
+        split_image: bool = False,
+        resample: "PILImageResampling | None" = None,
+        **kwargs,
+    ) -> BatchFeature:
+        if max_image_size not in [490, 980]:
+            raise ValueError("max_image_size must be either 490 or 980")
+
+        pixel_values = []
+        pixel_masks = []
+        num_crops = None
+
+        for image in images:
+            if split_image:
+                crop_images = self.get_image_patches(image, split_resolutions, max_image_size, resample)
+            else:
+                crop_images = [image]
+
+            if num_crops is None or len(crop_images) > num_crops:
+                num_crops = len(crop_images)
+
+            for crop_image in crop_images:
+                h, w = crop_image.shape[-2], crop_image.shape[-1]
+                scale = max_image_size / max(h, w)
+                if w >= h:
+                    new_h = max(int(h * scale), min_image_size)
+                    new_w = max_image_size
+                else:
+                    new_h = max_image_size
+                    new_w = max(int(w * scale), min_image_size)
+
+                crop_image = self.resize(crop_image, SizeDict(height=new_h, width=new_w), resample)
+
+                padding_bottom = max_image_size - new_h
+                padding_right = max_image_size - new_w
+                crop_image = np.pad(
+                    crop_image, ((0, 0), (0, padding_bottom), (0, padding_right)), mode="constant", constant_values=0
+                )
+
+                pixel_mask = np.zeros((max_image_size, max_image_size), dtype=bool)
+                pixel_mask[:new_h, :new_w] = True
+                pixel_masks.append(pixel_mask)
+
+                if do_rescale:
+                    crop_image = self.rescale(crop_image, rescale_factor)
+                if do_normalize:
+                    crop_image = self.normalize(crop_image, image_mean, image_std)
+
+                pixel_values.append(crop_image)
+
+        return BatchFeature(
+            data={
+                "pixel_values": np.stack(pixel_values, axis=0),
+                "pixel_mask": np.stack(pixel_masks, axis=0),
+                "num_crops": num_crops,
+            },
+            tensor_type=return_tensors,
+        )
+
+    def get_number_of_image_patches(self, height: int, width: int, images_kwargs=None):
+        """
+        A utility that returns number of image patches for a given image size.
+
+        Args:
+            height (`int`):
+                Height of the input image.
+            width (`int`):
+                Width of the input image.
+            images_kwargs (`dict`, *optional*):
+                Any kwargs to override defaults of the image processor.
+
+        Returns:
+            `int`: Number of patches per image.
+        """
+        split_image = images_kwargs.get("split_image", self.split_image)
+        max_image_size = images_kwargs.get("max_image_size", self.max_image_size)
+
+        resized_height, resized_width = select_best_resolution((height, width), self.split_resolutions)
+        num_patches = 1 if not split_image else resized_height // max_image_size * resized_width // max_image_size
+        return num_patches
+
+
+__all__ = ["AriaImageProcessorPil"]

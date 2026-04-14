@@ -215,7 +215,7 @@ class LasrForCTCModelTester:
         return config, input_features, attention_mask
 
     def get_config(self):
-        return LasrCTCConfig.from_encoder_config(
+        return LasrCTCConfig(
             encoder_config=self.encoder_model_tester.get_config(),
             vocab_size=self.vocab_size,
             pad_token_id=self.pad_token_id,

@@ -23,7 +23,7 @@ from parameterized import parameterized
 from transformers import (
     PPOCRV5ServerDetConfig,
     PPOCRV5ServerDetForObjectDetection,
-    PPOCRV5ServerDetImageProcessorFast,
+    PPOCRV5ServerDetImageProcessor,
     PPOCRV5ServerDetModel,
     is_torch_available,
     is_vision_available,
@@ -51,8 +51,17 @@ if is_vision_available():
 
 class PPOCRV5ServerDetModelTester:
     def __init__(
-        self, batch_size=3, image_size=128, num_channels=3, num_stages=5, is_training=False, scale=1.0, divisor=16
+        self,
+        parent,
+        batch_size=3,
+        image_size=128,
+        num_channels=3,
+        num_stages=5,
+        is_training=False,
+        scale=1.0,
+        divisor=16,
     ):
+        self.parent = parent
         self.batch_size = batch_size
         self.num_channels = num_channels
         self.image_size = image_size
@@ -142,6 +151,7 @@ class PPOCRV5ServerDetModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.
 
     def setUp(self):
         self.model_tester = PPOCRV5ServerDetModelTester(
+            self,
             batch_size=3,
             is_training=False,
             image_size=128,
@@ -248,10 +258,10 @@ class PPOCRV5ServerDetModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.
 @slow
 class PPOCRV5ServerDetModelIntegrationTest(unittest.TestCase):
     def setUp(self):
-        model_path = "PaddlePaddle/PP-OCRV5_server_det_safetensors"
+        model_path = "PaddlePaddle/PP-OCRv5_server_det_safetensors"
         self.model = PPOCRV5ServerDetForObjectDetection.from_pretrained(model_path).to(torch_device)
         self.image_processor = (
-            PPOCRV5ServerDetImageProcessorFast.from_pretrained(model_path) if is_vision_available() else None
+            PPOCRV5ServerDetImageProcessor.from_pretrained(model_path) if is_vision_available() else None
         )
         self.image = Image.open(
             requests.get(
