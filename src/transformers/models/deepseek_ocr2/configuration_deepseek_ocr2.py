@@ -149,8 +149,6 @@ class DeepseekOcr2VisionConfig(PreTrainedConfig):
 
     sam_config: dict | PreTrainedConfig | None = None
     encoder_config: dict | PreTrainedConfig | None = None
-    hidden_size: int | None = None
-    rms_norm_eps: float | None = None
 
     def __post_init__(self, **kwargs):
         if self.sam_config is None:
@@ -162,18 +160,6 @@ class DeepseekOcr2VisionConfig(PreTrainedConfig):
             self.encoder_config = DeepseekOcr2EncoderConfig()
         elif isinstance(self.encoder_config, dict):
             self.encoder_config = DeepseekOcr2EncoderConfig(**self.encoder_config)
-
-        # TODO: remove sync and use property delegation instead (see PR review discussion)
-        # Sync attributes from encoder_config for external access (tests, common utils)
-        if self.hidden_size is None:
-            self.hidden_size = self.encoder_config.hidden_size
-        else:
-            self.encoder_config.hidden_size = self.hidden_size
-
-        if self.rms_norm_eps is None:
-            self.rms_norm_eps = self.encoder_config.rms_norm_eps
-        else:
-            self.encoder_config.rms_norm_eps = self.rms_norm_eps
 
         super().__post_init__(**kwargs)
 

@@ -78,14 +78,25 @@ from ..sam.modeling_sam import (
 logger = logging.get_logger(__name__)
 
 
-class DeepseekOcr2ImageProcessorKwargs(GotOcr2ImageProcessorKwargs, total=False):
+class DeepseekOcr2ImageProcessorKwargs(ImagesKwargs, total=False):
     """
+    crop_to_patches (`bool`, *optional*, defaults to `True`):
+        Whether to crop the image into local patches. When `False`, only the global view is produced.
+    min_patches (`int`, *optional*, defaults to `2`):
+        The minimum number of patches to extract from the image for the local view.
+        Only has an effect if `crop_to_patches` is set to `True`.
+    max_patches (`int`, *optional*, defaults to `6`):
+        The maximum number of patches to extract from the image for the local view.
+        Only has an effect if `crop_to_patches` is set to `True`.
     tile_size (`int`, *optional*, defaults to `768`):
         The size of each local tile. Must match the model's query embedding size.
     background_color (`list[int]`, *optional*, defaults to `[127, 127, 127]`):
         The background color for padding.
     """
 
+    crop_to_patches: bool
+    min_patches: int
+    max_patches: int
     tile_size: int
     background_color: list[int]
 
@@ -302,29 +313,6 @@ class DeepseekOcr2ImageProcessor(GotOcr2ImageProcessor):
             num_patches += num_columns * num_rows
 
         return num_patches
-
-
-class DeepseekOcr2ImageProcessorKwargs(ImagesKwargs, total=False):
-    """
-    crop_to_patches (`bool`, *optional*, defaults to `True`):
-        Whether to crop the image into local patches. When `False`, only the global view is produced.
-    min_patches (`int`, *optional*, defaults to `2`):
-        The minimum number of patches to extract from the image for the local view.
-        Only has an effect if `crop_to_patches` is set to `True`.
-    max_patches (`int`, *optional*, defaults to `6`):
-        The maximum number of patches to extract from the image for the local view.
-        Only has an effect if `crop_to_patches` is set to `True`.
-    tile_size (`int`, *optional*, defaults to `768`):
-        The size of each local tile. Must match the model's query embedding size.
-    background_color (`list[int]`, *optional*, defaults to `[127, 127, 127]`):
-        The background color for padding.
-    """
-
-    crop_to_patches: bool
-    min_patches: int
-    max_patches: int
-    tile_size: int
-    background_color: list[int]
 
 
 @requires(backends=("vision",))
@@ -571,8 +559,6 @@ class DeepseekOcr2VisionConfig(PreTrainedConfig):
 
     sam_config: dict | PreTrainedConfig | None = None
     encoder_config: dict | PreTrainedConfig | None = None
-    hidden_size: int | None = None
-    rms_norm_eps: float | None = None
 
     def __post_init__(self, **kwargs):
         if self.sam_config is None:
@@ -584,18 +570,6 @@ class DeepseekOcr2VisionConfig(PreTrainedConfig):
             self.encoder_config = DeepseekOcr2EncoderConfig()
         elif isinstance(self.encoder_config, dict):
             self.encoder_config = DeepseekOcr2EncoderConfig(**self.encoder_config)
-
-        # TODO: remove sync and use property delegation instead (see PR review discussion)
-        # Sync attributes from encoder_config for external access (tests, common utils)
-        if self.hidden_size is None:
-            self.hidden_size = self.encoder_config.hidden_size
-        else:
-            self.encoder_config.hidden_size = self.hidden_size
-
-        if self.rms_norm_eps is None:
-            self.rms_norm_eps = self.encoder_config.rms_norm_eps
-        else:
-            self.encoder_config.rms_norm_eps = self.rms_norm_eps
 
         super().__post_init__(**kwargs)
 
@@ -790,6 +764,7 @@ class DeepseekOcr2SamVisionEncoder(SamVisionEncoder, DeepseekOcr2PreTrainedModel
         pos_embed = pos_embed.permute(0, 2, 3, 1)
         return pos_embed
 
+    @auto_docstring
     @capture_outputs(tie_last_hidden_states=False)
     def forward(self, pixel_values: torch.FloatTensor, **kwargs) -> BaseModelOutput:
         hidden_states = self.patch_embed(pixel_values)
@@ -851,15 +826,6 @@ class DeepseekOcr2VisionEncoder(Qwen2Model, DeepseekOcr2PreTrainedModel):
 
         hidden_states = self.norm(hidden_states)
         return BaseModelOutputWithPast(last_hidden_state=hidden_states)
-
-
-class DeepseekOcr2Projector(nn.Module):
-    def __init__(self, config: DeepseekOcr2Config):
-        super().__init__()
-        self.proj = nn.Linear(config.projector_input_dim, config.projector_n_embed)
-
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
-        return self.proj(x)
 
 
 def token_type_ids_mask_function(token_type_ids: torch.Tensor):
@@ -969,11 +935,10 @@ class DeepseekOcr2Model(LlavaNextModel):
         del self.image_newline
 
         self.vision_tower = DeepseekOcr2VisionModel(config.vision_config)
-        self.multi_modal_projector = DeepseekOcr2Projector(config)
+        self.multi_modal_projector = nn.Linear(config.projector_input_dim, config.projector_n_embed)
 
         # Learnable separator between local and global views
-        embed_std = 1.0 / math.sqrt(config.projector_n_embed)
-        self.view_separator = nn.Parameter(torch.randn(config.projector_n_embed) * embed_std)
+        self.view_separator = nn.Parameter(torch.empty(config.projector_n_embed))
 
         self.language_model = DeepseekOcr2TextModel(config.text_config)
 

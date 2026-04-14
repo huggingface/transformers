@@ -56,7 +56,7 @@ ORIGINAL_TO_CONVERTED_KEY_MAPPING = {
     r"model\.qwen2_model\.query_768\.":                     r"model.vision_tower.query_768.",
     r"model\.qwen2_model\.query_1024\.":                    r"model.vision_tower.query_1024.",
     # Projector
-    r"model\.projector\.layers\.":                          r"model.multi_modal_projector.proj.",
+    r"model\.projector\.layers\.":                          r"model.multi_modal_projector.",
     # View separator (typo fix: "seperator" -> "separator")
     r"model\.view_seperator":                               r"model.view_separator",
     # Language model (must come after all more specific model.* patterns)

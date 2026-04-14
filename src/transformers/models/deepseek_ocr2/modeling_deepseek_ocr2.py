@@ -576,6 +576,7 @@ class DeepseekOcr2SamVisionEncoder(DeepseekOcr2PreTrainedModel):
     def get_input_embeddings(self):
         return self.patch_embed
 
+    @auto_docstring
     @capture_outputs(tie_last_hidden_states=False)
     def forward(self, pixel_values: torch.FloatTensor, **kwargs) -> BaseModelOutput:
         hidden_states = self.patch_embed(pixel_values)
@@ -931,15 +932,6 @@ class DeepseekOcr2VisionEncoder(DeepseekOcr2PreTrainedModel):
 
         hidden_states = self.norm(hidden_states)
         return BaseModelOutputWithPast(last_hidden_state=hidden_states)
-
-
-class DeepseekOcr2Projector(nn.Module):
-    def __init__(self, config: DeepseekOcr2Config):
-        super().__init__()
-        self.proj = nn.Linear(config.projector_input_dim, config.projector_n_embed)
-
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
-        return self.proj(x)
 
 
 def token_type_ids_mask_function(token_type_ids: torch.Tensor):
@@ -1433,15 +1425,15 @@ class DeepseekOcr2Model(DeepseekOcr2PreTrainedModel):
         super().__init__(config)
 
         self.vision_tower = DeepseekOcr2VisionModel(config.vision_config)
-        self.multi_modal_projector = DeepseekOcr2Projector(config)
-
-        # Learnable separator between local and global views
-        embed_std = 1.0 / math.sqrt(config.projector_n_embed)
+        self.multi_modal_projector = nn.Linear(config.projector_input_dim, config.projector_n_embed)
+        embed_std = 1 / math.sqrt(config.text_config.hidden_size)
 
         self.vocab_size = config.text_config.vocab_size
 
         self.language_model = DeepseekOcr2TextModel(config.text_config)
-        self.view_separator = nn.Parameter(torch.randn(config.projector_n_embed) * embed_std)
+
+        # Learnable separator between local and global views (initialized in `_init_weights`).
+        self.view_separator = nn.Parameter(torch.empty(config.projector_n_embed))
         self.post_init()
 
     def get_input_embeddings(self):

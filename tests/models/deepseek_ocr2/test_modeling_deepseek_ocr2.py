@@ -15,6 +15,9 @@
 
 import unittest
 
+import pytest
+from parameterized import parameterized
+
 from transformers import (
     AutoProcessor,
     DeepseekOcr2Config,
@@ -25,7 +28,12 @@ from transformers.testing_utils import cleanup, require_torch, slow, torch_devic
 
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
-from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
+from ...test_modeling_common import (
+    TEST_EAGER_MATCHES_BATCHED_AND_GROUPED_INFERENCE_PARAMETERIZATION,
+    ModelTesterMixin,
+    floats_tensor,
+    ids_tensor,
+)
 from ...test_pipeline_mixin import PipelineTesterMixin
 
 
@@ -51,49 +59,9 @@ class DeepseekOcr2VisionText2TextModelTester:
         image_size=16,
         image_token_index=1,
         is_training=True,
-        sam_config={
-            "hidden_size": 32,
-            "output_channels": 16,
-            "num_hidden_layers": 2,
-            "num_attention_heads": 4,
-            "num_channels": 3,
-            "image_size": 16,
-            "patch_size": 2,
-            "hidden_act": "gelu",
-            "mlp_ratio": 4.0,
-            "window_size": 4,
-            "global_attn_indexes": [1],
-            "downsample_channels": [32, 64],
-        },
-        encoder_config={
-            "hidden_size": 64,
-            "intermediate_size": 128,
-            "num_hidden_layers": 2,
-            "num_attention_heads": 4,
-            "num_key_value_heads": 4,
-            "hidden_act": "silu",
-            "max_position_embeddings": 512,
-        },
-        text_config={
-            "model_type": "deepseek_ocr2_text",
-            "vocab_size": 99,
-            "hidden_size": 128,
-            "intermediate_size": 256,
-            "num_hidden_layers": 2,
-            "num_attention_heads": 4,
-            "num_key_value_heads": 4,
-            "hidden_act": "silu",
-            "max_position_embeddings": 512,
-            "tie_word_embeddings": False,
-            "bos_token_id": 2,
-            "eos_token_id": 3,
-            "pad_token_id": 4,
-            "n_routed_experts": 8,
-            "n_shared_experts": 1,
-            "first_k_dense_replace": 1,
-            "moe_intermediate_size": 64,
-            "num_experts_per_tok": 2,
-        },
+        sam_config=None,
+        encoder_config=None,
+        text_config=None,
     ):
         self.parent = parent
         self.batch_size = batch_size
@@ -101,6 +69,54 @@ class DeepseekOcr2VisionText2TextModelTester:
         self.image_size = image_size
         self.image_token_index = image_token_index
         self.is_training = is_training
+
+        # Defaults are None to avoid mutable default arguments.
+        if sam_config is None:
+            sam_config = {
+                "hidden_size": 32,
+                "output_channels": 16,
+                "num_hidden_layers": 2,
+                "num_attention_heads": 4,
+                "num_channels": 3,
+                "image_size": 16,
+                "patch_size": 2,
+                "hidden_act": "gelu",
+                "mlp_ratio": 4.0,
+                "window_size": 4,
+                "global_attn_indexes": [1],
+                "downsample_channels": [32, 64],
+            }
+        if encoder_config is None:
+            encoder_config = {
+                "hidden_size": 64,
+                "intermediate_size": 128,
+                "num_hidden_layers": 2,
+                "num_attention_heads": 4,
+                "num_key_value_heads": 4,
+                "hidden_act": "silu",
+                "max_position_embeddings": 512,
+            }
+        if text_config is None:
+            text_config = {
+                "model_type": "deepseek_ocr2_text",
+                "vocab_size": 99,
+                "hidden_size": 128,
+                "intermediate_size": 256,
+                "num_hidden_layers": 2,
+                "num_attention_heads": 4,
+                "num_key_value_heads": 4,
+                "hidden_act": "silu",
+                "max_position_embeddings": 512,
+                "tie_word_embeddings": False,
+                "bos_token_id": 2,
+                "eos_token_id": 3,
+                "pad_token_id": 4,
+                "n_routed_experts": 8,
+                "n_shared_experts": 1,
+                "first_k_dense_replace": 1,
+                "moe_intermediate_size": 64,
+                "num_experts_per_tok": 2,
+            }
         self.sam_config = sam_config
         self.encoder_config = encoder_config
         self.text_config = text_config
@@ -200,6 +216,21 @@ class DeepseekOcr2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTes
 
     def test_config(self):
         self.config_tester.run_common_tests()
+
+    @unittest.skip("hidden_size is on vision_config.encoder_config, not on vision_config.")
+    @parameterized.expand([True, False, None])
+    def test_get_image_features_output(self, return_dict: bool | None):
+        pass
+
+    @unittest.skip("rms_norm_eps on vision_config.encoder_config is not reached by set_config_for_less_flaky_test.")
+    @parameterized.expand(TEST_EAGER_MATCHES_BATCHED_AND_GROUPED_INFERENCE_PARAMETERIZATION)
+    def test_eager_matches_batched_and_grouped_inference(self, name, dtype):
+        pass
+
+    @unittest.skip(reason="Compile not yet supported because in LLava models")
+    @pytest.mark.torch_compile_test
+    def test_sdpa_can_compile_dynamic(self):
+        pass
 
 
 @require_torch
