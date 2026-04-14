@@ -13,7 +13,6 @@
 # limitations under the License.
 import unittest
 from types import SimpleNamespace
-from unittest.mock import patch
 
 import torch
 import torch.nn as nn
@@ -34,7 +33,7 @@ from transformers.core_model_loading import (
     convert_and_load_state_dict_in_model,
     rename_source_key,
     revert_weight_conversion,
-    spawn_parallel_materialize,
+    spawn_materialize,
 )
 from transformers.modeling_utils import LoadStateDictConfig
 from transformers.utils.import_utils import is_triton_available
@@ -275,6 +274,44 @@ def _make_dtensor_shard_op(mesh, placements, param_shape, local_shape):
 
 class TestConvertAndLoadStateDict(unittest.TestCase):
     def test_dtensor_shard_aware_mixtral_conversion_uses_only_local_experts(self):
+        """
+            The problem: Mixtral has 8 experts. The checkpoint stores them separately:                                
+            experts.0.w1.weight  (2x2)                                                                               
+            experts.0.w3.weight  (2x2)                                                                               
+            experts.1.w1.weight  (2x2)                                                                               
+            experts.1.w3.weight  (2x2)                                                                               
+                                                                                                                    
+            The model stores them packed into one tensor:                                                            
+            experts.gate_up_proj.weight  (2, 4, 2)                                                                   
+                                        ^  ^  ^                                                                    
+                                        |  |  └─ features                                                          
+                                        |  └─ w1 (2) + w3 (2) concatenated                                         
+                                        └─ num_experts                                                             
+                                                                                                                    
+            The conversion (without FSDP) is: load all expert w1/w3 tensors → MergeModulelist(dim=0) stacks experts → Concatenate(dim=1) joins w1+w3.                                                                          
+                                                                                                                    
+            Example — Mixtral experts with FSDP Shard(0) on the expert dim:                                                
+           
+            checkpoint files              shard_tensor              rank 0 gets                                          
+            ────────────────              ────────────              ───────────                                          
+             experts.0.w1  [[0,1],[2,3]]   idx=0 → kept             [[0,1],[2,3]]                                         
+             experts.1.w1  [[10,11],...]   idx=1 → None (not owned)                                                       
+             experts.0.w3  [[4,5],[6,7]]   idx=0 → kept             [[4,5],[6,7]]                                         
+             experts.1.w3  [[14,15],...]   idx=1 → None (not owned)                                                       
+                                                                                                                   
+            WeightConverter then stacks + concatenates only the kept tensors: gate_up_proj = [[[0,1],[2,3],[4,5],[6,7]]]  shape (1,4,2)
+                                                                                                                                                                                                                                       
+            MergeModulelist(dim=0):   [[0,1],[2,3]]       →  [[[0,1],[2,3]]]          (1 expert, shape 1x2x2)      
+                                        [[4,5],[6,7]]        →  [[[4,5],[6,7]]]          (1 expert, shape 1x2x2)     
+                                                                                                                    
+            Concatenate(dim=1):       cat along dim 1      →  [[[0,1],[2,3],[4,5],[6,7]]]   (shape 1x4x2)          
+                                                                ~~~~~~~~~~~  ~~~~~~~~~~~                           
+                                                                    w1            w3                                
+                                                                                                                    
+            The key point: DtensorShardOperation.shard_tensor(tensor_idx=1) returns None for rank 0, so the          
+            converter never even processes expert 1's data. This saves memory during loading. this should explain as well the  
+            other tests       
+        """
         shard_op = _make_dtensor_shard_op(
             FakeMesh(shape=(2,), rank=0),
             [Shard(0)],
@@ -287,43 +324,39 @@ class TestConvertAndLoadStateDict(unittest.TestCase):
             operations=[MergeModulelist(dim=0), Concatenate(dim=1)],
         )
 
-        with patch(
-            "transformers.core_model_loading.compute_local_shape_and_global_offset",
-            return_value=(torch.Size([1, 4, 2]), torch.Size([0, 0, 0])),
+        for idx, tensor in enumerate(
+            [
+                torch.tensor([[0.0, 1.0], [2.0, 3.0]]),
+                torch.tensor([[10.0, 11.0], [12.0, 13.0]]),
+            ]
         ):
-            for idx, tensor in enumerate(
-                [
-                    torch.tensor([[0.0, 1.0], [2.0, 3.0]]),
-                    torch.tensor([[10.0, 11.0], [12.0, 13.0]]),
-                ]
-            ):
-                converter.add_tensor(
-                    "model.layers.0.experts.gate_up_proj.weight",
-                    f"model.layers.0.experts.{idx}.w1.weight",
-                    "experts.*.w1.weight",
-                    spawn_parallel_materialize(None, tensor, shard_op, idx, device="cpu", dtype=None),
-                )
-
-            for idx, tensor in enumerate(
-                [
-                    torch.tensor([[4.0, 5.0], [6.0, 7.0]]),
-                    torch.tensor([[14.0, 15.0], [16.0, 17.0]]),
-                ]
-            ):
-                converter.add_tensor(
-                    "model.layers.0.experts.gate_up_proj.weight",
-                    f"model.layers.0.experts.{idx}.w3.weight",
-                    "experts.*.w3.weight",
-                    spawn_parallel_materialize(None, tensor, shard_op, idx, device="cpu", dtype=None),
-                )
-
-            converted = converter.convert("model.layers.0.experts.gate_up_proj.weight")
-
-            self.assertEqual(list(converted), ["model.layers.0.experts.gate_up_proj.weight"])
-            torch.testing.assert_close(
-                converted["model.layers.0.experts.gate_up_proj.weight"],
-                torch.tensor([[[0.0, 1.0], [2.0, 3.0], [4.0, 5.0], [6.0, 7.0]]]),
+            converter.add_tensor(
+                "model.layers.0.experts.gate_up_proj.weight",
+                f"model.layers.0.experts.{idx}.w1.weight",
+                "experts.*.w1.weight",
+                spawn_materialize(None, tensor, device="cpu", dtype=None, sharding_op=shard_op, tensor_idx=idx),
             )
+
+        for idx, tensor in enumerate(
+            [
+                torch.tensor([[4.0, 5.0], [6.0, 7.0]]),
+                torch.tensor([[14.0, 15.0], [16.0, 17.0]]),
+            ]
+        ):
+            converter.add_tensor(
+                "model.layers.0.experts.gate_up_proj.weight",
+                f"model.layers.0.experts.{idx}.w3.weight",
+                "experts.*.w3.weight",
+                spawn_materialize(None, tensor, device="cpu", dtype=None, sharding_op=shard_op, tensor_idx=idx),
+            )
+
+        converted = converter.convert("model.layers.0.experts.gate_up_proj.weight")
+
+        self.assertEqual(list(converted), ["model.layers.0.experts.gate_up_proj.weight"])
+        torch.testing.assert_close(
+            converted["model.layers.0.experts.gate_up_proj.weight"],
+            torch.tensor([[[0.0, 1.0], [2.0, 3.0], [4.0, 5.0], [6.0, 7.0]]]),
+        )
 
     def test_moe_and_qkv_conversion(self):
         model = DummyRoot()
@@ -835,7 +868,32 @@ class TestConvertAndLoadStateDict(unittest.TestCase):
 
 
 class TestDtensorShardOperation(unittest.TestCase):
-    """One test per code path in DtensorShardOperation.shard_tensor."""
+    """Unit tests for DtensorShardOperation.shard_tensor — one test per code path.
+
+    Branch coverage map:
+
+    shard_tensor()
+    ├── A: no sharding placements → full copy                            [test_no_shard_returns_full_tensor]
+    ├── B: expert path (tensor_idx set, ndim mismatch)
+    │   ├── B1: has_expert_sharding=False → fall through to C            [test_expert_shaped_tp_only_no_expert_sharding]
+    │   ├── B2: not owns_local_expert → None                             [test_expert_filtering]
+    │   ├── B3: owned, no inner placements → full copy                   [test_expert_filtering]
+    │   └── B4: owned, with inner placements → _shard_nd                 [test_expert_filtering_preserves_inner_sharding]
+    └── C: _shard_nd()
+        ├── C1: _can_shard_on_read=False → _materialize_and_split        [test_nd_strided_plus_shard_same_dim_fallback]
+        ├── C2: has_strided=False → contiguous slice
+        │   ├── 1D mesh                                                   [test_1d_shard_fast_path]
+        │   ├── 2D mesh                                                   [test_nd_contiguous_single_slice]
+        │   ├── negative dim                                              [test_negative_dim_normalizes_correctly]
+        │   └── uneven division                                           [test_contiguous_shard_uneven_division]
+        └── C3: has_strided=True → _compute_dim_ranges + _slice_and_read
+            ├── _StridedShard → _strided_ranges                           [test_nd_strided_shard_disjoint_ranges]
+            └── _source_tensor_needs_packing → contiguous                 [test_prepacked_strided_shard_uses_contiguous_source_slice]
+
+    _slice_and_read (tested directly)
+    ├── all single ranges → simple slice                                  [test_slice_and_read_all_single_ranges]
+    └── two multi-range dims → ValueError                                 [test_slice_and_read_raises_on_two_multi_range_dims]
+    """
 
     def test_no_shard_returns_full_tensor(self):
         """Replicate-only → full copy."""
@@ -904,18 +962,23 @@ class TestDtensorShardOperation(unittest.TestCase):
             )
             torch.testing.assert_close(op.shard_tensor(tensor, tensor_idx=0), expected, msg=f"rank {rank}")
 
+    def test_expert_shaped_tp_only_no_expert_sharding(self):
+        """Expert-shaped param with TP on dim 1 but no expert sharding on dim 0 → regular _shard_nd path."""
+        tensor = torch.arange(8).reshape(4, 2).float()
+        # Shard(1) on 3D param maps to dim 0 of the 2D checkpoint tensor (ndim_diff=1)
+        for rank, expected in [(0, tensor[:2]), (1, tensor[2:])]:
+            mesh = FakeMesh(shape=(2,), rank=rank)
+            op = _make_dtensor_shard_op(mesh, [Shard(1)], param_shape=(4, 4, 2), local_shape=(4, 2, 2))
+            torch.testing.assert_close(op.shard_tensor(tensor, tensor_idx=0), expected, msg=f"rank {rank}")
+
     def test_expert_filtering(self):
         """Mixtral-style experts: skip non-owned, return owned."""
         mesh = FakeMesh(shape=(2,), rank=1)
         op = _make_dtensor_shard_op(mesh, [Shard(0)], param_shape=(4, 2, 2), local_shape=(2, 2, 2))
         expert_tensor = torch.ones(2, 2)
-        with patch(
-            "transformers.core_model_loading.compute_local_shape_and_global_offset",
-            return_value=(torch.Size([2, 2, 2]), torch.Size([2, 0, 0])),
-        ):
-            # rank 1 owns experts 2,3 (offset=2)
-            self.assertIsNone(op.shard_tensor(expert_tensor, tensor_idx=0))
-            torch.testing.assert_close(op.shard_tensor(expert_tensor, tensor_idx=2), expert_tensor)
+        # rank 1 owns experts 2,3 (offset=2)
+        self.assertIsNone(op.shard_tensor(expert_tensor, tensor_idx=0))
+        torch.testing.assert_close(op.shard_tensor(expert_tensor, tensor_idx=2), expert_tensor)
 
     def test_expert_filtering_preserves_inner_sharding(self):
         """MoE expert ownership checks should still apply TP sharding on inner dims."""
@@ -929,20 +992,47 @@ class TestDtensorShardOperation(unittest.TestCase):
         for rank in range(4):
             mesh = FakeMesh(shape=(2, 2), rank=rank)
             op = _make_dtensor_shard_op(mesh, [Shard(0), Shard(1)], param_shape=(4, 4, 2), local_shape=(2, 2, 2))
+            shard = op.shard_tensor(tensor, tensor_idx=1)
+            if expected[rank] is None:
+                self.assertIsNone(shard)
+            else:
+                torch.testing.assert_close(shard, expected[rank], msg=f"rank {rank}")
 
-            def fake_local_shape_and_offset(*args, **kwargs):
-                expert_rank, tp_rank = mesh.get_coordinate()
-                return torch.Size([2, 2, 2]), torch.Size([2 * expert_rank, 2 * tp_rank, 0])
+    def test_negative_dim_normalizes_correctly(self):
+        """Shard(-1) on a 2D tensor should shard the last dimension."""
+        tensor = torch.arange(16).reshape(4, 4).float()
+        for rank, expected in [(0, tensor[:, :2]), (1, tensor[:, 2:])]:
+            mesh = FakeMesh(shape=(2,), rank=rank)
+            op = _make_dtensor_shard_op(mesh, [Shard(-1)], param_shape=(4, 4), local_shape=(4, 2))
+            torch.testing.assert_close(op.shard_tensor(tensor), expected, msg=f"rank {rank}")
 
-            with patch(
-                "transformers.core_model_loading.compute_local_shape_and_global_offset",
-                side_effect=fake_local_shape_and_offset,
-            ):
-                shard = op.shard_tensor(tensor, tensor_idx=1)
-                if expected[rank] is None:
-                    self.assertIsNone(shard)
-                else:
-                    torch.testing.assert_close(shard, expected[rank], msg=f"rank {rank}")
+    def test_contiguous_shard_uneven_division(self):
+        """Shard(0) on 5 rows across 2 ranks → rank 0 gets 3 rows, rank 1 gets 2."""
+        tensor = torch.arange(20).reshape(5, 4).float()
+        expected = {0: tensor[:3], 1: tensor[3:]}
+        for rank in range(2):
+            mesh = FakeMesh(shape=(2,), rank=rank)
+            local_rows = 3 if rank == 0 else 2
+            op = _make_dtensor_shard_op(mesh, [Shard(0)], param_shape=(5, 4), local_shape=(local_rows, 4))
+            torch.testing.assert_close(op.shard_tensor(tensor), expected[rank], msg=f"rank {rank}")
+
+    def test_slice_and_read_all_single_ranges(self):
+        """When every dim has exactly one range, _slice_and_read takes the simple slice path (no concat)."""
+        tensor = torch.arange(64).reshape(8, 8).float()
+        mesh = FakeMesh(shape=(2,), rank=0)
+        op = _make_dtensor_shard_op(mesh, [Shard(0)], param_shape=(8, 8), local_shape=(4, 4))
+        dim_ranges = {0: [(0, 4)], 1: [(2, 6)]}
+        result = op._slice_and_read(tensor, [8, 8], dim_ranges, None, None)
+        torch.testing.assert_close(result, tensor[0:4, 2:6])
+
+    def test_slice_and_read_raises_on_two_multi_range_dims(self):
+        """Multiple disjoint ranges on two different dims → ValueError."""
+        tensor = torch.arange(64).reshape(8, 8).float()
+        mesh = FakeMesh(shape=(2,), rank=0)
+        op = _make_dtensor_shard_op(mesh, [Shard(0)], param_shape=(8, 8), local_shape=(4, 4))
+        dim_ranges = {0: [(0, 2), (4, 6)], 1: [(0, 2), (4, 6)]}
+        with self.assertRaises(ValueError):
+            op._slice_and_read(tensor, [8, 8], dim_ranges, None, None)
 
 
 class TestConversionMapping(unittest.TestCase):
