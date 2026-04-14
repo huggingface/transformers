@@ -17,7 +17,7 @@ import re
 from dataclasses import dataclass
 from typing import Literal
 
-from torch.distributed.tensor import DTensor, Replicate, Shard
+from torch.distributed.tensor import Replicate, Shard
 from torch.distributed.tensor.parallel import (
     ColwiseParallel,
     RowwiseParallel,
