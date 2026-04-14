@@ -272,7 +272,7 @@ class ClapAudioPatchEmbed(nn.Module):
 
         padding = ((patch_size[0] - patch_stride[0]) // 2, (patch_size[1] - patch_stride[1]) // 2)
 
-        scale_factor = 4 if (self.enable_fusion) and (config.fusion_type == "channel_map") else 1
+        scale_factor = 4 if self.enable_fusion and config.fusion_type == "channel_map" else 1
 
         self.proj = nn.Conv2d(
             config.patch_embed_input_channels * scale_factor,

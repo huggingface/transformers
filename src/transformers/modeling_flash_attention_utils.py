@@ -62,6 +62,7 @@ def is_flash_attn_available():
 FLASH_ATTN_KERNEL_FALLBACK = {
     "flash_attention_2": "kernels-community/flash-attn2",
     "flash_attention_3": "kernels-community/vllm-flash-attn3",
+    "flash_attention_4": "kernels-community/flash-attn4",
 }
 
 
@@ -171,8 +172,10 @@ def _lazy_imports(
         else:
             from .integrations.hub_kernels import load_and_register_attn_kernel
 
+            # Map standard attention names to hub kernel repos
+            kernel_repo = FLASH_ATTN_KERNEL_FALLBACK.get(implementation, implementation)
             # We want to explicitly register the name with `paged|` if found
-            kernel_implementation = f"paged|{implementation}" if is_paged else implementation
+            kernel_implementation = f"paged|{implementation}" if is_paged else kernel_repo
             kernel = load_and_register_attn_kernel(
                 kernel_implementation, attention_wrapper, allow_all_kernels=allow_all_kernels
             )

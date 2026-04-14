@@ -330,7 +330,13 @@ class ProcessorTesterMixin:
                 component_class = component_class[-1] if component_class[-1] is not None else component_class[0]
             else:
                 component_class = component_class[0] if component_class[0] is not None else component_class[1]
-
+        elif isinstance(component_class, dict):
+            if not use_fast:
+                component_class = component_class["pil"]
+            else:
+                component_class = (
+                    component_class["torchvision"] if "torchvision" in component_class else component_class["pil"]
+                )
         return component_class
 
     @classmethod
@@ -857,7 +863,7 @@ class ProcessorTesterMixin:
                 tokenize=True,
                 return_dict=True,
                 return_tensors="pt",
-                padding=True,
+                processor_kwargs={"padding": True},
             )
             self.assertTrue(self.text_input_name in inputs_chat_template)
 
@@ -1579,10 +1585,12 @@ class ProcessorTesterMixin:
             batch_messages,
             add_generation_prompt=True,
             tokenize=True,
-            padding="max_length",
-            truncation=True,
             return_tensors=return_tensors,
-            max_length=self.chat_template_max_length,
+            processor_kwargs={
+                "padding": "max_length",
+                "truncation": True,
+                "max_length": self.chat_template_max_length,
+            },
         )
         self.assertEqual(len(tokenized_prompt_100[0]), self.chat_template_max_length)
 
@@ -1608,7 +1616,7 @@ class ProcessorTesterMixin:
             tokenize=True,
             return_dict=True,
             return_tensors=return_tensors,
-            num_frames=2,  # by default no more than 2 frames, otherwise too slow
+            processor_kwargs={"num_frames": 2},  # by default no more than 2 frames, otherwise too slow
         )
         input_name = getattr(self, input_name)
         self.assertTrue(input_name in out_dict)
@@ -1712,8 +1720,8 @@ class ProcessorTesterMixin:
             add_generation_prompt=True,
             tokenize=True,
             return_dict=True,
-            num_frames=num_frames,
             return_tensors="pt",
+            processor_kwargs={"num_frames": num_frames, "fps": None},
         )
         self.assertTrue(self.videos_input_name in out_dict_with_video)
         self.assertEqual(len(out_dict_with_video[self.videos_input_name]), 1)
@@ -1726,8 +1734,8 @@ class ProcessorTesterMixin:
             add_generation_prompt=True,
             tokenize=True,
             return_dict=True,
-            fps=fps,
             return_tensors="pt",
+            processor_kwargs={"fps": fps, "num_frames": None},
         )
         self.assertTrue(self.videos_input_name in out_dict_with_video)
         self.assertEqual(len(out_dict_with_video[self.videos_input_name]), 1)
@@ -1741,9 +1749,11 @@ class ProcessorTesterMixin:
             add_generation_prompt=True,
             tokenize=True,
             return_dict=True,
-            do_sample_frames=False,
-            fps=fps,
-            return_tensors="pt",
+            processor_kwargs={
+                "do_sample_frames": False,
+                "fps": fps,
+                "return_tensors": "pt",
+            },
         )
         self.assertTrue(self.videos_input_name in out_dict_with_video)
         self.assertEqual(len(out_dict_with_video[self.videos_input_name]), 1)
@@ -1756,8 +1766,7 @@ class ProcessorTesterMixin:
                 add_generation_prompt=True,
                 tokenize=True,
                 return_dict=True,
-                fps=fps,
-                num_frames=num_frames,
+                processor_kwargs={"fps": fps, "num_frames": num_frames},
             )
 
         # Load without any arg should load the whole video
@@ -1802,7 +1811,7 @@ class ProcessorTesterMixin:
                 add_generation_prompt=True,
                 tokenize=True,
                 return_dict=True,
-                do_sample_frames=True,
+                processor_kwargs={"do_sample_frames": True},
             )
 
     @require_librosa
@@ -1980,6 +1989,31 @@ class ProcessorTesterMixin:
         text_is_same = assistant_text == processor.decode(assistant_ids, clean_up_tokenization_spaces=True)
         ids_is_same = processor.tokenizer.encode(assistant_text, add_special_tokens=False), assistant_ids.tolist()
         self.assertTrue(text_is_same or ids_is_same)
+
+    @require_torch
+    def test_apply_chat_template_tool_calls_no_content(self):
+        processor = self.get_processor()
+
+        if processor.chat_template is None:
+            self.skipTest("Processor has no chat template")
+
+        if "tool" not in processor.chat_template:  # good heuristic to check if template supports tools
+            self.skipTest("Chat template does not support tools")
+
+        messages = [
+            {
+                "role": "user",
+                "content": [{"type": "text", "text": "What is the weather?"}],
+            },
+            {
+                "role": "assistant",
+                "tool_calls": [{"type": "function", "function": {"name": "get_weather", "arguments": "{}"}}],
+            },
+        ]
+
+        # Regression test for #45290: tokenize=True used to raise KeyError when "content" was missing
+        result = processor.apply_chat_template(messages, tokenize=True)
+        self.assertIsInstance(result, list)
 
     def test_get_num_multimodal_tokens_matches_processor_call(self):
         "Tests that the helper used internally in vLLM works correctly"

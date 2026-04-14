@@ -17,6 +17,7 @@ from collections.abc import Callable
 from typing import Literal
 
 import torch
+from huggingface_hub.dataclasses import strict
 from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
@@ -27,7 +28,7 @@ from ...generation import GenerationMixin
 from ...masking_utils import create_causal_mask, create_sliding_window_causal_mask
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast, SequenceClassifierOutputWithPast
-from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, RopeParameters
+from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
@@ -47,6 +48,7 @@ logger = logging.get_logger(__name__)
 
 
 @auto_docstring(checkpoint="blab-jhu/test-32m-dec")
+@strict
 class ModernBertDecoderConfig(PreTrainedConfig):
     r"""
     initializer_cutoff_factor (`float`, *optional*, defaults to 2.0):
@@ -55,8 +57,6 @@ class ModernBertDecoderConfig(PreTrainedConfig):
         The epsilon used by the rms normalization layers.
     norm_bias (`bool`, *optional*, defaults to `False`):
         Whether to use bias in the normalization layers.
-    embedding_dropout (`float`, *optional*, defaults to 0.0):
-        The dropout ratio for the embeddings.
     mlp_dropout (`float`, *optional*, defaults to 0.0):
         The dropout ratio for the MLP layers.
     decoder_bias (`bool`, *optional*, defaults to `True`):
@@ -68,8 +68,6 @@ class ModernBertDecoderConfig(PreTrainedConfig):
     local_attention (`int`, *optional*, defaults to 128):
         The sliding window size for local attention. Only used for layers that use local attention. Note that for
         the decoder to match ModernBERT this is actually half of the sliding window size, so 128 => 64.
-    global_attn_every_n_layers (`int`, *optional*, defaults to 3):
-        Every `global_attn_every_n_layers` layers will use global attention instead of local attention.
 
     Examples:
 
@@ -90,89 +88,53 @@ class ModernBertDecoderConfig(PreTrainedConfig):
     keys_to_ignore_at_inference = ["past_key_values"]
     default_theta = {"global": 160_000.0, "local": 10_000.0}
 
-    def __init__(
-        self,
-        vocab_size: int | None = 50368,
-        hidden_size: int | None = 768,
-        intermediate_size: int | None = 1152,
-        num_hidden_layers: int | None = 22,
-        num_attention_heads: int | None = 12,
-        hidden_activation: str | None = "gelu",
-        max_position_embeddings: int | None = 8192,
-        initializer_range: float | None = 0.02,
-        initializer_cutoff_factor: float | None = 2.0,
-        norm_eps: int | None = 1e-5,
-        norm_bias: bool | None = False,
-        pad_token_id: int | None = 50283,
-        eos_token_id: int | None = 50282,
-        bos_token_id: int | None = 50281,
-        cls_token_id: int | None = 50281,
-        sep_token_id: int | None = 50282,
-        attention_bias: bool | None = False,
-        attention_dropout: float | None = 0.0,
-        embedding_dropout: float | None = 0.0,
-        mlp_bias: bool | None = False,
-        mlp_dropout: float | None = 0.0,
-        decoder_bias: bool | None = True,
-        classifier_dropout: float | None = 0.0,
-        classifier_bias: bool | None = False,
-        classifier_activation: str | None = "gelu",
-        use_cache: bool | None = True,
-        local_attention: int | None = 128,
-        global_attn_every_n_layers: int | None = 3,
-        layer_types: list[str] | None = None,
-        tie_word_embeddings: bool | None = True,
-        rope_parameters: dict[Literal["full_attention", "sliding_attention"], RopeParameters] | None = None,
-        **kwargs,
-    ):
-        self.pad_token_id = pad_token_id
-        self.bos_token_id = bos_token_id
-        self.eos_token_id = eos_token_id
-        self.cls_token_id = cls_token_id
-        self.sep_token_id = sep_token_id
-        self.tie_word_embeddings = tie_word_embeddings
-        self.vocab_size = vocab_size
-        self.max_position_embeddings = max_position_embeddings
-        self.hidden_size = hidden_size
-        self.intermediate_size = intermediate_size
-        self.num_hidden_layers = num_hidden_layers
-        self.num_attention_heads = num_attention_heads
-        self.initializer_range = initializer_range
-        self.initializer_cutoff_factor = initializer_cutoff_factor
-        self.norm_eps = norm_eps
-        self.norm_bias = norm_bias
-        self.attention_bias = attention_bias
-        self.attention_dropout = attention_dropout
-        self.hidden_activation = hidden_activation
-        self.embedding_dropout = embedding_dropout
-        self.mlp_bias = mlp_bias
-        self.mlp_dropout = mlp_dropout
-        self.decoder_bias = decoder_bias
-        self.classifier_dropout = classifier_dropout
-        self.classifier_bias = classifier_bias
-        self.classifier_activation = classifier_activation
-        self.use_cache = use_cache
-        self.global_attn_every_n_layers = global_attn_every_n_layers
-        # for consistency with ModernBert
-        self.reference_compile = False
+    vocab_size: int = 50368
+    hidden_size: int = 768
+    intermediate_size: int = 1152
+    num_hidden_layers: int = 22
+    num_attention_heads: int = 12
+    hidden_activation: str = "gelu"
+    max_position_embeddings: int = 8192
+    initializer_range: float = 0.02
+    initializer_cutoff_factor: float = 2.0
+    norm_eps: float = 1e-5
+    norm_bias: bool = False
+    pad_token_id: int = 50283
+    eos_token_id: int | list[int] | None = 50282
+    bos_token_id: int = 50281
+    cls_token_id: int = 50281
+    sep_token_id: int = 50282
+    attention_bias: bool = False
+    attention_dropout: float | int = 0.0
+    embedding_dropout: float | int = 0.0
+    mlp_bias: bool = False
+    mlp_dropout: float | int = 0.0
+    decoder_bias: bool = True
+    classifier_dropout: float | int = 0.0
+    classifier_bias: bool = False
+    classifier_activation: str = "gelu"
+    use_cache: bool = True
+    local_attention: int | None = 128
+    layer_types: list[str] | None = None
+    tie_word_embeddings: bool = True
+    rope_parameters: dict[Literal["full_attention", "sliding_attention"], dict] | None = None
 
-        # Set up layer_types for standardized layer type detection
-        self.layer_types = layer_types
+    def __post_init__(self, **kwargs):
+        # BC -> the pattern used to be a simple int, and it's still present in configs on the Hub
+        global_attn_every_n_layers = kwargs.get("global_attn_every_n_layers", 3)
         if self.layer_types is None:
-            # Create layer_types based on the alternating pattern
             self.layer_types = []
-            for layer_id in range(num_hidden_layers):
+            for layer_id in range(self.num_hidden_layers):
                 if layer_id % global_attn_every_n_layers != 0:
                     self.layer_types.append("sliding_attention")
                 else:
                     self.layer_types.append("full_attention")
 
         # NOTE: sliding window numbers matches ModernBERT but is only half of it
-        self.sliding_window = local_attention // 2 if local_attention else -1
-        self.rope_parameters = rope_parameters
-        super().__init__(**kwargs)
+        self.sliding_window = self.local_attention // 2 if self.local_attention else -1
+        super().__post_init__(**kwargs)
 
-    def convert_rope_params_to_dict(self, ignore_keys_at_rope_validation=None, **kwargs):
+    def convert_rope_params_to_dict(self, **kwargs):
         rope_scaling = kwargs.pop("rope_scaling", None)
 
         # Try to set `rope_scaling` if available, otherwise use `rope_parameters`. If we find `rope_parameters`
@@ -200,7 +162,6 @@ class ModernBertDecoderConfig(PreTrainedConfig):
 
         # Standardize and validate the correctness of rotary position embeddings parameters
         self.standardize_rope_params()
-        self.validate_rope(ignore_keys=ignore_keys_at_rope_validation)
         return kwargs
 
 
@@ -222,7 +183,7 @@ def eager_attention_forward(
     key: torch.Tensor,
     value: torch.Tensor,
     attention_mask: torch.Tensor | None,
-    dropout: float = 0.0,
+    dropout: float | int = 0.0,
     scaling: float | None = None,
     sliding_window: int | None = None,
     **kwargs,
@@ -325,7 +286,6 @@ class ModernBertDecoderLayer(GradientCheckpointingLayer):
         super().__init__()
         self.config = config
         self.layer_idx = layer_idx
-        self.attention_type = config.layer_types[layer_idx]
         self.attn_norm = (
             nn.LayerNorm(config.hidden_size, eps=config.norm_eps, bias=config.norm_bias)
             if layer_idx != 0
@@ -508,11 +468,11 @@ class ModernBertDecoderModel(ModernBertDecoderPreTrainedModel):
         for layer_type in self.config.layer_types:
             position_embeddings[layer_type] = self.rotary_emb(hidden_states, position_ids, layer_type)
 
-        for decoder_layer in self.layers:
+        for i, decoder_layer in enumerate(self.layers):
             hidden_states = decoder_layer(
                 hidden_states,
-                attention_mask=causal_mask_mapping[decoder_layer.attention_type],
-                position_embeddings=position_embeddings[decoder_layer.attention_type],
+                attention_mask=causal_mask_mapping[self.config.layer_types[i]],
+                position_embeddings=position_embeddings[self.config.layer_types[i]],
                 past_key_values=past_key_values,
                 position_ids=position_ids,
                 **kwargs,

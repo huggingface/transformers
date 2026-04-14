@@ -16,9 +16,10 @@ import math
 from collections.abc import Callable
 from typing import Any
 
-import numpy as np
+import torch
 import torch.nn as nn
 import torch.nn.functional as F
+from huggingface_hub.dataclasses import strict
 
 from ...cache_utils import Cache
 from ...configuration_utils import PreTrainedConfig
@@ -29,8 +30,9 @@ from ...modeling_outputs import BaseModelOutputWithPooling
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import ImagesKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
-from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, is_torch_available, logging
+from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
 from ...utils.generic import merge_with_config_defaults
+from ...utils.import_utils import requires
 from ...utils.output_capturing import capture_outputs
 from ..chameleon.modeling_chameleon import ChameleonVQVAE, ChameleonVQVAEModelOutput, ChameleonVQVAEVectorQuantizer
 from ..glm4v.configuration_glm4v import Glm4vTextConfig, Glm4vVisionConfig
@@ -47,75 +49,67 @@ from ..glm4v.modeling_glm4v import (
     Glm4vVisionPatchEmbed,
 )
 from ..glm4v_moe.modeling_glm4v_moe import Glm4vMoeTextAttention, eager_attention_forward
+from ..qwen2_vl.image_processing_pil_qwen2_vl import Qwen2VLImageProcessorPil
 from ..qwen2_vl.image_processing_qwen2_vl import Qwen2VLImageProcessor
-from ..qwen2_vl.image_processing_qwen2_vl_fast import Qwen2VLImageProcessorFast
 from ..qwen2_vl.processing_qwen2_vl import Qwen2VLProcessorKwargs
 from ..siglip.modeling_siglip import SiglipMLP
 
-
-if is_torch_available():
-    import torch
 
 logger = logging.get_logger(__name__)
 
 
 @auto_docstring(checkpoint="zai-org/GLM-Image")
+@strict
 class GlmImageVQVAEConfig(PreTrainedConfig):
-    r"""
-    num_embeddings (`int`, *optional*, defaults to 16384):
-        Number of codebook embeddings.
-    """
-
     model_type = "glm_image_vqmodel"
     base_config_key = "vq_config"
 
-    def __init__(
-        self,
-        embed_dim: int = 2048,
-        num_embeddings: int = 16384,
-        latent_channels: int = 1536,
-        in_channels: int = 3,
-        initializer_range=0.02,
-        **kwargs,
-    ):
-        super().__init__(**kwargs)
-        self.embed_dim = embed_dim
-        self.num_embeddings = num_embeddings
-        self.latent_channels = latent_channels
-        self.in_channels = in_channels
-        self.initializer_range = initializer_range
+    embed_dim: int = 2048
+    num_embeddings: int = 16384
+    latent_channels: int = 1536
+    in_channels: int = 3
+    initializer_range: float = 0.02
 
 
 @auto_docstring(checkpoint="zai-org/GLM-Image")
+@strict
 class GlmImageVisionConfig(Glm4vVisionConfig):
+    r"""
+    Example:
+
+    ```python
+    >>> from transformers import GlmImageVisionConfig, GlmImageVisionModel
+
+    >>> # Initializing a GlmImageVisionConfig GLM-Image style configuration
+    >>> configuration = GlmImageVisionConfig()
+
+    >>> # Initializing a model (with random weights) from the GLM-Image configuration
+    >>> model = GlmImageVisionModel(configuration)
+
+    >>> # Accessing the model configuration
+    >>> configuration = model.config
+    ```"""
+
     model_type = "glm_image_vision"
     base_config_key = "vision_config"
 
-    def __init__(
-        self,
-        depth=40,
-        hidden_size=1536,
-        hidden_act="gelu",
-        attention_bias=True,
-        attention_dropout=0.0,
-        num_heads=16,
-        in_channels=3,
-        image_size=2048,
-        patch_size=16,
-        layer_norm_eps=1e-06,
-        spatial_merge_size=1,
-        intermediate_size=6144,
-        initializer_range=0.02,
-        **kwargs,
-    ):
-        super().__init__(**kwargs)
-        del self.out_hidden_size
-        del self.rms_norm_eps
-        del self.temporal_patch_size
-        self.layer_norm_eps = layer_norm_eps
+    depth: int = 40
+    hidden_act: str = "gelu"
+    attention_bias: bool = True
+    num_heads: int = 16
+    image_size: int | list[int] | tuple[int, int] = 2048
+    patch_size: int | list[int] | tuple[int, int] = 16
+    layer_norm_eps: float = 1e-06
+    spatial_merge_size: int = 1
+    intermediate_size: int = 6144
+
+    out_hidden_size = AttributeError()
+    rms_norm_eps = AttributeError()
+    temporal_patch_size = AttributeError()
 
 
 @auto_docstring(checkpoint="zai-org/GLM-Image")
+@strict
 class GlmImageTextConfig(Glm4vTextConfig):
     r"""
     vision_vocab_size (`int`, *optional*, defaults to 16512):
@@ -137,28 +131,16 @@ class GlmImageTextConfig(Glm4vTextConfig):
     >>> configuration = model.config
     ```"""
 
-    def __init__(
-        self,
-        vocab_size: int = 168064,
-        max_position_embeddings: int = 131072,
-        vision_vocab_size: int = 16512,
-        attention_bias: bool = True,
-        pad_token_id: int = 167841,
-        eos_token_id: int = 16385,
-        **super_kwargs,
-    ):
-        super().__init__(
-            vocab_size=vocab_size,
-            max_position_embeddings=max_position_embeddings,
-            pad_token_id=pad_token_id,
-            **super_kwargs,
-        )
-        self.vision_vocab_size = vision_vocab_size
-        self.attention_bias = attention_bias
-        self.eos_token_id = eos_token_id
+    vocab_size: int = 168064
+    max_position_embeddings: int = 131072
+    vision_vocab_size: int = 16512
+    attention_bias: bool = True
+    pad_token_id: int = 167841
+    eos_token_id: int | list[int] | None = 16385
 
 
 @auto_docstring(checkpoint="zai-org/GLM-Image")
+@strict
 class GlmImageConfig(PreTrainedConfig):
     r"""
     image_start_token_id (`int`, *optional*, defaults to 16384):
@@ -187,40 +169,31 @@ class GlmImageConfig(PreTrainedConfig):
     }
     keys_to_ignore_at_inference = ["past_key_values"]
 
-    def __init__(
-        self,
-        text_config=None,
-        vision_config=None,
-        vq_config=None,
-        image_token_id=167855,
-        image_start_token_id=16384,
-        image_end_token_id=16385,
-        tie_word_embeddings: bool | None = False,
-        **kwargs,
-    ):
-        if isinstance(vision_config, dict):
-            vision_config = self.sub_configs["vision_config"](**vision_config)
-        elif vision_config is None:
-            vision_config = self.sub_configs["vision_config"](**kwargs)
+    text_config: dict | PreTrainedConfig | None = None
+    vision_config: dict | PreTrainedConfig | None = None
+    vq_config: dict | PreTrainedConfig | None = None
+    image_token_id: int = 167855
+    image_start_token_id: int = 16384
+    image_end_token_id: int = 16385
+    tie_word_embeddings: bool = False
 
-        if isinstance(vq_config, dict):
-            vq_config = self.sub_configs["vq_config"](**vq_config)
-        elif vq_config is None:
-            vq_config = self.sub_configs["vq_config"](**kwargs)
+    def __post_init__(self, **kwargs):
+        if isinstance(self.vision_config, dict):
+            self.vision_config = self.sub_configs["vision_config"](**self.vision_config)
+        elif self.vision_config is None:
+            self.vision_config = self.sub_configs["vision_config"](**kwargs)
 
-        if isinstance(text_config, dict):
-            text_config = self.sub_configs["text_config"](**text_config)
-        elif text_config is None:
-            text_config = self.sub_configs["text_config"](**kwargs)
+        if isinstance(self.vq_config, dict):
+            self.vq_config = self.sub_configs["vq_config"](**self.vq_config)
+        elif self.vq_config is None:
+            self.vq_config = self.sub_configs["vq_config"](**kwargs)
 
-        self.image_token_id = image_token_id
-        self.image_start_token_id = image_start_token_id
-        self.image_end_token_id = image_end_token_id
-        self.text_config = text_config
-        self.vision_config = vision_config
-        self.vq_config = vq_config
-        self.tie_word_embeddings = tie_word_embeddings
-        super().__init__(**kwargs)
+        if isinstance(self.text_config, dict):
+            self.text_config = self.sub_configs["text_config"](**self.text_config)
+        elif self.text_config is None:
+            self.text_config = self.sub_configs["text_config"](**kwargs)
+
+        super().__post_init__(**kwargs)
 
 
 class GlmImageVisionMLP(SiglipMLP):
@@ -333,8 +306,6 @@ class GlmImageVisionBlock(Glm4vVisionBlock):
         **kwargs: Unpack[TransformersKwargs],
     ) -> torch.Tensor:
         r"""
-        position_embeddings (`tuple(torch.Tensor, torch.Tensor)` of shape `(num_patches, head_dim // 2)`):
-            The cosine and sine position embeddings for vision attention.
         cu_seqlens (`torch.Tensor` of shape `(num_images_or_videos + 1,)`):
             The cumulative sequence lengths of each image or video feature.
         """
@@ -822,8 +793,11 @@ class GlmImageModel(Glm4vModel):
                 images_per_sample=images_per_sample,
             )
             self.rope_deltas = rope_deltas
-        # Use pre-calculated rope-deltas to infer correct 3D position ids
-        elif self.rope_deltas is not None:
+        # Use pre-calculated rope-deltas to infer correct 3D position ids during incremental
+        # generation (past_key_values_length > 0) or when only inputs_embeds is provided (no input_ids
+        # to recompute from). Skip when input_ids is provided without past_key_values to avoid shape
+        # mismatches from stale rope_deltas (e.g., training forward pass after generation).
+        elif self.rope_deltas is not None and (past_key_values_length > 0 or input_ids is None):
             batch_size, seq_length, _ = inputs_embeds.shape
             if self._cached_decode_position_ids is not None:
                 step = past_key_values_length - self._prefill_len
@@ -944,7 +918,6 @@ class GlmImageCausalLMOutputWithPast(Glm4vCausalLMOutputWithPast):
 
 
 class GlmImageForConditionalGeneration(GlmImagePreTrainedModel, GenerationMixin):
-    _checkpoint_conversion_mapping = {}
     _tied_weights_keys = {}
     # Reference: fix gemma3 grad acc #37208
     accepts_loss_kwargs = False
@@ -1203,8 +1176,7 @@ class GlmImageForConditionalGeneration(GlmImagePreTrainedModel, GenerationMixin)
         def _expand_dict_for_generation(dict_to_expand):
             for key in dict_to_expand:
                 if (
-                    key != "cache_position"
-                    and dict_to_expand[key] is not None
+                    dict_to_expand[key] is not None
                     and isinstance(dict_to_expand[key], torch.Tensor)
                     and key not in visual_keys
                 ):
@@ -1271,7 +1243,7 @@ class GlmImageImageProcessor(Qwen2VLImageProcessor):
     model_input_names = ["pixel_values", "image_grid_thw", "images_per_sample"]
 
 
-class GlmImageImageProcessorFast(Qwen2VLImageProcessorFast):
+class GlmImageImageProcessorPil(Qwen2VLImageProcessorPil):
     model_input_names = ["pixel_values", "image_grid_thw", "images_per_sample"]
 
 
@@ -1302,6 +1274,7 @@ class GlmImageProcessorKwargs(Qwen2VLProcessorKwargs):
     }
 
 
+@requires(backends=("torch",))
 class GlmImageProcessor(ProcessorMixin):
     r"""
     Constructs a GLM-Image processor which wraps a GLM-Image image processor and a GLM-Image tokenizer into a single processor.
@@ -1451,10 +1424,7 @@ class GlmImageProcessor(ProcessorMixin):
         self._check_special_mm_tokens(text, text_inputs, modalities=["image"])
 
         if return_mm_token_type_ids:
-            array_ids = np.array(text_inputs["input_ids"])
-            mm_token_type_ids = np.zeros_like(text_inputs["input_ids"])
-            mm_token_type_ids[array_ids == self.image_token_id] = 1
-            text_inputs["mm_token_type_ids"] = mm_token_type_ids.tolist()
+            text_inputs["mm_token_type_ids"] = self.create_mm_token_type_ids(text_inputs["input_ids"])
         return BatchFeature(data={**text_inputs, **image_inputs}, tensor_type=return_tensors)
 
     def _build_prompt_with_target_shape(
@@ -1517,6 +1487,6 @@ __all__ = [
     "GlmImageModel",
     "GlmImageForConditionalGeneration",
     "GlmImageImageProcessor",
-    "GlmImageImageProcessorFast",
+    "GlmImageImageProcessorPil",
     "GlmImageProcessor",
 ]

@@ -13,6 +13,7 @@
 # limitations under the License.
 """Testing suite for the PyTorch Granite model."""
 
+import tempfile
 import unittest
 
 from transformers import GraniteConfig, is_torch_available
@@ -180,10 +181,18 @@ class GraniteModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
 
     def setUp(self):
         self.model_tester = GraniteModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=GraniteConfig, hidden_size=37)
+        self.config_tester = ConfigTester(self, config_class=GraniteConfig, hidden_size=32)
 
     def test_config(self):
         self.config_tester.run_common_tests()
+
+    def test_config_int_multiplier_roundtrip(self):
+        config = GraniteConfig(embedding_multiplier=12, logits_scaling=8)
+        with tempfile.TemporaryDirectory() as tmpdir:
+            config.save_pretrained(tmpdir)
+            loaded = GraniteConfig.from_pretrained(tmpdir)
+        self.assertEqual(loaded.embedding_multiplier, 12)
+        self.assertEqual(loaded.logits_scaling, 8)
 
     def test_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
