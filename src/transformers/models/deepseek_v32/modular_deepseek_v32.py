@@ -31,11 +31,13 @@ from ..deepseek_v2.modeling_deepseek_v2 import (
     DeepseekV2RotaryEmbedding,
 )
 from ..glm_moe_dsa.modeling_glm_moe_dsa import GlmMoeDsaIndexer, GlmMoeDsaAttention
+from ..glm_moe_dsa.configuration_glm_moe_dsa import GlmMoeDsaConfig
 from ...modeling_rope_utils import RotaryEmbeddingConfigMixin
 # TODO
-# Use our rope and convert qkv with rope rotation to benefit from kernels
+# Use our rope and convert qkv with rope rotation to benefit from kernels\
 
-class DeepseekV32Config(DeepseekV2Config, RotaryEmbeddingConfigMixin):
+@auto_docstring(checkpoint="deepseek-ai/DeepSeek-V2-Lite")
+class DeepseekV32Config(GlmMoeDsaConfig, RotaryEmbeddingConfigMixin):
     attribute_map = {
         "num_experts": "num_experts_per_tok"
     } 

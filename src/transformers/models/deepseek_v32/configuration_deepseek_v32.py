@@ -28,30 +28,34 @@ from ...utils import auto_docstring
 @strict
 class DeepseekV32Config(PreTrainedConfig, RotaryEmbeddingConfigMixin):
     r"""
-    first_k_dense_replace (`int`, *optional*, defaults to 0):
-        Number of dense layers in the shallow layers before switching to MoE layers.
-    n_group (`int`, *optional*):
+    n_group (`int`, *optional*, defaults to 1):
         Number of groups for routed experts.
-    topk_method (`str`, *optional*, defaults to `"greedy"`):
-        The method used for selecting top-k experts in the routed gate mechanism.
-
-    Example:
+    mlp_layer_types (`list`, *optional*):
+        MLP type pattern for each layer (`"dense"` or `"sparse"`). Defaults to 3 dense + rest sparse.
+    index_topk (`int`, *optional*, defaults to 2048):
+        Number of top tokens selected by the indexer for sparse attention.
+    index_head_dim (`int`, *optional*, defaults to 128):
+        Head dimension for the indexer projections (DSA).
+    index_n_heads (`int | None`, *optional*, defaults to 32):
+        Number of heads for the indexer projections (DSA).
 
     ```python
-    >>> from transformers import DeepseekV32Model, DeepseekV32Config
-    >>> # Initializing a DeepSeek-V2 style configuration
+    >>> from transformers import DeepseekV32Config, DeepseekV32Model
+
+    >>> # Initializing a GLM-MoE-DSA configuration
     >>> configuration = DeepseekV32Config()
-    >>> # Accessing the model configuration
+
+    >>> # Initializing a model from the configuration
     >>> model = DeepseekV32Model(configuration)
-    >>> print(model.config)
-    ```
-    """
+
+    >>> # Accessing the model configuration
+    >>> configuration = model.config
+    ```"""
 
     model_type = "deepseek_v32"
     keys_to_ignore_at_inference = ["past_key_values"]
 
     base_model_tp_plan = {
-        "layers.*.self_attn.q_proj": "colwise",
         "layers.*.self_attn.q_b_proj": "colwise",
         "layers.*.self_attn.kv_a_proj_with_mqa": "mla_kv_a_proj",
         "layers.*.self_attn.kv_b_proj": "colwise",
@@ -71,65 +75,56 @@ class DeepseekV32Config(PreTrainedConfig, RotaryEmbeddingConfigMixin):
         "layers": (["hidden_states", "attention_mask"], ["hidden_states"]),
         "norm": (["hidden_states"], ["hidden_states"]),
     }
+    attribute_map = {"num_experts": "num_experts_per_tok"}
 
-    vocab_size: int = 32000
-    hidden_size: int = 4096
-    intermediate_size: int = 11008
-    num_hidden_layers: int = 32
-    num_attention_heads: int = 32
-    num_key_value_heads: int | None = None
+    vocab_size: int = 154880
+
+    hidden_size: int = 6144
+    intermediate_size: int = 12288
+    moe_intermediate_size: int = 2048
+    num_hidden_layers: int = 78
+    num_attention_heads: int = 64
+    num_key_value_heads: int = 64
+    n_shared_experts: int = 1
+    n_routed_experts: int = 256
+    routed_scaling_factor: float = 2.5
+    kv_lora_rank: int = 512
+    q_lora_rank: int = 2048
+    qk_rope_head_dim: int = 64
+    v_head_dim: int = 256
+    qk_nope_head_dim: int = 192
+    n_group: int = 1
+    topk_group: int = 1
+    num_experts_per_tok: int = 8
+    norm_topk_prob: bool = True
     hidden_act: str = "silu"
-    max_position_embeddings: int = 2048
+    max_position_embeddings: int = 202752
     initializer_range: float = 0.02
-    rms_norm_eps: float = 1e-6
+    rms_norm_eps: float = 1e-5
     use_cache: bool = True
     pad_token_id: int | None = None
-    bos_token_id: int | None = 1
-    eos_token_id: int | list[int] | None = 2
-    pretraining_tp: int | None = 1
+    bos_token_id: int | None = 0
+    eos_token_id: int | list[int] | None = 1
     tie_word_embeddings: bool = False
     rope_parameters: RopeParameters | dict | None = None
+    mlp_layer_types: list[str] | None = None
     attention_bias: bool = False
-    attention_dropout: float | None = 0.0
-    mlp_bias: bool = False
-    head_dim: int | None = None
-    first_k_dense_replace: int = 0
-    kv_lora_rank: int = 512
-    q_lora_rank: int | None = 1536
-    n_group: int | None = None
-    n_routed_experts: int = 64
-    n_shared_experts: int = 2
-    qk_nope_head_dim: int = 128
-    qk_rope_head_dim: int = 64
-    routed_scaling_factor: float = 1.0
-    topk_group: int | None = None
-    topk_method: str | None = "greedy"
-    norm_topk_prob: bool | None = False
-    v_head_dim: int = 128
-    num_experts_per_tok: int | None = None
-    moe_intermediate_size: int = 1407
-    attribute_map = {"num_experts": "num_experts_per_tok"}
-    index_n_heads: int = 64
+    attention_dropout: float | int = 0.0
+    index_topk: int = 2048
     index_head_dim: int = 128
+    index_n_heads: int = 64
     index_top_k: int = 2048
     max_seq_len: int = 2048
 
     def __post_init__(self, **kwargs):
-        self.head_dim = self.qk_rope_head_dim
-        if self.head_dim is None:
-            self.head_dim = self.hidden_size // self.num_attention_heads
-        if self.num_key_value_heads is None:
-            self.num_key_value_heads = self.num_attention_heads
+        self.qk_head_dim = self.qk_nope_head_dim + self.qk_rope_head_dim
 
-        super().__post_init__(**kwargs)
-
-    def validate_architecture(self):
-        """Part of `@strict`-powered validation. Validates the architecture of the config."""
-        if self.hidden_size % self.num_attention_heads != 0:
-            raise ValueError(
-                f"The hidden size ({self.hidden_size}) is not a multiple of the number of attention "
-                f"heads ({self.num_attention_heads})."
+        # MLP layer types: first 3 dense, rest sparse
+        if self.mlp_layer_types is None:
+            self.mlp_layer_types = ["dense"] * min(3, self.num_hidden_layers) + ["sparse"] * (
+                self.num_hidden_layers - 3
             )
+        super().__post_init__(**kwargs)
 
 
 __all__ = ["DeepseekV32Config"]
