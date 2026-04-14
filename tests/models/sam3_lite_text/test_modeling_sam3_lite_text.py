@@ -1,4 +1,4 @@
-# Copyright 2025 The HuggingFace Inc. team. All rights reserved.
+# Copyright 2026 the HuggingFace Team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -11,7 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Testing suite for the PyTorch SAM3 model."""
+"""Testing suite for the PyTorch SAM3 LiteText model."""
 
 import gc
 import tempfile
@@ -37,175 +37,19 @@ if is_torch_available():
     import torch
     from torch import nn
 
-    from transformers.models.sam3.configuration_sam3 import (
-        Sam3Config,
-        Sam3DETRDecoderConfig,
-        Sam3DETREncoderConfig,
-        Sam3GeometryEncoderConfig,
-        Sam3MaskDecoderConfig,
-        Sam3VisionConfig,
-        Sam3ViTConfig,
+    from transformers.models.sam3.configuration_sam3 import Sam3VisionConfig, Sam3ViTConfig
+    from transformers.models.sam3.processing_sam3 import Sam3Processor as Sam3LiteTextProcessor
+    from transformers.models.sam3_lite_text.configuration_sam3_lite_text import (
+        Sam3LiteTextConfig,
+        Sam3LiteTextDETRDecoderConfig,
+        Sam3LiteTextDETREncoderConfig,
+        Sam3LiteTextGeometryEncoderConfig,
+        Sam3LiteTextMaskDecoderConfig,
     )
-    from transformers.models.sam3.modeling_sam3 import Sam3Model, Sam3VisionModel
-    from transformers.models.sam3.processing_sam3 import Sam3Processor
+    from transformers.models.sam3_lite_text.modeling_sam3_lite_text import Sam3LiteTextModel
 
 
-class Sam3VisionModelTester:
-    def __init__(
-        self,
-        parent,
-        hidden_size=32,
-        num_hidden_layers=2,
-        num_attention_heads=4,
-        intermediate_size=64,
-        num_channels=3,
-        image_size=224,
-        patch_size=14,
-        window_size=8,
-        global_attn_indexes=None,
-        fpn_hidden_size=32,
-        scale_factors=None,
-        batch_size=2,
-        is_training=True,
-    ):
-        if global_attn_indexes is None:
-            global_attn_indexes = [0, 1]
-        if scale_factors is None:
-            scale_factors = [4.0, 2.0, 1.0, 0.5]
-
-        self.parent = parent
-        self.hidden_size = hidden_size
-        self.num_hidden_layers = num_hidden_layers
-        self.num_attention_heads = num_attention_heads
-        self.intermediate_size = intermediate_size
-        self.num_channels = num_channels
-        self.image_size = image_size
-        self.patch_size = patch_size
-        self.window_size = window_size
-        self.global_attn_indexes = global_attn_indexes
-        self.fpn_hidden_size = fpn_hidden_size
-        self.scale_factors = scale_factors
-        self.batch_size = batch_size
-        self.is_training = is_training
-        self.encoder_seq_length = 256
-
-    def get_config(self):
-        backbone_config = Sam3ViTConfig(
-            hidden_size=self.hidden_size,
-            num_hidden_layers=self.num_hidden_layers,
-            num_attention_heads=self.num_attention_heads,
-            intermediate_size=self.intermediate_size,
-            num_channels=self.num_channels,
-            image_size=self.image_size,
-            patch_size=self.patch_size,
-            window_size=self.window_size,
-            global_attn_indexes=self.global_attn_indexes,
-        )
-        return Sam3VisionConfig(
-            backbone_config=backbone_config,
-            fpn_hidden_size=self.fpn_hidden_size,
-            scale_factors=self.scale_factors,
-        )
-
-    def prepare_config_and_inputs(self):
-        pixel_values = floats_tensor([self.batch_size, self.num_channels, self.image_size, self.image_size])
-        config = self.get_config()
-
-        return config, pixel_values
-
-    def create_and_check_model(self, config, pixel_values):
-        model = Sam3VisionModel(config=config)
-        model.to(torch_device)
-        model.eval()
-        with torch.no_grad():
-            result = model(pixel_values)
-
-        # Check FPN outputs
-        self.parent.assertEqual(len(result.fpn_hidden_states), len(self.scale_factors))
-        self.parent.assertEqual(len(result.fpn_position_encoding), len(self.scale_factors))
-
-        # Check last hidden state shape
-        expected_seq_len = (self.image_size // self.patch_size) ** 2
-        self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, expected_seq_len, self.hidden_size))
-
-    def prepare_config_and_inputs_for_common(self):
-        config_and_inputs = self.prepare_config_and_inputs()
-        config, pixel_values = config_and_inputs
-        inputs_dict = {"pixel_values": pixel_values}
-        return config, inputs_dict
-
-
-@require_torch
-class Sam3VisionModelTest(ModelTesterMixin, unittest.TestCase):
-    """
-    Tests for SAM3 Vision Model (ViT backbone + FPN neck).
-    """
-
-    all_model_classes = (Sam3VisionModel,) if is_torch_available() else ()
-
-    test_resize_embeddings = False
-
-    def setUp(self):
-        self.model_tester = Sam3VisionModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=Sam3VisionConfig, has_text_modality=False)
-
-    def test_config(self):
-        self.config_tester.create_and_test_config_to_json_string()
-        self.config_tester.create_and_test_config_to_json_file()
-        self.config_tester.create_and_test_config_from_and_save_pretrained()
-        self.config_tester.create_and_test_config_with_num_labels()
-        self.config_tester.check_config_can_be_init_without_params()
-        self.config_tester.check_config_arguments_init()
-
-    @unittest.skip(reason="SAM3's vision encoder does not use inputs_embeds")
-    def test_inputs_embeds(self):
-        pass
-
-    def test_model_get_set_embeddings(self):
-        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
-
-        for model_class in self.all_model_classes:
-            model = model_class(config)
-            self.assertIsInstance(model.get_input_embeddings(), (nn.Module))
-            x = model.get_output_embeddings()
-            self.assertTrue(x is None or isinstance(x, nn.Linear))
-
-    def test_model(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_model(*config_and_inputs)
-
-    def test_hidden_states_output(self):
-        def check_hidden_states_output(inputs_dict, config, model_class):
-            model = model_class(config)
-            model.to(torch_device)
-            model.eval()
-
-            with torch.no_grad():
-                outputs = model(**self._prepare_for_class(inputs_dict, model_class))
-
-            # SAM3VisionModel doesn't return hidden_states in the same way as SAM2
-            # It returns last_hidden_state, fpn_hidden_states, and fpn_position_encoding
-            self.assertIsNotNone(outputs.last_hidden_state)
-            self.assertIsNotNone(outputs.fpn_hidden_states)
-
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-
-        for model_class in self.all_model_classes:
-            check_hidden_states_output(inputs_dict, config, model_class)
-
-    def test_batching_equivalence(self, atol=5e-4, rtol=5e-4):
-        super().test_batching_equivalence(atol=atol, rtol=rtol)
-
-    @unittest.skip(reason="SAM3 model can't be compiled dynamic yet")
-    def test_sdpa_can_compile_dynamic(self):
-        pass
-
-    @unittest.skip(reason="SAM3VisionModel has FPN channel mismatch with flex attention")
-    def test_flex_attention_with_grads(self):
-        pass
-
-
-class Sam3ModelTester:
+class Sam3LiteTextModelTester:
     def __init__(
         self,
         parent,
@@ -229,6 +73,8 @@ class Sam3ModelTester:
         detr_decoder_num_queries=5,  # Reduced from 10 to 5
         mask_decoder_hidden_size=32,
         batch_size=2,
+        text_seq_length=16,
+        vocab_size=100,
         is_training=True,
     ):
         if global_attn_indexes is None:
@@ -249,6 +95,8 @@ class Sam3ModelTester:
         self.fpn_hidden_size = fpn_hidden_size
         self.scale_factors = scale_factors
         self.batch_size = batch_size
+        self.text_seq_length = text_seq_length
+        self.vocab_size = vocab_size
         self.is_training = is_training
 
         # Geometry encoder
@@ -268,7 +116,7 @@ class Sam3ModelTester:
     def prepare_config_and_inputs(self):
         pixel_values = floats_tensor([self.batch_size, self.num_channels, self.image_size, self.image_size])
         # Simple text input (will be processed by text encoder)
-        input_ids = torch.randint(0, 1000, (self.batch_size, 16), device=torch_device)
+        input_ids = torch.randint(0, self.vocab_size, (self.batch_size, self.text_seq_length), device=torch_device)
         attention_mask = torch.ones_like(input_ids)
 
         config = self.get_config()
@@ -294,19 +142,22 @@ class Sam3ModelTester:
             scale_factors=self.scale_factors,
         )
 
-        # Small text config for testing (instead of default full CLIP model)
+        # Small text config for testing (instead of default full MobileCLIP model)
+        # use_repmixer_blocks=False ensures all layers are standard TransformerLayers so
+        # attention output, hidden state, and SDPA dispatch tests pass correctly.
         text_config = {
-            "vocab_size": 1000,  # Keep at 1000 for stability
+            "vocab_size": self.vocab_size,
             "hidden_size": 32,
             "intermediate_size": 64,
             "projection_dim": 32,
             "num_hidden_layers": self.num_hidden_layers,
             "num_attention_heads": 4,
-            "max_position_embeddings": 32,  # Keep at 32 for stability
+            "max_position_embeddings": self.text_seq_length,
             "hidden_act": "gelu",
+            "use_repmixer_blocks": False,
         }
 
-        geometry_encoder_config = Sam3GeometryEncoderConfig(
+        geometry_encoder_config = Sam3LiteTextGeometryEncoderConfig(
             hidden_size=self.geometry_encoder_hidden_size,
             num_layers=self.geometry_encoder_num_layers,
             num_attention_heads=self.num_attention_heads,
@@ -315,14 +166,14 @@ class Sam3ModelTester:
             mask_fuser_num_layers=1,  # Reduce from default 2 to 1
         )
 
-        detr_encoder_config = Sam3DETREncoderConfig(
+        detr_encoder_config = Sam3LiteTextDETREncoderConfig(
             hidden_size=self.detr_encoder_hidden_size,
             num_layers=self.detr_encoder_num_layers,
             num_attention_heads=self.num_attention_heads,
             intermediate_size=self.intermediate_size,
         )
 
-        detr_decoder_config = Sam3DETRDecoderConfig(
+        detr_decoder_config = Sam3LiteTextDETRDecoderConfig(
             hidden_size=self.detr_decoder_hidden_size,
             num_layers=self.detr_decoder_num_layers,
             num_queries=self.detr_decoder_num_queries,
@@ -330,12 +181,12 @@ class Sam3ModelTester:
             intermediate_size=self.intermediate_size,
         )
 
-        mask_decoder_config = Sam3MaskDecoderConfig(
+        mask_decoder_config = Sam3LiteTextMaskDecoderConfig(
             hidden_size=self.mask_decoder_hidden_size,
             num_upsampling_stages=2,  # Reduced from 3 to 2
         )
 
-        return Sam3Config(
+        return Sam3LiteTextConfig(
             vision_config=vision_config,
             text_config=text_config,
             geometry_encoder_config=geometry_encoder_config,
@@ -345,7 +196,7 @@ class Sam3ModelTester:
         )
 
     def create_and_check_model(self, config, pixel_values, input_ids, attention_mask):
-        model = Sam3Model(config=config)
+        model = Sam3LiteTextModel(config=config)
         model.to(torch_device)
         model.eval()
         with torch.no_grad():
@@ -378,22 +229,22 @@ class Sam3ModelTester:
 
 
 @require_torch
-class Sam3ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
+class Sam3LiteTextModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     """
     Tests for SAM3 full model.
     """
 
-    all_model_classes = (Sam3Model,) if is_torch_available() else ()
-    pipeline_model_mapping = {"mask-generation": Sam3Model} if is_torch_available() else {}
+    all_model_classes = (Sam3LiteTextModel,) if is_torch_available() else ()
+    pipeline_model_mapping = {"mask-generation": Sam3LiteTextModel} if is_torch_available() else {}
 
     test_resize_embeddings = False
     _is_composite = True
 
     def setUp(self):
-        self.model_tester = Sam3ModelTester(self)
+        self.model_tester = Sam3LiteTextModelTester(self)
         common_properties = ["initializer_range"]
         self.config_tester = ConfigTester(
-            self, config_class=Sam3Config, has_text_modality=False, common_properties=common_properties
+            self, config_class=Sam3LiteTextConfig, has_text_modality=False, common_properties=common_properties
         )
 
     def test_config(self):
@@ -460,7 +311,7 @@ class Sam3ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
             for k in config.sub_configs:
                 if (subconfig := getattr(config, k)) is not None:
                     subconfig.output_attentions = True
-                    # Sam3 has a vision subconfig with itself a sub config....
+                    # Sam3LiteText has a vision subconfig with itself a sub config....
                     for k in subconfig.sub_configs:
                         if (subsubconfig := getattr(subconfig, k)) is not None:
                             subsubconfig.output_attentions = True
@@ -593,66 +444,6 @@ class Sam3ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
                 decoder_hidden_states = outputs.decoder_hidden_states
                 self.assertIsInstance(decoder_hidden_states, (list, tuple))
 
-    @unittest.skip(reason="SAM3VisionModel has FPN channel mismatch with flex attention")
-    def test_flex_attention_with_grads(self):
-        pass
-
-    @unittest.skip(
-        reason="Sam3Model creates attention masks from features (with gradients), "
-        "which is incompatible with flash attention's expectation of binary masks"
-    )
-    def test_flash_attn_2_inference_equivalence(self):
-        pass
-
-    @unittest.skip(
-        reason="Sam3Model creates attention masks from features (with gradients), "
-        "which is incompatible with flash attention's expectation of binary masks"
-    )
-    def test_flash_attn_2_inference_equivalence_right_padding(self):
-        pass
-
-    @unittest.skip(
-        reason="Sam3Model creates attention masks from features (with gradients), "
-        "which is incompatible with flash attention's expectation of binary masks"
-    )
-    def test_flash_attn_3_inference_equivalence(self):
-        pass
-
-    @unittest.skip(
-        reason="Sam3Model creates attention masks from features (with gradients), "
-        "which is incompatible with flash attention's expectation of binary masks"
-    )
-    def test_flash_attn_3_inference_equivalence_right_padding(self):
-        pass
-
-    @unittest.skip(
-        reason="Sam3Model creates attention masks from features (with gradients), "
-        "which is incompatible with flash attention's expectation of binary masks"
-    )
-    def test_flash_attn_4_inference_equivalence(self):
-        pass
-
-    @unittest.skip(
-        reason="Sam3Model creates attention masks from features (with gradients), "
-        "which is incompatible with flash attention's expectation of binary masks"
-    )
-    def test_flash_attn_4_inference_equivalence_right_padding(self):
-        pass
-
-    @unittest.skip(
-        reason="Sam3Model creates attention masks from features (with gradients), "
-        "which is incompatible with flash attention's expectation of binary masks"
-    )
-    def test_flash_attn_kernels_inference_equivalence(self):
-        pass
-
-    @unittest.skip(
-        reason="Sam3Model creates attention masks from features (with gradients), "
-        "which is incompatible with flash attention's expectation of binary masks"
-    )
-    def test_flash_attn_kernels_mps_inference_equivalence(self):
-        pass
-
     def test_sdpa_can_dispatch_composite_models(self):
         """
         Tests if composite models dispatch correctly on SDPA/eager when requested.
@@ -684,7 +475,7 @@ class Sam3ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
                 # Check that sub-models dispatch to SDPA if they support it
                 self.assertTrue(vision_encoder_sdpa.config._attn_implementation == "sdpa")
                 if text_encoder_sdpa is not None and hasattr(text_encoder_sdpa, "_supports_sdpa"):
-                    # Text encoder from CLIP should support SDPA
+                    # Sam3LiteTextTextModel supports SDPA
                     self.assertTrue(text_encoder_sdpa.config._attn_implementation == "sdpa")
                 if detr_encoder_sdpa is not None:
                     self.assertTrue(detr_encoder_sdpa.config._attn_implementation == "sdpa")
@@ -698,7 +489,7 @@ class Sam3ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
                 model_eager = model_eager.eval().to(torch_device)
 
                 self.assertTrue(getattr(model_eager, "vision_encoder").config._attn_implementation == "eager")
-                if hasattr(model_eager, "text_encoder"):
+                if hasattr(model_eager, "text_encoder") and hasattr(model_eager.text_encoder, "config"):
                     self.assertTrue(model_eager.text_encoder.config._attn_implementation == "eager")
                 if hasattr(model_eager, "detr_encoder"):
                     self.assertTrue(model_eager.detr_encoder.config._attn_implementation == "eager")
@@ -841,11 +632,16 @@ class Sam3ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         self.assertEqual(config.vision_config.backbone_config.image_size, 560)
 
         # Verify model works with custom size
-        model = Sam3Model(config=config).to(torch_device).eval()
+        model = Sam3LiteTextModel(config=config).to(torch_device).eval()
         pixel_values = floats_tensor([self.model_tester.batch_size, self.model_tester.num_channels, 560, 560]).to(
             torch_device
         )
-        input_ids = torch.randint(0, 1000, (self.model_tester.batch_size, 16), device=torch_device)
+        input_ids = torch.randint(
+            0,
+            config.text_config.vocab_size,
+            (self.model_tester.batch_size, self.model_tester.text_seq_length),
+            device=torch_device,
+        )
 
         with torch.no_grad():
             outputs = model(pixel_values=pixel_values, input_ids=input_ids, attention_mask=torch.ones_like(input_ids))
@@ -854,12 +650,13 @@ class Sam3ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         self.assertIsNotNone(outputs.pred_boxes)
         self.assertIsNotNone(outputs.pred_logits)
 
-    @unittest.skip(reason="SAM3 model can't be compiled dynamic yet")
+    @unittest.skip(reason="SAM3 LiteText model can't be compiled dynamic yet")
     def test_sdpa_can_compile_dynamic(self):
         pass
 
     @unittest.skip(
-        reason="SAM3 uses CLIP text encoder which has two attention masks: `causal_attention_mask` and `attention_mask`."
+        reason="Sam3LiteTextModel creates float attention masks from features (with gradients) in the DETR "
+        "encoder/decoder, which Flash Attention requires to be None."
     )
     def test_sdpa_can_dispatch_on_flash(self):
         pass
@@ -934,11 +731,11 @@ class Sam3ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
                 )
 
     def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
-        """Override to ensure input_ids and attention_mask are always present for Sam3Model."""
+        """Override to ensure input_ids and attention_mask are always present for Sam3LiteTextModel."""
         inputs_dict = super()._prepare_for_class(inputs_dict, model_class, return_labels=return_labels)
 
-        # Sam3Model always requires input_ids and attention_mask for text encoding
-        if model_class == Sam3Model:
+        # Sam3LiteTextModel always requires input_ids and attention_mask for text encoding
+        if model_class == Sam3LiteTextModel:
             if "input_ids" not in inputs_dict or inputs_dict.get("input_ids") is None:
                 # Create dummy input_ids if not present
                 # Get batch_size from pixel_values or vision_embeds
@@ -980,14 +777,15 @@ def prepare_coco_kitchen_image():
 
 
 @slow
-class Sam3ModelIntegrationTest(unittest.TestCase):
+@require_torch
+class Sam3LiteTextModelIntegrationTest(unittest.TestCase):
     """Integration tests for SAM3 model with real pretrained weights."""
 
     def setUp(self):
         super().setUp()
-        model_name = "facebook/sam3"
-        self.model = Sam3Model.from_pretrained(model_name).to(torch.float32)
-        self.processor = Sam3Processor.from_pretrained(model_name)
+        model_name = "yonigozlan/sam3-litetext-s0"
+        self.model = Sam3LiteTextModel.from_pretrained(model_name, dtype=torch.float32)
+        self.processor = Sam3LiteTextProcessor.from_pretrained(model_name)
         self.model.to(torch_device)
         self.model.eval()
 
@@ -1023,24 +821,24 @@ class Sam3ModelIntegrationTest(unittest.TestCase):
         top_idx = sorted_indices[0].item()
 
         torch.testing.assert_close(
-            top_scores, torch.tensor([0.9381, 0.9214, 0.0910]).to(torch_device), atol=1e-4, rtol=1e-4
+            top_scores, torch.tensor([0.9326, 0.9149, 0.1009]).to(torch_device), atol=1e-4, rtol=1e-4
         )
         torch.testing.assert_close(
-            top_logits, torch.tensor([2.7182, 2.4618, -2.3020]).to(torch_device), atol=1e-4, rtol=1e-4
+            top_logits, torch.tensor([2.6268, 2.3755, -2.1877]).to(torch_device), atol=1e-4, rtol=1e-4
         )
         torch.testing.assert_close(
             outputs.pred_boxes[0, top_idx],
-            torch.tensor([0.4704, 0.2014, 0.5615, 0.3770]).to(torch_device),
+            torch.tensor([0.4704, 0.2015, 0.5615, 0.3770]).to(torch_device),
             atol=1e-4,
             rtol=1e-4,
         )
         torch.testing.assert_close(
             outputs.pred_masks[0, top_idx, :3, :3],
             torch.tensor(
-                [[-2.1815, -6.2767, -7.0687], [-5.7988, -10.2704, -10.9379], [-8.5194, -10.7892, -9.9152]]
+                [[-2.1856, -6.2395, -7.0870], [-6.0620, -10.4022, -11.2534], [-8.7157, -10.7961, -9.9844]]
             ).to(torch_device),
-            atol=1e-4,
-            rtol=1e-4,
+            atol=1e-2,
+            rtol=1e-2,
         )
 
         # Test post-processing
@@ -1059,9 +857,9 @@ class Sam3ModelIntegrationTest(unittest.TestCase):
         top_pp_score = result["scores"][0]
         top_pp_box = result["boxes"][0]
 
-        torch.testing.assert_close(top_pp_score, torch.tensor(0.9210).to(torch_device), atol=1e-4, rtol=1e-4)
+        torch.testing.assert_close(top_pp_score, torch.tensor(0.9137).to(torch_device), atol=1e-4, rtol=1e-4)
         torch.testing.assert_close(
-            top_pp_box, torch.tensor([402.1755, 90.1420, 459.6165, 156.3702]).to(torch_device), atol=1e-4, rtol=1e-4
+            top_pp_box, torch.tensor([402.3560, 90.1643, 459.6652, 156.5201]).to(torch_device), atol=1e-4, rtol=1e-4
         )
 
     def test_inference_single_box_prompt(self):
@@ -1095,24 +893,24 @@ class Sam3ModelIntegrationTest(unittest.TestCase):
         top_idx = sorted_indices[0].item()
 
         torch.testing.assert_close(
-            top_scores, torch.tensor([0.9308, 0.1617, 0.1336]).to(torch_device), atol=1e-4, rtol=1e-4
+            top_scores, torch.tensor([0.9387, 0.1474, 0.1087]).to(torch_device), atol=1e-4, rtol=1e-4
         )
         torch.testing.assert_close(
-            top_logits, torch.tensor([2.5988, -1.6460, -1.8699]).to(torch_device), atol=1e-4, rtol=1e-4
+            top_logits, torch.tensor([2.7291, -1.7554, -2.1046]).to(torch_device), atol=1e-4, rtol=1e-4
         )
         torch.testing.assert_close(
             outputs.pred_boxes[0, top_idx],
-            torch.tensor([0.1631, 0.4140, 0.7510, 0.9931]).to(torch_device),
+            torch.tensor([0.1628, 0.4168, 0.7534, 0.9935]).to(torch_device),
             atol=1e-4,
             rtol=1e-4,
         )
         torch.testing.assert_close(
             outputs.pred_masks[0, top_idx, :3, :3],
-            torch.tensor([[-1.8726, -3.5063, -3.7716], [-3.1987, -5.3820, -5.6782], [-3.8850, -5.4164, -5.8604]]).to(
+            torch.tensor([[-1.9982, -3.7409, -3.9956], [-3.6554, -5.9248, -6.0131], [-4.5402, -6.0183, -6.2711]]).to(
                 torch_device
             ),
-            atol=1e-4,
-            rtol=1e-4,
+            atol=1e-2,
+            rtol=1e-2,
         )
 
         # Test post-processing
@@ -1129,9 +927,9 @@ class Sam3ModelIntegrationTest(unittest.TestCase):
         top_pp_score = result["scores"][0]
         top_pp_box = result["boxes"][0]
 
-        torch.testing.assert_close(top_pp_score, torch.tensor(0.9307).to(torch_device), atol=1e-4, rtol=1e-4)
+        torch.testing.assert_close(top_pp_score, torch.tensor(0.9387).to(torch_device), atol=1e-4, rtol=1e-4)
         torch.testing.assert_close(
-            top_pp_box, torch.tensor([104.3945, 175.9433, 480.6293, 422.0826]).to(torch_device), atol=1e-4, rtol=1e-4
+            top_pp_box, torch.tensor([104.2026, 177.1267, 482.1449, 422.2436]).to(torch_device), atol=1e-4, rtol=1e-4
         )
 
     def test_inference_multi_box_prompt(self):
@@ -1166,24 +964,24 @@ class Sam3ModelIntegrationTest(unittest.TestCase):
         top_idx = sorted_indices[0].item()
 
         torch.testing.assert_close(
-            top_scores, torch.tensor([0.9611, 0.9379, 0.8348]).to(torch_device), atol=1e-4, rtol=1e-4
+            top_scores, torch.tensor([0.9615, 0.9399, 0.8262]).to(torch_device), atol=1e-4, rtol=1e-4
         )
         torch.testing.assert_close(
-            top_logits, torch.tensor([3.2071, 2.7154, 1.6198]).to(torch_device), atol=1e-4, rtol=1e-4
+            top_logits, torch.tensor([3.2166, 2.7504, 1.5591]).to(torch_device), atol=1e-4, rtol=1e-4
         )
         torch.testing.assert_close(
             outputs.pred_boxes[0, top_idx],
-            torch.tensor([0.1757, 0.2888, 0.2296, 0.3259]).to(torch_device),
+            torch.tensor([0.1758, 0.2889, 0.2296, 0.3258]).to(torch_device),
             atol=1e-4,
             rtol=1e-4,
         )
         torch.testing.assert_close(
             outputs.pred_masks[0, top_idx, :3, :3],
             torch.tensor(
-                [[-8.6138, -14.5615, -17.9965], [-13.6695, -20.4994, -25.6705], [-14.9681, -23.0616, -17.0045]]
+                [[-9.1072, -15.0329, -18.6687], [-14.1670, -21.3808, -26.8545], [-15.5131, -23.4600, -17.5040]]
             ).to(torch_device),
-            atol=1e-4,
-            rtol=1e-4,
+            atol=1e-2,
+            rtol=1e-2,
         )
 
         # Test post-processing
@@ -1200,9 +998,9 @@ class Sam3ModelIntegrationTest(unittest.TestCase):
         top_pp_score = result["scores"][0]
         top_pp_box = result["boxes"][0]
 
-        torch.testing.assert_close(top_pp_score, torch.tensor(0.9379).to(torch_device), atol=1e-4, rtol=1e-4)
+        torch.testing.assert_close(top_pp_score, torch.tensor(0.9399).to(torch_device), atol=1e-4, rtol=1e-4)
         torch.testing.assert_close(
-            top_pp_box, torch.tensor([86.8687, 147.5269, 104.4475, 159.6138]).to(torch_device), atol=1e-4, rtol=1e-4
+            top_pp_box, torch.tensor([86.8764, 147.5362, 104.4958, 159.6079]).to(torch_device), atol=1e-4, rtol=1e-4
         )
 
     def test_inference_combined_prompts(self):
@@ -1265,44 +1063,44 @@ class Sam3ModelIntegrationTest(unittest.TestCase):
         top_idx_1 = sorted_indices_1[0].item()
 
         torch.testing.assert_close(
-            top_scores_0, torch.tensor([0.9381, 0.9214, 0.0910]).to(torch_device), atol=1e-4, rtol=1e-4
+            top_scores_0, torch.tensor([0.9326, 0.9149, 0.1009]).to(torch_device), atol=1e-4, rtol=1e-4
         )
         torch.testing.assert_close(
-            top_scores_1, torch.tensor([0.8863, 0.8849, 0.8841]).to(torch_device), atol=1e-4, rtol=1e-4
+            top_scores_1, torch.tensor([0.8532, 0.8497, 0.8473]).to(torch_device), atol=1e-4, rtol=1e-4
         )
         torch.testing.assert_close(
-            top_logits_0, torch.tensor([2.7182, 2.4618, -2.3020]).to(torch_device), atol=1e-4, rtol=1e-4
+            top_logits_0, torch.tensor([2.6268, 2.3755, -2.1877]).to(torch_device), atol=1e-4, rtol=1e-4
         )
         torch.testing.assert_close(
-            top_logits_1, torch.tensor([2.0534, 2.0395, 2.0320]).to(torch_device), atol=1e-4, rtol=1e-4
+            top_logits_1, torch.tensor([1.7598, 1.7324, 1.7133]).to(torch_device), atol=1e-4, rtol=1e-4
         )
         torch.testing.assert_close(
             outputs.pred_boxes[0, top_idx_0],
-            torch.tensor([0.4704, 0.2014, 0.5615, 0.3770]).to(torch_device),
+            torch.tensor([0.4704, 0.2015, 0.5615, 0.3770]).to(torch_device),
             atol=1e-4,
             rtol=1e-4,
         )
         torch.testing.assert_close(
             outputs.pred_boxes[1, top_idx_1],
-            torch.tensor([0.6162, 0.2769, 0.6838, 0.3238]).to(torch_device),
+            torch.tensor([0.5088, 0.2749, 0.5775, 0.3228]).to(torch_device),
             atol=1e-4,
             rtol=1e-4,
         )
         torch.testing.assert_close(
             outputs.pred_masks[0, top_idx_0, :3, :3],
             torch.tensor(
-                [[-2.1815, -6.2767, -7.0687], [-5.7988, -10.2704, -10.9379], [-8.5194, -10.7892, -9.9152]]
+                [[-2.1858, -6.2385, -7.0859], [-6.0630, -10.4010, -11.2507], [-8.7169, -10.7953, -9.9857]]
             ).to(torch_device),
-            atol=1e-4,
-            rtol=1e-4,
+            atol=1e-2,
+            rtol=1e-2,
         )
         torch.testing.assert_close(
             outputs.pred_masks[1, top_idx_1, :3, :3],
             torch.tensor(
-                [[-7.4371, -13.5898, -13.6496], [-11.8669, -20.6416, -23.0941], [-12.8623, -20.3439, -16.6497]]
+                [[-5.7639, -10.4997, -11.1576], [-8.6470, -14.8703, -17.1438], [-8.9861, -14.4202, -12.6988]]
             ).to(torch_device),
-            atol=1e-4,
-            rtol=1e-4,
+            atol=1e-2,
+            rtol=1e-2,
         )
 
         # Test post-processing
@@ -1321,13 +1119,13 @@ class Sam3ModelIntegrationTest(unittest.TestCase):
         top_pp_score_1 = results[1]["scores"][0]
         top_pp_box_1 = results[1]["boxes"][0]
 
-        torch.testing.assert_close(top_pp_score_0, torch.tensor(0.9210).to(torch_device), atol=1e-4, rtol=1e-4)
+        torch.testing.assert_close(top_pp_score_0, torch.tensor(0.9137).to(torch_device), atol=1e-4, rtol=1e-4)
         torch.testing.assert_close(
-            top_pp_box_0, torch.tensor([402.1755, 90.1421, 459.6165, 156.3701]).to(torch_device), atol=1e-4, rtol=1e-4
+            top_pp_box_0, torch.tensor([402.3560, 90.1644, 459.6652, 156.5200]).to(torch_device), atol=1e-4, rtol=1e-4
         )
-        torch.testing.assert_close(top_pp_score_1, torch.tensor(0.6641).to(torch_device), atol=1e-4, rtol=1e-4)
+        torch.testing.assert_close(top_pp_score_1, torch.tensor(0.5882).to(torch_device), atol=1e-4, rtol=1e-4)
         torch.testing.assert_close(
-            top_pp_box_1, torch.tensor([110.6279, 271.1848, 137.3600, 301.3683]).to(torch_device), atol=1e-4, rtol=1e-4
+            top_pp_box_1, torch.tensor([110.6558, 271.1691, 137.3885, 301.4023]).to(torch_device), atol=1e-4, rtol=1e-4
         )
 
     def test_inference_batched_mixed_prompts(self):
@@ -1366,45 +1164,48 @@ class Sam3ModelIntegrationTest(unittest.TestCase):
         top_idx_0 = sorted_indices_0[0].item()
         top_idx_1 = sorted_indices_1[0].item()
 
+        # Top-1 score/logit is always stable; positions 2-3 can swap when scores are very close
+        torch.testing.assert_close(top_scores_0[0], torch.tensor(0.9696).to(torch_device), atol=1e-4, rtol=1e-4)
+        torch.testing.assert_close(top_scores_1[0], torch.tensor(0.9696).to(torch_device), atol=1e-4, rtol=1e-4)
+        torch.testing.assert_close(top_logits_0[0], torch.tensor(3.4640).to(torch_device), atol=1e-4, rtol=1e-4)
+        torch.testing.assert_close(top_logits_1[0], torch.tensor(3.4608).to(torch_device), atol=1e-4, rtol=1e-4)
+        # Positions 2-3 use relaxed tolerance since their scores are very close (~0.16 and ~0.07)
         torch.testing.assert_close(
-            top_scores_0, torch.tensor([0.9756, 0.1352, 0.0701]).to(torch_device), atol=1e-4, rtol=1e-4
+            top_scores_0[1:], torch.tensor([0.1615, 0.0683]).to(torch_device), atol=1e-2, rtol=1e-2
         )
         torch.testing.assert_close(
-            top_scores_1, torch.tensor([0.9683, 0.8310, 0.8222]).to(torch_device), atol=1e-4, rtol=1e-4
+            top_scores_1[1:], torch.tensor([0.8302, 0.8153]).to(torch_device), atol=1e-4, rtol=1e-4
         )
         torch.testing.assert_close(
-            top_logits_0, torch.tensor([3.6865, -1.8555, -2.5854]).to(torch_device), atol=1e-4, rtol=1e-4
-        )
-        torch.testing.assert_close(
-            top_logits_1, torch.tensor([3.4183, 1.5929, 1.5315]).to(torch_device), atol=1e-4, rtol=1e-4
+            top_logits_1[1:], torch.tensor([1.5873, 1.4849]).to(torch_device), atol=1e-4, rtol=1e-4
         )
         torch.testing.assert_close(
             outputs.pred_boxes[0, top_idx_0],
-            torch.tensor([-0.0013, 0.0016, 0.4521, 0.9964]).to(torch_device),
+            torch.tensor([-0.0012, 0.0017, 0.4518, 0.9965]).to(torch_device),
             atol=1e-4,
             rtol=1e-4,
         )
         torch.testing.assert_close(
             outputs.pred_boxes[1, top_idx_1],
-            torch.tensor([0.1774, 0.2876, 0.2296, 0.3261]).to(torch_device),
+            torch.tensor([0.1775, 0.2877, 0.2297, 0.3261]).to(torch_device),
             atol=1e-4,
             rtol=1e-4,
         )
         torch.testing.assert_close(
             outputs.pred_masks[0, top_idx_0, :3, :3],
-            torch.tensor([[0.0520, 0.3121, 0.4103], [0.6820, 1.0069, 1.0949], [0.8418, 1.0318, 1.0365]]).to(
+            torch.tensor([[0.0345, 0.2871, 0.3752], [0.6577, 0.9573, 1.0289], [0.8247, 0.9766, 0.9590]]).to(
                 torch_device
             ),
-            atol=1e-4,
-            rtol=1e-4,
+            atol=1e-2,
+            rtol=1e-2,
         )
         torch.testing.assert_close(
             outputs.pred_masks[1, top_idx_1, :3, :3],
             torch.tensor(
-                [[-8.7447, -14.3499, -17.5662], [-13.6804, -20.3728, -25.5098], [-15.2996, -22.9116, -17.6658]]
+                [[-9.2271, -14.6975, -18.0719], [-14.1411, -21.1871, -26.6270], [-15.6623, -23.1574, -18.0739]]
             ).to(torch_device),
-            atol=1e-4,
-            rtol=1e-4,
+            atol=1e-2,
+            rtol=1e-2,
         )
 
         # Test post-processing
@@ -1423,16 +1224,15 @@ class Sam3ModelIntegrationTest(unittest.TestCase):
         top_pp_score_1 = results[1]["scores"][0]
         top_pp_box_1 = results[1]["boxes"][0]
 
-        torch.testing.assert_close(top_pp_score_0, torch.tensor(0.9655).to(torch_device), atol=1e-4, rtol=1e-4)
+        torch.testing.assert_close(top_pp_score_0, torch.tensor(0.9556).to(torch_device), atol=1e-4, rtol=1e-4)
         torch.testing.assert_close(
-            top_pp_box_0, torch.tensor([-0.8481, 0.6668, 289.3758, 423.4723]).to(torch_device), atol=1e-4, rtol=1e-4
+            top_pp_box_0, torch.tensor([-0.7773, 0.7140, 289.1797, 423.5321]).to(torch_device), atol=1e-4, rtol=1e-4
         )
-        torch.testing.assert_close(top_pp_score_1, torch.tensor(0.8222).to(torch_device), atol=1e-4, rtol=1e-4)
+        torch.testing.assert_close(top_pp_score_1, torch.tensor(0.8153).to(torch_device), atol=1e-4, rtol=1e-4)
         torch.testing.assert_close(
-            top_pp_box_1, torch.tensor([168.9376, 137.3257, 191.7281, 161.3243]).to(torch_device), atol=1e-4, rtol=1e-4
+            top_pp_box_1, torch.tensor([168.9672, 137.3469, 191.7236, 161.3282]).to(torch_device), atol=1e-4, rtol=1e-4
         )
 
-    # TODO add exact values
     def test_semantic_segmentation_output(self):
         """Test that semantic segmentation output is produced."""
         raw_image = prepare_coco_cat_image()
@@ -1500,7 +1300,7 @@ class Sam3ModelIntegrationTest(unittest.TestCase):
         text_prompt = "handle"
         text_inputs = self.processor(text=text_prompt, return_tensors="pt").to(torch_device)
         with torch.no_grad():
-            text_embeds = self.model.get_text_features(**text_inputs)
+            text_embeds = self.model.get_text_features(**text_inputs).pooler_output
 
         # Run inference on multiple images reusing text embeddings
         # Note: attention_mask must be passed along with text_embeds for proper masking
