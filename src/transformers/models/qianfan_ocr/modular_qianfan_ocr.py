@@ -143,28 +143,23 @@ class QianfanOCRVisionLayer(InternVLVisionLayer):
         self,
         hidden_states: torch.Tensor,
     ) -> torch.Tensor:
-        attention_output, _ = self.attention(
-            self.layernorm_before(hidden_states),
-        )
+        residual = hidden_states
+        hidden_states = self.layernorm_before(hidden_states)
+        # Self Attention
+        hidden_states, _ = self.attention(hidden_states)
+        hidden_states = self.lambda_1 * hidden_states
+        hidden_states = self.drop_path1(hidden_states)
+        hidden_states = hidden_states + residual
+        
+        residual = hidden_states
+        hidden_states = self.layernorm_after(hidden_states)
+        # Fully Connected
+        hidden_states = self.mlp(hidden_states)
+        hidden_states = self.dropout(hidden_states)
+        hidden_states = self.lambda_2 * hidden_states
+        hidden_states = self.drop_path2(hidden_states) + residual
 
-        attention_output = self.lambda_1 * attention_output
-
-        # first residual connection with drop path
-        hidden_states = self.drop_path1(attention_output) + hidden_states
-
-        # layernorm after self-attention
-        layer_output = self.layernorm_after(hidden_states)
-
-        layer_output = self.mlp(layer_output)
-        layer_output = self.dropout(layer_output)
-
-        if self.lambda_2 is not None:
-            layer_output = self.lambda_2 * layer_output
-
-        # second residual connection with drop path
-        layer_output = self.drop_path2(layer_output) + hidden_states
-
-        return layer_output
+        return hidden_states
 
 
 class QianfanOCRVisionEncoder(nn.Module):
