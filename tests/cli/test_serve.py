@@ -323,6 +323,36 @@ class TestValidation(unittest.TestCase):
         self.assertTrue(any("audio" in msg for msg in cm.output))
 
 
+class TestResolveModel(unittest.TestCase):
+    def _make_handler(self, force_model=None):
+        mm = MagicMock()
+        mm.force_model = force_model
+        mm.process_model_name.side_effect = ModelManager.process_model_name
+        mm.load_model_and_processor.return_value = (MagicMock(), MagicMock())
+        return ChatCompletionHandler(model_manager=mm, generation_state=GenerationState())
+
+    def test_force_model_overrides_when_model_omitted(self):
+        handler = self._make_handler(force_model="org/pinned")
+        body = {}
+        model_id, _, _ = handler._resolve_model(body)
+        self.assertEqual(model_id, "org/pinned@main")
+        self.assertEqual(body["model"], "org/pinned")
+
+    def test_force_model_allows_matching_request(self):
+        handler = self._make_handler(force_model="org/pinned")
+        body = {"model": "org/pinned"}
+        model_id, _, _ = handler._resolve_model(body)
+        self.assertEqual(model_id, "org/pinned@main")
+
+    def test_force_model_rejects_mismatched_request(self):
+        handler = self._make_handler(force_model="org/pinned")
+        with self.assertRaises(HTTPException) as ctx:
+            handler._resolve_model({"model": "other/model"})
+        self.assertEqual(ctx.exception.status_code, 400)
+        self.assertIn("org/pinned", ctx.exception.detail)
+        self.assertIn("other/model", ctx.exception.detail)
+
+
 class TestModelManager(unittest.TestCase):
     def test_process_model_name_adds_main(self):
         self.assertEqual(ModelManager.process_model_name("org/model"), "org/model@main")
