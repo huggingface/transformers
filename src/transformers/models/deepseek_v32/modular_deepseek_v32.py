@@ -17,7 +17,7 @@ import torch
 from torch import nn
 
 from ...cache_utils import Cache
-from ..glm_moe_dsa.modeling_glm_moe_dsa import GlmMoeDsaIndexer, GlmMoeDsaAttention, GlmMoeDsaRotaryEmbedding, GlmMoeDsaMLP, GlmMoeDsaExperts, GlmMoeDsaRMSNorm, GlmMoeDsaDecoderLayer, GlmMoeDsaPreTrainedModel, GlmMoeDsaModel, GlmMoeDsaForCausalLM
+from ..glm_moe_dsa.modeling_glm_moe_dsa import GlmMoeDsaIndexer, GlmMoeDsaAttention, GlmMoeDsaRotaryEmbedding, GlmMoeDsaMLP, GlmMoeDsaExperts, GlmMoeDsaRMSNorm, GlmMoeDsaDecoderLayer, GlmMoeDsaPreTrainedModel, GlmMoeDsaModel, GlmMoeDsaForCausalLM, GlmMoeDsaMoE
 from ..glm_moe_dsa.configuration_glm_moe_dsa import GlmMoeDsaConfig
 from ...modeling_rope_utils import RotaryEmbeddingConfigMixin
 # TODO
@@ -26,7 +26,7 @@ from ...modeling_rope_utils import RotaryEmbeddingConfigMixin
 @auto_docstring(checkpoint="deepseek-ai/DeepSeek-V2-Lite")
 class DeepseekV32Config(GlmMoeDsaConfig, RotaryEmbeddingConfigMixin):
     attribute_map = {
-        "num_experts": "num_experts_per_tok"
+        "num_local_experts": "num_experts_per_tok"
     } 
     index_n_heads: int = 64
     index_head_dim: int = 128
