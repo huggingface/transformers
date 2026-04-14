@@ -452,6 +452,15 @@ def use_kernelized_func(module_names: list[Callable] | Callable):
 
         def new_init(self, *args, **kwargs):
             orig_init(self, *args, **kwargs)
+            # Skip attaching the kernelized submodule under DeepSpeed ZeRO-3: the coordinator traces
+            # the module graph at init time, and a child `nn.Module` that is not actually invoked
+            # during forward (e.g. when the model keeps calling the plain Python `apply_rotary_pos_emb`)
+            # breaks the parameter fetch trace and raises `IndexError: pop from an empty deque`.
+            # See https://github.com/huggingface/transformers/issues/45137
+            from .deepspeed import is_deepspeed_zero3_enabled
+
+            if is_deepspeed_zero3_enabled():
+                return
             for fn in module_names:
                 # we hardcode the name of the function to "rotary_fn" for now
                 setattr(self, "rotary_fn", fn)

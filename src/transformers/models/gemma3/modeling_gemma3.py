@@ -1035,6 +1035,7 @@ class Gemma3ForConditionalGeneration(Gemma3PreTrainedModel, GenerationMixin):
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
             labels=labels,
+            return_dict=True,
             **lm_kwargs,
         )
 
@@ -1184,6 +1185,7 @@ class Gemma3ForSequenceClassification(Gemma3PreTrainedModel):
             inputs_embeds=inputs_embeds,
             token_type_ids=token_type_ids,
             use_cache=use_cache,
+            return_dict=True,
             **kwargs,
         )
         hidden_states = transformer_outputs.last_hidden_state
