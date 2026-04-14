@@ -36,6 +36,7 @@ if is_torch_available():
     from torch.distributed.tensor import DTensor, Replicate
     from torch.multiprocessing.spawn import ProcessRaisedException
 
+
 def _to_local(tensor):
     """Extract local tensor from DTensor, or return as-is for plain tensors."""
     if hasattr(tensor, "to_local"):
@@ -139,7 +140,9 @@ def _load_tp_and_reference_models(model_path, model_class, enable_sequence_paral
         tuple: (model_tp, model_ref, device)
     """
     tp_size = dist.get_world_size()
-    distributed_config = DistributedConfig(tp_size=tp_size, tp_plan="auto", enable_sequence_parallel=enable_sequence_parallel)
+    distributed_config = DistributedConfig(
+        tp_size=tp_size, tp_plan="auto", enable_sequence_parallel=enable_sequence_parallel
+    )
     model_tp = model_class.from_pretrained(
         model_path, distributed_config=distributed_config, attn_implementation="sdpa"
     )

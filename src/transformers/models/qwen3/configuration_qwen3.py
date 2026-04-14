@@ -50,9 +50,9 @@ class Qwen3Config(PreTrainedConfig):
         "layers.*.self_attn.k_proj": TPStyle("colwise", "none"),
         "layers.*.self_attn.v_proj": TPStyle("colwise", "none"),
         "layers.*.self_attn.o_proj": TPStyle("rowwise", "allreduce"),
-        "layers.*.mlp.gate_proj":    TPStyle("colwise", "none"),
-        "layers.*.mlp.up_proj":      TPStyle("colwise", "none"),
-        "layers.*.mlp.down_proj":    TPStyle("rowwise", "allreduce"),
+        "layers.*.mlp.gate_proj": TPStyle("colwise", "none"),
+        "layers.*.mlp.up_proj": TPStyle("colwise", "none"),
+        "layers.*.mlp.down_proj": TPStyle("rowwise", "allreduce"),
     }
 
     # TP + Sequence Parallelism plan (for training).
@@ -62,22 +62,22 @@ class Qwen3Config(PreTrainedConfig):
     # Not compatible with autoregressive decode (because seq_len=1 can't be split across ranks)
     # or KV cache (which stores plain tensors).
     base_model_sp_plan = {
-        "embed_tokens":                       TPStyle("vocab", "reduce_scatter"),
-        "layers.*.input_layernorm":           TPStyle("activation", "none"),
-        "layers.*.self_attn":                 TPStyle("module", "allgather", input_key="hidden_states"),
-        "layers.*.self_attn.q_proj":          TPStyle("colwise", "none"),
-        "layers.*.self_attn.k_proj":          TPStyle("colwise", "none"),
-        "layers.*.self_attn.v_proj":          TPStyle("colwise", "none"),
-        "layers.*.self_attn.q_norm":          TPStyle("activation", "none", sequence_dim=2),
-        "layers.*.self_attn.k_norm":          TPStyle("activation", "none", sequence_dim=2),
-        "layers.*.self_attn.o_proj":          TPStyle("rowwise", "reduce_scatter"),
-        "layers.*.post_attention_layernorm":  TPStyle("activation", "none"),
-        "layers.*.mlp":                       TPStyle("module", "allgather"),
-        "layers.*.mlp.gate_proj":             TPStyle("colwise", "none"),
-        "layers.*.mlp.up_proj":               TPStyle("colwise", "none"),
-        "layers.*.mlp.down_proj":             TPStyle("rowwise", "reduce_scatter"),
-        "norm":                               TPStyle("activation", "none"),
-        "lm_head":                            TPStyle("colwise", "loss_parallel"),
+        "embed_tokens": TPStyle("vocab", "reduce_scatter"),
+        "layers.*.input_layernorm": TPStyle("activation", "none"),
+        "layers.*.self_attn": TPStyle("module", "allgather", input_key="hidden_states"),
+        "layers.*.self_attn.q_proj": TPStyle("colwise", "none"),
+        "layers.*.self_attn.k_proj": TPStyle("colwise", "none"),
+        "layers.*.self_attn.v_proj": TPStyle("colwise", "none"),
+        "layers.*.self_attn.q_norm": TPStyle("activation", "none", sequence_dim=2),
+        "layers.*.self_attn.k_norm": TPStyle("activation", "none", sequence_dim=2),
+        "layers.*.self_attn.o_proj": TPStyle("rowwise", "reduce_scatter"),
+        "layers.*.post_attention_layernorm": TPStyle("activation", "none"),
+        "layers.*.mlp": TPStyle("module", "allgather"),
+        "layers.*.mlp.gate_proj": TPStyle("colwise", "none"),
+        "layers.*.mlp.up_proj": TPStyle("colwise", "none"),
+        "layers.*.mlp.down_proj": TPStyle("rowwise", "reduce_scatter"),
+        "norm": TPStyle("activation", "none"),
+        "lm_head": TPStyle("colwise", "loss_parallel"),
     }
     base_model_pp_plan = {
         "embed_tokens": (["input_ids"], ["inputs_embeds"]),

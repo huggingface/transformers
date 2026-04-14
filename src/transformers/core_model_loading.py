@@ -845,6 +845,7 @@ def spawn_materialize(
 
 class DtensorShardOperation:
     """Extracts the local shard from a full checkpoint tensor based on this rank's DTensor placements."""
+
     # tensor_dim -> list of (start, end) index ranges this rank owns
     DimRanges = dict[int, list[tuple[int, int]]]
 
@@ -1008,9 +1009,7 @@ class DtensorShardOperation:
         """Narrow each range by picking the ``rank``-th contiguous chunk (``Shard`` semantics)."""
         new_ranges = []
         for prev_start, prev_end in prev_ranges:
-            shard_size, offset = Shard.local_shard_size_and_offset(
-                prev_end - prev_start, world_size, rank
-            )
+            shard_size, offset = Shard.local_shard_size_and_offset(prev_end - prev_start, world_size, rank)
             if shard_size > 0:
                 new_ranges.append((prev_start + offset, prev_start + offset + shard_size))
         return new_ranges
@@ -1031,9 +1030,7 @@ class DtensorShardOperation:
                 g_end = min(g_start + group_size, prev_end)
                 if g_end <= g_start:
                     continue
-                shard_size, offset = Shard.local_shard_size_and_offset(
-                    g_end - g_start, world_size, rank
-                )
+                shard_size, offset = Shard.local_shard_size_and_offset(g_end - g_start, world_size, rank)
                 if shard_size > 0:
                     new_ranges.append((g_start + offset, g_start + offset + shard_size))
         return new_ranges
@@ -1056,9 +1053,7 @@ class DtensorShardOperation:
         return dim
 
     def _owns_local_expert(self, tensor_idx: int) -> bool:
-        _, offsets = compute_local_shape_and_global_offset(
-            self.param.shape, self.device_mesh, self.placements
-        )
+        _, offsets = compute_local_shape_and_global_offset(self.param.shape, self.device_mesh, self.placements)
         return offsets[0] <= tensor_idx < offsets[0] + self.local_shape[0]
 
     def _source_tensor_needs_packing(self, param_shape) -> bool:
@@ -1066,6 +1061,7 @@ class DtensorShardOperation:
         # converted into a packed expert parameter. In that case _StridedShard's
         # split groups do not exist yet.
         return self.param.ndim == len(param_shape) + 1
+
 
 
 def dot_natural_key(s: str):
@@ -1158,16 +1154,16 @@ def set_param_for_module(
         loading_info.missing_keys.discard(target_name)
 
         if isinstance(ref, DTensor):
-            local_shape, global_offset = compute_local_shape_and_global_offset(ref.shape, ref.device_mesh, ref.placements)
+            local_shape, global_offset = compute_local_shape_and_global_offset(
+                ref.shape, ref.device_mesh, ref.placements
+            )
             expected_shape = torch.Size(local_shape)
         else:
             expected_shape = ref.shape
 
         # When a WeightConverter produces the full global tensor, slice it to the local DTensor shard.
         if isinstance(ref, DTensor) and param_value.shape == ref.shape and param_value.shape != expected_shape:
-            slices = [
-                slice(global_offset[d], global_offset[d] + local_shape[d]) for d in range(param_value.ndim)
-            ]
+            slices = [slice(global_offset[d], global_offset[d] + local_shape[d]) for d in range(param_value.ndim)]
             param_value = param_value[tuple(slices)].contiguous()
 
         if ref is not None and param_value.shape != expected_shape and hf_quantizer is None:
@@ -1389,7 +1385,9 @@ def convert_and_load_state_dict_in_model(
         if device_mesh.device_type == "cpu":
             device_map = {"": torch.device("cpu")}
         else:
-            device_map = {"": torch.device(device_mesh.device_type, getattr(torch, device_mesh.device_type).current_device())}
+            device_map = {
+                "": torch.device(device_mesh.device_type, getattr(torch, device_mesh.device_type).current_device())
+            }
     else:
         device_map = {"": "cpu"}
     disk_offload_folder = load_config.disk_offload_folder
@@ -1511,8 +1509,12 @@ def convert_and_load_state_dict_in_model(
                     else None
                 )
                 future_or_tensor = spawn_materialize(
-                    thread_pool, tensor, param_device, _dtype,
-                    sharding_op=DtensorShardOperation(empty_param), tensor_idx=tensor_idx,
+                    thread_pool,
+                    tensor,
+                    param_device,
+                    _dtype,
+                    sharding_op=DtensorShardOperation(empty_param),
+                    tensor_idx=tensor_idx,
                 )
             else:
                 future_or_tensor = spawn_materialize(thread_pool, tensor, param_device, _dtype)
@@ -1544,9 +1546,7 @@ def convert_and_load_state_dict_in_model(
                             target_name, param, loading_info, disk_offload_folder, disk_offload_index, mapping
                         )
                     else:
-                        set_param_for_module(
-                            model, target_name, param, loading_info, hf_quantizer
-                        )
+                        set_param_for_module(model, target_name, param, loading_info, hf_quantizer)
 
                 # Cleanup all the tensors that were gathered before next iteration
                 del realized_value
