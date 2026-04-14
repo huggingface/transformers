@@ -150,6 +150,17 @@ class CHMv2ImageProcessor(DPTImageProcessor):
     image_std = [0.213, 0.156, 0.143]
     valid_kwargs = CHMv2ImageProcessorKwargs
 
+    def reduce_label(self, labels: list["torch.Tensor"]) -> list["torch.Tensor"]:
+        """Reduce label values by 1, replacing 0 with 255."""
+        for idx in range(len(labels)):
+            label = labels[idx]
+            ignore_mask = (label == 0) | (label == 255)
+            label = label.clone()
+            label[ignore_mask] = 255
+            label[~ignore_mask] = label[~ignore_mask] - 1
+            labels[idx] = label
+        return labels
+
     def post_process_depth_estimation(
         self,
         outputs: "DepthEstimatorOutput",
