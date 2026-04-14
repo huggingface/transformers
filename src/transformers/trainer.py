@@ -2392,9 +2392,10 @@ class Trainer:
     def get_tp_size(self) -> int:
         """Get the tensor parallel size from either the model or DeepSpeed config."""
 
-        # 1. Check model.tp_size first
-        if (model_tp := getattr(self.model, "_tp_size", None)) is not None:
-            return model_tp
+        # TODO: adapt it cleaner with distributed config once distributed api is stable
+        dc = getattr(getattr(self.model, "config", None), "distributed_config", None)
+        if dc is not None and dc.tp_size is not None:
+            return dc.tp_size
 
         # 2. Fall back to DeepSpeed config if enabled
         if self.is_deepspeed_enabled and (deepspeed_config := getattr(self.args, "hf_deepspeed_config", None)):

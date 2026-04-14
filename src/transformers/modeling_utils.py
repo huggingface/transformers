@@ -38,6 +38,7 @@ from packaging import version
 from safetensors import safe_open
 from safetensors.torch import save_file as safe_save_file
 from torch import Tensor, nn
+from torch.distributed.tensor import DTensor
 from torch.distributions import constraints
 from torch.utils.checkpoint import checkpoint
 
@@ -4123,15 +4124,13 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         if distributed_config is not None:
             model.config.distributed_config = distributed_config
             model.device_mesh = device_mesh
-
-            def sub_mesh(name):
-                return device_mesh[name] if device_mesh.ndim > 1 else device_mesh
-
             mesh_dim_names = device_mesh.mesh_dim_names or ()
             if "tp" in mesh_dim_names:
-                model = apply_tensor_parallel(model, sub_mesh("tp"), distributed_config.tp_plan)
+                tp_mesh = device_mesh["tp"] if device_mesh.ndim > 1 else device_mesh
+                model = apply_tensor_parallel(model, tp_mesh, distributed_config.tp_plan)
             if "fsdp" in mesh_dim_names:
-                model = apply_fully_shard_data_parallel(model, sub_mesh("fsdp"), distributed_config.fsdp_plan)
+                fsdp_mesh = device_mesh["fsdp"] if device_mesh.ndim > 1 else device_mesh
+                model = apply_fully_shard_data_parallel(model, fsdp_mesh, distributed_config.fsdp_plan)
         else:
             # Accelerate path: auto device mapping
             if device_map is not None:
@@ -4552,8 +4551,6 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         # will be re-initialized for nothing (which can be quite long)
         for key in missing_keys - self.all_tied_weights_keys.keys():
             param = self.get_parameter_or_buffer(key)
-            from torch.distributed.tensor import DTensor
-
             if isinstance(param, DTensor):
                 # DTensor from parallelize_module on meta — materialize on actual device
                 local_value = torch.empty(
