@@ -274,43 +274,51 @@ def _make_dtensor_shard_op(mesh, placements, param_shape, local_shape):
 
 class TestConvertAndLoadStateDict(unittest.TestCase):
     def test_dtensor_shard_aware_mixtral_conversion_uses_only_local_experts(self):
-        """
-            The problem: Mixtral has 8 experts. The checkpoint stores them separately:                                
-            experts.0.w1.weight  (2x2)                                                                               
-            experts.0.w3.weight  (2x2)                                                                               
-            experts.1.w1.weight  (2x2)                                                                               
-            experts.1.w3.weight  (2x2)                                                                               
-                                                                                                                    
-            The model stores them packed into one tensor:                                                            
-            experts.gate_up_proj.weight  (2, 4, 2)                                                                   
-                                        ^  ^  ^                                                                    
-                                        |  |  └─ features                                                          
-                                        |  └─ w1 (2) + w3 (2) concatenated                                         
-                                        └─ num_experts                                                             
-                                                                                                                    
-            The conversion (without FSDP) is: load all expert w1/w3 tensors → MergeModulelist(dim=0) stacks experts → Concatenate(dim=1) joins w1+w3.                                                                          
-                                                                                                                    
-            Example — Mixtral experts with FSDP Shard(0) on the expert dim:                                                
-           
-            checkpoint files              shard_tensor              rank 0 gets                                          
-            ────────────────              ────────────              ───────────                                          
-             experts.0.w1  [[0,1],[2,3]]   idx=0 → kept             [[0,1],[2,3]]                                         
-             experts.1.w1  [[10,11],...]   idx=1 → None (not owned)                                                       
-             experts.0.w3  [[4,5],[6,7]]   idx=0 → kept             [[4,5],[6,7]]                                         
-             experts.1.w3  [[14,15],...]   idx=1 → None (not owned)                                                       
-                                                                                                                   
-            WeightConverter then stacks + concatenates only the kept tensors: gate_up_proj = [[[0,1],[2,3],[4,5],[6,7]]]  shape (1,4,2)
-                                                                                                                                                                                                                                       
-            MergeModulelist(dim=0):   [[0,1],[2,3]]       →  [[[0,1],[2,3]]]          (1 expert, shape 1x2x2)      
-                                        [[4,5],[6,7]]        →  [[[4,5],[6,7]]]          (1 expert, shape 1x2x2)     
-                                                                                                                    
-            Concatenate(dim=1):       cat along dim 1      →  [[[0,1],[2,3],[4,5],[6,7]]]   (shape 1x4x2)          
-                                                                ~~~~~~~~~~~  ~~~~~~~~~~~                           
-                                                                    w1            w3                                
-                                                                                                                    
-            The key point: DtensorShardOperation.shard_tensor(tensor_idx=1) returns None for rank 0, so the          
-            converter never even processes expert 1's data. This saves memory during loading. this should explain as well the  
-            other tests       
+        """Integration test: FSDP-sharded expert loading + WeightConverter.
+
+        The problem: Mixtral has 8 experts. The checkpoint stores them separately::
+
+            experts.0.w1.weight  (2x2)
+            experts.0.w3.weight  (2x2)
+            experts.1.w1.weight  (2x2)
+            experts.1.w3.weight  (2x2)
+
+        The model stores them packed into one tensor::
+
+            experts.gate_up_proj.weight  (2, 4, 2)
+                                          ^  ^  ^
+                                          |  |  +-- features
+                                          |  +-- w1 (2) + w3 (2) concatenated
+                                          +-- num_experts
+
+        The conversion (without FSDP) is: load all expert w1/w3 tensors,
+        MergeModulelist(dim=0) stacks experts, Concatenate(dim=1) joins w1+w3.
+
+        With FSDP, Shard(0) splits the expert dim across ranks. Rank 0 owns
+        expert 0, rank 1 owns expert 1. So rank 0 should skip loading expert 1
+        entirely -- not load it then discard it.
+
+        What the test checks::
+
+            checkpoint files              shard_tensor              rank 0 gets
+            ----------------              ------------              -----------
+            experts.0.w1  [[0,1],[2,3]]   idx=0 -> kept            [[0,1],[2,3]]
+            experts.1.w1  [[10,11],...]   idx=1 -> None (not owned)
+            experts.0.w3  [[4,5],[6,7]]   idx=0 -> kept            [[4,5],[6,7]]
+            experts.1.w3  [[14,15],...]   idx=1 -> None (not owned)
+
+        WeightConverter then combines only the kept tensors::
+
+            MergeModulelist(dim=0): stack owned experts  -> shape (1, 2, 2) each
+            Concatenate(dim=1):     cat w1 + w3 along dim 1
+
+            gate_up_proj = [[[0,1],[2,3],[4,5],[6,7]]]   shape (1, 4, 2)
+                              ~~~~~~~~~~  ~~~~~~~~~~
+                                  w1          w3
+
+        The key point: DtensorShardOperation.shard_tensor(tensor_idx=1) returns
+        None for rank 0, so the converter never even processes expert 1's data.
+        This saves memory during loading.
         """
         shard_op = _make_dtensor_shard_op(
             FakeMesh(shape=(2,), rank=0),
