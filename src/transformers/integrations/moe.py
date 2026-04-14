@@ -26,7 +26,6 @@ from ..utils.import_utils import (
 from .sonicmoe import sonicmoe_experts_forward
 
 
-
 if is_torch_available():
     import torch
 
