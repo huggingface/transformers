@@ -1426,7 +1426,6 @@ class DeepseekOcr2Model(DeepseekOcr2PreTrainedModel):
 
         self.vision_tower = DeepseekOcr2VisionModel(config.vision_config)
         self.multi_modal_projector = nn.Linear(config.projector_input_dim, config.projector_n_embed)
-        embed_std = 1 / math.sqrt(config.text_config.hidden_size)
 
         self.vocab_size = config.text_config.vocab_size
 

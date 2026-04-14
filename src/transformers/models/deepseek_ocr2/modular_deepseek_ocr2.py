@@ -51,7 +51,6 @@ from ..deepseek_v2.modeling_deepseek_v2 import (
 )
 from ..got_ocr2.image_processing_got_ocr2 import (
     GotOcr2ImageProcessor,
-    GotOcr2ImageProcessorKwargs,
     get_optimal_tiled_canvas,
 )
 from ..got_ocr2.image_processing_pil_got_ocr2 import GotOcr2ImageProcessorPil
@@ -932,12 +931,13 @@ class DeepseekOcr2TextModel(DeepseekV2Model):
 class DeepseekOcr2Model(LlavaNextModel):
     def __init__(self, config: DeepseekOcr2Config):
         super().__init__(config)
+        del embed_std  # noqa: F821
         del self.image_newline
 
         self.vision_tower = DeepseekOcr2VisionModel(config.vision_config)
         self.multi_modal_projector = nn.Linear(config.projector_input_dim, config.projector_n_embed)
 
-        # Learnable separator between local and global views
+        # Learnable separator between local and global views (initialized in `_init_weights`).
         self.view_separator = nn.Parameter(torch.empty(config.projector_n_embed))
 
         self.language_model = DeepseekOcr2TextModel(config.text_config)
