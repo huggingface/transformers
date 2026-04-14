@@ -272,30 +272,41 @@ class AutoTokenizerTest(unittest.TestCase):
         config = Qwen3MoeConfig.from_pretrained("Qwen/Qwen3-235B-A22B-Thinking-2507")
         self.assertIsInstance(tokenizer, (Qwen2Tokenizer, Qwen2TokenizerFast))
 
+        mistral_warning = (
+            "with an incorrect regex pattern: "
+            "https://huggingface.co/mistralai/Mistral-Small-3.1-24B-Instruct-2503/discussions/84"
+            "#69121093e8b480e709447d5e"
+        )
+        logger = logging.get_logger("transformers.tokenization_utils_tokenizers")
+
         with tempfile.TemporaryDirectory() as tmp_dir:
             tokenizer.save_pretrained(tmp_dir)
 
             # Case 1: Tokenizer with no config associated
-            logger = logging.get_logger("transformers.tokenization_utils_base")
             with CaptureLogger(logger) as cl:
                 AutoTokenizer.from_pretrained(tmp_dir)
-            self.assertNotIn(
-                "with an incorrect regex pattern: https://huggingface.co/mistralai/Mistral-Small-3.1-24B-Instruct-2503/discussions/84#69121093e8b480e709447d5e",
-                cl.out,
-            )
+            self.assertNotIn(mistral_warning, cl.out)
 
-            # Case 2: Tokenizer with config associated
-            # Needed to be saved along the tokenizer to detect (non)mistral
-            # for a version where the regex bug occurs
-            config_dict = config.to_diff_dict()
-            config_dict["transformers_version"] = "4.57.2"
-
-            # Manually saving to avoid versioning clashes
+            # Case 2: Non-mistral tokenizer with a config.json present must not trigger the warning,
+            # regardless of the `transformers_version` recorded in the config
             config_path = os.path.join(tmp_dir, "config.json")
-            with open(config_path, "w", encoding="utf-8") as f:
-                json.dump(config_dict, f, indent=2, sort_keys=True)
+            for saved_version in ("4.57.2", "4.57.3", "4.57.6", None):
+                config_dict = config.to_diff_dict()
+                if saved_version is None:
+                    config_dict.pop("transformers_version", None)
+                else:
+                    config_dict["transformers_version"] = saved_version
 
-            tokenizer2 = AutoTokenizer.from_pretrained(tmp_dir)
+                with open(config_path, "w", encoding="utf-8") as f:
+                    json.dump(config_dict, f, indent=2, sort_keys=True)
+
+                with CaptureLogger(logger) as cl:
+                    tokenizer2 = AutoTokenizer.from_pretrained(tmp_dir)
+                self.assertNotIn(
+                    mistral_warning,
+                    cl.out,
+                    msg=f"Unexpected mistral regex warning for non-mistral config (transformers_version={saved_version!r})",
+                )
 
         self.assertIsInstance(tokenizer2, tokenizer.__class__)
         self.assertTrue(tokenizer2.vocab_size > 100_000)
