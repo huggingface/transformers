@@ -22,16 +22,16 @@ from ... import initialization as init
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
 from ...configuration_utils import PreTrainedConfig
-from ...generation import GenerationMixin
 from ...integrations import use_experts_implementation, use_kernelized_func
 from ...masking_utils import create_causal_mask, create_sliding_window_causal_mask
-from ...modeling_outputs import MoeCausalLMOutputWithPast, MoeModelOutputWithPast
+from ...modeling_outputs import BaseModelOutputWithPast
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
+from ...utils import TransformersKwargs, auto_docstring
 from ...utils.generic import merge_with_config_defaults
-from ...utils.output_capturing import OutputRecorder, capture_outputs
+from ...utils.output_capturing import capture_outputs
+from ..deepseek_v3.modeling_deepseek_v3 import DeepseekV3ForCausalLM
 from ..gemma3.modeling_gemma3 import Gemma3RotaryEmbedding
 from ..glm4_moe.modeling_glm4_moe import apply_rotary_pos_emb  # noqa: F401
 from ..llama.modeling_llama import LlamaDecoderLayer, eager_attention_forward, repeat_kv
@@ -100,7 +100,6 @@ class MiMoV2FlashConfig(PreTrainedConfig):
     topk_group: int = 1
     norm_topk_prob: bool = True
     routed_scaling_factor: float | None = 1.0
-    output_router_logits: bool = False
     router_jitter_noise: float = 0.0
     moe_layer_freq: list | None = None
     add_swa_attention_sink_bias: bool = True
@@ -500,8 +499,8 @@ class MiMoV2FlashPreTrainedModel(MixtralPreTrainedModel):
     _can_compile_fullgraph = True
     _supports_attention_backend = True
     _keep_in_fp32_modules_strict = ["e_score_correction_bias"]
+    _keys_to_ignore_on_load_unexpected = [r"^model\.mtp\."]
     _can_record_outputs = {
-        "router_logits": OutputRecorder(MiMoV2FlashTopKRouter, index=0),
         "hidden_states": MiMoV2FlashDecoderLayer,
         "attentions": MiMoV2FlashAttention,
     }
@@ -560,7 +559,7 @@ class MiMoV2FlashModel(MixtralModel):
         inputs_embeds: torch.FloatTensor | None = None,
         use_cache: bool | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> MoeModelOutputWithPast:
+    ) -> BaseModelOutputWithPast:
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
 
@@ -609,100 +608,14 @@ class MiMoV2FlashModel(MixtralModel):
 
         hidden_states = self.norm(hidden_states)
 
-        return MoeModelOutputWithPast(
+        return BaseModelOutputWithPast(
             last_hidden_state=hidden_states,
             past_key_values=past_key_values,
         )
 
 
-@auto_docstring
-class MiMoV2FlashForCausalLM(MiMoV2FlashPreTrainedModel, GenerationMixin):
-    """Causal LM head with Mixtral-style MoE fields; `forward` omits Mixtral load-balancing auxiliary loss."""
-
-    _tied_weights_keys = {"lm_head.weight": "model.embed_tokens.weight"}
-    _tp_plan = {"lm_head": "colwise_gather_output"}
-    _pp_plan = {"lm_head": (["hidden_states"], ["logits"])}
-
-    _keys_to_ignore_on_load_unexpected = [r"^model\.mtp\."]
-
-    def __init__(self, config: MiMoV2FlashConfig):
-        super().__init__(config)
-        self.model = MiMoV2FlashModel(config)
-        self.vocab_size = config.vocab_size
-        self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
-
-        # Initialize weights and apply final processing
-        self.post_init()
-
-    @can_return_tuple
-    def forward(
-        self,
-        input_ids: torch.LongTensor | None = None,
-        attention_mask: torch.Tensor | None = None,
-        position_ids: torch.LongTensor | None = None,
-        past_key_values: Cache | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
-        labels: torch.LongTensor | None = None,
-        use_cache: bool | None = None,
-        output_router_logits: bool | None = None,
-        logits_to_keep: int | torch.Tensor = 0,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> MoeCausalLMOutputWithPast:
-        r"""
-        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
-            config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
-            (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
-
-        Example:
-
-        ```python
-        >>> from transformers import AutoTokenizer, MiMoV2FlashForCausalLM
-
-        >>> model = MiMoV2FlashForCausalLM.from_pretrained("XiaomiMiMo/MiMo-V2-Flash")
-        >>> tokenizer = AutoTokenizer.from_pretrained("XiaomiMiMo/MiMo-V2-Flash")
-
-        >>> prompt = "Hey, are you conscious? Can you talk to me?"
-        >>> inputs = tokenizer(prompt, return_tensors="pt")
-
-        >>> # Generate
-        >>> generate_ids = model.generate(inputs.input_ids, max_length=30)
-        >>> tokenizer.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0]
-        "Hey, are you conscious? Can you talk to me?\\nI'm not conscious, but I can talk to you."
-        ```"""
-
-        output_router_logits = (
-            output_router_logits if output_router_logits is not None else self.config.output_router_logits
-        )
-
-        outputs: MoeModelOutputWithPast = self.model(
-            input_ids=input_ids,
-            attention_mask=attention_mask,
-            position_ids=position_ids,
-            past_key_values=past_key_values,
-            inputs_embeds=inputs_embeds,
-            use_cache=use_cache,
-            output_router_logits=output_router_logits,
-            **kwargs,
-        )
-
-        hidden_states = outputs.last_hidden_state
-        # Only compute necessary logits, and do not upcast them to float if we are not computing the loss
-        slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
-        logits = self.lm_head(hidden_states[:, slice_indices, :])
-
-        loss = None
-        if labels is not None:
-            loss = self.loss_function(logits=logits, labels=labels, vocab_size=self.config.vocab_size, **kwargs)
-
-        return MoeCausalLMOutputWithPast(
-            loss=loss,
-            logits=logits,
-            past_key_values=outputs.past_key_values,
-            hidden_states=outputs.hidden_states,
-            attentions=outputs.attentions,
-            router_logits=outputs.router_logits,
-        )
+class MiMoV2FlashForCausalLM(DeepseekV3ForCausalLM):
+    pass
 
 
 __all__ = [
