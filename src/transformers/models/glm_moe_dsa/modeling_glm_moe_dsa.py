@@ -215,10 +215,14 @@ class GlmMoeDsaIndexer(nn.Module):
         weights = self.weights_proj(hidden_states).float() * (self.n_heads**-0.5)  # [B, S, H]
 
         # q·k^T per head: [B, S, H, D] @ [B, T, D]^T → [B, S, H, T]
-        scores = torch.einsum("bshd,btd->bsht", q.float(), k_cached.float()) * self.softmax_scale
+        scores = torch.bmm(
+            q.float().reshape(batch_size, seq_len * self.n_heads, self.head_dim),
+            k_cached.float().transpose(1, 2),
+        )
+        scores = scores.view(batch_size, seq_len, self.n_heads, -1) * self.softmax_scale
         scores = F.relu(scores)
         # Weight per head and sum across heads → [B, S, T]
-        index_scores = torch.einsum("bsht,bsh->bst", scores, weights)
+        index_scores = torch.matmul(weights.unsqueeze(-2), scores).squeeze(-2)
 
         if attention_mask is not None:
             index_scores = index_scores + attention_mask
