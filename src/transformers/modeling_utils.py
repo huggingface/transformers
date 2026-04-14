@@ -29,7 +29,7 @@ from dataclasses import dataclass, field
 from functools import partial, wraps
 from itertools import cycle
 from threading import Thread
-from typing import Optional, TypeVar, get_type_hints
+from typing import Any, Optional, TypeVar, get_type_hints
 from zipfile import is_zipfile
 
 import torch
@@ -2984,6 +2984,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                 new_lm_head, old_lm_head, num_tokens_to_copy, transposed, has_new_lm_head_bias
             )
 
+        new_lm_head._is_hf_initialized = True
         return new_lm_head
 
     def _init_added_embeddings_weights_with_mean(
@@ -3617,7 +3618,10 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             elif is_quantized:
                 init_contexts.extend([torch.device("meta"), set_quantized_state()])
         else:
-            init_contexts.append(torch.device("meta"))
+            # meta_device_safe_creation_ops patches torch.linspace to default to CPU
+            # so that custom models calling .item() during __init__ (e.g. drop-path
+            # schedules) don't crash on meta tensors.
+            init_contexts.extend([torch.device("meta"), init.meta_device_safe_creation_ops()])
 
         return init_contexts
 
@@ -3690,6 +3694,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         revision: str = "main",
         use_safetensors: bool | None = None,
         weights_only: bool = True,
+        fusion_config: dict[str, bool | dict[str, Any]] | None = None,
         **kwargs,
     ) -> SpecificPreTrainedModelType:
         r"""
@@ -3868,6 +3873,13 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                 Indicates whether unpickler should be restricted to loading only tensors, primitive types,
                 dictionaries and any types added via torch.serialization.add_safe_globals().
                 When set to False, we can load wrapper tensor subclass weights.
+            fusion_config (`dict[str, bool | dict[str, Any]]`, *optional*):
+                Optional fusion configuration applied before model instantiation. Each key enables a fusion family and
+                its value can either be `True` to enable that fusion with default options or a dictionary of
+                family-specific options. For example, `{"patch_embeddings": True}` enables patch embedding fusion.
+                This should only be used as an inference optimization, as it can slightly change outputs. If omitted,
+                `from_pretrained()` falls back to `config.fusion_config` when available. Refer to the fusion mapping
+                guide in `docs/source/en/fusion_mapping.md` for more details.
             key_mapping (`dict[str, str], *optional*):
                 A potential mapping of the weight names if using a model on the Hub which is compatible to a Transformers
                 architecture, but was not converted accordingly.
@@ -4081,6 +4093,18 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         )
 
         config.name_or_path = pretrained_model_name_or_path
+
+        # Overwrite `config.fusion_config` if it is provided.
+        if fusion_config is not None:
+            config.fusion_config = copy.deepcopy(fusion_config)
+
+        # Register fusion patches
+        fusion_config = getattr(config, "fusion_config", None)
+        if fusion_config is not None:
+            from .fusion_mapping import register_fusion_patches
+
+            register_fusion_patches(cls, config, fusion_config)
+
         model_init_context = cls.get_init_context(dtype, is_quantized, _is_ds_init_called, allow_all_kernels)
 
         config = copy.deepcopy(config)  # We do not want to modify the config inplace in from_pretrained.
@@ -4512,10 +4536,10 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         # In this case we need to move everything back
         if is_fsdp_enabled() and not is_local_dist_rank_0() and not is_quantized:
             for key, param in self.named_parameters():
-                value = torch.empty_like(param, device="cpu")
+                value = torch.zeros_like(param, device="cpu")
                 _load_parameter_into_model(self, key, value)
             for key, buffer in self.named_buffers():
-                value = torch.empty_like(buffer, device="cpu")
+                value = torch.zeros_like(buffer, device="cpu")
                 _load_parameter_into_model(self, key, value)
             return
 
@@ -4611,7 +4635,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         later as they will be tied (overwritten) anyway.
         This is very important as most embeddings are tied, and they are huge params (vocabularies are often 256k), so
         running inits on them is very costly."""
-        for tied_param in self.all_tied_weights_keys.keys():
+        for tied_param in getattr(self, "all_tied_weights_keys", {}).keys():
             param = self.get_parameter(tied_param)
             param._is_hf_initialized = True
 

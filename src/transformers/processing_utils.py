@@ -1804,12 +1804,15 @@ class ProcessorMixin(PushToHubMixin):
             for conversation in conversations:
                 images, videos = [], []
                 for message in conversation:
-                    visuals = [content for content in message["content"] if content["type"] in ["image", "video"]]
+                    content = message.get("content") or []
+                    visuals = [
+                        content_block for content_block in content if content_block["type"] in ["image", "video"]
+                    ]
                     audio_fnames = [
-                        content[key]
-                        for content in message["content"]
+                        content_block[key]
+                        for content_block in content
                         for key in ["audio", "url", "path"]
-                        if key in content and content["type"] == "audio"
+                        if key in content_block and content_block["type"] == "audio"
                     ]
                     image_fnames = [
                         vision_info[key]
@@ -1832,6 +1835,9 @@ class ProcessorMixin(PushToHubMixin):
                             batch_audios.append(load_audio(fname, sampling_rate=sampling_rate))
                     else:
                         for fname in video_fnames:
+                            # This updates the template in-place and adds audio entry
+                            # to ensure `audio` token is added by jinja
+                            message["content"].append({"type": "audio"})
                             batch_audios.append(load_audio(fname, sampling_rate=sampling_rate))
 
                 # Currently all processors can accept nested list of batches, but not flat list of visuals
@@ -1839,10 +1845,8 @@ class ProcessorMixin(PushToHubMixin):
                 batch_images.append(images)
                 batch_videos.append(videos)
 
-        template_kwargs = {
-            **self.tokenizer.special_tokens_map,
-            **kwargs,
-        }  # kwargs overwrite special tokens if both are present
+        # `kwargs` overwrite special tokens if both are present
+        template_kwargs = {**self.tokenizer.special_tokens_map, **kwargs}
         prompt, generation_indices = render_jinja_template(
             conversations=conversations,
             tools=tools,
