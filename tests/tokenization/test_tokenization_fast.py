@@ -287,3 +287,47 @@ class ReduceMutableBorrowTests(unittest.TestCase):
 
     def fetch(self, tokenizer, text):
         return tokenizer.encode(text, truncation="longest_first", padding="longest")
+
+
+@require_tokenizers
+class PatchMistralRegexHubCallTests(unittest.TestCase):
+    """
+    Regression tests for https://github.com/huggingface/transformers/issues/44749 /
+    https://github.com/huggingface/transformers/issues/43502
+
+    `_patch_mistral_regex` used to unconditionally call `huggingface_hub.model_info`
+    for any tokenizer with vocab > 100k (e.g. Qwen3), causing a large slowdown
+    and breaking offline / local-path loading.
+    """
+
+    def _dummy_backend_tokenizer(self):
+        tok = Tokenizer(WordLevel({"[UNK]": 0, "a": 1}, unk_token="[UNK]"))
+        tok.pre_tokenizer = pre_tokenizers.Whitespace()
+        return tok
+
+    def test_local_files_only_skips_model_info(self):
+        from unittest.mock import patch
+
+        tok = self._dummy_backend_tokenizer()
+        with patch(
+            "huggingface_hub.model_info",
+            side_effect=AssertionError("model_info must not be called when local_files_only=True"),
+        ):
+            result = PreTrainedTokenizerFast._patch_mistral_regex(
+                tok,
+                "some/non-mistral-repo-id",
+                local_files_only=True,
+            )
+        self.assertIsNotNone(result)
+
+    def test_hub_error_does_not_break_init(self):
+        from unittest.mock import patch
+
+        tok = self._dummy_backend_tokenizer()
+        with patch("huggingface_hub.model_info", side_effect=RuntimeError("hub down")):
+            # Must not raise — a Hub failure should be swallowed for non-Mistral models.
+            result = PreTrainedTokenizerFast._patch_mistral_regex(
+                tok,
+                "not-a-real/hub-id",
+            )
+        self.assertIsNotNone(result)
