@@ -865,7 +865,18 @@ class BaseHandler:
 
         Returns ``(model_id, model, processor)``.
         """
+        from fastapi import HTTPException
+
         if self.model_manager.force_model is not None:
+            requested = body.get("model")
+            if requested is not None and requested != self.model_manager.force_model:
+                raise HTTPException(
+                    status_code=400,
+                    detail=(
+                        f"Server is pinned to '{self.model_manager.force_model}'; "
+                        f"requested '{requested}'."
+                    ),
+                )
             body["model"] = self.model_manager.force_model
 
         model_id = self.model_manager.process_model_name(body["model"])
