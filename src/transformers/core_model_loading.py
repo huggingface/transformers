@@ -32,7 +32,6 @@ from typing import TYPE_CHECKING, Any
 import torch
 
 from .integrations.accelerate import get_device, offload_weight
-from .integrations.tensor_parallel import ALL_PARALLEL_STYLES, get_tensor_shard
 from .utils import is_env_variable_true
 from .utils.loading_report import LoadStateDictInfo
 from .utils.logging import get_logger, tqdm
@@ -46,6 +45,7 @@ if TYPE_CHECKING:
 elif _torch_distributed_available:
     from torch.distributed.tensor import DTensor
     from torch.distributed.tensor._utils import compute_local_shape_and_global_offset
+    from torch.distributed.tensor.placement_types import Shard
 
 
 logger = get_logger(__name__)
@@ -116,17 +116,6 @@ class ConversionOps:
     @property
     def reverse_op(self) -> ConversionOps:
         raise NotImplementedError
-
-
-class _IdentityOp(ConversionOps):
-    """Pass-through reverse op for dequantize operations.
-
-    Dequantized weights are already in their target dtype and should be
-    saved as-is without any conversion.
-    """
-
-    def convert(self, input_dict: dict[str, Any], **kwargs) -> dict[str, Any]:
-        return input_dict
 
 
 class Chunk(ConversionOps):
@@ -535,15 +524,10 @@ class WeightTransform:
     target_patterns: str | list[str] = field(init=True)
     compiled_sources: re.Pattern = field(init=False)
 
-    distributed_operation: Any | None = None
     quantization_operation: ConversionOps | None = None
 
     collected_tensors: dict[str, list[Future]] = field(default_factory=lambda: defaultdict(list), init=False)
     layer_targets: dict[str, set[str]] = field(default_factory=lambda: defaultdict(set), init=False)
-
-    # Those are needed to be able to reverse correctly the transform, as the patterns may be processed
-    _original_source_patterns: list[str] = field(init=False)
-    _original_target_patterns: list[str] = field(init=False)
 
     def __setattr__(self, name, value):
         if name in ("source_patterns", "target_patterns"):
@@ -561,13 +545,10 @@ class WeightTransform:
         # when instantiating the reverse mapping (i.e. the targets become sources, and sources become targets)
         # The issues lie in the sources usually, so here we need to check the targets for the reversed mapping
 
-        # We need to copy the exact original patterns to later reverse (before processing may change them)
-        self._original_source_patterns = self.source_patterns.copy()
-        self._original_target_patterns = self.target_patterns.copy()
-
         # Process target_patterns: detect capturing groups and replace with \1
         # Store the original capturing group patterns for reverse mapping
         target_capturing_groups: list[str] = []
+        unprocess_targets = self.target_patterns.copy()
         for i, pattern in enumerate(self.target_patterns):
             self.target_patterns[i], captured_group = process_target_pattern(pattern)
             if captured_group is not None:
@@ -596,7 +577,7 @@ class WeightTransform:
                 pattern = pattern.replace(r"\1", unique_capturing_group, 1)
             # Potentially process a bit more for consistency - only if they are consistent pairs, i.e. the length is the same
             if len(self.source_patterns) == len(self.target_patterns):
-                pattern = process_source_pattern(pattern, self._original_target_patterns[i])
+                pattern = process_source_pattern(pattern, unprocess_targets[i])
             self.source_patterns[i] = pattern
 
         # Construct the regex we will use to rename keys from the sources to the targets
@@ -635,7 +616,7 @@ class WeightTransform:
             # inside that matched named group
             replaced_group_idx = self.compiled_sources.groupindex[matching_group_name] + 1
             replacement = replacement.replace(r"\1", match_object.group(replaced_group_idx))
-        renamed_key = source_key.replace(match_object.group(0), replacement, 1)
+        renamed_key = source_key.replace(match_object.group(0), replacement)
         return renamed_key, source_pattern_that_matched
 
     def reverse_transform(self) -> WeightTransform:
@@ -651,7 +632,7 @@ class WeightTransform:
             kwargs["operations"] = [op.reverse_op for op in self.operations[::-1]]
 
         reverse_transform = self.__class__(
-            source_patterns=self._original_target_patterns, target_patterns=self._original_source_patterns, **kwargs
+            source_patterns=self.target_patterns, target_patterns=self.source_patterns, **kwargs
         )
 
         return reverse_transform
@@ -840,169 +821,246 @@ def spawn_materialize(
     tensor: torch.Tensor,
     device=None,
     dtype=None,
+    sharding_op: DtensorShardOperation | None = None,
+    tensor_idx: int | None = None,
 ) -> Future | Callable:
-    """Materialize a tensor from file asynchronously if `thread_pool` is provided, or return a Callable that will
-    load the tensor synchronously when called."""
+    """Materialize (and optionally shard) a tensor, asynchronously if a thread pool is provided.
+
+    When ``sharding_op`` is given the tensor is sharded according to the DTensor
+    placement strategy; otherwise it is simply copied to *device*/*dtype*.
+    Without a thread pool a deferred callable is returned instead of a Future.
+    """
 
     def _job():
+        if sharding_op is not None:
+            return sharding_op.shard_tensor(tensor, tensor_idx=tensor_idx, device=device, dtype=dtype)
         return _materialize_copy(tensor, device, dtype)
 
     if thread_pool is not None:
         return thread_pool.submit(_job)
-    else:
-        # Return the Callable here, not the Tensor itself, so we actually delay loading to avoid saturating cpu
-        # memory during Conversion
-        return _job
+    # Return the Callable here, not the Tensor itself, so we actually delay loading
+    # to avoid saturating cpu memory during Conversion
+    return _job
 
 
-def spawn_parallel_materialize(
-    thread_pool: ThreadPoolExecutor | None,
-    tensor: torch.Tensor,
-    sharding_method,
-    tensor_idx,
-    device=None,
-    dtype=None,
-) -> Future | Callable:
-    """Materialize and shard a tensor according to the active parallelism strategy if `thread_pool` is provided, or
-    return a Callable that will load the tensor synchronously when called."""
+class DtensorShardOperation:
+    """Extracts the local shard from a full checkpoint tensor based on this rank's DTensor placements."""
 
-    def _job():
-        return sharding_method.shard_tensor(tensor, tensor_idx=tensor_idx, device=device, dtype=dtype)
+    # tensor_dim -> list of (start, end) index ranges this rank owns
+    DimRanges = dict[int, list[tuple[int, int]]]
 
-    if thread_pool is not None:
-        return thread_pool.submit(_job)
-    else:
-        # Return the Callable here, not the Tensor itself, so we actually delay loading to avoid saturating cpu
-        # memory during Conversion
-        return _job
-
-
-@dataclass(slots=True)
-class ParallelMaterializationContext:
-    distributed_operation: Any
-    tensor_idx: int | None
-    device: Any
-
-
-def is_dtensor_like(value: Any) -> bool:
-    return all(hasattr(value, attr) for attr in ("device_mesh", "placements", "to_local"))
-
-
-@dataclass(slots=True)
-class FSDPShardOperation:
-    device_mesh: Any
-    rank: int
-    empty_param: Any
-    placements: tuple[Any, ...]
-    shard_placement: Any | None = field(init=False, default=None)
-    local_shape: tuple[int, ...] = field(init=False)
-
-    def __post_init__(self):
-        shard_placements = [placement for placement in self.placements if placement.is_shard()]
-        if len(shard_placements) > 1:
-            raise NotImplementedError(
-                f"FSDP shard-on-read does not support multiple shard placements yet: {self.placements}"
-            )
-        self.shard_placement = shard_placements[0] if shard_placements else None
-        if self.shard_placement is not None and len(self.placements) != 1:
-            raise NotImplementedError(
-                f"FSDP shard-on-read only supports a single placement today. Got placements={self.placements}."
-            )
-        self.local_shape = self.get_expected_sharded_shape(self.empty_param.shape)
-
-    @classmethod
-    def from_param(cls, param: Any) -> FSDPShardOperation:
-        return cls(
-            device_mesh=param.device_mesh,
-            rank=param.device_mesh.get_local_rank(),
-            empty_param=param,
-            placements=tuple(param.placements),
-        )
+    def __init__(self, param: DTensor):
+        self.device_mesh = param.device_mesh
+        self.param = param
+        self.placements = tuple(param.placements)
+        local_shape, _ = compute_local_shape_and_global_offset(param.shape, self.device_mesh, self.placements)
+        self.local_shape = tuple(local_shape)
 
     def shard_tensor(
         self, param: torch.Tensor, tensor_idx: int | None = None, device=None, dtype=None
     ) -> torch.Tensor | None:
-        if self.shard_placement is None:
-            local_tensor = param[...]
-        else:
-            param_shape = list(param.shape) if isinstance(param, torch.Tensor) else param.get_shape()
-            # Mixtral-style converted expert weights first stack individual expert tensors along dim 0 before
-            # concatenating. Only materialize the experts owned by this rank.
-            if (
-                tensor_idx is not None
-                and len(self.empty_param.shape) == len(param_shape) + 1
-                and self.shard_placement.dim == 0
-            ):
-                local_expert_count = self.local_shape[0]
-                expert_offset = compute_local_shape_and_global_offset(
-                    self.empty_param.shape, self.device_mesh, self.placements
-                )[1][0]
-                if tensor_idx < expert_offset or tensor_idx >= expert_offset + local_expert_count:
+        """Return the local shard of ``param`` for this rank, dispatching to the appropriate strategy."""
+        # Find which placements actually shard data.
+        # _StridedShard.is_shard() returns False in PyTorch, so we also check for
+        # the ``dim`` attribute that both Shard and _StridedShard have.
+        sharding_placements = [
+            (i, p)
+            for i, p in enumerate(self.placements)
+            if p.is_shard() or (hasattr(p, "dim") and not p.is_replicate())
+        ]
+        param_shape = list(param.shape) if isinstance(param, torch.Tensor) else param.get_shape()
+
+        if not sharding_placements:
+            return param[...].to(device=device, dtype=dtype)
+
+        if tensor_idx is not None and len(self.param.shape) == len(param_shape) + 1:
+            # Expert parallelism: dim 0 (expert dimension) is sharded across ranks.
+            # When dim 0 is the only sharding placement, return the full expert or
+            # skip it. When TP also shards an inner dim, keep applying the remaining
+            # placements to the owned expert tensor.
+            has_expert_sharding = any(self._normalize_param_dim(p.dim) == 0 for _, p in sharding_placements)
+            if has_expert_sharding:
+                if not self._owns_local_expert(tensor_idx):
                     return None
-                local_tensor = param[...]
+                inner_placements = [(i, p) for i, p in sharding_placements if self._normalize_param_dim(p.dim) != 0]
+                if not inner_placements:
+                    return param[...].to(device=device, dtype=dtype)
+                return self._shard_nd(param, inner_placements, param_shape, device, dtype)
+
+        return self._shard_nd(param, sharding_placements, param_shape, device, dtype)
+
+    def _shard_nd(self, param, sharding_placements, param_shape, device, dtype):
+        """Handle multi-dimensional sharding, choosing the best strategy."""
+        if not self._can_shard_on_read(sharding_placements):
+            return self._materialize_and_split(param, sharding_placements, device, dtype)
+
+        # All placements are plain Shard on different dims.
+        # compute_local_shape_and_global_offset gives us one contiguous range per dim directly.
+        has_strided = any(not p.is_shard() for _, p in sharding_placements)
+        if not has_strided:
+            local_shape, global_offset = compute_local_shape_and_global_offset(
+                self.param.shape, self.device_mesh, self.placements
+            )
+            slices = [slice(None)] * len(param_shape)
+            for _, placement in sharding_placements:
+                dim = self._checkpoint_dim(placement.dim, param_shape)
+                offset = global_offset[placement.dim]
+                slices[dim] = slice(offset, offset + local_shape[placement.dim])
+            return param[tuple(slices)].to(device=device, dtype=dtype)
+
+        dim_ranges = self._compute_dim_ranges(sharding_placements, param_shape)
+        return self._slice_and_read(param, param_shape, dim_ranges, device, dtype)
+
+    def _can_shard_on_read(self, sharding_placements) -> bool:
+        """Check whether range-based shard-on-read is feasible.
+
+        Returns ``False`` when a ``_StridedShard`` and another placement share the
+        same tensor dimension — the strided reorder can't be composed via range
+        arithmetic because ``Shard`` would need to cut across the concatenated
+        result of ``_StridedShard``'s disjoint ranges.
+        """
+        dims_seen: dict[int, bool] = {}  # dim -> has_strided
+        for _, placement in sharding_placements:
+            dim = placement.dim
+            is_strided = not placement.is_shard()
+            if dim in dims_seen and (is_strided or dims_seen[dim]):
+                logger.debug(
+                    "Cannot shard-on-read: dim %d has both Shard and _StridedShard placements, "
+                    "falling back to materialize-then-split.",
+                    dim,
+                )
+                return False
+            dims_seen[dim] = is_strided
+        return True
+
+    def _materialize_and_split(self, param, sharding_placements, device, dtype):
+        """Fallback: load the full tensor, then iteratively split per mesh dim."""
+        tensor = param[...] if not isinstance(param, torch.Tensor) else param
+        for mesh_dim_idx, placement in sharding_placements:
+            sub_mesh = self._get_sub_mesh(mesh_dim_idx)
+            rank = sub_mesh.get_local_rank()
+            shards, _ = placement._split_tensor(tensor, sub_mesh.size(), with_padding=False, contiguous=True)
+            tensor = shards[rank]
+        return tensor.to(device=device, dtype=dtype)
+
+    def _compute_dim_ranges(self, sharding_placements, param_shape) -> DtensorShardOperation.DimRanges:
+        """Compute per-dimension index ranges for this rank.
+
+        Each sharding placement narrows the ranges on its tensor dimension:
+        - ``Shard``: one contiguous sub-range per previous range.
+        - ``_StridedShard``: multiple disjoint sub-ranges (one per split-factor group).
+        """
+        dim_ranges: DtensorShardOperation.DimRanges = {}
+        for mesh_dim_idx, placement in sharding_placements:
+            sub_mesh = self._get_sub_mesh(mesh_dim_idx)
+            rank = sub_mesh.get_local_rank()
+            world_size = sub_mesh.size()
+            dim = self._checkpoint_dim(placement.dim, param_shape)
+            prev_ranges = dim_ranges.get(dim, [(0, param_shape[dim])])
+
+            if placement.is_shard():
+                new_ranges = self._contiguous_ranges(prev_ranges, rank, world_size)
+            elif self._source_tensor_needs_packing(param_shape):
+                # _StridedShard only makes sense once the packed axis exists. While
+                # loading pre-packed source tensors (e.g. w1/w3 before gate_up_proj
+                # concatenation), take the contiguous chunk for this rank and let the
+                # WeightConverter recreate the packed layout afterward.
+                new_ranges = self._contiguous_ranges(prev_ranges, rank, world_size)
             else:
-                local_tensor = get_tensor_shard(
-                    param,
-                    self.empty_param,
-                    self.device_mesh,
-                    self.rank,
-                    self.shard_placement.dim,
-                    tensor_idx=tensor_idx,
-                )
-        if local_tensor is None:
-            return None
-        return local_tensor.to(device=device, dtype=dtype)
+                new_ranges = self._strided_ranges(prev_ranges, rank, world_size, placement.split_factor)
+            dim_ranges[dim] = new_ranges
+        return dim_ranges
 
-    def get_expected_sharded_shape(self, full_shape: tuple[int, ...] | torch.Size) -> tuple[int, ...]:
-        local_shape, _ = compute_local_shape_and_global_offset(full_shape, self.device_mesh, self.placements)
-        return tuple(local_shape)
+    def _slice_and_read(self, param, param_shape, dim_ranges: DtensorShardOperation.DimRanges, device, dtype):
+        """Build slices from computed ranges and read from the tensor.
 
-    def update_module_attributes(self, module: torch.nn.Module):
-        return None
+        At most one dim can have multiple disjoint ranges (from ``_StridedShard``).
+        If so, read each disjoint range separately and concatenate.
+        """
+        concat_dim = None
+        concat_ranges = None
+        base_slices = [slice(None)] * len(param_shape)
+        for dim, ranges in dim_ranges.items():
+            if len(ranges) == 1:
+                base_slices[dim] = slice(ranges[0][0], ranges[0][1])
+            elif len(ranges) > 1:
+                if concat_dim is not None:
+                    raise ValueError("Shard-on-read only supports disjoint ranges on a single checkpoint dimension.")
+                concat_dim = dim
+                concat_ranges = ranges
 
+        if concat_dim is None:
+            return param[tuple(base_slices)].to(device=device, dtype=dtype)
 
-def get_parallel_materialization_context(
-    mapping: WeightTransform,
-    renamed_key: str,
-    source_pattern: str,
-    empty_param: Any,
-    device_mesh: Any,
-    parallel_plan: dict[str, Any],
-    parallel_pattern_matcher: re.Pattern | None,
-    parallel_pattern_by_group_name: dict[str, str] | None,
-    device_map: dict[str, Any],
-) -> ParallelMaterializationContext | None:
-    tensor_idx = (
-        len(mapping.collected_tensors.get(source_pattern, []))
-        if isinstance(mapping, WeightConverter) and isinstance(mapping.operations[0], MergeModulelist)
-        else None
-    )
+        pieces = []
+        for start, end in concat_ranges:
+            slices = list(base_slices)
+            slices[concat_dim] = slice(start, end)
+            pieces.append(param[tuple(slices)])
+        return torch.cat(pieces, dim=concat_dim).to(device=device, dtype=dtype)
 
-    if (
-        device_mesh
-        and parallel_plan
-        and parallel_pattern_matcher is not None
-        and parallel_pattern_by_group_name is not None
-    ):
-        if matched_parallel_pattern := parallel_pattern_matcher.search(renamed_key):
-            matched_parallel_pattern = parallel_pattern_by_group_name[matched_parallel_pattern.lastgroup]
-            if getattr(mapping, "distributed_operation", None) is None:
-                parallel_layer = ALL_PARALLEL_STYLES[parallel_plan[matched_parallel_pattern]].__class__
-                mapping.distributed_operation = parallel_layer(
-                    device_mesh=device_mesh, rank=device_mesh.get_local_rank(), empty_param=empty_param.clone()
-                )
-            return ParallelMaterializationContext(mapping.distributed_operation, tensor_idx, device_map[""])
+    # ------------------------------------------------------------------
+    # Utilities
+    # ------------------------------------------------------------------
 
-    if is_dtensor_like(empty_param):
-        if getattr(mapping, "distributed_operation", None) is None:
-            mapping.distributed_operation = FSDPShardOperation.from_param(empty_param)
-        return ParallelMaterializationContext(
-            mapping.distributed_operation,
-            tensor_idx,
-            get_device(device_map, renamed_key, valid_torch_device=True),
-        )
+    def _contiguous_ranges(
+        self, prev_ranges: list[tuple[int, int]], rank: int, world_size: int
+    ) -> list[tuple[int, int]]:
+        """Narrow each range by picking the ``rank``-th contiguous chunk (``Shard`` semantics)."""
+        new_ranges = []
+        for prev_start, prev_end in prev_ranges:
+            shard_size, offset = Shard.local_shard_size_and_offset(prev_end - prev_start, world_size, rank)
+            if shard_size > 0:
+                new_ranges.append((prev_start + offset, prev_start + offset + shard_size))
+        return new_ranges
 
-    return None
+    def _strided_ranges(
+        self, prev_ranges: list[tuple[int, int]], rank: int, world_size: int, split_factor: int
+    ) -> list[tuple[int, int]]:
+        """Narrow each range using ``_StridedShard`` semantics.
+
+        Divides each range into ``split_factor`` groups, then within each group
+        picks the ``rank``-th chunk of ``world_size`` equal pieces.
+        """
+        new_ranges = []
+        for prev_start, prev_end in prev_ranges:
+            group_size = math.ceil((prev_end - prev_start) / split_factor)
+            for g in range(split_factor):
+                g_start = prev_start + g * group_size
+                g_end = min(g_start + group_size, prev_end)
+                if g_end <= g_start:
+                    continue
+                shard_size, offset = Shard.local_shard_size_and_offset(g_end - g_start, world_size, rank)
+                if shard_size > 0:
+                    new_ranges.append((g_start + offset, g_start + offset + shard_size))
+        return new_ranges
+
+    def _get_sub_mesh(self, mesh_dim_idx: int):
+        """Return the 1-D sub-mesh for ``mesh_dim_idx``."""
+        if self.device_mesh.ndim > 1:
+            return self.device_mesh[self.device_mesh.mesh_dim_names[mesh_dim_idx]]
+        return self.device_mesh
+
+    def _normalize_param_dim(self, dim: int) -> int:
+        return dim if dim >= 0 else self.param.ndim + dim
+
+    def _checkpoint_dim(self, placement_dim: int, param_shape) -> int:
+        """Map a placement dim from the DTensor shape to the checkpoint tensor shape."""
+        dim = self._normalize_param_dim(placement_dim)
+        ndim_diff = self.param.ndim - len(param_shape)
+        if ndim_diff > 0 and dim >= ndim_diff:
+            dim -= ndim_diff
+        return dim
+
+    def _owns_local_expert(self, tensor_idx: int) -> bool:
+        _, offsets = compute_local_shape_and_global_offset(self.param.shape, self.device_mesh, self.placements)
+        return offsets[0] <= tensor_idx < offsets[0] + self.local_shape[0]
+
+    def _source_tensor_needs_packing(self, param_shape) -> bool:
+        # A single source tensor still missing the leading expert axis is being
+        # converted into a packed expert parameter. In that case _StridedShard's
+        # split groups do not exist yet.
+        return self.param.ndim == len(param_shape) + 1
 
 
 def dot_natural_key(s: str):
@@ -1073,7 +1131,6 @@ def set_param_for_module(
     target_name: str,
     param_value: torch.Tensor,
     loading_info: LoadStateDictInfo,
-    distributed_operation: Any | None,
     hf_quantizer: HfQuantizer,
 ):
     module_path, _, param_name = target_name.rpartition(".")
@@ -1088,26 +1145,30 @@ def set_param_for_module(
     if ref is None:
         loading_info.unexpected_keys.add(target_name)
     else:
-        if not isinstance(param_value, torch.nn.Parameter) and not is_dtensor_like(ref):
+        if not isinstance(param_value, torch.nn.Parameter) and not isinstance(ref, DTensor):
             if param_name not in module_obj._buffers:
                 param_value = torch.nn.Parameter(param_value, requires_grad=param_value.is_floating_point())
 
         # Remove from missing keys (it's either mismatched, or all good)
         loading_info.missing_keys.discard(target_name)
 
-        # Determine expected shape: for TP/FSDP shard-on-read, use the local shard shape; otherwise, use full shape
-        if is_dtensor_like(ref):
-            local_shape, _ = compute_local_shape_and_global_offset(ref.shape, ref.device_mesh, ref.placements)
+        if isinstance(ref, DTensor):
+            local_shape, global_offset = compute_local_shape_and_global_offset(
+                ref.shape, ref.device_mesh, ref.placements
+            )
             expected_shape = torch.Size(local_shape)
-        elif distributed_operation is not None:
-            expected_shape = torch.Size(distributed_operation.get_expected_sharded_shape(ref.shape))
         else:
             expected_shape = ref.shape
+
+        # When a WeightConverter produces the full global tensor, slice it to the local DTensor shard.
+        if isinstance(ref, DTensor) and param_value.shape == ref.shape and param_value.shape != expected_shape:
+            slices = [slice(global_offset[d], global_offset[d] + local_shape[d]) for d in range(param_value.ndim)]
+            param_value = param_value[tuple(slices)].contiguous()
 
         if ref is not None and param_value.shape != expected_shape and hf_quantizer is None:
             loading_info.mismatched_keys.add((target_name, param_value.shape, expected_shape))
         else:
-            if is_dtensor_like(ref):
+            if isinstance(ref, DTensor):
                 local_param = param_value.detach() if isinstance(param_value, torch.nn.Parameter) else param_value
                 fsdp_param = DTensor.from_local(
                     local_param.contiguous(),
@@ -1128,8 +1189,6 @@ def set_param_for_module(
                 # super important otherwise _init_weight will re-init the param
                 param_value._is_hf_initialized = True
                 setattr(module_obj, param_name, param_value)
-                if distributed_operation is not None:
-                    distributed_operation.update_module_attributes(module_obj)
 
 
 def offload_and_maybe_resave_param(
@@ -1315,10 +1374,21 @@ def convert_and_load_state_dict_in_model(
     """
     prefix = model.base_model_prefix
     tp_plan = tp_plan or {}
-    device_map = load_config.device_map or {"": "cpu"}
     hf_quantizer = load_config.hf_quantizer
     dtype = load_config.dtype
     device_mesh = load_config.device_mesh
+
+    if load_config.device_map is not None:
+        device_map = load_config.device_map
+    elif device_mesh is not None:
+        if device_mesh.device_type == "cpu":
+            device_map = {"": torch.device("cpu")}
+        else:
+            device_map = {
+                "": torch.device(device_mesh.device_type, getattr(torch, device_mesh.device_type).current_device())
+            }
+    else:
+        device_map = {"": "cpu"}
     disk_offload_folder = load_config.disk_offload_folder
     offload_buffers = load_config.offload_buffers
     dtype_plan = load_config.dtype_plan or {}
@@ -1353,10 +1423,6 @@ def convert_and_load_state_dict_in_model(
     converters = [entry for entry in weight_mapping if isinstance(entry, WeightConverter)]
     param_name_to_load: dict[str, WeightRenaming | WeightConverter] = {}
 
-    # build '(?P<g0>.*.*\\.block_sparse_moe\\..*)' and group to source {'g0': '*.block_sparse_moe.'}
-    # and target to source {'g0': '*.mlp.'}. This allows us to quickly find which pattern matched.
-    if tp_plan != {}:
-        tp_plan_alt, tp_plan_by_group_name, _ = build_glob_alternation(list(tp_plan.keys()))
     if dtype_plan != {}:
         dtype_policy_alt, dtype_policy_by_group_name, _ = build_glob_alternation(list(dtype_plan.keys()))
 
@@ -1433,30 +1499,23 @@ def convert_and_load_state_dict_in_model(
             elif empty_param is not None and empty_param.dtype != _dtype:
                 _dtype = empty_param.dtype  # usually correct when initializing
 
-            # 4. Handle parallel shard-on-read or device_map placement
-            future_or_tensor = None
-            if parallel_context := get_parallel_materialization_context(
-                mapping=mapping,
-                renamed_key=renamed_key,
-                source_pattern=source_pattern,
-                empty_param=empty_param,
-                device_mesh=device_mesh,
-                parallel_plan=tp_plan,
-                parallel_pattern_matcher=tp_plan_alt if tp_plan else None,
-                parallel_pattern_by_group_name=tp_plan_by_group_name if tp_plan else None,
-                device_map=device_map,
-            ):
-                future_or_tensor = spawn_parallel_materialize(
+            # 4. Materialize tensor — shard-on-read for DTensor params, plain copy otherwise
+            param_device = get_device(device_map, renamed_key, valid_torch_device=True)
+            if isinstance(empty_param, DTensor):
+                tensor_idx = (
+                    len(mapping.collected_tensors.get(source_pattern, []))
+                    if isinstance(mapping, WeightConverter) and isinstance(mapping.operations[0], MergeModulelist)
+                    else None
+                )
+                future_or_tensor = spawn_materialize(
                     thread_pool,
                     tensor,
-                    parallel_context.distributed_operation,
-                    parallel_context.tensor_idx,
-                    parallel_context.device,
+                    param_device,
                     _dtype,
+                    sharding_op=DtensorShardOperation(empty_param),
+                    tensor_idx=tensor_idx,
                 )
-
-            if future_or_tensor is None:
-                param_device = get_device(device_map, renamed_key, valid_torch_device=True)
+            else:
                 future_or_tensor = spawn_materialize(thread_pool, tensor, param_device, _dtype)
 
             mapping.add_tensor(renamed_key, original_key, source_pattern, future_or_tensor)
@@ -1486,14 +1545,7 @@ def convert_and_load_state_dict_in_model(
                             target_name, param, loading_info, disk_offload_folder, disk_offload_index, mapping
                         )
                     else:
-                        set_param_for_module(
-                            model,
-                            target_name,
-                            param,
-                            loading_info,
-                            mapping.distributed_operation,
-                            hf_quantizer,
-                        )
+                        set_param_for_module(model, target_name, param, loading_info, hf_quantizer)
 
                 # Cleanup all the tensors that were gathered before next iteration
                 del realized_value
