@@ -41,7 +41,7 @@ from ...masking_utils import (
     create_sliding_window_causal_mask,
 )
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
-from ...modeling_layers import GradientCheckpointingLayer
+from ...modeling_layers import GenericForSequenceClassification, GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPooling, CausalLMOutputWithPast
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
@@ -2566,6 +2566,16 @@ class Gemma4ForConditionalGeneration(Gemma4PreTrainedModel, GenerationMixin):
             )
 
 
+class Gemma4TextForSequenceClassification(GenericForSequenceClassification, Gemma4PreTrainedModel):
+    """
+    Gemma4TextForSequenceClassification is a text-only sequence classification model that works with Gemma4TextConfig.
+    It uses the generic sequence classification implementation for efficiency and consistency.
+    """
+
+    config: Gemma4TextConfig
+    input_modalities = ("text",)
+
+
 __all__ = [
     "Gemma4AudioModel",
     "Gemma4ForCausalLM",
@@ -2574,4 +2584,5 @@ __all__ = [
     "Gemma4PreTrainedModel",
     "Gemma4TextModel",
     "Gemma4VisionModel",
+    "Gemma4TextForSequenceClassification",
 ]
