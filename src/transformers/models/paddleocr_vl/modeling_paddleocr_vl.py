@@ -848,7 +848,9 @@ class PaddleOCRVisionEncoder(nn.Module):
         )
 
         if rotary_pos_ids is None:
-            rotary_pos_ids = get_rotary_pos_ids(grid_thw, self.config.spatial_merge_size)
+            # Use merge_size=1: PaddleOCR merges patches in the projector (after the encoder),
+            # unlike Qwen which merges inside the encoder, so rotary positions here are simple (row, col).
+            rotary_pos_ids = get_rotary_pos_ids(grid_thw, 1)
 
         rotary_embeddings = self.rotary_pos_emb(rotary_pos_ids)
         rotary_embeddings = rotary_embeddings.repeat(1, 2)

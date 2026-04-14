@@ -397,7 +397,7 @@ class VideoLlama3VisionModel(VideoLlama3PreTrainedModel):
         if rotary_pos_ids is None:
             rotary_pos_ids = get_rotary_pos_ids(grid_thw, merge_sizes)
 
-        rotary_pos_emb = self.rotary_pos_emb(rotary_pos_ids).to(hidden_states.dtype)
+        rotary_pos_emb = self.rotary_pos_emb(rotary_pos_ids)
         emb = torch.cat((rotary_pos_emb, rotary_pos_emb), dim=-1)
         position_embeddings = (emb.cos(), emb.sin())
 

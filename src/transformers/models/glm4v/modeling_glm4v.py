@@ -758,7 +758,7 @@ class Glm4vVisionModel(Glm4vPreTrainedModel):
         if cu_seqlens is None:
             cu_seqlens = get_vision_cu_seqlens(grid_thw)
 
-        rotary_emb = self.rotary_pos_emb(rotary_pos_ids).to(hidden_states.dtype)
+        rotary_emb = self.rotary_pos_emb(rotary_pos_ids)
         emb = torch.cat((rotary_emb, rotary_emb), dim=-1)
         position_embeddings = (emb.cos(), emb.sin())
 
