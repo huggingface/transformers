@@ -19,6 +19,7 @@ from typing import Optional
 
 import torch
 from torch import nn
+from torch.distributed.tensor import DTensor, Replicate
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, LayerNorm, MSELoss
 from torch.nn import functional as F
 

@@ -21,6 +21,7 @@ from typing import Optional
 import torch
 import torch.nn.functional as F
 from torch import nn
+from torch.distributed.tensor import DTensor, Replicate
 
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
