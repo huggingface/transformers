@@ -1438,6 +1438,7 @@ class Gemma4TextScaledWordEmbedding(nn.Embedding):
 
 class Gemma4PreTrainedModel(PreTrainedModel):
     config: Gemma4Config
+    base_model_prefix = "model"
     supports_gradient_checkpointing = True
     _supports_flash_attn = True
     _supports_sdpa = True
@@ -1710,7 +1711,6 @@ class Gemma4ForCausalLM(Gemma4PreTrainedModel, GenerationMixin):
     _tp_plan = {"lm_head": "colwise_gather_output"}
     _pp_plan = {"lm_head": (["hidden_states"], ["logits"])}
     config: Gemma4TextConfig
-    base_model_prefix = "model"
 
     def __init__(self, config: Gemma4TextConfig):
         super().__init__(config)
@@ -2398,7 +2398,6 @@ class Gemma4Model(Gemma4PreTrainedModel):
 class Gemma4ForConditionalGeneration(Gemma4PreTrainedModel, GenerationMixin):
     _tied_weights_keys = {"lm_head.weight": "model.language_model.embed_tokens.weight"}
     accepts_loss_kwargs = False
-    base_model_prefix = "model"
 
     def __init__(self, config: Gemma4Config):
         super().__init__(config)

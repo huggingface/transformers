@@ -98,9 +98,6 @@ class Gemma4TextModelTest(CausalLMModelTest, unittest.TestCase):
     def test_num_layers_is_small(self):
         pass
 
-    def test_load_with_mismatched_shapes(self):
-        pass
-
     @unittest.skip("Gemma4 uses different rope per layer type, which is not compatible with this test")
     def test_model_rope_scaling_frequencies(self):
         pass
@@ -394,6 +391,7 @@ class Gemma4Vision2TextModelTest(ModelTesterMixin, GenerationTesterMixin, unitte
         self.model_tester = Gemma4Vision2TextModelTester(self)
         self.config_tester = ConfigTester(self, config_class=Gemma4Config, hidden_size=37)
 
+    @unittest.skip("Loading nested configs with overwritten `kwargs` isn't supported yet.")
     def test_load_with_mismatched_shapes(self):
         pass
 

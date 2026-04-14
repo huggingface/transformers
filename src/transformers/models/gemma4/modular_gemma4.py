@@ -1155,6 +1155,7 @@ class Gemma4TextScaledWordEmbedding(Gemma3TextScaledWordEmbedding):
 
 class Gemma4PreTrainedModel(PreTrainedModel):
     config: Gemma4Config
+    base_model_prefix = "model"
     supports_gradient_checkpointing = True
     _supports_flash_attn = True
     _supports_sdpa = True
@@ -1410,8 +1411,6 @@ class Gemma4TextModel(Gemma3TextModel):
 
 @auto_docstring(custom_intro="The base Gemma 4 language model with a language modeling head.")
 class Gemma4ForCausalLM(Gemma3ForCausalLM):
-    base_model_prefix = "model"
-
     def __init__(self, config: Gemma4TextConfig):
         super().__init__(config)
         # Grab the ones from the child
@@ -2003,8 +2002,6 @@ class Gemma4Model(Gemma3nModel):
     """
 )
 class Gemma4ForConditionalGeneration(Gemma3nForConditionalGeneration):
-    base_model_prefix = "model"
-
     def __init__(self, config: Gemma4Config):
         super().__init__(config)
         # Grab the ones from the child
