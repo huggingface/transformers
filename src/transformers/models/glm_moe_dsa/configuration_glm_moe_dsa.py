@@ -39,6 +39,12 @@ class GlmMoeDsaConfig(PreTrainedConfig):
         Head dimension for the indexer projections (DSA).
     index_n_heads (`int | None`, *optional*, defaults to 32):
         Number of heads for the indexer projections (DSA).
+    index_topk_freq (`int`, *optional*, defaults to 1):
+        Frequency interval for activating indexer Top-K selection across layers.
+    index_topk_pattern (`str` or `None`, *optional*, defaults to `None`):
+        Custom layer-wise pattern for IndexCache.
+    is_nextn (`bool`, *optional*, defaults to `False`):
+        Whether to enable NextN (speculative decoding) mode.
 
     ```python
     >>> from transformers import GlmMoeDsaConfig, GlmMoeDsaModel
@@ -117,6 +123,9 @@ class GlmMoeDsaConfig(PreTrainedConfig):
     index_topk: int = 2048
     index_head_dim: int = 128
     index_n_heads: int = 32
+    index_topk_freq: int = 1
+    index_topk_pattern: str | None = None
+    is_nextn: bool = False
 
     def __post_init__(self, **kwargs):
         self.qk_head_dim = self.qk_nope_head_dim + self.qk_rope_head_dim

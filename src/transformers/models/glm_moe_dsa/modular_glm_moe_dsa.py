@@ -19,13 +19,15 @@ import torch.nn as nn
 import torch.nn.functional as F
 from huggingface_hub.dataclasses import strict
 
-from ...cache_utils import Cache
+from ...cache_utils import Cache, DynamicCache
 from ...configuration_utils import PreTrainedConfig
+from ...masking_utils import create_causal_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
+from ...modeling_outputs import BaseModelOutputWithPast
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...models.llama.modeling_llama import rotate_half
 from ...processing_utils import Unpack
-from ...utils import auto_docstring, logging
+from ...utils import TransformersKwargs, auto_docstring, logging
 from ...utils.generic import is_flash_attention_requested
 from ..glm4_moe.modeling_glm4_moe import (
     Glm4MoeForCausalLM,
@@ -88,6 +90,12 @@ class GlmMoeDsaConfig(Glm4MoeLiteConfig):
         Head dimension for the indexer projections (DSA).
     index_n_heads (`int | None`, *optional*, defaults to 32):
         Number of heads for the indexer projections (DSA).
+    index_topk_freq (`int`, *optional*, defaults to 1):
+        Frequency interval for activating indexer Top-K selection across layers.
+    index_topk_pattern (`str` or `None`, *optional*, defaults to `None`):
+        Custom layer-wise pattern for IndexCache.
+    is_nextn (`bool`, *optional*, defaults to `False`):
+        Whether to enable NextN (speculative decoding) mode.
 
     ```python
     >>> from transformers import GlmMoeDsaConfig, GlmMoeDsaModel
@@ -131,6 +139,9 @@ class GlmMoeDsaConfig(Glm4MoeLiteConfig):
     index_topk: int = 2048
     index_head_dim: int = 128
     index_n_heads: int = 32
+    index_topk_freq: int = 1
+    index_topk_pattern: str | None = None
+    is_nextn: bool = False
     pretraining_tp = AttributeError()
     rope_interleave = AttributeError()
 
@@ -151,7 +162,7 @@ class GlmMoeDsaRMSNorm(Glm4MoeRMSNorm):
 
 class GlmMoeDsaIndexer(nn.Module):
     """
-    Dynamic Sparse Attention (DSA) indexer for selecting top-k tokens.
+    DeepSeek Sparse Attention (DSA) indexer for selecting top-k tokens.
 
     The Indexer has its own lightweight projections (wq_b, wk) separate from the
     main MLA attention. It uses non-interleaved (NeoX/Llama) RoPE, unlike the main attention
@@ -186,7 +197,7 @@ class GlmMoeDsaIndexer(nn.Module):
         self.softmax_scale = self.head_dim**-0.5
 
         # Indexer maintains its own key cache (not in DynamicCache, which is sized for attention layers only)
-        self._cached_keys: torch.Tensor | None = None
+        self.register_buffer("_cached_keys", None, persistent=False)
 
     @torch.no_grad()
     def forward(
@@ -278,7 +289,7 @@ class GlmMoeDsaIndexer(nn.Module):
 
 class GlmMoeDsaAttention(nn.Module):
     """
-    Multi-head Latent Attention (MLA) with Dynamic Sparse Attention (DSA) indexer.
+    Multi-head Latent Attention (MLA) with DeepSeek Sparse Attention (DSA) indexer.
 
     This follows the same architecture as DeepSeek V3.2's MLA:
       - Query: x → q_a_proj → RMSNorm → q_b_proj → split(q_nope, q_pe) → RoPE(q_pe)
@@ -345,14 +356,35 @@ class GlmMoeDsaAttention(nn.Module):
 
         self.indexer = GlmMoeDsaIndexer(config, layer_idx)
 
+        # Refer: https://arxiv.org/abs/2603.12201 for more details.
+        # skip_topk: when True, this layer will skip computation and reuse previous layer's topk indices.
+        # next_skip_topk: when True, the next layer will skip computation and reuse this layer's topk indices.
+        self.is_nextn = config.is_nextn
+        if self.is_nextn:
+            self.skip_topk = False
+            self.next_skip_topk = False
+        else:
+            self.index_topk_freq = config.index_topk_freq
+            self.index_topk_pattern = config.index_topk_pattern
+            if self.index_topk_pattern is None:
+                self.skip_topk = max(layer_idx - 1, 0) % self.index_topk_freq != 0
+                self.next_skip_topk = layer_idx % self.index_topk_freq != 0
+            else:
+                self.skip_topk = self.index_topk_pattern[layer_idx] == "S"
+                if layer_idx < len(self.index_topk_pattern) - 1:
+                    self.next_skip_topk = self.index_topk_pattern[layer_idx + 1] == "S"
+                else:
+                    self.next_skip_topk = False
+
     def forward(
         self,
         hidden_states: torch.Tensor,
         position_embeddings: tuple[torch.Tensor, torch.Tensor],
         attention_mask: torch.Tensor | None,
         past_key_values: Cache | None = None,
+        prev_topk_indices: torch.Tensor | None = None,
         **kwargs: Unpack[FlashAttentionKwargs],
-    ) -> tuple[torch.Tensor, torch.Tensor | None, tuple[torch.Tensor] | None]:
+    ) -> tuple[torch.Tensor, torch.Tensor] | tuple[torch.Tensor, torch.Tensor, torch.Tensor | None]:
         batch_size, seq_length = hidden_states.shape[:-1]
         cos, sin = position_embeddings
 
@@ -395,20 +427,23 @@ class GlmMoeDsaAttention(nn.Module):
 
         # ===== Indexer (DSA sparse mask) =====
         # attention_mask is [B, 1, S, T] (4D) for eager and (2D) otherwise but indexer works with [B, S, T] (3D)
-        indexer_mask = (
-            attention_mask[:, 0, :, :]
-            if attention_mask is not None and attention_mask.dim() == 4
-            else attention_mask.unsqueeze(1)
-            if attention_mask is not None
-            else None
-        )
-        topk_indices = self.indexer(
-            hidden_states,
-            q_resid,
-            position_embeddings,
-            indexer_mask,
-            use_cache=past_key_values is not None,
-        )  # [B, S, topk]
+        if not self.skip_topk or prev_topk_indices is None:
+            indexer_mask = (
+                attention_mask[:, 0, :, :]
+                if attention_mask is not None and attention_mask.dim() == 4
+                else attention_mask.unsqueeze(1)
+                if attention_mask is not None
+                else None
+            )
+            topk_indices = self.indexer(
+                hidden_states,
+                q_resid,
+                position_embeddings,
+                indexer_mask,
+                use_cache=past_key_values is not None,
+            )  # [B, S, topk]
+        else:
+            topk_indices = prev_topk_indices  # [B, S, topk]
 
         # Build combined DSA + causal mask: -inf everywhere except selected top-k positions
         total_len = key_states.shape[2]
@@ -455,11 +490,56 @@ class GlmMoeDsaAttention(nn.Module):
 
         attn_output = attn_output.reshape(batch_size, seq_length, -1).contiguous()
         attn_output = self.o_proj(attn_output)
-        return attn_output, attn_weights
+
+        if self.next_skip_topk is None:
+            return attn_output, attn_weights
+        else:
+            if self.next_skip_topk:
+                return attn_output, attn_weights, topk_indices
+            else:
+                return attn_output, attn_weights, None
 
 
 class GlmMoeDsaDecoderLayer(Glm4MoeLiteDecoderLayer):
-    pass
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        attention_mask: torch.Tensor | None = None,
+        position_ids: torch.LongTensor | None = None,
+        past_key_values: Cache | None = None,
+        use_cache: bool | None = False,
+        position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
+        prev_topk_indices: torch.Tensor | None = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> tuple[torch.Tensor, torch.Tensor | None]:
+        residual = hidden_states
+        hidden_states = self.input_layernorm(hidden_states)
+
+        # Self Attention
+        hidden_states = self.self_attn(
+            hidden_states=hidden_states,
+            attention_mask=attention_mask,
+            position_ids=position_ids,
+            past_key_values=past_key_values,
+            use_cache=use_cache,
+            position_embeddings=position_embeddings,
+            prev_topk_indices=prev_topk_indices,
+            **kwargs,
+        )
+        if isinstance(hidden_states, tuple) and len(hidden_states) == 3:
+            hidden_states, _, topk_indices = hidden_states
+        else:
+            hidden_states, _ = hidden_states
+            topk_indices = None
+
+        hidden_states = residual + hidden_states
+
+        # Fully Connected
+        residual = hidden_states
+        hidden_states = self.post_attention_layernorm(hidden_states)
+        hidden_states = self.mlp(hidden_states)
+        hidden_states = residual + hidden_states
+        return hidden_states, topk_indices
 
 
 class GlmMoeDsaPreTrainedModel(Glm4MoePreTrainedModel):
@@ -475,7 +555,59 @@ class GlmMoeDsaPreTrainedModel(Glm4MoePreTrainedModel):
 
 
 class GlmMoeDsaModel(Glm4MoeModel):
-    pass
+    def forward(
+        self,
+        input_ids: torch.LongTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
+        position_ids: torch.LongTensor | None = None,
+        past_key_values: Cache | None = None,
+        inputs_embeds: torch.FloatTensor | None = None,
+        use_cache: bool | None = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> BaseModelOutputWithPast:
+        if (input_ids is None) ^ (inputs_embeds is not None):
+            raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
+
+        if inputs_embeds is None:
+            inputs_embeds: torch.Tensor = self.embed_tokens(input_ids)
+
+        if use_cache and past_key_values is None:
+            past_key_values = DynamicCache(config=self.config)
+
+        if position_ids is None:
+            past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
+            position_ids = torch.arange(inputs_embeds.shape[1], device=inputs_embeds.device) + past_seen_tokens
+            position_ids = position_ids.unsqueeze(0)
+
+        causal_mask = create_causal_mask(
+            config=self.config,
+            inputs_embeds=inputs_embeds,
+            attention_mask=attention_mask,
+            past_key_values=past_key_values,
+            position_ids=position_ids,
+        )
+
+        hidden_states = inputs_embeds
+        position_embeddings = self.rotary_emb(hidden_states, position_ids=position_ids)
+
+        topk_indices = None
+        for decoder_layer in self.layers[: self.config.num_hidden_layers]:
+            hidden_states, topk_indices = decoder_layer(
+                hidden_states,
+                attention_mask=causal_mask,
+                position_embeddings=position_embeddings,
+                position_ids=position_ids,
+                past_key_values=past_key_values,
+                use_cache=use_cache,
+                prev_topk_indices=topk_indices,
+                **kwargs,
+            )
+
+        hidden_states = self.norm(hidden_states)
+        return BaseModelOutputWithPast(
+            last_hidden_state=hidden_states,
+            past_key_values=past_key_values,
+        )
 
 
 class GlmMoeDsaForCausalLM(Glm4MoeForCausalLM):
