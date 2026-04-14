@@ -253,6 +253,7 @@ class Qwen2_5_VLModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.Test
     def test_vision_position_ids(self):
         """
         Tests that vision position ids are built correctly for images and for videos.
+        See https://github.com/huggingface/transformers/pull/45400
         """
         config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
         model = Qwen2_5_VLModel(config).to(torch_device)
