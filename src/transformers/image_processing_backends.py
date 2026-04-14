@@ -50,6 +50,8 @@ from .image_utils import (
     get_image_type,
     get_max_height_width,
     infer_channel_dimension_format,
+    is_valid_image,
+    load_image_as_tensor,
 )
 from .processing_utils import ImagesKwargs, Unpack
 from .utils import (
@@ -107,6 +109,22 @@ class TorchvisionBackend(BaseImageProcessor):
         `str`: The backend used by this image processor.
         """
         return "torchvision"
+
+    def fetch_images(self, image_url_or_urls: str | list[str] | list[list[str]]):
+        """
+        Convert a single or a list of URLs / paths into `torch.Tensor` objects.
+
+        Already-valid image objects (tensors, numpy arrays, PIL Images) are passed through
+        unchanged so that callers who pre-load images are unaffected.
+        """
+        if isinstance(image_url_or_urls, (list, tuple)):
+            return [self.fetch_images(x) for x in image_url_or_urls]
+        elif isinstance(image_url_or_urls, str):
+            return load_image_as_tensor(image_url_or_urls)
+        elif is_valid_image(image_url_or_urls):
+            return image_url_or_urls
+        else:
+            raise TypeError(f"only a single or a list of entries is supported but got type={type(image_url_or_urls)}")
 
     def process_image(
         self,
