@@ -125,6 +125,7 @@ else:
             ("regnet", {"torchvision": "ConvNextImageProcessor", "pil": "ConvNextImageProcessorPil"}),
             ("resnet", {"torchvision": "ConvNextImageProcessor", "pil": "ConvNextImageProcessorPil"}),
             ("sam2_video", {"torchvision": "Sam2ImageProcessor"}),
+            ("sam3_lite_text", {"torchvision": "Sam3ImageProcessor"}),
             ("sam3_tracker", {"torchvision": "Sam3ImageProcessor"}),
             ("sam3_tracker_video", {"torchvision": "Sam3ImageProcessor"}),
             ("sam3_video", {"torchvision": "Sam3ImageProcessor"}),
@@ -137,12 +138,15 @@ else:
             ("t5gemma2_encoder", {"torchvision": "Gemma3ImageProcessor", "pil": "Gemma3ImageProcessorPil"}),
             ("table-transformer", {"torchvision": "DetrImageProcessor", "pil": "DetrImageProcessorPil"}),
             ("timesformer", {"pil": "VideoMAEImageProcessorPil", "torchvision": "VideoMAEImageProcessor"}),
+            ("timm_wrapper", {"pil": "TimmWrapperImageProcessor"}),
             ("trocr", {"torchvision": "ViTImageProcessor", "pil": "ViTImageProcessorPil"}),
             ("udop", {"torchvision": "LayoutLMv3ImageProcessor", "pil": "LayoutLMv3ImageProcessorPil"}),
             ("upernet", {"torchvision": "SegformerImageProcessor", "pil": "SegformerImageProcessorPil"}),
+            ("video_llava", {"pil": "VideoLlavaImageProcessor"}),
             ("vipllava", {"torchvision": "CLIPImageProcessor", "pil": "CLIPImageProcessorPil"}),
             ("vit_mae", {"torchvision": "ViTImageProcessor", "pil": "ViTImageProcessorPil"}),
             ("vit_msn", {"torchvision": "ViTImageProcessor", "pil": "ViTImageProcessorPil"}),
+            ("vivit", {"torchvision": "VivitImageProcessor"}),
             ("xclip", {"torchvision": "CLIPImageProcessor", "pil": "CLIPImageProcessorPil"}),
         ]
     )

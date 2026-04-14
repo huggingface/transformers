@@ -23,7 +23,7 @@ from ..auto.configuration_auto import AutoConfig
 logger = logging.get_logger(__name__)
 
 
-@auto_docstring
+@auto_docstring(checkpoint="facebook/nougat-base")
 @strict
 class NougatConfig(PreTrainedConfig):
     r"""
