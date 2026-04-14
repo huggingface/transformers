@@ -26,14 +26,14 @@ from ...modeling_rope_utils import RotaryEmbeddingConfigMixin
 @auto_docstring(checkpoint="deepseek-ai/DeepSeek-V2-Lite")
 class DeepseekV32Config(GlmMoeDsaConfig, RotaryEmbeddingConfigMixin):
     attribute_map = {
-        "num_local_experts": "num_experts_per_tok"
+        "num_local_experts": "num_experts"
     } 
     index_n_heads: int = 64
     index_head_dim: int = 128
     index_top_k: int = 2048
     max_seq_len: int = 2048
     mlp_bias: bool = False
-
+    num_experts:int = 256
 
 
 class DeepseekV32MoE(GlmMoeDsaMoE):
