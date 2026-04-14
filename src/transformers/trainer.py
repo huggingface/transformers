@@ -764,8 +764,9 @@ class Trainer:
                 )
             else:
                 self.args.gradient_accumulation_steps = grad_acc_kwargs["num_steps"]
-        else:
-            grad_acc_kwargs["num_steps"] = self.args.gradient_accumulation_steps
+
+        # The Trainer handles GAS itself, so GAS=1 in Accelerate to avoid any double-division
+        grad_acc_kwargs["num_steps"] = 1
 
         # Just making sure that gradient_state have the correct values passed.
         # We don't rely on `accumulate` from accelerate to set sync_gradients in gradient_state.
