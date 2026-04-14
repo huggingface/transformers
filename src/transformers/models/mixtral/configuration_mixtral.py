@@ -45,33 +45,41 @@ class MixtralConfig(PreTrainedConfig):
     default_theta = 1000000.0
     # TP plan (for inference/generation).
     base_model_tp_plan = {
-        "layers.*.self_attn.q_proj":  TPStyle("colwise", "none"),
-        "layers.*.self_attn.k_proj":  TPStyle("colwise", "none"),
-        "layers.*.self_attn.v_proj":  TPStyle("colwise", "none"),
-        "layers.*.self_attn.o_proj":  TPStyle("rowwise", "allreduce"),
-        "layers.*.mlp.experts":       TPStyle("moe_experts", "allreduce", shard_plan={
-            "gate_up_proj": "packed_colwise",
-            "down_proj": "rowwise",
-        }),
+        "layers.*.self_attn.q_proj": TPStyle("colwise", "none"),
+        "layers.*.self_attn.k_proj": TPStyle("colwise", "none"),
+        "layers.*.self_attn.v_proj": TPStyle("colwise", "none"),
+        "layers.*.self_attn.o_proj": TPStyle("rowwise", "allreduce"),
+        "layers.*.mlp.experts": TPStyle(
+            "moe_experts",
+            "allreduce",
+            shard_plan={
+                "gate_up_proj": "packed_colwise",
+                "down_proj": "rowwise",
+            },
+        ),
     }
 
     # TP + Sequence Parallelism plan (for training).
     base_model_sp_plan = {
-        "embed_tokens":                       TPStyle("vocab", "reduce_scatter"),
-        "layers.*.input_layernorm":           TPStyle("activation", "none"),
-        "layers.*.self_attn":                 TPStyle("module", "allgather", input_key="hidden_states"),
-        "layers.*.self_attn.q_proj":          TPStyle("colwise", "none"),
-        "layers.*.self_attn.k_proj":          TPStyle("colwise", "none"),
-        "layers.*.self_attn.v_proj":          TPStyle("colwise", "none"),
-        "layers.*.self_attn.o_proj":          TPStyle("rowwise", "reduce_scatter"),
-        "layers.*.post_attention_layernorm":  TPStyle("activation", "none"),
-        "layers.*.mlp":                       TPStyle("module", "allgather_split"),
-        "layers.*.mlp.experts":               TPStyle("moe_experts", "allreduce", shard_plan={
-            "gate_up_proj": "packed_colwise",
-            "down_proj": "rowwise",
-        }),
-        "norm":                               TPStyle("activation", "none"),
-        "lm_head":                            TPStyle("colwise", "loss_parallel"),
+        "embed_tokens": TPStyle("vocab", "reduce_scatter"),
+        "layers.*.input_layernorm": TPStyle("activation", "none"),
+        "layers.*.self_attn": TPStyle("module", "allgather", input_key="hidden_states"),
+        "layers.*.self_attn.q_proj": TPStyle("colwise", "none"),
+        "layers.*.self_attn.k_proj": TPStyle("colwise", "none"),
+        "layers.*.self_attn.v_proj": TPStyle("colwise", "none"),
+        "layers.*.self_attn.o_proj": TPStyle("rowwise", "reduce_scatter"),
+        "layers.*.post_attention_layernorm": TPStyle("activation", "none"),
+        "layers.*.mlp": TPStyle("module", "allgather_split"),
+        "layers.*.mlp.experts": TPStyle(
+            "moe_experts",
+            "allreduce",
+            shard_plan={
+                "gate_up_proj": "packed_colwise",
+                "down_proj": "rowwise",
+            },
+        ),
+        "norm": TPStyle("activation", "none"),
+        "lm_head": TPStyle("colwise", "loss_parallel"),
     }
     base_model_pp_plan = {
         "embed_tokens": (["input_ids"], ["inputs_embeds"]),

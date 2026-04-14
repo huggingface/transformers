@@ -50,10 +50,14 @@ class DeepseekV3Config(PreTrainedConfig):
     model_type = "deepseek_v3"
     keys_to_ignore_at_inference = ["past_key_values"]
     base_model_tp_plan = {
-        "layers.*.mlp.experts": TPStyle("moe_experts", "allreduce", shard_plan={
-            "gate_up_proj": "packed_colwise",
-            "down_proj": "rowwise",
-        }),
+        "layers.*.mlp.experts": TPStyle(
+            "moe_experts",
+            "allreduce",
+            shard_plan={
+                "gate_up_proj": "packed_colwise",
+                "down_proj": "rowwise",
+            },
+        ),
         "layers.*.mlp.shared_experts.gate_proj": TPStyle("colwise", "none"),
         "layers.*.mlp.shared_experts.up_proj": TPStyle("colwise", "none"),
         "layers.*.mlp.shared_experts.down_proj": TPStyle("rowwise", "allreduce"),

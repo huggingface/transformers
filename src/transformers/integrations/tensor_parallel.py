@@ -76,7 +76,6 @@ def _get_parameter_tp_plan(parameter_name: str, tp_plan: dict[str, str], is_weig
 # =============================================================================
 
 
-
 # =============================================================================
 # High-Level API Functions
 # =============================================================================
@@ -108,11 +107,7 @@ def verify_tp_plan(expected_keys: list[str], tp_plan: dict[str, str | TPStyle] |
 
     # Filter out module-level comm hooks — they don't shard weights
     _NON_WEIGHT_KINDS = {"activation", "module"}
-    weight_plan = {
-        k: v
-        for k, v in tp_plan.items()
-        if not isinstance(v, TPStyle) or v.kind not in _NON_WEIGHT_KINDS
-    }
+    weight_plan = {k: v for k, v in tp_plan.items() if not isinstance(v, TPStyle) or v.kind not in _NON_WEIGHT_KINDS}
 
     generic_keys = {replace_layer_number_by_wildcard(key) for key in expected_keys}
     unsharded_layers = set(generic_keys)
@@ -133,6 +128,7 @@ def verify_tp_plan(expected_keys: list[str], tp_plan: dict[str, str | TPStyle] |
         logger.warning(f"The following TP rules were not applied on any of the layers: {unused_rules}")
     if len(unsharded_layers) > 0:
         logger.warning(f"The following layers were not sharded: {', '.join(unsharded_layers)}")
+
 
 class PrepareModuleInputOutput(ParallelStyle):
     """Allgather input (Shard(1) → Replicate) + local split output (Replicate → Shard(1)).
@@ -235,7 +231,9 @@ class PackedColwiseParallel(ParallelStyle):
 
         if outputs is None or self.use_local_output:
             return outputs
-        return DTensor.from_local(outputs, device_mesh, (_StridedShard(dim=-1, split_factor=self.split_factor),), run_check=False)
+        return DTensor.from_local(
+            outputs, device_mesh, (_StridedShard(dim=-1, split_factor=self.split_factor),), run_check=False
+        )
 
     def _apply(self, module, device_mesh):
         if not isinstance(module, torch.nn.Linear):
@@ -285,7 +283,6 @@ class _AllReduceBackward(torch.autograd.Function):
     def backward(ctx, grad):
         dist.all_reduce(grad, group=ctx.process_group)
         return grad, None
-
 
 
 class MoEExpertsParallel(ParallelStyle):
@@ -574,10 +571,7 @@ def apply_tensor_parallel(model, tp_mesh, tp_plan):
     # loss_parallel patches F.cross_entropy to work with Shard(-1) logits.
     # It must be active during both forward and backward, so we enable it
     # once rather than as a context manager.
-    has_loss_parallel = any(
-        isinstance(v, TPStyle) and v.comm == "loss_parallel"
-        for v in tp_plan.values()
-    )
+    has_loss_parallel = any(isinstance(v, TPStyle) and v.comm == "loss_parallel" for v in tp_plan.values())
     if has_loss_parallel:
         from torch.distributed.tensor.parallel import loss_parallel
 
