@@ -23,29 +23,22 @@ import os
 import torch
 
 from ..utils import logging
+from .hub_kernels import lazy_load_kernel
 
 
 logger = logging.get_logger(__name__)
-
-_sonicmoe_module = None
 
 # Map activation function names from HF config to SonicMoE epilogue names
 ACT_MAP = {"silu": "swiglu", "gelu": "geglu", "relu": "reglu"}
 
 
 def _load_sonicmoe():
-    """Lazy-load the SonicMoE kernel from hub."""
-    global _sonicmoe_module
-    if _sonicmoe_module is None:
-        if "CUTE_DSL_ARCH" not in os.environ:
-            major, minor = torch.cuda.get_device_capability()
-            os.environ["CUTE_DSL_ARCH"] = f"sm_{major}{minor}a" if major >= 9 else f"sm_{major}{minor}"
+    """Lazy-load the SonicMoE kernel (hub or local install)."""
+    if "CUTE_DSL_ARCH" not in os.environ:
+        major, minor = torch.cuda.get_device_capability()
+        os.environ["CUTE_DSL_ARCH"] = f"sm_{major}{minor}a" if major >= 9 else f"sm_{major}{minor}"
 
-        from kernels import get_kernel
-
-        _sonicmoe_module = get_kernel("adarshxs/sonic-moe", revision="v1")
-
-    return _sonicmoe_module
+    return lazy_load_kernel("sonic-moe")
 
 
 def sonicmoe_experts_forward(
@@ -65,14 +58,14 @@ def sonicmoe_experts_forward(
     moe_general_routing = getattr(kernel, "moe_general_routing_inputs", None)
     if moe_general_routing is None:
         raise ImportError(
-            "moe_general_routing_inputs not found in adarshxs/sonic-moe. "
+            "moe_general_routing_inputs not found in kernels-community/sonic-moe. "
             "Make sure you have the `kernels` package and `nvidia-cutlass-dsl` installed."
         )
 
     ActivationType = getattr(getattr(kernel, "enums", None), "ActivationType", None)
     if ActivationType is None:
         raise ImportError(
-            "ActivationType enum not found in adarshxs/sonic-moe. "
+            "ActivationType enum not found in kernels-community/sonic-moe. "
             "Make sure you have the `kernels` package and `nvidia-cutlass-dsl` installed."
         )
 
@@ -91,17 +84,8 @@ def sonicmoe_experts_forward(
     expert_ids = top_k_index.reshape(-1).to(torch.int32)
 
     # Map activation function
-    act_name = getattr(self, "act_fn", "silu").lower()
+    act_name = getattr(self.config, "hidden_act", "silu").lower()
     activation_type = getattr(ActivationType, ACT_MAP.get(act_name, "swiglu").upper(), ActivationType.SWIGLU)
-
-    # SonicMoE's CUTLASS epilogue reads accumulators as interleaved pairs: act(D[2i]) * D[2i+1].
-    # HuggingFace stores concatenated [gate; up]. Interleave and cache on first call.
-    if not hasattr(self, "is_interleaved"):
-        I = self.gate_up_proj.size(1) // 2
-        self.gate_up_proj = torch.stack([self.gate_up_proj[:, :I, :], self.gate_up_proj[:, I:, :]], dim=2).reshape(
-            self.gate_up_proj.shape
-        )
-        self.is_interleaved = True
 
     w1 = self.gate_up_proj.permute(1, 2, 0)  # (2*I, H, E)
     w2 = self.down_proj.permute(1, 2, 0)  # (I, H, E)
@@ -119,8 +103,9 @@ def sonicmoe_experts_forward(
         b2,
         num_experts,
         cuda_device_stream,
-        activation_type,
-        grad_enabled,
+        activation_type=activation_type,
+        is_inference_mode_enabled=not grad_enabled,
+        is_concatenated_gate_up=True,
     )
 
     return output
