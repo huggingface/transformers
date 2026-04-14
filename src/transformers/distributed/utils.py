@@ -32,6 +32,7 @@ if is_torch_available():
 
 
 def is_fsdp_enabled() -> bool:
+    """Check if FSDP is active via Accelerate (env var based) — covers FSDP1 only."""
     if not is_torch_available():
         return False
 
