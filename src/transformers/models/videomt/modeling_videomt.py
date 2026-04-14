@@ -220,15 +220,12 @@ class VideomtAttention(nn.Module):
     ) -> tuple[torch.Tensor, torch.Tensor | None]:
         """Input shape: Batch x Time x Channel"""
 
-        batch_size, seq_length, embed_dim = hidden_states.shape
+        input_shape = hidden_states.shape[:-1]
 
-        queries = self.q_proj(hidden_states)
-        keys = self.k_proj(hidden_states)
-        values = self.v_proj(hidden_states)
-
-        queries = queries.view(batch_size, seq_length, self.num_heads, self.head_dim).transpose(1, 2)
-        keys = keys.view(batch_size, seq_length, self.num_heads, self.head_dim).transpose(1, 2)
-        values = values.view(batch_size, seq_length, self.num_heads, self.head_dim).transpose(1, 2)
+        hidden_shape = (*input_shape, -1, self.head_dim)
+        queries = self.q_proj(hidden_states).view(hidden_shape).transpose(1, 2)
+        keys = self.k_proj(hidden_states).view(hidden_shape).transpose(1, 2)
+        values = self.v_proj(hidden_states).view(hidden_shape).transpose(1, 2)
 
         attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
             self.config._attn_implementation, eager_attention_forward
@@ -245,7 +242,7 @@ class VideomtAttention(nn.Module):
             dropout=0.0 if not self.training else self.dropout,
         )
 
-        attn_output = attn_output.reshape(batch_size, seq_length, embed_dim).contiguous()
+        attn_output = attn_output.reshape(*input_shape, -1).contiguous()
         attn_output = self.out_proj(attn_output)
 
         return attn_output, attn_weights
@@ -1179,12 +1176,12 @@ class VideomtForUniversalSegmentation(VideomtPreTrainedModel):
             frame_hidden_states = hidden_states[:, frame_idx]
 
             if propagated_query is None:
-                query_tokens = self.query.weight[None, :, :].expand(batch_size, -1, -1)
+                query_tokens = self.query.weight[None, :, :].expand(batch_size, -1, -1).to(frame_hidden_states.device)
             else:
-                query_tokens = self.query_updater(propagated_query) + self.query.weight[None, :, :].to(
-                    frame_hidden_states.device
-                )
-            frame_hidden_states = torch.cat((query_tokens.to(frame_hidden_states.device), frame_hidden_states), dim=1)
+                query_tokens = self.query_updater(propagated_query).to(frame_hidden_states.device) + self.query.weight[
+                    None, :, :
+                ].to(frame_hidden_states.device)
+            frame_hidden_states = torch.cat((query_tokens, frame_hidden_states), dim=1)
 
             for layer_module in self.layers[query_start_idx:]:
                 frame_hidden_states = layer_module(frame_hidden_states)

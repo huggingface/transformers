@@ -359,3 +359,41 @@ class ConfigTestUtils(unittest.TestCase):
         self.assertIsInstance(new_config_instance.inf_positive, float)
         self.assertIsInstance(new_config_instance.inf_negative, float)
         self.assertIsInstance(new_config_instance.nan, float)
+
+
+class ConfigSubclassKwOnlyTest(unittest.TestCase):
+    """Test that config subclasses with non-default fields following parent default fields
+    no longer raise TypeError (fixed by kw_only=True in __init_subclass__). Regression
+    test for https://github.com/huggingface/transformers/issues/XXXX."""
+
+    def test_subclass_non_default_field_after_default(self):
+        """A config subclass adding a required field after parent defaults must not raise."""
+
+        class MyConfig(PreTrainedConfig):
+            pooling: str  # no default — would fail under Python dataclass ordering rules
+
+        # Should construct without TypeError
+        cfg = MyConfig(pooling="mean")
+        self.assertEqual(cfg.pooling, "mean")
+
+    def test_subclass_multiple_non_default_fields(self):
+        """Multiple non-default fields in the subclass should all work."""
+
+        class EmbedConfig(PreTrainedConfig):
+            dim: int
+            pooling: str
+
+        cfg = EmbedConfig(dim=128, pooling="cls")
+        self.assertEqual(cfg.dim, 128)
+        self.assertEqual(cfg.pooling, "cls")
+
+    def test_inherited_defaults_still_work(self):
+        """Inherited fields with defaults must still be accessible."""
+        from transformers import BertConfig
+
+        class BertWithPooling(BertConfig):
+            pooling: str
+
+        cfg = BertWithPooling(pooling="mean", hidden_size=256)
+        self.assertEqual(cfg.pooling, "mean")
+        self.assertEqual(cfg.hidden_size, 256)
