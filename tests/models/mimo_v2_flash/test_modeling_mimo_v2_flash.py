@@ -262,8 +262,7 @@ class MiMoV2FlashModelTest(CausalLMModelTest, unittest.TestCase):
                 "attention_chunk_size": 128,
                 "sliding_window_size": 128,
                 "n_shared_experts": None,
-                # attribute_map aliases (hub uses layernorm_epsilon, head_dim)
-                "layernorm_epsilon": 1e-5,
+                # attribute_map alias (hub uses head_dim directly, same as native)
                 "head_dim": 192,
                 # Legacy SWA-prefixed fields that should be stripped (redundant with non-SWA counterparts)
                 "swa_num_attention_heads": 64,
@@ -301,8 +300,6 @@ class MiMoV2FlashModelTest(CausalLMModelTest, unittest.TestCase):
         ):
             self.assertNotIn(key, config_dict)
 
-        # attribute_map aliases resolved
-        self.assertEqual(config.rms_norm_eps, 1e-5)
         self.assertEqual(config.head_dim, 192)
 
         # None -> default

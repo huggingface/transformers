@@ -50,7 +50,6 @@ class MiMoV2FlashConfig(PreTrainedConfig):
     default_theta = {"full_attention": 5_000_000.0, "sliding_attention": 10_000.0}
     attribute_map = {
         "num_local_experts": "n_routed_experts",
-        "layernorm_epsilon": "rms_norm_eps",
     }
 
     vocab_size: int = 152576
