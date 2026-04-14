@@ -160,7 +160,14 @@ else:
         "convert_and_export_with_cache",
     ]
 
-_import_structure["tensor_parallel"] = []
+_import_structure["tensor_parallel"] = [
+    "TPStyle",
+    "apply_tensor_parallel",
+    "convert_strided_to_shard",
+    "gather_full_state_dict",
+    "restore_strided_from_shard",
+    "verify_tp_plan",
+]
 try:
     if not is_torch_greater_or_equal("2.5"):
         raise OptionalDependencyNotAvailable()
@@ -291,6 +298,14 @@ if TYPE_CHECKING:
     from .quanto import replace_with_quanto_layers
     from .sinq import SinqDeserialize, SinqQuantize
     from .spqr import replace_with_spqr_linear
+    from .tensor_parallel import (
+        TPStyle,
+        apply_tensor_parallel,
+        convert_strided_to_shard,
+        gather_full_state_dict,
+        restore_strided_from_shard,
+        verify_tp_plan,
+    )
     from .vptq import replace_with_vptq_linear
 
     try:
