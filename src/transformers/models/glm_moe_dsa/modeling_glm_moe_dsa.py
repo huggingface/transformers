@@ -338,22 +338,12 @@ class GlmMoeDsaAttention(nn.Module):
         # Refer: https://arxiv.org/abs/2603.12201 for more details.
         # skip_topk: when True, this layer will skip computation and reuse previous layer's topk indices.
         # next_skip_topk: when True, the next layer will skip computation and reuse this layer's topk indices.
-        self.is_nextn = config.is_nextn
-        if self.is_nextn:
-            self.skip_topk = False
-            self.next_skip_topk = False
-        else:
-            self.index_topk_freq = config.index_topk_freq
-            self.index_topk_pattern = config.index_topk_pattern
-            if self.index_topk_pattern is None:
-                self.skip_topk = max(layer_idx - 1, 0) % self.index_topk_freq != 0
-                self.next_skip_topk = layer_idx % self.index_topk_freq != 0
-            else:
-                self.skip_topk = self.index_topk_pattern[layer_idx] == "S"
-                if layer_idx < len(self.index_topk_pattern) - 1:
-                    self.next_skip_topk = self.index_topk_pattern[layer_idx + 1] == "S"
-                else:
-                    self.next_skip_topk = False
+        self.skip_topk = config.index_topk_pattern[layer_idx] == "shared"
+        self.next_skip_topk = (
+            config.index_topk_pattern[layer_idx + 1] == "shared"
+            if layer_idx < len(config.index_topk_pattern) - 1
+            else False
+        )
 
     def forward(
         self,
@@ -363,7 +353,7 @@ class GlmMoeDsaAttention(nn.Module):
         past_key_values: Cache | None = None,
         prev_topk_indices: torch.Tensor | None = None,
         **kwargs: Unpack[FlashAttentionKwargs],
-    ) -> tuple[torch.Tensor, torch.Tensor] | tuple[torch.Tensor, torch.Tensor, torch.Tensor | None]:
+    ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor | None]:
         batch_size, seq_length = hidden_states.shape[:-1]
         cos, sin = position_embeddings
 
@@ -469,14 +459,7 @@ class GlmMoeDsaAttention(nn.Module):
 
         attn_output = attn_output.reshape(batch_size, seq_length, -1).contiguous()
         attn_output = self.o_proj(attn_output)
-
-        if self.next_skip_topk is None:
-            return attn_output, attn_weights
-        else:
-            if self.next_skip_topk:
-                return attn_output, attn_weights, topk_indices
-            else:
-                return attn_output, attn_weights, None
+        return attn_output, attn_weights, topk_indices if self.next_skip_topk else None
 
 
 class GlmMoeDsaMLP(nn.Module):
@@ -638,9 +621,8 @@ class GlmMoeDsaDecoderLayer(GradientCheckpointingLayer):
     ) -> tuple[torch.Tensor, torch.Tensor | None]:
         residual = hidden_states
         hidden_states = self.input_layernorm(hidden_states)
-
         # Self Attention
-        hidden_states = self.self_attn(
+        hidden_states, _, topk_indices = self.self_attn(
             hidden_states=hidden_states,
             attention_mask=attention_mask,
             position_ids=position_ids,
@@ -650,12 +632,6 @@ class GlmMoeDsaDecoderLayer(GradientCheckpointingLayer):
             prev_topk_indices=prev_topk_indices,
             **kwargs,
         )
-        if isinstance(hidden_states, tuple) and len(hidden_states) == 3:
-            hidden_states, _, topk_indices = hidden_states
-        else:
-            hidden_states, _ = hidden_states
-            topk_indices = None
-
         hidden_states = residual + hidden_states
 
         # Fully Connected
