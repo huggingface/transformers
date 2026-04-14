@@ -17,15 +17,12 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from huggingface_hub.dataclasses import strict
-
 from ...configuration_utils import PreTrainedConfig
 from ...modeling_rope_utils import RopeParameters, RotaryEmbeddingConfigMixin
 from ...utils import auto_docstring
 
 
 @auto_docstring(checkpoint="deepseek-ai/DeepSeek-V2-Lite")
-@strict
 class DeepseekV32Config(PreTrainedConfig, RotaryEmbeddingConfigMixin):
     r"""
     n_group (`int`, *optional*, defaults to 1):
@@ -115,6 +112,7 @@ class DeepseekV32Config(PreTrainedConfig, RotaryEmbeddingConfigMixin):
     index_n_heads: int = 64
     index_top_k: int = 2048
     max_seq_len: int = 2048
+    mlp_bias: bool = False
 
     def __post_init__(self, **kwargs):
         self.qk_head_dim = self.qk_nope_head_dim + self.qk_rope_head_dim

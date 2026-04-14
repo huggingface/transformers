@@ -17,20 +17,7 @@ import torch
 from torch import nn
 
 from ...cache_utils import Cache
-from ..deepseek_v2.configuration_deepseek_v2 import DeepseekV2Config
-from ..deepseek_v2.modeling_deepseek_v2 import (
-    DeepseekV2Attention,
-    DeepseekV2DecoderLayer,
-    DeepseekV2Experts,
-    DeepseekV2ForCausalLM,
-    DeepseekV2ForSequenceClassification,
-    DeepseekV2MLP,
-    DeepseekV2Model,
-    DeepseekV2PreTrainedModel,
-    DeepseekV2RMSNorm,
-    DeepseekV2RotaryEmbedding,
-)
-from ..glm_moe_dsa.modeling_glm_moe_dsa import GlmMoeDsaIndexer, GlmMoeDsaAttention
+from ..glm_moe_dsa.modeling_glm_moe_dsa import GlmMoeDsaIndexer, GlmMoeDsaAttention, GlmMoeDsaRotaryEmbedding, GlmMoeDsaMLP, GlmMoeDsaExperts, GlmMoeDsaRMSNorm, GlmMoeDsaDecoderLayer, GlmMoeDsaPreTrainedModel, GlmMoeDsaModel, GlmMoeDsaForCausalLM
 from ..glm_moe_dsa.configuration_glm_moe_dsa import GlmMoeDsaConfig
 from ...modeling_rope_utils import RotaryEmbeddingConfigMixin
 # TODO
@@ -45,25 +32,23 @@ class DeepseekV32Config(GlmMoeDsaConfig, RotaryEmbeddingConfigMixin):
     index_head_dim: int = 128
     index_top_k: int = 2048
     max_seq_len: int = 2048
+    mlp_bias: bool = False
 
 
-class DeepseekV32MoEGate(DeepseekV2Experts):
+
+class DeepseekV32MoE(GlmMoeDsaMoE):
     pass
 
 
-class DeepseekV32Experts(DeepseekV2Experts):
+class DeepseekV32MLP(GlmMoeDsaMLP):
     pass
 
 
-class DeepseekV32MLP(DeepseekV2MLP):
+class DeepseekV32RMSNorm(GlmMoeDsaRMSNorm):
     pass
 
 
-class DeepseekV32RMSNorm(DeepseekV2RMSNorm):
-    pass
-
-
-class DeepseekV32RotaryEmbedding(DeepseekV2RotaryEmbedding):
+class DeepseekV32RotaryEmbedding(GlmMoeDsaRotaryEmbedding):
     pass
 
 
@@ -74,23 +59,19 @@ class DeepseekV32Indexer(GlmMoeDsaIndexer):
 class DeepseekV32Attention(GlmMoeDsaAttention):
     pass
 
-class DeepseekV32DecoderLayer(DeepseekV2DecoderLayer):
+class DeepseekV32DecoderLayer(GlmMoeDsaDecoderLayer):
     pass
 
 
-class DeepseekV32PreTrainedModel(DeepseekV2PreTrainedModel):
+class DeepseekV32PreTrainedModel(GlmMoeDsaPreTrainedModel):
     pass
 
 
-class DeepseekV32Model(DeepseekV2Model):
+class DeepseekV32Model(GlmMoeDsaModel):
     pass
 
 
-class DeepseekV32ForCausalLM(DeepseekV2ForCausalLM):
-    pass
-
-
-class DeepseekV32ForSequenceClassification(DeepseekV2ForSequenceClassification):
+class DeepseekV32ForCausalLM(GlmMoeDsaForCausalLM):
     pass
 
 
@@ -99,5 +80,4 @@ __all__ = [
     "DeepseekV32PreTrainedModel",
     "DeepseekV32Model",
     "DeepseekV32ForCausalLM",
-    "DeepseekV32ForSequenceClassification",
 ]
