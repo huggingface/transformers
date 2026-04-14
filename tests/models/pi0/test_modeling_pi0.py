@@ -213,6 +213,70 @@ class PI0ForConditionalGenerationModelTest(ModelTesterMixin, unittest.TestCase):
     def test_training_gradient_checkpointing_use_reentrant_true(self):
         pass
 
+    @unittest.skip("PI0 model requires pixel_attention_mask to be provided")
+    def test_flash_attn_2_inference_equivalence(self):
+        pass
+
+    @unittest.skip("PI0 model requires pixel_attention_mask to be provided")
+    def test_flash_attn_2_inference_equivalence_right_padding(self):
+        pass
+
+    @unittest.skip("PI0 model requires pixel_attention_mask to be provided")
+    def test_flash_attn_3_inference_equivalence(self):
+        pass
+
+    @unittest.skip("PI0 model requires pixel_attention_mask to be provided")
+    def test_flash_attn_3_inference_equivalence_right_padding(self):
+        pass
+
+    @unittest.skip("PI0 model requires pixel_attention_mask to be provided")
+    def test_flash_attn_4_inference_equivalence(self):
+        pass
+
+    @unittest.skip("PI0 model requires pixel_attention_mask to be provided")
+    def test_flash_attn_4_inference_equivalence_right_padding(self):
+        pass
+
+    @unittest.skip("PI0 model requires pixel_attention_mask to be provided")
+    def test_flash_attn_kernels_inference_equivalence(self):
+        pass
+
+    @unittest.skip("PI0 model requires pixel_attention_mask to be provided")
+    def test_flash_attn_kernels_mps_inference_equivalence(self):
+        pass
+
+    @unittest.skip("PI0 model requires pixel_attention_mask to be provided")
+    def test_flash_attn_2_can_dispatch_composite_models(self):
+        pass
+
+    @unittest.skip("PI0 model requires pixel_attention_mask to be provided")
+    def test_flash_attn_3_can_dispatch_composite_models(self):
+        pass
+
+    @unittest.skip("PI0 model requires pixel_attention_mask to be provided")
+    def test_flash_attn_4_can_dispatch_composite_models(self):
+        pass
+
+    @unittest.skip("PI0 model requires pixel_attention_mask to be provided")
+    def test_flash_attn_2_fp32_ln(self):
+        pass
+
+    @unittest.skip("PI0 model requires pixel_attention_mask to be provided")
+    def test_flash_attn_2_can_compile_with_attention_mask_None_without_graph_break(self):
+        pass
+
+    @unittest.skip("PI0 model requires pixel_attention_mask to be provided")
+    def test_flash_attn_2_from_config(self):
+        pass
+
+    @unittest.skip("PI0 model requires pixel_attention_mask to be provided")
+    def test_flash_attn_3_from_config(self):
+        pass
+
+    @unittest.skip("PI0 model requires pixel_attention_mask to be provided")
+    def test_flash_attn_4_from_config(self):
+        pass
+
     def test_full_run_smoke(self):
         torch.manual_seed(0)
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()

@@ -43,6 +43,7 @@ from ..esm.modeling_esm import (
     EsmLayer,
     EsmOutput,
     EsmPooler,
+    EsmRotaryEmbedding,
     EsmSelfAttention,
     EsmSelfOutput,
 )
@@ -67,95 +68,21 @@ class EvollaSaProtEmbeddings(EsmEmbeddings):
         self.position_ids = None
 
 
-def rotate_half_esm(x):
-    x1, x2 = x.chunk(2, dim=-1)
-    return torch.cat((-x2, x1), dim=-1)
+class EvollaSaProtRotaryEmbedding(EsmRotaryEmbedding):
+    def __init__(self, config: SaProtConfig, device=None):
+        super().__init__(config, device)
 
-
-def apply_rotary_pos_emb_esm(x, cos, sin):
-    cos = cos[:, :, : x.shape[-2], :]
-    sin = sin[:, :, : x.shape[-2], :]
-
-    return (x * cos) + (rotate_half_esm(x) * sin)
-
-
-class EvollaSaProtRotaryEmbedding(nn.Module):
-    """
-    Rotary position embeddings based on those in
-    [RoFormer](https://huggingface.co/docs/transformers/model_doc/roformer). Query and keys are transformed by rotation
-    matrices which depend on their relative positions.
-    """
-
-    inv_freq: torch.Tensor  # fix linting for `register_buffer`
-
-    def __init__(self, dim: int):
-        super().__init__()
-        self.dim = dim
-        # Generate and save the inverse frequency buffer (non trainable)
-        inv_freq = 1.0 / (10000 ** (torch.arange(0, dim, 2, dtype=torch.int64).float() / dim))
-        self.register_buffer("inv_freq", inv_freq)
-
-        self._seq_len_cached = None
-        self._cos_cached = None
-        self._sin_cached = None
-
-    def _update_cos_sin_tables(self, x, seq_dimension=2):
-        seq_len = x.shape[seq_dimension]
-
-        # Reset the tables if the sequence length has changed,
-        # or if we're on a new device (possibly due to tracing for instance)
-        if seq_len != self._seq_len_cached or self._cos_cached.device != x.device:
-            self._seq_len_cached = seq_len
-            t = torch.arange(x.shape[seq_dimension], device=x.device).type_as(self.inv_freq)
-            freqs = torch.outer(t, self.inv_freq)
-            emb = torch.cat((freqs, freqs), dim=-1).to(x.device)
-
-            self._cos_cached = emb.cos()[None, None, :, :]
-            self._sin_cached = emb.sin()[None, None, :, :]
-
-        return self._cos_cached, self._sin_cached
-
-    def forward(self, q: torch.Tensor, k: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
-        self._cos_cached, self._sin_cached = self._update_cos_sin_tables(k, seq_dimension=-2)
-
-        return (
-            apply_rotary_pos_emb_esm(q, self._cos_cached, self._sin_cached).to(dtype=q.dtype),
-            apply_rotary_pos_emb_esm(k, self._cos_cached, self._sin_cached).to(dtype=k.dtype),
-        )
+    @staticmethod
+    def compute_default_rope_parameters(
+        config: SaProtConfig | None = None,
+        device: "torch.device | None" = None,
+        seq_len: int | None = None,
+    ) -> tuple["torch.Tensor", float]:
+        return super().compute_default_rope_parameters(config, device, seq_len)
 
 
 class EvollaSaProtSelfAttention(EsmSelfAttention):
-    def __init__(self, config, position_embedding_type=None, layer_idx=None, is_cross_attention=False):
-        nn.Module.__init__(self)
-        self.config = config
-
-        if config.hidden_size % config.num_attention_heads != 0 and not hasattr(config, "embedding_size"):
-            raise ValueError(
-                f"The hidden size ({config.hidden_size}) is not a multiple of the number of attention "
-                f"heads ({config.num_attention_heads})"
-            )
-
-        self.num_attention_heads = config.num_attention_heads
-        self.attention_head_size = int(config.hidden_size / config.num_attention_heads)
-        self.all_head_size = self.num_attention_heads * self.attention_head_size
-
-        self.query = nn.Linear(config.hidden_size, self.all_head_size)
-        self.key = nn.Linear(config.hidden_size, self.all_head_size)
-        self.value = nn.Linear(config.hidden_size, self.all_head_size)
-
-        self.dropout = config.attention_probs_dropout_prob
-
-        self.rotary_embeddings = None
-        self.position_embedding_type = position_embedding_type or getattr(
-            config, "position_embedding_type", "absolute"
-        )
-        if self.position_embedding_type == "rotary":
-            self.rotary_embeddings = EvollaSaProtRotaryEmbedding(dim=self.attention_head_size)
-
-        self.is_decoder = config.is_decoder
-        self.layer_idx = layer_idx
-        self.scaling = 1.0
-        self.is_causal = self.is_decoder and not is_cross_attention
+    pass
 
 
 class EvollaSaProtSelfOutput(EsmSelfOutput):
@@ -203,17 +130,19 @@ class EvollaSaProtPreTrainedModel(PreTrainedModel):
         ],
     }
 
+    @torch.no_grad()
     def _init_weights(self, module):
         super()._init_weights(module)
         if isinstance(module, EvollaSaProtRotaryEmbedding):
-            inv_freq = 1.0 / (10000 ** (torch.arange(0, module.dim, 2, dtype=torch.int64).float() / module.dim))
-            init.copy_(module.inv_freq, inv_freq)
+            curr_inv_freq, _ = module.compute_default_rope_parameters(module.config)
+            init.copy_(getattr(module, "inv_freq"), curr_inv_freq)
 
 
 class EvollaSaProtProteinEncoder(EvollaSaProtPreTrainedModel):
     def __init__(self, config: SaProtConfig):
         super().__init__(config)
         self.embeddings = EvollaSaProtEmbeddings(config)
+        self.rotary_embeddings = EvollaSaProtRotaryEmbedding(config=config)
         self.encoder = EvollaSaProtEncoder(config)
         self.post_init()
 
@@ -245,7 +174,12 @@ class EvollaSaProtProteinEncoder(EvollaSaProtPreTrainedModel):
             attention_mask=attention_mask,
         )
 
-        encoder_outputs = self.encoder(inputs_embeds, attention_mask=attention_mask, **kwargs)
+        position_ids = torch.arange(seq_length, device=device).unsqueeze(0)
+        position_embeddings = self.rotary_embeddings(inputs_embeds, position_ids)
+
+        encoder_outputs = self.encoder(
+            inputs_embeds, attention_mask=attention_mask, position_embeddings=position_embeddings, **kwargs
+        )
         sequence_output = encoder_outputs[0]
 
         return BaseModelOutputWithPoolingAndCrossAttentions(
@@ -720,6 +654,7 @@ class EvollaPreTrainedModel(LlamaPreTrainedModel):
     _supports_attention_backend = False
     _no_split_modules = [
         "EvollaDecoderLayer",
+        "EvollaSaProtLayer",
         "EvollaSequenceCompressorResampler",
         "EvollaSequenceAlignerCrossAttention",
     ]

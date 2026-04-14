@@ -162,61 +162,106 @@ class EvollaSaProtEmbeddings(nn.Module):
         return position_ids.unsqueeze(0).expand(input_shape)
 
 
-def rotate_half_esm(x):
-    x1, x2 = x.chunk(2, dim=-1)
-    return torch.cat((-x2, x1), dim=-1)
-
-
-def apply_rotary_pos_emb_esm(x, cos, sin):
-    cos = cos[:, :, : x.shape[-2], :]
-    sin = sin[:, :, : x.shape[-2], :]
-
-    return (x * cos) + (rotate_half_esm(x) * sin)
-
-
 class EvollaSaProtRotaryEmbedding(nn.Module):
     """
-    Rotary position embeddings based on those in
-    [RoFormer](https://huggingface.co/docs/transformers/model_doc/roformer). Query and keys are transformed by rotation
-    matrices which depend on their relative positions.
+    Rotary position embeddings.
+    Implementation based on [ModernBERT's RotaryEmbedding](https://github.com/huggingface/transformers/blob/aad13b87ed59f2afcfaebc985f403301887a35fc/src/transformers/models/modernbert/modeling_modernbert.py#L94).
     """
 
     inv_freq: torch.Tensor  # fix linting for `register_buffer`
 
-    def __init__(self, dim: int):
+    def __init__(self, config: SaProtConfig, device=None):
         super().__init__()
-        self.dim = dim
-        # Generate and save the inverse frequency buffer (non trainable)
-        inv_freq = 1.0 / (10000 ** (torch.arange(0, dim, 2, dtype=torch.int64).float() / dim))
-        self.register_buffer("inv_freq", inv_freq)
 
-        self._seq_len_cached = None
-        self._cos_cached = None
-        self._sin_cached = None
+        self.config = config
+        self.rope_type = {}
 
-    def _update_cos_sin_tables(self, x, seq_dimension=2):
-        seq_len = x.shape[seq_dimension]
+        curr_inv_freq, curr_attention_scaling = self.compute_default_rope_parameters(self.config, device)
+        self.register_buffer("inv_freq", curr_inv_freq)
+        setattr(self, "attention_scaling", curr_attention_scaling)
 
-        # Reset the tables if the sequence length has changed,
-        # or if we're on a new device (possibly due to tracing for instance)
-        if seq_len != self._seq_len_cached or self._cos_cached.device != x.device:
-            self._seq_len_cached = seq_len
-            t = torch.arange(x.shape[seq_dimension], device=x.device).type_as(self.inv_freq)
-            freqs = torch.outer(t, self.inv_freq)
-            emb = torch.cat((freqs, freqs), dim=-1).to(x.device)
+    @staticmethod
+    def compute_default_rope_parameters(
+        config: SaProtConfig | None = None,
+        device: "torch.device | None" = None,
+        seq_len: int | None = None,
+    ) -> tuple["torch.Tensor", float]:
+        """
+        Computes the inverse frequencies according to the original RoPE implementation
+        Args:
+            config ([`~transformers.PreTrainedConfig`]):
+                The model configuration.
+            device (`torch.device`):
+                The device to use for initialization of the inverse frequencies.
+            seq_len (`int`, *optional*):
+                The current sequence length. Unused for this type of RoPE.
 
-            self._cos_cached = emb.cos()[None, None, :, :]
-            self._sin_cached = emb.sin()[None, None, :, :]
+        Returns:
+            Tuple of (`torch.Tensor`, `float`), containing the inverse frequencies for the RoPE embeddings and the
+            post-processing scaling factor applied to the computed cos/sin (unused in this type of RoPE).
+        """
+        base = config.rope_theta
+        dim = getattr(config, "head_dim", None) or config.hidden_size // config.num_attention_heads
 
-        return self._cos_cached, self._sin_cached
+        attention_factor = 1.0  # Unused in this type of RoPE
 
-    def forward(self, q: torch.Tensor, k: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
-        self._cos_cached, self._sin_cached = self._update_cos_sin_tables(k, seq_dimension=-2)
-
-        return (
-            apply_rotary_pos_emb_esm(q, self._cos_cached, self._sin_cached).to(dtype=q.dtype),
-            apply_rotary_pos_emb_esm(k, self._cos_cached, self._sin_cached).to(dtype=k.dtype),
+        # Compute the inverse frequencies
+        inv_freq = 1.0 / (
+            base ** (torch.arange(0, dim, 2, dtype=torch.int64).to(device=device, dtype=torch.float) / dim)
         )
+        return inv_freq, attention_factor
+
+    @torch.no_grad()
+    @dynamic_rope_update  # power user: used with advanced RoPE types (e.g. dynamic rope)
+    def forward(self, x, position_ids, layer_type=None):
+        inv_freq = getattr(self, "inv_freq")
+        attention_scaling = getattr(self, "attention_scaling")
+
+        inv_freq_expanded = inv_freq[None, :, None].float().expand(position_ids.shape[0], -1, 1).to(x.device)
+        position_ids_expanded = position_ids[:, None, :].float()
+
+        device_type = x.device.type if isinstance(x.device.type, str) and x.device.type != "mps" else "cpu"
+        with maybe_autocast(device_type=device_type, enabled=False):  # Force float32
+            freqs = (inv_freq_expanded.float() @ position_ids_expanded.float()).transpose(1, 2)
+            emb = torch.cat((freqs, freqs), dim=-1)
+            cos = emb.cos() * attention_scaling
+            sin = emb.sin() * attention_scaling
+
+        return cos.to(dtype=x.dtype), sin.to(dtype=x.dtype)
+
+
+def rotate_half(x):
+    """Rotates half the hidden dims of the input."""
+    x1 = x[..., : x.shape[-1] // 2]
+    x2 = x[..., x.shape[-1] // 2 :]
+    return torch.cat((-x2, x1), dim=-1)
+
+
+@use_kernel_func_from_hub("rotary_pos_emb")
+def apply_rotary_pos_emb(q, k, cos, sin, unsqueeze_dim=1):
+    """Applies Rotary Position Embedding to the query and key tensors.
+
+    Args:
+        q (`torch.Tensor`): The query tensor.
+        k (`torch.Tensor`): The key tensor.
+        cos (`torch.Tensor`): The cosine part of the rotary embedding.
+        sin (`torch.Tensor`): The sine part of the rotary embedding.
+        unsqueeze_dim (`int`, *optional*, defaults to 1):
+            The 'unsqueeze_dim' argument specifies the dimension along which to unsqueeze cos[position_ids] and
+            sin[position_ids] so that they can be properly broadcasted to the dimensions of q and k. For example, note
+            that cos[position_ids] and sin[position_ids] have the shape [batch_size, seq_len, head_dim]. Then, if q and
+            k have the shape [batch_size, heads, seq_len, head_dim], then setting unsqueeze_dim=1 makes
+            cos[position_ids] and sin[position_ids] broadcastable to the shapes of q and k. Similarly, if q and k have
+            the shape [batch_size, seq_len, heads, head_dim], then set unsqueeze_dim=2.
+    Returns:
+        `tuple(torch.Tensor)` comprising of the query and key tensors rotated using the Rotary Position Embedding.
+    """
+    original_dtype = q.dtype
+    cos = cos.unsqueeze(unsqueeze_dim)
+    sin = sin.unsqueeze(unsqueeze_dim)
+    q_embed = (q.float() * cos) + (rotate_half(q.float()) * sin)
+    k_embed = (k.float() * cos) + (rotate_half(k.float()) * sin)
+    return q_embed.to(original_dtype), k_embed.to(original_dtype)
 
 
 def eager_attention_forward(
@@ -247,6 +292,7 @@ def eager_attention_forward(
     return attn_output, attn_weights
 
 
+@use_kernelized_func(apply_rotary_pos_emb)
 class EvollaSaProtSelfAttention(nn.Module):
     def __init__(self, config, position_embedding_type=None, layer_idx=None, is_cross_attention=False):
         super().__init__()
@@ -268,16 +314,12 @@ class EvollaSaProtSelfAttention(nn.Module):
 
         self.dropout = config.attention_probs_dropout_prob
 
-        self.rotary_embeddings = None
         self.position_embedding_type = position_embedding_type or getattr(
             config, "position_embedding_type", "absolute"
         )
-        if self.position_embedding_type == "rotary":
-            self.rotary_embeddings = EvollaSaProtRotaryEmbedding(dim=self.attention_head_size)
-
+        self.scaling = 1.0  # For BC we apply scaling before RoPE
         self.is_decoder = config.is_decoder
         self.layer_idx = layer_idx
-        self.scaling = 1.0
         self.is_causal = self.is_decoder and not is_cross_attention
 
     def forward(
@@ -286,10 +328,11 @@ class EvollaSaProtSelfAttention(nn.Module):
         attention_mask: torch.FloatTensor | None = None,
         encoder_hidden_states: torch.FloatTensor | None = None,
         encoder_attention_mask: torch.FloatTensor | None = None,
+        position_embeddings: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor]:
-        batch_size, seq_length = hidden_states.shape[:-1]
-        hidden_shape = (batch_size, seq_length, -1, self.attention_head_size)
+        input_shape = hidden_states.shape[:-1]
+        hidden_shape = (*input_shape, -1, self.attention_head_size)
 
         query_layer = self.query(hidden_states).view(hidden_shape).transpose(1, 2)
 
@@ -306,7 +349,8 @@ class EvollaSaProtSelfAttention(nn.Module):
         query_layer = query_layer * self.attention_head_size**-0.5
 
         if self.position_embedding_type == "rotary":
-            query_layer, key_layer = self.rotary_embeddings(query_layer, key_layer)
+            cos, sin = position_embeddings
+            query_layer, key_layer = apply_rotary_pos_emb(query_layer, key_layer, cos, sin, unsqueeze_dim=1)
 
         attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
             self.config._attn_implementation, eager_attention_forward
@@ -323,7 +367,7 @@ class EvollaSaProtSelfAttention(nn.Module):
             **kwargs,
         )
 
-        attn_output = attn_output.reshape(batch_size, seq_length, -1).contiguous()
+        attn_output = attn_output.reshape(*input_shape, -1).contiguous()
         return attn_output, attn_weights
 
 
@@ -354,6 +398,7 @@ class EvollaSaProtAttention(nn.Module):
         attention_mask=None,
         encoder_hidden_states=None,
         encoder_attention_mask=None,
+        position_embeddings: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ):
         hidden_states_ln = self.LayerNorm(hidden_states)
@@ -362,6 +407,7 @@ class EvollaSaProtAttention(nn.Module):
             attention_mask=attention_mask,
             encoder_hidden_states=encoder_hidden_states,
             encoder_attention_mask=encoder_attention_mask,
+            position_embeddings=position_embeddings,
             **kwargs,
         )
         attn_output = self.output(attn_output, hidden_states)
@@ -421,11 +467,13 @@ class EvollaSaProtLayer(GradientCheckpointingLayer):
         attention_mask=None,
         encoder_hidden_states=None,
         encoder_attention_mask=None,
+        position_embeddings: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ):
         attention_output = self.attention(
             hidden_states,
             attention_mask=attention_mask,
+            position_embeddings=position_embeddings,
             **kwargs,
         )
 
@@ -441,6 +489,7 @@ class EvollaSaProtLayer(GradientCheckpointingLayer):
                 attention_mask=attention_mask,
                 encoder_hidden_states=encoder_hidden_states,
                 encoder_attention_mask=encoder_attention_mask,
+                position_embeddings=position_embeddings,
                 **kwargs,
             )
 
@@ -469,6 +518,7 @@ class EvollaSaProtEncoder(nn.Module):
         attention_mask=None,
         encoder_hidden_states=None,
         encoder_attention_mask=None,
+        position_embeddings: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ):
         for i, layer_module in enumerate(self.layer):
@@ -477,6 +527,7 @@ class EvollaSaProtEncoder(nn.Module):
                 attention_mask=attention_mask,
                 encoder_hidden_states=encoder_hidden_states,
                 encoder_attention_mask=encoder_attention_mask,
+                position_embeddings=position_embeddings,
                 **kwargs,
             )
 
@@ -518,17 +569,19 @@ class EvollaSaProtPreTrainedModel(PreTrainedModel):
         ],
     }
 
+    @torch.no_grad()
     def _init_weights(self, module):
         super()._init_weights(module)
         if isinstance(module, EvollaSaProtRotaryEmbedding):
-            inv_freq = 1.0 / (10000 ** (torch.arange(0, module.dim, 2, dtype=torch.int64).float() / module.dim))
-            init.copy_(module.inv_freq, inv_freq)
+            curr_inv_freq, _ = module.compute_default_rope_parameters(module.config)
+            init.copy_(getattr(module, "inv_freq"), curr_inv_freq)
 
 
 class EvollaSaProtProteinEncoder(EvollaSaProtPreTrainedModel):
     def __init__(self, config: SaProtConfig):
         super().__init__(config)
         self.embeddings = EvollaSaProtEmbeddings(config)
+        self.rotary_embeddings = EvollaSaProtRotaryEmbedding(config=config)
         self.encoder = EvollaSaProtEncoder(config)
         self.post_init()
 
@@ -560,7 +613,12 @@ class EvollaSaProtProteinEncoder(EvollaSaProtPreTrainedModel):
             attention_mask=attention_mask,
         )
 
-        encoder_outputs = self.encoder(inputs_embeds, attention_mask=attention_mask, **kwargs)
+        position_ids = torch.arange(seq_length, device=device).unsqueeze(0)
+        position_embeddings = self.rotary_embeddings(inputs_embeds, position_ids)
+
+        encoder_outputs = self.encoder(
+            inputs_embeds, attention_mask=attention_mask, position_embeddings=position_embeddings, **kwargs
+        )
         sequence_output = encoder_outputs[0]
 
         return BaseModelOutputWithPoolingAndCrossAttentions(
@@ -1052,39 +1110,6 @@ class EvollaMLP(nn.Module):
         return down_proj
 
 
-def rotate_half(x):
-    """Rotates half the hidden dims of the input."""
-    x1 = x[..., : x.shape[-1] // 2]
-    x2 = x[..., x.shape[-1] // 2 :]
-    return torch.cat((-x2, x1), dim=-1)
-
-
-@use_kernel_func_from_hub("rotary_pos_emb")
-def apply_rotary_pos_emb(q, k, cos, sin, unsqueeze_dim=1):
-    """Applies Rotary Position Embedding to the query and key tensors.
-
-    Args:
-        q (`torch.Tensor`): The query tensor.
-        k (`torch.Tensor`): The key tensor.
-        cos (`torch.Tensor`): The cosine part of the rotary embedding.
-        sin (`torch.Tensor`): The sine part of the rotary embedding.
-        unsqueeze_dim (`int`, *optional*, defaults to 1):
-            The 'unsqueeze_dim' argument specifies the dimension along which to unsqueeze cos[position_ids] and
-            sin[position_ids] so that they can be properly broadcasted to the dimensions of q and k. For example, note
-            that cos[position_ids] and sin[position_ids] have the shape [batch_size, seq_len, head_dim]. Then, if q and
-            k have the shape [batch_size, heads, seq_len, head_dim], then setting unsqueeze_dim=1 makes
-            cos[position_ids] and sin[position_ids] broadcastable to the shapes of q and k. Similarly, if q and k have
-            the shape [batch_size, seq_len, heads, head_dim], then set unsqueeze_dim=2.
-    Returns:
-        `tuple(torch.Tensor)` comprising of the query and key tensors rotated using the Rotary Position Embedding.
-    """
-    cos = cos.unsqueeze(unsqueeze_dim)
-    sin = sin.unsqueeze(unsqueeze_dim)
-    q_embed = (q * cos) + (rotate_half(q) * sin)
-    k_embed = (k * cos) + (rotate_half(k) * sin)
-    return q_embed, k_embed
-
-
 def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
     """
     This is the equivalent of torch.repeat_interleave(x, dim=1, repeats=n_rep). The hidden states go from (batch,
@@ -1242,6 +1267,7 @@ class EvollaPreTrainedModel(PreTrainedModel):
     supports_gradient_checkpointing = True
     _no_split_modules = [
         "EvollaDecoderLayer",
+        "EvollaSaProtLayer",
         "EvollaSequenceCompressorResampler",
         "EvollaSequenceAlignerCrossAttention",
     ]

@@ -1541,6 +1541,11 @@ def torch_compilable_check(cond: Any, msg: str | Callable[[], str], error_type: 
 
 
 @lru_cache
+def is_ipython_available() -> bool:
+    return importlib.util.find_spec("IPython") is not None
+
+
+@lru_cache
 def is_in_notebook() -> bool:
     try:
         # Check if we are running inside Marimo
