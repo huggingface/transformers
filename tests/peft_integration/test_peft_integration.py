@@ -243,9 +243,7 @@ class PeftIntegrationTester(unittest.TestCase, PeftTesterMixin):
                     reloaded = auto_class.from_pretrained(tmpdirname).to(torch_device)
 
                 lora_params = {
-                    name: p
-                    for name, p in reloaded.named_parameters()
-                    if "lora_A" in name or "lora_B" in name
+                    name: p for name, p in reloaded.named_parameters() if "lora_A" in name or "lora_B" in name
                 }
                 self.assertTrue(lora_params, "no LoRA parameters found on reloaded model")
                 for name, p in lora_params.items():
