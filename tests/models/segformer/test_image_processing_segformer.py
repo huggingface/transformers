@@ -15,8 +15,8 @@
 
 import unittest
 
-from datasets import load_dataset
 import numpy as np
+from datasets import load_dataset
 
 from transformers.testing_utils import require_torch, require_vision
 from transformers.utils import is_torch_available

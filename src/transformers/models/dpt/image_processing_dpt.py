@@ -192,9 +192,10 @@ class DPTImageProcessor(TorchvisionBackend):
         """Reduce label values by 1, replacing 0 with 255."""
         for idx in range(len(labels)):
             label = labels[idx]
-            label = torch.where(label == 0, torch.tensor(255, dtype=label.dtype, device=label.device), label)
-            label = label - 1
-            label = torch.where(label == 254, torch.tensor(255, dtype=label.dtype, device=label.device), label)
+            ignore_mask = (label == 0) | (label == 255)
+            label = label.clone()
+            label[ignore_mask] = 255
+            label[~ignore_mask] = label[~ignore_mask] - 1
             labels[idx] = label
         return labels
 
