@@ -19,6 +19,7 @@ from typing import Optional
 
 import torch
 from torch import Tensor, nn
+from torch.distributed.tensor import DTensor, Replicate
 
 from ... import initialization as init
 from ...activations import ACT2FN

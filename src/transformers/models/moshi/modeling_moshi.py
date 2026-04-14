@@ -20,6 +20,7 @@ from typing import Any, Optional
 
 import torch
 import torch.nn as nn
+from torch.distributed.tensor import DTensor, Replicate
 from torch.nn import CrossEntropyLoss
 
 from ... import initialization as init
