@@ -111,7 +111,8 @@ class DeepseekV32Config(PreTrainedConfig, RotaryEmbeddingConfigMixin):
     attribute_map = {"num_experts": "num_experts_per_tok"}
     index_n_heads: int = 64
     index_head_dim: int = 128
-    index_topk: int = 2048
+    index_top_k: int = 2048
+    max_seq_len: int = 2048
 
     def __post_init__(self, **kwargs):
         self.head_dim = self.qk_rope_head_dim
