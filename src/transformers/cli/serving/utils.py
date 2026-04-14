@@ -265,7 +265,7 @@ def make_progress_tqdm_class(callback: Callable, model_id: str) -> type:
 
     download_aggregator = DownloadAggregator(callback, model_id)
 
-    class ProgressTqdm(base_tqdm):
+    class ProgressTqdm(base_tqdm):  # type: ignore[misc]
         def __init__(self, *args, **kwargs):
             self.sse_unit = kwargs.get("unit") or "it"
             kwargs["disable"] = True
@@ -494,6 +494,9 @@ class BaseGenerateManager(ABC):
     - :class:`CBGenerateManager` — continuous batching with paged attention.
     """
 
+    def init_cb(self, model: "PreTrainedModel", gen_config: "GenerationConfig") -> None:
+        """Initialize continuous batching. No-op for non-CB managers."""
+
     @abstractmethod
     def generate_streaming(
         self,
@@ -519,7 +522,7 @@ class BaseGenerateManager(ABC):
         """
 
     @abstractmethod
-    def generate_non_streaming(
+    async def generate_non_streaming(
         self,
         model: "PreTrainedModel",
         processor: "ProcessorMixin | PreTrainedTokenizerFast",
@@ -563,7 +566,7 @@ class GenerateManager(BaseGenerateManager):
         loop = asyncio.get_running_loop()
         queue: asyncio.Queue = asyncio.Queue()
         # ProcessorMixin exposes the fast tokenizer as .tokenizer; PreTrainedTokenizerFast is already one.
-        rust_tokenizer = getattr(processor, "tokenizer", processor)._tokenizer
+        rust_tokenizer = getattr(processor, "tokenizer", processor)._tokenizer  # type: ignore[union-attr]
         streamer = DirectStreamer(rust_tokenizer, loop, queue, skip_special_tokens=True)
         gen_kwargs = {**inputs, "streamer": streamer, "generation_config": gen_config, "tokenizer": processor}
 
@@ -652,11 +655,15 @@ class CBGenerateManager(BaseGenerateManager):
         request_id: str,
     ) -> tuple[asyncio.Queue, CBStreamer]:
         """Start streaming CB generation. Registers a per-request output handler."""
+        cb = self._cb
+        if cb is None:
+            raise RuntimeError("CB manager not initialized. Call `init_cb()` first.")
+
         loop = asyncio.get_running_loop()
         text_queue: asyncio.Queue = asyncio.Queue()
 
         input_ids = inputs["input_ids"]
-        request_id = self._cb.add_request(
+        request_id = cb.add_request(
             input_ids,
             request_id=request_id,
             streaming=True,
@@ -664,7 +671,7 @@ class CBGenerateManager(BaseGenerateManager):
             eos_token_id=gen_config.eos_token_id,
         )
         # ProcessorMixin exposes the fast tokenizer as .tokenizer; PreTrainedTokenizerFast is already one.
-        rust_tokenizer = getattr(processor, "tokenizer", processor)._tokenizer
+        rust_tokenizer = getattr(processor, "tokenizer", processor)._tokenizer  # type: ignore[union-attr]
         streamer = CBStreamer(self._cb, request_id, rust_tokenizer, loop, text_queue)
 
         # Register a direct callback: the dispatcher calls this on the event loop with each GenerationOutput.
@@ -677,7 +684,7 @@ class CBGenerateManager(BaseGenerateManager):
             except Exception as e:
                 text_queue.put_nowait(_StreamError(str(e)))
 
-        self._cb.register_result_handler(request_id, _on_output)
+        cb.register_result_handler(request_id, _on_output)
         return text_queue, streamer
 
     async def generate_non_streaming(
@@ -689,6 +696,10 @@ class CBGenerateManager(BaseGenerateManager):
         request_id: str,
     ) -> tuple[str, int, list[int]]:
         """Run non-streaming CB generation. Registers a handler that resolves an asyncio.Future on completion."""
+        cb = self._cb
+        if cb is None:
+            raise RuntimeError("CB manager not initialized. Call `init_cb()` first.")
+
         input_ids = inputs["input_ids"]
         input_len = len(input_ids)
 
@@ -700,9 +711,9 @@ class CBGenerateManager(BaseGenerateManager):
             if not future.done():
                 future.set_result(result)
 
-        self._cb.register_result_handler(request_id, _on_result)
+        cb.register_result_handler(request_id, _on_result)
 
-        self._cb.add_request(
+        cb.add_request(
             input_ids,
             request_id=request_id,
             max_new_tokens=gen_config.max_new_tokens,
@@ -719,6 +730,8 @@ class CBGenerateManager(BaseGenerateManager):
     @property
     def scheduler(self) -> "Scheduler":
         """The CB scheduler (for testing/monitoring)."""
+        if self._cb is None:
+            raise RuntimeError("CB manager not initialized.")
         return self._cb.batch_processor.scheduler
 
     def stop(self) -> None:
@@ -833,7 +846,7 @@ class BaseHandler:
 
         input_keys = set(body.keys())
         if self._valid_params_class is not None:
-            unexpected = input_keys - self._valid_params_class.__mutable_keys__
+            unexpected = input_keys - getattr(self._valid_params_class, "__mutable_keys__", set())
             if unexpected:
                 raise HTTPException(status_code=422, detail=f"Unexpected fields in the request: {unexpected}")
         unused = input_keys & self._unused_fields
