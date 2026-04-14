@@ -209,8 +209,9 @@ class MiMoV2FlashExperts(nn.Module):
 
     def __init__(self, config: MiMoV2FlashConfig):
         super().__init__()
-        self.num_experts = config.n_routed_experts
+        self.num_experts = config.num_local_experts
         self.hidden_dim = config.hidden_size
+        # MoE experts use moe_intermediate_size, not the dense MLP's intermediate_size
         self.intermediate_dim = config.moe_intermediate_size
         self.gate_up_proj = nn.Parameter(torch.empty(self.num_experts, 2 * self.intermediate_dim, self.hidden_dim))
         self.down_proj = nn.Parameter(torch.empty(self.num_experts, self.hidden_dim, self.intermediate_dim))
@@ -244,7 +245,7 @@ class MiMoV2FlashExperts(nn.Module):
 
 
 class MiMoV2FlashSparseMoeBlock(nn.Module):
-    def __init__(self, config: MiMoV2FlashConfig):
+    def __init__(self, config):
         super().__init__()
         self.top_k = config.num_experts_per_tok
         self.jitter_noise = config.router_jitter_noise
@@ -519,18 +520,17 @@ class MiMoV2FlashDecoderLayer(GradientCheckpointingLayer):
     def __init__(self, config: MiMoV2FlashConfig, layer_idx: int):
         super().__init__()
         self.hidden_size = config.hidden_size
-        self.attention_type = config.layer_types[layer_idx]
 
         self.self_attn = MiMoV2FlashAttention(config=config, layer_idx=layer_idx)
 
-        # Choose MoE or dense MLP based on layer pattern
-        if config.moe_layer_freq[layer_idx]:
-            self.mlp = MiMoV2FlashSparseMoeBlock(config)
-        else:
-            self.mlp = MiMoV2FlashMLP(config)
-
+        self.mlp = MiMoV2FlashMLP(config)
         self.input_layernorm = MiMoV2FlashRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.post_attention_layernorm = MiMoV2FlashRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        # TODO @casinca: for now attn_type is dead code but might need for new attn rework
+        self.attention_type = config.layer_types[layer_idx]
+        # Replace the dense MLP with an MoE block on MoE layers (per `moe_layer_freq`).
+        if config.moe_layer_freq[layer_idx]:
+            self.mlp = MiMoV2FlashSparseMoeBlock(config)
 
     def forward(
         self,
@@ -619,9 +619,7 @@ class MiMoV2FlashModel(MiMoV2FlashPreTrainedModel):
             [MiMoV2FlashDecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
         )
         self.norm = MiMoV2FlashRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-
         self.rotary_emb = MiMoV2FlashRotaryEmbedding(config=config)
-
         self.gradient_checkpointing = False
         self.has_sliding_layers = "sliding_attention" in self.rotary_emb.layer_types
 

@@ -19,7 +19,6 @@ import torch.nn.functional as F
 from huggingface_hub.dataclasses import strict
 
 from ... import initialization as init
-from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
 from ...configuration_utils import PreTrainedConfig
 from ...integrations import use_experts_implementation, use_kernelized_func
@@ -288,22 +287,15 @@ class MiMoV2FlashExperts(MixtralExperts):
     """
 
     def __init__(self, config: MiMoV2FlashConfig):
-        nn.Module.__init__(self)
-        self.num_experts = config.n_routed_experts
-        self.hidden_dim = config.hidden_size
+        super().__init__(config)
+        # MoE experts use moe_intermediate_size, not the dense MLP's intermediate_size
         self.intermediate_dim = config.moe_intermediate_size
         self.gate_up_proj = nn.Parameter(torch.empty(self.num_experts, 2 * self.intermediate_dim, self.hidden_dim))
         self.down_proj = nn.Parameter(torch.empty(self.num_experts, self.hidden_dim, self.intermediate_dim))
-        self.act_fn = ACT2FN[config.hidden_act]
 
 
 class MiMoV2FlashSparseMoeBlock(MixtralSparseMoeBlock):
-    def __init__(self, config: MiMoV2FlashConfig):
-        nn.Module.__init__(self)
-        self.top_k = config.num_experts_per_tok
-        self.jitter_noise = config.router_jitter_noise
-        self.gate = MiMoV2FlashTopKRouter(config)
-        self.experts = MiMoV2FlashExperts(config)
+    pass
 
 
 class MiMoV2FlashMLP(Qwen2MoeMLP):
@@ -469,20 +461,12 @@ class MiMoV2FlashAttention(nn.Module):
 
 class MiMoV2FlashDecoderLayer(LlamaDecoderLayer):
     def __init__(self, config: MiMoV2FlashConfig, layer_idx: int):
-        nn.Module.__init__(self)
-        self.hidden_size = config.hidden_size
+        super().__init__(config, layer_idx)
+        # TODO @casinca: for now attn_type is dead code but might need for new attn rework
         self.attention_type = config.layer_types[layer_idx]
-
-        self.self_attn = MiMoV2FlashAttention(config=config, layer_idx=layer_idx)
-
-        # Choose MoE or dense MLP based on layer pattern
+        # Replace the dense MLP with an MoE block on MoE layers (per `moe_layer_freq`).
         if config.moe_layer_freq[layer_idx]:
             self.mlp = MiMoV2FlashSparseMoeBlock(config)
-        else:
-            self.mlp = MiMoV2FlashMLP(config)
-
-        self.input_layernorm = MiMoV2FlashRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        self.post_attention_layernorm = MiMoV2FlashRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
 
 @auto_docstring
@@ -530,23 +514,8 @@ class MiMoV2FlashPreTrainedModel(MixtralPreTrainedModel):
 @auto_docstring
 class MiMoV2FlashModel(MixtralModel):
     def __init__(self, config: MiMoV2FlashConfig):
-        super(MixtralModel, self).__init__(config)
-        self.padding_idx = config.pad_token_id
-        self.vocab_size = config.vocab_size
-
-        self.embed_tokens = nn.Embedding(config.vocab_size, config.hidden_size, self.padding_idx)
-        self.layers = nn.ModuleList(
-            [MiMoV2FlashDecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
-        )
-        self.norm = MiMoV2FlashRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-
-        self.rotary_emb = MiMoV2FlashRotaryEmbedding(config=config)
+        super().__init__(config)
         self.has_sliding_layers = "sliding_attention" in self.rotary_emb.layer_types
-
-        self.gradient_checkpointing = False
-
-        # Initialize weights and apply final processing
-        self.post_init()
 
     @merge_with_config_defaults
     @capture_outputs
