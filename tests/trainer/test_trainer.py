@@ -44,7 +44,6 @@ from transformers import (
     TrainingArguments,
     default_data_collator,
     logging,
-    set_seed,
 )
 from transformers.integrations import activate_neftune
 from transformers.loss.loss_utils import ForCausalLMLoss
@@ -176,8 +175,13 @@ class TrainerGradientAccumulationTest(TestCasePlus, TrainerIntegrationCommon):
         cls._ga_data_collator = DataCollatorForLanguageModeling(tokenizer=tokenizer, mlm=False)
 
     def _check_gradient_accumulation(
-        self, base_batch_size, gas_batch_size, gas_steps, loss_tolerance,
-        model_accepts_loss_kwargs=True, compute_loss_func=None,
+        self,
+        base_batch_size,
+        gas_batch_size,
+        gas_steps,
+        loss_tolerance,
+        model_accepts_loss_kwargs=True,
+        compute_loss_func=None,
     ):
         """
         Train twice with the same effective batch (base_batch_size vs gas_batch_size * gas_steps)
@@ -203,7 +207,10 @@ class TrainerGradientAccumulationTest(TestCasePlus, TrainerIntegrationCommon):
 
             model = AutoModelForCausalLM.from_pretrained(model_name, dtype=torch.float32)
             args = TrainingArguments(
-                tmp_dir, per_device_train_batch_size=gas_batch_size, gradient_accumulation_steps=gas_steps, **args_kwargs
+                tmp_dir,
+                per_device_train_batch_size=gas_batch_size,
+                gradient_accumulation_steps=gas_steps,
+                **args_kwargs,
             )
             gas_callback = StoreLossCallback()
             trainer = Trainer(model, args, callbacks=[gas_callback], **trainer_kwargs)
@@ -238,8 +245,11 @@ class TrainerGradientAccumulationTest(TestCasePlus, TrainerIntegrationCommon):
         # Looser tolerance: without num_items_in_batch each micro-batch is independently
         # mean-reduced, so losses won't match as tightly. Uses bs=4/GAS=2 to limit variance.
         self._check_gradient_accumulation(
-            base_batch_size=8, gas_batch_size=4, gas_steps=2,
-            loss_tolerance=0.1, model_accepts_loss_kwargs=False,
+            base_batch_size=8,
+            gas_batch_size=4,
+            gas_steps=2,
+            loss_tolerance=0.1,
+            model_accepts_loss_kwargs=False,
         )
 
     def test_gradient_accumulation_grad_norm_with_compute_loss_func(self):
@@ -254,8 +264,11 @@ class TrainerGradientAccumulationTest(TestCasePlus, TrainerIntegrationCommon):
 
         # Tight tolerance: compute_loss_func uses num_items_in_batch to properly average loss
         self._check_gradient_accumulation(
-            base_batch_size=8, gas_batch_size=1, gas_steps=8,
-            loss_tolerance=0.001, compute_loss_func=partial(compute_loss, vocab_size=vocab_size),
+            base_batch_size=8,
+            gas_batch_size=1,
+            gas_steps=8,
+            loss_tolerance=0.001,
+            compute_loss_func=partial(compute_loss, vocab_size=vocab_size),
         )
 
     @require_torch_multi_accelerator
