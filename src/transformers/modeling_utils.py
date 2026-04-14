@@ -29,7 +29,7 @@ from dataclasses import dataclass, field
 from functools import partial, wraps
 from itertools import cycle
 from threading import Thread
-from typing import Optional, TypeVar, get_type_hints
+from typing import Any, Optional, TypeVar, get_type_hints
 from zipfile import is_zipfile
 
 import torch
@@ -3694,6 +3694,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         revision: str = "main",
         use_safetensors: bool | None = None,
         weights_only: bool = True,
+        fusion_config: dict[str, bool | dict[str, Any]] | None = None,
         **kwargs,
     ) -> SpecificPreTrainedModelType:
         r"""
@@ -3872,6 +3873,13 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                 Indicates whether unpickler should be restricted to loading only tensors, primitive types,
                 dictionaries and any types added via torch.serialization.add_safe_globals().
                 When set to False, we can load wrapper tensor subclass weights.
+            fusion_config (`dict[str, bool | dict[str, Any]]`, *optional*):
+                Optional fusion configuration applied before model instantiation. Each key enables a fusion family and
+                its value can either be `True` to enable that fusion with default options or a dictionary of
+                family-specific options. For example, `{"patch_embeddings": True}` enables patch embedding fusion.
+                This should only be used as an inference optimization, as it can slightly change outputs. If omitted,
+                `from_pretrained()` falls back to `config.fusion_config` when available. Refer to the fusion mapping
+                guide in `docs/source/en/fusion_mapping.md` for more details.
             key_mapping (`dict[str, str], *optional*):
                 A potential mapping of the weight names if using a model on the Hub which is compatible to a Transformers
                 architecture, but was not converted accordingly.
@@ -4085,6 +4093,18 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         )
 
         config.name_or_path = pretrained_model_name_or_path
+
+        # Overwrite `config.fusion_config` if it is provided.
+        if fusion_config is not None:
+            config.fusion_config = copy.deepcopy(fusion_config)
+
+        # Register fusion patches
+        fusion_config = getattr(config, "fusion_config", None)
+        if fusion_config is not None:
+            from .fusion_mapping import register_fusion_patches
+
+            register_fusion_patches(cls, config, fusion_config)
+
         model_init_context = cls.get_init_context(dtype, is_quantized, _is_ds_init_called, allow_all_kernels)
 
         config = copy.deepcopy(config)  # We do not want to modify the config inplace in from_pretrained.

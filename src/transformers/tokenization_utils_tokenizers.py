@@ -1366,11 +1366,11 @@ class TokenizersBackend(PreTrainedTokenizerBase):
                         ),
                         behavior="isolated",
                     )
-                    current_pretokenizer = tokenizer.backend_tokenizer.pre_tokenizer
+                    current_pretokenizer = tokenizer.pre_tokenizer
                     # Check if it's already a Sequence
                     if isinstance(current_pretokenizer, tokenizers.pre_tokenizers.Sequence):
                         # Replace the first element (the Split pattern)
-                        tokenizer.backend_tokenizer.pre_tokenizer[0] = split_pretokenizer
+                        tokenizer.pre_tokenizer[0] = split_pretokenizer
                     else:
                         # Replace Metaspace with ByteLevel when adding Split, as Metaspace(split=False) doesn't
                         # work correctly with the Split pre-tokenizer and causes spaces to be lost during encoding
@@ -1380,7 +1380,7 @@ class TokenizersBackend(PreTrainedTokenizerBase):
                             )
 
                         # Not a Sequence, so create one with Split + current pretokenizer
-                        tokenizer.backend_tokenizer.pre_tokenizer = tokenizers.pre_tokenizers.Sequence(
+                        tokenizer.pre_tokenizer = tokenizers.pre_tokenizers.Sequence(
                             [
                                 split_pretokenizer,
                                 current_pretokenizer,
