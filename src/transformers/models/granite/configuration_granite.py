@@ -80,10 +80,10 @@ class GraniteConfig(PreTrainedConfig):
     attention_bias: bool = False
     attention_dropout: float | int = 0.0
     mlp_bias: bool = False
-    embedding_multiplier: float = 1.0
-    logits_scaling: float = 1.0
-    residual_multiplier: float = 1.0
-    attention_multiplier: float = 1.0
+    embedding_multiplier: float | int = 1.0
+    logits_scaling: float | int = 1.0
+    residual_multiplier: float | int = 1.0
+    attention_multiplier: float | int = 1.0
 
     def __post_init__(self, **kwargs):
         if self.num_key_value_heads is None:

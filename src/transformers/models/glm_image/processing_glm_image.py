@@ -20,15 +20,13 @@
 
 import math
 
+import torch
+
 from ...feature_extraction_utils import BatchFeature
 from ...image_utils import ImageInput
 from ...processing_utils import ImagesKwargs, ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
-from ...utils import is_torch_available
-
-
-if is_torch_available():
-    import torch
+from ...utils.import_utils import requires
 
 
 class GlmImageImagesKwargs(ImagesKwargs, total=False):
@@ -57,6 +55,7 @@ class GlmImageProcessorKwargs(ProcessingKwargs, total=False):
     images_kwargs: GlmImageImagesKwargs
 
 
+@requires(backends=("torch",))
 class GlmImageProcessor(ProcessorMixin):
     r"""
     Constructs a GLM-Image processor which wraps a GLM-Image image processor and a GLM-Image tokenizer into a single processor.

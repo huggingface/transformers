@@ -46,7 +46,7 @@ def prepare_video(num_frames, num_channels, width=10, height=10, return_tensors=
     """This function prepares a video as a list of PIL images/NumPy arrays/PyTorch tensors."""
 
     video = []
-    for i in range(num_frames):
+    for frame_idx in range(num_frames):
         video.append(np.random.randint(255, size=(width, height, num_channels), dtype=np.uint8))
 
     if return_tensors == "pil":

@@ -98,5 +98,9 @@ class MambaConfig(PreTrainedConfig):
         )
         super().__post_init__(**kwargs)
 
+    @property
+    def layer_types(self):
+        return ["mamba"] * self.num_hidden_layers
+
 
 __all__ = ["MambaConfig"]
