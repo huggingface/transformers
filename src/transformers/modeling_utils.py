@@ -3203,8 +3203,8 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         # Apply it on the top-level module in case the top-level modules supports it
         # for example, LongT5Stack inherits from `PreTrainedModel`.
         if hasattr(self, "gradient_checkpointing"):
-            setattr(self, "_gradient_checkpointing_func", gradient_checkpointing_func)
-            setattr(self, "gradient_checkpointing", enable)
+            self._gradient_checkpointing_func = gradient_checkpointing_func
+            self.gradient_checkpointing = enable
             is_gradient_checkpointing_set = True
 
         for module in self.modules():
