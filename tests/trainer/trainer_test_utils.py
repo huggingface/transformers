@@ -314,6 +314,30 @@ if is_torch_available():
             loss = nn.functional.mse_loss(y, labels)
             return (loss, y, y) if self.double_output else (loss, y)
 
+    class RegressionPreTrainedModelWithLossDict(PreTrainedModel):
+        """Like `RegressionPreTrainedModel` but returns a combined loss plus a `loss_dict` for logging tests."""
+
+        config_class = RegressionModelConfig
+        base_model_prefix = "regression"
+
+        def __init__(self, config):
+            super().__init__(config)
+            self.a = nn.Parameter(torch.as_tensor(config.a).float())
+            self.b = nn.Parameter(torch.as_tensor(config.b).float())
+            self.post_init()
+
+        def forward(self, input_x, labels=None, **kwargs):
+            y = input_x * self.a + self.b
+            if labels is None:
+                return (y,)
+            mse = nn.functional.mse_loss(y, labels)
+            l1 = nn.functional.l1_loss(y, labels)
+            combined = mse + 0.25 * l1
+            return {
+                "loss": combined,
+                "loss_dict": {"mse": mse, "l1": l1},
+            }
+
     class RegressionDictModel(nn.Module):
         def __init__(self, a=0, b=0):
             super().__init__()

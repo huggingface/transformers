@@ -1496,6 +1496,8 @@ class Trainer:
         self._tr_loss = torch.tensor(0.0, device=args.device)
         self._total_loss_scalar = 0.0
         self._globalstep_last_logged = self.state.global_step
+        # Sums detached scalar auxiliary losses between logging steps (same schedule as `_tr_loss`).
+        self._aux_losses_accumulator: dict[str, torch.Tensor] = {}
 
         model.zero_grad()
 
@@ -1906,7 +1908,12 @@ class Trainer:
                 return loss_mb.reduce_mean().detach().to(self.args.device)
 
             with self.compute_loss_context_manager():
-                loss = self.compute_loss(model, inputs, num_items_in_batch=num_items_in_batch)
+                loss = self.compute_loss(
+                    model, inputs, num_items_in_batch=num_items_in_batch, return_outputs=True
+                )
+            outputs = None
+            if isinstance(loss, tuple):
+                loss, outputs = loss
 
             del inputs
             if (
@@ -1929,6 +1936,9 @@ class Trainer:
                 # If the model does not accept loss kwargs, we need to normalize the loss by the number of gradient accumulation steps
                 loss = loss / self.current_gradient_accumulation_steps
 
+            self._accumulate_auxiliary_losses(outputs, num_items_in_batch=num_items_in_batch)
+            del outputs
+
             # Turning off loss scaling w.r.t. gradient accumulation when DeepSpeed is enabled
             # https://github.com/huggingface/transformers/pull/35808
             if self.accelerator.distributed_type == DistributedType.DEEPSPEED:
@@ -1937,6 +1947,79 @@ class Trainer:
             self.accelerator.backward(loss, **kwargs)
 
             return loss.detach()
+
+    def _extract_auxiliary_losses_for_logging(self, outputs: Any) -> dict[str, torch.Tensor]:
+        """
+        Collect scalar per-term losses for logging alongside the main `loss`.
+
+        Supports:
+        - `loss_dict` (`dict` of scalar tensors), as used by several vision/detection heads.
+        - Top-level output fields whose name contains ``loss`` (apart from the main ``loss``), when they are scalar tensors.
+        """
+        collected: dict[str, torch.Tensor] = {}
+        if outputs is None:
+            return collected
+        try:
+            items = outputs.items()
+        except (AttributeError, TypeError):
+            return collected
+
+        skip_top_level = {
+            "loss",
+            "loss_dict",
+            "logits",
+            "start_logits",
+            "end_logits",
+            "mems",
+            "hidden_states",
+            "attentions",
+            "cross_attentions",
+            "encoder_last_hidden_state",
+            "decoder_hidden_states",
+            "decoder_attentions",
+            "encoder_attentions",
+            "past_key_values",
+            "cache_params",
+        }
+        for key, value in items:
+            if key == "loss_dict" and isinstance(value, dict):
+                for name, tensor in value.items():
+                    if isinstance(tensor, torch.Tensor) and tensor.numel() == 1:
+                        safe = str(name).replace("/", "_")
+                        collected[f"loss_dict_{safe}"] = tensor
+                continue
+            if key in skip_top_level:
+                continue
+            if (
+                isinstance(value, torch.Tensor)
+                and value.numel() == 1
+                and key != "loss"
+                and "loss" in key.lower()
+            ):
+                collected[key] = value
+        return collected
+
+    def _accumulate_auxiliary_losses(
+        self,
+        outputs: Any,
+        num_items_in_batch: torch.Tensor | int | None,
+    ) -> None:
+        extras = self._extract_auxiliary_losses_for_logging(outputs)
+        if not extras:
+            return
+        if self.args.n_gpu > 1:
+            for k in list(extras.keys()):
+                extras[k] = extras[k].mean()
+        if (not self.model_accepts_loss_kwargs or num_items_in_batch is None) and self.compute_loss_func is None:
+            gas = self.current_gradient_accumulation_steps
+            for k in list(extras.keys()):
+                extras[k] = extras[k] / gas
+        device = self.args.device
+        for k, v in extras.items():
+            v = v.detach()
+            if k not in self._aux_losses_accumulator:
+                self._aux_losses_accumulator[k] = torch.zeros((), device=device, dtype=v.dtype)
+            self._aux_losses_accumulator[k] = self._aux_losses_accumulator[k] + v.to(device)
 
     def compute_loss(
         self,
@@ -2065,7 +2148,12 @@ class Trainer:
             # reset tr_loss to zero
             tr_loss -= tr_loss
 
-            logs["loss"] = tr_loss_scalar / (self.state.global_step - self._globalstep_last_logged)
+            steps_since_log = self.state.global_step - self._globalstep_last_logged
+            logs["loss"] = tr_loss_scalar / steps_since_log
+            for aux_name, aux_tensor in list(self._aux_losses_accumulator.items()):
+                aux_scalar = nested_gather(aux_tensor, self.args.parallel_mode).mean().item()
+                logs[aux_name] = aux_scalar / steps_since_log
+            self._aux_losses_accumulator.clear()
             if grad_norm is not None:
                 logs["grad_norm"] = grad_norm.item() if isinstance(grad_norm, torch.Tensor) else grad_norm
             if learning_rate is not None:

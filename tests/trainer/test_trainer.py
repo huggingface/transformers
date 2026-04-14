@@ -78,6 +78,9 @@ from .trainer_test_utils import (
     BasicTextGenerationModel,
     RegressionDataset,
     RegressionModel,
+    RegressionModelConfig,
+    RegressionPreTrainedModelWithLossDict,
+    RegressionTrainingArguments,
     RepeatDataset,
     StoreLossCallback,
     TrainerIntegrationCommon,
@@ -1109,6 +1112,33 @@ class TrainerLigerKernelTest(TestCasePlus):
 @require_torch
 class TrainerIntegrationTest(TestCasePlus):
     """Integration tests: compatibility, and e2e."""
+
+    def test_trainer_logs_auxiliary_losses_from_loss_dict(self):
+        """When the model returns `loss_dict`, Trainer should log each term (see #31081)."""
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            config = RegressionModelConfig(a=0.0, b=0.0)
+            model = RegressionPreTrainedModelWithLossDict(config)
+            train_dataset = RegressionDataset(length=16)
+            args = RegressionTrainingArguments(
+                output_dir=tmp_dir,
+                max_steps=2,
+                logging_steps=1,
+                per_device_train_batch_size=4,
+                disable_tqdm=True,
+            )
+            trainer = Trainer(model=model, args=args, train_dataset=train_dataset)
+            trainer.model_accepts_loss_kwargs = False
+            trainer.train()
+            for row in trainer.state.log_history:
+                if "loss" not in row:
+                    continue
+                self.assertIn("loss_dict_mse", row)
+                self.assertIn("loss_dict_l1", row)
+                self.assertIsInstance(row["loss_dict_mse"], float)
+                self.assertIsInstance(row["loss_dict_l1"], float)
+                break
+            else:
+                self.fail("No training log row with auxiliary losses found")
 
     @slow
     @run_first
