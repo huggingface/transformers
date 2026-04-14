@@ -96,11 +96,11 @@ class Unsqueeze(ConversionOps):
 
     def convert(
         self,
-        input_dict: dict[str, "torch.Tensor"],
+        input_dict: dict[str, torch.Tensor],
         source_patterns: list[str],
         target_patterns: list[str],
         **kwargs,
-    ) -> dict[str, "torch.Tensor"]:
+    ) -> dict[str, torch.Tensor]:
         target_pattern = _single_input_target(input_dict, source_patterns, target_patterns)
         tensors = next(iter(input_dict.values()))
         tensor = tensors[0] if isinstance(tensors, list) else tensors
@@ -119,11 +119,11 @@ class Squeeze(ConversionOps):
 
     def convert(
         self,
-        input_dict: dict[str, "torch.Tensor"],
+        input_dict: dict[str, torch.Tensor],
         source_patterns: list[str],
         target_patterns: list[str],
         **kwargs,
-    ) -> dict[str, "torch.Tensor"]:
+    ) -> dict[str, torch.Tensor]:
         target_pattern = _single_input_target(input_dict, source_patterns, target_patterns)
         tensors = next(iter(input_dict.values()))
         tensor = tensors[0] if isinstance(tensors, list) else tensors
@@ -139,11 +139,11 @@ class SubtractOne(ConversionOps):
 
     def convert(
         self,
-        input_dict: dict[str, "torch.Tensor"],
+        input_dict: dict[str, torch.Tensor],
         source_patterns: list[str],
         target_patterns: list[str],
         **kwargs,
-    ) -> dict[str, "torch.Tensor"]:
+    ) -> dict[str, torch.Tensor]:
         target_pattern = _single_input_target(input_dict, source_patterns, target_patterns)
         tensors = next(iter(input_dict.values()))
         tensor = tensors[0] if isinstance(tensors, list) else tensors
@@ -159,11 +159,11 @@ class AddOne(ConversionOps):
 
     def convert(
         self,
-        input_dict: dict[str, "torch.Tensor"],
+        input_dict: dict[str, torch.Tensor],
         source_patterns: list[str],
         target_patterns: list[str],
         **kwargs,
-    ) -> dict[str, "torch.Tensor"]:
+    ) -> dict[str, torch.Tensor]:
         target_pattern = _single_input_target(input_dict, source_patterns, target_patterns)
         tensors = next(iter(input_dict.values()))
         tensor = tensors[0] if isinstance(tensors, list) else tensors
@@ -179,11 +179,11 @@ class LogNegate(ConversionOps):
 
     def convert(
         self,
-        input_dict: dict[str, "torch.Tensor"],
+        input_dict: dict[str, torch.Tensor],
         source_patterns: list[str],
         target_patterns: list[str],
         **kwargs,
-    ) -> dict[str, "torch.Tensor"]:
+    ) -> dict[str, torch.Tensor]:
         import torch
 
         target_pattern = _single_input_target(input_dict, source_patterns, target_patterns)
@@ -201,18 +201,20 @@ class ReversePermuteAttnQ(ConversionOps):
 
     def convert(
         self,
-        input_dict: dict[str, "torch.Tensor"],
+        input_dict: dict[str, torch.Tensor],
         source_patterns: list[str],
         target_patterns: list[str],
         config=None,
         **kwargs,
-    ) -> dict[str, "torch.Tensor"]:
+    ) -> dict[str, torch.Tensor]:
         num_heads = config.num_attention_heads
         target_pattern = _single_input_target(input_dict, source_patterns, target_patterns)
         tensors = next(iter(input_dict.values()))
         tensor = tensors[0] if isinstance(tensors, list) else tensors
         dim = tensor.shape[0] // num_heads // 2
-        return {target_pattern: tensor.reshape(num_heads, dim, 2, *tensor.shape[1:]).swapaxes(2, 1).reshape(tensor.shape)}
+        return {
+            target_pattern: tensor.reshape(num_heads, dim, 2, *tensor.shape[1:]).swapaxes(2, 1).reshape(tensor.shape)
+        }
 
     @property
     def reverse_op(self) -> ConversionOps:
@@ -225,18 +227,22 @@ class ReversePermuteAttnK(ConversionOps):
 
     def convert(
         self,
-        input_dict: dict[str, "torch.Tensor"],
+        input_dict: dict[str, torch.Tensor],
         source_patterns: list[str],
         target_patterns: list[str],
         config=None,
         **kwargs,
-    ) -> dict[str, "torch.Tensor"]:
+    ) -> dict[str, torch.Tensor]:
         num_kv_heads = config.num_key_value_heads
         target_pattern = _single_input_target(input_dict, source_patterns, target_patterns)
         tensors = next(iter(input_dict.values()))
         tensor = tensors[0] if isinstance(tensors, list) else tensors
         dim = tensor.shape[0] // num_kv_heads // 2
-        return {target_pattern: tensor.reshape(num_kv_heads, dim, 2, *tensor.shape[1:]).swapaxes(2, 1).reshape(tensor.shape)}
+        return {
+            target_pattern: tensor.reshape(num_kv_heads, dim, 2, *tensor.shape[1:])
+            .swapaxes(2, 1)
+            .reshape(tensor.shape)
+        }
 
     @property
     def reverse_op(self) -> ConversionOps:
@@ -248,12 +254,12 @@ class BloomReshapeQKVWeight(ConversionOps):
 
     def convert(
         self,
-        input_dict: dict[str, "torch.Tensor"],
+        input_dict: dict[str, torch.Tensor],
         source_patterns: list[str],
         target_patterns: list[str],
         config=None,
         **kwargs,
-    ) -> dict[str, "torch.Tensor"]:
+    ) -> dict[str, torch.Tensor]:
         import torch
 
         n_head = config.n_head
@@ -278,12 +284,12 @@ class BloomReshapeQKVBias(ConversionOps):
 
     def convert(
         self,
-        input_dict: dict[str, "torch.Tensor"],
+        input_dict: dict[str, torch.Tensor],
         source_patterns: list[str],
         target_patterns: list[str],
         config=None,
         **kwargs,
-    ) -> dict[str, "torch.Tensor"]:
+    ) -> dict[str, torch.Tensor]:
         import torch
 
         n_head = config.n_head

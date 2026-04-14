@@ -112,6 +112,7 @@ _deps = [
     "pydantic>=2",
     "pytest>=7.2.0,<9.0.0",
     "pytest-asyncio>=1.2.0",
+    "pytest-benchmark",
     "pytest-random-order",
     "pytest-rerunfailures<16.0",
     "pytest-timeout",

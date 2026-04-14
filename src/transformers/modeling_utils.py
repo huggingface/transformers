@@ -4073,7 +4073,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
 
         is_quantized = hf_quantizer is not None
         _gguf_weight_mapping = []  # populated below for GGUF checkpoints
-        _gguf_quantizer = None    # populated below for GGUF checkpoints
+        _gguf_quantizer = None  # populated below for GGUF checkpoints
 
         if gguf_file:
             from .modeling_gguf_pytorch_utils import load_gguf_checkpoint
@@ -4198,7 +4198,8 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         is_hqq_or_quark = (
             is_quantized
             and load_config.hf_quantizer.quantization_config is not None
-            and load_config.hf_quantizer.quantization_config.quant_method in {
+            and load_config.hf_quantizer.quantization_config.quant_method
+            in {
                 QuantizationMethod.HQQ,
                 QuantizationMethod.QUARK,
             }

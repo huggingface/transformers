@@ -875,10 +875,10 @@ def spawn_materialize(
 
 def spawn_gguf_materialize(
     thread_pool: ThreadPoolExecutor | None,
-    tensor: "GGUFQuantizedTensor",
+    tensor: GGUFQuantizedTensor,
     device=None,
     dtype=None,
-) -> "Future | Callable":
+) -> Future | Callable:
     """Dequantize a GGUFQuantizedTensor and move to target device/dtype.
 
     Mirrors ``spawn_materialize`` but handles raw GGUF data instead of

@@ -103,7 +103,6 @@ _QWEN2_MOE_CONVERTERS = [
     GGUFDequantizer("blk.*.attn_v.", "model.layers.*.self_attn.v_proj."),
     GGUFDequantizer("blk.*.attn_k.bias", "model.layers.*.self_attn.k_proj.bias"),
     GGUFDequantizer("blk.*.attn_q.bias", "model.layers.*.self_attn.q_proj.bias"),
-
     GGUFDequantizer("blk.*.attn_output.weight", "model.layers.*.self_attn.o_proj.weight"),
     GGUFDequantizer("blk.*.ffn_down_shexp.weight", "model.layers.*.mlp.shared_expert.down_proj.weight"),
     GGUFDequantizer("blk.*.ffn_gate_shexp.weight", "model.layers.*.mlp.shared_expert.gate_proj.weight"),
@@ -137,8 +136,12 @@ _GGUF_ARCH_CONVERTERS: dict[str, list[GGUFDequantizer]] = {
     "bloom": [
         GGUFDequantizer("blk.*.attn_norm.weight", "transformer.h.*.ln_attn.weight"),
         GGUFDequantizer("blk.*.attn_norm.bias", "transformer.h.*.ln_attn.bias"),
-        GGUFDequantizer("blk.*.attn_qkv.weight", "transformer.h.*.self_attention.query_key_value.weight", [BloomReshapeQKVWeight()]),
-        GGUFDequantizer("blk.*.attn_qkv.bias", "transformer.h.*.self_attention.query_key_value.bias", [BloomReshapeQKVBias()]),
+        GGUFDequantizer(
+            "blk.*.attn_qkv.weight", "transformer.h.*.self_attention.query_key_value.weight", [BloomReshapeQKVWeight()]
+        ),
+        GGUFDequantizer(
+            "blk.*.attn_qkv.bias", "transformer.h.*.self_attention.query_key_value.bias", [BloomReshapeQKVBias()]
+        ),
         GGUFDequantizer("blk.*.attn_output.weight", "transformer.h.*.self_attention.dense.weight"),
         GGUFDequantizer("blk.*.attn_output.bias", "transformer.h.*.self_attention.dense.bias"),
         GGUFDequantizer("blk.*.ffn_norm.weight", "transformer.h.*.ln_mlp.weight"),
@@ -363,8 +366,7 @@ def load_gguf_checkpoint(gguf_checkpoint_path, return_tensors=False):
         model_type = config.get("model_type", architecture)
 
         parsed_parameters["tensors"] = {
-            tensor.name: GGUFQuantizedTensor(tensor.data, tensor.tensor_type)
-            for tensor in reader.tensors
+            tensor.name: GGUFQuantizedTensor(tensor.data, tensor.tensor_type) for tensor in reader.tensors
         }
         parsed_parameters["weight_mapping"] = get_gguf_converters(model_type)
 
