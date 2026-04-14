@@ -567,7 +567,7 @@ class ContinuousBatchProcessor:
         function to be easier to trace with OpenTelemetry."""
         self.inputs_and_outputs.carry_over_tokens(batch_data["input_ids"], carry_over_ids, prev_output_ids)
         logits = self._model_forward(model, batch_data).float()  # convert to fp32 to match generate
-        scores = self._process_logit(batch_data, logits) if self.logit_processor else logits
+        scores = self._process_logit(batch_data, logits) if self.logit_processor.do_processing else logits
         self._sample(scores, batch_data["logits_indices"], output_ids)
 
     @traced(span_name="model_forward")
