@@ -27,6 +27,7 @@ from typing import Optional
 import numpy as np
 import torch
 from torch import nn
+from torch.distributed.tensor import DTensor, Replicate
 from torch.nn import Parameter
 from torch.nn import functional as F
 
@@ -1465,6 +1466,10 @@ def apply_rotary_pos_emb(q, k, cos, sin, unsqueeze_dim=1):
     """
     cos = cos.unsqueeze(unsqueeze_dim)
     sin = sin.unsqueeze(unsqueeze_dim)
+    if isinstance(q, DTensor):
+        replicate = (Replicate(),) * q.device_mesh.ndim
+        cos = DTensor.from_local(cos, q.device_mesh, replicate, run_check=False)
+        sin = DTensor.from_local(sin, q.device_mesh, replicate, run_check=False)
     q_embed = (q * cos) + (rotate_half(q) * sin)
     k_embed = (k * cos) + (rotate_half(k) * sin)
     return q_embed, k_embed
