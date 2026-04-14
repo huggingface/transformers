@@ -782,17 +782,16 @@ def _get_dtype(
                         dtype = sharded_metadata["dtype"]
                     elif state_dict is not None:
                         dtype = get_state_dict_dtype(state_dict)
+                    elif checkpoint_files is not None and checkpoint_files[0].endswith(".gguf"):
+                        dtype = torch.float32
                     else:
-                        if checkpoint_files is not None and checkpoint_files[0].endswith(".gguf"):
-                            dtype = torch.float32
-                        else:
-                            state_dict = load_state_dict(
-                                checkpoint_files[0], map_location="meta", weights_only=weights_only
-                            )
-                            dtype = get_state_dict_dtype(state_dict)
+                        state_dict = load_state_dict(
+                            checkpoint_files[0], map_location="meta", weights_only=weights_only
+                        )
+                        dtype = get_state_dict_dtype(state_dict)
                     logger.info(
-                        "Since the `dtype` attribute can't be found in model's config object, "
-                        "will use dtype={dtype} as derived from model's weights"
+                        f"Since the `dtype` attribute can't be found in model's config object, "
+                        f"will use dtype={dtype} as derived from model's weights"
                     )
             elif hasattr(torch, dtype):
                 dtype = getattr(torch, dtype)
