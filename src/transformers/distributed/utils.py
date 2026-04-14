@@ -27,6 +27,7 @@ if is_torch_available():
 
 
 def is_fsdp_enabled() -> bool:
+    """Check if FSDP is active via Accelerate (env var based) — covers FSDP1 only."""
     if not is_torch_available():
         return False
 
@@ -39,12 +40,18 @@ def is_fsdp_enabled() -> bool:
 
 
 def is_fsdp_managed_module(module: nn.Module) -> bool:
+    """Check if a module is managed by FSDP (1 or 2)."""
     if not is_torch_available():
         return False
     if not torch.distributed.is_available():
         return False
+
+    # FSDP2: attribute set by apply_fsdp2()
+    if getattr(module, "_is_fsdp_managed_module", False):
+        return True
+    # FSDP1: wrapped by FullyShardedDataParallel
     try:
         from torch.distributed.fsdp import FullyShardedDataParallel
     except ImportError:
         return False
-    return isinstance(module, FullyShardedDataParallel) or getattr(module, "_is_fsdp_managed_module", False)
+    return isinstance(module, FullyShardedDataParallel)
