@@ -1063,6 +1063,7 @@ class DtensorShardOperation:
         return self.param.ndim == len(param_shape) + 1
 
 
+
 def dot_natural_key(s: str):
     """Sort key for state-dict names: split on ``"."`` and sort digits numerically
     and strings alphabetically. We emit a tuple at each point to sort ints
