@@ -33,8 +33,8 @@ jobs:
       - name: Ignore untrusted commenter
         if: steps.trust.outputs.trusted != 'true'
         run: |
-          echo "Untrusted commenter; ignoring."
-          exit 0
+          echo "Untrusted commenter; stop."
+          exit 1
 
       - name: Fetch PR head SHA + number
         id: pr
