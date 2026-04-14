@@ -12,13 +12,18 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import Optional
 
 import numpy as np
 import torch
 
 from ...image_processing_utils import BatchFeature, get_size_dict
-from ...image_utils import IMAGENET_STANDARD_MEAN, IMAGENET_STANDARD_STD, PILImageResampling, SizeDict
+from ...image_utils import (
+    IMAGENET_STANDARD_MEAN,
+    IMAGENET_STANDARD_STD,
+    PILImageResampling,
+    SizeDict,
+    pil_torch_interpolation_mapping,
+)
 from ...processing_utils import Unpack, VideosKwargs
 from ...utils import TensorType, is_torchvision_available, logging
 from ...video_processing_utils import BaseVideoProcessor
@@ -127,7 +132,7 @@ class SmolVLMVideoProcessor(BaseVideoProcessor):
         self,
         video: "torch.Tensor",
         size: SizeDict,
-        interpolation: Optional["tvF.InterpolationMode"] = None,
+        resample: "PILImageResampling | tvF.InterpolationMode | int | None" = None,
         antialias: bool = True,
         **kwargs,
     ) -> "torch.Tensor":
@@ -138,12 +143,18 @@ class SmolVLMVideoProcessor(BaseVideoProcessor):
                 Video to resize.
             size (`SizeDict`):
                 Dictionary in the format `{"height": int, "width": int}` specifying the size of the output video.
-            resample (`InterpolationMode`, *optional*, defaults to `InterpolationMode.BILINEAR`):
-                `InterpolationMode` filter to use when resizing the video e.g. `InterpolationMode.BICUBIC`.
+            resample (`PILImageResampling` or `InterpolationMode`, *optional*, defaults to `InterpolationMode.BILINEAR`):
+                Resampling filter to use when resizing the video.
         Returns:
             `torch.Tensor`: The resized video.
         """
-        interpolation = interpolation if interpolation is not None else tvF.InterpolationMode.BILINEAR
+        if resample is not None:
+            if isinstance(resample, (PILImageResampling, int)):
+                interpolation = pil_torch_interpolation_mapping[resample]
+            else:
+                interpolation = resample
+        else:
+            interpolation = tvF.InterpolationMode.BILINEAR
         if interpolation == tvF.InterpolationMode.LANCZOS:
             logger.warning_once(
                 "You have used fast image processor with LANCZOS resample which not yet supported for torch.Tensor. "
