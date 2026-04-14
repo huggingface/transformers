@@ -16,6 +16,7 @@
 from collections.abc import Callable
 
 import torch
+from torch.distributed.tensor import DTensor, Replicate
 
 from ...cache_utils import Cache
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
@@ -34,7 +35,6 @@ from ..qwen2.modeling_qwen2 import (
     Qwen2ForTokenClassification,
     Qwen2RMSNorm,
     Qwen2RotaryEmbedding,
-    apply_rotary_pos_emb,
     eager_attention_forward,
 )
 from .configuration_qwen3 import Qwen3Config
@@ -43,6 +43,24 @@ from .configuration_qwen3 import Qwen3Config
 logger = logging.get_logger(__name__)
 
 _CHECKPOINT_FOR_DOC = "Qwen/Qwen3-8B"
+
+
+def rotate_half(x):
+    x1 = x[..., : x.shape[-1] // 2]
+    x2 = x[..., x.shape[-1] // 2 :]
+    return torch.cat((-x2, x1), dim=-1)
+
+
+def apply_rotary_pos_emb(q, k, cos, sin, unsqueeze_dim=1):
+    cos = cos.unsqueeze(unsqueeze_dim)
+    sin = sin.unsqueeze(unsqueeze_dim)
+    if isinstance(q, DTensor):
+        replicate = (Replicate(),) * q.device_mesh.ndim
+        cos = DTensor.from_local(cos, q.device_mesh, replicate, run_check=False)
+        sin = DTensor.from_local(sin, q.device_mesh, replicate, run_check=False)
+    q_embed = (q * cos) + (rotate_half(q) * sin)
+    k_embed = (k * cos) + (rotate_half(k) * sin)
+    return q_embed, k_embed
 
 
 class Qwen3RMSNorm(Qwen2RMSNorm):
@@ -108,6 +126,8 @@ class Qwen3Attention(LlamaAttention):
 
 
 class Qwen3ForCausalLM(Qwen2ForCausalLM):
+    _pp_plan = {"lm_head": (["hidden_states"], ["logits"])}
+
     def forward(
         self,
         **super_kwargs: Unpack[TransformersKwargs],

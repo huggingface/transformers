@@ -21,6 +21,7 @@
 from huggingface_hub.dataclasses import strict
 
 from ...configuration_utils import PreTrainedConfig
+from ...integrations.tensor_parallel import TPStyle
 from ...modeling_rope_utils import RopeParameters
 from ...utils import auto_docstring, logging
 
@@ -258,17 +259,42 @@ class Qwen3OmniMoeTalkerCodePredictorConfig(PreTrainedConfig):
     model_type = "qwen3_omni_moe_talker_code_predictor"
     keys_to_ignore_at_inference = ["past_key_values"]
 
-    # Default tensor parallel plan for base model `Qwen3OmniMoeTalkerCodePredictor`
+    # TP plan (for inference/generation).
+    # All activations are plain tensors — compatible with KV cache and autoregressive
+    # decode (seq_len=1). Each rank holds a full copy of activations between layers.
     base_model_tp_plan = {
-        "layers.*.self_attn.q_proj": "colwise",
-        "layers.*.self_attn.k_proj": "colwise",
-        "layers.*.self_attn.v_proj": "colwise",
-        "layers.*.self_attn.q_norm": "replicated_with_grad_allreduce",
-        "layers.*.self_attn.k_norm": "replicated_with_grad_allreduce",
-        "layers.*.self_attn.o_proj": "rowwise",
-        "layers.*.mlp.gate_proj": "colwise",
-        "layers.*.mlp.up_proj": "colwise",
-        "layers.*.mlp.down_proj": "rowwise",
+        "layers.*.self_attn.q_proj": TPStyle("colwise", "none"),
+        "layers.*.self_attn.k_proj": TPStyle("colwise", "none"),
+        "layers.*.self_attn.v_proj": TPStyle("colwise", "none"),
+        "layers.*.self_attn.o_proj": TPStyle("rowwise", "allreduce"),
+        "layers.*.mlp.gate_proj": TPStyle("colwise", "none"),
+        "layers.*.mlp.up_proj": TPStyle("colwise", "none"),
+        "layers.*.mlp.down_proj": TPStyle("rowwise", "allreduce"),
+    }
+
+    # TP + Sequence Parallelism plan (for training).
+    # Activations between layers are sharded on the sequence dimension (Shard(1)),
+    # reducing per-rank activation memory by tp_size. In exchange, extra collectives
+    # (all-gather before attention/MLP, reduce-scatter after) are needed.
+    # Not compatible with autoregressive decode (because seq_len=1 can't be split across ranks)
+    # or KV cache (which stores plain tensors).
+    base_model_sp_plan = {
+        "embed_tokens": TPStyle("vocab", "reduce_scatter"),
+        "layers.*.input_layernorm": TPStyle("activation", "none"),
+        "layers.*.self_attn": TPStyle("module", "allgather", input_key="hidden_states"),
+        "layers.*.self_attn.q_proj": TPStyle("colwise", "none"),
+        "layers.*.self_attn.k_proj": TPStyle("colwise", "none"),
+        "layers.*.self_attn.v_proj": TPStyle("colwise", "none"),
+        "layers.*.self_attn.q_norm": TPStyle("activation", "none", sequence_dim=2),
+        "layers.*.self_attn.k_norm": TPStyle("activation", "none", sequence_dim=2),
+        "layers.*.self_attn.o_proj": TPStyle("rowwise", "reduce_scatter"),
+        "layers.*.post_attention_layernorm": TPStyle("activation", "none"),
+        "layers.*.mlp": TPStyle("module", "allgather"),
+        "layers.*.mlp.gate_proj": TPStyle("colwise", "none"),
+        "layers.*.mlp.up_proj": TPStyle("colwise", "none"),
+        "layers.*.mlp.down_proj": TPStyle("rowwise", "reduce_scatter"),
+        "norm": TPStyle("activation", "none"),
+        "lm_head": TPStyle("colwise", "loss_parallel"),
     }
     base_model_pp_plan = {
         "embed_tokens": (["input_ids"], ["inputs_embeds"]),

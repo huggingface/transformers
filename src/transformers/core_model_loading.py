@@ -118,6 +118,17 @@ class ConversionOps:
         raise NotImplementedError
 
 
+class _IdentityOp(ConversionOps):
+    """Pass-through reverse op for dequantize operations.
+
+    Dequantized weights are already in their target dtype and should be
+    saved as-is without any conversion.
+    """
+
+    def convert(self, input_dict: dict[str, Any], **kwargs) -> dict[str, Any]:
+        return input_dict
+
+
 class Chunk(ConversionOps):
     """Split a tensor along ``dim`` into equally sized chunks."""
 
