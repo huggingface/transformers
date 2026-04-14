@@ -344,7 +344,7 @@ def patch_output_recorders(model: nn.Module) -> None:
 
     for submodule in model.modules():
         if hasattr(submodule, "_can_record_outputs") and submodule._can_record_outputs is not None:
-            for output, recorder in submodule._can_record_outputs.items():
+            for output, recorder in submodule._can_record_outputs.items():  # type: ignore[union-attr]
                 if isinstance(recorder, OutputRecorder):
                     # Check if target class matches any registered pattern or exact name
                     replacement_class = _find_replacement_class(recorder.target_class.__name__, mapping)

@@ -11,7 +11,9 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+from collections.abc import Callable
 from functools import partial
+from typing import Any
 
 import torch
 import torch.nn as nn
@@ -96,9 +98,13 @@ class GradientCheckpointingLayer(nn.Module):
 @auto_docstring
 class GenericForSequenceClassification:
     base_model_prefix = "model"
+    # Provided by PreTrainedModel when used as a mixin
+    config: Any
+    post_init: Callable
+    loss_function: Callable
 
     def __init__(self, config):
-        super().__init__(config)
+        super().__init__(config)  # type: ignore[too-many-positional-arguments]
         self.num_labels = config.num_labels
         # Similar to `self.model = AutoModel.from_config(config)` but allows to change the base model name if needed in the child class
         setattr(self, self.base_model_prefix, AutoModel.from_config(config))
@@ -135,7 +141,7 @@ class GenericForSequenceClassification:
         if input_ids is not None:
             batch_size = input_ids.shape[0]
         else:
-            batch_size = inputs_embeds.shape[0]
+            batch_size = inputs_embeds.shape[0]  # type: ignore[union-attr]
 
         if self.config.pad_token_id is None and batch_size != 1:
             raise ValueError("Cannot handle batch sizes > 1 if no padding token is defined.")
@@ -171,9 +177,13 @@ class GenericForSequenceClassification:
 @auto_docstring
 class GenericForQuestionAnswering:
     base_model_prefix = "model"
+    # Provided by PreTrainedModel when used as a mixin
+    config: Any
+    post_init: Callable
+    loss_function: Callable
 
     def __init__(self, config):
-        super().__init__(config)
+        super().__init__(config)  # type: ignore[too-many-positional-arguments]
         # Similar to `self.model = AutoModel.from_config(config)` but allows to change the base model name if needed in the child class
         setattr(self, self.base_model_prefix, AutoModel.from_config(config))
         self.qa_outputs = nn.Linear(config.hidden_size, 2)
@@ -232,9 +242,13 @@ class GenericForQuestionAnswering:
 @auto_docstring
 class GenericForTokenClassification:
     base_model_prefix = "model"
+    # Provided by PreTrainedModel when used as a mixin
+    config: Any
+    post_init: Callable
+    loss_function: Callable
 
     def __init__(self, config):
-        super().__init__(config)
+        super().__init__(config)  # type: ignore[too-many-positional-arguments]
         self.num_labels = config.num_labels
         # Similar to `self.model = AutoModel.from_config(config)` but allows to change the base model name if needed in the child class
         setattr(self, self.base_model_prefix, AutoModel.from_config(config))

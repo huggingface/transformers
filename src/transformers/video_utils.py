@@ -535,7 +535,7 @@ def read_video_torchvision(
         "Using `torchvision` for video decoding is deprecated and will be removed in future versions. "
         "Please use `torchcodec` instead."
     )
-    video, _, info = torchvision_io.read_video(
+    video, _, info = torchvision_io.read_video(  # type: ignore[unresolved-attribute]
         video_path,
         start_pts=0.0,
         end_pts=None,

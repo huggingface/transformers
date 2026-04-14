@@ -566,7 +566,7 @@ class PythonBackend(PreTrainedTokenizerBase):
             elif special_tokens:
                 # doing token.special=True changes the normalization! will fix in rust
                 # this is important and the only reason why the AddedTokens in each class are normalized by default
-                token.__setstate__({"special": True, "normalized": token.normalized})
+                token.__setstate__({"special": True, "normalized": token.normalized})  # type: ignore[union-attr]
             if token in self._added_tokens_decoder:
                 continue
             if not token.special and token.normalized and getattr(self, "do_lower_case", False):

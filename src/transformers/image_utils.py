@@ -223,15 +223,15 @@ def make_flat_list_of_images(
         return [img for img_list in images for img in img_list]
 
     if isinstance(images, (list, tuple)) and is_valid_list_of_images(images):
-        if is_pil_image(images[0]) or images[0].ndim == expected_ndims:
+        if is_pil_image(images[0]) or images[0].ndim == expected_ndims:  # type: ignore[union-attr]
             return images
-        if images[0].ndim == expected_ndims + 1:
+        if images[0].ndim == expected_ndims + 1:  # type: ignore[union-attr]
             return [img for img_list in images for img in img_list]
 
     if is_valid_image(images):
-        if is_pil_image(images) or images.ndim == expected_ndims:
+        if is_pil_image(images) or images.ndim == expected_ndims:  # type: ignore[union-attr]
             return [images]
-        if images.ndim == expected_ndims + 1:
+        if images.ndim == expected_ndims + 1:  # type: ignore[union-attr]
             return list(images)
 
     raise ValueError(f"Could not make a flat list of images from {images}")
@@ -261,16 +261,16 @@ def make_nested_list_of_images(
 
     # If it's a list of images, it's a single batch, so convert it to a list of lists
     if isinstance(images, (list, tuple)) and is_valid_list_of_images(images):
-        if is_pil_image(images[0]) or images[0].ndim == expected_ndims:
+        if is_pil_image(images[0]) or images[0].ndim == expected_ndims:  # type: ignore[union-attr]
             return [images]
-        if images[0].ndim == expected_ndims + 1:
+        if images[0].ndim == expected_ndims + 1:  # type: ignore[union-attr]
             return [list(image) for image in images]
 
     # If it's a single image, convert it to a list of lists
     if is_valid_image(images):
-        if is_pil_image(images) or images.ndim == expected_ndims:
+        if is_pil_image(images) or images.ndim == expected_ndims:  # type: ignore[union-attr]
             return [[images]]
-        if images.ndim == expected_ndims + 1:
+        if images.ndim == expected_ndims + 1:  # type: ignore[union-attr]
             return [list(images)]
 
     raise ValueError("Invalid input type. Must be a single image, a list of images, or a list of batches of images.")
@@ -703,7 +703,7 @@ class ImageFeatureExtractionMixin:
             image = np.array(image)
 
         if is_torch_tensor(image):
-            image = image.numpy()
+            image = image.numpy()  # type: ignore[union-attr]
 
         rescale = isinstance(image.flat[0], np.integer) if rescale is None else rescale
 
@@ -959,7 +959,7 @@ class ImageFeatureExtractionMixin:
         Returns:
             image: A rotated `PIL.Image.Image`.
         """
-        resample = resample if resample is not None else PIL.Image.NEAREST
+        resample = resample if resample is not None else PIL.Image.NEAREST  # type: ignore[unresolved-attribute]
 
         self._ensure_format_supported(image)
 

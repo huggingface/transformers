@@ -147,17 +147,17 @@ class TorchvisionBackend(BaseImageProcessor):
         elif image_type == ImageType.NUMPY:
             image = torch.from_numpy(image).contiguous()
 
-        if image.ndim == 2:
-            image = image.unsqueeze(0)
+        if image.ndim == 2:  # type: ignore[union-attr]
+            image = image.unsqueeze(0)  # type: ignore[union-attr]
 
         if input_data_format is None:
             input_data_format = infer_channel_dimension_format(image)
 
         if input_data_format == ChannelDimension.LAST:
-            image = image.permute(2, 0, 1).contiguous()
+            image = image.permute(2, 0, 1).contiguous()  # type: ignore[union-attr]
 
         if device is not None:
-            image = image.to(device)
+            image = image.to(device)  # type: ignore[union-attr]
 
         return image
 
@@ -168,7 +168,7 @@ class TorchvisionBackend(BaseImageProcessor):
     def pad(
         self,
         images: list["torch.Tensor"],
-        pad_size: SizeDict = None,
+        pad_size: SizeDict | None = None,
         fill_value: int | None = 0,
         padding_mode: str | None = "constant",
         return_mask: bool = False,
@@ -356,7 +356,7 @@ class TorchvisionBackend(BaseImageProcessor):
     ) -> "torch.Tensor":
         """Center crop an image using Torchvision."""
         if size.height is None or size.width is None:
-            raise ValueError(f"The size dictionary must have keys 'height' and 'width'. Got {size.keys()}")
+            raise ValueError(f"The size dictionary must have keys 'height' and 'width'. Got {dict(size).keys()}")
         image_height, image_width = image.shape[-2:]
         crop_height, crop_width = size.height, size.width
 
@@ -473,9 +473,9 @@ class PilBackend(BaseImageProcessor):
             if image.ndim >= 3:
                 input_data_format = ChannelDimension.LAST if input_data_format is None else input_data_format
         elif image_type == ImageType.TORCH:
-            image = image.numpy()
+            image = image.numpy()  # type: ignore[union-attr]
 
-        if image.ndim == 2:
+        if image.ndim == 2:  # type: ignore[union-attr]
             image = np.expand_dims(image, axis=0)
 
         if input_data_format is None:
@@ -495,7 +495,7 @@ class PilBackend(BaseImageProcessor):
     def pad(
         self,
         images: list[np.ndarray],
-        pad_size: SizeDict = None,
+        pad_size: SizeDict | None = None,
         fill_value: int | None = 0,
         padding_mode: str | None = "constant",
         return_mask: bool = False,
@@ -632,7 +632,7 @@ class PilBackend(BaseImageProcessor):
     ) -> np.ndarray:
         """Center crop an image using NumPy."""
         if size.height is None or size.width is None:
-            raise ValueError(f"The size dictionary must have keys 'height' and 'width'. Got {size.keys()}")
+            raise ValueError(f"The size dictionary must have keys 'height' and 'width'. Got {dict(size).keys()}")
 
         return np_center_crop(
             image,

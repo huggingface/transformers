@@ -598,7 +598,7 @@ class Trainer:
         if getattr(self.model, "config", None) is not None:
             self.model.config.use_cache = self.args.use_cache
 
-        self.is_fsdp_xla_v2_enabled = args.fsdp_config.get("xla_fsdp_v2", False)
+        self.is_fsdp_xla_v2_enabled = args.fsdp_config.get("xla_fsdp_v2", False)  # type: ignore[unresolved-attribute]
         if self.is_fsdp_xla_v2_enabled:
             if not IS_XLA_FSDPV2_POST_2_2:
                 raise ValueError("FSDPv2 requires `torch_xla` 2.2 or higher.")
@@ -651,7 +651,7 @@ class Trainer:
                 "You should subclass `Trainer` and override the `create_optimizer_and_scheduler` method."
             )
         if is_torch_xla_available() and self.optimizer is not None:
-            for param in self.model.parameters():
+            for param in self.model.parameters():  # type: ignore[unresolved-attribute]
                 model_device = param.device
                 break
             for param_group in self.optimizer.param_groups:
@@ -724,17 +724,17 @@ class Trainer:
                 )
             args["parallelism_config"] = self.args.parallelism_config
 
-        if getattr(self.model, "tp_size", None) is not None and self.model.tp_size > 1:
+        if getattr(self.model, "tp_size", None) is not None and self.model.tp_size > 1:  # type: ignore[unresolved-attribute]
             if self.args.parallelism_config is None:
                 if is_accelerate_available("1.12.0"):
                     if self.args.parallelism_config is None:
                         from accelerate import ParallelismConfig
 
-                        args["parallelism_config"] = ParallelismConfig(tp_size=self.model.tp_size)
+                        args["parallelism_config"] = ParallelismConfig(tp_size=self.model.tp_size)  # type: ignore[unresolved-attribute]
                 else:
                     raise ValueError("Requires accelerate>1.12.0 to use Tensor Parallelism.")
-            elif args["parallelism_config"].tp_size != self.model.tp_size:
-                args["parallelism_config"].tp_size = self.model.tp_size
+            elif args["parallelism_config"].tp_size != self.model.tp_size:  # type: ignore[unresolved-attribute]
+                args["parallelism_config"].tp_size = self.model.tp_size  # type: ignore[unresolved-attribute]
 
         if is_accelerate_available("1.2.0"):
             # it we don't have the correct version, we will rely on env var instead that were set in TrainingArguments
@@ -751,8 +751,8 @@ class Trainer:
         """Create the accelerator and perform post-creation setup (FSDP, DeepSpeed, etc.)."""
         # We explicitly don't rely on the `Accelerator` to do gradient accumulation
         grad_acc_kwargs = {}
-        if self.args.accelerator_config.gradient_accumulation_kwargs is not None:
-            grad_acc_kwargs = self.args.accelerator_config.gradient_accumulation_kwargs
+        if self.args.accelerator_config.gradient_accumulation_kwargs is not None:  # type: ignore[unresolved-attribute]
+            grad_acc_kwargs = self.args.accelerator_config.gradient_accumulation_kwargs  # type: ignore[unresolved-attribute]
 
         # check if num_steps is attempted to be passed in gradient_accumulation_kwargs
         if "num_steps" in grad_acc_kwargs:
@@ -773,7 +773,7 @@ class Trainer:
         # Rather, we do it ourselves by setting self.accelerator.gradient_state._set_sync_gradients.
         gradient_accumulation_plugin = GradientAccumulationPlugin(**grad_acc_kwargs)
 
-        accelerator_config = self.args.accelerator_config.to_dict()
+        accelerator_config = self.args.accelerator_config.to_dict()  # type: ignore[unresolved-attribute]
 
         # Extract dataloader config params from accelerator config
         dataloader_params = ["split_batches", "dispatch_batches", "even_batches", "use_seedable_sampler"]
@@ -822,8 +822,8 @@ class Trainer:
         if self.is_fsdp_enabled:
             fsdp_plugin = self.accelerator.state.fsdp_plugin
             for param in ["limit_all_gathers", "activation_checkpointing"]:
-                setattr(fsdp_plugin, param, self.args.fsdp_config.get(param, getattr(fsdp_plugin, param)))
-            if fsdp_plugin.activation_checkpointing and self.args.gradient_checkpointing:
+                setattr(fsdp_plugin, param, self.args.fsdp_config.get(param, getattr(fsdp_plugin, param)))  # type: ignore[unresolved-attribute]
+            if fsdp_plugin.activation_checkpointing and self.args.gradient_checkpointing:  # type: ignore[unresolved-attribute]
                 raise ValueError(
                     "The activation_checkpointing in FSDP config and the gradient_checkpointing in training arg "
                     "can't be set to True simultaneously. Please use FSDP's activation_checkpointing logic "
@@ -854,7 +854,7 @@ class Trainer:
         if (
             self.args.save_only_model
             and self.is_fsdp_enabled
-            and "SHARDED_STATE_DICT" in str(self.accelerator.state.fsdp_plugin.state_dict_type)
+            and "SHARDED_STATE_DICT" in str(self.accelerator.state.fsdp_plugin.state_dict_type)  # type: ignore[unresolved-attribute]
         ):
             raise ValueError("save_only_model option is not compatible with FSDP state dict type 'SHARDED_STATE_DICT'")
 
@@ -946,7 +946,7 @@ class Trainer:
             dataset = dataloader.dataset
             # Special case for IterableDatasetShard, we need to dig deeper
             if isinstance(dataset, IterableDatasetShard):
-                return len(dataloader.dataset.dataset)
+                return len(dataloader.dataset.dataset)  # type: ignore[unresolved-attribute]
             return len(dataloader.dataset)
         except (NameError, AttributeError, TypeError):  # no dataset or length, estimate by length of dataloader
             return len(dataloader) * self.args.per_device_train_batch_size
@@ -1019,7 +1019,7 @@ class Trainer:
             else:
                 lengths = None
             model_input_name = (
-                self.processing_class.model_input_names[0] if self.processing_class is not None else None
+                self.processing_class.model_input_names[0] if self.processing_class is not None else None  # type: ignore[unresolved-attribute]
             )
             return LengthGroupedSampler(
                 self.args.train_batch_size * self.args.gradient_accumulation_steps,
@@ -1047,7 +1047,7 @@ class Trainer:
             else:
                 lengths = None
             model_input_name = (
-                self.processing_class.model_input_names[0] if self.processing_class is not None else None
+                self.processing_class.model_input_names[0] if self.processing_class is not None else None  # type: ignore[unresolved-attribute]
             )
             return LengthGroupedSampler(
                 self.args.eval_batch_size,
@@ -1071,8 +1071,8 @@ class Trainer:
                     model_to_inspect = self.model.get_base_model()
                 else:
                     # PeftMixedModel do not provide a `get_base_model` method
-                    model_to_inspect = self.model.base_model.model
-            signature = inspect.signature(model_to_inspect.forward)
+                    model_to_inspect = self.model.base_model.model  # type: ignore[unresolved-attribute]
+            signature = inspect.signature(model_to_inspect.forward)  # type: ignore[unresolved-attribute]
             self._signature_columns = list(signature.parameters.keys())
             # Labels may be named label or label_ids, the default data collator handles that.
             self._signature_columns += list(set(["label", "label_ids"] + self.label_names))
@@ -1158,13 +1158,17 @@ class Trainer:
             optimizer_grouped_parameters = [
                 {
                     "params": [
-                        p for n, p in opt_model.named_parameters() if (n in decay_parameters and p.requires_grad)
+                        p
+                        for n, p in opt_model.named_parameters()  # type: ignore[unresolved-attribute]
+                        if (n in decay_parameters and p.requires_grad)
                     ],
                     "weight_decay": self.args.weight_decay,
                 },
                 {
                     "params": [
-                        p for n, p in opt_model.named_parameters() if (n not in decay_parameters and p.requires_grad)
+                        p
+                        for n, p in opt_model.named_parameters()  # type: ignore[unresolved-attribute]
+                        if (n not in decay_parameters and p.requires_grad)
                     ],
                     "weight_decay": 0.0,
                 },
@@ -1178,7 +1182,7 @@ class Trainer:
             # Check if this is a factory (for complex optimizers like Muon, Dion)
             # Factories are instantiated first, then called with (opt_model, **kwargs)
             if is_optimizer_factory(optimizer_cls):
-                self.optimizer = optimizer_cls()(opt_model, **optimizer_kwargs)
+                self.optimizer = optimizer_cls()(opt_model, **optimizer_kwargs)  # type: ignore[missing-argument]
             else:
                 # Standard optimizer class instantiation
                 # Overwrite `params` in case it's created by `get_optimizer_cls_and_kwargs`
@@ -1204,7 +1208,7 @@ class Trainer:
                 manager = bitsandbytes.optim.GlobalOptimManager.get_instance()
 
                 skipped = 0
-                for module in opt_model.modules():
+                for module in opt_model.modules():  # type: ignore[unresolved-attribute]
                     if isinstance(module, nn.Embedding):
                         skipped += sum({p.data_ptr(): p.numel() for p in module.parameters()}.values())
                         logger.info(f"skipped {module}: {skipped / 2**20}M params")
@@ -1234,7 +1238,7 @@ class Trainer:
             if optimizer is None:
                 if is_sagemaker_mp_enabled() and smp.state.cfg.fp16:
                     # If fp16 is enabled, we unwrap the optimizer
-                    optimizer = self.optimizer.optimizer
+                    optimizer = self.optimizer.optimizer  # type: ignore[unresolved-attribute]
                 else:
                     optimizer = self.optimizer
             self.lr_scheduler = get_scheduler(
@@ -1301,7 +1305,7 @@ class Trainer:
             # not run for the first few dozen steps while loss scale is too large, and thus during
             # that time `get_last_lr` will fail if called during that warm up stage, so work around it:
             try:
-                last_lr = self.lr_scheduler.get_last_lr()[0]
+                last_lr = self.lr_scheduler.get_last_lr()[0]  # type: ignore[unresolved-attribute]
             except AssertionError as e:
                 if "need to call step" in str(e):
                     logger.warning("tried to get lr value before scheduler/optimizer started stepping, returning lr=0")
@@ -1310,12 +1314,12 @@ class Trainer:
                     raise
         else:
             if isinstance(self.lr_scheduler, (torch.optim.lr_scheduler.ReduceLROnPlateau, GreedyLR)):
-                last_lr = self.optimizer.param_groups[0]["lr"]
+                last_lr = self.optimizer.param_groups[0]["lr"]  # type: ignore[unresolved-attribute]
             else:
-                last_lr = self.lr_scheduler.get_last_lr()[0]
+                last_lr = self.lr_scheduler.get_last_lr()[0]  # type: ignore[unresolved-attribute]
 
         if torch.is_tensor(last_lr):
-            last_lr = last_lr.item()
+            last_lr = last_lr.item()  # type: ignore[unresolved-attribute]
         return last_lr
 
     # ---- Training ----
@@ -1374,7 +1378,7 @@ class Trainer:
 
         # Activate gradient checkpointing if needed
         if args.gradient_checkpointing:
-            self.model.gradient_checkpointing_enable(gradient_checkpointing_kwargs=args.gradient_checkpointing_kwargs)
+            self.model.gradient_checkpointing_enable(gradient_checkpointing_kwargs=args.gradient_checkpointing_kwargs)  # type: ignore[unresolved-attribute]
 
         # If the model uses a tokenizer, it may have a new tokens for fine-tuning purposes.
         if isinstance(self.processing_class, (PreTrainedTokenizerBase, ProcessorMixin)) and hasattr(
@@ -1440,7 +1444,7 @@ class Trainer:
         """Run the actual training loop: forward, backward, optimizer step, logging, and checkpointing."""
         # reset everything
         self.accelerator.free_memory()
-        if args.auto_find_batch_size:
+        if args.auto_find_batch_size:  # type: ignore[unresolved-attribute]
             self._update_auto_batch_size(batch_size)
         # Data loader and number of training steps
         train_dataloader = self.get_train_dataloader()
@@ -1472,7 +1476,7 @@ class Trainer:
         if self.args.per_device_train_batch_size != self._train_batch_size:
             logger.info(f"  Training with DataParallel so batch size has been adjusted to: {self._train_batch_size:,}")
         logger.info(f"  Total train batch size (w. parallel, distributed & accumulation) = {total_train_batch_size:,}")
-        logger.info(f"  Gradient Accumulation steps = {args.gradient_accumulation_steps}")
+        logger.info(f"  Gradient Accumulation steps = {args.gradient_accumulation_steps}")  # type: ignore[unresolved-attribute]
         logger.info(f"  Total optimization steps = {max_steps:,}")
         logger.info(f"  Number of trainable parameters = {get_model_param_count(model, trainable_only=True):,}")
 
@@ -1491,7 +1495,7 @@ class Trainer:
         self._initial_num_input_tokens_seen = self.state.num_input_tokens_seen
         # Logging state: _tr_loss accumulates on-device between logging steps (avoiding costly .item() syncs
         # on TPUs), then gets drained into _total_loss_scalar at each logging step.
-        self._tr_loss = torch.tensor(0.0, device=args.device)
+        self._tr_loss = torch.tensor(0.0, device=args.device)  # type: ignore[unresolved-attribute]
         self._total_loss_scalar = 0.0
         self._globalstep_last_logged = self.state.global_step
 
@@ -1499,7 +1503,7 @@ class Trainer:
 
         self.control = self.callback_handler.on_train_begin(args, self.state, self.control)
 
-        if args.eval_on_start:
+        if args.eval_on_start:  # type: ignore[unresolved-attribute]
             self._evaluate(trial, ignore_keys_for_eval, skip_scheduler=True)
 
         for epoch in range(epochs_trained, num_train_epochs):
@@ -1625,7 +1629,7 @@ class Trainer:
         if self.is_fsdp_enabled:
             # Fix `got mixed torch.Tensor and DTensor` error in model.generate() for FSDP2 with LoRA
             if hasattr(self.model, "generate"):
-                dist.fsdp.register_fsdp_forward_method(self.model, "generate")
+                dist.fsdp.register_fsdp_forward_method(self.model, "generate")  # type: ignore[possibly-missing-attribute]
 
         # since DataLoader was Accelerate prepared w/o a model arg in the same call, we now have to complete the DL wrapping for ALST/UlyssesSP, after model has been prepared
         pc = getattr(self.accelerator, "parallelism_config", None)
@@ -1758,7 +1762,7 @@ class Trainer:
                     grad_norm = self._get_grad_norm(model, grad_norm=grad_norm)
 
                     self.control = self.callback_handler.on_pre_optimizer_step(self.args, self.state, self.control)
-                    self.optimizer.step()
+                    self.optimizer.step()  # type: ignore[unresolved-attribute]
                     self.control = self.callback_handler.on_optimizer_step(self.args, self.state, self.control)
 
                     # get leaning rate before update
@@ -1767,7 +1771,7 @@ class Trainer:
                     if not self.accelerator.optimizer_step_was_skipped:
                         # Delay optimizer scheduling until metrics are generated
                         if not isinstance(self.lr_scheduler, (torch.optim.lr_scheduler.ReduceLROnPlateau, GreedyLR)):
-                            self.lr_scheduler.step()
+                            self.lr_scheduler.step()  # type: ignore[unresolved-attribute]
 
                     model.zero_grad()
                     self.state.global_step += 1
@@ -1896,7 +1900,7 @@ class Trainer:
         with cp_context():
             model.train()
             if hasattr(self.optimizer, "train") and callable(self.optimizer.train):
-                self.optimizer.train()
+                self.optimizer.train()  # type: ignore[call-top-callable]
 
             inputs = self._prepare_inputs(inputs)
             if is_sagemaker_mp_enabled():
@@ -1920,7 +1924,9 @@ class Trainer:
                 kwargs["learning_rate"] = self._get_learning_rate()
 
             if self.args.n_gpu > 1:
-                loss = loss.mean()  # mean() to average on multi-gpu parallel training
+                loss = (
+                    loss.mean()  # type: ignore[unresolved-attribute]
+                )  # mean() to average on multi-gpu parallel training
 
             # Finally we need to normalize the loss for reporting if GA loss bug is not fixed during compute loss
             if (not self.model_accepts_loss_kwargs or num_items_in_batch is None) and self.compute_loss_func is None:
@@ -1934,7 +1940,7 @@ class Trainer:
 
             self.accelerator.backward(loss, **kwargs)
 
-            return loss.detach()
+            return loss.detach()  # type: ignore[unresolved-attribute]
 
     def compute_loss(
         self,
@@ -1964,7 +1970,7 @@ class Trainer:
         make sure to overwrite `self.model_accepts_loss_kwargs` to `False`. Otherwise, the loss calculation might be slightly inaccurate when performing gradient accumulation.
         """
         pc = getattr(self.accelerator, "parallelism_config", None)
-        if pc is not None and pc.sp_backend == "deepspeed" and pc.sp_enabled and self.model.training:
+        if pc is not None and pc.sp_backend == "deepspeed" and pc.sp_enabled and self.model.training:  # type: ignore[unresolved-attribute]
             return deepspeed_sp_compute_loss(self.accelerator, model, inputs, return_outputs, pc)
 
         if (self.label_smoother is not None or self.compute_loss_func is not None) and "labels" in inputs:
@@ -2207,13 +2213,13 @@ class Trainer:
         """
         if (
             getattr(self.accelerator, "parallelism_config", None) is not None
-            and self.accelerator.parallelism_config.cp_enabled
+            and self.accelerator.parallelism_config.cp_enabled  # type: ignore[unresolved-attribute]
         ):
-            if self.accelerator.parallelism_config.cp_backend == "torch":
+            if self.accelerator.parallelism_config.cp_backend == "torch":  # type: ignore[unresolved-attribute]
                 if hasattr(model, "config"):
-                    if model.config._attn_implementation != "sdpa":
+                    if model.config._attn_implementation != "sdpa":  # type: ignore[unresolved-attribute]
                         raise ValueError(
-                            f"Context parallelism is supported only with SDPA attention, you are using {model.config._attn_implementation}."
+                            f"Context parallelism is supported only with SDPA attention, you are using {model.config._attn_implementation}."  # type: ignore[unresolved-attribute]
                         )
 
                 if "shift_labels" not in inputs:
@@ -2379,7 +2385,7 @@ class Trainer:
             return 1
         else:
             pc = self.accelerator.parallelism_config
-            return pc.sp_size
+            return pc.sp_size  # type: ignore[unresolved-attribute]
 
     def get_cp_size(self) -> int:
         """Get the context parallel size"""
@@ -2387,7 +2393,7 @@ class Trainer:
             return 1
         else:
             pc = self.accelerator.parallelism_config
-            return pc.cp_size
+            return pc.cp_size  # type: ignore[unresolved-attribute]
 
     def get_tp_size(self) -> int:
         """Get the tensor parallel size from either the model or DeepSpeed config."""
@@ -2490,7 +2496,7 @@ class Trainer:
     def _clip_grad_norm(self, model):
         """Clip gradients to max_grad_norm. Returns the pre-clip gradient norm."""
         if is_sagemaker_mp_enabled() and self.args.fp16:
-            return self.optimizer.clip_master_grads(self.args.max_grad_norm)
+            return self.optimizer.clip_master_grads(self.args.max_grad_norm)  # type: ignore[unresolved-attribute]
         return self.accelerator.clip_grad_norm_(model.parameters(), self.args.max_grad_norm)
 
     def _get_grad_norm(self, model, grad_norm=None):
@@ -2586,7 +2592,7 @@ class Trainer:
         total_batch_size = self.args.eval_batch_size * self.args.world_size
         if f"{metric_key_prefix}_model_preparation_time" in output.metrics:
             start_time += output.metrics[f"{metric_key_prefix}_model_preparation_time"]
-        output.metrics.update(
+        output.metrics.update(  # type: ignore[unresolved-attribute]
             speed_metrics(
                 metric_key_prefix,
                 start_time,
@@ -2669,7 +2675,7 @@ class Trainer:
         if hasattr(model, "eval") and callable(model.eval):
             model.eval()
         if hasattr(self.optimizer, "eval") and callable(self.optimizer.eval):
-            self.optimizer.eval()
+            self.optimizer.eval()  # type: ignore[call-top-callable]
 
         self.callback_handler.eval_dataloader = dataloader
         # Do this before wrapping.
@@ -2741,7 +2747,7 @@ class Trainer:
                     batch_kwargs["inputs"] = inputs if "inputs" in args.include_for_metrics else None
                     metrics = self.compute_metrics(
                         EvalPrediction(predictions=logits, label_ids=labels, **batch_kwargs),
-                        compute_result=is_last_step,
+                        compute_result=is_last_step,  # type: ignore[unknown-argument]
                     )
 
                 del losses, logits, labels, inputs
@@ -2860,7 +2866,7 @@ class Trainer:
         total_batch_size = self.args.eval_batch_size * self.args.world_size
         if f"{metric_key_prefix}_model_preparation_time" in output.metrics:
             start_time += output.metrics[f"{metric_key_prefix}_model_preparation_time"]
-        output.metrics.update(
+        output.metrics.update(  # type: ignore[unresolved-attribute]
             speed_metrics(
                 metric_key_prefix,
                 start_time,
@@ -2995,7 +3001,7 @@ class Trainer:
             and not skip_scheduler
         ):
             metric_to_check = self.args.metric_for_best_model
-            if not metric_to_check.startswith("eval_"):
+            if not metric_to_check.startswith("eval_"):  # type: ignore[unresolved-attribute]
                 metric_to_check = f"eval_{metric_to_check}"
             try:
                 self.lr_scheduler.step(metrics[metric_to_check])
@@ -3015,7 +3021,7 @@ class Trainer:
         """Return the output directory, accounting for hyperparameter search trials."""
         if self.hp_search_backend is not None and trial is not None:
             if self.hp_search_backend == HPSearchBackend.OPTUNA:
-                run_id = trial.number
+                run_id = trial.number  # type: ignore[unresolved-attribute]
             elif self.hp_search_backend == HPSearchBackend.RAY:
                 import ray.tune
 
@@ -3055,7 +3061,7 @@ class Trainer:
             if is_torch_xla_available():
                 xm.rendezvous("load_best_model_at_end")
             elif self.args.parallel_mode == ParallelMode.DISTRIBUTED:
-                dist.barrier()
+                dist.barrier()  # type: ignore[possibly-missing-attribute]
             elif is_sagemaker_mp_enabled():
                 smp.barrier()
 
@@ -3157,27 +3163,27 @@ class Trainer:
 
         if is_torch_npu_available():
             if self.args.parallel_mode == ParallelMode.DISTRIBUTED:
-                rng_states["npu"] = torch.npu.random.get_rng_state_all()
+                rng_states["npu"] = torch.npu.random.get_rng_state_all()  # type: ignore[unresolved-attribute]
             else:
-                rng_states["npu"] = torch.npu.random.get_rng_state()
+                rng_states["npu"] = torch.npu.random.get_rng_state()  # type: ignore[unresolved-attribute]
 
         if is_torch_hpu_available():
             if self.args.parallel_mode == ParallelMode.DISTRIBUTED:
-                rng_states["hpu"] = torch.hpu.random.get_rng_state_all()
+                rng_states["hpu"] = torch.hpu.random.get_rng_state_all()  # type: ignore[unresolved-attribute]
             else:
-                rng_states["hpu"] = torch.hpu.random.get_rng_state()
+                rng_states["hpu"] = torch.hpu.random.get_rng_state()  # type: ignore[unresolved-attribute]
 
         if is_torch_mlu_available():
             if self.args.parallel_mode == ParallelMode.DISTRIBUTED:
-                rng_states["mlu"] = torch.mlu.random.get_rng_state_all()
+                rng_states["mlu"] = torch.mlu.random.get_rng_state_all()  # type: ignore[unresolved-attribute]
             else:
-                rng_states["mlu"] = torch.mlu.random.get_rng_state()
+                rng_states["mlu"] = torch.mlu.random.get_rng_state()  # type: ignore[unresolved-attribute]
 
         if is_torch_musa_available():
             if self.args.parallel_mode == ParallelMode.DISTRIBUTED:
-                rng_states["musa"] = torch.musa.get_rng_state_all()
+                rng_states["musa"] = torch.musa.get_rng_state_all()  # type: ignore[unresolved-attribute]
             else:
-                rng_states["musa"] = torch.musa.get_rng_state()
+                rng_states["musa"] = torch.musa.get_rng_state()  # type: ignore[unresolved-attribute]
 
         # A process can arrive here before the process 0 has a chance to save the model, in which case output_dir may
         # not yet exist.
@@ -3194,8 +3200,8 @@ class Trainer:
             xm.rendezvous("saving_optimizer_states")
             if self.is_fsdp_xla_v1_enabled:
                 optm = {
-                    "optimizer": self.optimizer.state_dict(),
-                    "shard_metadata": self.model.get_shard_metadata(),
+                    "optimizer": self.optimizer.state_dict(),  # type: ignore[unresolved-attribute]
+                    "shard_metadata": self.model.get_shard_metadata(),  # type: ignore[unresolved-attribute]
                 }
                 xm.save(
                     optm,
@@ -3205,12 +3211,12 @@ class Trainer:
                     master_only=False,
                 )
             else:
-                xm.save(self.optimizer.state_dict(), os.path.join(output_dir, OPTIMIZER_NAME))
+                xm.save(self.optimizer.state_dict(), os.path.join(output_dir, OPTIMIZER_NAME))  # type: ignore[unresolved-attribute]
             with warnings.catch_warnings(record=True) as caught_warnings:
-                xm.save(self.lr_scheduler.state_dict(), os.path.join(output_dir, SCHEDULER_NAME))
+                xm.save(self.lr_scheduler.state_dict(), os.path.join(output_dir, SCHEDULER_NAME))  # type: ignore[unresolved-attribute]
                 reissue_pt_warnings(caught_warnings)
         elif is_sagemaker_mp_enabled():
-            opt_state_dict = self.optimizer.local_state_dict(gather_if_shard=False)
+            opt_state_dict = self.optimizer.local_state_dict(gather_if_shard=False)  # type: ignore[unresolved-attribute]
             smp.barrier()
             if smp.rdp_rank() == 0 or smp.state.cfg.shard_optimizer_state:
                 smp.save(
@@ -3223,12 +3229,12 @@ class Trainer:
             # under zero3 model file itself doesn't get saved since it's bogus! Unless deepspeed
             # config `stage3_gather_16bit_weights_on_model_save` is True
             accept_exclude_frozen_parameters = "exclude_frozen_parameters" in set(
-                inspect.signature(self.model_wrapped.save_checkpoint).parameters.keys()
+                inspect.signature(self.model_wrapped.save_checkpoint).parameters.keys()  # type: ignore[unresolved-attribute]
             )
             if accept_exclude_frozen_parameters and _is_peft_model(self.model):
-                self.model_wrapped.save_checkpoint(output_dir, exclude_frozen_parameters=True)
+                self.model_wrapped.save_checkpoint(output_dir, exclude_frozen_parameters=True)  # type: ignore[unresolved-attribute]
             else:
-                self.model_wrapped.save_checkpoint(output_dir)
+                self.model_wrapped.save_checkpoint(output_dir)  # type: ignore[unresolved-attribute]
         elif self.is_fsdp_enabled:
             # save fsdp specific ckpt for resuming from ckpt
             save_fsdp_model(
@@ -3239,7 +3245,7 @@ class Trainer:
             )
         elif self.args.should_save:
             # deepspeed.save_checkpoint above saves model/optim/sched
-            torch.save(self.optimizer.state_dict(), os.path.join(output_dir, OPTIMIZER_NAME))
+            torch.save(self.optimizer.state_dict(), os.path.join(output_dir, OPTIMIZER_NAME))  # type: ignore[unresolved-attribute]
 
         # Save SCHEDULER & SCALER
         is_deepspeed_custom_scheduler = self.is_deepspeed_enabled and not isinstance(
@@ -3251,7 +3257,7 @@ class Trainer:
             and not is_torch_xla_available()
         ):
             with warnings.catch_warnings(record=True) as caught_warnings:
-                torch.save(self.lr_scheduler.state_dict(), os.path.join(output_dir, SCHEDULER_NAME))
+                torch.save(self.lr_scheduler.state_dict(), os.path.join(output_dir, SCHEDULER_NAME))  # type: ignore[unresolved-attribute]
             reissue_pt_warnings(caught_warnings)
 
     def _save_scaler(self, output_dir: str) -> None:
@@ -3266,13 +3272,13 @@ class Trainer:
         if is_torch_xla_available():
             xm.rendezvous("saving_scaler_state")
             with warnings.catch_warnings(record=True) as caught_warnings:
-                xm.save(self.accelerator.scaler.state_dict(), os.path.join(output_dir, SCALER_NAME))
+                xm.save(self.accelerator.scaler.state_dict(), os.path.join(output_dir, SCALER_NAME))  # type: ignore[unresolved-attribute]
                 reissue_pt_warnings(caught_warnings)
 
         # Save SCALER
         if self.args.should_save and not is_torch_xla_available():
             with warnings.catch_warnings(record=True) as caught_warnings:
-                torch.save(self.accelerator.scaler.state_dict(), os.path.join(output_dir, SCALER_NAME))
+                torch.save(self.accelerator.scaler.state_dict(), os.path.join(output_dir, SCALER_NAME))  # type: ignore[unresolved-attribute]
             reissue_pt_warnings(caught_warnings)
 
     # ---- Checkpoint Resuming ----
@@ -3370,7 +3376,7 @@ class Trainer:
 
                 # workaround for FSDP bug https://github.com/pytorch/pytorch/issues/82963
                 # which takes *args instead of **kwargs
-                load_result = model.load_state_dict(state_dict, False)
+                load_result = model.load_state_dict(state_dict, False)  # type: ignore[unresolved-attribute]
                 # release memory
                 del state_dict
                 self._issue_warnings_after_load(load_result)
@@ -3455,11 +3461,11 @@ class Trainer:
                             try:
                                 model.load_adapter(self.state.best_model_checkpoint, active_adapter)
                             except RuntimeError as exc:
-                                if model.peft_config[active_adapter].is_prompt_learning:
+                                if model.peft_config[active_adapter].is_prompt_learning:  # type: ignore[unresolved-attribute]
                                     # for context: https://github.com/huggingface/peft/issues/2256
                                     msg = (
                                         "When using prompt learning PEFT methods such as "
-                                        f"{model.peft_config[active_adapter].peft_type.value}, setting "
+                                        f"{model.peft_config[active_adapter].peft_type.value}, setting "  # type: ignore[unresolved-attribute]
                                         "load_best_model_at_end=True can lead to errors, it is recommended "
                                         "to set this to False and to load the model manually from the checkpoint "
                                         "directory using PeftModel.from_pretrained(base_model, <path>) after training "
@@ -3495,7 +3501,7 @@ class Trainer:
                     # If the model is on the GPU, it still works!
                     # workaround for FSDP bug https://github.com/pytorch/pytorch/issues/82963
                     # which takes *args instead of **kwargs
-                    load_result = model.load_state_dict(state_dict, False)
+                    load_result = model.load_state_dict(state_dict, False)  # type: ignore[unresolved-attribute]
                 if not is_sagemaker_mp_enabled() and has_been_loaded:
                     self._issue_warnings_after_load(load_result)
         elif os.path.exists(os.path.join(self.state.best_model_checkpoint, SAFE_WEIGHTS_INDEX_NAME)) or os.path.exists(
@@ -3549,13 +3555,13 @@ class Trainer:
         if torch.cuda.is_available():
             set_rng_state_for_device("CUDA", torch.cuda, checkpoint_rng_state, is_distributed)
         if is_torch_npu_available():
-            set_rng_state_for_device("NPU", torch.npu, checkpoint_rng_state, is_distributed)
+            set_rng_state_for_device("NPU", torch.npu, checkpoint_rng_state, is_distributed)  # type: ignore[unresolved-attribute]
         if is_torch_hpu_available():
-            set_rng_state_for_device("HPU", torch.hpu, checkpoint_rng_state, is_distributed)
+            set_rng_state_for_device("HPU", torch.hpu, checkpoint_rng_state, is_distributed)  # type: ignore[unresolved-attribute]
         if is_torch_mlu_available():
-            set_rng_state_for_device("MLU", torch.mlu, checkpoint_rng_state, is_distributed)
+            set_rng_state_for_device("MLU", torch.mlu, checkpoint_rng_state, is_distributed)  # type: ignore[unresolved-attribute]
         if is_torch_musa_available():
-            set_rng_state_for_device("MUSA", torch.musa, checkpoint_rng_state, is_distributed)
+            set_rng_state_for_device("MUSA", torch.musa, checkpoint_rng_state, is_distributed)  # type: ignore[unresolved-attribute]
 
     def _load_optimizer_and_scheduler(self, checkpoint: str | None) -> None:
         """If optimizer and scheduler states exist, load them."""
@@ -3567,7 +3573,7 @@ class Trainer:
             if not isinstance(self.lr_scheduler, DeepSpeedSchedulerWrapper):
                 with warnings.catch_warnings(record=True) as caught_warnings:
                     check_torch_load_is_safe()
-                    self.lr_scheduler.load_state_dict(
+                    self.lr_scheduler.load_state_dict(  # type: ignore[unresolved-attribute]
                         torch.load(os.path.join(checkpoint, SCHEDULER_NAME), weights_only=True)
                     )
                 reissue_pt_warnings(caught_warnings)
@@ -3624,15 +3630,15 @@ class Trainer:
                 xm.send_cpu_data_to_device(optimizer_state, self.args.device)
                 xm.send_cpu_data_to_device(lr_scheduler_state, self.args.device)
 
-                self.optimizer.load_state_dict(optimizer_state)
-                self.lr_scheduler.load_state_dict(lr_scheduler_state)
+                self.optimizer.load_state_dict(optimizer_state)  # type: ignore[unresolved-attribute]
+                self.lr_scheduler.load_state_dict(lr_scheduler_state)  # type: ignore[unresolved-attribute]
             else:
                 if is_sagemaker_mp_enabled():
 
                     def opt_load_hook(mod, opt):
                         opt.load_state_dict(smp.load(os.path.join(checkpoint, OPTIMIZER_NAME), partial=True))
 
-                    self.model_wrapped.register_post_step_hook(opt_load_hook)
+                    self.model_wrapped.register_post_step_hook(opt_load_hook)  # type: ignore[unresolved-attribute]
                 else:
                     # We use the CPU when training on one GPU to avoid OOM for GPU RAM when training big models.
                     # In distributed training however, we load directly on each GPU and risk the GPU OOM as it's more
@@ -3649,14 +3655,14 @@ class Trainer:
                         )
                     else:
                         check_torch_load_is_safe()
-                        self.optimizer.load_state_dict(
+                        self.optimizer.load_state_dict(  # type: ignore[unresolved-attribute]
                             torch.load(
                                 os.path.join(checkpoint, OPTIMIZER_NAME), map_location=map_location, weights_only=True
                             )
                         )
                 with warnings.catch_warnings(record=True) as caught_warnings:
                     check_torch_load_is_safe()
-                    self.lr_scheduler.load_state_dict(
+                    self.lr_scheduler.load_state_dict(  # type: ignore[unresolved-attribute]
                         torch.load(os.path.join(checkpoint, SCHEDULER_NAME), weights_only=True)
                     )
                 reissue_pt_warnings(caught_warnings)
@@ -3679,11 +3685,11 @@ class Trainer:
                     )
                 reissue_pt_warnings(caught_warnings)
                 xm.send_cpu_data_to_device(scaler_state, self.args.device)
-                self.accelerator.scaler.load_state_dict(scaler_state)
+                self.accelerator.scaler.load_state_dict(scaler_state)  # type: ignore[unresolved-attribute]
             else:
                 with warnings.catch_warnings(record=True) as caught_warnings:
                     check_torch_load_is_safe()
-                    self.accelerator.scaler.load_state_dict(
+                    self.accelerator.scaler.load_state_dict(  # type: ignore[unresolved-attribute]
                         torch.load(os.path.join(checkpoint, SCALER_NAME), weights_only=True)
                     )
                 reissue_pt_warnings(caught_warnings)
@@ -3696,7 +3702,7 @@ class Trainer:
         not_found = []
         new_callbacks = []
         original_callbacks = self.callback_handler.callbacks + [self.control]
-        for stored_callback, data in self.state.stateful_callbacks.items():
+        for stored_callback, data in self.state.stateful_callbacks.items():  # type: ignore[unresolved-attribute]
             if not isinstance(data, list):
                 data = [data]
             if any(callback.__class__.__name__ == stored_callback for callback in original_callbacks):
@@ -3730,10 +3736,10 @@ class Trainer:
     def _issue_warnings_after_load(self, load_result: Any) -> None:
         """Log warnings for missing or unexpected keys after loading a checkpoint."""
         if len(load_result.missing_keys) != 0:
-            if self.model._keys_to_ignore_on_save is not None and set(load_result.missing_keys) == set(
-                self.model._keys_to_ignore_on_save
+            if self.model._keys_to_ignore_on_save is not None and set(load_result.missing_keys) == set(  # type: ignore[unresolved-attribute]
+                self.model._keys_to_ignore_on_save  # type: ignore[unresolved-attribute]
             ):
-                self.model.tie_weights()
+                self.model.tie_weights()  # type: ignore[unresolved-attribute]
             else:
                 logger.warning(f"There were missing keys in the checkpoint model loaded: {load_result.missing_keys}.")
         if len(load_result.unexpected_keys) != 0:
@@ -3760,25 +3766,25 @@ class Trainer:
         elif is_sagemaker_mp_enabled():
             # Calling the state_dict needs to be done on the wrapped model and on all processes.
             os.makedirs(output_dir, exist_ok=True)
-            state_dict = self.model_wrapped.state_dict()
+            state_dict = self.model_wrapped.state_dict()  # type: ignore[unresolved-attribute]
             if self.args.should_save:
                 self._save(output_dir, state_dict=state_dict)
             Path(os.path.join(output_dir, "user_content.pt")).touch()
         elif self.is_fsdp_enabled:
-            if "FULL_STATE_DICT" in str(self.accelerator.state.fsdp_plugin.state_dict_type):
+            if "FULL_STATE_DICT" in str(self.accelerator.state.fsdp_plugin.state_dict_type):  # type: ignore[unresolved-attribute]
                 state_dict = self.accelerator.get_state_dict(self.model)
                 if self.args.should_save:
                     self._save(output_dir, state_dict=state_dict)
         elif self.is_deepspeed_enabled:
             try:
                 accept_exclude_frozen_parameters = "exclude_frozen_parameters" in set(
-                    inspect.signature(self.model_wrapped.save_checkpoint).parameters.keys()
+                    inspect.signature(self.model_wrapped.save_checkpoint).parameters.keys()  # type: ignore[unresolved-attribute]
                 )
-                zero3_sharding = self.deepspeed.config.get("zero_optimization", {}).get("stage", None) == 3
+                zero3_sharding = self.deepspeed.config.get("zero_optimization", {}).get("stage", None) == 3  # type: ignore[unresolved-attribute]
                 if accept_exclude_frozen_parameters and _is_peft_model(self.model) and zero3_sharding:
                     # When using PEFT with DeepSpeed ZeRO Stage 3,
                     # we do not need to load the frozen parameters
-                    state_dict = self.deepspeed._zero3_consolidated_16bit_state_dict(exclude_frozen_parameters=True)
+                    state_dict = self.deepspeed._zero3_consolidated_16bit_state_dict(exclude_frozen_parameters=True)  # type: ignore[unresolved-attribute]
                 else:
                     state_dict = self.accelerator.get_state_dict(self.deepspeed)
                 if self.args.should_save:
@@ -3792,7 +3798,7 @@ class Trainer:
                     self._save(output_dir, state_dict={})
                 # remove the dummy state_dict
                 remove_dummy_checkpoint(self.args.should_save, output_dir, [WEIGHTS_NAME, SAFE_WEIGHTS_NAME])
-                self.model_wrapped.save_checkpoint(output_dir)
+                self.model_wrapped.save_checkpoint(output_dir)  # type: ignore[unresolved-attribute]
 
         elif self.args.should_save:
             self._save(output_dir)
@@ -3835,7 +3841,7 @@ class Trainer:
             and self.data_collator.tokenizer is not None
         ):
             logger.info("Saving Trainer.data_collator.tokenizer by default as Trainer.processing_class is `None`")
-            self.data_collator.tokenizer.save_pretrained(output_dir)
+            self.data_collator.tokenizer.save_pretrained(output_dir)  # type: ignore[unresolved-attribute]
 
         # Good practice: save your training arguments together with the trained model
         torch.save(self.args, os.path.join(output_dir, TRAINING_ARGS_NAME))
@@ -4050,7 +4056,7 @@ class Trainer:
             if isinstance(kwargs["tags"], str):
                 kwargs["tags"] = [kwargs["tags"]]
 
-            for model_tag in self.model.model_tags:
+            for model_tag in self.model.model_tags:  # type: ignore[unresolved-attribute]
                 if model_tag not in kwargs["tags"]:
                     kwargs["tags"].append(model_tag)
 
@@ -4139,7 +4145,7 @@ class Trainer:
         if self.push_in_progress is None or self.push_in_progress.is_done():
             self.push_in_progress = PushInProgress(push_jobs)
         else:
-            self.push_in_progress.jobs.extend(push_jobs)
+            self.push_in_progress.jobs.extend(push_jobs)  # type: ignore[unresolved-attribute]
 
     def _finish_current_push(self) -> None:
         """Wait for any in-progress push to the Hub to complete."""
@@ -4275,7 +4281,7 @@ class Trainer:
 
             setattr(self.args, key, value)
         if self.hp_search_backend == HPSearchBackend.OPTUNA:
-            logger.info(f"Trial: {trial.params}")
+            logger.info(f"Trial: {trial.params}")  # type: ignore[unresolved-attribute]
         if self.hp_search_backend == HPSearchBackend.WANDB:
             logger.info(f"W&B Sweep parameters: {trial}")
         if self.is_deepspeed_enabled:
@@ -4312,9 +4318,9 @@ class Trainer:
         if self.hp_search_backend == HPSearchBackend.OPTUNA:
             import optuna
 
-            if hasattr(trial, "study") and not trial.study._is_multi_objective():
-                trial.report(self.objective, step)
-                if trial.should_prune():
+            if hasattr(trial, "study") and not trial.study._is_multi_objective():  # type: ignore[unresolved-attribute]
+                trial.report(self.objective, step)  # type: ignore[unresolved-attribute]
+                if trial.should_prune():  # type: ignore[unresolved-attribute]
                     self.callback_handler.on_train_end(self.args, self.state, self.control)
                     raise optuna.TrialPruned()
         elif self.hp_search_backend == HPSearchBackend.RAY:
@@ -4336,8 +4342,8 @@ class Trainer:
             # Update the `TrainerControl` state to where we are currently
             self.state.stateful_callbacks["TrainerControl"] = self.control.state()
             self.state.save_to_json(os.path.join(output_dir, TRAINER_STATE_NAME))
-            torch.save(self.optimizer.state_dict(), os.path.join(output_dir, OPTIMIZER_NAME))
-            torch.save(self.lr_scheduler.state_dict(), os.path.join(output_dir, SCHEDULER_NAME))
+            torch.save(self.optimizer.state_dict(), os.path.join(output_dir, OPTIMIZER_NAME))  # type: ignore[unresolved-attribute]
+            torch.save(self.lr_scheduler.state_dict(), os.path.join(output_dir, SCHEDULER_NAME))  # type: ignore[unresolved-attribute]
 
     # ---- Callbacks ----
 

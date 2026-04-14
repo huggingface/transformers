@@ -316,10 +316,10 @@ class BaseVideoProcessor(TorchvisionBackend):
                 input_data_format = infer_channel_dimension_format(video)
 
             if input_data_format == ChannelDimension.LAST:
-                video = video.permute(0, 3, 1, 2).contiguous()
+                video = video.permute(0, 3, 1, 2).contiguous()  # type: ignore[union-attr]
 
             if device is not None:
-                video = video.to(device)
+                video = video.to(device)  # type: ignore[union-attr]
 
             processed_videos.append(video)
         return processed_videos
@@ -537,7 +537,7 @@ class BaseVideoProcessor(TorchvisionBackend):
 
         if push_to_hub:
             commit_message = kwargs.pop("commit_message", None)
-            repo_id = kwargs.pop("repo_id", save_directory.split(os.path.sep)[-1])
+            repo_id = kwargs.pop("repo_id", str(save_directory).split(os.path.sep)[-1])
             repo_id = create_repo(repo_id, exist_ok=True, **kwargs).repo_id
             files_timestamps = self._get_files_timestamps(save_directory)
 

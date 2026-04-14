@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import importlib
+import importlib.util
 import inspect
 import os
 from collections.abc import Callable
@@ -147,8 +148,9 @@ def _lazy_imports(
 
     pad_input, unpad_input = _pad_input, _unpad_input
 
-    is_paged = implementation.startswith("paged|")
-    implementation = implementation.split("|")[1] if is_paged else implementation
+    is_paged = implementation is not None and implementation.startswith("paged|")
+    if is_paged and implementation is not None:
+        implementation = implementation.split("|")[1]
 
     if (implementation == "flash_attention_2" and is_fa2) or (
         implementation is None and is_fa2 and not is_fa3 and not is_fa4

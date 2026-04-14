@@ -205,8 +205,8 @@ def distributed_concat(tensor: Any, num_total_examples: int | None = None) -> An
         if isinstance(tensor, Mapping):
             return type(tensor)({k: distributed_concat(t, num_total_examples) for k, t in tensor.items()})
         tensor = atleast_1d(tensor).contiguous()
-        output_tensors = [tensor.clone() for _ in range(dist.get_world_size())]
-        dist.all_gather(output_tensors, tensor)
+        output_tensors = [tensor.clone() for _ in range(dist.get_world_size())]  # type: ignore[possibly-missing-attribute]
+        dist.all_gather(output_tensors, tensor)  # type: ignore[possibly-missing-attribute]
         concat = torch.cat(output_tensors, dim=0)
 
         # truncate the dummy elements added by SequentialDistributedSampler
@@ -288,8 +288,8 @@ def distributed_broadcast_scalars(
 ) -> torch.Tensor:
     try:
         tensorized_scalar = torch.tensor(scalars, device=device)
-        output_tensors = [tensorized_scalar.clone() for _ in range(dist.get_world_size())]
-        dist.all_gather(output_tensors, tensorized_scalar)
+        output_tensors = [tensorized_scalar.clone() for _ in range(dist.get_world_size())]  # type: ignore[possibly-missing-attribute]
+        dist.all_gather(output_tensors, tensorized_scalar)  # type: ignore[possibly-missing-attribute]
         concat = torch.cat(output_tensors, dim=0)
 
         # truncate the dummy elements added by SequentialDistributedSampler
@@ -317,10 +317,10 @@ def torch_distributed_zero_first(local_rank: int):
         local_rank (`int`): The rank of the local process.
     """
     if local_rank not in [-1, 0]:
-        dist.barrier()
+        dist.barrier()  # type: ignore[possibly-missing-attribute]
     yield
     if local_rank == 0:
-        dist.barrier()
+        dist.barrier()  # type: ignore[possibly-missing-attribute]
 
 
 class DistributedSamplerWithLoop(DistributedSampler):
@@ -577,11 +577,11 @@ class DistributedLengthGroupedSampler(DistributedSampler):
         if num_replicas is None:
             if not dist.is_available():
                 raise RuntimeError("Requires distributed package to be available")
-            num_replicas = dist.get_world_size()
+            num_replicas = dist.get_world_size()  # type: ignore[possibly-missing-attribute]
         if rank is None:
             if not dist.is_available():
                 raise RuntimeError("Requires distributed package to be available")
-            rank = dist.get_rank()
+            rank = dist.get_rank()  # type: ignore[possibly-missing-attribute]
 
         self.batch_size = batch_size
         self.num_replicas = num_replicas
@@ -1288,7 +1288,8 @@ class LayerWiseDummyScheduler(LRScheduler):
         # we take each lr in the parameters if they exist, assumes the optimizer to be the `LayerWiseDummyOptimizer`
         if self.optimizer is not None:
             param_wise_lrs = [
-                [group["lr"] for group in optim.param_groups] for optim in self.optimizer.optimizer_dict.values()
+                [group["lr"] for group in optim.param_groups]
+                for optim in self.optimizer.optimizer_dict.values()  # type: ignore[union-attr]
             ]
             lrs = list(chain(*param_wise_lrs))
 
@@ -1327,8 +1328,8 @@ def safe_globals():
     if version.parse(torch.__version__).release < version.parse("2.6").release:
         return contextlib.nullcontext()
 
-    np_core = np._core if version.parse(np.__version__) >= version.parse("2.0.0") else np.core
-    allowlist = [np_core.multiarray._reconstruct, np.ndarray, np.dtype]
+    np_core = np._core if version.parse(np.__version__) >= version.parse("2.0.0") else np.core  # type: ignore[possibly-missing-attribute]
+    allowlist = [np_core.multiarray._reconstruct, np.ndarray, np.dtype]  # type: ignore[unresolved-attribute]
     # numpy >1.25 defines numpy.dtypes.UInt32DType, but below works for
     # all versions of numpy
     allowlist += [type(np.dtype(np.uint32))]

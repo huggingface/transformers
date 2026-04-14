@@ -18,7 +18,7 @@ from __future__ import annotations
 import math
 import warnings
 from functools import partial
-from typing import Any
+from typing import Any, cast
 
 import torch
 from torch.optim import Optimizer
@@ -1012,30 +1012,30 @@ def get_scheduler(
         return LayerWiseDummyScheduler(optimizer_dict=optimizer_dict, lr=optimizer.defaults["lr"])
 
     if name == SchedulerType.CONSTANT:
-        return schedule_func(optimizer)
+        return get_constant_schedule(optimizer)
 
     if scheduler_specific_kwargs is None:
         scheduler_specific_kwargs = {}
 
     if name == SchedulerType.REDUCE_ON_PLATEAU:
-        return schedule_func(optimizer, **scheduler_specific_kwargs)
+        return get_reduce_on_plateau_schedule(optimizer, **scheduler_specific_kwargs)
 
     if name == SchedulerType.GREEDY:
-        return schedule_func(optimizer, **scheduler_specific_kwargs)
+        return get_greedy_schedule(optimizer, **scheduler_specific_kwargs)
 
     # All other schedulers require `num_warmup_steps`
     if num_warmup_steps is None:
         raise ValueError(f"{name} requires `num_warmup_steps`, please provide that argument.")
 
     if name == SchedulerType.CONSTANT_WITH_WARMUP:
-        return schedule_func(optimizer, num_warmup_steps=num_warmup_steps)
+        return get_constant_schedule_with_warmup(optimizer, num_warmup_steps=num_warmup_steps)
 
     if name == SchedulerType.INVERSE_SQRT:
-        return schedule_func(optimizer, num_warmup_steps=num_warmup_steps, **scheduler_specific_kwargs)
+        return get_inverse_sqrt_schedule(optimizer, num_warmup_steps=num_warmup_steps, **scheduler_specific_kwargs)
 
     # wsd scheduler requires either num_training_steps or num_stable_steps
     if name == SchedulerType.WARMUP_STABLE_DECAY:
-        return schedule_func(
+        return get_wsd_schedule(
             optimizer,
             num_warmup_steps=num_warmup_steps,
             num_training_steps=num_training_steps,
@@ -1046,7 +1046,11 @@ def get_scheduler(
     if num_training_steps is None:
         raise ValueError(f"{name} requires `num_training_steps`, please provide that argument.")
 
-    return schedule_func(
+    # At this point, `schedule_func` is one of the schedulers that accept
+    # (optimizer, num_warmup_steps, num_training_steps, **kwargs), but ty cannot
+    # narrow the union from the dict lookup — so we cast to Any.
+    schedule_func_any = cast(Any, schedule_func)
+    return schedule_func_any(
         optimizer,
         num_warmup_steps=num_warmup_steps,
         num_training_steps=num_training_steps,
@@ -1313,7 +1317,7 @@ class AdafactorSchedule(LambdaLR):
             del group["initial_lr"]
 
     def get_lr(self):
-        opt = self.optimizer
+        opt = cast(Adafactor, self.optimizer)
         lrs = [
             opt._get_lr(group, opt.state[group["params"][0]])
             for group in opt.param_groups

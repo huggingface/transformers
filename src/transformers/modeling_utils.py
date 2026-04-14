@@ -175,7 +175,7 @@ class LoadStateDictConfig:
     dtype: torch.dtype | None = None
     dtype_plan: dict = field(default_factory=dict)
     hf_quantizer: HfQuantizer | None = None
-    device_mesh: Optional["torch.distributed.device_mesh.DeviceMesh"] = None
+    device_mesh: Optional["torch.distributed.device_mesh.DeviceMesh"] = None  # type: ignore[possibly-missing-attribute]
     weights_only: bool = True
     weight_mapping: list[WeightConverter | WeightRenaming] | None = None
 
@@ -187,7 +187,7 @@ class LoadStateDictConfig:
 def is_local_dist_rank_0():
     return (
         torch.distributed.is_available()
-        and torch.distributed.is_initialized()
+        and torch.distributed.is_initialized()  # type: ignore[possibly-missing-attribute]
         and int(os.environ.get("LOCAL_RANK", "-1")) == 0
     )
 
@@ -295,7 +295,7 @@ def load_state_dict(
     Reads a `safetensor` or a `.bin` checkpoint file. We load the checkpoint on "cpu" by default.
     """
     # Use safetensors if possible
-    if checkpoint_file.endswith(".safetensors"):
+    if str(checkpoint_file).endswith(".safetensors"):
         with safe_open(checkpoint_file, framework="pt") as f:
             state_dict = {}
             for k in f.keys():
@@ -449,10 +449,10 @@ def remove_tied_weights_from_state_dict(
     shared_names, identical_names = _find_identical(shared_names, state_dict)
     # delete tensors that have identical storage
     for inames in identical_names:
-        known = inames.intersection(to_delete_names)
+        known = inames.intersection(to_delete_names)  # type: ignore[unresolved-attribute]
         for name in known:
             del state_dict[name]
-        unknown = inames.difference(to_delete_names)
+        unknown = inames.difference(to_delete_names)  # type: ignore[unresolved-attribute]
         if len(unknown) > 1:
             error_names.append(unknown)
 
@@ -840,6 +840,12 @@ class ModuleUtilsMixin:
     A few utilities for `torch.nn.Modules`, to be used as a mixin.
     """
 
+    # These are provided by nn.Module when used as a mixin
+    config: Any
+    parameters: Callable
+    named_modules: Callable
+    named_parameters: Callable
+
     @property
     def device(self) -> torch.device:
         """
@@ -1026,7 +1032,7 @@ class EmbeddingAccessMixin:
         if hasattr(self, "base_model"):
             base_model = self.base_model
             if base_model is not None and base_model is not self:
-                return base_model.get_input_embeddings()
+                return base_model.get_input_embeddings()  # type: ignore[unresolved-attribute]
 
         raise NotImplementedError(
             f"`get_input_embeddings` not auto‑handled for {self.__class__.__name__}; please override in the subclass."
@@ -1056,7 +1062,7 @@ class EmbeddingAccessMixin:
             setattr(self.model, name, value)
         # 4) recurse once into the registered *base* model (e.g. for encoder/decoder)
         elif hasattr(self, "base_model") and self.base_model is not self:
-            self.base_model.set_input_embeddings(value)
+            self.base_model.set_input_embeddings(value)  # type: ignore[unresolved-attribute]
         else:
             raise NotImplementedError(
                 f"`set_input_embeddings` not auto‑handled for {self.__class__.__name__}; please override in the subclass."
@@ -1560,7 +1566,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         general_availability_check: Callable,
         pkg_availability_check: Callable,
         supported_devices: tuple[tuple[Callable, str]],
-        custom_supported_devices: tuple[tuple[Callable, str]] = (),
+        custom_supported_devices: tuple[tuple[Callable, str]] = (),  # type: ignore[invalid-parameter-default]
         cuda_min_major_version: int | None = None,
     ):
         """
@@ -1816,7 +1822,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             for fa_version in FLASH_ATTENTION_COMPATIBILITY_MATRIX.keys():
                 # Check whether we have an original FA requested but not available in the env
                 if requested_original_flash_attn := (
-                    attn_implementation.removeprefix("paged|") == f"flash_attention_{fa_version}"
+                    attn_implementation.removeprefix("paged|") == f"flash_attention_{fa_version}"  # type: ignore[union-attr]
                     and not FLASH_ATTENTION_COMPATIBILITY_MATRIX[fa_version]["general_availability_check"]()
                 ):
                     break
@@ -1827,9 +1833,9 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             and is_kernels_available()
             and not is_torch_npu_available()
         ):
-            applicable_attn_implementation = FLASH_ATTN_KERNEL_FALLBACK[attn_implementation.removeprefix("paged|")]
+            applicable_attn_implementation = FLASH_ATTN_KERNEL_FALLBACK[attn_implementation.removeprefix("paged|")]  # type: ignore[union-attr]
 
-            if is_torch_xpu_available() and attn_implementation.removeprefix("paged|") == "flash_attention_2":
+            if is_torch_xpu_available() and attn_implementation.removeprefix("paged|") == "flash_attention_2":  # type: ignore[union-attr]
                 # On XPU, kernels library is the native implementation
                 # Disabling this flag to avoid giving wrong fallbacks on errors and warnings
                 requested_original_flash_attn = False
@@ -2387,7 +2393,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                 fn(self, is_remote_code)
                 return self
 
-            torch.nn.Module.smart_apply = smart_apply
+            torch.nn.Module.smart_apply = smart_apply  # type: ignore[unresolved-attribute]
 
         # Let the magic happen with this simple call
         self.smart_apply(self._initialize_weights, self.is_remote_code())
@@ -2984,7 +2990,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                 new_lm_head, old_lm_head, num_tokens_to_copy, transposed, has_new_lm_head_bias
             )
 
-        new_lm_head._is_hf_initialized = True
+        new_lm_head._is_hf_initialized = True  # type: ignore[unresolved-attribute]
         return new_lm_head
 
     def _init_added_embeddings_weights_with_mean(
@@ -3130,8 +3136,8 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
 
         for module in self.modules():
             if hasattr(module, "gradient_checkpointing"):
-                module._gradient_checkpointing_func = gradient_checkpointing_func
-                module.gradient_checkpointing = enable
+                module._gradient_checkpointing_func = gradient_checkpointing_func  # type: ignore[unresolved-attribute]
+                module.gradient_checkpointing = enable  # type: ignore[unresolved-attribute]
                 is_gradient_checkpointing_set = True
 
         if not is_gradient_checkpointing_set:
@@ -3256,7 +3262,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
 
         if push_to_hub:
             commit_message = kwargs.pop("commit_message", None)
-            repo_id = kwargs.pop("repo_id", save_directory.split(os.path.sep)[-1])
+            repo_id = kwargs.pop("repo_id", str(save_directory).split(os.path.sep)[-1])
             create_pr = kwargs.pop("create_pr", False)
             repo_id = create_repo(repo_id, exist_ok=True, **kwargs).repo_id
             files_timestamps = self._get_files_timestamps(save_directory)
@@ -3285,9 +3291,9 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         # Save the config
         if is_main_process:
             if not _hf_peft_config_loaded:
-                model_to_save.config.save_pretrained(save_directory)
+                model_to_save.config.save_pretrained(save_directory)  # type: ignore[union-attr]
             if self.can_generate():
-                model_to_save.generation_config.save_pretrained(save_directory)
+                model_to_save.generation_config.save_pretrained(save_directory)  # type: ignore[union-attr]
 
             if _hf_peft_config_loaded:
                 logger.info(
@@ -3314,7 +3320,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                 active_adapter = active_adapter[0]
 
                 current_peft_config = self.peft_config[active_adapter]
-                current_peft_config.save_pretrained(save_directory)
+                current_peft_config.save_pretrained(save_directory)  # type: ignore[union-attr]
 
         # Get the model state_dict
         if state_dict is None:
@@ -4012,7 +4018,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         # Load config if we don't provide a configuration
         if not isinstance(config, PreTrainedConfig):
             config_path = config if config is not None else pretrained_model_name_or_path
-            config, model_kwargs = cls.config_class.from_pretrained(
+            config, model_kwargs = cls.config_class.from_pretrained(  # type: ignore[union-attr]
                 config_path,
                 return_unused_kwargs=True,
                 gguf_file=gguf_file,
@@ -4191,7 +4197,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             )
 
         if output_loading_info:
-            return model, loading_info.to_dict()
+            return model, loading_info.to_dict()  # type: ignore[union-attr]
         return model
 
     @staticmethod
@@ -4204,7 +4210,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
     ) -> tuple[LoadStateDictInfo, dict]:
         """Perform the actual loading of some checkpoints into a `model`, by reading them from disk and dispatching them accordingly."""
         is_quantized = load_config.is_quantized
-        is_hqq_or_quark = is_quantized and load_config.hf_quantizer.quantization_config.quant_method in {
+        is_hqq_or_quark = is_quantized and load_config.hf_quantizer.quantization_config.quant_method in {  # type: ignore[union-attr]
             QuantizationMethod.HQQ,
             QuantizationMethod.QUARK,
         }
@@ -4519,7 +4525,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         self,
         missing_keys: list[str],
         device_map: dict | None,
-        device_mesh: "torch.distributed.device_mesh.DeviceMesh | None",
+        device_mesh: "torch.distributed.device_mesh.DeviceMesh | None",  # type: ignore[possibly-missing-attribute]
         hf_quantizer: HfQuantizer | None,
     ) -> None:
         """Move the missing keys (keys that are part of the model parameters, but were NOT found in the loaded state dicts)
@@ -4637,7 +4643,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         running inits on them is very costly."""
         for tied_param in getattr(self, "all_tied_weights_keys", {}).keys():
             param = self.get_parameter(tied_param)
-            param._is_hf_initialized = True
+            param._is_hf_initialized = True  # type: ignore[unresolved-attribute]
 
         # Some remote code models define module tying (not parameter tying) in their __init__. When modules themselves are shared,
         # weights inside both modules appear in the `state_dict` but only one will appear in the safetensors checkpoints
@@ -4761,7 +4767,7 @@ def get_total_byte_count(
 
     total_byte_count = defaultdict(lambda: 0)
     tied_param_names = model.all_tied_weights_keys.keys()
-    tp_plan = model._tp_plan if torch.distributed.is_available() and torch.distributed.is_initialized() else []
+    tp_plan = model._tp_plan if torch.distributed.is_available() and torch.distributed.is_initialized() else []  # type: ignore[possibly-missing-attribute]
 
     for param_name, device in accelerator_device_map.items():
         # Skip if the parameter has already been accounted for (tied weights)
@@ -4779,7 +4785,7 @@ def get_total_byte_count(
 
         if len(tp_plan) > 0:
             is_part_of_plan = _get_parameter_tp_plan(param_name, tp_plan, is_weight=True) is not None
-            param_byte_count //= torch.distributed.get_world_size() if is_part_of_plan else 1
+            param_byte_count //= torch.distributed.get_world_size() if is_part_of_plan else 1  # type: ignore[possibly-missing-attribute]
 
         total_byte_count[device] += param_byte_count
     return total_byte_count

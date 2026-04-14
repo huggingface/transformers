@@ -38,6 +38,8 @@ class SequenceFeatureExtractor(FeatureExtractionMixin):
             The value that is used to fill the padding values / vectors.
     """
 
+    model_input_names: list[str]
+
     def __init__(self, feature_size: int, sampling_rate: int, padding_value: float, **kwargs):
         self.feature_size = feature_size
         self.sampling_rate = sampling_rate
@@ -129,7 +131,7 @@ class SequenceFeatureExtractor(FeatureExtractionMixin):
             raise ValueError(
                 "You should supply an instance of `transformers.BatchFeature` or list of `transformers.BatchFeature`"
                 f" to this method that includes {self.model_input_names[0]}, but you provided"
-                f" {list(processed_features.keys())}"
+                f" {list(processed_features.keys())}"  # type: ignore[union-attr]
             )
 
         required_input = processed_features[self.model_input_names[0]]
@@ -166,7 +168,7 @@ class SequenceFeatureExtractor(FeatureExtractionMixin):
                     "Should be one of a python, numpy, or pytorch object."
                 )
 
-        for key, value in processed_features.items():
+        for key, value in processed_features.items():  # type: ignore[union-attr]
             if isinstance(value[0], (int, float)):
                 processed_features[key] = to_numpy(value)
             else:
@@ -178,12 +180,12 @@ class SequenceFeatureExtractor(FeatureExtractionMixin):
         required_input = processed_features[self.model_input_names[0]]
 
         batch_size = len(required_input)
-        if not all(len(v) == batch_size for v in processed_features.values()):
+        if not all(len(v) == batch_size for v in processed_features.values()):  # type: ignore[union-attr]
             raise ValueError("Some items in the output dictionary have a different batch size than others.")
 
         truncated_inputs = []
         for i in range(batch_size):
-            inputs = {k: v[i] for k, v in processed_features.items()}
+            inputs = {k: v[i] for k, v in processed_features.items()}  # type: ignore[union-attr]
             # truncation
             inputs_slice = self._truncate(
                 inputs,

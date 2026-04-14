@@ -112,6 +112,7 @@ unresolved-reference = "ignore"        # Forward references with noqa: F821 that
 invalid-argument-type = "ignore"       # Complex type narrowing and union type issues
 not-iterable = "ignore"                # Complex async/Future type patterns
 invalid-return-type = "ignore"         # Return type mismatches that would require refactoring
+unused-type-ignore-comment = "ignore"  # type: ignore comments may be needed only on some Python/stub versions
 deprecated = "ignore"                  # Deprecation warnings from dependencies
 invalid-assignment = "ignore"          # Low-level assignments that are runtime-safe
 unused-ignore-comment = "ignore"       # Ignore comments that became unnecessary after adding broader per-file-ignores

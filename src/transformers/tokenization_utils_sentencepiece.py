@@ -72,7 +72,7 @@ class SentencePieceBackend(PreTrainedTokenizer):
 
         # Load the SentencePiece model before calling parent __init__
         # This is needed because parent __init__ may call methods that depend on sp_model
-        tokenizer = spm.SentencePieceProcessor(**self.sp_model_kwargs)
+        tokenizer = spm.SentencePieceProcessor(**self.sp_model_kwargs)  # type: ignore[unresolved-attribute]
         tokenizer.Load(self.vocab_file)
 
         if not self.legacy:
@@ -85,7 +85,7 @@ class SentencePieceBackend(PreTrainedTokenizer):
         self.sp_model = tokenizer
 
         # Initialize total_vocab_size before parent __init__ (which may call _add_tokens -> len(self))
-        self.total_vocab_size = self.sp_model.get_piece_size()
+        self.total_vocab_size = self.sp_model.get_piece_size()  # type: ignore[unresolved-attribute]
 
         # Add sp_model_kwargs back to kwargs so it gets stored in init_kwargs
         kwargs["sp_model_kwargs"] = self.sp_model_kwargs
@@ -99,7 +99,7 @@ class SentencePieceBackend(PreTrainedTokenizer):
     @property
     def vocab_size(self) -> int:
         """Returns vocab size"""
-        return self.sp_model.get_piece_size()
+        return self.sp_model.get_piece_size()  # type: ignore[unresolved-attribute]
 
     def get_vocab(self):
         """Returns vocab as a dict"""
@@ -155,7 +155,7 @@ class SentencePieceBackend(PreTrainedTokenizer):
             elif special_tokens:
                 # doing token.special=True changes the normalization! will fix in rust
                 # this is important and the only reason why the AddedTokens in each class are normalized by default
-                token.__setstate__({"special": True, "normalized": token.normalized})
+                token.__setstate__({"special": True, "normalized": token.normalized})  # type: ignore[unresolved-attribute]
 
             if token in self._added_tokens_decoder.values():
                 continue
@@ -163,9 +163,9 @@ class SentencePieceBackend(PreTrainedTokenizer):
                 token.content = token.content.lower()
 
             # Check if token already exists in the SentencePiece base vocab
-            tok_id = self.sp_model.piece_to_id(token.content)
+            tok_id = self.sp_model.piece_to_id(token.content)  # type: ignore[unresolved-attribute]
             in_base_vocab = (
-                tok_id < self.sp_model.get_piece_size() and self.sp_model.IdToPiece(tok_id) == token.content
+                tok_id < self.sp_model.get_piece_size() and self.sp_model.IdToPiece(tok_id) == token.content  # type: ignore[unresolved-attribute]
             )
 
             if in_base_vocab:
@@ -212,17 +212,17 @@ class SentencePieceBackend(PreTrainedTokenizer):
         `self.tokenizer.sp_model.encode("<unk> Hey", out_type = str)[4:]`.
         """
         if self.legacy or not text.startswith((SPIECE_UNDERLINE, " ")):
-            return self.sp_model.encode(text, out_type=str)
+            return self.sp_model.encode(text, out_type=str)  # type: ignore[unresolved-attribute]
 
         # 1. Encode string + prefix ex: "<unk> Hey"
-        tokens = self.sp_model.encode(self.unk_token + text, out_type=str)
+        tokens = self.sp_model.encode(self.unk_token + text, out_type=str)  # type: ignore[unresolved-attribute]
         # 2. Remove self.unk_token from ['<','unk','>', '▁Hey']
-        unk_token_length = len(self.sp_model.encode(str(self.unk_token)))
+        unk_token_length = len(self.sp_model.encode(str(self.unk_token)))  # type: ignore[unresolved-attribute]
         return tokens[unk_token_length:] if len(tokens) >= unk_token_length else tokens
 
     def _convert_token_to_id(self, token):
         """Converts a token (str) to an id using the vocab."""
-        return self.sp_model.piece_to_id(token)
+        return self.sp_model.piece_to_id(token)  # type: ignore[unresolved-attribute]
 
     def _convert_id_to_token(self, index):
         """Converts an index (integer) in a token (str) using the vocab."""
@@ -304,12 +304,12 @@ class SentencePieceExtractor:
         order the merges with respect to the piece scores instead.
         """
         sp = self.sp
-        vocab_ids = {sp.id_to_piece(index): index for index in range(sp.GetPieceSize())}
+        vocab_ids = {sp.id_to_piece(index): index for index in range(sp.GetPieceSize())}  # type: ignore[unresolved-attribute]
 
-        vocab_scores_dict = {sp.id_to_piece(i): sp.get_score(i) for i in range(sp.GetPieceSize())}
+        vocab_scores_dict = {sp.id_to_piece(i): sp.get_score(i) for i in range(sp.GetPieceSize())}  # type: ignore[unresolved-attribute]
 
         merges = generate_merges(vocab_ids, vocab_scores_dict)
 
-        vocab_scores_list = [(sp.id_to_piece(i), sp.get_score(i)) for i in range(sp.GetPieceSize())]
+        vocab_scores_list = [(sp.id_to_piece(i), sp.get_score(i)) for i in range(sp.GetPieceSize())]  # type: ignore[unresolved-attribute]
 
         return vocab_ids, vocab_scores_list, merges

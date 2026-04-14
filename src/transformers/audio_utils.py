@@ -18,6 +18,7 @@ and remove unnecessary dependencies.
 
 import base64
 import importlib
+import importlib.metadata
 import io
 import os
 import warnings
@@ -146,9 +147,9 @@ def load_audio_librosa(audio: str | np.ndarray, sampling_rate=16000, timeout=Non
     requires_backends(load_audio_librosa, ["librosa"])
 
     # Load audio from URL (e.g https://qianwen-res.oss-cn-beijing.aliyuncs.com/Qwen2-Audio/audio/translate_to_chinese.wav)
-    if audio.startswith("http://") or audio.startswith("https://"):
+    if isinstance(audio, str) and (audio.startswith("http://") or audio.startswith("https://")):
         audio = librosa.load(BytesIO(_fetch_audio_bytes(audio, timeout=timeout)), sr=sampling_rate)[0]
-    elif os.path.isfile(audio):
+    elif isinstance(audio, str) and os.path.isfile(audio):
         audio = librosa.load(audio, sr=sampling_rate)[0]
     return audio
 
@@ -651,7 +652,7 @@ def spectrogram(
     min_value: float = 1e-10,
     db_range: float | None = None,
     remove_dc_offset: bool = False,
-    dtype: np.dtype = np.float32,
+    dtype: np.dtype | type = np.float32,
 ) -> np.ndarray:
     """
     Calculates a spectrogram over one waveform using the Short-Time Fourier Transform.
@@ -862,7 +863,7 @@ def spectrogram_batch(
     min_value: float = 1e-10,
     db_range: float | None = None,
     remove_dc_offset: bool = False,
-    dtype: np.dtype = np.float32,
+    dtype: np.dtype | type = np.float32,
 ) -> list[np.ndarray]:
     """
     Calculates spectrograms for a list of waveforms using the Short-Time Fourier Transform, optimized for batch processing.

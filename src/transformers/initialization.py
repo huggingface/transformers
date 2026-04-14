@@ -15,13 +15,14 @@ import math
 import sys
 from collections import defaultdict
 from contextlib import contextmanager
+from typing import Any
 
 import torch
 
 
 # Record all the torch primitives in advance, so that we can use them without them being modified when we patch torch
 # in context managers
-TORCH_INIT_FUNCTIONS = {
+TORCH_INIT_FUNCTIONS: dict[str, Any] = {
     "uniform_": torch.nn.init.uniform_,
     "normal_": torch.nn.init.normal_,
     "constant_": torch.nn.init.constant_,

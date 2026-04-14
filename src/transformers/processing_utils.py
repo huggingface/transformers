@@ -457,18 +457,18 @@ class ProcessingKwargs(TypedDict, total=False):
 
     """
 
-    _defaults = {}
+    _defaults = {}  # type: ignore[invalid-typed-dict-statement]
 
-    text_kwargs: TextKwargs = {
+    text_kwargs: TextKwargs = {  # type: ignore[invalid-typed-dict-statement]
         **TextKwargs.__annotations__,
     }
-    images_kwargs: ImagesKwargs = {
+    images_kwargs: ImagesKwargs = {  # type: ignore[invalid-typed-dict-statement]
         **ImagesKwargs.__annotations__,
     }
-    videos_kwargs: VideosKwargs = {
+    videos_kwargs: VideosKwargs = {  # type: ignore[invalid-typed-dict-statement]
         **VideosKwargs.__annotations__,
     }
-    audio_kwargs: AudioKwargs = {
+    audio_kwargs: AudioKwargs = {  # type: ignore[invalid-typed-dict-statement]
         **AudioKwargs.__annotations__,
     }
 
@@ -510,12 +510,12 @@ class TokenizerChatTemplateKwargs(TypedDict, total=False):
         this argument will have no effect.
     """
 
-    tools: list[dict] | None = None
-    documents: list[dict[str, str]] | None = None
-    add_generation_prompt: bool | None = False
-    continue_final_message: bool | None = False
-    return_assistant_tokens_mask: bool | None = False
-    reasoning_effort: str | None = None
+    tools: list[dict] | None = None  # type: ignore[invalid-typed-dict-statement]
+    documents: list[dict[str, str]] | None = None  # type: ignore[invalid-typed-dict-statement]
+    add_generation_prompt: bool | None = False  # type: ignore[invalid-typed-dict-statement]
+    continue_final_message: bool | None = False  # type: ignore[invalid-typed-dict-statement]
+    return_assistant_tokens_mask: bool | None = False  # type: ignore[invalid-typed-dict-statement]
+    reasoning_effort: str | None = None  # type: ignore[invalid-typed-dict-statement]
 
 
 class ProcessorChatTemplateKwargs(TokenizerChatTemplateKwargs, total=False):
@@ -533,9 +533,9 @@ class ProcessorChatTemplateKwargs(TokenizerChatTemplateKwargs, total=False):
         processor. This flag has no effect if the model doesn't support audio modality.
     """
 
-    tokenize: bool | None = False
-    return_dict: bool | None = False
-    load_audio_from_video: bool | None = False
+    tokenize: bool | None = False  # type: ignore[invalid-typed-dict-statement]
+    return_dict: bool | None = False  # type: ignore[invalid-typed-dict-statement]
+    load_audio_from_video: bool | None = False  # type: ignore[invalid-typed-dict-statement]
 
 
 class AllKwargsForChatTemplate(TypedDict, total=False):
@@ -579,6 +579,9 @@ class ProcessorMixin(PushToHubMixin):
     # Names need to be attr_class for attr in attributes
     _auto_class = None
     valid_processor_kwargs = ProcessingKwargs
+    chat_template: str | dict[str, str] | None
+    tokenizer: Any
+    audio_tokenizer: Any
 
     # args have to match the attributes class attribute
     def __init__(self, *args, **kwargs):
@@ -824,7 +827,7 @@ class ProcessorMixin(PushToHubMixin):
 
         if push_to_hub:
             commit_message = kwargs.pop("commit_message", None)
-            repo_id = kwargs.pop("repo_id", save_directory.split(os.path.sep)[-1])
+            repo_id = kwargs.pop("repo_id", str(save_directory).split(os.path.sep)[-1])
             repo_id = create_repo(repo_id, exist_ok=True, **kwargs).repo_id
             files_timestamps = self._get_files_timestamps(save_directory)
         # If we have a custom config, we copy the file defining it in the folder and set the attributes so it can be
@@ -1270,7 +1273,7 @@ class ProcessorMixin(PushToHubMixin):
 
         # get defaults from set model processor kwargs if they exist
         for modality in default_kwargs:
-            default_kwargs[modality] = ModelProcessorKwargs._defaults.get(modality, {}).copy()
+            default_kwargs[modality] = ModelProcessorKwargs._defaults.get(modality, {}).copy()  # type: ignore[unresolved-attribute]
             # Some preprocessors define a set of accepted "valid_kwargs" (currently only vision).
             # In those cases, we don’t declare a `ModalityKwargs` attribute in the TypedDict.
             # Instead, we dynamically obtain the kwargs from the preprocessor and merge them
@@ -1300,7 +1303,7 @@ class ProcessorMixin(PushToHubMixin):
         output_kwargs.update(default_kwargs)
 
         # For `common_kwargs` just update all modality-specific kwargs with same key/values
-        common_kwargs = ModelProcessorKwargs._defaults.get("common_kwargs", {})
+        common_kwargs = ModelProcessorKwargs._defaults.get("common_kwargs", {})  # type: ignore[unresolved-attribute]
         common_kwargs.update(kwargs.get("common_kwargs", {}))
         if common_kwargs:
             for kwarg in output_kwargs.values():
@@ -1837,7 +1840,7 @@ class ProcessorMixin(PushToHubMixin):
                         for fname in video_fnames:
                             # This updates the template in-place and adds audio entry
                             # to ensure `audio` token is added by jinja
-                            message["content"].append({"type": "audio"})
+                            message["content"].append({"type": "audio"})  # type: ignore[union-attr]
                             batch_audios.append(load_audio(fname, sampling_rate=sampling_rate))
 
                 # Currently all processors can accept nested list of batches, but not flat list of visuals

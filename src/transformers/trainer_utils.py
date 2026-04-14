@@ -195,13 +195,13 @@ def set_seed(seed: int, deterministic: bool = False):
         # ^^ safe to call this function even if cuda is not available
         if deterministic:
             torch.use_deterministic_algorithms(True)
-    if is_torch_mlu_available():
+    if is_torch_mlu_available() and hasattr(torch, "mlu"):
         torch.mlu.manual_seed_all(seed)
-    if is_torch_musa_available():
+    if is_torch_musa_available() and hasattr(torch, "musa"):
         torch.musa.manual_seed_all(seed)
-    if is_torch_npu_available():
+    if is_torch_npu_available() and hasattr(torch, "npu"):
         torch.npu.manual_seed_all(seed)
-    if is_torch_hpu_available():
+    if is_torch_hpu_available() and hasattr(torch, "hpu"):
         torch.hpu.manual_seed_all(seed)
     if is_torch_xpu_available():
         torch.xpu.manual_seed_all(seed)
@@ -276,7 +276,14 @@ def get_last_checkpoint(folder):
     ]
     if len(checkpoints) == 0:
         return
-    return os.path.join(folder, max(checkpoints, key=lambda x: int(_re_checkpoint.search(x).groups()[0])))
+
+    def _checkpoint_number(x: str) -> int:
+        match = _re_checkpoint.search(x)
+        if match is None:
+            raise ValueError(f"Invalid checkpoint name: {x}")
+        return int(match.groups()[0])
+
+    return os.path.join(folder, max(checkpoints, key=_checkpoint_number))
 
 
 def sort_checkpoints(
@@ -522,7 +529,8 @@ def total_processes_number(local_rank):
     elif local_rank != -1 and is_torch_available():
         import torch
 
-        return torch.distributed.get_world_size()
+        if hasattr(torch.distributed, "get_world_size"):
+            return torch.distributed.get_world_size()
     return 1
 
 
@@ -668,7 +676,16 @@ class TrainerMemoryTracker:
 
     def derive_stage(self):
         """derives the stage/caller name automatically"""
-        caller = inspect.currentframe().f_back.f_back.f_code.co_name
+        frame = inspect.currentframe()
+        if frame is None:
+            raise RuntimeError("Could not determine caller frame")
+        frame = frame.f_back
+        if frame is None:
+            raise RuntimeError("Could not determine caller frame")
+        frame = frame.f_back
+        if frame is None:
+            raise RuntimeError("Could not determine caller frame")
+        caller = frame.f_code.co_name
         if caller in self.stages:
             return self.stages[caller]
         else:
@@ -710,19 +727,19 @@ class TrainerMemoryTracker:
             if torch.cuda.is_available():
                 self.torch.cuda.reset_peak_memory_stats()
                 self.torch.cuda.empty_cache()
-            elif is_torch_mlu_available():
+            elif is_torch_mlu_available() and hasattr(self.torch, "mlu"):
                 self.torch.mlu.reset_peak_memory_stats()
                 self.torch.mlu.empty_cache()
-            elif is_torch_musa_available():
+            elif is_torch_musa_available() and hasattr(self.torch, "musa"):
                 self.torch.musa.reset_peak_memory_stats()
                 self.torch.musa.empty_cache()
             elif is_torch_xpu_available():
                 self.torch.xpu.reset_peak_memory_stats()
                 self.torch.xpu.empty_cache()
-            elif is_torch_npu_available():
+            elif is_torch_npu_available() and hasattr(self.torch, "npu"):
                 self.torch.npu.reset_peak_memory_stats()
                 self.torch.npu.empty_cache()
-            elif is_torch_hpu_available():
+            elif is_torch_hpu_available() and hasattr(self.torch, "hpu"):
                 self.torch.hpu.reset_peak_memory_stats()
                 # not available on hpu as it reserves all device memory for the current process
                 # self.torch.hpu.empty_cache()
@@ -733,15 +750,15 @@ class TrainerMemoryTracker:
         if self.torch is not None:
             if torch.cuda.is_available():
                 self.gpu_mem_used_at_start = self.torch.cuda.memory_allocated()
-            elif is_torch_mlu_available():
+            elif is_torch_mlu_available() and hasattr(self.torch, "mlu"):
                 self.gpu_mem_used_at_start = self.torch.mlu.memory_allocated()
-            elif is_torch_musa_available():
+            elif is_torch_musa_available() and hasattr(self.torch, "musa"):
                 self.gpu_mem_used_at_start = self.torch.musa.memory_allocated()
             elif is_torch_xpu_available():
                 self.gpu_mem_used_at_start = self.torch.xpu.memory_allocated()
-            elif is_torch_npu_available():
+            elif is_torch_npu_available() and hasattr(self.torch, "npu"):
                 self.gpu_mem_used_at_start = self.torch.npu.memory_allocated()
-            elif is_torch_hpu_available():
+            elif is_torch_hpu_available() and hasattr(self.torch, "hpu"):
                 self.gpu_mem_used_at_start = self.torch.hpu.memory_allocated()
             elif is_torch_mps_available():
                 self.gpu_mem_used_at_start = self.torch.mps.current_allocated_memory()
@@ -770,13 +787,13 @@ class TrainerMemoryTracker:
         if self.torch is not None:
             if torch.cuda.is_available():
                 self.torch.cuda.empty_cache()
-            elif is_torch_mlu_available():
+            elif is_torch_mlu_available() and hasattr(self.torch, "mlu"):
                 self.torch.mlu.empty_cache()
-            elif is_torch_musa_available():
+            elif is_torch_musa_available() and hasattr(self.torch, "musa"):
                 self.torch.musa.empty_cache()
             elif is_torch_xpu_available():
                 self.torch.xpu.empty_cache()
-            elif is_torch_npu_available():
+            elif is_torch_npu_available() and hasattr(self.torch, "npu"):
                 self.torch.npu.empty_cache()
             elif is_torch_hpu_available():
                 # not available on hpu as it reserves all device memory for the current process
@@ -795,19 +812,19 @@ class TrainerMemoryTracker:
             if torch.cuda.is_available():
                 self.gpu_mem_used_now = self.torch.cuda.memory_allocated()
                 self.gpu_mem_used_peak = self.torch.cuda.max_memory_allocated()
-            elif is_torch_mlu_available():
+            elif is_torch_mlu_available() and hasattr(self.torch, "mlu"):
                 self.gpu_mem_used_now = self.torch.mlu.memory_allocated()
                 self.gpu_mem_used_peak = self.torch.mlu.max_memory_allocated()
-            elif is_torch_musa_available():
+            elif is_torch_musa_available() and hasattr(self.torch, "musa"):
                 self.gpu_mem_used_now = self.torch.musa.memory_allocated()
                 self.gpu_mem_used_peak = self.torch.musa.max_memory_allocated()
             elif is_torch_xpu_available():
                 self.gpu_mem_used_now = self.torch.xpu.memory_allocated()
                 self.gpu_mem_used_peak = self.torch.xpu.max_memory_allocated()
-            elif is_torch_npu_available():
+            elif is_torch_npu_available() and hasattr(self.torch, "npu"):
                 self.gpu_mem_used_now = self.torch.npu.memory_allocated()
                 self.gpu_mem_used_peak = self.torch.npu.max_memory_allocated()
-            elif is_torch_hpu_available():
+            elif is_torch_hpu_available() and hasattr(self.torch, "hpu"):
                 self.gpu_mem_used_now = self.torch.hpu.memory_allocated()
                 self.gpu_mem_used_peak = self.torch.hpu.max_memory_allocated()
             elif is_torch_mps_available():

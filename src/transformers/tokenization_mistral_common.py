@@ -590,7 +590,7 @@ class MistralCommonBackend(PreTrainedTokenizerBase):
 
     def _piece_to_id(self, piece: str, warn: bool) -> int:
         if self._tokenizer_type == MistralTokenizerType.spm:
-            return self.tokenizer.instruct_tokenizer.tokenizer._model.piece_to_id(piece)
+            return self.tokenizer.instruct_tokenizer.tokenizer._model.piece_to_id(piece)  # type: ignore[attr-defined]
         elif self._tokenizer_type == MistralTokenizerType.tekken:
             return self._tekken_piece_to_id(piece, warn)
         else:
@@ -666,7 +666,7 @@ class MistralCommonBackend(PreTrainedTokenizerBase):
 
     def _get_all_special_ids(self) -> set[int]:
         if self._tokenizer_type == MistralTokenizerType.tekken:
-            return self.tokenizer.instruct_tokenizer.tokenizer._special_token_ids
+            return self.tokenizer.instruct_tokenizer.tokenizer._special_token_ids  # type: ignore[attr-defined]
         elif self._tokenizer_type == MistralTokenizerType.spm:
             return {
                 token_id
@@ -707,7 +707,7 @@ class MistralCommonBackend(PreTrainedTokenizerBase):
             # [BOS] seq0 [EOS]
             return [1] + ([0] * len(token_ids_0)) + [1]
 
-    def _encode_plus(  # type: ignore[override]
+    def _encode_plus(
         self,
         text: TextInput | PreTokenizedInput | EncodedInput,
         text_pair: None = None,
@@ -959,7 +959,7 @@ class MistralCommonBackend(PreTrainedTokenizerBase):
 
         return BatchEncoding(encoded_inputs, tensor_type=return_tensors, prepend_batch_axis=prepend_batch_axis)
 
-    def truncate_sequences(  # type: ignore[override]
+    def truncate_sequences(
         self,
         ids: list[int],
         pair_ids: None = None,
@@ -1023,7 +1023,7 @@ class MistralCommonBackend(PreTrainedTokenizerBase):
 
         return ids, None, overflowing_tokens
 
-    def apply_chat_template(  # type: ignore[override]
+    def apply_chat_template(
         self,
         conversation: list[dict[str, str]] | list[list[dict[str, str]]],
         tools: list[dict | Callable] | None = None,
@@ -1118,7 +1118,7 @@ class MistralCommonBackend(PreTrainedTokenizerBase):
         if add_generation_prompt:
             for conversation in conversations:
                 last_message = conversation[-1]
-                if last_message.get("role") == "assistant":
+                if isinstance(last_message, dict) and last_message.get("role") == "assistant":
                     raise ValueError(
                         "The last message in the conversation is already an assistant message. Consider using `continue_final_message` instead."
                     )
@@ -1530,7 +1530,7 @@ class MistralCommonBackend(PreTrainedTokenizerBase):
             clean_up_tokenization_spaces=clean_up_tokenization_spaces,
         )
 
-    def save_pretrained(  # type: ignore[override]
+    def save_pretrained(
         self,
         save_directory: str | os.PathLike | Path,
         push_to_hub: bool = False,
@@ -1633,7 +1633,7 @@ class MistralCommonBackend(PreTrainedTokenizerBase):
 
         raise NotImplementedError("`MistralCommonBackend` does not implement `add_special_tokens`.")
 
-    def add_tokens(  # type: ignore[override]
+    def add_tokens(
         self,
         special_tokens_dict: dict[str, str | AddedToken | Sequence[str | AddedToken]],
         replace_extra_special_tokens: bool = True,
@@ -1646,7 +1646,7 @@ class MistralCommonBackend(PreTrainedTokenizerBase):
 
         raise NotImplementedError("`MistralCommonBackend` does not implement `add_tokens`.")
 
-    def convert_added_tokens(cls, obj: AddedToken | Any, save: bool = False, add_type_field: bool = True):  # type: ignore[override]
+    def convert_added_tokens(cls, obj: AddedToken | Any, save: bool = False, add_type_field: bool = True):
         """
         `MistralCommonBackend` does not implement `convert_added_tokens` by design.
 
