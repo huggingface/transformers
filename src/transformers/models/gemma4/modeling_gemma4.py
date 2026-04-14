@@ -128,9 +128,8 @@ class Gemma4AudioModelOutput(BaseModelOutputWithPooling):
 class Gemma4ClippableLinear(nn.Linear):
     """Linear layer with optional input/output clamping.
 
-    Inherits from ``nn.Linear`` so that parameter-efficient fine-tuning
-    libraries (PEFT/LoRA) can discover and target these layers via the standard
-    ``isinstance(module, nn.Linear)`` check.
+    Inherits from ``nn.Linear`` directly so that PEFT/LoRA can target these
+    layers via ``isinstance(module, nn.Linear)``.
     """
 
     def __init__(
@@ -147,17 +146,6 @@ class Gemma4ClippableLinear(nn.Linear):
             self.register_buffer("input_max", torch.tensor(float("inf")))
             self.register_buffer("output_min", torch.tensor(-float("inf")))
             self.register_buffer("output_max", torch.tensor(float("inf")))
-
-        # Backward compat: older checkpoints store the weight under "linear.weight"
-        # (the previous implementation wrapped an nn.Linear as self.linear).
-        self._register_load_state_dict_pre_hook(self._remap_legacy_keys)
-
-    @staticmethod
-    def _remap_legacy_keys(state_dict, prefix, *args, **kwargs):
-        old_key = prefix + "linear.weight"
-        new_key = prefix + "weight"
-        if old_key in state_dict:
-            state_dict[new_key] = state_dict.pop(old_key)
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         if self.use_clipped_linears:

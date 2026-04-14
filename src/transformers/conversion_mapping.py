@@ -592,6 +592,10 @@ def _build_checkpoint_conversion_mapping():
         WeightRenaming(r"log_softmax\.mlp\.layer0", r"proj_out"),
     ]
 
+    mapping["gemma4"] = [
+        WeightRenaming(r"\.linear\.weight", ".weight"),
+    ]
+
     for model_type, base_pattern in _MODEL_TO_CONVERSION_PATTERN.items():
         if model_type in mapping:
             continue
