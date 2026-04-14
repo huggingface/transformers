@@ -872,10 +872,7 @@ class BaseHandler:
             if requested is not None and requested != self.model_manager.force_model:
                 raise HTTPException(
                     status_code=400,
-                    detail=(
-                        f"Server is pinned to '{self.model_manager.force_model}'; "
-                        f"requested '{requested}'."
-                    ),
+                    detail=(f"Server is pinned to '{self.model_manager.force_model}'; requested '{requested}'."),
                 )
             body["model"] = self.model_manager.force_model
 
