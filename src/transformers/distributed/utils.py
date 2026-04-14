@@ -98,7 +98,9 @@ def init_device_mesh(distributed_config: DistributedConfig) -> torch.distributed
     tp_size = distributed_config.tp_size
     fsdp_size = distributed_config.fsdp_size
 
-    assert world_size == tp_size * fsdp_size, f"world_size ({world_size}) must be equal to tp_size ({tp_size}) * fsdp_size ({fsdp_size})"
+    assert world_size == tp_size * fsdp_size, (
+        f"world_size ({world_size}) must be equal to tp_size ({tp_size}) * fsdp_size ({fsdp_size})"
+    )
 
     dims, names = [], []
     if fsdp_size > 1:

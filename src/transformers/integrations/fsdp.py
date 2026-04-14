@@ -492,6 +492,7 @@ def apply_fully_shard_data_parallel(
 
     return model
 
+
 # ========================= PEFT compatibility =========================
 # TODO(3outeille): make sure new FSDP works with PEFT
 def get_fsdp_ckpt_kwargs():

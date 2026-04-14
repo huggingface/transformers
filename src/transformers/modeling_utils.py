@@ -38,6 +38,7 @@ from packaging import version
 from safetensors import safe_open
 from safetensors.torch import save_file as safe_save_file
 from torch import Tensor, nn
+from torch.distributed.tensor import DTensor
 from torch.distributions import constraints
 from torch.utils.checkpoint import checkpoint
 
@@ -4550,8 +4551,6 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         # will be re-initialized for nothing (which can be quite long)
         for key in missing_keys - self.all_tied_weights_keys.keys():
             param = self.get_parameter_or_buffer(key)
-            from torch.distributed.tensor import DTensor
-
             if isinstance(param, DTensor):
                 # DTensor from parallelize_module on meta — materialize on actual device
                 local_value = torch.empty(
@@ -4560,8 +4559,12 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                     device=torch.device(param.device_mesh.device_type, torch.cuda.current_device()),
                 )
                 new_dtensor = DTensor.from_local(
-                    local_value, param.device_mesh, param.placements,
-                    run_check=False, shape=param.shape, stride=tuple(param.stride()),
+                    local_value,
+                    param.device_mesh,
+                    param.placements,
+                    run_check=False,
+                    shape=param.shape,
+                    stride=tuple(param.stride()),
                 )
                 with torch.no_grad():
                     new_param = torch.nn.Parameter(new_dtensor, requires_grad=param.requires_grad)

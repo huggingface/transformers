@@ -123,7 +123,9 @@ def gather_full_state_dict(model) -> dict[str, torch.Tensor]:
         if isinstance(tensor, DTensor):
             # All ranks participate in the collective, only rank 0 keeps the result
             with torch.no_grad():
-                full = tensor.redistribute(placements=[Replicate()] * tensor.device_mesh.ndim, async_op=False).to_local()
+                full = tensor.redistribute(
+                    placements=[Replicate()] * tensor.device_mesh.ndim, async_op=False
+                ).to_local()
             if is_rank0:
                 result[key] = _to_cpu_fresh(full)
             del full
@@ -142,6 +144,7 @@ def _redistribute_dtensor(tensor: DTensor, target_placements: tuple) -> DTensor:
     with torch.no_grad():
         replicated = tensor.redistribute(placements=[Replicate()] * tensor.device_mesh.ndim)
         return replicated.redistribute(placements=target_placements)
+
 
 def convert_strided_to_shard(state_dict: dict) -> dict[str, tuple]:
     # Convert _StridedShard DTensors in a state dict to plain Shard for DCP compatibility.
@@ -170,6 +173,7 @@ def restore_strided_from_shard(state_dict: dict, placement_map: dict[str, tuple]
         container, leaf_key = _resolve(state_dict, key)
         if leaf_key in container and isinstance(container[leaf_key], DTensor):
             container[leaf_key] = _redistribute_dtensor(container[leaf_key], original_placements)
+
 
 def verify_tp_plan(expected_keys: list[str], tp_plan: dict[str, str | TPStyle] | None):
     """

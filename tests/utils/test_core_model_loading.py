@@ -911,7 +911,7 @@ class TestDtensorShardOperation(unittest.TestCase):
         torch.testing.assert_close(op.shard_tensor(tensor), tensor)
 
     def test_1d_shard_fast_path(self):
-        #TODO(3outeille): double check fast path
+        # TODO(3outeille): double check fast path
         tensor = torch.arange(16).reshape(4, 4).float()
         for rank, expected in [(0, tensor[:2]), (1, tensor[2:])]:
             mesh = FakeMesh(shape=(2,), rank=rank)
@@ -940,8 +940,10 @@ class TestDtensorShardOperation(unittest.TestCase):
         for rank in range(4):
             mesh = FakeMesh(shape=(2, 2), rank=rank)
             op = _make_dtensor_shard_op(
-                mesh, [Shard(0), _StridedShard(dim=1, split_factor=2)],
-                param_shape=(8, 8), local_shape=(4, 4),
+                mesh,
+                [Shard(0), _StridedShard(dim=1, split_factor=2)],
+                param_shape=(8, 8),
+                local_shape=(4, 4),
             )
             torch.testing.assert_close(op.shard_tensor(tensor), expected[rank], msg=f"rank {rank}")
 
@@ -952,8 +954,10 @@ class TestDtensorShardOperation(unittest.TestCase):
         for rank in range(4):
             mesh = FakeMesh(shape=(2, 2), rank=rank)
             op = _make_dtensor_shard_op(
-                mesh, [_StridedShard(dim=0, split_factor=2), Shard(0)],
-                param_shape=(4, 4), local_shape=(1, 4),
+                mesh,
+                [_StridedShard(dim=0, split_factor=2), Shard(0)],
+                param_shape=(4, 4),
+                local_shape=(1, 4),
             )
             torch.testing.assert_close(op.shard_tensor(tensor), expected[rank], msg=f"rank {rank}")
 
