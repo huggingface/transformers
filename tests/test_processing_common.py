@@ -2024,7 +2024,7 @@ class ProcessorTesterMixin:
             {
                 "role": "assistant",
                 "content": None,
-                "tool_calls": [{"type": "function", "function": {"name": "get_weather", "arguments": "{}"}}],
+                "tool_calls": [{"type": "function", "function": {"name": "get_weather", "arguments": {}}}],
             },
         ]
         result_none = processor.apply_chat_template(messages_with_none, tokenize=True)
