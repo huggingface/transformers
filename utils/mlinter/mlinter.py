@@ -45,7 +45,7 @@ def _load_rule_specs() -> dict[str, dict]:
     if not isinstance(rules, dict):
         raise ValueError(f"Invalid rule spec file: missing [rules] table in {RULE_SPECS_PATH}")
 
-    required_explanation_keys = {"what_it_does", "why_bad", "bad_example", "good_example"}
+    required_explanation_keys = {"what_it_does", "why_bad", "diff"}
     specs: dict[str, dict] = {}
     for rule_id, spec in rules.items():
         if not isinstance(spec, dict):
@@ -332,29 +332,15 @@ def format_rule_summary(rule_id: str) -> str:
 def format_rule_details(rule_id: str) -> str:
     spec = TRF_RULE_SPECS[rule_id]
     explanation = spec["explanation"]
-    default_label = "yes" if spec["default_enabled"] else "no"
     return "\n".join(
         [
-            rule_id,
+            f"### {rule_id}",
             "",
-            f"Summary: {spec['description']}",
-            f"Default enabled: {default_label}",
+            f"{explanation['what_it_does']} {explanation['why_bad']}",
             "",
-            "What it does",
-            "",
-            explanation["what_it_does"],
-            "",
-            "Why is this bad?",
-            "",
-            explanation["why_bad"],
-            "",
-            "Example",
-            "",
-            explanation["bad_example"],
-            "",
-            "Use instead:",
-            "",
-            explanation["good_example"],
+            "```diff",
+            explanation["diff"].strip(),
+            "```",
         ]
     )
 
