@@ -482,9 +482,9 @@ class ContinuousBatchingIOs:
             use_cache=False,
         )
 
-        # If there is padding, make sure the padding sequences have length 0
+        # If there is padding, make sure the padding sequences have length 0 (ie. cumulative lengths plateau)
         if use_padding:
-            kwargs.cu_seq_lens_q[self.true_batch_size + 1 :] = 0
+            kwargs.cu_seq_lens_q[self.true_batch_size + 1 :] = self.total_seqlen_q
             # Additionally, if there are CUDA graphs, we need to pad max_seqlen so graph capture will work regardless of
             # the future Q / KV lengths of the next batches
             if not self.use_block_table and self.use_cuda_graph_varlen:
@@ -508,6 +508,8 @@ class ContinuousBatchingIOs:
         # For the attributes that are dict of tensors, we first fill the dict with the actual values
         for layer_type, seqlens_k in self.cumulative_seqlens_k.items():
             kwargs.cu_seq_lens_k[layer_type] = seqlens_k[: batch_size + 1]
+            if use_padding:
+                kwargs.cu_seq_lens_k[layer_type][self.true_batch_size + 1 :] = seqlens_k[self.true_batch_size]
             kwargs.max_seqlen_k[layer_type] = 1 if self.use_block_table else self.max_seqlen_k[layer_type]
             if self.attention_mask is not None:
                 k_len = kv_size if use_padding else seqlens_k[batch_size]

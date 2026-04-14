@@ -1794,9 +1794,11 @@ class ContinuousBatchingConfig:
         # For each config, priority is: explicit config, default config, fallback config, None
         if self.varlen_compile_config is None:
             if self.use_default_compile_configs:
-                # Flash does not support fullgraph but other (sdpa and eager) do
-                fullgraph = not is_flash_attn
-                varlen_config = CompileConfig(mode="max-autotune-no-cudagraphs", fullgraph=fullgraph, dynamic=True)
+                # We don't use compile with flash varlen, because max_seqlen_k is volatile and introduces recompilations
+                if is_flash_attn:
+                    varlen_config = None
+                else:
+                    varlen_config = CompileConfig(mode="max-autotune-no-cudagraphs", fullgraph=True, dynamic=True)
             elif fallback_compile_config is not None:
                 varlen_config = fallback_compile_config
             else:
