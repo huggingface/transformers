@@ -20,7 +20,7 @@ from ...configuration_utils import PreTrainedConfig
 from ...utils import auto_docstring
 
 
-@auto_docstring(checkpoint="google/dinov2-base-patch16-224")
+@auto_docstring(checkpoint="facebook/dinov2-base")
 @strict
 class Dinov2Config(BackboneConfigMixin, PreTrainedConfig):
     r"""
@@ -42,10 +42,10 @@ class Dinov2Config(BackboneConfigMixin, PreTrainedConfig):
     ```python
     >>> from transformers import Dinov2Config, Dinov2Model
 
-    >>> # Initializing a Dinov2 dinov2-base-patch16-224 style configuration
+    >>> # Initializing a Dinov2 dinov2-base style configuration
     >>> configuration = Dinov2Config()
 
-    >>> # Initializing a model (with random weights) from the dinov2-base-patch16-224 style configuration
+    >>> # Initializing a model (with random weights) from the dinov2-base style configuration
     >>> model = Dinov2Model(configuration)
 
     >>> # Accessing the model configuration
