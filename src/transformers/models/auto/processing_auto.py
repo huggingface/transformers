@@ -152,6 +152,7 @@ else:
             ("sam", "SamProcessor"),
             ("sam2", "Sam2Processor"),
             ("sam3", "Sam3Processor"),
+            ("sam3_lite_text", "Sam3Processor"),
             ("sam_hq", "SamHQProcessor"),
             ("seamless_m4t", "SeamlessM4TProcessor"),
             ("sew", "Wav2Vec2Processor"),

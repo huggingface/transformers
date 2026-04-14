@@ -1,5 +1,6 @@
 # Optimizing inference
 
 perf_infer_gpu_many: perf_infer_gpu_one
+perf_train_cpu_many: perf_train_cpu
 transformers_agents: agents
 quantization: quantization/overview
