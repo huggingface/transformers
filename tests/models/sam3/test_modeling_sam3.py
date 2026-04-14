@@ -17,8 +17,7 @@ import gc
 import tempfile
 import unittest
 
-import requests
-
+from transformers.image_utils import load_image
 from transformers.testing_utils import (
     backend_empty_cache,
     require_deterministic_for_xpu,
@@ -26,11 +25,12 @@ from transformers.testing_utils import (
     slow,
     torch_device,
 )
-from transformers.utils import is_torch_available, is_vision_available
+from transformers.utils import is_torch_available
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor
 from ...test_pipeline_mixin import PipelineTesterMixin
+from ...test_processing_common import url_to_local_path
 
 
 if is_torch_available():
@@ -48,10 +48,6 @@ if is_torch_available():
     )
     from transformers.models.sam3.modeling_sam3 import Sam3Model, Sam3VisionModel
     from transformers.models.sam3.processing_sam3 import Sam3Processor
-
-
-if is_vision_available():
-    from PIL import Image
 
 
 class Sam3VisionModelTester:
@@ -973,16 +969,14 @@ class Sam3ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 
 def prepare_coco_cat_image():
     """Prepare COCO cat and laptop image (from batched inference notebook)."""
-    img_url = "http://images.cocodataset.org/val2017/000000077595.jpg"
-    raw_image = Image.open(requests.get(img_url, stream=True).raw).convert("RGB")
-    return raw_image
+    img_url = url_to_local_path("http://images.cocodataset.org/val2017/000000077595.jpg")
+    return load_image(img_url).convert("RGB")
 
 
 def prepare_coco_kitchen_image():
     """Prepare COCO kitchen scene image (from batched inference notebook)."""
-    img_url = "http://images.cocodataset.org/val2017/000000136466.jpg"
-    raw_image = Image.open(requests.get(img_url, stream=True).raw).convert("RGB")
-    return raw_image
+    img_url = url_to_local_path("http://images.cocodataset.org/val2017/000000136466.jpg")
+    return load_image(img_url).convert("RGB")
 
 
 @slow

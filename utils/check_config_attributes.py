@@ -84,6 +84,8 @@ SPECIAL_CASES_TO_ALLOW = {
     "SamVisionConfig": ["mlp_ratio"],
     "DeepseekOcr2SamVisionConfig": ["mlp_ratio"],
     "Sam3VisionConfig": ["backbone_feature_sizes"],
+    "Sam3LiteTextViTConfig": ["global_attn_indexes", "window_size"],
+    "Sam3LiteTextVisionConfig": ["fpn_hidden_size", "scale_factors"],
     "SamHQVisionConfig": ["mlp_ratio"],
     "ClapAudioConfig": ["num_classes"],
     "ClvpDecoderConfig": ["add_cross_attention"],
