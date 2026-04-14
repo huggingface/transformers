@@ -596,7 +596,7 @@ class FP8Experts(nn.Module):
         self.block_size = block_size
         self.hidden_dim = config.hidden_size
         self.activation_scheme = activation_scheme
-        self.num_experts = getattr(config, "num_local_experts", config.num_experts)
+        self.num_experts = getattr(config, "num_local_experts", None) or getattr(config, "num_experts", None)
         self.intermediate_dim = getattr(config, "moe_intermediate_size", config.intermediate_size)
         self.act_fn = ACT2FN[getattr(config, "hidden_activation", config.hidden_act)]
 
