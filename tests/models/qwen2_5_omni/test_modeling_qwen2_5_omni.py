@@ -460,7 +460,7 @@ class Qwen2_5OmniThinkerForConditionalGenerationModelTest(
         image_grid_thw = torch.empty((0, 3), dtype=torch.long)
 
         # 3 * 2 * 2 = 12 video tokens
-        video_grid_thw = torch.tensor([[3, 2, 2]], dtype=torch.long)
+        video_grid_thw = torch.tensor([[3, 2, 2]], dtype=torch.long, device=torch_device)
 
         # num_audio_tokens = ((audio_seqlen - 1) // 2 + 1 - 2) // 2 + 1
         # i.e.: 300 audio_seqlen -> 75 audio tokens
