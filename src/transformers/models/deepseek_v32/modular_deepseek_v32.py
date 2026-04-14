@@ -35,6 +35,33 @@ class DeepseekV32Config(GlmMoeDsaConfig, RotaryEmbeddingConfigMixin):
     mlp_bias: bool = False
     num_experts:int = 256
 
+def apply_rotary_pos_emb(
+    x: torch.Tensor,
+    cos: torch.Tensor,
+    sin: torch.Tensor,
+    unsqueeze_dim: int = 1,
+) -> torch.Tensor:
+    """
+    Applies Rotary Position Embedding to a single tensor.
+
+    This is the transformers equivalent of DeepSeek V3.2's `apply_rotary_emb(x, freqs_cis, interleaved)`.
+    Instead of using complex-number `freqs_cis`, we use pre-split `(cos, sin)` tensors from RotaryEmbedding.
+
+    Args:
+        x (`torch.Tensor`): Input tensor of shape `[..., head_dim]`.
+        cos (`torch.Tensor`): Cosine part from RotaryEmbedding, shape `[batch, seq_len, head_dim]`.
+        sin (`torch.Tensor`): Sine part from RotaryEmbedding, shape `[batch, seq_len, head_dim]`.
+        unsqueeze_dim (`int`): Dimension along which to unsqueeze cos/sin for broadcasting.
+            Use `1` when x is `[B, H, S, D]` (BHSD) and `2` when x is `[B, S, H, D]` (BSHD).
+
+    Returns:
+        `torch.Tensor`: Tensor with rotary embeddings applied, same shape as input.
+    """
+    cos = cos[..., : x.shape[-1] // 2].unsqueeze(unsqueeze_dim)
+    sin = sin[..., : x.shape[-1] // 2].unsqueeze(unsqueeze_dim)
+    x1 = x[..., ::2]
+    x2 = x[..., 1::2]
+    return torch.stack((x1 * cos - x2 * sin, x2 * cos + x1 * sin), dim=-1).flatten(-2)
 
 class DeepseekV32MoE(GlmMoeDsaMoE):
     pass

@@ -292,13 +292,11 @@ def apply_rotary_pos_emb(
     Returns:
         `torch.Tensor`: Tensor with rotary embeddings applied, same shape as input.
     """
-    cos = cos.unsqueeze(unsqueeze_dim)
-    sin = sin.unsqueeze(unsqueeze_dim)
-
-    # Split-half (NeoX/Llama style): (x[:d/2], x[d/2:])
-    # This matches llama's apply_rotary_pos_emb logic.
-    x_rotated = (x * cos) + (rotate_half(x) * sin)
-    return x_rotated
+    cos = cos[..., : x.shape[-1] // 2].unsqueeze(unsqueeze_dim)
+    sin = sin[..., : x.shape[-1] // 2].unsqueeze(unsqueeze_dim)
+    x1 = x[..., ::2]
+    x2 = x[..., 1::2]
+    return torch.stack((x1 * cos - x2 * sin, x2 * cos + x1 * sin), dim=-1).flatten(-2)
 
 
 class DeepseekV32Indexer(nn.Module):
@@ -415,7 +413,7 @@ class DeepseekV32Indexer(nn.Module):
 
         # q·k^T per head: [B, S, H, D] @ [B, T, D]^T → [B, S, H, T]
         scores = torch.einsum("bshd,btd->bsht", q.float(), k_cached.float()) * self.softmax_scale
-        scores = F.relu(scores)
+        # scores = F.relu(scores)
         # Weight per head and sum across heads → [B, S, T]
         index_scores = torch.einsum("bsht,bsh->bst", scores, weights)
 
