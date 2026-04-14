@@ -1506,8 +1506,8 @@ def verify_tp_plan(expected_keys: list[str], tp_plan: dict[str, str] | None):
         logger.warning(f"The following layers were not sharded: {', '.join(unsharded_layers)}")
 
 
-def distribute_model(model, tp_plan, distributed_config, device_mesh, tp_size):
-    """Distribute a model according to the TP plan."""
+def distribute_model(model, tp_plan, distributed_config, device_mesh, tp_size, fsdp_plan=None):
+    """Attach distributed runtime hooks before checkpoint loading."""
     model._tp_size = tp_size
     model._device_mesh = device_mesh
     if distributed_config is not None:
@@ -1517,7 +1517,7 @@ def distribute_model(model, tp_plan, distributed_config, device_mesh, tp_size):
     # Set the new requested tp_plan on the model
     if isinstance(tp_plan, dict):
         model.tp_plan = tp_plan
-    model_plan = model.tp_plan
+    model_plan = model.tp_plan if tp_plan is not None or tp_size is not None else None
     if model_plan is not None and _torch_distributed_available:
         for v in model_plan.values():
             if v not in ALL_PARALLEL_STYLES:
@@ -1533,4 +1533,8 @@ def distribute_model(model, tp_plan, distributed_config, device_mesh, tp_size):
                     device_mesh,
                 )
             module._is_hooked = True
+    if fsdp_plan is not None:
+        from .fsdp import apply_fsdp2
+
+        model = apply_fsdp2(model, device_mesh, fsdp_plan)
     return model
