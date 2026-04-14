@@ -45,6 +45,7 @@ from transformers.generation.continuous_batching.requests import GenerationOutpu
 from transformers.testing_utils import (
     require_deterministic_for_xpu,
     require_flash_attn,
+    require_flash_attn_3,
     require_kernels,
     require_torch_accelerator,
     require_torch_gpu,
@@ -642,6 +643,22 @@ class ContinuousBatchingWithAcceleratorTest(unittest.TestCase):
             attn_implementation="flash_attention_2",
         )
 
+    @parameterized.expand([(True, False), (False, True)])
+    @require_flash_attn_3
+    @slow
+    def test_continuous_batching_tuple_cuda_graph(self, varlen_cg: bool, decode_cg: bool) -> None:
+        """Tests that use_cuda_graph can be a tuple to independently control varlen and decode paths."""
+        model_id = "TinyLlama/TinyLlama-1.1B-Chat-v1.0"
+        continuous_batching_config = ContinuousBatchingConfig(
+            use_cuda_graph=(varlen_cg, decode_cg),
+            use_async_batching=False,
+        )
+        self._test_continuous_batching_parity(
+            model_id=model_id,
+            continuous_batching_config=continuous_batching_config,
+            attn_implementation="flash_attention_3",
+        )
+
     def test_continuous_batching_fast(self) -> None:
         model_id = "TinyLlama/TinyLlama-1.1B-Chat-v1.0"
         continuous_batching_config = ContinuousBatchingConfig(
@@ -732,7 +749,7 @@ class ContinuousBatchingWithAcceleratorTest(unittest.TestCase):
         """Test continuous batching with use_default_compile_configs=True in ContinuousBatchingConfig.
 
         This test verifies that:
-        1. Default compile configs are created for both varlen and decode paths
+        1. Default compile configs are created for appropriate paths
         2. Generation completes successfully with compiled functions
         3. Output matches expectations
         """
@@ -758,15 +775,14 @@ class ContinuousBatchingWithAcceleratorTest(unittest.TestCase):
             cb_config.resolve_compile_configs(
                 fallback_compile_config=None, is_flash_attn=True, decode_fast_path_available=False
             )
-            varlen_cfg = cb_config.varlen_compile_config
-            if varlen_cfg is None:
-                raise RuntimeError("Varlen compile config should be created with use_default_compile_configs=True")
-            self.assertEqual(
-                varlen_cfg.mode,
-                "max-autotune-no-cudagraphs",
-                "Default varlen config should use max-autotune-no-cudagraphs mode",
+            self.assertIsNone(
+                cb_config.varlen_compile_config,
+                "Varlen compile config should not be created with use_default_compile_configs=True"
             )
-            self.assertTrue(varlen_cfg.dynamic, "Default varlen config should have dynamic=True")
+            self.assertIsNotNone(
+                cb_config.decode_compile_config,
+                "Decode compile config should be created with use_default_compile_configs=True"
+            )
 
             # Create GenerationConfig
             gen_config = GenerationConfig(max_new_tokens=20, do_sample=False)
