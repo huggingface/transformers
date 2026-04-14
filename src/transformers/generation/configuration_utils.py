@@ -1624,7 +1624,7 @@ class ContinuousBatchingConfig:
 
     # Enables cuda graphs. This can be a tuple of booleans (one for the varlen path and one for the decode fast path), a
     # boolean which will apply to both paths, or None (automatically inferred). After calling `decide_use_cuda_graphs`,
-    # the attribute will be a tuple of booleans.
+    # the attribute will ALWAYS be a tuple of booleans.
     use_cuda_graph: bool | tuple[bool, bool] | None = None
 
     # If any of these parameters are set to a non-default, CUDA graphs will be used. Otherwise we automatically infer
@@ -1709,8 +1709,9 @@ class ContinuousBatchingConfig:
         import torch
 
         if not torch.cuda.is_available():
-            if self.use_cuda_graph:  # throw a warning only if the user intended to use cuda graphs
-                logger.warning(f"use_cuda_graph is True but {torch.cuda.is_available() = }: turning off cuda graphs.")
+            intended_use_cuda_graph = any(self.get_cuda_graph_booleans())
+            if intended_use_cuda_graph:  # throw a warning only if the user intended to use cuda graphs
+                logger.warning(f"{self.use_cuda_graph = } but {torch.cuda.is_available() = }: turning off cuda graphs.")
             self.use_cuda_graph = (False, False)
 
         # Else if use_cuda_graph is specified, we follow the user's choice and make sure it is a tuple of booleans
@@ -1763,10 +1764,11 @@ class ContinuousBatchingConfig:
         """
         # If the user specifies to use async or not, no need to decide ourselves
         if self.use_async_batching is None:
-            self.use_async_batching = self.use_cuda_graph and not is_attn_mask_needed
+            use_cuda_graphs = any(self.get_cuda_graph_booleans())
+            self.use_async_batching = use_cuda_graphs and not is_attn_mask_needed
             logger.info(
                 f"No behavior specified for use_async_batching, choosing {self.use_async_batching = } because "
-                f"{self.use_cuda_graph = } and {not is_attn_mask_needed = }. If you want to save memory, you can "
+                f"{use_cuda_graphs = } and {not is_attn_mask_needed = }. If you want to save memory, you can "
                 "disable asynchronous batching but it will degrade performance."
             )
         return self.use_async_batching
