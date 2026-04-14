@@ -34,6 +34,7 @@ class DeepseekV32Config(GlmMoeDsaConfig, RotaryEmbeddingConfigMixin):
     max_seq_len: int = 2048
     mlp_bias: bool = False
     num_experts:int = 256
+    head_dim: int = 64
 
 def apply_rotary_pos_emb(
     x: torch.Tensor,
@@ -91,7 +92,7 @@ class DeepseekV32DecoderLayer(GlmMoeDsaDecoderLayer):
 
 
 class DeepseekV32PreTrainedModel(GlmMoeDsaPreTrainedModel):
-    pass
+    _keys_to_ignore_on_load_unexpected = [r"model\.layers\.61.*"]
 
 
 class DeepseekV32Model(GlmMoeDsaModel):

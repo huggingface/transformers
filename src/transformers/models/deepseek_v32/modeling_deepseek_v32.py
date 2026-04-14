@@ -263,13 +263,6 @@ class DeepseekV32RotaryEmbedding(nn.Module):
         return cos.to(dtype=x.dtype), sin.to(dtype=x.dtype)
 
 
-def rotate_half(x):
-    """Rotates half the hidden dims of the input."""
-    x1 = x[..., : x.shape[-1] // 2]
-    x2 = x[..., x.shape[-1] // 2 :]
-    return torch.cat((-x2, x1), dim=-1)
-
-
 def apply_rotary_pos_emb(
     x: torch.Tensor,
     cos: torch.Tensor,
@@ -412,10 +405,14 @@ class DeepseekV32Indexer(nn.Module):
         weights = self.weights_proj(hidden_states).float() * (self.n_heads**-0.5)  # [B, S, H]
 
         # q·k^T per head: [B, S, H, D] @ [B, T, D]^T → [B, S, H, T]
-        scores = torch.einsum("bshd,btd->bsht", q.float(), k_cached.float()) * self.softmax_scale
-        # scores = F.relu(scores)
+        scores = torch.bmm(
+            q.float().reshape(batch_size, seq_len * self.n_heads, self.head_dim),
+            k_cached.float().transpose(1, 2),
+        )
+        scores = scores.view(batch_size, seq_len, self.n_heads, -1) * self.softmax_scale
+        scores = F.relu(scores)
         # Weight per head and sum across heads → [B, S, T]
-        index_scores = torch.einsum("bsht,bsh->bst", scores, weights)
+        index_scores = torch.matmul(weights.unsqueeze(-2), scores).squeeze(-2)
 
         if attention_mask is not None:
             index_scores = index_scores + attention_mask
@@ -709,7 +706,7 @@ class DeepseekV32PreTrainedModel(PreTrainedModel):
         "attentions": DeepseekV32Attention,
     }
     _keep_in_fp32_modules_strict = ["e_score_correction_bias"]
-    _keys_to_ignore_on_load_unexpected = [r"model\.layers\.78.*"]
+    _keys_to_ignore_on_load_unexpected = [r"model\.layers\.61.*"]
     # NOTE: FP8 quantization uses `_keep_in_fp32_modules` (not `_strict`) to decide which modules to NOT convert.
     # We must keep `indexer.weights_proj` as a plain Linear to match the checkpoint (no `weight_scale_inv`).
     _keep_in_fp32_modules = ["indexer.weights_proj"]

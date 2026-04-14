@@ -92,7 +92,6 @@ class DeepseekV32Config(PreTrainedConfig, RotaryEmbeddingConfigMixin):
     qk_nope_head_dim: int = 192
     n_group: int = 1
     topk_group: int = 1
-    num_experts:int = 256
     num_experts_per_tok: int = 8
     norm_topk_prob: bool = True
     hidden_act: str = "silu"
@@ -114,7 +113,7 @@ class DeepseekV32Config(PreTrainedConfig, RotaryEmbeddingConfigMixin):
     index_top_k: int = 2048
     max_seq_len: int = 2048
     mlp_bias: bool = False
-    head_dim: int = 64
+    num_experts: int = 256
 
     def __post_init__(self, **kwargs):
         self.qk_head_dim = self.qk_nope_head_dim + self.qk_rope_head_dim
