@@ -72,7 +72,7 @@ class DeepseekV32Config(PreTrainedConfig, RotaryEmbeddingConfigMixin):
         "layers": (["hidden_states", "attention_mask"], ["hidden_states"]),
         "norm": (["hidden_states"], ["hidden_states"]),
     }
-    attribute_map = {"num_local_experts": "num_experts_per_tok"}
+    attribute_map = {"num_local_experts": "num_experts"}
 
     vocab_size: int = 154880
 
@@ -92,6 +92,7 @@ class DeepseekV32Config(PreTrainedConfig, RotaryEmbeddingConfigMixin):
     qk_nope_head_dim: int = 192
     n_group: int = 1
     topk_group: int = 1
+    num_experts:int = 256
     num_experts_per_tok: int = 8
     norm_topk_prob: bool = True
     hidden_act: str = "silu"
