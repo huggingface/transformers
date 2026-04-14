@@ -34,6 +34,7 @@ ExcInfo: TypeAlias = (
     | BaseException
     | tuple[type[BaseException], BaseException, object]  # traceback is `types.TracebackType`, but keep generic here
 )
+DeviceMeshLike: TypeAlias = Any  # PyTorch stubs do not model torch.distributed.device_mesh consistently yet.
 
 
 class TransformersLogger(Protocol):
