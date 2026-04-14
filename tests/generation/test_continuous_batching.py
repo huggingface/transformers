@@ -502,9 +502,10 @@ class ContinuousBatchingWithAcceleratorTest(unittest.TestCase):
     ) -> None:
         """Tests the parity between continuous batching and non-continuous batching generation."""
 
-        # Skip the test if Flash Attention 2 is required but not available
-        if attn_implementation == "flash_attention_2" and not (is_flash_attn_2_available() or is_kernels_available()):
-            self.skipTest("Flash Attention 2 is not available and neither is the kernels library. Skipping test.")
+        # Skip the test if Flash Attention is required but not available
+        is_fa = is_flash_attention_requested(requested_attention_implementation=attn_implementation)
+        if is_fa and not (is_flash_attn_2_available() or is_kernels_available()):
+            self.skipTest("Flash Attention is not available and neither is the kernels library. Skipping test.")
         # Skip the test if cuda graph is on but the device is not CUDA
         if continuous_batching_config.use_cuda_graph and torch_device != "cuda":
             self.skipTest("CUDA graph is only supported on CUDA devices. Skipping test.")
@@ -518,7 +519,7 @@ class ContinuousBatchingWithAcceleratorTest(unittest.TestCase):
 
         # Eager and SDPA implementations get a precision boost to account for the fact that an attention mask is used in
         # continuous batching but not in generate
-        dtype = "auto" if attn_implementation == "flash_attention_2" else torch.float32
+        dtype = "auto" if is_fa else torch.float32
 
         # Prepare inputs
         tokenizer, model = get_tokenizer_and_model(model_id, attn_implementation, torch_device, dtype)
@@ -1050,7 +1051,7 @@ class ContinuousBatchingWithAcceleratorTest(unittest.TestCase):
     @parameterized.expand(
         list(
             itertools.product(
-                ["sdpa", "flash_attention_2"],
+                ["sdpa", "flash_attention_2", "flash_attention_3"],
                 [False, True],
                 [False, True],
             )
