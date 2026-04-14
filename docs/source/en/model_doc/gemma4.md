@@ -293,6 +293,11 @@ print(processor.decode(outputs[0][input_len:], skip_special_tokens=False))
 
 [[autodoc]] Gemma4ForCausalLM
 
+## Gemma4ForSequenceClassification
+
+[[autodoc]] Gemma4ForSequenceClassification
+    - forward
+
 ## Gemma4TextForSequenceClassification
 
 [[autodoc]] Gemma4TextForSequenceClassification
