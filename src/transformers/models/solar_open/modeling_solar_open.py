@@ -34,6 +34,7 @@ from ...integrations import (
     use_kernel_func_from_hub,
     use_kernelized_func,
 )
+from ...integrations.tensor_parallel import TPStyle
 from ...masking_utils import create_causal_mask
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
@@ -552,7 +553,7 @@ class SolarOpenModel(SolarOpenPreTrainedModel):
 @auto_docstring
 class SolarOpenForCausalLM(SolarOpenPreTrainedModel, GenerationMixin):
     _tied_weights_keys = {"lm_head.weight": "model.embed_tokens.weight"}
-    _tp_plan = {"lm_head": "colwise_gather_output"}
+    _tp_plan = {"lm_head": TPStyle("colwise", "allgather")}
     _pp_plan = {"lm_head": (["hidden_states"], ["logits"])}
 
     def __init__(self, config):

@@ -17,6 +17,7 @@
 from huggingface_hub.dataclasses import strict
 
 from ...configuration_utils import PreTrainedConfig
+from ...integrations.tensor_parallel import TPStyle
 from ...modeling_rope_utils import RopeParameters
 from ...utils import auto_docstring
 
@@ -40,12 +41,14 @@ class Glm4Config(PreTrainedConfig):
     model_type = "glm4"
     keys_to_ignore_at_inference = ["past_key_values"]
     base_model_tp_plan = {
-        "layers.*.self_attn.q_proj": "colwise",
-        "layers.*.self_attn.k_proj": "colwise",
-        "layers.*.self_attn.v_proj": "colwise",
-        "layers.*.self_attn.o_proj": "rowwise",
-        "layers.*.mlp.gate_up_proj": "colwise_gather_output",  # we need to replicate here due to the `chunk` operation
-        "layers.*.mlp.down_proj": "rowwise_split_input",  # input is replicated due to the `chunk` operation
+        "layers.*.self_attn.q_proj": TPStyle("colwise", "none"),
+        "layers.*.self_attn.k_proj": TPStyle("colwise", "none"),
+        "layers.*.self_attn.v_proj": TPStyle("colwise", "none"),
+        "layers.*.self_attn.o_proj": TPStyle("rowwise", "allreduce"),
+        "layers.*.mlp.gate_up_proj": TPStyle(
+            "colwise", "allgather"
+        ),  # we need to replicate here due to the `chunk` operation
+        "layers.*.mlp.down_proj": TPStyle("vocab", "allreduce"),  # input is replicated due to the `chunk` operation
     }
     base_model_pp_plan = {
         "embed_tokens": (["input_ids"], ["inputs_embeds"]),

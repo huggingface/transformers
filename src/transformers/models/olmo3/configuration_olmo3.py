@@ -21,6 +21,7 @@
 from huggingface_hub.dataclasses import strict
 
 from ...configuration_utils import PreTrainedConfig
+from ...integrations.tensor_parallel import TPStyle
 from ...modeling_rope_utils import RopeParameters
 from ...utils import auto_docstring
 
@@ -48,13 +49,21 @@ class Olmo3Config(PreTrainedConfig):
     model_type = "olmo3"
     keys_to_ignore_at_inference = ["past_key_values"]
     base_model_tp_plan = {
-        "layers.*.self_attn.q_proj": "colwise_gather_output",  # we need to replicate here due to the added norm on q and k
-        "layers.*.self_attn.k_proj": "colwise_gather_output",  # we need to replicate here due to the added norm on q and k
-        "layers.*.self_attn.v_proj": "colwise_gather_output",  # we need to replicate here due to the added norm on q and k
-        "layers.*.self_attn.o_proj": "rowwise_split_input",  # input is replicated due to the added norm on q and k
-        "layers.*.mlp.gate_proj": "colwise",
-        "layers.*.mlp.up_proj": "colwise",
-        "layers.*.mlp.down_proj": "rowwise",
+        "layers.*.self_attn.q_proj": TPStyle(
+            "colwise", "allgather"
+        ),  # we need to replicate here due to the added norm on q and k
+        "layers.*.self_attn.k_proj": TPStyle(
+            "colwise", "allgather"
+        ),  # we need to replicate here due to the added norm on q and k
+        "layers.*.self_attn.v_proj": TPStyle(
+            "colwise", "allgather"
+        ),  # we need to replicate here due to the added norm on q and k
+        "layers.*.self_attn.o_proj": TPStyle(
+            "vocab", "allreduce"
+        ),  # input is replicated due to the added norm on q and k
+        "layers.*.mlp.gate_proj": TPStyle("colwise", "none"),
+        "layers.*.mlp.up_proj": TPStyle("colwise", "none"),
+        "layers.*.mlp.down_proj": TPStyle("rowwise", "allreduce"),
     }
     base_model_pp_plan = {
         "embed_tokens": (["input_ids"], ["inputs_embeds"]),

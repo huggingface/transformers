@@ -30,6 +30,7 @@ from ... import initialization as init
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache, StaticCache
 from ...generation import GenerationConfig, GenerationMixin
+from ...integrations.tensor_parallel import TPStyle
 from ...masking_utils import create_causal_mask
 from ...modeling_flash_attention_utils import flash_attn_supports_top_left_mask, is_flash_attn_available
 from ...modeling_layers import GradientCheckpointingLayer
@@ -874,7 +875,7 @@ class KyutaiSpeechToTextModel(KyutaiSpeechToTextPreTrainedModel):
 @auto_docstring
 class KyutaiSpeechToTextForConditionalGeneration(KyutaiSpeechToTextPreTrainedModel, GenerationMixin):
     _tied_weights_keys = {"lm_head.weight": "model.embed_tokens.embed_tokens.weight"}
-    _tp_plan = {"lm_head": "colwise_gather_output"}
+    _tp_plan = {"lm_head": TPStyle("colwise", "allgather")}
     _pp_plan = {"lm_head": (["hidden_states"], ["logits"])}
     _keep_in_fp32_modules_strict = ["codec_model"]
     output_modalities = ("audio", "text")

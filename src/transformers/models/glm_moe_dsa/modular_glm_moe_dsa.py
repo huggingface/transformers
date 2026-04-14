@@ -21,6 +21,7 @@ from huggingface_hub.dataclasses import strict
 
 from ...cache_utils import Cache
 from ...configuration_utils import PreTrainedConfig
+from ...integrations.tensor_parallel import TPStyle
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...models.llama.modeling_llama import rotate_half
@@ -103,19 +104,21 @@ class GlmMoeDsaConfig(Glm4MoeLiteConfig):
     ```"""
 
     base_model_tp_plan = {
-        "layers.*.self_attn.q_b_proj": "colwise",
+        "layers.*.self_attn.q_b_proj": TPStyle("colwise", "none"),
         "layers.*.self_attn.kv_a_proj_with_mqa": "mla_kv_a_proj",
-        "layers.*.self_attn.kv_b_proj": "colwise",
-        "layers.*.self_attn.o_proj": "rowwise",
-        "layers.*.mlp.experts.gate_up_proj": "packed_colwise",
-        "layers.*.mlp.experts.down_proj": "rowwise",
-        "layers.*.mlp.experts": "moe_tp_experts",
-        "layers.*.mlp.shared_experts.gate_proj": "colwise",
-        "layers.*.mlp.shared_experts.up_proj": "colwise",
-        "layers.*.mlp.shared_experts.down_proj": "rowwise",
-        "layers.*.mlp.gate_proj": "colwise",
-        "layers.*.mlp.up_proj": "colwise",
-        "layers.*.mlp.down_proj": "rowwise",
+        "layers.*.self_attn.kv_b_proj": TPStyle("colwise", "none"),
+        "layers.*.self_attn.o_proj": TPStyle("rowwise", "allreduce"),
+        "layers.*.mlp.experts": TPStyle(
+            "moe_experts",
+            "allreduce",
+            shard_plan={"gate_up_proj": "packed_colwise", "down_proj": "rowwise"},
+        ),
+        "layers.*.mlp.shared_experts.gate_proj": TPStyle("colwise", "none"),
+        "layers.*.mlp.shared_experts.up_proj": TPStyle("colwise", "none"),
+        "layers.*.mlp.shared_experts.down_proj": TPStyle("rowwise", "allreduce"),
+        "layers.*.mlp.gate_proj": TPStyle("colwise", "none"),
+        "layers.*.mlp.up_proj": TPStyle("colwise", "none"),
+        "layers.*.mlp.down_proj": TPStyle("rowwise", "allreduce"),
     }
 
     hidden_size: int = 6144

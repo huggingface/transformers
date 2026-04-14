@@ -13,6 +13,7 @@ from torch import nn
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationMixin
+from ...integrations.tensor_parallel import TPStyle
 from ...masking_utils import create_causal_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import GradientCheckpointingLayer
@@ -394,7 +395,7 @@ class GPTNeoXModel(GPTNeoXPreTrainedModel):
 )
 class GPTNeoXForCausalLM(GPTNeoXPreTrainedModel, GenerationMixin):
     _tied_weights_keys = {"embed_out.weight": "gpt_neox.embed_in.weight"}
-    _tp_plan = {"embed_out": "colwise_gather_output"}
+    _tp_plan = {"embed_out": TPStyle("colwise", "allgather")}
     _pp_plan = {"embed_out": (["hidden_states"], ["logits"])}
 
     def __init__(self, config):

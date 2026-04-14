@@ -54,8 +54,8 @@ class DeepseekV3Config(PreTrainedConfig):
             "moe_experts",
             "allreduce",
             shard_plan={
-                "gate_up_proj": "packed_colwise",
-                "down_proj": "rowwise",
+                "gate_up_proj": TPStyle("packed_colwise", "none"),
+                "down_proj": TPStyle("rowwise", "allreduce"),
             },
         ),
         "layers.*.mlp.shared_experts.gate_proj": TPStyle("colwise", "none"),

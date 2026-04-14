@@ -16,6 +16,7 @@
 from huggingface_hub.dataclasses import strict
 
 from ...configuration_utils import PreTrainedConfig
+from ...integrations.tensor_parallel import TPStyle
 from ...modeling_rope_utils import RopeParameters
 from ...utils import auto_docstring
 
@@ -46,10 +47,10 @@ class GPTNeoXConfig(PreTrainedConfig):
     model_type = "gpt_neox"
     keys_to_ignore_at_inference = ["past_key_values"]
     base_model_tp_plan = {
-        "layers.*.attention.query_key_value": "colwise",
-        "layers.*.attention.dense": "rowwise",
-        "layers.*.mlp.dense_h_to_4h": "colwise",
-        "layers.*.mlp.dense_4h_to_h": "rowwise",
+        "layers.*.attention.query_key_value": TPStyle("colwise", "none"),
+        "layers.*.attention.dense": TPStyle("rowwise", "allreduce"),
+        "layers.*.mlp.dense_h_to_4h": TPStyle("colwise", "none"),
+        "layers.*.mlp.dense_4h_to_h": TPStyle("rowwise", "allreduce"),
     }
     base_model_pp_plan = {
         "embed_in": (["input_ids"], ["inputs_embeds"]),

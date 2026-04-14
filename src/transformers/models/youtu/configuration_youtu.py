@@ -27,6 +27,7 @@
 from huggingface_hub.dataclasses import strict
 
 from ...configuration_utils import PreTrainedConfig
+from ...integrations.tensor_parallel import TPStyle
 from ...modeling_rope_utils import RopeParameters
 from ...utils import auto_docstring
 
@@ -51,9 +52,9 @@ class YoutuConfig(PreTrainedConfig):
     model_type = "youtu"
     keys_to_ignore_at_inference = ["past_key_values"]
     base_model_tp_plan = {
-        "layers.*.mlp.gate_proj": "colwise",
-        "layers.*.mlp.up_proj": "colwise",
-        "layers.*.mlp.down_proj": "rowwise",
+        "layers.*.mlp.gate_proj": TPStyle("colwise", "none"),
+        "layers.*.mlp.up_proj": TPStyle("colwise", "none"),
+        "layers.*.mlp.down_proj": TPStyle("rowwise", "allreduce"),
     }
     base_model_pp_plan = {
         "embed_tokens": (["input_ids"], ["inputs_embeds"]),

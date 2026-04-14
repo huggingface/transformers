@@ -24,6 +24,7 @@ from ... import initialization as init
 from ...cache_utils import DynamicCache, EncoderDecoderCache, StaticCache
 from ...configuration_utils import PreTrainedConfig
 from ...generation import GenerationConfig, GenerationMixin, GenerationMode
+from ...integrations.tensor_parallel import TPStyle
 from ...masking_utils import create_bidirectional_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_outputs import (
@@ -973,7 +974,7 @@ class T5Gemma2ForConditionalGeneration(T5Gemma2PreTrainedModel, GenerationMixin)
     _tied_weights_keys = {
         "lm_head.out_proj.weight": "model.encoder.text_model.embed_tokens.weight",
     }
-    _tp_plan = {"lm_head.out_proj": "colwise_gather_output"}
+    _tp_plan = {"lm_head.out_proj": TPStyle("colwise", "allgather")}
     _pp_plan = {"lm_head.out_proj": (["hidden_states"], ["logits"])}
 
     def __init__(self, config: T5Gemma2Config):

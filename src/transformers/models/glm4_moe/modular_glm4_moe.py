@@ -18,6 +18,7 @@ from huggingface_hub.dataclasses import strict
 from torch import nn
 
 from ...configuration_utils import PreTrainedConfig
+from ...integrations.tensor_parallel import TPStyle
 from ...modeling_rope_utils import RopeParameters
 from ...utils import auto_docstring, logging
 from ..cohere.modeling_cohere import CohereAttention
@@ -67,19 +68,21 @@ class Glm4MoeConfig(PreTrainedConfig):
 
     # Default tensor parallel plan for base model `Glm4Moe`
     base_model_tp_plan = {
-        "layers.*.self_attn.q_proj": "colwise",
-        "layers.*.self_attn.k_proj": "colwise",
-        "layers.*.self_attn.v_proj": "colwise",
-        "layers.*.self_attn.o_proj": "rowwise",
-        "layers.*.mlp.experts.gate_up_proj": "packed_colwise",
-        "layers.*.mlp.experts.down_proj": "rowwise",
-        "layers.*.mlp.experts": "moe_tp_experts",  # NOTE(3outeille): This needs to be right after down_proj in the dict. Otherwise, the pattern model.layers.*.mlp.experts will have priority over model.layers.*.mlp.experts.down_proj which will assign a wrong TP plan.
-        "layers.*.mlp.shared_experts.gate_proj": "colwise",
-        "layers.*.mlp.shared_experts.up_proj": "colwise",
-        "layers.*.mlp.shared_experts.down_proj": "rowwise",
-        "layers.*.mlp.gate_proj": "colwise",
-        "layers.*.mlp.up_proj": "colwise",
-        "layers.*.mlp.down_proj": "rowwise",
+        "layers.*.self_attn.q_proj": TPStyle("colwise", "none"),
+        "layers.*.self_attn.k_proj": TPStyle("colwise", "none"),
+        "layers.*.self_attn.v_proj": TPStyle("colwise", "none"),
+        "layers.*.self_attn.o_proj": TPStyle("rowwise", "allreduce"),
+        "layers.*.mlp.experts": TPStyle(
+            "moe_experts",
+            "allreduce",
+            shard_plan={"gate_up_proj": "packed_colwise", "down_proj": "rowwise"},
+        ),
+        "layers.*.mlp.shared_experts.gate_proj": TPStyle("colwise", "none"),
+        "layers.*.mlp.shared_experts.up_proj": TPStyle("colwise", "none"),
+        "layers.*.mlp.shared_experts.down_proj": TPStyle("rowwise", "allreduce"),
+        "layers.*.mlp.gate_proj": TPStyle("colwise", "none"),
+        "layers.*.mlp.up_proj": TPStyle("colwise", "none"),
+        "layers.*.mlp.down_proj": TPStyle("rowwise", "allreduce"),
     }
     base_model_pp_plan = {
         "embed_tokens": (["input_ids"], ["inputs_embeds"]),

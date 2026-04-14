@@ -17,6 +17,7 @@
 from huggingface_hub.dataclasses import strict
 
 from ...configuration_utils import PreTrainedConfig
+from ...integrations.tensor_parallel import TPStyle
 from ...modeling_rope_utils import RopeParameters
 from ...utils import auto_docstring
 
@@ -54,17 +55,19 @@ class LongcatFlashConfig(PreTrainedConfig):
     keys_to_ignore_at_inference = ["past_key_values"]
     default_theta = 10000000.0
     base_model_tp_plan = {
-        "layers.*.self_attn.*.q_b_proj": "colwise",
+        "layers.*.self_attn.*.q_b_proj": TPStyle("colwise", "none"),
         "layers.*.self_attn.*.kv_a_proj_with_mqa": "mla_kv_a_proj",
-        "layers.*.self_attn.*.kv_b_proj": "colwise",
-        "layers.*.self_attn.*.o_proj": "rowwise",
-        "layers.*.mlp.experts.gate_up_proj": "packed_colwise",
-        "layers.*.mlp.experts.down_proj": "rowwise",
+        "layers.*.self_attn.*.kv_b_proj": TPStyle("colwise", "none"),
+        "layers.*.self_attn.*.o_proj": TPStyle("rowwise", "allreduce"),
         "layers.*.mlp.experts.identity_expert": "moe_identity_expert",
-        "layers.*.mlp.experts": "moe_tp_experts",
-        "layers.*.mlps.*.gate_proj": "colwise",
-        "layers.*.mlps.*.up_proj": "colwise",
-        "layers.*.mlps.*.down_proj": "rowwise",
+        "layers.*.mlp.experts": TPStyle(
+            "moe_experts",
+            "allreduce",
+            shard_plan={"gate_up_proj": "packed_colwise", "down_proj": "rowwise"},
+        ),
+        "layers.*.mlps.*.gate_proj": TPStyle("colwise", "none"),
+        "layers.*.mlps.*.up_proj": TPStyle("colwise", "none"),
+        "layers.*.mlps.*.down_proj": TPStyle("rowwise", "allreduce"),
     }
 
     base_model_pp_plan = {

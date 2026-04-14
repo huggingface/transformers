@@ -19,6 +19,7 @@ import torch.nn as nn
 from huggingface_hub.dataclasses import strict
 
 from ...cache_utils import Cache, DynamicCache
+from ...integrations.tensor_parallel import TPStyle
 from ...masking_utils import create_causal_mask, create_sliding_window_causal_mask
 from ...modeling_outputs import BaseModelOutputWithPast
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
@@ -62,13 +63,21 @@ class Olmo3Config(Olmo2Config):
     model_type = "olmo3"
     keys_to_ignore_at_inference = ["past_key_values"]
     base_model_tp_plan = {
-        "layers.*.self_attn.q_proj": "colwise_gather_output",  # we need to replicate here due to the added norm on q and k
-        "layers.*.self_attn.k_proj": "colwise_gather_output",  # we need to replicate here due to the added norm on q and k
-        "layers.*.self_attn.v_proj": "colwise_gather_output",  # we need to replicate here due to the added norm on q and k
-        "layers.*.self_attn.o_proj": "rowwise_split_input",  # input is replicated due to the added norm on q and k
-        "layers.*.mlp.gate_proj": "colwise",
-        "layers.*.mlp.up_proj": "colwise",
-        "layers.*.mlp.down_proj": "rowwise",
+        "layers.*.self_attn.q_proj": TPStyle(
+            "colwise", "allgather"
+        ),  # we need to replicate here due to the added norm on q and k
+        "layers.*.self_attn.k_proj": TPStyle(
+            "colwise", "allgather"
+        ),  # we need to replicate here due to the added norm on q and k
+        "layers.*.self_attn.v_proj": TPStyle(
+            "colwise", "allgather"
+        ),  # we need to replicate here due to the added norm on q and k
+        "layers.*.self_attn.o_proj": TPStyle(
+            "vocab", "allreduce"
+        ),  # input is replicated due to the added norm on q and k
+        "layers.*.mlp.gate_proj": TPStyle("colwise", "none"),
+        "layers.*.mlp.up_proj": TPStyle("colwise", "none"),
+        "layers.*.mlp.down_proj": TPStyle("rowwise", "allreduce"),
     }
     base_model_pp_plan = {
         "embed_tokens": (["input_ids"], ["inputs_embeds"]),

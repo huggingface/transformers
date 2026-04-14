@@ -27,6 +27,7 @@ from ...cache_utils import Cache
 from ...configuration_utils import PreTrainedConfig
 from ...feature_extraction_utils import BatchFeature
 from ...image_utils import ImageInput, make_nested_list_of_images
+from ...integrations.tensor_parallel import TPStyle
 from ...masking_utils import create_bidirectional_mask
 from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
 from ...modeling_utils import PreTrainedModel
@@ -476,7 +477,7 @@ class PI0Model(PI0PreTrainedModel):
 class PI0ForConditionalGeneration(PI0PreTrainedModel):
     """PI0 model with action projection heads and flow matching."""
 
-    _tp_plan = {"action_out_proj": "colwise_gather_output"}
+    _tp_plan = {"action_out_proj": TPStyle("colwise", "allgather")}
 
     def __init__(self, config: PI0Config):
         super().__init__(config)

@@ -17,6 +17,7 @@ from huggingface_hub.dataclasses import strict
 
 from transformers.utils import auto_docstring, logging
 
+from ...integrations.tensor_parallel import TPStyle
 from ...modeling_rope_utils import RopeParameters
 from ..llama.configuration_llama import LlamaConfig
 from ..llama.modeling_llama import (
@@ -50,12 +51,12 @@ class ArceeConfig(LlamaConfig):
 
     model_type = "arcee"
     base_model_tp_plan = {
-        "layers.*.self_attn.q_proj": "colwise",
-        "layers.*.self_attn.k_proj": "colwise",
-        "layers.*.self_attn.v_proj": "colwise",
-        "layers.*.self_attn.o_proj": "rowwise",
-        "layers.*.mlp.up_proj": "colwise",
-        "layers.*.mlp.down_proj": "rowwise",
+        "layers.*.self_attn.q_proj": TPStyle("colwise", "none"),
+        "layers.*.self_attn.k_proj": TPStyle("colwise", "none"),
+        "layers.*.self_attn.v_proj": TPStyle("colwise", "none"),
+        "layers.*.self_attn.o_proj": TPStyle("rowwise", "allreduce"),
+        "layers.*.mlp.up_proj": TPStyle("colwise", "none"),
+        "layers.*.mlp.down_proj": TPStyle("rowwise", "allreduce"),
     }
 
     vocab_size: int = 32000

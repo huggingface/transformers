@@ -28,6 +28,7 @@ from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationMixin
 from ...integrations import use_kernel_forward_from_hub
+from ...integrations.tensor_parallel import TPStyle
 from ...masking_utils import create_causal_mask, create_chunked_causal_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import GradientCheckpointingLayer
@@ -590,7 +591,7 @@ class Llama4ForCausalLM(Llama4PreTrainedModel, GenerationMixin):
     _no_split_modules = ["Llama4TextDecoderLayer"]
     base_model_prefix = "language_model"
     _tied_weights_keys = {"lm_head.weight": "model.embed_tokens.weight"}
-    _tp_plan = {"lm_head": "colwise_gather_output"}
+    _tp_plan = {"lm_head": TPStyle("colwise", "allgather")}
     config: Llama4TextConfig
 
     def __init__(self, config: Llama4TextConfig):

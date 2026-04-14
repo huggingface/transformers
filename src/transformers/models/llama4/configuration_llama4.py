@@ -17,6 +17,7 @@
 from huggingface_hub.dataclasses import strict
 
 from ...configuration_utils import PreTrainedConfig
+from ...integrations.tensor_parallel import TPStyle
 from ...modeling_rope_utils import RopeParameters
 from ...utils import auto_docstring, logging
 
@@ -42,13 +43,13 @@ class Llama4VisionConfig(PreTrainedConfig):
     """
 
     base_model_tp_plan = {
-        "model.layers.*.self_attn.q_proj": "colwise",
-        "model.layers.*.self_attn.k_proj": "colwise",
-        "model.layers.*.self_attn.v_proj": "colwise",
-        "model.layers.*.self_attn.o_proj": "rowwise",
-        "vision_adapter.mlp.fc1": "colwise",
-        "vision_adapter.mlp.fc2": "rowwise",
-        "patch_embedding.linear": "colwise_gather_output",
+        "model.layers.*.self_attn.q_proj": TPStyle("colwise", "none"),
+        "model.layers.*.self_attn.k_proj": TPStyle("colwise", "none"),
+        "model.layers.*.self_attn.v_proj": TPStyle("colwise", "none"),
+        "model.layers.*.self_attn.o_proj": TPStyle("rowwise", "allreduce"),
+        "vision_adapter.mlp.fc1": TPStyle("colwise", "none"),
+        "vision_adapter.mlp.fc2": TPStyle("rowwise", "allreduce"),
+        "patch_embedding.linear": TPStyle("colwise", "allgather"),
     }
     model_type = "llama4_vision_model"
     base_config_key = "vision_config"
@@ -110,18 +111,16 @@ class Llama4TextConfig(PreTrainedConfig):
     keys_to_ignore_at_inference = ["past_key_values"]
     default_theta = 500000.0
     base_model_tp_plan = {
-        "layers.*.self_attn.q_proj": "colwise",
-        "layers.*.self_attn.k_proj": "colwise",
-        "layers.*.self_attn.v_proj": "colwise",
-        "layers.*.self_attn.o_proj": "rowwise",
-        "layers.*.feed_forward.shared_expert.gate_proj": "colwise",
-        "layers.*.feed_forward.shared_expert.up_proj": "colwise",
-        "layers.*.feed_forward.shared_expert.down_proj": "rowwise",
-        "layers.*.feed_forward.experts.gate_up_proj": "packed_rowwise",  # row because not linear
-        "layers.*.feed_forward.experts.down_proj": "colwise",  # col because not linear
-        "layers.*.feed_forward.gate_proj": "colwise",
-        "layers.*.feed_forward.up_proj": "colwise",
-        "layers.*.feed_forward.down_proj": "rowwise",
+        "layers.*.self_attn.q_proj": TPStyle("colwise", "none"),
+        "layers.*.self_attn.k_proj": TPStyle("colwise", "none"),
+        "layers.*.self_attn.v_proj": TPStyle("colwise", "none"),
+        "layers.*.self_attn.o_proj": TPStyle("rowwise", "allreduce"),
+        "layers.*.feed_forward.shared_expert.gate_proj": TPStyle("colwise", "none"),
+        "layers.*.feed_forward.shared_expert.up_proj": TPStyle("colwise", "none"),
+        "layers.*.feed_forward.shared_expert.down_proj": TPStyle("rowwise", "allreduce"),
+        "layers.*.feed_forward.gate_proj": TPStyle("colwise", "none"),
+        "layers.*.feed_forward.up_proj": TPStyle("colwise", "none"),
+        "layers.*.feed_forward.down_proj": TPStyle("rowwise", "allreduce"),
     }
     base_model_ep_plan = {
         "layers.*.self_attn.q_proj": "colwise",
@@ -179,7 +178,7 @@ class Llama4TextConfig(PreTrainedConfig):
         default_no_rope_layers = [
             int((layer_idx + 1) % self.no_rope_layer_interval != 0) for layer_idx in range(self.num_hidden_layers)
         ]
-        self.no_rope_layers = self.no_rope_layers if self.no_rope_layers else default_no_rope_layers
+        self.no_rope_layers = self.no_rope_layers or default_no_rope_layers
         self.head_dim = self.head_dim if self.head_dim is not None else self.hidden_size // self.num_attention_heads
 
         self.moe_layers = (

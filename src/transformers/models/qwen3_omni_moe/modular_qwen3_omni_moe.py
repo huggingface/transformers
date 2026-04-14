@@ -32,6 +32,7 @@ from ...configuration_utils import PreTrainedConfig
 from ...feature_extraction_utils import BatchFeature
 from ...generation import GenerationMixin
 from ...image_utils import ImageInput
+from ...integrations.tensor_parallel import TPStyle
 from ...masking_utils import create_causal_mask
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import (
@@ -182,15 +183,13 @@ class Qwen3OmniMoeTextConfig(PreTrainedConfig):
 
     # Default tensor parallel plan for base model `Qwen3OmniMoeText`
     base_model_tp_plan = {
-        "layers.*.self_attn.q_proj": "colwise",
-        "layers.*.self_attn.k_proj": "colwise",
-        "layers.*.self_attn.v_proj": "colwise",
-        "layers.*.self_attn.o_proj": "rowwise",
-        "layers.*.mlp.experts.gate_up_proj": "packed_colwise",
-        "layers.*.mlp.experts.down_proj": "rowwise",
-        "layers.*.mlp.gate_proj": "colwise",
-        "layers.*.mlp.up_proj": "colwise",
-        "layers.*.mlp.down_proj": "rowwise",
+        "layers.*.self_attn.q_proj": TPStyle("colwise", "none"),
+        "layers.*.self_attn.k_proj": TPStyle("colwise", "none"),
+        "layers.*.self_attn.v_proj": TPStyle("colwise", "none"),
+        "layers.*.self_attn.o_proj": TPStyle("rowwise", "allreduce"),
+        "layers.*.mlp.gate_proj": TPStyle("colwise", "none"),
+        "layers.*.mlp.up_proj": TPStyle("colwise", "none"),
+        "layers.*.mlp.down_proj": TPStyle("rowwise", "allreduce"),
     }
     base_model_pp_plan = {
         "embed_tokens": (["input_ids"], ["inputs_embeds"]),
@@ -1578,7 +1577,7 @@ class Qwen3OmniMoeTalkerModel(Qwen3VLMoeTextModel):
 
 class Qwen3OmniMoeTalkerForConditionalGeneration(Qwen3MoeForCausalLM):
     _tied_weights_keys = {"codec_head": "model.codec_embedding.weight"}
-    _tp_plan = {"codec_head": "colwise_gather_output"}
+    _tp_plan = {"codec_head": TPStyle("colwise", "allgather")}
     _pp_plan = {"codec_head": (["hidden_states"], ["logits"])}
     config_class = Qwen3OmniMoeTalkerConfig
     base_model_prefix = "talker"

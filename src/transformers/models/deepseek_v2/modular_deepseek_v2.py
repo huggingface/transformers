@@ -21,6 +21,7 @@ from torch import nn
 
 from ... import initialization as init
 from ...cache_utils import Cache
+from ...integrations.tensor_parallel import TPStyle
 from ...modeling_rope_utils import RopeParameters, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...utils import auto_docstring, logging
@@ -67,20 +68,22 @@ class DeepseekV2Config(LlamaConfig):
     """
 
     base_model_tp_plan = {
-        "layers.*.self_attn.q_proj": "colwise",
-        "layers.*.self_attn.q_b_proj": "colwise",
+        "layers.*.self_attn.q_proj": TPStyle("colwise", "none"),
+        "layers.*.self_attn.q_b_proj": TPStyle("colwise", "none"),
         "layers.*.self_attn.kv_a_proj_with_mqa": "mla_kv_a_proj",
-        "layers.*.self_attn.kv_b_proj": "colwise",
-        "layers.*.self_attn.o_proj": "rowwise",
-        "layers.*.mlp.experts.gate_up_proj": "packed_colwise",
-        "layers.*.mlp.experts.down_proj": "rowwise",
-        "layers.*.mlp.experts": "moe_tp_experts",
-        "layers.*.mlp.shared_experts.gate_proj": "colwise",
-        "layers.*.mlp.shared_experts.up_proj": "colwise",
-        "layers.*.mlp.shared_experts.down_proj": "rowwise",
-        "layers.*.mlp.gate_proj": "colwise",
-        "layers.*.mlp.up_proj": "colwise",
-        "layers.*.mlp.down_proj": "rowwise",
+        "layers.*.self_attn.kv_b_proj": TPStyle("colwise", "none"),
+        "layers.*.self_attn.o_proj": TPStyle("rowwise", "allreduce"),
+        "layers.*.mlp.experts": TPStyle(
+            "moe_experts",
+            "allreduce",
+            shard_plan={"gate_up_proj": "packed_colwise", "down_proj": "rowwise"},
+        ),
+        "layers.*.mlp.shared_experts.gate_proj": TPStyle("colwise", "none"),
+        "layers.*.mlp.shared_experts.up_proj": TPStyle("colwise", "none"),
+        "layers.*.mlp.shared_experts.down_proj": TPStyle("rowwise", "allreduce"),
+        "layers.*.mlp.gate_proj": TPStyle("colwise", "none"),
+        "layers.*.mlp.up_proj": TPStyle("colwise", "none"),
+        "layers.*.mlp.down_proj": TPStyle("rowwise", "allreduce"),
     }
 
     model_type = "deepseek_v2"

@@ -627,8 +627,14 @@ def apply_tensor_parallel(model, tp_mesh, tp_plan):
             # so _partition_fn can create DTensors with the correct placements.
             if isinstance(dtensor_style, MoEExpertsParallel) and style_value.shard_plan:
                 dtensor_style._moe_shard_plan = style_value.shard_plan
-        else:
+        elif isinstance(style_value, ParallelStyle):
             parallelize_plan[name] = style_value
+        else:
+            raise TypeError(
+                f"Unsupported plan value for '{name}': {style_value!r} (type {type(style_value).__name__}). "
+                f"TP plan values must be TPStyle instances or ParallelStyle instances, not strings. "
+                f"Migrate string plan values to TPStyle (e.g., 'colwise' -> TPStyle('colwise', 'none'))."
+            )
 
     parallelize_module(model, tp_mesh, parallelize_plan)
 

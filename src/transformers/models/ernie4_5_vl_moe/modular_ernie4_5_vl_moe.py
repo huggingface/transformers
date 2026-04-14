@@ -37,6 +37,7 @@ from ...image_utils import (
     PILImageResampling,
     SizeDict,
 )
+from ...integrations.tensor_parallel import TPStyle
 from ...masking_utils import create_causal_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import GradientCheckpointingLayer
@@ -93,10 +94,10 @@ class Ernie4_5_VLMoeVisionConfig(Qwen2VLVisionConfig):
     model_type = "ernie4_5_vl_moe_vision"
 
     base_model_tp_plan = {
-        "blocks.*.attn.qkv": "colwise",
-        "blocks.*.attn.proj": "rowwise",
-        "blocks.*.mlp.fc1": "colwise",
-        "blocks.*.mlp.fc2": "rowwise",
+        "blocks.*.attn.qkv": TPStyle("colwise", "none"),
+        "blocks.*.attn.proj": TPStyle("rowwise", "allreduce"),
+        "blocks.*.mlp.fc1": TPStyle("colwise", "none"),
+        "blocks.*.mlp.fc2": TPStyle("rowwise", "allreduce"),
     }
 
     hidden_size: int = 1280
@@ -131,16 +132,16 @@ class Ernie4_5_VLMoeTextConfig(Ernie4_5_MoeConfig):
     base_config_key = "text_config"
 
     base_model_tp_plan = {
-        "layers.*.self_attn.q_proj": "colwise",
-        "layers.*.self_attn.k_proj": "colwise",
-        "layers.*.self_attn.v_proj": "colwise",
-        "layers.*.self_attn.o_proj": "rowwise",
-        "layers.*.mlp.shared_experts.gate_proj": "colwise",
-        "layers.*.mlp.shared_experts.up_proj": "colwise",
-        "layers.*.mlp.shared_experts.down_proj": "rowwise",
-        "layers.*.mlp.gate_proj": "colwise",
-        "layers.*.mlp.up_proj": "colwise",
-        "layers.*.mlp.down_proj": "rowwise",
+        "layers.*.self_attn.q_proj": TPStyle("colwise", "none"),
+        "layers.*.self_attn.k_proj": TPStyle("colwise", "none"),
+        "layers.*.self_attn.v_proj": TPStyle("colwise", "none"),
+        "layers.*.self_attn.o_proj": TPStyle("rowwise", "allreduce"),
+        "layers.*.mlp.shared_experts.gate_proj": TPStyle("colwise", "none"),
+        "layers.*.mlp.shared_experts.up_proj": TPStyle("colwise", "none"),
+        "layers.*.mlp.shared_experts.down_proj": TPStyle("rowwise", "allreduce"),
+        "layers.*.mlp.gate_proj": TPStyle("colwise", "none"),
+        "layers.*.mlp.up_proj": TPStyle("colwise", "none"),
+        "layers.*.mlp.down_proj": TPStyle("rowwise", "allreduce"),
     }
     ignore_keys_at_rope_validation = {"mrope_section"}
 

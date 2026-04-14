@@ -30,6 +30,7 @@ from ...image_utils import (
     SizeDict,
     get_image_size,
 )
+from ...integrations.tensor_parallel import TPStyle
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_outputs import BaseModelOutputWithPooling
 from ...modeling_utils import PreTrainedModel
@@ -110,13 +111,13 @@ class AriaTextConfig(LlamaConfig):
     model_type = "aria_text"
     base_config_key = "text_config"
     base_model_tp_plan = {
-        "layers.*.self_attn.q_proj": "colwise",
-        "layers.*.self_attn.k_proj": "colwise",
-        "layers.*.self_attn.v_proj": "colwise",
-        "layers.*.self_attn.o_proj": "rowwise",
-        "layers.*.mlp.shared_experts.gate_proj": "colwise",
-        "layers.*.mlp.shared_experts.up_proj": "colwise",
-        "layers.*.mlp.shared_experts.down_proj": "rowwise",
+        "layers.*.self_attn.q_proj": TPStyle("colwise", "none"),
+        "layers.*.self_attn.k_proj": TPStyle("colwise", "none"),
+        "layers.*.self_attn.v_proj": TPStyle("colwise", "none"),
+        "layers.*.self_attn.o_proj": TPStyle("rowwise", "allreduce"),
+        "layers.*.mlp.shared_experts.gate_proj": TPStyle("colwise", "none"),
+        "layers.*.mlp.shared_experts.up_proj": TPStyle("colwise", "none"),
+        "layers.*.mlp.shared_experts.down_proj": TPStyle("rowwise", "allreduce"),
     }
 
     intermediate_size: int = 4096

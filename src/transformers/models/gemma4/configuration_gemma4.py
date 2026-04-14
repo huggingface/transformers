@@ -17,6 +17,7 @@ from typing import Any, Literal
 from huggingface_hub.dataclasses import strict
 
 from ...configuration_utils import PreTrainedConfig
+from ...integrations.tensor_parallel import TPStyle
 from ...utils import auto_docstring, logging
 from ...utils.type_validators import interval
 
@@ -123,18 +124,18 @@ class Gemma4TextConfig(PreTrainedConfig):
     model_type = "gemma4_text"
     keys_to_ignore_at_inference = ["past_key_values"]
     base_model_tp_plan = {
-        "layers.*.self_attn.q_proj": "colwise",
-        "layers.*.self_attn.k_proj": "colwise",
-        "layers.*.self_attn.v_proj": "colwise",
-        "layers.*.self_attn.q_norm": "replicated_with_grad_allreduce",
-        "layers.*.self_attn.k_norm": "replicated_with_grad_allreduce",
-        "layers.*.self_attn.o_proj": "rowwise",
-        "layers.*.mlp.gate_proj": "colwise",
-        "layers.*.mlp.up_proj": "colwise",
-        "layers.*.mlp.down_proj": "rowwise",
-        "layers.*.experts.gate_up_proj": "packed_colwise",
-        "layers.*.experts.down_proj": "rowwise",
-        "layers.*.experts": "moe_tp_experts",
+        "layers.*.self_attn.q_proj": TPStyle("colwise", "none"),
+        "layers.*.self_attn.k_proj": TPStyle("colwise", "none"),
+        "layers.*.self_attn.v_proj": TPStyle("colwise", "none"),
+        "layers.*.self_attn.o_proj": TPStyle("rowwise", "allreduce"),
+        "layers.*.mlp.gate_proj": TPStyle("colwise", "none"),
+        "layers.*.mlp.up_proj": TPStyle("colwise", "none"),
+        "layers.*.mlp.down_proj": TPStyle("rowwise", "allreduce"),
+        "layers.*.experts": TPStyle(
+            "moe_experts",
+            "allreduce",
+            shard_plan={"gate_up_proj": "packed_colwise", "down_proj": "rowwise"},
+        ),
     }
     base_model_pp_plan = {
         "embed_tokens": (["input_ids"], ["inputs_embeds"]),
@@ -226,15 +227,13 @@ class Gemma4VisionConfig(PreTrainedConfig):
 
     model_type = "gemma4_vision"
     base_model_tp_plan = {
-        "encoder.layers.*.self_attn.q_proj": "colwise",
-        "encoder.layers.*.self_attn.k_proj": "colwise",
-        "encoder.layers.*.self_attn.v_proj": "colwise",
-        "encoder.layers.*.self_attn.q_norm": "replicated_with_grad_allreduce",
-        "encoder.layers.*.self_attn.k_norm": "replicated_with_grad_allreduce",
-        "encoder.layers.*.self_attn.o_proj": "rowwise",
-        "encoder.layers.*.mlp.gate_proj": "colwise",
-        "encoder.layers.*.mlp.up_proj": "colwise",
-        "encoder.layers.*.mlp.down_proj": "rowwise",
+        "encoder.layers.*.self_attn.q_proj": TPStyle("colwise", "none"),
+        "encoder.layers.*.self_attn.k_proj": TPStyle("colwise", "none"),
+        "encoder.layers.*.self_attn.v_proj": TPStyle("colwise", "none"),
+        "encoder.layers.*.self_attn.o_proj": TPStyle("rowwise", "allreduce"),
+        "encoder.layers.*.mlp.gate_proj": TPStyle("colwise", "none"),
+        "encoder.layers.*.mlp.up_proj": TPStyle("colwise", "none"),
+        "encoder.layers.*.mlp.down_proj": TPStyle("rowwise", "allreduce"),
     }
     default_theta = 100.0
 

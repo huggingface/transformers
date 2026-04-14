@@ -16,6 +16,7 @@
 from huggingface_hub.dataclasses import strict
 from torch import nn
 
+from ...integrations.tensor_parallel import TPStyle
 from ...utils import auto_docstring, logging
 from ..glm4_moe.configuration_glm4_moe import Glm4MoeConfig
 from ..glm4_moe.modeling_glm4_moe import (
@@ -44,13 +45,15 @@ class SolarOpenConfig(Glm4MoeConfig):
 
     # Default tensor parallel plan for base model `SolarOpenModel`
     base_model_tp_plan = {
-        "layers.*.self_attn.q_proj": "colwise",
-        "layers.*.self_attn.k_proj": "colwise",
-        "layers.*.self_attn.v_proj": "colwise",
-        "layers.*.self_attn.o_proj": "rowwise",
-        "layers.*.mlp.experts.gate_up_proj": "packed_colwise",
-        "layers.*.mlp.experts.down_proj": "rowwise",
-        "layers.*.mlp.experts": "moe_tp_experts",
+        "layers.*.self_attn.q_proj": TPStyle("colwise", "none"),
+        "layers.*.self_attn.k_proj": TPStyle("colwise", "none"),
+        "layers.*.self_attn.v_proj": TPStyle("colwise", "none"),
+        "layers.*.self_attn.o_proj": TPStyle("rowwise", "allreduce"),
+        "layers.*.mlp.experts": TPStyle(
+            "moe_experts",
+            "allreduce",
+            shard_plan={"gate_up_proj": "packed_colwise", "down_proj": "rowwise"},
+        ),
     }
 
     vocab_size: int = 196608

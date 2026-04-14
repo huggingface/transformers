@@ -53,8 +53,8 @@ class MixtralConfig(PreTrainedConfig):
             "moe_experts",
             "allreduce",
             shard_plan={
-                "gate_up_proj": "packed_colwise",
-                "down_proj": "rowwise",
+                "gate_up_proj": TPStyle("packed_colwise", "none"),
+                "down_proj": TPStyle("rowwise", "allreduce"),
             },
         ),
     }
@@ -74,8 +74,8 @@ class MixtralConfig(PreTrainedConfig):
             "moe_experts",
             "allreduce",
             shard_plan={
-                "gate_up_proj": "packed_colwise",
-                "down_proj": "rowwise",
+                "gate_up_proj": TPStyle("packed_colwise", "none"),
+                "down_proj": TPStyle("rowwise", "allreduce"),
             },
         ),
         "norm": TPStyle("activation", "none"),

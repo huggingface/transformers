@@ -20,6 +20,7 @@ import torch.nn as nn
 
 from ... import initialization as init
 from ...cache_utils import Cache, DynamicCache
+from ...integrations.tensor_parallel import TPStyle
 from ...masking_utils import create_causal_mask
 from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
@@ -198,7 +199,7 @@ class NanoChatModel(LlamaModel):
 
 @auto_docstring
 class NanoChatForCausalLM(Gemma2ForCausalLM):
-    _tp_plan = {"lm_head": "colwise_gather_output"}
+    _tp_plan = {"lm_head": TPStyle("colwise", "allgather")}
 
     def forward(self, **super_kwargs) -> CausalLMOutputWithPast:
         r"""

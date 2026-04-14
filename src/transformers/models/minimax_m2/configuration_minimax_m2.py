@@ -22,6 +22,7 @@
 from huggingface_hub.dataclasses import strict
 
 from ...configuration_utils import PreTrainedConfig
+from ...integrations.tensor_parallel import TPStyle
 from ...modeling_rope_utils import RopeParameters
 from ...utils import auto_docstring
 
@@ -48,13 +49,15 @@ class MiniMaxM2Config(PreTrainedConfig):
     model_type = "minimax_m2"
     keys_to_ignore_at_inference = ["past_key_values"]
     base_model_tp_plan = {
-        "layers.*.self_attn.q_proj": "colwise_gather_output",
-        "layers.*.self_attn.k_proj": "colwise_gather_output",
-        "layers.*.self_attn.v_proj": "colwise_gather_output",
-        "layers.*.self_attn.o_proj": "rowwise_split_input",
-        "layers.*.mlp.experts.gate_up_proj": "packed_colwise",
-        "layers.*.mlp.experts.down_proj": "rowwise",
-        "layers.*.mlp.experts": "moe_tp_experts",
+        "layers.*.self_attn.q_proj": TPStyle("colwise", "allgather"),
+        "layers.*.self_attn.k_proj": TPStyle("colwise", "allgather"),
+        "layers.*.self_attn.v_proj": TPStyle("colwise", "allgather"),
+        "layers.*.self_attn.o_proj": TPStyle("vocab", "allreduce"),
+        "layers.*.mlp.experts": TPStyle(
+            "moe_experts",
+            "allreduce",
+            shard_plan={"gate_up_proj": "packed_colwise", "down_proj": "rowwise"},
+        ),
     }
     base_model_pp_plan = {
         "embed_tokens": (["input_ids"], ["inputs_embeds"]),

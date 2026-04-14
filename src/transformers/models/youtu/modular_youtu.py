@@ -23,6 +23,7 @@ from huggingface_hub.dataclasses import strict
 from torch import nn
 
 from ... import initialization as init
+from ...integrations.tensor_parallel import TPStyle
 from ...modeling_utils import PreTrainedModel
 from ...utils import auto_docstring, logging
 from ..deepseek_v3.configuration_deepseek_v3 import DeepseekV3Config
@@ -60,9 +61,9 @@ class YoutuConfig(DeepseekV3Config):
 
     model_type = "youtu"
     base_model_tp_plan = {
-        "layers.*.mlp.gate_proj": "colwise",
-        "layers.*.mlp.up_proj": "colwise",
-        "layers.*.mlp.down_proj": "rowwise",
+        "layers.*.mlp.gate_proj": TPStyle("colwise", "none"),
+        "layers.*.mlp.up_proj": TPStyle("colwise", "none"),
+        "layers.*.mlp.down_proj": TPStyle("rowwise", "allreduce"),
     }
     attribute_map = {}
 
