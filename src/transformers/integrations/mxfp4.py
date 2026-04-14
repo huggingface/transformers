@@ -20,7 +20,7 @@ if is_torch_available():
     from torch import nn
 from contextlib import contextmanager
 
-from ..core_model_loading import ConversionOps
+from ..core_model_loading import ConversionOps, _IdentityOp
 from ..quantizers.quantizers_utils import get_module_from_name, should_convert_module
 
 
@@ -144,6 +144,10 @@ class Mxfp4Dequantize(ConversionOps):
         # Here we are dequantizing the weights
         dequantized = dequantize_convertops(param_data[f"{proj}_blocks"], param_data[f"{proj}_scales"])
         return {full_layer_name: dequantized}
+
+    @property
+    def reverse_op(self) -> "ConversionOps":
+        return _IdentityOp()
 
 
 class Mxfp4Deserialize(ConversionOps):
