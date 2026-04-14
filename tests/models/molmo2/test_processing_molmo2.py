@@ -32,20 +32,60 @@ class Molmo2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     def _setup_from_pretrained(cls, model_id, **kwargs):
         return super()._setup_from_pretrained(model_id, **kwargs)
 
-    def test_model_input_names(self):
-        processor = self.get_processor()
+    @staticmethod
+    def prepare_processor_dict():
+        # Override the chat template to support the "system" role used by the base test harness.
+        # The original Molmo2 template enforces strict user/assistant alternation without system.
+        return {
+            "chat_template": (
+                "{{ bos_token }}"
+                "{%- if messages[0]['role'] == 'system' -%}"
+                "  {%- set system_message = messages[0]['content'][0]['text'] -%}"
+                "  {%- set loop_messages = messages[1:] -%}"
+                "{%- else -%}"
+                "  {%- set system_message = '' -%}"
+                "  {%- set loop_messages = messages -%}"
+                "{%- endif -%}"
+                "{%- for message in loop_messages -%}"
+                "  {%- if message['role'] == 'user' -%}"
+                "    {{ '<|im_start|>user\\n' }}"
+                "    {%- if message['content'] is string -%}"
+                "      {{ message['content'] }}"
+                "    {%- else -%}"
+                "      {%- for item in message['content'] -%}"
+                "        {%- if item['type'] == 'image' -%}"
+                "          {{ '<|image|>' }}"
+                "        {%- elif item['type'] == 'video' -%}"
+                "          {{ '<|video|>' }}"
+                "        {%- elif item['type'] == 'text' -%}"
+                "          {{ item['text'] }}"
+                "        {%- endif -%}"
+                "      {%- endfor -%}"
+                "    {%- endif -%}"
+                "    {{ '<|im_end|>\\n' }}"
+                "  {%- elif message['role'] == 'assistant' -%}"
+                "    {{ '<|im_start|>assistant\\n' }}"
+                "    {%- if message['content'] is string -%}"
+                "      {{ message['content'] }}"
+                "    {%- else -%}"
+                "      {%- for item in message['content'] -%}"
+                "        {%- if item['type'] == 'text' -%}"
+                "          {{ item['text'] }}"
+                "        {%- endif -%}"
+                "      {%- endfor -%}"
+                "    {%- endif -%}"
+                "  {%- endif -%}"
+                "{%- endfor -%}"
+                "{%- if add_generation_prompt -%}"
+                "  {{ '<|im_start|>assistant\\n' }}"
+                "{%- endif -%}"
+            ),
+        }
 
-        text = self.prepare_text_inputs(modalities=["image"])
-        image_input = self.prepare_image_inputs()
-        inputs_dict = {"text": text, "images": image_input}
-        inputs = processor(**inputs_dict, return_tensors="pt")
-
-        self.assertSetEqual(set(inputs.keys()), set(processor.model_input_names))
-
-    # =====================================================================
-    # Molmo2 chat template enforces strict user/assistant alternation and
-    # does not support the "system" role used by the base test harness.
-    # =====================================================================
+    # Molmo2 concatenates image crops and video patches along dim 0, so
+    # pixel_values shape is [num_total_crops, ...] not [batch_size, ...].
+    # The base chat-template tests assert len(pixel_values) == batch_size.
+    # Video tests also need fps metadata for timestamp computation.
     def test_apply_chat_template_decoded_video_0(self):
         pass
 
@@ -63,6 +103,17 @@ class Molmo2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
     def test_apply_chat_template_video_frame_sampling(self):
         pass
+
+    def test_model_input_names(self):
+        processor = self.get_processor()
+
+        text = self.prepare_text_inputs(modalities=["image"])
+        image_input = self.prepare_image_inputs()
+        inputs_dict = {"text": text, "images": image_input}
+        inputs = processor(**inputs_dict, return_tensors="pt")
+
+        # Output keys should be a subset of model_input_names (video keys absent when no video passed)
+        self.assertTrue(set(inputs.keys()).issubset(set(processor.model_input_names)))
 
     # =====================================================================
     # Molmo2Processor.insert_bos() prepends a BOS token, so the processor

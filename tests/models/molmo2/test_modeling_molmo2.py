@@ -386,12 +386,7 @@ class Molmo2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
             curr_input_dict["image_grids"] = curr_input_dict["image_grids"][:1, ...]
             _ = model(**curr_input_dict)
 
-    @unittest.skip(
-        reason="Molmo2 interleaves visual and text tokens in the KV cache; continuation generation "
-        "with pre-computed past_key_values from a separate forward pass is not a supported use case."
-    )
-    def test_generate_with_past_key_values(self):
-        pass
+    # Image features get cached in KV cache like other VLMs; no need to skip.
 
     def test_retain_grad_hidden_states_attentions(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()

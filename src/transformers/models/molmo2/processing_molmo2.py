@@ -28,7 +28,7 @@ from ...processing_utils import (
     VideosKwargs,
 )
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
-from ...utils import logging
+from ...utils import auto_docstring, logging
 from ...video_utils import VideoInput
 
 
@@ -69,9 +69,7 @@ class Molmo2ImagesKwargs(ImagesKwargs, total=False):
 class Molmo2VideosKwargs(VideosKwargs, total=False):
     patch_size: int | None
     pooling_size: list[int] | None
-    frame_sample_mode: str | None
     max_fps: int | None
-    sampling_fps: int | None
 
 
 class Molmo2ProcessorKwargs(ProcessingKwargs, total=False):
@@ -88,23 +86,11 @@ class Molmo2ProcessorKwargs(ProcessingKwargs, total=False):
     }
 
 
+@auto_docstring
 class Molmo2Processor(ProcessorMixin):
-    attributes = ["image_processor", "video_processor", "tokenizer"]
-    optional_attributes = ["chat_template"]
-    image_processor_class = "AutoImageProcessor"
-    video_processor_class = "AutoVideoProcessor"
-    tokenizer_class = "AutoTokenizer"
-
     @property
     def model_input_names(self):
-        model_input_names = []
-        if hasattr(self, "tokenizer") and self.tokenizer is not None:
-            model_input_names.extend(self.tokenizer.model_input_names)
-        if "token_type_ids" not in model_input_names:
-            model_input_names.append("token_type_ids")
-        if hasattr(self, "image_processor") and self.image_processor is not None:
-            model_input_names.extend(self.image_processor.model_input_names)
-        return model_input_names
+        return super().model_input_names + ["token_type_ids"]
 
     def __init__(
         self,
@@ -258,6 +244,7 @@ class Molmo2Processor(ProcessorMixin):
 
             return new_input_ids, new_attention_mask
 
+    @auto_docstring
     def __call__(
         self,
         text: TextInput | PreTokenizedInput | list[TextInput] | list[PreTokenizedInput] = None,
@@ -265,41 +252,21 @@ class Molmo2Processor(ProcessorMixin):
         videos: VideoInput = None,
         **kwargs: Unpack[Molmo2ProcessorKwargs],
     ) -> BatchFeature:
-        """
-
-        Args:
-            text (`str`, `list[str]`, `list[list[str]]`):
-                The sequence or batch of sequences to be encoded. Each sequence can be a string or a list of strings
-                (pretokenized string). If the sequences are provided as list of strings (pretokenized), you must set
-                `is_split_into_words=True` (to lift the ambiguity with a batch of sequences).
-            images (`PIL.Image.Image`, `np.ndarray`, `torch.Tensor`, `list[PIL.Image.Image]`, `list[np.ndarray]`, `list[torch.Tensor]`):
-                The image or batch of images to be prepared. Each image can be a PIL image, NumPy array or PyTorch
-                tensor. Both channels-first and channels-last formats are supported.
-            videos (`dict[str, Any]` or `list[dict[str, Any]]`):
-                The video or batch of videos to be prepared. Each video can be a dictionary with the following keys:
-                - `"frames"`: `np.ndarray` of shape (T, H, W, 3)
-                - `"timestamps"`: `np.ndarray` of shape (T,)
-                - `"sampled_fps"`: `float` (optional)
-                - `"sampling_augmentation"`: `str` (optional)
-            return_tensors (`str` or [`~utils.TensorType`], *optional*):
-                If set, will return tensors of a particular framework. Acceptable values are:
-                - `'tf'`: Return TensorFlow `tf.constant` objects.
-                - `'pt'`: Return PyTorch `torch.Tensor` objects.
-                - `'np'`: Return NumPy `np.ndarray` objects.
-                - `'jax'`: Return JAX `jnp.ndarray` objects.
-
+        r"""
         Returns:
-            `BatchFeature`: A [`BatchFeature`] with the following fields:
+            [`BatchFeature`]: A [`BatchFeature`] with the following fields:
+
             - **input_ids** -- List of token ids to be fed to a model. Returned when `text` is not `None`.
             - **attention_mask** -- List of indices specifying which tokens should be attended to by the model (when
-              `return_attention_mask=True` or if *"attention_mask"* is in `self.model_input_names` and if `text` is not `None`).
+              `return_attention_mask=True` or if *"attention_mask"* is in `self.model_input_names` and if `text` is not
+              `None`).
             - **pixel_values** -- Pixel values to be fed to a model. Returned when `images` is not `None`.
-            - **image_token_pooling** -- Indices of the patches in `image_grids` to pool for each token in `image_tokens`.
+            - **image_token_pooling** -- Indices of the patches in `image_grids` to pool for each token.
               Returned when `images` is not `None`.
             - **image_grids** -- Grids of images. Returned when `images` is not `None`.
             - **image_num_crops** -- Number of crops for each image. Returned when `images` is not `None`.
-            - **pixel_values_videos** -- Pixel values of videos to be fed to a model. Returned when `videos` is not `None`.
-            - **video_token_pooling** -- Indices of the patches in `video_grids` to pool for each token in `video_tokens`.
+            - **pixel_values_videos** -- Pixel values of videos. Returned when `videos` is not `None`.
+            - **video_token_pooling** -- Indices of the patches in `video_grids` to pool for each token.
               Returned when `videos` is not `None`.
             - **video_grids** -- Grids of videos. Returned when `videos` is not `None`.
         """
