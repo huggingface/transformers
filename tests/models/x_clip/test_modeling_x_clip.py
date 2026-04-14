@@ -180,6 +180,22 @@ class XCLIPVisionModelTest(ModelTesterMixin, unittest.TestCase):
     def test_flash_attn_2_inference_equivalence_right_padding(self):
         pass
 
+    @unittest.skip(reason="X-CLIP needs batch size to match frames, can't crop and create new dummy inputs")
+    def test_flash_attn_3_inference_equivalence(self):
+        pass
+
+    @unittest.skip(reason="X-CLIP needs batch size to match frames, can't crop and create new dummy inputs")
+    def test_flash_attn_3_inference_equivalence_right_padding(self):
+        pass
+
+    @unittest.skip(reason="X-CLIP needs batch size to match frames, can't crop and create new dummy inputs")
+    def test_flash_attn_4_inference_equivalence(self):
+        pass
+
+    @unittest.skip(reason="X-CLIP needs batch size to match frames, can't crop and create new dummy inputs")
+    def test_flash_attn_4_inference_equivalence_right_padding(self):
+        pass
+
     @unittest.skip(reason="X-CLIP cross-frame attention has device placement issues with model parallelism")
     def test_model_parallelism(self):
         pass
