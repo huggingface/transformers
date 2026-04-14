@@ -73,10 +73,12 @@ _RESPONSE_SCHEMA = {
         "role": {"const": "assistant"},
         "thinking": {
             "type": "string",
-            "x-regex": r"<\|channel\>(?:thought\n)?(.+?)<channel\|>",
+        },
+        "content": {
+            "type": "string",
         },
         "tool_calls": {
-            "x-regex-iterator": r"<\|tool_call\>(.*?)<tool_call\|>",
+            "x-regex-iterator": r"<\|tool_call>(.*?)<tool_call\|>",
             "type": "array",
             "items": {
                 "type": "object",
@@ -84,12 +86,15 @@ _RESPONSE_SCHEMA = {
                     "type": {"const": "function"},
                     "function": {
                         "type": "object",
+                        "x-regex": r"call\:(?P<name>\w+)(?P<arguments>\{.*\})",
                         "properties": {
-                            "name": {"type": "string", "x-regex": r"call:([^{]+)"},
-                            "arguments": {
+                            "name": {
                                 "type": "string",
-                                "x-regex": r"call:[^{]+(\{.*\})",
-                                "x-mapping-regex": {r"<\|\"\|>": '"', r"(\{|,)\s*([a-zA-Z_]\w+):": r'\1"\2":'},
+                            },
+                            "arguments": {
+                                "type": "object",
+                                "x-parser": "gemma4-tool-call",
+                                "additionalProperties": {},
                             },
                         },
                     },
@@ -97,6 +102,7 @@ _RESPONSE_SCHEMA = {
             },
         },
     },
+    "x-regex": r"(\<\|channel\>thought\n(?P<thinking>.*?)\<channel\|\>)?(?P<tool_calls>\<\|tool_call\>.*\<tool_call\|\>)?(?P<content>(?:(?!\<turn\|\>)(?!\<\|tool_response\>).)+)?(?:\<turn\|\>|\<\|tool_response\>)?",
 }
 
 _DTYPES = {"float32", "bfloat16", "float16"}

@@ -26,7 +26,7 @@ import torch
 
 from transformers import CLIPTokenizerFast
 from transformers.models.sam2_video.video_processing_sam2_video import Sam2VideoVideoProcessor
-from transformers.models.sam3.image_processing_sam3_fast import Sam3ImageProcessorFast
+from transformers.models.sam3.image_processing_sam3 import Sam3ImageProcessor
 from transformers.models.sam3.modeling_sam3 import Sam3Model
 from transformers.models.sam3_tracker.modeling_sam3_tracker import Sam3TrackerModel
 from transformers.models.sam3_tracker_video.modeling_sam3_tracker_video import Sam3TrackerVideoModel
@@ -664,7 +664,7 @@ def convert_sam3_checkpoint(
 
     # Save processor
     print("Creating and saving processor...")
-    image_processor = Sam3ImageProcessorFast()
+    image_processor = Sam3ImageProcessor()
     video_processor = Sam2VideoVideoProcessor(
         image_mean=[0.5, 0.5, 0.5], image_std=[0.5, 0.5, 0.5], size={"height": 1008, "width": 1008}
     )

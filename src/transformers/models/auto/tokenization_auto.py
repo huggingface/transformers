@@ -358,7 +358,6 @@ MODELS_WITH_INCORRECT_HUB_TOKENIZER_CLASS: set[str] = {
     "internvl_chat",
     "jamba",
     "janus",
-    "kimi_k25",
     "llava",
     "llava_next",
     "minicpmv",
