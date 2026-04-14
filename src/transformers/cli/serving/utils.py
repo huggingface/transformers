@@ -562,7 +562,9 @@ class GenerateManager(BaseGenerateManager):
         """Start streaming generation via ``model.generate()`` on the inference thread."""
         loop = asyncio.get_running_loop()
         queue: asyncio.Queue = asyncio.Queue()
-        streamer = DirectStreamer(processor._tokenizer, loop, queue, skip_special_tokens=True)
+        # ProcessorMixin exposes the fast tokenizer as .tokenizer; PreTrainedTokenizerFast is already one.
+        rust_tokenizer = getattr(processor, "tokenizer", processor)._tokenizer
+        streamer = DirectStreamer(rust_tokenizer, loop, queue, skip_special_tokens=True)
         gen_kwargs = {**inputs, "streamer": streamer, "generation_config": gen_config, "tokenizer": processor}
 
         def _run() -> None:
@@ -661,7 +663,9 @@ class CBGenerateManager(BaseGenerateManager):
             max_new_tokens=gen_config.max_new_tokens,
             eos_token_id=gen_config.eos_token_id,
         )
-        streamer = CBStreamer(self._cb, request_id, processor._tokenizer, loop, text_queue)
+        # ProcessorMixin exposes the fast tokenizer as .tokenizer; PreTrainedTokenizerFast is already one.
+        rust_tokenizer = getattr(processor, "tokenizer", processor)._tokenizer
+        streamer = CBStreamer(self._cb, request_id, rust_tokenizer, loop, text_queue)
 
         # Register a direct callback: the dispatcher calls this on the event loop with each GenerationOutput.
         # This decodes tokens and pushes text straight to the SSE text_queue
@@ -926,24 +930,25 @@ class BaseHandler:
         for message in messages:
             parsed = {"role": message["role"], "content": []}
 
+            content = message.get("content")
             if modality == Modality.LLM:
-                if isinstance(message["content"], str):
-                    parsed["content"] = message["content"]
-                elif isinstance(message["content"], list):
-                    texts = [c["text"] for c in message["content"] if c["type"] == "text"]
+                if isinstance(content, str):
+                    parsed["content"] = content
+                elif isinstance(content, list):
+                    texts = [c["text"] for c in content if c["type"] == "text"]
                     parsed["content"] = " ".join(texts)
 
             elif modality == Modality.VLM:
-                if isinstance(message["content"], str):
-                    parsed["content"].append({"type": "text", "text": message["content"]})
-                else:
-                    for content in message["content"]:
-                        if content["type"] == "text":
-                            parsed["content"].append(content)
-                        elif content["type"] == "image_url":
+                if isinstance(content, str):
+                    parsed["content"].append({"type": "text", "text": content})
+                elif isinstance(content, list):
+                    for content_block in content:
+                        if content_block["type"] == "text":
+                            parsed["content"].append(content_block)
+                        elif content_block["type"] == "image_url":
                             from PIL import Image
 
-                            url = content["image_url"]["url"]
+                            url = content_block["image_url"]["url"]
                             if "base64" in url:
                                 image_data = re.sub("^data:image/.+;base64,", "", url)
                                 image = Image.open(BytesIO(base64.b64decode(image_data)))
