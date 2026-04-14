@@ -35,12 +35,12 @@ from ...modeling_rope_utils import RotaryEmbeddingConfigMixin
 # Use our rope and convert qkv with rope rotation to benefit from kernels
 
 class DeepseekV32Config(DeepseekV2Config, RotaryEmbeddingConfigMixin):
-    def __init__(self, index_n_heads=64, index_head_dim=128, index_topk=2048, **super_kwargs):
-        super().__init__(**super_kwargs)
-        self.index_n_heads = index_n_heads
-        self.index_head_dim = index_head_dim
-        self.index_top_k = index_topk
-        self.max_seq_len = 16384
+    attribute_map = {
+        "num_experts": "num_experts_per_tok"
+    } 
+    index_n_heads: int = 64
+    index_head_dim: int = 128
+    index_topk: int = 2048
 
 
 class DeepseekV32MoEGate(DeepseekV2Experts):
