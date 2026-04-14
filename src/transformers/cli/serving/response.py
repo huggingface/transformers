@@ -51,6 +51,8 @@ if is_serve_available():
     from openai.types.responses.response_create_params import ResponseCreateParamsStreaming
     from openai.types.responses.response_usage import InputTokensDetails, OutputTokensDetails, ResponseUsage
 
+from transformers import BatchEncoding
+
 from .utils import (
     BaseGenerateManager,
     BaseHandler,
@@ -128,6 +130,8 @@ class ResponseHandler(BaseHandler):
             tokenize=True,
         )
         if not use_cb:
+            if not isinstance(inputs, BatchEncoding):
+                raise TypeError("Expected BatchEncoding from apply_chat_template with return_tensors='pt'")
             inputs = inputs.to(model.device)
 
         gen_config = self._build_generation_config(body, model.generation_config, use_cb=use_cb)
@@ -439,7 +443,7 @@ class ResponseHandler(BaseHandler):
                     status="completed",
                     role="assistant",
                     content=[output_text_part],
-                    annotations=[],
+                    annotations=[],  # type: ignore[call-arg]
                 )
                 yield self.chunk_to_sse(
                     ResponseOutputItemDoneEvent(
@@ -496,7 +500,7 @@ class ResponseHandler(BaseHandler):
                 status="completed",
                 role="assistant",
                 content=[ResponseOutputText(type="output_text", text=full_text, annotations=[])],
-                annotations=[],
+                annotations=[],  # type: ignore[call-arg]
             )
         ]
 

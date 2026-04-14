@@ -41,23 +41,23 @@ class Gemma3nTextConfig(PreTrainedConfig):
     vocab_size_per_layer_input (`int`, *optional*, defaults to 262144):
         Vocabulary size of the per-layer text embeddings that augment the standard embeddings.
     hidden_size_per_layer_input (`int`, *optional*, defaults to 256):
-        Dimension of the hidden representations for per-layer emebeddings.
+        Dimension of the hidden representations for per-layer embeddings.
     altup_active_idx (`int`, *optional*, defaults to 0):
-        The index of the prediction from which AltUp will compute additional predictions or correct
+        The index of the prediction from which AltUp will compute additional predictions or correct the active prediction.
     altup_coef_clip (`float`, *optional*, defaults to 120.0):
         The maximum amplitude of an AltUp prediction or correction coefficient weight.
     altup_correct_scale (`bool`, *optional*, defaults to `True`):
         If True, apply the `AltUp.correct_output_scale` to the corrected prediction at `altup_active_idx`.
     altup_num_inputs (`int`, *optional*, defaults to 4):
-        The number of predictions that AltUp should be make given the input sequence.
+        The number of predictions that AltUp should make given the input sequence.
     num_kv_shared_layers (`int`, *optional*, defaults to 15):
-        The number of layer that share KV cache values. During the forward pass, the last `num_kv_shared_layers`
+        The number of layers that share KV cache values. During the forward pass, the last `num_kv_shared_layers`
         layers in the model "share" the KV values in that each local and global layer in this range uses the KV
         cache values computed for the last local or global layer, respectively, before entering this range. The
         value should be a multiple of the attention pattern size (see `layer_types` parameter).
-    laurel_rank (int, *optional*, defaults to 64):
+    laurel_rank (`int`, *optional*, defaults to 64):
         The intermediate size for the linear projections in the Learned Augmented Residual Layer.
-    activation_sparsity_pattern (Sequence[float], *optional*):
+    activation_sparsity_pattern (`Sequence[float]`, *optional*):
         The sparsity factor used to extract the top-k activations for a given layer. The provided Sequence must
         explicitly provide a sparsity value for each layer in the model. By default, the first 10 layers are
         sparse with a sparsity factor of 0.95 and the rest are dense.
