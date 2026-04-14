@@ -23,6 +23,7 @@ from ...modeling_vision_utils import get_rotary_pos_ids, get_vision_cu_seqlens
 from ...processing_utils import MultiModalData, ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
 from ...utils import auto_docstring, logging
+from ...utils.import_utils import requires_backends
 from ...video_utils import VideoInput
 
 
@@ -90,6 +91,7 @@ class VideoLlama3Processor(ProcessorMixin):
             image_grid_thw = image_inputs["image_grid_thw"]
             image_merge_sizes = image_inputs["image_merge_sizes"]
             if return_extra_tensors:
+                requires_backends(self, ["torch"])
                 image_inputs["image_cu_seqlens"] = get_vision_cu_seqlens(image_grid_thw)
                 image_inputs["image_rotary_pos_ids"] = get_rotary_pos_ids(image_grid_thw, image_merge_sizes)
         else:

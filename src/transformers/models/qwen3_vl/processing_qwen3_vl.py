@@ -27,6 +27,7 @@ from ...modeling_vision_utils import get_vision_cu_seqlens
 from ...processing_utils import MultiModalData, ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
 from ...utils import auto_docstring, logging
+from ...utils.import_utils import requires_backends
 from ...video_utils import VideoInput
 
 
@@ -108,6 +109,7 @@ class Qwen3VLProcessor(ProcessorMixin):
             image_inputs = self.image_processor(images=images, **output_kwargs["images_kwargs"])
             image_grid_thw = image_inputs["image_grid_thw"]
             if return_extra_tensors:
+                requires_backends(self, ["torch"])
                 spatial_merge_size = self.image_processor.merge_size
                 image_inputs["image_cu_seqlens"] = get_vision_cu_seqlens(image_grid_thw)
                 image_inputs["image_rotary_pos_ids"] = get_rotary_pos_ids(image_grid_thw, spatial_merge_size)
@@ -119,6 +121,7 @@ class Qwen3VLProcessor(ProcessorMixin):
             videos_inputs = self.video_processor(videos=videos, **output_kwargs["videos_kwargs"])
             video_grid_thw = videos_inputs["video_grid_thw"]
             if return_extra_tensors:
+                requires_backends(self, ["torch"])
                 spatial_merge_size = self.video_processor.merge_size
                 videos_inputs["video_cu_seqlens"] = get_vision_cu_seqlens(video_grid_thw)
                 videos_inputs["video_rotary_pos_ids"] = get_rotary_pos_ids(video_grid_thw, spatial_merge_size)

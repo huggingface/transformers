@@ -47,6 +47,7 @@ from ...utils import (
     logging,
 )
 from ...utils.generic import is_flash_attention_requested, merge_with_config_defaults
+from ...utils.import_utils import requires_backends
 from ...utils.output_capturing import capture_outputs
 from ...video_utils import (
     VideoInput,
@@ -1078,6 +1079,7 @@ class VideoLlama3Processor(Qwen2VLProcessor):
             image_grid_thw = image_inputs["image_grid_thw"]
             image_merge_sizes = image_inputs["image_merge_sizes"]
             if return_extra_tensors:
+                requires_backends(self, ["torch"])
                 image_inputs["image_cu_seqlens"] = get_vision_cu_seqlens(image_grid_thw)
                 image_inputs["image_rotary_pos_ids"] = get_rotary_pos_ids(image_grid_thw, image_merge_sizes)
         else:

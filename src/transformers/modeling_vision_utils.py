@@ -11,12 +11,13 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Pure vision utility functions for computing data-dependent tensors.
+"""Pure vision utility functions for pre-computing very dynamic and
+data-dependent tensors that can break model capturing and tracing.
 
 All functions are standalone (no model weights) and compute tensors from
 ``grid_thw`` + config scalars. They are used by vision encoders and can be
-precomputed before ``torch.export`` tracing since they use untraceable ops
-(``repeat_interleave``, ``.tolist()``, ``nonzero()``, loops).
+precomputed before `torch.compile` / ``torch.export`` tracing since they
+use untraceable ops (``repeat_interleave``, ``.tolist()``, ``nonzero()``, loops).
 """
 
 from __future__ import annotations
@@ -56,7 +57,7 @@ def get_rotary_pos_ids(grid_thw: torch.Tensor, spatial_merge_size: int | torch.T
         ``pos_ids``: ``(total_tokens, 2)`` long — (row, col) position per token.
     """
     device = grid_thw.device
-    if not isinstance(spatial_merge_size, torch.Tensor):
+    if isinstance(spatial_merge_size, int):
         spatial_merge_size = torch.tensor([spatial_merge_size], device=device).expand(len(grid_thw))
 
     pos_ids = []

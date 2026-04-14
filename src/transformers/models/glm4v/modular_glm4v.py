@@ -44,6 +44,7 @@ from ...utils import (
     torch_compilable_check,
 )
 from ...utils.generic import maybe_autocast, merge_with_config_defaults
+from ...utils.import_utils import requires_backends
 from ...utils.output_capturing import capture_outputs
 from ...video_utils import VideoInput
 from ..glm4.modeling_glm4 import Glm4MLP, Glm4RMSNorm, Glm4RotaryEmbedding, eager_attention_forward
@@ -1289,6 +1290,7 @@ class Glm4vProcessor(Qwen2VLProcessor):
             image_inputs = self.image_processor(images=images, **output_kwargs["images_kwargs"])
             image_grid_thw = image_inputs["image_grid_thw"]
             if return_extra_tensors:
+                requires_backends(self, ["torch"])
                 spatial_merge_size = self.image_processor.merge_size
                 image_inputs["image_cu_seqlens"] = get_vision_cu_seqlens(image_grid_thw)
                 image_inputs["image_rotary_pos_ids"] = get_rotary_pos_ids(image_grid_thw, spatial_merge_size)
@@ -1305,6 +1307,7 @@ class Glm4vProcessor(Qwen2VLProcessor):
                 video_metadata = videos_inputs["video_metadata"]
             video_grid_thw = videos_inputs["video_grid_thw"]
             if return_extra_tensors:
+                requires_backends(self, ["torch"])
                 spatial_merge_size = self.video_processor.merge_size
                 videos_inputs["video_cu_seqlens"] = get_vision_cu_seqlens(video_grid_thw)
                 videos_inputs["video_rotary_pos_ids"] = get_rotary_pos_ids(video_grid_thw, spatial_merge_size)
