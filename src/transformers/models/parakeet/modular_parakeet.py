@@ -41,6 +41,7 @@ from ..auto import AutoModel
 from ..fastspeech2_conformer.modeling_fastspeech2_conformer import FastSpeech2ConformerConvolutionModule
 from ..llama.modeling_llama import LlamaAttention, eager_attention_forward
 from .configuration_parakeet import ParakeetCTCConfig, ParakeetEncoderConfig, ParakeetTDTConfig
+from .generation_parakeet import ParakeetTDTGenerationMixin
 
 
 logger = logging.get_logger(__name__)
@@ -741,7 +742,7 @@ class ParakeetTDTDecoder(nn.Module):
 
     def __init__(self, config: ParakeetTDTConfig):
         super().__init__()
-        self.config = config
+        self.blank_token_id = config.blank_token_id
         self.embedding = nn.Embedding(config.vocab_size, config.decoder_hidden_size)
         self.lstm = nn.LSTM(
             input_size=config.decoder_hidden_size,
@@ -754,21 +755,26 @@ class ParakeetTDTDecoder(nn.Module):
     def forward(
         self,
         input_ids: torch.LongTensor,
-        decoder_cache: ParakeetTDTDecoderCache | None = None,
-        decoder_cache_update_mask: torch.BoolTensor | None = None,
+        cache: ParakeetTDTDecoderCache | None = None,
     ) -> torch.Tensor:
+        # All-blank fast path
+        if cache is not None and cache.is_initialized:
+            blank_mask = input_ids[:, -1] == self.blank_token_id
+            if blank_mask.all():
+                return cache.cache
+
         hidden_cell_states = (
-            (decoder_cache.hidden_state, decoder_cache.cell_state)
-            if decoder_cache is not None and decoder_cache.is_initialized
-            else None
+            (cache.hidden_state, cache.cell_state) if cache is not None and cache.is_initialized else None
         )
         embeddings = self.embedding(input_ids)
         lstm_output, (hidden_state, cell_state) = self.lstm(embeddings, hidden_cell_states)
         decoder_output = self.decoder_projector(lstm_output)
-        if decoder_cache is not None:
-            decoder_cache.update(
-                decoder_output, hidden_state, cell_state, lstm_module=self.lstm, mask=decoder_cache_update_mask
-            )
+
+        if cache is not None:
+            mask = ~blank_mask if cache.is_initialized else None
+            cache.update(decoder_output, hidden_state, cell_state, lstm_module=self.lstm, mask=mask)
+            return cache.cache
+
         return decoder_output
 
 
@@ -784,39 +790,11 @@ class ParakeetTDTJointNetwork(nn.Module):
 
     def forward(
         self,
-        decoder_output: torch.Tensor,
-        encoder_output: torch.Tensor,
+        decoder_hidden_states: torch.Tensor,
+        encoder_hidden_states: torch.Tensor,
     ) -> tuple[torch.Tensor, torch.Tensor]:
-        joint_output = self.activation(encoder_output + decoder_output)
-        logits = self.head(joint_output)
-        token_logits = logits[..., : self.vocab_size]
-        duration_logits = logits[..., self.vocab_size :]
-        return token_logits, duration_logits
-
-
-@dataclass
-class ParakeetTDTGenerateOutput(ModelOutput):
-    """
-    Outputs of Parakeet TDT generation.
-
-    Args:
-        sequences (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
-            Generated token sequences.
-        token_timestamps (`torch.FloatTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Per-token frame indices. Returned when `return_timestamps=True`.
-        token_durations (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Per-token durations in frames. Returned when `return_timestamps=True`.
-        attentions (`tuple(tuple(torch.FloatTensor))`, *optional*):
-            Encoder attention weights per layer.
-        hidden_states (`tuple(tuple(torch.FloatTensor))`, *optional*):
-            Encoder hidden states per layer.
-    """
-
-    sequences: torch.LongTensor
-    token_timestamps: torch.FloatTensor | None = None
-    token_durations: torch.LongTensor | None = None
-    attentions: tuple[tuple[torch.FloatTensor]] | None = None
-    hidden_states: tuple[tuple[torch.FloatTensor]] | None = None
+        joint_output = self.activation(encoder_hidden_states + decoder_hidden_states)
+        return self.head(joint_output)
 
 
 @dataclass
@@ -830,16 +808,12 @@ class ParakeetTDTOutput(BaseModelOutputWithPooling):
         logits (`torch.FloatTensor`):
             Joint token and duration logits. Shape is `(batch, T, U+1, vocab+durations)` for training
             or `(batch, 1, 1, vocab+durations)` for single-step inference.
-        attention_mask (`torch.Tensor`, *optional*):
-            Encoder output attention mask after subsampling.
         decoder_cache (`ParakeetTDTDecoderCache`, *optional*):
-            Decoder LSTM cache containing hidden state, cell state, and decoder output.
-            Updated in-place during generation.
+            Decoder LSTM cache containing hidden state, cell state, and last output.
     """
 
     loss: torch.FloatTensor | None = None
     logits: torch.FloatTensor | None = None
-    attention_mask: torch.Tensor | None = None
     decoder_cache: ParakeetTDTDecoderCache | None = None
 
 
