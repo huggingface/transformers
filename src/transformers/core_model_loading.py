@@ -654,6 +654,13 @@ class WeightTransform:
     def __repr__(self):
         return f"{self.__class__.__name__}(source_patterns={self.source_patterns}, target_patterns={self.target_patterns})"
 
+    def __eq__(self, other: WeightTransform):
+        return (
+            self.__class__ is other.__class__
+            and self._original_source_patterns == other._original_source_patterns
+            and self._original_target_patterns == other._original_target_patterns
+        )
+
     def __setattr__(self, name, value):
         if name in ("source_patterns", "target_patterns"):
             # We do not allow to re-set the patterns, as they are linked between each other and changing one
@@ -743,6 +750,9 @@ class WeightTransform:
 class WeightRenaming(WeightTransform):
     # Special case of WeightTransform that only renames keys without any conversion.
 
+    # Needs to be empty, otherwise the class will not be slotted
+    __slots__ = ()
+
     def convert(
         self,
         layer_name: str,
@@ -777,6 +787,53 @@ class WeightRenaming(WeightTransform):
         return collected_tensors
 
 
+class PrefixChange(WeightRenaming):
+    # Special case of weight renaming, used to easily add/remove a prefix while removing/adding it back
+    # easily as well during saving
+
+    __slots__ = (
+        "prefix_to_add",
+        "prefix_to_remove",
+        "_prefix_was_changed",
+    )
+
+    def __init__(
+        self, prefix_to_add: str | None = None, prefix_to_remove: str | None = None, model_prefix: str | None = None
+    ):
+        if prefix_to_add is None ^ prefix_to_remove is not None:
+            raise ValueError("You must provide only one of `prefix_to_add` and `prefix_to_remove`")
+
+        self.prefix_to_add = prefix_to_add
+        self.prefix_to_remove = prefix_to_remove
+        model_prefix = "" if model_prefix is None else model_prefix
+
+        if prefix_to_add is not None:
+            super().__init__(
+                source_patterns=rf"^{model_prefix}\.(.+)$", target_patterns=rf"{model_prefix}\.{prefix_to_add}\.\1"
+            )
+        else:
+            super().__init__(
+                source_patterns=rf"^{model_prefix}\.{prefix_to_remove}\.(.+)$", target_patterns=rf"{model_prefix}\.\1"
+            )
+
+        # Flag to signal at runtime if the instance was used, i.e. if the checkpoints matched the added/removed
+        # prefix. If it ends-up being True, the opposite will be used when saving
+        self._prefix_was_changed = False
+
+    def rename_source_key(self, source_key: str):
+        renamed_key, source_pattern_that_matched = super().rename_source_key(source_key)
+        if renamed_key != source_key:
+            self._prefix_was_changed = True
+
+    def prefix_was_changed(self):
+        return self._prefix_was_changed
+
+    def with_submodel_prefix(self, prefix: str) -> PrefixChange:
+        return PrefixChange(
+            prefix_to_add=self.prefix_to_add, prefix_to_remove=self.prefix_to_remove, model_prefix=prefix
+        )
+
+
 # List of classes that are known to be able to use m:n
 _INTERNAL_MANY_TO_MANY_CONVERSIONS = (
     ErnieFuseAndSplitTextVisionExperts,
@@ -785,7 +842,7 @@ _INTERNAL_MANY_TO_MANY_CONVERSIONS = (
 
 
 class WeightConverter(WeightTransform):
-    __slots__ = WeightTransform.__slots__ + ("operations",)
+    __slots__ = ("operations",)
 
     def __init__(self, source_patterns: str | list[str], target_patterns: str | list[str]):
         super().__init__(source_patterns, target_patterns)
@@ -1363,7 +1420,21 @@ def convert_and_load_state_dict_in_model(
             thread_pool.shutdown(wait=False, cancel_futures=True)
 
     # Keep the current weight conversion mapping for later saving (in case it was coming directly from the user)
-    model._weight_conversions = weight_mapping
+    model_specific_conversions = []
+    for conversion in weight_mapping:
+        # For a prefix change, we need to update at runtime depending on whether the checkpoint already had the correct
+        # format or not - otherwise, we may end up adding twice the same prefix
+        if isinstance(conversion, PrefixChange):
+            used_conversion = next(
+                used_conversion for used_conversion in param_name_to_load.values() if used_conversion == conversion
+            )
+            # Add the prefix switch to the saved conversion ONLY if it was used at runtime
+            if used_conversion.prefix_was_changed():
+                model_specific_conversions.append(conversion)
+        else:
+            model_specific_conversions.append(conversion)
+    model._weight_conversions = model_specific_conversions
+
     return loading_info, disk_offload_index
 
 

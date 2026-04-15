@@ -22,9 +22,11 @@ from .core_model_loading import (
     Concatenate,
     ErnieFuseAndSplitTextVisionExperts,
     MergeModulelist,
+    PrefixChange,
     Transpose,
     WeightConverter,
     WeightRenaming,
+    WeightTransform,
 )
 
 
@@ -96,7 +98,7 @@ def _build_checkpoint_conversion_mapping():
             WeightRenaming(source_patterns=r"^multi_modal_projector", target_patterns="model.multi_modal_projector"),
             WeightRenaming(source_patterns=r"^image_newline", target_patterns="model.image_newline"),
         ],
-        "clip_vision_model": [WeightRenaming(source_patterns=r"vision_model\.(.+)", target_patterns=r"\1")],
+        "clip_vision_model": [PrefixChange(prefix_to_remove="vision_model")],
         "video_llava": [
             WeightRenaming(source_patterns=r"^language_model.model", target_patterns="model.language_model"),
             WeightRenaming(source_patterns=r"^language_model.lm_head", target_patterns="lm_head"),
@@ -624,10 +626,16 @@ def register_checkpoint_conversion_mapping(
     _checkpoint_conversion_mapping_cache[model_type] = mapping
 
 
-def extract_weight_conversions_for_model(model: PreTrainedModel) -> list[WeightConverter | WeightRenaming] | None:
+def extract_weight_conversions_for_model(model: PreTrainedModel, model_prefix: str) -> list[WeightTransform] | None:
     model_type = getattr(model.config, "model_type", None)
     if model_type is not None:
         model_specific_conversions = get_checkpoint_conversion_mapping(model_type)
+        # In this case, add the prefix to `PrefixChange` instances, in order to know where to add/remove the prefix
+        if model_prefix != "":
+            for i, conversion in enumerate(model_specific_conversions):
+                # In this case, add the prefix
+                if isinstance(conversion, PrefixChange):
+                    model_specific_conversions[i] = conversion.with_submodel_prefix(model_prefix)
         return model_specific_conversions
     return None
 
@@ -637,7 +645,7 @@ def get_model_conversion_mapping(
     key_mapping: dict[str, str] | None = None,
     hf_quantizer: HfQuantizer | None = None,
     add_legacy: bool = True,
-) -> list[WeightConverter | WeightRenaming]:
+) -> list[WeightTransform]:
     """
     For a given `model`, obtain the weight conversion mapping if any are registered either as a simple renaming
     `_checkpoint_conversion_mapping` class argument, or in the general WeightConverter mapping.
@@ -652,26 +660,16 @@ def get_model_conversion_mapping(
     if key_mapping is not None:
         weight_conversions = [WeightRenaming(source_patterns=k, target_patterns=v) for k, v in key_mapping.items()]
 
-    # Model have several `PreTrainedModel` within with the same model type
-    # For ex: XForConditionalGeneration -> XModel. We don't want to apply the same
-    # conversion pattern twice because of that
+    # Model have several `PreTrainedModel` within with the same model type, for example: XForConditionalGeneration -> XModel
+    # We don't want to apply the same conversion pattern twice because of that
     seen_model_types = set()
-    if (conversions := extract_weight_conversions_for_model(model)) is not None:
-        weight_conversions.extend(conversions)
-        seen_model_types.add(model.config.model_type)
-
     # Recurse over submodules and collect all conversions
-    for submodule in model.modules():
-        if (
-            submodule is not model
-            and isinstance(submodule, PreTrainedModel)
-            and submodule.config.model_type not in seen_model_types
-        ):
-            conversions = extract_weight_conversions_for_model(submodule)
+    for name, submodule in model.named_modules():
+        if isinstance(submodule, PreTrainedModel) and submodule.config.model_type not in seen_model_types:
+            conversions = extract_weight_conversions_for_model(submodule, name)
             if conversions is not None:
-                for conversion in conversions:
-                    conversion.restrict_to = submodule.__class__.__name__
-                weight_conversions.extend(conversions)
+                # Important: we want conversions for submodels to appear first!!
+                weight_conversions = conversions + weight_conversions
                 seen_model_types.add(submodule.config.model_type)
 
     if add_legacy:
