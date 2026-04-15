@@ -300,16 +300,6 @@ class Qwen2_5OmniProcessor(ProcessorMixin):
 
         return list(_iter())
 
-    def apply_chat_template(self, conversations, chat_template=None, **kwargs):
-        is_batched = False
-        if isinstance(conversations[0], dict):
-            conversations = [conversations]
-            is_batched = True
-        if is_batched:
-            conversations = conversations[0]
-
-        return super().apply_chat_template(conversations, chat_template, **kwargs)
-
     def post_process_image_text_to_text(self, generated_outputs, skip_special_tokens=True, **kwargs):
         """
         Post-process the output of a vlm to decode the text.
