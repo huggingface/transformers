@@ -107,7 +107,13 @@ class Qwen2_5OmniProcessorKwargs(ProcessingKwargs, total=False):
 @auto_docstring
 class Qwen2_5OmniProcessor(ProcessorMixin):
     def __init__(
-        self, image_processor=None, video_processor=None, feature_extractor=None, tokenizer=None, chat_template=None
+        self,
+        image_processor=None,
+        video_processor=None,
+        feature_extractor=None,
+        tokenizer=None,
+        chat_template=None,
+        check_audio_system_prompt: bool = True,
     ):
         super().__init__(image_processor, video_processor, feature_extractor, tokenizer, chat_template=chat_template)
         self.image_token = self.tokenizer.image_token
@@ -117,6 +123,7 @@ class Qwen2_5OmniProcessor(ProcessorMixin):
         self.vision_eos_token = self.tokenizer.vision_eos_token
         self.audio_bos_token = self.tokenizer.audio_bos_token
         self.audio_eos_token = self.tokenizer.audio_eos_token
+        self.check_audio_system_prompt = check_audio_system_prompt
 
     @auto_docstring
     def __call__(
@@ -309,16 +316,17 @@ class Qwen2_5OmniProcessor(ProcessorMixin):
             conversations = [conversations]
             is_batched = True
 
-        for conversation in conversations:
-            if (
-                conversation[0]["role"] != "system"
-                or conversation[0]["content"][0]["text"]
-                != "You are Qwen, a virtual human developed by the Qwen Team, Alibaba Group, capable of perceiving auditory and visual inputs, as well as generating text and speech."
-            ):
-                logger.warning_once(
-                    "System prompt modified, audio output may not work as expected. "
-                    + "Audio output mode only works when using default system prompt 'You are Qwen, a virtual human developed by the Qwen Team, Alibaba Group, capable of perceiving auditory and visual inputs, as well as generating text and speech.'"
-                )
+        if self.check_audio_system_prompt:
+            for conversation in conversations:
+                if (
+                    conversation[0]["role"] != "system"
+                    or conversation[0]["content"][0]["text"]
+                    != "You are Qwen, a virtual human developed by the Qwen Team, Alibaba Group, capable of perceiving auditory and visual inputs, as well as generating text and speech."
+                ):
+                    logger.warning_once(
+                        "System prompt modified, audio output may not work as expected. "
+                        + "Audio output mode only works when using default system prompt 'You are Qwen, a virtual human developed by the Qwen Team, Alibaba Group, capable of perceiving auditory and visual inputs, as well as generating text and speech.'"
+                    )
         if is_batched:
             conversations = conversations[0]
 
