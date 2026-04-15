@@ -701,7 +701,10 @@ class WeightTransform:
             kwargs["operations"] = [op.reverse_op for op in self.operations[::-1]]
 
         reverse_transform = self.__class__(
-            source_patterns=self._original_target_patterns, target_patterns=self._original_source_patterns, **kwargs
+            source_patterns=self._original_target_patterns,
+            target_patterns=self._original_source_patterns,
+            restrict_to=self.restrict_to,
+            **kwargs,
         )
 
         return reverse_transform
