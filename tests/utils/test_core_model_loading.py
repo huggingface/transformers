@@ -27,6 +27,7 @@ from transformers.core_model_loading import (
     LinearToConv3d,
     MergeModulelist,
     PermuteForRope,
+    PrefixChange,
     WeightConverter,
     WeightRenaming,
     build_glob_alternation,
@@ -777,6 +778,55 @@ class TestConversionMapping(unittest.TestCase):
         )
 
         self.assertEqual(len(get_checkpoint_conversion_mapping("foobarbaz")), 2)
+
+    def test_can_add_and_remove_full_parts(self):
+        model = DummyRoot()
+        model.config = PretrainedConfig()
+
+        bad_serialized_checkpoints = {f"bad_name.{k}": v.clone() for k, v in model.state_dict().items()}
+        weight_mapping = [PrefixChange(remove_prefix="bad_name")]
+
+        loading_info, _ = convert_and_load_state_dict_in_model(
+            model,
+            bad_serialized_checkpoints,
+            LoadStateDictConfig(weight_mapping=weight_mapping),
+            tp_plan=None,
+        )
+
+        # Assert we can load without issues
+        self.assertEqual(loading_info.missing_keys, set())
+        self.assertEqual(loading_info.unexpected_keys, set())
+        self.assertEqual(loading_info.mismatched_keys, set())
+        self.assertEqual(loading_info.conversion_errors, {})
+
+        # Assert that re-saving will lead to the exact same state_dict, re-adding the bad prefix
+        saved_state_dict = revert_weight_conversion(model, model.state_dict())
+        self.assertEqual(set(bad_serialized_checkpoints.keys()), set(saved_state_dict.keys()))
+        for k, v in saved_state_dict.items():
+            self.assertTrue((v == bad_serialized_checkpoints[k]).all())
+
+        # Now, check that using the same conversion with already good keys works when loading and resaving
+        good_serialized_checkpoints = {k: v.clone() for k, v in model.state_dict().items()}
+
+        loading_info, _ = convert_and_load_state_dict_in_model(
+            model,
+            good_serialized_checkpoints,
+            LoadStateDictConfig(weight_mapping=weight_mapping),
+            tp_plan=None,
+        )
+
+        # Assert we can load without issues
+        self.assertEqual(loading_info.missing_keys, set())
+        self.assertEqual(loading_info.unexpected_keys, set())
+        self.assertEqual(loading_info.mismatched_keys, set())
+        self.assertEqual(loading_info.conversion_errors, {})
+
+        # Assert that re-saving will lead to the exact same state_dict, i.e. it will not re-add the bad prefix since it was
+        # not present at loading time
+        saved_state_dict = revert_weight_conversion(model, model.state_dict())
+        self.assertEqual(set(good_serialized_checkpoints.keys()), set(saved_state_dict.keys()))
+        for k, v in saved_state_dict.items():
+            self.assertTrue((v == good_serialized_checkpoints[k]).all())
 
 
 if __name__ == "__main__":
