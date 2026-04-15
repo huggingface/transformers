@@ -29,12 +29,6 @@ if is_torch_available():
     import torch
 
 
-# QianfanOCRProcessor.__init__ reads special token attributes (start_image_token,
-# end_image_token, context_image_token, etc.) directly from the tokenizer, which are
-# only present on the InternVL-family tokenizer shipped with the real checkpoint.
-# A generic Qwen2Tokenizer does not have these attributes, so the processor cannot be
-# constructed from scratch without access to the pretrained tokenizer.  All tests
-# therefore require network access and are marked @slow.
 @slow
 @require_vision
 class QianfanOCRProcessorTest(ProcessorTesterMixin, unittest.TestCase):
@@ -45,7 +39,7 @@ class QianfanOCRProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
     @classmethod
     def _setup_test_attributes(cls, processor):
-        cls.image_token = processor.image_token
+        cls.image_token = processor.image_placeholder_token
 
     @unittest.skip("QianfanOCR does not support video processing")
     def test_video_processor_defaults(self):
@@ -55,9 +49,14 @@ class QianfanOCRProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     def test_process_interleaved_images_videos(self):
         pass
 
-    @unittest.skip("QianfanOCR does not support video processing")
-    def test_apply_chat_template_video_frame_sampling(self):
-        pass
+    def test_model_input_names(self):
+        processor = self.get_processor()
+
+        text = self.prepare_text_inputs(modalities=["image"])
+        image_input = self.prepare_image_inputs()
+        inputs = processor(text=text, images=image_input, return_tensors="pt")
+
+        self.assertSetEqual(set(inputs.keys()), set(processor.model_input_names))
 
     @staticmethod
     def prepare_processor_dict():

@@ -14,7 +14,6 @@
 """Testing suite for the PyTorch QianfanOCR model."""
 
 import unittest
-from pathlib import Path
 
 import pytest
 
@@ -22,7 +21,6 @@ from transformers import (
     AutoProcessor,
     QianfanOCRConfig,
     is_torch_available,
-    is_vision_available,
 )
 from transformers.testing_utils import (
     Expectations,
@@ -37,14 +35,13 @@ from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
 from ...test_pipeline_mixin import PipelineTesterMixin
+from ...test_processing_common import url_to_local_path
 
 
 if is_torch_available():
     import torch
 
     from transformers import QianfanOCRForConditionalGeneration, QianfanOCRModel
-if is_vision_available():
-    from PIL import Image
 
 
 class QianfanOCRVisionText2TextModelTester:
@@ -241,7 +238,9 @@ class QianfanOCRIntegrationTest(unittest.TestCase):
         # model weights in baidu/Qianfan-OCR will be updated after this PR get released in transformers,
         # use bairongz/QianfanOCR for testing and will update back to baidu/Qianfan-OCR after weight update
         self.model_checkpoint = "bairongz/QianfanOCR"
-        self.image_path = Path(__file__).parents[2] / "fixtures" / "tests_samples" / "COCO" / "000000039769.png"
+        self.image_url = url_to_local_path(
+            "http://images.cocodataset.org/val2017/000000039769.jpg"
+        )
         cleanup(torch_device, gc_collect=True)
 
     def tearDown(self):
@@ -252,13 +251,12 @@ class QianfanOCRIntegrationTest(unittest.TestCase):
             self.model_checkpoint, torch_dtype=torch.bfloat16, device_map=torch_device
         )
         processor = AutoProcessor.from_pretrained(self.model_checkpoint)
-        image = Image.open(self.image_path).convert("RGB")
 
         messages = [
             {
                 "role": "user",
                 "content": [
-                    {"type": "image", "image": image},
+                    {"type": "image", "url": self.image_url},
                     {"type": "text", "text": "Describe the image."},
                 ],
             }
@@ -276,11 +274,11 @@ class QianfanOCRIntegrationTest(unittest.TestCase):
         # fmt: off
         expected_logits = Expectations(
             {
-                ("cuda", 8): torch.tensor([10.1250, 15.8125, 13.1250, 12.2500,  9.5000]),
+                (None, None): torch.tensor([10.0625, 15.6875, 13.0000, 12.1875,  9.3750]),
             }
         )  # fmt: skip
         self.assertTrue(
-            torch.allclose(actual_logits, expected_logits.get_expectation(), atol=0.1),
+            torch.allclose(actual_logits, expected_logits.get_expectation(), atol=1e-3, rtol=1e-2),
             f"Actual logits: {actual_logits}\nExpected logits: {expected_logits.get_expectation()}",
         )
 
@@ -289,13 +287,12 @@ class QianfanOCRIntegrationTest(unittest.TestCase):
             self.model_checkpoint, torch_dtype=torch.bfloat16, device_map=torch_device
         )
         processor = AutoProcessor.from_pretrained(self.model_checkpoint)
-        image = Image.open(self.image_path).convert("RGB")
 
         messages = [
             {
                 "role": "user",
                 "content": [
-                    {"type": "image", "image": image},
+                    {"type": "image", "url": self.image_url},
                     {"type": "text", "text": "Describe the image."},
                 ],
             }
@@ -310,7 +307,7 @@ class QianfanOCRIntegrationTest(unittest.TestCase):
         # fmt: off
         expected_outputs = Expectations(
             {
-                ("cuda", 2): "The image features two striped cats lying down on a couch, both appearing to be",
+                (None, None): "The image features two striped cats lying down on a pink couch, seemingly asleep.",
             }
         )  # fmt: skip
         self.assertEqual(decoded, expected_outputs.get_expectation())
@@ -332,7 +329,7 @@ class QianfanOCRIntegrationTest(unittest.TestCase):
         # fmt: off
         expected_outputs = Expectations(
             {
-                ("cuda", 2): "1 + 1 equals 2.",
+                (None, None): "1 + 1 equals 2.",
             }
         )  # fmt: skip
         self.assertEqual(decoded, expected_outputs.get_expectation())
@@ -343,13 +340,12 @@ class QianfanOCRIntegrationTest(unittest.TestCase):
         )
         processor = AutoProcessor.from_pretrained(self.model_checkpoint)
         processor.tokenizer.padding_side = "left"
-        image = Image.open(self.image_path).convert("RGB")
 
         messages1 = [
             {
                 "role": "user",
                 "content": [
-                    {"type": "image", "image": image},
+                    {"type": "image", "url": self.image_url},
                     {"type": "text", "text": "What is in this image?"},
                 ],
             }
@@ -358,7 +354,7 @@ class QianfanOCRIntegrationTest(unittest.TestCase):
             {
                 "role": "user",
                 "content": [
-                    {"type": "image", "image": image},
+                    {"type": "image", "url": self.image_url},
                     {"type": "text", "text": "Describe the image."},
                 ],
             }
@@ -367,9 +363,9 @@ class QianfanOCRIntegrationTest(unittest.TestCase):
             processor.apply_chat_template(messages1, add_generation_prompt=True),
             processor.apply_chat_template(messages2, add_generation_prompt=True),
         ]
-        inputs = processor(text=texts, images=[image, image], padding=True, return_tensors="pt").to(
-            torch_device, torch.bfloat16
-        )
+        inputs = processor.apply_chat_template(
+            [messages1, messages2], add_generation_prompt=True, tokenize=True, return_dict=True, return_tensors="pt", padding=True
+        ).to(torch_device, torch.bfloat16)
 
         output = model.generate(**inputs, max_new_tokens=16, do_sample=False)
         self.assertEqual(output.shape[0], 2)
@@ -380,12 +376,12 @@ class QianfanOCRIntegrationTest(unittest.TestCase):
         # fmt: off
         expected_outputs_0 = Expectations(
             {
-                ("cuda", 2): "In the tranquil setting of this image, two tabby cats are the stars of",
+                (None, None): "In the tranquil setting of this image, two tabby cats are the stars of",
             }
         )  # fmt: skip
         expected_outputs_1 = Expectations(
             {
-                ("cuda", 2): "The image features two striped cats lying down on a couch, both appearing to be",
+                (None, None): "The image features two striped cats lying down on a pink couch, seemingly asleep.",
             }
         )  # fmt: skip
         self.assertEqual(decoded_0, expected_outputs_0.get_expectation())
