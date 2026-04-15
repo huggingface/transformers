@@ -16,7 +16,7 @@ rendered properly in your Markdown viewer.
 
 # Add vision processing components
 
-Adding a vision language model (VLM) requires two image processor classes on top of the standard [modular](./modular_transformers) approach.
+Adding a vision model requires two image processor classes on top of the standard [modular](./modular_transformers) approach.
 
 > [!NOTE]
 > For the modeling and config steps, follow the [modular](./modular_transformers) guide first.
@@ -56,13 +56,17 @@ class MyModelImageProcessor(TorchvisionBackend):
 
 ## PIL
 
-Create `image_processing_pil_<model_name>.py` with a class that inherits from [`PilBackend`]. Import the kwargs class from the torchvision file, but don't redefine it. Sharing the same class keeps both backends' kwargs in sync. For processors with no custom parameters, use [`ImagesKwargs`] directly.
+Create `image_processing_pil_<model_name>.py` with a class that inherits from [`PilBackend`]. Duplicate the kwargs class here instead of importing it from the torchvision file because it can fail when torchvision isn't installed. Add an `# Adapted from` comment so the two stay in sync. For processors with no custom parameters, use [`ImagesKwargs`] directly.
 
 ```py
 from ...image_processing_backends import PilBackend
 from ...image_utils import OPENAI_CLIP_MEAN, OPENAI_CLIP_STD, PILImageResampling
+from ...processing_utils import ImagesKwargs, Unpack
 from ...utils import auto_docstring
-from .image_processing_<model_name> import MyModelImageProcessorKwargs
+
+# Adapted from transformers.models.my_model.image_processing_my_model.MyModelImageProcessorKwargs
+class MyModelImageProcessorKwargs(ImagesKwargs, total=False):
+    tile_size: int  # any model-specific kwargs
 
 @auto_docstring
 class MyModelImageProcessorPil(PilBackend):
