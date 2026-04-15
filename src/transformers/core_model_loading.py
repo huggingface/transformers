@@ -596,8 +596,8 @@ class WeightTransform:
         self.source_patterns: list[str] = source_patterns
         self.target_patterns: list[str] = target_patterns
         # Those are needed to be able to reverse correctly the transform, as the patterns may be processed
-        self._original_source_patterns = source_patterns.copy()
-        self._original_target_patterns = target_patterns.copy()
+        self._original_source_patterns = self.source_patterns.copy()
+        self._original_target_patterns = self.target_patterns.copy()
 
         # Init fields that will be used during conversion
         self.distributed_operation: TensorParallelLayer | None = None
