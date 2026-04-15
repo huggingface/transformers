@@ -265,7 +265,7 @@ def make_progress_tqdm_class(callback: Callable, model_id: str) -> type:
 
     download_aggregator = DownloadAggregator(callback, model_id)
 
-    class ProgressTqdm(base_tqdm):
+    class ProgressTqdm(base_tqdm):  # type: ignore[misc]
         def __init__(self, *args, **kwargs):
             self.sse_unit = kwargs.get("unit") or "it"
             kwargs["disable"] = True
@@ -494,6 +494,9 @@ class BaseGenerateManager(ABC):
     - :class:`CBGenerateManager` — continuous batching with paged attention.
     """
 
+    def init_cb(self, model: "PreTrainedModel", gen_config: "GenerationConfig") -> None:
+        """Initialize continuous batching. No-op for non-CB managers."""
+
     @abstractmethod
     def generate_streaming(
         self,
@@ -519,7 +522,7 @@ class BaseGenerateManager(ABC):
         """
 
     @abstractmethod
-    def generate_non_streaming(
+    async def generate_non_streaming(
         self,
         model: "PreTrainedModel",
         processor: "ProcessorMixin | PreTrainedTokenizerFast",
@@ -562,7 +565,9 @@ class GenerateManager(BaseGenerateManager):
         """Start streaming generation via ``model.generate()`` on the inference thread."""
         loop = asyncio.get_running_loop()
         queue: asyncio.Queue = asyncio.Queue()
-        streamer = DirectStreamer(processor._tokenizer, loop, queue, skip_special_tokens=True)
+        # ProcessorMixin exposes the fast tokenizer as .tokenizer; PreTrainedTokenizerFast is already one.
+        rust_tokenizer = getattr(processor, "tokenizer", processor)._tokenizer  # type: ignore[union-attr]
+        streamer = DirectStreamer(rust_tokenizer, loop, queue, skip_special_tokens=True)
         gen_kwargs = {**inputs, "streamer": streamer, "generation_config": gen_config, "tokenizer": processor}
 
         def _run() -> None:
@@ -650,18 +655,24 @@ class CBGenerateManager(BaseGenerateManager):
         request_id: str,
     ) -> tuple[asyncio.Queue, CBStreamer]:
         """Start streaming CB generation. Registers a per-request output handler."""
+        cb = self._cb
+        if cb is None:
+            raise RuntimeError("CB manager not initialized. Call `init_cb()` first.")
+
         loop = asyncio.get_running_loop()
         text_queue: asyncio.Queue = asyncio.Queue()
 
         input_ids = inputs["input_ids"]
-        request_id = self._cb.add_request(
+        request_id = cb.add_request(
             input_ids,
             request_id=request_id,
             streaming=True,
             max_new_tokens=gen_config.max_new_tokens,
             eos_token_id=gen_config.eos_token_id,
         )
-        streamer = CBStreamer(self._cb, request_id, processor._tokenizer, loop, text_queue)
+        # ProcessorMixin exposes the fast tokenizer as .tokenizer; PreTrainedTokenizerFast is already one.
+        rust_tokenizer = getattr(processor, "tokenizer", processor)._tokenizer  # type: ignore[union-attr]
+        streamer = CBStreamer(self._cb, request_id, rust_tokenizer, loop, text_queue)
 
         # Register a direct callback: the dispatcher calls this on the event loop with each GenerationOutput.
         # This decodes tokens and pushes text straight to the SSE text_queue
@@ -673,7 +684,7 @@ class CBGenerateManager(BaseGenerateManager):
             except Exception as e:
                 text_queue.put_nowait(_StreamError(str(e)))
 
-        self._cb.register_result_handler(request_id, _on_output)
+        cb.register_result_handler(request_id, _on_output)
         return text_queue, streamer
 
     async def generate_non_streaming(
@@ -685,6 +696,10 @@ class CBGenerateManager(BaseGenerateManager):
         request_id: str,
     ) -> tuple[str, int, list[int]]:
         """Run non-streaming CB generation. Registers a handler that resolves an asyncio.Future on completion."""
+        cb = self._cb
+        if cb is None:
+            raise RuntimeError("CB manager not initialized. Call `init_cb()` first.")
+
         input_ids = inputs["input_ids"]
         input_len = len(input_ids)
 
@@ -696,9 +711,9 @@ class CBGenerateManager(BaseGenerateManager):
             if not future.done():
                 future.set_result(result)
 
-        self._cb.register_result_handler(request_id, _on_result)
+        cb.register_result_handler(request_id, _on_result)
 
-        self._cb.add_request(
+        cb.add_request(
             input_ids,
             request_id=request_id,
             max_new_tokens=gen_config.max_new_tokens,
@@ -715,6 +730,8 @@ class CBGenerateManager(BaseGenerateManager):
     @property
     def scheduler(self) -> "Scheduler":
         """The CB scheduler (for testing/monitoring)."""
+        if self._cb is None:
+            raise RuntimeError("CB manager not initialized.")
         return self._cb.batch_processor.scheduler
 
     def stop(self) -> None:
@@ -829,7 +846,7 @@ class BaseHandler:
 
         input_keys = set(body.keys())
         if self._valid_params_class is not None:
-            unexpected = input_keys - self._valid_params_class.__mutable_keys__
+            unexpected = input_keys - getattr(self._valid_params_class, "__mutable_keys__", set())
             if unexpected:
                 raise HTTPException(status_code=422, detail=f"Unexpected fields in the request: {unexpected}")
         unused = input_keys & self._unused_fields
@@ -926,30 +943,34 @@ class BaseHandler:
         for message in messages:
             parsed = {"role": message["role"], "content": []}
 
+            content = message.get("content")
             if modality == Modality.LLM:
-                if isinstance(message["content"], str):
-                    parsed["content"] = message["content"]
-                elif isinstance(message["content"], list):
-                    texts = [c["text"] for c in message["content"] if c["type"] == "text"]
+                if isinstance(content, str):
+                    parsed["content"] = content
+                elif isinstance(content, list):
+                    texts = [c["text"] for c in content if c["type"] == "text"]
                     parsed["content"] = " ".join(texts)
 
             elif modality == Modality.VLM:
-                if isinstance(message["content"], str):
-                    parsed["content"].append({"type": "text", "text": message["content"]})
-                else:
-                    for content in message["content"]:
-                        if content["type"] == "text":
-                            parsed["content"].append(content)
-                        elif content["type"] == "image_url":
+                if isinstance(content, str):
+                    parsed["content"].append({"type": "text", "text": content})
+                elif isinstance(content, list):
+                    for content_block in content:
+                        if content_block["type"] == "text":
+                            parsed["content"].append(content_block)
+                        elif content_block["type"] == "image_url":
                             from PIL import Image
 
-                            url = content["image_url"]["url"]
+                            url = content_block["image_url"]["url"]
                             if "base64" in url:
                                 image_data = re.sub("^data:image/.+;base64,", "", url)
                                 image = Image.open(BytesIO(base64.b64decode(image_data)))
                                 file = tempfile.NamedTemporaryFile(suffix=".png", delete=False)
+                                file.close()  # close handle immediately after creation
                                 image.save(file.name)
                                 url = file.name
+                            # We don't delete the file as tne caller need it (via the `url` key).
+                            # TODO: Better approach to avoid file accumulation.
                             parsed["content"].append({"type": "image", "url": url})
 
             processor_inputs.append(parsed)

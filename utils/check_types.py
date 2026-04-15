@@ -15,15 +15,19 @@ CHECKER_CONFIG = {
     # the explicitly targeted paths but not transitive dependencies.
     "file_globs": [
         "src/transformers/_typing.py",
+        "src/transformers/cli/**/*.py",
         "src/transformers/utils/**/*.py",
         "src/transformers/generation/**/*.py",
         "src/transformers/quantizers/**/*.py",
+        ".circleci/create_circleci_config.py",
     ],
     "check_args": [
         "src/transformers/_typing.py",
+        "src/transformers/cli",
         "src/transformers/utils",
         "src/transformers/generation",
         "src/transformers/quantizers",
+        ".circleci/create_circleci_config.py",
     ],
     "fix_args": None,
 }

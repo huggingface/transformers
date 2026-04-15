@@ -111,8 +111,6 @@ PRIVATE_MODELS = [
     "Kosmos2_5TextForCausalLM",
     "Kosmos2_5VisionModel",
     "SmolVLMVisionTransformer",
-    "SiglipVisionTransformer",
-    "Siglip2VisionTransformer",
     "AriaTextForCausalLM",
     "AriaTextModel",
     "Phi4MultimodalAudioModel",
@@ -134,19 +132,13 @@ PRIVATE_MODELS = [
     "Owlv2VisionTransformer",
     "OwlViTTextTransformer",
     "OwlViTVisionTransformer",
-    "XCLIPTextTransformer",
     "CLIPSegTextTransformer",
     "DetrDecoder",
     "GroupViTTextTransformer",
     "CLIPTextTransformer",
-    "CLIPVisionTransformer",
-    "MetaClip2TextTransformer",
-    "MetaClip2VisionTransformer",
-    "MLCDVisionTransformer",
     "Kosmos2TextTransformer",
     "Kosmos2VisionTransformer",
     "Kosmos2_5TextTransformer",
-    "XCLIPVisionTransformer",
     # end of should have beens
     "VoxtralRealtimeTextModel",
     "VoxtralRealtimeTextForCausalLM",
@@ -280,6 +272,7 @@ IGNORE_NON_TESTED = (
         "UVDocBridge",  # Building part of a bigger model, tested implicitly through UVDocModel
         "Gemma4VisionModel",  # Building part of a bigger model, tested implicitly
         "Gemma4AudioModel",  # Building part of a bigger model, tested implicitly
+        "Sam3LiteTextTextModel",  # Building part of a bigger model, tested implicitly through Sam3LiteTextModel
     ]
 )
 
@@ -451,9 +444,7 @@ IGNORE_NON_AUTO_CONFIGURED = PRIVATE_MODELS.copy() + [
     "SegGptForImageSegmentation",
     "SiglipVisionModel",
     "SiglipTextModel",
-    "SiglipVisionTransformer",
     "Siglip2VisionModel",
-    "Siglip2VisionTransformer",
     "Siglip2TextModel",
     "ChameleonVQVAE",  # no autoclass for VQ-VAE models
     "VitPoseForPoseEstimation",
