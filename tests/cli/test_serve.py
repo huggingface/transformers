@@ -210,6 +210,42 @@ class TestProcessorInputsFromMessages(unittest.TestCase):
             self.assertIsInstance(msg["content"], list)
             self.assertEqual(msg["content"][0]["type"], "text")
 
+    def test_llm_tool_use_fields_forwarded(self):
+        """Tool-use fields (tool_calls, tool_call_id) should be forwarded to processor inputs."""
+
+        get_processor_inputs_from_messages = BaseHandler.get_processor_inputs_from_messages
+
+        tool_calls = [
+            {"id": "call_1", "type": "function", "function": {"name": "get_weather", "arguments": '{"city": "Paris"}'}}
+        ]
+        messages = [
+            {"role": "user", "content": "What's the weather in Paris?"},
+            {"role": "assistant", "tool_calls": tool_calls},
+            {"role": "tool", "content": "22°C, sunny", "tool_call_id": "call_1"},
+        ]
+        result = get_processor_inputs_from_messages(messages, Modality.LLM)
+        self.assertEqual(len(result), 3)
+        self.assertEqual(result[1]["tool_calls"], tool_calls)
+        self.assertNotIn("tool_calls", result[0])
+        self.assertEqual(result[2]["tool_call_id"], "call_1")
+        self.assertNotIn("tool_call_id", result[0])
+
+    def test_vlm_tool_use_fields_forwarded(self):
+        """Tool-use fields should be forwarded for VLM modality as well."""
+
+        get_processor_inputs_from_messages = BaseHandler.get_processor_inputs_from_messages
+
+        tool_calls = [{"id": "call_1", "type": "function", "function": {"name": "describe", "arguments": "{}"}}]
+        messages = [
+            {"role": "user", "content": "Describe this"},
+            {"role": "assistant", "tool_calls": tool_calls},
+            {"role": "tool", "content": "A landscape photo", "tool_call_id": "call_1"},
+        ]
+        result = get_processor_inputs_from_messages(messages, Modality.VLM)
+        self.assertEqual(len(result), 3)
+        self.assertEqual(result[1]["tool_calls"], tool_calls)
+        self.assertEqual(result[2]["tool_call_id"], "call_1")
+
     def test_multimodal_base64_input_audio_decoded_to_temp_file(self):
         """input_audio with base64 data should be decoded, written to a temp file, and converted to HF audio format."""
         import base64

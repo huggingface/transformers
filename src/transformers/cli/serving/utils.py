@@ -949,8 +949,13 @@ class BaseHandler:
         for message in messages:
             parsed = {"role": message["role"], "content": []}
 
-            # Normalize content to a list of typed parts
-            raw_content = message["content"]
+            # Forward tool-use fields so apply_chat_template can handle multi-turn tool conversations
+            if "tool_calls" in message:
+                parsed["tool_calls"] = message["tool_calls"]
+            if "tool_call_id" in message:
+                parsed["tool_call_id"] = message["tool_call_id"]
+
+            raw_content = message.get("content", [])
             if isinstance(raw_content, str):
                 raw_content = [{"type": "text", "text": raw_content}]
 
