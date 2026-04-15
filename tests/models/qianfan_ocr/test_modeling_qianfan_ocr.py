@@ -238,9 +238,7 @@ class QianfanOCRIntegrationTest(unittest.TestCase):
         # model weights in baidu/Qianfan-OCR will be updated after this PR get released in transformers,
         # use bairongz/QianfanOCR for testing and will update back to baidu/Qianfan-OCR after weight update
         self.model_checkpoint = "bairongz/QianfanOCR"
-        self.image_url = url_to_local_path(
-            "http://images.cocodataset.org/val2017/000000039769.jpg"
-        )
+        self.image_url = url_to_local_path("http://images.cocodataset.org/val2017/000000039769.jpg")
         cleanup(torch_device, gc_collect=True)
 
     def tearDown(self):
@@ -274,7 +272,7 @@ class QianfanOCRIntegrationTest(unittest.TestCase):
         # fmt: off
         expected_logits = Expectations(
             {
-                (None, None): torch.tensor([10.0625, 15.6875, 13.0000, 12.1875,  9.3750]),
+                ("cuda", None): torch.tensor([10.0625, 15.6875, 13.0000, 12.1875,  9.3750]),
             }
         )  # fmt: skip
         self.assertTrue(
@@ -307,7 +305,7 @@ class QianfanOCRIntegrationTest(unittest.TestCase):
         # fmt: off
         expected_outputs = Expectations(
             {
-                (None, None): "The image features two striped cats lying down on a pink couch, seemingly asleep.",
+                ("cuda", None): "The image features two striped cats lying down on a pink couch, seemingly asleep.",
             }
         )  # fmt: skip
         self.assertEqual(decoded, expected_outputs.get_expectation())
@@ -329,7 +327,7 @@ class QianfanOCRIntegrationTest(unittest.TestCase):
         # fmt: off
         expected_outputs = Expectations(
             {
-                (None, None): "1 + 1 equals 2.",
+                ("cuda", None): "1 + 1 equals 2.",
             }
         )  # fmt: skip
         self.assertEqual(decoded, expected_outputs.get_expectation())
@@ -359,12 +357,13 @@ class QianfanOCRIntegrationTest(unittest.TestCase):
                 ],
             }
         ]
-        texts = [
-            processor.apply_chat_template(messages1, add_generation_prompt=True),
-            processor.apply_chat_template(messages2, add_generation_prompt=True),
-        ]
         inputs = processor.apply_chat_template(
-            [messages1, messages2], add_generation_prompt=True, tokenize=True, return_dict=True, return_tensors="pt", padding=True
+            [messages1, messages2],
+            add_generation_prompt=True,
+            tokenize=True,
+            return_dict=True,
+            return_tensors="pt",
+            padding=True,
         ).to(torch_device, torch.bfloat16)
 
         output = model.generate(**inputs, max_new_tokens=16, do_sample=False)
@@ -376,12 +375,12 @@ class QianfanOCRIntegrationTest(unittest.TestCase):
         # fmt: off
         expected_outputs_0 = Expectations(
             {
-                (None, None): "In the tranquil setting of this image, two tabby cats are the stars of",
+                ("cuda", None): "In the tranquil setting of this image, two tabby cats are the stars of",
             }
         )  # fmt: skip
         expected_outputs_1 = Expectations(
             {
-                (None, None): "The image features two striped cats lying down on a pink couch, seemingly asleep.",
+                ("cuda", None): "The image features two striped cats lying down on a pink couch, seemingly asleep.",
             }
         )  # fmt: skip
         self.assertEqual(decoded_0, expected_outputs_0.get_expectation())

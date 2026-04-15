@@ -159,7 +159,7 @@ class QianfanOCRVisionLayer(InternVLVisionLayer):
         hidden_states = self.lambda_1 * hidden_states
         hidden_states = self.drop_path1(hidden_states)
         hidden_states = hidden_states + residual
-        
+
         residual = hidden_states
         hidden_states = self.layernorm_after(hidden_states)
         # Fully Connected
@@ -227,7 +227,10 @@ class QianfanOCRVisionModel(InternVLVisionModel):
     @capture_outputs
     @auto_docstring
     def forward(
-        self, pixel_values: torch.Tensor, bool_masked_pos: torch.BoolTensor | None = None, **kwargs: Unpack[TransformersKwargs]
+        self,
+        pixel_values: torch.Tensor,
+        bool_masked_pos: torch.BoolTensor | None = None,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | QianfanOCRVisionModelOutputWithPooling:
         r"""
         bool_masked_pos (`torch.BoolTensor` of shape `(batch_size, num_patches)`, *optional*):
