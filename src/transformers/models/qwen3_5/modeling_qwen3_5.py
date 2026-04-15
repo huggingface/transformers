@@ -48,8 +48,7 @@ from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, loggi
 from ...utils.generic import is_flash_attention_requested, maybe_autocast, merge_with_config_defaults
 from ...utils.import_utils import is_causal_conv1d_available, is_flash_linear_attention_available
 from ...utils.output_capturing import capture_outputs
-from ...vision_utils import get_pos_embed_indices, get_vision_cu_seqlens
-from ...vision_utils import get_rotary_pos_ids_interleaved as get_rotary_pos_ids
+from ...vision_utils import get_pos_embed_indices, get_rotary_pos_ids, get_vision_cu_seqlens
 from .configuration_qwen3_5 import Qwen3_5Config, Qwen3_5TextConfig, Qwen3_5VisionConfig
 
 

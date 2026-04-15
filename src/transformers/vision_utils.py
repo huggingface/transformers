@@ -73,55 +73,6 @@ def get_rotary_pos_ids(grid_thw: torch.Tensor, spatial_merge_size: int | torch.T
     return torch.cat(pos_ids, dim=0)
 
 
-def get_rotary_pos_ids_interleaved(grid_thw: torch.Tensor, spatial_merge_size: int) -> torch.Tensor:
-    """Compute (row, col) position IDs for Qwen3-VL style vision rotary embeddings.
-
-    Uses block-interleaved positions with intra-block offsets (different from the
-    Qwen2-VL variant which permutes whole rows/columns).
-
-    Args:
-        grid_thw: ``(num_images_or_videos, 3)``
-        spatial_merge_size: merge block size from vision config.
-
-    Returns:
-        ``pos_ids``: ``(total_tokens, 2)`` long — (row, col) position per token.
-    """
-    m = spatial_merge_size
-    device = grid_thw.device
-    total_tokens = int((grid_thw[:, 0] * grid_thw[:, 1] * grid_thw[:, 2]).sum().item())
-    pos_ids = torch.empty((total_tokens, 2), dtype=torch.long, device=device)
-
-    offset = 0
-    for num_frames, height, width in grid_thw.tolist():
-        num_frames, height, width = int(num_frames), int(height), int(width)
-        merged_h, merged_w = height // m, width // m
-
-        block_rows = torch.arange(merged_h, device=device)
-        block_cols = torch.arange(merged_w, device=device)
-        intra_row = torch.arange(m, device=device)
-        intra_col = torch.arange(m, device=device)
-
-        row_idx = (
-            (block_rows[:, None, None, None] * m + intra_row[None, None, :, None])
-            .expand(merged_h, merged_w, m, m)
-            .reshape(-1)
-        )
-        col_idx = (
-            (block_cols[None, :, None, None] * m + intra_col[None, None, None, :])
-            .expand(merged_h, merged_w, m, m)
-            .reshape(-1)
-        )
-
-        coords = torch.stack((row_idx, col_idx), dim=-1)
-        if num_frames > 1:
-            coords = coords.repeat(num_frames, 1)
-
-        num_tokens = coords.shape[0]
-        pos_ids[offset : offset + num_tokens] = coords
-        offset += num_tokens
-
-    return pos_ids
-
 
 def get_window_index(
     grid_thw: torch.Tensor,

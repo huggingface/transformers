@@ -30,8 +30,7 @@ from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
 from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
-from ...vision_utils import get_pos_embed_indices, get_vision_cu_seqlens
-from ...vision_utils import get_rotary_pos_ids_interleaved as get_rotary_pos_ids
+from ...vision_utils import get_pos_embed_indices, get_rotary_pos_ids, get_vision_cu_seqlens
 from ..qwen3.modeling_qwen3 import Qwen3ForCausalLM
 from ..qwen3_next.configuration_qwen3_next import Qwen3NextConfig
 from ..qwen3_next.modeling_qwen3_next import (

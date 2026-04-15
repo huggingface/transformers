@@ -27,8 +27,7 @@ from ...tokenization_utils_base import PreTokenizedInput, TextInput
 from ...utils import auto_docstring, logging
 from ...utils.import_utils import requires_backends
 from ...video_utils import VideoInput
-from ...vision_utils import get_rotary_pos_ids_interleaved as get_rotary_pos_ids
-from ...vision_utils import get_vision_cu_seqlens
+from ...vision_utils import get_rotary_pos_ids, get_vision_cu_seqlens
 
 
 logger = logging.get_logger(__name__)

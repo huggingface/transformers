@@ -40,8 +40,7 @@ from ...utils.generic import maybe_autocast, merge_with_config_defaults
 from ...utils.import_utils import requires_backends
 from ...utils.output_capturing import capture_outputs
 from ...video_utils import VideoInput
-from ...vision_utils import get_pos_embed_indices, get_vision_cu_seqlens
-from ...vision_utils import get_rotary_pos_ids_interleaved as get_rotary_pos_ids
+from ...vision_utils import get_pos_embed_indices, get_rotary_pos_ids, get_vision_cu_seqlens
 from ..llama.modeling_llama import LlamaRotaryEmbedding
 from ..qwen2_5_vl.modeling_qwen2_5_vl import (
     Qwen2_5_VLCausalLMOutputWithPast,
