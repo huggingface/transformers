@@ -91,15 +91,17 @@ class ParakeetProcessor(ProcessorMixin):
         feature_extractor_input_names = self.feature_extractor.model_input_names
         return feature_extractor_input_names + ["labels"]
 
-    def decode(self, *args, token_timestamps=None, token_durations=None, **kwargs):
+    def decode(self, *args, durations=None, **kwargs):
         """
         Forward arguments to [`~PreTrainedTokenizer.decode`] and post-process the timestamps (if provided for TDT) as
         in the NeMo library.
         """
         decoded = self.tokenizer.decode(*args, **kwargs)
 
-        if token_timestamps is not None and token_durations is not None:
+        if durations is not None:
             token_ids = args[0]
+            # Derive per-step frame indices from cumulative sum of durations.
+            timestamps = durations.cumsum(dim=-1) - durations
 
             output_kwargs = self._merge_kwargs(
                 ParakeetProcessorKwargs,
@@ -112,16 +114,18 @@ class ParakeetProcessor(ProcessorMixin):
                 * output_kwargs["audio_kwargs"]["subsampling_factor"]
             )
             proc_timestamps = []
-            for batch_ids, timestamps, durations in zip(token_ids, token_timestamps, token_durations):
+            for batch_ids, batch_timestamps, batch_durations in zip(token_ids, timestamps, durations):
                 # See `compute_rnnt_timestamps` in NeMo: https://github.com/NVIDIA-NeMo/NeMo/blob/1692a8fb97e1aadc883cfadd2a57c4e8a1b793aa/nemo/collections/asr/parts/submodules/rnnt_decoding.py#L993
-                # Filter padding (unwritten positions in `all_tokens_tensor` in `generate`)
+                # Filter padding and blank tokens
+                blank_token_id = self.tokenizer.convert_tokens_to_ids("<blank>")
+                skip_ids = {self.tokenizer.pad_token_id, blank_token_id}
                 non_blank_indices = [
-                    i for i, token_id in enumerate(batch_ids) if token_id != self.tokenizer.pad_token_id
+                    i for i, token_id in enumerate(batch_ids) if int(token_id) not in skip_ids
                 ]
                 non_blank_ids = [batch_ids[i] for i in non_blank_indices]
                 decoded_tokens = [self.tokenizer.decode([token_id]) for token_id in non_blank_ids]
                 timestamp_dict = [
-                    {"token": token_str, "start": int(timestamps[i]), "end": int(timestamps[i] + durations[i])}
+                    {"token": token_str, "start": int(batch_timestamps[i]), "end": int(batch_timestamps[i] + batch_durations[i])}
                     for token_str, i in zip(decoded_tokens, non_blank_indices)
                 ]
                 timestamp_dict = self._refine_timestamps_tdt(timestamp_dict)
