@@ -590,6 +590,7 @@ class WeightTransform:
         "layer_targets",
         "_original_source_patterns",
         "_original_target_patterns",
+        "_was_used",
     )
 
     def __init__(self, source_patterns: str | list[str], target_patterns: str | list[str]):
@@ -604,6 +605,9 @@ class WeightTransform:
         self.quantization_operation: ConversionOps | None = None
         self.collected_tensors: dict[str, list[Future]] = defaultdict(list)
         self.layer_targets: dict[str, set[str]] = defaultdict(set)
+
+        # Flag to notice if the Transform was used
+        self._was_used = False
 
         # We need to process a few exceptions here when instantiating the reverse mapping (i.e. the targets become
         # sources, and sources become targets). The issues lie in the sources usually, so here we need to check the
@@ -654,13 +658,6 @@ class WeightTransform:
     def __repr__(self):
         return f"{self.__class__.__name__}(source_patterns={self.source_patterns}, target_patterns={self.target_patterns})"
 
-    def __eq__(self, other: WeightTransform):
-        return (
-            self.__class__ is other.__class__
-            and self._original_source_patterns == other._original_source_patterns
-            and self._original_target_patterns == other._original_target_patterns
-        )
-
     def __setattr__(self, name, value):
         if name in ("source_patterns", "target_patterns"):
             # We do not allow to re-set the patterns, as they are linked between each other and changing one
@@ -687,6 +684,9 @@ class WeightTransform:
         match_object = self.compiled_sources.search(source_key)
         if match_object is None:
             return source_key, None
+
+        # We have a match, so the Transform was used
+        self._was_used = True
 
         # Find the source that produced the match (it's the first group that matched, as the search stops after first branch match)
         matching_group_name = next(name for name, val in match_object.groupdict().items() if val is not None)
@@ -746,6 +746,10 @@ class WeightTransform:
 
         return collected_tensors
 
+    def was_used(self) -> bool:
+        """Return whether the current Transform matched any weights during loading/saving"""
+        return self._was_used
+
 
 class WeightRenaming(WeightTransform):
     # Special case of WeightTransform that only renames keys without any conversion.
@@ -795,7 +799,6 @@ class PrefixChange(WeightRenaming):
         "prefix_to_add",
         "prefix_to_remove",
         "model_prefix",
-        "_prefix_was_changed",
     )
 
     def __init__(
@@ -819,16 +822,6 @@ class PrefixChange(WeightRenaming):
                 target_patterns=rf"{self.model_prefix}\.\1",
             )
 
-        # Flag to signal at runtime if the instance was used, i.e. if the checkpoints matched the added/removed
-        # prefix. If it ends-up being True, the opposite will be used when saving
-        self._prefix_was_changed = False
-
-    def rename_source_key(self, source_key: str):
-        renamed_key, source_pattern_that_matched = super().rename_source_key(source_key)
-        if renamed_key != source_key:
-            self._prefix_was_changed = True
-        return renamed_key, source_pattern_that_matched
-
     def reverse_transform(self) -> WeightTransform:
         """Reverse the current `WeightTransform` instance, to be able to save with the opposite weight transformations."""
         # TODO: check this and relax when quantizer have `reverse_op`
@@ -841,9 +834,6 @@ class PrefixChange(WeightRenaming):
             reverse_transform = PrefixChange(prefix_to_add=self.prefix_to_remove, model_prefix=self.model_prefix)
 
         return reverse_transform
-
-    def prefix_was_changed(self):
-        return self._prefix_was_changed
 
     def with_submodel_prefix(self, prefix: str) -> PrefixChange:
         new_prefix = f"{prefix}.{self.model_prefix}" if self.model_prefix != "" else prefix
@@ -1427,16 +1417,9 @@ def convert_and_load_state_dict_in_model(
             # `cancel_futures=True` in case the program was interrupted, to avoid wasting time on exit
             thread_pool.shutdown(wait=False, cancel_futures=True)
 
-    # Keep the current weight conversion mapping for later saving (in case it was coming directly from the user)
-    model_specific_conversions = []
-    for conversion in weight_mapping:
-        # For a prefix change, we need to update at runtime depending on whether the checkpoint already had the correct
-        # format or not - otherwise, we may end up adding twice the same prefix
-        if isinstance(conversion, PrefixChange):
-            if conversion.prefix_was_changed():
-                model_specific_conversions.append(conversion)
-        else:
-            model_specific_conversions.append(conversion)
+    # Keep the current weight conversion mapping for later saving (in case it was coming directly from the user), but
+    # only if it was used, i.e. it matched any weight from the checkpoints
+    model_specific_conversions = [conversion for conversion in weight_mapping if conversion.was_used()]
     # Important: we need to revert the order here, so that potential conversions from submodels are performed first
     model._weight_conversions = model_specific_conversions[::-1]
 
