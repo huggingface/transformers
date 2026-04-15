@@ -30,6 +30,8 @@
       sections:
       - local: contributing
         title: Contribute to Transformers
+      - local: modeling_rules
+        title: Model structure rules
       - local: modular_transformers
         title: Contributing a new model to Transformers
       - local: model_output_tracing
