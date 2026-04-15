@@ -1081,7 +1081,7 @@ def create_bidirectional_mask(
     batch_size, dtype, device = embeds.shape[0], embeds.dtype, embeds.device
     mask_factory_function = bidirectional_mask_function
     if block_sequence_ids is not None:
-        mask_factory_function = or_masks(blockwise_overlay(block_sequence_ids), mask_factory_function)
+        mask_factory_function = and_masks(blockwise_overlay(block_sequence_ids), mask_factory_function)
     mask_interface = ALL_MASK_ATTENTION_FUNCTIONS[config._attn_implementation]
 
     # Allow skipping the mask creation except we have additional masking operators (and/or masks)
@@ -1304,7 +1304,7 @@ def create_bidirectional_sliding_window_mask(
     batch_size, dtype, device = inputs_embeds.shape[0], inputs_embeds.dtype, inputs_embeds.device
     mask_factory_function = sliding_window_bidirectional_mask_function(sliding_window)
     if block_sequence_ids is not None:
-        mask_factory_function = or_masks(blockwise_overlay(block_sequence_ids), mask_factory_function)
+        mask_factory_function = and_masks(blockwise_overlay(block_sequence_ids), mask_factory_function)
     mask_interface = ALL_MASK_ATTENTION_FUNCTIONS[config._attn_implementation]
 
     use_vmap = False
