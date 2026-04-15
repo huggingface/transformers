@@ -17,14 +17,16 @@ import inspect
 import unittest
 
 import requests
+from parameterized import parameterized
 
 from transformers import ChineseCLIPConfig, ChineseCLIPTextConfig, ChineseCLIPVisionConfig
 from transformers.models.auto import get_values
-from transformers.testing_utils import require_torch, require_vision, slow, torch_device
+from transformers.testing_utils import is_flaky, require_torch, require_vision, slow, torch_device
 from transformers.utils import is_torch_available, is_vision_available
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import (
+    TEST_EAGER_MATCHES_SDPA_INFERENCE_PARAMETERIZATION,
     ModelTesterMixin,
     floats_tensor,
     ids_tensor,
@@ -329,7 +331,7 @@ class ChineseCLIPTextModelTest(ModelTesterMixin, unittest.TestCase):
 
     def setUp(self):
         self.model_tester = ChineseCLIPTextModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=ChineseCLIPTextConfig, hidden_size=32)
+        self.config_tester = ConfigTester(self, config_class=ChineseCLIPTextConfig, hidden_size=36)
 
     def test_config(self):
         self.config_tester.run_common_tests()
@@ -406,7 +408,7 @@ class ChineseCLIPVisionModelTest(ModelTesterMixin, unittest.TestCase):
     def setUp(self):
         self.model_tester = ChineseCLIPVisionModelTester(self)
         self.config_tester = ConfigTester(
-            self, config_class=ChineseCLIPVisionConfig, has_text_modality=False, hidden_size=32
+            self, config_class=ChineseCLIPVisionConfig, has_text_modality=False, hidden_size=36
         )
 
     def test_config(self):
@@ -519,6 +521,7 @@ class ChineseCLIPModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestC
 
     test_resize_embeddings = False
     test_attention_outputs = False
+    additional_model_inputs = ["pixel_values"]
 
     def setUp(self):
         text_kwargs = {"use_labels": False, "batch_size": 12}
@@ -528,6 +531,13 @@ class ChineseCLIPModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestC
     def test_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
+
+    @parameterized.expand(TEST_EAGER_MATCHES_SDPA_INFERENCE_PARAMETERIZATION)
+    @slow
+    @is_flaky()
+    def test_eager_matches_sdpa_inference(self, *args):
+        # adding only flaky decorator here and call the parent test method
+        return getattr(ModelTesterMixin, self._testMethodName)(self)
 
     @unittest.skip(reason="Hidden_states is tested in individual model tests")
     def test_hidden_states_output(self):
