@@ -800,7 +800,7 @@ class PrefixChange(WeightRenaming):
     def __init__(
         self, prefix_to_add: str | None = None, prefix_to_remove: str | None = None, model_prefix: str | None = None
     ):
-        if prefix_to_add is None ^ prefix_to_remove is not None:
+        if (prefix_to_add is None) ^ (prefix_to_remove is not None):
             raise ValueError("You must provide only one of `prefix_to_add` and `prefix_to_remove`")
 
         self.prefix_to_add = prefix_to_add
