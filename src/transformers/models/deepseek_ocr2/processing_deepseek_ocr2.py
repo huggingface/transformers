@@ -18,7 +18,7 @@ Processor class for DeepSeek-OCR-2.
 import math
 
 from ...feature_extraction_utils import BatchFeature
-from ...image_utils import ImageInput
+from ...image_utils import ImageInput, make_nested_list_of_images
 from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
 from ...utils import auto_docstring, logging
@@ -120,10 +120,7 @@ class DeepseekOcr2Processor(ProcessorMixin):
         if images is None:
             raise ValueError("`images` are expected as arguments to a `DeepseekOcr2Processor` instance.")
         if text is None:
-            logger.warning_once(
-                "You are using DeepseekOcr2Processor without a text prefix. Defaulting to `<image>\\nFree OCR.`."
-            )
-            text = "<image>\nFree OCR."
+            logger.warning_once("You are using DeepseekOcr2Processor without a text prefix.")
 
         output_kwargs = self._merge_kwargs(
             DeepseekOcr2ProcessorKwargs,
@@ -133,17 +130,20 @@ class DeepseekOcr2Processor(ProcessorMixin):
 
         if isinstance(text, str):
             text = [text]
-        elif not isinstance(text, list) and not isinstance(text[0], str):
+        elif not (isinstance(text, (list, tuple)) and all(isinstance(t, str) for t in text)):
             raise TypeError("Invalid input text. Please provide a string, or a list of strings")
 
         text = text.copy()  # below lines change text in-place
 
-        if not any(self.image_token in sample for sample in text):
-            logger.warning_once(
-                "No `<image>` token found in the text. Adding `<image>` prefix automatically. "
-                "It is recommended to add `<image>` tokens explicitly in your text."
+        images = make_nested_list_of_images(images)
+        n_images_in_text = [t.count(self.image_token) for t in text]
+        n_images_in_samples = [len(sample) for sample in images]
+
+        if n_images_in_text != n_images_in_samples:
+            raise ValueError(
+                f"The number of `<image>` tokens in each text ({n_images_in_text}) should match the "
+                f"number of provided images per sample ({n_images_in_samples})."
             )
-            text = [self.image_token + "\n" + t for t in text]
 
         image_inputs = self.image_processor(images, **output_kwargs["images_kwargs"])
         num_crops_list = image_inputs["num_local_patches"]
