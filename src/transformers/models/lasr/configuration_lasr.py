@@ -60,6 +60,9 @@ class LasrEncoderConfig(PreTrainedConfig):
     >>> # Accessing the model configuration
     >>> configuration = model.config
     ```
+
+    This configuration class is based on the LasrEncoder architecture from Google Health AI. You can find more details
+    and pre-trained models at [google/medasr](https://huggingface.co/google/medasr).
     """
 
     model_type = "lasr_encoder"
@@ -78,7 +81,7 @@ class LasrEncoderConfig(PreTrainedConfig):
     subsampling_conv_kernel_size: int = 5
     subsampling_conv_stride: int = 2
     dropout: float | int = 0.1
-    dropout_positions: float = 0.0
+    dropout_positions: float | int = 0.0
     layerdrop: float | int = 0.1
     activation_dropout: float | int = 0.1
     attention_dropout: float | int = 0.1
@@ -117,6 +120,8 @@ class LasrCTCConfig(PreTrainedConfig):
     >>> # Accessing the model configuration
     >>> configuration = model.config
     ```
+    This configuration class is based on the Lasr CTC architecture from Google Health AI. You can find more details
+    and pre-trained models at [google/medasr](https://huggingface.co/google/medasr).
     """
 
     model_type = "lasr_ctc"

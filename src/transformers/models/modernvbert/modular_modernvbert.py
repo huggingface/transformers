@@ -81,7 +81,7 @@ class ModernVBertConfig(PreTrainedConfig):
     initializer_range: float = 0.02
     initializer_cutoff_factor: float = 2.0
     classifier_pooling: Literal["cls", "mean"] = "cls"
-    classifier_dropout: float = 0.0
+    classifier_dropout: float | int = 0.0
     classifier_bias: bool = False
     tie_word_embeddings: bool = False
 
@@ -335,7 +335,7 @@ class ModernVBertPredictionHead(ModernBertPredictionHead):
 class ModernVBertForMaskedLM(ModernVBertPreTrainedModel):
     _tied_weights_keys = {"lm_head.weight": "model.text_model.embeddings.tok_embeddings.weight"}
 
-    def __init__(self, config):
+    def __init__(self, config: ModernVBertConfig):
         super().__init__(config)
 
         self.vocab_size = config.text_config.vocab_size

@@ -359,7 +359,7 @@ class Owlv2ImageProcessor(TorchvisionBackend):
         images: list["torch.Tensor"],
         do_resize: bool,
         size: SizeDict,
-        resample: "PILImageResampling | tvF.InterpolationMode | int | None",
+        resample: "PILImageResampling | None",
         do_pad: bool,
         do_rescale: bool,
         rescale_factor: float,

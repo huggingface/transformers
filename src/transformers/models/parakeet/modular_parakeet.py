@@ -422,12 +422,12 @@ class ParakeetEncoder(ParakeetPreTrainedModel):
         self,
         input_features: torch.Tensor,
         attention_mask: torch.Tensor | None = None,
-        output_attention_mask: bool | None = None,
+        output_attention_mask: bool = True,
         **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutput:
         r"""
-        output_attention_mask (`bool`, *optional*):
-            Whether to return the output attention mask.
+        output_attention_mask (`bool`, *optional*, defaults to `True`):
+            Whether to return the output attention mask. Only effective when `attention_mask` is provided.
 
         Example:
 
@@ -483,7 +483,7 @@ class ParakeetEncoder(ParakeetPreTrainedModel):
 
         return ParakeetEncoderModelOutput(
             last_hidden_state=hidden_states,
-            attention_mask=output_mask.int() if output_attention_mask and output_mask is not None else None,
+            attention_mask=output_mask.int() if attention_mask is not None and output_attention_mask else None,
         )
 
 

@@ -68,7 +68,7 @@ class Pix2StructTextConfig(PreTrainedConfig):
     num_heads: int = 12
     relative_attention_num_buckets: int = 32
     relative_attention_max_distance: int = 128
-    dropout_rate: float = 0.1
+    dropout_rate: float | int = 0.1
     layer_norm_epsilon: float = 1e-6
     initializer_factor: float = 1.0
     dense_act_fn: str = "gelu_new"
@@ -128,7 +128,7 @@ class Pix2StructVisionConfig(PreTrainedConfig):
     num_attention_heads: int = 12
     dense_act_fn: str = "gelu_new"
     layer_norm_eps: float = 1e-6
-    dropout_rate: float = 0.0
+    dropout_rate: float | int = 0.0
     attention_dropout: float | int = 0.0
     initializer_range: float = 1e-10
     initializer_factor: float = 1.0

@@ -20,6 +20,16 @@ from transformers.configuration_utils import PreTrainedConfig
 from transformers.utils import direct_transformers_import
 
 
+CHECKER_CONFIG = {
+    "name": "config_attributes",
+    "label": "Config attributes",
+    # Approximate: iterates CONFIG_MAPPING at runtime and also reads modeling_*.py files
+    # in each config's directory via os.listdir(). Deprecated models are skipped.
+    "file_globs": ["src/transformers/models/**/configuration_*.py", "src/transformers/models/**/modeling_*.py"],
+    "check_args": [],
+    "fix_args": None,
+}
+
 # All paths are set with the intent you should run this script from the root of the repo with the command
 # python utils/check_config_docstrings.py
 PATH_TO_TRANSFORMERS = "src/transformers"
@@ -73,6 +83,8 @@ SPECIAL_CASES_TO_ALLOW = {
     "AutoformerConfig": ["num_static_real_features", "num_time_features"],
     "SamVisionConfig": ["mlp_ratio"],
     "Sam3VisionConfig": ["backbone_feature_sizes"],
+    "Sam3LiteTextViTConfig": ["global_attn_indexes", "window_size"],
+    "Sam3LiteTextVisionConfig": ["fpn_hidden_size", "scale_factors"],
     "SamHQVisionConfig": ["mlp_ratio"],
     "ClapAudioConfig": ["num_classes"],
     "ClvpDecoderConfig": ["add_cross_attention"],
@@ -99,6 +111,7 @@ SPECIAL_CASES_TO_ALLOW = {
     "ConditionalDetrConfig": True,
     "DabDetrConfig": True,
     "SwitchTransformersConfig": True,
+    "MaskFormerDetrConfig": True,
     "DetrConfig": True,
     "DFineConfig": True,
     "GroundingDinoConfig": True,

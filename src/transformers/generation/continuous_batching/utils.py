@@ -13,12 +13,13 @@
 # limitations under the License.
 from collections import OrderedDict
 from math import ceil
+from typing import Any
 
 import torch
 
 from transformers.configuration_utils import PretrainedConfig
 
-from .requests import logger
+from .requests import FutureRequestState, RequestState, RequestStatus, logger
 
 
 class CudaGraphBuffer:
@@ -158,3 +159,32 @@ def build_attention_mask(
             masked += torch.tril(minus_inf, diagonal=sliding_diagonal)
         # Replace in attention mask
         attention_mask[..., query_range, key_range] = masked
+
+
+def create_warmup_future_states(
+    num: int,
+    status: RequestStatus,
+    num_query_tokens: int,
+    num_cache_tokens: int,
+    cache: Any,  # not annotated to avoid circular import
+) -> list[FutureRequestState]:
+    """An utility function to create a list of FutureRequestStates for the warmup of CB."""
+    # Setup
+    request_ids = [f"__warmup_{status.name}_{i}__" for i in range(num)]
+    total_tokens = num_query_tokens + num_cache_tokens
+    blocks_needed = ceil(total_tokens / cache.block_size)
+    # Main loop
+    future_states = []
+    for req_id in request_ids:
+        state = RequestState(request_id=req_id, initial_tokens=[0] * total_tokens, max_new_tokens=1)
+        state._status = status  # bypass the property setter to avoid the lifecycle side effects
+        state.tokens_to_process = [0] * num_query_tokens
+        state.position_offset = num_cache_tokens
+        # Stop if allocation fails for any request
+        allocated = cache.allocate_blocks(blocks_needed, state.request_id, 0)
+        if allocated is None:
+            return future_states
+        future_states.append(
+            FutureRequestState(state, has_new_token=True, complete_blocks=0, query_length=num_query_tokens)
+        )
+    return future_states

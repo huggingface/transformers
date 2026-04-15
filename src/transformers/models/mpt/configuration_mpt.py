@@ -122,9 +122,9 @@ class MptConfig(PreTrainedConfig):
     expansion_ratio: int = 4
     max_seq_len: int = 2048
     vocab_size: int = 50368
-    resid_pdrop: float = 0.0
+    resid_pdrop: float | int = 0.0
     layer_norm_epsilon: float = 1e-5
-    emb_pdrop: float = 0.0
+    emb_pdrop: float | int = 0.0
     learned_pos_emb: bool = True
     attn_config: dict | MptAttentionConfig | None = None
     init_device: str = "cpu"
