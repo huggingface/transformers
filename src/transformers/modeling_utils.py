@@ -2771,6 +2771,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             old_num_tokens, old_embedding_dim = old_embeddings.weight.size()
 
         if old_num_tokens == new_num_tokens and not is_deepspeed_zero3_enabled():
+            old_embeddings.num_embeddings = new_num_tokens  # maybe weights are tied which doesn't update attr
             return old_embeddings
 
         if not isinstance(old_embeddings, nn.Embedding):
@@ -2910,6 +2911,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             )
 
         if old_num_tokens == new_num_tokens and not is_deepspeed_zero3_enabled():
+            old_lm_head.out_features = new_num_tokens  # maybe weights are tied which doesn't update attr
             return old_lm_head
 
         if not isinstance(old_lm_head, nn.Linear):
