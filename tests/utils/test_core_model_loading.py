@@ -878,29 +878,29 @@ class TestConvertAndLoadStateDict(unittest.TestCase):
 class TestDtensorShardOperation(unittest.TestCase):
     """Unit tests for DtensorShardOperation.shard_tensor — one test per code path.
 
-    Branch coverage map:
+    Branch coverage map (labels [A]–[C3b] match comments in core_model_loading.py):
 
     shard_tensor()
-    ├── A: no sharding placements → full copy                            [test_no_shard_returns_full_tensor]
-    ├── B: expert path (tensor_idx set, ndim mismatch)
-    │   ├── B1: has_expert_sharding=False → fall through to C            [test_expert_shaped_tp_only_no_expert_sharding]
-    │   ├── B2: not owns_local_expert → None                             [test_expert_filtering]
-    │   ├── B3: owned, no inner placements → full copy                   [test_expert_filtering]
-    │   └── B4: owned, with inner placements → _shard_nd                 [test_expert_filtering_preserves_inner_sharding]
-    └── C: _shard_nd()
-        ├── C1: _can_shard_on_read=False → _materialize_and_split        [test_nd_strided_plus_shard_same_dim_fallback]
-        ├── C2: has_strided=False → contiguous slice
-        │   ├── 1D mesh                                                   [test_1d_shard_fast_path]
-        │   ├── 2D mesh                                                   [test_nd_contiguous_single_slice]
-        │   ├── negative dim                                              [test_negative_dim_normalizes_correctly]
-        │   └── uneven division                                           [test_contiguous_shard_uneven_division]
-        └── C3: has_strided=True → _compute_dim_ranges + _slice_and_read
-            ├── _StridedShard → _strided_ranges                           [test_nd_strided_shard_disjoint_ranges]
-            └── _source_tensor_needs_packing → contiguous                 [test_prepacked_strided_shard_uses_contiguous_source_slice]
+    ├── [A]  no sharding placements → full copy                            [test_no_shard_returns_full_tensor]
+    ├── [B]  expert path (tensor_idx set, ndim mismatch)
+    │   ├── [B1] has_expert_sharding=False → fall through to C             [test_expert_shaped_tp_only_no_expert_sharding]
+    │   ├── [B2] not owns_local_expert → None                              [test_expert_filtering]
+    │   ├── [B3] owned, no inner placements → full copy                    [test_expert_filtering]
+    │   └── [B4] owned, with inner placements → _shard_nd                  [test_expert_filtering_preserves_inner_sharding]
+    └── [C]  _shard_nd()
+        ├── [C1]  _can_shard_on_read=False → _materialize_and_split        [test_nd_strided_plus_shard_same_dim_fallback]
+        ├── [C2]  has_strided=False → contiguous slice
+        │   ├── 1D mesh                                                    [test_1d_shard_fast_path]
+        │   ├── 2D mesh                                                    [test_nd_contiguous_single_slice]
+        │   ├── negative dim                                               [test_negative_dim_normalizes_correctly]
+        │   └── uneven division                                            [test_contiguous_shard_uneven_division]
+        └── [C3] has_strided=True → _compute_dim_ranges + _slice_and_read
+            ├── [C3a] _source_tensor_needs_packing → contiguous            [test_prepacked_strided_shard_uses_contiguous_source_slice]
+            └── [C3b] _StridedShard → _strided_ranges                      [test_nd_strided_shard_disjoint_ranges]
 
     _slice_and_read (tested directly)
-    ├── all single ranges → simple slice                                  [test_slice_and_read_all_single_ranges]
-    └── two multi-range dims → ValueError                                 [test_slice_and_read_raises_on_two_multi_range_dims]
+    ├── all single ranges → simple slice                                   [test_slice_and_read_all_single_ranges]
+    └── two multi-range dims → ValueError                                  [test_slice_and_read_raises_on_two_multi_range_dims]
     """
 
     def test_no_shard_returns_full_tensor(self):

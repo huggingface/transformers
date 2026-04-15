@@ -871,7 +871,7 @@ class DtensorShardOperation:
         self, param: torch.Tensor, tensor_idx: int | None = None, device=None, dtype=None
     ) -> torch.Tensor | None:
         """Return the local shard of ``param`` for this rank, dispatching to the appropriate strategy."""
-        # Find which placements actually shard data.
+        # Find sharding placements (keep Shard and _StridedShard only)
         # _StridedShard.is_shard() returns False in PyTorch, so we also check for
         # the ``dim`` attribute that both Shard and _StridedShard have.
         sharding_placements = [
@@ -881,32 +881,38 @@ class DtensorShardOperation:
         ]
         param_shape = list(param.shape) if isinstance(param, torch.Tensor) else param.get_shape()
 
+        # [A] No sharding placements -> Return full copy
         if not sharding_placements:
             return param[...].to(device=device, dtype=dtype)
 
+        
         if tensor_idx is not None and len(self.param.shape) == len(param_shape) + 1:
-            # Expert parallelism: dim 0 (expert dimension) is sharded across ranks.
+            # [B] Expert path: shard on expert dimension (dim 0).
             # When dim 0 is the only sharding placement, return the full expert or
             # skip it. When TP also shards an inner dim, keep applying the remaining
             # placements to the owned expert tensor.
             has_expert_sharding = any(self._normalize_param_dim(p.dim) == 0 for _, p in sharding_placements)
             if has_expert_sharding:
+                # [B2] This rank doesn't own the expert tensor -> skip it
                 if not self._owns_local_expert(tensor_idx):
                     return None
                 inner_placements = [(i, p) for i, p in sharding_placements if self._normalize_param_dim(p.dim) != 0]
+                # [B3] Not composed with TP placements -> return full copy of the expert tensor
                 if not inner_placements:
                     return param[...].to(device=device, dtype=dtype)
+                # [B4] Composed with TP placements -> shard the expert's inner dims
                 return self._shard_nd(param, inner_placements, param_shape, device, dtype)
-
+            
+        # [B1] has_expert_sharding=False -> fall through to _shard_nd
         return self._shard_nd(param, sharding_placements, param_shape, device, dtype)
 
     def _shard_nd(self, param, sharding_placements, param_shape, device, dtype):
         """Handle multi-dimensional sharding, choosing the best strategy."""
+        # [C1] Column Parallel when composed with FSDP. We choose the easier path but maybe we should do a better one? 
         if not self._can_shard_on_read(sharding_placements):
             return self._materialize_and_split(param, sharding_placements, device, dtype)
 
-        # All placements are plain Shard on different dims.
-        # compute_local_shape_and_global_offset gives us one contiguous range per dim directly.
+        # [C2] All sharding placements are plain Shard on different dims -> single contiguous slice
         has_strided = any(not p.is_shard() for _, p in sharding_placements)
         if not has_strided:
             local_shape, global_offset = compute_local_shape_and_global_offset(
@@ -919,6 +925,7 @@ class DtensorShardOperation:
                 slices[dim] = slice(offset, offset + local_shape[placement.dim])
             return param[tuple(slices)].to(device=device, dtype=dtype)
 
+        # [C3] At least one _StridedShard (no same-dim conflict) -> _compute_dim_ranges + _slice_and_read
         dim_ranges = self._compute_dim_ranges(sharding_placements, param_shape)
         return self._slice_and_read(param, param_shape, dim_ranges, device, dtype)
 
@@ -972,12 +979,13 @@ class DtensorShardOperation:
             if placement.is_shard():
                 new_ranges = self._contiguous_ranges(prev_ranges, rank, world_size)
             elif self._source_tensor_needs_packing(param_shape):
-                # _StridedShard only makes sense once the packed axis exists. While
+                # [C3a] _StridedShard only makes sense once the packed axis exists. While
                 # loading pre-packed source tensors (e.g. w1/w3 before gate_up_proj
                 # concatenation), take the contiguous chunk for this rank and let the
                 # WeightConverter recreate the packed layout afterward.
                 new_ranges = self._contiguous_ranges(prev_ranges, rank, world_size)
             else:
+                # [C3b] Normal strided -> disjoint ranges + cat
                 new_ranges = self._strided_ranges(prev_ranges, rank, world_size, placement.split_factor)
             dim_ranges[dim] = new_ranges
         return dim_ranges
