@@ -668,8 +668,7 @@ def get_model_conversion_mapping(
         if isinstance(submodule, PreTrainedModel) and submodule.config.model_type not in seen_model_types:
             conversions = extract_weight_conversions_for_model(submodule, name)
             if conversions is not None:
-                # Important: we want conversions for submodels to appear first!!
-                weight_conversions = conversions + weight_conversions
+                weight_conversions.extend(conversions)
                 seen_model_types.add(submodule.config.model_type)
 
     if add_legacy:

@@ -794,6 +794,7 @@ class PrefixChange(WeightRenaming):
     __slots__ = (
         "prefix_to_add",
         "prefix_to_remove",
+        "model_prefix",
         "_prefix_was_changed",
     )
 
@@ -805,15 +806,17 @@ class PrefixChange(WeightRenaming):
 
         self.prefix_to_add = prefix_to_add
         self.prefix_to_remove = prefix_to_remove
-        model_prefix = "" if model_prefix is None else model_prefix
+        self.model_prefix = "" if model_prefix is None else model_prefix
 
         if prefix_to_add is not None:
             super().__init__(
-                source_patterns=rf"^{model_prefix}\.(.+)$", target_patterns=rf"{model_prefix}\.{prefix_to_add}\.\1"
+                source_patterns=rf"^{self.model_prefix}\.(.+)$",
+                target_patterns=rf"{self.model_prefix}\.{prefix_to_add}\.\1",
             )
         else:
             super().__init__(
-                source_patterns=rf"^{model_prefix}\.{prefix_to_remove}\.(.+)$", target_patterns=rf"{model_prefix}\.\1"
+                source_patterns=rf"^{self.model_prefix}\.{prefix_to_remove}\.(.+)$",
+                target_patterns=rf"{self.model_prefix}\.\1",
             )
 
         # Flag to signal at runtime if the instance was used, i.e. if the checkpoints matched the added/removed
@@ -825,6 +828,19 @@ class PrefixChange(WeightRenaming):
         if renamed_key != source_key:
             self._prefix_was_changed = True
         return renamed_key, source_pattern_that_matched
+
+    def reverse_transform(self) -> WeightTransform:
+        """Reverse the current `WeightTransform` instance, to be able to save with the opposite weight transformations."""
+        # TODO: check this and relax when quantizer have `reverse_op`
+        if self.quantization_operation is not None:
+            raise ValueError("Cannot reverse the transform with TP or quantization")
+
+        if self.prefix_to_add is not None:
+            reverse_transform = PrefixChange(prefix_to_remove=self.prefix_to_add, model_prefix=self.model_prefix)
+        else:
+            reverse_transform = PrefixChange(prefix_to_add=self.prefix_to_remove, model_prefix=self.model_prefix)
+
+        return reverse_transform
 
     def prefix_was_changed(self):
         return self._prefix_was_changed
