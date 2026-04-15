@@ -19,7 +19,6 @@ import os
 from pathlib import Path
 
 import regex as re
-import tiktoken
 import torch
 from safetensors.torch import load_file as safe_load
 
@@ -29,7 +28,7 @@ from transformers import (
     GptOssForCausalLM,
     PreTrainedTokenizerFast,
 )
-from transformers.convert_slow_tokenizer import TikTokenConverter
+from transformers.convert_slow_tokenizer import TikTokenEncodingConverter, get_o200k_harmony_special_tokens
 
 
 # fmt: off
@@ -332,57 +331,7 @@ def create_safetensors_index(safetensors_index, num_shards, model_path):
         json.dump(safetensors_index, f)
 
 
-def bytes_to_unicode():
-    """
-    Returns list of utf-8 byte and a mapping to unicode strings. We specifically avoids mapping to whitespace/control
-    characters the bpe code barfs on.
-
-    The reversible bpe codes work on unicode strings. This means you need a large # of unicode characters in your vocab
-    if you want to avoid UNKs. When you're at something like a 10B token dataset you end up needing around 5K for
-    decent coverage. This is a significant percentage of your normal, say, 32K bpe vocab. To avoid that, we want lookup
-    tables between utf-8 bytes and unicode strings.
-    """
-    bs = (
-        list(range(ord("!"), ord("~") + 1)) + list(range(ord("¡"), ord("¬") + 1)) + list(range(ord("®"), ord("ÿ") + 1))
-    )
-    cs = bs[:]
-    n = 0
-    for b in range(2**8):
-        if b not in bs:
-            bs.append(b)
-            cs.append(2**8 + n)
-            n += 1
-    cs = [chr(n) for n in cs]
-    return dict(zip(bs, cs))
-
-
-class GptOssConverter(TikTokenConverter):
-    def extract_vocab_merges_from_model(self, tiktoken_url: str):
-        tokenizer = tiktoken.get_encoding(tiktoken_url)
-        self.pattern = tokenizer._pat_str
-        bpe_ranks = tokenizer._mergeable_ranks
-        byte_encoder = bytes_to_unicode()
-
-        def token_bytes_to_string(b):
-            return "".join([byte_encoder[ord(char)] for char in b.decode("latin-1")])
-
-        merges = []
-        vocab = {}
-        for token, rank in bpe_ranks.items():
-            vocab[token_bytes_to_string(token)] = rank
-            if len(token) == 1:
-                continue
-            local = []
-            for index in range(1, len(token)):
-                piece_l, piece_r = token[:index], token[index:]
-                if piece_l in bpe_ranks and piece_r in bpe_ranks and (piece_l + piece_r) in bpe_ranks:
-                    local.append((piece_l, piece_r, rank))
-            local = sorted(local, key=lambda x: (bpe_ranks[x[0]], bpe_ranks[x[1]]), reverse=False)
-            merges.extend(local)
-        merges = sorted(merges, key=lambda val: val[2], reverse=False)
-        merges = [(token_bytes_to_string(val[0]), token_bytes_to_string(val[1])) for val in merges]
-        return vocab, merges
-
+class GptOssConverter(TikTokenEncodingConverter):
     def __init__(
         self,
         vocab_file,
@@ -392,32 +341,7 @@ class GptOssConverter(TikTokenConverter):
     ):
         super().__init__(vocab_file, pattern=None)
 
-        # TODO 1st download the vocabfile!!!
-        tokenizer = tiktoken.get_encoding(vocab_file)
-        self.additional_special_tokens = {}
-        # Complete list of Harmony special tokens as per o200k_harmony spec
-        special_tokens_map = {
-            "<|startoftext|>": 199998,
-            "<|endoftext|>": 199999,
-            "<|return|>": 200002,
-            "<|constrain|>": 200003,
-            "<|channel|>": 200005,
-            "<|start|>": 200006,
-            "<|end|>": 200007,
-            "<|message|>": 200008,
-            "<|call|>": 200012,
-            "<|endofprompt|>": 200018,
-        }
-
-        # Add the remaining reserved slots while skipping IDs already present above.
-        used_ids = set(special_tokens_map.values())
-        for k in range(199999, 200018):
-            if k in used_ids:
-                continue
-            special_tokens_map.setdefault(f"<|reserved_{k}|>", k)
-
-        # Keep only token strings (sorted by ID) for TikTokenConverter.
-        self.additional_special_tokens = [tok for tok, _ in sorted(special_tokens_map.items(), key=lambda x: x[1])]
+        self.additional_special_tokens = get_o200k_harmony_special_tokens()
         tokenizer = self.converted()
         if chat_template is not None:
             kwargs["chat_template"] = chat_template
