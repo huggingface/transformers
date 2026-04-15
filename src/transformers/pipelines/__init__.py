@@ -487,6 +487,7 @@ def _get_tokenizer_loading_kwargs(tokenizer, use_fast, model_kwargs):
 
 def _resolve_tokenizer(tokenizer, load_tokenizer, use_fast, model_name, config, task, hub_kwargs, model_kwargs):
     """Resolve and optionally load the tokenizer required by the pipeline class."""
+
     def load(tokenizer):
         tokenizer = _infer_pipeline_component(
             tokenizer,
@@ -524,6 +525,7 @@ def _resolve_image_processor(
     model_kwargs,
 ):
     """Resolve and optionally load the image processor for vision-capable pipelines."""
+
     def load(image_processor):
         image_processor = _infer_pipeline_component(
             image_processor,
@@ -587,6 +589,7 @@ def _resolve_feature_extractor(
     pretrained_model_name_or_path,
 ):
     """Resolve and optionally load the feature extractor, including CTC decoder side-loading."""
+
     def load(feature_extractor):
         feature_extractor = _infer_pipeline_component(
             feature_extractor,
@@ -610,6 +613,7 @@ def _resolve_feature_extractor(
 
 def _resolve_processor(processor, load_processor, model_name, config, task, hub_kwargs, model_kwargs):
     """Resolve and optionally load a multimodal processor."""
+
     def load(processor):
         processor = _infer_pipeline_component(
             processor,
