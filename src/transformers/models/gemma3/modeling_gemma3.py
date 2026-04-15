@@ -31,7 +31,7 @@ from ...cache_utils import Cache, DynamicCache
 from ...configuration_utils import PreTrainedConfig
 from ...generation import GenerationMixin
 from ...integrations import use_kernel_func_from_hub, use_kernelized_func
-from ...masking_utils import create_blockwise_causal_mask, create_causal_mask, create_sliding_window_causal_mask
+from ...masking_utils import create_causal_mask, create_masks_for_generate, create_sliding_window_causal_mask
 from ...modeling_layers import GenericForSequenceClassification, GradientCheckpointingLayer
 from ...modeling_outputs import (
     BaseModelOutputWithPast,
@@ -844,7 +844,7 @@ class Gemma3Model(Gemma3PreTrainedModel):
                 group_ids = torch.where(is_image, group_ids, -1)
 
             mask_kwargs = {
-                "config": self.config,
+                "config": self.config.get_text_config(),
                 "inputs_embeds": inputs_embeds,
                 "attention_mask": attention_mask,
                 "past_key_values": past_key_values,
@@ -853,16 +853,10 @@ class Gemma3Model(Gemma3PreTrainedModel):
             }
             sliding_mask_kwargs = mask_kwargs.copy()
 
-            if self.config.text_config.use_bidirectional_attention:
-                mask_kwargs["or_mask_function"] = lambda *args: torch.tensor(True, dtype=torch.bool)
-                sliding_mask_kwargs["or_mask_function"] = _bidirectional_window_overlay(
-                    self.config.text_config.sliding_window
-                )
-
             # Create the masks
             causal_mask_mapping = {
-                "full_attention": create_blockwise_causal_mask(**mask_kwargs),
-                "sliding_attention": create_blockwise_causal_mask(**sliding_mask_kwargs),
+                "full_attention": create_causal_mask(**mask_kwargs),
+                "sliding_attention": create_sliding_window_causal_mask(**sliding_mask_kwargs),
             }
 
         outputs = self.language_model(
@@ -1081,7 +1075,7 @@ class Gemma3ForConditionalGeneration(Gemma3PreTrainedModel, GenerationMixin):
             group_ids = torch.cumsum(new_image_start.int(), dim=1) - 1
             group_ids = torch.where(is_image, group_ids, -1)
 
-        return create_blockwise_causal_mask(
+        return create_masks_for_generate(
             config=config.get_text_config(),
             inputs_embeds=inputs_embeds,
             block_sequence_ids=group_ids,

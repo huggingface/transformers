@@ -24,9 +24,8 @@ from torch import nn
 from ... import initialization as init
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
-from ...configuration_utils import PreTrainedConfig
 from ...generation import GenerationMixin
-from ...masking_utils import create_masks_for_generate
+from ...masking_utils import create_causal_mask
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import (
     BaseModelOutput,
@@ -44,7 +43,6 @@ from ...utils import (
     logging,
     torch_int,
 )
-from ...utils.deprecation import deprecate_kwarg
 from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
 from .configuration_git import GitConfig, GitVisionConfig
@@ -98,60 +96,6 @@ def token_type_ids_mask_function(group_ids: torch.Tensor) -> Callable:
         return (q_group == kv_group) & (q_group >= 0)
 
     return inner_mask
-
-
-@deprecate_kwarg("input_embeds", version="5.6.0", new_name="inputs_embeds")
-# Copied from transformers.models.gemma3.modeling_gemma3.create_causal_mask_mapping
-def create_causal_mask_mapping(
-    config: PreTrainedConfig,
-    inputs_embeds: torch.Tensor,
-    attention_mask: torch.Tensor | None,
-    past_key_values: Cache | None,
-    position_ids: torch.Tensor | None,
-    token_type_ids: torch.Tensor | None = None,
-    pixel_values: torch.FloatTensor | None = None,
-    is_training: bool = False,
-    is_first_iteration: bool | None = None,
-    **kwargs,
-) -> dict:
-    """
-    Overwrites the base `create_masks_for_generate` with `token_type_ids` masking to create the causal mask mapping
-    for all kinds of forward passes. Gemma3 uses a bidirectional mask for images.
-
-    Uses `pixel_values` as an optional input to disambiguate edge cases.
-    """
-    if is_training and token_type_ids is None:
-        raise ValueError("`token_type_ids` is required as a model input when training")
-
-    mask_kwargs = {
-        "config": config.get_text_config(),
-        "inputs_embeds": inputs_embeds,
-        "attention_mask": attention_mask,
-        "past_key_values": past_key_values,
-        "position_ids": position_ids,
-    }
-    # NOTE: this `may_have_image_input` logic is not flawless, it fails when we're using a cache eagerly initialized
-    # (e.g. compiled prefill) AND `pixel_values` are not provided (i.e. the image data is provided through other
-    # means). Determining prefill in that case requires checking data values, which is not compile-compatible.
-    is_first_iteration = (
-        is_first_iteration
-        if is_first_iteration is not None
-        else (past_key_values is None or not past_key_values.is_initialized or pixel_values is not None)
-    )
-    if token_type_ids is not None and is_first_iteration:
-        # We need to pass an additional mask function to account for token type ids, and it needs to be an `or` (to
-        # undo the causal masking)
-
-        # First find where a new image block starts: 1 if image and previous not image
-        # The images cannot attend to future images, but can attend to all prev images and to itself bidirectionally
-        is_image = (token_type_ids == 1).to(inputs_embeds.device)
-        is_previous_image = nn.functional.pad(is_image, (1, 0), value=0)[:, :-1]
-        new_image_start = is_image & ~is_previous_image
-        group_ids = torch.cumsum(new_image_start.int(), dim=1) - 1
-        group_ids = torch.where(is_image, group_ids, -1)
-        mask_kwargs["or_mask_function"] = token_type_ids_mask_function(group_ids)
-
-    return create_masks_for_generate(**mask_kwargs)
 
 
 class GitEmbeddings(nn.Module):
@@ -979,15 +923,26 @@ class GitModel(GitPreTrainedModel):
             attention_mask = torch.cat([extended_attention_mask, attention_mask], dim=-1)
 
         # Images attend each other bidirectionally while text remains causal
-        causal_mask = create_causal_mask_mapping(
-            self.config,
-            embedding_output,
-            attention_mask,
-            past_key_values,
-            None,
-            token_type_ids,
-            pixel_values,
-        )
+        group_ids = torch.full([*inputs_embeds.size()], -1)
+        if token_type_ids is not None:
+            # First find where a new image block starts: 1 if image and previous not image
+            # The images cannot attend to future images, but can attend to all prev images and to itself bidirectionally
+            is_image = (token_type_ids == 1).to(inputs_embeds.device)
+            is_previous_image = nn.functional.pad(is_image, (1, 0), value=0)[:, :-1]
+            new_image_start = is_image & ~is_previous_image
+            group_ids = torch.cumsum(new_image_start.int(), dim=1) - 1
+            group_ids = torch.where(is_image, group_ids, -1)
+
+        mask_kwargs = {
+            "config": self.config.get_text_config(),
+            "inputs_embeds": inputs_embeds,
+            "attention_mask": attention_mask,
+            "past_key_values": past_key_values,
+            "position_ids": position_ids,
+            "block_sequence_ids": group_ids,
+        }
+
+        causal_mask = create_causal_mask(**mask_kwargs)
 
         hidden_states = embedding_output
 

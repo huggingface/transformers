@@ -13,7 +13,6 @@
 # limitations under the License.
 """PyTorch PaliGemmamodel."""
 
-from collections.abc import Callable
 from dataclasses import dataclass
 
 import torch
@@ -22,7 +21,7 @@ from torch import nn
 from ...cache_utils import Cache
 from ...configuration_utils import PreTrainedConfig
 from ...generation import GenerationMixin
-from ...masking_utils import create_blockwise_causal_mask
+from ...masking_utils import create_causal_mask, create_masks_for_generate, create_sliding_window_causal_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPooling
 from ...modeling_utils import PreTrainedModel
@@ -98,33 +97,6 @@ class PaliGemmaMultiModalProjector(nn.Module):
         hidden_states = self.linear(image_features)
 
         return hidden_states
-
-
-def token_type_ids_mask_function(group_ids: torch.Tensor) -> Callable:
-    """
-    This function adds the correct offsets to the `q_idx` and `kv_idx` as the torch API can only accept lengths,
-    not start and end indices.
-    Args:
-        group_ids (`torch.Tensor`):
-            A tensor of shape `(bs, len)` assigning each token to a vision group. Tokens with the same group
-            come from the same input image. Text is denoted by `-1`.
-    """
-
-    def inner_mask(batch_idx: int, head_idx: int, q_idx: int, kv_idx: int) -> bool:
-        seq_length = group_ids.shape[-1]
-
-        # clamp indices because with static cache they can go beyond `group_ids.shape[-1]`
-        q_idx_clamped = q_idx.clamp(max=seq_length - 1)
-        kv_idx_clamped = kv_idx.clamp(max=seq_length - 1)
-
-        # Unmask if the q and kv come from same group which is not -1 (i.e. non-text)
-        q_group = group_ids[batch_idx, q_idx_clamped]
-        kv_group = group_ids[batch_idx, kv_idx_clamped]
-        q_group = torch.where(q_idx < seq_length, q_group, -1)
-        kv_group = torch.where(kv_idx < seq_length, kv_group, -1)
-        return (q_group == kv_group) & (q_group >= 0)
-
-    return inner_mask
 
 
 @auto_docstring
@@ -297,14 +269,14 @@ class PaliGemmaModel(PaliGemmaPreTrainedModel):
             "position_ids": position_ids,
             "block_sequence_ids": group_ids,
         }
-        causal_mask = (create_blockwise_causal_mask(**mask_kwargs),)
+        causal_mask = create_causal_mask(**mask_kwargs)
 
         # PG has no sliding window, only full attn. But PG2 needs sliding mask and full mask
         if getattr(self.config.text_config, "sliding_window", None) is not None:
             sliding_mask_kwargs = mask_kwargs.copy()
             causal_mask = {
                 "full_attention": causal_mask,
-                "sliding_attention": create_blockwise_causal_mask(**sliding_mask_kwargs),
+                "sliding_attention": create_sliding_window_causal_mask(**sliding_mask_kwargs),
             }
 
         outputs = self.language_model(
@@ -488,7 +460,7 @@ class PaliGemmaForConditionalGeneration(PaliGemmaPreTrainedModel, GenerationMixi
             # The images cannot attend to future images, but can attend to all prev images and to itself bidirectionally
             group_ids = torch.where(token_type_ids == 0, 0, -1)
 
-        return create_blockwise_causal_mask(
+        return create_masks_for_generate(
             config=config.get_text_config(),
             inputs_embeds=inputs_embeds,
             block_sequence_ids=group_ids,

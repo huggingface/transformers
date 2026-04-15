@@ -36,7 +36,6 @@ from ...generation import GenerationMixin
 from ...integrations import use_experts_implementation, use_kernelized_func
 from ...masking_utils import (
     create_bidirectional_mask,
-    create_blockwise_causal_mask,
     create_causal_mask,
     create_masks_for_generate,
     create_sliding_window_causal_mask,
@@ -2173,8 +2172,17 @@ class Gemma4Model(Gemma4PreTrainedModel):
             position_ids = position_ids.unsqueeze(0)
 
         if not isinstance(causal_mask_mapping := attention_mask, dict):
+            mask_kwargs = {
+                "config": self.config.get_text_config(),
+                "inputs_embeds": inputs_embeds,
+                "attention_mask": attention_mask,
+                "past_key_values": past_key_values,
+                "position_ids": position_ids,
+            }
+
+            # Larger Gemma 4 models use Gemma 3's bidirectional attention mask for vision inputs
+            # Smaller Gemma models use a conventional casual attention mask
             if self.config.get_text_config().use_bidirectional_attention == "vision":
-                # Larger Gemma 4 models use Gemma 3's bidirectional attention mask for vision inputs
                 vision_group_ids = torch.full([*inputs_embeds.size()], -1)
                 if mm_token_type_ids is not None:
                     is_vision = (mm_token_type_ids == 1) | (mm_token_type_ids == 2)
@@ -2184,30 +2192,10 @@ class Gemma4Model(Gemma4PreTrainedModel):
                     vision_group_ids = torch.cumsum(new_vision_starts.int(), dim=1) - 1
                     vision_group_ids = torch.where(is_vision, vision_group_ids, -1)
 
-                mask_kwargs = {
-                    "config": self.config,
-                    "inputs_embeds": inputs_embeds,
-                    "attention_mask": attention_mask,
-                    "past_key_values": past_key_values,
-                    "position_ids": position_ids,
-                    "block_sequence_ids": vision_group_ids,
-                }
-                sliding_mask_kwargs = mask_kwargs.copy()
+                mask_kwargs["block_sequence_ids"] = vision_group_ids
 
-                # Create the masks
-                causal_mask_mapping = {
-                    "full_attention": create_blockwise_causal_mask(**mask_kwargs),
-                    "sliding_attention": create_blockwise_causal_mask(**sliding_mask_kwargs),
-                }
-            else:
-                # Smaller Gemma models use a conventional casual attention mask
-                causal_mask_mapping = create_masks_for_generate(
-                    self.config,
-                    inputs_embeds,
-                    attention_mask,
-                    past_key_values,
-                    position_ids,
-                )
+            # Create the masks
+            causal_mask_mapping = create_masks_for_generate(**mask_kwargs)
 
         outputs = self.language_model(
             per_layer_inputs=per_layer_inputs,
@@ -2458,8 +2446,17 @@ class Gemma4ForConditionalGeneration(Gemma4PreTrainedModel, GenerationMixin):
         is_first_iteration: bool | None = False,
         **kwargs,
     ) -> dict:
+        mask_kwargs = {
+            "config": config.get_text_config(),
+            "inputs_embeds": inputs_embeds,
+            "attention_mask": attention_mask,
+            "past_key_values": past_key_values,
+            "position_ids": position_ids,
+        }
+
+        # Larger Gemma 4 models use Gemma 3's bidirectional attention mask for vision inputs
+        # Smaller Gemma models use a conventional casual attention mask
         if getattr(config.get_text_config(), "use_bidirectional_attention", None) == "vision":
-            # Larger Gemma 4 models use Gemma 3's bidirectional attention mask for vision inputs
             vision_group_ids = torch.full([*inputs_embeds.size()], -1)
             if mm_token_type_ids is not None:
                 is_vision = (mm_token_type_ids == 1) | (mm_token_type_ids == 2)
@@ -2469,26 +2466,9 @@ class Gemma4ForConditionalGeneration(Gemma4PreTrainedModel, GenerationMixin):
                 vision_group_ids = torch.cumsum(new_vision_starts.int(), dim=1) - 1
                 vision_group_ids = torch.where(is_vision, vision_group_ids, -1)
 
-            mask_kwargs = {
-                "config": config,
-                "inputs_embeds": inputs_embeds,
-                "attention_mask": attention_mask,
-                "past_key_values": past_key_values,
-                "position_ids": position_ids,
-                "block_sequence_ids": vision_group_ids,
-            }
-            sliding_mask_kwargs = mask_kwargs.copy()
+            mask_kwargs["block_sequence_ids"] = (vision_group_ids,)
 
-            # Create the masks
-            return {
-                "full_attention": create_blockwise_causal_mask(**mask_kwargs),
-                "sliding_attention": create_blockwise_causal_mask(**sliding_mask_kwargs),
-            }
-        else:
-            # Smaller Gemma models use a conventional casual attention mask
-            return create_masks_for_generate(
-                config, inputs_embeds, attention_mask, past_key_values, position_ids, **kwargs
-            )
+        return create_masks_for_generate(**mask_kwargs)
 
 
 __all__ = [
