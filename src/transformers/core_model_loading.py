@@ -846,8 +846,9 @@ class PrefixChange(WeightRenaming):
         return self._prefix_was_changed
 
     def with_submodel_prefix(self, prefix: str) -> PrefixChange:
+        new_prefix = f"{prefix}.{self.model_prefix}" if self.model_prefix != "" else prefix
         return PrefixChange(
-            prefix_to_add=self.prefix_to_add, prefix_to_remove=self.prefix_to_remove, model_prefix=prefix
+            prefix_to_add=self.prefix_to_add, prefix_to_remove=self.prefix_to_remove, model_prefix=new_prefix
         )
 
 
