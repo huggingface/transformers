@@ -456,8 +456,7 @@ class MiMoV2FlashAttention(nn.Module):
 
         # Dispatch attention: sink layers use GPT-OSS always-sink eager, non-sink layers use standard Llama eager
         # (which is compatible with SDPA/FA2/flex backends)
-        add_sink = config.add_swa_attention_sink_bias if is_swa else config.add_full_attention_sink_bias
-        if add_sink:
+        if is_swa:
             self.sinks = nn.Parameter(torch.empty(num_attn_heads), requires_grad=False)
             self._eager_attention_forward = eager_attention_forward_with_sink
         else:
@@ -528,8 +527,8 @@ class MiMoV2FlashDecoderLayer(GradientCheckpointingLayer):
         self.post_attention_layernorm = MiMoV2FlashRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         # TODO @casinca: for now attn_type is dead code but might need for new attn rework
         self.attention_type = config.layer_types[layer_idx]
-        # Replace the dense MLP with an MoE block on MoE layers (per `moe_layer_freq`).
-        if config.moe_layer_freq[layer_idx]:
+        # Replace the dense MLP with an MoE block on sparse layers (per `mlp_layer_types`).
+        if config.mlp_layer_types[layer_idx] == "sparse":
             self.mlp = MiMoV2FlashSparseMoeBlock(config)
 
     def forward(

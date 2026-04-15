@@ -56,12 +56,8 @@ class MiMoV2FlashConfig(PreTrainedConfig):
         Number of expert groups for group-based top-k routing.
     topk_group (`int`, *optional*, defaults to 1):
         Number of groups selected per token in group-based top-k routing.
-    moe_layer_freq (`list`, *optional*):
-        Per-layer binary flag indicating MoE (1) vs dense MLP (0).
-    add_swa_attention_sink_bias (`bool`, *optional*, defaults to `True`):
-        Whether to add attention sink bias to sliding window attention layers.
-    add_full_attention_sink_bias (`bool`, *optional*, defaults to `False`):
-        Whether to add attention sink bias to full attention layers.
+    mlp_layer_types (`list`, *optional*):
+        MLP pattern for each layer (`"dense"` or `"sparse"`). Defaults to 1 dense + rest sparse.
     """
 
     model_type = "mimo_v2_flash"
@@ -100,44 +96,51 @@ class MiMoV2FlashConfig(PreTrainedConfig):
     norm_topk_prob: bool = True
     routed_scaling_factor: float | None = 1.0
     router_jitter_noise: float = 0.0
-    moe_layer_freq: list | None = None
-    add_swa_attention_sink_bias: bool = True
-    add_full_attention_sink_bias: bool = False
+    mlp_layer_types: list[str] | None = None
     rope_parameters: dict | None = None
 
     def __post_init__(self, **kwargs):
+        # BC: pop hub-only fields. Some are converted to native fields below, others simply dropped.
+        hub_kwargs = {
+            key: kwargs.pop(key, None)
+            for key in (
+                "hybrid_layer_pattern",
+                "moe_layer_freq",
+                "scoring_func",
+                "topk_method",
+                "attention_value_scale",
+                "attention_chunk_size",
+                "sliding_window_size",
+                "n_shared_experts",
+                "swa_num_attention_heads",
+                "swa_num_key_value_heads",
+                "swa_qk_head_dim",
+                "swa_v_head_dim",
+                "swa_head_dim",
+            )
+        }
+
         # Full attention: first layer and every 6th layer; rest are SWA
-        hybrid_layer_pattern = kwargs.pop("hybrid_layer_pattern", None)
         if self.layer_types is None:
-            if hybrid_layer_pattern is not None:
-                self.layer_types = ["sliding_attention" if p == 1 else "full_attention" for p in hybrid_layer_pattern]
+            if hub_kwargs["hybrid_layer_pattern"] is not None:
+                self.layer_types = [
+                    "sliding_attention" if p == 1 else "full_attention" for p in hub_kwargs["hybrid_layer_pattern"]
+                ]
             else:
                 self.layer_types = [
                     "full_attention" if (i == 0 or not ((i + 1) % 6)) else "sliding_attention"
                     for i in range(self.num_hidden_layers)
                 ]
 
-        # BC: hub-only fields not modeled in the config or redundant that can be derived.
-        for _hub_only in (
-            "scoring_func",
-            "topk_method",
-            "attention_value_scale",
-            "attention_chunk_size",
-            "sliding_window_size",
-            "n_shared_experts",
-            "swa_num_attention_heads",
-            "swa_num_key_value_heads",
-            "swa_qk_head_dim",
-            "swa_v_head_dim",
-            "swa_head_dim",
-        ):
-            kwargs.pop(_hub_only, None)
+        # MLP layer types: convert hub's `moe_layer_freq` (binary list) if given, else first dense + rest sparse
+        if self.mlp_layer_types is None:
+            if hub_kwargs["moe_layer_freq"] is not None:
+                self.mlp_layer_types = ["sparse" if f == 1 else "dense" for f in hub_kwargs["moe_layer_freq"]]
+            else:
+                self.mlp_layer_types = ["dense"] + ["sparse"] * (self.num_hidden_layers - 1)
 
         if self.routed_scaling_factor is None:
             self.routed_scaling_factor = 1.0
-
-        if self.moe_layer_freq is None:
-            self.moe_layer_freq = [0] * self.num_hidden_layers
 
         super().__post_init__(**kwargs)
 
@@ -399,8 +402,7 @@ class MiMoV2FlashAttention(nn.Module):
 
         # Dispatch attention: sink layers use GPT-OSS always-sink eager, non-sink layers use standard Llama eager
         # (which is compatible with SDPA/FA2/flex backends)
-        add_sink = config.add_swa_attention_sink_bias if is_swa else config.add_full_attention_sink_bias
-        if add_sink:
+        if is_swa:
             self.sinks = nn.Parameter(torch.empty(num_attn_heads), requires_grad=False)
             self._eager_attention_forward = eager_attention_forward_with_sink
         else:
@@ -464,8 +466,8 @@ class MiMoV2FlashDecoderLayer(LlamaDecoderLayer):
         super().__init__(config, layer_idx)
         # TODO @casinca: for now attn_type is dead code but might need for new attn rework
         self.attention_type = config.layer_types[layer_idx]
-        # Replace the dense MLP with an MoE block on MoE layers (per `moe_layer_freq`).
-        if config.moe_layer_freq[layer_idx]:
+        # Replace the dense MLP with an MoE block on sparse layers (per `mlp_layer_types`).
+        if config.mlp_layer_types[layer_idx] == "sparse":
             self.mlp = MiMoV2FlashSparseMoeBlock(config)
 
 

@@ -83,8 +83,6 @@ class MiMoV2FlashModelTester(CausalLMModelTester):
         # MiMo-V2-Flash specific test config
         self.head_dim = 8
         self.v_head_dim = 8
-        self.add_swa_attention_sink_bias = True
-        self.add_full_attention_sink_bias = False
         self.layer_types = ["full_attention", "sliding_attention"]
         self.rope_parameters = {
             "full_attention": {"rope_type": "default", "rope_theta": 5_000_000.0, "partial_rotary_factor": 0.5},
