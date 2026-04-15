@@ -97,7 +97,7 @@ class Qwen3ASRConfig(PreTrainedConfig):
 class Qwen3ASRProcessorKwargs(ProcessingKwargs, total=False):
     _defaults = {
         "text_kwargs": {
-            "padding": False,
+            "padding": True,
             "padding_side": "left",
         },
         "audio_kwargs": {
@@ -202,6 +202,182 @@ class Qwen3ASRProcessor(ProcessorMixin):
             data["labels"] = labels
 
         return BatchFeature(data=data, tensor_type=return_tensors)
+
+    def apply_transcription_request(
+        self,
+        audio: AudioInput | list[AudioInput],
+        language: str | list[str] | None = None,
+        **kwargs,
+    ) -> BatchFeature:
+        """
+        Prepare inputs for automatic speech recognition without manually writing the chat template.
+
+        Args:
+            audio (`AudioInput` or `list[AudioInput]`):
+                Audio to transcribe. Can be a URL string, local path, numpy array, or a list of these.
+            language (`str` or `list[str]`, *optional*):
+                Language hint(s) to include in the system prompt (e.g. "English", "Chinese").
+                A list must be the same length as the audio batch.
+                When `None`, the model performs automatic language detection.
+            **kwargs:
+                Additional keyword arguments forwarded to
+                [`~Qwen3ASRProcessor.apply_chat_template`].
+
+        Returns:
+            [`BatchFeature`]: Processor outputs ready to be passed to
+            [`Qwen3ASRForConditionalGeneration.generate`].
+        """
+        if isinstance(audio, str):
+            audio_items: list = [audio]
+        elif isinstance(audio, (list, tuple)) and audio and all(isinstance(a, str) for a in audio):
+            audio_items = list(audio)
+        else:
+            audio_items = list(make_list_of_audio(audio))
+
+        batch_size = len(audio_items)
+        if batch_size == 0:
+            raise ValueError("`audio` must contain at least one sample.")
+
+        if language is None:
+            languages = [None] * batch_size
+        elif isinstance(language, str):
+            languages = [language] * batch_size
+        elif isinstance(language, (list, tuple)):
+            if len(language) != batch_size:
+                raise ValueError(
+                    f"Received {len(language)} language(s) for {batch_size} audio sample(s); counts must match."
+                )
+            languages = list(language)
+        else:
+            raise TypeError("`language` must be a string, a list of strings, or `None`.")
+
+        conversations = []
+        for lang, audio_item in zip(languages, audio_items):
+            content = []
+            if isinstance(audio_item, str):
+                content.append({"type": "audio", "path": audio_item})
+            else:
+                content.append({"type": "audio", "audio": audio_item})
+
+            messages = []
+            if lang is not None:
+                messages.append({"role": "system", "content": [{"type": "text", "text": lang}]})
+            messages.append({"role": "user", "content": content})
+            conversations.append(messages)
+
+        return self.apply_chat_template(
+            conversations,
+            tokenize=True,
+            add_generation_prompt=True,
+            return_dict=True,
+            **kwargs,
+        )
+
+    def decode(self, *args, return_format="raw", **kwargs):
+        """
+        Forward arguments to the tokenizer's decode and optionally parse the ASR output.
+
+        Qwen3 ASR outputs transcription in the format: ``language <LANG><asr_text>transcribed text``
+
+        Args:
+            return_format (`str`, *optional*, defaults to `"raw"`):
+                Options:
+
+                - ``"raw"``: Return raw decoded strings from the tokenizer.
+                - ``"parsed"``: Return a dict (or list of dicts) with ``"language"`` and ``"transcription"`` keys.
+                - ``"transcription_only"``: Extract only the transcribed text (after ``<asr_text>``).
+
+                ``skip_special_tokens`` is hard-set to ``True`` for ``"parsed"`` and ``"transcription_only"``.
+        """
+        valid_formats = ["raw", "parsed", "transcription_only"]
+        if return_format not in valid_formats:
+            raise ValueError(f"return_format must be one of {valid_formats}.")
+        if return_format != "raw":
+            kwargs["skip_special_tokens"] = True
+
+        decoded = self.tokenizer.decode(*args, **kwargs)
+        if return_format == "parsed":
+            decoded = self.parse_output(decoded)
+        elif return_format == "transcription_only":
+            decoded = self.extract_transcription(decoded)
+        return decoded
+
+    @staticmethod
+    def _strip_chat_prefix(text: str) -> str:
+        """Strip chat template prefixes like ``system\\n...\\nassistant\\n``."""
+        if "assistant\n" in text:
+            text = text.split("assistant\n", 1)[-1]
+        return text
+
+    @staticmethod
+    def parse_output(text: str | list[str]) -> dict | list[dict]:
+        """
+        Parse Qwen3 ASR raw output into a structured dict.
+
+        The model outputs ``language <LANG><asr_text>transcribed text``.
+        This method returns a dict with ``"language"`` and ``"transcription"`` keys.
+
+        Args:
+            text (`str` or `list[str]`): Raw decoded output(s).
+
+        Returns:
+            `dict` or `list[dict]`: Parsed output(s). Each dict has keys
+            ``"language"`` (str or None) and ``"transcription"`` (str).
+            Returns the original string as the transcription if parsing fails.
+        """
+        is_single = isinstance(text, str)
+        if is_single:
+            text = [text]
+
+        results = []
+        for t in text:
+            t = Qwen3ASRProcessor._strip_chat_prefix(t)
+            marker = "<asr_text>"
+            language = None
+            transcription = t
+
+            if marker in t:
+                prefix, transcription = t.split(marker, 1)
+                transcription = transcription.strip()
+                # prefix is "language <LANG>"
+                prefix = prefix.strip()
+                if prefix.startswith("language "):
+                    language = prefix[len("language "):].strip()
+                elif prefix:
+                    language = prefix
+
+            results.append({"language": language, "transcription": transcription})
+
+        return results[0] if is_single else results
+
+    @staticmethod
+    def extract_transcription(text: str | list[str]) -> str | list[str]:
+        """
+        Extract transcription text from Qwen3 ASR raw output.
+
+        The model outputs ``language <LANG><asr_text>transcribed text``.
+        This method extracts the text after ``<asr_text>``.
+
+        Args:
+            text (`str` or `list[str]`): Raw decoded output(s).
+
+        Returns:
+            `str` or `list[str]`: Extracted transcription(s). Returns the
+            original string if ``<asr_text>`` is not found.
+        """
+        is_single = isinstance(text, str)
+        if is_single:
+            text = [text]
+
+        results = []
+        for t in text:
+            t = Qwen3ASRProcessor._strip_chat_prefix(t)
+            marker = "<asr_text>"
+            if marker in t:
+                t = t.split(marker, 1)[-1].strip()
+            results.append(t)
+
+        return results[0] if is_single else results
 
     @property
     def model_input_names(self):
