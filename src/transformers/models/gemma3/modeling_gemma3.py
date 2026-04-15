@@ -755,7 +755,7 @@ def create_causal_mask_mapping(
         "past_key_values": past_key_values,
         "position_ids": position_ids,
     }
-    if token_type_ids is not None and is_first_iteration:
+    if token_type_ids is not None:
         # We need to pass an additional mask function to account for token type ids, and it needs to be an `or` (to
         # undo the causal masking)
 

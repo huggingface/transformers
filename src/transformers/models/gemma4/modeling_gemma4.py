@@ -2030,7 +2030,7 @@ def create_causal_mask_mapping(
     }
     sliding_mask_kwargs = mask_kwargs.copy()
 
-    if mm_token_type_ids is not None and is_first_iteration:
+    if mm_token_type_ids is not None:
         # We need to pass an additional mask function to account for token type ids, and it needs to be an `or` (to
         # undo the causal masking)
 
