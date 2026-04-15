@@ -86,6 +86,7 @@ tokenizer = AutoTokenizer.from_pretrained(
     "path/to/local/directory",
     gguf_file="gpt-oss-20b-Q5_K_M.gguf",
 )
+```
 
 ## GptOssConfig
 
