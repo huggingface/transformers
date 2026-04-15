@@ -41,16 +41,24 @@ from ...masking_utils import (
     create_sliding_window_causal_mask,
 )
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
-from ...modeling_layers import GradientCheckpointingLayer
-from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPooling, CausalLMOutputWithPast
+from ...modeling_layers import GenericForSequenceClassification, GradientCheckpointingLayer
+from ...modeling_outputs import (
+    BaseModelOutputWithPast,
+    BaseModelOutputWithPooling,
+    CausalLMOutputWithPast,
+    SequenceClassifierOutputWithPast,
+)
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import ModelOutput, TransformersKwargs, auto_docstring, can_return_tuple, torch_compilable_check
+from ...utils import ModelOutput, TransformersKwargs, auto_docstring, can_return_tuple, logging, torch_compilable_check
 from ...utils.generic import maybe_autocast, merge_with_config_defaults
 from ...utils.output_capturing import OutputRecorder, capture_outputs
 from ..auto.modeling_auto import AutoModel
 from .configuration_gemma4 import Gemma4AudioConfig, Gemma4Config, Gemma4TextConfig, Gemma4VisionConfig
+
+
+logger = logging.get_logger(__name__)
 
 
 @dataclass
@@ -1430,6 +1438,7 @@ class Gemma4TextScaledWordEmbedding(nn.Embedding):
 
 class Gemma4PreTrainedModel(PreTrainedModel):
     config: Gemma4Config
+    base_model_prefix = "model"
     supports_gradient_checkpointing = True
     _supports_flash_attn = True
     _supports_sdpa = True
@@ -1726,7 +1735,6 @@ class Gemma4ForCausalLM(Gemma4PreTrainedModel, GenerationMixin):
     _tp_plan = {"lm_head": "colwise_gather_output"}
     _pp_plan = {"lm_head": (["hidden_states"], ["logits"])}
     config: Gemma4TextConfig
-    base_model_prefix = "model"
 
     def __init__(self, config: Gemma4TextConfig):
         super().__init__(config)
@@ -2414,7 +2422,6 @@ class Gemma4Model(Gemma4PreTrainedModel):
 class Gemma4ForConditionalGeneration(Gemma4PreTrainedModel, GenerationMixin):
     _tied_weights_keys = {"lm_head.weight": "model.language_model.embed_tokens.weight"}
     accepts_loss_kwargs = False
-    base_model_prefix = "model"
 
     def __init__(self, config: Gemma4Config):
         super().__init__(config)
@@ -2590,6 +2597,123 @@ class Gemma4ForConditionalGeneration(Gemma4PreTrainedModel, GenerationMixin):
             )
 
 
+class Gemma4ForSequenceClassification(Gemma4PreTrainedModel):
+    def __init__(self, config):
+        super().__init__(config)
+        self.num_labels = config.num_labels
+        self.model = Gemma4Model(config)
+        self.score = nn.Linear(config.text_config.hidden_size, self.num_labels, bias=False)
+
+        # Initialize weights and apply final processing
+        self.post_init()
+
+    def get_input_embeddings(self):
+        return self.model.get_input_embeddings()
+
+    def set_input_embeddings(self, value):
+        self.model.set_input_embeddings(value)
+
+    @can_return_tuple
+    @auto_docstring
+    def forward(
+        self,
+        input_ids: torch.LongTensor | None = None,
+        pixel_values: torch.FloatTensor | None = None,
+        pixel_values_videos: torch.FloatTensor | None = None,
+        input_features: torch.FloatTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
+        input_features_mask: torch.Tensor | None = None,
+        position_ids: torch.LongTensor | None = None,
+        past_key_values: Cache | None = None,
+        mm_token_type_ids: torch.LongTensor | None = None,
+        inputs_embeds: torch.FloatTensor | None = None,
+        labels: torch.LongTensor | None = None,
+        use_cache: bool | None = None,
+        image_position_ids: torch.LongTensor | None = None,
+        video_position_ids: torch.LongTensor | None = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> SequenceClassifierOutputWithPast:
+        r"""
+        input_features_mask (`torch.FloatTensor` of shape `(num_images, seq_length)`):
+            The attention mask for the input audio.
+        labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
+            Labels for computing the sequence classification/regression loss. Indices should be in `[0, ...,
+            config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
+            `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
+        image_position_ids (`torch.LongTensor` of shape `(batch_size, max_patches, 2)`, *optional*):
+            2D patch position coordinates from the image processor, with `(-1, -1)` indicating padding.
+            Passed through to the vision encoder for positional embedding computation.
+        video_position_ids (`torch.LongTensor` of shape `(num_videos, num_frames, max_patches, 2)`, *optional*):
+            2D patch position coordinates from the video processor, with `(-1, -1)` indicating padding.
+            Passed through to the vision encoder for positional embedding computation.
+        """
+
+        transformer_outputs = self.model(
+            input_ids,
+            attention_mask=attention_mask,
+            pixel_values=pixel_values,
+            pixel_values_videos=pixel_values_videos,
+            input_features=input_features,
+            input_features_mask=input_features_mask,
+            position_ids=position_ids,
+            past_key_values=past_key_values,
+            mm_token_type_ids=mm_token_type_ids,
+            inputs_embeds=inputs_embeds,
+            use_cache=use_cache,
+            image_position_ids=image_position_ids,
+            video_position_ids=video_position_ids,
+            return_dict=True,
+            **kwargs,
+        )
+        hidden_states = transformer_outputs.last_hidden_state
+        logits = self.score(hidden_states)
+
+        if input_ids is not None:
+            batch_size = input_ids.shape[0]
+        else:
+            batch_size = inputs_embeds.shape[0]
+
+        if self.config.text_config.pad_token_id is None and batch_size != 1:
+            raise ValueError("Cannot handle batch sizes > 1 if no padding token is defined.")
+        if self.config.text_config.pad_token_id is None:
+            last_non_pad_token = -1
+        elif input_ids is not None:
+            # To handle both left- and right- padding, we take the rightmost token that is not equal to pad_token_id
+            non_pad_mask = (input_ids != self.config.text_config.pad_token_id).to(logits.device, torch.int32)
+            token_indices = torch.arange(input_ids.shape[-1], device=logits.device, dtype=torch.int32)
+            last_non_pad_token = (token_indices * non_pad_mask).argmax(-1)
+        else:
+            last_non_pad_token = -1
+            logger.warning_once(
+                f"{self.__class__.__name__} will not detect padding tokens in `inputs_embeds`. Results may be "
+                "unexpected if using padding tokens in conjunction with `inputs_embeds.`"
+            )
+
+        pooled_logits = logits[torch.arange(batch_size, device=logits.device), last_non_pad_token]
+
+        loss = None
+        if labels is not None:
+            loss = self.loss_function(logits=logits, labels=labels, pooled_logits=pooled_logits, config=self.config)
+
+        return SequenceClassifierOutputWithPast(
+            loss=loss,
+            logits=pooled_logits,
+            past_key_values=transformer_outputs.past_key_values,
+            hidden_states=transformer_outputs.hidden_states,
+            attentions=transformer_outputs.attentions,
+        )
+
+
+class Gemma4TextForSequenceClassification(GenericForSequenceClassification, Gemma4PreTrainedModel):
+    """
+    Gemma4TextForSequenceClassification is a text-only sequence classification model that works with Gemma4TextConfig.
+    It uses the generic sequence classification implementation for efficiency and consistency.
+    """
+
+    config: Gemma4TextConfig
+    input_modalities = ("text",)
+
+
 __all__ = [
     "Gemma4AudioModel",
     "Gemma4ForCausalLM",
@@ -2598,4 +2722,6 @@ __all__ = [
     "Gemma4PreTrainedModel",
     "Gemma4TextModel",
     "Gemma4VisionModel",
+    "Gemma4ForSequenceClassification",
+    "Gemma4TextForSequenceClassification",
 ]

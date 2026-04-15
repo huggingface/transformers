@@ -48,8 +48,10 @@ if is_torch_available():
         AutoModelForCausalLM,
         Gemma4ForCausalLM,
         Gemma4ForConditionalGeneration,
+        Gemma4ForSequenceClassification,
         Gemma4Model,
         Gemma4Processor,
+        Gemma4TextForSequenceClassification,
         Gemma4TextModel,
     )
 
@@ -59,6 +61,7 @@ class Gemma4TextModelTester(CausalLMModelTester):
         config_class = Gemma4TextConfig
         base_model_class = Gemma4TextModel
         causal_lm_class = Gemma4ForCausalLM
+        sequence_classification_class = Gemma4TextForSequenceClassification
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -378,13 +381,19 @@ class Gemma4Vision2TextModelTester:
 
 @require_torch
 class Gemma4Vision2TextModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
-    all_model_classes = (Gemma4Model, Gemma4ForConditionalGeneration) if is_torch_available() else ()
+    all_model_classes = (
+        (Gemma4Model, Gemma4ForConditionalGeneration, Gemma4ForSequenceClassification) if is_torch_available() else ()
+    )
     all_generative_model_classes = (Gemma4ForConditionalGeneration,) if is_torch_available() else ()
     additional_model_inputs = ["mm_token_type_ids"]
 
     def setUp(self):
         self.model_tester = Gemma4Vision2TextModelTester(self)
         self.config_tester = ConfigTester(self, config_class=Gemma4Config, hidden_size=37)
+
+    @unittest.skip("Loading nested configs with overwritten `kwargs` isn't supported yet.")
+    def test_load_with_mismatched_shapes(self):
+        pass
 
     @unittest.skip("The tester has no audios in input dict")
     def test_get_audio_features_hidden_states(self):
