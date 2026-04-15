@@ -1119,13 +1119,18 @@ def _redistribute_realized_value(
     Coordinate the post-`convert` redistribution of full tensors across TP ranks.
 
     The `source_rank` produced full tensors via `mapping.convert(...)`; every other rank participates here as a
-    receiver. We broadcast a small metadata header (target names + shapes + dtypes) so every rank knows what's
-    coming, then broadcast each tensor's bytes. Each rank then locally calls `tp_layer.shard_tensor` (or keeps the
-    full tensor for replicated params) so it ends up with exactly the slice it owns.
+    receiver. We first broadcast a small metadata header (target names + full shapes + dtypes) so every rank
+    knows what's coming. Then:
 
-    This replaces the old per-rank slicing at load time: now only one rank reads each tensor from disk, and the
-    cluster comms scatter the slices. A `None` payload from the source rank (e.g. when convert raised
-    `SkipParameters`) is signalled to all peers and returns `None` so callers can skip the mapping cleanly.
+      * For sharded params (`tp_layer is not None`) and `world_size > 1`, the source pre-slices the full tensor
+        into one shard per rank (via `tp_layer.shard_tensor` with its `.rank` temporarily swapped) and
+        `dist.scatter`s them — each rank receives only its own shard. This avoids the `(N-1) × sizeof(full)`
+        bandwidth and the full-tensor peak memory of the old broadcast-then-slice design.
+      * For replicated params (`tp_layer is None`), we broadcast the full tensor (every rank keeps a copy).
+      * For `world_size == 1` sharded, we just local-shard — no comms.
+
+    A `None` payload from the source (e.g. when `convert` raised `SkipParameters`) is signalled to all peers
+    and returns `None` so callers can skip the mapping cleanly.
     """
     import torch.distributed as dist
 
@@ -1153,46 +1158,93 @@ def _redistribute_realized_value(
 
     tp_layer = mapping.distributed_operation
     out: dict[str, torch.Tensor] = {}
+    world_size = device_mesh.size()
+    local_rank = device_mesh.get_local_rank()
 
-    # 2. For each target tensor, broadcast its bytes from the source rank, then locally shard. We free the full
-    # tensor on BOTH ends right after the shard/replicate step — otherwise a big MoE mapping (e.g. a whole layer's
-    # packed experts) sits in GPU memory until the outer `realized_value` dict is collected, which blows up peak
-    # memory and can OOM the source rank on large FP8 checkpoints (GLM-5-FP8 was one such case).
+    # 2. For each target tensor:
+    #   - Sharded + world_size>1: source pre-slices into world_size shards then `dist.scatter` — each rank only
+    #     receives its own slice. No full-tensor broadcast, no view→clone dance on receivers. Total wire bytes
+    #     are (world_size-1)/world_size * sizeof(full), vs. (world_size-1) * sizeof(full) with broadcast.
+    #   - Replicated (tp_layer is None): still broadcast, receivers just keep the full tensor.
+    #   - world_size==1 sharded: local shard call only.
     for target_name, shape, t_dtype in meta:
-        if is_source:
+        sharded = tp_layer is not None
+
+        if sharded and world_size > 1:
+            # Each rank computes *its own* shard shape locally so it can allocate the scatter receive buffer
+            # without an extra metadata round-trip.
+            my_shard_shape = tp_layer.get_expected_sharded_shape(shape)
+
+            if is_source:
+                full_tensor = realized_value[target_name]
+                full_tensor = full_tensor[0] if isinstance(full_tensor, list) else full_tensor
+                full_tensor = full_tensor.to(device=local_device).contiguous()
+                # Drop the caller's reference so the original CPU tensor can be freed as soon as we've carved
+                # the shards out of it below.
+                realized_value[target_name] = None
+
+                # Pre-slice once per rank. `tp_layer.shard_tensor` reads `self.rank`, so we temporarily swap
+                # it in a loop (restored in `finally`). Scatter's `scatter_list` entries must each be
+                # contiguous with their own storage — packed shards already are (`torch.cat(...).contiguous()`
+                # in `get_packed_weights`), plain slice shards are views so we clone them.
+                scatter_list: list[torch.Tensor] = []
+                original_rank = tp_layer.rank
+                try:
+                    for r in range(world_size):
+                        tp_layer.rank = r
+                        shard = tp_layer.shard_tensor(full_tensor, tensor_idx=None, device=local_device, dtype=None)
+                        if shard._base is full_tensor:
+                            shard = shard.clone(memory_format=torch.contiguous_format)
+                        elif not shard.is_contiguous():
+                            shard = shard.contiguous()
+                        scatter_list.append(shard)
+                finally:
+                    tp_layer.rank = original_rank
+                del full_tensor  # all bytes now live in scatter_list
+
+                # `dist.scatter` requires every scatter_list entry to match the receiver's recv-buffer
+                # shape. When the sharded dim doesn't divide evenly by world_size the last ranks' shards
+                # are smaller (ragged) — raise loudly rather than silently miscomputing. All models we ship
+                # use divisible world sizes; if this fires in practice we can add a true broadcast fallback.
+                ref_shape = scatter_list[local_rank].shape
+                if not all(s.shape == ref_shape for s in scatter_list):
+                    raise RuntimeError(
+                        f"Ragged TP shard detected for mapping {target_name!r}: per-rank shard shapes "
+                        f"{[tuple(s.shape) for s in scatter_list]} are non-uniform. Run with a "
+                        "world_size that divides the sharded dim."
+                    )
+                local_param = torch.empty(my_shard_shape, dtype=t_dtype, device=local_device)
+                dist.scatter(local_param, scatter_list=scatter_list, src=src_global_rank, group=group)
+                del scatter_list
+            else:
+                local_param = torch.empty(my_shard_shape, dtype=t_dtype, device=local_device)
+                dist.scatter(local_param, scatter_list=None, src=src_global_rank, group=group)
+
+        elif sharded:
+            # world_size == 1 — no comms needed, local shard call.
             full_tensor = realized_value[target_name]
             full_tensor = full_tensor[0] if isinstance(full_tensor, list) else full_tensor
             full_tensor = full_tensor.to(device=local_device).contiguous()
-            # Drop the reference in `realized_value` right away so the original (possibly on-CPU) tensor can be
-            # freed as soon as the broadcast copy below holds the bytes we need.
             realized_value[target_name] = None
-        else:
-            full_tensor = torch.empty(shape, dtype=t_dtype, device=local_device)
-
-        if device_mesh.size() > 1:
-            dist.broadcast(full_tensor, src=src_global_rank, group=group)
-
-        if tp_layer is not None:
-            # Do NOT re-cast here: the source rank materialized each tensor with its per-entry `_dtype` in
-            # `spawn_materialize` (handles pre-quantized passthrough vs. on-the-fly dtype), and the broadcast
-            # preserves that. Passing `dtype=<top-level dtype>` would force an FP8 -> BF16 upcast of every
-            # sharded expert, doubling peak memory and OOMing on big FP8 MoE checkpoints.
             local_param = tp_layer.shard_tensor(full_tensor, tensor_idx=None, device=local_device, dtype=None)
-            # `get_tensor_shard` may return a *view* of `full_tensor` (simple slice path). Holding the view
-            # keeps the entire 6 GB full broadcast tensor alive even after we `del full_tensor` below. Force
-            # a copy only in that case — the packed path (`torch.cat(...).contiguous()` in
-            # `get_packed_weights`) already produces an independent tensor and doesn't need cloning.
             if local_param._base is full_tensor:
                 local_param = local_param.clone(memory_format=torch.contiguous_format)
+            del full_tensor
+
         else:
-            # Replicated parameter: every rank keeps the full tensor.
+            # Replicated parameter: broadcast the full tensor (every rank ends up with a full copy).
+            if is_source:
+                full_tensor = realized_value[target_name]
+                full_tensor = full_tensor[0] if isinstance(full_tensor, list) else full_tensor
+                full_tensor = full_tensor.to(device=local_device).contiguous()
+                realized_value[target_name] = None
+            else:
+                full_tensor = torch.empty(shape, dtype=t_dtype, device=local_device)
+            if world_size > 1:
+                dist.broadcast(full_tensor, src=src_global_rank, group=group)
             local_param = full_tensor
 
         out[target_name] = local_param
-        # Explicitly drop the full tensor now — the slice in `local_param` is a view-or-copy independent of it
-        # (see the slice-first behaviour in `get_packed_weights`), so holding `full_tensor` any longer is pure
-        # peak-memory cost.
-        del full_tensor
 
     return out
 
