@@ -306,17 +306,6 @@ class Qwen2_5OmniProcessor(ProcessorMixin):
         if isinstance(conversations[0], dict):
             conversations = [conversations]
             is_batched = True
-
-        for conversation in conversations:
-            if (
-                conversation[0]["role"] != "system"
-                or conversation[0]["content"][0]["text"]
-                != "You are Qwen, a virtual human developed by the Qwen Team, Alibaba Group, capable of perceiving auditory and visual inputs, as well as generating text and speech."
-            ):
-                logging.warning(
-                    "System prompt modified, audio output may not work as expected. "
-                    + "Audio output mode only works when using default system prompt 'You are Qwen, a virtual human developed by the Qwen Team, Alibaba Group, capable of perceiving auditory and visual inputs, as well as generating text and speech.'"
-                )
         if is_batched:
             conversations = conversations[0]
 
