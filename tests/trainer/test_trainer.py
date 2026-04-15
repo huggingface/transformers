@@ -149,7 +149,7 @@ class TrainerGradientAccumulationTest(TestCasePlus, TrainerIntegrationCommon):
     """Tests for gradient accumulation loss alignment and batch counting."""
 
     def test_gradient_accumulation_steps_not_leaked_to_accelerator(self):
-        """The Trainer must not pass its gradient_accumulation_steps to the Accelerator."""
+        """The Trainer must not pass its gradient_accumulation_steps to the Accelerator. See #45305."""
         with tempfile.TemporaryDirectory() as tmp_dir:
             args = TrainingArguments(
                 output_dir=tmp_dir,
@@ -235,6 +235,7 @@ class TrainerGradientAccumulationTest(TestCasePlus, TrainerIntegrationCommon):
         """
         # Tight tolerance: num_items_in_batch properly averages loss across micro-batches
         self._check_gradient_accumulation(base_batch_size=8, gas_batch_size=1, gas_steps=8, loss_tolerance=0.001)
+        self._check_gradient_accumulation(base_batch_size=8, gas_batch_size=4, gas_steps=2, loss_tolerance=0.001)
 
     def test_gradient_accumulation_grad_norm_without_num_items_in_batch(self):
         """
@@ -243,7 +244,7 @@ class TrainerGradientAccumulationTest(TestCasePlus, TrainerIntegrationCommon):
         baseline and an equivalent GAS run.
         """
         # Looser tolerance: without num_items_in_batch each micro-batch is independently
-        # mean-reduced, so losses won't match as tightly. Uses bs=4/GAS=2 to limit variance.
+        # mean-reduced, so losses won't match as tightly.
         self._check_gradient_accumulation(
             base_batch_size=8,
             gas_batch_size=4,
