@@ -40,7 +40,7 @@ from ..utils.import_utils import (
 )
 
 
-_TORCH_FLEX_USE_AUX = is_torch_greater_or_equal("2.9.0")
+_TORCH_FLEX_USE_AUX = is_torch_greater_or_equal("2.9.1")
 
 
 if is_torch_flex_attn_available():
