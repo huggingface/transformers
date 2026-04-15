@@ -955,9 +955,7 @@ class BaseHandler:
             if "tool_call_id" in message:
                 parsed["tool_call_id"] = message["tool_call_id"]
 
-            content = message.get("content")
-            # Normalize content to a list of typed parts
-            raw_content = message["content"]
+            raw_content = message.get("content", [])
             if isinstance(raw_content, str):
                 raw_content = [{"type": "text", "text": raw_content}]
 
