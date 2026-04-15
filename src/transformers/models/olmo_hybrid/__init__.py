@@ -19,8 +19,8 @@ from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
-    from .configuration_olmo_hybrid import *
-    from .modeling_olmo_hybrid import *
+    from .configuration_olmo_hybrid import OlmoHybridConfig
+    from .modeling_olmo_hybrid import OlmoHybridForCausalLM, OlmoHybridModel, OlmoHybridPreTrainedModel
 else:
     import sys
 

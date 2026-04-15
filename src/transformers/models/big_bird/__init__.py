@@ -18,9 +18,20 @@ from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
-    from .configuration_big_bird import *
-    from .modeling_big_bird import *
-    from .tokenization_big_bird import *
+    from .configuration_big_bird import BigBirdConfig
+    from .modeling_big_bird import (
+        BigBirdForCausalLM,
+        BigBirdForMaskedLM,
+        BigBirdForMultipleChoice,
+        BigBirdForPreTraining,
+        BigBirdForQuestionAnswering,
+        BigBirdForSequenceClassification,
+        BigBirdForTokenClassification,
+        BigBirdLayer,
+        BigBirdModel,
+        BigBirdPreTrainedModel,
+    )
+    from .tokenization_big_bird import BigBirdTokenizer
 else:
     import sys
 

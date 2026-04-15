@@ -18,8 +18,8 @@ from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
-    from .configuration_sew import *
-    from .modeling_sew import *
+    from .configuration_sew import SEWConfig
+    from .modeling_sew import SEWForCTC, SEWForSequenceClassification, SEWModel, SEWPreTrainedModel
 else:
     import sys
 

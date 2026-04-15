@@ -20,9 +20,13 @@ from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
-    from .configuration_pp_doclayout_v3 import *
-    from .image_processing_pp_doclayout_v3 import *
-    from .modeling_pp_doclayout_v3 import *
+    from .configuration_pp_doclayout_v3 import PPDocLayoutV3Config
+    from .image_processing_pp_doclayout_v3 import PPDocLayoutV3ImageProcessor
+    from .modeling_pp_doclayout_v3 import (
+        PPDocLayoutV3ForObjectDetection,
+        PPDocLayoutV3Model,
+        PPDocLayoutV3PreTrainedModel,
+    )
 else:
     import sys
 

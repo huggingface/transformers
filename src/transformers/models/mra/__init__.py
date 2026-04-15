@@ -18,8 +18,17 @@ from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
-    from .configuration_mra import *
-    from .modeling_mra import *
+    from .configuration_mra import MraConfig
+    from .modeling_mra import (
+        MraForMaskedLM,
+        MraForMultipleChoice,
+        MraForQuestionAnswering,
+        MraForSequenceClassification,
+        MraForTokenClassification,
+        MraLayer,
+        MraModel,
+        MraPreTrainedModel,
+    )
 else:
     import sys
 

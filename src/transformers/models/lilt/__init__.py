@@ -18,8 +18,14 @@ from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
-    from .configuration_lilt import *
-    from .modeling_lilt import *
+    from .configuration_lilt import LiltConfig
+    from .modeling_lilt import (
+        LiltForQuestionAnswering,
+        LiltForSequenceClassification,
+        LiltForTokenClassification,
+        LiltModel,
+        LiltPreTrainedModel,
+    )
 else:
     import sys
 

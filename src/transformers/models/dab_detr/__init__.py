@@ -19,8 +19,8 @@ from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
-    from .configuration_dab_detr import *
-    from .modeling_dab_detr import *
+    from .configuration_dab_detr import DabDetrConfig
+    from .modeling_dab_detr import DabDetrForObjectDetection, DabDetrModel, DabDetrPreTrainedModel
 else:
     import sys
 

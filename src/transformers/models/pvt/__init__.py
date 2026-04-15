@@ -18,10 +18,10 @@ from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
-    from .configuration_pvt import *
-    from .image_processing_pil_pvt import *
-    from .image_processing_pvt import *
-    from .modeling_pvt import *
+    from .configuration_pvt import PvtConfig
+    from .image_processing_pil_pvt import PvtImageProcessorPil
+    from .image_processing_pvt import PvtImageProcessor
+    from .modeling_pvt import PvtForImageClassification, PvtModel, PvtPreTrainedModel
 else:
     import sys
 

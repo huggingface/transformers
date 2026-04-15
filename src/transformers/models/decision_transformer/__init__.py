@@ -18,8 +18,13 @@ from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
-    from .configuration_decision_transformer import *
-    from .modeling_decision_transformer import *
+    from .configuration_decision_transformer import DecisionTransformerConfig
+    from .modeling_decision_transformer import (
+        DecisionTransformerGPT2Model,
+        DecisionTransformerGPT2PreTrainedModel,
+        DecisionTransformerModel,
+        DecisionTransformerPreTrainedModel,
+    )
 else:
     import sys
 

@@ -18,9 +18,16 @@ from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
-    from .configuration_wav2vec2_bert import *
-    from .modeling_wav2vec2_bert import *
-    from .processing_wav2vec2_bert import *
+    from .configuration_wav2vec2_bert import Wav2Vec2BertConfig
+    from .modeling_wav2vec2_bert import (
+        Wav2Vec2BertForAudioFrameClassification,
+        Wav2Vec2BertForCTC,
+        Wav2Vec2BertForSequenceClassification,
+        Wav2Vec2BertForXVector,
+        Wav2Vec2BertModel,
+        Wav2Vec2BertPreTrainedModel,
+    )
+    from .processing_wav2vec2_bert import Wav2Vec2BertProcessor
 else:
     import sys
 

@@ -18,10 +18,10 @@ from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
-    from .configuration_vit import *
-    from .image_processing_pil_vit import *
-    from .image_processing_vit import *
-    from .modeling_vit import *
+    from .configuration_vit import ViTConfig
+    from .image_processing_pil_vit import ViTImageProcessorPil
+    from .image_processing_vit import ViTImageProcessor
+    from .modeling_vit import ViTForImageClassification, ViTForMaskedImageModeling, ViTModel, ViTPreTrainedModel
 else:
     import sys
 

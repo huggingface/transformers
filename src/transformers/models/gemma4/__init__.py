@@ -19,13 +19,21 @@ from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
-    from .configuration_gemma4 import *
-    from .feature_extraction_gemma4 import *
-    from .image_processing_gemma4 import *
-    from .image_processing_pil_gemma4 import *
-    from .modeling_gemma4 import *
-    from .processing_gemma4 import *
-    from .video_processing_gemma4 import *
+    from .configuration_gemma4 import Gemma4AudioConfig, Gemma4Config, Gemma4TextConfig, Gemma4VisionConfig
+    from .feature_extraction_gemma4 import Gemma4AudioFeatureExtractor
+    from .image_processing_gemma4 import Gemma4ImageProcessor
+    from .image_processing_pil_gemma4 import Gemma4ImageProcessorPil
+    from .modeling_gemma4 import (
+        Gemma4AudioModel,
+        Gemma4ForCausalLM,
+        Gemma4ForConditionalGeneration,
+        Gemma4Model,
+        Gemma4PreTrainedModel,
+        Gemma4TextModel,
+        Gemma4VisionModel,
+    )
+    from .processing_gemma4 import Gemma4Processor
+    from .video_processing_gemma4 import Gemma4VideoProcessor
 else:
     import sys
 

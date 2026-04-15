@@ -18,12 +18,18 @@ from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
-    from .configuration_glm4v import *
-    from .image_processing_glm4v import *
-    from .image_processing_pil_glm4v import *
-    from .modeling_glm4v import *
-    from .processing_glm4v import *
-    from .video_processing_glm4v import *
+    from .configuration_glm4v import Glm4vConfig, Glm4vTextConfig, Glm4vVisionConfig
+    from .image_processing_glm4v import Glm4vImageProcessor
+    from .image_processing_pil_glm4v import Glm4vImageProcessorPil
+    from .modeling_glm4v import (
+        Glm4vForConditionalGeneration,
+        Glm4vModel,
+        Glm4vPreTrainedModel,
+        Glm4vTextModel,
+        Glm4vVisionModel,
+    )
+    from .processing_glm4v import Glm4vProcessor
+    from .video_processing_glm4v import Glm4vVideoProcessor
 else:
     import sys
 

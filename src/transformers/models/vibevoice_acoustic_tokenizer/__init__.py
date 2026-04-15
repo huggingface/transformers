@@ -18,9 +18,18 @@ from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
-    from .configuration_vibevoice_acoustic_tokenizer import *
-    from .feature_extraction_vibevoice_acoustic_tokenizer import *
-    from .modeling_vibevoice_acoustic_tokenizer import *
+    from .configuration_vibevoice_acoustic_tokenizer import (
+        VibeVoiceAcousticTokenizerConfig,
+        VibeVoiceAcousticTokenizerEncoderConfig,
+        VibeVoiceAcousticTokenizerDecoderConfig,
+    )
+    from .feature_extraction_vibevoice_acoustic_tokenizer import VibeVoiceAcousticTokenizerFeatureExtractor
+    from .modeling_vibevoice_acoustic_tokenizer import (
+        VibeVoiceAcousticTokenizerModel,
+        VibeVoiceAcousticTokenizerEncoderModel,
+        VibeVoiceAcousticTokenizerDecoderModel,
+        VibeVoiceAcousticTokenizerPreTrainedModel,
+    )
 else:
     import sys
 

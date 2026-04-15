@@ -18,8 +18,13 @@ from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
-    from .configuration_mobilevitv2 import *
-    from .modeling_mobilevitv2 import *
+    from .configuration_mobilevitv2 import MobileViTV2Config
+    from .modeling_mobilevitv2 import (
+        MobileViTV2ForImageClassification,
+        MobileViTV2ForSemanticSegmentation,
+        MobileViTV2Model,
+        MobileViTV2PreTrainedModel,
+    )
 else:
     import sys
 

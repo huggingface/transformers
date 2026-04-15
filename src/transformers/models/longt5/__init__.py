@@ -18,8 +18,8 @@ from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
-    from .configuration_longt5 import *
-    from .modeling_longt5 import *
+    from .configuration_longt5 import LongT5Config
+    from .modeling_longt5 import LongT5EncoderModel, LongT5ForConditionalGeneration, LongT5Model, LongT5PreTrainedModel
 else:
     import sys
 

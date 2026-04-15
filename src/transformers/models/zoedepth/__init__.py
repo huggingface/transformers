@@ -18,10 +18,10 @@ from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
-    from .configuration_zoedepth import *
-    from .image_processing_pil_zoedepth import *
-    from .image_processing_zoedepth import *
-    from .modeling_zoedepth import *
+    from .configuration_zoedepth import ZOEDEPTH_PRETRAINED_CONFIG_ARCHIVE_MAP, ZoeDepthConfig
+    from .image_processing_pil_zoedepth import ZoeDepthImageProcessorPil
+    from .image_processing_zoedepth import ZoeDepthImageProcessor
+    from .modeling_zoedepth import ZoeDepthForDepthEstimation, ZoeDepthPreTrainedModel
 else:
     import sys
 

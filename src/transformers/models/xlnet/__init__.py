@@ -18,9 +18,18 @@ from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
-    from .configuration_xlnet import *
-    from .modeling_xlnet import *
-    from .tokenization_xlnet import *
+    from .configuration_xlnet import XLNetConfig
+    from .modeling_xlnet import (
+        XLNetForMultipleChoice,
+        XLNetForQuestionAnswering,
+        XLNetForQuestionAnsweringSimple,
+        XLNetForSequenceClassification,
+        XLNetForTokenClassification,
+        XLNetLMHeadModel,
+        XLNetModel,
+        XLNetPreTrainedModel,
+    )
+    from .tokenization_xlnet import XLNetTokenizer
 else:
     import sys
 

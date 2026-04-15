@@ -18,9 +18,19 @@ from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
-    from .configuration_rembert import *
-    from .modeling_rembert import *
-    from .tokenization_rembert import *
+    from .configuration_rembert import RemBertConfig
+    from .modeling_rembert import (
+        RemBertForCausalLM,
+        RemBertForMaskedLM,
+        RemBertForMultipleChoice,
+        RemBertForQuestionAnswering,
+        RemBertForSequenceClassification,
+        RemBertForTokenClassification,
+        RemBertLayer,
+        RemBertModel,
+        RemBertPreTrainedModel,
+    )
+    from .tokenization_rembert import RemBertTokenizer
 else:
     import sys
 

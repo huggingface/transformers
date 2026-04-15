@@ -18,7 +18,7 @@ from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
-    from .tokenization_myt5 import *
+    from .tokenization_myt5 import MyT5Tokenizer
 else:
     import sys
 

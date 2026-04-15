@@ -18,9 +18,14 @@ from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
-    from .configuration_gpt_neox_japanese import *
-    from .modeling_gpt_neox_japanese import *
-    from .tokenization_gpt_neox_japanese import *
+    from .configuration_gpt_neox_japanese import GPTNeoXJapaneseConfig
+    from .modeling_gpt_neox_japanese import (
+        GPTNeoXJapaneseForCausalLM,
+        GPTNeoXJapaneseLayer,
+        GPTNeoXJapaneseModel,
+        GPTNeoXJapanesePreTrainedModel,
+    )
+    from .tokenization_gpt_neox_japanese import GPTNeoXJapaneseTokenizer
 else:
     import sys
 

@@ -18,8 +18,8 @@ from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
-    from .configuration_granitemoe import *
-    from .modeling_granitemoe import *
+    from .configuration_granitemoe import GraniteMoeConfig
+    from .modeling_granitemoe import GraniteMoeForCausalLM, GraniteMoeModel, GraniteMoePreTrainedModel
 else:
     import sys
 

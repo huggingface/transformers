@@ -18,8 +18,17 @@ from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
-    from .configuration_yoso import *
-    from .modeling_yoso import *
+    from .configuration_yoso import YosoConfig
+    from .modeling_yoso import (
+        YosoForMaskedLM,
+        YosoForMultipleChoice,
+        YosoForQuestionAnswering,
+        YosoForSequenceClassification,
+        YosoForTokenClassification,
+        YosoLayer,
+        YosoModel,
+        YosoPreTrainedModel,
+    )
 else:
     import sys
 

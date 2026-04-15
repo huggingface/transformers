@@ -18,10 +18,16 @@ from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
-    from .configuration_deit import *
-    from .image_processing_deit import *
-    from .image_processing_pil_deit import *
-    from .modeling_deit import *
+    from .configuration_deit import DeiTConfig
+    from .image_processing_deit import DeiTImageProcessor
+    from .image_processing_pil_deit import DeiTImageProcessorPil
+    from .modeling_deit import (
+        DeiTForImageClassification,
+        DeiTForImageClassificationWithTeacher,
+        DeiTForMaskedImageModeling,
+        DeiTModel,
+        DeiTPreTrainedModel,
+    )
 else:
     import sys
 

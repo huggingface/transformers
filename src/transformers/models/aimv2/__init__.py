@@ -18,8 +18,8 @@ from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
-    from .configuration_aimv2 import *
-    from .modeling_aimv2 import *
+    from .configuration_aimv2 import Aimv2Config, Aimv2VisionConfig, Aimv2TextConfig
+    from .modeling_aimv2 import Aimv2VisionModel, Aimv2Model, Aimv2PreTrainedModel, Aimv2TextModel
 else:
     import sys
 

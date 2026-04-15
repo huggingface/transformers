@@ -18,8 +18,8 @@ from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
-    from .configuration_olmo2 import *
-    from .modeling_olmo2 import *
+    from .configuration_olmo2 import Olmo2Config
+    from .modeling_olmo2 import Olmo2ForCausalLM, Olmo2Model, Olmo2PreTrainedModel
 else:
     import sys
 

@@ -18,10 +18,14 @@ from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
-    from .configuration_llava_next_video import *
+    from .configuration_llava_next_video import LlavaNextVideoConfig
     from .image_processing_llava_next_video import *
-    from .modeling_llava_next_video import *
-    from .processing_llava_next_video import *
+    from .modeling_llava_next_video import (
+        LlavaNextVideoForConditionalGeneration,
+        LlavaNextVideoModel,
+        LlavaNextVideoPreTrainedModel,
+    )
+    from .processing_llava_next_video import LlavaNextVideoProcessor
 else:
     import sys
 

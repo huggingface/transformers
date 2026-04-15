@@ -19,8 +19,8 @@ from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
-    from .configuration_minimax_m2 import *
-    from .modeling_minimax_m2 import *
+    from .configuration_minimax_m2 import MiniMaxM2Config
+    from .modeling_minimax_m2 import MiniMaxM2ForCausalLM, MiniMaxM2Model, MiniMaxM2PreTrainedModel
 else:
     import sys
 

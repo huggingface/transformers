@@ -18,9 +18,15 @@ from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
-    from .configuration_openai import *
-    from .modeling_openai import *
-    from .tokenization_openai import *
+    from .configuration_openai import OpenAIGPTConfig
+    from .modeling_openai import (
+        OpenAIGPTDoubleHeadsModel,
+        OpenAIGPTForSequenceClassification,
+        OpenAIGPTLMHeadModel,
+        OpenAIGPTModel,
+        OpenAIGPTPreTrainedModel,
+    )
+    from .tokenization_openai import OpenAIGPTTokenizer
 else:
     import sys
 

@@ -18,8 +18,8 @@ from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
-    from .configuration_encoder_decoder import *
-    from .modeling_encoder_decoder import *
+    from .configuration_encoder_decoder import EncoderDecoderConfig
+    from .modeling_encoder_decoder import EncoderDecoderModel
 else:
     import sys
 

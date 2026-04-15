@@ -18,8 +18,8 @@ from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
-    from .configuration_fast_vlm import *
-    from .modeling_fast_vlm import *
+    from .configuration_fast_vlm import FastVlmConfig
+    from .modeling_fast_vlm import FastVlmForConditionalGeneration, FastVlmModel, FastVlmPreTrainedModel
 else:
     import sys
 

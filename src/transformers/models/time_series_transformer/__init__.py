@@ -18,8 +18,12 @@ from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
-    from .configuration_time_series_transformer import *
-    from .modeling_time_series_transformer import *
+    from .configuration_time_series_transformer import TimeSeriesTransformerConfig
+    from .modeling_time_series_transformer import (
+        TimeSeriesTransformerForPrediction,
+        TimeSeriesTransformerModel,
+        TimeSeriesTransformerPreTrainedModel,
+    )
 else:
     import sys
 

@@ -18,8 +18,8 @@ from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
-    from .configuration_falcon_mamba import *
-    from .modeling_falcon_mamba import *
+    from .configuration_falcon_mamba import FalconMambaConfig
+    from .modeling_falcon_mamba import FalconMambaForCausalLM, FalconMambaModel, FalconMambaPreTrainedModel
 else:
     import sys
 

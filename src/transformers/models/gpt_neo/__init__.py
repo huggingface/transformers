@@ -18,8 +18,15 @@ from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
-    from .configuration_gpt_neo import *
-    from .modeling_gpt_neo import *
+    from .configuration_gpt_neo import GPTNeoConfig
+    from .modeling_gpt_neo import (
+        GPTNeoForCausalLM,
+        GPTNeoForQuestionAnswering,
+        GPTNeoForSequenceClassification,
+        GPTNeoForTokenClassification,
+        GPTNeoModel,
+        GPTNeoPreTrainedModel,
+    )
 else:
     import sys
 

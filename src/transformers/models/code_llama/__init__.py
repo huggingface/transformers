@@ -18,7 +18,7 @@ from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
-    from .tokenization_code_llama import *
+    from .tokenization_code_llama import CodeLlamaTokenizer, CodeLlamaTokenizerFast
 else:
     import sys
 

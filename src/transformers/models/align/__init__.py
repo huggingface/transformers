@@ -18,9 +18,9 @@ from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
-    from .configuration_align import *
-    from .modeling_align import *
-    from .processing_align import *
+    from .configuration_align import AlignTextConfig, AlignVisionConfig, AlignConfig
+    from .modeling_align import AlignPreTrainedModel, AlignTextModel, AlignVisionModel, AlignModel
+    from .processing_align import AlignProcessor
 else:
     import sys
 

@@ -18,11 +18,11 @@ from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
-    from .configuration_idefics import *
-    from .image_processing_idefics import *
-    from .image_processing_pil_idefics import *
-    from .modeling_idefics import *
-    from .processing_idefics import *
+    from .configuration_idefics import IdeficsConfig
+    from .image_processing_idefics import IdeficsImageProcessor
+    from .image_processing_pil_idefics import IdeficsImageProcessorPil
+    from .modeling_idefics import IdeficsForVisionText2Text, IdeficsModel, IdeficsPreTrainedModel
+    from .processing_idefics import IdeficsProcessor
 else:
     import sys
 

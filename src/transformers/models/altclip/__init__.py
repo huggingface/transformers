@@ -18,9 +18,9 @@ from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
-    from .configuration_altclip import *
-    from .modeling_altclip import *
-    from .processing_altclip import *
+    from .configuration_altclip import AltCLIPTextConfig, AltCLIPVisionConfig, AltCLIPConfig
+    from .modeling_altclip import AltCLIPPreTrainedModel, AltCLIPVisionModel, AltCLIPTextModel, AltCLIPModel
+    from .processing_altclip import AltCLIPProcessor
 else:
     import sys
 

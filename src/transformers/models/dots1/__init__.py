@@ -18,8 +18,8 @@ from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
-    from .configuration_dots1 import *
-    from .modeling_dots1 import *
+    from .configuration_dots1 import Dots1Config
+    from .modeling_dots1 import Dots1PreTrainedModel, Dots1Model, Dots1ForCausalLM
 else:
     import sys
 

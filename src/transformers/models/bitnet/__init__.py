@@ -18,8 +18,8 @@ from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
-    from .configuration_bitnet import *
-    from .modeling_bitnet import *
+    from .configuration_bitnet import BitNetConfig
+    from .modeling_bitnet import BitNetForCausalLM, BitNetModel, BitNetPreTrainedModel
 else:
     import sys
 

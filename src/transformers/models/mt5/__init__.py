@@ -18,8 +18,16 @@ from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
-    from .configuration_mt5 import *
-    from .modeling_mt5 import *
+    from .configuration_mt5 import MT5Config
+    from .modeling_mt5 import (
+        MT5EncoderModel,
+        MT5ForConditionalGeneration,
+        MT5ForQuestionAnswering,
+        MT5ForSequenceClassification,
+        MT5ForTokenClassification,
+        MT5Model,
+        MT5PreTrainedModel,
+    )
     from .tokenization_mt5 import *
 else:
     import sys

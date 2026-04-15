@@ -18,8 +18,15 @@ from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
-    from .configuration_exaone4 import *
-    from .modeling_exaone4 import *
+    from .configuration_exaone4 import Exaone4Config
+    from .modeling_exaone4 import (
+        Exaone4PreTrainedModel,
+        Exaone4Model,
+        Exaone4ForCausalLM,
+        Exaone4ForSequenceClassification,
+        Exaone4ForTokenClassification,
+        Exaone4ForQuestionAnswering,
+    )
 else:
     import sys
 

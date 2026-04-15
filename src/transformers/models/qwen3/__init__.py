@@ -18,8 +18,15 @@ from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
-    from .configuration_qwen3 import *
-    from .modeling_qwen3 import *
+    from .configuration_qwen3 import Qwen3Config
+    from .modeling_qwen3 import (
+        Qwen3ForCausalLM,
+        Qwen3ForQuestionAnswering,
+        Qwen3PreTrainedModel,
+        Qwen3Model,
+        Qwen3ForSequenceClassification,
+        Qwen3ForTokenClassification,
+    )
 else:
     import sys
 

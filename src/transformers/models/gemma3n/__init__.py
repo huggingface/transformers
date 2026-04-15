@@ -18,10 +18,17 @@ from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
-    from .configuration_gemma3n import *
-    from .feature_extraction_gemma3n import *
-    from .modeling_gemma3n import *
-    from .processing_gemma3n import *
+    from .configuration_gemma3n import Gemma3nAudioConfig, Gemma3nConfig, Gemma3nTextConfig, Gemma3nVisionConfig
+    from .feature_extraction_gemma3n import Gemma3nAudioFeatureExtractor
+    from .modeling_gemma3n import (
+        Gemma3nAudioEncoder,
+        Gemma3nForCausalLM,
+        Gemma3nForConditionalGeneration,
+        Gemma3nModel,
+        Gemma3nPreTrainedModel,
+        Gemma3nTextModel,
+    )
+    from .processing_gemma3n import Gemma3nProcessor
 else:
     import sys
 

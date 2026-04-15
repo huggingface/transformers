@@ -18,8 +18,8 @@ from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
-    from .configuration_vision_encoder_decoder import *
-    from .modeling_vision_encoder_decoder import *
+    from .configuration_vision_encoder_decoder import VisionEncoderDecoderConfig
+    from .modeling_vision_encoder_decoder import VisionEncoderDecoderModel
 else:
     import sys
 

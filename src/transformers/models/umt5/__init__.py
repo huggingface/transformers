@@ -18,8 +18,16 @@ from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
-    from .configuration_umt5 import *
-    from .modeling_umt5 import *
+    from .configuration_umt5 import UMT5Config
+    from .modeling_umt5 import (
+        UMT5EncoderModel,
+        UMT5ForConditionalGeneration,
+        UMT5ForQuestionAnswering,
+        UMT5ForSequenceClassification,
+        UMT5ForTokenClassification,
+        UMT5Model,
+        UMT5PreTrainedModel,
+    )
 else:
     import sys
 

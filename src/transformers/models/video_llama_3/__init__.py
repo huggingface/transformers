@@ -18,12 +18,17 @@ from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
-    from .configuration_video_llama_3 import *
-    from .image_processing_pil_video_llama_3 import *
-    from .image_processing_video_llama_3 import *
-    from .modeling_video_llama_3 import *
-    from .processing_video_llama_3 import *
-    from .video_processing_video_llama_3 import *
+    from .configuration_video_llama_3 import VideoLlama3VisionConfig, VideoLlama3Config
+    from .image_processing_pil_video_llama_3 import VideoLlama3ImageProcessorPil
+    from .image_processing_video_llama_3 import VideoLlama3ImageProcessor
+    from .modeling_video_llama_3 import (
+        VideoLlama3VisionModel,
+        VideoLlama3PreTrainedModel,
+        VideoLlama3Model,
+        VideoLlama3ForConditionalGeneration,
+    )
+    from .processing_video_llama_3 import VideoLlama3Processor
+    from .video_processing_video_llama_3 import VideoLlama3VideoProcessor
 else:
     import sys
 

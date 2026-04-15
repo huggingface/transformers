@@ -19,8 +19,8 @@ from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
-    from .configuration_lfm2_moe import *
-    from .modeling_lfm2_moe import *
+    from .configuration_lfm2_moe import Lfm2MoeConfig
+    from .modeling_lfm2_moe import Lfm2MoeForCausalLM, Lfm2MoeModel, Lfm2MoePreTrainedModel
 else:
     import sys
 

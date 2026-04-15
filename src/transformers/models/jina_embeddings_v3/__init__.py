@@ -20,8 +20,16 @@ from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
-    from .configuration_jina_embeddings_v3 import *
-    from .modeling_jina_embeddings_v3 import *
+    from .configuration_jina_embeddings_v3 import JinaEmbeddingsV3Config
+    from .modeling_jina_embeddings_v3 import (
+        JinaEmbeddingsV3PreTrainedModel,
+        JinaEmbeddingsV3Model,
+        JinaEmbeddingsV3ForMaskedLM,
+        JinaEmbeddingsV3ForSequenceClassification,
+        JinaEmbeddingsV3ForTokenClassification,
+        JinaEmbeddingsV3ForQuestionAnswering,
+        JinaEmbeddingsV3Layer,
+    )
 else:
     import sys
 

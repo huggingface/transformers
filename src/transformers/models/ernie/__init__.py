@@ -18,8 +18,19 @@ from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
-    from .configuration_ernie import *
-    from .modeling_ernie import *
+    from .configuration_ernie import ErnieConfig
+    from .modeling_ernie import (
+        ErnieForCausalLM,
+        ErnieForMaskedLM,
+        ErnieForMultipleChoice,
+        ErnieForNextSentencePrediction,
+        ErnieForPreTraining,
+        ErnieForQuestionAnswering,
+        ErnieForSequenceClassification,
+        ErnieForTokenClassification,
+        ErnieModel,
+        ErniePreTrainedModel,
+    )
 else:
     import sys
 

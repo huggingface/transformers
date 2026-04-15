@@ -18,8 +18,14 @@ from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
-    from .configuration_gptj import *
-    from .modeling_gptj import *
+    from .configuration_gptj import GPTJConfig
+    from .modeling_gptj import (
+        GPTJForCausalLM,
+        GPTJForQuestionAnswering,
+        GPTJForSequenceClassification,
+        GPTJModel,
+        GPTJPreTrainedModel,
+    )
 else:
     import sys
 

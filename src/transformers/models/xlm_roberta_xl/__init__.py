@@ -18,8 +18,17 @@ from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
-    from .configuration_xlm_roberta_xl import *
-    from .modeling_xlm_roberta_xl import *
+    from .configuration_xlm_roberta_xl import XLMRobertaXLConfig
+    from .modeling_xlm_roberta_xl import (
+        XLMRobertaXLForCausalLM,
+        XLMRobertaXLForMaskedLM,
+        XLMRobertaXLForMultipleChoice,
+        XLMRobertaXLForQuestionAnswering,
+        XLMRobertaXLForSequenceClassification,
+        XLMRobertaXLForTokenClassification,
+        XLMRobertaXLModel,
+        XLMRobertaXLPreTrainedModel,
+    )
 else:
     import sys
 

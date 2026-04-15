@@ -18,10 +18,10 @@ from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
-    from .configuration_mask2former import *
-    from .image_processing_mask2former import *
-    from .image_processing_pil_mask2former import *
-    from .modeling_mask2former import *
+    from .configuration_mask2former import Mask2FormerConfig
+    from .image_processing_mask2former import Mask2FormerImageProcessor
+    from .image_processing_pil_mask2former import Mask2FormerImageProcessorPil
+    from .modeling_mask2former import Mask2FormerForUniversalSegmentation, Mask2FormerModel, Mask2FormerPreTrainedModel
 else:
     import sys
 

@@ -18,8 +18,14 @@ from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
-    from .configuration_glm4 import *
-    from .modeling_glm4 import *
+    from .configuration_glm4 import Glm4Config
+    from .modeling_glm4 import (
+        Glm4PreTrainedModel,
+        Glm4Model,
+        Glm4ForCausalLM,
+        Glm4ForSequenceClassification,
+        Glm4ForTokenClassification,
+    )
 else:
     import sys
 

@@ -18,8 +18,8 @@ from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
-    from .configuration_exaone_moe import *
-    from .modeling_exaone_moe import *
+    from .configuration_exaone_moe import ExaoneMoeConfig
+    from .modeling_exaone_moe import ExaoneMoePreTrainedModel, ExaoneMoeModel, ExaoneMoeForCausalLM
 else:
     import sys
 

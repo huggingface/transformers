@@ -18,9 +18,15 @@ from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
-    from .configuration_plbart import *
-    from .modeling_plbart import *
-    from .tokenization_plbart import *
+    from .configuration_plbart import PLBartConfig
+    from .modeling_plbart import (
+        PLBartForCausalLM,
+        PLBartForConditionalGeneration,
+        PLBartForSequenceClassification,
+        PLBartModel,
+        PLBartPreTrainedModel,
+    )
+    from .tokenization_plbart import PLBartTokenizer
 else:
     import sys
 

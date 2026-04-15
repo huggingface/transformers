@@ -18,10 +18,17 @@ from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
-    from .configuration_segformer import *
-    from .image_processing_pil_segformer import *
-    from .image_processing_segformer import *
-    from .modeling_segformer import *
+    from .configuration_segformer import SegformerConfig
+    from .image_processing_pil_segformer import SegformerImageProcessorPil
+    from .image_processing_segformer import SegformerImageProcessor
+    from .modeling_segformer import (
+        SegformerDecodeHead,
+        SegformerForImageClassification,
+        SegformerForSemanticSegmentation,
+        SegformerLayer,
+        SegformerModel,
+        SegformerPreTrainedModel,
+    )
 else:
     import sys
 

@@ -19,8 +19,8 @@ from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
-    from .configuration_vaultgemma import *
-    from .modeling_vaultgemma import *
+    from .configuration_vaultgemma import VaultGemmaConfig
+    from .modeling_vaultgemma import VaultGemmaForCausalLM, VaultGemmaModel, VaultGemmaPreTrainedModel
 else:
     import sys
 

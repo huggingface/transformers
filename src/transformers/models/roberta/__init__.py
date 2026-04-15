@@ -18,9 +18,18 @@ from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
-    from .configuration_roberta import *
-    from .modeling_roberta import *
-    from .tokenization_roberta import *
+    from .configuration_roberta import RobertaConfig
+    from .modeling_roberta import (
+        RobertaForCausalLM,
+        RobertaForMaskedLM,
+        RobertaForMultipleChoice,
+        RobertaForQuestionAnswering,
+        RobertaForSequenceClassification,
+        RobertaForTokenClassification,
+        RobertaModel,
+        RobertaPreTrainedModel,
+    )
+    from .tokenization_roberta import RobertaTokenizer
 else:
     import sys
 

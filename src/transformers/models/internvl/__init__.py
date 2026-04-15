@@ -18,10 +18,16 @@ from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
-    from .configuration_internvl import *
-    from .modeling_internvl import *
-    from .processing_internvl import *
-    from .video_processing_internvl import *
+    from .configuration_internvl import InternVLVisionConfig, InternVLConfig
+    from .modeling_internvl import (
+        InternVLVisionPreTrainedModel,
+        InternVLVisionModel,
+        InternVLPreTrainedModel,
+        InternVLModel,
+        InternVLForConditionalGeneration,
+    )
+    from .processing_internvl import InternVLProcessor
+    from .video_processing_internvl import InternVLVideoProcessor
 else:
     import sys
 

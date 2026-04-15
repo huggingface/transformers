@@ -18,8 +18,14 @@ from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
-    from .configuration_unispeech import *
-    from .modeling_unispeech import *
+    from .configuration_unispeech import UniSpeechConfig
+    from .modeling_unispeech import (
+        UniSpeechForCTC,
+        UniSpeechForPreTraining,
+        UniSpeechForSequenceClassification,
+        UniSpeechModel,
+        UniSpeechPreTrainedModel,
+    )
 else:
     import sys
 

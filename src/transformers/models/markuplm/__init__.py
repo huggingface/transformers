@@ -18,10 +18,16 @@ from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
-    from .configuration_markuplm import *
-    from .feature_extraction_markuplm import *
-    from .modeling_markuplm import *
-    from .processing_markuplm import *
+    from .configuration_markuplm import MarkupLMConfig
+    from .feature_extraction_markuplm import MarkupLMFeatureExtractor
+    from .modeling_markuplm import (
+        MarkupLMForQuestionAnswering,
+        MarkupLMForSequenceClassification,
+        MarkupLMForTokenClassification,
+        MarkupLMModel,
+        MarkupLMPreTrainedModel,
+    )
+    from .processing_markuplm import MarkupLMProcessor
 else:
     import sys
 

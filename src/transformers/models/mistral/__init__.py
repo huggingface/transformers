@@ -18,8 +18,15 @@ from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
-    from .configuration_mistral import *
-    from .modeling_mistral import *
+    from .configuration_mistral import MistralConfig
+    from .modeling_mistral import (
+        MistralForCausalLM,
+        MistralForQuestionAnswering,
+        MistralModel,
+        MistralPreTrainedModel,
+        MistralForSequenceClassification,
+        MistralForTokenClassification,
+    )
 else:
     import sys
 

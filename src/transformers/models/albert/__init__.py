@@ -18,9 +18,18 @@ from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
-    from .configuration_albert import *
-    from .modeling_albert import *
-    from .tokenization_albert import *
+    from .configuration_albert import AlbertConfig
+    from .modeling_albert import (
+        AlbertPreTrainedModel,
+        AlbertModel,
+        AlbertForPreTraining,
+        AlbertForMaskedLM,
+        AlbertForSequenceClassification,
+        AlbertForTokenClassification,
+        AlbertForQuestionAnswering,
+        AlbertForMultipleChoice,
+    )
+    from .tokenization_albert import AlbertTokenizer
 else:
     import sys
 

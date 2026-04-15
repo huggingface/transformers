@@ -18,8 +18,15 @@ from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
-    from .configuration_smollm3 import *
-    from .modeling_smollm3 import *
+    from .configuration_smollm3 import SmolLM3Config
+    from .modeling_smollm3 import (
+        SmolLM3PreTrainedModel,
+        SmolLM3Model,
+        SmolLM3ForCausalLM,
+        SmolLM3ForSequenceClassification,
+        SmolLM3ForTokenClassification,
+        SmolLM3ForQuestionAnswering,
+    )
 else:
     import sys
 

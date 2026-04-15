@@ -18,11 +18,17 @@ from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
-    from .configuration_bridgetower import *
-    from .image_processing_bridgetower import *
-    from .image_processing_pil_bridgetower import *
-    from .modeling_bridgetower import *
-    from .processing_bridgetower import *
+    from .configuration_bridgetower import BridgeTowerConfig, BridgeTowerTextConfig, BridgeTowerVisionConfig
+    from .image_processing_bridgetower import BridgeTowerImageProcessor
+    from .image_processing_pil_bridgetower import BridgeTowerImageProcessorPil
+    from .modeling_bridgetower import (
+        BridgeTowerForContrastiveLearning,
+        BridgeTowerForImageAndTextRetrieval,
+        BridgeTowerForMaskedLM,
+        BridgeTowerModel,
+        BridgeTowerPreTrainedModel,
+    )
+    from .processing_bridgetower import BridgeTowerProcessor
 else:
     import sys
 

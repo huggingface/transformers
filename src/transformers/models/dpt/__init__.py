@@ -18,10 +18,10 @@ from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
-    from .configuration_dpt import *
-    from .image_processing_dpt import *
-    from .image_processing_pil_dpt import *
-    from .modeling_dpt import *
+    from .configuration_dpt import DPTConfig
+    from .image_processing_dpt import DPTImageProcessor
+    from .image_processing_pil_dpt import DPTImageProcessorPil
+    from .modeling_dpt import DPTForDepthEstimation, DPTForSemanticSegmentation, DPTModel, DPTPreTrainedModel
 else:
     import sys
 

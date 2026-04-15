@@ -18,9 +18,18 @@ from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
-    from .configuration_reformer import *
-    from .modeling_reformer import *
-    from .tokenization_reformer import *
+    from .configuration_reformer import ReformerConfig
+    from .modeling_reformer import (
+        ReformerAttention,
+        ReformerForMaskedLM,
+        ReformerForQuestionAnswering,
+        ReformerForSequenceClassification,
+        ReformerLayer,
+        ReformerModel,
+        ReformerModelWithLMHead,
+        ReformerPreTrainedModel,
+    )
+    from .tokenization_reformer import ReformerTokenizer
 else:
     import sys
 

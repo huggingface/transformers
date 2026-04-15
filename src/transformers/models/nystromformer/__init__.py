@@ -18,8 +18,17 @@ from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
-    from .configuration_nystromformer import *
-    from .modeling_nystromformer import *
+    from .configuration_nystromformer import NystromformerConfig
+    from .modeling_nystromformer import (
+        NystromformerForMaskedLM,
+        NystromformerForMultipleChoice,
+        NystromformerForQuestionAnswering,
+        NystromformerForSequenceClassification,
+        NystromformerForTokenClassification,
+        NystromformerLayer,
+        NystromformerModel,
+        NystromformerPreTrainedModel,
+    )
 else:
     import sys
 

@@ -18,8 +18,8 @@ from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
-    from .configuration_zamba import *
-    from .modeling_zamba import *
+    from .configuration_zamba import ZambaConfig
+    from .modeling_zamba import ZambaForCausalLM, ZambaForSequenceClassification, ZambaModel, ZambaPreTrainedModel
 else:
     import sys
 

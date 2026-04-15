@@ -18,9 +18,16 @@ from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
-    from .configuration_mbart import *
-    from .modeling_mbart import *
-    from .tokenization_mbart import *
+    from .configuration_mbart import MBartConfig
+    from .modeling_mbart import (
+        MBartForCausalLM,
+        MBartForConditionalGeneration,
+        MBartForQuestionAnswering,
+        MBartForSequenceClassification,
+        MBartModel,
+        MBartPreTrainedModel,
+    )
+    from .tokenization_mbart import MBartTokenizer
 else:
     import sys
 

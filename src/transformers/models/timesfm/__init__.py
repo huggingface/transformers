@@ -18,8 +18,8 @@ from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
-    from .configuration_timesfm import *
-    from .modeling_timesfm import *
+    from .configuration_timesfm import TimesFmConfig
+    from .modeling_timesfm import TimesFmModelForPrediction, TimesFmPreTrainedModel, TimesFmModel
 else:
     import sys
 

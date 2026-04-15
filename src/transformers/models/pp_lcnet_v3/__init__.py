@@ -18,8 +18,8 @@ from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
-    from .configuration_pp_lcnet_v3 import *
-    from .modeling_pp_lcnet_v3 import *
+    from .configuration_pp_lcnet_v3 import PPLCNetV3Config
+    from .modeling_pp_lcnet_v3 import PPLCNetV3Backbone, PPLCNetV3PreTrainedModel
 else:
     import sys
 

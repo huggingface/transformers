@@ -18,10 +18,15 @@ from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
-    from .configuration_conditional_detr import *
-    from .image_processing_conditional_detr import *
-    from .image_processing_pil_conditional_detr import *
-    from .modeling_conditional_detr import *
+    from .configuration_conditional_detr import ConditionalDetrConfig
+    from .image_processing_conditional_detr import ConditionalDetrImageProcessor
+    from .image_processing_pil_conditional_detr import ConditionalDetrImageProcessorPil
+    from .modeling_conditional_detr import (
+        ConditionalDetrForObjectDetection,
+        ConditionalDetrForSegmentation,
+        ConditionalDetrModel,
+        ConditionalDetrPreTrainedModel,
+    )
 else:
     import sys
 

@@ -18,11 +18,16 @@ from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
-    from .configuration_imagegpt import *
+    from .configuration_imagegpt import ImageGPTConfig
     from .feature_extraction_imagegpt import *
-    from .image_processing_imagegpt import *
-    from .image_processing_pil_imagegpt import *
-    from .modeling_imagegpt import *
+    from .image_processing_imagegpt import ImageGPTImageProcessor
+    from .image_processing_pil_imagegpt import ImageGPTImageProcessorPil
+    from .modeling_imagegpt import (
+        ImageGPTForCausalImageModeling,
+        ImageGPTForImageClassification,
+        ImageGPTModel,
+        ImageGPTPreTrainedModel,
+    )
 else:
     import sys
 
