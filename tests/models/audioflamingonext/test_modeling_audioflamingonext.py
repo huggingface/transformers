@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Testing suite for the PyTorch MusicFlamingo model."""
+"""Testing suite for the PyTorch AudioFlamingoNext model."""
 
 import json
 import os
@@ -23,14 +23,13 @@ from pathlib import Path
 import pytest
 
 from transformers import (
+    AudioFlamingoNextConfig,
+    AudioFlamingoNextForConditionalGeneration,
     AutoProcessor,
-    MusicFlamingoConfig,
-    MusicFlamingoForConditionalGeneration,
     is_torch_available,
 )
 from transformers.testing_utils import (
     cleanup,
-    require_deterministic_for_xpu,
     require_torch,
     slow,
     torch_device,
@@ -45,9 +44,9 @@ if is_torch_available():
     import torch
 
 
-class MusicFlamingoModelTester:
+class AudioFlamingoNextModelTester:
     """
-    Builds a tiny MusicFlamingo config and synthetic inputs that respect MusicFlamingo's
+    Builds a tiny AudioFlamingoNext config and synthetic inputs that respect AudioFlamingoNext's
     post-pool token accounting: num <sound> tokens per sample == post-pool frame count.
     """
 
@@ -67,7 +66,6 @@ class MusicFlamingoModelTester:
         self.feat_seq_length = feat_seq_length
         self.is_training = is_training
 
-        # Small text backbone (Qwen2-ish)
         if text_config is None:
             text_config = {
                 "model_type": "qwen2",
@@ -81,12 +79,11 @@ class MusicFlamingoModelTester:
                 "use_labels": True,
                 "use_mrope": False,
                 "vocab_size": 99,
-                "pad_token_id": 1,  # Ensure pad token != audio token
+                "pad_token_id": 1,
             }
-        # Small audio encoder (MusicFlamingo Whisper-style)
         if audio_config is None:
             audio_config = {
-                "model_type": "musicflamingo_encoder",
+                "model_type": "audioflamingo3_encoder",
                 "hidden_size": 16,
                 "num_attention_heads": 4,
                 "intermediate_size": 16,
@@ -107,7 +104,7 @@ class MusicFlamingoModelTester:
         self.encoder_seq_length = seq_length
 
     def get_config(self):
-        return MusicFlamingoConfig(
+        return AudioFlamingoNextConfig(
             text_config=self.text_config,
             audio_config=self.audio_config,
             audio_token_id=self.audio_token_id,
@@ -115,32 +112,25 @@ class MusicFlamingoModelTester:
         )
 
     def prepare_config_and_inputs(self):
-        # (#windows == batch_size, n_mels, T_mel)
         input_features_values = floats_tensor(
             [self.batch_size, self.audio_config["num_mel_bins"], self.feat_seq_length]
         )
         config = self.get_config()
-        # Per-window mel validity (all ones => full length)
         input_features_mask = torch.ones([self.batch_size, self.feat_seq_length], dtype=torch.bool).to(torch_device)
         return config, input_features_values, input_features_mask
 
     def _post_pool_tokens_per_window(self, T_mel):
-        # Mirror MusicFlamingo processor math:
         pre = (T_mel - 1) // 2 + 1
         post = (pre - 2) // 2 + 1
         return post
 
     def prepare_config_and_inputs_for_common(self):
         config, input_features_values, input_features_mask = self.prepare_config_and_inputs()
-        # Every window has same T_mel here
         num_audio_tokens_per_sample = self._post_pool_tokens_per_window(input_features_values.shape[-1])
 
-        # Build token ids with valid range and K <sound> tokens
         input_ids = ids_tensor([self.batch_size, self.seq_length], config.text_config.vocab_size - 2) + 2
         attention_mask = torch.ones_like(input_ids, dtype=torch.long, device=torch_device)
-        attention_mask[:, :1] = 0  # left padding sentinel
-
-        # Fill first K positions (after padding) with the audio token id, for each sample
+        attention_mask[:, :1] = 0
         input_ids[:, 1 : 1 + num_audio_tokens_per_sample] = config.audio_token_id
 
         inputs_dict = {
@@ -153,16 +143,16 @@ class MusicFlamingoModelTester:
 
 
 @require_torch
-class MusicFlamingoForConditionalGenerationModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
+class AudioFlamingoNextForConditionalGenerationModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
     """
-    Model tester for `MusicFlamingoForConditionalGeneration`.
+    Model tester for `AudioFlamingoNextForConditionalGeneration`.
     """
 
-    all_model_classes = (MusicFlamingoForConditionalGeneration,) if is_torch_available() else ()
+    all_model_classes = (AudioFlamingoNextForConditionalGeneration,) if is_torch_available() else ()
     pipeline_model_mapping = (
         {
-            "text-to-speech": MusicFlamingoForConditionalGeneration,
-            "audio-text-to-text": MusicFlamingoForConditionalGeneration,
+            "text-to-speech": AudioFlamingoNextForConditionalGeneration,
+            "audio-text-to-text": AudioFlamingoNextForConditionalGeneration,
         }
         if is_torch_available()
         else {}
@@ -170,12 +160,12 @@ class MusicFlamingoForConditionalGenerationModelTest(ModelTesterMixin, Generatio
     _is_composite = True
 
     def setUp(self):
-        self.model_tester = MusicFlamingoModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=MusicFlamingoConfig, has_text_modality=False)
+        self.model_tester = AudioFlamingoNextModelTester(self)
+        self.config_tester = ConfigTester(self, config_class=AudioFlamingoNextConfig, has_text_modality=False)
 
     def test_rotary_window_axis_resets_per_audio(self):
         config = self.model_tester.get_config()
-        pos_emb = MusicFlamingoForConditionalGeneration(config).pos_emb.to(torch_device)
+        pos_emb = AudioFlamingoNextForConditionalGeneration(config).pos_emb.to(torch_device)
 
         timestamps = torch.tensor(
             [
@@ -197,7 +187,7 @@ class MusicFlamingoForConditionalGenerationModelTest(ModelTesterMixin, Generatio
 
     def test_build_audio_timestamps_reconstructs_windows_from_input_ids(self):
         config = self.model_tester.get_config()
-        model = MusicFlamingoForConditionalGeneration(config).to(torch_device).eval()
+        model = AudioFlamingoNextForConditionalGeneration(config).to(torch_device).eval()
         num_windows = 5
         feat_seq_length = self.model_tester.feat_seq_length
         input_features_mask = torch.ones([num_windows, feat_seq_length], dtype=torch.bool, device=torch_device)
@@ -227,30 +217,29 @@ class MusicFlamingoForConditionalGenerationModelTest(ModelTesterMixin, Generatio
         torch.testing.assert_close(inferred, audio_timestamps)
 
     @unittest.skip(
-        reason="This test does not apply to MusicFlamingo since High-level inputs_embeds corresponding to audio tokens are replaced when input features are provided."
+        reason="This test does not apply to AudioFlamingoNext since High-level inputs_embeds corresponding to audio tokens are replaced when input features are provided."
     )
     def test_inputs_embeds_matches_input_ids(self):
         pass
 
-    @unittest.skip(reason="Compile not yet supported for MusicFlamingo models")
+    @unittest.skip(reason="Compile not yet supported for AudioFlamingoNext models")
     @pytest.mark.torch_compile_test
     def test_sdpa_can_compile_dynamic(self):
         pass
 
-    @unittest.skip(reason="Compile not yet supported for MusicFlamingo models")
+    @unittest.skip(reason="Compile not yet supported for AudioFlamingoNext models")
     def test_sdpa_can_dispatch_on_flash(self):
         pass
 
-    @unittest.skip(reason="MusicFlamingo tests avoid right-padding equivalence; fusion is in-place.")
+    @unittest.skip(reason="AudioFlamingoNext tests avoid right-padding equivalence; fusion is in-place.")
     def test_flash_attn_2_inference_equivalence_right_padding(self):
         pass
 
-    @unittest.skip(reason="MusicFlamingo has no separate base model without a head.")
+    @unittest.skip(reason="AudioFlamingoNext has no separate base model without a head.")
     def test_model_base_model_prefix(self):
         pass
 
     def test_sdpa_can_dispatch_composite_models(self):
-        # MusicFlamingo is audio+text composite; verify SDPA toggles propagate to submodules.
         if not self.has_attentions:
             self.skipTest(reason="Model architecture does not support attentions")
 
@@ -264,7 +253,6 @@ class MusicFlamingoForConditionalGenerationModelTest(ModelTesterMixin, Generatio
             with tempfile.TemporaryDirectory() as tmpdirname:
                 model.save_pretrained(tmpdirname)
 
-                # SDPA (default)
                 model_sdpa = model_class.from_pretrained(tmpdirname)
                 model_sdpa = model_sdpa.eval().to(torch_device)
 
@@ -275,7 +263,6 @@ class MusicFlamingoForConditionalGenerationModelTest(ModelTesterMixin, Generatio
                 self.assertTrue(model.language_model.config._attn_implementation == text_attn)
                 self.assertTrue(model.audio_tower.config._attn_implementation == audio_attn)
 
-                # Eager
                 model_eager = model_class.from_pretrained(tmpdirname, attn_implementation="eager")
                 model_eager = model_eager.eval().to(torch_device)
                 self.assertTrue(model_eager.config._attn_implementation == "eager")
@@ -289,15 +276,15 @@ class MusicFlamingoForConditionalGenerationModelTest(ModelTesterMixin, Generatio
 
 
 @require_torch
-class MusicFlamingoForConditionalGenerationIntegrationTest(unittest.TestCase):
+class AudioFlamingoNextForConditionalGenerationIntegrationTest(unittest.TestCase):
     """
-    Original model is private, but expected outputs are computed with checkpoint/code during integration.
+    Public checkpoint integration tests using AF3-style prompts and audio examples.
     """
 
     @classmethod
     def setUp(cls):
         cleanup(torch_device, gc_collect=True)
-        cls.checkpoint = os.environ.get("MUSIC_FLAMINGO_TEST_CHECKPOINT", "nvidia/music-flamingo-2601-hf")
+        cls.checkpoint = os.environ.get("AUDIO_FLAMINGO_NEXT_TEST_CHECKPOINT", "nvidia/audio-flamingo-next-hf")
         cls.processor = AutoProcessor.from_pretrained(cls.checkpoint)
         cls.max_new_tokens = 50
 
@@ -306,10 +293,7 @@ class MusicFlamingoForConditionalGenerationIntegrationTest(unittest.TestCase):
 
     @slow
     def test_fixture_single_matches(self):
-        """
-        reproducer (creates JSON directly in repo): https://gist.github.com/ebezzam/a3226a0ba25e51be84a4808a79b59257#file-reproducer_hf-py
-        """
-        path = Path(__file__).parent.parent.parent / "fixtures/musicflamingo/expected_results_single.json"
+        path = Path(__file__).parent.parent.parent / "fixtures/audioflamingonext/expected_results_single.json"
         with open(path, "r", encoding="utf-8") as f:
             raw = json.load(f)
         exp_ids = torch.tensor(raw["token_ids"])
@@ -321,17 +305,17 @@ class MusicFlamingoForConditionalGenerationIntegrationTest(unittest.TestCase):
                 "content": [
                     {
                         "type": "text",
-                        "text": "Describe this track in full detail - tell me the genre, tempo, and key, then dive into the instruments, production style, and overall mood it creates.",
+                        "text": "What is surprising about the relationship between the barking and the music?",
                     },
                     {
                         "type": "audio",
-                        "path": "https://huggingface.co/datasets/nvidia/AudioSkills/resolve/main/assets/song_1.mp3",
+                        "path": "https://huggingface.co/datasets/nvidia/AudioSkills/resolve/main/assets/dogs_barking_in_sync_with_the_music.wav",
                     },
                 ],
             }
         ]
 
-        model = MusicFlamingoForConditionalGeneration.from_pretrained(
+        model = AudioFlamingoNextForConditionalGeneration.from_pretrained(
             self.checkpoint, device_map="auto", dtype=torch.bfloat16
         ).eval()
 
@@ -346,13 +330,9 @@ class MusicFlamingoForConditionalGenerationIntegrationTest(unittest.TestCase):
         txt = self.processor.batch_decode(gen_ids, skip_special_tokens=True)
         self.assertListEqual(txt, exp_txt)
 
-    @require_deterministic_for_xpu
     @slow
     def test_fixture_batched_matches(self):
-        """
-        reproducer (creates JSON directly in repo): https://gist.github.com/ebezzam/a3226a0ba25e51be84a4808a79b59257#file-reproducer_hf-py
-        """
-        path = Path(__file__).parent.parent.parent / "fixtures/musicflamingo/expected_results_batched.json"
+        path = Path(__file__).parent.parent.parent / "fixtures/audioflamingonext/expected_results_batched.json"
         with open(path, "r", encoding="utf-8") as f:
             raw = json.load(f)
         exp_ids = torch.tensor(raw["token_ids"])
@@ -365,11 +345,11 @@ class MusicFlamingoForConditionalGenerationIntegrationTest(unittest.TestCase):
                     "content": [
                         {
                             "type": "text",
-                            "text": "Describe this track in full detail - tell me the genre, tempo, and key, then dive into the instruments, production style, and overall mood it creates.",
+                            "text": "What is surprising about the relationship between the barking and the music?",
                         },
                         {
                             "type": "audio",
-                            "path": "https://huggingface.co/datasets/nvidia/AudioSkills/resolve/main/assets/song_1.mp3",
+                            "path": "https://huggingface.co/datasets/nvidia/AudioSkills/resolve/main/assets/dogs_barking_in_sync_with_the_music.wav",
                         },
                     ],
                 }
@@ -380,18 +360,22 @@ class MusicFlamingoForConditionalGenerationIntegrationTest(unittest.TestCase):
                     "content": [
                         {
                             "type": "text",
-                            "text": "Generate a structured lyric sheet from the input music.",
+                            "text": "Why is the philosopher's name mentioned in the lyrics? "
+                            "(A) To express a sense of nostalgia "
+                            "(B) To indicate that language cannot express clearly, satirizing the inversion of black and white in the world "
+                            "(C) To add depth and complexity to the lyrics "
+                            "(D) To showcase the wisdom and influence of the philosopher",
                         },
                         {
                             "type": "audio",
-                            "path": "https://huggingface.co/datasets/nvidia/AudioSkills/resolve/main/assets/song_2.mp3",
+                            "path": "https://huggingface.co/datasets/nvidia/AudioSkills/resolve/main/assets/Ch6Ae9DT6Ko_00-04-03_00-04-31.wav",
                         },
                     ],
                 }
             ],
         ]
 
-        model = MusicFlamingoForConditionalGeneration.from_pretrained(
+        model = AudioFlamingoNextForConditionalGeneration.from_pretrained(
             self.checkpoint, device_map="auto", dtype=torch.bfloat16
         ).eval()
 

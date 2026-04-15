@@ -28,6 +28,7 @@ if TYPE_CHECKING:
     from .aria import *
     from .audio_spectrogram_transformer import *
     from .audioflamingo3 import *
+    from .audioflamingonext import *
     from .auto import *
     from .autoformer import *
     from .aya_vision import *

@@ -76,10 +76,14 @@ class MusicFlamingoConfig(AudioFlamingo3Config):
     rope_parameters: dict | None = None
 
     def __post_init__(self, **kwargs):
+        if self.rope_parameters is None:
+            self.rope_parameters = {
+                "rope_type": "default",
+                "rope_theta": kwargs.get("rope_theta", 1200),
+                "partial_rotary_factor": kwargs.get("partial_rotary_factor", 0.2),
+            }
         super().__post_init__(**kwargs)
 
-        if self.rope_parameters is None:
-            self.rope_parameters = {"rope_type": "default", "rope_theta": 1200, "partial_rotary_factor": 0.2}
         self.max_position_embeddings = self.rope_parameters["rope_theta"]
         self.head_dim = self.audio_config.hidden_size
 
