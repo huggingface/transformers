@@ -62,7 +62,7 @@ def get_release_branch_name():
 def checkout_branch(branch):
     """Checkout the target branch."""
     try:
-        subprocess.run(["git", "checkout", branch], check=True)
+        subprocess.run(["git", "checkout", branch], check=True)  # noqa: S603, S607
         print(f"[SUCCESS] Checked out branch: {branch}")
     except subprocess.CalledProcessError:
         print(f"[FAIL] Failed to checkout branch: {branch}. Does it exist?")
@@ -84,7 +84,7 @@ def get_prs_by_label(label):
         "--limit",
         "100",
     ]
-    result = subprocess.run(cmd, check=False, capture_output=True, text=True)
+    result = subprocess.run(cmd, check=False, capture_output=True, text=True)  # noqa: S603
     result.check_returncode()
     prs = json.loads(result.stdout)
     for pr in prs:
@@ -96,8 +96,11 @@ def get_prs_by_label(label):
 
 def get_commit_timestamp(commit_sha):
     """Get UNIX timestamp of a commit using git."""
-    result = subprocess.run(
-        ["git", "show", "-s", "--format=%ct", commit_sha], check=False, capture_output=True, text=True
+    result = subprocess.run(  # noqa: S603
+        ["git", "show", "-s", "--format=%ct", commit_sha],  # noqa: S607
+        check=False,
+        capture_output=True,
+        text=True,
     )
     result.check_returncode()
     return int(result.stdout.strip())
@@ -106,7 +109,7 @@ def get_commit_timestamp(commit_sha):
 def cherry_pick_commit(sha):
     """Cherry-pick a given commit SHA."""
     try:
-        subprocess.run(["git", "cherry-pick", sha], check=True)
+        subprocess.run(["git", "cherry-pick", sha], check=True)  # noqa: S603, S607
         print(f"[SUCCESS] Cherry-picked commit {sha}")
     except subprocess.CalledProcessError:
         print(f"[WARNING] Failed to cherry-pick {sha}. Manual intervention required.")
@@ -114,8 +117,8 @@ def cherry_pick_commit(sha):
 
 def commit_in_history(commit_sha, base_branch="HEAD"):
     """Return True if commit is already part of base_branch history."""
-    result = subprocess.run(
-        ["git", "merge-base", "--is-ancestor", commit_sha, base_branch],
+    result = subprocess.run(  # noqa: S603
+        ["git", "merge-base", "--is-ancestor", commit_sha, base_branch],  # noqa: S607
         check=False,
         stdout=subprocess.DEVNULL,
         stderr=subprocess.DEVNULL,

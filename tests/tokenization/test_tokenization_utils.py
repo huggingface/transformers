@@ -345,9 +345,10 @@ class TokenizerUtilsTest(unittest.TestCase):
             == text_with_nonspecial_tokens
         )
 
-        # Checking if this carries over even after saving and relaoding
-        tokenizer.save_pretrained("/tmp/ernie_tokenizer")
-        new_tokenizer = AutoTokenizer.from_pretrained("/tmp/ernie_tokenizer")
+        # Checking if this carries over even after saving and reloading
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            tokenizer.save_pretrained(tmp_dir)
+            new_tokenizer = AutoTokenizer.from_pretrained(tmp_dir)
         self.assertTrue(
             new_tokenizer.decode(new_tokenizer.encode(text_with_nonspecial_tokens), skip_special_tokens=True)
             == text_with_nonspecial_tokens

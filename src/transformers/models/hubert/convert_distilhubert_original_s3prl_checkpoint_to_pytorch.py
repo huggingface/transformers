@@ -14,6 +14,7 @@
 """Convert Hubert checkpoint."""
 
 import argparse
+import ast
 
 import torch
 from s3prl.hub import distilhubert
@@ -158,7 +159,7 @@ def convert_config(model):
     config.apply_spec_augment = False
     config.attention_dropout = fs_config.attention_dropout
     config.conv_bias = False
-    conv_layers = eval(fs_config.extractor_conv_feature_layers)
+    conv_layers = ast.literal_eval(fs_config.extractor_conv_feature_layers)
     config.conv_dim = [x[0] for x in conv_layers]
     config.conv_kernel = [x[1] for x in conv_layers]
     config.conv_stride = [x[2] for x in conv_layers]

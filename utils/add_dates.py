@@ -93,13 +93,13 @@ def check_file_exists_on_github(file_path: str) -> bool:
 def get_modified_cards() -> list[str]:
     """Get the list of model names from modified files in docs/source/en/model_doc/"""
 
-    current_branch = subprocess.check_output(["git", "branch", "--show-current"], text=True).strip()
+    current_branch = subprocess.check_output(["git", "branch", "--show-current"], text=True).strip()  # noqa: S607
     if current_branch == "main":
         # On main branch, only uncommitted changes detected
-        result = subprocess.check_output(["git", "diff", "--name-only", "HEAD"], text=True)
+        result = subprocess.check_output(["git", "diff", "--name-only", "HEAD"], text=True)  # noqa: S607
     else:
-        fork_point_sha = subprocess.check_output("git merge-base main HEAD".split()).decode("utf-8")
-        result = subprocess.check_output(f"git diff --name-only {fork_point_sha}".split()).decode("utf-8")
+        fork_point_sha = subprocess.check_output("git merge-base main HEAD".split()).decode("utf-8")  # noqa: S603
+        result = subprocess.check_output(f"git diff --name-only {fork_point_sha}".split()).decode("utf-8")  # noqa: S603
 
     model_names = []
     for line in result.strip().split("\n"):
@@ -159,8 +159,9 @@ def get_first_commit_date(model_name: str | None) -> str:
         final_date = date.today().isoformat()
     else:
         # File exists on GitHub main branch, get the first commit date from local git history
-        final_date = subprocess.check_output(
-            ["git", "log", "--reverse", "--pretty=format:%ad", "--date=iso", file_path], text=True
+        final_date = subprocess.check_output(  # noqa: S603
+            ["git", "log", "--reverse", "--pretty=format:%ad", "--date=iso", file_path],  # noqa: S607
+            text=True,
         )
     return final_date.strip().split("\n")[0][:10]
 
@@ -208,6 +209,7 @@ def replace_paper_links(file_path: str) -> bool:
 
         except Exception:
             # Paper not available on huggingface, keep arxiv link
+            logger.debug("Paper %s not available on huggingface, keeping arxiv link.", paper_id)
             continue
 
     # Write back only if content changed

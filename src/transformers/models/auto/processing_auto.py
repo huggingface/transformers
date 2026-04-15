@@ -442,6 +442,9 @@ class AutoProcessor:
                     pretrained_model_name_or_path, trust_remote_code=trust_remote_code, **kwargs
                 )
             except Exception:
+                logger.debug(
+                    "Failed to load %s with %s, trying next class.", pretrained_model_name_or_path, klass.__name__
+                )
                 continue
 
         raise ValueError(

@@ -568,7 +568,7 @@ def run_ruff(code, check=False):
         command = ["ruff", "check", "-", "--fix", "--exit-zero"]
     else:
         command = ["ruff", "format", "-", "--config", "pyproject.toml", "--silent"]
-    process = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, stdin=subprocess.PIPE)
+    process = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, stdin=subprocess.PIPE)  # noqa: S603
     stdout, _ = process.communicate(input=code.encode())
     return stdout.decode()
 

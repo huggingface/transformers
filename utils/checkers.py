@@ -352,12 +352,12 @@ def _print_output(output: str) -> None:
 def _run_cmd(cmd, line_callback=None):
     """Run a command, capturing output. Returns (returncode, output)."""
     if line_callback is None:
-        result = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+        result = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)  # noqa: S603
         return result.returncode, result.stdout.decode("utf-8", errors="replace")
 
     env = os.environ.copy()
     env["PYTHONUNBUFFERED"] = "1"
-    proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, env=env)
+    proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, env=env)  # noqa: S603
     output_lines = []
     for raw_line in proc.stdout:
         line = raw_line.decode("utf-8", errors="replace")

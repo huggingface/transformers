@@ -14,6 +14,7 @@
 
 
 import glob
+import logging
 import os
 
 from get_test_info import get_tester_classes
@@ -33,6 +34,7 @@ if __name__ == "__main__":
             try:
                 tester = tester_class(parent=None)
             except Exception:
+                logging.debug("Failed to instantiate %s, skipping.", tester_class.__name__)
                 continue
             if hasattr(tester, "get_config"):
                 config = tester.get_config()

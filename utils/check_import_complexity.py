@@ -29,6 +29,7 @@ from __future__ import annotations
 import argparse
 import importlib
 import importlib.abc
+import logging
 import sys
 import threading
 from dataclasses import dataclass, field
@@ -94,6 +95,7 @@ class ImportTreeFinder(importlib.abc.MetaPathFinder):
             try:
                 spec = finder.find_spec(fullname, path, target) if hasattr(finder, "find_spec") else None
             except Exception:
+                logging.debug("Finder %s failed for %s, trying next.", finder, fullname)
                 continue
 
             if spec is None:

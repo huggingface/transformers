@@ -14,6 +14,7 @@
 """Convert SEW checkpoint."""
 
 import argparse
+import ast
 import json
 import os
 
@@ -181,7 +182,7 @@ def convert_config(model, is_finetuned):
         fs_config = model.cfg
 
     config.conv_bias = fs_config.conv_bias
-    conv_layers = eval(fs_config.conv_feature_layers)
+    conv_layers = ast.literal_eval(fs_config.conv_feature_layers)
     config.conv_dim = [x[0] for x in conv_layers]
     config.conv_kernel = [x[1] for x in conv_layers]
     config.conv_stride = [x[2] for x in conv_layers]

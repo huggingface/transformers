@@ -51,7 +51,7 @@ def ffmpeg_read(bpayload: bytes, sampling_rate: int) -> np.ndarray:
     ]
 
     try:
-        ffmpeg_process = subprocess.Popen(ffmpeg_command, stdin=subprocess.PIPE, stdout=subprocess.PIPE)
+        ffmpeg_process = subprocess.Popen(ffmpeg_command, stdin=subprocess.PIPE, stdout=subprocess.PIPE)  # noqa: S603
     except FileNotFoundError:
         raise ValueError("ffmpeg was not found but is required to load audio files from filename")
     output_stream = ffmpeg_process.communicate(bpayload)

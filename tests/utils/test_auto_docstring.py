@@ -16,6 +16,7 @@ Tests for auto_docstring decorator and check_auto_docstrings function.
 """
 
 import importlib
+import logging
 import os
 import statistics
 import sys
@@ -724,6 +725,7 @@ class TestAutoDocstringPerformance:
                 try:
                     importlib.import_module(mod)
                 except Exception:
+                    logging.debug("Failed to import module %s, skipping.", mod)
                     continue
 
         _import_all()  # warmup
