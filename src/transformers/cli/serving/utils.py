@@ -969,8 +969,9 @@ class BaseHandler:
                         url = file.name
                     parsed["content"].append({"type": "image", "url": url})
                 elif content["type"] == "input_audio" and modality == Modality.MULTIMODAL:
-                    audio_data = base64.b64decode(content["input_audio"]["data"])
-                    suffix = f".{content['input_audio'].get('format', 'wav')}"
+                    input_audio = content["input_audio"]
+                    audio_data = base64.b64decode(input_audio["data"])
+                    suffix = f".{input_audio.get('format', 'wav')}" if isinstance(input_audio, dict) else ".wav"
                     file = tempfile.NamedTemporaryFile(suffix=suffix, delete=False)
                     file.write(audio_data)
                     file.flush()
