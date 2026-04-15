@@ -461,23 +461,27 @@ Multimodal models like [Gemma 4](https://huggingface.co/google/gemma-4-E2B-it) a
 <hfoption id="curl">
 
 ```shell
-# First, base64-encode the audio file
+# First, base64-encode the audio file and build the JSON payload
 AUDIO_B64=$(curl -sL https://huggingface.co/datasets/hf-internal-testing/dummy-audio-samples/resolve/main/obama_first_45_secs.mp3 | base64 -w 0)
+
+cat <<EOF > /tmp/audio_request.json
+{
+  "model": "google/gemma-4-E2B-it",
+  "messages": [
+    {
+      "role": "user",
+      "content": [
+        {"type": "text", "text": "Transcribe this audio."},
+        {"type": "input_audio", "input_audio": {"data": "$AUDIO_B64", "format": "mp3"}}
+      ]
+    }
+  ]
+}
+EOF
 
 curl http://localhost:8000/v1/chat/completions \
   -H "Content-Type: application/json" \
-  -d '{
-    "model": "google/gemma-4-E2B-it",
-    "messages": [
-      {
-        "role": "user",
-        "content": [
-          {"type": "text", "text": "Transcribe this audio."},
-          {"type": "input_audio", "input_audio": {"data": "'"$AUDIO_B64"'", "format": "mp3"}}
-        ]
-      }
-    ]
-  }'
+  -d @/tmp/audio_request.json
 ```
 
 The command returns a JSON string.
@@ -510,24 +514,28 @@ The command returns a JSON string.
 <hfoption id="curl (stream)">
 
 ```shell
-# First, base64-encode the audio file
+# First, base64-encode the audio file and build the JSON payload
 AUDIO_B64=$(curl -sL https://huggingface.co/datasets/hf-internal-testing/dummy-audio-samples/resolve/main/obama_first_45_secs.mp3 | base64 -w 0)
+
+cat <<EOF > /tmp/audio_request.json
+{
+  "model": "google/gemma-4-E2B-it",
+  "stream": true,
+  "messages": [
+    {
+      "role": "user",
+      "content": [
+        {"type": "text", "text": "Transcribe this audio."},
+        {"type": "input_audio", "input_audio": {"data": "$AUDIO_B64", "format": "mp3"}}
+      ]
+    }
+  ]
+}
+EOF
 
 curl http://localhost:8000/v1/chat/completions \
   -H "Content-Type: application/json" \
-  -d '{
-    "model": "google/gemma-4-E2B-it",
-    "stream": true,
-    "messages": [
-      {
-        "role": "user",
-        "content": [
-          {"type": "text", "text": "Transcribe this audio."},
-          {"type": "input_audio", "input_audio": {"data": "'"$AUDIO_B64"'", "format": "mp3"}}
-        ]
-      }
-    ]
-  }'
+  -d @/tmp/audio_request.json
 ```
 
 The command returns a stream of chunks.
