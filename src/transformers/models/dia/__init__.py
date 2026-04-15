@@ -18,10 +18,10 @@ from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
-    from .configuration_dia import DiaConfig, DiaEncoderConfig, DiaDecoderConfig
+    from .configuration_dia import DiaConfig, DiaDecoderConfig, DiaEncoderConfig
     from .feature_extraction_dia import DiaFeatureExtractor
     from .generation_dia import *
-    from .modeling_dia import DiaModel, DiaPreTrainedModel, DiaForConditionalGeneration
+    from .modeling_dia import DiaForConditionalGeneration, DiaModel, DiaPreTrainedModel
     from .processing_dia import DiaProcessor
     from .tokenization_dia import DiaTokenizer
 else:

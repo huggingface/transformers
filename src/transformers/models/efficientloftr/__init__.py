@@ -22,9 +22,9 @@ if TYPE_CHECKING:
     from .image_processing_efficientloftr import EfficientLoFTRImageProcessor
     from .image_processing_pil_efficientloftr import EfficientLoFTRImageProcessorPil
     from .modeling_efficientloftr import (
-        EfficientLoFTRPreTrainedModel,
-        EfficientLoFTRModel,
         EfficientLoFTRForKeypointMatching,
+        EfficientLoFTRModel,
+        EfficientLoFTRPreTrainedModel,
     )
 else:
     import sys

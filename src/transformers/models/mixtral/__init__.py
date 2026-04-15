@@ -22,10 +22,10 @@ if TYPE_CHECKING:
     from .modeling_mixtral import (
         MixtralForCausalLM,
         MixtralForQuestionAnswering,
-        MixtralModel,
-        MixtralPreTrainedModel,
         MixtralForSequenceClassification,
         MixtralForTokenClassification,
+        MixtralModel,
+        MixtralPreTrainedModel,
     )
 else:
     import sys

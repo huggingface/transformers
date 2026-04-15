@@ -20,10 +20,10 @@ from ...utils.import_utils import define_import_structure
 if TYPE_CHECKING:
     from .configuration_dinov2_with_registers import Dinov2WithRegistersConfig
     from .modeling_dinov2_with_registers import (
-        Dinov2WithRegistersPreTrainedModel,
-        Dinov2WithRegistersModel,
-        Dinov2WithRegistersForImageClassification,
         Dinov2WithRegistersBackbone,
+        Dinov2WithRegistersForImageClassification,
+        Dinov2WithRegistersModel,
+        Dinov2WithRegistersPreTrainedModel,
     )
 else:
     import sys

@@ -22,10 +22,10 @@ if TYPE_CHECKING:
     from .modeling_mistral import (
         MistralForCausalLM,
         MistralForQuestionAnswering,
-        MistralModel,
-        MistralPreTrainedModel,
         MistralForSequenceClassification,
         MistralForTokenClassification,
+        MistralModel,
+        MistralPreTrainedModel,
     )
 else:
     import sys

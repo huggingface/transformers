@@ -21,14 +21,14 @@ if TYPE_CHECKING:
     from .configuration_seamless_m4t import SeamlessM4TConfig
     from .feature_extraction_seamless_m4t import SeamlessM4TFeatureExtractor
     from .modeling_seamless_m4t import (
-        SeamlessM4TForTextToSpeech,
+        SeamlessM4TCodeHifiGan,
         SeamlessM4TForSpeechToSpeech,
-        SeamlessM4TForTextToText,
         SeamlessM4TForSpeechToText,
+        SeamlessM4TForTextToSpeech,
+        SeamlessM4TForTextToText,
+        SeamlessM4THifiGan,
         SeamlessM4TModel,
         SeamlessM4TPreTrainedModel,
-        SeamlessM4TCodeHifiGan,
-        SeamlessM4THifiGan,
         SeamlessM4TTextToUnitForConditionalGeneration,
         SeamlessM4TTextToUnitModel,
     )

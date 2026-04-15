@@ -26,8 +26,8 @@ if TYPE_CHECKING:
         FlaubertForSequenceClassification,
         FlaubertForTokenClassification,
         FlaubertModel,
-        FlaubertWithLMHeadModel,
         FlaubertPreTrainedModel,
+        FlaubertWithLMHeadModel,
     )
     from .tokenization_flaubert import FlaubertTokenizer
 else:

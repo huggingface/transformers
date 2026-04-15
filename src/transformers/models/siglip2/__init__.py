@@ -22,11 +22,11 @@ if TYPE_CHECKING:
     from .image_processing_pil_siglip2 import Siglip2ImageProcessorPil
     from .image_processing_siglip2 import Siglip2ImageProcessor
     from .modeling_siglip2 import (
+        Siglip2ForImageClassification,
         Siglip2Model,
         Siglip2PreTrainedModel,
         Siglip2TextModel,
         Siglip2VisionModel,
-        Siglip2ForImageClassification,
     )
     from .processing_siglip2 import Siglip2Processor
     from .tokenization_siglip2 import Siglip2Tokenizer

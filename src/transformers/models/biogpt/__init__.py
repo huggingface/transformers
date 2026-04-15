@@ -21,8 +21,8 @@ if TYPE_CHECKING:
     from .configuration_biogpt import BioGptConfig
     from .modeling_biogpt import (
         BioGptForCausalLM,
-        BioGptForTokenClassification,
         BioGptForSequenceClassification,
+        BioGptForTokenClassification,
         BioGptModel,
         BioGptPreTrainedModel,
     )

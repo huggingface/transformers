@@ -21,7 +21,7 @@ if TYPE_CHECKING:
     from .configuration_bit import BitConfig
     from .image_processing_bit import BitImageProcessor
     from .image_processing_pil_bit import BitImageProcessorPil
-    from .modeling_bit import BitForImageClassification, BitModel, BitPreTrainedModel, BitBackbone
+    from .modeling_bit import BitBackbone, BitForImageClassification, BitModel, BitPreTrainedModel
 else:
     import sys
 

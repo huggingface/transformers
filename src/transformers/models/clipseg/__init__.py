@@ -20,11 +20,11 @@ from ...utils.import_utils import define_import_structure
 if TYPE_CHECKING:
     from .configuration_clipseg import CLIPSegConfig, CLIPSegTextConfig, CLIPSegVisionConfig
     from .modeling_clipseg import (
+        CLIPSegForImageSegmentation,
         CLIPSegModel,
         CLIPSegPreTrainedModel,
         CLIPSegTextModel,
         CLIPSegVisionModel,
-        CLIPSegForImageSegmentation,
     )
     from .processing_clipseg import CLIPSegProcessor
 else:

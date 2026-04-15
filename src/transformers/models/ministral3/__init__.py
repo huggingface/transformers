@@ -22,10 +22,10 @@ if TYPE_CHECKING:
     from .modeling_ministral3 import (
         Ministral3ForCausalLM,
         Ministral3ForQuestionAnswering,
-        Ministral3Model,
-        Ministral3PreTrainedModel,
         Ministral3ForSequenceClassification,
         Ministral3ForTokenClassification,
+        Ministral3Model,
+        Ministral3PreTrainedModel,
     )
 else:
     import sys

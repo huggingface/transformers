@@ -21,12 +21,12 @@ if TYPE_CHECKING:
     from .configuration_speecht5 import SpeechT5Config, SpeechT5HifiGanConfig
     from .feature_extraction_speecht5 import SpeechT5FeatureExtractor
     from .modeling_speecht5 import (
-        SpeechT5ForSpeechToText,
         SpeechT5ForSpeechToSpeech,
+        SpeechT5ForSpeechToText,
         SpeechT5ForTextToSpeech,
+        SpeechT5HifiGan,
         SpeechT5Model,
         SpeechT5PreTrainedModel,
-        SpeechT5HifiGan,
     )
     from .processing_speecht5 import SpeechT5Processor
     from .tokenization_speecht5 import SpeechT5Tokenizer

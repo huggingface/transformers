@@ -24,9 +24,9 @@ if TYPE_CHECKING:
     from .image_processing_videomae import VideoMAEImageProcessor
     from .modeling_videomae import (
         VideoMAEForPreTraining,
+        VideoMAEForVideoClassification,
         VideoMAEModel,
         VideoMAEPreTrainedModel,
-        VideoMAEForVideoClassification,
     )
     from .video_processing_videomae import VideoMAEVideoProcessor
 else:

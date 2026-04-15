@@ -21,7 +21,7 @@ if TYPE_CHECKING:
     from .configuration_tvp import TvpConfig
     from .image_processing_pil_tvp import TvpImageProcessorPil
     from .image_processing_tvp import TvpImageProcessor
-    from .modeling_tvp import TvpModel, TvpPreTrainedModel, TvpForVideoGrounding
+    from .modeling_tvp import TvpForVideoGrounding, TvpModel, TvpPreTrainedModel
     from .processing_tvp import TvpProcessor
 else:
     import sys

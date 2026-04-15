@@ -19,7 +19,7 @@ from ...utils.import_utils import define_import_structure
 
 if TYPE_CHECKING:
     from .configuration_phimoe import PhimoeConfig
-    from .modeling_phimoe import PhimoePreTrainedModel, PhimoeModel, PhimoeForCausalLM, PhimoeForSequenceClassification
+    from .modeling_phimoe import PhimoeForCausalLM, PhimoeForSequenceClassification, PhimoeModel, PhimoePreTrainedModel
 
 else:
     import sys

@@ -19,7 +19,7 @@ from ...utils.import_utils import define_import_structure
 
 if TYPE_CHECKING:
     from .configuration_vit_msn import ViTMSNConfig
-    from .modeling_vit_msn import ViTMSNModel, ViTMSNForImageClassification, ViTMSNPreTrainedModel
+    from .modeling_vit_msn import ViTMSNForImageClassification, ViTMSNModel, ViTMSNPreTrainedModel
 else:
     import sys
 

@@ -21,7 +21,7 @@ if TYPE_CHECKING:
     from .configuration_seggpt import SegGptConfig
     from .image_processing_pil_seggpt import SegGptImageProcessorPil
     from .image_processing_seggpt import SegGptImageProcessor
-    from .modeling_seggpt import SegGptModel, SegGptPreTrainedModel, SegGptForImageSegmentation
+    from .modeling_seggpt import SegGptForImageSegmentation, SegGptModel, SegGptPreTrainedModel
 else:
     import sys
 

@@ -20,11 +20,11 @@ from ...utils.import_utils import define_import_structure
 if TYPE_CHECKING:
     from .configuration_phi import PhiConfig
     from .modeling_phi import (
-        PhiPreTrainedModel,
-        PhiModel,
         PhiForCausalLM,
         PhiForSequenceClassification,
         PhiForTokenClassification,
+        PhiModel,
+        PhiPreTrainedModel,
     )
 else:
     import sys

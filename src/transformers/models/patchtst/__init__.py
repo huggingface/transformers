@@ -20,12 +20,12 @@ from ...utils.import_utils import define_import_structure
 if TYPE_CHECKING:
     from .configuration_patchtst import PatchTSTConfig
     from .modeling_patchtst import (
-        PatchTSTModel,
-        PatchTSTPreTrainedModel,
+        PatchTSTForClassification,
         PatchTSTForPrediction,
         PatchTSTForPretraining,
         PatchTSTForRegression,
-        PatchTSTForClassification,
+        PatchTSTModel,
+        PatchTSTPreTrainedModel,
     )
 else:
     import sys

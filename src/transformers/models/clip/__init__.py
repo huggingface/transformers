@@ -22,13 +22,13 @@ if TYPE_CHECKING:
     from .image_processing_clip import CLIPImageProcessor
     from .image_processing_pil_clip import CLIPImageProcessorPil
     from .modeling_clip import (
+        CLIPForImageClassification,
         CLIPModel,
         CLIPPreTrainedModel,
         CLIPTextModel,
         CLIPTextModelWithProjection,
         CLIPVisionModel,
         CLIPVisionModelWithProjection,
-        CLIPForImageClassification,
     )
     from .processing_clip import CLIPProcessor
     from .tokenization_clip import CLIPTokenizer

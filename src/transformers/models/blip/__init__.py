@@ -22,15 +22,15 @@ if TYPE_CHECKING:
     from .image_processing_blip import BlipImageProcessor
     from .image_processing_pil_blip import BlipImageProcessorPil
     from .modeling_blip import (
+        BlipForConditionalGeneration,
+        BlipForImageTextRetrieval,
+        BlipForQuestionAnswering,
         BlipModel,
         BlipPreTrainedModel,
-        BlipForConditionalGeneration,
-        BlipForQuestionAnswering,
-        BlipVisionModel,
         BlipTextModel,
-        BlipForImageTextRetrieval,
+        BlipVisionModel,
     )
-    from .modeling_blip_text import BlipTextModel, BlipTextLMHeadModel, BlipTextPreTrainedModel
+    from .modeling_blip_text import BlipTextLMHeadModel, BlipTextModel, BlipTextPreTrainedModel
     from .processing_blip import BlipProcessor
 else:
     import sys

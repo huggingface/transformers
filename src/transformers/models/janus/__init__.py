@@ -18,15 +18,15 @@ from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
-    from .configuration_janus import JanusVQVAEConfig, JanusVisionConfig, JanusConfig
+    from .configuration_janus import JanusConfig, JanusVisionConfig, JanusVQVAEConfig
     from .image_processing_janus import JanusImageProcessor
     from .image_processing_pil_janus import JanusImageProcessorPil
     from .modeling_janus import (
-        JanusPreTrainedModel,
         JanusForConditionalGeneration,
         JanusModel,
-        JanusVQVAE,
+        JanusPreTrainedModel,
         JanusVisionModel,
+        JanusVQVAE,
     )
     from .processing_janus import JanusProcessor
 else:

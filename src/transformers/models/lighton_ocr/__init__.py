@@ -19,7 +19,7 @@ from ...utils.import_utils import define_import_structure
 
 if TYPE_CHECKING:
     from .configuration_lighton_ocr import LightOnOcrConfig
-    from .modeling_lighton_ocr import LightOnOcrPreTrainedModel, LightOnOcrForConditionalGeneration, LightOnOcrModel
+    from .modeling_lighton_ocr import LightOnOcrForConditionalGeneration, LightOnOcrModel, LightOnOcrPreTrainedModel
     from .processing_lighton_ocr import LightOnOcrProcessor
 else:
     import sys

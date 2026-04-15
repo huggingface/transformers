@@ -20,12 +20,12 @@ from ...utils.import_utils import define_import_structure
 if TYPE_CHECKING:
     from .configuration_nemotron import NemotronConfig
     from .modeling_nemotron import (
-        NemotronForQuestionAnswering,
         NemotronForCausalLM,
-        NemotronModel,
-        NemotronPreTrainedModel,
+        NemotronForQuestionAnswering,
         NemotronForSequenceClassification,
         NemotronForTokenClassification,
+        NemotronModel,
+        NemotronPreTrainedModel,
     )
 else:
     import sys

@@ -21,7 +21,7 @@ if TYPE_CHECKING:
     from .configuration_pixtral import PixtralVisionConfig
     from .image_processing_pil_pixtral import PixtralImageProcessorPil
     from .image_processing_pixtral import PixtralImageProcessor
-    from .modeling_pixtral import PixtralVisionModel, PixtralPreTrainedModel
+    from .modeling_pixtral import PixtralPreTrainedModel, PixtralVisionModel
     from .processing_pixtral import PixtralProcessor
 else:
     import sys

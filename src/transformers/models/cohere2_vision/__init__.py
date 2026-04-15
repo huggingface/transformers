@@ -22,8 +22,8 @@ if TYPE_CHECKING:
     from .image_processing_cohere2_vision import Cohere2VisionImageProcessor
     from .modeling_cohere2_vision import (
         Cohere2VisionForConditionalGeneration,
-        Cohere2VisionPreTrainedModel,
         Cohere2VisionModel,
+        Cohere2VisionPreTrainedModel,
     )
     from .processing_cohere2_vision import Cohere2VisionProcessor
 else:

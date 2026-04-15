@@ -20,12 +20,12 @@ from ...utils.import_utils import define_import_structure
 if TYPE_CHECKING:
     from .configuration_patchtsmixer import PatchTSMixerConfig
     from .modeling_patchtsmixer import (
-        PatchTSMixerPreTrainedModel,
-        PatchTSMixerModel,
-        PatchTSMixerForPretraining,
         PatchTSMixerForPrediction,
-        PatchTSMixerForTimeSeriesClassification,
+        PatchTSMixerForPretraining,
         PatchTSMixerForRegression,
+        PatchTSMixerForTimeSeriesClassification,
+        PatchTSMixerModel,
+        PatchTSMixerPreTrainedModel,
     )
 else:
     import sys

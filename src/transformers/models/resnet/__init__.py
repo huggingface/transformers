@@ -19,7 +19,7 @@ from ...utils.import_utils import define_import_structure
 
 if TYPE_CHECKING:
     from .configuration_resnet import ResNetConfig
-    from .modeling_resnet import ResNetForImageClassification, ResNetModel, ResNetPreTrainedModel, ResNetBackbone
+    from .modeling_resnet import ResNetBackbone, ResNetForImageClassification, ResNetModel, ResNetPreTrainedModel
 else:
     import sys
 

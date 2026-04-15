@@ -22,11 +22,11 @@ if TYPE_CHECKING:
     from .image_processing_modernvbert import *
     from .image_processing_modernvbert_fast import *
     from .modeling_modernvbert import (
-        ModernVBertPreTrainedModel,
-        ModernVBertModel,
         ModernVBertForMaskedLM,
         ModernVBertForSequenceClassification,
         ModernVBertForTokenClassification,
+        ModernVBertModel,
+        ModernVBertPreTrainedModel,
     )
     from .processing_modernvbert import *
 else:

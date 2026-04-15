@@ -29,18 +29,18 @@ if TYPE_CHECKING:
     from .image_processing_ernie4_5_vl_moe import Ernie4_5_VL_MoeImageProcessor, Ernie4_5_VLMoeImageProcessor
     from .image_processing_pil_ernie4_5_vl_moe import Ernie4_5_VL_MoeImageProcessorPil, Ernie4_5_VLMoeImageProcessorPil
     from .modeling_ernie4_5_vl_moe import (
-        Ernie4_5_VL_MoePreTrainedModel,
         Ernie4_5_VL_MoeForConditionalGeneration,
         Ernie4_5_VL_MoeModel,
+        Ernie4_5_VL_MoePreTrainedModel,
         Ernie4_5_VL_MoeTextModel,
-        Ernie4_5_VL_MoeVisionTransformerPretrainedModel,
         Ernie4_5_VL_MoeVariableResolutionResamplerModel,
-        Ernie4_5_VLMoePreTrainedModel,
+        Ernie4_5_VL_MoeVisionTransformerPretrainedModel,
         Ernie4_5_VLMoeForConditionalGeneration,
         Ernie4_5_VLMoeModel,
+        Ernie4_5_VLMoePreTrainedModel,
         Ernie4_5_VLMoeTextModel,
-        Ernie4_5_VLMoeVisionTransformerPretrainedModel,
         Ernie4_5_VLMoeVariableResolutionResamplerModel,
+        Ernie4_5_VLMoeVisionTransformerPretrainedModel,
     )
     from .processing_ernie4_5_vl_moe import Ernie4_5_VLMoeProcessor
     from .video_processing_ernie4_5_vl_moe import Ernie4_5_VLMoeVideoProcessor

@@ -22,9 +22,9 @@ if TYPE_CHECKING:
     from .image_processing_deepseek_vl_hybrid import DeepseekVLHybridImageProcessor
     from .image_processing_pil_deepseek_vl_hybrid import DeepseekVLHybridImageProcessorPil
     from .modeling_deepseek_vl_hybrid import (
-        DeepseekVLHybridPreTrainedModel,
-        DeepseekVLHybridModel,
         DeepseekVLHybridForConditionalGeneration,
+        DeepseekVLHybridModel,
+        DeepseekVLHybridPreTrainedModel,
     )
     from .processing_deepseek_vl_hybrid import DeepseekVLHybridProcessor
 else:

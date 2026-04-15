@@ -18,8 +18,8 @@ from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
-    from .configuration_align import AlignTextConfig, AlignVisionConfig, AlignConfig
-    from .modeling_align import AlignPreTrainedModel, AlignTextModel, AlignVisionModel, AlignModel
+    from .configuration_align import AlignConfig, AlignTextConfig, AlignVisionConfig
+    from .modeling_align import AlignModel, AlignPreTrainedModel, AlignTextModel, AlignVisionModel
     from .processing_align import AlignProcessor
 else:
     import sys

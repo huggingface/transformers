@@ -20,9 +20,9 @@ from ...utils.import_utils import define_import_structure
 if TYPE_CHECKING:
     from .configuration_focalnet import FocalNetConfig
     from .modeling_focalnet import (
+        FocalNetBackbone,
         FocalNetForImageClassification,
         FocalNetForMaskedImageModeling,
-        FocalNetBackbone,
         FocalNetModel,
         FocalNetPreTrainedModel,
     )

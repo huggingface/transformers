@@ -21,10 +21,10 @@ if TYPE_CHECKING:
     from .configuration_gemma2 import Gemma2Config
     from .modeling_gemma2 import (
         Gemma2ForCausalLM,
-        Gemma2Model,
-        Gemma2PreTrainedModel,
         Gemma2ForSequenceClassification,
         Gemma2ForTokenClassification,
+        Gemma2Model,
+        Gemma2PreTrainedModel,
     )
 else:
     import sys

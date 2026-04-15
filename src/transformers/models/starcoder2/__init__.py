@@ -21,10 +21,10 @@ if TYPE_CHECKING:
     from .configuration_starcoder2 import Starcoder2Config
     from .modeling_starcoder2 import (
         Starcoder2ForCausalLM,
-        Starcoder2Model,
-        Starcoder2PreTrainedModel,
         Starcoder2ForSequenceClassification,
         Starcoder2ForTokenClassification,
+        Starcoder2Model,
+        Starcoder2PreTrainedModel,
     )
 else:
     import sys

@@ -19,7 +19,7 @@ from ...utils.import_utils import define_import_structure
 
 if TYPE_CHECKING:
     from .configuration_paligemma import PaliGemmaConfig
-    from .modeling_paligemma import PaliGemmaForConditionalGeneration, PaliGemmaPreTrainedModel, PaliGemmaModel
+    from .modeling_paligemma import PaliGemmaForConditionalGeneration, PaliGemmaModel, PaliGemmaPreTrainedModel
     from .processing_paligemma import PaliGemmaProcessor
 else:
     import sys

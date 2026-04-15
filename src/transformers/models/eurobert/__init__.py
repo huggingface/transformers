@@ -20,11 +20,11 @@ from ...utils.import_utils import define_import_structure
 if TYPE_CHECKING:
     from .configuration_eurobert import EuroBertConfig
     from .modeling_eurobert import (
-        EuroBertPreTrainedModel,
-        EuroBertModel,
         EuroBertForMaskedLM,
         EuroBertForSequenceClassification,
         EuroBertForTokenClassification,
+        EuroBertModel,
+        EuroBertPreTrainedModel,
     )
 else:
     import sys

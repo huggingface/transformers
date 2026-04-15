@@ -19,7 +19,7 @@ from ...utils.import_utils import define_import_structure
 
 if TYPE_CHECKING:
     from .configuration_nemotron_h import NemotronHConfig
-    from .modeling_nemotron_h import NemotronHPreTrainedModel, NemotronHModel, NemotronHForCausalLM
+    from .modeling_nemotron_h import NemotronHForCausalLM, NemotronHModel, NemotronHPreTrainedModel
 else:
     import sys
 

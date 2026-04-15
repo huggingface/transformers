@@ -20,13 +20,13 @@ from ...utils.import_utils import define_import_structure
 if TYPE_CHECKING:
     from .configuration_metaclip_2 import MetaClip2Config, MetaClip2TextConfig, MetaClip2VisionConfig
     from .modeling_metaclip_2 import (
+        MetaClip2ForImageClassification,
         MetaClip2Model,
         MetaClip2PreTrainedModel,
         MetaClip2TextModel,
         MetaClip2TextModelWithProjection,
         MetaClip2VisionModel,
         MetaClip2VisionModelWithProjection,
-        MetaClip2ForImageClassification,
     )
 else:
     import sys

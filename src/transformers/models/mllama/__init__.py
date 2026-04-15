@@ -22,12 +22,12 @@ if TYPE_CHECKING:
     from .image_processing_mllama import MllamaImageProcessor
     from .image_processing_pil_mllama import MllamaImageProcessorPil
     from .modeling_mllama import (
-        MllamaForConditionalGeneration,
         MllamaForCausalLM,
+        MllamaForConditionalGeneration,
+        MllamaModel,
+        MllamaPreTrainedModel,
         MllamaTextModel,
         MllamaVisionModel,
-        MllamaPreTrainedModel,
-        MllamaModel,
     )
     from .processing_mllama import MllamaProcessor
 else:

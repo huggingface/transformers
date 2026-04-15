@@ -20,7 +20,7 @@ from ...utils.import_utils import define_import_structure
 
 if TYPE_CHECKING:
     from .configuration_glm4_moe_lite import Glm4MoeLiteConfig
-    from .modeling_glm4_moe_lite import Glm4MoeLitePreTrainedModel, Glm4MoeLiteModel, Glm4MoeLiteForCausalLM
+    from .modeling_glm4_moe_lite import Glm4MoeLiteForCausalLM, Glm4MoeLiteModel, Glm4MoeLitePreTrainedModel
 else:
     import sys
 

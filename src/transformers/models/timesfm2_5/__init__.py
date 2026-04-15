@@ -20,7 +20,7 @@ from ...utils.import_utils import define_import_structure
 
 if TYPE_CHECKING:
     from .configuration_timesfm2_5 import TimesFm2_5Config
-    from .modeling_timesfm2_5 import TimesFm2_5ModelForPrediction, TimesFm2_5PreTrainedModel, TimesFm2_5Model
+    from .modeling_timesfm2_5 import TimesFm2_5Model, TimesFm2_5ModelForPrediction, TimesFm2_5PreTrainedModel
 else:
     import sys
 

@@ -26,7 +26,7 @@ if TYPE_CHECKING:
         EsmModel,
         EsmPreTrainedModel,
     )
-    from .modeling_esmfold import EsmForProteinFolding, EsmFoldPreTrainedModel
+    from .modeling_esmfold import EsmFoldPreTrainedModel, EsmForProteinFolding
     from .tokenization_esm import EsmTokenizer
 else:
     import sys

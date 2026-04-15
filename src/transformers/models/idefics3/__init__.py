@@ -23,8 +23,8 @@ if TYPE_CHECKING:
     from .image_processing_pil_idefics3 import Idefics3ImageProcessorPil
     from .modeling_idefics3 import (
         Idefics3ForConditionalGeneration,
-        Idefics3PreTrainedModel,
         Idefics3Model,
+        Idefics3PreTrainedModel,
         Idefics3VisionTransformer,
     )
     from .processing_idefics3 import Idefics3Processor

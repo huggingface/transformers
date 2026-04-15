@@ -21,7 +21,7 @@ from ...utils.import_utils import define_import_structure
 
 if TYPE_CHECKING:
     from .configuration_pixio import PixioConfig
-    from .modeling_pixio import PixioModel, PixioPreTrainedModel, PixioBackbone
+    from .modeling_pixio import PixioBackbone, PixioModel, PixioPreTrainedModel
 else:
     import sys
 

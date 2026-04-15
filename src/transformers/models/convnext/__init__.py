@@ -22,10 +22,10 @@ if TYPE_CHECKING:
     from .image_processing_convnext import ConvNextImageProcessor
     from .image_processing_pil_convnext import ConvNextImageProcessorPil
     from .modeling_convnext import (
+        ConvNextBackbone,
         ConvNextForImageClassification,
         ConvNextModel,
         ConvNextPreTrainedModel,
-        ConvNextBackbone,
     )
 else:
     import sys

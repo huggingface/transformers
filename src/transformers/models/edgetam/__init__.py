@@ -20,11 +20,11 @@ from ...utils.import_utils import define_import_structure
 if TYPE_CHECKING:
     from .configuration_edgetam import (
         EdgeTamConfig,
-        EdgeTamVisionConfig,
-        EdgeTamPromptEncoderConfig,
         EdgeTamMaskDecoderConfig,
+        EdgeTamPromptEncoderConfig,
+        EdgeTamVisionConfig,
     )
-    from .modeling_edgetam import EdgeTamModel, EdgeTamVisionModel, EdgeTamPreTrainedModel
+    from .modeling_edgetam import EdgeTamModel, EdgeTamPreTrainedModel, EdgeTamVisionModel
 else:
     import sys
 

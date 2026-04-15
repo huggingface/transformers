@@ -25,11 +25,11 @@ if TYPE_CHECKING:
     )
     from .image_processing_instructblipvideo import *
     from .modeling_instructblipvideo import (
-        InstructBlipVideoVisionModel,
+        InstructBlipVideoForConditionalGeneration,
+        InstructBlipVideoModel,
         InstructBlipVideoPreTrainedModel,
         InstructBlipVideoQFormerModel,
-        InstructBlipVideoModel,
-        InstructBlipVideoForConditionalGeneration,
+        InstructBlipVideoVisionModel,
     )
     from .processing_instructblipvideo import InstructBlipVideoProcessor
     from .video_processing_instructblipvideo import InstructBlipVideoVideoProcessor

@@ -18,7 +18,7 @@ from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
-    from .configuration_pe_video import PeVideoEncoderConfig, PeVideoConfig
+    from .configuration_pe_video import PeVideoConfig, PeVideoEncoderConfig
     from .modeling_pe_video import PeVideoEncoder, PeVideoModel
     from .processing_pe_video import PeVideoProcessor
     from .video_processing_pe_video import PeVideoVideoProcessor

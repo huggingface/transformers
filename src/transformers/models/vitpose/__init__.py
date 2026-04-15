@@ -21,7 +21,7 @@ if TYPE_CHECKING:
     from .configuration_vitpose import VitPoseConfig
     from .image_processing_pil_vitpose import VitPoseImageProcessorPil
     from .image_processing_vitpose import VitPoseImageProcessor
-    from .modeling_vitpose import VitPosePreTrainedModel, VitPoseForPoseEstimation
+    from .modeling_vitpose import VitPoseForPoseEstimation, VitPosePreTrainedModel
 else:
     import sys
 

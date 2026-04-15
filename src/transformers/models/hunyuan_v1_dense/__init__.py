@@ -8,9 +8,9 @@ if TYPE_CHECKING:
     from .configuration_hunyuan_v1_dense import HunYuanDenseV1Config
     from .modeling_hunyuan_v1_dense import (
         HunYuanDenseV1ForCausalLM,
+        HunYuanDenseV1ForSequenceClassification,
         HunYuanDenseV1Model,
         HunYuanDenseV1PreTrainedModel,
-        HunYuanDenseV1ForSequenceClassification,
     )
     from .tokenization_hy import *
 else:

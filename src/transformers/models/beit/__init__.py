@@ -22,12 +22,12 @@ if TYPE_CHECKING:
     from .image_processing_beit import BeitImageProcessor
     from .image_processing_pil_beit import BeitImageProcessorPil
     from .modeling_beit import (
+        BeitBackbone,
         BeitForImageClassification,
         BeitForMaskedImageModeling,
         BeitForSemanticSegmentation,
         BeitModel,
         BeitPreTrainedModel,
-        BeitBackbone,
     )
 else:
     import sys

@@ -19,7 +19,7 @@ from ...utils.import_utils import define_import_structure
 
 if TYPE_CHECKING:
     from .configuration_jais2 import Jais2Config
-    from .modeling_jais2 import Jais2Model, Jais2ForCausalLM, Jais2PreTrainedModel
+    from .modeling_jais2 import Jais2ForCausalLM, Jais2Model, Jais2PreTrainedModel
 else:
     import sys
 

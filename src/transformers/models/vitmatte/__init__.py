@@ -21,7 +21,7 @@ if TYPE_CHECKING:
     from .configuration_vitmatte import VitMatteConfig
     from .image_processing_pil_vitmatte import VitMatteImageProcessorPil
     from .image_processing_vitmatte import VitMatteImageProcessor
-    from .modeling_vitmatte import VitMattePreTrainedModel, VitMatteForImageMatting
+    from .modeling_vitmatte import VitMatteForImageMatting, VitMattePreTrainedModel
 else:
     import sys
 

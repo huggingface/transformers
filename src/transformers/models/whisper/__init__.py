@@ -21,11 +21,11 @@ if TYPE_CHECKING:
     from .configuration_whisper import WhisperConfig
     from .feature_extraction_whisper import WhisperFeatureExtractor
     from .modeling_whisper import (
+        WhisperForAudioClassification,
         WhisperForCausalLM,
         WhisperForConditionalGeneration,
         WhisperModel,
         WhisperPreTrainedModel,
-        WhisperForAudioClassification,
     )
     from .processing_whisper import WhisperProcessor
     from .tokenization_whisper import WhisperTokenizer

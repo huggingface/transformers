@@ -20,9 +20,9 @@ from ...utils.import_utils import define_import_structure
 if TYPE_CHECKING:
     from .configuration_bros import BrosConfig
     from .modeling_bros import (
-        BrosPreTrainedModel,
-        BrosModel,
         BrosForTokenClassification,
+        BrosModel,
+        BrosPreTrainedModel,
         BrosSpadeEEForTokenClassification,
         BrosSpadeELForTokenClassification,
     )

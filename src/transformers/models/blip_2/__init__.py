@@ -20,14 +20,14 @@ from ...utils.import_utils import define_import_structure
 if TYPE_CHECKING:
     from .configuration_blip_2 import Blip2Config, Blip2QFormerConfig, Blip2VisionConfig
     from .modeling_blip_2 import (
-        Blip2Model,
-        Blip2VisionModelWithProjection,
-        Blip2QFormerModel,
-        Blip2PreTrainedModel,
         Blip2ForConditionalGeneration,
         Blip2ForImageTextRetrieval,
-        Blip2VisionModel,
+        Blip2Model,
+        Blip2PreTrainedModel,
+        Blip2QFormerModel,
         Blip2TextModelWithProjection,
+        Blip2VisionModel,
+        Blip2VisionModelWithProjection,
     )
     from .processing_blip_2 import Blip2Processor
 else:

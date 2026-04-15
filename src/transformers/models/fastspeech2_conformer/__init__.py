@@ -24,10 +24,10 @@ if TYPE_CHECKING:
         FastSpeech2ConformerWithHifiGanConfig,
     )
     from .modeling_fastspeech2_conformer import (
-        FastSpeech2ConformerWithHifiGan,
         FastSpeech2ConformerHifiGan,
         FastSpeech2ConformerModel,
         FastSpeech2ConformerPreTrainedModel,
+        FastSpeech2ConformerWithHifiGan,
     )
     from .tokenization_fastspeech2_conformer import FastSpeech2ConformerTokenizer
 else:

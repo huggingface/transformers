@@ -24,10 +24,10 @@ if TYPE_CHECKING:
     from .image_processing_maskformer import MaskFormerImageProcessor
     from .image_processing_pil_maskformer import MaskFormerImageProcessorPil
     from .modeling_maskformer import (
+        MaskFormerDetrPreTrainedModel,
         MaskFormerForInstanceSegmentation,
         MaskFormerModel,
         MaskFormerPreTrainedModel,
-        MaskFormerDetrPreTrainedModel,
     )
     from .modeling_maskformer_swin import MaskFormerSwinBackbone, MaskFormerSwinModel, MaskFormerSwinPreTrainedModel
 else:

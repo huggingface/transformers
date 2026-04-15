@@ -21,12 +21,12 @@ if TYPE_CHECKING:
     from .configuration_sam2 import (
         Sam2Config,
         Sam2HieraDetConfig,
-        Sam2VisionConfig,
-        Sam2PromptEncoderConfig,
         Sam2MaskDecoderConfig,
+        Sam2PromptEncoderConfig,
+        Sam2VisionConfig,
     )
     from .image_processing_sam2 import Sam2ImageProcessor
-    from .modeling_sam2 import Sam2Model, Sam2VisionModel, Sam2PreTrainedModel, Sam2HieraDetModel
+    from .modeling_sam2 import Sam2HieraDetModel, Sam2Model, Sam2PreTrainedModel, Sam2VisionModel
     from .processing_sam2 import Sam2Processor
 else:
     import sys

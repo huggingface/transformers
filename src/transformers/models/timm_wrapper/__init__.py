@@ -20,7 +20,7 @@ from ...utils.import_utils import define_import_structure
 if TYPE_CHECKING:
     from .configuration_timm_wrapper import TimmWrapperConfig
     from .image_processing_timm_wrapper import TimmWrapperImageProcessor
-    from .modeling_timm_wrapper import TimmWrapperPreTrainedModel, TimmWrapperModel, TimmWrapperForImageClassification
+    from .modeling_timm_wrapper import TimmWrapperForImageClassification, TimmWrapperModel, TimmWrapperPreTrainedModel
 else:
     import sys
 

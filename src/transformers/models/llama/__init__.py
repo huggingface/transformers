@@ -21,11 +21,11 @@ if TYPE_CHECKING:
     from .configuration_llama import LlamaConfig
     from .modeling_llama import (
         LlamaForCausalLM,
+        LlamaForQuestionAnswering,
+        LlamaForSequenceClassification,
+        LlamaForTokenClassification,
         LlamaModel,
         LlamaPreTrainedModel,
-        LlamaForSequenceClassification,
-        LlamaForQuestionAnswering,
-        LlamaForTokenClassification,
     )
     from .tokenization_llama import LlamaTokenizer, LlamaTokenizerFast
 else:

@@ -6,7 +6,7 @@ from ...utils.import_utils import define_import_structure
 
 if TYPE_CHECKING:
     from .configuration_nanochat import NanoChatConfig
-    from .modeling_nanochat import NanoChatPreTrainedModel, NanoChatModel, NanoChatForCausalLM
+    from .modeling_nanochat import NanoChatForCausalLM, NanoChatModel, NanoChatPreTrainedModel
 else:
     import sys
 

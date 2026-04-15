@@ -23,11 +23,11 @@ if TYPE_CHECKING:
         LukeForEntityClassification,
         LukeForEntityPairClassification,
         LukeForEntitySpanClassification,
+        LukeForMaskedLM,
         LukeForMultipleChoice,
         LukeForQuestionAnswering,
         LukeForSequenceClassification,
         LukeForTokenClassification,
-        LukeForMaskedLM,
         LukeModel,
         LukePreTrainedModel,
     )

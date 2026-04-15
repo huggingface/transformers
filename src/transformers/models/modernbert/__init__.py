@@ -20,13 +20,13 @@ from ...utils.import_utils import define_import_structure
 if TYPE_CHECKING:
     from .configuration_modernbert import ModernBertConfig
     from .modeling_modernbert import (
-        ModernBertModel,
-        ModernBertPreTrainedModel,
         ModernBertForMaskedLM,
+        ModernBertForMultipleChoice,
+        ModernBertForQuestionAnswering,
         ModernBertForSequenceClassification,
         ModernBertForTokenClassification,
-        ModernBertForQuestionAnswering,
-        ModernBertForMultipleChoice,
+        ModernBertModel,
+        ModernBertPreTrainedModel,
     )
 else:
     import sys

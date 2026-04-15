@@ -20,10 +20,10 @@ from ...utils.import_utils import define_import_structure
 if TYPE_CHECKING:
     from .configuration_instructblip import InstructBlipConfig, InstructBlipQFormerConfig, InstructBlipVisionConfig
     from .modeling_instructblip import (
-        InstructBlipQFormerModel,
-        InstructBlipPreTrainedModel,
-        InstructBlipModel,
         InstructBlipForConditionalGeneration,
+        InstructBlipModel,
+        InstructBlipPreTrainedModel,
+        InstructBlipQFormerModel,
         InstructBlipVisionModel,
     )
     from .processing_instructblip import InstructBlipProcessor

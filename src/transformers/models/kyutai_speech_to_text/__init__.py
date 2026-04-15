@@ -21,9 +21,9 @@ if TYPE_CHECKING:
     from .configuration_kyutai_speech_to_text import KyutaiSpeechToTextConfig
     from .feature_extraction_kyutai_speech_to_text import KyutaiSpeechToTextFeatureExtractor
     from .modeling_kyutai_speech_to_text import (
-        KyutaiSpeechToTextPreTrainedModel,
-        KyutaiSpeechToTextModel,
         KyutaiSpeechToTextForConditionalGeneration,
+        KyutaiSpeechToTextModel,
+        KyutaiSpeechToTextPreTrainedModel,
     )
     from .processing_kyutai_speech_to_text import KyutaiSpeechToTextProcessor
 else:

@@ -19,7 +19,7 @@ from ...utils.import_utils import define_import_structure
 
 if TYPE_CHECKING:
     from .configuration_dinat import DinatConfig
-    from .modeling_dinat import DinatForImageClassification, DinatModel, DinatPreTrainedModel, DinatBackbone
+    from .modeling_dinat import DinatBackbone, DinatForImageClassification, DinatModel, DinatPreTrainedModel
 else:
     import sys
 

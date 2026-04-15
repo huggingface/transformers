@@ -19,7 +19,7 @@ from ...utils.import_utils import define_import_structure
 
 if TYPE_CHECKING:
     from .configuration_vipllava import VipLlavaConfig
-    from .modeling_vipllava import VipLlavaModel, VipLlavaForConditionalGeneration, VipLlavaPreTrainedModel
+    from .modeling_vipllava import VipLlavaForConditionalGeneration, VipLlavaModel, VipLlavaPreTrainedModel
 else:
     import sys
 

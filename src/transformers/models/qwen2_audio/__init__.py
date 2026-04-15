@@ -19,7 +19,7 @@ from ...utils.import_utils import define_import_structure
 
 if TYPE_CHECKING:
     from .configuration_qwen2_audio import Qwen2AudioConfig, Qwen2AudioEncoderConfig
-    from .modeling_qwen2_audio import Qwen2AudioForConditionalGeneration, Qwen2AudioPreTrainedModel, Qwen2AudioEncoder
+    from .modeling_qwen2_audio import Qwen2AudioEncoder, Qwen2AudioForConditionalGeneration, Qwen2AudioPreTrainedModel
     from .processing_qwen2_audio import Qwen2AudioProcessor
 else:
     import sys

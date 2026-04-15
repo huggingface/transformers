@@ -21,10 +21,10 @@ if TYPE_CHECKING:
     from .configuration_opt import OPTConfig
     from .modeling_opt import (
         OPTForCausalLM,
+        OPTForQuestionAnswering,
+        OPTForSequenceClassification,
         OPTModel,
         OPTPreTrainedModel,
-        OPTForSequenceClassification,
-        OPTForQuestionAnswering,
     )
 else:
     import sys

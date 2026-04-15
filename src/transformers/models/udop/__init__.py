@@ -19,7 +19,7 @@ from ...utils.import_utils import define_import_structure
 
 if TYPE_CHECKING:
     from .configuration_udop import UdopConfig
-    from .modeling_udop import UdopForConditionalGeneration, UdopPreTrainedModel, UdopModel, UdopEncoderModel
+    from .modeling_udop import UdopEncoderModel, UdopForConditionalGeneration, UdopModel, UdopPreTrainedModel
     from .processing_udop import UdopProcessor
     from .tokenization_udop import UdopTokenizer
 else:

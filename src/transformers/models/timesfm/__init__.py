@@ -19,7 +19,7 @@ from ...utils.import_utils import define_import_structure
 
 if TYPE_CHECKING:
     from .configuration_timesfm import TimesFmConfig
-    from .modeling_timesfm import TimesFmModelForPrediction, TimesFmPreTrainedModel, TimesFmModel
+    from .modeling_timesfm import TimesFmModel, TimesFmModelForPrediction, TimesFmPreTrainedModel
 else:
     import sys
 

@@ -21,7 +21,7 @@ if TYPE_CHECKING:
     from .configuration_donut_swin import DonutSwinConfig
     from .image_processing_donut import DonutImageProcessor
     from .image_processing_pil_donut import DonutImageProcessorPil
-    from .modeling_donut_swin import DonutSwinModel, DonutSwinPreTrainedModel, DonutSwinForImageClassification
+    from .modeling_donut_swin import DonutSwinForImageClassification, DonutSwinModel, DonutSwinPreTrainedModel
     from .processing_donut import DonutProcessor
 else:
     import sys

@@ -21,7 +21,7 @@ if TYPE_CHECKING:
     from .configuration_textnet import TextNetConfig
     from .image_processing_pil_textnet import TextNetImageProcessorPil
     from .image_processing_textnet import TextNetImageProcessor
-    from .modeling_textnet import TextNetBackbone, TextNetModel, TextNetPreTrainedModel, TextNetForImageClassification
+    from .modeling_textnet import TextNetBackbone, TextNetForImageClassification, TextNetModel, TextNetPreTrainedModel
 else:
     import sys
 

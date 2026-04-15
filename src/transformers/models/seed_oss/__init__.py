@@ -22,10 +22,10 @@ if TYPE_CHECKING:
     from .modeling_seed_oss import (
         SeedOssForCausalLM,
         SeedOssForQuestionAnswering,
-        SeedOssPreTrainedModel,
-        SeedOssModel,
         SeedOssForSequenceClassification,
         SeedOssForTokenClassification,
+        SeedOssModel,
+        SeedOssPreTrainedModel,
     )
 else:
     import sys

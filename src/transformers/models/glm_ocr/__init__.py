@@ -21,11 +21,11 @@ from ...utils.import_utils import define_import_structure
 if TYPE_CHECKING:
     from .configuration_glm_ocr import GlmOcrConfig, GlmOcrTextConfig, GlmOcrVisionConfig
     from .modeling_glm_ocr import (
-        GlmOcrTextModel,
-        GlmOcrVisionModel,
+        GlmOcrForConditionalGeneration,
         GlmOcrModel,
         GlmOcrPreTrainedModel,
-        GlmOcrForConditionalGeneration,
+        GlmOcrTextModel,
+        GlmOcrVisionModel,
     )
 else:
     import sys

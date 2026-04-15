@@ -19,7 +19,7 @@ from ...utils.import_utils import define_import_structure
 
 if TYPE_CHECKING:
     from .configuration_aya_vision import AyaVisionConfig
-    from .modeling_aya_vision import AyaVisionForConditionalGeneration, AyaVisionPreTrainedModel, AyaVisionModel
+    from .modeling_aya_vision import AyaVisionForConditionalGeneration, AyaVisionModel, AyaVisionPreTrainedModel
     from .processing_aya_vision import AyaVisionProcessor
 else:
     import sys

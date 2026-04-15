@@ -23,11 +23,11 @@ if TYPE_CHECKING:
     from .image_processing_pil_aria import AriaImageProcessorPil
     from .modeling_aria import (
         AriaForConditionalGeneration,
-        AriaPreTrainedModel,
-        AriaTextPreTrainedModel,
-        AriaTextModel,
         AriaModel,
+        AriaPreTrainedModel,
         AriaTextForCausalLM,
+        AriaTextModel,
+        AriaTextPreTrainedModel,
     )
     from .processing_aria import AriaProcessor
 

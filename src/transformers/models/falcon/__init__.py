@@ -21,11 +21,11 @@ if TYPE_CHECKING:
     from .configuration_falcon import FalconConfig
     from .modeling_falcon import (
         FalconForCausalLM,
-        FalconModel,
-        FalconPreTrainedModel,
+        FalconForQuestionAnswering,
         FalconForSequenceClassification,
         FalconForTokenClassification,
-        FalconForQuestionAnswering,
+        FalconModel,
+        FalconPreTrainedModel,
     )
 else:
     import sys

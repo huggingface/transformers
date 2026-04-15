@@ -19,7 +19,7 @@ from ...utils.import_utils import define_import_structure
 
 if TYPE_CHECKING:
     from .configuration_ijepa import IJepaConfig
-    from .modeling_ijepa import IJepaPreTrainedModel, IJepaModel, IJepaForImageClassification
+    from .modeling_ijepa import IJepaForImageClassification, IJepaModel, IJepaPreTrainedModel
 else:
     import sys
 

@@ -20,7 +20,7 @@ from ...utils.import_utils import define_import_structure
 
 if TYPE_CHECKING:
     from .configuration_longcat_flash import LongcatFlashConfig
-    from .modeling_longcat_flash import LongcatFlashPreTrainedModel, LongcatFlashModel, LongcatFlashForCausalLM
+    from .modeling_longcat_flash import LongcatFlashForCausalLM, LongcatFlashModel, LongcatFlashPreTrainedModel
 else:
     import sys
 

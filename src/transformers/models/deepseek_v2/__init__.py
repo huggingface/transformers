@@ -22,10 +22,10 @@ from ...utils.import_utils import define_import_structure
 if TYPE_CHECKING:
     from .configuration_deepseek_v2 import DeepseekV2Config
     from .modeling_deepseek_v2 import (
-        DeepseekV2PreTrainedModel,
-        DeepseekV2Model,
         DeepseekV2ForCausalLM,
         DeepseekV2ForSequenceClassification,
+        DeepseekV2Model,
+        DeepseekV2PreTrainedModel,
     )
 else:
     import sys

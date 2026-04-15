@@ -21,11 +21,11 @@ if TYPE_CHECKING:
     from .configuration_mpt import MptConfig
     from .modeling_mpt import (
         MptForCausalLM,
-        MptModel,
-        MptPreTrainedModel,
+        MptForQuestionAnswering,
         MptForSequenceClassification,
         MptForTokenClassification,
-        MptForQuestionAnswering,
+        MptModel,
+        MptPreTrainedModel,
     )
 else:
     import sys

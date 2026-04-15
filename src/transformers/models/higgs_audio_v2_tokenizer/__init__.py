@@ -19,7 +19,7 @@ from ...utils.import_utils import define_import_structure
 
 if TYPE_CHECKING:
     from .configuration_higgs_audio_v2_tokenizer import HiggsAudioV2TokenizerConfig
-    from .modeling_higgs_audio_v2_tokenizer import HiggsAudioV2TokenizerPreTrainedModel, HiggsAudioV2TokenizerModel
+    from .modeling_higgs_audio_v2_tokenizer import HiggsAudioV2TokenizerModel, HiggsAudioV2TokenizerPreTrainedModel
 else:
     import sys
 

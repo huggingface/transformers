@@ -20,13 +20,13 @@ from ...utils.import_utils import define_import_structure
 if TYPE_CHECKING:
     from .configuration_qwen2 import Qwen2Config
     from .modeling_qwen2 import (
-        Qwen2PreTrainedModel,
-        Qwen2Model,
         Qwen2ForCausalLM,
-        Qwen2RMSNorm,
+        Qwen2ForQuestionAnswering,
         Qwen2ForSequenceClassification,
         Qwen2ForTokenClassification,
-        Qwen2ForQuestionAnswering,
+        Qwen2Model,
+        Qwen2PreTrainedModel,
+        Qwen2RMSNorm,
     )
     from .tokenization_qwen2 import Qwen2Tokenizer
     from .tokenization_qwen2_fast import *

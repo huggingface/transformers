@@ -21,7 +21,7 @@ if TYPE_CHECKING:
     from .configuration_eomt import EomtConfig
     from .image_processing_eomt import EomtImageProcessor
     from .image_processing_pil_eomt import EomtImageProcessorPil
-    from .modeling_eomt import EomtPreTrainedModel, EomtForUniversalSegmentation
+    from .modeling_eomt import EomtForUniversalSegmentation, EomtPreTrainedModel
 else:
     import sys
 

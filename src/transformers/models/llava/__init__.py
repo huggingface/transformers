@@ -21,7 +21,7 @@ if TYPE_CHECKING:
     from .configuration_llava import LlavaConfig
     from .image_processing_llava import LlavaImageProcessor
     from .image_processing_pil_llava import LlavaImageProcessorPil
-    from .modeling_llava import LlavaForConditionalGeneration, LlavaPreTrainedModel, LlavaModel
+    from .modeling_llava import LlavaForConditionalGeneration, LlavaModel, LlavaPreTrainedModel
     from .processing_llava import LlavaProcessor
 else:
     import sys

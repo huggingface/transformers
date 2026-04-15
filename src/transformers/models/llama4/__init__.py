@@ -21,11 +21,11 @@ if TYPE_CHECKING:
     from .configuration_llama4 import Llama4Config, Llama4TextConfig, Llama4VisionConfig
     from .image_processing_llama4 import Llama4ImageProcessor
     from .modeling_llama4 import (
+        Llama4ForCausalLM,
+        Llama4ForConditionalGeneration,
         Llama4PreTrainedModel,
         Llama4TextModel,
         Llama4VisionModel,
-        Llama4ForCausalLM,
-        Llama4ForConditionalGeneration,
     )
     from .processing_llama4 import Llama4Processor
 else:

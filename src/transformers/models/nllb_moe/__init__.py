@@ -23,8 +23,8 @@ if TYPE_CHECKING:
         NllbMoeForConditionalGeneration,
         NllbMoeModel,
         NllbMoePreTrainedModel,
-        NllbMoeTop2Router,
         NllbMoeSparseMLP,
+        NllbMoeTop2Router,
     )
 else:
     import sys

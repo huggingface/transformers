@@ -21,10 +21,10 @@ if TYPE_CHECKING:
     from .configuration_stablelm import StableLmConfig
     from .modeling_stablelm import (
         StableLmForCausalLM,
-        StableLmModel,
-        StableLmPreTrainedModel,
         StableLmForSequenceClassification,
         StableLmForTokenClassification,
+        StableLmModel,
+        StableLmPreTrainedModel,
     )
 else:
     import sys

@@ -22,8 +22,8 @@ if TYPE_CHECKING:
     from .image_processing_perception_lm import PerceptionLMImageProcessor
     from .modeling_perception_lm import (
         PerceptionLMForConditionalGeneration,
-        PerceptionLMPreTrainedModel,
         PerceptionLMModel,
+        PerceptionLMPreTrainedModel,
     )
     from .processing_perception_lm import PerceptionLMProcessor
 else:

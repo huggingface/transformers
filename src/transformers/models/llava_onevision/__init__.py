@@ -22,8 +22,8 @@ if TYPE_CHECKING:
     from .image_processing_llava_onevision import LlavaOnevisionImageProcessor
     from .image_processing_pil_llava_onevision import LlavaOnevisionImageProcessorPil
     from .modeling_llava_onevision import (
-        LlavaOnevisionModel,
         LlavaOnevisionForConditionalGeneration,
+        LlavaOnevisionModel,
         LlavaOnevisionPreTrainedModel,
     )
     from .processing_llava_onevision import LlavaOnevisionProcessor

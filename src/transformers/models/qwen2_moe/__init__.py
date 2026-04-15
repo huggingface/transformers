@@ -22,10 +22,10 @@ if TYPE_CHECKING:
     from .modeling_qwen2_moe import (
         Qwen2MoeForCausalLM,
         Qwen2MoeForQuestionAnswering,
-        Qwen2MoeModel,
-        Qwen2MoePreTrainedModel,
         Qwen2MoeForSequenceClassification,
         Qwen2MoeForTokenClassification,
+        Qwen2MoeModel,
+        Qwen2MoePreTrainedModel,
     )
 else:
     import sys

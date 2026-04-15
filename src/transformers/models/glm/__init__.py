@@ -20,11 +20,11 @@ from ...utils.import_utils import define_import_structure
 if TYPE_CHECKING:
     from .configuration_glm import GlmConfig
     from .modeling_glm import (
-        GlmPreTrainedModel,
-        GlmModel,
         GlmForCausalLM,
         GlmForSequenceClassification,
         GlmForTokenClassification,
+        GlmModel,
+        GlmPreTrainedModel,
     )
 else:
     import sys

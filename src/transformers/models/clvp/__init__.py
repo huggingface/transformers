@@ -21,12 +21,12 @@ if TYPE_CHECKING:
     from .configuration_clvp import ClvpConfig, ClvpDecoderConfig, ClvpEncoderConfig
     from .feature_extraction_clvp import ClvpFeatureExtractor
     from .modeling_clvp import (
-        ClvpModelForConditionalGeneration,
+        ClvpDecoder,
+        ClvpEncoder,
         ClvpForCausalLM,
         ClvpModel,
+        ClvpModelForConditionalGeneration,
         ClvpPreTrainedModel,
-        ClvpEncoder,
-        ClvpDecoder,
     )
     from .processing_clvp import ClvpProcessor
     from .tokenization_clvp import ClvpTokenizer

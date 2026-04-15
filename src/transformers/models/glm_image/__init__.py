@@ -19,16 +19,16 @@ from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
-    from .configuration_glm_image import GlmImageVQVAEConfig, GlmImageVisionConfig, GlmImageTextConfig, GlmImageConfig
+    from .configuration_glm_image import GlmImageConfig, GlmImageTextConfig, GlmImageVisionConfig, GlmImageVQVAEConfig
     from .image_processing_glm_image import GlmImageImageProcessor
     from .image_processing_pil_glm_image import GlmImageImageProcessorPil
     from .modeling_glm_image import (
-        GlmImagePreTrainedModel,
-        GlmImageVQVAE,
-        GlmImageVisionModel,
-        GlmImageTextModel,
-        GlmImageModel,
         GlmImageForConditionalGeneration,
+        GlmImageModel,
+        GlmImagePreTrainedModel,
+        GlmImageTextModel,
+        GlmImageVisionModel,
+        GlmImageVQVAE,
     )
     from .processing_glm_image import GlmImageProcessor
 else:

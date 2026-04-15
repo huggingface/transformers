@@ -22,13 +22,13 @@ if TYPE_CHECKING:
     from .image_processing_gemma3 import Gemma3ImageProcessor
     from .image_processing_pil_gemma3 import Gemma3ImageProcessorPil
     from .modeling_gemma3 import (
-        Gemma3PreTrainedModel,
-        Gemma3TextModel,
         Gemma3ForCausalLM,
         Gemma3ForConditionalGeneration,
-        Gemma3Model,
         Gemma3ForSequenceClassification,
+        Gemma3Model,
+        Gemma3PreTrainedModel,
         Gemma3TextForSequenceClassification,
+        Gemma3TextModel,
     )
     from .processing_gemma3 import Gemma3Processor
 else:

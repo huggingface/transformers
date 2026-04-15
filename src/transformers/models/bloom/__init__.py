@@ -21,11 +21,11 @@ if TYPE_CHECKING:
     from .configuration_bloom import BloomConfig
     from .modeling_bloom import (
         BloomForCausalLM,
-        BloomModel,
-        BloomPreTrainedModel,
+        BloomForQuestionAnswering,
         BloomForSequenceClassification,
         BloomForTokenClassification,
-        BloomForQuestionAnswering,
+        BloomModel,
+        BloomPreTrainedModel,
     )
     from .tokenization_bloom import *
 else:

@@ -19,7 +19,7 @@ from ...utils.import_utils import define_import_structure
 
 if TYPE_CHECKING:
     from .configuration_mistral3 import Mistral3Config
-    from .modeling_mistral3 import Mistral3Model, Mistral3PreTrainedModel, Mistral3ForConditionalGeneration
+    from .modeling_mistral3 import Mistral3ForConditionalGeneration, Mistral3Model, Mistral3PreTrainedModel
     from .processing_mistral3 import *
 else:
     import sys

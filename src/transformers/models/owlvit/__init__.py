@@ -23,11 +23,11 @@ if TYPE_CHECKING:
     from .image_processing_owlvit import OwlViTImageProcessor
     from .image_processing_pil_owlvit import OwlViTImageProcessorPil
     from .modeling_owlvit import (
+        OwlViTForObjectDetection,
         OwlViTModel,
         OwlViTPreTrainedModel,
         OwlViTTextModel,
         OwlViTVisionModel,
-        OwlViTForObjectDetection,
     )
     from .processing_owlvit import OwlViTProcessor
 else:

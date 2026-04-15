@@ -21,10 +21,10 @@ if TYPE_CHECKING:
     from .configuration_persimmon import PersimmonConfig
     from .modeling_persimmon import (
         PersimmonForCausalLM,
-        PersimmonModel,
-        PersimmonPreTrainedModel,
         PersimmonForSequenceClassification,
         PersimmonForTokenClassification,
+        PersimmonModel,
+        PersimmonPreTrainedModel,
     )
 else:
     import sys

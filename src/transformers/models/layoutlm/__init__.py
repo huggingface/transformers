@@ -23,9 +23,9 @@ if TYPE_CHECKING:
     from .configuration_layoutlm import LayoutLMConfig
     from .modeling_layoutlm import (
         LayoutLMForMaskedLM,
+        LayoutLMForQuestionAnswering,
         LayoutLMForSequenceClassification,
         LayoutLMForTokenClassification,
-        LayoutLMForQuestionAnswering,
         LayoutLMModel,
         LayoutLMPreTrainedModel,
     )

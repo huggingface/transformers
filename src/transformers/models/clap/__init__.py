@@ -21,12 +21,12 @@ if TYPE_CHECKING:
     from .configuration_clap import ClapAudioConfig, ClapConfig, ClapTextConfig
     from .feature_extraction_clap import ClapFeatureExtractor
     from .modeling_clap import (
+        ClapAudioModel,
+        ClapAudioModelWithProjection,
         ClapModel,
         ClapPreTrainedModel,
         ClapTextModel,
         ClapTextModelWithProjection,
-        ClapAudioModel,
-        ClapAudioModelWithProjection,
     )
     from .processing_clap import ClapProcessor
 else:

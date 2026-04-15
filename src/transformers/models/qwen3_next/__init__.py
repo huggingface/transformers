@@ -22,10 +22,10 @@ if TYPE_CHECKING:
     from .modeling_qwen3_next import (
         Qwen3NextForCausalLM,
         Qwen3NextForQuestionAnswering,
-        Qwen3NextModel,
-        Qwen3NextPreTrainedModel,
         Qwen3NextForSequenceClassification,
         Qwen3NextForTokenClassification,
+        Qwen3NextModel,
+        Qwen3NextPreTrainedModel,
     )
 else:
     import sys

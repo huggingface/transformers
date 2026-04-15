@@ -20,9 +20,9 @@ from ...utils.import_utils import define_import_structure
 if TYPE_CHECKING:
     from .configuration_sam3_video import Sam3VideoConfig
     from .modeling_sam3_video import (
+        Sam3VideoInferenceSession,
         Sam3VideoModel,
         Sam3VideoPreTrainedModel,
-        Sam3VideoInferenceSession,
         Sam3VideoSegmentationOutput,
     )
     from .processing_sam3_video import Sam3VideoProcessor

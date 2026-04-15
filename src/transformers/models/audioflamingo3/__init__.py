@@ -22,9 +22,9 @@ from ...utils.import_utils import define_import_structure
 if TYPE_CHECKING:
     from .configuration_audioflamingo3 import AudioFlamingo3Config, AudioFlamingo3EncoderConfig
     from .modeling_audioflamingo3 import (
+        AudioFlamingo3Encoder,
         AudioFlamingo3ForConditionalGeneration,
         AudioFlamingo3PreTrainedModel,
-        AudioFlamingo3Encoder,
     )
     from .processing_audioflamingo3 import AudioFlamingo3Processor
 else:

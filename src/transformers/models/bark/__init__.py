@@ -20,12 +20,12 @@ from ...utils.import_utils import define_import_structure
 if TYPE_CHECKING:
     from .configuration_bark import BarkCoarseConfig, BarkConfig, BarkFineConfig, BarkSemanticConfig
     from .modeling_bark import (
-        BarkFineModel,
-        BarkSemanticModel,
+        BarkCausalModel,
         BarkCoarseModel,
+        BarkFineModel,
         BarkModel,
         BarkPreTrainedModel,
-        BarkCausalModel,
+        BarkSemanticModel,
     )
     from .processing_bark import BarkProcessor
 else:

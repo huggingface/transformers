@@ -18,9 +18,9 @@ from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
-    from .configuration_lasr import LasrEncoderConfig, LasrCTCConfig
+    from .configuration_lasr import LasrCTCConfig, LasrEncoderConfig
     from .feature_extraction_lasr import LasrFeatureExtractor
-    from .modeling_lasr import LasrForCTC, LasrEncoder, LasrPreTrainedModel
+    from .modeling_lasr import LasrEncoder, LasrForCTC, LasrPreTrainedModel
     from .tokenization_lasr import LasrTokenizer
 else:
     import sys

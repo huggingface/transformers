@@ -21,8 +21,8 @@ from ...utils.import_utils import define_import_structure
 if TYPE_CHECKING:
     from .configuration_sam3_tracker import (
         Sam3TrackerConfig,
-        Sam3TrackerPromptEncoderConfig,
         Sam3TrackerMaskDecoderConfig,
+        Sam3TrackerPromptEncoderConfig,
     )
     from .modeling_sam3_tracker import Sam3TrackerModel, Sam3TrackerPreTrainedModel
     from .processing_sam3_tracker import Sam3TrackerProcessor

@@ -19,13 +19,13 @@ from ...utils.import_utils import define_import_structure
 
 if TYPE_CHECKING:
     from .configuration_voxtral_realtime import (
-        VoxtralRealtimeEncoderConfig,
         VoxtralRealtimeConfig,
+        VoxtralRealtimeEncoderConfig,
         VoxtralRealtimeTextConfig,
     )
     from .modeling_voxtral_realtime import (
-        VoxtralRealtimeForConditionalGeneration,
         VoxtralRealtimeEncoder,
+        VoxtralRealtimeForConditionalGeneration,
         VoxtralRealtimePreTrainedModel,
     )
     from .processing_voxtral_realtime import VoxtralRealtimeProcessor

@@ -19,7 +19,7 @@ from ...utils.import_utils import define_import_structure
 
 if TYPE_CHECKING:
     from .configuration_solar_open import SolarOpenConfig
-    from .modeling_solar_open import SolarOpenPreTrainedModel, SolarOpenModel, SolarOpenForCausalLM
+    from .modeling_solar_open import SolarOpenForCausalLM, SolarOpenModel, SolarOpenPreTrainedModel
 else:
     import sys
 

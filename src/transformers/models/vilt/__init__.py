@@ -25,9 +25,9 @@ if TYPE_CHECKING:
     from .modeling_vilt import (
         ViltForImageAndTextRetrieval,
         ViltForImagesAndTextClassification,
-        ViltForTokenClassification,
         ViltForMaskedLM,
         ViltForQuestionAnswering,
+        ViltForTokenClassification,
         ViltLayer,
         ViltModel,
         ViltPreTrainedModel,

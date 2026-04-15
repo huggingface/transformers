@@ -20,11 +20,11 @@ from ...utils.import_utils import define_import_structure
 
 if TYPE_CHECKING:
     from .configuration_edgetam_video import (
+        EdgeTamVideoConfig,
         EdgeTamVideoMaskDecoderConfig,
         EdgeTamVideoPromptEncoderConfig,
-        EdgeTamVideoConfig,
     )
-    from .modeling_edgetam_video import EdgeTamVideoModel, EdgeTamVideoInferenceSession, EdgeTamVideoPreTrainedModel
+    from .modeling_edgetam_video import EdgeTamVideoInferenceSession, EdgeTamVideoModel, EdgeTamVideoPreTrainedModel
 else:
     import sys
 

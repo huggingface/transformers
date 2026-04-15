@@ -21,12 +21,12 @@ from ...utils.import_utils import define_import_structure
 if TYPE_CHECKING:
     from .configuration_minimax import MiniMaxConfig
     from .modeling_minimax import (
-        MiniMaxPreTrainedModel,
-        MiniMaxModel,
         MiniMaxForCausalLM,
+        MiniMaxForQuestionAnswering,
         MiniMaxForSequenceClassification,
         MiniMaxForTokenClassification,
-        MiniMaxForQuestionAnswering,
+        MiniMaxModel,
+        MiniMaxPreTrainedModel,
     )
 else:
     import sys

@@ -20,7 +20,7 @@ from ...utils.import_utils import define_import_structure
 if TYPE_CHECKING:
     from .configuration_pi0 import PI0Config
     from .image_processing_pi0 import PI0ImageProcessor
-    from .modeling_pi0 import PI0PreTrainedModel, PI0Model, PI0ForConditionalGeneration
+    from .modeling_pi0 import PI0ForConditionalGeneration, PI0Model, PI0PreTrainedModel
 else:
     import sys
 

@@ -18,10 +18,10 @@ from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
-    from .configuration_got_ocr2 import GotOcr2VisionConfig, GotOcr2Config
+    from .configuration_got_ocr2 import GotOcr2Config, GotOcr2VisionConfig
     from .image_processing_got_ocr2 import GotOcr2ImageProcessor
     from .image_processing_pil_got_ocr2 import GotOcr2ImageProcessorPil
-    from .modeling_got_ocr2 import GotOcr2PreTrainedModel, GotOcr2Model, GotOcr2ForConditionalGeneration
+    from .modeling_got_ocr2 import GotOcr2ForConditionalGeneration, GotOcr2Model, GotOcr2PreTrainedModel
     from .processing_got_ocr2 import GotOcr2Processor
 
 

@@ -21,7 +21,7 @@ from ...utils.import_utils import define_import_structure
 if TYPE_CHECKING:
     from .configuration_slanext import SLANeXtConfig
     from .image_processing_slanext import SLANeXtImageProcessor
-    from .modeling_slanext import SLANeXtSLAHead, SLANeXtBackbone, SLANeXtForTableRecognition, SLANeXtPreTrainedModel
+    from .modeling_slanext import SLANeXtBackbone, SLANeXtForTableRecognition, SLANeXtPreTrainedModel, SLANeXtSLAHead
 else:
     import sys
 

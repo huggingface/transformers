@@ -18,8 +18,8 @@ from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
-    from .configuration_voxtral import VoxtralEncoderConfig, VoxtralConfig
-    from .modeling_voxtral import VoxtralPreTrainedModel, VoxtralEncoder, VoxtralForConditionalGeneration
+    from .configuration_voxtral import VoxtralConfig, VoxtralEncoderConfig
+    from .modeling_voxtral import VoxtralEncoder, VoxtralForConditionalGeneration, VoxtralPreTrainedModel
     from .processing_voxtral import VoxtralProcessor
 else:
     import sys

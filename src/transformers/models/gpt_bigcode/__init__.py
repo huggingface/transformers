@@ -20,9 +20,9 @@ from ...utils.import_utils import define_import_structure
 if TYPE_CHECKING:
     from .configuration_gpt_bigcode import GPTBigCodeConfig
     from .modeling_gpt_bigcode import (
+        GPTBigCodeForCausalLM,
         GPTBigCodeForSequenceClassification,
         GPTBigCodeForTokenClassification,
-        GPTBigCodeForCausalLM,
         GPTBigCodeModel,
         GPTBigCodePreTrainedModel,
     )

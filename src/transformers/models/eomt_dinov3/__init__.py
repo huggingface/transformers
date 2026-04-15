@@ -20,7 +20,7 @@ from ...utils.import_utils import define_import_structure
 
 if TYPE_CHECKING:
     from .configuration_eomt_dinov3 import EomtDinov3Config
-    from .modeling_eomt_dinov3 import EomtDinov3PreTrainedModel, EomtDinov3ForUniversalSegmentation
+    from .modeling_eomt_dinov3 import EomtDinov3ForUniversalSegmentation, EomtDinov3PreTrainedModel
 else:
     import sys
 

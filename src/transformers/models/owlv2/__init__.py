@@ -22,11 +22,11 @@ if TYPE_CHECKING:
     from .image_processing_owlv2 import Owlv2ImageProcessor
     from .image_processing_pil_owlv2 import Owlv2ImageProcessorPil
     from .modeling_owlv2 import (
+        Owlv2ForObjectDetection,
         Owlv2Model,
         Owlv2PreTrainedModel,
         Owlv2TextModel,
         Owlv2VisionModel,
-        Owlv2ForObjectDetection,
     )
     from .processing_owlv2 import Owlv2Processor
 else:

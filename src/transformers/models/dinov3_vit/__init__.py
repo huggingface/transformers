@@ -20,7 +20,7 @@ from ...utils.import_utils import define_import_structure
 if TYPE_CHECKING:
     from .configuration_dinov3_vit import DINOv3ViTConfig
     from .image_processing_dinov3_vit import DINOv3ViTImageProcessor
-    from .modeling_dinov3_vit import DINOv3ViTModel, DINOv3ViTPreTrainedModel, DINOv3ViTBackbone
+    from .modeling_dinov3_vit import DINOv3ViTBackbone, DINOv3ViTModel, DINOv3ViTPreTrainedModel
 else:
     import sys
 

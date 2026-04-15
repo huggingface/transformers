@@ -19,10 +19,10 @@ from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
-    from .configuration_ovis2 import Ovis2VisionConfig, Ovis2Config
+    from .configuration_ovis2 import Ovis2Config, Ovis2VisionConfig
     from .image_processing_ovis2 import Ovis2ImageProcessor
     from .image_processing_pil_ovis2 import Ovis2ImageProcessorPil
-    from .modeling_ovis2 import Ovis2PreTrainedModel, Ovis2Model, Ovis2ForConditionalGeneration
+    from .modeling_ovis2 import Ovis2ForConditionalGeneration, Ovis2Model, Ovis2PreTrainedModel
     from .processing_ovis2 import Ovis2Processor
 else:
     import sys

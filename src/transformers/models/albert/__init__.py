@@ -20,14 +20,14 @@ from ...utils.import_utils import define_import_structure
 if TYPE_CHECKING:
     from .configuration_albert import AlbertConfig
     from .modeling_albert import (
-        AlbertPreTrainedModel,
-        AlbertModel,
-        AlbertForPreTraining,
         AlbertForMaskedLM,
+        AlbertForMultipleChoice,
+        AlbertForPreTraining,
+        AlbertForQuestionAnswering,
         AlbertForSequenceClassification,
         AlbertForTokenClassification,
-        AlbertForQuestionAnswering,
-        AlbertForMultipleChoice,
+        AlbertModel,
+        AlbertPreTrainedModel,
     )
     from .tokenization_albert import AlbertTokenizer
 else:

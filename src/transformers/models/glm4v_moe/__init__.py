@@ -18,7 +18,7 @@ from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
-    from .configuration_glm4v_moe import Glm4vMoeConfig, Glm4vMoeVisionConfig, Glm4vMoeTextConfig
+    from .configuration_glm4v_moe import Glm4vMoeConfig, Glm4vMoeTextConfig, Glm4vMoeVisionConfig
     from .modeling_glm4v_moe import (
         Glm4vMoeForConditionalGeneration,
         Glm4vMoeModel,

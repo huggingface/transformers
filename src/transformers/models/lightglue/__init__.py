@@ -21,7 +21,7 @@ if TYPE_CHECKING:
     from .configuration_lightglue import LightGlueConfig
     from .image_processing_lightglue import LightGlueImageProcessor
     from .image_processing_pil_lightglue import LightGlueImageProcessorPil
-    from .modeling_lightglue import LightGluePreTrainedModel, LightGlueForKeypointMatching
+    from .modeling_lightglue import LightGlueForKeypointMatching, LightGluePreTrainedModel
 else:
     import sys
 

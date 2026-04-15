@@ -22,10 +22,10 @@ if TYPE_CHECKING:
     from .image_processing_pil_pix2struct import Pix2StructImageProcessorPil
     from .image_processing_pix2struct import Pix2StructImageProcessor
     from .modeling_pix2struct import (
-        Pix2StructPreTrainedModel,
         Pix2StructForConditionalGeneration,
-        Pix2StructVisionModel,
+        Pix2StructPreTrainedModel,
         Pix2StructTextModel,
+        Pix2StructVisionModel,
     )
     from .processing_pix2struct import Pix2StructProcessor
 else:

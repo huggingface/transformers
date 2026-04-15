@@ -20,8 +20,8 @@ from ...utils.import_utils import define_import_structure
 if TYPE_CHECKING:
     from .configuration_splinter import SplinterConfig
     from .modeling_splinter import (
-        SplinterForQuestionAnswering,
         SplinterForPreTraining,
+        SplinterForQuestionAnswering,
         SplinterLayer,
         SplinterModel,
         SplinterPreTrainedModel,

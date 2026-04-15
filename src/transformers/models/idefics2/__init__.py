@@ -21,7 +21,7 @@ if TYPE_CHECKING:
     from .configuration_idefics2 import Idefics2Config
     from .image_processing_idefics2 import Idefics2ImageProcessor
     from .image_processing_pil_idefics2 import Idefics2ImageProcessorPil
-    from .modeling_idefics2 import Idefics2ForConditionalGeneration, Idefics2PreTrainedModel, Idefics2Model
+    from .modeling_idefics2 import Idefics2ForConditionalGeneration, Idefics2Model, Idefics2PreTrainedModel
     from .processing_idefics2 import Idefics2Processor
 else:
     import sys

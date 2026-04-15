@@ -21,7 +21,7 @@ if TYPE_CHECKING:
     from .configuration_sam import SamConfig, SamMaskDecoderConfig, SamPromptEncoderConfig, SamVisionConfig
     from .image_processing_pil_sam import SamImageProcessorPil
     from .image_processing_sam import SamImageProcessor
-    from .modeling_sam import SamVisionModel, SamModel, SamPreTrainedModel
+    from .modeling_sam import SamModel, SamPreTrainedModel, SamVisionModel
     from .processing_sam import SamProcessor
 else:
     import sys
