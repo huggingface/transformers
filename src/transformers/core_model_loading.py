@@ -881,21 +881,58 @@ def spawn_materialize(
         return _job
 
 
-def spawn_tp_materialize(
-    thread_pool: ThreadPoolExecutor | None, tensor: torch.Tensor, sharding_method, tensor_idx, device=None, dtype=None
-) -> Future | Callable:
-    """Materialize and shard a tensor (according to the TP-plan) from file asynchronously if `thread_pool` is provided, or
-    return a Callable that will load the tensor synchronously when called."""
+# Approximate bytes per element for safetensors dtype strings (used to size mappings for TP partitioning).
+_SAFETENSORS_DTYPE_BYTES = {
+    "BOOL": 1,
+    "U8": 1,
+    "I8": 1,
+    "F8_E4M3": 1,
+    "F8_E5M2": 1,
+    "I16": 2,
+    "U16": 2,
+    "F16": 2,
+    "BF16": 2,
+    "I32": 4,
+    "U32": 4,
+    "F32": 4,
+    "I64": 8,
+    "U64": 8,
+    "F64": 8,
+}
 
-    def _job():
-        return sharding_method.shard_tensor(tensor, tensor_idx=tensor_idx, device=device, dtype=dtype)
 
-    if thread_pool is not None:
-        return thread_pool.submit(_job)
-    else:
-        # Return the Callable here, not the Tensor itself, so we actually delay loading to avoid saturating cpu
-        # memory during Conversion
-        return _job
+def _tensor_nbytes(tensor) -> int:
+    """Best-effort byte size for either a torch.Tensor or a safetensors slice handle."""
+    if isinstance(tensor, torch.Tensor):
+        return tensor.element_size() * tensor.numel()
+    shape = tensor.get_shape() if hasattr(tensor, "get_shape") else getattr(tensor, "shape", ())
+    numel = 1
+    for s in shape:
+        numel *= int(s)
+    bytes_per_el = 4
+    if hasattr(tensor, "get_dtype"):
+        bytes_per_el = _SAFETENSORS_DTYPE_BYTES.get(tensor.get_dtype(), 4)
+    return numel * bytes_per_el
+
+
+def partition_mappings_across_ranks(mapping_total_bytes: dict[str, int], world_size: int) -> dict[str, int]:
+    """Greedy bin-packing: assign each mapping (identified by its `first_param_name`) to one rank such that the
+    per-rank load is roughly balanced. The assignment is fully deterministic given identical inputs, so every rank
+    can compute the same partition independently. The returned dict maps each mapping name to its source rank.
+    """
+    if world_size <= 1:
+        return dict.fromkeys(mapping_total_bytes, 0)
+
+    # Sort mappings by descending size, then by name for determinism on ties.
+    sorted_names = sorted(mapping_total_bytes.keys(), key=lambda n: (-mapping_total_bytes[n], n))
+    rank_loads = [0] * world_size
+    assignment: dict[str, int] = {}
+    for name in sorted_names:
+        # Pick the least-loaded rank; tie-break on lowest rank index for determinism.
+        target = min(range(world_size), key=lambda r: (rank_loads[r], r))
+        assignment[name] = target
+        rank_loads[target] += mapping_total_bytes[name]
+    return assignment
 
 
 def dot_natural_key(s: str):
@@ -1068,6 +1105,77 @@ def rename_source_key(
     return renamed_key, source_pattern
 
 
+def _redistribute_realized_value(
+    realized_value: dict[str, list[torch.Tensor] | torch.Tensor] | None,
+    mapping: WeightTransform,
+    source_rank: int,
+    device_mesh,
+    local_device,
+    dtype,
+    source_skipped: bool = False,
+) -> dict[str, torch.Tensor] | None:
+    """
+    Coordinate the post-`convert` redistribution of full tensors across TP ranks.
+
+    The `source_rank` produced full tensors via `mapping.convert(...)`; every other rank participates here as a
+    receiver. We broadcast a small metadata header (target names + shapes + dtypes) so every rank knows what's
+    coming, then broadcast each tensor's bytes. Each rank then locally calls `tp_layer.shard_tensor` (or keeps the
+    full tensor for replicated params) so it ends up with exactly the slice it owns.
+
+    This replaces the old per-rank slicing at load time: now only one rank reads each tensor from disk, and the
+    cluster comms scatter the slices. A `None` payload from the source rank (e.g. when convert raised
+    `SkipParameters`) is signalled to all peers and returns `None` so callers can skip the mapping cleanly.
+    """
+    import torch.distributed as dist
+
+    is_source = device_mesh.get_local_rank() == source_rank
+    group = device_mesh.get_group()
+    src_global_rank = dist.get_global_rank(group, source_rank)
+
+    # 1. Build & broadcast metadata so every rank agrees on the target keys / shapes / dtypes. A `None` payload is
+    # the sentinel for "source skipped this mapping" — every rank then bails out together.
+    if is_source:
+        if source_skipped or realized_value is None:
+            payload = [None]
+        else:
+            meta = []
+            for target_name, param in realized_value.items():
+                param = param[0] if isinstance(param, list) else param
+                meta.append((target_name, tuple(param.shape), param.dtype))
+            payload = [meta]
+    else:
+        payload = [None]
+    dist.broadcast_object_list(payload, src=src_global_rank, group=group)
+    meta = payload[0]
+    if meta is None:
+        return None
+
+    tp_layer = mapping.distributed_operation
+    out: dict[str, torch.Tensor] = {}
+
+    # 2. For each target tensor, broadcast its bytes from the source rank, then locally shard.
+    for target_name, shape, t_dtype in meta:
+        if is_source:
+            full_tensor = realized_value[target_name]
+            full_tensor = full_tensor[0] if isinstance(full_tensor, list) else full_tensor
+            full_tensor = full_tensor.to(device=local_device).contiguous()
+        else:
+            full_tensor = torch.empty(shape, dtype=t_dtype, device=local_device)
+
+        if device_mesh.size() > 1:
+            dist.broadcast(full_tensor, src=src_global_rank, group=group)
+
+        if tp_layer is not None:
+            local_param = tp_layer.shard_tensor(full_tensor, tensor_idx=None, device=local_device, dtype=dtype)
+        else:
+            # Replicated parameter: every rank keeps the full tensor (already cast to the right dtype if requested).
+            local_param = full_tensor.to(dtype=dtype) if dtype is not None else full_tensor
+
+        out[target_name] = local_param
+
+    return out
+
+
 def convert_and_load_state_dict_in_model(
     model: PreTrainedModel,
     state_dict: dict[str, Any],
@@ -1210,6 +1318,18 @@ def convert_and_load_state_dict_in_model(
 
     pattern_to_converter = {k: converter for converter in converters for k in converter.source_patterns}
 
+    # When we have a TP `device_mesh`, we partition the loading work across ranks: every rank reads only the
+    # checkpoint slices it owns from disk, and the per-mapping full tensor is then redistributed via collective
+    # comms after `mapping.convert(...)`. To compute the partition we first do a metadata-only pass collecting the
+    # entries (no I/O), then assign mappings to ranks, and finally spawn the materialize jobs only on the owning
+    # rank.
+    distributed_loading = device_mesh is not None
+    local_rank = device_mesh.get_local_rank() if distributed_loading else 0
+
+    # Per-mapping pending entries: list of (target_key, original_key, source_pattern, tensor, _dtype, shard_index).
+    pending_entries: dict[str, list[tuple]] = defaultdict(list)
+    mapping_total_bytes: dict[str, int] = defaultdict(int)
+
     state_dict = sorted(state_dict.items(), key=lambda kv: dot_natural_key(kv[0]))
     for original_key, tensor in state_dict:
         # 1. Rename the key according to all renaming pattern and optional weight converter patterns
@@ -1266,35 +1386,23 @@ def convert_and_load_state_dict_in_model(
             elif empty_param is not None and empty_param.dtype != _dtype:
                 _dtype = empty_param.dtype  # usually correct when initializing
 
-            # 4. Handle TP sharding or device_map placement
-            future_or_tensor = None
-            if device_mesh and tp_plan:
+            # 4. TP plan resolution. We always set `distributed_operation` (it's identical on all ranks); the actual
+            # sharding via `shard_tensor` happens later, post-`convert`, on full tensors received over the wire.
+            if distributed_loading and tp_plan:
                 if matched_tp_pattern := tp_plan_alt.search(renamed_key):
                     matched_tp_pattern = tp_plan_by_group_name[matched_tp_pattern.lastgroup]
                     if getattr(mapping, "distributed_operation", None) is None:
                         tp_layer = ALL_PARALLEL_STYLES[model.tp_plan[matched_tp_pattern]].__class__
                         mapping.distributed_operation = tp_layer(
-                            device_mesh=device_mesh, rank=device_mesh.get_local_rank(), empty_param=empty_param.clone()
+                            device_mesh=device_mesh, rank=local_rank, empty_param=empty_param.clone()
                         )
-                    shard_index = (
-                        len(mapping.collected_tensors.get(source_pattern, []))
-                        if isinstance(mapping, WeightConverter) and isinstance(mapping.operations[0], MergeModulelist)
-                        else None
-                    )
-                    future_or_tensor = spawn_tp_materialize(
-                        thread_pool,
-                        tensor,
-                        mapping.distributed_operation,
-                        shard_index,
-                        device_map[""],
-                        _dtype,
-                    )
 
-            if future_or_tensor is None:
-                param_device = get_device(device_map, renamed_key, valid_torch_device=True)
-                future_or_tensor = spawn_materialize(thread_pool, tensor, param_device, _dtype)
-
-            mapping.add_tensor(renamed_key, original_key, source_pattern, future_or_tensor)
+            # 5. Defer the actual disk I/O: just record what would need to be loaded. We'll spawn the materialize
+            # only for mappings owned by this rank (after we compute the partition). The order of `pending_entries`
+            # is the future `add_tensor` order on the owning rank, which preserves shard ordering for ops like
+            # `MergeModulelist`.
+            pending_entries[renamed_key].append((renamed_key, original_key, source_pattern, tensor, _dtype))
+            mapping_total_bytes[renamed_key] += _tensor_nbytes(tensor)
         elif source_pattern is not None:  # add all target keys as unexpected
             mapping = pattern_to_converter[source_pattern]
             for k in mapping.target_patterns:
@@ -1302,16 +1410,65 @@ def convert_and_load_state_dict_in_model(
         else:
             loading_info.unexpected_keys.add(renamed_key)
 
+    # 6. Compute the per-mapping rank assignment. When TP isn't active, the local rank is the source for everything
+    # which preserves the original (single-process) behavior.
+    if distributed_loading:
+        mapping_to_source_rank = partition_mappings_across_ranks(mapping_total_bytes, device_mesh.size())
+    else:
+        mapping_to_source_rank = dict.fromkeys(pending_entries, 0)
+
+    # 7. Spawn the materialize jobs only for mappings this rank owns. Non-owned mappings stay with empty
+    # `collected_tensors` and are handled as receivers in the redistribute step.
+    for first_param_name, entries in pending_entries.items():
+        if mapping_to_source_rank[first_param_name] != local_rank:
+            continue
+        mapping = param_name_to_load[first_param_name]
+        for target_key, original_key, source_pattern, tensor, _dtype in entries:
+            if distributed_loading:
+                # When loading under TP we materialize to the local TP device so the subsequent broadcast is on-device.
+                param_device = device_map[""]
+            else:
+                param_device = get_device(device_map, target_key, valid_torch_device=True)
+            future_or_tensor = spawn_materialize(thread_pool, tensor, param_device, _dtype)
+            mapping.add_tensor(target_key, original_key, source_pattern, future_or_tensor)
+
     try:
         for first_param_name, mapping in tqdm(param_name_to_load.items(), desc="Loading weights"):
             try:
-                realized_value = mapping.convert(
-                    first_param_name,
-                    model=model,
-                    config=model.config,
-                    hf_quantizer=hf_quantizer,
-                    loading_info=loading_info,
-                )
+                source_rank = mapping_to_source_rank.get(first_param_name, local_rank)
+                is_source = source_rank == local_rank
+
+                realized_value = None
+                skip = False
+                if is_source:
+                    try:
+                        realized_value = mapping.convert(
+                            first_param_name,
+                            model=model,
+                            config=model.config,
+                            hf_quantizer=hf_quantizer,
+                            loading_info=loading_info,
+                        )
+                    except SkipParameters:
+                        skip = True
+
+                # When TP is active, we redistribute the full tensors produced on the source rank to all ranks via
+                # comms; each rank then locally extracts its shard via `tp_layer.shard_tensor`. We coordinate the
+                # "skip this mapping" decision via a small object broadcast so non-source ranks don't hang waiting
+                # on a tensor broadcast that will never come.
+                if distributed_loading:
+                    realized_value = _redistribute_realized_value(
+                        realized_value,
+                        mapping,
+                        source_rank,
+                        device_mesh,
+                        local_device=device_map[""],
+                        dtype=dtype,
+                        source_skipped=skip,
+                    )
+                if skip or realized_value is None:
+                    continue
+
                 for target_name, param in realized_value.items():
                     param = param[0] if isinstance(param, list) else param
                     param_device = get_device(device_map, target_name)
