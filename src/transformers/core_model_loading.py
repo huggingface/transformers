@@ -1032,39 +1032,34 @@ class SkipParameters(Exception):
 
 def _compute_all_prefixes(model) -> list[str]:
     """
-    Return all cumulative `base_model_prefix` paths for the model's nesting hierarchy,
-    ordered from shortest to longest.
+    Return all base-model prefix paths reachable from `model`, ordered shortest-first (BFS).
+
+    `base_model_prefix` on a class means "when I am stored as a submodule in a parent
+    model, the parent stores me under the attribute named `base_model_prefix`". A child is
+    therefore a "base model" of the current model when its `base_model_prefix` matches the
+    attribute name it is stored under.
+
+    Multiple base-model children are supported (e.g. a multi-modal model that contains
+    both `self.vision_model` and `self.text_model`).
 
     Examples:
 
-        RfDetrModel / RfDetrForObjectDetection  -> ["model"]
-        RfDetrForInstanceSegmentation           -> ["model", "model.model"]
-        ConditionalDetrForPanopticSegmentation  -> ["conditional_detr", "conditional_detr.model"]
-        LlamaForCausalLM                        -> ["model"]
+        DetrForObjectDetection  -> ["model"]
+        DetrForSegmentation     -> ["detr", "detr.model"]
+        LlamaForCausalLM        -> ["model"]
+        CLIPModel               -> ["vision_model", "text_model"]
     """
-    prefixes: list[str] = []
-    current_model = model
-    accumulated_prefix = ""
+    prefixes: list[str] = [getattr(model, "base_model_prefix", "")]
+    queue: list[tuple] = [(model, getattr(model, "base_model_prefix", ""))]
 
-    while True:
-        prefix = getattr(current_model, "base_model_prefix", "")
-        if not prefix:
-            break
-
-        next_accumulated = f"{accumulated_prefix}.{prefix}" if accumulated_prefix else prefix
-        prefixes.append(next_accumulated)
-
-        inner_model = getattr(current_model, prefix, None)
-        if inner_model is None:
-            break  # current_model is the leaf base model
-
-        # Stop when the inner model is itself a leaf (no deeper nesting to traverse).
-        inner_prefix = getattr(inner_model, "base_model_prefix", "")
-        if not inner_prefix or getattr(inner_model, inner_prefix, None) is None:
-            break
-
-        accumulated_prefix = next_accumulated
-        current_model = inner_model
+    while queue:
+        current_model, accumulated_prefix = queue.pop(0)
+        for name, child in current_model.named_children():
+            child_prefix = getattr(child, "base_model_prefix", "")
+            if child_prefix and child_prefix == name:
+                next_accumulated = f"{accumulated_prefix}.{name}" if accumulated_prefix else name
+                prefixes.append(next_accumulated)
+                queue.append((child, next_accumulated))
 
     return prefixes
 
@@ -1075,20 +1070,21 @@ def _strip_model_prefix_for_save(key: str, model) -> str:
     reverse conversion rules (written relative to the innermost base model) operate on
     bare keys regardless of nesting depth.
 
-    Examples for `RfDetrForInstanceSegmentation` (prefix chain `model` -> `model`):
+    We identify each prefix level by finding the direct child whose `base_model_prefix`
+    matches its attribute name (same logic as `_compute_all_prefixes`).
 
-        "model.model.backbone.backbone.x"  ->  "backbone.backbone.x"
-        "model.class_labels_classifier.x"  ->  "class_labels_classifier.x"
-        "query_features_block.mlp.fc1.x"  ->  "query_features_block.mlp.fc1.x"
+    Examples for `DetrForSegmentation` (prefix chain `detr` -> `model`):
+
+        "detr.model.backbone.x"            ->  "backbone.x"
+        "detr.class_labels_classifier.x"   ->  "class_labels_classifier.x"
+        "mask_head.x"                      ->  "mask_head.x"
     """
-    prefix = getattr(model, "base_model_prefix", "")
-    if not prefix or not key.startswith(prefix + "."):
-        return key
-    stripped_key = key[len(prefix) + 1 :]
-    inner_model = getattr(model, prefix, None)
-    if inner_model is not None:
-        stripped_key = _strip_model_prefix_for_save(stripped_key, inner_model)
-    return stripped_key
+    for name, child in model.named_children():
+        child_prefix = getattr(child, "base_model_prefix", "")
+        if child_prefix and child_prefix == name and key.startswith(name + "."):
+            stripped_key = key[len(name) + 1 :]
+            return _strip_model_prefix_for_save(stripped_key, child)
+    return key
 
 
 def rename_source_key(
@@ -1130,6 +1126,17 @@ def rename_source_key(
             if candidate in meta_state_dict:
                 renamed_key = candidate
                 break
+        # If we still don't have a match, the checkpoint may originate from a model that wraps the
+        # target model at 2 or more nesting levels (e.g. loading a DetrForSegmentation checkpoint
+        # into DetrModel), so we search for a valid prefix anywhere within the key.
+        for prefix in reversed(valid_prefixes):
+            # remove the prefix from the key until we don't have it anymore (in case of multiple levels of nesting with the same prefix)
+            candidate = renamed_key
+            while prefix in candidate:
+                candidate = "".join(candidate.split(prefix + ".", maxsplit=1)[1:])
+                if candidate in meta_state_dict:
+                    renamed_key = candidate
+                    break
 
     return renamed_key, source_pattern
 

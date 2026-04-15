@@ -1477,6 +1477,8 @@ def inverse_sigmoid(x, eps=1e-5):
     """
 )
 class ConditionalDetrForObjectDetection(ConditionalDetrPreTrainedModel):
+    base_model_prefix = "conditional_detr"
+
     def __init__(self, config: ConditionalDetrConfig):
         super().__init__(config)
 
@@ -1621,8 +1623,6 @@ class ConditionalDetrForObjectDetection(ConditionalDetrPreTrainedModel):
     """
 )
 class ConditionalDetrForSegmentation(ConditionalDetrPreTrainedModel):
-    base_model_prefix = "conditional_detr"
-
     def __init__(self, config: ConditionalDetrConfig):
         super().__init__(config)
 
