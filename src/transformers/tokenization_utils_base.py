@@ -76,8 +76,9 @@ def import_protobuf_decode_error(error_message=""):
         from google.protobuf.message import DecodeError
 
         return DecodeError
-    else:
-        raise ImportError(PROTOBUF_IMPORT_ERROR.format(error_message))
+    # Return empty tuple when protobuf is not available so the except matches nothing.
+    # DecodeError can't be raised without protobuf imported, so () is safe here.
+    return ()
 
 
 def flatten(arr: list):
