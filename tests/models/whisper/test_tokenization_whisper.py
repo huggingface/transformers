@@ -274,9 +274,7 @@ class WhisperTokenizerTest(TokenizerTesterMixin, unittest.TestCase):
         self.assertEqual(expected_indices, output[2])
 
     def test_split_tokens_on_unicode_trailing_replacement_char(self):
-        # Regression test: trailing token that decodes to U+FFFD (replacement char) at EOF
-        # caused an IndexError because unicode_offset advanced past len(decoded_full).
-        # https://github.com/huggingface/transformers/issues/44869
+        """Test `_split_tokens_on_unicode` with a trailing token that decodes to U+FFFD (Unicode replacement char)."""
         from collections import defaultdict
 
         class DummyTokenizer:
