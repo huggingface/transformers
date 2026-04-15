@@ -51,6 +51,7 @@ from ..deepseek_v2.modeling_deepseek_v2 import (
 )
 from ..got_ocr2.image_processing_got_ocr2 import (
     GotOcr2ImageProcessor,
+    GotOcr2ImageProcessorKwargs,
     get_optimal_tiled_canvas,
 )
 from ..got_ocr2.image_processing_pil_got_ocr2 import GotOcr2ImageProcessorPil
@@ -77,25 +78,16 @@ from ..sam.modeling_sam import (
 logger = logging.get_logger(__name__)
 
 
-class DeepseekOcr2ImageProcessorKwargs(ImagesKwargs, total=False):
+# FIXME @raushan: modular cannot copy DeepseekOcr2ImageProcessorKwargs correctly after #43514.
+# Class needs to be defined two times!
+class DeepseekOcr2ImageProcessorKwargs(GotOcr2ImageProcessorKwargs, total=False):
     """
-    crop_to_patches (`bool`, *optional*, defaults to `True`):
-        Whether to crop the image into local patches. When `False`, only the global view is produced.
-    min_patches (`int`, *optional*, defaults to `2`):
-        The minimum number of patches to extract from the image for the local view.
-        Only has an effect if `crop_to_patches` is set to `True`.
-    max_patches (`int`, *optional*, defaults to `6`):
-        The maximum number of patches to extract from the image for the local view.
-        Only has an effect if `crop_to_patches` is set to `True`.
     tile_size (`int`, *optional*, defaults to `768`):
         The size of each local tile. Must match the model's query embedding size.
     background_color (`list[int]`, *optional*, defaults to `[127, 127, 127]`):
         The background color for padding.
     """
 
-    crop_to_patches: bool
-    min_patches: int
-    max_patches: int
     tile_size: int
     background_color: list[int]
 
@@ -312,6 +304,31 @@ class DeepseekOcr2ImageProcessor(GotOcr2ImageProcessor):
             num_patches += num_columns * num_rows
 
         return num_patches
+
+
+# FIXME @raushan: modular cannot copy DeepseekOcr2ImageProcessorKwargs correctly after #43514.
+# Class needs to be defined two times!
+class DeepseekOcr2ImageProcessorKwargs(ImagesKwargs, total=False):
+    """
+    crop_to_patches (`bool`, *optional*, defaults to `True`):
+        Whether to crop the image into local patches. When `False`, only the global view is produced.
+    min_patches (`int`, *optional*, defaults to `2`):
+        The minimum number of patches to extract from the image for the local view.
+        Only has an effect if `crop_to_patches` is set to `True`.
+    max_patches (`int`, *optional*, defaults to `6`):
+        The maximum number of patches to extract from the image for the local view.
+        Only has an effect if `crop_to_patches` is set to `True`.
+    tile_size (`int`, *optional*, defaults to `768`):
+        The size of each local tile. Must match the model's query embedding size.
+    background_color (`list[int]`, *optional*, defaults to `[127, 127, 127]`):
+        The background color for padding.
+    """
+
+    crop_to_patches: bool
+    min_patches: int
+    max_patches: int
+    tile_size: int
+    background_color: list[int]
 
 
 @requires(backends=("vision",))

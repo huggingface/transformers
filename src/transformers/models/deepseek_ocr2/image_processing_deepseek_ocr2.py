@@ -31,6 +31,8 @@ from ...processing_utils import ImagesKwargs, Unpack
 from ...utils import TensorType, auto_docstring
 
 
+# FIXME @raushan: modular cannot copy DeepseekOcr2ImageProcessorKwargs correctly after #43514.
+# Class needs to be defined two times!
 class DeepseekOcr2ImageProcessorKwargs(ImagesKwargs, total=False):
     """
     crop_to_patches (`bool`, *optional*, defaults to `True`):
