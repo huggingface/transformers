@@ -96,7 +96,7 @@ def _build_checkpoint_conversion_mapping():
             WeightRenaming(source_patterns=r"^multi_modal_projector", target_patterns="model.multi_modal_projector"),
             WeightRenaming(source_patterns=r"^image_newline", target_patterns="model.image_newline"),
         ],
-        "clip_vision": [WeightRenaming(source_patterns=r"vision_model\.(.+)", target_patterns=r"\1")],
+        "clip_vision_model": [WeightRenaming(source_patterns=r"vision_model\.(.+)", target_patterns=r"\1")],
         "video_llava": [
             WeightRenaming(source_patterns=r"^language_model.model", target_patterns="model.language_model"),
             WeightRenaming(source_patterns=r"^language_model.lm_head", target_patterns="lm_head"),
