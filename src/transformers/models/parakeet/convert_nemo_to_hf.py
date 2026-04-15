@@ -370,6 +370,11 @@ def write_tdt_model(nemo_config, encoder_config, model_files, output_dir, push_t
 
     del model.config._name_or_path
 
+    model.generation_config.decoder_start_token_id = model.config.blank_token_id
+    model.generation_config.suppress_tokens = list(
+        range(model.config.vocab_size, model.config.vocab_size + len(model.config.durations))
+    )
+
     print("Saving the model.")
     model.save_pretrained(output_dir)
 
