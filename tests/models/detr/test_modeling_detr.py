@@ -16,6 +16,7 @@
 import copy
 import inspect
 import math
+import tempfile
 import unittest
 from functools import cached_property
 
@@ -512,6 +513,31 @@ class DetrModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
                 outputs = model(**self._prepare_for_class(inputs_dict, model_class))
 
             self.assertTrue(outputs)
+
+    def test_nested_base_model_prefix_checkpoint_loading(self):
+        """Segmentation checkpoints load into Seg / OD / backbone without missing keys; backbone-only checkpoints load
+        without unexpected keys (nested `base_model_prefix` key resolution)."""
+        config = self.model_tester.get_config()
+
+        with tempfile.TemporaryDirectory() as seg_ckpt_dir:
+            DetrForSegmentation(config).save_pretrained(seg_ckpt_dir)
+            for model_class in (DetrForSegmentation, DetrForObjectDetection, DetrModel):
+                _, info = model_class.from_pretrained(seg_ckpt_dir, output_loading_info=True)
+                self.assertEqual(
+                    info["missing_keys"],
+                    set(),
+                    msg=f"Seg checkpoint -> {model_class.__name__}: missing_keys={sorted(info['missing_keys'])}",
+                )
+
+        with tempfile.TemporaryDirectory() as base_ckpt_dir:
+            DetrModel(config).save_pretrained(base_ckpt_dir)
+            for model_class in (DetrForSegmentation, DetrForObjectDetection, DetrModel):
+                _, info = model_class.from_pretrained(base_ckpt_dir, output_loading_info=True)
+                self.assertEqual(
+                    info["unexpected_keys"],
+                    set(),
+                    msg=f"DetrModel checkpoint -> {model_class.__name__}: unexpected_keys={sorted(info['unexpected_keys'])}",
+                )
 
     # override test_eager_matches_sdpa_inference to set use_attention_mask to False
     # as masks used in test are not adapted to the ones used in the model

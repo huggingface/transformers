@@ -1087,6 +1087,55 @@ def _strip_model_prefix_for_save(key: str, model) -> str:
     return key
 
 
+def _resolve_key_for_prefix_nesting(
+    renamed_key: str,
+    valid_prefixes: list[str],
+    meta_state_dict: dict,
+) -> str:
+    """
+    Rewrite `renamed_key` with `valid_prefixes` from `_compute_all_prefixes` (longest prefixes first) so
+    `base_model_prefix` lines up for head and base models (strip wrapper prefixes or add missing inner ones).
+
+    - Per prefix (longest first): strip leading `prefix.`; if `prefix` is dotted, also try prepending the substring
+      after its first `.`.
+    - If still unmatched: `valid_prefixes` only reflects the load target, so keys from a more wrapped checkpoint can
+      still embed `prefix.` in the middle of the path. For each prefix, restart from `renamed_key` and
+      repeatedly replace the string with everything after the first `prefix.` (discarding that segment and anything
+      before it), while the string starts with `prefix.` or contains `.{prefix}.`, until a suffix exists in
+      `meta_state_dict`.
+
+    Args:
+        renamed_key: Key after weight renamings and conversion patterns.
+        valid_prefixes: Candidate `base_model_prefix` paths for the model being loaded.
+        meta_state_dict: Reference key set (e.g. `model.state_dict()`).
+
+    Returns:
+        A matching key in `meta_state_dict`, or `renamed_key`.
+    """
+    for prefix in reversed(valid_prefixes):
+        if renamed_key.startswith(prefix + "."):
+            candidate = renamed_key[len(prefix) + 1 :]
+            if candidate in meta_state_dict:
+                return candidate
+        if "." in prefix:
+            # remove the first prefix (current model's prefix) when adding it to the key
+            add_prefix = prefix.split(".", maxsplit=1)[1]
+            candidate = f"{add_prefix}.{renamed_key}"
+            if candidate in meta_state_dict:
+                return candidate
+    # Checkpoint may wrap the target at 2+ nesting levels (outer prefixes not in valid_prefixes),
+    # so we need to check for the prefix inside the key.
+    for prefix in reversed(valid_prefixes):
+        candidate = renamed_key
+        # avoid matching parts of module names containing the prefix
+        while f".{prefix}." in candidate or candidate.startswith(f"{prefix}."):
+            candidate = candidate.split(prefix + ".", maxsplit=1)[1]
+            if candidate in meta_state_dict:
+                return candidate
+
+    return renamed_key
+
+
 def rename_source_key(
     source_key: str,
     weight_renamings: list[WeightRenaming],
@@ -1116,27 +1165,7 @@ def rename_source_key(
     # 3. If the key is still not in the model state dict, try adding or removing each
     # prefix level (longest first) until a match is found.  Only active during loading.
     if valid_prefixes is not None and meta_state_dict is not None and renamed_key not in meta_state_dict:
-        for prefix in reversed(valid_prefixes):
-            if renamed_key.startswith(prefix + "."):
-                candidate = renamed_key[len(prefix) + 1 :]
-                if candidate in meta_state_dict:
-                    renamed_key = candidate
-                    break
-            candidate = f"{prefix}.{renamed_key}"
-            if candidate in meta_state_dict:
-                renamed_key = candidate
-                break
-        # If we still don't have a match, the checkpoint may originate from a model that wraps the
-        # target model at 2 or more nesting levels (e.g. loading a DetrForSegmentation checkpoint
-        # into DetrModel), so we search for a valid prefix anywhere within the key.
-        for prefix in reversed(valid_prefixes):
-            # remove the prefix from the key until we don't have it anymore (in case of multiple levels of nesting with the same prefix)
-            candidate = renamed_key
-            while prefix in candidate:
-                candidate = "".join(candidate.split(prefix + ".", maxsplit=1)[1:])
-                if candidate in meta_state_dict:
-                    renamed_key = candidate
-                    break
+        renamed_key = _resolve_key_for_prefix_nesting(renamed_key, valid_prefixes, meta_state_dict)
 
     return renamed_key, source_pattern
 
