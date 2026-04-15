@@ -46,19 +46,18 @@ This model was contributed by the [Baidu Qianfan Team](https://github.com/baidub
 ### Document parsing
 
 ```python
->>> import torch
->>> from transformers import AutoProcessor, AutoModelForImageTextToText
+from transformers import AutoProcessor, AutoModelForImageTextToText
 
->>> model = AutoModelForImageTextToText.from_pretrained("baidu/Qianfan-OCR", dtype=torch.bfloat16, device_map="auto")
->>> processor = AutoProcessor.from_pretrained("baidu/Qianfan-OCR")
+model = AutoModelForImageTextToText.from_pretrained("baidu/Qianfan-OCR", dtype="auto", device_map="auto")
+processor = AutoProcessor.from_pretrained("baidu/Qianfan-OCR")
 
->>> image = "https://huggingface.co/datasets/hf-internal-testing/fixtures_got_ocr/resolve/main/image_ocr.jpg"
->>> messages = [{"role": "user", "content": [{"type": "image", "url": image}, {"type": "text", "text": "Parse this document to Markdown."}]}]
+image = "https://huggingface.co/datasets/hf-internal-testing/fixtures_got_ocr/resolve/main/image_ocr.jpg"
+messages = [{"role": "user", "content": [{"type": "image", "url": image}, {"type": "text", "text": "Parse this document to Markdown."}]}]
 
->>> inputs = processor.apply_chat_template(messages, add_generation_prompt=True, tokenize=True, return_tensors="pt").to(model.device)
+inputs = processor.apply_chat_template(messages, add_generation_prompt=True, tokenize=True, return_tensors="pt").to(model.device)
 
->>> generate_ids = model.generate(**inputs, max_new_tokens=4096)
->>> processor.decode(generate_ids[0, inputs["input_ids"].shape[1]:], skip_special_tokens=True)
+generate_ids = model.generate(**inputs, max_new_tokens=4096)
+processor.decode(generate_ids[0, inputs["input_ids"].shape[1]:], skip_special_tokens=True)
 ```
 
 ### Layout-as-Thought (thinking mode)
@@ -66,41 +65,39 @@ This model was contributed by the [Baidu Qianfan Team](https://github.com/baidub
 For documents with complex layouts, cluttered elements, or non-standard reading orders, enable thinking mode by setting `enable_thinking=True` in `apply_chat_template`. The model will first generate structured layout analysis (bounding boxes, element types, reading order), then produce the final output.
 
 ```python
->>> import torch
->>> from transformers import AutoProcessor, AutoModelForImageTextToText
+from transformers import AutoProcessor, AutoModelForImageTextToText
 
->>> model = AutoModelForImageTextToText.from_pretrained("baidu/Qianfan-OCR", dtype=torch.bfloat16, device_map="auto")
->>> processor = AutoProcessor.from_pretrained("baidu/Qianfan-OCR")
+model = AutoModelForImageTextToText.from_pretrained("baidu/Qianfan-OCR", dtype="auto", device_map="auto")
+processor = AutoProcessor.from_pretrained("baidu/Qianfan-OCR")
 
->>> image = "https://huggingface.co/datasets/hf-internal-testing/fixtures_got_ocr/resolve/main/image_ocr.jpg"
->>> messages = [{"role": "user", "content": [{"type": "image", "url": image}, {"type": "text", "text": "Parse this document to Markdown."}]}]
+image = "https://huggingface.co/datasets/hf-internal-testing/fixtures_got_ocr/resolve/main/image_ocr.jpg"
+messages = [{"role": "user", "content": [{"type": "image", "url": image}, {"type": "text", "text": "Parse this document to Markdown."}]}]
 
->>> inputs = processor.apply_chat_template(messages, add_generation_prompt=True, tokenize=True, return_tensors="pt", enable_thinking=True).to(model.device)
+inputs = processor.apply_chat_template(messages, add_generation_prompt=True, tokenize=True, return_tensors="pt", enable_thinking=True).to(model.device)
 
->>> generate_ids = model.generate(**inputs, max_new_tokens=16384)
->>> processor.decode(generate_ids[0, inputs["input_ids"].shape[1]:], skip_special_tokens=True)
+generate_ids = model.generate(**inputs, max_new_tokens=16384)
+processor.decode(generate_ids[0, inputs["input_ids"].shape[1]:], skip_special_tokens=True)
 ```
 
 ### Batched inference
 
 ```python
->>> import torch
->>> from transformers import AutoProcessor, AutoModelForImageTextToText
+from transformers import AutoProcessor, AutoModelForImageTextToText
 
->>> model = AutoModelForImageTextToText.from_pretrained("baidu/Qianfan-OCR", dtype=torch.bfloat16, device_map="auto")
->>> processor = AutoProcessor.from_pretrained("baidu/Qianfan-OCR")
+model = AutoModelForImageTextToText.from_pretrained("baidu/Qianfan-OCR", dtype="auto", device_map="auto")
+processor = AutoProcessor.from_pretrained("baidu/Qianfan-OCR")
 
->>> image1 = "https://huggingface.co/datasets/hf-internal-testing/fixtures_got_ocr/resolve/main/image_ocr.jpg"
->>> image2 = "https://huggingface.co/datasets/hf-internal-testing/fixtures_got_ocr/resolve/main/multi_box.png"
->>> messages = [
-...     [{"role": "user", "content": [{"type": "image", "url": image1}, {"type": "text", "text": "Parse this document to Markdown."}]}],
-...     [{"role": "user", "content": [{"type": "image", "url": image2}, {"type": "text", "text": "OCR the text in the image."}]}],
-... ]
+image1 = "https://huggingface.co/datasets/hf-internal-testing/fixtures_got_ocr/resolve/main/image_ocr.jpg"
+image2 = "https://huggingface.co/datasets/hf-internal-testing/fixtures_got_ocr/resolve/main/multi_box.png"
+messages = [
+    [{"role": "user", "content": [{"type": "image", "url": image1}, {"type": "text", "text": "Parse this document to Markdown."}]}],
+    [{"role": "user", "content": [{"type": "image", "url": image2}, {"type": "text", "text": "OCR the text in the image."}]}],
+]
 
->>> inputs = processor.apply_chat_template(messages, add_generation_prompt=True, tokenize=True, return_tensors="pt", padding=True).to(model.device)
+inputs = processor.apply_chat_template(messages, add_generation_prompt=True, tokenize=True, return_tensors="pt", padding=True).to(model.device)
 
->>> generate_ids = model.generate(**inputs, max_new_tokens=4096)
->>> processor.batch_decode(generate_ids[:, inputs["input_ids"].shape[1]:], skip_special_tokens=True)
+generate_ids = model.generate(**inputs, max_new_tokens=4096)
+processor.batch_decode(generate_ids[:, inputs["input_ids"].shape[1]:], skip_special_tokens=True)
 ```
 
 ## QianfanOCRConfig

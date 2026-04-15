@@ -37,7 +37,7 @@ from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import ModelOutput, TransformersKwargs, auto_docstring, torch_compilable_check, torch_int
 from ...utils.generic import can_return_tuple, merge_with_config_defaults
-from ...utils.output_capturing import OutputRecorder, capture_outputs
+from ...utils.output_capturing import capture_outputs
 from ..auto import AutoModel
 from .configuration_qianfan_ocr import QianfanOCRConfig, QianfanOCRVisionConfig
 
@@ -214,8 +214,6 @@ class QianfanOCRVisionLayer(GradientCheckpointingLayer):
 
     def __init__(self, config: QianfanOCRVisionConfig, drop_path_rate: float = 0.0) -> None:
         super().__init__()
-        self.chunk_size_feed_forward = config.chunk_size_feed_forward
-        self.seq_len_dim = 1
         self.attention = QianfanOCRVisionAttention(config)
         self.mlp = QianfanOCRVisionMLP(config)
         # QianfanOCR uses different layernorm implementations for different models
@@ -232,29 +230,24 @@ class QianfanOCRVisionLayer(GradientCheckpointingLayer):
     def forward(
         self,
         hidden_states: torch.Tensor,
-    ) -> tuple[torch.Tensor] | tuple[torch.Tensor, torch.Tensor]:
-        attention_output, _ = self.attention(
-            self.layernorm_before(hidden_states),
-        )
+    ) -> torch.Tensor:
+        residual = hidden_states
+        hidden_states = self.layernorm_before(hidden_states)
+        # Self Attention
+        hidden_states, _ = self.attention(hidden_states)
+        hidden_states = self.lambda_1 * hidden_states
+        hidden_states = self.drop_path1(hidden_states)
+        hidden_states = hidden_states + residual
 
-        attention_output = self.lambda_1 * attention_output
+        residual = hidden_states
+        hidden_states = self.layernorm_after(hidden_states)
+        # Fully Connected
+        hidden_states = self.mlp(hidden_states)
+        hidden_states = self.dropout(hidden_states)
+        hidden_states = self.lambda_2 * hidden_states
+        hidden_states = self.drop_path2(hidden_states) + residual
 
-        # first residual connection with drop path
-        hidden_states = self.drop_path1(attention_output) + hidden_states
-
-        # layernorm after self-attention
-        layer_output = self.layernorm_after(hidden_states)
-
-        layer_output = self.mlp(layer_output)
-        layer_output = self.dropout(layer_output)
-
-        if self.lambda_2 is not None:
-            layer_output = self.lambda_2 * layer_output
-
-        # second residual connection with drop path
-        layer_output = self.drop_path2(layer_output) + hidden_states
-
-        return layer_output
+        return hidden_states
 
 
 class QianfanOCRVisionEncoder(nn.Module):
@@ -271,9 +264,10 @@ class QianfanOCRVisionEncoder(nn.Module):
     def forward(
         self,
         hidden_states: torch.Tensor,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutput:
         for layer_module in self.layer:
-            hidden_states = layer_module(hidden_states)
+            hidden_states = layer_module(hidden_states, **kwargs)
 
         return BaseModelOutput(
             last_hidden_state=hidden_states,
@@ -435,8 +429,8 @@ class QianfanOCRVisionPreTrainedModel(PreTrainedModel):
     _supports_flex_attn = True
     _supports_attention_backend = True
     _can_record_outputs = {
-        "hidden_states": OutputRecorder(QianfanOCRVisionLayer, index=0),
-        "attentions": OutputRecorder(QianfanOCRVisionAttention, index=1),
+        "hidden_states": QianfanOCRVisionLayer,
+        "attentions": QianfanOCRVisionAttention,
     }
     config_class = QianfanOCRVisionConfig
 
@@ -475,17 +469,20 @@ class QianfanOCRVisionModel(QianfanOCRVisionPreTrainedModel):
         return self.embeddings.patch_embeddings
 
     @merge_with_config_defaults
-    @capture_outputs(tie_last_hidden_states=False)
+    @capture_outputs
     @auto_docstring
     def forward(
-        self, pixel_values: torch.Tensor, bool_masked_pos: torch.BoolTensor | None = None, **kwargs
+        self,
+        pixel_values: torch.Tensor,
+        bool_masked_pos: torch.BoolTensor | None = None,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | QianfanOCRVisionModelOutputWithPooling:
         r"""
         bool_masked_pos (`torch.BoolTensor` of shape `(batch_size, num_patches)`, *optional*):
             Boolean masked positions. Indicates which patches are masked (1) and which aren't (0).
         """
         embedding_output = self.embeddings(pixel_values, bool_masked_pos=bool_masked_pos)
-        encoder_outputs = self.encoder(embedding_output)
+        encoder_outputs = self.encoder(embedding_output, **kwargs)
         sequence_output = encoder_outputs[0]
         sequence_output = self.layernorm(sequence_output)
 

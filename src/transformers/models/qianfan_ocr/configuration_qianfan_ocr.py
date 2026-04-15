@@ -45,11 +45,14 @@ class QianfanOCRVisionConfig(InternVLVisionConfig):
     Example:
 
     ```python
-    >>> from transformers import QianfanOCRVisionConfig
-
+    >>> # Initializing a QianfanOCR vision style configuration
     >>> configuration = QianfanOCRVisionConfig()
-    >>> configuration.hidden_size
-    1024
+
+    >>> # Initializing a model from the configuration
+    >>> model = QianfanOCRVisionModel(configuration)
+
+    >>> # Accessing the model configuration
+    >>> configuration = model.config
     ```"""
 
     model_type = "qianfan_ocr_vision"
@@ -69,11 +72,14 @@ class QianfanOCRConfig(InternVLConfig):
     Example:
 
     ```python
-    >>> from transformers import QianfanOCRConfig
-
+    >>> # Initializing a QianfanOCR style configuration
     >>> configuration = QianfanOCRConfig()
-    >>> configuration.downsample_ratio
-    0.5
+
+    >>> # Initializing a model from the configuration
+    >>> model = QianfanOCRForConditionalGeneration(configuration)
+
+    >>> # Accessing the model configuration
+    >>> configuration = model.config
     ```"""
 
     model_type = "qianfan_ocr"
