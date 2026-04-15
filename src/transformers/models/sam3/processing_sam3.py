@@ -173,12 +173,9 @@ class Sam3Processor(ProcessorMixin):
                 expected_format="[image level, box level]",
             )
 
-            # When input_boxes_labels is not provided, generate default labels that
-            # mark padded (None) entries with the pad value so the model can mask them.
-            # This ensures that images without boxes in a mixed batch are properly
-            # ignored by the geometry encoder (fixes #45059).
+            # Auto-generate labels so padded None entries are masked out in the geometry encoder (#45059).
             if processed_boxes is not None and processed_boxes_labels is None:
-                processed_boxes_labels = self._generate_default_box_labels(processed_boxes, input_boxes)
+                processed_boxes_labels = self._generate_default_box_labels(processed_boxes)
 
             # Get padding requirements for all inputs
             if processed_boxes is not None:
@@ -237,36 +234,9 @@ class Sam3Processor(ProcessorMixin):
 
         return coords
 
-    def _generate_default_box_labels(self, processed_boxes, raw_input_boxes):
-        """
-        Generate default box labels when none are provided. Entries corresponding to
-        None in the original input_boxes are labeled with `point_pad_value` (-10) so
-        the model's geometry encoder can mask them out. Real box entries get label 1
-        (positive).
-
-        Args:
-            processed_boxes (`list`):
-                The validated/converted nested list of boxes (depth 3).
-            raw_input_boxes (`list`):
-                The original input_boxes argument as passed by the user, used to
-                detect which image-level entries were None.
-
-        Returns:
-            `list`: Nested list of labels with the same structure as processed_boxes
-            (depth 2), where None entries are marked with `point_pad_value`.
-        """
-        labels = []
-        for i, image_boxes in enumerate(processed_boxes):
-            # Check if this image's boxes were originally None
-            originally_none = (
-                isinstance(raw_input_boxes, list) and i < len(raw_input_boxes) and raw_input_boxes[i] is None
-            )
-            if originally_none or image_boxes is None:
-                labels.append(None)
-            else:
-                # Real boxes get label 1 (positive)
-                labels.append([1] * len(image_boxes))
-        return labels
+    def _generate_default_box_labels(self, processed_boxes):
+        """Generate default box labels: `point_pad_value` for None (padded) entries, 1 for real boxes."""
+        return [None if image_boxes is None else [1] * len(image_boxes) for image_boxes in processed_boxes]
 
     def _convert_to_nested_list(self, data, expected_depth, current_depth=0):
         """

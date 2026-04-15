@@ -14,42 +14,52 @@
 
 import unittest
 
+from transformers import AutoTokenizer
+from transformers.models.sam3.processing_sam3 import Sam3Processor
 from transformers.testing_utils import require_torch, require_vision
-from transformers.utils import is_vision_available
 
-
-if is_vision_available():
-    from PIL import Image
+from ...test_processing_common import ProcessorTesterMixin
 
 
 @require_torch
 @require_vision
-class Sam3ProcessorTest(unittest.TestCase):
-    def setUp(self):
-        from transformers.models.sam3.image_processing_sam3 import Sam3ImageProcessor
-        from transformers.models.sam3.processing_sam3 import Sam3Processor
+class Sam3ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
+    processor_class = Sam3Processor
 
-        image_processor = Sam3ImageProcessor()
-        # Use a small public tokenizer for testing
-        from transformers import AutoTokenizer
+    @classmethod
+    def _setup_tokenizer(cls):
+        return AutoTokenizer.from_pretrained("openai/clip-vit-base-patch32", max_length=32, model_max_length=32)
 
-        tokenizer = AutoTokenizer.from_pretrained("google-bert/bert-base-uncased")
-        self.processor = Sam3Processor(image_processor=image_processor, tokenizer=tokenizer)
-        self.image = Image.new("RGB", (640, 480), color=(128, 128, 128))
+    # Sam3Processor has a custom non-standard __call__ signature (no chat template, extra
+    # prompting args like input_boxes). Skip mixin tests that assume a standard VLM interface.
+    def test_chat_template_save_loading(self):
+        self.skipTest("Sam3Processor does not use a chat template")
 
-    def test_mixed_none_input_boxes_generates_labels(self):
-        """Test that a batch with mixed None/real input_boxes produces input_boxes_labels
-        that mark None entries with the pad value (-10) so the model can mask them out.
-        Regression test for https://github.com/huggingface/transformers/issues/45059
-        """
-        inputs = self.processor(
-            images=[self.image, self.image],
+    def test_model_input_names(self):
+        self.skipTest("Sam3Processor outputs extra keys (e.g. original_sizes) beyond model_input_names")
+
+    def test_tokenizer_defaults(self):
+        self.skipTest("Sam3Processor always pads tokenizer output to max_length=32")
+
+    def test_processor_text_has_no_visual(self):
+        self.skipTest("Sam3Processor has a custom interface, not a standard VLM text+image interface")
+
+    def test_processor_with_multiple_inputs(self):
+        self.skipTest("Sam3Processor has a custom interface, not a standard VLM text+image interface")
+
+    # --- Sam3-specific tests ---
+
+    def test_input_boxes_default_labels_mixed_batch(self):
+        # Regression test for https://github.com/huggingface/transformers/issues/45059:
+        # None entries should get pad label (-10), real entries should get positive label (1).
+        processor = self.get_processor()
+        images = self.prepare_image_inputs(batch_size=2)
+        inputs = processor(
+            images=images,
             text=["cat", None],
             input_boxes=[None, [[100, 100, 200, 200]]],
             return_tensors="pt",
         )
-
-        # Both input_boxes and input_boxes_labels should be present
         self.assertIn("input_boxes", inputs)
         self.assertIn("input_boxes_labels", inputs)
 
@@ -58,39 +68,38 @@ class Sam3ProcessorTest(unittest.TestCase):
         # The real entry (index 1) should have label 1 (positive)
         self.assertEqual(inputs["input_boxes_labels"][1, 0].item(), 1)
 
-    def test_all_real_boxes_generates_positive_labels(self):
-        """When all entries have real boxes, all labels should be 1."""
-        inputs = self.processor(
-            images=[self.image, self.image],
+    def test_input_boxes_default_labels_all_real(self):
+        processor = self.get_processor()
+        images = self.prepare_image_inputs(batch_size=2)
+        inputs = processor(
+            images=images,
             text=["cat", "dog"],
             input_boxes=[[[50, 50, 150, 150]], [[200, 200, 300, 300]]],
             return_tensors="pt",
         )
-
         self.assertIn("input_boxes_labels", inputs)
         self.assertTrue((inputs["input_boxes_labels"] == 1).all())
 
-    def test_no_input_boxes_omits_key(self):
-        """When input_boxes=None, no input_boxes key should be in the output."""
-        inputs = self.processor(
-            images=[self.image],
+    def test_no_input_boxes_omits_labels(self):
+        processor = self.get_processor()
+        images = self.prepare_image_inputs(batch_size=1)
+        inputs = processor(
+            images=images,
             text=["cat"],
-            input_boxes=None,
             return_tensors="pt",
         )
-
         self.assertNotIn("input_boxes", inputs)
         self.assertNotIn("input_boxes_labels", inputs)
 
     def test_user_provided_labels_preserved(self):
-        """User-provided input_boxes_labels should not be overwritten."""
-        inputs = self.processor(
-            images=[self.image, self.image],
+        processor = self.get_processor()
+        images = self.prepare_image_inputs(batch_size=2)
+        inputs = processor(
+            images=images,
             text=["cat", "dog"],
             input_boxes=[[[50, 50, 150, 150]], [[200, 200, 300, 300]]],
             input_boxes_labels=[[1], [0]],
             return_tensors="pt",
         )
-
         self.assertEqual(inputs["input_boxes_labels"][0, 0].item(), 1)
         self.assertEqual(inputs["input_boxes_labels"][1, 0].item(), 0)
