@@ -20,7 +20,7 @@ rendered properly in your Markdown viewer.
 
 # Pull request checks
 
-When you open a pull request, CircleCI runs several checks that must pass before your PR can be merged. This page explains each check and how to pass it locally before pushing.
+When you open a pull request, the Hugging Face CI runs several checks that must pass before your PR can be merged. This page explains each check and how to pass it locally before pushing.
 
 Before you push, run these three commands in order:
 
@@ -34,15 +34,15 @@ make check-repo # verify all checks pass, fix anything that remains
 
 ## Code quality
 
-The `ci/circleci: check_code_quality` check covers formatting, imports, type checking, and model structure rules. It corresponds to `make fix-repo` and `make typing`.
+The code quality check covers formatting, imports, type checking, and model structure rules. It corresponds to `make fix-repo` and `make typing`.
 
 `make style` (included in `make fix-repo`) auto-fixes [Ruff](https://docs.astral.sh/ruff/) linting and formatting, `__init__.py` import sort order, and auto-mapping consistency.
 
-`make typing` performs type checking with [ty](https://docs.astral.sh/ty/) and validates model structure rules, which cover config class naming conventions and `forward()` signatures. Type errors and TRF violations are reported with specific rule numbers and must be fixed manually.
+`make typing` performs type checking with [ty](https://docs.astral.sh/ty/) and validates model structure rules, which cover config class naming conventions and `forward()` signatures. Type errors and TRF violations are reported with specific rule numbers and must be fixed manually. Use `python -m utils.mlinter --list-rules` to see all available TRF rules and `python -m utils.mlinter --rule TRFXXX` to view the full documentation for a specific rule.
 
 ## Repository consistency
 
-The `ci/circleci: check_repository_consistency` check ensures the repository stays internally consistent across five categories. For new models, it also verifies that all new model classes are registered in the auto-mappings.
+The repository consistency check is similar to `make check-repo`, except it stops on the first failure. It ensures the repository stays internally consistent across the categories below. For new models, it also verifies that all new model classes are registered in the auto-mappings.
 
 | Category | What it validates | Auto-fixed? |
 |---|---|---|
@@ -54,13 +54,13 @@ The `ci/circleci: check_repository_consistency` check ensures the repository sta
 
 ## Tests
 
-CircleCI runs a targeted subset of tests based on what your PR changes. The sections below explain how test selection works, which jobs run, and how to handle slow tests.
+CI runs a targeted subset of tests based on what your PR changes. The sections below explain how test selection works, which jobs run, and how to handle slow tests.
 
 ### Test selection
 
-CircleCI doesn't run the full test suite on every PR. `utils/tests_fetcher.py` traces import dependencies from your changed files to identify affected tests and only runs those. It also catches regressions in other models if you touched shared utilities. The fetcher prints which files changed, which tests are impacted, and writes the list to `tests_torch_test_list.txt`.
+CI doesn't run the full test suite on every PR. `utils/tests_fetcher.py` traces import dependencies from your changed files to identify affected tests and only runs those. It also catches regressions in other models if you touched shared utilities. The fetcher prints which files changed, which tests are impacted, and writes the list to `tests_torch_test_list.txt`.
 
-Use the fetcher to replicate exactly what CircleCI runs.
+Use the fetcher to replicate exactly what CI runs.
 
 ```bash
 python utils/tests_fetcher.py
@@ -78,7 +78,7 @@ pytest tests/models/my_model/ -v
 
 ### Test job categories
 
-Tests are distributed across parallel CircleCI jobs. Your `test_modeling_my_model.py` is detected by its path pattern. The relevant jobs for a model PR are:
+Tests are distributed across parallel CI jobs. Your `test_modeling_my_model.py` is detected by its path pattern. The relevant jobs for a model PR are:
 
 - `tests_torch` — modeling tests (`tests/models/*/test_modeling_*.py`)
 - `tests_tokenization` — tokenizer tests (`tests/models/*/test_tokenization_*.py`)
@@ -90,7 +90,7 @@ Tests are distributed across parallel CircleCI jobs. Your `test_modeling_my_mode
 
 ### Slow tests
 
-Tests decorated with `@slow` are skipped in regular CircleCI. They require a real checkpoint download or significant compute, so they run on GPU instances and are triggered by maintainers once your PR is under review.
+Tests decorated with `@slow` are skipped in regular CI runs. They require a real checkpoint download or significant compute, so they run on GPU instances and are triggered by maintainers once your PR is under review.
 
 Run slow tests locally with the command below.
 

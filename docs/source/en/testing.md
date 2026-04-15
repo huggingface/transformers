@@ -31,7 +31,7 @@ pytest tests/models/mymodel/test_modeling_mymodel.py::MyModelTest::test_model
 RUN_SLOW=1 pytest tests/models/mymodel/ -v
 ```
 
-CI runs model tests without `@slow` on every pull request, and slow tests run on a nightly schedule (see [Pull request checks](./pr_checks) for what the CI validates).
+The Hugging Face CI runs model tests without `@slow` on every pull request, and slow tests run on a nightly schedule (see [Pull request checks](./pr_checks) for what the CI validates).
 
 ## Write tests for a causal LM
 
@@ -154,145 +154,19 @@ Pick the mixins your model needs.
 
 ### Writing a model test
 
-The example below is based on [tests/models/modernbert/test_modeling_modernbert.py](https://github.com/huggingface/transformers/blob/main/tests/models/modernbert/test_modeling_modernbert.py).
+See [tests/models/modernbert/test_modeling_modernbert.py](https://github.com/huggingface/transformers/blob/main/tests/models/modernbert/test_modeling_modernbert.py) for a complete working example. The key steps are outlined below.
 
-1. The tester creates tiny configs and generates dummy inputs. Keep dimensions small so tests finish in seconds on CPU. Three tensor helper functions are available to build inputs.
+1. The `ModelTester` class builds tiny configs and dummy inputs. Keep dimensions small so tests finish in seconds on CPU. Three tensor helper functions are available to build inputs.
 
     - `ids_tensor(shape, vocab_size)`: Random integer tensor in `[0, vocab_size)`. Use for `input_ids`, `token_type_ids`, and label tensors.
     - `random_attention_mask(shape)`: Binary tensor (0s and 1s) where the first token is always 1. Use for `attention_mask`.
     - `floats_tensor(shape, scale=1.0)`: Random float tensor. Use for continuous inputs like `pixel_values` or `inputs_embeds`.
 
-    ```py
-    from tests.test_modeling_common import ids_tensor, random_attention_mask, floats_tensor, torch_device
+    The tester must implement `get_config()`, `prepare_config_and_inputs()`, and `prepare_config_and_inputs_for_common()`. Add `create_and_check_*` methods for each task head (base model, sequence classification, token classification, etc.).
 
-    class MyModelTester:
-        def __init__(
-            self,
-            parent,
-            batch_size=13,
-            seq_length=7,
-            is_training=True,
-            use_input_mask=True,
-            use_labels=True,
-            vocab_size=99,
-            hidden_size=32,
-            num_hidden_layers=2,
-            num_attention_heads=4,
-            intermediate_size=37,
-            num_labels=3,
-            pad_token_id=0,
-        ):
-            self.parent = parent
-            self.batch_size = batch_size
-            self.seq_length = seq_length
-            self.is_training = is_training
-            self.use_input_mask = use_input_mask
-            self.use_labels = use_labels
-            self.vocab_size = vocab_size
-            self.hidden_size = hidden_size
-            self.num_hidden_layers = num_hidden_layers
-            self.num_attention_heads = num_attention_heads
-            self.intermediate_size = intermediate_size
-            self.num_labels = num_labels
-            self.pad_token_id = pad_token_id
+2. Inherit from the mixins your model needs, set `all_model_classes` and `pipeline_model_mapping`, and define `setUp()`. Write `test_*` methods that delegate to the tester's `create_and_check_*` methods.
 
-        def get_config(self):
-            return MyModelConfig(
-                vocab_size=self.vocab_size,
-                hidden_size=self.hidden_size,
-                num_hidden_layers=self.num_hidden_layers,
-                num_attention_heads=self.num_attention_heads,
-                intermediate_size=self.intermediate_size,
-                pad_token_id=self.pad_token_id,
-            )
-
-        def prepare_config_and_inputs(self):
-            config = self.get_config()
-            input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
-            input_mask = None
-            if self.use_input_mask:
-                input_mask = random_attention_mask([self.batch_size, self.seq_length])
-
-            sequence_labels = None
-            token_labels = None
-            if self.use_labels:
-                sequence_labels = ids_tensor([self.batch_size], self.num_labels)
-                token_labels = ids_tensor([self.batch_size, self.seq_length], self.num_labels)
-
-            return config, input_ids, input_mask, sequence_labels, token_labels
-
-        def prepare_config_and_inputs_for_common(self):
-            config, input_ids, input_mask, _, _ = self.prepare_config_and_inputs()
-            inputs_dict = {"input_ids": input_ids, "attention_mask": input_mask}
-            return config, inputs_dict
-
-        def create_and_check_model(self, config, input_ids, input_mask, sequence_labels, token_labels):
-            model = MyModel(config).to(torch_device).eval()
-            result = model(input_ids, attention_mask=input_mask)
-            self.parent.assertEqual(
-                result.last_hidden_state.shape,
-                (self.batch_size, self.seq_length, self.hidden_size),
-            )
-    ```
-
-2. Inherit from the mixins your model needs, set the key attributes, and define `setUp()`.
-
-    ```py
-    from tests.test_modeling_common import ModelTesterMixin
-    from tests.test_pipeline_mixin import PipelineTesterMixin
-    from tests.test_configuration_common import ConfigTester
-
-    class MyModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
-        all_model_classes = (
-            MyModel,
-            MyModelForMaskedLM,
-            MyModelForSequenceClassification,
-            MyModelForTokenClassification,
-        )
-        pipeline_model_mapping = {
-            "feature-extraction": MyModel,
-            "fill-mask": MyModelForMaskedLM,
-            "text-classification": MyModelForSequenceClassification,
-            "token-classification": MyModelForTokenClassification,
-        }
-
-        def setUp(self):
-            self.model_tester = MyModelTester(self)
-            self.config_tester = ConfigTester(self, config_class=MyModelConfig, hidden_size=32)
-
-        def test_config(self):
-            self.config_tester.run_common_tests()
-
-        def test_model(self):
-            config_and_inputs = self.model_tester.prepare_config_and_inputs()
-            self.model_tester.create_and_check_model(*config_and_inputs)
-    ```
-
-3. Add `create_and_check_*` methods on the tester for each task head, then call them from `test_*` methods on the test class.
-
-    ```py
-    # in MyModelTester:
-    def create_and_check_for_sequence_classification(self, config, input_ids, input_mask, sequence_labels, token_labels):
-        config.num_labels = self.num_labels
-        model = MyModelForSequenceClassification(config).to(torch_device).eval()
-        result = model(input_ids, attention_mask=input_mask, labels=sequence_labels)
-        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.num_labels))
-
-    def create_and_check_for_token_classification(self, config, input_ids, input_mask, sequence_labels, token_labels):
-        config.num_labels = self.num_labels
-        model = MyModelForTokenClassification(config).to(torch_device).eval()
-        result = model(input_ids, attention_mask=input_mask, labels=token_labels)
-        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.num_labels))
-
-    # in MyModelTest:
-    def test_for_sequence_classification(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_for_sequence_classification(*config_and_inputs)
-
-    def test_for_token_classification(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_for_token_classification(*config_and_inputs)
-    ```
+3. For each task head, add a `create_and_check_*` method on the tester that instantiates the model, runs a forward pass, and asserts output shapes. Then add a corresponding `test_*` method on the test class.
 
 ### File organization
 
