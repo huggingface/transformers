@@ -1011,11 +1011,9 @@ class ParakeetForTDT(ParakeetPreTrainedModel, GenerationMixin):
         input_features: torch.Tensor | None = None,
         attention_mask: torch.Tensor | None = None,
         decoder_input_ids: torch.LongTensor | None = None,
-        encoder_outputs: tuple[torch.FloatTensor] | None = None,
-        encoder_frame_ids: torch.LongTensor | None = None,
         decoder_cache: ParakeetTDTDecoderCache | None = None,
-        decoder_cache_update_mask: torch.BoolTensor | None = None,
         use_decoder_cache: bool | None = None,
+        encoder_outputs: ParakeetEncoderModelOutput | tuple[torch.FloatTensor] | None = None,
         labels: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> ParakeetTDTOutput:
@@ -1025,17 +1023,10 @@ class ParakeetForTDT(ParakeetPreTrainedModel, GenerationMixin):
         encoder_outputs (`tuple(torch.FloatTensor)`, *optional*):
             Pre-computed encoder outputs (last_hidden_state, pooler_output, hidden_states, attentions, attention_mask).
             Can be a tuple or `ParakeetEncoderModelOutput`.
-        encoder_frame_ids (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
-            Encoder frame indices for the joint network during generation.
         decoder_cache (`ParakeetTDTDecoderCache`, *optional*):
             Decoder LSTM cache. When provided and initialized, the cached `decoder_output` is reused
             (e.g. during blank-skipping) instead of running the decoder. When `input_ids` is provided,
             the decoder runs and the cache is updated in-place.
-        decoder_cache_update_mask (`torch.BoolTensor` of shape `(batch_size,)`, *optional*):
-            Boolean mask controlling which batch elements have their decoder cache updated.
-            When provided, only elements where the mask is `True` are written to the cache;
-            other elements retain their previous cached state. Used during generation to
-            preserve cache for samples that predicted blank tokens.
         use_decoder_cache (`bool`, *optional*):
             Whether to use a decoder cache. When `True` and `decoder_cache` is `None`, a new cache
             is created automatically during the forward pass.
@@ -1057,12 +1048,7 @@ class ParakeetForTDT(ParakeetPreTrainedModel, GenerationMixin):
         >>> outputs = model(**inputs)
         ```
         """
-        # 1. Encode + project
         if encoder_outputs is None:
-            if input_features is None:
-                raise ValueError("Either `input_features` or `encoder_outputs` must be provided.")
-            if labels is not None:
-                kwargs.setdefault("output_attention_mask", True)
             encoder_outputs = self.get_audio_features(
                 input_features=input_features,
                 attention_mask=attention_mask,
@@ -1070,77 +1056,41 @@ class ParakeetForTDT(ParakeetPreTrainedModel, GenerationMixin):
             )
         elif not isinstance(encoder_outputs, ParakeetEncoderModelOutput):
             encoder_outputs = ParakeetEncoderModelOutput(
-                last_hidden_state=encoder_outputs[0],
-                pooler_output=encoder_outputs[1],
+                last_hidden_state=encoder_outputs[0] if len(encoder_outputs) > 0 else None,
+                pooler_output=encoder_outputs[1] if len(encoder_outputs) > 1 else None,
                 hidden_states=encoder_outputs[2] if len(encoder_outputs) > 2 else None,
                 attentions=encoder_outputs[3] if len(encoder_outputs) > 3 else None,
                 attention_mask=encoder_outputs[4] if len(encoder_outputs) > 4 else None,
-            )
-        projected_encoder_output = encoder_outputs.pooler_output
-
-        if labels is not None:
-            # for training: [blank, labels...] for training
-            blank_tokens = torch.full(
-                (labels.shape[0], 1), self.config.blank_token_id, dtype=labels.dtype, device=labels.device
-            )
-            decoder_input_ids = torch.cat([blank_tokens, labels], dim=1)
-        elif decoder_input_ids is None and decoder_cache is None:
-            # for inference: start with blank token if not provided
-            decoder_input_ids = torch.full(
-                (projected_encoder_output.shape[0], 1),
-                self.config.blank_token_id,
-                dtype=torch.long,
-                device=projected_encoder_output.device,
             )
 
         if use_decoder_cache and decoder_cache is None:
             decoder_cache = ParakeetTDTDecoderCache()
 
-        # Run decoder if we have decoder_input_ids (initial step or after emitting a token)
-        if decoder_input_ids is not None:
-            decoder_output = self.decoder(decoder_input_ids, decoder_cache, decoder_cache_update_mask)
-        else:
-            # Reuse cached decoder_output (blank-skipping path)
-            decoder_output = decoder_cache.cache
-
-        if encoder_frame_ids is not None:
-            batch_indices = torch.arange(projected_encoder_output.shape[0], device=projected_encoder_output.device)
-            safe_frame_ids = torch.clamp(encoder_frame_ids, max=projected_encoder_output.shape[1] - 1)
-            encoder_for_joint = projected_encoder_output[batch_indices, safe_frame_ids].unsqueeze(1)
-            decoder_for_joint = decoder_output
-        else:
-            encoder_for_joint = projected_encoder_output.unsqueeze(2)
-            decoder_for_joint = decoder_output.unsqueeze(1)
-
-        token_logits, duration_logits = self.joint(
-            decoder_output=decoder_for_joint,
-            encoder_output=encoder_for_joint,
+        decoder_hidden_states = self.decoder(decoder_input_ids, cache=decoder_cache)
+        logits = self.joint(
+            encoder_hidden_states=encoder_outputs.pooler_output,
+            decoder_hidden_states=decoder_hidden_states,
         )
-        logits = torch.cat([token_logits, duration_logits], dim=-1)
 
         loss = None
         if labels is not None:
-            encoder_lengths = encoder_outputs.attention_mask.sum(-1)
-            target_lengths = (labels != self.config.pad_token_id).sum(-1)
             loss = self.loss_function(
-                token_logits=token_logits.float(),
-                duration_logits=duration_logits.float(),
-                targets=labels.to(token_logits.device).int(),
-                logit_lengths=encoder_lengths.to(token_logits.device).int(),
-                target_lengths=target_lengths.to(token_logits.device).int(),
+                token_logits=logits[..., : self.config.vocab_size],
+                duration_logits=logits[..., self.config.vocab_size :],
+                labels=labels,
+                logit_lengths=encoder_outputs.attention_mask.sum(-1),
+                label_lengths=(labels != self.config.pad_token_id).sum(-1),
                 blank_token_id=self.config.blank_token_id,
                 durations=self.config.durations,
-                reduction="mean",
             )
 
         return ParakeetTDTOutput(
             loss=loss,
             logits=logits,
             last_hidden_state=encoder_outputs.last_hidden_state,
+            pooler_output=encoder_outputs.pooler_output,
             hidden_states=encoder_outputs.hidden_states,
             attentions=encoder_outputs.attentions,
-            pooler_output=encoder_outputs.pooler_output,
-            attention_mask=encoder_outputs.attention_mask,
             decoder_cache=decoder_cache,
         )
 
