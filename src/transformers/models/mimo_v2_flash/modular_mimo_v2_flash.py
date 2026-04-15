@@ -473,16 +473,13 @@ class MiMoV2FlashDecoderLayer(LlamaDecoderLayer):
 
 @auto_docstring
 class MiMoV2FlashPreTrainedModel(MixtralPreTrainedModel):
-    config_class = MiMoV2FlashConfig
-    base_model_prefix = "model"
-    supports_gradient_checkpointing = True
+    config: MiMoV2FlashConfig
     _no_split_modules = ["MiMoV2FlashDecoderLayer"]
-    _skip_keys_device_placement = ["past_key_values"]
+    # TODO @casinca: once we settle for what backend to allow after attn rework, recheck flags to keep/drop
     # non-sink layers can use backends (SDPA/FA2/flex_attention compatible)
     _supports_flash_attn = True
     _supports_sdpa = True
     _supports_flex_attn = True
-    _can_compile_fullgraph = True
     _supports_attention_backend = True
     _keep_in_fp32_modules_strict = ["e_score_correction_bias"]
     _keys_to_ignore_on_load_unexpected = [r"^model\.mtp\."]
