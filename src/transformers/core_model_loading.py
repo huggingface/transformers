@@ -1436,6 +1436,7 @@ def convert_and_load_state_dict_in_model(
                 model_specific_conversions.append(conversion)
         else:
             model_specific_conversions.append(conversion)
+    # Important: we need to revert the order here, so that potential conversions from submodels are performed first
     model._weight_conversions = model_specific_conversions[::-1]
 
     return loading_info, disk_offload_index
