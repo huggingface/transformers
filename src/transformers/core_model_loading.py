@@ -844,9 +844,11 @@ _INTERNAL_MANY_TO_MANY_CONVERSIONS = (
 class WeightConverter(WeightTransform):
     __slots__ = ("operations",)
 
-    def __init__(self, source_patterns: str | list[str], target_patterns: str | list[str]):
+    def __init__(
+        self, source_patterns: str | list[str], target_patterns: str | list[str], operations: list[ConversionOps]
+    ):
         super().__init__(source_patterns, target_patterns)
-        self.operations: list[ConversionOps] = []
+        self.operations: list[ConversionOps] = operations
 
         if bool(len(self.source_patterns) - 1) + bool(len(self.target_patterns) - 1) >= 2:
             # We allow many-to-many only if we use an internal operation that can handle it
