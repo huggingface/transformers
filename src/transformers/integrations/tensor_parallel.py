@@ -213,36 +213,47 @@ def get_packed_weights(param, empty_param, device_mesh, rank, dim):
     world_size = device_mesh.size()
     block_sizes = _blocks_to_block_sizes(total_size=total_size, blocks=2)
 
-    tensors_slices = []
+    # Build contiguous (start, stop) ranges per block rather than one flat list of indices — contiguous slicing
+    # works for every dtype (including FP8), whereas advanced-indexing with an int list is not supported for FP8
+    # on CPU and blows up memory on GPU (it has to materialize the gathered tensor).
+    slice_ranges = []
     block_offset = 0
     for block_size in block_sizes:
         shard_block_size = block_size // world_size
         start = rank * shard_block_size
         stop = (rank + 1) * shard_block_size
-        tensors_slices += range(block_offset + start, block_offset + stop)
+        slice_ranges.append((block_offset + start, block_offset + stop))
         block_offset += block_size
 
-    # `slice_` is either a safetensors slice handle (has `get_dtype()` returning a str like "F8_E4M3") or a plain
-    # torch.Tensor (after the distributed-loading refactor, ranks may already have the full tensor in memory from
-    # a broadcast — no safetensors handle available).
+    # `slice_` is either a safetensors slice handle (has `get_dtype()`) or a plain torch.Tensor — after the
+    # distributed-loading refactor, ranks already hold the full tensor in memory from a broadcast (no safetensors
+    # handle available).
     is_tensor = isinstance(slice_, torch.Tensor)
     if is_tensor:
-        slice_dtype_str = None
-        torch_dtype = slice_.dtype
-    else:
-        slice_dtype_str = slice_.get_dtype()
-        torch_dtype = str_to_dtype[slice_dtype_str]
-    # Handle F8_E4M3 dtype by converting to float16 before slicing
-    # Without upcasting, the slicing causes : RuntimeError: "index_cpu" not implemented for 'Float8_e4m3fn'
-    casted = False
-    needs_fp8_cast = slice_dtype_str in ("F8_E4M3", "F8_E5M2") or torch_dtype in (
-        getattr(torch, "float8_e4m3fn", None),
-        getattr(torch, "float8_e5m2", None),
-    )
-    if needs_fp8_cast:
-        slice_ = slice_[...].to(torch.float16) if not is_tensor else slice_.to(torch.float16)
-        casted = True
+        # Slice first (stays in native dtype — no upcast of the full tensor), upcast the already-small shard
+        # only if the dtype can't be expressed in the target param's storage directly.
+        pieces = []
+        for start, stop in slice_ranges:
+            if dim == 0:
+                pieces.append(slice_[start:stop, ...])
+            elif dim == 1 or dim == -2:
+                pieces.append(slice_[:, start:stop, ...])
+            elif dim == 2 or dim == -1:
+                pieces.append(slice_[..., start:stop])
+            else:
+                raise ValueError(f"Unsupported dim {dim}, only dim 0, 1 or 2 are supported")
+        return torch.cat(pieces, dim=dim).contiguous()
 
+    # Safetensors-slice path — FP8 needs the upcast-then-index workaround because CPU int-indexing is not
+    # implemented for Float8_e4m3fn / Float8_e5m2.
+    slice_dtype = slice_.get_dtype()
+    casted = slice_dtype in ("F8_E4M3", "F8_E5M2")
+    if casted:
+        slice_ = slice_[...].to(torch.float16)
+
+    tensors_slices = []
+    for start, stop in slice_ranges:
+        tensors_slices.extend(range(start, stop))
     if dim == 0:
         tensor = slice_[tensors_slices, ...]
     elif dim == 1 or dim == -2:
@@ -254,7 +265,7 @@ def get_packed_weights(param, empty_param, device_mesh, rank, dim):
 
     if casted:
         return tensor
-    return tensor.to(torch_dtype)
+    return tensor.to(str_to_dtype[slice_dtype])
 
 
 def repack_weights(

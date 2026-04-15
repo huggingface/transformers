@@ -136,7 +136,9 @@ def _worker(rank: int, args: _WorkerArgs) -> None:
         elapsed = time.perf_counter() - t0
 
         per_rank_dump = {k: v.detach().clone() for k, v in model.state_dict().items()}
-        torch.save({"rank": rank, "elapsed": elapsed, "params": per_rank_dump}, os.path.join(args.out_dir, f"rank_{rank}.pt"))
+        torch.save(
+            {"rank": rank, "elapsed": elapsed, "params": per_rank_dump}, os.path.join(args.out_dir, f"rank_{rank}.pt")
+        )
     finally:
         dist.destroy_process_group()
 
@@ -194,7 +196,9 @@ def benchmark_tp_loading(world_size: int, num_layers: int, hidden: int) -> bool:
                 plan = "colwise" if plan_key == "up" else "rowwise"
                 expected = _expected_shard(full_sd[name], plan, rank, world_size)
                 if tensor.shape != expected.shape or not torch.equal(tensor, expected):
-                    print(f"[tp] MISMATCH on rank={rank} name={name}: got shape {tuple(tensor.shape)} expected {tuple(expected.shape)}")
+                    print(
+                        f"[tp] MISMATCH on rank={rank} name={name}: got shape {tuple(tensor.shape)} expected {tuple(expected.shape)}"
+                    )
                     ok = False
 
         print(f"[tp] world_size={world_size} num_layers={num_layers} hidden={hidden}")
@@ -220,18 +224,91 @@ def benchmark_single_rank_baseline(num_layers: int, hidden: int) -> None:
     print(f"[baseline] sample _tensor_nbytes({sample_key}) = {_tensor_nbytes(state_dict[sample_key])}")
 
 
+# ---------------------------------------------------------------------------------------------------------------------
+# Real-model TP loading benchmark. Invoked under `torchrun --nproc-per-node=N`; every rank loads the same pretrained
+# model with `tp_plan="auto"`, which wires up the device mesh + TP sharding path we just refactored. The purpose here
+# is to exercise the same code path on production checkpoints and time the load — smoke + perf on real weights.
+# ---------------------------------------------------------------------------------------------------------------------
+def benchmark_real_model(model_id: str, dtype: str, run_generate: bool) -> bool:
+    import torch
+
+    from transformers import AutoModelForCausalLM, AutoTokenizer
+
+    rank = int(os.environ.get("RANK", 0))
+    world_size = int(os.environ.get("WORLD_SIZE", 1))
+    if world_size <= 1:
+        print(
+            "[real] --model-id requires torchrun with world_size > 1; "
+            "e.g. `torchrun --nproc-per-node=8 tp_loading.py --model-id MODEL`"
+        )
+        return False
+
+    if rank == 0:
+        print(f"[real] loading {model_id!r} with tp_plan='auto' (world_size={world_size}, dtype={dtype})")
+
+    torch.manual_seed(0)
+    t0 = time.perf_counter()
+    model = AutoModelForCausalLM.from_pretrained(model_id, tp_plan="auto", dtype=dtype)
+    elapsed = time.perf_counter() - t0
+
+    # Gather peak CUDA memory across ranks for a rough sanity check on the shard placement.
+    peak_mem_bytes = 0
+    if torch.cuda.is_available():
+        peak_mem_bytes = torch.cuda.max_memory_allocated()
+    if rank == 0:
+        print(f"[real] rank0 load time = {elapsed:.2f}s (peak cuda mem on rank0 = {peak_mem_bytes / 1e9:.2f} GB)")
+
+    # Generate is a smoke check but not the subject of the benchmark; some checkpoints (e.g. gpt-oss with MXFP4
+    # experts loaded without the quantizer) will not have all weights populated, which breaks generation but is
+    # orthogonal to whether the TP load succeeded. So we report generate failures as warnings and keep the overall
+    # status tied to the load path.
+    if run_generate:
+        try:
+            tokenizer = AutoTokenizer.from_pretrained(model_id)
+            prompt = "Pipeline parallelism in ai is "
+            inputs = tokenizer(prompt, return_tensors="pt").to(model.device)
+            t0 = time.perf_counter()
+            out = model.generate(**inputs, max_new_tokens=8, do_sample=False)
+            gen_elapsed = time.perf_counter() - t0
+            if rank == 0:
+                decoded = tokenizer.decode(out[0], skip_special_tokens=False)
+                print(f"[real] generate {gen_elapsed:.2f}s -> {decoded!r}")
+        except Exception as e:  # noqa: BLE001
+            if rank == 0:
+                print(f"[real] generate failed (load is still OK): {e!r}")
+
+    return True
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--world-size", type=int, default=2, help="Number of TP ranks to simulate (mp.spawn).")
     parser.add_argument("--num-layers", type=int, default=8, help="Number of synthetic transformer-like blocks.")
     parser.add_argument("--hidden", type=int, default=512, help="Hidden size of each block's Linear weights.")
-    parser.add_argument("--partition-mappings", type=int, default=5_000, help="Mapping count for the partition microbenchmark.")
-    parser.add_argument("--partition-world-size", type=int, default=8, help="World size for the partition microbenchmark.")
+    parser.add_argument(
+        "--partition-mappings", type=int, default=5_000, help="Mapping count for the partition microbenchmark."
+    )
+    parser.add_argument(
+        "--partition-world-size", type=int, default=8, help="World size for the partition microbenchmark."
+    )
+    parser.add_argument(
+        "--model-id",
+        type=str,
+        default=None,
+        help="If set, skip the synthetic tests and load this pretrained model via `tp_plan='auto'`. Must be run "
+        "under torchrun (e.g. `torchrun --nproc-per-node=8 ... --model-id MODEL`).",
+    )
+    parser.add_argument("--dtype", type=str, default="auto", help="Dtype to pass to from_pretrained.")
+    parser.add_argument("--no-generate", action="store_true", help="Skip the post-load generate sanity check.")
     args = parser.parse_args()
 
     print("=" * 72)
     print("TP loading benchmark")
     print("=" * 72)
+
+    if args.model_id is not None:
+        ok = benchmark_real_model(args.model_id, args.dtype, run_generate=not args.no_generate)
+        return 0 if ok else 1
 
     benchmark_partition(args.partition_mappings, args.partition_world_size)
     print()

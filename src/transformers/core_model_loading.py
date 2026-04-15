@@ -1105,6 +1105,7 @@ def rename_source_key(
     return renamed_key, source_pattern
 
 
+@torch.no_grad()
 def _redistribute_realized_value(
     realized_value: dict[str, list[torch.Tensor] | torch.Tensor] | None,
     mapping: WeightTransform,
@@ -1153,12 +1154,18 @@ def _redistribute_realized_value(
     tp_layer = mapping.distributed_operation
     out: dict[str, torch.Tensor] = {}
 
-    # 2. For each target tensor, broadcast its bytes from the source rank, then locally shard.
+    # 2. For each target tensor, broadcast its bytes from the source rank, then locally shard. We free the full
+    # tensor on BOTH ends right after the shard/replicate step — otherwise a big MoE mapping (e.g. a whole layer's
+    # packed experts) sits in GPU memory until the outer `realized_value` dict is collected, which blows up peak
+    # memory and can OOM the source rank on large FP8 checkpoints (GLM-5-FP8 was one such case).
     for target_name, shape, t_dtype in meta:
         if is_source:
             full_tensor = realized_value[target_name]
             full_tensor = full_tensor[0] if isinstance(full_tensor, list) else full_tensor
             full_tensor = full_tensor.to(device=local_device).contiguous()
+            # Drop the reference in `realized_value` right away so the original (possibly on-CPU) tensor can be
+            # freed as soon as the broadcast copy below holds the bytes we need.
+            realized_value[target_name] = None
         else:
             full_tensor = torch.empty(shape, dtype=t_dtype, device=local_device)
 
@@ -1172,6 +1179,10 @@ def _redistribute_realized_value(
             local_param = full_tensor.to(dtype=dtype) if dtype is not None else full_tensor
 
         out[target_name] = local_param
+        # Explicitly drop the full tensor now — the slice in `local_param` is a view-or-copy independent of it
+        # (see the slice-first behaviour in `get_packed_weights`), so holding `full_tensor` any longer is pure
+        # peak-memory cost.
+        del full_tensor
 
     return out
 
@@ -1417,16 +1428,22 @@ def convert_and_load_state_dict_in_model(
     else:
         mapping_to_source_rank = dict.fromkeys(pending_entries, 0)
 
-    # 7. Spawn the materialize jobs only for mappings this rank owns. Non-owned mappings stay with empty
-    # `collected_tensors` and are handled as receivers in the redistribute step.
+    # 7. Schedule materialize jobs *up front* for every mapping this rank owns — submitting them all to the
+    # thread pool at once is what gives us cross-mapping disk I/O parallelism. Each rank only schedules for its
+    # own mappings (so no duplicated reads across ranks). Non-owned mappings stay with empty `collected_tensors`
+    # and are handled as receivers in the redistribute step.
+    # Under TP we materialize the scheduled tensors to **CPU** (not the local GPU): the owning rank may hold
+    # many mappings-worth of weights that haven't been consumed by the main loop yet, and parking them in host
+    # RAM (which is abundant) while we process one mapping at a time avoids accumulating them on the local GPU
+    # where the sharded result has to fit too. The broadcast in `_redistribute_realized_value` pushes them
+    # back to device lazily, one mapping at a time.
     for first_param_name, entries in pending_entries.items():
         if mapping_to_source_rank[first_param_name] != local_rank:
             continue
         mapping = param_name_to_load[first_param_name]
         for target_key, original_key, source_pattern, tensor, _dtype in entries:
             if distributed_loading:
-                # When loading under TP we materialize to the local TP device so the subsequent broadcast is on-device.
-                param_device = device_map[""]
+                param_device = "cpu"
             else:
                 param_device = get_device(device_map, target_key, valid_torch_device=True)
             future_or_tensor = spawn_materialize(thread_pool, tensor, param_device, _dtype)
@@ -1441,6 +1458,8 @@ def convert_and_load_state_dict_in_model(
                 realized_value = None
                 skip = False
                 if is_source:
+                    # Only the owning rank runs `convert` (and therefore waits on the futures it scheduled
+                    # above). Other ranks skip straight to the broadcast below as receivers.
                     try:
                         realized_value = mapping.convert(
                             first_param_name,
