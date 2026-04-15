@@ -117,7 +117,7 @@ class ChatCompletionHandler(BaseHandler):
         has_video = any(
             c.get("type") == "video"
             for msg in processor_inputs
-            for c in (msg["content"] if isinstance(msg["content"], list) else [])
+            for c in (msg.get("content") if isinstance(msg.get("content"), list) else [])
         )
         # Default to 32 frames for video (Gemma 4 default); some processors load all frames otherwise
         chat_template_kwargs = {}
