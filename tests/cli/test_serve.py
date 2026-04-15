@@ -18,7 +18,6 @@ Tests for the serving layer.
 
 import asyncio
 import json
-import os
 import socket
 import time
 import unittest
@@ -170,8 +169,8 @@ class TestProcessorInputsFromMessages(unittest.TestCase):
         self.assertEqual(result[0]["content"], "Hello world")
 
     @require_vision
-    def test_vlm_base64_image_creates_temp_file(self):
-        """Base64 image URLs should be decoded and saved to a temp file."""
+    def test_vlm_base64_image_passed_through(self):
+        """Base64 image URLs should be passed through as-is for the processor to handle."""
 
         get_processor_inputs_from_messages = BaseHandler.get_processor_inputs_from_messages
 
@@ -192,7 +191,7 @@ class TestProcessorInputsFromMessages(unittest.TestCase):
         result = get_processor_inputs_from_messages(messages, Modality.VLM)
         image_item = result[0]["content"][1]
         self.assertEqual(image_item["type"], "image")
-        self.assertTrue(os.path.exists(image_item["url"]))  # temp file was created
+        self.assertEqual(image_item["url"], base64_url)
 
     def test_vlm_multi_turn(self):
         """VLM multi-turn: string content should be wrapped in text type."""
@@ -210,8 +209,8 @@ class TestProcessorInputsFromMessages(unittest.TestCase):
             self.assertIsInstance(msg["content"], list)
             self.assertEqual(msg["content"][0]["type"], "text")
 
-    def test_multimodal_base64_input_audio_decoded_to_temp_file(self):
-        """input_audio with base64 data should be decoded, written to a temp file, and converted to HF audio format."""
+    def test_multimodal_base64_input_audio_converted_to_data_uri(self):
+        """input_audio with base64 data should be converted to a data URI for the processor to handle."""
         import base64
 
         get_processor_inputs_from_messages = BaseHandler.get_processor_inputs_from_messages
@@ -234,10 +233,8 @@ class TestProcessorInputsFromMessages(unittest.TestCase):
         self.assertEqual(result[0]["content"][0]["type"], "text")
         audio_item = result[0]["content"][1]
         self.assertEqual(audio_item["type"], "audio")
-        self.assertTrue(os.path.exists(audio_item["url"]))
-        self.assertTrue(audio_item["url"].endswith(".mp3"))
-        with open(audio_item["url"], "rb") as f:
-            self.assertEqual(f.read(), audio_bytes)
+        self.assertTrue(audio_item["url"].startswith("data:audio/mp3;base64,"))
+        self.assertIn(audio_b64, audio_item["url"])
 
     def test_vlm_ignores_audio_content(self):
         """VLM models should ignore audio content parts."""
