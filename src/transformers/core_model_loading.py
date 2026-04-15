@@ -810,17 +810,12 @@ class PrefixChange(WeightRenaming):
         self.prefix_to_add = prefix_to_add
         self.prefix_to_remove = prefix_to_remove
         self.model_prefix = "" if model_prefix is None else model_prefix
+        prefix = rf"{self.model_prefix}\." if self.model_prefix != "" else ""
 
         if prefix_to_add is not None:
-            super().__init__(
-                source_patterns=rf"^{self.model_prefix}\.(.+)$",
-                target_patterns=rf"{self.model_prefix}\.{prefix_to_add}\.\1",
-            )
+            super().__init__(source_patterns=rf"^{prefix}(.+)$", target_patterns=rf"{prefix}{prefix_to_add}\.\1")
         else:
-            super().__init__(
-                source_patterns=rf"^{self.model_prefix}\.{prefix_to_remove}\.(.+)$",
-                target_patterns=rf"{self.model_prefix}\.\1",
-            )
+            super().__init__(source_patterns=rf"^{prefix}{prefix_to_remove}\.(.+)$", target_patterns=rf"{prefix}\1")
 
     def reverse_transform(self) -> WeightTransform:
         """Reverse the current `WeightTransform` instance, to be able to save with the opposite weight transformations."""
