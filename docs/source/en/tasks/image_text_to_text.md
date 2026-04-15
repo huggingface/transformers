@@ -334,9 +334,11 @@ And that's it, we can use the model the same way with no changes.
 
 ## Iterative chatting with cache
 
-If you're building chat agents with multimodal capabilities, chances are you’re passing the same images or audio across multiple turns. Instead of reprocessing them every time, caching lets you reuse their encoded representations, improving both speed and efficiency.
+If you're building multimodal chat agents, you’re likely passing the same images or audio across turns. Caching lets you reuse their encoded representations instead of reprocessing them each time, cutting redundant computation.
 
-Similar to text-only models, we need to keep track of dialogue history with a [chat template](./chat_templating). However unlike text-only models, multimodal models require careful handling of iterative multimodal data (image or audio). To avoid reprocessing the same data across turns, chat template should be applied only in the "text" format so we can process new multimodal content separately. If the chat template is applied with processing, the entire conversation will be reprocessed each time, since the "jinja" cannot tell where previously encoded inputs end and new ones begin, leading to redundant computation.
+Like text-only models, multimodal models track dialogue history with a [chat template](./chat_templating). The key difference is that it applies the chat template in `"text"` format only and processes new multimodal content separately. If you apply the template with processing, the entire conversation gets reprocessed every turn because Jinja can't distinguish previously encoded inputs from new ones.
+
+The example below demonstrates this pattern. For text-only models, see the [iterative generation](../kv_cache#iterative-generation) guide.
 
 Here’s a simple Python example demonstrating this pattern. For an example with text-only models, refer to [this guide](../kv_cache.md#iterative-generation).
 
