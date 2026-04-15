@@ -1525,6 +1525,40 @@ class TestNonTrainerIntegrationDeepSpeed(TestCasePlus):
         embedding = model.get_input_embeddings()
         with deepspeed.zero.GatheredParameters([embedding.weight]):
             self.assertEqual(embedding.weight.shape[0], new_size)
+            
+    def test_zero3_load_registered_buffers(self):
+        """Test that registered buffers are loaded correctly under ZeRO-3 from_pretrained."""
+        from transformers.models.gemma4.configuration_gemma4 import (
+            Gemma4AudioConfig, Gemma4Config, Gemma4TextConfig, Gemma4VisionConfig,
+        )
+        from transformers.models.gemma4.modeling_gemma4 import Gemma4ForConditionalGeneration
+
+        text_config = Gemma4TextConfig(
+            hidden_size=128, num_hidden_layers=2, num_attention_heads=2,
+            intermediate_size=256, vocab_size=32000, num_key_value_heads=2, pad_token_id=None,
+        )
+        vision_config = Gemma4VisionConfig(hidden_size=64, num_hidden_layers=2, num_attention_heads=2, intermediate_size=128)
+        audio_config = Gemma4AudioConfig()
+        config = Gemma4Config(text_config=text_config, vision_config=vision_config, audio_config=audio_config)
+
+        # save without ZeRO-3
+        save_path = self.get_auto_remove_tmp_dir()
+        model = Gemma4ForConditionalGeneration(config)
+        model.save_pretrained(save_path)
+        del model
+
+        # load with ZeRO-3
+        ds_config = self._get_zero3_ds_config(bf16={"enabled": True}, train_micro_batch_size_per_gpu=1)
+        with mockenv_context(**self.dist_env_1_gpu):
+            dschf = HfDeepSpeedConfig(ds_config)
+            model2 = Gemma4ForConditionalGeneration.from_pretrained(save_path, torch_dtype=torch.bfloat16)
+
+        # verify no registered buffers are MISSING
+        missing = [
+            name for name, buf in model2.named_buffers()
+            if buf is None
+        ]
+        self.assertEqual(missing, [], f"Registered buffers missing after ZeRO-3 load: {missing}")
 
 
 # ---------------------------------------------------------------------------
