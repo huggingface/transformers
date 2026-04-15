@@ -453,7 +453,7 @@ data: {"id":"f47ac10b-58cc-4372-a567-0e02b2c3d479","choices":[{"delta":{"content
 </hfoption>
 </hfoptions>
 
-### Audio completions
+### Audio-based completions
 
 Multimodal models like [Gemma 4](https://huggingface.co/google/gemma-4-E2B-it) and [Qwen2.5-Omni](https://huggingface.co/Qwen/Qwen2.5-Omni-3B) accept audio input using the OpenAI `input_audio` content type. The audio must be base64-encoded and the format (`mp3` or `wav`) must be specified.
 
@@ -711,7 +711,7 @@ completion = client.chat.completions.create(
 )
 ```
 
-### Video completions
+### Video-based completions
 
 > [!WARNING]
 > The `video_url` content type is an extension not part of the OpenAI standard and may change in future versions.
@@ -1062,7 +1062,7 @@ data: {"content_index":0,"delta":"upon ","item_id":"msg_req_0","output_index":0,
 
 ### Image-based responses
 
-The Responses API also supports image, audio, and video inputs. Pass them as a list of messages using the same content types as [v1/chat/completions](#text-and-image-based-completions).
+The Responses API also supports image, audio, and video inputs.
 
 <hfoptions id="responses-images">
 <hfoption id="openai">
@@ -1075,18 +1075,11 @@ client = OpenAI(base_url="http://localhost:8000/v1", api_key="<random_string>")
 response = client.responses.create(
     model="Qwen/Qwen2.5-VL-7B-Instruct",
     input=[
+        {"type": "input_text", "text": "What's in this image?"},
         {
-            "role": "user",
-            "content": [
-                {"type": "text", "text": "What's in this image?"},
-                {
-                    "type": "image_url",
-                    "image_url": {
-                        "url": "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/diffusers/astronaut.jpg",
-                    }
-                },
-            ],
-        }
+            "type": "input_image",
+            "image_url": "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/diffusers/astronaut.jpg",
+        },
     ],
     max_output_tokens=256,
     stream=False,
@@ -1111,18 +1104,11 @@ client = OpenAI(base_url="http://localhost:8000/v1", api_key="<random_string>")
 response = client.responses.create(
     model="Qwen/Qwen2.5-VL-7B-Instruct",
     input=[
+        {"type": "input_text", "text": "What's in this image?"},
         {
-            "role": "user",
-            "content": [
-                {"type": "text", "text": "What's in this image?"},
-                {
-                    "type": "image_url",
-                    "image_url": {
-                        "url": "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/diffusers/astronaut.jpg",
-                    }
-                },
-            ],
-        }
+            "type": "input_image",
+            "image_url": "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/diffusers/astronaut.jpg",
+        },
     ],
     max_output_tokens=256,
     stream=True,
@@ -1148,13 +1134,8 @@ curl http://localhost:8000/v1/responses \
   -d '{
     "model": "Qwen/Qwen2.5-VL-7B-Instruct",
     "input": [
-      {
-        "role": "user",
-        "content": [
-          {"type": "text", "text": "What'\''s in this image?"},
-          {"type": "image_url", "image_url": {"url": "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/diffusers/astronaut.jpg"}}
-        ]
-      }
+      {"type": "input_text", "text": "What'\''s in this image?"},
+      {"type": "input_image", "image_url": "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/diffusers/astronaut.jpg"}
     ],
     "max_output_tokens": 256,
     "stream": false
@@ -1198,13 +1179,8 @@ curl http://localhost:8000/v1/responses \
     "model": "Qwen/Qwen2.5-VL-7B-Instruct",
     "stream": true,
     "input": [
-      {
-        "role": "user",
-        "content": [
-          {"type": "text", "text": "What'\''s in this image?"},
-          {"type": "image_url", "image_url": {"url": "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/diffusers/astronaut.jpg"}}
-        ]
-      }
+      {"type": "input_text", "text": "What'\''s in this image?"},
+      {"type": "input_image", "image_url": "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/diffusers/astronaut.jpg"}
     ],
     "max_output_tokens": 256
   }'
@@ -1241,13 +1217,8 @@ audio_b64 = base64.b64encode(httpx.get(audio_url, follow_redirects=True).content
 response = client.responses.create(
     model="google/gemma-4-E2B-it",
     input=[
-        {
-            "role": "user",
-            "content": [
-                {"type": "text", "text": "Transcribe this audio."},
-                {"type": "input_audio", "input_audio": {"data": audio_b64, "format": "mp3"}},
-            ],
-        }
+        {"type": "input_text", "text": "Transcribe this audio."},
+        {"type": "input_audio", "input_audio": {"data": audio_b64, "format": "mp3"}},
     ],
     max_output_tokens=256,
     stream=False,
@@ -1277,11 +1248,8 @@ audio_b64 = base64.b64encode(httpx.get(audio_url, follow_redirects=True).content
 response = client.responses.create(
     model="google/gemma-4-E2B-it",
     input=[
-        {
-            "role": "user",
-            "content": [
-                {"type": "text", "text": "Transcribe this audio."},
-                {"type": "input_audio", "input_audio": {"data": audio_b64, "format": "mp3"}},
+        {"type": "input_text", "text": "Transcribe this audio."},
+        {"type": "input_audio", "input_audio": {"data": audio_b64, "format": "mp3"}},
             ],
         }
     ],
@@ -1311,13 +1279,8 @@ cat <<EOF > /tmp/audio_request.json
 {
   "model": "google/gemma-4-E2B-it",
   "input": [
-    {
-      "role": "user",
-      "content": [
-        {"type": "text", "text": "Transcribe this audio."},
-        {"type": "input_audio", "input_audio": {"data": "$AUDIO_B64", "format": "mp3"}}
-      ]
-    }
+    {"type": "input_text", "text": "Transcribe this audio."},
+    {"type": "input_audio", "input_audio": {"data": "$AUDIO_B64", "format": "mp3"}}
   ],
   "max_output_tokens": 256,
   "stream": false
@@ -1368,13 +1331,8 @@ cat <<EOF > /tmp/audio_request.json
   "model": "google/gemma-4-E2B-it",
   "stream": true,
   "input": [
-    {
-      "role": "user",
-      "content": [
-        {"type": "text", "text": "Transcribe this audio."},
-        {"type": "input_audio", "input_audio": {"data": "$AUDIO_B64", "format": "mp3"}}
-      ]
-    }
+    {"type": "input_text", "text": "Transcribe this audio."},
+    {"type": "input_audio", "input_audio": {"data": "$AUDIO_B64", "format": "mp3"}}
   ],
   "max_output_tokens": 256
 }
@@ -1407,13 +1365,8 @@ As a convenience, audio can also be passed by URL using the `audio_url` content 
 response = client.responses.create(
     model="google/gemma-4-E2B-it",
     input=[
-        {
-            "role": "user",
-            "content": [
-                {"type": "text", "text": "Transcribe this audio."},
-                {"type": "audio_url", "audio_url": {"url": "https://huggingface.co/datasets/hf-internal-testing/dummy-audio-samples/resolve/main/obama_first_45_secs.mp3"}},
-            ],
-        }
+        {"type": "input_text", "text": "Transcribe this audio."},
+        {"type": "audio_url", "audio_url": {"url": "https://huggingface.co/datasets/hf-internal-testing/dummy-audio-samples/resolve/main/obama_first_45_secs.mp3"}},
     ],
     max_output_tokens=256,
     stream=False,
@@ -1439,13 +1392,8 @@ client = OpenAI(base_url="http://localhost:8000/v1", api_key="<random_string>")
 response = client.responses.create(
     model="google/gemma-4-E2B-it",
     input=[
-        {
-            "role": "user",
-            "content": [
-                {"type": "video_url", "video_url": {"url": "https://huggingface.co/datasets/merve/vlm_test_images/resolve/main/concert.mp4"}},
-                {"type": "text", "text": "What is happening in the video and what is the song about?"},
-            ],
-        }
+        {"type": "input_text", "text": "What is happening in the video and what is the song about?"},
+        {"type": "video_url", "video_url": {"url": "https://huggingface.co/datasets/merve/vlm_test_images/resolve/main/concert.mp4"}},
     ],
     max_output_tokens=256,
     stream=False,
@@ -1472,13 +1420,8 @@ client = OpenAI(base_url="http://localhost:8000/v1", api_key="<random_string>")
 response = client.responses.create(
     model="google/gemma-4-E2B-it",
     input=[
-        {
-            "role": "user",
-            "content": [
-                {"type": "video_url", "video_url": {"url": "https://huggingface.co/datasets/merve/vlm_test_images/resolve/main/concert.mp4"}},
-                {"type": "text", "text": "What is happening in the video and what is the song about?"},
-            ],
-        }
+        {"type": "input_text", "text": "What is happening in the video and what is the song about?"},
+        {"type": "video_url", "video_url": {"url": "https://huggingface.co/datasets/merve/vlm_test_images/resolve/main/concert.mp4"}},
     ],
     max_output_tokens=256,
     stream=True,
@@ -1506,13 +1449,8 @@ curl http://localhost:8000/v1/responses \
   -d '{
     "model": "google/gemma-4-E2B-it",
     "input": [
-      {
-        "role": "user",
-        "content": [
-          {"type": "video_url", "video_url": {"url": "https://huggingface.co/datasets/merve/vlm_test_images/resolve/main/concert.mp4"}},
-          {"type": "text", "text": "What is happening in the video and what is the song about?"}
-        ]
-      }
+      {"type": "input_text", "text": "What is happening in the video and what is the song about?"},
+      {"type": "video_url", "video_url": {"url": "https://huggingface.co/datasets/merve/vlm_test_images/resolve/main/concert.mp4"}}
     ],
     "max_output_tokens": 256,
     "stream": false
@@ -1556,13 +1494,8 @@ curl http://localhost:8000/v1/responses \
     "model": "google/gemma-4-E2B-it",
     "stream": true,
     "input": [
-      {
-        "role": "user",
-        "content": [
-          {"type": "video_url", "video_url": {"url": "https://huggingface.co/datasets/merve/vlm_test_images/resolve/main/concert.mp4"}},
-          {"type": "text", "text": "What is happening in the video and what is the song about?"}
-        ]
-      }
+      {"type": "input_text", "text": "What is happening in the video and what is the song about?"},
+      {"type": "video_url", "video_url": {"url": "https://huggingface.co/datasets/merve/vlm_test_images/resolve/main/concert.mp4"}}
     ],
     "max_output_tokens": 256
   }'
