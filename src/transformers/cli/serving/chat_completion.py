@@ -40,6 +40,7 @@ from transformers import BatchEncoding
 from .utils import (
     BaseGenerateManager,
     BaseHandler,
+    Modality,
     ToolCallParser,
     _StreamError,
     detect_tool_format,
@@ -113,6 +114,15 @@ class ChatCompletionHandler(BaseHandler):
         gen_manager = self.generation_state.get_manager(model_id, use_cb=use_cb)
         processor_inputs = self.get_processor_inputs_from_messages(body["messages"], modality)
 
+        has_video = any(
+            c.get("type") == "video"
+            for msg in processor_inputs
+            for c in (msg.get("content") if isinstance(msg.get("content"), list) else [])
+        )
+        # Default to 32 frames for video (Gemma 4 default); some processors load all frames otherwise
+        chat_template_kwargs = {}
+        if has_video:
+            chat_template_kwargs["num_frames"] = 32
         inputs = processor.apply_chat_template(
             processor_inputs,
             add_generation_prompt=True,
@@ -120,6 +130,8 @@ class ChatCompletionHandler(BaseHandler):
             return_tensors=None if use_cb else "pt",
             return_dict=True,
             tokenize=True,
+            load_audio_from_video=modality == Modality.MULTIMODAL and has_video,
+            **chat_template_kwargs,
         )
         if not use_cb:
             if not isinstance(inputs, BatchEncoding):
