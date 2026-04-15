@@ -13,6 +13,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import inspect
+import json
+import os
+import tempfile
 import unittest
 
 import numpy as np
@@ -353,3 +356,29 @@ class Qwen2_5OmniProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         # Qwen pixel values are flattened, verify length matches video_grid_thw
         expected_video_tokens = sum(thw[0] * thw[1] * thw[2] for thw in out_dict["video_grid_thw"])
         self.assertEqual(len(out_dict[self.videos_input_name]), expected_video_tokens)  # 1 video in the conversation
+
+    def test_check_audio_system_prompt_round_trip(self):
+        processor = self.get_processor()
+        self.assertTrue(processor.check_audio_system_prompt)
+
+        processor.check_audio_system_prompt = False
+        with tempfile.TemporaryDirectory() as tmpdir:
+            processor.save_pretrained(tmpdir)
+
+            with open(os.path.join(tmpdir, "processor_config.json")) as f:
+                saved_config = json.load(f)
+            self.assertFalse(saved_config["check_audio_system_prompt"])
+
+            reloaded = self.processor_class.from_pretrained(tmpdir)
+        self.assertFalse(reloaded.check_audio_system_prompt)
+
+        # With the flag disabled, a non-default system prompt must not produce a warning.
+        messages = [{"role": "user", "content": [{"type": "text", "text": "hi"}]}]
+        with self.assertNoLogs("transformers.models.qwen2_5_omni.processing_qwen2_5_omni", level="WARNING"):
+            reloaded.apply_chat_template(messages, tokenize=False)
+
+        # While with the flag enabled, we'll get a warning
+        reloaded.check_audio_system_prompt = True
+        messages = [{"role": "user", "content": [{"type": "text", "text": "hi"}]}]
+        with self.assertLogs("transformers.models.qwen2_5_omni.processing_qwen2_5_omni", level="WARNING"):
+            reloaded.apply_chat_template(messages, tokenize=False)
