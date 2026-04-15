@@ -73,7 +73,6 @@ def get_rotary_pos_ids(grid_thw: torch.Tensor, spatial_merge_size: int | torch.T
     return torch.cat(pos_ids, dim=0)
 
 
-
 def get_window_index(
     grid_thw: torch.Tensor,
     spatial_merge_size: int,
