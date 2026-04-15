@@ -281,25 +281,26 @@ class AutoTokenizerTest(unittest.TestCase):
 
         with tempfile.TemporaryDirectory() as tmp_dir:
             tokenizer.save_pretrained(tmp_dir)
+            config_path = os.path.join(tmp_dir, "config.json")
 
-            # Case 1: Tokenizer with no config associated
+            def _write_config(**overrides):
+                config_dict = config.to_diff_dict()
+                for key, value in overrides.items():
+                    if value is None:
+                        config_dict.pop(key, None)
+                    else:
+                        config_dict[key] = value
+                with open(config_path, "w", encoding="utf-8") as f:
+                    json.dump(config_dict, f, indent=2, sort_keys=True)
+
+            # Case 1: Tokenizer with no config associated must not warn
             with CaptureLogger(logger) as cl:
                 AutoTokenizer.from_pretrained(tmp_dir)
             self.assertNotIn(mistral_warning, cl.out)
 
-            # Case 2: Non-mistral tokenizer with a config.json present must not trigger the warning,
-            # regardless of the `transformers_version` recorded in the config
-            config_path = os.path.join(tmp_dir, "config.json")
-            for saved_version in ("4.57.2", "4.57.3", "4.57.6", None):
-                config_dict = config.to_diff_dict()
-                if saved_version is None:
-                    config_dict.pop("transformers_version", None)
-                else:
-                    config_dict["transformers_version"] = saved_version
-
-                with open(config_path, "w", encoding="utf-8") as f:
-                    json.dump(config_dict, f, indent=2, sort_keys=True)
-
+            # Case 2: Non-mistral local config must not warn for any `transformers_version`
+            for saved_version in ("4.57.2", "4.57.3", "4.57.6", "5.0.1"):
+                _write_config(transformers_version=saved_version)
                 with CaptureLogger(logger) as cl:
                     tokenizer2 = AutoTokenizer.from_pretrained(tmp_dir)
                 self.assertNotIn(
@@ -307,6 +308,24 @@ class AutoTokenizerTest(unittest.TestCase):
                     cl.out,
                     msg=f"Unexpected mistral regex warning for non-mistral config (transformers_version={saved_version!r})",
                 )
+
+            # Case 3: Mistral-family local config saved by an affected transformers release
+            # must still warn, even up to 4.57.6
+            for saved_version in ("4.57.3", "4.57.6"):
+                _write_config(model_type="mistral", transformers_version=saved_version)
+                with CaptureLogger(logger) as cl:
+                    AutoTokenizer.from_pretrained(tmp_dir)
+                self.assertIn(
+                    mistral_warning,
+                    cl.out,
+                    msg=f"Missing mistral regex warning for mistral config (transformers_version={saved_version!r})",
+                )
+
+            # Case 4: Mistral-family local config saved by a fixed transformers release must not warn
+            _write_config(model_type="mistral", transformers_version="5.0.1")
+            with CaptureLogger(logger) as cl:
+                AutoTokenizer.from_pretrained(tmp_dir)
+            self.assertNotIn(mistral_warning, cl.out)
 
         self.assertIsInstance(tokenizer2, tokenizer.__class__)
         self.assertTrue(tokenizer2.vocab_size > 100_000)
