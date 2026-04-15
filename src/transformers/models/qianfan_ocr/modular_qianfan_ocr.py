@@ -150,6 +150,7 @@ class QianfanOCRVisionLayer(InternVLVisionLayer):
     def forward(
         self,
         hidden_states: torch.Tensor,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> torch.Tensor:
         residual = hidden_states
         hidden_states = self.layernorm_before(hidden_states)
@@ -274,6 +275,7 @@ class QianfanOCRCausalLMOutputWithPast(InternVLCausalLMOutputWithPast):
 
 
 class QianfanOCRForConditionalGeneration(InternVLForConditionalGeneration):
+    # capture_outputs uses ContextVar which torch.compile dynamo cannot trace
     _can_compile_fullgraph = False
 
     @can_return_tuple

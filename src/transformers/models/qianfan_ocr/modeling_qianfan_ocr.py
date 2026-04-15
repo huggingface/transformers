@@ -230,6 +230,7 @@ class QianfanOCRVisionLayer(GradientCheckpointingLayer):
     def forward(
         self,
         hidden_states: torch.Tensor,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> torch.Tensor:
         residual = hidden_states
         hidden_states = self.layernorm_before(hidden_states)
@@ -759,6 +760,7 @@ class QianfanOCRCausalLMOutputWithPast(ModelOutput):
 )
 class QianfanOCRForConditionalGeneration(QianfanOCRPreTrainedModel, GenerationMixin):
     _tied_weights_keys = {"lm_head.weight": "model.language_model.embed_tokens.weight"}
+    # capture_outputs uses ContextVar which torch.compile dynamo cannot trace
     _can_compile_fullgraph = False
 
     def __init__(self, config: QianfanOCRConfig):
