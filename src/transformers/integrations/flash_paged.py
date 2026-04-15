@@ -104,9 +104,7 @@ def _paged_decode_forward(
     # Get layer group index for this layer
     group_idx, layer_idx_in_group = cache.layer_index_to_group_indices[module.layer_idx]
     # KV cache shape: [num_pages, num_kv_heads, head_dim] -> [num_blocks, block_size, num_kv_heads, head_dim]
-    k_cache = cache.key_cache[layer_idx_in_group].view(
-        -1, cache.block_size, cache.num_key_value_heads, cache.head_dim
-    )
+    k_cache = cache.key_cache[layer_idx_in_group].view(-1, cache.block_size, cache.num_key_value_heads, cache.head_dim)
     v_cache = cache.value_cache[layer_idx_in_group].view(
         -1, cache.block_size, cache.num_key_value_heads, cache.head_dim
     )

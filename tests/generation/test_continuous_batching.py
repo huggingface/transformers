@@ -777,11 +777,11 @@ class ContinuousBatchingWithAcceleratorTest(unittest.TestCase):
             )
             self.assertIsNone(
                 cb_config.varlen_compile_config,
-                "Varlen compile config should not be created with use_default_compile_configs=True"
+                "Varlen compile config should not be created with use_default_compile_configs=True",
             )
             self.assertIsNotNone(
                 cb_config.decode_compile_config,
-                "Decode compile config should be created with use_default_compile_configs=True"
+                "Decode compile config should be created with use_default_compile_configs=True",
             )
 
             # Create GenerationConfig
