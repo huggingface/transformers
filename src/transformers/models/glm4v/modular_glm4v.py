@@ -33,7 +33,6 @@ from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPooling
 from ...modeling_rope_utils import RopeParameters
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
-from ...modeling_vision_utils import get_rotary_pos_ids, get_vision_cu_seqlens
 from ...processing_utils import Unpack
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
 from ...utils import (
@@ -47,6 +46,7 @@ from ...utils.generic import maybe_autocast, merge_with_config_defaults
 from ...utils.import_utils import requires_backends
 from ...utils.output_capturing import capture_outputs
 from ...video_utils import VideoInput
+from ...vision_utils import get_rotary_pos_ids, get_vision_cu_seqlens
 from ..glm4.modeling_glm4 import Glm4MLP, Glm4RMSNorm, Glm4RotaryEmbedding, eager_attention_forward
 from ..qwen2_5_vl.modeling_qwen2_5_vl import (
     Qwen2_5_VisionPatchEmbed,

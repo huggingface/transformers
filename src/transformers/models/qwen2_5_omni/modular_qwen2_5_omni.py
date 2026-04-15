@@ -33,7 +33,6 @@ from ...generation import GenerationMixin
 from ...modeling_outputs import BaseModelOutputWithPooling, ModelOutput
 from ...modeling_rope_utils import RopeParameters
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
-from ...modeling_vision_utils import get_rotary_pos_ids, get_vision_cu_seqlens, get_window_index
 from ...processing_utils import Unpack
 from ...utils import (
     TransformersKwargs,
@@ -47,6 +46,7 @@ from ...utils.deprecation import deprecate_kwarg
 from ...utils.generic import is_flash_attention_requested, merge_with_config_defaults
 from ...utils.hub import cached_file
 from ...utils.output_capturing import capture_outputs
+from ...vision_utils import get_rotary_pos_ids, get_vision_cu_seqlens, get_window_index
 from ..llama.modeling_llama import LlamaRotaryEmbedding, rotate_half
 from ..qwen2_5_vl.configuration_qwen2_5_vl import Qwen2_5_VLVisionConfig
 from ..qwen2_5_vl.modeling_qwen2_5_vl import (
@@ -1365,6 +1365,7 @@ class Qwen2_5OmniAudioEncoder(Qwen2_5OmniPreTrainedModel):
             pool_indices = get_pool_indices(feature_lens)
 
         # Derive masks from chunk_lengths (traceable arithmetic + arange broadcasting)
+
         padded_feature = padded_feature.to(self.conv1.weight.dtype)
         padded_mask = (
             (torch.arange(padded_feature.shape[2], device=padded_feature.device) < chunk_lengths.unsqueeze(1))

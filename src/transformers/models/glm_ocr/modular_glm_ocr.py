@@ -20,8 +20,8 @@ from huggingface_hub.dataclasses import strict
 
 from ...modeling_outputs import BaseModelOutputWithPooling
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
-from ...modeling_vision_utils import get_rotary_pos_ids, get_vision_cu_seqlens
 from ...utils import auto_docstring
+from ...vision_utils import get_rotary_pos_ids, get_vision_cu_seqlens
 from ..glm4v.configuration_glm4v import Glm4vConfig, Glm4vTextConfig, Glm4vVisionConfig
 from ..glm4v.modeling_glm4v import (
     Glm4vForConditionalGeneration,

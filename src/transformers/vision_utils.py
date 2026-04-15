@@ -11,8 +11,8 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Pure vision utility functions for pre-computing very dynamic and
-data-dependent tensors that can break model capturing and tracing.
+"""Vision utility functions for pre-computing very dynamic and
+data-dependent tensors that can break model graph capturing.
 
 All functions are standalone (no model weights) and compute tensors from
 ``grid_thw`` + config scalars. They are used by vision encoders and can be

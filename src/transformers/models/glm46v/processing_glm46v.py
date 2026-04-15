@@ -23,12 +23,12 @@ import numpy as np
 
 from ...image_processing_utils import BatchFeature
 from ...image_utils import ImageInput
-from ...modeling_vision_utils import get_rotary_pos_ids, get_vision_cu_seqlens
 from ...processing_utils import MultiModalData, ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
 from ...utils import auto_docstring, logging
 from ...utils.import_utils import requires_backends
 from ...video_utils import VideoInput
+from ...vision_utils import get_rotary_pos_ids, get_vision_cu_seqlens
 
 
 logger = logging.get_logger(__name__)

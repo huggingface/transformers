@@ -22,12 +22,12 @@ Processor class for Qwen2-VL.
 
 from ...feature_extraction_utils import BatchFeature
 from ...image_utils import ImageInput
-from ...modeling_vision_utils import get_rotary_pos_ids, get_vision_cu_seqlens
 from ...processing_utils import MultiModalData, ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
 from ...utils import auto_docstring, logging
 from ...utils.import_utils import requires_backends
 from ...video_utils import VideoInput
+from ...vision_utils import get_rotary_pos_ids, get_vision_cu_seqlens
 
 
 logger = logging.get_logger(__name__)
@@ -104,6 +104,7 @@ class Qwen2VLProcessor(ProcessorMixin):
                 requires_backends(self, ["torch"])
                 spatial_merge_size = self.video_processor.merge_size
                 videos_inputs["video_cu_seqlens"] = get_vision_cu_seqlens(video_grid_thw)
+
                 videos_inputs["video_rotary_pos_ids"] = get_rotary_pos_ids(video_grid_thw, spatial_merge_size)
 
         if not isinstance(text, list):
