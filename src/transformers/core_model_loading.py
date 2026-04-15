@@ -1173,10 +1173,20 @@ def _redistribute_realized_value(
             dist.broadcast(full_tensor, src=src_global_rank, group=group)
 
         if tp_layer is not None:
-            local_param = tp_layer.shard_tensor(full_tensor, tensor_idx=None, device=local_device, dtype=dtype)
+            # Do NOT re-cast here: the source rank materialized each tensor with its per-entry `_dtype` in
+            # `spawn_materialize` (handles pre-quantized passthrough vs. on-the-fly dtype), and the broadcast
+            # preserves that. Passing `dtype=<top-level dtype>` would force an FP8 -> BF16 upcast of every
+            # sharded expert, doubling peak memory and OOMing on big FP8 MoE checkpoints.
+            local_param = tp_layer.shard_tensor(full_tensor, tensor_idx=None, device=local_device, dtype=None)
+            # `get_tensor_shard` may return a *view* of `full_tensor` (simple slice path). Holding the view
+            # keeps the entire 6 GB full broadcast tensor alive even after we `del full_tensor` below. Force
+            # a copy only in that case — the packed path (`torch.cat(...).contiguous()` in
+            # `get_packed_weights`) already produces an independent tensor and doesn't need cloning.
+            if local_param._base is full_tensor:
+                local_param = local_param.clone(memory_format=torch.contiguous_format)
         else:
-            # Replicated parameter: every rank keeps the full tensor (already cast to the right dtype if requested).
-            local_param = full_tensor.to(dtype=dtype) if dtype is not None else full_tensor
+            # Replicated parameter: every rank keeps the full tensor.
+            local_param = full_tensor
 
         out[target_name] = local_param
         # Explicitly drop the full tensor now — the slice in `local_param` is a view-or-copy independent of it
