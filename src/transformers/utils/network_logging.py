@@ -118,17 +118,9 @@ class _NetworkDebugProfiler:
     def enabled(self) -> bool:
         return self._enabled
 
-    @property
-    def shared_dir(self) -> str | None:
-        return self._shared_dir
-
     def clear(self) -> None:
         with self._lock:
             self._records = []
-
-    def record_count(self) -> int:
-        with self._lock:
-            return len(self._records)
 
     def enable(self, output_path: str | os.PathLike | None = None) -> None:
         if self._enabled:
@@ -272,19 +264,16 @@ class _NetworkDebugProfiler:
         self._append_record(trace.build_record(response=response, stream=kwargs.get("stream", False)))
         return response
 
-    def _copy_records(self, start_index: int = 0) -> list[dict[str, Any]]:
+    def build_report(self) -> dict[str, Any]:
         with self._lock:
-            records = self._records[start_index:]
-            return [
+            records = [
                 {
                     **record,
                     "phases_ms": dict(record["phases_ms"]),
                 }
-                for record in records
+                for record in self._records
             ]
 
-    def build_report(self, *, start_index: int = 0) -> dict[str, Any]:
-        records = self._copy_records(start_index=start_index)
         phase_totals_ms = defaultdict(float)
         route_totals = {}
         for record in records:
@@ -343,7 +332,6 @@ _NETWORK_DEBUG_PROFILER = _NetworkDebugProfiler()
 
 
 _DEFAULT_REPORT_PATH = "network_debug_report.json"
-_DEFAULT_SLOW_TEST_THRESHOLD_S = 30.0
 
 
 def _parse_network_debug_env() -> tuple[bool, str]:
@@ -355,17 +343,6 @@ def _parse_network_debug_env() -> tuple[bool, str]:
 
     output_path = os.environ.get("NETWORK_DEBUG_REPORT_PATH", "").strip() or _DEFAULT_REPORT_PATH
     return enabled, output_path
-
-
-def _parse_network_debug_slow_test_threshold() -> float:
-    threshold_raw = os.environ.get("NETWORK_DEBUG_SLOW_TEST_THRESHOLD_SECONDS", "").strip()
-    if not threshold_raw:
-        return _DEFAULT_SLOW_TEST_THRESHOLD_S
-
-    try:
-        return max(float(threshold_raw), 0.0)
-    except ValueError:
-        return _DEFAULT_SLOW_TEST_THRESHOLD_S
 
 
 def _enable_network_debug_report(output_path: str | os.PathLike | None = None) -> None:
@@ -393,19 +370,13 @@ def _enable_network_debug_report_from_env() -> bool:
     return True
 
 
-def _format_network_debug_report(
-    report: dict[str, Any] | None = None,
-    *,
-    title: str = "Network debug report",
-    max_requests: int = 20,
-    max_routes: int = 10,
-) -> str:
-    report = _get_network_debug_report() if report is None else report
+def _format_network_debug_report(max_requests: int = 20, max_routes: int = 10) -> str:
+    report = _get_network_debug_report()
     if report["total_requests"] == 0:
-        return f"{title}: no httpx requests captured."
+        return "Network debug report: no httpx requests captured."
 
     lines = [
-        title,
+        "Network debug report",
         f"Requests captured: {report['total_requests']}",
         f"Failed requests: {report['failed_requests']}",
         f"Cumulative request time: {report['total_time_ms']:.1f} ms",
@@ -450,15 +421,7 @@ def _format_network_debug_report(
 class NetworkDebugPlugin:
     """Pytest plugin that handles all network debug orchestration including xdist coordination."""
 
-    def __init__(self):
-        self._active_tests: dict[str, dict[str, float | int]] = {}
-        self._slow_tests: list[dict[str, Any]] = []
-        self._slow_test_threshold_s = _DEFAULT_SLOW_TEST_THRESHOLD_S
-
     def pytest_configure(self, config):
-        self._active_tests.clear()
-        self._slow_tests.clear()
-        self._slow_test_threshold_s = _parse_network_debug_slow_test_threshold()
         _enable_network_debug_report_from_env()
         if not _NETWORK_DEBUG_PROFILER.enabled:
             return
@@ -474,59 +437,6 @@ class NetworkDebugPlugin:
             if shared_dir:
                 _NETWORK_DEBUG_PROFILER.set_shared_dir(shared_dir)
 
-    def pytest_runtest_logstart(self, nodeid, location):
-        if not _NETWORK_DEBUG_PROFILER.enabled:
-            return
-
-        self._active_tests[nodeid] = {
-            "started_at": time.perf_counter(),
-            "record_index": _NETWORK_DEBUG_PROFILER.record_count(),
-        }
-
-    def pytest_runtest_logfinish(self, nodeid, location):
-        if not _NETWORK_DEBUG_PROFILER.enabled:
-            return
-
-        test_state = self._active_tests.pop(nodeid, None)
-        if test_state is None:
-            return
-
-        duration_s = time.perf_counter() - test_state["started_at"]
-        if duration_s < self._slow_test_threshold_s:
-            return
-
-        network_report = _NETWORK_DEBUG_PROFILER.build_report(start_index=test_state["record_index"])
-        if network_report["total_requests"] == 0:
-            return
-
-        self._slow_tests.append(
-            {
-                "duration_s": duration_s,
-                "network_report": network_report,
-                "nodeid": nodeid,
-            }
-        )
-
-    def _dump_worker_slow_tests(self, worker_id: str | None = None) -> None:
-        if not _NETWORK_DEBUG_PROFILER.shared_dir or not self._slow_tests:
-            return
-
-        worker_id = worker_id or f"pid{os.getpid()}"
-        dump_path = os.path.join(_NETWORK_DEBUG_PROFILER.shared_dir, f"slow_tests_{worker_id}.json")
-        Path(dump_path).write_text(json.dumps(self._slow_tests), encoding="utf-8")
-
-    def _load_worker_slow_tests(self) -> None:
-        if not _NETWORK_DEBUG_PROFILER.shared_dir or not os.path.isdir(_NETWORK_DEBUG_PROFILER.shared_dir):
-            return
-
-        import glob as glob_module
-
-        for slow_test_file in glob_module.glob(os.path.join(_NETWORK_DEBUG_PROFILER.shared_dir, "slow_tests_*.json")):
-            try:
-                self._slow_tests.extend(json.loads(Path(slow_test_file).read_text(encoding="utf-8")))
-            except (OSError, json.JSONDecodeError):
-                pass
-
     def pytest_configure_node(self, node):
         """xdist hook: called on the controller to configure each worker node."""
         shared_dir = getattr(node.config, "_network_debug_shared_dir", None)
@@ -538,7 +448,6 @@ class NetworkDebugPlugin:
         if hasattr(session.config, "workerinput"):
             worker_id = session.config.workerinput.get("workerid", f"pid{os.getpid()}")
             _NETWORK_DEBUG_PROFILER.dump_worker_records(worker_id=worker_id)
-            self._dump_worker_slow_tests(worker_id=worker_id)
 
     def pytest_terminal_summary(self, terminalreporter):
         if not _NETWORK_DEBUG_PROFILER.enabled:
@@ -550,7 +459,6 @@ class NetworkDebugPlugin:
 
         # Aggregate worker records if running under xdist.
         _NETWORK_DEBUG_PROFILER.load_worker_records()
-        self._load_worker_slow_tests()
 
         report_path = None
         try:
@@ -563,21 +471,6 @@ class NetworkDebugPlugin:
             terminalreporter.write_line(line)
         if report_path is not None:
             terminalreporter.write_line(f"JSON report: {report_path}")
-
-        if self._slow_tests:
-            terminalreporter.section(
-                f"Slow tests with network activity (>= {self._slow_test_threshold_s:.1f}s)", sep="="
-            )
-            for slow_test in sorted(self._slow_tests, key=lambda item: item["duration_s"], reverse=True):
-                summary = _format_network_debug_report(
-                    slow_test["network_report"],
-                    title=f"{slow_test['nodeid']} ({slow_test['duration_s']:.1f}s)",
-                    max_requests=10,
-                    max_routes=5,
-                )
-                for line in summary.splitlines():
-                    terminalreporter.write_line(line)
-                terminalreporter.write_line("")
 
         _NETWORK_DEBUG_PROFILER.cleanup_shared_dir()
 

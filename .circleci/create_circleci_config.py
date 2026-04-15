@@ -38,10 +38,27 @@ COMMON_PYTEST_OPTIONS = {
     "rsfE": None,
     "random-order-bucket": "module",
     "random-order-seed": "${CIRCLE_BUILD_NUM:-0}",
-    "durations": 10,
-    "durations-min": 60.0,
 }
 DEFAULT_DOCKER_IMAGE = [{"image": "cimg/python:3.8.12"}]
+
+# Strings that commonly appear in the output of flaky tests when they fail. These are used with `pytest-rerunfailures`
+# to rerun the tests that match these patterns.
+FLAKY_TEST_FAILURE_PATTERNS = [
+    "OSError",  # Machine/connection transient error
+    "Timeout",  # Machine/connection transient error
+    "ConnectionError",  # Connection transient error
+    "FileNotFoundError",  # Raised by `datasets` on Hub failures
+    "PIL.UnidentifiedImageError",  # Raised by `PIL.Image.open` on connection issues
+    "HTTPError",  # Also catches HfHubHTTPError
+    "AssertionError: Tensor-likes are not close!",  # `torch.testing.assert_close`, we might have unlucky random values
+    # TODO: error downloading tokenizer's `merged.txt` from hub can cause all the exceptions below. Throw and handle
+    # them under a single message.
+    "TypeError: expected str, bytes or os.PathLike object, not NoneType",
+    "TypeError: stat: path should be string, bytes, os.PathLike or integer, not NoneType",
+    "Converting from Tiktoken failed",
+    "KeyError: <class ",
+    "TypeError: not a string",
+]
 
 
 class EmptyJob:
@@ -128,11 +145,10 @@ class CircleCIJob:
 
     def to_dict(self):
         env = COMMON_ENV_VARIABLES.copy()
-        if self.job_name != "tests_hub":
-            # fmt: off
-            # not critical
-            env.update({"HF_TOKEN": "".join(["h", "f", "_", "H", "o", "d", "V", "u", "M", "q", "b", "R", "m", "t", "b", "z", "F", "Q", "O", "Q", "A", "J", "G", "D", "l", "V", "Q", "r", "R", "N", "w", "D", "M", "V", "C", "s", "d"])})
-            # fmt: on
+        # fmt: off
+        # not critical
+        env.update({"HF_TOKEN": "".join(["h", "f", "_", "H", "o", "d", "V", "u", "M", "q", "b", "R", "m", "t", "b", "z", "F", "Q", "O", "Q", "A", "J", "G", "D", "l", "V", "Q", "r", "R", "N", "w", "D", "M", "V", "C", "s", "d"])})
+        # fmt: on
 
         # Do not run tests decorated by @is_flaky on pull requests
         env["RUN_FLAKY"] = os.environ.get("CIRCLE_PULL_REQUEST", "") == ""
@@ -157,6 +173,8 @@ class CircleCIJob:
         timeout_cmd = f"timeout {self.command_timeout} " if self.command_timeout else ""
         marker_cmd = f"-m '{self.marker}'" if self.marker is not None else ""
         junit_flags = " -p no:warning -o junit_family=xunit1 --junitxml=test-results/junit.xml"
+        joined_flaky_patterns = "|".join(FLAKY_TEST_FAILURE_PATTERNS)
+        repeat_on_failure_flags = f"--reruns 5 --reruns-delay 2 --only-rerun '({joined_flaky_patterns})'"
         parallel = f" << pipeline.parameters.{self.job_name}_parallelism >> "
         steps = [
             "checkout",
@@ -223,8 +241,7 @@ class CircleCIJob:
             {
                 "run": {
                     "name": "Run tests",
-                    "no_output_timeout": "30m",
-                    "command": f"({timeout_cmd} python3 -m pytest {marker_cmd} -n {self.pytest_num_workers} {junit_flags} {' '.join(pytest_flags)} $(cat splitted_tests.txt) | tee tests_output.txt)",
+                    "command": f"({timeout_cmd} python3 -m pytest {marker_cmd} -n {self.pytest_num_workers} {junit_flags} {repeat_on_failure_flags} {' '.join(pytest_flags)} $(cat splitted_tests.txt) | tee tests_output.txt)",
                 }
             },
             {
@@ -339,20 +356,6 @@ examples_torch_job = CircleCIJob(
     pytest_num_workers=4,
 )
 
-hub_job = CircleCIJob(
-    "hub",
-    additional_env={"HUGGINGFACE_CO_STAGING": True},
-    docker_image=[{"image": "huggingface/transformers-torch-light"}],
-    install_steps=[
-        "uv pip install .",
-        'git config --global user.email "ci@dummy.com"',
-        'git config --global user.name "ci"',
-    ],
-    marker="is_staging_test",
-    pytest_num_workers=2,
-    resource_class="medium",
-)
-
 exotic_models_job = CircleCIJob(
     "exotic_models",
     docker_image=[{"image": "huggingface/transformers-exotic-models"}],
@@ -419,7 +422,7 @@ doc_test_job = CircleCIJob(
     pytest_num_workers=1,
 )
 
-REGULAR_TESTS = [torch_job, hub_job, tokenization_job, processor_job, generate_job, non_model_job]  # fmt: skip
+REGULAR_TESTS = [torch_job, tokenization_job, processor_job, generate_job, non_model_job]  # fmt: skip
 EXAMPLES_TESTS = [examples_torch_job]
 PIPELINE_TESTS = [pipelines_torch_job]
 REPO_UTIL_TESTS = [repo_utils_job]
