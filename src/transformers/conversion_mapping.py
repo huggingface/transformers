@@ -631,7 +631,7 @@ def extract_weight_conversions_for_model(model: PreTrainedModel, model_prefix: s
     if model_type is not None:
         model_specific_conversions = get_checkpoint_conversion_mapping(model_type)
         # In this case, add the prefix to `PrefixChange` instances, in order to know where to add/remove the prefix
-        if model_prefix != "":
+        if model_specific_conversions is not None and model_prefix != "":
             for i, conversion in enumerate(model_specific_conversions):
                 # In this case, add the prefix
                 if isinstance(conversion, PrefixChange):
