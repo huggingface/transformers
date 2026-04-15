@@ -40,7 +40,7 @@ if is_torch_available():
         ParakeetForTDT,
         ParakeetTDTConfig,
     )
-    from transformers.models.parakeet.modeling_parakeet import tdt_loss
+    from transformers.loss.loss_tdt import tdt_loss
 
 
 @require_torch
