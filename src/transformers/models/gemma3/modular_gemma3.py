@@ -705,11 +705,11 @@ class Gemma3Model(PaliGemmaModel):
         if not isinstance(causal_mask_mapping := attention_mask, dict):
             causal_mask_mapping = create_causal_mask_mapping(
                 self.config,
-                inputs_embeds,
-                attention_mask,
-                past_key_values,
-                position_ids,
-                token_type_ids,
+                inputs_embeds=inputs_embeds,
+                attention_mask=attention_mask,
+                past_key_values=past_key_values,
+                position_ids=position_ids,
+                token_type_ids=token_type_ids,
             )
 
         outputs = self.language_model(
@@ -871,7 +871,6 @@ class Gemma3ForConditionalGeneration(PaliGemmaForConditionalGeneration):
             use_cache=use_cache,
             logits_to_keep=logits_to_keep,
             token_type_ids=token_type_ids,
-            pixel_values=pixel_values,
             is_first_iteration=is_first_iteration,
             **kwargs,
         )

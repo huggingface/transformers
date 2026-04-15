@@ -1918,12 +1918,11 @@ class Gemma4Model(Gemma3nModel):
                 # Larger Gemma 4 models use Gemma 3's bidirectional attention mask for vision inputs
                 causal_mask_mapping = create_causal_mask_mapping(
                     self.config,
-                    inputs_embeds,
-                    attention_mask,
-                    past_key_values,
-                    position_ids,
-                    mm_token_type_ids,
-                    pixel_values,
+                    inputs_embeds=inputs_embeds,
+                    attention_mask=attention_mask,
+                    past_key_values=past_key_values,
+                    position_ids=position_ids,
+                    mm_token_type_ids=mm_token_type_ids,
                 )
             else:
                 # Smaller Gemma models use a conventional casual attention mask
