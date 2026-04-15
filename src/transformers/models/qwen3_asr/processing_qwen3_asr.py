@@ -120,12 +120,9 @@ class Qwen3ASRProcessor(ProcessorMixin):
         if len(text) != len(audio):
             raise ValueError(f"Got {len(text)} text but {len(audio)} audios; they must match 1:1.")
 
-        # Prepare audio: batched, padded, and flatten as expected by Qwen3OmniMoe's audio encoder
+        # Prepare audio
         data = self.feature_extractor(audio, **audio_kwargs)
         data["input_features_mask"] = data.pop("attention_mask")
-        data["input_features"] = (
-            data["input_features"].permute(0, 2, 1)[data["input_features_mask"].bool()].permute(1, 0)
-        )
 
         # Replace audio tokens in text
         audio_lengths = _get_feat_extract_output_lengths(data["input_features_mask"].sum(-1)).cpu().numpy()

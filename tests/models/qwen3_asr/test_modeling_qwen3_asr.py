@@ -19,26 +19,29 @@ from transformers.testing_utils import (
 
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
-from ...test_modeling_common import ModelTesterMixin, ids_tensor
+from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
 
 
 class Qwen3ASRModelTester:
     def __init__(self, parent):
         self.parent = parent
-        self.batch_size = 1
-        self.seq_length = 10
+        self.batch_size = 3
+        self.seq_length = 25
+        self.num_mel_bins = 20
+        self.feat_seq_length = 100  # mel frames per sample
         self.audio_token_id = 0
         self.is_training = False
 
         text_config = {
             "model_type": "qwen3",
-            "vocab_size": 151936,
+            "vocab_size": 99,
             "hidden_size": 16,
             "intermediate_size": 32,
             "num_hidden_layers": 1,
             "num_attention_heads": 2,
             "num_key_value_heads": 2,
-            "max_position_embeddings": 16,
+            "head_dim": 8,
+            "max_position_embeddings": 52,
             "bos_token_id": 0,
             "pad_token_id": 1,
             "eos_token_id": 2,
@@ -46,10 +49,13 @@ class Qwen3ASRModelTester:
         }
         audio_config = {
             "model_type": "qwen3_audio_encoder",
+            "num_mel_bins": self.num_mel_bins,
             "d_model": 8,
             "encoder_layers": 1,
             "encoder_attention_heads": 2,
             "encoder_ffn_dim": 16,
+            "output_dim": text_config["hidden_size"],
+            "downsample_hidden_size": 4,
         }
 
         self.text_config = text_config
@@ -57,6 +63,7 @@ class Qwen3ASRModelTester:
         self.num_hidden_layers = text_config["num_hidden_layers"]
         self.num_attention_heads = text_config["num_attention_heads"]
         self.hidden_size = text_config["hidden_size"]
+        self.encoder_seq_length = self.seq_length
 
     def get_config(self):
         return Qwen3ASRConfig(
@@ -65,13 +72,36 @@ class Qwen3ASRModelTester:
             audio_token_id=self.audio_token_id,
         )
 
+    def _num_audio_tokens(self, config):
+        """Compute how many tokens the audio encoder produces for feat_seq_length frames."""
+        from transformers.models.qwen3_omni_moe.modeling_qwen3_omni_moe import _get_feat_extract_output_lengths
+
+        return int(
+            _get_feat_extract_output_lengths(
+                torch.tensor(self.feat_seq_length),
+                config.audio_config.n_window,
+            ).item()
+        )
+
     def prepare_config_and_inputs(self):
         config = self.get_config()
-        input_ids = ids_tensor([self.batch_size, self.seq_length], config.text_config.vocab_size)
-        attention_mask = torch.ones(self.batch_size, self.seq_length, dtype=torch.long)
+        num_audio_tokens = self._num_audio_tokens(config)
+
+        # Batched audio features (batch, mel, time) + mask (batch, time)
+        input_features = floats_tensor([self.batch_size, self.num_mel_bins, self.feat_seq_length])
+        input_features_mask = torch.ones([self.batch_size, self.feat_seq_length], dtype=torch.long).to(torch_device)
+
+        # Text with audio token placeholders
+        input_ids = ids_tensor([self.batch_size, self.seq_length], config.text_config.vocab_size - 1) + 1
+        attention_mask = torch.ones(input_ids.shape, dtype=torch.long).to(torch_device)
+        attention_mask[:, :1] = 0
+        input_ids[:, 1 : 1 + num_audio_tokens] = config.audio_token_id
+
         inputs_dict = {
             "input_ids": input_ids,
             "attention_mask": attention_mask,
+            "input_features": input_features,
+            "input_features_mask": input_features_mask,
         }
         return config, inputs_dict
 
@@ -90,20 +120,34 @@ class Qwen3ASRForConditionalGenerationModelTest(ModelTesterMixin, GenerationTest
         else {}
     )
 
+    # Similar to Qwen3OmniMoe,
+    skip_test_audio_features_output_shape = True  # as the audio encoder merges batch_size and output_lengths in dim 0
+    _is_composite = True
+    test_cpu_offload = False
+    test_disk_offload_safetensors = False
+    test_disk_offload_bin = False
+    test_torch_exportable = False  # Audio encoder has data-dependent ops incompatible with torch.export
+
     def setUp(self):
         self.model_tester = Qwen3ASRModelTester(self)
         self.config_tester = ConfigTester(self, config_class=Qwen3ASRConfig)
 
-    @unittest.skip(reason="Small model is at least 4M tokens")
-    def test_model_is_small(self):
+    @unittest.skip(reason="Same as Qwen3OmniMoe.")
+    def test_model_base_model_prefix(self):
         pass
 
-    @unittest.skip(reason="Multi-modal model with sub-models")
-    def test_generate_compilation_all_outputs(self):
+    @unittest.skip(
+        reason="Like other audio LMs (Audio Flamingo, Voxtral) inputs_embeds corresponding to audio tokens are replaced when input features are provided."
+    )
+    def test_inputs_embeds_matches_input_ids(self):
         pass
 
-    @unittest.skip(reason="Multi-modal model with sub-models")
-    def test_generate_compile_model_forward_fullgraph(self):
+    @unittest.skip("Does not has no attribute `hf_device_map`")
+    def test_model_parallelism(self):
+        pass
+
+    @unittest.skip(reason="See test_model_parallelism")
+    def test_model_parallel_beam_search(self):
         pass
 
 

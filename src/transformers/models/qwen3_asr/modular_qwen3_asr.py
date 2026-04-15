@@ -176,12 +176,9 @@ class Qwen3ASRProcessor(ProcessorMixin):
         if len(text) != len(audio):
             raise ValueError(f"Got {len(text)} text but {len(audio)} audios; they must match 1:1.")
 
-        # Prepare audio: batched, padded, and flatten as expected by Qwen3OmniMoe's audio encoder
+        # Prepare audio
         data = self.feature_extractor(audio, **audio_kwargs)
         data["input_features_mask"] = data.pop("attention_mask")
-        data["input_features"] = (
-            data["input_features"].permute(0, 2, 1)[data["input_features_mask"].bool()].permute(1, 0)
-        )
 
         # Replace audio tokens in text
         audio_lengths = _get_feat_extract_output_lengths(data["input_features_mask"].sum(-1)).cpu().numpy()
@@ -342,7 +339,7 @@ class Qwen3ASRProcessor(ProcessorMixin):
                 # prefix is "language <LANG>"
                 prefix = prefix.strip()
                 if prefix.startswith("language "):
-                    language = prefix[len("language "):].strip()
+                    language = prefix[len("language ") :].strip()
                 elif prefix:
                     language = prefix
 
@@ -388,7 +385,7 @@ class Qwen3ASRProcessor(ProcessorMixin):
 
 class Qwen3ASRPreTrainedModel(Qwen2AudioPreTrainedModel):
     _no_split_modules = ["Qwen3OmniMoeAudioEncoderLayer", "Qwen3DecoderLayer"]
-    _can_compile_fullgraph = True
+    _can_compile_fullgraph = False  # Audio encoder has data-dependent ops (same as Qwen3OmniMoe)
     _supports_attention_backend = True
 
 
@@ -418,9 +415,13 @@ class Qwen3ASRForConditionalGeneration(AudioFlamingo3ForConditionalGeneration):
         input_features_mask (`torch.Tensor` of shape `(batch_size, feature_sequence_length)`):
             Mask to avoid performing attention on padded feature indices.
         """
+        # Flatten batched features for the Qwen3OmniMoe audio encoder
+        audio_feature_lengths = input_features_mask.sum(dim=1)
+        input_features = input_features.permute(0, 2, 1)[input_features_mask.bool()].permute(1, 0)
+
         audio_output = self.audio_tower(
             input_features,
-            feature_lens=input_features_mask.sum(dim=1),
+            feature_lens=audio_feature_lengths,
             **kwargs,
         )
         audio_output.pooler_output = audio_output.last_hidden_state
