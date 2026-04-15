@@ -34,6 +34,8 @@
         title: Model structure rules
       - local: modular_transformers
         title: Contributing a new model to Transformers
+      - local: add_vision_processing_components
+        title: Add vision processing components
       - local: model_output_tracing
         title: Tracing model intermediate outputs
       - local: auto_docstring
