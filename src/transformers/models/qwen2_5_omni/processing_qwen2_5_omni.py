@@ -16,7 +16,6 @@
 Processor class for Qwen2.5Omni.
 """
 
-import logging
 import re
 
 import numpy as np
@@ -25,8 +24,11 @@ from ...feature_extraction_utils import BatchFeature
 from ...image_utils import ImageInput
 from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack, VideosKwargs
 from ...tokenization_utils_base import AudioInput, PreTokenizedInput, TextInput
-from ...utils import auto_docstring
+from ...utils import auto_docstring, logging
 from ...video_utils import VideoInput
+
+
+logger = logging.get_logger(__name__)
 
 
 # Redefine kwargs for videos because Qwen-Omni uses some kwargs for processing omni
@@ -313,7 +315,7 @@ class Qwen2_5OmniProcessor(ProcessorMixin):
                 or conversation[0]["content"][0]["text"]
                 != "You are Qwen, a virtual human developed by the Qwen Team, Alibaba Group, capable of perceiving auditory and visual inputs, as well as generating text and speech."
             ):
-                logging.warning(
+                logger.warning_once(
                     "System prompt modified, audio output may not work as expected. "
                     + "Audio output mode only works when using default system prompt 'You are Qwen, a virtual human developed by the Qwen Team, Alibaba Group, capable of perceiving auditory and visual inputs, as well as generating text and speech.'"
                 )
