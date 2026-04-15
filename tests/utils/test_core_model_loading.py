@@ -784,7 +784,7 @@ class TestConversionMapping(unittest.TestCase):
         model.config = PretrainedConfig()
 
         bad_serialized_checkpoints = {f"bad_name.{k}": v.clone() for k, v in model.state_dict().items()}
-        weight_mapping = [PrefixChange(remove_prefix="bad_name")]
+        weight_mapping = [PrefixChange(prefix_to_remove="bad_name")]
 
         loading_info, _ = convert_and_load_state_dict_in_model(
             model,
