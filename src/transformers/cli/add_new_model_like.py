@@ -240,7 +240,7 @@ def add_model_to_auto_mappings(
         block_match = re.search(
             r"VIDEO_PROCESSOR_MAPPING_NAMES\s*=\s*OrderedDict\(\s*\[(.*?)\]\s*\)", autofile, re.DOTALL
         )
-        block = block_match.group(1)
+        block = block_match.group(1)  # type: ignore
         matching_lines = re.findall(rf'^\s+\("{old_lowercase_name}",\s+"[^"]+"\),?$', block, re.MULTILINE)
         if matching_lines:
             match = matching_lines[0]
