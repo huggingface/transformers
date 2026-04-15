@@ -16,7 +16,7 @@ from dataclasses import dataclass
 
 import torch
 
-from ...generation import GenerationMixin, GenerationMode, StoppingCriteria
+from ...generation import GenerationMixin, StoppingCriteria
 from ...utils import ModelOutput
 
 
@@ -74,7 +74,7 @@ class ParakeetTDTGenerationMixin(GenerationMixin):
         logits = outputs.logits[:, -1, :]
         tokens = logits[:, : self.config.vocab_size].argmax(dim=-1)
         durations = logits[:, self.config.vocab_size :].argmax(dim=-1)
-    
+
         # Only force forward progress (duration >= 1) for blank predictions;
         blank_mask = tokens == self.config.blank_token_id
         durations = torch.where(blank_mask & (durations == 0), torch.ones_like(durations), durations)
