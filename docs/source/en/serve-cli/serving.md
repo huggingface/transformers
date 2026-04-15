@@ -1398,7 +1398,32 @@ data: {"content_index":0,"delta":"This ","item_id":"msg_a1b2c3d4","output_index"
 </hfoption>
 </hfoptions>
 
+> [!WARNING]
+> The `audio_url` content type is an extension not part of the OpenAI standard and may change in future versions.
+
+As a convenience, audio can also be passed by URL using the `audio_url` content type, avoiding the need for base64 encoding.
+
+```python
+response = client.responses.create(
+    model="google/gemma-4-E2B-it",
+    input=[
+        {
+            "role": "user",
+            "content": [
+                {"type": "text", "text": "Transcribe this audio."},
+                {"type": "audio_url", "audio_url": {"url": "https://huggingface.co/datasets/hf-internal-testing/dummy-audio-samples/resolve/main/obama_first_45_secs.mp3"}},
+            ],
+        }
+    ],
+    max_output_tokens=256,
+    stream=False,
+)
+```
+
 ### Video-based responses
+
+> [!WARNING]
+> The `video_url` content type is an extension not part of the OpenAI standard and may change in future versions.
 
 > [!TIP]
 > Video processing requires [torchcodec](https://github.com/pytorch/torchcodec). Install it with `pip install torchcodec`.
