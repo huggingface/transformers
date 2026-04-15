@@ -25,7 +25,7 @@ from ...integrations import use_experts_implementation, use_kernelized_func
 from ...masking_utils import create_causal_mask, create_sliding_window_causal_mask
 from ...modeling_outputs import BaseModelOutputWithPast
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS
-from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring
 from ...utils.generic import merge_with_config_defaults
@@ -493,12 +493,9 @@ class MiMoV2FlashPreTrainedModel(MixtralPreTrainedModel):
 
     @torch.no_grad()
     def _init_weights(self, module):
-        PreTrainedModel._init_weights(self, module)
+        super()._init_weights(module)
         std = self.config.initializer_range
-        if isinstance(module, MiMoV2FlashExperts):
-            init.normal_(module.gate_up_proj, mean=0.0, std=std)
-            init.normal_(module.down_proj, mean=0.0, std=std)
-        elif isinstance(module, MiMoV2FlashAttention) and module.sinks is not None:
+        if isinstance(module, MiMoV2FlashAttention) and module.sinks is not None:
             init.normal_(module.sinks, mean=0.0, std=std)
         elif isinstance(module, MiMoV2FlashTopKRouter):
             init.normal_(module.weight, mean=0.0, std=std)

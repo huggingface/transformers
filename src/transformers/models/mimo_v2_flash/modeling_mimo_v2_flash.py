@@ -591,7 +591,9 @@ class MiMoV2FlashPreTrainedModel(PreTrainedModel):
         if isinstance(module, MiMoV2FlashExperts):
             init.normal_(module.gate_up_proj, mean=0.0, std=std)
             init.normal_(module.down_proj, mean=0.0, std=std)
-        elif isinstance(module, MiMoV2FlashAttention) and module.sinks is not None:
+        elif isinstance(module, MiMoV2FlashTopKRouter):
+            init.normal_(module.weight, mean=0.0, std=std)
+        if isinstance(module, MiMoV2FlashAttention) and module.sinks is not None:
             init.normal_(module.sinks, mean=0.0, std=std)
         elif isinstance(module, MiMoV2FlashTopKRouter):
             init.normal_(module.weight, mean=0.0, std=std)
