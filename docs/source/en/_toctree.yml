@@ -30,12 +30,12 @@
       sections:
       - local: contributing
         title: Contribute to Transformers
-      - local: modeling_rules
-        title: Model structure rules
       - local: modular_transformers
-        title: Contributing a new model to Transformers
+        title: Add a model with modular transformers
       - local: add_vision_processing_components
         title: Add vision processing components
+      - local: modeling_rules
+        title: Model structure rules
       - local: model_output_tracing
         title: Tracing model intermediate outputs
       - local: auto_docstring

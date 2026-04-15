@@ -17,10 +17,12 @@ rendered properly in your Markdown viewer.
 
 Modular transformers reduces the code needed to add a model by allowing imports and inheritance, in contrast to the [single model, single file](https://huggingface.co/blog/transformers-design-philosophy) policy. Instead of repeating model components across files, add a *modular* file to your model folder and inherit from existing classes.
 
-A converter generates standalone files from the modular file. Users import and use the same single-file interface they're already familiar with.
+A converter generates standalone files from the modular file. Users get the same single-file interface they already know.
 
 > [!NOTE]
 > Modular transformers isn't meant to replace the [legacy modeling code](./add_new_model). If your model isn't based on an existing model, add a `modeling.py` file manually. The same applies to configuration, tokenization, or processing files that can't cleanly inherit from a similar file.
+>
+> There's no single right order either. Some contributors write the modular file first and generate from it. Others start with a hand-written `modeling.py` and refactor it into a modular file later. Both approaches work.
 
 ## Implementing a modular file
 
@@ -39,6 +41,8 @@ Start by finding a model in Transformers similar to yours. Good starting points 
 
 > [!TIP]
 > Use the [modular-detector-v2](https://huggingface.co/spaces/Molbap/modular-detector-v2) tool to find existing implementations to inherit from. Paste a code snippet and it returns the most similar methods already in Transformers, so you can identify the best parent class before you start writing.
+
+Don't modify an existing model just to make inheritance work for your new one. If renaming or subclassing a parent class is too awkward, copy the relevant code directly instead.
 
 Create `src/transformers/models/<name>/modular_<name>.py`, where `<name>` matches the snake_case model directory name. This section walks you through implementing [Olmo2](./model_doc/olmo2) from [Olmo](./model_doc/olmo) with the modular approach (refer to the original [modular_olmo2.py](../../../src/transformers/models/olmo2/modular_olmo2) file).
 
@@ -66,7 +70,7 @@ Declare new arguments as class-level type annotations with a default value. For 
 +    clip_qkv = AttributeError()
 ```
 
-`@auto_docstring` generates standard argument docs automatically (see the [@auto_docstring](./auto_docstring) guide). `@strict` rejects unknown kwargs at instantiation time, catching typos and stale arguments early. Add both to every config class — neither is inherited from the parent, so you must declare them explicitly even if the parent config already has them.
+`@auto_docstring` generates standard argument docs automatically (see the [@auto_docstring](./auto_docstring) guide). `@strict` rejects unknown kwargs at instantiation time, catching typos and stale arguments early. Add both to every config class because the decorators aren't inherited from the parent. Declare them explicitly even if the parent config already has them.
 
 To set a derived attribute or handle backward-compatibility logic, use `__post_init__` instead of `__init__`. For example, Cohere2 computes `head_dim` and derives `layer_types` at init time.
 
@@ -78,7 +82,7 @@ def __post_init__(self, **kwargs):
     super().__post_init__(**kwargs)
 ```
 
-For models with tensor or pipeline parallelism support, define `base_model_tp_plan` and `base_model_pp_plan` as class-level dictionaries on the config. These define how to shard the model across devices. See existing configs like [Olmo2](../../../src/transformers/models/olmo2/modular_olmo2) or [Cohere2](../../../src/transformers/models/cohere2/modular_cohere2) for examples.
+For models with tensor or pipeline parallelism support, define `base_model_tp_plan` and `base_model_pp_plan` as class-level dictionaries on the config. Both dictionaries define how to shard the model across devices. See existing configs like [Olmo2](../../../src/transformers/models/olmo2/modular_olmo2) or [Cohere2](../../../src/transformers/models/cohere2/modular_cohere2) for examples.
 
 ```py
 class MyNewModelConfig(PreTrainedConfig):
@@ -133,7 +137,7 @@ To change specific behavior, inherit and override only what differs. [`Olmo2RMSN
 
 ### Attention
 
-Olmo2's attention is identical to Olmo's except it applies [`RMSNorm`] to the queries and keys, and removes qkv clipping. `super().__init__(...)` copies the parent body and appends the two new norm lines. The `forward` is fully redefined because queries and keys now pass through norms before projection. The linter pulls in any imported functions — `apply_rotary_pos_emb`, `eager_attention_forward`, and their own dependencies — into the generated file automatically.
+Olmo2's attention is identical to Olmo's except it applies [`RMSNorm`] to the queries and keys, and removes qkv clipping. `super().__init__(...)` copies the parent body and appends the two new norm lines. The `forward` is fully redefined because queries and keys now pass through norms before projection. The linter also pulls in any imported functions into the generated file, including `apply_rotary_pos_emb`, `eager_attention_forward`, and their dependencies.
 
 ```diff
  class Olmo2Attention(OlmoAttention):
@@ -162,7 +166,7 @@ Olmo2's attention is identical to Olmo's except it applies [`RMSNorm`] to the qu
 
 After `super().__init__(...)`, overwrite the norm attributes with `Olmo2RMSNorm` instances and reassign `self.self_attn` to the new `Olmo2Attention` class. The `del self.input_layernorm` removes the parent's `input_layernorm` assignment since Olmo2 applies the norm *after* attention rather than before. See [Removing attributes](#removing-attributes) for details on what `del` does and doesn't remove.
 
-The `forward` is rewritten to reflect the post-attention norm placement. Switching only the norm type without renaming the attribute wouldn't require a `forward` rewrite.
+The `forward` is rewritten to reflect the post-attention norm placement. A `forward` rewrite is only needed when an attribute is renamed, not when only its type changes.
 
 ```diff
  class Olmo2DecoderLayer(OlmoDecoderLayer):
@@ -228,9 +232,9 @@ class Olmo2ForCausalLM(OlmoForCausalLM):
 
 The [modeling_olmo2.py](../../../src/transformers/models/olmo2/modeling_olmo2) generated by the linter also contains classes ([`Olmo2MLP`], [`Olmo2RotaryEmbedding`], [`Olmo2PreTrainedModel`]) that weren't explicitly defined in `modular_olmo2.py`.
 
-Any class that an inherited class depends on is pulled in automatically if you don't explicitly redefine it. Imported functions like `apply_rotary_pos_emb` follow the same rule.
+The linter pulls in any class an inherited class depends on, unless you explicitly redefine it. Imported functions like `apply_rotary_pos_emb` follow the same rule.
 
-For example, [`OlmoDecoderLayer`] has `self.mlp = OlmoMLP(config)`. Since [`Olmo2MLP`] was never defined in the modular file, the linter automatically creates it. This is equivalent to using `pass`.
+For example, [`OlmoDecoderLayer`] has `self.mlp = OlmoMLP(config)`. [`Olmo2MLP`] was never defined in the modular file, so the linter creates it automatically, equivalent to using `pass`.
 
 ```py
 from ..olmo.modeling_olmo import OlmoMLP
@@ -268,9 +272,9 @@ __all__ = [
 
 ## Generate the modeling files
 
-The `modular_model_converter.py` script generates standalone `modeling.py`, `configuration.py`, and other files from your modular file. It does this by copying each inherited parent class body into the child, renaming all references to match the new model, and pulling in any helper functions or classes those parents depend on.
+The `modular_model_converter.py` script generates standalone `modeling.py`, `configuration.py`, and other files from your modular file. For each inherited class, it copies the parent body into the child, renames all references to match the new model, and pulls in any helper functions or classes those parents depend on.
 
-The output files contain no cross-model imports and no inheritance from other model directories. Inheritance is flattened to only a *single* level. If [`Olmo2Attention`] inherits from [`OlmoAttention`], the generated `Olmo2Attention` is fully self-contained. But if `OlmoAttention` itself inherited from something else, that grandparent is not inlined.
+The output files contain no cross-model imports and no inheritance from other model directories. The linter flattens inheritance to a single level. If [`Olmo2Attention`] inherits from [`OlmoAttention`], the generated `Olmo2Attention` is fully self-contained. But if `OlmoAttention` itself inherited from something else, the linter doesn't inline that grandparent.
 
 Run the command below to generate files from a modular file.
 
@@ -280,7 +284,52 @@ python utils/modular_model_converter.py your_model
 
 Never edit the generated files directly because any changes will be overwritten on the next run.
 
-## Removing attributes
+## Checkpoint conversion
+
+Once you've generated your modeling files, verify that real weights load correctly. Write a conversion script to translate the upstream checkpoint format into a Transformers-compatible one, then save it to the Hub.
+
+### Write a conversion script
+
+Add a `convert_<model>_to_hf.py` file to `src/transformers/models/<model>/`. The script loads the upstream weights, renames and reshapes keys to match your module's parameter names, and saves the result with [`~PreTrainedModel.save_pretrained`].
+
+> [!TIP]
+> Look for an existing script to copy and adapt. Models under `src/transformers/models/` include a `convert_*_to_hf.py` you can use as a starting point.
+
+After running the script, load the saved checkpoint with [`~PreTrainedModel.from_pretrained`] and confirm every expected weight loaded correctly. Unused checkpoint keys indicate mismatched names, so print them to catch problems early.
+
+```py
+model = YourModelForTask.from_pretrained("path/to/output/")
+```
+
+Check shape and name matches when iterating over keys. Shape mismatches typically mean a parameter in your config is wrong, the architecture differs from the original, or a weight needs to be transposed.
+
+```py
+for key, tensor in original_state_dict.items():
+    hf_tensor = hf_model.state_dict().get(mapped_key)
+    assert hf_tensor.shape == tensor.shape, (
+        f"Shape mismatch for {key}: expected {tensor.shape}, got {hf_tensor.shape}"
+    )
+```
+
+Fix any issues by iterating between your modular file, the generated modeling file, and the conversion script until all weights load cleanly.
+
+Once the checkpoint loads cleanly, push it to the Hub using [`~PreTrainedModel.push_to_hub`]. Refer to the [model sharing](./model_sharing) guide for more details.
+
+```py
+model.push_to_hub("username/your-model-name")
+```
+
+### Runtime conversion mapping
+
+Add a runtime mapping to `src/transformers/conversion_mapping.py` when the published weights don't match your module's parameter layout. Common cases include fused weights stored separately and MoE expert tensors that need stacking. The mapping lets [`~PreTrainedModel.from_pretrained`] load the Hub checkpoint without a separate export step.
+
+Refer to the [dynamic weight loading](./weightconverter) guide for how to write [`WeightRenaming`] and [`WeightConverter`] rules and register them for your `model_type`.
+
+## Patterns for modular files
+
+The sections below document common usage patterns, such as removing attributes or overriding decorated methods, when working with a modular file.
+
+### Removing attributes
 
 Removing an inherited attribute depends on whether you're working with a config class or an `nn.Module` subclass.
 
@@ -291,7 +340,7 @@ class MyNewConfig(ParentConfig):
     removed_attr = AttributeError()
 ```
 
-The linter removes the attribute declaration from the generated config file entirely. Config classes use a dataclass-style layout with no `__init__`, so this is the right pattern to use.
+The linter removes the attribute declaration from the generated config file entirely. Config classes use a dataclass-style layout with no `__init__`, so assigning `AttributeError()` at the class level is the correct approach.
 
 For an `nn.Module` subclass, use `del self.attribute` after `super().__init__(...)`.
 
@@ -302,7 +351,7 @@ class MyNewModel(ParentModel):
         del self.attribute
 ```
 
-`del self.attribute` removes only the `self.attribute = ...` assignment line from the copied parent body. It does not remove any other lines that reference `self.attribute`. If the parent's `forward` or other methods also reference the attribute, override those methods too.
+`del self.attribute` removes only the `self.attribute = ...` assignment line from the copied parent body. It doesn't remove any other lines that reference `self.attribute`. If the parent's `forward` or other methods also reference the attribute, override those methods too.
 
 ```py
 class DummyModel(nn.Module):
@@ -321,16 +370,16 @@ class MyNewDummyModel(DummyModel):
         # Override forward() or any other method that references self.attribute.
 ```
 
-## Working with `super()`
+### Working with `super()`
 
 `super().__init__(config)` tells the converter to copy the parent body into the child. Two patterns let you override this behavior.
 
 - Call a specific parent class directly when you need the generated output to call a grandparent (`nn.Module.__init__`) rather than the modular parent.
-- Use `**super_kwargs` when you want to inherit a parent method's full signature while adding a custom docstring or swapping a decorator.
+- Use `**super_kwargs` to inherit a parent method's full signature while adding a custom docstring or swapping a decorator.
 
-### Call a grandparent class directly
+#### Call a grandparent class directly
 
-To call `super()` on the *generated* class parent rather than the modular parent, be explicit about which class you're calling. The example below calls `nn.Module.__init__(self)` directly. `DummyModule` is itself an `nn.Module`, so the converter writes this as `super().__init__()` in the generated `MyNewDummyModule`.
+Be explicit about which class you're calling when you need `super()` to target the generated class parent rather than the modular parent. The example below calls `nn.Module.__init__(self)` directly. `DummyModule` is itself an `nn.Module`, so the converter writes it as `super().__init__()` in the generated `MyNewDummyModule`.
 
 ```py
 class MyNewDummyModule(DummyModule):                   |     class MyNewDummyModule(nn.Module):
@@ -341,11 +390,11 @@ class MyNewDummyModule(DummyModule):                   |     class MyNewDummyMod
     ...                                                |         ...
 ```
 
-### super_kwargs
+#### super_kwargs
 
-Use `**super_kwargs` when you want to inherit a parent method's full signature while adding a custom docstring or swapping a decorator. In the overridden signature, `**super_kwargs` tells the linter to expand all the parent's arguments in the generated output.
+Use `**super_kwargs` to inherit a parent method's full signature while adding a custom docstring or swapping a decorator. In the overridden signature, it tells the linter to expand all parent arguments in the generated output.
 
-The most common use is adding a model-specific docstring — for example, documenting the `labels` argument — without rewriting the full signature. Gemma does exactly this:
+The most common use is adding a model-specific docstring, like documenting the `labels` argument, without rewriting the full signature.
 
 ```py
 # modular_gemma.py
@@ -362,11 +411,11 @@ class GemmaForCausalLM(LlamaForCausalLM):
         return super().forward(**super_kwargs)
 ```
 
-The generated `GemmaForCausalLM.forward` has the full `LlamaForCausalLM` signature — no manual copying needed.
+The generated `GemmaForCausalLM.forward` has the full `LlamaForCausalLM` signature with no manual copying needed.
 
-`**super_kwargs` is a shortcut for a few niche cases. Don't use it to avoid writing explicit signatures when overriding a method with real logic changes. If you change behavior, write the full signature explicitly.
+`**super_kwargs` is a shortcut for niche cases. If you're changing behavior, write the full signature instead.
 
-## Deleting unused methods
+### Deleting unused methods
 
 Remove a parent method by overriding it with a `raise AttributeError("")` statement. The linter removes the method from the generated file.
 
@@ -381,9 +430,9 @@ class GemmaTokenizer(LlamaTokenizer):
         raise AttributeError("Not needed for Gemma")
 ```
 
-## Overriding decorated methods
+### Overriding decorated methods
 
-When you override a decorated parent method, the parent's decorators carry over automatically unless you add your own, in which case your decorator replaces theirs.
+When you override a decorated parent method, the parent's decorator carries over automatically. If you add your own decorator, it replaces the parent's.
 
 Two decorators appear throughout the library, one for [capturing model intermediate outputs](./model_output_tracing) and one for [auto-generating docstrings](./auto_docstring).
 
@@ -409,12 +458,12 @@ class NewModel(DummyModel):       |   class NewModel(nn.Module):
     ...                           |       ...
 ```
 
-## Docstring variables
+### Docstring variables
 
 > [!TIP]
 > Refer to the [Documenting a model](./auto_docstring) guide for more information about how to use the `@auto_docstring` decorator to automatically generate consistent docstring arguments. For most models, `@auto_docstring` removes the need for explicit docstring variables entirely.
 
-The modular definition takes precedence when an object appears in both the modular and source modeling file. The exception is if assignments matches the pattern `DOCSTRING`. These variables (`MODEL_START_DOCSTRING`, `MODEL_INPUT_DOCSTRING`) contain large blocks of text. Set a docstring variable to `None` in the modular file to use the source file's definition instead.
+The modular definition takes precedence when an object appears in both the modular and source modeling file. The exception is if an assignment matches the pattern `DOCSTRING`. Variables like `MODEL_START_DOCSTRING` and `MODEL_INPUT_DOCSTRING` contain large blocks of text. Set one to `None` in the modular file to use the source file's definition instead.
 
 ```py
 STARCODER2_INPUTS_DOCSTRING = None  # will be automatically redefined
@@ -429,7 +478,7 @@ class Starcoder2Model(MistralModel):
 
 Setting the variable to anything other than `None` overrides the docstring with your custom value.
 
-## Special naming
+### Special naming
 
 The linter automatically renames everything when inheriting from a class. Use the same class name prefix across all classes in the same file.
 
@@ -451,14 +500,14 @@ The linter raises a warning when it detects an ambiguous prefix.
 We detected multiple prefix names when inheriting from transformers.models.llama.modeling_llama: ('Emu3Text', 'Emu3'). We will only use the most used 'Emu3' prefix when grabbing args and dependencies. Make sure to subclass the intermediate classes with the prefix you want (if different from 'Emu3') or use a single prefix in all the modular (best).
 ```
 
-This most commonly comes up in multimodal models where class names include a modality qualifier like `Text`. If you want a dependency to use a specific prefix, explicitly rename it with a `pass`.
+Ambiguous prefixes are most common in multimodal models where class names include a modality qualifier like `Text`. To give a dependency a specific prefix, explicitly rename it with a `pass`.
 
 ```py
 class Emu3TextMLP(LlamaMLP):
     pass
 ```
 
-## Config docstrings
+### Config docstrings
 
 The linter doesn't support partial docstring inheritance yet. When adding or removing config attributes, add the full docstring directly in the modular file under the class definition.
 
