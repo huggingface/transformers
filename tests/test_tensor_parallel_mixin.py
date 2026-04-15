@@ -48,7 +48,9 @@ def _to_local(tensor):
         #  Partial gradients for us.
 
         if isinstance(tensor, DTensor) and any(not p.is_replicate() for p in tensor.placements):
-            tensor = tensor.redistribute(placements=(Replicate(),))
+            from transformers.integrations.tensor_parallel import _replicate_dtensor
+
+            tensor = _replicate_dtensor(tensor)
         return tensor.to_local()
     return tensor
 

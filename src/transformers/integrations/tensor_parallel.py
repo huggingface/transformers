@@ -124,9 +124,7 @@ def gather_full_state_dict(model) -> dict[str, torch.Tensor]:
         if isinstance(tensor, DTensor):
             # All ranks participate in the collective, only rank 0 keeps the result
             with torch.no_grad():
-                full = tensor.redistribute(
-                    placements=[Replicate()] * tensor.device_mesh.ndim, async_op=False
-                ).to_local()
+                full = _replicate_dtensor(tensor).to_local()
             if is_rank0:
                 result[key] = _to_cpu_fresh(full)
             del full
@@ -136,15 +134,19 @@ def gather_full_state_dict(model) -> dict[str, torch.Tensor]:
     return result
 
 
-def _redistribute_dtensor(tensor: DTensor, target_placements: tuple) -> DTensor:
-    """Redistribute a DTensor via Replicate as an intermediate step.
+def _replicate_dtensor(tensor: DTensor) -> DTensor:
+    """All-gather a DTensor to Replicate, handling _StridedShard placements.
 
-    PyTorch doesn't implement all placement conversions (e.g. _StridedShard↔Shard).
-    Going through Replicate first is always supported.
+    PyTorch's ``redistribute`` does not support ``_StridedShard`` as a source,
+    so we use each placement's ``_to_replicate_tensor`` directly.
     """
+    mesh = tensor.device_mesh
     with torch.no_grad():
-        replicated = tensor.redistribute(placements=[Replicate()] * tensor.device_mesh.ndim)
-        return replicated.redistribute(placements=target_placements)
+        local = tensor._local_tensor
+        for i, p in enumerate(tensor.placements):
+            if not p.is_replicate():
+                local = p._to_replicate_tensor(local, mesh, i, tensor.shape)
+        return DTensor.from_local(local, mesh, [Replicate()] * mesh.ndim, run_check=False)
 
 
 def convert_strided_to_shard(state_dict: dict) -> dict[str, tuple]:
@@ -158,7 +160,7 @@ def convert_strided_to_shard(state_dict: dict) -> dict[str, tuple]:
         elif isinstance(value, DTensor) and any(isinstance(p, _StridedShard) for p in value.placements):
             placement_map[key] = tuple(value.placements)
             shard_placements = tuple(Shard(p.dim) if isinstance(p, _StridedShard) else p for p in value.placements)
-            state_dict[key] = _redistribute_dtensor(value, shard_placements)
+            state_dict[key] = _replicate_dtensor(value).redistribute(placements=shard_placements)
     return placement_map
 
 
@@ -173,7 +175,7 @@ def restore_strided_from_shard(state_dict: dict, placement_map: dict[str, tuple]
     for key, original_placements in placement_map.items():
         container, leaf_key = _resolve(state_dict, key)
         if leaf_key in container and isinstance(container[leaf_key], DTensor):
-            container[leaf_key] = _redistribute_dtensor(container[leaf_key], original_placements)
+            container[leaf_key] = _replicate_dtensor(container[leaf_key]).redistribute(placements=original_placements)
 
 
 def verify_tp_plan(expected_keys: list[str], tp_plan: dict[str, str | TPStyle] | None):
@@ -405,14 +407,15 @@ class MoEExpertsParallel(ParallelStyle):
         # partial hidden-state contribution that must be reduced. Under TP+FSDP,
         # FSDP can swap in full gathered expert weights for the current rank's
         # forward, in which case the local output is already complete.
+        intermediate = getattr(mod, "intermediate_dim", None) or getattr(mod, "intermediate_size", None)
         if hasattr(mod, "gate_up_proj"):
             gate_up_proj = mod.gate_up_proj.to_local() if isinstance(mod.gate_up_proj, DTensor) else mod.gate_up_proj
-            full_expert_out = 2 * mod.intermediate_dim
+            full_expert_out = 2 * intermediate
             sharded_dim = -1 if getattr(mod, "is_transposed", False) else -2
             cached = gate_up_proj.shape[sharded_dim] != full_expert_out
         elif hasattr(mod, "up_proj"):
             up_proj = mod.up_proj.to_local() if isinstance(mod.up_proj, DTensor) else mod.up_proj
-            full_expert_out = mod.intermediate_dim
+            full_expert_out = intermediate
             sharded_dim = -1 if getattr(mod, "is_transposed", False) else -2
             cached = up_proj.shape[sharded_dim] != full_expert_out
         else:
