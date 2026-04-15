@@ -25,7 +25,6 @@ from collections.abc import Callable
 from concurrent.futures import Future, ThreadPoolExecutor
 from contextlib import contextmanager
 from copy import deepcopy
-from dataclasses import dataclass, field
 from itertools import chain
 from typing import TYPE_CHECKING, Any
 
@@ -579,42 +578,36 @@ def process_source_pattern(source_pattern: str, target_pattern: str) -> str:
     return source_pattern
 
 
-@dataclass(slots=True)
 class WeightTransform:
-    source_patterns: str | list[str] = field(init=True)
-    target_patterns: str | list[str] = field(init=True)
-    restrict_to: str | None = None
-    compiled_sources: re.Pattern = field(init=False)
+    # Restrict the attributes that can be attached
+    __slots__ = (
+        "source_patterns",
+        "target_patterns",
+        "compiled_sources",
+        "distributed_operation",
+        "quantization_operation",
+        "collected_tensors",
+        "layer_targets",
+        "_original_source_patterns",
+        "_original_target_patterns",
+    )
 
-    distributed_operation: TensorParallelLayer | None = None
-    quantization_operation: ConversionOps | None = None
+    def __init__(self, source_patterns: str | list[str], target_patterns: str | list[str]):
+        self.source_patterns: list[str] = source_patterns
+        self.target_patterns: list[str] = target_patterns
+        # Those are needed to be able to reverse correctly the transform, as the patterns may be processed
+        self._original_source_patterns = source_patterns.copy()
+        self._original_target_patterns = target_patterns.copy()
 
-    collected_tensors: dict[str, list[Future]] = field(default_factory=lambda: defaultdict(list), init=False)
-    layer_targets: dict[str, set[str]] = field(default_factory=lambda: defaultdict(set), init=False)
+        # Init fields that will be used during conversion
+        self.distributed_operation: TensorParallelLayer | None = None
+        self.quantization_operation: ConversionOps | None = None
+        self.collected_tensors: dict[str, list[Future]] = defaultdict(list)
+        self.layer_targets: dict[str, set[str]] = defaultdict(set)
 
-    # Those are needed to be able to reverse correctly the transform, as the patterns may be processed
-    _original_source_patterns: list[str] = field(init=False)
-    _original_target_patterns: list[str] = field(init=False)
-
-    def __setattr__(self, name, value):
-        if name in ("source_patterns", "target_patterns"):
-            # We do not allow to re-set the patterns, as they are linked between each other and changing one
-            # without the other can mess-up with the capturing groups/compiled sources
-            if hasattr(self, name):
-                raise ValueError(f"Cannot assign to field {name}, you should create a new instance")
-            # Switch str to list
-            elif isinstance(value, str):
-                value = [value]
-        object.__setattr__(self, name, value)
-
-    def __post_init__(self):
-        # Due to how our `_checkpoint_conversion_mapping` mappings are written, we need a few exceptions here
-        # when instantiating the reverse mapping (i.e. the targets become sources, and sources become targets)
-        # The issues lie in the sources usually, so here we need to check the targets for the reversed mapping
-
-        # We need to copy the exact original patterns to later reverse (before processing may change them)
-        self._original_source_patterns = self.source_patterns.copy()
-        self._original_target_patterns = self.target_patterns.copy()
+        # We need to process a few exceptions here when instantiating the reverse mapping (i.e. the targets become
+        # sources, and sources become targets). The issues lie in the sources usually, so here we need to check the
+        # targets for the reversed mapping
 
         # Process target_patterns: detect capturing groups and replace with \1
         # Store the original capturing group patterns for reverse mapping
@@ -657,6 +650,20 @@ class WeightTransform:
             pattern = source_pattern.replace(".*.", r"\..*\.")
             branches.append(f"(?P<{group_name}>{pattern})")
         self.compiled_sources = re.compile("|".join(branches))
+
+    def __repr__(self):
+        return f"{self.__class__.__name__}(source_patterns={self.source_patterns}, target_patterns={self.target_patterns})"
+
+    def __setattr__(self, name, value):
+        if name in ("source_patterns", "target_patterns"):
+            # We do not allow to re-set the patterns, as they are linked between each other and changing one
+            # without the other can mess-up with the capturing groups/compiled sources
+            if hasattr(self, name):
+                raise ValueError(f"Cannot assign to field {name}, you should create a new instance")
+            # Switch str to list
+            elif isinstance(value, str):
+                value = [value]
+        object.__setattr__(self, name, value)
 
     def add_tensor(self, target_key: str, source_key: str, source_pattern: str, future: Future):
         self.collected_tensors[source_pattern].append(future)
@@ -701,10 +708,7 @@ class WeightTransform:
             kwargs["operations"] = [op.reverse_op for op in self.operations[::-1]]
 
         reverse_transform = self.__class__(
-            source_patterns=self._original_target_patterns,
-            target_patterns=self._original_source_patterns,
-            restrict_to=self.restrict_to,
-            **kwargs,
+            source_patterns=self._original_target_patterns, target_patterns=self._original_source_patterns, **kwargs
         )
 
         return reverse_transform
@@ -735,26 +739,7 @@ class WeightTransform:
 
         return collected_tensors
 
-    def allow_transform(self, source_or_target_key: str, model: PreTrainedModel) -> bool:
-        """Check if `source_key`"""
-        if self.restrict_to is None:
-            return True
-        if self.restrict_to == model.__class__.__name__:
-            return source_or_target_key in model.state_dict().keys()
 
-        restricted_name, current_module = source_or_target_key, model
-        for name in source_or_target_key.split("."):
-            restricted_name = restricted_name.removeprefix(name)
-            restricted_name = restricted_name.removeprefix(".")
-            current_module = getattr(current_module, name)
-            if self.restrict_to == current_module.__class__.__name__:
-                return restricted_name in current_module.state_dict().keys()
-
-        # If we did not find the module class, return True
-        return True
-
-
-@dataclass(slots=True)
 class WeightRenaming(WeightTransform):
     # Special case of WeightTransform that only renames keys without any conversion.
 
@@ -799,12 +784,13 @@ _INTERNAL_MANY_TO_MANY_CONVERSIONS = (
 )
 
 
-@dataclass(slots=True)
 class WeightConverter(WeightTransform):
-    operations: list[ConversionOps] = field(default_factory=list, repr=False)
+    __slots__ = WeightTransform.__slots__ + ("operations",)
 
-    def __post_init__(self):
-        WeightTransform.__post_init__(self)
+    def __init__(self, source_patterns: str | list[str], target_patterns: str | list[str]):
+        super().__init__(source_patterns, target_patterns)
+        self.operations: list[ConversionOps] = []
+
         if bool(len(self.source_patterns) - 1) + bool(len(self.target_patterns) - 1) >= 2:
             # We allow many-to-many only if we use an internal operation that can handle it
             if not any(isinstance(op, _INTERNAL_MANY_TO_MANY_CONVERSIONS) for op in self.operations):
