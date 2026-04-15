@@ -245,6 +245,7 @@ class TestProcessorInputsFromMessages(unittest.TestCase):
         self.assertEqual(len(result), 3)
         self.assertEqual(result[1]["tool_calls"], tool_calls)
         self.assertEqual(result[2]["tool_call_id"], "call_1")
+
     def test_multimodal_base64_input_audio_decoded_to_temp_file(self):
         """input_audio with base64 data should be decoded, written to a temp file, and converted to HF audio format."""
         import base64
