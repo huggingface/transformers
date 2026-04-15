@@ -670,7 +670,7 @@ def get_model_conversion_mapping(
             conversions = extract_weight_conversions_for_model(submodule)
             if conversions is not None:
                 for conversion in conversions:
-                    conversions.restrict_to = submodule.__class__.__name__
+                    conversion.restrict_to = submodule.__class__.__name__
                 weight_conversions.extend(conversions)
                 seen_model_types.add(submodule.config.model_type)
 
