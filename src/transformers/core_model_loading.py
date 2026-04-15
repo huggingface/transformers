@@ -824,6 +824,7 @@ class PrefixChange(WeightRenaming):
         renamed_key, source_pattern_that_matched = super().rename_source_key(source_key)
         if renamed_key != source_key:
             self._prefix_was_changed = True
+        return renamed_key, source_pattern_that_matched
 
     def prefix_was_changed(self):
         return self._prefix_was_changed
@@ -1415,11 +1416,7 @@ def convert_and_load_state_dict_in_model(
         # For a prefix change, we need to update at runtime depending on whether the checkpoint already had the correct
         # format or not - otherwise, we may end up adding twice the same prefix
         if isinstance(conversion, PrefixChange):
-            used_conversion = next(
-                used_conversion for used_conversion in param_name_to_load.values() if used_conversion == conversion
-            )
-            # Add the prefix switch to the saved conversion ONLY if it was used at runtime
-            if used_conversion.prefix_was_changed():
+            if conversion.prefix_was_changed():
                 model_specific_conversions.append(conversion)
         else:
             model_specific_conversions.append(conversion)
