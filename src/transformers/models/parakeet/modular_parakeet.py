@@ -22,7 +22,7 @@ from torch import nn
 
 from ... import initialization as init
 from ...activations import ACT2FN
-from ...generation import CompileConfig, GenerationMixin
+from ...generation import CompileConfig, GenerationMixin, GenerationMode
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling, CausalLMOutput
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
@@ -978,6 +978,7 @@ class ParakeetTDTOutput(BaseModelOutputWithPooling):
 class ParakeetForTDT(ParakeetPreTrainedModel, ParakeetTDTGenerationMixin):
     config: ParakeetTDTConfig
     _no_split_modules = ["ParakeetTDTDecoder"]
+    _supported_generation_modes = [GenerationMode.GREEDY_SEARCH]
 
     def __init__(self, config: ParakeetTDTConfig):
         super().__init__(config)
