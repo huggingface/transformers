@@ -470,7 +470,6 @@ IGNORE_NON_AUTO_CONFIGURED = PRIVATE_MODELS.copy() + [
     "PaddleOCRTextModel",  # Building part of bigger (tested) model
     "Qwen2_5OmniTalkerForConditionalGeneration",  # Building part of a bigger model
     "Qwen2_5OmniTalkerModel",  # Building part of a bigger model
-    "Qwen2_5OmniThinkerForConditionalGeneration",  # Building part of a bigger model
     "Qwen2_5OmniThinkerTextModel",  # Building part of a bigger model
     "Qwen2_5OmniToken2WavModel",  # Building part of a bigger model
     "Qwen2_5OmniToken2WavBigVGANModel",  # Building part of a bigger model
@@ -488,7 +487,6 @@ IGNORE_NON_AUTO_CONFIGURED = PRIVATE_MODELS.copy() + [
     "Qwen3OmniMoeTalkerCodePredictorModelForConditionalGeneration",  # Building part of a bigger model
     "Qwen3OmniMoeTalkerForConditionalGeneration",  # Building part of a bigger model
     "Qwen3OmniMoeTalkerModel",  # Building part of a bigger model
-    "Qwen3OmniMoeThinkerForConditionalGeneration",  # Building part of a bigger model
     "Qwen3OmniMoeThinkerTextModel",  # Building part of a bigger model
     "Ernie4_5_VLMoeTextModel",  # Building part of a bigger model
     "PeAudioFrameLevelModel",
