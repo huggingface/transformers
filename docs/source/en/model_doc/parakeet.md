@@ -94,7 +94,7 @@ Parakeet TDT transcripts include casing, and the model can also performk token t
 ```py
 from transformers import pipeline
 
-pipe = pipeline("automatic-speech-recognition", model="nvidia/parakeet-tdt-0.6b-v3")
+pipe = pipeline("automatic-speech-recognition", model="nvidia/parakeet-tdt-0.6b-v3", revision="refs/pr/39")
 out = pipe("https://huggingface.co/datasets/hf-internal-testing/dummy-audio-samples/resolve/main/bcn_weather.mp3")
 print(out)
 ```
@@ -107,8 +107,9 @@ from transformers import AutoModelForTDT, AutoProcessor
 from datasets import load_dataset, Audio
 
 model_id = "nvidia/parakeet-tdt-0.6b-v3"
-processor = AutoProcessor.from_pretrained(model_id)
-model = AutoModelForTDT.from_pretrained(model_id, dtype="auto", device_map="auto")
+revision = "refs/pr/39"
+processor = AutoProcessor.from_pretrained(model_id, revision=revision)
+model = AutoModelForTDT.from_pretrained(model_id, revision=revision, dtype="auto", device_map="auto")
 
 ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
 ds = ds.cast_column("audio", Audio(sampling_rate=processor.feature_extractor.sampling_rate))
@@ -128,8 +129,9 @@ from datasets import Audio, load_dataset
 from transformers import AutoModelForTDT, AutoProcessor
 
 model_id = "nvidia/parakeet-tdt-0.6b-v3"
-processor = AutoProcessor.from_pretrained(model_id)
-model = AutoModelForTDT.from_pretrained(model_id, dtype="auto", device_map="auto")
+revision = "refs/pr/39"
+processor = AutoProcessor.from_pretrained(model_id, revision=revision)
+model = AutoModelForTDT.from_pretrained(model_id, revision=revision, dtype="auto", device_map="auto")
 
 ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
 ds = ds.cast_column("audio", Audio(sampling_rate=processor.feature_extractor.sampling_rate))
@@ -269,21 +271,17 @@ outputs.loss.backward()
 
 ### TDT Training
 
-The TDT loss has been implemented within Transformers to enable training. For faster training (around 10x), consider using NeMo's `TDTLossNumba`. Note that this requires installing the NeMo toolkit with `pip install nemo_toolkit[asr]`.  
-
-<hfoptions id="usage">
-<hfoption id="Transformers-only">
-
 ```py
 from datasets import Audio, load_dataset
 import torch
 from transformers import AutoModelForTDT, AutoProcessor
 
-model_id = "nvidia/parakeet-tdt-0.6b-v3-hf"
+model_id = "nvidia/parakeet-tdt-0.6b-v3"
+revision = "refs/pr/39"
 NUM_SAMPLES = 4
 
-processor = AutoProcessor.from_pretrained(model_id)
-model = AutoModelForTDT.from_pretrained(model_id, dtype=torch.bfloat16, device_map="auto")
+processor = AutoProcessor.from_pretrained(model_id, revision=revision)
+model = AutoModelForTDT.from_pretrained(model_id, revision=revision, dtype=torch.bfloat16, device_map="auto")
 model.train()
 
 ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
@@ -299,72 +297,6 @@ outputs = model(**inputs)
 print("Loss:", outputs.loss.item())
 outputs.loss.backward()
 ```
-
-</hfoption>
-<hfoption id="With TDTLossNumba (monkey patch)">
-
-```py
-import torch
-from datasets import Audio, load_dataset
-from nemo.collections.asr.losses.rnnt import TDTLossNumba
-from transformers import AutoModelForTDT, AutoProcessor
-
-
-model_id = "nvidia/parakeet-tdt-0.6b-v3-hf"
-NUM_SAMPLES = 4
-
-# Load model and processor
-processor = AutoProcessor.from_pretrained(model_id)
-model = AutoModelForTDT.from_pretrained(model_id, dtype=torch.bfloat16, device_map="auto")
-model.train()
-
-# Initialize NeMo TDT loss
-loss_fn = TDTLossNumba(
-    blank=model.config.blank_token_id,
-    durations=model.config.durations,
-    reduction="none",   
-)
-
-def nemo_loss_wrapper(token_logits, duration_logits, targets, logit_lengths, target_lengths, **kwargs):
-    """Adapter function that converts Transformers loss signature to NeMo signature."""
-    acts = torch.cat([token_logits, duration_logits], dim=-1)
-    batch_size, T, U = acts.shape[:3]
-    act_lens = torch.full((batch_size,), T, dtype=torch.long, device=acts.device)
-    # NeMo requires float32 (Numba doesn't support float16/bfloat16) and int64
-    per_sample_losses = nemo_loss_fn(
-        acts=acts.float(),
-        labels=targets.long(),
-        act_lens=act_lens,
-        label_lens=target_lengths.long(),
-    )
-    # NOTE: NeMo's TDTLossNumba doesn't do normalization with target lengths as suggested by its docstring so we do manually:
-    # - Docstring: https://github.com/NVIDIA-NeMo/NeMo/blob/main/nemo/collections/asr/parts/numba/rnnt_loss/rnnt_pytorch.py#L373
-    # - Expected normalization: https://github.com/NVIDIA-NeMo/NeMo/blob/main/nemo/collections/asr/parts/numba/rnnt_loss/rnnt_pytorch.py#L247-L253
-    return (per_sample_losses / target_lengths.float()).mean()
-
-# Monkey-patch the model's loss function
-model.loss_function = nemo_loss_wrapper
-
-# Load dataset
-ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
-ds = ds.cast_column("audio", Audio(sampling_rate=processor.feature_extractor.sampling_rate))
-speech_samples = [el["array"] for el in ds["audio"][:NUM_SAMPLES]]
-text_samples = ds["text"][:NUM_SAMPLES]
-
-# Prepare inputs
-inputs = processor(audio=speech_samples, text=text_samples, sampling_rate=processor.feature_extractor.sampling_rate)
-inputs.to(device=model.device, dtype=model.dtype)
-
-# Forward and backward
-outputs = model(**inputs)
-loss = outputs.loss
-print(f"Loss (NeMo TDTLossNumba): {loss.item():.6f}")
-loss.backward()
-print("\n✓ Successfully computed loss and gradients using NeMo's fast TDT loss!")
-```
-
-</hfoption>
-</hfoptions>
 
 
 ## ParakeetTokenizer
