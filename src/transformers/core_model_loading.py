@@ -1432,8 +1432,7 @@ def convert_and_load_state_dict_in_model(
     # Keep the current weight conversion mapping for later saving (in case it was coming directly from the user), but
     # only if it was used, i.e. it matched any weight from the checkpoints
     model_specific_conversions = [conversion for conversion in weight_mapping if conversion.was_used()]
-    # Important: we need to revert the order here, so that potential conversions from submodels are performed first
-    model._weight_conversions = model_specific_conversions[::-1]
+    model._weight_conversions = model_specific_conversions
 
     return loading_info, disk_offload_index
 
@@ -1460,6 +1459,9 @@ def revert_weight_conversion(model: PreTrainedModel, state_dict: dict[str, torch
     # We did not find any operations to perform -> quick escape
     if weight_conversions is None:
         return state_dict
+
+    # Important: we need to revert the order here, so that potential conversions from submodels are performed first
+    weight_conversions = weight_conversions[::-1]
 
     # Reverse all Transform to correctly match keys
     reverse_weight_conversion = [conversion.reverse_transform() for conversion in weight_conversions]

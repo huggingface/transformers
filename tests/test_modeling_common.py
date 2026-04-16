@@ -5682,7 +5682,12 @@ def compare_state_dicts(state_dict1, state_dict2) -> bool:
     """Make sure 2 state dicts are the exact same"""
     # Make sure the keys are the exact same
     if sorted(state_dict1.keys()) != sorted(state_dict2.keys()):
-        raise ValueError("The keys of both state dict are not the same")
+        in1_not2 = sorted(set(state_dict1.keys()) - set(state_dict2.keys()))
+        in2_not1 = sorted(set(state_dict2.keys()) - set(state_dict1.keys()))
+        raise ValueError(
+            f"The keys of both state dict are not the same.\nKeys found in the first item but not second: {in1_not2}"
+            f"\nKeys found in the second item but not first: {in2_not1}"
+        )
 
     for k, v1 in state_dict1.items():
         v2 = state_dict2[k]
