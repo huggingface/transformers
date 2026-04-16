@@ -589,16 +589,20 @@ class XCLIPModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     def test_feed_forward_chunking(self):
         pass
 
-    @unittest.skip(reason="XCLIPOutput has logits_per_video, not logits_per_image expected by the common test")
+    @unittest.skip(reason="XCLIPModel does not properly support device_map='auto'")
+    def test_model_parallelism(self):
+        pass
+
+    @unittest.skip(
+        reason="X-CLIP's hidden_states are nested in sub-outputs (text_model_output, vision_model_output), not at root level"
+    )
     def test_flash_attn_2_inference_equivalence(self):
         pass
 
-    @unittest.skip(reason="XCLIPOutput has logits_per_video, not logits_per_image expected by the common test")
+    @unittest.skip(
+        reason="X-CLIP's hidden_states are nested in sub-outputs (text_model_output, vision_model_output), not at root level"
+    )
     def test_flash_attn_2_inference_equivalence_right_padding(self):
-        pass
-
-    @unittest.skip(reason="XCLIPModel does not properly support device_map='auto'")
-    def test_model_parallelism(self):
         pass
 
     def test_load_vision_text_config(self):
