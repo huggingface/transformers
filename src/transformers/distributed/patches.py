@@ -20,10 +20,9 @@ so that modeling files stay free of DTensor-specific code.
 
 from __future__ import annotations
 
+import inspect
 import sys
 from functools import wraps
-
-import inspect
 
 from torch.distributed.tensor import DTensor, Replicate
 

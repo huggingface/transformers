@@ -454,12 +454,20 @@ class _AllReduceBackward(torch.autograd.Function):
 
 
 class MoEExpertsParallel(ParallelStyle):
-    """Hybrid parallel style for MoE expert modules.
+    """Tensor-parallel style for MoE expert modules.
 
-    Converts expert weights to DTensors based on the ``shard_plan`` (e.g.
-    ``{"gate_up_proj": "packed_colwise", "down_proj": "rowwise"}``).
-    Communication uses DTensor ``from_local``/``to_local`` on activations only —
-    compatible with ``grouped_mm``.
+    Shards expert weights as DTensors, then wraps the module's ``forward`` so
+    that grouped_mm (which needs plain tensors) works transparently.
+
+    The wrapped forward does four things:
+    1. Localize inputs  — wrap hidden_states as Replicate DTensor then extract
+       local tensor (gives us an all-reduce on the backward gradient for free).
+    2. Fix routing grads — routing weights are the same on all ranks, but their
+       backward gradient is partial; use allreduce-sum (not divide-by-world-size).
+    3. Swap params      — temporarily replace DTensor params with local tensors
+       for grouped_mm, restore them after so save_pretrained sees DTensors.
+    4. Reduce output    — each rank's output is partial (only its expert shard
+       contributed); all-reduce to get the complete hidden state.
     """
 
     def __init__(self, output_layouts=None):
@@ -480,84 +488,55 @@ class MoEExpertsParallel(ParallelStyle):
             dtensor = distribute_tensor(param.data, device_mesh, [placement])
             module._parameters[param_name] = torch.nn.Parameter(dtensor, requires_grad=param.requires_grad)
 
-    @staticmethod
-    def _uses_partial_outputs(mod) -> bool:
-        cached = getattr(mod, "_moe_outputs_are_partial", None)
-        if cached is not None:
-            return cached
-
-        # Under TP-only the expert MLP dimension is sharded, so each rank emits a
-        # partial hidden-state contribution that must be reduced. Under TP+FSDP,
-        # FSDP can swap in full gathered expert weights for the current rank's
-        # forward, in which case the local output is already complete.
-        intermediate = getattr(mod, "intermediate_dim", None) or getattr(mod, "intermediate_size", None)
-        if hasattr(mod, "gate_up_proj"):
-            gate_up_proj = mod.gate_up_proj.to_local() if isinstance(mod.gate_up_proj, DTensor) else mod.gate_up_proj
-            full_expert_out = 2 * intermediate
-            sharded_dim = -1 if getattr(mod, "is_transposed", False) else -2
-            cached = gate_up_proj.shape[sharded_dim] != full_expert_out
-        elif hasattr(mod, "up_proj"):
-            up_proj = mod.up_proj.to_local() if isinstance(mod.up_proj, DTensor) else mod.up_proj
-            full_expert_out = intermediate
-            sharded_dim = -1 if getattr(mod, "is_transposed", False) else -2
-            cached = up_proj.shape[sharded_dim] != full_expert_out
-        else:
-            cached = True
-
-        mod._moe_outputs_are_partial = cached
-        return cached
-
-    @staticmethod
-    def _prepare_input_fn(mod, inputs, device_mesh):
-        hidden_states, top_k_index, top_k_weights = inputs[0], inputs[1], inputs[2]
-        # from_local([Replicate()]).to_local(): forward sees plain tensor,
-        # backward graph goes through DTensor all-reduce on gradient.
-        if not isinstance(hidden_states, DTensor):
-            hidden_states = DTensor.from_local(hidden_states, device_mesh, [Replicate()], run_check=False)
-        hidden_states = hidden_states.to_local()
-        # Route weights are replicated (same on all ranks), but their backward
-        # gradient is partial (each rank's contribution from its expert shard).
-        # Use allreduce-sum (not Replicate's allreduce-then-divide) to aggregate.
-        tp_group = device_mesh.get_group() if device_mesh.ndim == 1 else device_mesh.get_group("tp")
-        if isinstance(top_k_weights, DTensor):
-            top_k_weights = top_k_weights.to_local()
-        top_k_weights = _AllReduceBackward.apply(top_k_weights, tp_group)
-        # grouped_mm expects plain tensors, but we must restore the original
-        # DTensor params after the forward so save_pretrained still sees the
-        # canonical sharded weights.
-        _materialize_local_params(mod, "_moe_local_params")
-        return (hidden_states, top_k_index, top_k_weights)
-
-    @staticmethod
-    def _prepare_output_fn(output_layouts, mod, outputs, device_mesh):
-        _restore_local_params(mod, "_moe_local_params")
-        if outputs is None:
-            return None
-        # Plain TP expert weights produce partial outputs that need an all-reduce.
-        # TP+FSDP can leave experts replicated across TP and sharded only across
-        # experts/FSDP, in which case the local output is already complete.
-        source_layout = Partial() if MoEExpertsParallel._uses_partial_outputs(mod) else Replicate()
-        if not isinstance(outputs, DTensor):
-            outputs = DTensor.from_local(outputs, device_mesh, [source_layout], run_check=False)
-        # MoE experts output 2D [num_tokens, hidden]. For SP reduce-scatter,
-        # Shard(1) means sequence dim in 3D, but in 2D the token dim is 0.
-        actual_layouts = output_layouts
-        if outputs.dim() == 2 and isinstance(output_layouts, Shard) and output_layouts.dim == 1:
-            actual_layouts = Shard(0)
-        if outputs.placements != (actual_layouts,):
-            outputs = outputs.redistribute(placements=(actual_layouts,))
-        return outputs.to_local()
-
     def _apply(self, module, device_mesh):
-        # Don't use PyTorch's distribute_module — it would auto-convert all
-        # params to Replicate DTensors. We create DTensors with proper Shard
-        # placements in _partition_fn instead, and register hooks manually.
         self._partition_fn(module.__class__.__name__, module, device_mesh, self._moe_shard_plan)
-        module.register_forward_pre_hook(lambda mod, inputs: self._prepare_input_fn(mod, inputs, device_mesh))
-        module.register_forward_hook(
-            lambda mod, inputs, outputs: self._prepare_output_fn(self.output_layouts, mod, outputs, device_mesh),
-            always_call=True,
-        )
+
+        output_layouts = self.output_layouts
+        original_forward = module.forward
+        tp_group = device_mesh.get_group() if device_mesh.ndim == 1 else device_mesh.get_group("tp")
+
+        def tp_forward(hidden_states, top_k_index, top_k_weights):
+            # --- 1. Localize hidden_states (backward gets all-reduce for free) ---
+            if not isinstance(hidden_states, DTensor):
+                hidden_states = DTensor.from_local(hidden_states, device_mesh, [Replicate()], run_check=False)
+            hidden_states = hidden_states.to_local()
+
+            # --- 2. Fix routing weight gradients (allreduce-sum, not ÷ world_size) ---
+            if isinstance(top_k_weights, DTensor):
+                top_k_weights = top_k_weights.to_local()
+            top_k_weights = _AllReduceBackward.apply(top_k_weights, tp_group)
+
+            # --- 3. Swap DTensor params → local for grouped_mm ---
+            _materialize_local_params(module, "_moe_local_params")
+
+            # --- 4. Run the original forward ---
+            output = original_forward(hidden_states, top_k_index, top_k_weights)
+
+            # --- 5. Restore DTensor params (so save_pretrained sees them) ---
+            _restore_local_params(module, "_moe_local_params")
+
+            # --- 6. Reduce partial output ---
+            if output is None:
+                return None
+            # Under TP-only each rank has a partial result; under TP+FSDP the
+            # weights may be fully gathered by FSDP, making the output complete.
+            has_sharded_params = any(
+                isinstance(p, DTensor) and any(not pl.is_replicate() for pl in p.placements)
+                for p in module.parameters()
+            )
+            source = Partial() if has_sharded_params else Replicate()
+            if not isinstance(output, DTensor):
+                output = DTensor.from_local(output, device_mesh, [source], run_check=False)
+            # MoE output is 2D [tokens, hidden]. For SP, Shard(1) means seq dim
+            # in 3D but token dim (0) in 2D.
+            target = output_layouts
+            if output.dim() == 2 and isinstance(target, Shard) and target.dim == 1:
+                target = Shard(0)
+            if output.placements != (target,):
+                output = output.redistribute(placements=(target,))
+            return output.to_local()
+
+        module.forward = tp_forward
         return module
 
 
