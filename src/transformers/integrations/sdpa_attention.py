@@ -1,7 +1,7 @@
 import torch
 
 from ..utils import is_torch_npu_available, is_torch_xpu_available, logging
-from ..utils.import_utils import is_torch_greater_or_equal
+from ..utils.import_utils import is_torch_greater_or_equal, is_torch_mps_available
 
 
 logger = logging.get_logger(__name__)
@@ -11,6 +11,7 @@ _is_torch_greater_or_equal_than_2_5 = is_torch_greater_or_equal("2.5", accept_de
 _is_torch_greater_or_equal_than_2_8 = is_torch_greater_or_equal("2.8", accept_dev=True)
 _is_torch_xpu_available = is_torch_xpu_available()
 _is_torch_npu_available = is_torch_npu_available()
+_is_torch_mps_available = is_torch_mps_available()
 
 
 def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
@@ -89,6 +90,16 @@ def sdpa_attention_forward(
             # Convert to boolean type, making sdpa to force call FlashAttentionScore to improve performance.
             attention_mask = torch.logical_not(attention_mask.bool()).to(query.device)
 
+    # Workaround for MPS bug (PyTorch < 2.12) where SDPA produces incorrect output when
+    # value head dim differs from query head dim. See: pytorch/pytorch#176767, pytorch/pytorch#176843
+    # DeepSeek models (MQA) are affected as they have different qk and v head dims.
+    # The fix pads v to match q's head dim, calls SDPA, then truncates output to original v size.
+    ev = value.size(-1)
+    eq = query.size(-1)
+    needs_mps_fix = _is_torch_mps_available and query.device.type == "mps" and ev != eq
+    if needs_mps_fix:
+        value = torch.nn.functional.pad(value, (0, eq - ev))
+
     attn_output = torch.nn.functional.scaled_dot_product_attention(
         query,
         key,
@@ -99,6 +110,11 @@ def sdpa_attention_forward(
         is_causal=is_causal,
         **sdpa_kwargs,
     )
+
+    # Truncate back to original value head dim after MPS workaround
+    if needs_mps_fix:
+        attn_output = attn_output[..., :ev]
+
     attn_output = attn_output.transpose(1, 2).contiguous()
 
     return attn_output, None
