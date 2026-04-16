@@ -1537,10 +1537,17 @@ class TestNonTrainerIntegrationDeepSpeed(TestCasePlus):
         from transformers.models.gemma4.modeling_gemma4 import Gemma4ForConditionalGeneration
 
         text_config = Gemma4TextConfig(
-            hidden_size=128, num_hidden_layers=2, num_attention_heads=2,
-            intermediate_size=256, vocab_size=32000, num_key_value_heads=2, pad_token_id=None,
+            hidden_size=128,
+            num_hidden_layers=2,
+            num_attention_heads=2,
+            intermediate_size=256,
+            vocab_size=32000,
+            num_key_value_heads=2,
+            pad_token_id=None,
         )
-        vision_config = Gemma4VisionConfig(hidden_size=64, num_hidden_layers=2, num_attention_heads=2, intermediate_size=128)
+        vision_config = Gemma4VisionConfig(
+            hidden_size=64, num_hidden_layers=2, num_attention_heads=2, intermediate_size=128
+        )
         audio_config = Gemma4AudioConfig()
         config = Gemma4Config(text_config=text_config, vision_config=vision_config, audio_config=audio_config)
 
@@ -1557,10 +1564,7 @@ class TestNonTrainerIntegrationDeepSpeed(TestCasePlus):
             model2 = Gemma4ForConditionalGeneration.from_pretrained(save_path, torch_dtype=torch.bfloat16)
 
         # verify no registered buffers are MISSING
-        missing = [
-            name for name, buf in model2.named_buffers()
-            if buf is None
-        ]
+        missing = [name for name, buf in model2.named_buffers() if buf is None]
         self.assertEqual(missing, [], f"Registered buffers missing after ZeRO-3 load: {missing}")
 
 
