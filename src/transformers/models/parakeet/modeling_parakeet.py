@@ -733,8 +733,6 @@ class ParakeetForCTC(ParakeetPreTrainedModel, GenerationMixin):
         >>> print(outputs.loss)
         ```"""
 
-        if labels is not None:
-            kwargs.setdefault("output_attention_mask", True)
         encoder_outputs = self.encoder(
             input_features=input_features,
             attention_mask=attention_mask,
@@ -899,14 +897,7 @@ class ParakeetTDTDecoderCache:
 
 
 class ParakeetTDTDecoder(nn.Module):
-    """LSTM-based prediction network for TDT.
-
-    During generation the decoder is called once per step.  When a blank token
-    is fed back (i.e. the model predicted blank at the previous step), the LSTM
-    state must *not* change — only the encoder frame advances.  The blank-
-    skipping logic restores the previous cache state for those batch elements
-    using ``torch.where`` so that callers can treat the decoder as a black box.
-    """
+    """LSTM-based prediction network for TDT."""
 
     def __init__(self, config: ParakeetTDTConfig):
         super().__init__()
@@ -939,10 +930,10 @@ class ParakeetTDTDecoder(nn.Module):
         decoder_output = self.decoder_projector(lstm_output)
 
         if cache is not None:
-            # Use ~blank_mask so only non-blank elements are updated; blank elements keep previous state.
             mask = ~blank_mask if cache.is_initialized else None
             cache.update(decoder_output, hidden_state, cell_state, lstm_module=self.lstm, mask=mask)
             return cache.cache
+
         return decoder_output
 
 
@@ -1031,6 +1022,37 @@ class ParakeetForTDT(ParakeetPreTrainedModel, ParakeetTDTGenerationMixin):
         labels: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> ParakeetTDTOutput:
+        r"""
+        decoder_input_ids (`torch.LongTensor` of shape `(batch_size, 1)`, *optional*):
+            Decoder input token ids for single-step inference.
+        encoder_outputs (`tuple(torch.FloatTensor)`, *optional*):
+            Pre-computed encoder outputs (last_hidden_state, pooler_output, hidden_states, attentions, attention_mask).
+            Can be a tuple or `ParakeetEncoderModelOutput`.
+        decoder_cache (`ParakeetTDTDecoderCache`, *optional*):
+            Decoder LSTM cache. When provided and initialized, the cached `decoder_output` is reused
+            (e.g. during blank-skipping) instead of running the decoder. When `input_ids` is provided,
+            the decoder runs and the cache is updated in-place.
+        use_decoder_cache (`bool`, *optional*):
+            Whether to use a decoder cache. When `True` and `decoder_cache` is `None`, a new cache
+            is created automatically during the forward pass.
+
+        Example:
+
+        ```python
+        >>> from transformers import AutoProcessor, ParakeetForTDT
+        >>> from datasets import load_dataset, Audio
+
+        >>> model_id = "nvidia/parakeet-tdt-0.6b-v3"
+        >>> processor = AutoProcessor.from_pretrained(model_id)
+        >>> model = ParakeetForTDT.from_pretrained(model_id)
+
+        >>> ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
+        >>> ds = ds.cast_column("audio", Audio(sampling_rate=processor.feature_extractor.sampling_rate))
+
+        >>> inputs = processor(ds[0]["audio"]["array"])
+        >>> outputs = model(**inputs)
+        ```
+        """
         if encoder_outputs is None:
             encoder_outputs = self.get_audio_features(
                 input_features=input_features,
