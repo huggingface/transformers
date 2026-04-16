@@ -20,6 +20,7 @@ import torch
 import torch.nn as nn
 from huggingface_hub.dataclasses import strict
 
+from ...configuration_utils import PreTrainedConfig
 from ...image_processing_utils import BatchFeature
 from ...image_utils import ImageInput
 from ...modeling_outputs import BaseModelOutputWithPooling
@@ -30,7 +31,7 @@ from ...utils.generic import can_return_tuple, merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
 from ..auto import CONFIG_MAPPING, AutoConfig
 from ..beit.modeling_beit import BeitDropPath
-from ..internvl import InternVLConfig, InternVLVisionConfig
+from ..internvl.configuration_internvl import InternVLConfig, InternVLVisionConfig
 from ..internvl.modeling_internvl import (
     InternVLCausalLMOutputWithPast,
     InternVLForConditionalGeneration,
@@ -48,8 +49,8 @@ from ..internvl.modeling_internvl import (
 from ..internvl.processing_internvl import InternVLProcessor
 
 
-@strict
 @auto_docstring(checkpoint="baidu/Qianfan-OCR")
+@strict
 class QianfanOCRVisionConfig(InternVLVisionConfig):
     r"""
     drop_path_rate (`float`, *optional*, defaults to 0.1):
@@ -84,8 +85,8 @@ class QianfanOCRVisionConfig(InternVLVisionConfig):
     drop_path_rate: float = 0.1
 
 
-@strict
 @auto_docstring(checkpoint="baidu/Qianfan-OCR")
+@strict
 class QianfanOCRConfig(InternVLConfig):
     r"""
     downsample_ratio (`float`, *optional*, defaults to 0.5):
@@ -121,7 +122,7 @@ class QianfanOCRConfig(InternVLConfig):
         elif self.text_config is None:
             self.text_config = CONFIG_MAPPING["qwen3"]()
 
-        super().__post_init__(**kwargs)
+        PreTrainedConfig.__post_init__(self, **kwargs)
 
 
 class QianfanOCRDropPath(BeitDropPath):
