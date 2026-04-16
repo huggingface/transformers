@@ -302,6 +302,7 @@ if TYPE_CHECKING:
     from .paddleocr_vl import *
     from .paligemma import *
     from .parakeet import *
+    from .param2moe import *
     from .patchtsmixer import *
     from .patchtst import *
     from .pe_audio import *
