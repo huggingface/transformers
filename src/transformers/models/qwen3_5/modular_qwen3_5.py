@@ -13,7 +13,7 @@
 # limitations under the License.
 """PyTorch Qwen3.5 model."""
 
-from typing import Optional
+from typing import Optional, overload
 
 import torch
 import torch.nn.functional as F
@@ -24,7 +24,7 @@ from ... import initialization as init
 from ...cache_utils import Cache, DynamicCache
 from ...masking_utils import create_causal_mask
 from ...modeling_layers import GenericForSequenceClassification, GradientCheckpointingLayer
-from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPooling
+from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPooling, SequenceClassifierOutputWithPast
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
@@ -659,10 +659,6 @@ class Qwen3_5ForCausalLM(Qwen3ForCausalLM):
         self.model = Qwen3_5TextModel(config)
 
 
-class Qwen3_5ForSequenceClassification(GenericForSequenceClassification, Qwen3_5PreTrainedModel):
-    config: Qwen3_5TextConfig
-
-
 class Qwen3_5ForConditionalGeneration(Qwen3VLForConditionalGeneration):
     def get_video_features(
         self,
@@ -677,6 +673,29 @@ class Qwen3_5ForConditionalGeneration(Qwen3VLForConditionalGeneration):
         return super().get_image_features(**super_kwargs)
 
 
+class Qwen3_5TextForSequenceClassification(GenericForSequenceClassification, Qwen3_5PreTrainedModel):
+    config: Qwen3_5TextConfig
+    input_modalities = ("text",)
+
+
+class Qwen3_5ForSequenceClassification(GenericForSequenceClassification, Qwen3_5PreTrainedModel):
+    @overload
+    def forward(
+        self,
+        input_ids: torch.LongTensor = None,
+        attention_mask: torch.Tensor | None = None,
+        position_ids: torch.LongTensor | None = None,
+        past_key_values: Cache | None = None,
+        inputs_embeds: torch.FloatTensor | None = None,
+        pixel_values: torch.Tensor | None = None,
+        pixel_values_videos: torch.FloatTensor | None = None,
+        image_grid_thw: torch.LongTensor | None = None,
+        video_grid_thw: torch.LongTensor | None = None,
+        mm_token_type_ids: torch.IntTensor | None = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> SequenceClassifierOutputWithPast: ...
+
+
 __all__ = [
     "Qwen3_5Config",
     "Qwen3_5TextConfig",
@@ -684,6 +703,7 @@ __all__ = [
     "Qwen3_5TextModel",
     "Qwen3_5Model",
     "Qwen3_5ForCausalLM",
+    "Qwen3_5TextForSequenceClassification",
     "Qwen3_5ForSequenceClassification",
     "Qwen3_5ForConditionalGeneration",
     "Qwen3_5PreTrainedModel",
