@@ -11,6 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+import copy
 import unittest
 from types import SimpleNamespace
 
@@ -789,7 +790,7 @@ class TestConversionMapping(unittest.TestCase):
         loading_info, _ = convert_and_load_state_dict_in_model(
             model,
             bad_serialized_checkpoints,
-            LoadStateDictConfig(weight_mapping=weight_mapping),
+            LoadStateDictConfig(weight_mapping=copy.deepcopy(weight_mapping)),
             tp_plan=None,
         )
 
@@ -811,7 +812,7 @@ class TestConversionMapping(unittest.TestCase):
         loading_info, _ = convert_and_load_state_dict_in_model(
             model,
             good_serialized_checkpoints,
-            LoadStateDictConfig(weight_mapping=weight_mapping),
+            LoadStateDictConfig(weight_mapping=copy.deepcopy(weight_mapping)),
             tp_plan=None,
         )
 
