@@ -99,7 +99,7 @@ class QianfanOCRConfig(InternVLConfig):
         elif self.text_config is None:
             self.text_config = CONFIG_MAPPING["qwen3"]()
 
-        super(InternVLConfig, self).__post_init__(**kwargs)
+        super().__post_init__(**kwargs)
 
 
 __all__ = ["QianfanOCRVisionConfig", "QianfanOCRConfig"]

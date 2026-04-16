@@ -594,10 +594,10 @@ def _build_checkpoint_conversion_mapping():
 
     mapping["qianfan_ocr"] = [
         WeightRenaming(r"^vision_model\.", r"model\.vision_tower\."),
-        WeightRenaming(r"encoder\.layers\.", r"encoder\.layer\."),
+        WeightRenaming(r"encoder\.layers\.", r"layers\."),
         WeightRenaming(r"\.ls1", r"\.lambda_1"),
         WeightRenaming(r"\.ls2", r"\.lambda_2"),
-        WeightRenaming(r"(encoder\.layers?\.\d+)\.attn\.proj\.", r"\1.attention.projection_layer."),
+        WeightRenaming(r"(layers\.\d+)\.attn\.proj\.", r"\1.attention.projection_layer."),
         WeightConverter(
             source_patterns=["attn.qkv.weight"],
             target_patterns=["attention.q_proj.weight", "attention.k_proj.weight", "attention.v_proj.weight"],

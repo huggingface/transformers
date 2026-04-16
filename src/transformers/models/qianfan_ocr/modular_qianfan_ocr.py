@@ -23,8 +23,8 @@ from huggingface_hub.dataclasses import strict
 from ...cache_utils import Cache
 from ...image_processing_utils import BatchFeature
 from ...image_utils import ImageInput
-from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling
-from ...processing_utils import ProcessorMixin, Unpack
+from ...modeling_outputs import BaseModelOutputWithPooling
+from ...processing_utils import Unpack
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
 from ...utils import TransformersKwargs, auto_docstring
 from ...utils.generic import can_return_tuple, merge_with_config_defaults
@@ -122,7 +122,7 @@ class QianfanOCRConfig(InternVLConfig):
         elif self.text_config is None:
             self.text_config = CONFIG_MAPPING["qwen3"]()
 
-        super(InternVLConfig, self).__post_init__(**kwargs)
+        super().__post_init__(**kwargs)
 
 
 class QianfanOCRDropPath(BeitDropPath):
@@ -155,7 +155,7 @@ class QianfanOCRVisionLayer(InternVLVisionLayer):
         residual = hidden_states
         hidden_states = self.layernorm_before(hidden_states)
         # Self Attention
-        hidden_states, _ = self.attention(hidden_states)
+        hidden_states, _ = self.attention(hidden_states, **kwargs)
         hidden_states = self.lambda_1 * hidden_states
         hidden_states = self.drop_path1(hidden_states)
         hidden_states = hidden_states + residual
@@ -169,30 +169,6 @@ class QianfanOCRVisionLayer(InternVLVisionLayer):
         hidden_states = self.drop_path2(hidden_states) + residual
 
         return hidden_states
-
-
-class QianfanOCRVisionEncoder(nn.Module):
-    def __init__(self, config: QianfanOCRVisionConfig) -> None:
-        super().__init__()
-        self.config = config
-        self.gradient_checkpointing = False
-
-        dpr = [x.item() for x in torch.linspace(0, config.drop_path_rate, config.num_hidden_layers, device="cpu")]
-        self.layer = nn.ModuleList(
-            [QianfanOCRVisionLayer(config, drop_path_rate=dpr[i]) for i in range(config.num_hidden_layers)]
-        )
-
-    def forward(
-        self,
-        hidden_states: torch.Tensor,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | BaseModelOutput:
-        for layer_module in self.layer:
-            hidden_states = layer_module(hidden_states, **kwargs)
-
-        return BaseModelOutput(
-            last_hidden_state=hidden_states,
-        )
 
 
 class QianfanOCRVisionEmbeddings(InternVLVisionEmbeddings):
@@ -223,6 +199,15 @@ class QianfanOCRVisionPreTrainedModel(InternVLVisionPreTrainedModel):
 
 @auto_docstring
 class QianfanOCRVisionModel(InternVLVisionModel):
+    def __init__(self, config: QianfanOCRVisionConfig) -> None:
+        super().__init__(config)
+        # Replace the encoder with direct layers (no intermediate encoder module)
+        del self.encoder
+        dpr = [x.item() for x in torch.linspace(0, config.drop_path_rate, config.num_hidden_layers, device="cpu")]
+        self.layers = nn.ModuleList(
+            [QianfanOCRVisionLayer(config, drop_path_rate=dpr[i]) for i in range(config.num_hidden_layers)]
+        )
+
     @merge_with_config_defaults
     @capture_outputs
     @auto_docstring
@@ -236,13 +221,13 @@ class QianfanOCRVisionModel(InternVLVisionModel):
         bool_masked_pos (`torch.BoolTensor` of shape `(batch_size, num_patches)`, *optional*):
             Boolean masked positions. Indicates which patches are masked (1) and which aren't (0).
         """
-        embedding_output = self.embeddings(pixel_values, bool_masked_pos=bool_masked_pos)
-        encoder_outputs = self.encoder(embedding_output, **kwargs)
-        sequence_output = encoder_outputs[0]
-        sequence_output = self.layernorm(sequence_output)
+        hidden_states = self.embeddings(pixel_values, bool_masked_pos=bool_masked_pos)
+        for layer_module in self.layers:
+            hidden_states = layer_module(hidden_states, **kwargs)
+        hidden_states = self.layernorm(hidden_states)
 
         return QianfanOCRVisionModelOutputWithPooling(
-            last_hidden_state=sequence_output,
+            last_hidden_state=hidden_states,
         )
 
 
@@ -283,34 +268,17 @@ class QianfanOCRForConditionalGeneration(InternVLForConditionalGeneration):
 
     @can_return_tuple
     @auto_docstring
-    def forward(
-        self,
-        input_ids: torch.LongTensor | None = None,
-        pixel_values: torch.FloatTensor | None = None,
-        attention_mask: torch.Tensor | None = None,
-        position_ids: torch.LongTensor | None = None,
-        past_key_values: Cache | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
-        vision_feature_layer: int | list[int] | None = None,
-        vision_feature_select_strategy: str | None = None,
-        labels: torch.LongTensor | None = None,
-        logits_to_keep: int | torch.Tensor = 0,
-        image_sizes: torch.Tensor | None = None,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | QianfanOCRCausalLMOutputWithPast:
+    def forward(self, **super_kwargs) -> tuple | QianfanOCRCausalLMOutputWithPast:
         r"""
         Example:
-
         ```python
         >>> import torch
         >>> from transformers import AutoProcessor, AutoModelForImageTextToText
-
         >>> torch_device = "cuda"
         >>> processor = AutoProcessor.from_pretrained("baidu/Qianfan-OCR")
         >>> model = AutoModelForImageTextToText.from_pretrained(
         ...     "baidu/Qianfan-OCR", dtype=torch.bfloat16, device_map=torch_device
         ... )
-
         >>> messages = [
         ...     {
         ...         "role": "user",
@@ -320,25 +288,11 @@ class QianfanOCRForConditionalGeneration(InternVLForConditionalGeneration):
         ...         ],
         ...     },
         ... ]
-
         >>> inputs = processor.apply_chat_template(messages, add_generation_prompt=True, tokenize=True, return_dict=True, return_tensors="pt").to(torch_device)
         >>> generate_ids = model.generate(**inputs, max_new_tokens=200)
         >>> print(processor.decode(generate_ids[0, inputs["input_ids"].shape[1] :], skip_special_tokens=True))
         ```"""
-        return super().forward(
-            input_ids=input_ids,
-            pixel_values=pixel_values,
-            attention_mask=attention_mask,
-            position_ids=position_ids,
-            past_key_values=past_key_values,
-            inputs_embeds=inputs_embeds,
-            vision_feature_layer=vision_feature_layer,
-            vision_feature_select_strategy=vision_feature_select_strategy,
-            labels=labels,
-            logits_to_keep=logits_to_keep,
-            image_sizes=image_sizes,
-            **kwargs,
-        )
+        return super().forward(**super_kwargs)
 
 
 class QianfanOCRProcessor(InternVLProcessor):
@@ -346,45 +300,28 @@ class QianfanOCRProcessor(InternVLProcessor):
         self,
         image_processor=None,
         tokenizer=None,
+        video_processor=None,
         image_seq_length: int = 256,
         chat_template=None,
-        start_image_token: str = "<img>",
-        end_image_token: str = "</img>",
-        context_image_token: str = "<IMG_CONTEXT>",
         image_placeholder_token: str = "<image>",
         **kwargs,
     ):
         r"""
-        start_image_token (`str`, *optional*, defaults to `"<img>"`):
-            The token used to mark the start of an image sequence.
-        end_image_token (`str`, *optional*, defaults to `"</img>"`):
-            The token used to mark the end of an image sequence.
-        context_image_token (`str`, *optional*, defaults to `"<IMG_CONTEXT>"`):
-            The token used as an image context placeholder in the input sequence.
         image_placeholder_token (`str`, *optional*, defaults to `"<image>"`):
             The token emitted by the chat template to mark image positions.
             It is replaced by the full ``<img><IMG_CONTEXT>...<IMG_CONTEXT></img>``
             sequence during processing.
         """
-        ProcessorMixin.__init__(
-            self,
+        super().__init__(
             image_processor=image_processor,
             tokenizer=tokenizer,
+            video_processor=None,
+            image_seq_length=image_seq_length,
             chat_template=chat_template,
             **kwargs,
         )
-        self.image_seq_length = image_seq_length
-        # Override with the config values to ensure they are always used,
-        # regardless of what the tokenizer may have returned.
-        self.start_image_token = start_image_token
-        self.end_image_token = end_image_token
-        self.image_token = context_image_token
         self.image_placeholder_token = image_placeholder_token
         self.video_token = None
-        self.start_image_token_id = tokenizer.convert_tokens_to_ids(start_image_token)
-        self.end_image_token_id = tokenizer.convert_tokens_to_ids(end_image_token)
-        self.image_token_id = tokenizer.convert_tokens_to_ids(context_image_token)
-        self.image_ids = [self.image_token_id, self.start_image_token_id, self.end_image_token_id]
         self.video_processor = None
 
     def _insert_media_placeholders(
@@ -431,9 +368,7 @@ class QianfanOCRProcessor(InternVLProcessor):
     ) -> BatchFeature:
         if videos is not None:
             raise ValueError("QianfanOCR does not support video input.")
-        if kwargs.get("audio") is not None:
-            raise ValueError("QianfanOCR does not support audio input.")
-        kwargs.pop("audio", None)
+
         return super().__call__(images=images, text=text, videos=None, **kwargs)
 
 

@@ -32,7 +32,7 @@ from ...cache_utils import Cache
 from ...generation import GenerationMixin
 from ...integrations import use_kernel_forward_from_hub
 from ...modeling_layers import GradientCheckpointingLayer
-from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPast, BaseModelOutputWithPooling
+from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPooling
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import ModelOutput, TransformersKwargs, auto_docstring, torch_compilable_check, torch_int
@@ -235,7 +235,7 @@ class QianfanOCRVisionLayer(GradientCheckpointingLayer):
         residual = hidden_states
         hidden_states = self.layernorm_before(hidden_states)
         # Self Attention
-        hidden_states, _ = self.attention(hidden_states)
+        hidden_states, _ = self.attention(hidden_states, **kwargs)
         hidden_states = self.lambda_1 * hidden_states
         hidden_states = self.drop_path1(hidden_states)
         hidden_states = hidden_states + residual
@@ -249,30 +249,6 @@ class QianfanOCRVisionLayer(GradientCheckpointingLayer):
         hidden_states = self.drop_path2(hidden_states) + residual
 
         return hidden_states
-
-
-class QianfanOCRVisionEncoder(nn.Module):
-    def __init__(self, config: QianfanOCRVisionConfig) -> None:
-        super().__init__()
-        self.config = config
-        self.gradient_checkpointing = False
-
-        dpr = [x.item() for x in torch.linspace(0, config.drop_path_rate, config.num_hidden_layers, device="cpu")]
-        self.layer = nn.ModuleList(
-            [QianfanOCRVisionLayer(config, drop_path_rate=dpr[i]) for i in range(config.num_hidden_layers)]
-        )
-
-    def forward(
-        self,
-        hidden_states: torch.Tensor,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | BaseModelOutput:
-        for layer_module in self.layer:
-            hidden_states = layer_module(hidden_states, **kwargs)
-
-        return BaseModelOutput(
-            last_hidden_state=hidden_states,
-        )
 
 
 class QianfanOCRVisionPatchEmbeddings(nn.Module):
@@ -457,10 +433,13 @@ class QianfanOCRVisionModel(QianfanOCRVisionPreTrainedModel):
         self.config = config
 
         self.embeddings = QianfanOCRVisionEmbeddings(config)
-        self.encoder = QianfanOCRVisionEncoder(config)
 
         self.layernorm = (
             nn.Identity() if config.use_mean_pooling else nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
+        )
+        dpr = [x.item() for x in torch.linspace(0, config.drop_path_rate, config.num_hidden_layers, device="cpu")]
+        self.layers = nn.ModuleList(
+            [QianfanOCRVisionLayer(config, drop_path_rate=dpr[i]) for i in range(config.num_hidden_layers)]
         )
 
         # Initialize weights and apply final processing
@@ -482,13 +461,13 @@ class QianfanOCRVisionModel(QianfanOCRVisionPreTrainedModel):
         bool_masked_pos (`torch.BoolTensor` of shape `(batch_size, num_patches)`, *optional*):
             Boolean masked positions. Indicates which patches are masked (1) and which aren't (0).
         """
-        embedding_output = self.embeddings(pixel_values, bool_masked_pos=bool_masked_pos)
-        encoder_outputs = self.encoder(embedding_output, **kwargs)
-        sequence_output = encoder_outputs[0]
-        sequence_output = self.layernorm(sequence_output)
+        hidden_states = self.embeddings(pixel_values, bool_masked_pos=bool_masked_pos)
+        for layer_module in self.layers:
+            hidden_states = layer_module(hidden_states, **kwargs)
+        hidden_states = self.layernorm(hidden_states)
 
         return QianfanOCRVisionModelOutputWithPooling(
-            last_hidden_state=sequence_output,
+            last_hidden_state=hidden_states,
         )
 
 
@@ -803,7 +782,7 @@ class QianfanOCRForConditionalGeneration(QianfanOCRPreTrainedModel, GenerationMi
         position_ids: torch.LongTensor | None = None,
         past_key_values: Cache | None = None,
         inputs_embeds: torch.FloatTensor | None = None,
-        vision_feature_layer: int | list[int] | None = None,
+        vision_feature_layer: int | list[int] | list[int] | None = None,
         vision_feature_select_strategy: str | None = None,
         labels: torch.LongTensor | None = None,
         logits_to_keep: int | torch.Tensor = 0,
@@ -812,17 +791,14 @@ class QianfanOCRForConditionalGeneration(QianfanOCRPreTrainedModel, GenerationMi
     ) -> tuple | QianfanOCRCausalLMOutputWithPast:
         r"""
         Example:
-
         ```python
         >>> import torch
         >>> from transformers import AutoProcessor, AutoModelForImageTextToText
-
         >>> torch_device = "cuda"
         >>> processor = AutoProcessor.from_pretrained("baidu/Qianfan-OCR")
         >>> model = AutoModelForImageTextToText.from_pretrained(
         ...     "baidu/Qianfan-OCR", dtype=torch.bfloat16, device_map=torch_device
         ... )
-
         >>> messages = [
         ...     {
         ...         "role": "user",
@@ -832,7 +808,6 @@ class QianfanOCRForConditionalGeneration(QianfanOCRPreTrainedModel, GenerationMi
         ...         ],
         ...     },
         ... ]
-
         >>> inputs = processor.apply_chat_template(messages, add_generation_prompt=True, tokenize=True, return_dict=True, return_tensors="pt").to(torch_device)
         >>> generate_ids = model.generate(**inputs, max_new_tokens=200)
         >>> print(processor.decode(generate_ids[0, inputs["input_ids"].shape[1] :], skip_special_tokens=True))

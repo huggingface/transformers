@@ -49,44 +49,30 @@ class QianfanOCRProcessor(ProcessorMixin):
         self,
         image_processor=None,
         tokenizer=None,
+        video_processor=None,
         image_seq_length: int = 256,
         chat_template=None,
-        start_image_token: str = "<img>",
-        end_image_token: str = "</img>",
-        context_image_token: str = "<IMG_CONTEXT>",
         image_placeholder_token: str = "<image>",
         **kwargs,
     ):
         r"""
-        start_image_token (`str`, *optional*, defaults to `"<img>"`):
-            The token used to mark the start of an image sequence.
-        end_image_token (`str`, *optional*, defaults to `"</img>"`):
-            The token used to mark the end of an image sequence.
-        context_image_token (`str`, *optional*, defaults to `"<IMG_CONTEXT>"`):
-            The token used as an image context placeholder in the input sequence.
         image_placeholder_token (`str`, *optional*, defaults to `"<image>"`):
             The token emitted by the chat template to mark image positions.
             It is replaced by the full ``<img><IMG_CONTEXT>...<IMG_CONTEXT></img>``
             sequence during processing.
         """
-        super().__init__(
-            image_processor=image_processor,
-            tokenizer=tokenizer,
-            chat_template=chat_template,
-            **kwargs,
-        )
+        super().__init__(image_processor, tokenizer, video_processor, chat_template=chat_template, **kwargs)
+
         self.image_seq_length = image_seq_length
-        # Override with the config values to ensure they are always used,
-        # regardless of what the tokenizer may have returned.
-        self.start_image_token = start_image_token
-        self.end_image_token = end_image_token
-        self.image_token = context_image_token
-        self.image_placeholder_token = image_placeholder_token
+        self.start_image_token = tokenizer.start_image_token
+        self.end_image_token = tokenizer.end_image_token
+        self.start_image_token_id = tokenizer.start_image_token_id
+        self.end_image_token_id = tokenizer.end_image_token_id
+        self.image_token = tokenizer.context_image_token
         self.video_token = None
-        self.start_image_token_id = tokenizer.convert_tokens_to_ids(start_image_token)
-        self.end_image_token_id = tokenizer.convert_tokens_to_ids(end_image_token)
-        self.image_token_id = tokenizer.convert_tokens_to_ids(context_image_token)
+        self.image_token_id = tokenizer.context_image_token_id
         self.image_ids = [self.image_token_id, self.start_image_token_id, self.end_image_token_id]
+        self.image_placeholder_token = image_placeholder_token
         self.video_processor = None
 
     def _insert_media_placeholders(
@@ -144,9 +130,6 @@ class QianfanOCRProcessor(ProcessorMixin):
         """
         if videos is not None:
             raise ValueError("QianfanOCR does not support video input.")
-        if kwargs.get("audio") is not None:
-            raise ValueError("QianfanOCR does not support audio input.")
-        kwargs.pop("audio", None)
         if text is None:
             raise ValueError("You have to specify text.")
 
