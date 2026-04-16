@@ -16,6 +16,7 @@
 from __future__ import annotations
 
 import math
+import contextlib
 import os
 import re
 import traceback
@@ -1541,111 +1542,114 @@ def convert_and_load_state_dict_in_model(
         )
 
     try:
-        # ── Pipelined main loop ─────────────────────────────────────────────────────────────────
-        # Three-stage pipeline that overlaps disk I/O, conversion, comms, and model assignment:
-        #
-        #   Stage A (background thread): source rank runs `mapping.convert()` which resolves the
-        #       pre-scheduled thread-pool futures (disk → GPU) and stacks/reshapes the result.
-        #   Stage B (main thread, async NCCL): `_redistribute_async()` pre-shards on GPU and starts
-        #       `dist.scatter(async_op=True)`.
-        #   Stage C (main thread, sync): `_finalize_mapping()` waits for the previous scatter to
-        #       complete and writes the param into the model.
-        #
-        # At any given iteration the CPU is handling stage A for mapping N+1, stage B for mapping N,
-        # and stage C for mapping N-1 — all concurrently.  The NCCL stream runs stage-B scatters
-        # independently of the CPU.
-        convert_pool = ThreadPoolExecutor(max_workers=1)
-
-        # `inflight` holds (work_handles, params, mapping) for the mapping whose scatter is in-flight.
-        inflight = None
-        # `next_convert` holds the Future for the mapping whose convert is running in the background.
-        next_convert_future = None
-        next_convert_meta = None  # (first_param_name, mapping, source_rank)
-
         items = list(param_name_to_load.items())
-        for idx, (first_param_name, mapping) in enumerate(tqdm(items, desc="Loading weights")):
-            try:
-                source_rank = mapping_to_source_rank.get(first_param_name, local_rank)
-                is_source = source_rank == local_rank
 
-                if not distributed_loading:
-                    # Non-distributed: synchronous path (unchanged).
-                    if is_source:
+        if not distributed_loading:
+            # Non-distributed (single-process) path — unchanged.
+            for first_param_name, mapping in tqdm(items, desc="Loading weights"):
+                try:
+                    realized_value = _convert_mapping(mapping, first_param_name)
+                except SkipParameters:
+                    continue
+                for target_name, param in realized_value.items():
+                    param = param[0] if isinstance(param, list) else param
+                    param_device = get_device(device_map, target_name)
+                    if param_device == "disk" and (target_name not in model_buffers or offload_buffers):
+                        disk_offload_index = offload_and_maybe_resave_param(
+                            target_name, param, loading_info, disk_offload_folder, disk_offload_index, mapping
+                        )
+                    else:
+                        set_param_for_module(
+                            model, target_name, param, loading_info, mapping.distributed_operation, hf_quantizer
+                        )
+                del realized_value
+
+        else:
+            # ── Batched + coalesced TP load ────────────────────────────────────────────────────
+            # We batch mappings into groups and submit every scatter/broadcast inside one
+            # `dist._coalescing_manager(device=...)` context — the NCCL backend wraps the whole batch
+            # in `ncclGroupStart`/`ncclGroupEnd`, turning N per-collective launches into ONE. On
+            # NVLink the profile showed ~15 ms per standalone scatter call vs essentially constant
+            # overhead for a coalesced group, so for 14B (579 mappings) this collapses ~9 s of launch
+            # overhead into a couple hundred ms.
+            #
+            # Batch size tradeoff: bigger = fewer launches, but more in-flight shards on the source
+            # rank and more pre-allocated recv buffers on the receivers. BATCH_SIZE=64 keeps that
+            # in-flight footprint bounded while capturing ~all the launch-overhead savings.
+            BATCH_SIZE = 64
+            convert_pool = ThreadPoolExecutor(max_workers=min(4, os.cpu_count() or 1))
+
+            pbar = tqdm(total=len(items), desc="Loading weights")
+            i = 0
+            while i < len(items):
+                batch = items[i : i + BATCH_SIZE]
+                i += len(batch)
+
+                # ── Stage A: convert all source-owned mappings in this batch (threaded) ──
+                # Non-source ranks have nothing to convert; they participate as scatter/broadcast
+                # receivers and derive shapes from the shared meta model.
+                convert_futures = {}
+                for first_param_name, mapping in batch:
+                    source_rank = mapping_to_source_rank.get(first_param_name, local_rank)
+                    if source_rank == local_rank:
+                        convert_futures[first_param_name] = convert_pool.submit(
+                            _convert_mapping, mapping, first_param_name
+                        )
+
+                realized_by_name: dict[str, dict | None] = {}
+                skips: set[str] = set()
+                for first_param_name, fut in convert_futures.items():
+                    try:
+                        realized_by_name[first_param_name] = fut.result()
+                    except SkipParameters:
+                        skips.add(first_param_name)
+
+                # ── Stage B: open ONE coalesced NCCL group for the whole batch ──
+                # Every scatter/broadcast inside this context is bundled into a single
+                # `ncclGroupStart`/`ncclGroupEnd` pair, so we pay the launch cost once for the batch.
+                # Gloo (CPU backend used by the synthetic test) has no coalescing primitive — fall
+                # back to launching ops individually in that case.
+                batch_results = []
+                group = device_mesh.get_group()
+                local_device = device_map[""]
+                backend = torch.distributed.get_backend(group)
+                can_coalesce = backend == "nccl"
+                if can_coalesce:
+                    ctx = torch.distributed.distributed_c10d._coalescing_manager(
+                        group=group, device=torch.device(local_device), async_ops=True
+                    )
+                else:
+                    ctx = contextlib.nullcontext()
+                with ctx as cm:
+                    for first_param_name, mapping in batch:
+                        if first_param_name in skips:
+                            continue
+                        source_rank = mapping_to_source_rank.get(first_param_name, local_rank)
+                        realized_value = realized_by_name.get(first_param_name)
                         try:
-                            realized_value = _convert_mapping(mapping, first_param_name)
+                            result = _redistribute_async(
+                                realized_value,
+                                mapping,
+                                source_rank,
+                                device_mesh,
+                                local_device=local_device,
+                                meta_model_state_dict=meta_model_state_dict,
+                                first_param_name=first_param_name,
+                            )
+                            batch_results.append((result[0], result[1], mapping))
                         except SkipParameters:
                             continue
-                    else:
-                        continue
-                    for target_name, param in realized_value.items():
-                        param = param[0] if isinstance(param, list) else param
-                        param_device = get_device(device_map, target_name)
-                        if param_device == "disk" and (target_name not in model_buffers or offload_buffers):
-                            disk_offload_index = offload_and_maybe_resave_param(
-                                target_name, param, loading_info, disk_offload_folder, disk_offload_index, mapping
-                            )
-                        else:
-                            set_param_for_module(
-                                model, target_name, param, loading_info, mapping.distributed_operation, hf_quantizer
-                            )
-                    del realized_value
-                    continue
 
-                # ── Stage A: get the convert result (from background thread or inline) ──
-                realized_value = None
-                skip = False
-                if next_convert_future is not None and next_convert_meta[0] == first_param_name:
-                    # The background thread already started this convert last iteration.
-                    try:
-                        realized_value = next_convert_future.result()
-                    except SkipParameters:
-                        skip = True
-                    next_convert_future = next_convert_meta = None
-                elif is_source:
-                    try:
-                        realized_value = _convert_mapping(mapping, first_param_name)
-                    except SkipParameters:
-                        skip = True
+                # ── Stage C: wait for the whole coalesced group, then set params ──
+                if can_coalesce and cm is not None:
+                    cm.wait()
+                for work_handles, params, mapping_obj in batch_results:
+                    _finalize_mapping(work_handles, params, mapping_obj)
 
-                # ── Pre-submit convert for the NEXT mapping in background ──
-                if idx + 1 < len(items):
-                    nxt_name, nxt_mapping = items[idx + 1]
-                    nxt_source = mapping_to_source_rank.get(nxt_name, local_rank)
-                    if nxt_source == local_rank:
-                        next_convert_future = convert_pool.submit(_convert_mapping, nxt_mapping, nxt_name)
-                        next_convert_meta = (nxt_name, nxt_mapping, nxt_source)
+                pbar.update(len(batch))
 
-                if skip:
-                    # All ranks must agree to skip. Since SkipParameters is deterministic (same model
-                    # structure on all ranks), non-source ranks also skip this mapping.
-                    continue
-
-                # ── Stage B: start async scatter for THIS mapping ──
-                result = _redistribute_async(
-                    realized_value,
-                    mapping,
-                    source_rank,
-                    device_mesh,
-                    local_device=device_map[""],
-                    meta_model_state_dict=meta_model_state_dict,
-                    first_param_name=first_param_name,
-                )
-
-                # ── Stage C: finalize the PREVIOUS mapping (wait scatter + set_param) ──
-                if inflight is not None:
-                    _finalize_mapping(*inflight)
-                    inflight = None
-
-                inflight = (result[0], result[1], mapping)
-
-            except SkipParameters:
-                continue
-
-        # ── Drain ──
-        if inflight is not None:
-            _finalize_mapping(*inflight)
-
-        convert_pool.shutdown(wait=False)
+            pbar.close()
+            convert_pool.shutdown(wait=False)
 
     # Close the pool, independently of whether the code was interrupted or finished successfully
     finally:

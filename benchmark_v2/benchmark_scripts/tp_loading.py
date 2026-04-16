@@ -247,9 +247,22 @@ def benchmark_real_model(model_id: str, dtype: str, run_generate: bool) -> bool:
         print(f"[real] loading {model_id!r} with tp_plan='auto' (world_size={world_size}, dtype={dtype})")
 
     torch.manual_seed(0)
+    viztracer_output = os.environ.get("VIZTRACER_OUTPUT")
+    tracer = None
+    if viztracer_output and rank == 0:
+        from viztracer import VizTracer
+
+        tracer = VizTracer(output_file=viztracer_output, tracer_entries=20_000_000, max_stack_depth=30)
+        tracer.start()
+
     t0 = time.perf_counter()
     model = AutoModelForCausalLM.from_pretrained(model_id, tp_plan="auto", dtype=dtype)
     elapsed = time.perf_counter() - t0
+
+    if tracer is not None:
+        tracer.stop()
+        tracer.save()
+        print(f"[viztracer] saved trace to {viztracer_output}")
 
     # Gather peak CUDA memory across ranks for a rough sanity check on the shard placement.
     peak_mem_bytes = 0
