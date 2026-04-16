@@ -43,6 +43,22 @@ class VJEPA2Config(PreTrainedConfig):
         Initialize the mask tokens in the predictor with 0.
     pred_mlp_ratio (`float`, *optional*, defaults to 4.0):
         Ratio of the hidden size of the MLPs used in Predictor relative to the `pred_hidden_size`.
+    use_rope_interleave (`bool`, *optional*, defaults to `False`):
+        Use corrected RoPE implementation with `repeat_interleave` (V-JEPA 2.1) instead of `repeat` (V-JEPA 2).
+    use_modality_embeddings (`bool`, *optional*, defaults to `False`):
+        Add learnable modality embeddings (`img_mod_embed`/`video_mod_embed`) to patch embeddings.
+    interpolate_rope (`bool`, *optional*, defaults to `False`):
+        Scale RoPE positions for flexible resolution handling.
+    return_all_tokens (`bool`, *optional*, defaults to `False`):
+        Whether the predictor returns both predicted and context tokens via a separate projection.
+    img_temporal_dim_size (`int`, *optional*, defaults to `None`):
+        When set, creates a separate image patch embedding with `tubelet_size=1`.
+    teacher_embed_dim (`int`, *optional*, defaults to `None`):
+        Teacher embedding dimension for distilled models. Controls predictor output projection size.
+    n_output_distillation (`int`, *optional*, defaults to 0):
+        Number of distillation output layers. Controls predictor embed architecture (>1 uses MLP).
+    hierarchical_layers (`list[int]`, *optional*, defaults to `None`):
+        Encoder layer indices for hierarchical feature extraction with per-layer norms.
 
     Example:
 
@@ -84,6 +100,14 @@ class VJEPA2Config(PreTrainedConfig):
     pred_num_mask_tokens: int = 10
     pred_zero_init_mask_tokens: bool = True
     pred_mlp_ratio: int | float = 4.0
+    use_rope_interleave: bool = False
+    use_modality_embeddings: bool = False
+    interpolate_rope: bool = False
+    return_all_tokens: bool = False
+    img_temporal_dim_size: int | None = None
+    teacher_embed_dim: int | None = None
+    n_output_distillation: int = 0
+    hierarchical_layers: list[int] | None = None
 
 
 __all__ = ["VJEPA2Config"]
