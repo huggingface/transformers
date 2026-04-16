@@ -1212,7 +1212,7 @@ def _redistribute_async(
             if is_source:
                 full_tensor = realized_value[target_name]
                 full_tensor = full_tensor[0] if isinstance(full_tensor, list) else full_tensor
-                full_tensor = full_tensor.to(device=local_device).contiguous()
+                full_tensor = full_tensor.contiguous()
                 realized_value[target_name] = None
 
                 scatter_list = _batch_shard_for_scatter(full_tensor, tp_layer, world_size)
@@ -1249,7 +1249,7 @@ def _redistribute_async(
             # world_size == 1 — local shard, no comms.
             full_tensor = realized_value[target_name]
             full_tensor = full_tensor[0] if isinstance(full_tensor, list) else full_tensor
-            full_tensor = full_tensor.to(device=local_device).contiguous()
+            full_tensor = full_tensor.contiguous()
             realized_value[target_name] = None
             local_param = tp_layer.shard_tensor(full_tensor, tensor_idx=None, device=local_device, dtype=None)
             if local_param._base is full_tensor:
@@ -1261,7 +1261,7 @@ def _redistribute_async(
             if is_source:
                 full_tensor = realized_value[target_name]
                 full_tensor = full_tensor[0] if isinstance(full_tensor, list) else full_tensor
-                full_tensor = full_tensor.to(device=local_device).contiguous()
+                full_tensor = full_tensor.contiguous()
                 realized_value[target_name] = None
             else:
                 full_tensor = torch.empty(full_shape, dtype=t_dtype, device=local_device)
@@ -1520,18 +1520,16 @@ def convert_and_load_state_dict_in_model(
     # thread pool at once is what gives us cross-mapping disk I/O parallelism. Each rank only schedules for its
     # own mappings (so no duplicated reads across ranks). Non-owned mappings stay with empty `collected_tensors`
     # and are handled as receivers in the redistribute step.
-    # Under TP we materialize the scheduled tensors to **CPU** (not the local GPU): the owning rank may hold
-    # many mappings-worth of weights that haven't been consumed by the main loop yet, and parking them in host
-    # RAM (which is abundant) while we process one mapping at a time avoids accumulating them on the local GPU
-    # where the sharded result has to fit too. The broadcast in `_redistribute_realized_value` pushes them
-    # back to device lazily, one mapping at a time.
+    # Schedule materialize to the target device directly (GPU under TP). The thread pool reads from disk via
+    # safetensors mmap and lands the tensor on the target device in one shot — no CPU staging + separate
+    # CPU→GPU copy per mapping.
     for first_param_name, entries in pending_entries.items():
         if mapping_to_source_rank[first_param_name] != local_rank:
             continue
         mapping = param_name_to_load[first_param_name]
         for target_key, original_key, source_pattern, tensor, _dtype in entries:
             if distributed_loading:
-                param_device = "cpu"
+                param_device = device_map[""]
             else:
                 param_device = get_device(device_map, target_key, valid_torch_device=True)
             future_or_tensor = spawn_materialize(thread_pool, tensor, param_device, _dtype)
