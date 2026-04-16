@@ -77,6 +77,11 @@ _MODEL_TO_CONVERSION_PATTERN = {
     "pp_chart2table": "llava",
     "gemma3n_text": "qwen3_5_text",
     "qwen3_5_moe_text": "qwen3_5_text",
+    "altclip_vision_model": "clip_vision_model",
+    "chinese_clip_vision_model": "clip_vision_model",
+    "clipseg_vision_model": "clip_vision_model",
+    "mlcd_vision": "clip_vision_model",
+    "mlcd": "clip_vision_model",
 }
 
 
