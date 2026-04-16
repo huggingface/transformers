@@ -30,8 +30,6 @@ from ..auto import CONFIG_MAPPING, AutoConfig
 @strict
 class QianfanOCRVisionConfig(PreTrainedConfig):
     r"""
-    drop_path_rate (`float`, *optional*, defaults to 0.1):
-        Dropout rate for stochastic depth.
     projection_dropout (`float`, *optional*, defaults to 0.0):
         Dropout probability for the projection layer.
     norm_type (`str`, *optional*, defaults to `"layer_norm"`):
@@ -41,6 +39,8 @@ class QianfanOCRVisionConfig(PreTrainedConfig):
     use_mean_pooling (`bool`, *optional*, defaults to `True`):
         Whether to mean pool the final hidden states of the patches instead of using the final hidden state of the
         CLS token, before applying the classification head.
+    drop_path_rate (`float`, *optional*, defaults to 0.1):
+        Dropout rate for stochastic depth.
 
     Example:
 

@@ -734,7 +734,7 @@ class QianfanOCRCausalLMOutputWithPast(ModelOutput):
 
 @auto_docstring(
     custom_intro="""
-    The QIANFAN_OCR model which consists of a vision backbone and a language model.
+    The QIANFAN_O_C_R model which consists of a vision backbone and a language model.
     """
 )
 class QianfanOCRForConditionalGeneration(QianfanOCRPreTrainedModel, GenerationMixin):
