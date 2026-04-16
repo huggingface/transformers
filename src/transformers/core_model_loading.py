@@ -1146,21 +1146,22 @@ def _batch_shard_for_scatter(full_tensor: torch.Tensor, tp_layer, world_size: in
 
 @torch.no_grad()
 def _redistribute_async(
-    realized_value: dict[str, list[torch.Tensor] | torch.Tensor] | None,
+    realized_value: dict[str, list[torch.Tensor] | torch.Tensor],
     mapping: WeightTransform,
     source_rank: int,
     device_mesh,
     local_device,
     meta_model_state_dict: dict[str, torch.Tensor],
     first_param_name: str,
-    source_skipped: bool = False,
-) -> tuple[list, dict[str, torch.Tensor]] | None:
+) -> tuple[list, dict[str, torch.Tensor]]:
     """
-    Start async scatter/broadcast for one mapping's tensors.  Returns ``(work_handles, local_params)`` where
-    ``work_handles`` is a list of ``dist.Work`` objects (or empty for world_size==1). The caller must call
+    Start async scatter/broadcast for one mapping's realized tensors.  Returns ``(work_handles, local_params)``
+    where ``work_handles`` is a list of ``(dist.Work, kept_alive_ref)`` tuples. The caller must call
     ``work.wait()`` on every handle before reading ``local_params``.
 
-    Returns ``None`` when the source signalled a skip (all ranks agree via a lightweight int broadcast).
+    No per-mapping metadata broadcast: all ranks derive target shapes from the shared ``meta_model_state_dict``.
+    No per-mapping skip-flag broadcast: the caller must guarantee that ``realized_value`` is non-None
+    and non-empty (i.e. SkipParameters was not raised). Skips are handled at the caller level.
     """
     import torch.distributed as dist
 
@@ -1170,36 +1171,20 @@ def _redistribute_async(
     world_size = device_mesh.size()
     tp_layer = mapping.distributed_operation
 
-    # ── skip signalling ────────────────────────────────────────────────────────
-    # A single-int broadcast replaces the old heavyweight `broadcast_object_list` of pickled metadata.
-    # 0 = proceed, 1 = skip.
-    if world_size > 1:
-        flag = torch.tensor([int(source_skipped)], dtype=torch.int32, device=local_device)
-        dist.broadcast(flag, src=src_global_rank, group=group)
-        if flag.item():
-            return None
-    elif source_skipped:
-        return None
-
-    # ── build target list from the shared meta model (no per-mapping metadata broadcast) ──
+    # ── build target list from the shared meta model (zero comms) ──
     if is_source:
         targets = []
         for target_name, param in realized_value.items():
             param = param[0] if isinstance(param, list) else param
             targets.append((target_name, tuple(param.shape), param.dtype))
     else:
-        # Non-source: derive shapes/dtypes from the meta model. The mapping's `target_patterns` + layer
-        # numbering give us the target keys; the meta state dict gives shapes; dtype comes from the empty
-        # param on meta (which already reflects FP8 replacement etc.).
         targets = []
         for target_name in mapping.target_patterns:
-            # Expand the generic pattern (with *) to the concrete name for this mapping.
             concrete = first_param_name.replace(mapping.target_patterns[0], target_name)
             ref = meta_model_state_dict.get(concrete)
             if ref is not None:
                 targets.append((concrete, tuple(ref.shape), ref.dtype))
 
-    # Each entry is (work_handle, kept_alive_ref) — the ref keeps scatter_list alive until wait().
     work_handles: list[tuple] = []
     out: dict[str, torch.Tensor] = {}
 
@@ -1238,7 +1223,6 @@ def _redistribute_async(
                 work = dist.scatter(
                     local_param, scatter_list=scatter_list, src=src_global_rank, group=group, async_op=True
                 )
-                # scatter_list must stay alive until work completes — store alongside the handle.
                 work_handles.append((work, scatter_list))
             else:
                 local_param = torch.empty(my_shard_shape, dtype=t_dtype, device=local_device)
@@ -1246,7 +1230,6 @@ def _redistribute_async(
                 work_handles.append((work, None))
 
         elif sharded:
-            # world_size == 1 — local shard, no comms.
             full_tensor = realized_value[target_name]
             full_tensor = full_tensor[0] if isinstance(full_tensor, list) else full_tensor
             full_tensor = full_tensor.contiguous()
@@ -1257,7 +1240,6 @@ def _redistribute_async(
             del full_tensor
 
         else:
-            # Replicated: async broadcast.
             if is_source:
                 full_tensor = realized_value[target_name]
                 full_tensor = full_tensor[0] if isinstance(full_tensor, list) else full_tensor
@@ -1552,60 +1534,48 @@ def convert_and_load_state_dict_in_model(
                     model, target_name, param, loading_info, mapping_obj.distributed_operation, hf_quantizer
                 )
 
-    try:
-        # ── Pipelined main loop ──────────────────────────────────────────────────
-        # While scatter N is in-flight on the NIC/NVLink, the CPU is already converting mapping N+1 and
-        # kicking off its async scatter. This overlaps comms with compute and hides per-mapping latency.
-        prev_work_handles = None
-        prev_params = None
-        prev_mapping = None
+    def _convert_mapping(mapping, first_param_name):
+        """Run mapping.convert() — designed to be submitted to a background thread."""
+        return mapping.convert(
+            first_param_name, model=model, config=model.config, hf_quantizer=hf_quantizer, loading_info=loading_info
+        )
 
-        for first_param_name, mapping in tqdm(param_name_to_load.items(), desc="Loading weights"):
+    try:
+        # ── Pipelined main loop ─────────────────────────────────────────────────────────────────
+        # Three-stage pipeline that overlaps disk I/O, conversion, comms, and model assignment:
+        #
+        #   Stage A (background thread): source rank runs `mapping.convert()` which resolves the
+        #       pre-scheduled thread-pool futures (disk → GPU) and stacks/reshapes the result.
+        #   Stage B (main thread, async NCCL): `_redistribute_async()` pre-shards on GPU and starts
+        #       `dist.scatter(async_op=True)`.
+        #   Stage C (main thread, sync): `_finalize_mapping()` waits for the previous scatter to
+        #       complete and writes the param into the model.
+        #
+        # At any given iteration the CPU is handling stage A for mapping N+1, stage B for mapping N,
+        # and stage C for mapping N-1 — all concurrently.  The NCCL stream runs stage-B scatters
+        # independently of the CPU.
+        convert_pool = ThreadPoolExecutor(max_workers=1)
+
+        # `inflight` holds (work_handles, params, mapping) for the mapping whose scatter is in-flight.
+        inflight = None
+        # `next_convert` holds the Future for the mapping whose convert is running in the background.
+        next_convert_future = None
+        next_convert_meta = None  # (first_param_name, mapping, source_rank)
+
+        items = list(param_name_to_load.items())
+        for idx, (first_param_name, mapping) in enumerate(tqdm(items, desc="Loading weights")):
             try:
                 source_rank = mapping_to_source_rank.get(first_param_name, local_rank)
                 is_source = source_rank == local_rank
 
-                # ── Source: convert (sync — resolves the pre-scheduled futures from the thread pool) ──
-                realized_value = None
-                skip = False
-                if is_source:
-                    try:
-                        realized_value = mapping.convert(
-                            first_param_name,
-                            model=model,
-                            config=model.config,
-                            hf_quantizer=hf_quantizer,
-                            loading_info=loading_info,
-                        )
-                    except SkipParameters:
-                        skip = True
-
-                if distributed_loading:
-                    # ── Start async scatter/broadcast for THIS mapping ──
-                    result = _redistribute_async(
-                        realized_value,
-                        mapping,
-                        source_rank,
-                        device_mesh,
-                        local_device=device_map[""],
-                        meta_model_state_dict=meta_model_state_dict,
-                        first_param_name=first_param_name,
-                        source_skipped=skip,
-                    )
-
-                    # ── Meanwhile, finalize the PREVIOUS mapping (whose async ops are now done or nearly done) ──
-                    if prev_work_handles is not None:
-                        _finalize_mapping(prev_work_handles, prev_params, prev_mapping)
-                        prev_work_handles = prev_params = prev_mapping = None
-
-                    if result is None:
-                        continue
-                    prev_work_handles, prev_params = result
-                    prev_mapping = mapping
-
-                else:
+                if not distributed_loading:
                     # Non-distributed: synchronous path (unchanged).
-                    if skip or realized_value is None:
+                    if is_source:
+                        try:
+                            realized_value = _convert_mapping(mapping, first_param_name)
+                        except SkipParameters:
+                            continue
+                    else:
                         continue
                     for target_name, param in realized_value.items():
                         param = param[0] if isinstance(param, list) else param
@@ -1619,13 +1589,63 @@ def convert_and_load_state_dict_in_model(
                                 model, target_name, param, loading_info, mapping.distributed_operation, hf_quantizer
                             )
                     del realized_value
+                    continue
+
+                # ── Stage A: get the convert result (from background thread or inline) ──
+                realized_value = None
+                skip = False
+                if next_convert_future is not None and next_convert_meta[0] == first_param_name:
+                    # The background thread already started this convert last iteration.
+                    try:
+                        realized_value = next_convert_future.result()
+                    except SkipParameters:
+                        skip = True
+                    next_convert_future = next_convert_meta = None
+                elif is_source:
+                    try:
+                        realized_value = _convert_mapping(mapping, first_param_name)
+                    except SkipParameters:
+                        skip = True
+
+                # ── Pre-submit convert for the NEXT mapping in background ──
+                if idx + 1 < len(items):
+                    nxt_name, nxt_mapping = items[idx + 1]
+                    nxt_source = mapping_to_source_rank.get(nxt_name, local_rank)
+                    if nxt_source == local_rank:
+                        next_convert_future = convert_pool.submit(_convert_mapping, nxt_mapping, nxt_name)
+                        next_convert_meta = (nxt_name, nxt_mapping, nxt_source)
+
+                if skip:
+                    # All ranks must agree to skip. Since SkipParameters is deterministic (same model
+                    # structure on all ranks), non-source ranks also skip this mapping.
+                    continue
+
+                # ── Stage B: start async scatter for THIS mapping ──
+                result = _redistribute_async(
+                    realized_value,
+                    mapping,
+                    source_rank,
+                    device_mesh,
+                    local_device=device_map[""],
+                    meta_model_state_dict=meta_model_state_dict,
+                    first_param_name=first_param_name,
+                )
+
+                # ── Stage C: finalize the PREVIOUS mapping (wait scatter + set_param) ──
+                if inflight is not None:
+                    _finalize_mapping(*inflight)
+                    inflight = None
+
+                inflight = (result[0], result[1], mapping)
 
             except SkipParameters:
                 continue
 
-        # ── Drain the last in-flight mapping ──
-        if prev_work_handles is not None:
-            _finalize_mapping(prev_work_handles, prev_params, prev_mapping)
+        # ── Drain ──
+        if inflight is not None:
+            _finalize_mapping(*inflight)
+
+        convert_pool.shutdown(wait=False)
 
     # Close the pool, independently of whether the code was interrupted or finished successfully
     finally:
