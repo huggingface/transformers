@@ -201,7 +201,6 @@ class QianfanOCRVisionPreTrainedModel(InternVLVisionPreTrainedModel):
 class QianfanOCRVisionModel(InternVLVisionModel):
     def __init__(self, config: QianfanOCRVisionConfig) -> None:
         super().__init__(config)
-        # Replace the encoder with direct layers (no intermediate encoder module)
         del self.encoder
         dpr = [x.item() for x in torch.linspace(0, config.drop_path_rate, config.num_hidden_layers, device="cpu")]
         self.layers = nn.ModuleList(
