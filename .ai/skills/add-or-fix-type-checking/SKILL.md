@@ -28,7 +28,6 @@ description: Fixes broken typing checks detected by ty, make typing, or make che
 3. **Triage errors by category** before fixing anything:
    - Wrong/missing type annotations on signatures
    - Attribute access on union types (for example `X | None`)
-   - `str | os.PathLike` values used like plain strings
    - Functions returning broad unions (for example `str | list | BatchEncoding`)
    - Mixin/protocol self-type issues
    - Dynamic attributes on objects or modules
@@ -81,23 +80,15 @@ description: Fixes broken typing checks detected by ty, make typing, or make che
       inputs = result.to(device)["input_ids"]
       ```
 
-   d. **Normalize `str | os.PathLike` with `os.fspath()` before using string methods**.
-      Prefer `os.fspath(path)` over `str(path)` when the value may be path-like:
-      ```python
-      checkpoint_path = os.fspath(checkpoint_file)
-      if checkpoint_path.endswith(".safetensors"):
-          ...
-      ```
-
-   e. **Fix incorrect type hints at the source**. If a parameter is typed `X | None`
+   d. **Fix incorrect type hints at the source**. If a parameter is typed `X | None`
       but can never be `None` when actually called, remove `None` from the hint.
 
-   f. **Annotate untyped attributes**. Add type annotations to instance variables
+   e. **Annotate untyped attributes**. Add type annotations to instance variables
       set in `__init__` or elsewhere (for example `self.foo: list[int] = []`).
       Declare class-level attributes that are set dynamically later
       (for example `_cache: Cache`, `_token_tensor: torch.Tensor | None`).
 
-   g. **Use `@overload` for methods with input-dependent return types**.
+   f. **Use `@overload` for methods with input-dependent return types**.
       When a method returns different types based on the input type (e.g.
       `__getitem__` with str vs int keys), use `@overload` to declare each
       signature separately:
@@ -117,7 +108,7 @@ description: Fixes broken typing checks detected by ty, make typing, or make che
       This eliminates `cast()` calls at usage sites by giving the checker
       precise return types for each call pattern.
 
-   h. **Make container classes generic to propagate value types**.
+   g. **Make container classes generic to propagate value types**.
       When a class like `UserDict` holds values whose type changes after
       transformation (e.g. lists → tensors after `.to()`), make the class
       generic so methods can return narrowed types:
@@ -142,13 +133,12 @@ description: Fixes broken typing checks detected by ty, make typing, or make che
       Only methods that narrow the value type (like `.to()`) declare a specific
       return type. This eliminates `cast()` at all call sites.
 
-   i. **Use `self: "HostType"` / `self: "ProtocolType"` for mixins**. When a mixin
-      accesses attributes from its host class, annotate `self` on the affected methods.
-      Prefer the concrete host type when one real host class is enough; use a Protocol
-      only when multiple unrelated hosts share the same contract. Import under
-      `TYPE_CHECKING` to avoid circular imports.
+   h. **Use `self: "ProtocolType"` for mixins**. When a mixin accesses attributes
+      from its host class, define a Protocol in `src/transformers/_typing.py` and
+      annotate `self` on methods that need it. Apply this consistently to all methods
+      in the mixin. Import under `TYPE_CHECKING` to avoid circular imports.
 
-   j. **Use `TypeGuard` functions for dynamic module attributes** (for example
+   i. **Use `TypeGuard` functions for dynamic module attributes** (for example
       `torch.npu`, `torch.xpu`, `torch.compiler`). Instead of `getattr(torch, "npu")`
       or `hasattr(torch, "npu") and torch.npu.is_available()`, define a type guard
       function in `src/transformers/_typing.py`:
@@ -169,19 +159,14 @@ description: Fixes broken typing checks detected by ty, make typing, or make che
         attribute `_typing.has_torch_xxx`) — `ty` only resolves `TypeGuard` from
         direct imports.
 
-   k. **Use `getattr()` / `setattr()` for genuinely dynamic attributes**.
+   j. **Use `getattr()` / `setattr()` for dynamic model/config attributes**.
       For runtime-injected fields (for example config/model flags), use
       `getattr(obj, "field", default)` for reads and `setattr(obj, "field", value)`
       for writes. Also use `getattr()` for third-party packages missing type stubs
       (for example `getattr(safetensors, "__version__", "unknown")`).
-      Prefer normal attribute reads/writes when the receiver is already precisely typed;
-      reserve `setattr()` for generic loop variables (for example plain `nn.Module`),
-      monkey-patched classes, or truly dynamic runtime fields. If you must fall back to
-      `Any`, remember `Any | None` effectively loses `Optional` checking, so prefer a
-      Protocol or TypeGuard when `None` semantics matter.
       Avoid `getattr(torch, "npu")` style — use type guards instead (see above).
 
-   l. **Use `cast()` as a last resort before `# type: ignore`**.
+   k. **Use `cast()` as a last resort before `# type: ignore`**.
       Use when you've structurally validated the type but the checker can't see it:
       pattern-matched AST nodes, known-typed dict values, or validated API responses.
       ```python
@@ -192,7 +177,7 @@ description: Fixes broken typing checks detected by ty, make typing, or make che
       Do not use `cast()` for module attribute narrowing — use type guards.
       Do not use `cast()` when `@overload` or generics can solve it at the source.
 
-   m. **Use `# type: ignore` only for third-party stub defects**. This means
+   l. **Use `# type: ignore` only for third-party stub defects**. This means
       cases where the third-party package's type stubs are wrong or incomplete
       and there is no way to narrow or cast around it. Examples:
       - A kwarg that exists at runtime but is missing from the stubs
@@ -208,7 +193,6 @@ description: Fixes broken typing checks detected by ty, make typing, or make che
      (`npu`, `xpu`, `hpu`, `musa`, `mlu`, `neuron`, `compiler`) — use type guards
    - Do not use `cast()` for module attribute narrowing — use type guards
    - Do not use `cast()` when `@overload` or generics can eliminate it at the source
-   - Do not use `str(pathlike)` when `os.fspath(pathlike)` preserves the real path semantics
    - Do not add helper methods or abstractions just to satisfy the type checker
      (especially for only 1-2 occurrences)
    - Do not pollute base classes with domain-specific fields; use Protocols
