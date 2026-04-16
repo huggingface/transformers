@@ -13,7 +13,7 @@
 # limitations under the License.
 """PyTorch Qwen3.5 model."""
 
-from typing import Optional, overload
+from typing import Optional
 
 import torch
 import torch.nn.functional as F
@@ -679,7 +679,6 @@ class Qwen3_5TextForSequenceClassification(GenericForSequenceClassification, Qwe
 
 
 class Qwen3_5ForSequenceClassification(GenericForSequenceClassification, Qwen3_5PreTrainedModel):
-    @overload
     def forward(
         self,
         input_ids: torch.LongTensor = None,
@@ -693,7 +692,20 @@ class Qwen3_5ForSequenceClassification(GenericForSequenceClassification, Qwen3_5
         video_grid_thw: torch.LongTensor | None = None,
         mm_token_type_ids: torch.IntTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> SequenceClassifierOutputWithPast: ...
+    ) -> SequenceClassifierOutputWithPast:
+        return super().forward(
+            input_ids=input_ids,
+            attention_mask=attention_mask,
+            position_ids=position_ids,
+            past_key_values=past_key_values,
+            inputs_embeds=inputs_embeds,
+            pixel_values=pixel_values,
+            pixel_values_videos=pixel_values_videos,
+            image_grid_thw=image_grid_thw,
+            video_grid_thw=video_grid_thw,
+            mm_token_type_ids=mm_token_type_ids,
+            **kwargs,
+        )
 
 
 __all__ = [

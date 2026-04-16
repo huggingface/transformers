@@ -20,7 +20,7 @@
 # limitations under the License.
 from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Optional, overload
+from typing import Optional
 
 import torch
 import torch.nn as nn
@@ -1152,7 +1152,6 @@ class Gemma3TextForSequenceClassification(GenericForSequenceClassification, Gemm
 
 
 class Gemma3ForSequenceClassification(GenericForSequenceClassification, Gemma3PreTrainedModel):
-    @overload
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
@@ -1164,7 +1163,18 @@ class Gemma3ForSequenceClassification(GenericForSequenceClassification, Gemma3Pr
         inputs_embeds: torch.FloatTensor | None = None,
         labels: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> SequenceClassifierOutputWithPast: ...
+    ) -> SequenceClassifierOutputWithPast:
+        return super().forward(
+            input_ids=input_ids,
+            attention_mask=attention_mask,
+            position_ids=position_ids,
+            past_key_values=past_key_values,
+            inputs_embeds=inputs_embeds,
+            pixel_values=pixel_values,
+            token_type_ids=token_type_ids,
+            labels=labels,
+            **kwargs,
+        )
 
 
 __all__ = [
