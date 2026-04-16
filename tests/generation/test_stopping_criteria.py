@@ -25,14 +25,15 @@ if is_torch_available():
     import torch
 
     from transformers.generation import (
-        ConfidenceCriteria,
-        EosTokenCriteria,
-        MaxLengthCriteria,
-        MaxTimeCriteria,
-        StoppingCriteriaList,
-        StopStringCriteria,
-        validate_stopping_criteria,
-    )
+    ConfidenceCriteria,
+    EosTokenCriteria,
+    MaxLengthCriteria,
+    MaxTimeCriteria,
+    StoppingCriteria,
+    StoppingCriteriaList,
+    StopStringCriteria,
+    validate_stopping_criteria,
+)
 
 
 @require_torch
