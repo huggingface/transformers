@@ -254,6 +254,13 @@ class Sam3LiteTextModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Test
     def test_inputs_embeds(self):
         pass
 
+    @unittest.skip(
+        reason="Sam3LiteTextModel sets _supports_flash_attn=False due to DETR float masks, "
+        "but submodules support it, causing test logic mismatch"
+    )
+    def test_flash_attn_2_can_dispatch_composite_models(self):
+        pass
+
     def test_model_get_set_embeddings(self):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
 
