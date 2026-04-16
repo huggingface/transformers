@@ -196,10 +196,6 @@ class XCLIPVisionModelTest(ModelTesterMixin, unittest.TestCase):
     def test_flash_attn_4_inference_equivalence_right_padding(self):
         pass
 
-    @unittest.skip(reason="X-CLIP cross-frame attention has device placement issues with model parallelism")
-    def test_model_parallelism(self):
-        pass
-
     def test_model_get_set_embeddings(self):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
 
@@ -589,7 +585,7 @@ class XCLIPModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     def test_feed_forward_chunking(self):
         pass
 
-    @unittest.skip(reason="XCLIPModel does not properly support device_map='auto'")
+    @unittest.skip(reason="Does not work on the tiny model as we keep hitting edge cases.")
     def test_model_parallelism(self):
         pass
 
