@@ -16,7 +16,6 @@
 from __future__ import annotations
 
 import math
-import contextlib
 import os
 import re
 import traceback
@@ -1106,6 +1105,131 @@ def rename_source_key(
     return renamed_key, source_pattern
 
 
+def _elem_size(dtype: torch.dtype) -> int:
+    """Bytes per element for a torch dtype (handles fp8, bool, etc. without needing a real tensor)."""
+    return torch.empty((), dtype=dtype).element_size()
+
+
+def _numel(shape) -> int:
+    n = 1
+    for s in shape:
+        n *= int(s)
+    return n
+
+
+# A layout entry: (first_param_name, concrete, mapping, my_shard_shape, dtype, byte_offset, byte_size)
+# - first_param_name: the key under which the mapping is registered in `param_name_to_load`
+# - concrete: the resolved target parameter name on the model (e.g. "model.layers.5.mlp.down_proj.weight")
+# - mapping: the WeightTransform/WeightConverter instance
+# - my_shard_shape: this rank's local shard shape (or full shape for replicated params)
+# - byte_offset: offset into the concatenated byte buffer for this source rank
+# - byte_size: size of this entry in the byte buffer
+
+
+def _plan_batch_layouts(
+    batch: list[tuple[str, WeightTransform]],
+    mapping_to_source_rank: dict[str, int],
+    local_rank: int,
+    world_size: int,
+    meta_model_state_dict: dict[str, torch.Tensor],
+) -> dict[int, list]:
+    """Build the same per-source layout on every rank from the shared meta model — zero wire traffic."""
+    layouts: dict[int, list] = {r: [] for r in range(world_size)}
+    offsets: dict[int, int] = dict.fromkeys(range(world_size), 0)
+    for first_param_name, mapping in batch:
+        src = mapping_to_source_rank.get(first_param_name, local_rank)
+        tp_layer = mapping.distributed_operation
+        for target_pattern in mapping.target_patterns:
+            concrete = first_param_name.replace(mapping.target_patterns[0], target_pattern)
+            ref = meta_model_state_dict.get(concrete)
+            if ref is None:
+                continue
+            full_shape = tuple(ref.shape)
+            if tp_layer is not None:
+                shape = tuple(tp_layer.get_expected_sharded_shape(full_shape))
+            else:
+                shape = full_shape
+            byte_size = _numel(shape) * _elem_size(ref.dtype)
+            layouts[src].append((first_param_name, concrete, mapping, shape, ref.dtype, offsets[src], byte_size))
+            offsets[src] += byte_size
+    return layouts
+
+
+def _build_scatter_list(
+    my_layout: list,
+    realized_by_name: dict,
+    local_device,
+    world_size: int,
+) -> list[torch.Tensor]:
+    """Source-side packing: produce one uint8 buffer per destination rank (scatter_list[r] = all bytes
+    rank r will receive from me). Each buffer is a concatenation of this rank's owned shards in layout
+    order; receivers unpack using the same layout.
+
+    Assumes uniform sharding (every dest's shard has the same bytes for a given mapping entry).
+    """
+    # Total bytes per destination (same for every dest under uniform sharding).
+    total_bytes = sum(byte_size for *_, byte_size in my_layout)
+    scatter_list = [torch.empty(total_bytes, dtype=torch.uint8, device=local_device) for _ in range(world_size)]
+
+    cursor = 0
+    for first_param_name, concrete, mapping, shape, dtype, _off, byte_size in my_layout:
+        tp_layer = mapping.distributed_operation
+        realized = realized_by_name.get(first_param_name)
+        if realized is None:
+            cursor += byte_size
+            continue
+        full = realized.get(concrete)
+        if full is None:
+            cursor += byte_size
+            continue
+        full = full[0] if isinstance(full, list) else full
+        if full.device != torch.device(local_device):
+            full = full.to(device=local_device)
+        full = full.contiguous()
+
+        if tp_layer is not None:
+            shards = _batch_shard_for_scatter(full, tp_layer, world_size)
+            if shards is None:
+                shards = []
+                original_rank = tp_layer.rank
+                try:
+                    for r in range(world_size):
+                        tp_layer.rank = r
+                        s = tp_layer.shard_tensor(full, tensor_idx=None, device=local_device, dtype=None)
+                        if s._base is full:
+                            s = s.clone(memory_format=torch.contiguous_format)
+                        elif not s.is_contiguous():
+                            s = s.contiguous()
+                        shards.append(s)
+                finally:
+                    tp_layer.rank = original_rank
+        else:
+            shards = [full] * world_size
+
+        for r, s in enumerate(shards):
+            s_bytes = s.view(torch.uint8).reshape(-1)
+            scatter_list[r][cursor : cursor + byte_size].copy_(s_bytes)
+        cursor += byte_size
+        realized.pop(concrete, None)  # free the full tensor ASAP
+
+    return scatter_list
+
+
+def _unpack_recv_buffer(recv_buf: torch.Tensor, layout: list) -> dict[str, tuple]:
+    """Receiver-side: slice the received uint8 buffer back into typed, shaped views keyed by concrete
+    target name. Returns ``{concrete: (param_view, mapping)}``. The caller must keep `recv_buf` alive
+    for the lifetime of the returned views (they alias its storage).
+    """
+    out: dict[str, tuple] = {}
+    cursor = 0
+    for _fpn, concrete, mapping, shape, dtype, _off, byte_size in layout:
+        sl = recv_buf[cursor : cursor + byte_size]
+        cursor += byte_size
+        view = sl.view(dtype).reshape(shape)
+        out[concrete] = (view, mapping)
+    return out
+
+
 def _batch_shard_for_scatter(full_tensor: torch.Tensor, tp_layer, world_size: int) -> list[torch.Tensor] | None:
     """Batched GPU-native pre-slice for scatter. Returns `world_size` contiguous shards or None (fall back to loop)."""
     from transformers.integrations.tensor_parallel import (
@@ -1565,19 +1689,27 @@ def convert_and_load_state_dict_in_model(
                 del realized_value
 
         else:
-            # ── Batched + coalesced TP load ────────────────────────────────────────────────────
-            # We batch mappings into groups and submit every scatter/broadcast inside one
-            # `dist._coalescing_manager(device=...)` context — the NCCL backend wraps the whole batch
-            # in `ncclGroupStart`/`ncclGroupEnd`, turning N per-collective launches into ONE. On
-            # NVLink the profile showed ~15 ms per standalone scatter call vs essentially constant
-            # overhead for a coalesced group, so for 14B (579 mappings) this collapses ~9 s of launch
-            # overhead into a couple hundred ms.
+            # ── Packed + coalesced TP load ─────────────────────────────────────────────────────
+            # For each batch of mappings, we group them by source rank and do ONE packed scatter
+            # per source rank, where each "scatter message" is a concatenated uint8 buffer of all
+            # of that source's owned shards for the batch. The receivers allocate a matching recv
+            # buffer and slice it back into individual typed/shaped views after `cm.wait()`.
             #
-            # Batch size tradeoff: bigger = fewer launches, but more in-flight shards on the source
-            # rank and more pre-allocated recv buffers on the receivers. BATCH_SIZE=64 keeps that
-            # in-flight footprint bounded while capturing ~all the launch-overhead savings.
+            # This collapses K×world_size scatters per batch into world_size big scatters per
+            # batch, turning tiny NCCL ops (that are sync-barrier-bound) into few large ops (that
+            # are bandwidth-bound and actually saturate NVLink).
+            #
+            # Gloo (CPU synthetic test) has no coalescing primitive, so the coalesce manager is a
+            # nullcontext there; the packed-scatter approach still applies and is correct.
             BATCH_SIZE = 64
             convert_pool = ThreadPoolExecutor(max_workers=min(4, os.cpu_count() or 1))
+
+            # Recv buffers must outlive the set_param_for_module() calls (model params are views
+            # of them). Keep a list per batch so they're freed after the batch's params are
+            # written — then the next batch can reuse the allocator pool.
+            group = device_mesh.get_group()
+            world_size = device_mesh.size()
+            local_device_obj = torch.device(device_map[""])
 
             pbar = tqdm(total=len(items), desc="Loading weights")
             i = 0
@@ -1586,8 +1718,6 @@ def convert_and_load_state_dict_in_model(
                 i += len(batch)
 
                 # ── Stage A: convert all source-owned mappings in this batch (threaded) ──
-                # Non-source ranks have nothing to convert; they participate as scatter/broadcast
-                # receivers and derive shapes from the shared meta model.
                 convert_futures = {}
                 for first_param_name, mapping in batch:
                     source_rank = mapping_to_source_rank.get(first_param_name, local_rank)
@@ -1595,7 +1725,6 @@ def convert_and_load_state_dict_in_model(
                         convert_futures[first_param_name] = convert_pool.submit(
                             _convert_mapping, mapping, first_param_name
                         )
-
                 realized_by_name: dict[str, dict | None] = {}
                 skips: set[str] = set()
                 for first_param_name, fut in convert_futures.items():
@@ -1604,47 +1733,59 @@ def convert_and_load_state_dict_in_model(
                     except SkipParameters:
                         skips.add(first_param_name)
 
-                # ── Stage B: open ONE coalesced NCCL group for the whole batch ──
-                # Every scatter/broadcast inside this context is bundled into a single
-                # `ncclGroupStart`/`ncclGroupEnd` pair, so we pay the launch cost once for the batch.
-                # Gloo (CPU backend used by the synthetic test) has no coalescing primitive — fall
-                # back to launching ops individually in that case.
-                batch_results = []
-                group = device_mesh.get_group()
-                local_device = device_map[""]
-                backend = torch.distributed.get_backend(group)
-                can_coalesce = backend == "nccl"
-                if can_coalesce:
-                    ctx = torch.distributed.distributed_c10d._coalescing_manager(
-                        group=group, device=torch.device(local_device), async_ops=True
-                    )
-                else:
-                    ctx = contextlib.nullcontext()
-                with ctx as cm:
-                    for first_param_name, mapping in batch:
-                        if first_param_name in skips:
-                            continue
-                        source_rank = mapping_to_source_rank.get(first_param_name, local_rank)
-                        realized_value = realized_by_name.get(first_param_name)
-                        try:
-                            result = _redistribute_async(
-                                realized_value,
-                                mapping,
-                                source_rank,
-                                device_mesh,
-                                local_device=local_device,
-                                meta_model_state_dict=meta_model_state_dict,
-                                first_param_name=first_param_name,
-                            )
-                            batch_results.append((result[0], result[1], mapping))
-                        except SkipParameters:
-                            continue
+                # ── Stage B: plan layout (same on all ranks — no wire traffic) ──
+                effective_batch = [bm for bm in batch if bm[0] not in skips]
+                layouts = _plan_batch_layouts(
+                    effective_batch, mapping_to_source_rank, local_rank, world_size, meta_model_state_dict
+                )
 
-                # ── Stage C: wait for the whole coalesced group, then set params ──
-                if can_coalesce and cm is not None:
-                    cm.wait()
-                for work_handles, params, mapping_obj in batch_results:
-                    _finalize_mapping(work_handles, params, mapping_obj)
+                # ── Stage C: one packed scatter per source rank, async, then wait on all ──
+                # No coalescing_manager: profiling showed it wasn't the bottleneck once we packed
+                # multiple mappings into a single big scatter, and it's NCCL-only (gloo has no
+                # equivalent), so skipping it keeps the code backend-agnostic.
+                #
+                # entries: (src, recv_buf, layout, scatter_list_kept_alive, work_handle)
+                recv_buffers: list[tuple] = []
+                for src, layout in layouts.items():
+                    if not layout:
+                        continue
+                    total_bytes = sum(entry[-1] for entry in layout)  # byte_size is last field
+                    recv_buf = torch.empty(total_bytes, dtype=torch.uint8, device=local_device_obj)
+                    src_global = torch.distributed.get_global_rank(group, src)
+                    if src == local_rank:
+                        scatter_list = _build_scatter_list(layout, realized_by_name, local_device_obj, world_size)
+                        work = torch.distributed.scatter(
+                            recv_buf, scatter_list=scatter_list, src=src_global, group=group, async_op=True
+                        )
+                        recv_buffers.append((src, recv_buf, layout, scatter_list, work))
+                    else:
+                        work = torch.distributed.scatter(
+                            recv_buf, scatter_list=None, src=src_global, group=group, async_op=True
+                        )
+                        recv_buffers.append((src, recv_buf, layout, None, work))
+
+                for _src, _rb, _layout, _sl, work in recv_buffers:
+                    if work is not None:
+                        work.wait()
+
+                # ── Stage D: unpack recv buffers into per-param views and set them on the model ──
+                for src, recv_buf, layout, _sl_ref, _work in recv_buffers:
+                    unpacked = _unpack_recv_buffer(recv_buf, layout)
+                    for concrete, (view, mapping_obj) in unpacked.items():
+                        param_device = get_device(device_map, concrete)
+                        if param_device == "disk" and (concrete not in model_buffers or offload_buffers):
+                            disk_offload_index = offload_and_maybe_resave_param(
+                                concrete, view, loading_info, disk_offload_folder, disk_offload_index, mapping_obj
+                            )
+                        else:
+                            set_param_for_module(
+                                model, concrete, view, loading_info, mapping_obj.distributed_operation, hf_quantizer
+                            )
+                    # Keep recv_buf alive for the lifetime of the model — the param views alias it.
+                    # Attach it to the model so it's GC'd with the model.
+                    if not hasattr(model, "_tp_recv_buffers"):
+                        model._tp_recv_buffers = []
+                    model._tp_recv_buffers.append(recv_buf)
 
                 pbar.update(len(batch))
 
