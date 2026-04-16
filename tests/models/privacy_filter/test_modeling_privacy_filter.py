@@ -19,6 +19,7 @@ from transformers import (
     PRIVACY_FILTER_NER_LABELS,
     PrivacyFilterConfig,
     is_torch_available,
+    set_seed,
 )
 from transformers.testing_utils import require_torch, torch_device
 
@@ -28,6 +29,8 @@ from ...test_pipeline_mixin import PipelineTesterMixin
 
 
 if is_torch_available():
+    import torch
+
     from transformers import (
         PrivacyFilterForTokenClassification,
         PrivacyFilterModel,
@@ -189,3 +192,50 @@ class PrivacyFilterModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Tes
     def test_token_classification_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_for_token_classification(*config_and_inputs)
+
+    def test_tiny_random_token_classification_logits(self):
+        set_seed(42)
+        config = PrivacyFilterConfig(
+            vocab_size=32,
+            hidden_size=16,
+            intermediate_size=8,
+            num_hidden_layers=1,
+            num_attention_heads=2,
+            num_key_value_heads=1,
+            head_dim=8,
+            num_local_experts=4,
+            num_experts_per_tok=2,
+            sliding_window=3,
+            bidirectional_left_context=1,
+            bidirectional_right_context=1,
+            initial_context_length=16,
+            max_position_embeddings=16,
+            default_n_ctx=16,
+            rope_parameters={
+                "rope_type": "yarn",
+                "rope_theta": 150000.0,
+                "factor": 1.0,
+                "beta_fast": 32.0,
+                "beta_slow": 1.0,
+                "truncate": False,
+                "original_max_position_embeddings": 16,
+            },
+            num_labels=5,
+        )
+        model = PrivacyFilterForTokenClassification(config).to(torch_device)
+        model.eval()
+
+        input_ids = torch.tensor([[1, 2, 3, 4]], device=torch_device)
+        attention_mask = torch.ones_like(input_ids)
+        with torch.no_grad():
+            logits = model(input_ids, attention_mask=attention_mask).logits
+
+        self.assertEqual(logits.shape, (1, 4, 5))
+        expected_slice = torch.tensor(
+            [
+                [0.09870907, -0.02894341, -0.00059298],
+                [0.02090938, 0.09710200, 0.05788925],
+            ],
+            device=torch_device,
+        )
+        torch.testing.assert_close(logits[0, :2, :3], expected_slice, rtol=1e-4, atol=1e-4)
