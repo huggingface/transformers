@@ -135,18 +135,51 @@ def gather_full_state_dict(model) -> dict[str, torch.Tensor]:
 
 
 def _replicate_dtensor(tensor: DTensor) -> DTensor:
-    """All-gather a DTensor to Replicate, handling _StridedShard placements.
+    """All-gather a DTensor to fully Replicate, handling ``_StridedShard``.
 
-    PyTorch's ``redistribute`` does not support ``_StridedShard`` as a source,
-    so we use each placement's ``_to_replicate_tensor`` directly.
+    PyTorch's ``redistribute()`` does not support ``_StridedShard`` as a source::
+
+        _StridedShard -> redistribute() -> Replicate      ❌ AssertionError
+        _StridedShard -> redistribute() -> Shard           ❌ NotImplementedError
+        Shard         -> redistribute() -> Replicate      ✅ works
+        Replicate     -> redistribute() -> Shard           ✅ works
+        Replicate     -> redistribute() -> _StridedShard  ✅ works
+
+    So we bypass ``redistribute`` and call each placement's low-level
+    ``_to_replicate_tensor`` (manual all-gather + interleaved reorder).
+
+    We process mesh dims **right-to-left** (innermost first).  Under TP+FSDP
+    the 2D mesh is ``(fsdp, tp)`` and both dims can shard the same tensor dim::
+
+        placements = (_StridedShard(dim=0), Shard(dim=0))
+        local shape = [64, 1024]   (global [256, 1024], fsdp=2, tp=2)
+
+    Right-to-left means TP is gathered first (local grows to [128, 1024]),
+    then FSDP (grows to [256, 1024]).  Each step must pass the correct
+    intermediate logical shape — the global shape divided by the mesh sizes
+    of dims not yet gathered (to the left).
     """
     mesh = tensor.device_mesh
+    replicate_all = tuple(Replicate() for _ in range(mesh.ndim))
     with torch.no_grad():
-        local = tensor._local_tensor
-        for i, p in enumerate(tensor.placements):
-            if not p.is_replicate():
-                local = p._to_replicate_tensor(local, mesh, i, tensor.shape)
-        return DTensor.from_local(local, mesh, [Replicate()] * mesh.ndim, run_check=False)
+        if any(isinstance(p, _StridedShard) for p in tensor.placements):
+            local = tensor._local_tensor
+            placements = tensor.placements
+            for i in reversed(range(mesh.ndim)):
+                p = placements[i]
+                if p.is_replicate():
+                    continue
+                # Compute the logical shape seen at this step: dims to the left
+                # (not yet gathered) still divide their tensor dimension.
+                logical_shape = list(tensor.shape)
+                for j in range(i):
+                    pj = placements[j]
+                    if not pj.is_replicate():
+                        logical_shape[pj.dim] //= mesh.size(j)
+                local = p._to_replicate_tensor(local, mesh, i, logical_shape)
+            return DTensor.from_local(local, mesh, replicate_all, run_check=False)
+
+        return tensor.redistribute(placements=replicate_all)
 
 
 def convert_strided_to_shard(state_dict: dict) -> dict[str, tuple]:
