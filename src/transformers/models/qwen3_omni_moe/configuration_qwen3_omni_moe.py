@@ -661,4 +661,13 @@ class Qwen3OmniMoeConfig(PreTrainedConfig):
         return self.thinker_config.get_text_config()
 
 
-__all__ = ["Qwen3OmniMoeConfig", "Qwen3OmniMoeThinkerConfig", "Qwen3OmniMoeTalkerConfig"]
+__all__ = [
+    "Qwen3OmniMoeConfig",
+    "Qwen3OmniMoeThinkerConfig",
+    "Qwen3OmniMoeTalkerConfig",
+    "Qwen3OmniMoeAudioEncoderConfig",
+    "Qwen3OmniMoeTalkerCodePredictorConfig",
+    "Qwen3OmniMoeTalkerTextConfig",
+    "Qwen3OmniMoeTextConfig",
+    "Qwen3OmniMoeVisionEncoderConfig",
+]
