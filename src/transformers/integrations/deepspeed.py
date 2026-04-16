@@ -509,9 +509,9 @@ def _load_state_dict_into_zero3_model(model_to_load, state_dict, load_config=Non
             for k, buf in named_buffers.items():
                 if k in state_dict and buf is not None:
                     missing_keys.discard(k)
-                    if torch.distributed.get_rank() == 0:
-                        with torch.no_grad():
-                            buf.copy_(state_dict[k])
+                    with torch.no_grad():
+                        buf.copy_(state_dict[k])
+                    buf._is_hf_initialized = True
 
         for name, child in module._modules.items():
             if child is not None:
