@@ -334,38 +334,9 @@ def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
     return hidden_states.reshape(batch, num_key_value_heads * n_rep, slen, head_dim)
 
 
+# Eager attention forward function with optional attention sinks.
+# Same as the remote MiMo `eager_attention_forward` but with mask preparation removed (not needed post transformers V5)
 def eager_attention_forward(
-    module: nn.Module,
-    query: torch.Tensor,
-    key: torch.Tensor,
-    value: torch.Tensor,
-    attention_mask: torch.Tensor | None,
-    scaling: float,
-    dropout: float = 0.0,
-    **kwargs: Unpack[TransformersKwargs],
-):
-    key_states = repeat_kv(key, module.num_key_value_groups)
-    value_states = repeat_kv(value, module.num_key_value_groups)
-
-    attn_weights = torch.matmul(query, key_states.transpose(2, 3)) * scaling
-    if attention_mask is not None:
-        attn_weights = attn_weights + attention_mask
-
-    attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query.dtype)
-    attn_weights = nn.functional.dropout(attn_weights, p=dropout, training=module.training)
-    attn_output = torch.matmul(attn_weights, value_states)
-    attn_output = attn_output.transpose(1, 2).contiguous()
-
-    return attn_output, attn_weights
-
-
-# There is no prior occurrence of this function in the repo, except for gpt-oss.
-# But for enabling dual eager attention, with a sink path and a non-sink path, we'd need to import both functions from
-# gpt-oss and llama with aliases (they have the same name).
-# However this cause problems with `modular_model_converter.py` and HuggingFace prefers not to refactor other models,
-# see: https://github.com/huggingface/transformers/issues/45141
-# So I'm creating this function as a direct copy of the gpt-oss eager attention forward (with sinks).
-def eager_attention_forward_with_sink(
     module: nn.Module,
     query: torch.Tensor,
     key: torch.Tensor,
@@ -375,57 +346,27 @@ def eager_attention_forward_with_sink(
     dropout: float | int = 0.0,
     **kwargs,
 ):
-    """Eager attention with attention sinks (copy from gpt-oss `eager_attention_forward`)."""
     key_states = repeat_kv(key, module.num_key_value_groups)
     value_states = repeat_kv(value, module.num_key_value_groups)
     attn_weights = torch.matmul(query, key_states.transpose(2, 3)) * scaling
     if attention_mask is not None:
         attn_weights = attn_weights + attention_mask
 
-    sinks = module.sinks.reshape(1, -1, 1, 1).expand(query.shape[0], -1, query.shape[-2], -1)
-    combined_logits = torch.cat([attn_weights, sinks], dim=-1)
+    if module.sinks is not None:
+        sinks = module.sinks.reshape(1, -1, 1, 1).expand(query.shape[0], -1, query.shape[-2], -1)
+        attn_weights = torch.cat([attn_weights, sinks], dim=-1)
 
-    # This was not in the original implementation and slightly affect results; it prevents overflow in BF16/FP16
-    # when training with bsz>1 we clamp max values.
+    # Subtract max for BF16/FP16 numerical stability (same as Arthur's fix in gpt-oss).
+    attn_weights = attn_weights - attn_weights.max(dim=-1, keepdim=True).values
+    probs = F.softmax(attn_weights, dim=-1, dtype=attn_weights.dtype)
 
-    combined_logits = combined_logits - combined_logits.max(dim=-1, keepdim=True).values
-    probs = F.softmax(combined_logits, dim=-1, dtype=combined_logits.dtype)
-    scores = probs[..., :-1]  # we drop the sink here
-    attn_weights = nn.functional.dropout(scores, p=dropout, training=module.training).to(value_states.dtype)
+    if module.sinks is not None:
+        probs = probs[..., :-1]  # drop the sink
+
+    attn_weights = nn.functional.dropout(probs, p=dropout, training=module.training).to(value_states.dtype)
     attn_output = torch.matmul(attn_weights, value_states)
     attn_output = attn_output.transpose(1, 2).contiguous()
     return attn_output, attn_weights
-
-
-# NOTE: @casinca I have to do this in the case users enable backends. The upcoming attention mask (which depends on the
-# backend used) needs to be converted for the sink path which always expects a float mask (gpt-oss eager attn).
-def _prepare_sink_eager_attention_mask(
-    attention_mask: torch.Tensor | None,
-    query_states: torch.Tensor,
-    key_states: torch.Tensor,
-    config: MiMoV2FlashConfig,
-    layer_idx: int,
-) -> torch.Tensor:
-    """
-    This is a helper needed to build or normalize the upcoming attention mask for the gpt-oss sink eager attention path.
-
-    SDPA/FlashAttention can pass None, flex attention can pass a boolean mask.
-    But Sink eager attention always needs an explicit additive float mask (0 for allowed, finfo(dtype).min for masked).
-    """
-    if attention_mask is None:
-        seq_len, key_len = query_states.shape[2], key_states.shape[2]
-        dtype, device = query_states.dtype, query_states.device
-        min_val = torch.finfo(dtype).min
-        row_pos = torch.arange(seq_len, device=device).unsqueeze(1) + (key_len - seq_len)
-        col_pos = torch.arange(key_len, device=device).unsqueeze(0)
-        mask = col_pos > row_pos  # causal
-        if config.layer_types[layer_idx] == "sliding_attention":
-            mask = mask | (row_pos - col_pos >= config.sliding_window)
-        return torch.where(mask, min_val, 0.0).to(dtype)[None, None]
-    if attention_mask.dtype == torch.bool:
-        min_dtype = torch.finfo(query_states.dtype).min
-        return torch.where(attention_mask, 0.0, min_dtype).to(query_states.dtype)
-    return attention_mask
 
 
 @use_kernelized_func(apply_rotary_pos_emb)
@@ -448,20 +389,15 @@ class MiMoV2FlashAttention(nn.Module):
         self.scaling = head_dim**-0.5
         self.attention_dropout = config.attention_dropout
         self.is_causal = True
+        self.sliding_window = config.sliding_window if is_swa else None
 
         self.q_proj = nn.Linear(config.hidden_size, num_attn_heads * head_dim, bias=config.attention_bias)
         self.k_proj = nn.Linear(config.hidden_size, num_kv_heads * head_dim, bias=config.attention_bias)
         self.v_proj = nn.Linear(config.hidden_size, num_kv_heads * v_head_dim, bias=config.attention_bias)
         self.o_proj = nn.Linear(num_attn_heads * v_head_dim, config.hidden_size, bias=False)
 
-        # Dispatch attention: sink layers use GPT-OSS always-sink eager, non-sink layers use standard Llama eager
-        # (which is compatible with SDPA/FA2/flex backends)
-        if is_swa:
-            self.sinks = nn.Parameter(torch.empty(num_attn_heads), requires_grad=False)
-            self._eager_attention_forward = eager_attention_forward_with_sink
-        else:
-            self.sinks = None
-            self._eager_attention_forward = eager_attention_forward
+        # Only SWA layers have attention sinks.
+        self.sinks = nn.Parameter(torch.empty(num_attn_heads), requires_grad=False) if is_swa else None
 
     def forward(
         self,
@@ -487,18 +423,9 @@ class MiMoV2FlashAttention(nn.Module):
         if past_key_values is not None:
             key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx)
 
-        # Sink layers always use their custom eager attention (incompatible with SDPA/FA2/flex).
-        # Non-sink layers can dispatch to any configured backend.
-        if self.sinks is not None:
-            attention_interface = self._eager_attention_forward
-            attention_mask = _prepare_sink_eager_attention_mask(
-                attention_mask, query_states, key_states, self.config, self.layer_idx
-            )
-        else:
-            attention_interface = ALL_ATTENTION_FUNCTIONS.get_interface(
-                self.config._attn_implementation, self._eager_attention_forward
-            )
-
+        attention_interface = ALL_ATTENTION_FUNCTIONS.get_interface(
+            self.config._attn_implementation, eager_attention_forward
+        )
         attn_output, attn_weights = attention_interface(
             self,
             query_states,
@@ -507,6 +434,8 @@ class MiMoV2FlashAttention(nn.Module):
             attention_mask,
             dropout=0.0 if not self.training else self.attention_dropout,
             scaling=self.scaling,
+            sliding_window=self.sliding_window,
+            s_aux=self.sinks,
             **kwargs,
         )
 
@@ -525,8 +454,6 @@ class MiMoV2FlashDecoderLayer(GradientCheckpointingLayer):
         self.mlp = MiMoV2FlashMLP(config)
         self.input_layernorm = MiMoV2FlashRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.post_attention_layernorm = MiMoV2FlashRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        # TODO @casinca: for now attn_type is dead code but might need for new attn rework
-        self.attention_type = config.layer_types[layer_idx]
         # Replace the dense MLP with an MoE block on sparse layers (per `mlp_layer_types`).
         if config.mlp_layer_types[layer_idx] == "sparse":
             self.mlp = MiMoV2FlashSparseMoeBlock(config)
@@ -570,10 +497,8 @@ class MiMoV2FlashPreTrainedModel(PreTrainedModel):
     supports_gradient_checkpointing = True
     _no_split_modules = ["MiMoV2FlashDecoderLayer"]
     _skip_keys_device_placement = ["past_key_values"]
-    # TODO @casinca: once we settle for what backend to allow after attn rework, recheck flags to keep/drop
-    # non-sink layers can use backends (SDPA/FA2/flex_attention compatible)
     _supports_flash_attn = True
-    _supports_sdpa = True
+    _supports_sdpa = False  # disabling SDPA as it has no sink API atm (same as gpt-oss)
     _supports_flex_attn = True
 
     _can_compile_fullgraph = True
