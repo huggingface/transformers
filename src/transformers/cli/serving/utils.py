@@ -61,6 +61,7 @@ X_REQUEST_ID = "x-request-id"
 class Modality(enum.Enum):
     LLM = "LLM"
     VLM = "VLM"
+    MULTIMODAL = "MULTIMODAL"  # supports text, image, video, and audio
     STT = "STT"
     TTS = "TTS"
 
@@ -569,6 +570,8 @@ class GenerateManager(BaseGenerateManager):
         rust_tokenizer = getattr(processor, "tokenizer", processor)._tokenizer  # type: ignore[union-attr]
         streamer = DirectStreamer(rust_tokenizer, loop, queue, skip_special_tokens=True)
         gen_kwargs = {**inputs, "streamer": streamer, "generation_config": gen_config, "tokenizer": processor}
+        if hasattr(model, "has_talker"):
+            gen_kwargs["generation_mode"] = "text"
 
         def _run() -> None:
             try:
@@ -590,9 +593,12 @@ class GenerateManager(BaseGenerateManager):
         request_id: str,
     ) -> tuple[str, int, "torch.Tensor"]:
         """Run generation to completion via ``model.generate()`` on the inference thread."""
-        sequences = await self.async_submit(
-            model.generate, **inputs, generation_config=gen_config, tokenizer=processor
-        )
+        # Multimodal models (e.g. Qwen2.5-Omni) may generate audio alongside text by default;
+        # force text-only output since the serve layer only handles text
+        generate_kwargs = {**inputs, "generation_config": gen_config, "tokenizer": processor}
+        if hasattr(model, "has_talker"):
+            generate_kwargs["generation_mode"] = "text"
+        sequences = await self.async_submit(model.generate, **generate_kwargs)
         input_len = inputs["input_ids"].shape[-1]
         generated_ids = sequences[0, input_len:]
         text = processor.decode(generated_ids, skip_special_tokens=True)
@@ -927,13 +933,13 @@ class BaseHandler:
     def get_processor_inputs_from_messages(messages: list[dict], modality: Modality) -> list[dict]:
         """Convert OpenAI-format messages to the format expected by HF processors.
 
-        For LLMs, collapses list content blocks into plain text. For VLMs, converts
-        ``image_url`` content parts (including base64) into ``{"type": "image", "url": ...}``
-        entries that HF processors understand.
+        All modalities extract text. VLM additionally handles ``image_url`` and ``video_url``.
+        MULTIMODAL handles all of the above plus ``input_audio`` and ``audio_url``.
+        For LLMs, the content parts are collapsed into a plain text string.
 
         Args:
             messages (`list[dict]`): OpenAI-format chat messages.
-            modality (`Modality`): Whether the model is an LLM or VLM.
+            modality (`Modality`): The model modality (LLM, VLM, or MULTIMODAL).
 
         Returns:
             `list[dict]`: Processor-compatible messages.
@@ -943,35 +949,47 @@ class BaseHandler:
         for message in messages:
             parsed = {"role": message["role"], "content": []}
 
-            content = message.get("content")
+            # Forward tool-use fields so apply_chat_template can handle multi-turn tool conversations
+            if "tool_calls" in message:
+                parsed["tool_calls"] = message["tool_calls"]
+            if "tool_call_id" in message:
+                parsed["tool_call_id"] = message["tool_call_id"]
+
+            raw_content = message.get("content", [])
+            if isinstance(raw_content, str):
+                raw_content = [{"type": "text", "text": raw_content}]
+
+            for content in raw_content:
+                if content["type"] == "text":
+                    parsed["content"].append(content)
+                elif content["type"] == "image_url" and modality in (Modality.VLM, Modality.MULTIMODAL):
+                    from PIL import Image
+
+                    url = content["image_url"]["url"]
+                    if "base64" in url:
+                        image_data = re.sub("^data:image/.+;base64,", "", url)
+                        image = Image.open(BytesIO(base64.b64decode(image_data)))
+                        file = tempfile.NamedTemporaryFile(suffix=".png", delete=False)
+                        image.save(file.name)
+                        url = file.name
+                    parsed["content"].append({"type": "image", "url": url})
+                elif content["type"] == "input_audio" and modality == Modality.MULTIMODAL:
+                    input_audio = content["input_audio"]
+                    audio_data = base64.b64decode(input_audio["data"])
+                    suffix = f".{input_audio.get('format', 'wav')}" if isinstance(input_audio, dict) else ".wav"
+                    file = tempfile.NamedTemporaryFile(suffix=suffix, delete=False)
+                    file.write(audio_data)
+                    file.flush()
+                    parsed["content"].append({"type": "audio", "url": file.name})
+                # Extensions (not part of the OpenAI API standard)
+                elif content["type"] == "video_url" and modality in (Modality.VLM, Modality.MULTIMODAL):
+                    parsed["content"].append({"type": "video", "url": content["video_url"]["url"]})
+                elif content["type"] == "audio_url" and modality == Modality.MULTIMODAL:
+                    parsed["content"].append({"type": "audio", "url": content["audio_url"]["url"]})
+
+            # LLMs expect plain text, not a list of content parts
             if modality == Modality.LLM:
-                if isinstance(content, str):
-                    parsed["content"] = content
-                elif isinstance(content, list):
-                    texts = [c["text"] for c in content if c["type"] == "text"]
-                    parsed["content"] = " ".join(texts)
-
-            elif modality == Modality.VLM:
-                if isinstance(content, str):
-                    parsed["content"].append({"type": "text", "text": content})
-                elif isinstance(content, list):
-                    for content_block in content:
-                        if content_block["type"] == "text":
-                            parsed["content"].append(content_block)
-                        elif content_block["type"] == "image_url":
-                            from PIL import Image
-
-                            url = content_block["image_url"]["url"]
-                            if "base64" in url:
-                                image_data = re.sub("^data:image/.+;base64,", "", url)
-                                image = Image.open(BytesIO(base64.b64decode(image_data)))
-                                file = tempfile.NamedTemporaryFile(suffix=".png", delete=False)
-                                file.close()  # close handle immediately after creation
-                                image.save(file.name)
-                                url = file.name
-                            # We don't delete the file as tne caller need it (via the `url` key).
-                            # TODO: Better approach to avoid file accumulation.
-                            parsed["content"].append({"type": "image", "url": url})
+                parsed["content"] = " ".join(c["text"] for c in parsed["content"])
 
             processor_inputs.append(parsed)
         return processor_inputs
