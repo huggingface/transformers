@@ -1,4 +1,4 @@
-# Copyright 2026 The HuggingFace Team. All rights reserved.
+# Copyright 2025 The HuggingFace Team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -13,6 +13,24 @@
 # limitations under the License.
 
 import torch
+
+from ..utils import logging
+
+
+logger = logging.get_logger(__name__)
+
+
+def _load_tdt_kernel():
+    """Try to load the TDT loss CUDA kernel from the Hub. Returns None on failure."""
+    try:
+        from ..integrations.hub_kernels import lazy_load_kernel
+
+        return lazy_load_kernel("tdt-loss")
+    except (ImportError, ModuleNotFoundError):
+        return None
+    except Exception as e:
+        logger.warning_once(f"Failed to load TDT CUDA kernel: {e}. Falling back to pure PyTorch implementation.")
+        return None
 
 
 def tdt_loss(
@@ -33,6 +51,9 @@ def tdt_loss(
     the token prediction head and the duration prediction head. It uses vectorized anti-diagonal processing for
     efficiency: all (t, u) pairs on each anti-diagonal t+u=n are computed in parallel as batched tensor operations.
 
+    When the ``kernels-community/tdt-loss`` CUDA kernel is installed, it is used automatically for GPU tensors,
+    Falls back to the pure PyTorch implementation otherwise.
+
     Args:
         token_logits: Token logits of shape `(batch, T, U+1, vocab_size+1)`.
         duration_logits: Duration logits of shape `(batch, T, U+1, num_durations)`.
@@ -48,6 +69,18 @@ def tdt_loss(
         Scalar loss tensor (or per-example losses if `reduction="none"`).
 
     """
+    kernel = _load_tdt_kernel() if token_logits.is_cuda else None
+    if kernel is not None and hasattr(kernel, "tdt_loss"):
+        durations_t = torch.tensor(durations, dtype=torch.int32, device=token_logits.device)
+        return kernel.tdt_loss(
+            token_logits, duration_logits, targets,
+            logit_lengths, target_lengths, durations_t,
+            blank_token_id, sigma, reduction,
+        )
+
+    if reduction not in ("mean", "sum", "none"):
+        raise ValueError(f'Invalid reduction mode "{reduction}". Expected one of "mean", "sum", or "none".')
+
     device = token_logits.device
     batch_size, max_t, max_u, _ = token_logits.shape
 
@@ -55,6 +88,7 @@ def tdt_loss(
     duration_logits = duration_logits.float()
 
     # Apply log-softmax to get log probabilities
+    # sigma only applies to token logits (undernormalization constant from the TDT paper)
     token_log_probs = torch.log_softmax(token_logits, dim=-1) - sigma
     duration_log_probs = torch.log_softmax(duration_logits, dim=-1)
 
@@ -71,6 +105,8 @@ def tdt_loss(
             dim=3,
             index=targets_expanded.unsqueeze(-1),
         ).squeeze(-1)  # (batch, T, U-1)
+
+    neg_inf = torch.tensor(float("-inf"), device=device)
 
     # Process anti-diagonals: all (t, u) with t + u = n have no mutual dependencies
     for n in range(1, max_t + max_u - 1):
@@ -94,7 +130,7 @@ def tdt_loss(
                     + blank_log_probs[:, t_src, u_indices]
                     + duration_log_probs[:, t_src, u_indices, i]
                 )
-                contrib = torch.where(valid_t.unsqueeze(0), contrib, torch.tensor(float("-inf"), device=device))
+                contrib = torch.where(valid_t.unsqueeze(0), contrib, neg_inf)
                 all_candidates.append(contrib)
 
             # Label arcs: from (t-dur, u-1) to (t, u), only if u > 0
@@ -109,7 +145,7 @@ def tdt_loss(
                     + label_log_probs[:, t_src, u_src_label]
                     + duration_log_probs[:, t_src, u_src, i]
                 )
-                contrib = torch.where(valid_both.unsqueeze(0), contrib, torch.tensor(float("-inf"), device=device))
+                contrib = torch.where(valid_both.unsqueeze(0), contrib, neg_inf)
                 all_candidates.append(contrib)
 
         if all_candidates:
@@ -153,15 +189,19 @@ def ParakeetForTDTLoss(
     label_lengths,
     blank_token_id,
     durations,
+    sigma=0.0,
+    reduction="mean",
     **kwargs,
 ):
     device = token_logits.device
     return tdt_loss(
-        token_logits=token_logits.float(),
-        duration_logits=duration_logits.float(),
+        token_logits=token_logits,
+        duration_logits=duration_logits,
         targets=labels.to(device).int(),
         logit_lengths=logit_lengths.to(device).int(),
         target_lengths=label_lengths.to(device).int(),
         blank_token_id=blank_token_id,
         durations=durations,
+        sigma=sigma,
+        reduction=reduction,
     )
