@@ -12,7 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import os
 import subprocess
 import sys
 import tempfile
@@ -20,13 +19,8 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-
-git_repo_path = os.path.abspath(os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
-if git_repo_path not in sys.path:
-    sys.path.insert(0, git_repo_path)
-
-from utils.mlinter import mlinter  # noqa: E402
-from utils.mlinter import trf011 as _trf011_mod  # noqa: E402
+from mlinter import mlinter
+from mlinter import trf011 as _trf011_mod
 
 
 TEST_PP_PLAN_MODULES = {"foo": {"embed_tokens", "final_layer_norm", "layers", "norm"}}
@@ -596,7 +590,7 @@ class _LazyConfigMapping(OrderedDict[str, str]):
         violations = mlinter.analyze_file(file_path, source)
         self.assertEqual(violations, [])
 
-    @patch("utils.mlinter.mlinter.subprocess.run")
+    @patch("mlinter.mlinter.subprocess.run")
     def test_get_changed_modeling_files_includes_configuration_files(self, mock_run):
         mock_run.side_effect = [
             subprocess.CompletedProcess(
@@ -624,7 +618,7 @@ class _LazyConfigMapping(OrderedDict[str, str]):
             },
         )
 
-    @patch("utils.mlinter.mlinter.subprocess.run")
+    @patch("mlinter.mlinter.subprocess.run")
     def test_get_changed_modeling_files_includes_uncommitted_worktree_changes(self, mock_run):
         mock_run.side_effect = [
             subprocess.CompletedProcess(args=["git", "diff"], returncode=0, stdout="", stderr=""),

@@ -1,20 +1,11 @@
 #!/usr/bin/env python
-"""Shim: delegates to utils.mlinter.mlinter for backward compatibility."""
-
-import sys
-from pathlib import Path
-
-
-# Ensure the repo root is on sys.path so `utils.mlinter` is importable as a package.
-_REPO_ROOT = str(Path(__file__).resolve().parent.parent)
-if _REPO_ROOT not in sys.path:
-    sys.path.insert(0, _REPO_ROOT)
+"""Shim: delegates to the external mlinter package for backward compatibility."""
 
 # Re-export subprocess so that `@patch("check_modeling_structure.subprocess.run")` still works in tests.
-import subprocess  # noqa: E402, F401
+import subprocess  # noqa: F401
 
 # Re-export everything the test suite uses via `import check_modeling_structure as cms`.
-from utils.mlinter._helpers import (  # noqa: E402, F401
+from mlinter._helpers import (  # noqa: F401
     MODELS_ROOT,
     Violation,
     _collect_class_bases,
@@ -25,7 +16,7 @@ from utils.mlinter._helpers import (  # noqa: E402, F401
     is_self_method_call,
     is_super_method_call,
 )
-from utils.mlinter.mlinter import (  # noqa: E402, F401
+from mlinter.mlinter import (  # noqa: F401
     DEFAULT_ENABLED_TRF_RULES,
     TRF_MODEL_DIR_ALLOWLISTS,
     TRF_RULE_CHECKS,
@@ -40,7 +31,7 @@ from utils.mlinter.mlinter import (  # noqa: E402, F401
     format_violation,
     get_changed_modeling_files,
     iter_modeling_files,
-    main,  # noqa: E402
+    main,
     maybe_handle_rule_docs_cli,
     parse_args,
     resolve_enabled_rules,
@@ -51,7 +42,6 @@ from utils.mlinter.mlinter import (  # noqa: E402, F401
 CHECKER_CONFIG = {
     "name": "modeling_structure",
     "label": "Modeling file structure",
-    # mlinter scans modeling_*.py, modular_*.py, and configuration_*.py via MODELING_PATTERNS.
     "file_globs": [
         "src/transformers/models/**/modeling_*.py",
         "src/transformers/models/**/modular_*.py",

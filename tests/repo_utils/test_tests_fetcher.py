@@ -262,7 +262,7 @@ class TestFetcherTester(unittest.TestCase):
         assert "tests/repo_utils/test_tests_fetcher.py" in repo_utils_tests
 
     def test_should_run_repo_utils_tests(self):
-        assert should_run_repo_utils_tests(["utils/mlinter/mlinter.py"])
+        assert should_run_repo_utils_tests(["utils/check_modeling_structure.py"])
         assert not should_run_repo_utils_tests(["src/transformers/modeling_utils.py"])
 
     def test_create_test_list_from_filter_routes_repo_utils_tests(self):
@@ -295,7 +295,7 @@ class TestFetcherTester(unittest.TestCase):
         with ExitStack() as stack:
             stack.enter_context(patch.object(tests_fetcher, "commit_flags", {"test_all": False}, create=True))
             stack.enter_context(
-                patch.object(tests_fetcher, "get_modified_python_files", return_value=["utils/mlinter/mlinter.py"])
+                patch.object(tests_fetcher, "get_modified_python_files", return_value=["utils/check_modeling_structure.py"])
             )
             stack.enter_context(patch.object(tests_fetcher, "create_reverse_dependency_map", return_value={}))
             stack.enter_context(
