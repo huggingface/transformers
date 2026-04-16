@@ -184,5 +184,7 @@ def create_warmup_future_states(
         allocated = cache.allocate_blocks(blocks_needed, state.request_id, 0)
         if allocated is None:
             return future_states
-        future_states.append(FutureRequestState(state, has_new_token=True, complete_blocks=0))
+        future_states.append(
+            FutureRequestState(state, has_new_token=True, complete_blocks=0, query_length=num_query_tokens)
+        )
     return future_states

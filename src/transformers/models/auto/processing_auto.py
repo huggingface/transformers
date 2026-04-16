@@ -81,6 +81,7 @@ else:
             ("fuyu", "FuyuProcessor"),
             ("gemma3", "Gemma3Processor"),
             ("gemma3n", "Gemma3nProcessor"),
+            ("gemma4", "Gemma4Processor"),
             ("git", "GitProcessor"),
             ("glm46v", "Glm46VProcessor"),
             ("glm4v", "Glm4vProcessor"),
@@ -151,6 +152,7 @@ else:
             ("sam", "SamProcessor"),
             ("sam2", "Sam2Processor"),
             ("sam3", "Sam3Processor"),
+            ("sam3_lite_text", "Sam3Processor"),
             ("sam_hq", "SamHQProcessor"),
             ("seamless_m4t", "SeamlessM4TProcessor"),
             ("sew", "Wav2Vec2Processor"),
@@ -403,6 +405,9 @@ class AutoProcessor:
 
         has_remote_code = processor_auto_map is not None
         has_local_code = processor_class is not None or type(config) in PROCESSOR_MAPPING
+        explicit_local_code = has_local_code and not (
+            processor_class or PROCESSOR_MAPPING[type(config)]
+        ).__module__.startswith("transformers.")
         if has_remote_code:
             if "--" in processor_auto_map:
                 upstream_repo = processor_auto_map.split("--")[0]
@@ -412,7 +417,7 @@ class AutoProcessor:
                 trust_remote_code, pretrained_model_name_or_path, has_local_code, has_remote_code, upstream_repo
             )
 
-        if has_remote_code and trust_remote_code:
+        if has_remote_code and trust_remote_code and not explicit_local_code:
             processor_class = get_class_from_dynamic_module(
                 processor_auto_map, pretrained_model_name_or_path, **kwargs
             )

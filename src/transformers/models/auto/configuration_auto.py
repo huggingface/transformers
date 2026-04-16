@@ -175,6 +175,10 @@ CONFIG_MAPPING_NAMES = OrderedDict[str, str](
         ("gemma3n_audio", "Gemma3nAudioConfig"),
         ("gemma3n_text", "Gemma3nTextConfig"),
         ("gemma3n_vision", "Gemma3nVisionConfig"),
+        ("gemma4", "Gemma4Config"),
+        ("gemma4_audio", "Gemma4AudioConfig"),
+        ("gemma4_text", "Gemma4TextConfig"),
+        ("gemma4_vision", "Gemma4VisionConfig"),
         ("git", "GitConfig"),
         ("glm", "GlmConfig"),
         ("glm4", "Glm4Config"),
@@ -321,6 +325,7 @@ CONFIG_MAPPING_NAMES = OrderedDict[str, str](
         ("nemotron", "NemotronConfig"),
         ("nemotron_h", "NemotronHConfig"),
         ("nllb-moe", "NllbMoeConfig"),
+        ("nomic_bert", "NomicBertConfig"),
         ("nougat", "VisionEncoderDecoderConfig"),
         ("nystromformer", "NystromformerConfig"),
         ("olmo", "OlmoConfig"),
@@ -417,6 +422,8 @@ CONFIG_MAPPING_NAMES = OrderedDict[str, str](
         ("sam2_video", "Sam2VideoConfig"),
         ("sam2_vision_model", "Sam2VisionConfig"),
         ("sam3", "Sam3Config"),
+        ("sam3_lite_text", "Sam3LiteTextConfig"),
+        ("sam3_lite_text_text_model", "Sam3LiteTextTextConfig"),
         ("sam3_tracker", "Sam3TrackerConfig"),
         ("sam3_tracker_video", "Sam3TrackerVideoConfig"),
         ("sam3_video", "Sam3VideoConfig"),
@@ -690,6 +697,10 @@ MODEL_NAMES_MAPPING = OrderedDict[str, str](
         ("gemma3n_audio", "Gemma3nAudioEncoder"),
         ("gemma3n_text", "Gemma3nForCausalLM"),
         ("gemma3n_vision", "TimmWrapperModel"),
+        ("gemma4", "Gemma4ForConditionalGeneration"),
+        ("gemma4_audio", "Gemma4AudioModel"),
+        ("gemma4_text", "Gemma4ForCausalLM"),
+        ("gemma4_vision", "Gemma4VisionModel"),
         ("git", "GIT"),
         ("glm", "GLM"),
         ("glm4", "GLM4"),
@@ -848,6 +859,7 @@ MODEL_NAMES_MAPPING = OrderedDict[str, str](
         ("nemotron_h", "NemotronH"),
         ("nllb", "NLLB"),
         ("nllb-moe", "NLLB-MOE"),
+        ("nomic_bert", "NomicBERT"),
         ("nougat", "Nougat"),
         ("nystromformer", "Nyströmformer"),
         ("olmo", "OLMo"),
@@ -946,6 +958,8 @@ MODEL_NAMES_MAPPING = OrderedDict[str, str](
         ("sam2_video", "Sam2VideoModel"),
         ("sam2_vision_model", "Sam2VisionModel"),
         ("sam3", "SAM3"),
+        ("sam3_lite_text", "SAM3-LiteText"),
+        ("sam3_lite_text_text_model", "SAM3-LiteText Text Model"),
         ("sam3_tracker", "Sam3Tracker"),
         ("sam3_tracker_video", "Sam3TrackerVideo"),
         ("sam3_video", "Sam3VideoModel"),
@@ -1098,6 +1112,9 @@ SPECIAL_MODEL_TYPE_TO_MODULE_NAME = OrderedDict[str, str](
         ("gemma3n_audio", "gemma3n"),
         ("gemma3n_text", "gemma3n"),
         ("gemma3n_vision", "gemma3n"),
+        ("gemma4_audio", "gemma4"),
+        ("gemma4_text", "gemma4"),
+        ("gemma4_vision", "gemma4"),
         ("glm4v_vision", "glm4v"),
         ("glm4v_moe_vision", "glm4v_moe"),
         ("glm4v_text", "glm4v"),
@@ -1131,6 +1148,7 @@ SPECIAL_MODEL_TYPE_TO_MODULE_NAME = OrderedDict[str, str](
         ("sam_vision_model", "sam"),
         ("sam2_vision_model", "sam2"),
         ("sam2_hiera_det_model", "sam2"),
+        ("sam3_lite_text_text_model", "sam3_lite_text"),
         ("sam3_vit_model", "sam3"),
         ("sam3_vision_model", "sam3"),
         ("edgetam_vision_model", "edgetam"),
@@ -1472,6 +1490,9 @@ class AutoConfig:
         config_dict, unused_kwargs = PreTrainedConfig.get_config_dict(pretrained_model_name_or_path, **kwargs)
         has_remote_code = "auto_map" in config_dict and "AutoConfig" in config_dict["auto_map"]
         has_local_code = "model_type" in config_dict and config_dict["model_type"] in CONFIG_MAPPING
+        explicit_local_code = has_local_code and not CONFIG_MAPPING[config_dict["model_type"]].__module__.startswith(
+            "transformers."
+        )
         if has_remote_code:
             class_ref = config_dict["auto_map"]["AutoConfig"]
             if "--" in class_ref:
@@ -1482,7 +1503,7 @@ class AutoConfig:
                 trust_remote_code, pretrained_model_name_or_path, has_local_code, has_remote_code, upstream_repo
             )
 
-        if has_remote_code and trust_remote_code:
+        if has_remote_code and trust_remote_code and not explicit_local_code:
             config_class = get_class_from_dynamic_module(
                 class_ref, pretrained_model_name_or_path, code_revision=code_revision, **kwargs
             )
