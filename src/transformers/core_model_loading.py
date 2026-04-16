@@ -1739,38 +1739,55 @@ def convert_and_load_state_dict_in_model(
                     effective_batch, mapping_to_source_rank, local_rank, world_size, meta_model_state_dict
                 )
 
-                # ── Stage C: one packed scatter per source rank, async, then wait on all ──
-                # No coalescing_manager: profiling showed it wasn't the bottleneck once we packed
-                # multiple mappings into a single big scatter, and it's NCCL-only (gloo has no
-                # equivalent), so skipping it keeps the code backend-agnostic.
+                # ── Stage C: all-to-all (ONE NCCL native collective per batch) ──
+                # dist.scatter decomposes into N-1 send/recv pairs on NCCL (~140 ms each).
+                # dist.all_to_all_single is natively implemented in NCCL (ncclAlltoAll) — every rank
+                # simultaneously sends its owned shards to every other rank and receives the shards
+                # it needs from them, in one shot.
                 #
-                # entries: (src, recv_buf, layout, scatter_list_kept_alive, work_handle)
-                recv_buffers: list[tuple] = []
-                for src, layout in layouts.items():
+                # Build: send_buf = concat(what I send to rank 0, ..., rank N-1)
+                #        recv_buf = concat(what rank 0 sends to me, ..., rank N-1)
+                # Compute send/recv sizes (in bytes = uint8 elements).
+                # send_sizes[d] = how many bytes I send TO rank d (= my owned mappings' per-dest shard total).
+                # recv_sizes[s] = how many bytes I receive FROM rank s (= their owned mappings' per-dest shard total).
+                my_layout = layouts.get(local_rank, [])
+                my_send_per_dest = sum(e[-1] for e in my_layout)
+                send_sizes = [my_send_per_dest] * world_size
+                recv_sizes = [sum(e[-1] for e in layouts.get(s, [])) for s in range(world_size)]
+
+                total_send = sum(send_sizes)
+                total_recv = sum(recv_sizes)
+
+                send_buf = torch.zeros(max(total_send, 1), dtype=torch.uint8, device=local_device_obj)
+                recv_buf = torch.empty(max(total_recv, 1), dtype=torch.uint8, device=local_device_obj)
+
+                # Pack my owned shards into send_buf in dest order.
+                if my_layout:
+                    packed_per_dest = _build_scatter_list(my_layout, realized_by_name, local_device_obj, world_size)
+                    offset = 0
+                    for d in range(world_size):
+                        sz = send_sizes[d]
+                        if sz > 0:
+                            send_buf[offset : offset + sz].copy_(packed_per_dest[d])
+                        offset += sz
+                    del packed_per_dest
+
+                work = torch.distributed.all_to_all_single(
+                    recv_buf, send_buf, recv_sizes, send_sizes, group=group, async_op=True
+                )
+                work.wait()
+                del send_buf
+
+                # ── Stage D: unpack recv_buf per-source into per-param views, set on model ──
+                recv_offset = 0
+                for src in range(world_size):
+                    layout = layouts.get(src, [])
                     if not layout:
                         continue
-                    total_bytes = sum(entry[-1] for entry in layout)  # byte_size is last field
-                    recv_buf = torch.empty(total_bytes, dtype=torch.uint8, device=local_device_obj)
-                    src_global = torch.distributed.get_global_rank(group, src)
-                    if src == local_rank:
-                        scatter_list = _build_scatter_list(layout, realized_by_name, local_device_obj, world_size)
-                        work = torch.distributed.scatter(
-                            recv_buf, scatter_list=scatter_list, src=src_global, group=group, async_op=True
-                        )
-                        recv_buffers.append((src, recv_buf, layout, scatter_list, work))
-                    else:
-                        work = torch.distributed.scatter(
-                            recv_buf, scatter_list=None, src=src_global, group=group, async_op=True
-                        )
-                        recv_buffers.append((src, recv_buf, layout, None, work))
-
-                for _src, _rb, _layout, _sl, work in recv_buffers:
-                    if work is not None:
-                        work.wait()
-
-                # ── Stage D: unpack recv buffers into per-param views and set them on the model ──
-                for src, recv_buf, layout, _sl_ref, _work in recv_buffers:
-                    unpacked = _unpack_recv_buffer(recv_buf, layout)
+                    src_bytes = recv_sizes[src]
+                    src_recv = recv_buf[recv_offset : recv_offset + src_bytes]
+                    recv_offset += src_bytes
+                    unpacked = _unpack_recv_buffer(src_recv, layout)
                     for concrete, (view, mapping_obj) in unpacked.items():
                         param_device = get_device(device_map, concrete)
                         if param_device == "disk" and (concrete not in model_buffers or offload_buffers):
@@ -1778,14 +1795,17 @@ def convert_and_load_state_dict_in_model(
                                 concrete, view, loading_info, disk_offload_folder, disk_offload_index, mapping_obj
                             )
                         else:
+                            # Clone the view out of the recv_buf so we can free the big buffer after
+                            # this batch — dropping peak memory from O(model) to O(batch).
                             set_param_for_module(
-                                model, concrete, view, loading_info, mapping_obj.distributed_operation, hf_quantizer
+                                model,
+                                concrete,
+                                view.clone(),
+                                loading_info,
+                                mapping_obj.distributed_operation,
+                                hf_quantizer,
                             )
-                    # Keep recv_buf alive for the lifetime of the model — the param views alias it.
-                    # Attach it to the model so it's GC'd with the model.
-                    if not hasattr(model, "_tp_recv_buffers"):
-                        model._tp_recv_buffers = []
-                    model._tp_recv_buffers.append(recv_buf)
+                del recv_buf  # free immediately — all params now own independent storage
 
                 pbar.update(len(batch))
 
