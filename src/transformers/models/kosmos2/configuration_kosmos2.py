@@ -121,4 +121,4 @@ class Kosmos2Config(PreTrainedConfig):
         super().__post_init__(**kwargs)
 
 
-__all__ = ["Kosmos2Config"]
+__all__ = ["Kosmos2Config", "Kosmos2TextConfig", "Kosmos2VisionConfig"]
