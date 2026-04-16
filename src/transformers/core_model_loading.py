@@ -1105,6 +1105,45 @@ def rename_source_key(
     return renamed_key, source_pattern
 
 
+def _batch_shard_for_scatter(full_tensor: torch.Tensor, tp_layer, world_size: int) -> list[torch.Tensor] | None:
+    """Batched GPU-native pre-slice for scatter. Returns `world_size` contiguous shards or None (fall back to loop)."""
+    from transformers.integrations.tensor_parallel import (
+        ColwiseParallel,
+        EmbeddingParallel,
+        PackedColwiseParallel,
+        PackedRowwiseParallel,
+        RowwiseParallel,
+    )
+
+    # Determine shard dim from tp_layer class.
+    if isinstance(tp_layer, (ColwiseParallel, PackedColwiseParallel)):
+        shard_dim = -2 if full_tensor.ndim >= 2 else -1
+    elif isinstance(tp_layer, (RowwiseParallel, PackedRowwiseParallel)):
+        shard_dim = -1
+    elif isinstance(tp_layer, EmbeddingParallel):
+        shard_dim = 0 if hasattr(tp_layer, "_shard_dim_0") else 1  # rowwise=0, colwise=1
+        return None  # rare; not worth special-casing
+    else:
+        return None  # unknown class — caller falls back to per-rank loop
+
+    is_packed = isinstance(tp_layer, (PackedColwiseParallel, PackedRowwiseParallel))
+    dim = shard_dim % full_tensor.ndim
+
+    if not is_packed:
+        # Single `torch.chunk` → N views. `.contiguous()` is a no-op when the view is already contiguous
+        # (dim-0 slice of a contiguous source), otherwise a single GPU memcpy per shard.
+        return [c.contiguous() for c in torch.chunk(full_tensor, world_size, dim=dim)]
+
+    # Packed: two interleaved blocks along `dim` (gate + up, or similar). Split the blocks, chunk each
+    # independently, then cat per-rank to get the interleaved shard.
+    total = full_tensor.shape[dim]
+    block_size = total // 2
+    block0, block1 = full_tensor.split(block_size, dim=dim)
+    chunks0 = torch.chunk(block0, world_size, dim=dim)
+    chunks1 = torch.chunk(block1, world_size, dim=dim)
+    return [torch.cat([c0, c1], dim=dim).contiguous() for c0, c1 in zip(chunks0, chunks1)]
+
+
 @torch.no_grad()
 def _redistribute_realized_value(
     realized_value: dict[str, list[torch.Tensor] | torch.Tensor] | None,
@@ -1183,23 +1222,27 @@ def _redistribute_realized_value(
                 # the shards out of it below.
                 realized_value[target_name] = None
 
-                # Pre-slice once per rank. `tp_layer.shard_tensor` reads `self.rank`, so we temporarily swap
-                # it in a loop (restored in `finally`). Scatter's `scatter_list` entries must each be
-                # contiguous with their own storage — packed shards already are (`torch.cat(...).contiguous()`
-                # in `get_packed_weights`), plain slice shards are views so we clone them.
-                scatter_list: list[torch.Tensor] = []
-                original_rank = tp_layer.rank
-                try:
-                    for r in range(world_size):
-                        tp_layer.rank = r
-                        shard = tp_layer.shard_tensor(full_tensor, tensor_idx=None, device=local_device, dtype=None)
-                        if shard._base is full_tensor:
-                            shard = shard.clone(memory_format=torch.contiguous_format)
-                        elif not shard.is_contiguous():
-                            shard = shard.contiguous()
-                        scatter_list.append(shard)
-                finally:
-                    tp_layer.rank = original_rank
+                # Batch pre-slice: use GPU-native `torch.chunk` / `torch.split` to produce all shards at
+                # once instead of looping over ranks in Python (which was the bottleneck — N function calls +
+                # N clone ops on source per mapping). Falls back to the per-rank loop for unusual TP classes.
+                scatter_list = _batch_shard_for_scatter(full_tensor, tp_layer, world_size)
+                if scatter_list is None:
+                    # Fallback: per-rank loop (rare — only for TP classes not handled by the batched path).
+                    scatter_list = []
+                    original_rank = tp_layer.rank
+                    try:
+                        for r in range(world_size):
+                            tp_layer.rank = r
+                            shard = tp_layer.shard_tensor(
+                                full_tensor, tensor_idx=None, device=local_device, dtype=None
+                            )
+                            if shard._base is full_tensor:
+                                shard = shard.clone(memory_format=torch.contiguous_format)
+                            elif not shard.is_contiguous():
+                                shard = shard.contiguous()
+                            scatter_list.append(shard)
+                    finally:
+                        tp_layer.rank = original_rank
                 del full_tensor  # all bytes now live in scatter_list
 
                 # `dist.scatter` requires every scatter_list entry to match the receiver's recv-buffer
