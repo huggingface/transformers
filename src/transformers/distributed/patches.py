@@ -23,21 +23,44 @@ from __future__ import annotations
 import sys
 from functools import wraps
 
+import inspect
+
 from torch.distributed.tensor import DTensor, Replicate
 
 
 def _make_dtensor_rotary_wrapper(original_fn):
-    """Return a wrapper that converts cos/sin to replicated DTensors when q is a DTensor."""
+    """Return a wrapper that promotes cos/sin to replicated DTensors.
 
-    @wraps(original_fn)
-    def _dtensor_apply_rotary_pos_emb(q, k, cos, sin, *args, **kwargs):
-        if isinstance(q, DTensor) and not isinstance(cos, DTensor):
-            replicate = (Replicate(),) * q.device_mesh.ndim
-            cos = DTensor.from_local(cos, q.device_mesh, replicate, run_check=False)
-            sin = DTensor.from_local(sin, q.device_mesh, replicate, run_check=False)
-        return original_fn(q, k, cos, sin, *args, **kwargs)
+    Models use two ``apply_rotary_pos_emb`` signatures:
+      - ``(q, k, cos, sin, ...)``  — most models
+      - ``(x, cos, sin, ...)``     — gemma3n, gemma4, glm_moe_dsa
 
-    return _dtensor_apply_rotary_pos_emb
+    We detect which one at patch time via parameter count and create
+    the matching wrapper.
+    """
+    params = inspect.signature(original_fn).parameters
+    n_required = sum(1 for p in params.values() if p.default is inspect.Parameter.empty)
+
+    if n_required >= 4:
+
+        @wraps(original_fn)
+        def _wrapper(q, k, cos, sin, *args, **kwargs):
+            if isinstance(q, DTensor) and not isinstance(cos, DTensor):
+                replicate = (Replicate(),) * q.device_mesh.ndim
+                cos = DTensor.from_local(cos, q.device_mesh, replicate, run_check=False)
+                sin = DTensor.from_local(sin, q.device_mesh, replicate, run_check=False)
+            return original_fn(q, k, cos, sin, *args, **kwargs)
+    else:
+
+        @wraps(original_fn)
+        def _wrapper(x, cos, sin, *args, **kwargs):
+            if isinstance(x, DTensor) and not isinstance(cos, DTensor):
+                replicate = (Replicate(),) * x.device_mesh.ndim
+                cos = DTensor.from_local(cos, x.device_mesh, replicate, run_check=False)
+                sin = DTensor.from_local(sin, x.device_mesh, replicate, run_check=False)
+            return original_fn(x, cos, sin, *args, **kwargs)
+
+    return _wrapper
 
 
 def patch_dtensor_ops(model):
