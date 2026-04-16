@@ -80,8 +80,17 @@ _MODEL_TO_CONVERSION_PATTERN = {
     "altclip_vision_model": "clip_vision_model",
     "chinese_clip_vision_model": "clip_vision_model",
     "clipseg_vision_model": "clip_vision_model",
+    "metaclip_2_vision_model": "clip_vision_model",
     "mlcd_vision": "clip_vision_model",
     "mlcd": "clip_vision_model",
+    "siglip_vision_model": "clip_vision_model",
+    "siglip2_vision_model": "clip_vision_model",
+    "xclip_vision_model": "clip_vision_model",
+    "clipseg_text_model": "clip_text_model",
+    "metaclip_2_text_model": "clip_text_model",
+    "siglip_text_model": "clip_text_model",
+    "siglip2_text_model": "clip_text_model",
+    "xclip_text_model": "clip_text_model",
 }
 
 
@@ -104,6 +113,7 @@ def _build_checkpoint_conversion_mapping():
             WeightRenaming(source_patterns=r"^image_newline", target_patterns="model.image_newline"),
         ],
         "clip_vision_model": [PrefixChange(prefix_to_remove="vision_model")],
+        "clip_text_model": [PrefixChange(prefix_to_remove="text_model")],
         "video_llava": [
             WeightRenaming(source_patterns=r"^language_model.model", target_patterns="model.language_model"),
             WeightRenaming(source_patterns=r"^language_model.lm_head", target_patterns="lm_head"),
