@@ -216,6 +216,21 @@ pytest --doctest-modules <path_to_file_or_dir>
 
 If the file has a markdown extension, you should add the `--doctest-glob="*.md"` argument.
 
+#### Run runnable Markdown blocks
+
+Markdown pages can also include runnable Python fences marked with `runnable` or `runnable:<label>`.
+When `hf-doc-builder` is installed, `pytest` can collect and execute those blocks directly from a documentation page
+or from the whole documentation tree:
+
+```bash
+pytest -q docs/source/en/my_page.md
+pytest -q docs/source/en/
+```
+
+For the full authoring syntax, including continuation blocks, `# pytest-decorator:`, and
+`# doc-builder: hide`, see the
+[doc-builder runnable code blocks guide](https://github.com/huggingface/doc-builder/blob/main/docs/runnable-code-blocks.md).
+
 ### Run only modified tests
 
 You can run the tests related to the unstaged files or the current branch (according to Git) by using [pytest-picked](https://github.com/anapaulagomes/pytest-picked). This is a great way of quickly testing your changes didn't break
@@ -458,14 +473,14 @@ Let's depict the GPU requirements in the following table:
 | `< 2`  | `@require_torch_non_multi_gpu` |
 | `< 3`  | `@require_torch_up_to_2_gpus`  |
 
-For example, here is a test that must be run only when there are 2 or more GPUs available and pytorch is installed:
+For example, here is a test that must be run only when there are 2 or more GPUs available and PyTorch is installed:
 
 ```python no-style
 @require_torch_multi_gpu
 def test_example_with_multi_gpu():
 ```
 
-These decorators can be stacked. For example, if a test is slow and requires at least one GPU under pytorch, here is
+These decorators can be stacked. For example, if a test is slow and requires at least one GPU under PyTorch, here is
 how to set it up:
 
 ```python no-style
@@ -541,7 +556,7 @@ spawns a normal process that then spawns off multiple workers and manages the IO
 
 Here are some tests that use it:
 
-- [test_trainer_distributed.py](https://github.com/huggingface/transformers/tree/main/tests/trainer/test_trainer_distributed.py)
+- [test_trainer_distributed.py](https://github.com/huggingface/transformers/tree/main/tests/trainer/distributed/test_trainer_distributed.py)
 - [test_deepspeed.py](https://github.com/huggingface/transformers/tree/main/tests/deepspeed/test_deepspeed.py)
 
 To jump right into the execution point, search for the `execute_subprocess_async` call in those tests.

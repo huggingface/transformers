@@ -147,7 +147,6 @@ class GotOcr2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
     )
     pipeline_model_mapping = (
         {
-            "image-to-text": GotOcr2ForConditionalGeneration,
             "image-text-to-text": GotOcr2ForConditionalGeneration,
             "any-to-any": GotOcr2ForConditionalGeneration,
         }
@@ -161,6 +160,9 @@ class GotOcr2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
 
     def test_config(self):
         self.config_tester.run_common_tests()
+
+    def test_reverse_loading_mapping(self):
+        super().test_reverse_loading_mapping(skip_base_model=True)
 
 
 @require_torch

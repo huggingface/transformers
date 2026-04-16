@@ -314,17 +314,36 @@ def _get_adamw_anyprecision(ctx: OptimizerContext) -> tuple[Any, dict[str, Any]]
 
 def _get_sgd(ctx: OptimizerContext) -> tuple[Any, dict[str, Any]]:
     """Get SGD optimizer."""
-    return torch.optim.SGD, ctx.optimizer_kwargs
+    kwargs = ctx.optimizer_kwargs.copy()
+    if ctx.optim_args:
+        for key in ("momentum", "dampening", "weight_decay"):
+            if key in ctx.optim_args:
+                kwargs[key] = float(ctx.optim_args[key])
+        if "nesterov" in ctx.optim_args:
+            kwargs["nesterov"] = ctx.optim_args["nesterov"].lower() in ("true", "1", "yes")
+    return torch.optim.SGD, kwargs
 
 
 def _get_adagrad(ctx: OptimizerContext) -> tuple[Any, dict[str, Any]]:
     """Get Adagrad optimizer."""
-    return torch.optim.Adagrad, ctx.optimizer_kwargs
+    kwargs = ctx.optimizer_kwargs.copy()
+    if ctx.optim_args:
+        for key in ("lr_decay", "weight_decay", "eps"):
+            if key in ctx.optim_args:
+                kwargs[key] = float(ctx.optim_args[key])
+    return torch.optim.Adagrad, kwargs
 
 
 def _get_rmsprop(ctx: OptimizerContext) -> tuple[Any, dict[str, Any]]:
     """Get RMSprop optimizer."""
-    return torch.optim.RMSprop, ctx.optimizer_kwargs
+    kwargs = ctx.optimizer_kwargs.copy()
+    if ctx.optim_args:
+        for key in ("momentum", "alpha", "eps", "weight_decay"):
+            if key in ctx.optim_args:
+                kwargs[key] = float(ctx.optim_args[key])
+        if "centered" in ctx.optim_args:
+            kwargs["centered"] = ctx.optim_args["centered"].lower() in ("true", "1", "yes")
+    return torch.optim.RMSprop, kwargs
 
 
 def _get_galore_optimizer(ctx: OptimizerContext) -> tuple[Any, dict[str, Any]]:

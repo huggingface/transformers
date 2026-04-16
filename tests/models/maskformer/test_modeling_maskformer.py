@@ -45,7 +45,7 @@ if is_torch_available():
     from transformers import MaskFormerForInstanceSegmentation, MaskFormerModel
 
     if is_vision_available():
-        from transformers import MaskFormerImageProcessor
+        from transformers import MaskFormerImageProcessorPil
 
 if is_vision_available():
     from PIL import Image
@@ -244,6 +244,12 @@ class MaskFormerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
     def test_maskformer_instance_segmentation_head_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_maskformer_instance_segmentation_head_model(*config_and_inputs)
+
+    @unittest.skip(
+        reason="MaskFormer loads only the decoder from DETR and needs 2-3 conversion from the whole mapping"
+    )
+    def test_reverse_loading_mapping(self, check_keys_were_modified=True):
+        pass
 
     @unittest.skip(reason="MaskFormer does not use inputs_embeds")
     def test_inputs_embeds(self):
@@ -499,7 +505,7 @@ class MaskFormerModelIntegrationTest(unittest.TestCase):
     @cached_property
     def default_image_processor(self):
         return (
-            MaskFormerImageProcessor.from_pretrained("facebook/maskformer-swin-small-coco")
+            MaskFormerImageProcessorPil.from_pretrained("facebook/maskformer-swin-small-coco")
             if is_vision_available()
             else None
         )

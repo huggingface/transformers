@@ -86,7 +86,7 @@ python run_speech_recognition_ctc.py \
 	--gradient_checkpointing \
 	--chars_to_ignore , ? . ! - \; \: \" “ % ‘ ” � \
 	--fp16 \
-	--group_by_length \
+	--train_sampling_strategy group_by_length \
 	--push_to_hub \
 	--do_train --do_eval 
 ```
@@ -121,7 +121,7 @@ torchrun \
 	--gradient_checkpointing \
 	--chars_to_ignore , ? . ! - \; \: \" “ % ‘ ” � \
 	--fp16 \
-	--group_by_length \
+	--train_sampling_strategy group_by_length \
 	--push_to_hub \
 	--do_train --do_eval
 ```
@@ -300,7 +300,7 @@ python run_speech_recognition_ctc.py \
 	--gradient_checkpointing \
 	--chars_to_ignore , ? . ! - \; \: \" “ % ‘ ” � \
 	--fp16 \
-	--group_by_length \
+	--train_sampling_strategy group_by_length \
 	--do_train --do_eval \
   --push_to_hub
 ```
@@ -337,7 +337,7 @@ python run_speech_recognition_ctc.py \
 	--gradient_checkpointing \
 	--chars_to_ignore , ? . ! - \; \: \" “ % ‘ ” � \
 	--fp16 \
-	--group_by_length \
+	--train_sampling_strategy group_by_length \
 	--do_train --do_eval \
   --push_to_hub
 ```
@@ -547,7 +547,7 @@ python run_speech_recognition_seq2seq.py \
 	--freeze_feature_encoder \
 	--gradient_checkpointing \
 	--fp16 \
-	--group_by_length \
+	--train_sampling_strategy group_by_length \
 	--predict_with_generate \
 	--generation_max_length="40" \
 	--generation_num_beams="1" \
@@ -588,7 +588,7 @@ torchrun \
 	--freeze_feature_encoder \
 	--gradient_checkpointing \
 	--fp16 \
-	--group_by_length \
+	--train_sampling_strategy group_by_length \
 	--predict_with_generate \
 	--do_train --do_eval \
 	--do_lower_case

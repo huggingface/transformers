@@ -1,4 +1,4 @@
-# Copyright 2025 Sesame and The HuggingFace Inc. team. All rights reserved.
+# Copyright 2025 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -28,8 +28,9 @@ if is_mistral_common_available():
 
 from ...audio_utils import AudioInput, load_audio_as, make_list_of_audio
 from ...feature_extraction_utils import BatchFeature
-from ...processing_utils import AllKwargsForChatTemplate, AudioKwargs, ProcessingKwargs, ProcessorMixin, Unpack
+from ...processing_utils import AudioKwargs, ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
+from ...utils.chat_template_utils import _get_template_variables
 
 
 logger = logging.get_logger(__name__)
@@ -97,7 +98,18 @@ class VoxtralProcessor(ProcessorMixin):
     def apply_chat_template(
         self,
         conversation: list[dict[str, str]] | list[list[dict[str, str]]],
-        **kwargs: Unpack[AllKwargsForChatTemplate],
+        chat_template: str | None = None,
+        tools: list[dict] | None = None,
+        documents: list[dict[str, str]] | None = None,
+        add_generation_prompt: bool = False,
+        continue_final_message: bool = False,
+        return_assistant_tokens_mask: bool = False,
+        tokenize: bool = False,
+        return_tensors: str | None = None,
+        return_dict: bool = False,
+        load_audio_from_video: bool = False,
+        processor_kwargs: dict | None = None,
+        **kwargs,
     ) -> str:
         """
         This method applies the model's chat completion template given a conversation. It relies on MistralCommonBackend's
@@ -139,30 +151,13 @@ class VoxtralProcessor(ProcessorMixin):
             conversation (`Union[list[Dict, [str, str]], list[list[dict[str, str]]]]`):
                 The conversation to format.
         """
-        if kwargs.get("continue_final_message", False):
-            if kwargs.get("add_generation_prompt", False):
+        if continue_final_message:
+            if add_generation_prompt:
                 raise ValueError(
                     "continue_final_message and add_generation_prompt are not compatible. Use continue_final_message when you want the model to continue the final message, and add_generation_prompt when you want to add a header that will prompt it to start a new assistant message instead."
                 )
-            if kwargs.get("return_assistant_tokens_mask", False):
+            if return_assistant_tokens_mask:
                 raise ValueError("continue_final_message is not compatible with return_assistant_tokens_mask.")
-
-        # Fill sets of kwargs that should be used by different parts of template
-        processed_kwargs = {
-            "mm_load_kwargs": {},
-            "template_kwargs": {},
-        }
-
-        for kwarg_type in processed_kwargs:
-            for key in AllKwargsForChatTemplate.__annotations__[kwarg_type].__annotations__:
-                kwarg_type_defaults = AllKwargsForChatTemplate.__annotations__[kwarg_type]
-                default_value = getattr(kwarg_type_defaults, key, None)
-                value = kwargs.pop(key, default_value)
-                if value is not None and not isinstance(value, dict):
-                    processed_kwargs[kwarg_type][key] = value
-
-        # Pass unprocessed custom kwargs
-        processed_kwargs["template_kwargs"].update(kwargs)
 
         if isinstance(conversation, (list, tuple)) and (
             isinstance(conversation[0], (list, tuple)) or hasattr(conversation[0], "content")
@@ -173,17 +168,23 @@ class VoxtralProcessor(ProcessorMixin):
             is_batched = False
             conversations = [conversation]
 
-        # Check for any overlapping keys between mm_load_kwargs and kwargs
-        mm_load_kwargs = processed_kwargs["mm_load_kwargs"]
-        if any(key in kwargs for key in mm_load_kwargs):
-            overlapping_keys = [key for key in mm_load_kwargs if key in kwargs]
+        # Users might still be passing processing kwargs in `**kwargs` so we need to filter
+        # out additional kwargs that the template expects via Jinja2 template introspection
+        # We strip unrelated kwargs to avoid passing unrecognized kwargs to `_merge_kwargs`.
+        processor_kwargs = processor_kwargs or {}
+        template_kwargs = _get_template_variables(chat_template)
+        processor_kwargs_from_kwargs = {k: v for k, v in kwargs.items() if k not in template_kwargs}
+        if processor_kwargs_from_kwargs:
             logger.warning(
-                f"{overlapping_keys[0] if len(overlapping_keys) == 1 else ', '.join(overlapping_keys)} load multimodal data kwarg{'s' if len(overlapping_keys) > 1 else ''} {'have' if len(overlapping_keys) > 1 else 'has'} been passed to the processor, but {'they are' if len(overlapping_keys) > 1 else 'it is'} not supported for VoxtralProcessor since it relies on mistral_common directly. {'They' if len(overlapping_keys) > 1 else 'It'} will be ignored."
+                "Kwargs passed to `processor.__call__` have to be in `processor_kwargs` dict, not in `**kwargs`"
             )
+            processor_kwargs = processor_kwargs_from_kwargs
 
+        if return_tensors:
+            processor_kwargs["return_tensors"] = return_tensors
         output_kwargs = self._merge_kwargs(
             VoxtralProcessorKwargs,
-            **kwargs,
+            **processor_kwargs,
         )
         text_kwargs = output_kwargs["text_kwargs"]
         audio_kwargs = output_kwargs["audio_kwargs"]
@@ -192,20 +193,12 @@ class VoxtralProcessor(ProcessorMixin):
         if return_tensors != "pt":
             raise ValueError(f"{self.__class__.__name__} only supports `return_tensors='pt'`.")
 
-        tokenizer_kwargs = {**processed_kwargs["template_kwargs"], **text_kwargs}
+        tokenizer_kwargs = output_kwargs["text_kwargs"]
         tokenizer_kwargs["return_tensors"] = None  # let's not return tensors here
-        tokenize = tokenizer_kwargs.pop("tokenize", False)
-        return_dict = tokenizer_kwargs.pop("return_dict", True)
+        encoded_instruct_inputs = self.tokenizer.apply_chat_template(conversations, **tokenizer_kwargs)
 
-        encoded_instruct_inputs = self.tokenizer.apply_chat_template(
-            conversations,
-            tokenize=tokenize,
-            return_dict=return_dict,
-            **tokenizer_kwargs,
-        )
-
-        if tokenize:
-            if return_dict:
+        if text_kwargs.get("tokenize", False):
+            if text_kwargs.get("return_dict", False):
                 audio = encoded_instruct_inputs.pop("audio", None)
                 data = dict(encoded_instruct_inputs)
                 if audio is not None:

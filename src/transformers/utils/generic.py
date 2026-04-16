@@ -20,6 +20,9 @@ from __future__ import annotations
 import inspect
 import json
 import os
+import random
+import re
+import time
 import warnings
 from collections import OrderedDict, UserDict
 from collections.abc import Callable, Iterable, MutableMapping
@@ -35,22 +38,43 @@ from ..utils import logging
 from .import_utils import is_mlx_available, is_torch_available, is_torch_fx_proxy
 
 
-_is_torch_available = False
-if is_torch_available():
-    # required for @can_return_tuple decorator to work with torchdynamo
-    import torch
-    from torch.types import _dtype
-
-    from ..model_debugging_utils import model_addition_debugger_context
-
-    _is_torch_available = True
-
-
 if TYPE_CHECKING:
+    import torch
     from torch import nn
 
 
 logger = logging.get_logger(__name__)
+
+
+_is_torch_available = False
+if is_torch_available():
+    _is_torch_available = True
+
+_registered_model_output_types: set[type[Any]] = set()
+
+
+def _register_model_output_pytree_node(output_type: type[ModelOutput]) -> None:
+    if not _is_torch_available:
+        return
+    import torch
+
+    # AMD CI runs PyTorch 2.8.0+rocm which does not support tracing `set.__contains__`
+    # through TorchDynamo. Skip registration during compilation since the pytree node
+    # is already registered from the preceding eager run.
+    if torch.compiler.is_compiling():
+        return
+    if output_type in _registered_model_output_types:
+        return
+
+    import torch.utils._pytree as torch_pytree
+
+    torch_pytree.register_pytree_node(
+        output_type,
+        _model_output_flatten,
+        partial(_model_output_unflatten, output_type=output_type),
+        serialized_type_name=f"{output_type.__module__}.{output_type.__name__}",
+    )
+    _registered_model_output_types.add(output_type)
 
 
 # required for @can_return_tuple decorator to work with torchdynamo
@@ -60,7 +84,7 @@ if is_mlx_available():
 
 
 # vendored from distutils.util
-def strtobool(val):
+def strtobool(val) -> int:
     """Convert a string representation of truth to true (1) or false (0).
 
     True values are 'y', 'yes', 't', 'true', 'on', and '1'; false values are 'n', 'no', 'f', 'false', 'off', and '0'.
@@ -74,7 +98,7 @@ def strtobool(val):
     raise ValueError(f"invalid truth value {val!r}")
 
 
-def infer_framework_from_repr(x):
+def infer_framework_from_repr(x) -> str | None:
     """
     Tries to guess the framework of an object `x` from its repr (brittle but will help in `is_tensor` to try the
     frameworks in a smart order, without the need to import the frameworks).
@@ -107,7 +131,7 @@ def _get_frameworks_and_test_func(x):
     return {f: framework_to_test[f] for f in frameworks}
 
 
-def is_tensor(x):
+def is_tensor(x) -> bool:
     """
     Tests if `x` is a `torch.Tensor`, `np.ndarray` or `mlx.array` in the order defined by `infer_framework_from_repr`
     """
@@ -124,33 +148,46 @@ def is_tensor(x):
     return False
 
 
-def is_numpy_array(x):
+def is_numpy_array(x) -> bool:
     """
     Tests if `x` is a numpy array or not.
     """
     return isinstance(x, np.ndarray)
 
 
-def is_torch_tensor(x):
+def is_torch_tensor(x) -> bool:
     """
     Tests if `x` is a torch tensor or not. Safe to call even if torch is not installed.
     """
-    return _is_torch_available and isinstance(x, torch.Tensor)
+    if not _is_torch_available:
+        return False
+
+    import torch
+
+    return isinstance(x, torch.Tensor)
 
 
-def is_torch_device(x):
+def is_torch_device(x) -> bool:
     """
     Tests if `x` is a torch device or not. Safe to call even if torch is not installed.
     """
-    return _is_torch_available and isinstance(x, torch.device)
+    if not _is_torch_available:
+        return False
+
+    import torch
+
+    return isinstance(x, torch.device)
 
 
-def is_torch_dtype(x):
+def is_torch_dtype(x) -> bool:
     """
     Tests if `x` is a torch dtype or not. Safe to call even if torch is not installed.
     """
     if not _is_torch_available:
         return False
+
+    import torch
+
     if isinstance(x, str):
         if hasattr(torch, x):
             x = getattr(torch, x)
@@ -181,7 +218,7 @@ def _is_tensor_or_array_like(value):
 
 def maybe_autocast(
     device_type: str,
-    dtype: _dtype | None = None,
+    dtype: torch.dtype | None = None,
     enabled: bool = True,
     cache_enabled: bool | None = None,
 ):
@@ -195,6 +232,13 @@ def maybe_autocast(
     Which makes graph splitting in `torch.compile` more flexible as it removes the
     requirement that partition IDs be monotonically increasing.
     """
+    if not _is_torch_available:
+        raise ImportError("`maybe_autocast` requires PyTorch to be installed.")
+
+    import torch
+
+    if device_type == "meta":
+        return nullcontext()
     if torch.is_autocast_enabled(device_type) or enabled:
         return torch.autocast(device_type, dtype=dtype, enabled=enabled, cache_enabled=cache_enabled)
     else:
@@ -207,16 +251,19 @@ def _is_mlx(x):
     return isinstance(x, mx.array)
 
 
-def is_mlx_array(x):
+def is_mlx_array(x) -> bool:
     """
     Tests if `x` is a mlx array or not. Safe to call even when mlx is not installed.
     """
     return False if not _is_mlx_available else _is_mlx(x)
 
 
-def is_flash_attention_requested(config=None, requested_attention_implementation: str | None = None):
+def is_flash_attention_requested(
+    config=None, requested_attention_implementation: str | None = None, version: int | None = None
+) -> bool:
     """
-    Checks whether some flavor of flash attention is requested or not.
+    Checks whether some flavor of flash attention is requested or not. Optionally, checks for a specific version of
+    flash attention.
 
     This is checked against one of the two arguments, i.e. either the `config` or the directly passed value
     `requested_attention_implementation`. Otherwise, an error will be raised (ambiguity).
@@ -236,6 +283,14 @@ def is_flash_attention_requested(config=None, requested_attention_implementation
     else:
         checked_attention_implementation = requested_attention_implementation
 
+    # theoretically can happen, equivalent to default implementation (sdpa/eager)
+    if checked_attention_implementation is None:
+        return False
+
+    # If a specific version is requested, look for a pattern of type "flash...{version}"
+    if version is not None:
+        return re.match(r".*flash.*" + str(version), checked_attention_implementation) is not None
+    # Otherwise, just check "flash" is in the attention implementation
     return "flash" in checked_attention_implementation
 
 
@@ -328,18 +383,11 @@ class ModelOutput(OrderedDict):
         This is necessary to synchronize gradients when using `torch.nn.parallel.DistributedDataParallel` with
         `static_graph=True` with modules that output `ModelOutput` subclasses.
         """
-        if _is_torch_available:
-            from torch.utils._pytree import register_pytree_node
-
-            register_pytree_node(
-                cls,
-                _model_output_flatten,
-                partial(_model_output_unflatten, output_type=cls),
-                serialized_type_name=f"{cls.__module__}.{cls.__name__}",
-            )
+        _register_model_output_pytree_node(cls)
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
+        _register_model_output_pytree_node(type(self))
 
         # Subclasses of ModelOutput must use the @dataclass decorator
         # This check is done in __init__ because the @dataclass decorator operates after __init_subclass__
@@ -358,6 +406,7 @@ class ModelOutput(OrderedDict):
 
         Only occurs if @dataclass decorator has been used.
         """
+        _register_model_output_pytree_node(type(self))
         class_fields = fields(self)
 
         # Safety and consistency checks
@@ -383,8 +432,9 @@ class ModelOutput(OrderedDict):
             # if we provided an iterator as first field and the iterator is a (key, value) iterator
             # set the associated fields
             if first_field_iterator:
-                # reset first field to None
+                # reset first field to None and remove it from the internal dictionary
                 setattr(self, class_fields[0].name, None)
+                super().__delitem__(class_fields[0].name)
                 for idx, element in enumerate(iterator):
                     if not isinstance(element, (list, tuple)) or len(element) != 2 or not isinstance(element[0], str):
                         if idx == 0:
@@ -427,7 +477,8 @@ class ModelOutput(OrderedDict):
             return self.to_tuple()[k]
 
     def __setattr__(self, name, value):
-        if name in self.keys() and value is not None:
+        field_names = {field.name for field in fields(self)}
+        if name in field_names and value is not None:
             # Don't call self.__setitem__ to avoid recursion errors
             super().__setitem__(name, value)
         super().__setattr__(name, value)
@@ -452,25 +503,16 @@ class ModelOutput(OrderedDict):
         return tuple(self[k] for k in self.keys())
 
 
-if _is_torch_available:
-    import torch.utils._pytree as _torch_pytree
+def _model_output_flatten(output: ModelOutput) -> tuple[list[Any], list[str]]:
+    return list(output.values()), list(output.keys())
 
-    def _model_output_flatten(output: ModelOutput) -> tuple[list[Any], _torch_pytree.Context]:
-        return list(output.values()), list(output.keys())
 
-    def _model_output_unflatten(
-        values: Iterable[Any],
-        context: _torch_pytree.Context,
-        output_type=None,
-    ) -> ModelOutput:
-        return output_type(**dict(zip(context, values)))
-
-    _torch_pytree.register_pytree_node(
-        ModelOutput,
-        _model_output_flatten,
-        partial(_model_output_unflatten, output_type=ModelOutput),
-        serialized_type_name=f"{ModelOutput.__module__}.{ModelOutput.__name__}",
-    )
+def _model_output_unflatten(
+    values: Iterable[Any],
+    context: list[str],
+    output_type: type[ModelOutput] | None = None,
+) -> ModelOutput:
+    return output_type(**dict(zip(context, values)))
 
 
 class ExplicitEnum(str, Enum):
@@ -638,6 +680,8 @@ def torch_int(x):
     if not _is_torch_available:
         return int(x)
 
+    import torch
+
     return x.to(torch.int64) if torch.jit.is_tracing() and isinstance(x, torch.Tensor) else int(x)
 
 
@@ -647,6 +691,8 @@ def torch_float(x):
     """
     if not _is_torch_available:
         return int(x)
+
+    import torch
 
     return x.to(torch.float32) if torch.jit.is_tracing() and isinstance(x, torch.Tensor) else int(x)
 
@@ -826,7 +872,7 @@ def del_attribute_from_modules(module: nn.Module, key: str):
 def can_return_tuple(func):
     """
     Decorator to wrap model method, to call output.to_tuple() if return_dict=False passed as a kwarg or
-    use_return_dict=False is set in the config.
+    return_dict=False is set in the config.
 
     Note:
         output.to_tuple() convert output to tuple skipping all `None` values.
@@ -907,6 +953,8 @@ def merge_with_config_defaults(func):
         # Call the original forward with the updated kwargs/config
         try:
             if kwargs.get("debug_io", False):
+                from ..model_debugging_utils import model_addition_debugger_context
+
                 with model_addition_debugger_context(
                     self, kwargs.get("debug_io_dir", "model_debug"), kwargs.get("prune_layers")
                 ):
@@ -926,10 +974,18 @@ def merge_with_config_defaults(func):
     return wrapper
 
 
+# bc for check_model_inputs:
+
+
+def check_model_inputs(func):
+    logger.warning_once("The `check_model_inputs` decorator is deprecated in favor of `merge_with_config_defaults`.")
+    return merge_with_config_defaults(func)
+
+
 class GeneralInterface(MutableMapping):
     """
     Dict-like object keeping track of a class-wide mapping, as well as a local one. Allows to have library-wide
-    modifications though the class mapping, as well as local modifications in a single file with the local mapping.
+    modifications through the class mapping, as well as local modifications in a single file with the local mapping.
     """
 
     # Class instance object, so that a call to `register` can be reflected into all other files correctly, even if
@@ -965,3 +1021,54 @@ class GeneralInterface(MutableMapping):
 
     def valid_keys(self) -> list[str]:
         return list(self.keys())
+
+
+def retry(
+    max_retries=5,
+    initial_delay=1.0,
+    max_delay=30.0,
+    jitter=True,
+    exceptions=(Exception,),
+):
+    """
+    Decorator that retries a function call with exponential backoff.
+
+    Args:
+        max_retries (`int`, *optional*, defaults to 5):
+            Maximum number of retry attempts.
+        initial_delay (`float`, *optional*, defaults to 1.0):
+            Initial delay in seconds before the first retry.
+        max_delay (`float`, *optional*, defaults to 30.0):
+            Maximum delay in seconds between retries.
+        jitter (`bool`, *optional*, defaults to `True`):
+            Whether to add random jitter to the delay.
+        exceptions (`tuple`, *optional*, defaults to `(Exception,)`):
+            Tuple of exception types to catch and retry on.
+    """
+
+    def decorator(func):
+        @wraps(func)
+        def wrapper(*args, **kwargs):
+            delay = initial_delay
+
+            for attempt in range(1, max_retries + 1):
+                try:
+                    return func(*args, **kwargs)
+                except exceptions as exc:
+                    if attempt == max_retries:
+                        raise
+
+                    sleep_for = min(delay, max_delay)
+                    if jitter:
+                        sleep_for *= random.uniform(0.8, 1.2)
+
+                    logger.info(
+                        f"[{func.__name__}] attempt {attempt}/{max_retries} failed: {exc}\n"
+                        f"Retrying in {sleep_for:.1f}s..."
+                    )
+                    time.sleep(sleep_for)
+                    delay = min(delay * 2, max_delay)
+
+        return wrapper
+
+    return decorator

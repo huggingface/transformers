@@ -16,23 +16,46 @@
       title: Loading models
     - local: custom_models
       title: Customizing models
+    - local: monkey_patching
+      title: Monkey patching
+    - local: fusion_mapping
+      title: Fusion mapping
     - local: how_to_hack_models
       title: Customizing model components
     - local: model_sharing
       title: Sharing
     - local: serialization
       title: Exporting to production
-    - local: modular_transformers
-      title: Contributing a new model to Transformers
-    - local: add_new_model
-      title: Legacy model contribution
-    - local: auto_docstring
-      title: Documenting a model
+    - isExpanded: false
+      sections:
+      - local: contributing
+        title: Contribute to Transformers
+      - local: modeling_rules
+        title: Model structure rules
+      - local: modular_transformers
+        title: Contributing a new model to Transformers
+      - local: add_vision_processing_components
+        title: Add vision processing components
+      - local: model_output_tracing
+        title: Tracing model intermediate outputs
+      - local: auto_docstring
+        title: Auto-generating docstrings
+      - local: testing
+        title: Transformers model tests
+      - local: pr_checks
+        title: Pull request checks
+      - local: add_new_model
+        title: Legacy model contribution
+      title: Contribute
     title: Models
   - isExpanded: false
     sections:
     - local: fast_tokenizers
       title: Tokenizers
+    - local: custom_tokenizers
+      title: Customizing tokenizers
+    - local: tokenizer_summary
+      title: Tokenization algorithms
     - local: image_processors
       title: Image processors
     - local: video_processors
@@ -43,10 +66,6 @@
       title: Feature extractors
     - local: processors
       title: Processors
-    - local: tokenizer_summary
-      title: Summary of the tokenizers
-    - local: pad_truncation
-      title: Padding and truncation
     title: Preprocessors
   title: Base classes
 - isExpanded: true
@@ -85,6 +104,10 @@
       title: Experts backends
     - local: continuous_batching
       title: Continuous batching
+    - local: continuous_batching_architecture
+      title: Continuous batching architecture
+    - local: paged_attention
+      title: Paged attention
     - sections:
       - local: kernel_doc/overview
         title: Kernels
@@ -120,6 +143,8 @@
       title: Tool use
     - local: chat_templating_writing
       title: Writing a chat template
+    - local: chat_response_parsing
+      title: Response parsing
     title: Chat with models
   - isExpanded: false
     sections:
@@ -142,14 +167,46 @@
   - isExpanded: false
     sections:
     - local: trainer
-      title: Trainer
+      title: Trainer overview
     - local: training
       title: Fine-tuning
+    title: Get started
+  - isExpanded: false
+    sections:
+    - local: trainer_customize
+      title: Subclassing Trainer methods
+    - local: trainer_callbacks
+      title: Callbacks
+    - local: data_collators
+      title: Data collators
     - local: optimizers
-      title: Optimizers
+      title: Optimizers and schedulers
     - local: hpo_train
       title: Hyperparameter search
-    title: Trainer API
+    - local: trainer_recipes
+      title: Trainer features
+    title: Customization
+  - local: peft
+    title: Parameter-efficient fine-tuning
+  - isExpanded: false
+    sections:
+    - sections:
+      - local: grad_accumulation
+        title: Gradient accumulation
+      - local: grad_checkpointing
+        title: Gradient checkpointing
+      - local: model_memory_anatomy
+        title: GPU memory usage
+      title: Memory optimization
+    - sections:
+      - local: mixed_precision_training
+        title: Mixed precision training
+      - local: torch_compile
+        title: torch.compile
+      - local: kernels
+        title: Kernels
+      title: Speed optimization
+    title: Performance
   - isExpanded: false
     sections:
     - local: accelerator_selection
@@ -159,18 +216,18 @@
     - local: fsdp
       title: FullyShardedDataParallel
     - local: deepspeed
-      title: DeepSpeed
+      title: DeepSpeed ZeRO
+    - local: deepspeed_alst
+      title: Ulysses sequence parallelism
+    - local: tensor_parallelism
+      title: Tensor parallelism
     - local: debugging
-      title: Multi-GPU debugging
-    - local: perf_train_cpu_many
-      title: Distributed CPUs
+      title: Debugging
     - local: perf_train_gpu_many
       title: Parallelism methods
     title: Distributed training
   - isExpanded: false
     sections:
-    - local: perf_train_gpu_one
-      title: GPU
     - local: perf_train_cpu
       title: CPU
     - local: perf_train_special
@@ -178,12 +235,10 @@
     - local: perf_train_gaudi
       title: Intel Gaudi
     - local: perf_hardware
-      title: Build your own machine
+      title: Building a GPU workstation
+    - local: model_memory_anatomy
+      title: Model training anatomy
     title: Hardware
-  - local: peft
-    title: PEFT
-  - local: model_memory_anatomy
-    title: Model training anatomy
   title: Training
 - isExpanded: false
   sections:
@@ -211,6 +266,8 @@
     title: FBGEMM
   - local: quantization/finegrained_fp8
     title: Fine-grained FP8
+  - local: quantization/fouroversix
+    title: Four Over Six
   - local: quantization/fp_quant
     title: FP-Quant
   - local: gguf
@@ -221,6 +278,8 @@
     title: HIGGS
   - local: quantization/hqq
     title: HQQ
+  - local: quantization/metal
+    title: Metal
   - local: quantization/mxfp4
     title: MXFP4
   - local: quantization/optimum
@@ -235,6 +294,8 @@
     title: SpQR
   - local: quantization/vptq
     title: VPTQ
+  - local: quantization/sinq
+    title: SINQ
   - local: quantization/contribute
     title: Contribute
   title: Quantization
@@ -261,12 +322,16 @@
       title: MLX
     title: Local deployment
   - sections:
+    - local: community_integrations/nemo_automodel_pretraining
+      title: NeMo Automodel
     - local: community_integrations/nanotron
       title: Nanotron
     - local: community_integrations/torchtitan
       title: torchtitan
     title: Pretraining
   - sections:
+    - local: community_integrations/nemo_automodel_finetuning
+      title: NeMo Automodel
     - local: community_integrations/axolotl
       title: Axolotl
     - local: community_integrations/trl
@@ -301,6 +366,8 @@
         title: Audio classification
       - local: tasks/asr
         title: Automatic speech recognition
+      - local: tasks/audio_text_to_text
+        title: Audio-text-to-text
       - local: tasks/text-to-speech
         title: Text to speech
       title: Audio
@@ -319,8 +386,6 @@
         title: Zero-shot image classification
       - local: tasks/monocular_depth_estimation
         title: Depth estimation
-      - local: tasks/image_to_image
-        title: Image-to-Image
       - local: tasks/image_feature_extraction
         title: Image Feature Extraction
       - local: tasks/mask_generation
@@ -370,15 +435,6 @@
   title: Resources
 - isExpanded: false
   sections:
-  - local: contributing
-    title: Contribute to Transformers
-  - local: testing
-    title: Transformers model tests
-  - local: pr_checks
-    title: Pull request checks
-  title: Contribute
-- isExpanded: false
-  sections:
   - sections:
     - local: model_doc/auto
       title: Auto Classes
@@ -388,6 +444,8 @@
       title: Callbacks
     - local: main_classes/configuration
       title: Configuration
+    - local: main_classes/continuous_batching
+      title: Continuous batching
     - local: main_classes/data_collator
       title: Data Collator
     - local: main_classes/logging
@@ -523,6 +581,8 @@
         title: Ernie4_5_MoE
       - local: model_doc/esm
         title: ESM
+      - local: model_doc/eurobert
+        title: EuroBERT
       - local: model_doc/exaone4
         title: EXAONE-4.0
       - local: model_doc/exaone_moe
@@ -609,6 +669,8 @@
         title: Jamba
       - local: model_doc/jetmoe
         title: JetMoe
+      - local: model_doc/jina_embeddings_v3
+        title: jina_embeddings_v3
       - local: model_doc/led
         title: LED
       - local: model_doc/lfm2
@@ -667,6 +729,8 @@
         title: ModernBert
       - local: model_doc/modernbert-decoder
         title: ModernBERTDecoder
+      - local: model_doc/modernvbert
+        title: ModernVBert
       - local: model_doc/mpnet
         title: MPNet
       - local: model_doc/mpt
@@ -683,10 +747,14 @@
         title: NanoChat
       - local: model_doc/nemotron
         title: Nemotron
+      - local: model_doc/nemotron_h
+        title: NemotronH
       - local: model_doc/nllb
         title: NLLB
       - local: model_doc/nllb-moe
         title: NLLB-MoE
+      - local: model_doc/nomic_bert
+        title: NomicBERT
       - local: model_doc/nystromformer
         title: Nyströmformer
       - local: model_doc/olmo
@@ -697,6 +765,8 @@
         title: Olmo3
       - local: model_doc/olmoe
         title: OLMoE
+      - local: model_doc/olmo_hybrid
+        title: OlmoHybrid
       - local: model_doc/opt
         title: OPT
       - local: model_doc/pegasus
@@ -809,6 +879,8 @@
         title: BEiT
       - local: model_doc/bit
         title: BiT
+      - local: model_doc/chmv2
+        title: CHMv2
       - local: model_doc/conditional_detr
         title: Conditional DETR
       - local: model_doc/convnext
@@ -935,6 +1007,10 @@
         title: Timm Wrapper
       - local: model_doc/upernet
         title: UperNet
+      - local: model_doc/uvdoc
+        title: UVDoc
+      - local: model_doc/videomt
+        title: VidEoMT
       - local: model_doc/vit
         title: Vision Transformer (ViT)
       - local: model_doc/vitdet
@@ -959,6 +1035,8 @@
         title: Bark
       - local: model_doc/clap
         title: CLAP
+      - local: model_doc/cohere_asr
+        title: Cohere ASR
       - local: model_doc/csm
         title: CSM
       - local: model_doc/dac
@@ -973,6 +1051,10 @@
         title: GLM-ASR
       - local: model_doc/granite_speech
         title: GraniteSpeech
+      - local: model_doc/higgs_audio_v2
+        title: Higgs Audio V2
+      - local: model_doc/higgs_audio_v2_tokenizer
+        title: Higgs Audio V2 Tokenizer
       - local: model_doc/hubert
         title: Hubert
       - local: model_doc/kyutai_speech_to_text
@@ -1019,6 +1101,8 @@
         title: UnivNet
       - local: model_doc/vibevoice_acoustic_tokenizer
         title: VibeVoice Acoustic Tokenizer
+      - local: model_doc/vibevoice_asr
+        title: VibeVoice ASR
       - local: model_doc/vits
         title: VITS
       - local: model_doc/wav2vec2
@@ -1089,6 +1173,8 @@
         title: Code World Model (CWM)
       - local: model_doc/cohere2_vision
         title: Cohere2Vision
+      - local: model_doc/colmodernvbert
+        title: ColModernVBert
       - local: model_doc/colpali
         title: ColPali
       - local: model_doc/colqwen2
@@ -1123,6 +1209,8 @@
         title: Gemma3
       - local: model_doc/gemma3n
         title: Gemma3n
+      - local: model_doc/gemma4
+        title: Gemma4
       - local: model_doc/git
         title: GIT
       - local: model_doc/glm46v
@@ -1193,10 +1281,14 @@
         title: MGP-STR
       - local: model_doc/mistral3
         title: Mistral3
+      - local: model_doc/mistral4
+        title: Mistral4
       - local: model_doc/mllama
         title: mllama
       - local: model_doc/mm-grounding-dino
         title: MM Grounding DINO
+      - local: model_doc/musicflamingo
+        title: MusicFlamingo
       - local: model_doc/nougat
         title: Nougat
       - local: model_doc/omdet-turbo
@@ -1221,12 +1313,30 @@
         title: PerceptionLM
       - local: model_doc/phi4_multimodal
         title: Phi4 Multimodal
+      - local: model_doc/pi0
+        title: PI0
       - local: model_doc/pix2struct
         title: Pix2Struct
       - local: model_doc/pixtral
         title: Pixtral
+      - local: model_doc/pp_doclayout_v2
+        title: PP-DocLayoutV2
       - local: model_doc/pp_doclayout_v3
         title: PP-DocLayoutV3
+      - local: model_doc/pp_ocrv5_mobile_det
+        title: PP-OCRv5_mobile_det
+      - local: model_doc/pp_ocrv5_mobile_rec
+        title: PP-OCRv5_mobile_rec
+      - local: model_doc/pp_ocrv5_server_det
+        title: PP-OCRv5_server_det
+      - local: model_doc/pp_ocrv5_server_rec
+        title: PP-OCRv5_server_rec
+      - local: model_doc/pp_chart2table
+        title: PPChart2Table
+      - local: model_doc/pp_lcnet
+        title: PPLCNet
+      - local: model_doc/pp_lcnet_v3
+        title: PPLCNetV3
       - local: model_doc/qwen2_5_omni
         title: Qwen2.5-Omni
       - local: model_doc/qwen2_5_vl
@@ -1245,12 +1355,16 @@
         title: SAM3
       - local: model_doc/sam3_video
         title: SAM3 Video
+      - local: model_doc/sam3_lite_text
+        title: SAM3-LiteText
       - local: model_doc/shieldgemma2
         title: ShieldGemma2
       - local: model_doc/siglip
         title: SigLIP
       - local: model_doc/siglip2
         title: SigLIP2
+      - local: model_doc/slanext
+        title: SLANeXt
       - local: model_doc/smollm3
         title: SmolLM3
       - local: model_doc/smolvlm
@@ -1281,6 +1395,8 @@
         title: VisualBERT
       - local: model_doc/voxtral
         title: Voxtral
+      - local: model_doc/voxtral_realtime
+        title: VoxtralRealtime
       - local: model_doc/xclip
         title: X-CLIP
       title: Multimodal models
@@ -1301,6 +1417,8 @@
         title: Time Series Transformer
       - local: model_doc/timesfm
         title: TimesFM
+      - local: model_doc/timesfm2_5
+        title: TimesFM2.5
       title: Time series models
     title: Models
   - sections:

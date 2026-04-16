@@ -418,18 +418,7 @@ class LukeTokenizer(TokenizersBackend):
             else self.clean_up_tokenization_spaces
         )
         if clean_up_tokenization_spaces:
-            text = (
-                text.replace(" .", ".")
-                .replace(" ?", "?")
-                .replace(" !", "!")
-                .replace(" ,", ",")
-                .replace(" ' ", "'")
-                .replace(" n't", "n't")
-                .replace(" 'm", "'m")
-                .replace(" 's", "'s")
-                .replace(" 've", "'ve")
-                .replace(" 're", "'re")
-            )
+            text = self.clean_up_tokenization(text)
 
         return text
 

@@ -624,7 +624,7 @@ class DetrEncoderLayer(GradientCheckpointingLayer):
         hidden_states = self.final_layer_norm(hidden_states)
 
         if self.training:
-            if torch.isinf(hidden_states).any() or torch.isnan(hidden_states).any():
+            if not torch.isfinite(hidden_states).all():
                 clamp_value = torch.finfo(hidden_states.dtype).max - 1000
                 hidden_states = torch.clamp(hidden_states, min=-clamp_value, max=clamp_value)
 
@@ -974,7 +974,7 @@ class DetrEncoder(DetrPreTrainedModel):
 
         attention_mask = create_bidirectional_mask(
             config=self.config,
-            input_embeds=inputs_embeds,
+            inputs_embeds=inputs_embeds,
             attention_mask=attention_mask,
         )
 
@@ -1059,7 +1059,7 @@ class DetrDecoder(DetrPreTrainedModel):
         if attention_mask is not None:
             attention_mask = create_bidirectional_mask(
                 config=self.config,
-                input_embeds=hidden_states,
+                inputs_embeds=hidden_states,
                 attention_mask=attention_mask,
             )
 
@@ -1067,7 +1067,7 @@ class DetrDecoder(DetrPreTrainedModel):
         if encoder_hidden_states is not None and encoder_attention_mask is not None:
             encoder_attention_mask = create_bidirectional_mask(
                 config=self.config,
-                input_embeds=hidden_states,
+                inputs_embeds=hidden_states,
                 attention_mask=encoder_attention_mask,
                 encoder_hidden_states=encoder_hidden_states,
             )
@@ -1435,26 +1435,6 @@ class DetrForObjectDetection(DetrPreTrainedModel):
     """
 )
 class DetrForSegmentation(DetrPreTrainedModel):
-    _checkpoint_conversion_mapping = {
-        "bbox_attention.q_linear": "bbox_attention.q_proj",
-        "bbox_attention.k_linear": "bbox_attention.k_proj",
-        # Mask head refactor
-        "mask_head.lay1": "mask_head.conv1.conv",
-        "mask_head.gn1": "mask_head.conv1.norm",
-        "mask_head.lay2": "mask_head.conv2.conv",
-        "mask_head.gn2": "mask_head.conv2.norm",
-        "mask_head.adapter1": "mask_head.fpn_stages.0.fpn_adapter",
-        "mask_head.lay3": "mask_head.fpn_stages.0.refine.conv",
-        "mask_head.gn3": "mask_head.fpn_stages.0.refine.norm",
-        "mask_head.adapter2": "mask_head.fpn_stages.1.fpn_adapter",
-        "mask_head.lay4": "mask_head.fpn_stages.1.refine.conv",
-        "mask_head.gn4": "mask_head.fpn_stages.1.refine.norm",
-        "mask_head.adapter3": "mask_head.fpn_stages.2.fpn_adapter",
-        "mask_head.lay5": "mask_head.fpn_stages.2.refine.conv",
-        "mask_head.gn5": "mask_head.fpn_stages.2.refine.norm",
-        "mask_head.out_lay": "mask_head.output_conv",
-    }
-
     def __init__(self, config: DetrConfig):
         super().__init__(config)
 

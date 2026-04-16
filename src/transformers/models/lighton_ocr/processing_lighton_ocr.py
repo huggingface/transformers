@@ -110,6 +110,8 @@ class LightOnOcrProcessor(ProcessorMixin):
         chat_template=None,
         **kwargs,
     ):
+        super().__init__(image_processor, tokenizer, chat_template=chat_template)
+
         self.patch_size = patch_size
         self.spatial_merge_size = spatial_merge_size
         # Calculate effective patch size for image processing
@@ -124,8 +126,6 @@ class LightOnOcrProcessor(ProcessorMixin):
         self.image_end_token_id = tokenizer.image_end_token_id
 
         self.image_ids = [self.image_token_id, self.image_break_token_id, self.image_end_token_id]
-
-        super().__init__(image_processor, tokenizer, chat_template=chat_template)
 
     def __call__(
         self,
@@ -183,11 +183,7 @@ class LightOnOcrProcessor(ProcessorMixin):
         self._check_special_mm_tokens(prompt_strings, text_inputs, modalities=["image"])
 
         if return_mm_token_type_ids:
-            array_ids = np.array(text_inputs["input_ids"])
-            mm_token_type_ids = np.zeros_like(text_inputs["input_ids"])
-            mm_token_type_ids[np.isin(array_ids, self.image_ids)] = 1
-            text_inputs["mm_token_type_ids"] = mm_token_type_ids.tolist()
-
+            text_inputs["mm_token_type_ids"] = self.create_mm_token_type_ids(text_inputs["input_ids"])
         return BatchFeature(data={**text_inputs, **image_inputs}, tensor_type=return_tensors)
 
     def _get_num_multimodal_tokens(self, image_sizes=None, **kwargs):
@@ -208,13 +204,16 @@ class LightOnOcrProcessor(ProcessorMixin):
             images_kwargs.update(kwargs)
 
             size = images_kwargs.get("size", None) or self.image_processor.size
+            patch_size = images_kwargs.get("patch_size", None) or self.image_processor.patch_size
+            if isinstance(patch_size, dict) and "height" in patch_size and "width" in patch_size:
+                patch_size = (patch_size["height"], patch_size["width"])
 
             num_image_tokens = []
             for height, width in image_sizes:
                 resized_height, resized_width = get_resize_output_image_size(
                     np.zeros((height, width, 3)),
                     size=(size["longest_edge"], size["longest_edge"]),
-                    patch_size=(self.effective_patch_size, self.effective_patch_size),
+                    patch_size=patch_size,
                 )
                 num_height_tokens = resized_height // self.effective_patch_size
                 num_width_tokens = resized_width // self.effective_patch_size

@@ -171,11 +171,7 @@ class FastVlmForConditionalGenerationModelTest(ModelTesterMixin, GenerationTeste
         if is_torch_available()
         else ()
     )
-    pipeline_model_mapping = (
-        {"image-to-text": FastVlmForConditionalGeneration, "image-text-to-text": FastVlmForConditionalGeneration}
-        if is_torch_available()
-        else {}
-    )
+    pipeline_model_mapping = {"image-text-to-text": FastVlmForConditionalGeneration} if is_torch_available() else {}
     skip_test_image_features_output_shape = True  # FastVLM uses index -3 for hidden_size instead of -1
 
     _is_composite = True
@@ -230,6 +226,10 @@ class FastVlmForConditionalGenerationModelTest(ModelTesterMixin, GenerationTeste
 
     @unittest.skip("Cannot set output_attentions on timm models.")
     def test_get_image_features_attentions(self):
+        pass
+
+    @unittest.skip(reason="The model has TimmWrapper backbone but doesn't apply any conversion")
+    def test_reverse_loading_mapping(self, check_keys_were_modified=True):
         pass
 
     def _image_features_get_expected_num_hidden_states(self, model_tester=None):

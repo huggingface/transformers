@@ -72,13 +72,6 @@ print(decoded)
 ```
 
 </hfoption>
-<hfoption id="transformers CLI">
-
-```bash
-echo -e "水在零度时会[MASK]" | transformers run --task fill-mask --model junnyu/roformer_chinese_base --device 0
-```
-
-</hfoption>
 </hfoptions>
 
 ## Notes
