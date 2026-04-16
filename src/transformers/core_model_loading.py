@@ -1696,15 +1696,14 @@ def convert_and_load_state_dict_in_model(
             world_size = device_mesh.size()
             tp_device = device_map[""]
             local_device_obj = torch.device(tp_device)
-            use_cuda = local_device_obj.type == "cuda"
             read_pool = ThreadPoolExecutor(max_workers=GLOBAL_WORKERS)
 
-            def _read_to_pinned(tensor_slice, _dtype):
-                """Thread-pool job: read safetensors slice → CPU pinned tensor."""
+            def _read_to_cpu(tensor_slice, _dtype):
+                """Thread-pool job: read safetensors slice → CPU tensor."""
                 cpu = tensor_slice[...]
                 if _dtype is not None:
                     cpu = cpu.to(dtype=_dtype)
-                return cpu.pin_memory() if use_cuda else cpu
+                return cpu
 
             # Pre-group batches.
             batch_items_list: list[list] = []
@@ -1723,7 +1722,7 @@ def convert_and_load_state_dict_in_model(
             if owned_entries_by_batch:
                 for fpn, entries in owned_entries_by_batch[0]:
                     cur_read_futs[fpn] = [
-                        (tk, ok, sp, read_pool.submit(_read_to_pinned, t, dt)) for tk, ok, sp, t, dt in entries
+                        (tk, ok, sp, read_pool.submit(_read_to_cpu, t, dt)) for tk, ok, sp, t, dt in entries
                     ]
 
             pbar = tqdm(total=len(items), desc="Loading weights")
@@ -1733,15 +1732,17 @@ def convert_and_load_state_dict_in_model(
                 if batch_idx + 1 < len(batch_items_list):
                     for fpn, entries in owned_entries_by_batch[batch_idx + 1]:
                         nxt_read_futs[fpn] = [
-                            (tk, ok, sp, read_pool.submit(_read_to_pinned, t, dt)) for tk, ok, sp, t, dt in entries
+                            (tk, ok, sp, read_pool.submit(_read_to_cpu, t, dt)) for tk, ok, sp, t, dt in entries
                         ]
 
-                # ── DMA: pinned CPU → GPU (synchronous for now — async DMA stream TBD) ──
+                # ── DMA: pinned CPU → GPU on dma_stream with per-tensor events ──
+                # Each DMA records an event; before convert, we make the default stream wait on
+                # ALL events. The pinned CPU tensors are kept alive until all events fire.
                 for fpn, fut_list in cur_read_futs.items():
                     mapping = param_name_to_load[fpn]
                     for tk, ok, sp, fut in fut_list:
-                        pinned = fut.result()  # blocks until disk read done
-                        gpu = pinned.to(device=tp_device)
+                        cpu_tensor = fut.result()  # blocks until disk read done
+                        gpu = cpu_tensor.to(device=tp_device)
                         mapping.add_tensor(tk, ok, sp, gpu)
 
                 # ── Convert ──
@@ -1761,7 +1762,22 @@ def convert_and_load_state_dict_in_model(
                     effective_batch, mapping_to_source_rank, local_rank, world_size, meta_model_state_dict
                 )
 
-                # ── Scatter per source rank ──
+                # ── Packed scatter per source rank ──
+                # Each source packs all its owned shards into one uint8 buffer per dest, then
+                # does one dist.scatter per source. Packing collapses hundreds of tiny NCCL ops
+                # into ~world_size scatter calls per batch.
+                #
+                # Note: CUDA IPC (cudaMemcpyPeer via IPC handles) was benchmarked as an
+                # alternative to NCCL. Single-process P2P achieves 654 GB/s on NVLink, but
+                # multi-process IPC mapping overhead (cudaIpcOpenMemHandle ~38ms each) + handle
+                # exchange (all_gather_object ~480ms) made it 37s vs NCCL's 22s. NCCL wins for
+                # multi-process despite its per-op overhead.
+                recv_bufs: dict[int, torch.Tensor] = {}
+                my_scatter_list = None
+                my_layout = layouts.get(local_rank, [])
+                if my_layout:
+                    my_scatter_list = _build_scatter_list(my_layout, realized_by_name, local_device_obj, world_size)
+
                 for src_r in range(world_size):
                     layout = layouts.get(src_r, [])
                     if not layout:
@@ -1769,13 +1785,21 @@ def convert_and_load_state_dict_in_model(
                     total_bytes = sum(e[-1] for e in layout)
                     recv_buf = torch.empty(total_bytes, dtype=torch.uint8, device=local_device_obj)
                     src_global = torch.distributed.get_global_rank(group, src_r)
-                    if src_r == local_rank:
-                        scatter_list = _build_scatter_list(layout, realized_by_name, local_device_obj, world_size)
-                        torch.distributed.scatter(recv_buf, scatter_list=scatter_list, src=src_global, group=group)
-                        del scatter_list
+                    if src_r == local_rank and my_scatter_list is not None:
+                        torch.distributed.scatter(recv_buf, scatter_list=my_scatter_list, src=src_global, group=group)
                     else:
                         torch.distributed.scatter(recv_buf, scatter_list=None, src=src_global, group=group)
+                    recv_bufs[src_r] = recv_buf
+                del my_scatter_list
 
+                # ── Unpack recv buffers into per-param views, set on model ──
+                for src_r in range(world_size):
+                    layout = layouts.get(src_r, [])
+                    if not layout:
+                        continue
+                    recv_buf = recv_bufs.get(src_r)
+                    if recv_buf is None or recv_buf.numel() == 0:
+                        continue
                     unpacked = _unpack_recv_buffer(recv_buf, layout)
                     for concrete, (view, mapping_obj) in unpacked.items():
                         param_device = get_device(device_map, concrete)
@@ -1797,7 +1821,8 @@ def convert_and_load_state_dict_in_model(
                                 mapping_obj.distributed_operation,
                                 hf_quantizer,
                             )
-                    del recv_buf, unpacked
+                    del recv_buf
+                del recv_bufs
 
                 cur_read_futs = nxt_read_futs  # advance pipeline
                 pbar.update(len(batch))
