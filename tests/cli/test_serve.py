@@ -32,11 +32,13 @@ from transformers.cli.serving.response import ResponseHandler, compute_usage
 from transformers.cli.serving.server import build_server
 from transformers.cli.serving.transcription import TranscriptionHandler
 from transformers.cli.serving.utils import (
+    _TOOL_CALL_FALLBACKS,
     BaseHandler,
     GenerationState,
     Modality,
     ToolCallParser,
-    detect_tool_format,
+    get_tool_call_config,
+    parse_tool_calls,
 )
 from transformers.testing_utils import (
     require_librosa,
@@ -47,6 +49,7 @@ from transformers.testing_utils import (
     require_vision,
     slow,
 )
+from transformers.utils.chat_parsing_utils import recursive_parse
 from transformers.utils.import_utils import is_serve_available
 
 
@@ -504,130 +507,11 @@ class TestChunkSSE(unittest.TestCase):
         self.assertEqual(result, "data: hello\n\n")
 
 
-QWEN_TOOL_FORMAT = {"start": "<tool_call>", "end": "</tool_call>"}
+QWEN_STC = "<tool_call>"
+QWEN_ETC = "</tool_call>"
 
 
 @require_serve
-class TestToolParser(unittest.TestCase):
-    def test_detect_tool_format_qwen(self):
-        model = MagicMock()
-        model.config.architectures = ["Qwen2ForCausalLM"]
-        fmt = detect_tool_format(model)
-        self.assertEqual(fmt, QWEN_TOOL_FORMAT)
-
-    def test_detect_tool_format_unsupported(self):
-        model = MagicMock()
-        model.config.architectures = ["LlamaForCausalLM"]
-        self.assertIsNone(detect_tool_format(model))
-
-    def test_parser_start_token(self):
-        parser = ToolCallParser(QWEN_TOOL_FORMAT)
-        result = parser.feed("<tool_call>")
-        self.assertIs(result, ToolCallParser.CONSUMED)
-
-    def test_parser_end_token(self):
-        parser = ToolCallParser(QWEN_TOOL_FORMAT)
-        parser.feed("<tool_call>")
-        result = parser.feed("</tool_call>")
-        self.assertIs(result, ToolCallParser.CONSUMED)
-
-    def test_parser_buffers_until_end(self):
-        parser = ToolCallParser(QWEN_TOOL_FORMAT)
-        parser.feed("<tool_call>")
-        # Intermediate tokens are buffered
-        result = parser.feed('{"name": "my_tool", "arguments": {"x": 1}}')
-        self.assertIs(result, ToolCallParser.CONSUMED)
-        # Tool call is emitted on end token
-        result = parser.feed("</tool_call>")
-        self.assertIsNot(result, ToolCallParser.CONSUMED)
-        self.assertEqual(result["name"], "my_tool")
-
-    def test_parser_normal_text_returns_none(self):
-        parser = ToolCallParser(QWEN_TOOL_FORMAT)
-        result = parser.feed("Hello world")
-        self.assertIsNone(result)
-
-    def test_parser_full_flow(self):
-        """Simulate a complete tool call token sequence."""
-
-        parser = ToolCallParser(QWEN_TOOL_FORMAT)
-        tool_calls = []
-
-        for token in [
-            "<tool_call>",
-            '{"name": "get_weather",',
-            ' "arguments": {',
-            '"city": "Paris"',
-            "}}",
-            "\n",
-            "</tool_call>",
-        ]:
-            result = parser.feed(token)
-            if result is not None and result is not ToolCallParser.CONSUMED:
-                tool_calls.append(result)
-
-        # Single tool call emitted on </tool_call> with both name and arguments
-        self.assertEqual(len(tool_calls), 1)
-        self.assertEqual(tool_calls[0]["name"], "get_weather")
-        self.assertIn("Paris", tool_calls[0]["arguments"])
-
-    def test_parse_tool_calls_from_text(self):
-        """Non-streaming tool call parsing from complete text."""
-
-        text = '<tool_call>\n{"name": "get_weather", "arguments": {"city": "Paris"}}\n</tool_call>'
-        calls = ToolCallParser.parse(text, QWEN_TOOL_FORMAT)
-        self.assertIsNotNone(calls)
-        self.assertEqual(len(calls), 1)
-        self.assertEqual(calls[0]["name"], "get_weather")
-        self.assertIn("Paris", calls[0]["arguments"])
-
-    def test_parse_tool_calls_no_tool_call(self):
-        """Non-streaming: normal text returns None."""
-
-        calls = ToolCallParser.parse("Hello, how can I help?", QWEN_TOOL_FORMAT)
-        self.assertIsNone(calls)
-
-    def test_parse_multiple_tool_calls(self):
-        """Non-streaming: multiple tool calls in one response."""
-
-        text = (
-            '<tool_call>\n{"name": "get_weather", "arguments": {"city": "Paris"}}\n</tool_call>\n'
-            '<tool_call>\n{"name": "get_weather", "arguments": {"city": "London"}}\n</tool_call>'
-        )
-        calls = ToolCallParser.parse(text, QWEN_TOOL_FORMAT)
-        self.assertIsNotNone(calls)
-        self.assertEqual(len(calls), 2)
-        self.assertEqual(calls[0]["name"], "get_weather")
-        self.assertIn("Paris", calls[0]["arguments"])
-        self.assertEqual(calls[1]["name"], "get_weather")
-        self.assertIn("London", calls[1]["arguments"])
-
-    def test_feed_multiple_tool_calls(self):
-        """Streaming: multiple tool calls emitted sequentially."""
-
-        parser = ToolCallParser(QWEN_TOOL_FORMAT)
-        tool_calls = []
-
-        tokens = [
-            "<tool_call>",
-            '{"name": "get_weather", "arguments": {"city": "Paris"}}',
-            "</tool_call>",
-            "<tool_call>",
-            '{"name": "get_weather", "arguments": {"city": "London"}}',
-            "</tool_call>",
-        ]
-        for token in tokens:
-            result = parser.feed(token)
-            if result is not None and result is not ToolCallParser.CONSUMED:
-                tool_calls.append(result)
-
-        self.assertEqual(len(tool_calls), 2)
-        self.assertEqual(tool_calls[0]["name"], "get_weather")
-        self.assertIn("Paris", tool_calls[0]["arguments"])
-        self.assertEqual(tool_calls[1]["name"], "get_weather")
-        self.assertIn("London", tool_calls[1]["arguments"])
-
-
 @require_serve
 class TestAppRoutes(unittest.TestCase):
     @classmethod
@@ -784,110 +668,6 @@ class TestChatCompletion(unittest.TestCase):
         self.assertGreater(last.usage.completion_tokens, 0)
         self.assertEqual(last.usage.total_tokens, last.usage.prompt_tokens + last.usage.completion_tokens)
 
-    def test_tool_call(self):
-        """Tool calls should be parsed and emitted as ChoiceDeltaToolCall objects."""
-        # Qwen2.5-0.5B-Instruct supports tools (Qwen family)
-        tool_def = {
-            "function": {
-                "name": "get_weather",
-                "parameters": {
-                    "type": "object",
-                    "properties": {"city": {"type": "string"}},
-                },
-                "description": "Get the weather for a city.",
-            },
-            "type": "function",
-        }
-        chunks = list(
-            self.client.chat.completions.create(
-                model=self.MODEL,
-                messages=[{"role": "user", "content": "What is the weather in Paris?"}],
-                stream=True,
-                max_tokens=50,
-                temperature=0.0,
-                tools=[tool_def],
-            )
-        )
-
-        # First chunk should have role="assistant"
-        self.assertEqual(chunks[0].choices[0].delta.role, "assistant")
-
-        # Model should make a tool call for this prompt
-        tool_chunks = [c for c in chunks if c.choices[0].delta.tool_calls]
-        self.assertGreater(len(tool_chunks), 0, "Model did not produce a tool call")
-
-        # First tool call delta should have the function name
-        first_tool = tool_chunks[0].choices[0].delta.tool_calls[0]
-        self.assertEqual(first_tool.function.name, "get_weather")
-
-        # finish_reason should be "tool_calls"
-        last = chunks[-1]
-        self.assertEqual(last.choices[0].finish_reason, "tool_calls")
-
-        # Arguments should be valid JSON with no trailing brace
-        args_json = first_tool.function.arguments
-        import json as json_mod
-
-        parsed_args = json_mod.loads(args_json)
-        self.assertIsInstance(parsed_args, dict)
-
-    def test_tool_call_non_streaming(self):
-        """Non-streaming tool calls should return tool_calls in the message."""
-        tool_def = {
-            "function": {
-                "name": "get_weather",
-                "parameters": {"type": "object", "properties": {"city": {"type": "string"}}},
-                "description": "Get the weather for a city.",
-            },
-            "type": "function",
-        }
-        resp = self.client.chat.completions.create(
-            model=self.MODEL,
-            messages=[{"role": "user", "content": "What is the weather in Paris?"}],
-            stream=False,
-            max_tokens=50,
-            temperature=0.0,
-            tools=[tool_def],
-        )
-        self.assertEqual(resp.choices[0].finish_reason, "tool_calls")
-        self.assertIsNotNone(resp.choices[0].message.tool_calls)
-        tc = resp.choices[0].message.tool_calls[0]
-        self.assertEqual(tc.function.name, "get_weather")
-
-        import json as json_mod
-
-        parsed_args = json_mod.loads(tc.function.arguments)
-        self.assertIsInstance(parsed_args, dict)
-
-    def test_tool_call_multi(self):
-        """Model should be able to call multiple tools when asked."""
-        tool_def = {
-            "function": {
-                "name": "get_weather",
-                "parameters": {"type": "object", "properties": {"city": {"type": "string"}}},
-                "description": "Get the weather for a city.",
-            },
-            "type": "function",
-        }
-        # Ask for two cities to encourage multiple tool calls
-        chunks = list(
-            self.client.chat.completions.create(
-                model=self.MODEL,
-                messages=[{"role": "user", "content": "What is the weather in Paris and London?"}],
-                stream=True,
-                max_tokens=100,
-                temperature=0.0,
-                tools=[tool_def],
-            )
-        )
-        tool_chunks = [c for c in chunks if c.choices[0].delta.tool_calls]
-        # Should have two tool calls — one for Paris, one for London
-        self.assertEqual(len(tool_chunks), 2, f"Expected 2 tool calls, got {len(tool_chunks)}")
-        cities = {tc.choices[0].delta.tool_calls[0].function.name for tc in tool_chunks}
-        self.assertEqual(cities, {"get_weather"})
-        last = chunks[-1]
-        self.assertEqual(last.choices[0].finish_reason, "tool_calls")
-
     def test_concurrent_non_streaming(self):
         """Two concurrent non-streaming requests should both complete without interference."""
         import concurrent.futures
@@ -978,19 +758,19 @@ class TestResponseInputConversion(unittest.TestCase):
 
     def test_string_input(self):
         handler = self._make_handler()
-        msgs = handler._input_to_messages({"input": "Hello"})
+        msgs = handler._normalize_input({"input": "Hello"})
         self.assertEqual(msgs, [{"role": "user", "content": "Hello"}])
 
     def test_string_input_with_instructions(self):
         handler = self._make_handler()
-        msgs = handler._input_to_messages({"input": "Hello", "instructions": "Be brief"})
+        msgs = handler._normalize_input({"input": "Hello", "instructions": "Be brief"})
         self.assertEqual(len(msgs), 2)
         self.assertEqual(msgs[0], {"role": "system", "content": "Be brief"})
         self.assertEqual(msgs[1], {"role": "user", "content": "Hello"})
 
     def test_list_input(self):
         handler = self._make_handler()
-        msgs = handler._input_to_messages(
+        msgs = handler._normalize_input(
             {"input": [{"role": "user", "content": "A"}, {"role": "assistant", "content": "B"}]}
         )
         self.assertEqual(len(msgs), 2)
@@ -998,14 +778,14 @@ class TestResponseInputConversion(unittest.TestCase):
 
     def test_list_input_with_instructions_prepends_system(self):
         handler = self._make_handler()
-        msgs = handler._input_to_messages({"input": [{"role": "user", "content": "Hi"}], "instructions": "Be helpful"})
+        msgs = handler._normalize_input({"input": [{"role": "user", "content": "Hi"}], "instructions": "Be helpful"})
         self.assertEqual(len(msgs), 2)
         self.assertEqual(msgs[0]["role"], "system")
         self.assertEqual(msgs[0]["content"], "Be helpful")
 
     def test_list_input_with_instructions_replaces_existing_system(self):
         handler = self._make_handler()
-        msgs = handler._input_to_messages(
+        msgs = handler._normalize_input(
             {"input": [{"role": "system", "content": "Old"}, {"role": "user", "content": "Hi"}], "instructions": "New"}
         )
         self.assertEqual(len(msgs), 2)
@@ -1018,7 +798,7 @@ class TestResponseInputConversion(unittest.TestCase):
             {"type": "input_text", "text": "Hello"},
             {"type": "input_image", "image_url": "https://example.com/img.jpg"},
         ]
-        msgs = handler._input_to_messages({"input": flat_input})
+        msgs = handler._normalize_input({"input": flat_input})
         self.assertEqual(len(msgs), 1)
         self.assertEqual(msgs[0]["role"], "user")
         self.assertEqual(msgs[0]["content"], flat_input)
@@ -1027,7 +807,7 @@ class TestResponseInputConversion(unittest.TestCase):
         """Flat content list with instructions prepends a system message."""
         handler = self._make_handler()
         flat_input = [{"type": "input_text", "text": "Hello"}]
-        msgs = handler._input_to_messages({"input": flat_input, "instructions": "Be brief"})
+        msgs = handler._normalize_input({"input": flat_input, "instructions": "Be brief"})
         self.assertEqual(len(msgs), 2)
         self.assertEqual(msgs[0], {"role": "system", "content": "Be brief"})
         self.assertEqual(msgs[1]["role"], "user")
@@ -1220,96 +1000,6 @@ class TestResponsesIntegration(unittest.TestCase):
         self.assertGreater(usage.input_tokens, 0)
         self.assertGreater(usage.output_tokens, 0)
         self.assertEqual(usage.total_tokens, usage.input_tokens + usage.output_tokens)
-
-    def test_tool_call_streaming(self):
-        """Streaming responses with tools should emit function_call events."""
-        tool_def = {
-            "function": {
-                "name": "get_weather",
-                "parameters": {"type": "object", "properties": {"city": {"type": "string"}}},
-                "description": "Get the weather for a city.",
-            },
-            "type": "function",
-        }
-        events = list(
-            self.client.responses.create(
-                model=self.MODEL,
-                input="What is the weather in Paris?",
-                stream=True,
-                max_output_tokens=50,
-                tools=[tool_def],
-            )
-        )
-        types = [e.type for e in events]
-        self.assertIn("response.created", types)
-        self.assertIn("response.completed", types)
-
-        # Should have function call events
-        self.assertIn("response.output_item.added", types)
-        self.assertIn("response.function_call_arguments.done", types)
-
-        # Check the arguments done event
-        args_done = [e for e in events if e.type == "response.function_call_arguments.done"]
-        self.assertGreater(len(args_done), 0)
-        self.assertEqual(args_done[0].name, "get_weather")
-
-        import json as json_mod
-
-        parsed = json_mod.loads(args_done[0].arguments)
-        self.assertIsInstance(parsed, dict)
-
-    def test_tool_call_non_streaming(self):
-        """Non-streaming responses with tools should include function_call output items."""
-        tool_def = {
-            "function": {
-                "name": "get_weather",
-                "parameters": {"type": "object", "properties": {"city": {"type": "string"}}},
-                "description": "Get the weather for a city.",
-            },
-            "type": "function",
-        }
-        resp = self.client.responses.create(
-            model=self.MODEL,
-            input="What is the weather in Paris?",
-            stream=False,
-            max_output_tokens=50,
-            tools=[tool_def],
-        )
-        self.assertEqual(resp.status, "completed")
-
-        # Should have at least message + function_call in output
-        self.assertGreater(len(resp.output), 1)
-        fc_items = [o for o in resp.output if o.type == "function_call"]
-        self.assertGreater(len(fc_items), 0)
-        self.assertEqual(fc_items[0].name, "get_weather")
-
-        import json as json_mod
-
-        parsed = json_mod.loads(fc_items[0].arguments)
-        self.assertIsInstance(parsed, dict)
-
-    def test_tool_call_multi(self):
-        """Model should produce multiple tool calls when asked about two cities."""
-        tool_def = {
-            "function": {
-                "name": "get_weather",
-                "parameters": {"type": "object", "properties": {"city": {"type": "string"}}},
-                "description": "Get the weather for a city.",
-            },
-            "type": "function",
-        }
-        events = list(
-            self.client.responses.create(
-                model=self.MODEL,
-                input="What is the weather in Paris and London?",
-                stream=True,
-                max_output_tokens=100,
-                tools=[tool_def],
-            )
-        )
-        args_done = [e for e in events if e.type == "response.function_call_arguments.done"]
-        self.assertEqual(len(args_done), 2, f"Expected 2 tool calls, got {len(args_done)}")
-        self.assertEqual(events[-1].type, "response.completed")
 
     def test_multi_turn(self):
         """Multi-turn conversation via list input."""
@@ -1870,6 +1560,399 @@ class TestMultimodalLM(unittest.TestCase):
             if event.type == "response.output_text.delta":
                 text += event.delta
         self._assert_video_description(text)
+
+
+class TestToolCallUnit(unittest.TestCase):
+    """Unit tests for tool call parsing utilities (no server needed)."""
+
+    def test_get_tool_call_config_fallback(self):
+        """Fallback config is returned for known model families (Qwen)."""
+        model = MagicMock()
+        model.config.model_type = "qwen2"
+        processor = MagicMock(spec=["convert_tokens_to_ids"])
+        processor.convert_tokens_to_ids.return_value = 151657
+        config = get_tool_call_config(processor, model)
+        self.assertIsNotNone(config)
+        self.assertEqual(config["stc"], "<tool_call>")
+        self.assertEqual(config["etc"], "</tool_call>")
+
+    def test_get_tool_call_config_unsupported(self):
+        """None is returned for models without tool call support."""
+        model = MagicMock()
+        model.config.model_type = "llama"
+        processor = MagicMock(spec=[])
+        self.assertIsNone(get_tool_call_config(processor, model))
+
+    def test_parser_streaming_flow(self):
+        """Streaming: tokens between start/end markers are consumed."""
+        parser = ToolCallParser(QWEN_STC, QWEN_ETC)
+        results = []
+        for token in [
+            "Hello ",
+            "<tool_call>",
+            '{"name": "get_weather",',
+            ' "arguments": {"city": "Paris"}}',
+            "\n",
+            "</tool_call>",
+        ]:
+            result = parser.feed(token)
+            results.append((token, result))
+        # "Hello " → None (normal text), rest → CONSUMED or raw block
+        self.assertIsNone(results[0][1])
+        self.assertIsNotNone(results[1][1])  # stc consumed
+
+    def test_parser_normal_text(self):
+        parser = ToolCallParser(QWEN_STC, QWEN_ETC)
+        self.assertIsNone(parser.feed("Hello world"))
+
+    def test_parse_tool_calls_from_text(self):
+        text = '<tool_call>\n{"name": "get_weather", "arguments": {"city": "Paris"}}\n</tool_call>'
+        processor = MagicMock()
+        processor.parse_response = lambda t, s: recursive_parse(t, s)
+        calls = parse_tool_calls(processor, text, _TOOL_CALL_FALLBACKS["qwen"]["schema"])
+        self.assertEqual(len(calls), 1)
+        self.assertEqual(calls[0]["name"], "get_weather")
+
+    def test_parse_multiple_tool_calls_from_text(self):
+        text = (
+            '<tool_call>\n{"name": "get_weather", "arguments": {"city": "Paris"}}\n</tool_call>\n'
+            '<tool_call>\n{"name": "get_weather", "arguments": {"city": "London"}}\n</tool_call>'
+        )
+        processor = MagicMock()
+        processor.parse_response = lambda t, s: recursive_parse(t, s)
+        calls = parse_tool_calls(processor, text, _TOOL_CALL_FALLBACKS["qwen"]["schema"])
+        self.assertEqual(len(calls), 2)
+
+
+class _TestToolCallBase:
+    """Base class for tool call integration tests. Subclasses set MODEL and inherit all tests."""
+
+    MODEL: str
+
+    @classmethod
+    def setUpClass(cls):
+        cls.serve, port = _start_serve()
+        cls.base_url = f"http://localhost:{port}"
+        cls.client = OpenAI(base_url=f"{cls.base_url}/v1", api_key="unused")
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.serve.kill_server()
+
+    def _get_tool_def(self):
+        return {
+            "function": {
+                "name": "get_weather",
+                "parameters": {"type": "object", "properties": {"city": {"type": "string"}}},
+                "description": "Get the weather for a city.",
+            },
+            "type": "function",
+        }
+
+    def test_chat_non_streaming(self):
+        resp = self.client.chat.completions.create(
+            model=self.MODEL,
+            messages=[{"role": "user", "content": "What is the weather in Paris?"}],
+            stream=False,
+            max_tokens=50,
+            temperature=0.0,
+            tools=[self._get_tool_def()],
+        )
+        self.assertEqual(resp.choices[0].finish_reason, "tool_calls")
+        self.assertIsNotNone(resp.choices[0].message.tool_calls)
+        tc = resp.choices[0].message.tool_calls[0]
+        self.assertEqual(tc.function.name, "get_weather")
+        parsed_args = json.loads(tc.function.arguments)
+        self.assertIsInstance(parsed_args, dict)
+
+    def test_chat_streaming(self):
+        chunks = list(
+            self.client.chat.completions.create(
+                model=self.MODEL,
+                messages=[{"role": "user", "content": "What is the weather in Paris?"}],
+                stream=True,
+                max_tokens=50,
+                temperature=0.0,
+                tools=[self._get_tool_def()],
+            )
+        )
+        tool_chunks = [c for c in chunks if c.choices[0].delta.tool_calls]
+        self.assertGreater(len(tool_chunks), 0, "Model did not produce a tool call")
+        first_tool = tool_chunks[0].choices[0].delta.tool_calls[0]
+        self.assertEqual(first_tool.function.name, "get_weather")
+        self.assertEqual(chunks[-1].choices[0].finish_reason, "tool_calls")
+        parsed_args = json.loads(first_tool.function.arguments)
+        self.assertIsInstance(parsed_args, dict)
+
+    def test_chat_multiple_tool_calls_non_streaming(self):
+        resp = self.client.chat.completions.create(
+            model=self.MODEL,
+            messages=[{"role": "user", "content": "What is the weather in Paris and London?"}],
+            stream=False,
+            max_tokens=100,
+            temperature=0.0,
+            tools=[self._get_tool_def()],
+        )
+        self.assertEqual(resp.choices[0].finish_reason, "tool_calls")
+        self.assertEqual(len(resp.choices[0].message.tool_calls), 2)
+
+    def test_chat_multiple_tool_calls_streaming(self):
+        chunks = list(
+            self.client.chat.completions.create(
+                model=self.MODEL,
+                messages=[{"role": "user", "content": "What is the weather in Paris and London?"}],
+                stream=True,
+                max_tokens=100,
+                temperature=0.0,
+                tools=[self._get_tool_def()],
+            )
+        )
+        tool_chunks = [c for c in chunks if c.choices[0].delta.tool_calls]
+        self.assertEqual(len(tool_chunks), 2, f"Expected 2 tool calls, got {len(tool_chunks)}")
+        self.assertEqual(chunks[-1].choices[0].finish_reason, "tool_calls")
+
+    def test_chat_multi_turn_non_streaming(self):
+        tool_def = self._get_tool_def()
+        resp1 = self.client.chat.completions.create(
+            model=self.MODEL,
+            messages=[{"role": "user", "content": "What is the weather in Paris?"}],
+            stream=False,
+            max_tokens=50,
+            temperature=0.0,
+            tools=[tool_def],
+        )
+        self.assertEqual(resp1.choices[0].finish_reason, "tool_calls")
+        tc = resp1.choices[0].message.tool_calls[0]
+
+        resp2 = self.client.chat.completions.create(
+            model=self.MODEL,
+            messages=[
+                {"role": "user", "content": "What is the weather in Paris?"},
+                resp1.choices[0].message,
+                {"role": "tool", "tool_call_id": tc.id, "content": '{"temperature": 22, "condition": "sunny"}'},
+            ],
+            stream=False,
+            max_tokens=100,
+            temperature=0.0,
+            tools=[tool_def],
+        )
+        self.assertIn(resp2.choices[0].finish_reason, ("stop", "length"))
+        content = resp2.choices[0].message.content
+        self.assertIsNotNone(content)
+        self.assertTrue(
+            "22" in content.lower() or "sunny" in content.lower(),
+            f"Expected model to reference tool result, got: {content}",
+        )
+
+    def test_chat_multi_turn_streaming(self):
+        tool_def = self._get_tool_def()
+
+        # Turn 1: streaming — accumulate tool call from deltas
+        chunks = list(
+            self.client.chat.completions.create(
+                model=self.MODEL,
+                messages=[{"role": "user", "content": "What is the weather in Paris?"}],
+                stream=True,
+                max_tokens=50,
+                temperature=0.0,
+                tools=[tool_def],
+            )
+        )
+        self.assertEqual(chunks[-1].choices[0].finish_reason, "tool_calls")
+        tool_chunks = [c for c in chunks if c.choices[0].delta.tool_calls]
+        self.assertGreater(len(tool_chunks), 0)
+        tc = tool_chunks[0].choices[0].delta.tool_calls[0]
+
+        # Reconstruct assistant message from deltas
+        content = "".join(c.choices[0].delta.content for c in chunks if c.choices[0].delta.content)
+        assistant_msg = {
+            "role": "assistant",
+            "content": content,
+            "tool_calls": [{"id": tc.id, "type": "function", "function": tc.function.model_dump()}],
+        }
+
+        # Turn 2: streaming — send back tool result
+        chunks2 = list(
+            self.client.chat.completions.create(
+                model=self.MODEL,
+                messages=[
+                    {"role": "user", "content": "What is the weather in Paris?"},
+                    assistant_msg,
+                    {"role": "tool", "tool_call_id": tc.id, "content": '{"temperature": 22, "condition": "sunny"}'},
+                ],
+                stream=True,
+                max_tokens=100,
+                temperature=0.0,
+                tools=[tool_def],
+            )
+        )
+        content = "".join(c.choices[0].delta.content for c in chunks2 if c.choices[0].delta.content)
+        self.assertTrue(
+            "22" in content.lower() or "sunny" in content.lower(),
+            f"Expected model to reference tool result, got: {content}",
+        )
+
+    def test_responses_non_streaming(self):
+        resp = self.client.responses.create(
+            model=self.MODEL,
+            input="What is the weather in Paris?",
+            stream=False,
+            max_output_tokens=50,
+            tools=[self._get_tool_def()],
+        )
+        self.assertEqual(resp.status, "completed")
+        fc_items = [o for o in resp.output if o.type == "function_call"]
+        self.assertGreater(len(fc_items), 0)
+        self.assertEqual(fc_items[0].name, "get_weather")
+        parsed = json.loads(fc_items[0].arguments)
+        self.assertIsInstance(parsed, dict)
+
+    def test_responses_streaming(self):
+        events = list(
+            self.client.responses.create(
+                model=self.MODEL,
+                input="What is the weather in Paris?",
+                stream=True,
+                max_output_tokens=50,
+                tools=[self._get_tool_def()],
+            )
+        )
+        types = [e.type for e in events]
+        self.assertIn("response.created", types)
+        self.assertIn("response.completed", types)
+        self.assertIn("response.function_call_arguments.done", types)
+
+        args_done = [e for e in events if e.type == "response.function_call_arguments.done"]
+        self.assertGreater(len(args_done), 0)
+        self.assertEqual(args_done[0].name, "get_weather")
+        parsed = json.loads(args_done[0].arguments)
+        self.assertIsInstance(parsed, dict)
+
+    def test_responses_multiple_tool_calls_non_streaming(self):
+        resp = self.client.responses.create(
+            model=self.MODEL,
+            input="What is the weather in Paris and London?",
+            stream=False,
+            max_output_tokens=100,
+            tools=[self._get_tool_def()],
+        )
+        self.assertEqual(resp.status, "completed")
+        fc_items = [o for o in resp.output if o.type == "function_call"]
+        self.assertEqual(len(fc_items), 2, f"Expected 2 tool calls, got {len(fc_items)}")
+
+    def test_responses_multiple_tool_calls_streaming(self):
+        events = list(
+            self.client.responses.create(
+                model=self.MODEL,
+                input="What is the weather in Paris and London?",
+                stream=True,
+                max_output_tokens=100,
+                tools=[self._get_tool_def()],
+            )
+        )
+        args_done = [e for e in events if e.type == "response.function_call_arguments.done"]
+        self.assertEqual(len(args_done), 2, f"Expected 2 tool calls, got {len(args_done)}")
+        self.assertEqual(events[-1].type, "response.completed")
+
+    def test_responses_multi_turn_non_streaming(self):
+        tool_def = self._get_tool_def()
+        resp1 = self.client.responses.create(
+            model=self.MODEL,
+            input="What is the weather in Paris?",
+            stream=False,
+            max_output_tokens=50,
+            tools=[tool_def],
+        )
+        self.assertEqual(resp1.status, "completed")
+        fc_items = [o for o in resp1.output if o.type == "function_call"]
+        self.assertGreater(len(fc_items), 0)
+
+        input_list = [{"role": "user", "content": "What is the weather in Paris?"}]
+        input_list += resp1.output
+        input_list.append(
+            {
+                "type": "function_call_output",
+                "call_id": fc_items[0].call_id,
+                "output": '{"temperature": 22, "condition": "sunny"}',
+            }
+        )
+        resp2 = self.client.responses.create(
+            model=self.MODEL,
+            input=input_list,
+            stream=False,
+            max_output_tokens=100,
+            tools=[tool_def],
+        )
+        self.assertEqual(resp2.status, "completed")
+        msg_items = [o for o in resp2.output if o.type == "message"]
+        self.assertGreater(len(msg_items), 0)
+        content = msg_items[0].content[0].text
+        self.assertTrue(
+            "22" in content.lower() or "sunny" in content.lower(),
+            f"Expected model to reference tool result, got: {content}",
+        )
+
+    def test_responses_multi_turn_streaming(self):
+        tool_def = self._get_tool_def()
+
+        # Turn 1: streaming — get completed response with tool calls
+        events = list(
+            self.client.responses.create(
+                model=self.MODEL,
+                input="What is the weather in Paris?",
+                stream=True,
+                max_output_tokens=50,
+                tools=[tool_def],
+            )
+        )
+        completed = [e for e in events if e.type == "response.completed"]
+        self.assertEqual(len(completed), 1)
+        resp1_output = completed[0].response.output
+        fc_items = [o for o in resp1_output if o.type == "function_call"]
+        self.assertGreater(len(fc_items), 0)
+
+        # Turn 2: streaming — send back tool result
+        input_list = [{"role": "user", "content": "What is the weather in Paris?"}]
+        input_list += resp1_output
+        input_list.append(
+            {
+                "type": "function_call_output",
+                "call_id": fc_items[0].call_id,
+                "output": '{"temperature": 22, "condition": "sunny"}',
+            }
+        )
+        events2 = list(
+            self.client.responses.create(
+                model=self.MODEL,
+                input=input_list,
+                stream=True,
+                max_output_tokens=100,
+                tools=[tool_def],
+            )
+        )
+        content = "".join(e.delta for e in events2 if e.type == "response.output_text.delta")
+        self.assertTrue(
+            "22" in content.lower() or "sunny" in content.lower(),
+            f"Expected model to reference tool result, got: {content}",
+        )
+
+
+@slow
+@require_serve
+@require_torch_accelerator
+class TestToolCallQwen(_TestToolCallBase, unittest.TestCase):
+    """Tool call tests with Qwen (fallback config, no response_schema)."""
+
+    MODEL = "Qwen/Qwen2.5-0.5B-Instruct"
+
+
+@slow
+@require_serve
+@require_torch_accelerator
+class TestToolCallGemma(_TestToolCallBase, unittest.TestCase):
+    """Tool call tests with Gemma 4 (response_schema + stc/etc special tokens)."""
+
+    MODEL = "google/gemma-4-E2B-it"
 
 
 @slow

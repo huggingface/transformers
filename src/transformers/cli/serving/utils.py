@@ -73,132 +73,145 @@ class _GenerationCancelled(Exception):
     """Raised inside ``DirectStreamer.put()`` to abort ``model.generate()``."""
 
 
-# Model-specific tokens that mark the start/end of a tool call block.
-# TODO: extract these from the chat template at runtime instead of hardcoding.
-# Qwen/Hermes use <tool_call>/<tool_call>, Mistral uses [TOOL_CALLS], etc.
-# The markers are defined in each model's Jinja chat template.
-_TOOL_CALL_TOKENS = {
+# Fallback tool call configs for models that don't declare stc_token/etc_token/response_schema
+# on their tokenizer.
+# Keys are matched via substring against model_type (e.g. "qwen" matches "qwen2", "qwen3_vl", etc.).
+# If a model family changes its tool call format, split into separate keys (e.g. "qwen2", "qwen3").
+_TOOL_CALL_FALLBACKS = {
     "qwen": {
-        "start": "<tool_call>",
-        "end": "</tool_call>",
+        "stc": "<tool_call>",
+        "etc": "</tool_call>",
+        "schema": {
+            "x-regex-iterator": r"<tool_call>(.*?)</tool_call>",
+            "type": "array",
+            "items": {"type": "object", "x-parser": "json"},
+        },
     },
 }
 
 
-def detect_tool_format(model: "PreTrainedModel") -> dict | None:
-    """Return the tool call token format for a model, if supported.
+def get_tool_call_config(processor, model: "PreTrainedModel") -> dict | None:
+    """Return tool call config for the model, or ``None`` if tool calls are not supported.
+
+    Returns a dict with:
+        - ``stc`` (`str`): Start-of-tool-call token.
+        - ``etc`` (`str`): End-of-tool-call token.
+        - ``schema`` (`dict`): Schema to pass to ``tokenizer.parse_response(block, schema)``.
+        - ``passthrough_ids`` (`set[int]`): Token IDs of stc/etc that the streamer should
+          decode with ``skip_special_tokens=False`` and inject into the queue directly.
+          This is needed for models like Gemma 4 where the tool-call delimiters are
+          registered as special tokens and would otherwise be silently stripped.
+    """
+    tokenizer = getattr(processor, "tokenizer", processor)
+    stc = getattr(tokenizer, "stc_token", None)
+    etc = getattr(tokenizer, "etc_token", None)
+    response_schema = getattr(tokenizer, "response_schema", None)
+
+    # Models with full tokenizer config (e.g. Gemma 4)
+    if stc and etc and response_schema:
+        schema = response_schema["properties"]["tool_calls"]
+    else:
+        # Fallback: known model families without full tokenizer config
+        fallback = next((v for k, v in _TOOL_CALL_FALLBACKS.items() if k in model.config.model_type), None)
+        if fallback is None:
+            return None
+        stc, etc, schema = fallback["stc"], fallback["etc"], fallback["schema"]
+
+    stc_id = tokenizer.convert_tokens_to_ids(stc)
+    etc_id = tokenizer.convert_tokens_to_ids(etc)
+    passthrough_ids = {tid for tid in (stc_id, etc_id) if tid is not None}
+    return {"stc": stc, "etc": etc, "schema": schema, "passthrough_ids": passthrough_ids}
+
+
+def _normalize_tool_call(tool_call: dict) -> dict:
+    """Normalize a parsed tool call to ``{"name": str, "arguments": str}``.
+
+    Different models return different structures from ``parse_response``:
+    - Gemma: ``{"function": {"name": ..., "arguments": {...}}}`` (nested, arguments as dict)
+    - Qwen:  ``{"name": ..., "arguments": {...}}`` (flat, arguments as dict)
+
+    The OpenAI API expects ``arguments`` as a JSON **string**, so we ``json.dumps`` it.
+    """
+    function = tool_call.get("function", tool_call)
+    arguments = function.get("arguments", {})
+    return {
+        "name": function["name"],
+        "arguments": json.dumps(arguments) if not isinstance(arguments, str) else arguments,
+    }
+
+
+def parse_tool_calls(processor, generated_ids, schema: dict) -> list[dict] | None:
+    """Parse tool calls from generated token IDs using ``tokenizer.parse_response``.
 
     Args:
-        model (`PreTrainedModel`): The loaded model.
+        processor: The processor or tokenizer.
+        generated_ids: Token IDs from generation. Passed directly to ``parse_response``
+            which decodes them internally, preserving special tokens that
+            ``skip_special_tokens=True`` would strip (e.g. Gemma's ``<|tool_call>``).
+        schema: The tool call schema (from ``response_schema`` or ``_TOOL_CALL_FALLBACKS``).
 
-    Returns:
-        `dict | None`: A dict ``{"start": str, "end": str}`` with the model's tool call
-        delimiters, or ``None`` if the model family is not recognized.
+    Returns a list of ``{"name": str, "arguments": str}`` dicts, or ``None`` if none found.
     """
-    architecture = model.config.architectures[0].lower()
-    for family in _TOOL_CALL_TOKENS:
-        if family in architecture:
-            return _TOOL_CALL_TOKENS[family]
-    return None
+    parsed = processor.parse_response(generated_ids, schema)
+    if not parsed:
+        return None
+    if not isinstance(parsed, list):
+        parsed = [parsed]
+    tool_calls = [_normalize_tool_call(tool_call) for tool_call in parsed]
+    return tool_calls if tool_calls else None
 
 
 class ToolCallParser:
-    """Parses tool calls from model output.
+    """Detects tool call boundaries in streamed text and suppresses them from content output.
 
-    The model emits tool calls as structured text between start/end tokens
-    (e.g. ``<tool_call>{"name": "fn", "arguments": {...}}</tool_call>``).
-
-    **Streaming** (``feed``): buffers tokens between start/end markers, parses
-    the complete block when the end marker is seen, returns a ``ChoiceDeltaToolCall``.
-
-    **Non-streaming** (``parse``): extracts all tool call blocks from complete text.
+    During streaming, text between stc/etc delimiters (e.g. ``<tool_call>...</tool_call>``)
+    is consumed so the client never sees raw tool call markup. Tool call parsing is done
+    separately at the end of generation via ``parse_tool_calls``.
 
     Usage::
 
-        parser = ToolCallParser(tool_format={"start": ..., "end": ...})
+        parser = ToolCallParser(stc="<tool_call>", etc="</tool_call>")
         for text_chunk in streamer:
             result = parser.feed(text_chunk)
             if result is None:
-                # Normal text — emit as content
-            elif result is ToolCallParser.CONSUMED:
-                # Buffering — skip
+                # Normal text — stream as content
             else:
-                # result is a ChoiceDeltaToolCall — emit it
+                # Tool call token (delimiter or body) — suppress from output
     """
 
-    def __init__(self, tool_format: dict):
-        self._tokens = tool_format
+    def __init__(self, stc: str, etc: str):
+        self._stc = stc
+        self._etc = etc
         self._inside = False
         self._buffer = ""
 
     # Sentinel: token was consumed by the parser but produced no output.
     CONSUMED = object()
 
-    def feed(self, text: str) -> object | dict | None:
+    def feed(self, text: str) -> object | str | None:
         """Feed a text chunk (streaming).
 
         Returns:
         - ``None`` — normal text, not a tool token. Emit as content.
         - ``CONSUMED`` — token consumed internally (buffering/markers). Skip.
-        - A ``ChoiceDeltaToolCall`` — emit as a tool call delta.
+        - A raw block ``str`` — complete tool call block ready for parsing.
         """
-        if text.strip() == self._tokens["start"]:
+        if text.strip() == self._stc:
             self._inside = True
             self._buffer = ""
             return self.CONSUMED
 
-        if text.strip() == self._tokens["end"]:
+        if text.strip() == self._etc:
             self._inside = False
             block = self._buffer.strip()
             self._buffer = ""
-            return self._parse_block(block) or self.CONSUMED
+            return block if block else self.CONSUMED
 
         if self._inside:
             self._buffer += text
             return self.CONSUMED
 
         return None
-
-    @staticmethod
-    def _extract_name_and_args(block: str) -> tuple[str, str] | None:
-        """Extract (name, arguments_json) from a tool call block, or None if invalid."""
-        if not block:
-            return None
-        parsed = json.loads(block)
-        name = parsed.get("name")
-        if name is None:
-            return None
-        arguments = parsed.get("arguments", {})
-        return name, json.dumps(arguments)
-
-    @staticmethod
-    def parse(text: str, tool_format: dict) -> list[dict] | None:
-        """Parse tool calls from complete text.
-
-        Returns a list of ``{"name": str, "arguments": str}`` dicts, or ``None`` if none found.
-        """
-        start, end = tool_format["start"], tool_format["end"]
-        tool_calls = []
-        pos = 0
-        while True:
-            s = text.find(start, pos)
-            if s < 0:
-                break
-            e = text.find(end, s + len(start))
-            if e < 0:
-                break
-            result = ToolCallParser._extract_name_and_args(text[s + len(start) : e].strip())
-            if result is not None:
-                tool_calls.append({"name": result[0], "arguments": result[1]})
-            pos = e + len(end)
-        return tool_calls if tool_calls else None
-
-    def _parse_block(self, block: str) -> dict | None:
-        """Parse a buffered tool call block. Returns ``{"name": str, "arguments": str}`` or None."""
-        result = self._extract_name_and_args(block)
-        if result is None:
-            return None
-        return {"name": result[0], "arguments": result[1]}
 
 
 class DownloadAggregator:
@@ -330,6 +343,7 @@ class DirectStreamer:
         loop: asyncio.AbstractEventLoop,
         queue: asyncio.Queue,
         skip_special_tokens: bool = True,
+        passthrough_token_ids: set[int] | None = None,
     ):
         """
         Args:
@@ -338,6 +352,12 @@ class DirectStreamer:
             queue (`asyncio.Queue`): The queue that receives decoded text chunks.
             skip_special_tokens (`bool`, *optional*, defaults to `True`):
                 Whether to strip special tokens during decoding.
+            passthrough_token_ids (`set[int]`, *optional*):
+                Token IDs that should bypass ``skip_special_tokens`` filtering.
+                When one of these tokens is generated, it is decoded with
+                ``skip_special_tokens=False`` and pushed directly to the queue.
+                Used for tool-call delimiters (e.g. ``<|tool_call>``) that are
+                special tokens but must remain visible for the ``ToolCallParser``.
         """
         from tokenizers.decoders import DecodeStream
 
@@ -345,9 +365,12 @@ class DirectStreamer:
         self._loop = loop
         self._queue = queue
         self._decode_stream = DecodeStream([], skip_special_tokens)
+        self._passthrough = passthrough_token_ids or set()
+        self._passthrough_stream = DecodeStream([], False) if self._passthrough else None
         self._first = True
         self._cancelled = threading.Event()
         self.total_tokens = 0
+        self.generated_token_ids: list[int] = []
 
     def put(self, value: "torch.Tensor") -> None:
         """Called by ``model.generate()`` after each decode step with new token(s)."""
@@ -359,7 +382,13 @@ class DirectStreamer:
             return
         for token_id in value.tolist():
             self.total_tokens += 1
-            text = self._decode_stream.step(self._tokenizer, token_id)
+            self.generated_token_ids.append(token_id)
+
+            if token_id in self._passthrough and self._passthrough_stream is not None:
+                text = self._passthrough_stream.step(self._tokenizer, token_id)
+                self._decode_stream.step(self._tokenizer, token_id)  # keep state in sync
+            else:
+                text = self._decode_stream.step(self._tokenizer, token_id)
             if text is not None:
                 self._loop.call_soon_threadsafe(self._queue.put_nowait, text)
 
@@ -388,6 +417,7 @@ class CBStreamer:
         tokenizer: "tokenizers.Tokenizer",
         loop: asyncio.AbstractEventLoop,
         queue: asyncio.Queue,
+        passthrough_token_ids: set[int] | None = None,
     ):
         """
         Args:
@@ -396,6 +426,8 @@ class CBStreamer:
             tokenizer: The Rust tokenizer (``tokenizer._tokenizer``).
             loop (`asyncio.AbstractEventLoop`): The event loop to push decoded text to.
             queue (`asyncio.Queue`): The queue that receives decoded text chunks.
+            passthrough_token_ids (`set[int]`, *optional*):
+                Token IDs that should bypass ``skip_special_tokens`` (see ``DirectStreamer``).
         """
         from tokenizers.decoders import DecodeStream
 
@@ -405,8 +437,11 @@ class CBStreamer:
         self._queue = queue
         self._tokenizer = tokenizer
         self._decode_stream = DecodeStream([], True)
+        self._passthrough = passthrough_token_ids or set()
+        self._passthrough_stream = DecodeStream([], False) if self._passthrough else None
         self._prev_len = 0
         self.total_tokens = 0
+        self.generated_token_ids: list[int] = []
 
     def put(self, output: "GenerationOutput") -> None:
         """Decode new tokens from a CB ``GenerationOutput`` and push text to the queue."""
@@ -414,7 +449,13 @@ class CBStreamer:
         self._prev_len = len(output.generated_tokens)
         for token_id in new_tokens:
             self.total_tokens += 1
-            text = self._decode_stream.step(self._tokenizer, token_id)
+            self.generated_token_ids.append(token_id)
+
+            if token_id in self._passthrough and self._passthrough_stream is not None:
+                text = self._passthrough_stream.step(self._tokenizer, token_id)
+                self._decode_stream.step(self._tokenizer, token_id)  # keep state in sync
+            else:
+                text = self._decode_stream.step(self._tokenizer, token_id)
             if text is not None:
                 self._queue.put_nowait(text)
 
@@ -502,6 +543,7 @@ class BaseGenerateManager(ABC):
         inputs: dict,
         gen_config: "GenerationConfig",
         request_id: str,
+        passthrough_token_ids: set[int] | None = None,
     ) -> tuple[asyncio.Queue, "DirectStreamer | CBStreamer"]:
         """Start streaming generation.
 
@@ -511,6 +553,9 @@ class BaseGenerateManager(ABC):
             inputs (`dict`): Tokenized inputs (tensors for sequential, lists for CB).
             gen_config (`GenerationConfig`): Generation parameters.
             request_id (`str`): Unique request identifier.
+            passthrough_token_ids (`set[int]`, *optional*):
+                Token IDs that should bypass ``skip_special_tokens`` and be pushed as-is
+                to the queue (e.g. tool-call delimiters).
 
         Returns:
             `tuple[asyncio.Queue, DirectStreamer | CBStreamer]`: A ``(queue, streamer)`` pair
@@ -558,13 +603,19 @@ class GenerateManager(BaseGenerateManager):
         inputs: dict,
         gen_config: "GenerationConfig",
         request_id: str,
+        passthrough_token_ids: set[int] | None = None,
     ) -> tuple[asyncio.Queue, DirectStreamer]:
         """Start streaming generation via ``model.generate()`` on the inference thread."""
         loop = asyncio.get_running_loop()
         queue: asyncio.Queue = asyncio.Queue()
         # ProcessorMixin exposes the fast tokenizer as .tokenizer; PreTrainedTokenizerFast is already one.
         rust_tokenizer = getattr(processor, "tokenizer", processor)._tokenizer  # type: ignore[union-attr]
-        streamer = DirectStreamer(rust_tokenizer, loop, queue, skip_special_tokens=True)
+        streamer = DirectStreamer(
+            rust_tokenizer,
+            loop,
+            queue,
+            passthrough_token_ids=passthrough_token_ids,
+        )
         gen_kwargs = {**inputs, "streamer": streamer, "generation_config": gen_config, "tokenizer": processor}
         if hasattr(model, "has_talker"):
             gen_kwargs["generation_mode"] = "text"
@@ -655,6 +706,7 @@ class CBGenerateManager(BaseGenerateManager):
         inputs: dict,
         gen_config: "GenerationConfig",
         request_id: str,
+        passthrough_token_ids: set[int] | None = None,
     ) -> tuple[asyncio.Queue, CBStreamer]:
         """Start streaming CB generation. Registers a per-request output handler."""
         cb = self._cb
@@ -674,7 +726,14 @@ class CBGenerateManager(BaseGenerateManager):
         )
         # ProcessorMixin exposes the fast tokenizer as .tokenizer; PreTrainedTokenizerFast is already one.
         rust_tokenizer = getattr(processor, "tokenizer", processor)._tokenizer  # type: ignore[union-attr]
-        streamer = CBStreamer(self._cb, request_id, rust_tokenizer, loop, text_queue)
+        streamer = CBStreamer(
+            self._cb,
+            request_id,
+            rust_tokenizer,
+            loop,
+            text_queue,
+            passthrough_token_ids=passthrough_token_ids,
+        )
 
         # Register a direct callback: the dispatcher calls this on the event loop with each GenerationOutput.
         # This decodes tokens and pushes text straight to the SSE text_queue
@@ -951,14 +1010,16 @@ class BaseHandler:
             if "tool_call_id" in message:
                 parsed["tool_call_id"] = message["tool_call_id"]
 
-            raw_content = message.get("content", [])
+            # When tool_calls are present, ignore content — it's either empty or contains
+            # raw tool call markup that would confuse the chat template if rendered.
+            raw_content = [] if "tool_calls" in message else (message.get("content") or [])
             if isinstance(raw_content, str):
                 raw_content = [{"type": "text", "text": raw_content}]
 
             for content in raw_content:
                 content_type = content["type"]
                 # Text: chat completions ("text") and Responses API ("input_text")
-                if content_type in ("text", "input_text"):
+                if content_type in ("text", "input_text", "output_text"):
                     parsed["content"].append({"type": "text", "text": content["text"]})
                 # Image: chat completions ("image_url") and Responses API ("input_image")
                 elif content_type in ("image_url", "input_image") and modality in (Modality.VLM, Modality.MULTIMODAL):
