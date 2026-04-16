@@ -747,7 +747,13 @@ class WeightTransform:
         return collected_tensors
 
     def was_used(self) -> bool:
-        """Return whether the current Transform matched any weights during loading/saving"""
+        """
+        Return whether the current Transform matched any weights during loading/saving. This is needed as some
+        weight renaming transforms are not bijective, i.e. if we drop/add full parts of a name with PrefixChange, we
+        lose some informations that we cannot get back if we don't know if the Transform was used before already (say we
+        have a prefix to drop, we need to know whether the checkpoints we loaded before contained the said prefix or not
+        before adding it back, or not, during saving).
+        """
         return self._was_used
 
 
@@ -792,8 +798,15 @@ class WeightRenaming(WeightTransform):
 
 
 class PrefixChange(WeightRenaming):
-    # Special case of weight renaming, used to easily add/remove a prefix while removing/adding it back
-    # easily as well during saving
+    """
+    Special case of WeightRenaming, used to simplify adding/removing full parts of a weight name. The regexes
+    that are needed for such operations are complex, so this is a much easier API for such cases.
+
+    It also correctly handles the revert operations, which are in general not bijective for addition/removal of full
+    name parts. Indeed, if we drop/add full parts of a name, we lose some informations that we cannot get back if we don't
+    know if the Transform was used before. For example, say we have a prefix to drop, we need to know whether the checkpoints
+    we actually loaded before contained the said prefix or not before adding it back, or not, during saving.
+    """
 
     __slots__ = (
         "prefix_to_add",
