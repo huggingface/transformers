@@ -741,3 +741,60 @@ class ParakeetForTDTIntegrationTest(unittest.TestCase):
         torch.testing.assert_close(predicted_start_times, EXPECTED_START_TIMESTAMPS)
         torch.testing.assert_close(predicted_end_times, EXPECTED_END_TIMESTAMPS)
         self.assertListEqual(output.token_durations.cpu().tolist(), EXPECTED_DURATIONS)
+
+    @slow
+    def test_tdt_model_integration_loss(self):
+        """
+        Verify that ParakeetForTDT loss matches NeMo's TDT loss (sigma=0) for both
+        the CUDA kernel and the pure PyTorch implementation.
+        reproducer: https://gist.github.com/883ea42bf7d8ce2af42f3055627476a7
+        """
+        from transformers.loss.loss_tdt import _load_tdt_kernel
+
+        RESULTS_PATH = Path(__file__).parent.parent.parent / "fixtures/parakeet/expected_loss_tdt.json"
+        with open(RESULTS_PATH, "r") as f:
+            raw_data = json.load(f)
+        EXPECTED_MEAN_LOSS = torch.tensor(raw_data["expected_mean_loss"])
+        num_samples = raw_data["num_samples"]
+
+        samples = self._load_datasamples(num_samples)
+        transcripts = self._dataset.sort("id")[:num_samples]["text"]
+        transcripts = [t.lower() for t in transcripts]
+
+        # Use float32 for loss precision
+        model = ParakeetForTDT.from_pretrained(self.checkpoint_name, dtype=torch.float32, device_map="auto")
+
+        inputs = self.processor(
+            audio=samples,
+            text=transcripts,
+            sampling_rate=self.processor.feature_extractor.sampling_rate,
+        )
+        inputs.to(model.device)
+
+        # Test both backends: kernel (if available) and pure PyTorch
+        has_kernel = _load_tdt_kernel() is not None
+        backends = [("kernel", None), ("torch", patch("transformers.loss.loss_tdt._load_tdt_kernel", return_value=None))]
+        if not has_kernel:
+            backends = backends[1:]  # skip kernel test when not installed
+
+        for backend_name, ctx in backends:
+            with self.subTest(backend=backend_name):
+                ctx_manager = ctx if ctx is not None else nullcontext()
+                with ctx_manager:
+                    # Forward in eval mode — check loss matches NeMo
+                    model.eval()
+                    with torch.no_grad():
+                        outputs = model(**inputs)
+                    self.assertIsNotNone(outputs.loss, "Loss must be computed when labels are provided")
+                    self.assertEqual(outputs.logits.dim(), 4, "Training logits must be 4D (B, T, U+1, V+D)")
+                    torch.testing.assert_close(outputs.loss.cpu(), EXPECTED_MEAN_LOSS, rtol=1e-3, atol=1e-3)
+
+                    # Backward — verify gradients flow
+                    del outputs
+                    torch.cuda.empty_cache()
+                    model.train()
+                    model.zero_grad()
+                    outputs = model(**inputs)
+                    outputs.loss.backward()
+                    n_with_grad = sum(1 for p in model.parameters() if p.grad is not None)
+                    self.assertGreater(n_with_grad, 0, "No gradients after backward")
