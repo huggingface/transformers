@@ -1758,8 +1758,8 @@ def convert_and_load_state_dict_in_model(
                 total_send = sum(send_sizes)
                 total_recv = sum(recv_sizes)
 
-                send_buf = torch.zeros(max(total_send, 1), dtype=torch.uint8, device=local_device_obj)
-                recv_buf = torch.empty(max(total_recv, 1), dtype=torch.uint8, device=local_device_obj)
+                send_buf = torch.zeros(total_send, dtype=torch.uint8, device=local_device_obj)
+                recv_buf = torch.empty(total_recv, dtype=torch.uint8, device=local_device_obj)
 
                 # Pack my owned shards into send_buf in dest order.
                 if my_layout:
