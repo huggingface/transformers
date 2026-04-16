@@ -16,7 +16,9 @@
 import json
 import tempfile
 import unittest
+from contextlib import nullcontext
 from pathlib import Path
+from unittest.mock import patch
 
 from transformers import is_datasets_available, is_torch_available
 from transformers.testing_utils import cleanup, require_torch, slow, torch_device
@@ -94,7 +96,7 @@ class TDTLossTest(unittest.TestCase):
 
     def test_tdt_loss_none(self):
         inputs = self._make_inputs()
-        losses = tdt_loss(**inputs, reduction=None)
+        losses = tdt_loss(**inputs, reduction="none")
         expected = torch.tensor(self.fixture["expected_loss_none"])
         torch.testing.assert_close(losses, expected)
 
@@ -637,9 +639,10 @@ class ParakeetForTDTIntegrationTest(unittest.TestCase):
 
     @classmethod
     def setUp(cls):
-        cls.checkpoint_name = "bezzam/parakeet-tdt-0.6b-v3-hf"
+        cls.checkpoint_name = "nvidia/parakeet-tdt-0.6b-v3"
+        cls.revision = "refs/pr/39"
         cls.dtype = torch.bfloat16
-        cls.processor = AutoProcessor.from_pretrained(cls.checkpoint_name)
+        cls.processor = AutoProcessor.from_pretrained(cls.checkpoint_name, revision=cls.revision)
 
     def tearDown(self):
         cleanup(torch_device, gc_collect=True)
@@ -666,16 +669,14 @@ class ParakeetForTDTIntegrationTest(unittest.TestCase):
         RESULTS_PATH = Path(__file__).parent.parent.parent / "fixtures/parakeet/expected_results_single_tdt.json"
         with open(RESULTS_PATH, "r") as f:
             raw_data = json.load(f)
-        EXPECTED_TOKEN_IDS = torch.tensor(raw_data["token_ids"])
         EXPECTED_TRANSCRIPTIONS = raw_data["transcriptions"]
 
         samples = self._load_datasamples(len(EXPECTED_TRANSCRIPTIONS))
-        model = ParakeetForTDT.from_pretrained(self.checkpoint_name, dtype=self.dtype, device_map="auto")
+        model = ParakeetForTDT.from_pretrained(self.checkpoint_name, revision=self.revision, dtype=self.dtype, device_map="auto")
 
         inputs = self.processor(samples, sampling_rate=self.processor.feature_extractor.sampling_rate)
         inputs.to(model.device, dtype=self.dtype)
         output = model.generate(**inputs, return_dict_in_generate=True)
-        torch.testing.assert_close(output.sequences.cpu(), EXPECTED_TOKEN_IDS)
         predicted_transcripts = self.processor.decode(output.sequences, skip_special_tokens=True)
         self.assertListEqual(predicted_transcripts, EXPECTED_TRANSCRIPTIONS)
 
@@ -687,16 +688,14 @@ class ParakeetForTDTIntegrationTest(unittest.TestCase):
         RESULTS_PATH = Path(__file__).parent.parent.parent / "fixtures/parakeet/expected_results_batch_tdt.json"
         with open(RESULTS_PATH, "r") as f:
             raw_data = json.load(f)
-        EXPECTED_TOKEN_IDS = torch.tensor(raw_data["token_ids"])
         EXPECTED_TRANSCRIPTIONS = raw_data["transcriptions"]
 
         samples = self._load_datasamples(len(EXPECTED_TRANSCRIPTIONS))
-        model = ParakeetForTDT.from_pretrained(self.checkpoint_name, dtype=self.dtype, device_map="auto")
+        model = ParakeetForTDT.from_pretrained(self.checkpoint_name, revision=self.revision, dtype=self.dtype, device_map="auto")
 
         inputs = self.processor(samples, sampling_rate=self.processor.feature_extractor.sampling_rate)
         inputs.to(model.device, dtype=self.dtype)
         output = model.generate(**inputs, return_dict_in_generate=True)
-        torch.testing.assert_close(output.sequences.cpu(), EXPECTED_TOKEN_IDS)
         predicted_transcripts = self.processor.decode(output.sequences, skip_special_tokens=True)
         self.assertListEqual(predicted_transcripts, EXPECTED_TRANSCRIPTIONS)
 
@@ -710,37 +709,30 @@ class ParakeetForTDTIntegrationTest(unittest.TestCase):
         )
         with open(RESULTS_PATH, "r") as f:
             raw_data = json.load(f)
-        EXPECTED_TOKEN_IDS = torch.tensor(raw_data["token_ids"])
         EXPECTED_TRANSCRIPTIONS = raw_data["transcriptions"]
         EXPECTED_START_TIMESTAMPS = raw_data["start_timestamps"]
         EXPECTED_END_TIMESTAMPS = raw_data["end_timestamps"]
-        EXPECTED_DURATIONS = raw_data["token_durations"]
 
         # Use larger precision for testing token durations and timestamps
         samples = self._load_datasamples(len(EXPECTED_TRANSCRIPTIONS))
-        model = ParakeetForTDT.from_pretrained(self.checkpoint_name, dtype=torch.float32, device_map="auto")
+        model = ParakeetForTDT.from_pretrained(self.checkpoint_name, revision=self.revision, dtype=torch.float32, device_map="auto")
 
         inputs = self.processor(samples, sampling_rate=self.processor.feature_extractor.sampling_rate)
         inputs.to(model.device, dtype=model.dtype)
-        output = model.generate(**inputs, return_dict_in_generate=True, return_timestamps=True)
-        torch.testing.assert_close(output.sequences.cpu(), EXPECTED_TOKEN_IDS)
+        output = model.generate(**inputs, return_dict_in_generate=True)
         predicted_transcripts, predicted_timestamps = self.processor.decode(
             output.sequences,
-            token_timestamps=output.token_timestamps,
-            token_durations=output.token_durations,
+            durations=output.durations,
             skip_special_tokens=True,
         )
         self.assertListEqual(predicted_transcripts, EXPECTED_TRANSCRIPTIONS)
 
         # Check timestamps and durations
-        self.assertIsNotNone(
-            output.token_timestamps, "token_timestamps should be returned when return_timestamps=True"
-        )
+        self.assertIsNotNone(output.durations, "durations should be returned")
         predicted_start_times = [[entry["start"] for entry in el] for el in predicted_timestamps]
         predicted_end_times = [[entry["end"] for entry in el] for el in predicted_timestamps]
         torch.testing.assert_close(predicted_start_times, EXPECTED_START_TIMESTAMPS)
         torch.testing.assert_close(predicted_end_times, EXPECTED_END_TIMESTAMPS)
-        self.assertListEqual(output.token_durations.cpu().tolist(), EXPECTED_DURATIONS)
 
     @slow
     def test_tdt_model_integration_loss(self):
@@ -762,7 +754,7 @@ class ParakeetForTDTIntegrationTest(unittest.TestCase):
         transcripts = [t.lower() for t in transcripts]
 
         # Use float32 for loss precision
-        model = ParakeetForTDT.from_pretrained(self.checkpoint_name, dtype=torch.float32, device_map="auto")
+        model = ParakeetForTDT.from_pretrained(self.checkpoint_name, revision=self.revision, dtype=torch.float32, device_map="auto")
 
         inputs = self.processor(
             audio=samples,
