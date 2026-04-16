@@ -64,6 +64,7 @@ FEATURE_EXTRACTOR_MAPPING_NAMES = OrderedDict(
         ("parakeet_encoder", "ParakeetFeatureExtractor"),
         ("pe_audio", "PeAudioFeatureExtractor"),
         ("pe_audio_video", "PeAudioFeatureExtractor"),
+        ("phoneticxeus", "Wav2Vec2FeatureExtractor"),
         ("phi4_multimodal", "Phi4MultimodalFeatureExtractor"),
         ("pop2piano", "Pop2PianoFeatureExtractor"),
         ("qwen2_5_omni", "WhisperFeatureExtractor"),
