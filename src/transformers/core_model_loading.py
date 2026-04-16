@@ -1691,7 +1691,11 @@ def convert_and_load_state_dict_in_model(
             #
             # Pipeline overlap: while batch N scatters (step 4), thread pool already reads
             # batch N+1 from disk (step 1). Disk I/O and NCCL run fully concurrently.
-            BATCH_SIZE = 64
+            # Bigger batch = fewer scatter calls. Each scatter has ~120ms NCCL overhead regardless
+            # of payload size. With BATCH_SIZE=all, we get world_size scatters total (one per source)
+            # instead of world_size × num_batches. Memory: source holds all its packed shards at once
+            # (~model_size / world_size per source), fits on B200/H100 for models up to ~700B.
+            BATCH_SIZE = max(len(items), 1)
             group = device_mesh.get_group()
             world_size = device_mesh.size()
             tp_device = device_map[""]
@@ -1772,6 +1776,12 @@ def convert_and_load_state_dict_in_model(
                 # multi-process IPC mapping overhead (cudaIpcOpenMemHandle ~38ms each) + handle
                 # exchange (all_gather_object ~480ms) made it 37s vs NCCL's 22s. NCCL wins for
                 # multi-process despite its per-op overhead.
+                # ── Packed scatter per source rank ──
+                # Profiling showed: scatter, all_to_all_single, and batch_isend_irecv all produce
+                # the same ~11s of NCCL transfer time for a 70B model. The transfer time is
+                # dominated by NVLink bisection bandwidth (8 ranks × 17.5 GB each = 140 GB total
+                # cross-traffic), not NCCL per-op overhead. Scatter has the lowest peak memory
+                # (only one source's buffers live at a time).
                 recv_bufs: dict[int, torch.Tensor] = {}
                 my_scatter_list = None
                 my_layout = layouts.get(local_rank, [])
