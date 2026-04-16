@@ -1584,7 +1584,7 @@ class TestToolCallUnit(unittest.TestCase):
         self.assertIsNone(get_tool_call_config(processor, model))
 
     def test_parser_streaming_flow(self):
-        """Streaming: tokens between start/end markers are consumed."""
+        """Streaming: tokens between start/end markers are suppressed."""
         parser = ToolCallParser(QWEN_STC, QWEN_ETC)
         results = []
         for token in [
@@ -1595,15 +1595,14 @@ class TestToolCallUnit(unittest.TestCase):
             "\n",
             "</tool_call>",
         ]:
-            result = parser.feed(token)
-            results.append((token, result))
-        # "Hello " → None (normal text), rest → CONSUMED or raw block
-        self.assertIsNone(results[0][1])
-        self.assertIsNotNone(results[1][1])  # stc consumed
+            results.append((token, parser.feed(token)))
+        # "Hello " → False (normal text), rest → True (suppressed)
+        self.assertFalse(results[0][1])
+        self.assertTrue(results[1][1])
 
     def test_parser_normal_text(self):
         parser = ToolCallParser(QWEN_STC, QWEN_ETC)
-        self.assertIsNone(parser.feed("Hello world"))
+        self.assertFalse(parser.feed("Hello world"))
 
     def test_parse_tool_calls_from_text(self):
         text = '<tool_call>\n{"name": "get_weather", "arguments": {"city": "Paris"}}\n</tool_call>'

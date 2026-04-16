@@ -424,7 +424,7 @@ class ResponseHandler(BaseHandler):
                             yield "".join(sse_parts)
                             return
 
-                        if parser is not None and parser.feed(text) is not None:
+                        if parser is not None and parser.feed(text):
                             continue
 
                         full_text += text

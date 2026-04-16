@@ -218,7 +218,7 @@ class ChatCompletionHandler(BaseHandler):
                             yield "".join(sse_parts)
                             return
 
-                        if parser is not None and parser.feed(text) is not None:
+                        if parser is not None and parser.feed(text):
                             continue
 
                         sse_parts.append(self._build_chunk_sse(request_id, model=model_id, content=text))

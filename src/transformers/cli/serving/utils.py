@@ -162,56 +162,24 @@ def parse_tool_calls(processor, generated_ids, schema: dict) -> list[dict] | Non
 
 
 class ToolCallParser:
-    """Detects tool call boundaries in streamed text and suppresses them from content output.
+    """Suppresses tool call tokens from streamed content.
 
-    During streaming, text between stc/etc delimiters (e.g. ``<tool_call>...</tool_call>``)
-    is consumed so the client never sees raw tool call markup. Tool call parsing is done
-    separately at the end of generation via ``parse_tool_calls``.
-
-    Usage::
-
-        parser = ToolCallParser(stc="<tool_call>", etc="</tool_call>")
-        for text_chunk in streamer:
-            result = parser.feed(text_chunk)
-            if result is None:
-                # Normal text — stream as content
-            else:
-                # Tool call token (delimiter or body) — suppress from output
+    Returns ``True`` from ``feed()`` for any token between stc/etc delimiters (inclusive).
     """
 
     def __init__(self, stc: str, etc: str):
         self._stc = stc
         self._etc = etc
         self._inside = False
-        self._buffer = ""
 
-    # Sentinel: token was consumed by the parser but produced no output.
-    CONSUMED = object()
-
-    def feed(self, text: str) -> object | str | None:
-        """Feed a text chunk (streaming).
-
-        Returns:
-        - ``None`` — normal text, not a tool token. Emit as content.
-        - ``CONSUMED`` — token consumed internally (buffering/markers). Skip.
-        - A raw block ``str`` — complete tool call block ready for parsing.
-        """
-        if text.strip() == self._stc:
+    def feed(self, text: str) -> bool:
+        """Returns ``True`` if the token should be suppressed from content output."""
+        stripped = text.strip()
+        if stripped == self._stc:
             self._inside = True
-            self._buffer = ""
-            return self.CONSUMED
-
-        if text.strip() == self._etc:
+        elif stripped == self._etc:
             self._inside = False
-            block = self._buffer.strip()
-            self._buffer = ""
-            return block if block else self.CONSUMED
-
-        if self._inside:
-            self._buffer += text
-            return self.CONSUMED
-
-        return None
+        return self._inside or stripped == self._etc
 
 
 class DownloadAggregator:
