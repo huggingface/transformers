@@ -280,6 +280,70 @@ class PrepareModuleInputOutput(ParallelStyle):
         return module
 
 
+def _accumulate_local_param_grad(original_param: DTensor, local_grad: torch.Tensor) -> torch.Tensor:
+    """Copy a detached local grad into the original DTensor parameter.
+
+    Packed ``_StridedShard`` parameters cannot rely on autograd through
+    ``DTensor.to_local()`` on older torch releases, so we materialize a local leaf
+    parameter for the forward and stitch its gradient back manually here.
+    """
+    tensor_meta = original_param._spec.tensor_meta
+    detached_grad = local_grad.detach()
+    grad_dtensor = DTensor.from_local(
+        detached_grad,
+        original_param.device_mesh,
+        original_param.placements,
+        run_check=False,
+        shape=tensor_meta.shape,
+        stride=tensor_meta.stride,
+    )
+
+    with torch.no_grad():
+        existing_grad = original_param.grad
+        if existing_grad is None:
+            original_param.grad = grad_dtensor
+        elif isinstance(existing_grad, DTensor):
+            existing_grad._local_tensor.add_(detached_grad)
+        else:
+            existing_grad.add_(detached_grad)
+
+    return local_grad
+
+
+def _swap_dtensor_params_for_local(module, shadow_attr: str) -> None:
+    """Temporarily replace DTensor params by detached local leaf params."""
+    local_param_shadows = {}
+    for param_name, param in list(module.named_parameters(recurse=False)):
+        if not isinstance(param, DTensor):
+            continue
+
+        local_param_shadows[param_name] = param
+        local_param = torch.nn.Parameter(param._local_tensor.detach(), requires_grad=param.requires_grad)
+        if param.requires_grad:
+            local_param.register_hook(
+                lambda grad, original_param=param: _accumulate_local_param_grad(original_param, grad)
+            )
+
+        module._parameters.pop(param_name)
+        setattr(module, param_name, local_param)
+
+    if local_param_shadows:
+        shadow_stack = getattr(module, shadow_attr, None)
+        if shadow_stack is None:
+            shadow_stack = []
+            setattr(module, shadow_attr, shadow_stack)
+        shadow_stack.append(local_param_shadows)
+
+
+def _restore_dtensor_params(module, shadow_attr: str) -> None:
+    shadow_stack = getattr(module, shadow_attr, None)
+    if shadow_stack:
+        for param_name, param in shadow_stack.pop().items():
+            if hasattr(module, param_name):
+                delattr(module, param_name)
+            module.register_parameter(param_name, param)
+
+
 class PackedColwiseParallel(ParallelStyle):
     """Column-wise parallel style for fused linear weights packed along the output dimension."""
 
@@ -325,27 +389,11 @@ class PackedColwiseParallel(ParallelStyle):
             input_tensor = input_tensor.redistribute(placements=self.input_layouts)
         input_tensor = input_tensor.to_local()
 
-        local_param_shadows = {}
-        for param_name, param in list(mod.named_parameters(recurse=False)):
-            if isinstance(param, DTensor):
-                local_param_shadows[param_name] = param
-                mod._parameters.pop(param_name)
-                setattr(mod, param_name, param.to_local())
-        if local_param_shadows:
-            shadow_stack = getattr(mod, "_packed_local_param_shadows", None)
-            if shadow_stack is None:
-                shadow_stack = []
-                mod._packed_local_param_shadows = shadow_stack
-            shadow_stack.append(local_param_shadows)
+        _swap_dtensor_params_for_local(mod, "_packed_local_param_shadows")
         return (input_tensor,) + inputs[1:]
 
     def _prepare_output_fn(self, mod, outputs, device_mesh):
-        shadow_stack = getattr(mod, "_packed_local_param_shadows", None)
-        if shadow_stack:
-            for param_name, param in shadow_stack.pop().items():
-                if hasattr(mod, param_name):
-                    delattr(mod, param_name)
-                mod.register_parameter(param_name, param)
+        _restore_dtensor_params(mod, "_packed_local_param_shadows")
 
         if outputs is None or self.use_local_output:
             return outputs
@@ -472,31 +520,15 @@ class MoEExpertsParallel(ParallelStyle):
         if isinstance(top_k_weights, DTensor):
             top_k_weights = top_k_weights.to_local()
         top_k_weights = _AllReduceBackward.apply(top_k_weights, tp_group)
-        local_param_shadows = {}
-        for param_name, param in list(mod.named_parameters(recurse=False)):
-            if isinstance(param, DTensor):
-                # grouped_mm expects plain tensors, but we must restore the
-                # original DTensor params after the forward so save_pretrained
-                # still sees the canonical sharded weights.
-                local_param_shadows[param_name] = param
-                mod._parameters.pop(param_name)
-                setattr(mod, param_name, param.to_local())
-        if local_param_shadows:
-            shadow_stack = getattr(mod, "_moe_local_param_shadows", None)
-            if shadow_stack is None:
-                shadow_stack = []
-                mod._moe_local_param_shadows = shadow_stack
-            shadow_stack.append(local_param_shadows)
+        # grouped_mm expects plain tensors, but we must restore the original
+        # DTensor params after the forward so save_pretrained still sees the
+        # canonical sharded weights.
+        _swap_dtensor_params_for_local(mod, "_moe_local_param_shadows")
         return (hidden_states, top_k_index, top_k_weights)
 
     @staticmethod
     def _prepare_output_fn(output_layouts, mod, outputs, device_mesh):
-        shadow_stack = getattr(mod, "_moe_local_param_shadows", None)
-        if shadow_stack:
-            for param_name, param in shadow_stack.pop().items():
-                if hasattr(mod, param_name):
-                    delattr(mod, param_name)
-                mod.register_parameter(param_name, param)
+        _restore_dtensor_params(mod, "_moe_local_param_shadows")
         if outputs is None:
             return None
         # Plain TP expert weights produce partial outputs that need an all-reduce.

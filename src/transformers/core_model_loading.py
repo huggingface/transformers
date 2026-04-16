@@ -885,7 +885,6 @@ class DtensorShardOperation:
         if not sharding_placements:
             return param[...].to(device=device, dtype=dtype)
 
-        
         if tensor_idx is not None and len(self.param.shape) == len(param_shape) + 1:
             # [B] Expert path: shard on expert dimension (dim 0).
             # When dim 0 is the only sharding placement, return the full expert or
@@ -902,13 +901,13 @@ class DtensorShardOperation:
                     return param[...].to(device=device, dtype=dtype)
                 # [B4] Composed with TP placements -> shard the expert's inner dims
                 return self._shard_nd(param, inner_placements, param_shape, device, dtype)
-            
+
         # [B1] has_expert_sharding=False -> fall through to _shard_nd
         return self._shard_nd(param, sharding_placements, param_shape, device, dtype)
 
     def _shard_nd(self, param, sharding_placements, param_shape, device, dtype):
         """Handle multi-dimensional sharding, choosing the best strategy."""
-        # [C1] Column Parallel when composed with FSDP. We choose the easier path but maybe we should do a better one? 
+        # [C1] Column Parallel when composed with FSDP. We choose the easier path but maybe we should do a better one?
         if not self._can_shard_on_read(sharding_placements):
             return self._materialize_and_split(param, sharding_placements, device, dtype)
 

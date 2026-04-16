@@ -17,13 +17,12 @@ from abc import ABC, abstractmethod
 
 from transformers import TorchAoConfig, set_seed
 from transformers.distributed import DistributedConfig
-from transformers.integrations.tensor_parallel import _get_parameter_tp_plan
+from transformers.integrations.tensor_parallel import _get_parameter_tp_plan, _replicate_dtensor
 from transformers.testing_utils import (
     is_tensor_parallel_test,
     is_torch_available,
 )
 from transformers.utils import is_torch_greater_or_equal, is_torchao_available
-from transformers.integrations.tensor_parallel import _replicate_dtensor
 
 
 if is_torchao_available():
@@ -34,7 +33,7 @@ if is_torch_available():
     import torch
     import torch.distributed as dist
     import torch.multiprocessing as mp
-    from torch.distributed.tensor import DTensor, Replicate
+    from torch.distributed.tensor import DTensor
     from torch.multiprocessing.spawn import ProcessRaisedException
 
 
