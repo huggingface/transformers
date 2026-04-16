@@ -324,7 +324,6 @@ CONFIG_MAPPING_NAMES = OrderedDict[str, str](
         ("olmo3", "Olmo3Config"),
         ("olmo_hybrid", "OlmoHybridConfig"),
         ("olmoe", "OlmoeConfig"),
-        ("opf", "OpfConfig"),
         ("omdet-turbo", "OmDetTurboConfig"),
         ("oneformer", "OneFormerConfig"),
         ("openai-gpt", "OpenAIGPTConfig"),
@@ -369,6 +368,7 @@ CONFIG_MAPPING_NAMES = OrderedDict[str, str](
         ("pp_ocrv5_mobile_rec", "PPOCRV5MobileRecConfig"),
         ("pp_ocrv5_server_det", "PPOCRV5ServerDetConfig"),
         ("pp_ocrv5_server_rec", "PPOCRV5ServerRecConfig"),
+        ("privacy_filter", "PrivacyFilterConfig"),
         ("prompt_depth_anything", "PromptDepthAnythingConfig"),
         ("prophetnet", "ProphetNetConfig"),
         ("pvt", "PvtConfig"),
@@ -847,7 +847,6 @@ MODEL_NAMES_MAPPING = OrderedDict[str, str](
         ("olmo3", "Olmo3"),
         ("olmo_hybrid", "OlmoHybrid"),
         ("olmoe", "OLMoE"),
-        ("opf", "OPF"),
         ("omdet-turbo", "OmDet-Turbo"),
         ("oneformer", "OneFormer"),
         ("openai-gpt", "OpenAI GPT"),
@@ -894,6 +893,7 @@ MODEL_NAMES_MAPPING = OrderedDict[str, str](
         ("pp_ocrv5_mobile_rec", "PPOCRV5MobileRec"),
         ("pp_ocrv5_server_det", "PPOCRV5ServerDet"),
         ("pp_ocrv5_server_rec", "PPOCRV5ServerRec"),
+        ("privacy_filter", "Privacy Filter"),
         ("prompt_depth_anything", "PromptDepthAnything"),
         ("prophetnet", "ProphetNet"),
         ("pvt", "PVT"),
@@ -1283,7 +1283,7 @@ class _LazyLoadAllMappings(OrderedDict[str, str]):
 
 
 def _get_class_name(model_class: str | list[str]):
-    if isinstance(model_class, (list, tuple)):
+    if isinstance(model_class, list | tuple):
         return " or ".join([f"[`{c}`]" for c in model_class if c is not None])
     return f"[`{model_class}`]"
 

@@ -18,8 +18,8 @@ from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
-    from .configuration_opf import *
-    from .modeling_opf import *
+    from .configuration_privacy_filter import *
+    from .modeling_privacy_filter import *
 else:
     import sys
 

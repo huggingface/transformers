@@ -24,7 +24,7 @@ import tiktoken
 import torch
 from safetensors.torch import load_file as safe_load
 
-from transformers import OpfConfig, OpfForTokenClassification, PreTrainedTokenizerFast
+from transformers import PreTrainedTokenizerFast, PrivacyFilterConfig, PrivacyFilterForTokenClassification
 from transformers.convert_slow_tokenizer import TikTokenConverter
 
 
@@ -35,12 +35,12 @@ ORIGINAL_TO_CONVERTED_KEY_MAPPING = {
     r"^norm\.scale$":                               r"model.norm.weight",
     r"^unembedding\.weight$":                       r"score.weight",
 
-    r"^block\.(\d+)\.attn\.qkv\.(weight|bias)$":   r"model.layers.\1.attn.qkv_proj.\2",
-    r"^block\.(\d+)\.attn\.norm\.scale$":          r"model.layers.\1.attn.norm.weight",
-    r"^block\.(\d+)\.attn\.out\.(weight|bias)$":   r"model.layers.\1.attn.o_proj.\2",
-    r"^block\.(\d+)\.attn\.sinks$":                r"model.layers.\1.attn.sinks",
+    r"^block\.(\d+)\.attn\.qkv\.(weight|bias)$":   r"model.layers.\1.self_attn.qkv_proj.\2",
+    r"^block\.(\d+)\.attn\.norm\.scale$":          r"model.layers.\1.input_layernorm.weight",
+    r"^block\.(\d+)\.attn\.out\.(weight|bias)$":   r"model.layers.\1.self_attn.o_proj.\2",
+    r"^block\.(\d+)\.attn\.sinks$":                r"model.layers.\1.self_attn.sinks",
 
-    r"^block\.(\d+)\.mlp\.norm\.scale$":           r"model.layers.\1.mlp.norm.weight",
+    r"^block\.(\d+)\.mlp\.norm\.scale$":           r"model.layers.\1.post_attention_layernorm.weight",
     r"^block\.(\d+)\.mlp\.gate\.(weight|bias)$":   r"model.layers.\1.mlp.router.\2",
     r"^block\.(\d+)\.mlp\.swiglu\.weight$":        r"model.layers.\1.mlp.experts.gate_up_proj",
     r"^block\.(\d+)\.mlp\.swiglu\.bias$":          r"model.layers.\1.mlp.experts.gate_up_proj_bias",
@@ -109,7 +109,7 @@ def get_o200k_harmony_special_tokens() -> list[str]:
     return [token for token, _ in sorted(special_tokens_map.items(), key=lambda item: item[1])]
 
 
-class OpfConverter(TikTokenConverter):
+class PrivacyFilterConverter(TikTokenConverter):
     def extract_vocab_merges_from_model(self, tiktoken_url: str):
         tokenizer = tiktoken.get_encoding(tiktoken_url)
         self.pattern = tokenizer._pat_str
@@ -149,46 +149,46 @@ class OpfConverter(TikTokenConverter):
         )
 
 
-def build_config(original_config: dict[str, object], state_dict: dict[str, torch.Tensor]) -> OpfConfig:
-    initial_context_length = int(original_config.get("initial_context_length", 4096))
-    rope_theta = float(original_config.get("rope_theta", 150000.0))
+def build_config(original_config: dict[str, object], state_dict: dict[str, torch.Tensor]) -> PrivacyFilterConfig:
+    initial_context_length = int(original_config["initial_context_length"])
+    rope_theta = float(original_config["rope_theta"])
     rope_parameters = {
         "rope_type": "yarn",
         "rope_theta": rope_theta,
-        "factor": float(original_config.get("rope_scaling_factor", 32.0)),
-        "beta_fast": float(original_config.get("rope_ntk_beta", 32.0)),
-        "beta_slow": float(original_config.get("rope_ntk_alpha", 1.0)),
+        "factor": float(original_config["rope_scaling_factor"]),
+        "beta_fast": float(original_config["rope_ntk_beta"]),
+        "beta_slow": float(original_config["rope_ntk_alpha"]),
         "truncate": False,
         "original_max_position_embeddings": initial_context_length,
     }
 
-    config = OpfConfig(
+    config = PrivacyFilterConfig(
         vocab_size=int(state_dict["embedding.weight"].shape[0]),
-        num_labels=int(original_config.get("num_labels", state_dict["unembedding.weight"].shape[0])),
+        num_labels=int(state_dict["unembedding.weight"].shape[0]),
         hidden_size=int(original_config["hidden_size"]),
         intermediate_size=int(original_config["intermediate_size"]),
         num_hidden_layers=int(original_config["num_hidden_layers"]),
-        num_local_experts=int(original_config.get("num_experts", original_config.get("num_local_experts", 128))),
-        num_experts_per_tok=int(
-            original_config.get("experts_per_token", original_config.get("num_experts_per_tok", 4))
-        ),
+        num_local_experts=int(original_config["num_experts"]),
+        num_experts_per_tok=int(original_config["experts_per_token"]),
         head_dim=int(original_config["head_dim"]),
         num_attention_heads=int(original_config["num_attention_heads"]),
         num_key_value_heads=int(original_config["num_key_value_heads"]),
         sliding_window=int(original_config["sliding_window"]),
-        bidirectional_left_context=int(original_config.get("bidirectional_left_context", 128)),
-        bidirectional_right_context=int(original_config.get("bidirectional_right_context", 128)),
+        bidirectional_left_context=int(original_config["bidirectional_left_context"]),
+        bidirectional_right_context=int(original_config["bidirectional_right_context"]),
         initial_context_length=initial_context_length,
-        max_position_embeddings=int(original_config.get("max_position_embeddings", 131072)),
-        default_n_ctx=int(original_config.get("default_n_ctx", 128000)),
+        max_position_embeddings=int(original_config["max_position_embeddings"]),
+        default_n_ctx=int(original_config["default_n_ctx"]),
         rope_theta=rope_theta,
         rope_parameters=rope_parameters,
     )
-    config.architectures = ["OpfForTokenClassification"]
+    config.architectures = ["PrivacyFilterForTokenClassification"]
     return config
 
 
-def split_qkv_tensor(tensor: torch.Tensor, config: OpfConfig) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+def split_qkv_tensor(
+    tensor: torch.Tensor, config: PrivacyFilterConfig
+) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
     q_len = config.num_attention_heads * config.head_dim
     kv_len = config.num_key_value_heads * config.head_dim
     q = tensor[:q_len]
@@ -197,13 +197,15 @@ def split_qkv_tensor(tensor: torch.Tensor, config: OpfConfig) -> tuple[torch.Ten
     return q, k, v
 
 
-def convert_state_dict(original_state_dict: dict[str, torch.Tensor], config: OpfConfig) -> dict[str, torch.Tensor]:
+def convert_state_dict(
+    original_state_dict: dict[str, torch.Tensor], config: PrivacyFilterConfig
+) -> dict[str, torch.Tensor]:
     new_keys = convert_old_keys_to_new_keys(original_state_dict.keys())
     converted = {}
 
     for key, tensor in original_state_dict.items():
         if key not in new_keys:
-            raise KeyError(f"Unrecognized OPF checkpoint tensor: {key}")
+            raise KeyError(f"Unrecognized Privacy Filter checkpoint tensor: {key}")
         new_key = new_keys[key]
 
         if re.search("qkv_proj", new_key):
@@ -223,7 +225,7 @@ def convert_state_dict(original_state_dict: dict[str, torch.Tensor], config: Opf
 
 
 def write_tokenizer(save_dir: str, model_max_length: int | None):
-    converter = OpfConverter(vocab_file="o200k_base", model_max_length=model_max_length)
+    converter = PrivacyFilterConverter(vocab_file="o200k_base", model_max_length=model_max_length)
     converter.tokenizer.save_pretrained(save_dir)
 
 
@@ -244,7 +246,7 @@ def write_model(input_dir: str, output_dir: str):
     gc.collect()
 
     with torch.device("meta"):
-        model = OpfForTokenClassification(config)
+        model = PrivacyFilterForTokenClassification(config)
     model.load_state_dict(state_dict, strict=True, assign=True)
     model.save_pretrained(output_path)
     del model, state_dict
@@ -255,12 +257,14 @@ def write_model(input_dir: str, output_dir: str):
     if calibration_path.exists():
         shutil.copy2(calibration_path, output_path / "viterbi_calibration.json")
 
-    OpfForTokenClassification.from_pretrained(output_path).eval()
+    PrivacyFilterForTokenClassification.from_pretrained(output_path).eval()
 
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--input_dir", required=True, help="Path to the original OPF/OSPF checkpoint directory.")
+    parser.add_argument(
+        "--input_dir", required=True, help="Path to the original Privacy Filter/OSPF checkpoint directory."
+    )
     parser.add_argument("--output_dir", required=True, help="Path to write the converted Transformers checkpoint.")
     args = parser.parse_args()
     write_model(args.input_dir, args.output_dir)

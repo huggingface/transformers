@@ -11,49 +11,30 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Testing suite for the PyTorch Opf model."""
+"""Testing suite for the PyTorch PrivacyFilter model."""
 
 import unittest
 
 from transformers import (
-    OPF_NER_LABELS,
-    GptOssConfig,
-    OpfConfig,
+    PRIVACY_FILTER_NER_LABELS,
+    PrivacyFilterConfig,
     is_torch_available,
 )
 from transformers.testing_utils import require_torch, torch_device
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, ids_tensor, random_attention_mask
+from ...test_pipeline_mixin import PipelineTesterMixin
 
 
 if is_torch_available():
     from transformers import (
-        OpfForTokenClassification,
-        OpfModel,
+        PrivacyFilterForTokenClassification,
+        PrivacyFilterModel,
     )
 
 
-class OpfModelTester:
-    base_model_class = None
-    config_class = OpfConfig
-    token_classification_class = None
-
-    if is_torch_available():
-        base_model_class = OpfModel
-        token_classification_class = OpfForTokenClassification
-
-    @property
-    def all_model_classes(self):
-        return tuple(
-            model_class
-            for model_class in (
-                self.base_model_class,
-                self.token_classification_class,
-            )
-            if model_class is not None
-        )
-
+class PrivacyFilterModelTester:
     def __init__(
         self,
         parent,
@@ -77,7 +58,7 @@ class OpfModelTester:
         initial_context_length=64,
         max_position_embeddings=64,
         initializer_range=0.02,
-        num_labels=len(OPF_NER_LABELS),
+        num_labels=len(PRIVACY_FILTER_NER_LABELS),
         scope=None,
     ):
         self.parent = parent
@@ -119,7 +100,7 @@ class OpfModelTester:
         return config, input_ids, input_mask, token_labels
 
     def get_config(self):
-        return self.config_class(
+        return PrivacyFilterConfig(
             vocab_size=self.vocab_size,
             pad_token_id=self.pad_token_id,
             hidden_size=self.hidden_size,
@@ -151,7 +132,7 @@ class OpfModelTester:
         )
 
     def create_and_check_model(self, config, input_ids, input_mask, token_labels):
-        model = self.base_model_class(config=config)
+        model = PrivacyFilterModel(config=config)
         model.to(torch_device)
         model.eval()
         result = model(input_ids, attention_mask=input_mask)
@@ -160,7 +141,7 @@ class OpfModelTester:
 
     def create_and_check_for_token_classification(self, config, input_ids, input_mask, token_labels):
         config.num_labels = self.num_labels
-        model = self.token_classification_class(config=config)
+        model = PrivacyFilterForTokenClassification(config=config)
         model.to(torch_device)
         model.eval()
         result = model(input_ids, attention_mask=input_mask, labels=token_labels)
@@ -173,34 +154,33 @@ class OpfModelTester:
 
 
 @require_torch
-class OpfModelTest(ModelTesterMixin, unittest.TestCase):
+class PrivacyFilterModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
+    all_model_classes = (
+        (
+            PrivacyFilterModel,
+            PrivacyFilterForTokenClassification,
+        )
+        if is_torch_available()
+        else ()
+    )
+    pipeline_model_mapping = (
+        {
+            "feature-extraction": PrivacyFilterModel,
+            "token-classification": PrivacyFilterForTokenClassification,
+        }
+        if is_torch_available()
+        else {}
+    )
     has_attentions = False
     test_all_params_have_gradient = False
     model_split_percents = [0.5, 0.6]
-    model_tester_class = OpfModelTester
-    all_model_classes = None
 
     def setUp(self):
-        self.model_tester = self.model_tester_class(self)
-        self.config_tester = ConfigTester(self, config_class=self.model_tester.config_class, hidden_size=32)
-
-        if self.all_model_classes is None:
-            self.all_model_classes = self.model_tester.all_model_classes
+        self.model_tester = PrivacyFilterModelTester(self)
+        self.config_tester = ConfigTester(self, config_class=PrivacyFilterConfig, hidden_size=32)
 
     def test_config(self):
         self.config_tester.run_common_tests()
-
-    def test_config_inherits_gpt_oss_defaults_without_causal_overrides(self):
-        config = OpfConfig()
-
-        self.assertIsInstance(config, GptOssConfig)
-        self.assertEqual(config.use_cache, False)
-        self.assertEqual(config.router_aux_loss_coef, 0.0)
-        self.assertEqual(config.base_model_ep_plan, {})
-        self.assertEqual(config.layer_types, ["sliding_attention"] * config.num_hidden_layers)
-        self.assertEqual(config.rope_parameters["rope_theta"], config.rope_theta)
-        self.assertNotIn("mup_scale", config.to_dict())
-        self.assertNotIn("logit_multiplier", config.to_dict())
 
     def test_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
@@ -209,12 +189,3 @@ class OpfModelTest(ModelTesterMixin, unittest.TestCase):
     def test_token_classification_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_for_token_classification(*config_and_inputs)
-
-    def test_set_use_kernels(self):
-        config, _, _, _ = self.model_tester.prepare_config_and_inputs()
-        model = OpfModel(config)
-
-        self.assertIsNone(model.set_use_kernels(False))
-        self.assertFalse(model.use_kernels)
-        with self.assertRaisesRegex(ValueError, "OPF does not support kernelized layers."):
-            model.set_use_kernels(True)

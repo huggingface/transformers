@@ -11,20 +11,23 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""PyTorch OPF model."""
+"""PyTorch Privacy Filter model."""
 
 import math
+from copy import copy
 
 import torch
 from torch import nn
 from torch.nn import functional as F
 
 from ... import initialization as init
+from ...masking_utils import create_bidirectional_sliding_window_mask
 from ...modeling_outputs import BaseModelOutputWithPast, TokenClassifierOutput
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
+from ...utils.output_capturing import OutputRecorder
 from ..gpt_oss.modeling_gpt_oss import (
     GptOssAttention,
     GptOssDecoderLayer,
@@ -34,39 +37,37 @@ from ..gpt_oss.modeling_gpt_oss import (
     GptOssRMSNorm,
     GptOssRotaryEmbedding,
     GptOssTopKRouter,
+    apply_rotary_pos_emb,
 )
-from .configuration_opf import OpfConfig
+from .configuration_privacy_filter import PrivacyFilterConfig
 
 
 logger = logging.get_logger(__name__)
 
 
-class OpfRMSNorm(GptOssRMSNorm):
+class PrivacyFilterRMSNorm(GptOssRMSNorm):
     pass
 
 
-class OpfTopKRouter(GptOssTopKRouter):
+class PrivacyFilterTopKRouter(GptOssTopKRouter):
+    def forward(self, hidden_states: torch.Tensor):
+        hidden_states = hidden_states.float()
+        return super().forward(hidden_states)
+
+
+class PrivacyFilterRotaryEmbedding(GptOssRotaryEmbedding):
     pass
 
 
-class OpfRotaryEmbedding(GptOssRotaryEmbedding):
-    pass
-
-
-def _apply_rotary_emb(x: torch.Tensor, cos: torch.Tensor, sin: torch.Tensor) -> torch.Tensor:
-    x_even = x[..., ::2]
-    x_odd = x[..., 1::2]
-    out_even = x_even * cos - x_odd * sin
-    out_odd = x_odd * cos + x_even * sin
-    return torch.stack((out_even, out_odd), dim=-1).reshape_as(x)
-
-
-def apply_rotary_pos_emb(q: torch.Tensor, k: torch.Tensor, cos: torch.Tensor, sin: torch.Tensor):
-    cos = cos.unsqueeze(2).to(q.dtype)
-    sin = sin.unsqueeze(2).to(q.dtype)
-    q_embed = _apply_rotary_emb(q, cos, sin)
-    k_embed = _apply_rotary_emb(k, cos, sin)
-    return q_embed, k_embed
+def _apply_rotary_emb(
+    x: torch.Tensor,
+    cos: torch.Tensor,
+    sin: torch.Tensor,
+) -> torch.Tensor:
+    first_half, second_half = x[..., ::2], x[..., 1::2]
+    first_ = first_half * cos - second_half * sin
+    second_ = second_half * cos + first_half * sin
+    return torch.stack((first_, second_), dim=-1).flatten(-2)
 
 
 def _batched_linear(
@@ -83,6 +84,38 @@ def _batched_linear(
     return out
 
 
+def _local_bidirectional_attention_mask(
+    attention_mask: torch.Tensor | None,
+    *,
+    batch_size: int,
+    sequence_length: int,
+    window_radius: int,
+    device: torch.device,
+) -> torch.Tensor:
+    window = 2 * window_radius + 1
+    relative_positions = torch.arange(window, device=device) - window_radius
+    key_positions = torch.arange(sequence_length, device=device)[:, None] + relative_positions[None, :]
+    valid_positions = (key_positions >= 0) & (key_positions < sequence_length)
+
+    if attention_mask is None:
+        return valid_positions.unsqueeze(0).expand(batch_size, -1, -1)
+
+    if attention_mask.dim() == 3:
+        return attention_mask.to(device=device, dtype=torch.bool)
+    if attention_mask.dim() != 4:
+        raise ValueError("Privacy Filter attention expects a 4D additive mask or a 3D local attention mask.")
+
+    if attention_mask.dtype == torch.bool:
+        full_attention_mask = attention_mask[:, 0].to(device=device)
+    else:
+        full_attention_mask = attention_mask[:, 0].to(device=device) == 0
+
+    padded_attention_mask = F.pad(full_attention_mask, (window_radius, window_radius), value=False)
+    window_attention_mask = padded_attention_mask.unfold(-1, window, 1)
+    token_positions = torch.arange(sequence_length, device=device)
+    return window_attention_mask[:, token_positions, token_positions, :] & valid_positions.unsqueeze(0)
+
+
 def _local_bidirectional_attention(
     query: torch.Tensor,
     key: torch.Tensor,
@@ -90,32 +123,26 @@ def _local_bidirectional_attention(
     sinks: torch.Tensor,
     attention_mask: torch.Tensor | None,
     *,
-    left_context: int,
-    right_context: int,
+    window_radius: int,
 ) -> torch.Tensor:
     batch_size, num_tokens, num_key_value_heads, num_query_groups, head_dim = query.shape
-    window = left_context + right_context + 1
+    window = 2 * window_radius + 1
 
-    padded_key = F.pad(key, (0, 0, 0, 0, left_context, right_context))
-    padded_value = F.pad(value, (0, 0, 0, 0, left_context, right_context))
+    attention_mask = _local_bidirectional_attention_mask(
+        attention_mask,
+        batch_size=batch_size,
+        sequence_length=num_tokens,
+        window_radius=window_radius,
+        device=query.device,
+    )
+    padded_key = F.pad(key, (0, 0, 0, 0, window_radius, window_radius))
+    padded_value = F.pad(value, (0, 0, 0, 0, window_radius, window_radius))
     key_window = padded_key.unfold(1, window, 1).permute(0, 1, 4, 2, 3)
     value_window = padded_value.unfold(1, window, 1).permute(0, 1, 4, 2, 3)
 
-    relative_positions = torch.arange(window, device=query.device) - left_context
-    key_positions = torch.arange(num_tokens, device=query.device)[:, None] + relative_positions[None, :]
-    valid = (key_positions >= 0) & (key_positions < num_tokens)
-
-    if attention_mask is not None:
-        key_mask = attention_mask.to(device=query.device, dtype=torch.bool)
-        padded_key_mask = F.pad(key_mask, (left_context, right_context))
-        window_key_mask = padded_key_mask.unfold(1, window, 1)
-        valid = valid[None, :, :] & window_key_mask
-    else:
-        valid = valid[None, :, :]
-
     scores = torch.einsum("bthqd,btwhd->bthqw", query, key_window)
     scores = scores.float()
-    scores = scores.masked_fill(~valid[:, :, None, None, :], -float("inf"))
+    scores = scores.masked_fill(~attention_mask[:, :, None, None, :], -float("inf"))
 
     sink_scores = (sinks * math.log(2.0)).reshape(num_key_value_heads, num_query_groups)
     sink_scores = sink_scores[None, None, :, :, None].expand(batch_size, num_tokens, -1, -1, 1)
@@ -126,16 +153,15 @@ def _local_bidirectional_attention(
     return attn_output.reshape(batch_size, num_tokens, num_key_value_heads * num_query_groups * head_dim)
 
 
-class OpfAttention(GptOssAttention):
-    def __init__(self, config: OpfConfig, layer_idx: int = 0):
+class PrivacyFilterAttention(GptOssAttention):
+    def __init__(self, config: PrivacyFilterConfig, layer_idx: int = 0):
         super().__init__(config, layer_idx)
+        self.is_causal = False
         self.num_attention_heads = config.num_attention_heads
         self.num_key_value_heads = config.num_key_value_heads
         self.num_query_groups = config.num_attention_heads // config.num_key_value_heads
-        self.left_context = int(config.bidirectional_left_context)
-        self.right_context = int(config.bidirectional_right_context)
-        self.qk_scale = 1 / math.sqrt(math.sqrt(config.head_dim))
-        self.norm = OpfRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.window_radius = int(config.bidirectional_left_context)
+        self.scaling = config.head_dim**-0.25
         self.sinks = nn.Parameter(torch.empty(config.num_attention_heads, dtype=torch.float32))
 
     def forward(
@@ -143,9 +169,9 @@ class OpfAttention(GptOssAttention):
         hidden_states: torch.Tensor,
         position_embeddings: tuple[torch.Tensor, torch.Tensor],
         attention_mask: torch.Tensor | None = None,
-    ) -> torch.Tensor:
-        residual = hidden_states
-        hidden_states = self.norm(hidden_states)
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> tuple[torch.Tensor, None]:
+        original_dtype = hidden_states.dtype
         if hidden_states.dtype != self.q_proj.weight.dtype:
             hidden_states = hidden_states.to(self.q_proj.weight.dtype)
 
@@ -161,11 +187,11 @@ class OpfAttention(GptOssAttention):
         )
 
         cos, sin = position_embeddings
-        query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
-        query_states = (query_states * self.qk_scale).view(
+        query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin, unsqueeze_dim=2)
+        query_states = (query_states * self.scaling).view(
             batch_size, sequence_length, self.num_key_value_heads, self.num_query_groups, self.head_dim
         )
-        key_states = key_states * self.qk_scale
+        key_states = key_states * self.scaling
 
         attn_output = _local_bidirectional_attention(
             query_states,
@@ -173,20 +199,16 @@ class OpfAttention(GptOssAttention):
             value_states,
             self.sinks,
             attention_mask,
-            left_context=self.left_context,
-            right_context=self.right_context,
+            window_radius=self.window_radius,
         )
 
         if attn_output.dtype != self.o_proj.weight.dtype:
             attn_output = attn_output.to(self.o_proj.weight.dtype)
         attn_output = F.linear(attn_output, self.o_proj.weight, self.o_proj.bias)
-        return residual + attn_output.to(residual.dtype)
+        return attn_output.to(original_dtype), None
 
 
-class OpfExperts(GptOssExperts):
-    def __init__(self, config: OpfConfig):
-        super().__init__(config)
-
+class PrivacyFilterExperts(GptOssExperts):
     def _apply_gate(self, gate_up: torch.Tensor) -> torch.Tensor:
         gate, up = gate_up.chunk(2, dim=-1)
         gate = gate.clamp(min=None, max=self.limit)
@@ -199,7 +221,7 @@ class OpfExperts(GptOssExperts):
         expert_indices: torch.Tensor,
         expert_weights: torch.Tensor,
         *,
-        chunk_size: int,
+        chunk_size: int = 32,
     ) -> torch.Tensor:
         outputs = []
         effective_chunk_size = chunk_size if chunk_size > 0 else hidden_states.shape[0]
@@ -227,111 +249,92 @@ class OpfExperts(GptOssExperts):
         return torch.cat(outputs, dim=0)
 
 
-class OpfMLP(GptOssMLP):
-    def __init__(self, config: OpfConfig):
+class PrivacyFilterMLP(GptOssMLP):
+    def __init__(self, config: PrivacyFilterConfig):
         super().__init__(config)
-        self.config = config
-        self.top_k = config.num_experts_per_tok
-        self.num_experts = config.num_local_experts
-        self.norm = OpfRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        self.router = OpfTopKRouter(config)
-        self.experts = OpfExperts(config)
-
-    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        residual = hidden_states
-        batch_shape = hidden_states.shape[:-1]
-        hidden_states = self.norm(hidden_states).reshape(-1, hidden_states.shape[-1])
-
-        router_logits = F.linear(
-            hidden_states.float(),
-            self.router.weight.float(),
-            self.router.bias.float() if self.router.bias is not None else None,
-        )
-        top_values, top_indices = torch.topk(router_logits, k=self.top_k, dim=-1, sorted=True)
-        top_weights = torch.softmax(top_values, dim=1)
-
-        hidden_states = self.experts(
-            hidden_states,
-            top_indices,
-            top_weights,
-            chunk_size=32,
-        )
-        hidden_states = hidden_states.reshape(*batch_shape, -1)
-        return residual + hidden_states.to(residual.dtype)
+        self.router = PrivacyFilterTopKRouter(config)
+        self.experts = PrivacyFilterExperts(config)
 
 
-class OpfDecoderLayer(GptOssDecoderLayer):
-    def __init__(self, config: OpfConfig, layer_idx: int):
+class PrivacyFilterEncoderLayer(GptOssDecoderLayer):
+    def __init__(self, config: PrivacyFilterConfig, layer_idx: int):
         super().__init__(config, layer_idx)
-        del self.self_attn
-        del self.input_layernorm
-        del self.post_attention_layernorm
-        self.attn = OpfAttention(config, layer_idx)
-        self.mlp = OpfMLP(config)
+        self.self_attn = PrivacyFilterAttention(config, layer_idx)
+        self.mlp = PrivacyFilterMLP(config)
 
     def forward(
         self,
         hidden_states: torch.Tensor,
-        position_embeddings: tuple[torch.Tensor, torch.Tensor],
         attention_mask: torch.Tensor | None = None,
+        position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> torch.Tensor:
-        hidden_states = self.attn(
-            hidden_states,
+        residual = hidden_states
+        hidden_states = self.input_layernorm(hidden_states)
+        hidden_states, _ = self.self_attn(
+            hidden_states=hidden_states,
             position_embeddings=position_embeddings,
             attention_mask=attention_mask,
+            **kwargs,
         )
-        hidden_states = self.mlp(hidden_states)
-        return hidden_states
+        hidden_states = residual + hidden_states
+
+        residual = hidden_states
+        hidden_states = self.post_attention_layernorm(hidden_states)
+        hidden_states, _ = self.mlp(hidden_states)
+        return residual + hidden_states
 
 
-class OpfPreTrainedModel(GptOssPreTrainedModel):
-    config: OpfConfig
-    base_model_prefix = "model"
-    supports_gradient_checkpointing = False
-    _no_split_modules = ["OpfDecoderLayer"]
-    _skip_keys_device_placement = None
-    _keep_in_fp32_modules = ["norm", "embedding_norm"]
-    _keep_in_fp32_modules_strict: list[str] = ["sinks"]
+class PrivacyFilterPreTrainedModel(GptOssPreTrainedModel):
+    config: PrivacyFilterConfig
+    _no_split_modules = ["PrivacyFilterEncoderLayer"]
+    _skip_keys_device_placement = None  # No cache
+    _keep_in_fp32_modules = ["norm", "embedding_norm", "input_layernorm", "post_attention_layernorm"]
+    _keep_in_fp32_modules_strict: list[str] = ["sinks", "router"]
     _supports_sdpa = False
     _supports_flash_attn = False
     _supports_flex_attn = False
     _can_compile_fullgraph = False
     _supports_attention_backend = False
-    _can_record_outputs = None
+    _can_record_outputs = {
+        "router_logits": OutputRecorder(PrivacyFilterTopKRouter, index=0),
+        "hidden_states": PrivacyFilterEncoderLayer,
+        "attentions": PrivacyFilterAttention,
+    }
     _compatible_flash_implementations = None
 
     @classmethod
     def _can_set_experts_implementation(cls) -> bool:
-        # Modular conversion inherits GptOssExperts' decorator, but OPF's expert forward is checkpoint-specific.
+        # Modular conversion inherits GptOssExperts' decorator, but Privacy Filter's expert forward is checkpoint-specific.
         return False
 
     def get_correct_experts_implementation(self, requested_experts: str | None) -> str:
         if requested_experts not in (None, "eager"):
-            raise ValueError("OPF only supports the eager experts implementation.")
+            raise ValueError("Privacy Filter only supports the eager experts implementation.")
         return "eager"
 
     def set_use_kernels(self, use_kernels, kernel_config=None):
         if use_kernels:
-            raise ValueError("OPF does not support kernelized layers.")
+            raise ValueError("Privacy Filter does not support kernelized layers.")
         PreTrainedModel.set_use_kernels(self, use_kernels, kernel_config)
 
     @torch.no_grad()
     def _init_weights(self, module):
         super()._init_weights(module)
-        if isinstance(module, OpfTopKRouter):
+        if isinstance(module, PrivacyFilterTopKRouter):
             init.zeros_(module.bias)
-        elif isinstance(module, OpfRotaryEmbedding):
+        elif isinstance(module, PrivacyFilterRotaryEmbedding):
             rope_init_fn = module.compute_default_rope_parameters
             if module.rope_type != "default":
                 rope_init_fn = ROPE_INIT_FUNCTIONS[module.rope_type]
             inv_freq, module.attention_scaling = rope_init_fn(module.config, module.inv_freq.device)
-            module.inv_freq.copy_(inv_freq)
-            module.original_inv_freq.copy_(inv_freq.clone())
+            init.copy_(module.inv_freq, inv_freq)
+            init.copy_(module.original_inv_freq, inv_freq)
 
 
 @auto_docstring
-class OpfModel(OpfPreTrainedModel):
-    def __init__(self, config: OpfConfig):
+class PrivacyFilterModel(PrivacyFilterPreTrainedModel):
+    def __init__(self, config: PrivacyFilterConfig):
         super().__init__(config)
         self.padding_idx = (
             config.pad_token_id
@@ -340,12 +343,12 @@ class OpfModel(OpfPreTrainedModel):
         )
         self.vocab_size = config.vocab_size
         self.embed_tokens = nn.Embedding(config.vocab_size, config.hidden_size, self.padding_idx)
-        self.embedding_norm = OpfRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.embedding_norm = PrivacyFilterRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.layers = nn.ModuleList(
-            [OpfDecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
+            [PrivacyFilterEncoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
         )
-        self.norm = OpfRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        self.rotary_emb = OpfRotaryEmbedding(config=config)
+        self.norm = PrivacyFilterRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.rotary_emb = PrivacyFilterRotaryEmbedding(config=config)
         self.post_init()
 
     def get_input_embeddings(self):
@@ -371,9 +374,9 @@ class OpfModel(OpfPreTrainedModel):
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
         if past_key_values is not None or use_cache:
-            raise ValueError("OPF is a bidirectional encoder and does not support key/value caching.")
+            raise ValueError("Privacy Filter is a bidirectional encoder and does not support key/value caching.")
         if output_attentions:
-            logger.warning_once("OPF does not return attention weights.")
+            logger.warning_once("Privacy Filter does not return attention weights.")
 
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -385,6 +388,25 @@ class OpfModel(OpfPreTrainedModel):
         hidden_states = self.embedding_norm(inputs_embeds)
         batch_size, sequence_length, _ = hidden_states.shape
 
+        if not isinstance(attention_mask_mapping := attention_mask, dict):
+            window_radius = self.config.bidirectional_left_context
+            if window_radius != self.config.bidirectional_right_context:
+                raise ValueError(
+                    "Privacy Filter only supports symmetric bidirectional context with the shared mask API."
+                )
+            if self.config.sliding_window != 2 * window_radius + 1:
+                raise ValueError(
+                    "`sliding_window` must equal `2 * bidirectional_left_context + 1` for Privacy Filter checkpoints."
+                )
+            mask_config = copy(self.config)
+            mask_config.sliding_window = window_radius
+            mask_kwargs = {
+                "config": mask_config,
+                "inputs_embeds": hidden_states,
+                "attention_mask": attention_mask,
+            }
+            attention_mask_mapping = {"sliding_attention": create_bidirectional_sliding_window_mask(**mask_kwargs)}
+
         if position_ids is None:
             position_ids = torch.arange(sequence_length, device=hidden_states.device).unsqueeze(0)
             position_ids = position_ids.expand(batch_size, -1)
@@ -392,13 +414,13 @@ class OpfModel(OpfPreTrainedModel):
         position_embeddings = self.rotary_emb(hidden_states, position_ids)
         all_hidden_states = () if output_hidden_states else None
 
-        for decoder_layer in self.layers:
+        for i, decoder_layer in enumerate(self.layers):
             if output_hidden_states:
                 all_hidden_states += (hidden_states,)
             hidden_states = decoder_layer(
                 hidden_states,
                 position_embeddings=position_embeddings,
-                attention_mask=attention_mask,
+                attention_mask=attention_mask_mapping[self.config.layer_types[i]],
             )
 
         hidden_states = self.norm(hidden_states)
@@ -416,19 +438,13 @@ class OpfModel(OpfPreTrainedModel):
 
 
 @auto_docstring
-class OpfForTokenClassification(OpfPreTrainedModel):
-    def __init__(self, config: OpfConfig):
+class PrivacyFilterForTokenClassification(PrivacyFilterPreTrainedModel):
+    def __init__(self, config: PrivacyFilterConfig):
         super().__init__(config)
         self.num_labels = config.num_labels
-        self.model = OpfModel(config)
+        self.model = PrivacyFilterModel(config)
         self.score = nn.Linear(config.hidden_size, config.num_labels, bias=False)
         self.post_init()
-
-    def get_input_embeddings(self):
-        return self.model.embed_tokens
-
-    def set_input_embeddings(self, value):
-        self.model.embed_tokens = value
 
     @can_return_tuple
     @auto_docstring
@@ -437,38 +453,28 @@ class OpfForTokenClassification(OpfPreTrainedModel):
         input_ids: torch.LongTensor | None = None,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
-        past_key_values: None = None,
         inputs_embeds: torch.FloatTensor | None = None,
         labels: torch.LongTensor | None = None,
-        use_cache: bool | None = None,
-        output_attentions: bool | None = None,
-        output_hidden_states: bool | None = None,
-        return_dict: bool | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> TokenClassifierOutput:
-        return_dict = return_dict if return_dict is not None else self.config.return_dict
+    ) -> tuple[torch.Tensor] | TokenClassifierOutput:
+        r"""
+        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Labels for computing the token classification loss. Indices should be in `[0, ..., config.num_labels - 1]`.
+        """
         outputs = self.model(
             input_ids,
             attention_mask=attention_mask,
             position_ids=position_ids,
-            past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,
-            use_cache=use_cache,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
             **kwargs,
         )
-        sequence_output = outputs[0]
+        sequence_output = outputs.last_hidden_state
         logits = self.score(sequence_output)
 
         loss = None
         if labels is not None:
             loss = self.loss_function(logits, labels, self.config)
 
-        if not return_dict:
-            output = (logits,) + outputs[2:]
-            return ((loss,) + output) if loss is not None else output
         return TokenClassifierOutput(
             loss=loss,
             logits=logits,
@@ -477,4 +483,4 @@ class OpfForTokenClassification(OpfPreTrainedModel):
         )
 
 
-__all__ = ["OpfForTokenClassification", "OpfModel", "OpfPreTrainedModel"]
+__all__ = ["PrivacyFilterForTokenClassification", "PrivacyFilterModel", "PrivacyFilterPreTrainedModel"]
