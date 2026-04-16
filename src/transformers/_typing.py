@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import logging
 from collections.abc import Mapping, MutableMapping
+from os import PathLike
 from typing import TYPE_CHECKING, Any, Protocol, TypeAlias
 
 
@@ -165,6 +166,19 @@ class GenerativePreTrainedModel(Protocol):
     def get_compiled_call(self, compile_config: Any) -> Any: ...
     def set_experts_implementation(self, *args: Any, **kwargs: Any) -> Any: ...
     def _supports_logits_to_keep(self) -> bool: ...
+
+
+class StringValuedEnumLike(Protocol):
+    value: str
+
+
+class PeftConfigLike(Protocol):
+    peft_type: StringValuedEnumLike
+    is_prompt_learning: bool
+    base_model_name_or_path: str | PathLike[str] | None
+    inference_mode: bool
+
+    def save_pretrained(self, save_directory: str | PathLike[str], **kwargs: Any) -> None: ...
 
 
 class WhisperGenerationConfigLike(Protocol):

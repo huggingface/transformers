@@ -63,7 +63,8 @@ MIN_PEFT_VERSION = "0.18.2"
 logger = logging.get_logger(__name__)
 
 if TYPE_CHECKING:
-    from ..modeling_utils import LoadStateDictConfig
+    from .._typing import PeftConfigLike
+    from ..modeling_utils import LoadStateDictConfig, LoadStateDictInfo
 
 
 # TODO: remove once PEFT < 0.19 no longer supported
@@ -424,6 +425,7 @@ class PeftAdapterMixin:
 
     _hf_peft_config_loaded = False
     _prepare_peft_hotswap_kwargs: dict | None = None
+    peft_config: dict[str, "PeftConfigLike"]
 
     def load_adapter(
         self,
@@ -438,7 +440,7 @@ class PeftAdapterMixin:
         adapter_kwargs: dict[str, Any] | None = None,
         load_config: Optional["LoadStateDictConfig"] = None,
         **kwargs,
-    ) -> None:
+    ) -> "LoadStateDictInfo":
         """
         Load adapter weights from file or remote Hub folder. If you are not familiar with adapters and PEFT methods, we
         invite you to read more about them on PEFT official documentation: https://huggingface.co/docs/peft
@@ -696,6 +698,7 @@ class PeftAdapterMixin:
             loading_info=loading_info,
             logger=logger,
         )
+        return loading_info
 
     def enable_peft_hotswap(
         self, target_rank: int = 128, check_compiled: Literal["error", "warn", "ignore"] = "error"

@@ -29,7 +29,7 @@ from dataclasses import dataclass, field
 from functools import partial, wraps
 from itertools import cycle
 from threading import Thread
-from typing import TYPE_CHECKING, Any, TypeVar, get_type_hints
+from typing import TYPE_CHECKING, Any, TypeVar, get_type_hints, overload
 from zipfile import is_zipfile
 
 import torch
@@ -1853,11 +1853,11 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             `str`: The final attention implementation to use, including potential fallbacks from sdpa to eager, or from
             None to sdpa (to potentially eager).
         """
+        is_paged = attn_implementation is not None and attn_implementation.startswith("paged|")
+        base_implementation = attn_implementation.removeprefix("paged|") if attn_implementation is not None else None
+
         # Auto-correct model's default flash implementation if specified
         if attn_implementation is not None:
-            is_paged = attn_implementation.startswith("paged|")
-            base_implementation = attn_implementation.removeprefix("paged|")
-
             compatible_flash_implementations = getattr(self, "_compatible_flash_implementations", None)
             if (
                 is_flash_attention_requested(requested_attention_implementation=base_implementation)
@@ -1873,18 +1873,18 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                     f"Automatically falling back to `{default_flash_implementation}` instead of `{attn_implementation}`."
                 )
                 attn_implementation = default_flash_implementation
+                is_paged = attn_implementation.startswith("paged|")
+                base_implementation = attn_implementation.removeprefix("paged|")
 
         applicable_attn_implementation = attn_implementation
-        is_paged = attn_implementation is not None and attn_implementation.startswith("paged|")
-        requested_attn_base = attn_implementation.removeprefix("paged|") if attn_implementation is not None else None
 
         requested_original_flash_attn = False
-        if is_flash_attention_requested(requested_attention_implementation=attn_implementation):
+        if is_flash_attention_requested(requested_attention_implementation=base_implementation):
             # If FA not installed, do not fail but use kernels instead if possible
             for fa_version in FLASH_ATTENTION_COMPATIBILITY_MATRIX.keys():
                 # Check whether we have an original FA requested but not available in the env
                 if (
-                    requested_attn_base == f"flash_attention_{fa_version}"
+                    base_implementation == f"flash_attention_{fa_version}"
                     and not FLASH_ATTENTION_COMPATIBILITY_MATRIX[fa_version]["general_availability_check"]()
                 ):
                     requested_original_flash_attn = True
@@ -1893,14 +1893,13 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         if (
             self._supports_flash_attn
             and requested_original_flash_attn
+            and base_implementation is not None
             and is_kernels_available()
             and not is_torch_npu_available()
         ):
-            if requested_attn_base is None:
-                raise ValueError("Requested flash attention fallback without an attention implementation.")
-            applicable_attn_implementation = FLASH_ATTN_KERNEL_FALLBACK[requested_attn_base]
+            applicable_attn_implementation = FLASH_ATTN_KERNEL_FALLBACK[base_implementation]
 
-            if is_torch_xpu_available() and requested_attn_base == "flash_attention_2":
+            if is_torch_xpu_available() and base_implementation == "flash_attention_2":
                 # On XPU, kernels library is the native implementation
                 # Disabling this flag to avoid giving wrong fallbacks on errors and warnings
                 requested_original_flash_attn = False
@@ -1926,10 +1925,8 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                     )
             except Exception as e:
                 # raise the proper exception for requested flash attention
-                if requested_original_flash_attn:
-                    if requested_attn_base is None:
-                        raise ValueError("Requested flash attention fallback without an attention implementation.")
-                    fa_version = int(requested_attn_base[-1])  # "flash_attention_(2|3|...)"
+                if requested_original_flash_attn and base_implementation is not None:
+                    fa_version = int(base_implementation[-1])  # "flash_attention_(2|3|...)"
                     self._flash_attn_can_dispatch(flash_attn_version=fa_version, is_init_check=is_init_check)
 
                 # error properly out if a kernel was specifically requested
@@ -2466,8 +2463,8 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             setattr(torch.nn.Module, "smart_apply", smart_apply)
 
         # Let the magic happen with this simple call
-        smart_apply_fn = getattr(torch.nn.Module, "smart_apply")
-        smart_apply_fn(self, self._initialize_weights, self.is_remote_code())
+        smart_apply_fn = getattr(self, "smart_apply")
+        smart_apply_fn(self._initialize_weights, self.is_remote_code())
 
     def get_expanded_tied_weights_keys(self, all_submodels: bool = False) -> dict:
         r"""
@@ -3348,8 +3345,6 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
 
         # Only save the model itself if we are using distributed training
         model_to_save = unwrap_model(self)
-        if not isinstance(model_to_save, PreTrainedModel):
-            raise TypeError(f"Expected `unwrap_model` to return a `PreTrainedModel`, got {type(model_to_save)!r}.")
         # save the string version of dtype to the config, e.g. convert torch.float32 => "float32"
         # we currently don't use this setting automatically, but may start to use with v5
         dtype = model_to_save.dtype
@@ -3396,8 +3391,6 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                 active_adapter = active_adapter[0]
 
                 current_peft_config = self.peft_config[active_adapter]
-                if not hasattr(current_peft_config, "save_pretrained"):
-                    raise TypeError("Expected the active PEFT config to define `save_pretrained`.")
                 current_peft_config.save_pretrained(save_directory)
 
         # Get the model state_dict
@@ -4289,8 +4282,6 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             )
 
         if output_loading_info:
-            if loading_info is None:
-                raise TypeError("Expected loading information when `output_loading_info=True`.")
             return model, loading_info.to_dict()
         return model
 
@@ -4304,7 +4295,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
     ) -> tuple[LoadStateDictInfo, dict]:
         """Perform the actual loading of some checkpoints into a `model`, by reading them from disk and dispatching them accordingly."""
         hf_quantizer = load_config.hf_quantizer
-        is_quantized = hf_quantizer is not None
+        is_quantized = load_config.is_quantized
         is_hqq_or_quark = hf_quantizer is not None and hf_quantizer.quantization_config.quant_method in {
             QuantizationMethod.HQQ,
             QuantizationMethod.QUARK,
@@ -4844,6 +4835,14 @@ if PreTrainedModel.push_to_hub.__doc__ is not None:
     PreTrainedModel.push_to_hub.__doc__ = PreTrainedModel.push_to_hub.__doc__.format(
         object="model", object_class="AutoModel", object_files="model file"
     )
+
+
+@overload
+def unwrap_model(model: PreTrainedModel, recursive: bool = False) -> PreTrainedModel: ...
+
+
+@overload
+def unwrap_model(model: nn.Module, recursive: bool = False) -> nn.Module: ...
 
 
 def unwrap_model(model: nn.Module, recursive: bool = False) -> nn.Module:
