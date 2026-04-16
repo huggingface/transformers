@@ -358,7 +358,6 @@ MODELS_WITH_INCORRECT_HUB_TOKENIZER_CLASS: set[str] = {
     "internvl_chat",
     "jamba",
     "janus",
-    "kimi_k25",
     "llava",
     "llava_next",
     "minicpmv",
@@ -374,6 +373,7 @@ MODELS_WITH_INCORRECT_HUB_TOKENIZER_CLASS: set[str] = {
     "phi3_v",
     "phimoe",
     "step3p5",
+    "step3_vl",
     "vipllava",
     "cohere_asr",
 }

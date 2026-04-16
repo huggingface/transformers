@@ -237,8 +237,15 @@ class ModelManager:
         if progress_callback is not None:
             progress_callback({"status": "loading", "model": model_id_and_revision, "stage": "config"})
         config = AutoConfig.from_pretrained(model_id, **model_kwargs)
-        architecture = getattr(transformers, config.architectures[0])
 
+        from transformers.models.auto.modeling_auto import MODEL_FOR_MULTIMODAL_LM_MAPPING_NAMES
+
+        if config.model_type in MODEL_FOR_MULTIMODAL_LM_MAPPING_NAMES:
+            from transformers import AutoModelForMultimodalLM
+
+            return AutoModelForMultimodalLM.from_pretrained(model_id, **model_kwargs)
+
+        architecture = getattr(transformers, config.architectures[0])
         return architecture.from_pretrained(model_id, **model_kwargs)
 
     def load_model_and_processor(
@@ -387,7 +394,7 @@ class ModelManager:
                 If a plain tokenizer (not a multi-modal processor), short-circuits to LLM.
 
         Returns:
-            `Modality`: The detected modality (``Modality.LLM`` or ``Modality.VLM``).
+            `Modality`: The detected modality (``Modality.LLM``, ``Modality.VLM``, or ``Modality.MULTIMODAL``).
         """
         if processor is not None and isinstance(processor, PreTrainedTokenizerBase):
             return Modality.LLM
@@ -395,10 +402,13 @@ class ModelManager:
         from transformers.models.auto.modeling_auto import (
             MODEL_FOR_CAUSAL_LM_MAPPING_NAMES,
             MODEL_FOR_IMAGE_TEXT_TO_TEXT_MAPPING_NAMES,
+            MODEL_FOR_MULTIMODAL_LM_MAPPING_NAMES,
         )
 
         model_classname = model.__class__.__name__
-        if model_classname in MODEL_FOR_IMAGE_TEXT_TO_TEXT_MAPPING_NAMES.values():
+        if model_classname in MODEL_FOR_MULTIMODAL_LM_MAPPING_NAMES.values():
+            return Modality.MULTIMODAL
+        elif model_classname in MODEL_FOR_IMAGE_TEXT_TO_TEXT_MAPPING_NAMES.values():
             return Modality.VLM
         elif model_classname in MODEL_FOR_CAUSAL_LM_MAPPING_NAMES.values():
             return Modality.LLM
@@ -420,6 +430,7 @@ class ModelManager:
         from transformers.models.auto.modeling_auto import (
             MODEL_FOR_CAUSAL_LM_MAPPING_NAMES,
             MODEL_FOR_IMAGE_TEXT_TO_TEXT_MAPPING_NAMES,
+            MODEL_FOR_MULTIMODAL_LM_MAPPING_NAMES,
         )
 
         generative_models = []
@@ -441,8 +452,9 @@ class ModelManager:
                 architectures = config["architectures"]
                 llms = MODEL_FOR_CAUSAL_LM_MAPPING_NAMES.values()
                 vlms = MODEL_FOR_IMAGE_TEXT_TO_TEXT_MAPPING_NAMES.values()
+                multimodal = MODEL_FOR_MULTIMODAL_LM_MAPPING_NAMES.values()
 
-                if any(arch for arch in architectures if arch in [*llms, *vlms]):
+                if any(arch for arch in architectures if arch in [*llms, *vlms, *multimodal]):
                     author = repo.repo_id.split("/") if "/" in repo.repo_id else ""
                     repo_handle = repo.repo_id + (f"@{ref}" if ref != "main" else "")
                     generative_models.append(

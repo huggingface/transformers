@@ -44,6 +44,7 @@ from transformers.testing_utils import (
     require_multipart,
     require_serve,
     require_torch_accelerator,
+    require_torchcodec,
     require_vision,
     slow,
 )
@@ -208,6 +209,112 @@ class TestProcessorInputsFromMessages(unittest.TestCase):
         for msg in result:
             self.assertIsInstance(msg["content"], list)
             self.assertEqual(msg["content"][0]["type"], "text")
+
+    def test_llm_tool_use_fields_forwarded(self):
+        """Tool-use fields (tool_calls, tool_call_id) should be forwarded to processor inputs."""
+
+        get_processor_inputs_from_messages = BaseHandler.get_processor_inputs_from_messages
+
+        tool_calls = [
+            {"id": "call_1", "type": "function", "function": {"name": "get_weather", "arguments": '{"city": "Paris"}'}}
+        ]
+        messages = [
+            {"role": "user", "content": "What's the weather in Paris?"},
+            {"role": "assistant", "tool_calls": tool_calls},
+            {"role": "tool", "content": "22°C, sunny", "tool_call_id": "call_1"},
+        ]
+        result = get_processor_inputs_from_messages(messages, Modality.LLM)
+        self.assertEqual(len(result), 3)
+        self.assertEqual(result[1]["tool_calls"], tool_calls)
+        self.assertNotIn("tool_calls", result[0])
+        self.assertEqual(result[2]["tool_call_id"], "call_1")
+        self.assertNotIn("tool_call_id", result[0])
+
+    def test_vlm_tool_use_fields_forwarded(self):
+        """Tool-use fields should be forwarded for VLM modality as well."""
+
+        get_processor_inputs_from_messages = BaseHandler.get_processor_inputs_from_messages
+
+        tool_calls = [{"id": "call_1", "type": "function", "function": {"name": "describe", "arguments": "{}"}}]
+        messages = [
+            {"role": "user", "content": "Describe this"},
+            {"role": "assistant", "tool_calls": tool_calls},
+            {"role": "tool", "content": "A landscape photo", "tool_call_id": "call_1"},
+        ]
+        result = get_processor_inputs_from_messages(messages, Modality.VLM)
+        self.assertEqual(len(result), 3)
+        self.assertEqual(result[1]["tool_calls"], tool_calls)
+        self.assertEqual(result[2]["tool_call_id"], "call_1")
+
+    def test_multimodal_base64_input_audio_decoded_to_temp_file(self):
+        """input_audio with base64 data should be decoded, written to a temp file, and converted to HF audio format."""
+        import base64
+
+        get_processor_inputs_from_messages = BaseHandler.get_processor_inputs_from_messages
+
+        audio_url = "https://huggingface.co/datasets/hf-internal-testing/dummy-audio-samples/resolve/main/obama_first_45_secs.mp3"
+        audio_bytes = httpx.get(audio_url, follow_redirects=True).content
+        audio_b64 = base64.b64encode(audio_bytes).decode()
+
+        messages = [
+            {
+                "role": "user",
+                "content": [
+                    {"type": "text", "text": "What do you hear?"},
+                    {"type": "input_audio", "input_audio": {"data": audio_b64, "format": "mp3"}},
+                ],
+            }
+        ]
+        result = get_processor_inputs_from_messages(messages, Modality.MULTIMODAL)
+        self.assertEqual(len(result[0]["content"]), 2)
+        self.assertEqual(result[0]["content"][0]["type"], "text")
+        audio_item = result[0]["content"][1]
+        self.assertEqual(audio_item["type"], "audio")
+        self.assertTrue(os.path.exists(audio_item["url"]))
+        self.assertTrue(audio_item["url"].endswith(".mp3"))
+        with open(audio_item["url"], "rb") as f:
+            self.assertEqual(f.read(), audio_bytes)
+
+    def test_vlm_ignores_audio_content(self):
+        """VLM models should ignore audio content parts."""
+        import base64
+
+        get_processor_inputs_from_messages = BaseHandler.get_processor_inputs_from_messages
+
+        audio_b64 = base64.b64encode(b"fake audio").decode()
+        messages = [
+            {
+                "role": "user",
+                "content": [
+                    {"type": "text", "text": "What do you hear?"},
+                    {"type": "input_audio", "input_audio": {"data": audio_b64, "format": "mp3"}},
+                ],
+            }
+        ]
+        result = get_processor_inputs_from_messages(messages, Modality.VLM)
+        self.assertEqual(len(result[0]["content"]), 1)
+        self.assertEqual(result[0]["content"][0]["type"], "text")
+
+    def test_video_url_converted_to_hf_video_format(self):
+        """video_url content should be converted to HF video format for both VLM and MULTIMODAL."""
+        get_processor_inputs_from_messages = BaseHandler.get_processor_inputs_from_messages
+
+        video_src = "https://huggingface.co/datasets/merve/vlm_test_images/resolve/main/concert.mp4"
+        messages = [
+            {
+                "role": "user",
+                "content": [
+                    {"type": "video_url", "video_url": {"url": video_src}},
+                    {"type": "text", "text": "What is happening?"},
+                ],
+            }
+        ]
+        for modality in (Modality.VLM, Modality.MULTIMODAL):
+            with self.subTest(modality=modality):
+                result = get_processor_inputs_from_messages(messages, modality)
+                self.assertEqual(len(result[0]["content"]), 2)
+                video_item = result[0]["content"][0]
+                self.assertEqual(video_item, {"type": "video", "url": video_src})
 
 
 class TestGenerativeModelList(unittest.TestCase):
@@ -1561,6 +1668,188 @@ class TestVLM(unittest.TestCase):
             any(word in text.lower() for word in ["dog", "beach", "person"]),
             f"Expected dog/beach/person in response, got: {text}",
         )
+
+
+_AUDIO_URL = (
+    "https://huggingface.co/datasets/hf-internal-testing/dummy-audio-samples/resolve/main/obama_first_45_secs.mp3"
+)
+_VIDEO_URL = "https://huggingface.co/datasets/merve/vlm_test_images/resolve/main/concert.mp4"
+
+
+@slow
+@require_serve
+class TestMultimodalLM(unittest.TestCase):
+    """Integration tests for multimodal (audio, video) chat completions with Gemma 4."""
+
+    MODEL = "google/gemma-4-E2B-it"
+
+    @classmethod
+    def setUpClass(cls):
+        cls.serve, port = _start_serve()
+        cls.base_url = f"http://localhost:{port}"
+        cls.client = OpenAI(base_url=f"{cls.base_url}/v1", api_key="unused")
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.serve.kill_server()
+
+    def _get_audio_messages(self):
+        import base64
+
+        audio_bytes = httpx.get(_AUDIO_URL, follow_redirects=True).content
+        audio_b64 = base64.b64encode(audio_bytes).decode()
+        return [
+            {
+                "role": "user",
+                "content": [
+                    {"type": "text", "text": "Transcribe this audio."},
+                    {"type": "input_audio", "input_audio": {"data": audio_b64, "format": "mp3"}},
+                ],
+            }
+        ]
+
+    def _assert_audio_transcription(self, text):
+        self.assertIsNotNone(text)
+        self.assertIn("chicago", text.lower(), f"Expected 'chicago' in transcription, got: {text}")
+
+    def _assert_video_description(self, text):
+        self.assertIsNotNone(text)
+        self.assertTrue(
+            any(word in text.lower() for word in ["concert", "music", "stage", "perform"]),
+            f"Expected concert/music/stage/perform in response, got: {text}",
+        )
+
+    def test_chat_completion_with_audio(self):
+        """Chat completions should accept input_audio (base64) content and transcribe audio."""
+        resp = self.client.chat.completions.create(
+            model=self.MODEL,
+            messages=self._get_audio_messages(),
+            max_tokens=200,
+        )
+        self._assert_audio_transcription(resp.choices[0].message.content)
+
+    def test_chat_completion_with_audio_streaming(self):
+        """Streaming chat completions should accept input_audio (base64) content and transcribe audio."""
+        stream = self.client.chat.completions.create(
+            model=self.MODEL,
+            messages=self._get_audio_messages(),
+            max_tokens=200,
+            stream=True,
+        )
+        chunks = []
+        for chunk in stream:
+            if chunk.choices[0].delta.content:
+                chunks.append(chunk.choices[0].delta.content)
+        self._assert_audio_transcription("".join(chunks))
+
+    @require_torchcodec
+    def test_chat_completion_with_video(self):
+        """Chat completions should accept video_url content and describe video."""
+        resp = self.client.chat.completions.create(
+            model=self.MODEL,
+            messages=[
+                {
+                    "role": "user",
+                    "content": [
+                        {"type": "video_url", "video_url": {"url": _VIDEO_URL}},
+                        {"type": "text", "text": "What is happening in the video?"},
+                    ],
+                }
+            ],
+            max_tokens=200,
+        )
+        self._assert_video_description(resp.choices[0].message.content)
+
+    @require_torchcodec
+    def test_chat_completion_with_video_streaming(self):
+        """Streaming chat completions should accept video_url content and describe video."""
+        stream = self.client.chat.completions.create(
+            model=self.MODEL,
+            messages=[
+                {
+                    "role": "user",
+                    "content": [
+                        {"type": "video_url", "video_url": {"url": _VIDEO_URL}},
+                        {"type": "text", "text": "What is happening in the video?"},
+                    ],
+                }
+            ],
+            max_tokens=200,
+            stream=True,
+        )
+        chunks = []
+        for chunk in stream:
+            if chunk.choices[0].delta.content:
+                chunks.append(chunk.choices[0].delta.content)
+        self._assert_video_description("".join(chunks))
+
+    def test_responses_with_audio(self):
+        """Responses API should accept input_audio (base64) content and transcribe audio."""
+        resp = self.client.responses.create(
+            model=self.MODEL,
+            input=self._get_audio_messages(),
+            stream=False,
+            max_output_tokens=200,
+        )
+        self.assertEqual(resp.status, "completed")
+        self._assert_audio_transcription(resp.output[0].content[0].text)
+
+    def test_responses_with_audio_streaming(self):
+        """Streaming responses API should accept input_audio (base64) content and transcribe audio."""
+        stream = self.client.responses.create(
+            model=self.MODEL,
+            input=self._get_audio_messages(),
+            stream=True,
+            max_output_tokens=200,
+        )
+        text = ""
+        for event in stream:
+            if event.type == "response.output_text.delta":
+                text += event.delta
+        self._assert_audio_transcription(text)
+
+    @require_torchcodec
+    def test_responses_with_video(self):
+        """Responses API should accept video_url content and describe video."""
+        resp = self.client.responses.create(
+            model=self.MODEL,
+            input=[
+                {
+                    "role": "user",
+                    "content": [
+                        {"type": "video_url", "video_url": {"url": _VIDEO_URL}},
+                        {"type": "text", "text": "What is happening in the video?"},
+                    ],
+                }
+            ],
+            stream=False,
+            max_output_tokens=200,
+        )
+        self.assertEqual(resp.status, "completed")
+        self._assert_video_description(resp.output[0].content[0].text)
+
+    @require_torchcodec
+    def test_responses_with_video_streaming(self):
+        """Streaming responses API should accept video_url content and describe video."""
+        stream = self.client.responses.create(
+            model=self.MODEL,
+            input=[
+                {
+                    "role": "user",
+                    "content": [
+                        {"type": "video_url", "video_url": {"url": _VIDEO_URL}},
+                        {"type": "text", "text": "What is happening in the video?"},
+                    ],
+                }
+            ],
+            stream=True,
+            max_output_tokens=200,
+        )
+        text = ""
+        for event in stream:
+            if event.type == "response.output_text.delta":
+                text += event.delta
+        self._assert_video_description(text)
 
 
 @slow
