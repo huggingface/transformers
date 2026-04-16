@@ -564,7 +564,7 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
             if "attention_mask" in model_inputs:
                 inputs["attention_mask"] = model_inputs.pop("attention_mask")
             outputs = self.model.generate(**inputs)
-            out = {"tokens": outputs}
+            out = {"tokens": outputs.sequences}
         else:
             raise ValueError("Unsupported model type {self.type}.")
 

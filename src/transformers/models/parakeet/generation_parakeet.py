@@ -117,9 +117,9 @@ class ParakeetTDTGenerationMixin(GenerationMixin):
         if encoder_outputs.attention_mask is not None:
             encoder_valid_lengths = encoder_outputs.attention_mask.sum(-1)
         else:
-            batch_size = encoder_outputs.shape[0]
+            batch_size = encoder_outputs.last_hidden_state.shape[0]
             encoder_valid_lengths = torch.full(
-                (batch_size,), encoder_outputs.last_hidden_state.shape[1], dtype=torch.long, device=encoder_outputs.device
+                (batch_size,), encoder_outputs.last_hidden_state.shape[1], dtype=torch.long, device=encoder_outputs.last_hidden_state.device
             )
         model_kwargs["encoder_valid_lengths"] = encoder_valid_lengths
 
