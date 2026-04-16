@@ -1698,11 +1698,7 @@ def create_tiny_models(
     report_path = os.path.join(output_path, "reports")
     os.makedirs(report_path, exist_ok=True)
 
-    _pytorch_arch_mappings = [
-        x
-        for x in dir(transformers_module)
-        if x.startswith("MODEL_") and x.endswith("_MAPPING") and x != "MODEL_NAMES_MAPPING"
-    ]
+    _pytorch_arch_mappings = [x for x in dir(transformers_module) if x.startswith("MODEL_") and x.endswith("_MAPPING")]
 
     pytorch_arch_mappings = [getattr(transformers_module, x) for x in _pytorch_arch_mappings]
 

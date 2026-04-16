@@ -25,7 +25,7 @@ from ...utils import auto_docstring
 @auto_docstring(checkpoint="Qwen/Qwen2-VL-7B-Instruct")
 @strict
 class Qwen2VLVisionConfig(PreTrainedConfig):
-    model_type = "qwen2_vl"
+    model_type = "qwen2_vl_vision"
     base_config_key = "vision_config"
 
     depth: int = 32
@@ -183,4 +183,4 @@ class Qwen2VLConfig(PreTrainedConfig):
         super().__post_init__(**kwargs)
 
 
-__all__ = ["Qwen2VLConfig", "Qwen2VLTextConfig"]
+__all__ = ["Qwen2VLConfig", "Qwen2VLTextConfig", "Qwen2VLVisionConfig"]
