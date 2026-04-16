@@ -150,9 +150,7 @@ class VJEPA2Embeddings(nn.Module):
         # (batch_size, channels, num_frames, height, width)
         pixel_values_videos = pixel_values_videos.permute(0, 2, 1, 3, 4)
 
-        is_image = (
-            self.config.img_temporal_dim_size is not None and num_frames == self.config.img_temporal_dim_size
-        )
+        is_image = self.config.img_temporal_dim_size is not None and num_frames == self.config.img_temporal_dim_size
 
         if is_image and self.patch_embeddings_img is not None:
             target_dtype = self.patch_embeddings_img.proj.weight.dtype
@@ -474,9 +472,12 @@ class VJEPA2Encoder(nn.Module):
             self.norms_block = nn.ModuleList(
                 [nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps) for _ in config.hierarchical_layers]
             )
+            n_dist = config.n_output_distillation if config.n_output_distillation > 0 else 1
+            self._extraction_layers = config.hierarchical_layers[-n_dist:]
             self.layernorm = None
         else:
             self.norms_block = None
+            self._extraction_layers = None
             self.layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
 
         self.gradient_checkpointing = False
@@ -494,10 +495,10 @@ class VJEPA2Encoder(nn.Module):
             layer_outputs = layer_module(hidden_states, None, **kwargs)
             hidden_states = layer_outputs[0]
 
-            if self.norms_block is not None and self.config.hierarchical_layers is not None:
-                if i in self.config.hierarchical_layers:
-                    idx = self.config.hierarchical_layers.index(i)
-                    hierarchical_outputs.append(self.norms_block[idx](hidden_states))
+            if self.norms_block is not None and self._extraction_layers is not None:
+                if i in self._extraction_layers:
+                    norm_idx = self.config.hierarchical_layers.index(i)
+                    hierarchical_outputs.append(self.norms_block[norm_idx](hidden_states))
 
         if self.norms_block is not None and hierarchical_outputs:
             hidden_states = torch.cat(hierarchical_outputs, dim=-1)
@@ -536,8 +537,8 @@ class VJEPA2PredictorEmbeddings(nn.Module):
 
         self.config = config
 
-        n_hier = len(config.hierarchical_layers) if config.hierarchical_layers else 1
-        encoder_output_dim = config.hidden_size * n_hier
+        n_dist = config.n_output_distillation if config.n_output_distillation > 0 else 1
+        encoder_output_dim = config.hidden_size * n_dist
 
         if config.n_output_distillation > 1:
             self.predictor_embeddings = nn.Sequential(
@@ -636,12 +637,13 @@ class VJEPA2Predictor(nn.Module):
         )
         self.layernorm = nn.LayerNorm(config.pred_hidden_size, eps=config.layer_norm_eps)
 
-        n_hier = len(config.hierarchical_layers) if config.hierarchical_layers else 1
+        n_dist = config.n_output_distillation if config.n_output_distillation > 0 else 1
         if config.teacher_embed_dim is not None:
+            n_hier = len(config.hierarchical_layers) if config.hierarchical_layers else 1
             out_embed_dim = config.teacher_embed_dim // n_hier
         else:
             out_embed_dim = config.hidden_size
-        proj_output_dim = n_hier * out_embed_dim
+        proj_output_dim = n_dist * out_embed_dim
 
         self.proj = nn.Linear(config.pred_hidden_size, proj_output_dim, bias=True)
 
