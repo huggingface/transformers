@@ -505,6 +505,33 @@ def _build_checkpoint_conversion_mapping():
             WeightRenaming(source_patterns="norm1", target_patterns="post_attention_layernorm"),
             WeightRenaming(source_patterns="norm2", target_patterns="post_mlp_layernorm"),
         ],
+        "qianfan_ocr": [
+            WeightRenaming(r"^vision_model\.", r"model\.vision_tower\."),
+            WeightRenaming(r"encoder\.layers\.", r"layers\."),
+            WeightRenaming(r"\.ls1", r"\.lambda_1"),
+            WeightRenaming(r"\.ls2", r"\.lambda_2"),
+            WeightRenaming(r"(layers\.\d+)\.attn\.proj\.", r"\1.attention.projection_layer."),
+            WeightConverter(
+                source_patterns=["attn.qkv.weight"],
+                target_patterns=["attention.q_proj.weight", "attention.k_proj.weight", "attention.v_proj.weight"],
+                operations=[Chunk(dim=0)],
+            ),
+            WeightConverter(
+                source_patterns=["attn.qkv.bias"],
+                target_patterns=["attention.q_proj.bias", "attention.k_proj.bias", "attention.v_proj.bias"],
+                operations=[Chunk(dim=0)],
+            ),
+            WeightRenaming(r"\.norm1\.", r"\.layernorm_before\."),
+            WeightRenaming(r"\.norm2\.", r"\.layernorm_after\."),
+            WeightRenaming(r"\.embeddings\.class_embedding", r"\.embeddings\.cls_token"),
+            WeightRenaming(r"\.embeddings\.position_embedding", r"\.embeddings\.position_embeddings"),
+            WeightRenaming(r"\.embeddings\.patch_embedding\.", r"\.embeddings\.patch_embeddings\.projection\."),
+            WeightRenaming(r"^language_model\.model\.", r"model\.language_model\."),
+            WeightRenaming(r"^language_model\.lm_head\.", r"lm_head\."),
+            WeightRenaming(r"^mlp1\.0\.", r"model\.multi_modal_projector\.layer_norm\."),
+            WeightRenaming(r"^mlp1\.1\.", r"model\.multi_modal_projector\.linear_1\."),
+            WeightRenaming(r"^mlp1\.3\.", r"model\.multi_modal_projector\.linear_2\."),
+        ],
     }
     # The legacy mapping is added to the esm model here since the extra weight renaming do not apply to the esm model.
     mapping["esm"] += mapping["legacy"].copy()
@@ -590,34 +617,6 @@ def _build_checkpoint_conversion_mapping():
         WeightRenaming(r"\.layer_norm_3\.", r".final_layernorm."),
         WeightRenaming(r"\.conv\.batch_norm", r".conv.norm"),
         WeightRenaming(r"log_softmax\.mlp\.layer0", r"proj_out"),
-    ]
-
-    mapping["qianfan_ocr"] = [
-        WeightRenaming(r"^vision_model\.", r"model\.vision_tower\."),
-        WeightRenaming(r"encoder\.layers\.", r"layers\."),
-        WeightRenaming(r"\.ls1", r"\.lambda_1"),
-        WeightRenaming(r"\.ls2", r"\.lambda_2"),
-        WeightRenaming(r"(layers\.\d+)\.attn\.proj\.", r"\1.attention.projection_layer."),
-        WeightConverter(
-            source_patterns=["attn.qkv.weight"],
-            target_patterns=["attention.q_proj.weight", "attention.k_proj.weight", "attention.v_proj.weight"],
-            operations=[Chunk(dim=0)],
-        ),
-        WeightConverter(
-            source_patterns=["attn.qkv.bias"],
-            target_patterns=["attention.q_proj.bias", "attention.k_proj.bias", "attention.v_proj.bias"],
-            operations=[Chunk(dim=0)],
-        ),
-        WeightRenaming(r"\.norm1\.", r"\.layernorm_before\."),
-        WeightRenaming(r"\.norm2\.", r"\.layernorm_after\."),
-        WeightRenaming(r"\.embeddings\.class_embedding", r"\.embeddings\.cls_token"),
-        WeightRenaming(r"\.embeddings\.position_embedding", r"\.embeddings\.position_embeddings"),
-        WeightRenaming(r"\.embeddings\.patch_embedding\.", r"\.embeddings\.patch_embeddings\.projection\."),
-        WeightRenaming(r"^language_model\.model\.", r"model\.language_model\."),
-        WeightRenaming(r"^language_model\.lm_head\.", r"lm_head\."),
-        WeightRenaming(r"^mlp1\.0\.", r"model\.multi_modal_projector\.layer_norm\."),
-        WeightRenaming(r"^mlp1\.1\.", r"model\.multi_modal_projector\.linear_1\."),
-        WeightRenaming(r"^mlp1\.3\.", r"model\.multi_modal_projector\.linear_2\."),
     ]
 
     for model_type, base_pattern in _MODEL_TO_CONVERSION_PATTERN.items():
