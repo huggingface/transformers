@@ -813,7 +813,11 @@ class PrefixChange(WeightRenaming):
         prefix = rf"{self.model_prefix}\." if self.model_prefix != "" else ""
 
         if prefix_to_add is not None:
-            super().__init__(source_patterns=rf"^{prefix}(.+)$", target_patterns=rf"{prefix}{prefix_to_add}\.\1")
+            # We use a lookbehind to avoid adding the prefix if we detect that it's already present
+            super().__init__(
+                source_patterns=rf"^{prefix}(?:(?!{prefix_to_add}\.))(.+)$",
+                target_patterns=rf"{prefix}{prefix_to_add}\.\1",
+            )
         else:
             super().__init__(source_patterns=rf"^{prefix}{prefix_to_remove}\.(.+)$", target_patterns=rf"{prefix}\1")
 
