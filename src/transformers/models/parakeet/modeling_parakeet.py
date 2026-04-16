@@ -1051,9 +1051,9 @@ class ParakeetForTDT(ParakeetPreTrainedModel, ParakeetTDTGenerationMixin):
 
         decoder_hidden_states = self.decoder(decoder_input_ids, cache=decoder_cache)
         logits = self.joint(
-            encoder_hidden_states=encoder_outputs.pooler_output,
-            decoder_hidden_states=decoder_hidden_states,
-        )
+            encoder_hidden_states=encoder_outputs.pooler_output[:, :, None, :],
+            decoder_hidden_states=decoder_hidden_states[:, None, :, :],
+        ).squeeze(2)
 
         loss = None
         if labels is not None:

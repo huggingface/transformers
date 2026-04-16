@@ -40,7 +40,9 @@ class ParakeetProcessorKwargs(ProcessingKwargs, total=False):
 
 @auto_docstring
 class ParakeetProcessor(ProcessorMixin):
-    def __init__(self, feature_extractor, tokenizer):
+    def __init__(self, feature_extractor, tokenizer, blank_token="<blank>"):
+        self.blank_token = blank_token
+        self.blank_token_id = tokenizer.convert_tokens_to_ids(blank_token)
         super().__init__(feature_extractor, tokenizer)
 
     @auto_docstring
@@ -84,6 +86,13 @@ class ParakeetProcessor(ProcessorMixin):
             return inputs
         else:
             inputs["labels"] = encodings["input_ids"]
+            # Prepend blank token to labels to form decoder_input_ids.
+            # The TDT decoder expects [blank, label_0, ..., label_{U-1}] as input,
+            if isinstance(text, str):
+                text = [text]
+            decoder_text = [self.blank_token + t for t in text]
+            decoder_encodings = self.tokenizer(decoder_text, **output_kwargs["text_kwargs"])
+            inputs["decoder_input_ids"] = decoder_encodings["input_ids"]
             return inputs
 
     @property
@@ -106,7 +115,6 @@ class ParakeetProcessor(ProcessorMixin):
             output_kwargs = self._merge_kwargs(
                 ParakeetProcessorKwargs,
                 tokenizer_init_kwargs=self.tokenizer.init_kwargs,
-                **kwargs,
             )
             frame_rate = (
                 self.feature_extractor.hop_length
@@ -117,7 +125,7 @@ class ParakeetProcessor(ProcessorMixin):
             for batch_ids, batch_timestamps, batch_durations in zip(token_ids, timestamps, durations):
                 # See `compute_rnnt_timestamps` in NeMo: https://github.com/NVIDIA-NeMo/NeMo/blob/1692a8fb97e1aadc883cfadd2a57c4e8a1b793aa/nemo/collections/asr/parts/submodules/rnnt_decoding.py#L993
                 # Filter padding and blank tokens
-                blank_token_id = self.tokenizer.convert_tokens_to_ids("<blank>")
+                blank_token_id = self.blank_token_id
                 skip_ids = {self.tokenizer.pad_token_id, blank_token_id}
                 non_blank_indices = [
                     i for i, token_id in enumerate(batch_ids) if int(token_id) not in skip_ids
