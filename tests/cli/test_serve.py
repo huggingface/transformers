@@ -18,7 +18,6 @@ Tests for the serving layer.
 
 import asyncio
 import json
-import os
 import socket
 import time
 import unittest
@@ -170,8 +169,8 @@ class TestProcessorInputsFromMessages(unittest.TestCase):
         self.assertEqual(result[0]["content"], "Hello world")
 
     @require_vision
-    def test_vlm_base64_image_creates_temp_file(self):
-        """Base64 image URLs should be decoded and saved to a temp file."""
+    def test_vlm_base64_image_passed_through(self):
+        """Base64 image URLs should be passed through as-is for the processor to handle."""
 
         get_processor_inputs_from_messages = BaseHandler.get_processor_inputs_from_messages
 
@@ -192,7 +191,7 @@ class TestProcessorInputsFromMessages(unittest.TestCase):
         result = get_processor_inputs_from_messages(messages, Modality.VLM)
         image_item = result[0]["content"][1]
         self.assertEqual(image_item["type"], "image")
-        self.assertTrue(os.path.exists(image_item["url"]))  # temp file was created
+        self.assertEqual(image_item["url"], base64_url)
 
     def test_vlm_multi_turn(self):
         """VLM multi-turn: string content should be wrapped in text type."""
@@ -246,8 +245,8 @@ class TestProcessorInputsFromMessages(unittest.TestCase):
         self.assertEqual(result[1]["tool_calls"], tool_calls)
         self.assertEqual(result[2]["tool_call_id"], "call_1")
 
-    def test_multimodal_base64_input_audio_decoded_to_temp_file(self):
-        """input_audio with base64 data should be decoded, written to a temp file, and converted to HF audio format."""
+    def test_multimodal_base64_input_audio_converted_to_data_uri(self):
+        """input_audio with base64 data should be converted to a data URI for the processor to handle."""
         import base64
 
         get_processor_inputs_from_messages = BaseHandler.get_processor_inputs_from_messages
@@ -270,10 +269,8 @@ class TestProcessorInputsFromMessages(unittest.TestCase):
         self.assertEqual(result[0]["content"][0]["type"], "text")
         audio_item = result[0]["content"][1]
         self.assertEqual(audio_item["type"], "audio")
-        self.assertTrue(os.path.exists(audio_item["url"]))
-        self.assertTrue(audio_item["url"].endswith(".mp3"))
-        with open(audio_item["url"], "rb") as f:
-            self.assertEqual(f.read(), audio_bytes)
+        self.assertTrue(audio_item["url"].startswith("data:audio/mp3;base64,"))
+        self.assertIn(audio_b64, audio_item["url"])
 
     def test_vlm_ignores_audio_content(self):
         """VLM models should ignore audio content parts."""
@@ -1014,10 +1011,27 @@ class TestResponseInputConversion(unittest.TestCase):
         self.assertEqual(len(msgs), 2)
         self.assertEqual(msgs[0]["content"], "New")
 
-    def test_dict_input(self):
+    def test_flat_content_list(self):
+        """Flat content list (Responses API native) is wrapped as a single user message."""
         handler = self._make_handler()
-        msgs = handler._input_to_messages({"input": {"role": "user", "content": "Test"}})
-        self.assertEqual(msgs, [{"role": "user", "content": "Test"}])
+        flat_input = [
+            {"type": "input_text", "text": "Hello"},
+            {"type": "input_image", "image_url": "https://example.com/img.jpg"},
+        ]
+        msgs = handler._input_to_messages({"input": flat_input})
+        self.assertEqual(len(msgs), 1)
+        self.assertEqual(msgs[0]["role"], "user")
+        self.assertEqual(msgs[0]["content"], flat_input)
+
+    def test_flat_content_list_with_instructions(self):
+        """Flat content list with instructions prepends a system message."""
+        handler = self._make_handler()
+        flat_input = [{"type": "input_text", "text": "Hello"}]
+        msgs = handler._input_to_messages({"input": flat_input, "instructions": "Be brief"})
+        self.assertEqual(len(msgs), 2)
+        self.assertEqual(msgs[0], {"role": "system", "content": "Be brief"})
+        self.assertEqual(msgs[1]["role"], "user")
+        self.assertEqual(msgs[1]["content"], flat_input)
 
 
 @require_serve
@@ -1167,6 +1181,16 @@ class TestResponsesIntegration(unittest.TestCase):
         )
         self.assertEqual(resp.status, "completed")
         self.assertTrue(len(resp.output) > 0)
+        self.assertTrue(len(resp.output[0].content[0].text) > 0)
+
+    def test_flat_content_list(self):
+        """Flat content list input (Responses API native format)."""
+        resp = self.client.responses.create(
+            model=self.MODEL,
+            input=[{"type": "input_text", "text": "Say hello"}],
+            stream=False,
+        )
+        self.assertEqual(resp.status, "completed")
         self.assertTrue(len(resp.output[0].content[0].text) > 0)
 
     def test_non_streaming_usage(self):
@@ -1647,17 +1671,12 @@ class TestVLM(unittest.TestCase):
         )
 
     def test_responses_with_image(self):
-        """Responses API should accept image_url content and produce a meaningful response."""
+        """Responses API should accept input_image content and produce a meaningful response."""
         resp = self.client.responses.create(
             model=self.MODEL,
             input=[
-                {
-                    "role": "user",
-                    "content": [
-                        {"type": "text", "text": "What do you see in this image?"},
-                        {"type": "image_url", "image_url": {"url": _DOG_IMAGE_URL}},
-                    ],
-                }
+                {"type": "input_text", "text": "What do you see in this image?"},
+                {"type": "input_image", "image_url": _DOG_IMAGE_URL},
             ],
             stream=False,
             max_output_tokens=50,
@@ -1706,6 +1725,17 @@ class TestMultimodalLM(unittest.TestCase):
                     {"type": "input_audio", "input_audio": {"data": audio_b64, "format": "mp3"}},
                 ],
             }
+        ]
+
+    def _get_audio_flat_input(self):
+        """Flat content list format for Responses API."""
+        import base64
+
+        audio_bytes = httpx.get(_AUDIO_URL, follow_redirects=True).content
+        audio_b64 = base64.b64encode(audio_bytes).decode()
+        return [
+            {"type": "input_text", "text": "Transcribe this audio."},
+            {"type": "input_audio", "input_audio": {"data": audio_b64, "format": "mp3"}},
         ]
 
     def _assert_audio_transcription(self, text):
@@ -1787,7 +1817,7 @@ class TestMultimodalLM(unittest.TestCase):
         """Responses API should accept input_audio (base64) content and transcribe audio."""
         resp = self.client.responses.create(
             model=self.MODEL,
-            input=self._get_audio_messages(),
+            input=self._get_audio_flat_input(),
             stream=False,
             max_output_tokens=200,
         )
@@ -1798,7 +1828,7 @@ class TestMultimodalLM(unittest.TestCase):
         """Streaming responses API should accept input_audio (base64) content and transcribe audio."""
         stream = self.client.responses.create(
             model=self.MODEL,
-            input=self._get_audio_messages(),
+            input=self._get_audio_flat_input(),
             stream=True,
             max_output_tokens=200,
         )
@@ -1814,13 +1844,8 @@ class TestMultimodalLM(unittest.TestCase):
         resp = self.client.responses.create(
             model=self.MODEL,
             input=[
-                {
-                    "role": "user",
-                    "content": [
-                        {"type": "video_url", "video_url": {"url": _VIDEO_URL}},
-                        {"type": "text", "text": "What is happening in the video?"},
-                    ],
-                }
+                {"type": "input_text", "text": "What is happening in the video?"},
+                {"type": "video_url", "video_url": {"url": _VIDEO_URL}},
             ],
             stream=False,
             max_output_tokens=200,
@@ -1834,13 +1859,8 @@ class TestMultimodalLM(unittest.TestCase):
         stream = self.client.responses.create(
             model=self.MODEL,
             input=[
-                {
-                    "role": "user",
-                    "content": [
-                        {"type": "video_url", "video_url": {"url": _VIDEO_URL}},
-                        {"type": "text", "text": "What is happening in the video?"},
-                    ],
-                }
+                {"type": "input_text", "text": "What is happening in the video?"},
+                {"type": "video_url", "video_url": {"url": _VIDEO_URL}},
             ],
             stream=True,
             max_output_tokens=200,
