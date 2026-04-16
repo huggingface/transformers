@@ -23,6 +23,7 @@ from transformers.testing_utils import (
     is_torch_available,
 )
 from transformers.utils import is_torch_greater_or_equal, is_torchao_available
+from transformers.integrations.tensor_parallel import _replicate_dtensor
 
 
 if is_torchao_available():
@@ -48,7 +49,7 @@ def _to_local(tensor):
         #  Partial gradients for us.
 
         if isinstance(tensor, DTensor) and any(not p.is_replicate() for p in tensor.placements):
-            tensor = tensor.redistribute(placements=(Replicate(),))
+            tensor = _replicate_dtensor(tensor)
         return tensor.to_local()
     return tensor
 
