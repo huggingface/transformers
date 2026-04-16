@@ -258,7 +258,6 @@ class TestFetcherTester(unittest.TestCase):
 
     def test_get_repo_utils_tests_on_full_repo(self):
         repo_utils_tests = get_repo_utils_tests()
-        assert "tests/repo_utils/test_mlinter.py" in repo_utils_tests
         assert "tests/repo_utils/test_tests_fetcher.py" in repo_utils_tests
 
     def test_should_run_repo_utils_tests(self):
@@ -270,7 +269,6 @@ class TestFetcherTester(unittest.TestCase):
             create_test_list_from_filter(
                 [
                     "tests/models/bert/test_modeling_bert.py",
-                    "tests/repo_utils/test_mlinter.py",
                     "tests/repo_utils/test_tests_fetcher.py",
                 ],
                 out_path=tmp_folder,
@@ -280,7 +278,6 @@ class TestFetcherTester(unittest.TestCase):
                 repo_utils_tests = f.read().splitlines()
 
             assert repo_utils_tests == [
-                "tests/repo_utils/test_mlinter.py",
                 "tests/repo_utils/test_tests_fetcher.py",
             ]
 
@@ -308,7 +305,7 @@ class TestFetcherTester(unittest.TestCase):
             infer_tests_to_run("unused.txt", diff_with_last_commit=True)
 
         test_files_to_run = mock_create_test_list.call_args.args[0]
-        assert "tests/repo_utils/test_mlinter.py" in test_files_to_run
+        assert "tests/repo_utils/test_tests_fetcher.py" in test_files_to_run
 
     def test_diff_is_docstring_only(self):
         with tempfile.TemporaryDirectory() as tmp_folder:
