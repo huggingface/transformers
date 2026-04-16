@@ -1183,9 +1183,8 @@ def _build_scatter_list(
             cursor += byte_size
             continue
         full = full[0] if isinstance(full, list) else full
-        if full.device != torch.device(local_device):
-            full = full.to(device=local_device)
-        full = full.contiguous()
+        # No .to(device) — spawn_materialize already landed the tensor on local_device.
+        # No .contiguous() guard — safetensors slices materialise contiguous by construction.
 
         if tp_layer is not None:
             shards = _batch_shard_for_scatter(full, tp_layer, world_size)
@@ -1269,7 +1268,6 @@ def _batch_shard_for_scatter(full_tensor: torch.Tensor, tp_layer, world_size: in
     return [torch.cat([c0, c1], dim=dim).contiguous() for c0, c1 in zip(chunks0, chunks1)]
 
 
-@torch.no_grad()
 def _redistribute_async(
     realized_value: dict[str, list[torch.Tensor] | torch.Tensor],
     mapping: WeightTransform,
@@ -1627,20 +1625,15 @@ def convert_and_load_state_dict_in_model(
     # thread pool at once is what gives us cross-mapping disk I/O parallelism. Each rank only schedules for its
     # own mappings (so no duplicated reads across ranks). Non-owned mappings stay with empty `collected_tensors`
     # and are handled as receivers in the redistribute step.
-    # Schedule materialize to the target device directly (GPU under TP). The thread pool reads from disk via
-    # safetensors mmap and lands the tensor on the target device in one shot — no CPU staging + separate
-    # CPU→GPU copy per mapping.
-    for first_param_name, entries in pending_entries.items():
-        if mapping_to_source_rank[first_param_name] != local_rank:
-            continue
-        mapping = param_name_to_load[first_param_name]
-        for target_key, original_key, source_pattern, tensor, _dtype in entries:
-            if distributed_loading:
-                param_device = device_map[""]
-            else:
+    # For distributed loading, we schedule per-batch (below) to enable DMA/scatter overlap.
+    # For non-distributed, schedule all materialize jobs up front as before.
+    if not distributed_loading:
+        for first_param_name, entries in pending_entries.items():
+            mapping = param_name_to_load[first_param_name]
+            for target_key, original_key, source_pattern, tensor, _dtype in entries:
                 param_device = get_device(device_map, target_key, valid_torch_device=True)
-            future_or_tensor = spawn_materialize(thread_pool, tensor, param_device, _dtype)
-            mapping.add_tensor(target_key, original_key, source_pattern, future_or_tensor)
+                future_or_tensor = spawn_materialize(thread_pool, tensor, param_device, _dtype)
+                mapping.add_tensor(target_key, original_key, source_pattern, future_or_tensor)
 
     def _finalize_mapping(work_handles, params, mapping_obj):
         """Wait for all async comms to finish, then assign params to the model."""
@@ -1689,114 +1682,113 @@ def convert_and_load_state_dict_in_model(
                 del realized_value
 
         else:
-            # ── Packed + coalesced TP load ─────────────────────────────────────────────────────
-            # For each batch of mappings, we group them by source rank and do ONE packed scatter
-            # per source rank, where each "scatter message" is a concatenated uint8 buffer of all
-            # of that source's owned shards for the batch. The receivers allocate a matching recv
-            # buffer and slice it back into individual typed/shaped views after `cm.wait()`.
+            # ── Pipelined TP load with pinned-memory DMA overlap ───────────────────────────────
+            # Per batch:
+            #   1. Thread pool reads safetensors → CPU pinned memory (disk I/O, CPU-bound)
+            #   2. Main thread DMAs pinned → GPU on a dedicated CUDA stream (truly non-blocking)
+            #   3. Sync DMA stream → default; convert + pack on default stream
+            #   4. Scatter (NCCL, sync — all ranks participate)
             #
-            # This collapses K×world_size scatters per batch into world_size big scatters per
-            # batch, turning tiny NCCL ops (that are sync-barrier-bound) into few large ops (that
-            # are bandwidth-bound and actually saturate NVLink).
-            #
-            # Gloo (CPU synthetic test) has no coalescing primitive, so the coalesce manager is a
-            # nullcontext there; the packed-scatter approach still applies and is correct.
+            # Pipeline overlap: while batch N scatters (step 4), thread pool already reads
+            # batch N+1 from disk (step 1). Disk I/O and NCCL run fully concurrently.
             BATCH_SIZE = 64
-            convert_pool = ThreadPoolExecutor(max_workers=min(4, os.cpu_count() or 1))
-
-            # Recv buffers must outlive the set_param_for_module() calls (model params are views
-            # of them). Keep a list per batch so they're freed after the batch's params are
-            # written — then the next batch can reuse the allocator pool.
             group = device_mesh.get_group()
             world_size = device_mesh.size()
-            local_device_obj = torch.device(device_map[""])
+            tp_device = device_map[""]
+            local_device_obj = torch.device(tp_device)
+            use_cuda = local_device_obj.type == "cuda"
+            read_pool = ThreadPoolExecutor(max_workers=GLOBAL_WORKERS)
+
+            def _read_to_pinned(tensor_slice, _dtype):
+                """Thread-pool job: read safetensors slice → CPU pinned tensor."""
+                cpu = tensor_slice[...]
+                if _dtype is not None:
+                    cpu = cpu.to(dtype=_dtype)
+                return cpu.pin_memory() if use_cuda else cpu
+
+            # Pre-group batches.
+            batch_items_list: list[list] = []
+            owned_entries_by_batch: list[list] = []
+            for bi in range(0, len(items), BATCH_SIZE):
+                batch = items[bi : bi + BATCH_SIZE]
+                batch_items_list.append(batch)
+                owned = []
+                for fpn, _m in batch:
+                    if mapping_to_source_rank.get(fpn, local_rank) == local_rank:
+                        owned.append((fpn, pending_entries[fpn]))
+                owned_entries_by_batch.append(owned)
+
+            # Submit disk reads for batch 0 immediately (they run on CPU threads).
+            cur_read_futs: dict[str, list[tuple]] = {}
+            if owned_entries_by_batch:
+                for fpn, entries in owned_entries_by_batch[0]:
+                    cur_read_futs[fpn] = [
+                        (tk, ok, sp, read_pool.submit(_read_to_pinned, t, dt)) for tk, ok, sp, t, dt in entries
+                    ]
 
             pbar = tqdm(total=len(items), desc="Loading weights")
-            i = 0
-            while i < len(items):
-                batch = items[i : i + BATCH_SIZE]
-                i += len(batch)
+            for batch_idx, batch in enumerate(batch_items_list):
+                # ── Submit disk reads for NEXT batch (overlap with this batch's scatter) ──
+                nxt_read_futs: dict[str, list[tuple]] = {}
+                if batch_idx + 1 < len(batch_items_list):
+                    for fpn, entries in owned_entries_by_batch[batch_idx + 1]:
+                        nxt_read_futs[fpn] = [
+                            (tk, ok, sp, read_pool.submit(_read_to_pinned, t, dt)) for tk, ok, sp, t, dt in entries
+                        ]
 
-                # ── Stage A: convert all source-owned mappings in this batch (threaded) ──
-                convert_futures = {}
-                for first_param_name, mapping in batch:
-                    source_rank = mapping_to_source_rank.get(first_param_name, local_rank)
-                    if source_rank == local_rank:
-                        convert_futures[first_param_name] = convert_pool.submit(
-                            _convert_mapping, mapping, first_param_name
-                        )
+                # ── DMA: pinned CPU → GPU (synchronous for now — async DMA stream TBD) ──
+                for fpn, fut_list in cur_read_futs.items():
+                    mapping = param_name_to_load[fpn]
+                    for tk, ok, sp, fut in fut_list:
+                        pinned = fut.result()  # blocks until disk read done
+                        gpu = pinned.to(device=tp_device)
+                        mapping.add_tensor(tk, ok, sp, gpu)
+
+                # ── Convert ──
                 realized_by_name: dict[str, dict | None] = {}
                 skips: set[str] = set()
-                for first_param_name, fut in convert_futures.items():
-                    try:
-                        realized_by_name[first_param_name] = fut.result()
-                    except SkipParameters:
-                        skips.add(first_param_name)
+                for fpn, mapping in batch:
+                    src = mapping_to_source_rank.get(fpn, local_rank)
+                    if src == local_rank:
+                        try:
+                            realized_by_name[fpn] = _convert_mapping(mapping, fpn)
+                        except SkipParameters:
+                            skips.add(fpn)
 
-                # ── Stage B: plan layout (same on all ranks — no wire traffic) ──
+                # ── Plan layout ──
                 effective_batch = [bm for bm in batch if bm[0] not in skips]
                 layouts = _plan_batch_layouts(
                     effective_batch, mapping_to_source_rank, local_rank, world_size, meta_model_state_dict
                 )
 
-                # ── Stage C: all-to-all (ONE NCCL native collective per batch) ──
-                # dist.scatter decomposes into N-1 send/recv pairs on NCCL (~140 ms each).
-                # dist.all_to_all_single is natively implemented in NCCL (ncclAlltoAll) — every rank
-                # simultaneously sends its owned shards to every other rank and receives the shards
-                # it needs from them, in one shot.
-                #
-                # Build: send_buf = concat(what I send to rank 0, ..., rank N-1)
-                #        recv_buf = concat(what rank 0 sends to me, ..., rank N-1)
-                # Compute send/recv sizes (in bytes = uint8 elements).
-                # send_sizes[d] = how many bytes I send TO rank d (= my owned mappings' per-dest shard total).
-                # recv_sizes[s] = how many bytes I receive FROM rank s (= their owned mappings' per-dest shard total).
-                my_layout = layouts.get(local_rank, [])
-                my_send_per_dest = sum(e[-1] for e in my_layout)
-                send_sizes = [my_send_per_dest] * world_size
-                recv_sizes = [sum(e[-1] for e in layouts.get(s, [])) for s in range(world_size)]
-
-                total_send = sum(send_sizes)
-                total_recv = sum(recv_sizes)
-
-                send_buf = torch.zeros(total_send, dtype=torch.uint8, device=local_device_obj)
-                recv_buf = torch.empty(total_recv, dtype=torch.uint8, device=local_device_obj)
-
-                # Pack my owned shards into send_buf in dest order.
-                if my_layout:
-                    packed_per_dest = _build_scatter_list(my_layout, realized_by_name, local_device_obj, world_size)
-                    offset = 0
-                    for d in range(world_size):
-                        sz = send_sizes[d]
-                        if sz > 0:
-                            send_buf[offset : offset + sz].copy_(packed_per_dest[d])
-                        offset += sz
-                    del packed_per_dest
-
-                work = torch.distributed.all_to_all_single(
-                    recv_buf, send_buf, recv_sizes, send_sizes, group=group, async_op=True
-                )
-                work.wait()
-                del send_buf
-
-                # ── Stage D: unpack recv_buf per-source into per-param views, set on model ──
-                recv_offset = 0
-                for src in range(world_size):
-                    layout = layouts.get(src, [])
+                # ── Scatter per source rank ──
+                for src_r in range(world_size):
+                    layout = layouts.get(src_r, [])
                     if not layout:
                         continue
-                    src_bytes = recv_sizes[src]
-                    src_recv = recv_buf[recv_offset : recv_offset + src_bytes]
-                    recv_offset += src_bytes
-                    unpacked = _unpack_recv_buffer(src_recv, layout)
+                    total_bytes = sum(e[-1] for e in layout)
+                    recv_buf = torch.empty(total_bytes, dtype=torch.uint8, device=local_device_obj)
+                    src_global = torch.distributed.get_global_rank(group, src_r)
+                    if src_r == local_rank:
+                        scatter_list = _build_scatter_list(layout, realized_by_name, local_device_obj, world_size)
+                        torch.distributed.scatter(recv_buf, scatter_list=scatter_list, src=src_global, group=group)
+                        del scatter_list
+                    else:
+                        torch.distributed.scatter(recv_buf, scatter_list=None, src=src_global, group=group)
+
+                    unpacked = _unpack_recv_buffer(recv_buf, layout)
                     for concrete, (view, mapping_obj) in unpacked.items():
                         param_device = get_device(device_map, concrete)
                         if param_device == "disk" and (concrete not in model_buffers or offload_buffers):
                             disk_offload_index = offload_and_maybe_resave_param(
-                                concrete, view, loading_info, disk_offload_folder, disk_offload_index, mapping_obj
+                                concrete,
+                                view.clone(),
+                                loading_info,
+                                disk_offload_folder,
+                                disk_offload_index,
+                                mapping_obj,
                             )
                         else:
-                            # Clone the view out of the recv_buf so we can free the big buffer after
-                            # this batch — dropping peak memory from O(model) to O(batch).
                             set_param_for_module(
                                 model,
                                 concrete,
@@ -1805,12 +1797,12 @@ def convert_and_load_state_dict_in_model(
                                 mapping_obj.distributed_operation,
                                 hf_quantizer,
                             )
-                del recv_buf  # free immediately — all params now own independent storage
+                    del recv_buf, unpacked
 
+                cur_read_futs = nxt_read_futs  # advance pipeline
                 pbar.update(len(batch))
 
-            pbar.close()
-            convert_pool.shutdown(wait=False)
+            read_pool.shutdown(wait=False)
 
     # Close the pool, independently of whether the code was interrupted or finished successfully
     finally:
