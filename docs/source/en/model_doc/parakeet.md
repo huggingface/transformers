@@ -89,7 +89,7 @@ print(processor.decode(outputs))
 <hfoptions id="tdt-usage">
 <hfoption id="Pipeline">
 
-Parakeet TDT transcripts include casing, and the model can also performk token timestamping.
+Parakeet TDT transcripts include casing, and the model can also perform token timestamping.
 
 ```py
 from transformers import pipeline
@@ -139,12 +139,11 @@ speech_samples = [el['array'] for el in ds["audio"][:1]]
 
 inputs = processor(speech_samples, sampling_rate=processor.feature_extractor.sampling_rate)
 inputs.to(model.device, dtype=model.dtype)
-output = model.generate(**inputs, return_dict_in_generate=True, return_timestamps=True)
+output = model.generate(**inputs, return_dict_in_generate=True)
 decoded_output, decoded_timestamps = processor.decode(
     output.sequences,
-    token_timestamps=output.token_timestamps,
-    token_durations=output.token_durations,
-    skip_special_tokens=True
+    durations=output.durations,
+    skip_special_tokens=True,
 )
 print("Transcription:", decoded_output)
 print("\nTimestamped tokens:", decoded_timestamps)
