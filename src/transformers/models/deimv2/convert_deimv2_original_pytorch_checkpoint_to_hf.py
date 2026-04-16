@@ -183,7 +183,7 @@ def get_deimv2_config(model_name: str) -> Deimv2Config:
         dinov3_cfg = orig_config["DINOv3STAs"]
         name = dinov3_cfg["name"]
         interaction_indexes = dinov3_cfg["interaction_indexes"]
-        config.spatial_tuning_adapter_inplanes = dinov3_cfg.get("conv_inplane") or 16
+        config.spatial_tuning_adapter_inplanes = dinov3_cfg.get("conv_inplane", 16)
 
         is_dinov3 = "dinov3" in name
 
@@ -231,8 +231,8 @@ def get_deimv2_config(model_name: str) -> Deimv2Config:
             vit_hidden_size = preset["vit_hidden_size"]
             vit_num_heads = preset["vit_num_heads"]
         else:
-            vit_hidden_size = dinov3_cfg.get("embed_dim") or 192
-            vit_num_heads = dinov3_cfg.get("num_heads") or 3
+            vit_hidden_size = dinov3_cfg.get("embed_dim", 192)
+            vit_num_heads = dinov3_cfg.get("num_heads", 3)
 
         ffn_ratio = preset["ffn_ratio"]
         if preset["use_gated_mlp"]:

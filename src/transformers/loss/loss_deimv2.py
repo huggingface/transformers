@@ -37,7 +37,7 @@ class Deimv2Loss(DFineLoss):
         }
         self.losses = ["mal", "boxes", "local"]
         self.mal_alpha = config.mal_alpha
-        self.use_dense_o2o = config.use_dense_o2o
+        self.use_dense_one_to_one = config.use_dense_one_to_one
 
     def loss_labels_mal(self, outputs, targets, indices, num_boxes):
         """Compute the Matching Aware Loss (MAL), which uses IoU-weighted soft labels
@@ -51,16 +51,16 @@ class Deimv2Loss(DFineLoss):
         ious = torch.diag(ious).detach()
 
         src_logits = outputs["logits"]
-        target_classes_o = torch.cat([t["class_labels"][i] for t, (_, i) in zip(targets, indices)])
+        target_classes_original = torch.cat([t["class_labels"][i] for t, (_, i) in zip(targets, indices)])
         target_classes = torch.full(
             src_logits.shape[:2], self.num_classes, dtype=torch.int64, device=src_logits.device
         )
-        target_classes[idx] = target_classes_o
+        target_classes[idx] = target_classes_original
         target = F.one_hot(target_classes, num_classes=self.num_classes + 1)[..., :-1]
 
-        target_score_o = torch.zeros_like(target_classes, dtype=src_logits.dtype)
-        target_score_o[idx] = ious.to(target_score_o.dtype)
-        target_score = target_score_o.unsqueeze(-1) * target
+        target_score_original = torch.zeros_like(target_classes, dtype=src_logits.dtype)
+        target_score_original[idx] = ious.to(target_score_original.dtype)
+        target_score = target_score_original.unsqueeze(-1) * target
 
         pred_score = F.sigmoid(src_logits).detach()
         target_score = target_score.pow(self.gamma)
@@ -81,8 +81,8 @@ class Deimv2Loss(DFineLoss):
                 for idx1, idx2 in zip(indices.copy(), indices_aux.copy())
             ]
 
-        for ind in [torch.cat([idx[0][:, None], idx[1][:, None]], 1) for idx in indices]:
-            unique, counts = torch.unique(ind, return_counts=True, dim=0)
+        for index in [torch.cat([idx[0][:, None], idx[1][:, None]], 1) for idx in indices]:
+            unique, counts = torch.unique(index, return_counts=True, dim=0)
             count_sort_indices = torch.argsort(counts, descending=True)
             unique_sorted = unique[count_sort_indices]
             column_to_row = {}
@@ -90,8 +90,8 @@ class Deimv2Loss(DFineLoss):
                 row_idx, col_idx = idx_pair[0].item(), idx_pair[1].item()
                 if row_idx not in column_to_row:
                     column_to_row[row_idx] = col_idx
-            final_rows = torch.tensor(list(column_to_row.keys()), device=ind.device)
-            final_cols = torch.tensor(list(column_to_row.values()), device=ind.device)
+            final_rows = torch.tensor(list(column_to_row.keys()), device=index.device)
+            final_cols = torch.tensor(list(column_to_row.values()), device=index.device)
             results.append((final_rows.long(), final_cols.long()))
         return results
 

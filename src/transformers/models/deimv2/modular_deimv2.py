@@ -24,6 +24,7 @@ from ...backbone_utils import load_backbone
 from ...modeling_outputs import ModelOutput
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, logging
+from ...utils.output_capturing import OutputRecorder, capture_outputs
 from ..auto import AutoConfig
 from ..d_fine.configuration_d_fine import DFineConfig
 from ..d_fine.modeling_d_fine import (
@@ -48,7 +49,7 @@ from ..d_fine.modeling_d_fine import (
     DFineSCDown,
     get_contrastive_denoising_training_group,
 )
-from ..llama.modeling_llama import LlamaRMSNorm
+from ..llama.modeling_llama import LlamaMLP, LlamaRMSNorm
 
 
 logger = logging.get_logger(__name__)
@@ -153,7 +154,7 @@ class Deimv2Config(DFineConfig):
         Controls the upper bounds of the Weighting Function.
     weight_loss_mal (`float`, *optional*, defaults to 1.0):
         Relative weight of the matching auxiliary loss in the object detection loss.
-    use_dense_o2o (`bool`, *optional*, defaults to `True`):
+    use_dense_one_to_one (`bool`, *optional*, defaults to `True`):
         Whether to use dense one-to-one matching across decoder layers.
     mal_alpha (`float`, *optional*):
         Alpha parameter for the Matching Auxiliary Loss (MAL). If `None`, uses `focal_loss_alpha`.
@@ -180,7 +181,7 @@ class Deimv2Config(DFineConfig):
 
     eval_size: list[int] | tuple[int, int] | None = None
     weight_loss_mal: float = 1.0
-    use_dense_o2o: bool = True
+    use_dense_one_to_one: bool = True
     mal_alpha: float | None = None
     encoder_fuse_op: str = "sum"
     spatial_tuning_adapter_inplanes: int = 16
@@ -220,16 +221,14 @@ class Deimv2RMSNorm(LlamaRMSNorm):
     pass
 
 
-class Deimv2SwiGLUFFN(nn.Module):
-    def __init__(self, in_features: int, hidden_features: int, out_features: int):
-        super().__init__()
-        self.gate_proj = nn.Linear(in_features, hidden_features, bias=True)
-        self.up_proj = nn.Linear(in_features, hidden_features, bias=True)
-        self.down_proj = nn.Linear(hidden_features, out_features, bias=True)
+class Deimv2SwiGLUFFN(LlamaMLP):
+    def __init__(self, config: Deimv2Config):
+        nn.Module.__init__(self)
+        hidden_features = config.decoder_ffn_dim // 2
+        self.gate_proj = nn.Linear(config.d_model, hidden_features, bias=True)
+        self.up_proj = nn.Linear(config.d_model, hidden_features, bias=True)
+        self.down_proj = nn.Linear(hidden_features, config.d_model, bias=True)
         self.act_fn = nn.SiLU()
-
-    def forward(self, x):
-        return self.down_proj(self.act_fn(self.gate_proj(x)) * self.up_proj(x))
 
 
 class Deimv2Gate(DFineGate):
@@ -333,75 +332,23 @@ class Deimv2SpatialTuningAdapter(nn.Module):
         self.stem_conv = Deimv2ConvNormLayer(config, 3, inplanes, 3, 2, activation="gelu")
         self.stem_pool = nn.MaxPool2d(kernel_size=3, stride=2, padding=1)
         self.conv2 = Deimv2ConvNormLayer(config, inplanes, 2 * inplanes, 3, 2)
-        self.act3 = nn.GELU()
         self.conv3 = Deimv2ConvNormLayer(config, 2 * inplanes, 4 * inplanes, 3, 2)
-        self.act4 = nn.GELU()
         self.conv4 = Deimv2ConvNormLayer(config, 4 * inplanes, 4 * inplanes, 3, 2)
+        self.act_fn = nn.GELU()
 
     def forward(self, pixel_values: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         hidden_states_1 = self.stem_pool(self.stem_conv(pixel_values))
         hidden_states_2 = self.conv2(hidden_states_1)
-        hidden_states_3 = self.conv3(self.act3(hidden_states_2))
-        hidden_states_4 = self.conv4(self.act4(hidden_states_3))
+        hidden_states_3 = self.conv3(self.act_fn(hidden_states_2))
+        hidden_states_4 = self.conv4(self.act_fn(hidden_states_3))
         return hidden_states_2, hidden_states_3, hidden_states_4
 
 
-class Deimv2FeatureFusion(nn.Module):
+def fuse_feature_maps(feature_map_1: torch.Tensor, feature_map_2: torch.Tensor, fuse_op: str = "sum") -> torch.Tensor:
     """Fuses two feature maps via element-wise sum or channel-wise concatenation."""
-
-    def __init__(self, fuse_op: str = "sum"):
-        super().__init__()
-        self.fuse_op = fuse_op
-
-    def forward(self, feature_map_a: torch.Tensor, feature_map_b: torch.Tensor) -> torch.Tensor:
-        if self.fuse_op == "sum":
-            return feature_map_a + feature_map_b
-        return torch.cat([feature_map_a, feature_map_b], dim=1)
-
-
-class Deimv2LiteEncoder(nn.Module):
-    def __init__(self, config: Deimv2Config):
-        super().__init__()
-        hidden_dim = config.encoder_hidden_dim
-        activation = config.activation_function
-
-        self.input_proj = nn.ModuleList(
-            [Deimv2ConvNormLayer(config, in_channel, hidden_dim, 1, 1) for in_channel in config.encoder_in_channels]
-        )
-
-        self.down_pool1 = nn.AvgPool2d(kernel_size=3, stride=2, padding=1)
-        self.down_conv1 = Deimv2ConvNormLayer(config, hidden_dim, hidden_dim, 1, 1, activation=activation)
-        self.down_pool2 = nn.AvgPool2d(kernel_size=3, stride=2, padding=1)
-        self.down_conv2 = Deimv2ConvNormLayer(config, hidden_dim, hidden_dim, 1, 1, activation=activation)
-
-        self.bi_fusion_conv = Deimv2ConvNormLayer(config, hidden_dim, hidden_dim, 1, 1, activation=activation)
-
-        num_blocks = round(3 * config.depth_mult)
-        self.fpn_block = Deimv2RepNCSPELAN5(config, numb_blocks=num_blocks)
-        self.pan_block = Deimv2RepNCSPELAN5(config, numb_blocks=num_blocks)
-
-    def forward(self, inputs_embeds: list[torch.Tensor], **kwargs: Unpack[TransformersKwargs]) -> Deimv2EncoderOutput:
-        projected_features = []
-        for i, feature in enumerate(inputs_embeds):
-            projected_features.append(self.input_proj[i](feature))
-        projected_features.append(self.down_conv1(self.down_pool1(projected_features[-1])))
-
-        projected_features[-1] = self.bi_fusion_conv(
-            projected_features[-1] + F.adaptive_avg_pool2d(projected_features[-1], 1)
-        )
-
-        outputs = []
-        fused_feature = projected_features[0] + F.interpolate(projected_features[1], scale_factor=2.0, mode="nearest")
-        outputs.append(self.fpn_block(fused_feature))
-
-        fused_feature = projected_features[1] + self.down_conv2(self.down_pool2(outputs[-1]))
-        outputs.append(self.pan_block(fused_feature))
-
-        # LiteEncoder has no transformer layers, so we collect projected features as hidden_states manually.
-        return Deimv2EncoderOutput(
-            feature_maps=outputs,
-            hidden_states=tuple(projected_features) if kwargs.get("output_hidden_states") else None,
-        )
+    if fuse_op == "sum":
+        return feature_map_1 + feature_map_2
+    return torch.cat([feature_map_1, feature_map_2], dim=1)
 
 
 class Deimv2ConvEncoder(DFineConvEncoder):
@@ -416,8 +363,8 @@ class Deimv2ConvEncoder(DFineConvEncoder):
             ]
         )
 
-    def forward(self, pixel_values: torch.Tensor) -> list[torch.Tensor]:
-        features = self.model(pixel_values).feature_maps
+    def forward(self, pixel_values: torch.Tensor, **kwargs: Unpack[TransformersKwargs]) -> list[torch.Tensor]:
+        features = self.model(pixel_values, **kwargs).feature_maps
         return [proj(feat) for proj, feat in zip(self.encoder_input_proj, features)]
 
 
@@ -439,8 +386,8 @@ class Deimv2DINOv3ConvEncoder(nn.Module):
             ]
         )
 
-    def forward(self, pixel_values: torch.Tensor) -> list[torch.Tensor]:
-        backbone_output = self.backbone(pixel_values)
+    def forward(self, pixel_values: torch.Tensor, **kwargs: Unpack[TransformersKwargs]) -> list[torch.Tensor]:
+        backbone_output = self.backbone(pixel_values, **kwargs)
         feature_maps = backbone_output.feature_maps
 
         patch_size = self.backbone.config.patch_size
@@ -479,7 +426,7 @@ class Deimv2DecoderLayer(DFineDecoderLayer):
         self.encoder_attn = Deimv2MultiscaleDeformableAttention(config=config)
         self.self_attn_layer_norm = Deimv2RMSNorm(config.d_model)
         self.final_layer_norm = Deimv2RMSNorm(config.d_model)
-        self.mlp = Deimv2SwiGLUFFN(config.d_model, config.decoder_ffn_dim // 2, config.d_model)
+        self.mlp = Deimv2SwiGLUFFN(config)
         self.use_gateway = config.use_gateway
         self.gateway = Deimv2Gate(config.d_model) if config.use_gateway else None
         self.encoder_attn_layer_norm = None if config.use_gateway else Deimv2RMSNorm(config.d_model)
@@ -554,9 +501,59 @@ class Deimv2PreTrainedModel(DFinePreTrainedModel):
             init.ones_(module.weight)
 
 
+class Deimv2LiteEncoder(Deimv2PreTrainedModel):
+    # LiteEncoder has no transformer layers, so hidden_states are recorded from the conv projections.
+    _can_record_outputs = {
+        "hidden_states": [
+            OutputRecorder(Deimv2ConvNormLayer, layer_name="input_proj"),
+            OutputRecorder(Deimv2ConvNormLayer, layer_name="bi_fusion_conv"),
+        ],
+    }
+
+    def __init__(self, config: Deimv2Config):
+        super().__init__(config)
+        hidden_dim = config.encoder_hidden_dim
+        activation = config.activation_function
+
+        self.input_proj = nn.ModuleList(
+            [Deimv2ConvNormLayer(config, in_channel, hidden_dim, 1, 1) for in_channel in config.encoder_in_channels]
+        )
+
+        self.down_pool1 = nn.AvgPool2d(kernel_size=3, stride=2, padding=1)
+        self.down_conv1 = Deimv2ConvNormLayer(config, hidden_dim, hidden_dim, 1, 1, activation=activation)
+        self.down_pool2 = nn.AvgPool2d(kernel_size=3, stride=2, padding=1)
+        self.down_conv2 = Deimv2ConvNormLayer(config, hidden_dim, hidden_dim, 1, 1, activation=activation)
+
+        self.bi_fusion_conv = Deimv2ConvNormLayer(config, hidden_dim, hidden_dim, 1, 1, activation=activation)
+
+        num_blocks = round(3 * config.depth_mult)
+        self.fpn_block = Deimv2RepNCSPELAN5(config, numb_blocks=num_blocks)
+        self.pan_block = Deimv2RepNCSPELAN5(config, numb_blocks=num_blocks)
+
+        self.post_init()
+
+    @capture_outputs(tie_last_hidden_states=False)
+    def forward(self, inputs_embeds: list[torch.Tensor], **kwargs: Unpack[TransformersKwargs]) -> Deimv2EncoderOutput:
+        projected_features = [self.input_proj[i](feature) for i, feature in enumerate(inputs_embeds)]
+        projected_features.append(self.down_conv1(self.down_pool1(projected_features[-1])))
+
+        projected_features[-1] = self.bi_fusion_conv(
+            projected_features[-1] + F.adaptive_avg_pool2d(projected_features[-1], 1)
+        )
+
+        outputs = []
+        fused_feature = projected_features[0] + F.interpolate(projected_features[1], scale_factor=2.0, mode="nearest")
+        outputs.append(self.fpn_block(fused_feature))
+
+        fused_feature = projected_features[1] + self.down_conv2(self.down_pool2(outputs[-1]))
+        outputs.append(self.pan_block(fused_feature))
+
+        return Deimv2EncoderOutput(feature_maps=outputs)
+
+
 class Deimv2HybridEncoder(DFineHybridEncoder):
     """
-    DEIMv2 variant of DFineHybridEncoder. Uses element-wise sum fusion (Deimv2FeatureFusion) instead of
+    DEIMv2 variant of DFineHybridEncoder. Uses element-wise sum fusion (`fuse_feature_maps`) instead of
     D-FINE's channel concatenation, Deimv2RepNCSPELAN5 (simplified 4-way concat) instead of DFineRepNCSPELAN4,
     and returns Deimv2EncoderOutput with feature_maps instead of BaseModelOutput with last_hidden_state.
     """
@@ -573,7 +570,7 @@ class Deimv2HybridEncoder(DFineHybridEncoder):
         self.eval_size = config.eval_size
         self.out_channels = [self.encoder_hidden_dim for _ in self.in_channels]
         self.out_strides = self.feat_strides
-        self.feature_fusion = Deimv2FeatureFusion(config.encoder_fuse_op)
+        self.fuse_op = config.encoder_fuse_op
 
         self.aifi = nn.ModuleList([Deimv2AIFILayer(config) for _ in range(len(self.encode_proj_layers))])
 
@@ -602,8 +599,8 @@ class Deimv2HybridEncoder(DFineHybridEncoder):
     ) -> Deimv2EncoderOutput:
         r"""
         Args:
-            inputs_embeds (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
-                Flattened feature map (output of the backbone + projection layer) that is passed to the encoder.
+            inputs_embeds (`list[torch.FloatTensor]`):
+                Multi-scale feature maps from the backbone (one tensor per feature level) passed to the encoder.
         """
         feature_maps = inputs_embeds
 
@@ -619,7 +616,7 @@ class Deimv2HybridEncoder(DFineHybridEncoder):
             top_fpn_feature_map = lateral_conv(top_fpn_feature_map)
             fpn_feature_maps[-1] = top_fpn_feature_map
             top_fpn_feature_map = F.interpolate(top_fpn_feature_map, scale_factor=2.0, mode="nearest")
-            fused_feature_map = self.feature_fusion(top_fpn_feature_map, backbone_feature_map)
+            fused_feature_map = fuse_feature_maps(top_fpn_feature_map, backbone_feature_map, self.fuse_op)
             new_fpn_feature_map = fpn_block(fused_feature_map)
             fpn_feature_maps.append(new_fpn_feature_map)
 
@@ -631,7 +628,7 @@ class Deimv2HybridEncoder(DFineHybridEncoder):
             top_pan_feature_map = pan_feature_maps[-1]
             fpn_feature_map = fpn_feature_maps[idx + 1]
             downsampled_feature_map = downsample_conv(top_pan_feature_map)
-            fused_feature_map = self.feature_fusion(downsampled_feature_map, fpn_feature_map)
+            fused_feature_map = fuse_feature_maps(downsampled_feature_map, fpn_feature_map, self.fuse_op)
             new_pan_feature_map = pan_block(fused_feature_map)
             pan_feature_maps.append(new_pan_feature_map)
 
@@ -640,22 +637,8 @@ class Deimv2HybridEncoder(DFineHybridEncoder):
 
 class Deimv2Decoder(DFineDecoder):
     def __init__(self, config: Deimv2Config):
-        self.eval_idx = config.eval_idx if config.eval_idx >= 0 else config.decoder_layers + config.eval_idx
         super().__init__(config=config)
         self.query_pos_head = Deimv2MLP(4, config.d_model, config.d_model, 3, config.decoder_activation_function)
-        self.reg_scale = nn.Parameter(torch.tensor([config.reg_scale]), requires_grad=False)
-        self.max_num_bins = config.max_num_bins
-        self.d_model = config.d_model
-        self.layer_scale = config.layer_scale
-        self.pre_bbox_head = Deimv2MLP(config.hidden_size, config.hidden_size, 4, 3)
-        self.integral = Deimv2Integral(config)
-        self.num_head = config.decoder_attention_heads
-        self.up = nn.Parameter(torch.tensor([config.up]), requires_grad=False)
-        self.lqe_layers = nn.ModuleList([Deimv2LQE(config) for _ in range(config.decoder_layers)])
-        self.layers = nn.ModuleList(
-            [Deimv2DecoderLayer(config) for _ in range(config.decoder_layers)]
-            + [Deimv2DecoderLayer(config) for _ in range(config.decoder_layers - self.eval_idx - 1)]
-        )
 
 
 class Deimv2Model(DFineModel):
@@ -740,15 +723,15 @@ class Deimv2Model(DFineModel):
         )
 
         # Equivalent to def _get_encoder_input
+        # https://github.com/lyuwenyu/RT-DETR/blob/94f5e16708329d2f2716426868ec89aa774af016/rtdetr_pytorch/src/zoo/rtdetr/rtdetr_decoder.py#L412
         sources = []
         for level, source in enumerate(encoder_outputs.feature_maps):
             sources.append(self.decoder_input_proj[level](source))
 
         # Lowest resolution feature maps are obtained via 3x3 stride 2 convolutions on the final stage
         if self.config.num_feature_levels > len(sources):
-            _len_sources = len(sources)
-            sources.append(self.decoder_input_proj[_len_sources](encoder_outputs.feature_maps[-1]))
-            for i in range(_len_sources + 1, self.config.num_feature_levels):
+            sources.append(self.decoder_input_proj[len(sources)](encoder_outputs.feature_maps[-1]))
+            for i in range(len(sources), self.config.num_feature_levels):
                 sources.append(self.decoder_input_proj[i](encoder_outputs.feature_maps[-1]))
 
         # Prepare encoder inputs (by flattening)
@@ -867,7 +850,7 @@ class Deimv2Model(DFineModel):
 
 
 class Deimv2ForObjectDetection(DFineForObjectDetection):
-    _no_split_modules = None
+    _no_split_modules = [r"Deimv2HybridEncoder", r"Deimv2LiteEncoder", r"Deimv2DecoderLayer"]
 
     @property
     def _tied_weights_keys(self):

@@ -27,7 +27,7 @@ The abstract from the paper is the following:
 ## Usage
 
 ```python
-from transformers import AutoImageProcessor, Deimv2ForObjectDetection
+from transformers import AutoImageProcessor, AutoModelForObjectDetection
 from transformers.image_utils import load_image
 
 url = "http://images.cocodataset.org/val2017/000000039769.jpg"
@@ -35,7 +35,7 @@ image = load_image(url)
 
 # TODO: Replace with Transformers-compatible ckpts once uploaded.
 image_processor = AutoImageProcessor.from_pretrained("harshaljanjani/DEIMv2_HGNetv2_N_COCO_Transformers")
-model = Deimv2ForObjectDetection.from_pretrained("harshaljanjani/DEIMv2_HGNetv2_N_COCO_Transformers", device_map="auto")
+model = AutoModelForObjectDetection.from_pretrained("harshaljanjani/DEIMv2_HGNetv2_N_COCO_Transformers", device_map="auto")
 
 inputs = image_processor(images=image, return_tensors="pt").to(model.device)
 outputs = model(**inputs)

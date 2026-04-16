@@ -127,7 +127,7 @@ class Deimv2Config(PreTrainedConfig):
         Controls the upper bounds of the Weighting Function.
     weight_loss_mal (`float`, *optional*, defaults to 1.0):
         Relative weight of the matching auxiliary loss in the object detection loss.
-    use_dense_o2o (`bool`, *optional*, defaults to `True`):
+    use_dense_one_to_one (`bool`, *optional*, defaults to `True`):
         Whether to use dense one-to-one matching across decoder layers.
     mal_alpha (`float`, *optional*):
         Alpha parameter for the Matching Auxiliary Loss (MAL). If `None`, uses `focal_loss_alpha`.
@@ -230,7 +230,7 @@ class Deimv2Config(PreTrainedConfig):
     tie_word_embeddings: bool = True
     is_encoder_decoder: bool = True
     weight_loss_mal: float = 1.0
-    use_dense_o2o: bool = True
+    use_dense_one_to_one: bool = True
     mal_alpha: float | None = None
     encoder_fuse_op: str = "sum"
     spatial_tuning_adapter_inplanes: int = 16

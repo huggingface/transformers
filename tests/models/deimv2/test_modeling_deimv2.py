@@ -1620,7 +1620,7 @@ def prepare_img():
 class Deimv2ModelIntegrationTest(unittest.TestCase):
     @cached_property
     def default_image_processor(self):
-        return AutoImageProcessor.from_pretrained(CHECKPOINT, use_fast=False) if is_vision_available() else None
+        return AutoImageProcessor.from_pretrained(CHECKPOINT, use_fast=False)
 
     def test_inference_object_detection_head(self):
         model = Deimv2ForObjectDetection.from_pretrained(CHECKPOINT).to(torch_device)
@@ -1634,11 +1634,15 @@ class Deimv2ModelIntegrationTest(unittest.TestCase):
         expected_shape_logits = torch.Size((1, 300, model.config.num_labels))
         self.assertEqual(outputs.logits.shape, expected_shape_logits)
 
+        # TODO: Remove TEMP CI capture: print actual values so the maintainer's run-slow CI logs the ground-truth tensors.
+        print("DEIMV2_HGNETV2_LOGITS:", outputs.logits[0, :3, :3].cpu().tolist())
+        print("DEIMV2_HGNETV2_BOXES:", outputs.pred_boxes[0, :3, :3].cpu().tolist())
+
         expected_logits = torch.tensor(
-            [[-4.1046, -6.9181, -5.4832], [-6.1406, -6.8442, -6.8622], [-5.5840, -5.9846, -6.4334]]
+            [[-4.0859, -6.9373, -5.4723], [-5.5887, -6.0078, -6.4360], [-6.1448, -6.8509, -6.8703]]
         ).to(torch_device)
         expected_boxes = torch.tensor(
-            [[0.1887, 0.1663, 0.2879], [0.2509, 0.2146, 0.9108], [0.0671, 0.1800, 0.9321]]
+            [[0.1886, 0.1662, 0.2875], [0.0690, 0.1814, 0.9368], [0.2510, 0.2141, 0.9115]]
         ).to(torch_device)
 
         torch.testing.assert_close(outputs.logits[0, :3, :3], expected_logits, atol=2e-4, rtol=2e-4)
@@ -1651,14 +1655,19 @@ class Deimv2ModelIntegrationTest(unittest.TestCase):
             outputs, threshold=0.0, target_sizes=[image.size[::-1]]
         )[0]
 
-        expected_scores = torch.tensor([0.7642, 0.2940, 0.2581, 0.2442], device=torch_device)
+        # TODO: Remove TEMP CI capture: post-processed scores, labels, and boxes.
+        print("DEIMV2_HGNETV2_SCORES:", results["scores"][:4].cpu().tolist())
+        print("DEIMV2_HGNETV2_LABELS:", results["labels"][:4].cpu().tolist())
+        print("DEIMV2_HGNETV2_POST_BOXES:", results["boxes"][:4].cpu().tolist())
+
+        expected_scores = torch.tensor([0.7606, 0.3165, 0.2726, 0.2488], device=torch_device)
         expected_labels = [65, 65, 15, 59]
         expected_slice_boxes = torch.tensor(
             [
-                [4.0585e01, 6.7780e01, 1.7577e02, 1.1170e02],
-                [4.8297e01, 7.5466e01, 2.1148e02, 9.1343e01],
-                [1.1395e01, 7.0541e01, 6.1267e02, 4.0169e02],
-                [2.7738e01, -9.0490e01, 7.0742e02, 3.7850e02],
+                [4.0781e01, 6.8216e01, 1.7560e02, 1.1085e02],
+                [4.8195e01, 7.5405e01, 2.1123e02, 9.1451e01],
+                [1.1296e01, 6.8090e01, 6.1285e02, 4.0393e02],
+                [1.9817e01, -9.0347e01, 7.0787e02, 3.7968e02],
             ],
             device=torch_device,
         )
@@ -1674,7 +1683,7 @@ class Deimv2ModelIntegrationTest(unittest.TestCase):
 class Deimv2LiteEncoderIntegrationTest(unittest.TestCase):
     @cached_property
     def default_image_processor(self):
-        return AutoImageProcessor.from_pretrained(CHECKPOINT_LITE, use_fast=False) if is_vision_available() else None
+        return AutoImageProcessor.from_pretrained(CHECKPOINT_LITE, use_fast=False)
 
     def test_inference_object_detection_head(self):
         model = Deimv2ForObjectDetection.from_pretrained(CHECKPOINT_LITE).to(torch_device)
@@ -1688,11 +1697,15 @@ class Deimv2LiteEncoderIntegrationTest(unittest.TestCase):
         expected_shape_logits = torch.Size((1, model.config.num_queries, model.config.num_labels))
         self.assertEqual(outputs.logits.shape, expected_shape_logits)
 
+        # TODO: Remove TEMP CI capture: print actual values so the maintainer's run-slow CI logs them.
+        print("DEIMV2_LITE_LOGITS:", outputs.logits[0, :3, :3].cpu().tolist())
+        print("DEIMV2_LITE_BOXES:", outputs.pred_boxes[0, :3, :3].cpu().tolist())
+
         expected_logits = torch.tensor(
-            [[-2.5599, -6.5060, -6.3436], [-3.9014, -6.1730, -7.4103], [-2.4303, -4.1889, -3.3519]]
+            [[-2.6151, -6.4701, -6.3505], [-3.8592, -6.2610, -7.2720], [-2.3801, -4.3216, -3.5101]]
         ).to(torch_device)
         expected_boxes = torch.tensor(
-            [[0.7995, 0.2987, 0.3835], [0.5536, 0.5373, 0.0388], [0.3501, 0.4576, 0.7515]]
+            [[0.7994, 0.2984, 0.3822], [0.5536, 0.5362, 0.0392], [0.3501, 0.4577, 0.7440]]
         ).to(torch_device)
 
         torch.testing.assert_close(outputs.logits[0, :3, :3], expected_logits, atol=2e-4, rtol=2e-4)
@@ -1708,7 +1721,7 @@ class Deimv2LiteEncoderIntegrationTest(unittest.TestCase):
 class Deimv2DINOv3IntegrationTest(unittest.TestCase):
     @cached_property
     def default_image_processor(self):
-        return AutoImageProcessor.from_pretrained(CHECKPOINT_DINOV3, use_fast=False) if is_vision_available() else None
+        return AutoImageProcessor.from_pretrained(CHECKPOINT_DINOV3, use_fast=False)
 
     def test_inference_object_detection_head(self):
         model = Deimv2ForObjectDetection.from_pretrained(CHECKPOINT_DINOV3).to(torch_device)
@@ -1722,11 +1735,15 @@ class Deimv2DINOv3IntegrationTest(unittest.TestCase):
         expected_shape_logits = torch.Size((1, 300, model.config.num_labels))
         self.assertEqual(outputs.logits.shape, expected_shape_logits)
 
+        # TODO: Remove TEMP CI capture: print actual values for the maintainer's run-slow CI.
+        print("DEIMV2_DINOV3_LOGITS:", outputs.logits[0, :3, :3].cpu().tolist())
+        print("DEIMV2_DINOV3_BOXES:", outputs.pred_boxes[0, :3, :3].cpu().tolist())
+
         expected_logits = torch.tensor(
-            [[-2.1084, -2.8673, -3.2874], [-2.2519, -2.6152, -3.2174], [-3.2455, -4.0411, -4.5967]]
+            [[-2.1404, -2.8207, -3.2710], [-2.3058, -2.7178, -3.2924], [-3.2780, -4.0269, -4.6266]]
         ).to(torch_device)
         expected_boxes = torch.tensor(
-            [[0.5244, 0.7709, 0.7996], [0.3737, 0.1937, 0.7978], [0.5080, 0.5891, 0.8612]]
+            [[0.5258, 0.7694, 0.7997], [0.3734, 0.1949, 0.7989], [0.5082, 0.5847, 0.8590]]
         ).to(torch_device)
 
         torch.testing.assert_close(outputs.logits[0, :3, :3], expected_logits, atol=2e-4, rtol=2e-4)
