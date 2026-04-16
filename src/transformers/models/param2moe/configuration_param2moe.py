@@ -1,7 +1,9 @@
 """Param2MoE model configuration"""
 
 from ...configuration_utils import PreTrainedConfig
+from huggingface_hub.dataclasses import strict
 
+@strict
 class Param2MoEConfig(PreTrainedConfig):
     def __init__(
         self,

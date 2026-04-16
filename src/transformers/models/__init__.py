@@ -302,6 +302,7 @@ if TYPE_CHECKING:
     from .paddleocr_vl import *
     from .paligemma import *
     from .parakeet import *
+    from .param2moe import *
     from .patchtsmixer import *
     from .patchtst import *
     from .pe_audio import *
@@ -343,7 +344,6 @@ if TYPE_CHECKING:
     from .qwen2_moe import *
     from .qwen2_vl import *
     from .qwen3 import *
-    from .param2moe import *
     from .qwen3_5 import *
     from .qwen3_5_moe import *
     from .qwen3_moe import *

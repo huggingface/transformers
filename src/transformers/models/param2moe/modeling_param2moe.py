@@ -26,6 +26,7 @@ from typing import List, Optional, Tuple, Union
 import torch
 import torch.nn.functional as F
 from torch import nn
+from torch.nn import init as nn_init
 
 from transformers.activations import ACT2FN
 from transformers.cache_utils import Cache, DynamicCache
@@ -49,7 +50,7 @@ from transformers.utils import (
     logging,
     replace_return_docstrings,
 )
-from transformers.utils.import_utils import is_torch_fx_available
+from transformers.utils.import_utils import is_torch_available
 
 from .configuration_param2moe import Param2MoEConfig
 
@@ -59,7 +60,7 @@ if is_flash_attn_2_available():
 
 # This makes `_prepare_4d_causal_attention_mask` a leaf function in the FX graph.
 # It means that the function will not be traced through and simply appear as a node in the graph.
-if is_torch_fx_available():
+if is_torch_available():
     if not is_torch_greater_or_equal_than_1_13:
         import torch.fx
 
@@ -1058,14 +1059,14 @@ class Param2MoEPreTrainedModel(PreTrainedModel):
     def _init_weights(self, module):
         std = self.config.initializer_range
         if isinstance(module, nn.Linear):
-            module.weight.data.normal_(mean=0.0, std=std)
+            nn_init.normal_(module.weight.data, mean=0.0, std=std)
             if module.bias is not None:
-                module.bias.data.zero_()
+                nn_init.zeros_(module.bias.data)
         elif isinstance(module, nn.Embedding):
-            module.weight.data.normal_(mean=0.0, std=std)
+            nn_init.normal_(module.weight.data, mean=0.0, std=std)
             if module.padding_idx is not None:
-                module.weight.data[module.padding_idx].zero_()
-
+                with torch.no_grad():
+                    module.weight[module.padding_idx].zero_()
 
 PARAM2MOE_INPUTS_DOCSTRING = r"""
     Args:
