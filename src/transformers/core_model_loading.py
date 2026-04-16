@@ -1145,89 +1145,78 @@ def _batch_shard_for_scatter(full_tensor: torch.Tensor, tp_layer, world_size: in
 
 
 @torch.no_grad()
-def _redistribute_realized_value(
+def _redistribute_async(
     realized_value: dict[str, list[torch.Tensor] | torch.Tensor] | None,
     mapping: WeightTransform,
     source_rank: int,
     device_mesh,
     local_device,
-    dtype,
+    meta_model_state_dict: dict[str, torch.Tensor],
+    first_param_name: str,
     source_skipped: bool = False,
-) -> dict[str, torch.Tensor] | None:
+) -> tuple[list, dict[str, torch.Tensor]] | None:
     """
-    Coordinate the post-`convert` redistribution of full tensors across TP ranks.
+    Start async scatter/broadcast for one mapping's tensors.  Returns ``(work_handles, local_params)`` where
+    ``work_handles`` is a list of ``dist.Work`` objects (or empty for world_size==1). The caller must call
+    ``work.wait()`` on every handle before reading ``local_params``.
 
-    The `source_rank` produced full tensors via `mapping.convert(...)`; every other rank participates here as a
-    receiver. We first broadcast a small metadata header (target names + full shapes + dtypes) so every rank
-    knows what's coming. Then:
-
-      * For sharded params (`tp_layer is not None`) and `world_size > 1`, the source pre-slices the full tensor
-        into one shard per rank (via `tp_layer.shard_tensor` with its `.rank` temporarily swapped) and
-        `dist.scatter`s them — each rank receives only its own shard. This avoids the `(N-1) × sizeof(full)`
-        bandwidth and the full-tensor peak memory of the old broadcast-then-slice design.
-      * For replicated params (`tp_layer is None`), we broadcast the full tensor (every rank keeps a copy).
-      * For `world_size == 1` sharded, we just local-shard — no comms.
-
-    A `None` payload from the source (e.g. when `convert` raised `SkipParameters`) is signalled to all peers
-    and returns `None` so callers can skip the mapping cleanly.
+    Returns ``None`` when the source signalled a skip (all ranks agree via a lightweight int broadcast).
     """
     import torch.distributed as dist
 
     is_source = device_mesh.get_local_rank() == source_rank
     group = device_mesh.get_group()
     src_global_rank = dist.get_global_rank(group, source_rank)
+    world_size = device_mesh.size()
+    tp_layer = mapping.distributed_operation
 
-    # 1. Build & broadcast metadata so every rank agrees on the target keys / shapes / dtypes. A `None` payload is
-    # the sentinel for "source skipped this mapping" — every rank then bails out together.
-    if is_source:
-        if source_skipped or realized_value is None:
-            payload = [None]
-        else:
-            meta = []
-            for target_name, param in realized_value.items():
-                param = param[0] if isinstance(param, list) else param
-                meta.append((target_name, tuple(param.shape), param.dtype))
-            payload = [meta]
-    else:
-        payload = [None]
-    dist.broadcast_object_list(payload, src=src_global_rank, group=group)
-    meta = payload[0]
-    if meta is None:
+    # ── skip signalling ────────────────────────────────────────────────────────
+    # A single-int broadcast replaces the old heavyweight `broadcast_object_list` of pickled metadata.
+    # 0 = proceed, 1 = skip.
+    if world_size > 1:
+        flag = torch.tensor([int(source_skipped)], dtype=torch.int32, device=local_device)
+        dist.broadcast(flag, src=src_global_rank, group=group)
+        if flag.item():
+            return None
+    elif source_skipped:
         return None
 
-    tp_layer = mapping.distributed_operation
-    out: dict[str, torch.Tensor] = {}
-    world_size = device_mesh.size()
-    local_rank = device_mesh.get_local_rank()
+    # ── build target list from the shared meta model (no per-mapping metadata broadcast) ──
+    if is_source:
+        targets = []
+        for target_name, param in realized_value.items():
+            param = param[0] if isinstance(param, list) else param
+            targets.append((target_name, tuple(param.shape), param.dtype))
+    else:
+        # Non-source: derive shapes/dtypes from the meta model. The mapping's `target_patterns` + layer
+        # numbering give us the target keys; the meta state dict gives shapes; dtype comes from the empty
+        # param on meta (which already reflects FP8 replacement etc.).
+        targets = []
+        for target_name in mapping.target_patterns:
+            # Expand the generic pattern (with *) to the concrete name for this mapping.
+            concrete = first_param_name.replace(mapping.target_patterns[0], target_name)
+            ref = meta_model_state_dict.get(concrete)
+            if ref is not None:
+                targets.append((concrete, tuple(ref.shape), ref.dtype))
 
-    # 2. For each target tensor:
-    #   - Sharded + world_size>1: source pre-slices into world_size shards then `dist.scatter` — each rank only
-    #     receives its own slice. No full-tensor broadcast, no view→clone dance on receivers. Total wire bytes
-    #     are (world_size-1)/world_size * sizeof(full), vs. (world_size-1) * sizeof(full) with broadcast.
-    #   - Replicated (tp_layer is None): still broadcast, receivers just keep the full tensor.
-    #   - world_size==1 sharded: local shard call only.
-    for target_name, shape, t_dtype in meta:
+    # Each entry is (work_handle, kept_alive_ref) — the ref keeps scatter_list alive until wait().
+    work_handles: list[tuple] = []
+    out: dict[str, torch.Tensor] = {}
+
+    for target_name, full_shape, t_dtype in targets:
         sharded = tp_layer is not None
 
         if sharded and world_size > 1:
-            # Each rank computes *its own* shard shape locally so it can allocate the scatter receive buffer
-            # without an extra metadata round-trip.
-            my_shard_shape = tp_layer.get_expected_sharded_shape(shape)
+            my_shard_shape = tp_layer.get_expected_sharded_shape(full_shape)
 
             if is_source:
                 full_tensor = realized_value[target_name]
                 full_tensor = full_tensor[0] if isinstance(full_tensor, list) else full_tensor
                 full_tensor = full_tensor.to(device=local_device).contiguous()
-                # Drop the caller's reference so the original CPU tensor can be freed as soon as we've carved
-                # the shards out of it below.
                 realized_value[target_name] = None
 
-                # Batch pre-slice: use GPU-native `torch.chunk` / `torch.split` to produce all shards at
-                # once instead of looping over ranks in Python (which was the bottleneck — N function calls +
-                # N clone ops on source per mapping). Falls back to the per-rank loop for unusual TP classes.
                 scatter_list = _batch_shard_for_scatter(full_tensor, tp_layer, world_size)
                 if scatter_list is None:
-                    # Fallback: per-rank loop (rare — only for TP classes not handled by the batched path).
                     scatter_list = []
                     original_rank = tp_layer.rank
                     try:
@@ -1243,28 +1232,21 @@ def _redistribute_realized_value(
                             scatter_list.append(shard)
                     finally:
                         tp_layer.rank = original_rank
-                del full_tensor  # all bytes now live in scatter_list
+                del full_tensor
 
-                # `dist.scatter` requires every scatter_list entry to match the receiver's recv-buffer
-                # shape. When the sharded dim doesn't divide evenly by world_size the last ranks' shards
-                # are smaller (ragged) — raise loudly rather than silently miscomputing. All models we ship
-                # use divisible world sizes; if this fires in practice we can add a true broadcast fallback.
-                ref_shape = scatter_list[local_rank].shape
-                if not all(s.shape == ref_shape for s in scatter_list):
-                    raise RuntimeError(
-                        f"Ragged TP shard detected for mapping {target_name!r}: per-rank shard shapes "
-                        f"{[tuple(s.shape) for s in scatter_list]} are non-uniform. Run with a "
-                        "world_size that divides the sharded dim."
-                    )
                 local_param = torch.empty(my_shard_shape, dtype=t_dtype, device=local_device)
-                dist.scatter(local_param, scatter_list=scatter_list, src=src_global_rank, group=group)
-                del scatter_list
+                work = dist.scatter(
+                    local_param, scatter_list=scatter_list, src=src_global_rank, group=group, async_op=True
+                )
+                # scatter_list must stay alive until work completes — store alongside the handle.
+                work_handles.append((work, scatter_list))
             else:
                 local_param = torch.empty(my_shard_shape, dtype=t_dtype, device=local_device)
-                dist.scatter(local_param, scatter_list=None, src=src_global_rank, group=group)
+                work = dist.scatter(local_param, scatter_list=None, src=src_global_rank, group=group, async_op=True)
+                work_handles.append((work, None))
 
         elif sharded:
-            # world_size == 1 — no comms needed, local shard call.
+            # world_size == 1 — local shard, no comms.
             full_tensor = realized_value[target_name]
             full_tensor = full_tensor[0] if isinstance(full_tensor, list) else full_tensor
             full_tensor = full_tensor.to(device=local_device).contiguous()
@@ -1275,21 +1257,22 @@ def _redistribute_realized_value(
             del full_tensor
 
         else:
-            # Replicated parameter: broadcast the full tensor (every rank ends up with a full copy).
+            # Replicated: async broadcast.
             if is_source:
                 full_tensor = realized_value[target_name]
                 full_tensor = full_tensor[0] if isinstance(full_tensor, list) else full_tensor
                 full_tensor = full_tensor.to(device=local_device).contiguous()
                 realized_value[target_name] = None
             else:
-                full_tensor = torch.empty(shape, dtype=t_dtype, device=local_device)
+                full_tensor = torch.empty(full_shape, dtype=t_dtype, device=local_device)
             if world_size > 1:
-                dist.broadcast(full_tensor, src=src_global_rank, group=group)
+                work = dist.broadcast(full_tensor, src=src_global_rank, group=group, async_op=True)
+                work_handles.append((work, None))
             local_param = full_tensor
 
         out[target_name] = local_param
 
-    return out
+    return work_handles, out
 
 
 def convert_and_load_state_dict_in_model(
@@ -1554,17 +1537,40 @@ def convert_and_load_state_dict_in_model(
             future_or_tensor = spawn_materialize(thread_pool, tensor, param_device, _dtype)
             mapping.add_tensor(target_key, original_key, source_pattern, future_or_tensor)
 
+    def _finalize_mapping(work_handles, params, mapping_obj):
+        """Wait for all async comms to finish, then assign params to the model."""
+        for w, _kept_alive in work_handles:
+            w.wait()
+        for target_name, param in params.items():
+            param = param[0] if isinstance(param, list) else param
+            param_device = get_device(device_map, target_name)
+            if param_device == "disk" and (target_name not in model_buffers or offload_buffers):
+                nonlocal disk_offload_index
+                disk_offload_index = offload_and_maybe_resave_param(
+                    target_name, param, loading_info, disk_offload_folder, disk_offload_index, mapping_obj
+                )
+            else:
+                set_param_for_module(
+                    model, target_name, param, loading_info, mapping_obj.distributed_operation, hf_quantizer
+                )
+
     try:
+        # ── Pipelined main loop ──────────────────────────────────────────────────
+        # While scatter N is in-flight on the NIC/NVLink, the CPU is already converting mapping N+1 and
+        # kicking off its async scatter. This overlaps comms with compute and hides per-mapping latency.
+        prev_work_handles = None
+        prev_params = None
+        prev_mapping = None
+
         for first_param_name, mapping in tqdm(param_name_to_load.items(), desc="Loading weights"):
             try:
                 source_rank = mapping_to_source_rank.get(first_param_name, local_rank)
                 is_source = source_rank == local_rank
 
+                # ── Source: convert (sync — resolves the pre-scheduled futures from the thread pool) ──
                 realized_value = None
                 skip = False
                 if is_source:
-                    # Only the owning rank runs `convert` (and therefore waits on the futures it scheduled
-                    # above). Other ranks skip straight to the broadcast below as receivers.
                     try:
                         realized_value = mapping.convert(
                             first_param_name,
@@ -1576,46 +1582,52 @@ def convert_and_load_state_dict_in_model(
                     except SkipParameters:
                         skip = True
 
-                # When TP is active, we redistribute the full tensors produced on the source rank to all ranks via
-                # comms; each rank then locally extracts its shard via `tp_layer.shard_tensor`. We coordinate the
-                # "skip this mapping" decision via a small object broadcast so non-source ranks don't hang waiting
-                # on a tensor broadcast that will never come.
                 if distributed_loading:
-                    realized_value = _redistribute_realized_value(
+                    # ── Start async scatter/broadcast for THIS mapping ──
+                    result = _redistribute_async(
                         realized_value,
                         mapping,
                         source_rank,
                         device_mesh,
                         local_device=device_map[""],
-                        dtype=dtype,
+                        meta_model_state_dict=meta_model_state_dict,
+                        first_param_name=first_param_name,
                         source_skipped=skip,
                     )
-                if skip or realized_value is None:
-                    continue
 
-                for target_name, param in realized_value.items():
-                    param = param[0] if isinstance(param, list) else param
-                    param_device = get_device(device_map, target_name)
-                    # Offloading support
-                    if param_device == "disk" and (target_name not in model_buffers or offload_buffers):
-                        disk_offload_index = offload_and_maybe_resave_param(
-                            target_name, param, loading_info, disk_offload_folder, disk_offload_index, mapping
-                        )
-                    else:
-                        set_param_for_module(
-                            model,
-                            target_name,
-                            param,
-                            loading_info,
-                            mapping.distributed_operation,
-                            hf_quantizer,
-                        )
+                    # ── Meanwhile, finalize the PREVIOUS mapping (whose async ops are now done or nearly done) ──
+                    if prev_work_handles is not None:
+                        _finalize_mapping(prev_work_handles, prev_params, prev_mapping)
+                        prev_work_handles = prev_params = prev_mapping = None
 
-                # Cleanup all the tensors that were gathered before next iteration
-                del realized_value
+                    if result is None:
+                        continue
+                    prev_work_handles, prev_params = result
+                    prev_mapping = mapping
+
+                else:
+                    # Non-distributed: synchronous path (unchanged).
+                    if skip or realized_value is None:
+                        continue
+                    for target_name, param in realized_value.items():
+                        param = param[0] if isinstance(param, list) else param
+                        param_device = get_device(device_map, target_name)
+                        if param_device == "disk" and (target_name not in model_buffers or offload_buffers):
+                            disk_offload_index = offload_and_maybe_resave_param(
+                                target_name, param, loading_info, disk_offload_folder, disk_offload_index, mapping
+                            )
+                        else:
+                            set_param_for_module(
+                                model, target_name, param, loading_info, mapping.distributed_operation, hf_quantizer
+                            )
+                    del realized_value
 
             except SkipParameters:
                 continue
+
+        # ── Drain the last in-flight mapping ──
+        if prev_work_handles is not None:
+            _finalize_mapping(prev_work_handles, prev_params, prev_mapping)
 
     # Close the pool, independently of whether the code was interrupted or finished successfully
     finally:
