@@ -20,8 +20,10 @@ import pytest
 from transformers import (
     AutoProcessor,
     QianfanOCRConfig,
+    QianfanOCRVisionConfig,
     is_torch_available,
 )
+from transformers.models.qwen3 import Qwen3Config
 from transformers.testing_utils import (
     Expectations,
     cleanup,
@@ -31,11 +33,9 @@ from transformers.testing_utils import (
     torch_device,
 )
 
-from ...generation.test_utils import GenerationTesterMixin
-from ...test_configuration_common import ConfigTester
-from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
-from ...test_pipeline_mixin import PipelineTesterMixin
+from ...test_modeling_common import floats_tensor
 from ...test_processing_common import url_to_local_path
+from ...vlm_tester import VLMModelTest, VLMModelTester
 
 
 if is_torch_available():
@@ -44,147 +44,82 @@ if is_torch_available():
     from transformers import QianfanOCRForConditionalGeneration, QianfanOCRModel
 
 
-class QianfanOCRVisionText2TextModelTester:
-    def __init__(
-        self,
-        parent,
-        batch_size=3,
-        seq_length=7,
-        image_seq_length=64,
-        vision_feature_layer=-1,
-        ignore_index=-100,
-        image_token_id=1,
-        num_channels=3,
-        image_size=64,
-        is_training=True,
-        text_config={
-            "model_type": "qwen3",
-            "vocab_size": 99,
-            "hidden_size": 128,
-            "intermediate_size": 256,
-            "num_hidden_layers": 2,
-            "num_attention_heads": 4,
-            "num_key_value_heads": 2,
-            "head_dim": 32,
-            "hidden_act": "silu",
-            "max_position_embeddings": 512,
-            "rope_theta": 10000,
-            "tie_word_embeddings": False,
-            "bos_token_id": 3,
-            "eos_token_id": 4,
-            "pad_token_id": 5,
-        },
-        vision_config={
-            "hidden_size": 32,
-            "num_hidden_layers": 2,
-            "num_attention_heads": 4,
-            "intermediate_size": 128,
-            "image_size": 64,
-            "patch_size": 4,
-            "num_channels": 3,
-            "hidden_act": "quick_gelu",
-            "use_absolute_position_embeddings": True,
-            "drop_path_rate": 0.0,
-        },
-    ):
-        self.parent = parent
-        self.ignore_index = ignore_index
-        self.bos_token_id = text_config["bos_token_id"]
-        self.eos_token_id = text_config["eos_token_id"]
-        self.pad_token_id = text_config["pad_token_id"]
-        self.image_token_id = image_token_id
-        self.text_config = text_config
-        self.vision_config = vision_config
-        self.batch_size = batch_size
-        self.vision_feature_layer = vision_feature_layer
-        self.is_training = is_training
-        self.image_seq_length = image_seq_length
-        self.num_channels = num_channels
-        self.image_size = image_size
-        self.seq_length = seq_length + image_seq_length
+class QianfanOCRVisionText2TextModelTester(VLMModelTester):
+    base_model_class = QianfanOCRModel if is_torch_available() else None
+    config_class = QianfanOCRConfig
+    text_config_class = Qwen3Config
+    vision_config_class = QianfanOCRVisionConfig
+    conditional_generation_class = QianfanOCRForConditionalGeneration if is_torch_available() else None
 
-        self.num_hidden_layers = text_config["num_hidden_layers"]
-        self.vocab_size = text_config["vocab_size"]
-        self.hidden_size = text_config["hidden_size"]
-        self.num_attention_heads = text_config["num_attention_heads"]
+    def __init__(self, parent, **kwargs):
+        kwargs.setdefault("image_token_id", 1)
+        kwargs.setdefault("image_size", 32)
+        kwargs.setdefault("patch_size", 4)
+        kwargs.setdefault("num_channels", 3)
+        kwargs.setdefault("hidden_size", 128)
+        kwargs.setdefault("intermediate_size", 256)
+        kwargs.setdefault("num_hidden_layers", 2)
+        kwargs.setdefault("num_attention_heads", 4)
+        kwargs.setdefault("num_key_value_heads", 2)
+        kwargs.setdefault("head_dim", 32)
+        kwargs.setdefault("hidden_act", "silu")
+        kwargs.setdefault("vision_hidden_size", 32)
+        kwargs.setdefault("vision_intermediate_size", 128)
+        kwargs.setdefault("vision_num_hidden_layers", 2)
+        kwargs.setdefault("vision_num_attention_heads", 4)
+        kwargs.setdefault("vision_hidden_act", "quick_gelu")
+        kwargs.setdefault("drop_path_rate", 0.0)
+        kwargs.setdefault("use_absolute_position_embeddings", True)
+        kwargs.setdefault("image_seq_length", 64)
+        kwargs.setdefault("bos_token_id", 3)
+        kwargs.setdefault("eos_token_id", 4)
+        kwargs.setdefault("pad_token_id", 5)
+        kwargs.setdefault("vocab_size", 99)
+        kwargs.setdefault("max_position_embeddings", 512)
+        kwargs.setdefault("rope_theta", 10000)
+        super().__init__(parent, **kwargs)
+
+        # image_seq_length overrides the VLMModelTester default num_image_tokens-based seq_length
+        self.seq_length = 7 + self.image_seq_length
+
+    def get_vision_config(self):
+        return self.vision_config_class(
+            hidden_size=self.vision_hidden_size,
+            intermediate_size=self.vision_intermediate_size,
+            num_hidden_layers=self.vision_num_hidden_layers,
+            num_attention_heads=self.vision_num_attention_heads,
+            hidden_act=self.vision_hidden_act,
+            image_size=self.image_size,
+            patch_size=self.patch_size,
+            num_channels=self.num_channels,
+            use_absolute_position_embeddings=self.use_absolute_position_embeddings,
+            drop_path_rate=self.drop_path_rate,
+        )
 
     def get_config(self):
-        return QianfanOCRConfig(
-            text_config=self.text_config,
-            vision_config=self.vision_config,
+        return self.config_class(
+            text_config=self.get_text_config().to_dict(),
+            vision_config=self.get_vision_config().to_dict(),
             image_token_id=self.image_token_id,
             image_seq_length=self.image_seq_length,
             vision_feature_layer=self.vision_feature_layer,
+            pad_token_id=self.pad_token_id,
         )
 
-    def prepare_config_and_inputs(self):
-        config = self.get_config()
-        pixel_values = floats_tensor([self.batch_size, self.num_channels, self.image_size, self.image_size])
-        return config, pixel_values
+    def create_pixel_values(self):
+        return floats_tensor([self.batch_size, self.num_channels, self.image_size, self.image_size])
 
-    def prepare_config_and_inputs_for_common(self):
-        config_and_inputs = self.prepare_config_and_inputs()
-        config, pixel_values = config_and_inputs
-        input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
-        attention_mask = torch.ones(input_ids.shape, dtype=torch.long, device=torch_device)
-
+    def place_image_tokens(self, input_ids, config):
+        input_ids = input_ids.clone()
         input_ids[input_ids == self.image_token_id] = self.pad_token_id
         input_ids[:, : self.image_seq_length] = self.image_token_id
-
-        inputs_dict = {
-            "pixel_values": pixel_values,
-            "input_ids": input_ids,
-            "attention_mask": attention_mask,
-        }
-        return config, inputs_dict
-
-    def create_and_check_model_fp16_forward(self, config, input_ids, pixel_values, attention_mask):
-        model = QianfanOCRForConditionalGeneration(config=config)
-        model.to(torch_device)
-        model.half()
-        model.eval()
-        logits = model(
-            input_ids=input_ids,
-            attention_mask=attention_mask,
-            pixel_values=pixel_values.to(torch.bfloat16),
-            return_dict=True,
-        )["logits"]
-        self.parent.assertFalse(torch.isnan(logits).any().item())
-
-    def create_and_check_model_fp16_autocast_forward(self, config, input_ids, pixel_values, attention_mask):
-        config.dtype = torch.float16
-        model = QianfanOCRForConditionalGeneration(config=config)
-        model.to(torch_device)
-        model.eval()
-        with torch.autocast(device_type=torch_device, dtype=torch.float16):
-            logits = model(
-                input_ids=input_ids,
-                attention_mask=attention_mask,
-                pixel_values=pixel_values.to(torch.bfloat16),
-                return_dict=True,
-            )["logits"]
-        self.parent.assertFalse(torch.isnan(logits).any().item())
+        return input_ids
 
 
 @require_torch
-class QianfanOCRModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
+class QianfanOCRModelTest(VLMModelTest, unittest.TestCase):
+    model_tester_class = QianfanOCRVisionText2TextModelTester
     test_torch_exportable = False
-    all_model_classes = (QianfanOCRForConditionalGeneration, QianfanOCRModel) if is_torch_available() else ()
-    all_generative_model_classes = (QianfanOCRForConditionalGeneration,) if is_torch_available() else ()
-    pipeline_model_mapping = (
-        {
-            "image-text-to-text": QianfanOCRForConditionalGeneration,
-        }
-        if is_torch_available()
-        else {}
-    )
-
-    def setUp(self):
-        self.model_tester = QianfanOCRVisionText2TextModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=QianfanOCRConfig, has_text_modality=False)
-
-    def test_config(self):
-        self.config_tester.run_common_tests()
 
     def test_reverse_loading_mapping(self):
         # Conversion happens only for the `ConditionalGeneration` model, not the base model
@@ -211,24 +146,6 @@ class QianfanOCRModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTeste
     @unittest.skip("DataParallel is a deprecated legacy API and not officially supported")
     def test_multi_gpu_data_parallel_forward(self):
         pass
-
-    def test_model_fp16_forward(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-        self.model_tester.create_and_check_model_fp16_forward(
-            config,
-            inputs_dict["input_ids"],
-            inputs_dict["pixel_values"],
-            inputs_dict["attention_mask"],
-        )
-
-    def test_model_fp16_autocast_forward(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-        self.model_tester.create_and_check_model_fp16_autocast_forward(
-            config,
-            inputs_dict["input_ids"],
-            inputs_dict["pixel_values"],
-            inputs_dict["attention_mask"],
-        )
 
 
 @slow
