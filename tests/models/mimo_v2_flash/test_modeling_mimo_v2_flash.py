@@ -89,7 +89,7 @@ class MiMoV2FlashModelTester(CausalLMModelTester):
             "sliding_attention": {"rope_type": "default", "rope_theta": 10_000.0, "partial_rotary_factor": 0.5},
         }
         # 2 layers: [dense, moe]
-        self.moe_layer_freq = [0, 1]
+        self.mlp_layer_types = ["dense", "sparse"]
         self.n_routed_experts = 4
         self.num_experts_per_tok = 2
         self.moe_intermediate_size = 16
@@ -103,10 +103,6 @@ class MiMoV2FlashModelTester(CausalLMModelTester):
         self.attention_dropout = 0.0
 
 
-# NOTE @casinca: some of these tests are re-used from GPT-OSS
-# For MiMO, since we decouple sink and non sink layers for backends, these 2 tests are not skipped (unlike GPT-OSS):
-# - test_sdpa_can_dispatch_non_composite_models
-# - test_eager_matches_sdpa_inference
 @require_torch
 class MiMoV2FlashModelTest(CausalLMModelTest, unittest.TestCase):
     _is_stateful = True
@@ -338,7 +334,7 @@ class MiMoV2FlashModelTest(CausalLMModelTest, unittest.TestCase):
             hidden_size=32,
             moe_intermediate_size=16,
             n_routed_experts=4,
-            moe_layer_freq=[0, 1],
+            mlp_layer_types=["dense", "sparse"],
         )
         model = MiMoV2FlashModel(config)
         experts = model.layers[1].mlp.experts
@@ -353,7 +349,7 @@ class MiMoV2FlashModelTest(CausalLMModelTest, unittest.TestCase):
             hidden_size=32,
             moe_intermediate_size=16,
             n_routed_experts=4,
-            moe_layer_freq=[0, 1],
+            mlp_layer_types=["dense", "sparse"],
         )
         model = MiMoV2FlashModel(config)
         weight_mapping = get_model_conversion_mapping(model)
@@ -383,7 +379,7 @@ class MiMoV2FlashModelTest(CausalLMModelTest, unittest.TestCase):
             head_dim=4,
             v_head_dim=4,
             layer_types=["full_attention", "sliding_attention"],
-            moe_layer_freq=[0, 1],
+            mlp_layer_types=["dense", "sparse"],
             n_routed_experts=4,
             num_experts_per_tok=2,
             n_group=2,
@@ -415,7 +411,7 @@ class MiMoV2FlashModelTest(CausalLMModelTest, unittest.TestCase):
             v_head_dim=8,
             num_attention_heads=4,
             num_key_value_heads=2,
-            moe_layer_freq=[0, 1],
+            mlp_layer_types=["dense", "sparse"],
             moe_intermediate_size=16,
             n_routed_experts=4,
             num_experts_per_tok=2,
