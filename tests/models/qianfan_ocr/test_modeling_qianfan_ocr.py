@@ -130,9 +130,7 @@ class QianfanOCRModelTest(VLMModelTest, unittest.TestCase):
         finally:
             self.all_model_classes = original_classes
 
-    @unittest.skip(
-        reason="Not high prio, fails with `torch._dynamo.exc.InternalTorchDynamoError: ValueRangeError: Invalid ranges [0:-0.500000000000000]`"
-    )
+    @unittest.skip(reason="Not high prio, fails with `torch._dynamo.exc.InternalTorchDynamoError: ValueRangeError: Invalid ranges [0:-0.500000000000000]`")
     @pytest.mark.torch_compile_test
     def test_sdpa_can_compile_dynamic(self):
         pass
