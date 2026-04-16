@@ -748,6 +748,8 @@
         title: PhoBERT
       - local: model_doc/plbart
         title: PLBart
+      - local: model_doc/privacy_filter
+        title: Privacy Filter
       - local: model_doc/prophetnet
         title: ProphetNet
       - local: model_doc/qwen2
