@@ -142,7 +142,7 @@ def extract_nemo_archive(nemo_file_path: str, extract_dir: str) -> dict[str, str
     return model_files
 
 
-def write_processor(nemo_config: dict, model_files, output_dir, model_type, push_to_repo_id=None):
+def write_processor(nemo_config: dict, model_files, output_dir, model_type, push_to_repo_id=None, create_pr=True, revision=None):
     tokenizer_converted = ParakeetConverter(model_files["tokenizer_model_file"]).converted()
     tokenizer_converted_fast = ParakeetTokenizer(
         tokenizer_object=tokenizer_converted,
@@ -204,7 +204,12 @@ def write_processor(nemo_config: dict, model_files, output_dir, model_type, push
     processor.save_pretrained(output_dir)
 
     if push_to_repo_id:
-        processor.push_to_hub(push_to_repo_id)
+        commit_info = processor.push_to_hub(push_to_repo_id, create_pr=create_pr, revision=revision)
+        if create_pr and hasattr(commit_info, "pr_url") and commit_info.pr_url:
+            pr_num = commit_info.pr_url.rstrip("/").split("/")[-1]
+            return f"refs/pr/{pr_num}"
+
+    return revision
 
 
 def convert_encoder_config(nemo_config):
@@ -273,7 +278,7 @@ def load_and_convert_state_dict(model_files):
     return converted_state_dict
 
 
-def write_ctc_model(encoder_config, converted_state_dict, output_dir, push_to_repo_id=None):
+def write_ctc_model(encoder_config, converted_state_dict, output_dir, push_to_repo_id=None, revision=None):
     """Write CTC model using encoder config and converted state dict."""
     model_config = ParakeetCTCConfig.from_encoder_config(encoder_config)
 
@@ -288,7 +293,7 @@ def write_ctc_model(encoder_config, converted_state_dict, output_dir, push_to_re
     model.save_pretrained(output_dir)
 
     if push_to_repo_id:
-        model.push_to_hub(push_to_repo_id)
+        model.push_to_hub(push_to_repo_id, revision=revision)
 
     del model
 
@@ -347,7 +352,7 @@ def load_and_convert_tdt_state_dict(model_files, vocab_size):
     return converted_state_dict
 
 
-def write_tdt_model(nemo_config, encoder_config, model_files, output_dir, push_to_repo_id=None):
+def write_tdt_model(nemo_config, encoder_config, model_files, output_dir, push_to_repo_id=None, revision=None):
     """Write TDT model using encoder config, TDT config, and converted state dict."""
     model_config = convert_tdt_config(nemo_config, encoder_config)
     print(f"Converted TDT config: {model_config}")
@@ -379,7 +384,7 @@ def write_tdt_model(nemo_config, encoder_config, model_files, output_dir, push_t
     model.save_pretrained(output_dir)
 
     if push_to_repo_id:
-        model.push_to_hub(push_to_repo_id)
+        model.push_to_hub(push_to_repo_id, revision=revision)
 
     del model
 
@@ -389,16 +394,16 @@ def write_tdt_model(nemo_config, encoder_config, model_files, output_dir, push_t
     print("Model reloaded successfully.")
 
 
-def write_model(nemo_config, model_files, model_type, output_dir, push_to_repo_id=None):
+def write_model(nemo_config, model_files, model_type, output_dir, push_to_repo_id=None, revision=None):
     """Main model conversion function."""
     encoder_config = convert_encoder_config(nemo_config)
     print(f"Converted encoder config: {encoder_config}")
 
     if model_type == "ctc":
         converted_state_dict = load_and_convert_state_dict(model_files)
-        write_ctc_model(encoder_config, converted_state_dict, output_dir, push_to_repo_id)
+        write_ctc_model(encoder_config, converted_state_dict, output_dir, push_to_repo_id, revision)
     elif model_type == "tdt":
-        write_tdt_model(nemo_config, encoder_config, model_files, output_dir, push_to_repo_id)
+        write_tdt_model(nemo_config, encoder_config, model_files, output_dir, push_to_repo_id, revision)
     else:
         raise ValueError(f"Model type {model_type} not supported.")
 
@@ -408,6 +413,8 @@ def main(
     output_dir,
     model_type,
     push_to_repo_id=None,
+    create_pr=True,
+    revision=None,
 ):
     nemo_filename = f"{hf_repo_id.split('/')[-1]}.nemo"
     filepath = cached_file(hf_repo_id, nemo_filename)
@@ -415,8 +422,14 @@ def main(
     model_files = extract_nemo_archive(filepath, os.path.dirname(filepath))
     nemo_config = yaml.load(open(model_files["model_config"], "r"), Loader=yaml.FullLoader)
 
-    write_processor(nemo_config, model_files, output_dir, model_type, push_to_repo_id)
-    write_model(nemo_config, model_files, model_type, output_dir, push_to_repo_id)
+    # When revision is given (e.g. "refs/pr/3"), both pushes target that existing PR branch.
+    # Otherwise, write_processor creates a new PR and returns its revision for write_model.
+    pr_revision = write_processor(
+        nemo_config, model_files, output_dir, model_type, push_to_repo_id,
+        create_pr=create_pr if revision is None else False,
+        revision=revision,
+    )
+    write_model(nemo_config, model_files, model_type, output_dir, push_to_repo_id, pr_revision)
 
 
 """
@@ -444,10 +457,23 @@ if __name__ == "__main__":
     parser.add_argument("--model_type", required=True, choices=["ctc", "tdt"], help="Model type (`ctc`, `tdt`)")
     parser.add_argument("--output_dir", required=True, help="Output directory for HuggingFace model")
     parser.add_argument("--push_to_repo_id", help="Repository ID to push the model to on the Hub")
+    parser.add_argument(
+        "--create_pr",
+        default=True,
+        action=argparse.BooleanOptionalAction,
+        help="Create a PR when pushing to the Hub (default: True). Use --no-create_pr to push directly.",
+    )
+    parser.add_argument(
+        "--revision",
+        default=None,
+        help='Push to an existing Hub PR branch (e.g. "refs/pr/3"). Overrides --create_pr.',
+    )
     args = parser.parse_args()
     main(
         args.hf_repo_id,
         args.output_dir,
         args.model_type,
         args.push_to_repo_id,
+        args.create_pr,
+        args.revision,
     )
