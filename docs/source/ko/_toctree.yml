@@ -1071,6 +1071,8 @@
         title: Grounding DINO
       - local: in_translation
         title: GroupViT
+      - local: model_doc/hyperclovax_vision_v2
+        title: HyperCLOVAX Vision V2
       - local: in_translation
         title: IDEFICS
       - local: in_translation

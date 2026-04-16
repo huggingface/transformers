@@ -138,6 +138,7 @@ else:
             ),
             ("groupvit", {"torchvision": "CLIPImageProcessor", "pil": "CLIPImageProcessorPil"}),
             ("hiera", {"torchvision": "BitImageProcessor", "pil": "BitImageProcessorPil"}),
+            ("hyperclovax_vision_v2", {"torchvision": "Qwen2VLImageProcessor", "pil": "Qwen2VLImageProcessorPil"}),
             ("idefics", {"torchvision": "IdeficsImageProcessor", "pil": "IdeficsImageProcessorPil"}),
             ("idefics2", {"torchvision": "Idefics2ImageProcessor", "pil": "Idefics2ImageProcessorPil"}),
             ("idefics3", {"torchvision": "Idefics3ImageProcessor", "pil": "Idefics3ImageProcessorPil"}),

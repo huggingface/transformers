@@ -21,7 +21,10 @@ from collections.abc import Callable, Iterator, KeysView, ValuesView
 from typing import Any, TypeVar
 
 from ...configuration_utils import PreTrainedConfig
-from ...dynamic_module_utils import get_class_from_dynamic_module, resolve_trust_remote_code
+from ...dynamic_module_utils import (
+    get_class_from_dynamic_module,
+    resolve_trust_remote_code,
+)
 from ...utils import CONFIG_NAME, logging
 
 
@@ -226,6 +229,8 @@ CONFIG_MAPPING_NAMES = OrderedDict[str, str](
         ("hubert", "HubertConfig"),
         ("hunyuan_v1_dense", "HunYuanDenseV1Config"),
         ("hunyuan_v1_moe", "HunYuanMoEV1Config"),
+        ("hyperclovax", "HyperCLOVAXConfig"),
+        ("hyperclovax_vision_v2", "HCXVisionV2Config"),
         ("ibert", "IBertConfig"),
         ("idefics", "IdeficsConfig"),
         ("idefics2", "Idefics2Config"),
@@ -384,6 +389,7 @@ CONFIG_MAPPING_NAMES = OrderedDict[str, str](
         ("qwen2_5_omni", "Qwen2_5OmniConfig"),
         ("qwen2_5_vl", "Qwen2_5_VLConfig"),
         ("qwen2_5_vl_text", "Qwen2_5_VLTextConfig"),
+        ("qwen2_5_vl_vision", "Qwen2_5_VLVisionConfig"),
         ("qwen2_audio", "Qwen2AudioConfig"),
         ("qwen2_audio_encoder", "Qwen2AudioEncoderConfig"),
         ("qwen2_moe", "Qwen2MoeConfig"),
@@ -748,6 +754,8 @@ MODEL_NAMES_MAPPING = OrderedDict[str, str](
         ("hubert", "Hubert"),
         ("hunyuan_v1_dense", "HunYuanDenseV1"),
         ("hunyuan_v1_moe", "HunYuanMoeV1"),
+        ("hyperclovax", "HyperCLOVAXModel"),
+        ("hyperclovax_vision_v2", "HCXVisionV2ForConditionalGeneration"),
         ("ibert", "I-BERT"),
         ("idefics", "IDEFICS"),
         ("idefics2", "Idefics2"),
@@ -919,6 +927,7 @@ MODEL_NAMES_MAPPING = OrderedDict[str, str](
         ("qwen2_5_omni", "Qwen2_5Omni"),
         ("qwen2_5_vl", "Qwen2_5_VL"),
         ("qwen2_5_vl_text", "Qwen2_5_VL"),
+        ("qwen2_5_vl_vision", "Qwen2_5_VL"),
         ("qwen2_audio", "Qwen2Audio"),
         ("qwen2_audio_encoder", "Qwen2AudioEncoder"),
         ("qwen2_moe", "Qwen2MoE"),
@@ -1101,6 +1110,7 @@ SPECIAL_MODEL_TYPE_TO_MODULE_NAME = OrderedDict[str, str](
         ("xclip", "x_clip"),
         ("clip_vision_model", "clip"),
         ("qwen2_audio_encoder", "qwen2_audio"),
+        ("qwen2_5_vl_vision", "qwen2_5_vl"),
         ("voxtral_encoder", "voxtral"),
         ("voxtral_realtime_encoder", "voxtral_realtime"),
         ("voxtral_realtime_text", "voxtral_realtime"),
@@ -1124,6 +1134,8 @@ SPECIAL_MODEL_TYPE_TO_MODULE_NAME = OrderedDict[str, str](
         ("glm_ocr_vqmodel", "glm_ocr"),
         ("glm_ocr_text", "glm_ocr"),
         ("glmasr_encoder", "glmasr"),
+        ("hyperclovax", "hyperclovax_vision_v2"),
+        ("hyperclovax_vision_v2", "hyperclovax_vision_v2"),
         ("grounding-dino", "grounding_dino"),
         ("moonshine_streaming_encoder", "moonshine_streaming"),
         ("mm-grounding-dino", "mm_grounding_dino"),

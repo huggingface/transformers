@@ -72,6 +72,7 @@ _MODEL_TO_CONVERSION_PATTERN = {
     "mistral3": "llava",
     "qwen2_5_vl": "qwen2_vl",
     "sam3_tracker_video": "sam3_tracker",
+    "hyperclovax_vision_v2": "llava",
     "pp_chart2table": "llava",
     "gemma3n_text": "qwen3_5_text",
     "qwen3_5_moe_text": "qwen3_5_text",
@@ -456,6 +457,19 @@ def _build_checkpoint_conversion_mapping():
                 target_patterns="feed_forward.experts.down_proj",
                 operations=[MergeModulelist(dim=0)],
             ),
+        ],
+        "hyperclovax": [
+            WeightRenaming(r"^model.language_model.model.layers", "model.layers"),
+            WeightRenaming(r"^model.language_model.lm_head", "lm_head"),
+            WeightRenaming(r"^model.language_model.model.embed_tokens", "model.embed_tokens"),
+            WeightRenaming(r"^model.language_model.model.norm", "model.norm"),
+        ],
+        "hyperclovax_vision_v2": [
+            WeightRenaming(r"^model.language_model.lm_head", "lm_head"),
+            WeightRenaming(r"^model.mm_projector", "model.projector"),
+            WeightRenaming(r"^model.language_model.model.layers", "model.language_model.layers"),
+            WeightRenaming(r"^model.language_model.model.embed_tokens", "model.language_model.embed_tokens"),
+            WeightRenaming(r"^model.language_model.model.norm", "model.language_model.norm"),
         ],
         "legacy": [
             WeightRenaming(
