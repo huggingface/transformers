@@ -262,9 +262,6 @@ class QianfanOCRCausalLMOutputWithPast(InternVLCausalLMOutputWithPast):
 
 
 class QianfanOCRForConditionalGeneration(InternVLForConditionalGeneration):
-    # capture_outputs uses ContextVar which torch.compile dynamo cannot trace
-    _can_compile_fullgraph = False
-
     @can_return_tuple
     @auto_docstring
     def forward(self, **super_kwargs) -> tuple | QianfanOCRCausalLMOutputWithPast:
