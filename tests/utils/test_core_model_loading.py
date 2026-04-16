@@ -830,6 +830,15 @@ class TestConversionMapping(unittest.TestCase):
         for k, v in saved_state_dict.items():
             self.assertTrue((v == good_serialized_checkpoints[k]).all())
 
+        # Now, use a fresh model, without going trough loading first, so the model won't have `_weight_conversions` attached
+        # and the prefix should not be added when saving directly (i.e. the conversion should be dropped)
+        model = DummyRoot()
+        saved_state_dict = revert_weight_conversion(model, model.state_dict())
+        model_state_dict = model.state_dict()
+        self.assertEqual(set(model_state_dict.keys()), set(saved_state_dict.keys()))
+        for k, v in saved_state_dict.items():
+            self.assertTrue((v == model_state_dict[k]).all())
+
     def test_can_add_prefix(self):
         # we cannot have another param next to the model, otherwise the prefix adding will already be added even with correct
         # checkpoints starting with the prefix
@@ -880,6 +889,15 @@ class TestConversionMapping(unittest.TestCase):
         self.assertEqual(set(good_serialized_checkpoints.keys()), set(saved_state_dict.keys()))
         for k, v in saved_state_dict.items():
             self.assertTrue((v == good_serialized_checkpoints[k]).all())
+
+        # Now, use a fresh model, without going trough loading first, so the model won't have `_weight_conversions` attached
+        # and the prefix should not be removed when saving directly (i.e. the conversion should be dropped)
+        model = DummyRoot()
+        saved_state_dict = revert_weight_conversion(model, model.state_dict())
+        model_state_dict = model.state_dict()
+        self.assertEqual(set(model_state_dict.keys()), set(saved_state_dict.keys()))
+        for k, v in saved_state_dict.items():
+            self.assertTrue((v == model_state_dict[k]).all())
 
     def test_can_remove_prefix_submodule(self):
         model = DummyRoot()
@@ -933,6 +951,15 @@ class TestConversionMapping(unittest.TestCase):
         for k, v in saved_state_dict.items():
             self.assertTrue((v == good_serialized_checkpoints[k]).all())
 
+        # Now, use a fresh model, without going trough loading first, so the model won't have `_weight_conversions` attached
+        # and the prefix should not be added when saving directly (i.e. the conversion should be dropped)
+        model = DummyRoot()
+        saved_state_dict = revert_weight_conversion(model, model.state_dict())
+        model_state_dict = model.state_dict()
+        self.assertEqual(set(model_state_dict.keys()), set(saved_state_dict.keys()))
+        for k, v in saved_state_dict.items():
+            self.assertTrue((v == model_state_dict[k]).all())
+
     def test_can_add_prefix_submodule(self):
         # we cannot have another param next to the model, otherwise the prefix adding will already be added even with correct
         # checkpoints starting with the prefix
@@ -983,6 +1010,15 @@ class TestConversionMapping(unittest.TestCase):
         self.assertEqual(set(good_serialized_checkpoints.keys()), set(saved_state_dict.keys()))
         for k, v in saved_state_dict.items():
             self.assertTrue((v == good_serialized_checkpoints[k]).all())
+
+        # Now, use a fresh model, without going trough loading first, so the model won't have `_weight_conversions` attached
+        # and the prefix should not be removed when saving directly (i.e. the conversion should be dropped)
+        model = DummyRoot()
+        saved_state_dict = revert_weight_conversion(model, model.state_dict())
+        model_state_dict = model.state_dict()
+        self.assertEqual(set(model_state_dict.keys()), set(saved_state_dict.keys()))
+        for k, v in saved_state_dict.items():
+            self.assertTrue((v == model_state_dict[k]).all())
 
 
 if __name__ == "__main__":
