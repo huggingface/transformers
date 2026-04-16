@@ -599,12 +599,11 @@ class MiMoV2FlashModel(MiMoV2FlashPreTrainedModel):
             lt: self.rotary_emb(hidden_states, position_ids, layer_type=lt) for lt in self.rotary_emb.layer_types
         }
 
-        for layer_idx, decoder_layer in enumerate(self.layers[: self.config.num_hidden_layers]):
-            layer_type = self.config.layer_types[layer_idx]
+        for i, decoder_layer in enumerate(self.layers[: self.config.num_hidden_layers]):
             hidden_states = decoder_layer(
                 hidden_states,
-                attention_mask=causal_mask_mapping[layer_type],
-                position_embeddings=position_embeddings_mapping[layer_type],
+                attention_mask=causal_mask_mapping[self.config.layer_types[i]],
+                position_embeddings=position_embeddings_mapping[self.config.layer_types[i]],
                 position_ids=position_ids,
                 past_key_values=past_key_values,
                 use_cache=use_cache,
