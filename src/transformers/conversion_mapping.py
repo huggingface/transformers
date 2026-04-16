@@ -633,7 +633,7 @@ def extract_weight_conversions_for_model(model: PreTrainedModel, model_prefix: s
         # In this case, add the prefix to `PrefixChange` instances, in order to know where to add/remove the prefix
         if model_specific_conversions is not None and model_prefix != "":
             for i, conversion in enumerate(model_specific_conversions):
-                # In this case, add the prefix
+                # In this case, add the prefix, as otherwise we don't know where we need to re-add it exactly in the module name chain
                 if isinstance(conversion, PrefixChange):
                     model_specific_conversions[i] = conversion.with_submodel_prefix(model_prefix)
         return model_specific_conversions
