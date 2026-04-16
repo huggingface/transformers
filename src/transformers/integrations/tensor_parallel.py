@@ -1052,10 +1052,8 @@ class GroupedGemmParallel(TensorParallelLayer):
             )
         local_num_experts = global_num_experts // self.device_mesh.size()
         shard_size = local_num_experts
-        if isinstance(device, torch.device):
-            device = device.index if device.index is not None else 0
-        start = device * shard_size
-        end = (device + 1) * shard_size
+        start = self.rank * shard_size
+        end = (self.rank + 1) * shard_size
         # special case we don't "shard" just send this entire tensor to the correct rank.
         shape = param.get_shape() if not isinstance(param, torch.Tensor) else param.shape
         if tensor_idx is not None and start <= tensor_idx < end:
