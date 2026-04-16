@@ -135,10 +135,6 @@ class QianfanOCRModelTest(VLMModelTest, unittest.TestCase):
     def test_sdpa_can_compile_dynamic(self):
         pass
 
-    @unittest.skip(reason="Compile fullgraph not yet supported in multimodal models")
-    def test_generate_compile_model_forward_fullgraph(self):
-        pass
-
     @unittest.skip("FlashAttention only support fp16 and bf16 data type")
     def test_flash_attn_2_fp32_ln(self):
         pass
