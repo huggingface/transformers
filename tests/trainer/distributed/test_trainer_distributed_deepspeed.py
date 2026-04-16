@@ -1525,11 +1525,14 @@ class TestNonTrainerIntegrationDeepSpeed(TestCasePlus):
         embedding = model.get_input_embeddings()
         with deepspeed.zero.GatheredParameters([embedding.weight]):
             self.assertEqual(embedding.weight.shape[0], new_size)
-            
+
     def test_zero3_load_registered_buffers(self):
         """Test that registered buffers are loaded correctly under ZeRO-3 from_pretrained."""
         from transformers.models.gemma4.configuration_gemma4 import (
-            Gemma4AudioConfig, Gemma4Config, Gemma4TextConfig, Gemma4VisionConfig,
+            Gemma4AudioConfig,
+            Gemma4Config,
+            Gemma4TextConfig,
+            Gemma4VisionConfig,
         )
         from transformers.models.gemma4.modeling_gemma4 import Gemma4ForConditionalGeneration
 
@@ -1550,7 +1553,7 @@ class TestNonTrainerIntegrationDeepSpeed(TestCasePlus):
         # load with ZeRO-3
         ds_config = self._get_zero3_ds_config(bf16={"enabled": True}, train_micro_batch_size_per_gpu=1)
         with mockenv_context(**self.dist_env_1_gpu):
-            dschf = HfDeepSpeedConfig(ds_config)
+            HfDeepSpeedConfig(ds_config)
             model2 = Gemma4ForConditionalGeneration.from_pretrained(save_path, torch_dtype=torch.bfloat16)
 
         # verify no registered buffers are MISSING
