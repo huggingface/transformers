@@ -80,25 +80,20 @@ class Qwen3ASRProcessor(ProcessorMixin):
 
     def __call__(
         self,
-        audio: AudioInput,
         text: TextInput | list[TextInput],
+        audio: AudioInput,
         output_labels: bool | None = False,
         **kwargs,
     ) -> BatchFeature:
         """
-        Main method to prepare for the model one or several sequences(s) and audio(s). This method forwards the `text`
-        and `kwargs` arguments to Qwen2TokenizerFast's [`~Qwen2TokenizerFast.__call__`] if `text` is not `None` to encode
-        the text. To prepare the audio(s), this method forwards the `audio` and `kwargs` arguments to
-        WhisperFeatureExtractor's [`~WhisperFeatureExtractor.__call__`] if `audio` is not `None`. Please refer to the doctsring
-        of the above two methods for more information.
+        Main method to prepare one or several text sequence(s) and audio waveform(s) for the model.
 
         Args:
+            text (`str`, `List[str]`):
+                The sequence or batch of sequences to be encoded.
             audio (`np.ndarray`, `List[np.ndarray]`):
-                The audio or batch of audio to be prepared.
-            text (`str`, `List[str]`, `List[List[str]]`):
-                The sequence or batch of sequences to be encoded. Each sequence can be a string or a list of strings
-                (pretokenized string). If the sequences are provided as list of strings (pretokenized), you must set
-                `is_split_into_words=True` (to lift the ambiguity with a batch of sequences).
+                The audio or batch of audio to be prepared. Must be as many ``text``
+                inputs as ``audio`` inputs.
             output_labels (bool, *optional*, default=False):
                 Whether to return labels for training.
         """
@@ -114,9 +109,10 @@ class Qwen3ASRProcessor(ProcessorMixin):
         if return_tensors != "pt":
             raise ValueError(f"{self.__class__.__name__} only supports `return_tensors='pt'`.")
 
-        audio = make_list_of_audio(audio)
-        if not isinstance(text, list):
+        if isinstance(text, str):
             text = [text]
+
+        audio = make_list_of_audio(audio)
         if len(text) != len(audio):
             raise ValueError(f"Got {len(text)} text but {len(audio)} audios; they must match 1:1.")
 
@@ -131,8 +127,8 @@ class Qwen3ASRProcessor(ProcessorMixin):
             text[i] = audio_token_pattern.sub(self.audio_token * int(num_tokens), text[i])
 
         # Prepare text
-        texts_inputs = self.tokenizer(text, **text_kwargs)
-        data.update(texts_inputs)
+        text_inputs = self.tokenizer(text, **text_kwargs)
+        data.update(text_inputs)
 
         if output_labels:
             labels = data["input_ids"].clone()
