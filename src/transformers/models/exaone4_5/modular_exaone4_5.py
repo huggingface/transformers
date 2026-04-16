@@ -6,34 +6,35 @@ import torch
 from huggingface_hub.dataclasses import strict
 from torch import nn
 
+from ... import initialization as init
 from ...cache_utils import Cache
 from ...configuration_utils import PreTrainedConfig
 from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import ProcessingKwargs, Unpack
 from ...utils import TransformersKwargs, can_return_tuple
+from ...utils.generic import is_flash_attention_requested
 from ..exaone4.configuration_exaone4 import Exaone4Config
 from ..exaone4.modeling_exaone4 import Exaone4Model, Exaone4PreTrainedModel, Exaone4RMSNorm
 from ..qwen2_5_vl.configuration_qwen2_5_vl import Qwen2_5_VLVisionConfig
 from ..qwen2_5_vl.modeling_qwen2_5_vl import (
-    Qwen2_5_VLForConditionalGeneration,
-    Qwen2_5_VLModel,
-    Qwen2_5_VLVisionAttention,
-    Qwen2_5_VLVisionBlock,
-    Qwen2_5_VisionTransformerPretrainedModel,
-    Qwen2_5_VLMLP,
-    Qwen2_5_VLPatchMerger,
     Qwen2_5_VisionPatchEmbed,
     Qwen2_5_VisionRotaryEmbedding,
+    Qwen2_5_VisionTransformerPretrainedModel,
+    Qwen2_5_VLForConditionalGeneration,
+    Qwen2_5_VLMLP,
+    Qwen2_5_VLModel,
+    Qwen2_5_VLPatchMerger,
+    Qwen2_5_VLVisionAttention,
+    Qwen2_5_VLVisionBlock,
 )
 from ..qwen2_5_vl.processing_qwen2_5_vl import Qwen2_5_VLProcessor
+from ..qwen2_vl.image_processing_pil_qwen2_vl import Qwen2VLImageProcessorPil
+from ..qwen2_vl.image_processing_qwen2_vl import Qwen2VLImageProcessor
 from ..qwen2_vl.modeling_qwen2_vl import (
     apply_rotary_pos_emb_vision,
     eager_attention_forward,
 )
-from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
-from ...utils.generic import is_flash_attention_requested
-from ..qwen2_vl.image_processing_pil_qwen2_vl import Qwen2VLImageProcessorPil
-from ..qwen2_vl.image_processing_qwen2_vl import Qwen2VLImageProcessor
 from ..qwen2_vl.video_processing_qwen2_vl import Qwen2VLVideoProcessor
 
 
@@ -189,7 +190,9 @@ class Exaone4_5_VisionAttention(Qwen2_5_VLVisionAttention):
             )
         else:
             lengths = cu_seqlens[1:] - cu_seqlens[:-1]
-            splits = [torch.split(tensor, lengths.tolist(), dim=2) for tensor in (query_states, key_states, value_states)]
+            splits = [
+                torch.split(tensor, lengths.tolist(), dim=2) for tensor in (query_states, key_states, value_states)
+            ]
             attn_outputs = [
                 attention_interface(
                     self,
@@ -301,13 +304,17 @@ class Exaone4_5_Model(Exaone4_5_PreTrainedModel, Qwen2_5_VLModel):
         if pixel_values is not None:
             image_embeds = self.get_image_features(pixel_values, image_grid_thw).pooler_output
             image_embeds = torch.cat(image_embeds, dim=0).to(inputs_embeds.device, inputs_embeds.dtype)
-            image_mask, _ = self.get_placeholder_mask(input_ids, inputs_embeds=inputs_embeds, image_features=image_embeds)
+            image_mask, _ = self.get_placeholder_mask(
+                input_ids, inputs_embeds=inputs_embeds, image_features=image_embeds
+            )
             inputs_embeds = inputs_embeds.masked_scatter(image_mask, image_embeds)
 
         if pixel_values_videos is not None:
             video_embeds = self.get_video_features(pixel_values_videos, video_grid_thw).pooler_output
             video_embeds = torch.cat(video_embeds, dim=0).to(inputs_embeds.device, inputs_embeds.dtype)
-            _, video_mask = self.get_placeholder_mask(input_ids, inputs_embeds=inputs_embeds, video_features=video_embeds)
+            _, video_mask = self.get_placeholder_mask(
+                input_ids, inputs_embeds=inputs_embeds, video_features=video_embeds
+            )
             inputs_embeds = inputs_embeds.masked_scatter(video_mask, video_embeds)
 
         # EXAONE-4.5 text stack uses standard 1D RoPE from Exaone4Model.
@@ -385,7 +392,9 @@ class Exaone4_5_ForConditionalGeneration(Exaone4_5_PreTrainedModel, Qwen2_5_VLFo
 
         loss = None
         if labels is not None:
-            loss = self.loss_function(logits=logits, labels=labels, vocab_size=self.config.text_config.vocab_size, **kwargs)
+            loss = self.loss_function(
+                logits=logits, labels=labels, vocab_size=self.config.text_config.vocab_size, **kwargs
+            )
 
         return CausalLMOutputWithPast(
             loss=loss,
