@@ -49,7 +49,6 @@ class QianfanOCRProcessor(ProcessorMixin):
         self,
         image_processor=None,
         tokenizer=None,
-        video_processor=None,
         image_seq_length: int = 256,
         chat_template=None,
         image_placeholder_token: str = "<image>",
@@ -61,18 +60,17 @@ class QianfanOCRProcessor(ProcessorMixin):
             It is replaced by the full ``<img><IMG_CONTEXT>...<IMG_CONTEXT></img>``
             sequence during processing.
         """
-        super().__init__(image_processor, tokenizer, video_processor, chat_template=chat_template, **kwargs)
-
+        super().__init__(image_processor, tokenizer, chat_template=chat_template, **kwargs)
         self.image_seq_length = image_seq_length
         self.start_image_token = tokenizer.start_image_token
         self.end_image_token = tokenizer.end_image_token
         self.start_image_token_id = tokenizer.start_image_token_id
         self.end_image_token_id = tokenizer.end_image_token_id
         self.image_token = tokenizer.context_image_token
-        self.video_token = None
         self.image_token_id = tokenizer.context_image_token_id
         self.image_ids = [self.image_token_id, self.start_image_token_id, self.end_image_token_id]
         self.image_placeholder_token = image_placeholder_token
+        self.video_token = None
         self.video_processor = None
 
     def _insert_media_placeholders(

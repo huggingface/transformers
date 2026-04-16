@@ -20,11 +20,10 @@ import torch
 import torch.nn as nn
 from huggingface_hub.dataclasses import strict
 
-from ...cache_utils import Cache
 from ...image_processing_utils import BatchFeature
 from ...image_utils import ImageInput
 from ...modeling_outputs import BaseModelOutputWithPooling
-from ...processing_utils import Unpack
+from ...processing_utils import ProcessorMixin, Unpack
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
 from ...utils import TransformersKwargs, auto_docstring
 from ...utils.generic import can_return_tuple, merge_with_config_defaults
@@ -300,7 +299,6 @@ class QianfanOCRProcessor(InternVLProcessor):
         self,
         image_processor=None,
         tokenizer=None,
-        video_processor=None,
         image_seq_length: int = 256,
         chat_template=None,
         image_placeholder_token: str = "<image>",
@@ -312,14 +310,15 @@ class QianfanOCRProcessor(InternVLProcessor):
             It is replaced by the full ``<img><IMG_CONTEXT>...<IMG_CONTEXT></img>``
             sequence during processing.
         """
-        super().__init__(
-            image_processor=image_processor,
-            tokenizer=tokenizer,
-            video_processor=None,
-            image_seq_length=image_seq_length,
-            chat_template=chat_template,
-            **kwargs,
-        )
+        ProcessorMixin.__init__(self, image_processor, tokenizer, chat_template=chat_template, **kwargs)
+        self.image_seq_length = image_seq_length
+        self.start_image_token = tokenizer.start_image_token
+        self.end_image_token = tokenizer.end_image_token
+        self.start_image_token_id = tokenizer.start_image_token_id
+        self.end_image_token_id = tokenizer.end_image_token_id
+        self.image_token = tokenizer.context_image_token
+        self.image_token_id = tokenizer.context_image_token_id
+        self.image_ids = [self.image_token_id, self.start_image_token_id, self.end_image_token_id]
         self.image_placeholder_token = image_placeholder_token
         self.video_token = None
         self.video_processor = None

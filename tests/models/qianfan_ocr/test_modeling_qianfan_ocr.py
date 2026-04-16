@@ -45,11 +45,11 @@ if is_torch_available():
 
 
 class QianfanOCRVisionText2TextModelTester(VLMModelTester):
-    base_model_class = QianfanOCRModel if is_torch_available() else None
+    base_model_class = QianfanOCRModel
     config_class = QianfanOCRConfig
     text_config_class = Qwen3Config
     vision_config_class = QianfanOCRVisionConfig
-    conditional_generation_class = QianfanOCRForConditionalGeneration if is_torch_available() else None
+    conditional_generation_class = QianfanOCRForConditionalGeneration
 
     def __init__(self, parent, **kwargs):
         kwargs.setdefault("image_token_id", 1)
@@ -70,7 +70,7 @@ class QianfanOCRVisionText2TextModelTester(VLMModelTester):
         kwargs.setdefault("vision_hidden_act", "quick_gelu")
         kwargs.setdefault("drop_path_rate", 0.0)
         kwargs.setdefault("use_absolute_position_embeddings", True)
-        kwargs.setdefault("image_seq_length", 64)
+        kwargs.setdefault("image_seq_length", 16)
         kwargs.setdefault("bos_token_id", 3)
         kwargs.setdefault("eos_token_id", 4)
         kwargs.setdefault("pad_token_id", 5)
