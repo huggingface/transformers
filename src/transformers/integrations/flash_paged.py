@@ -81,8 +81,9 @@ def paged_attention_forward(
 
     # Otherwise, use flash_attn_with_kvcache which updates the cache in-place and computes attention
     else:
+        flash_kwargs = {"s_aux": kwargs["s_aux"]} if "s_aux" in kwargs else {}  # this is only available in VLLM's FA3
         attn_output = _paged_decode_forward(
-            module, q, k, v, cache, cu_seq_lens_k, sliding_window, flash_attn_with_kvcache, block_table, **kwargs
+            module, q, k, v, cache, cu_seq_lens_k, sliding_window, flash_attn_with_kvcache, block_table, **flash_kwargs
         )
     return attn_output, None
 
@@ -98,7 +99,7 @@ def _paged_decode_forward(
     sliding_window: tuple[int, int],
     flash_attn_with_kvcache,
     block_table: torch.Tensor,
-    **kwargs,
+    **flash_kwargs,
 ) -> torch.Tensor:
     """Decode fast path using flash_attn_with_kvcache. Disabled because FA3 has issue with tracing this."""
     # Get layer group index for this layer
@@ -117,9 +118,7 @@ def _paged_decode_forward(
     batch_size = k.size(0)
     cache_seqlens = (cu_seq_lens_k[1 : batch_size + 1] - cu_seq_lens_k[:batch_size] - 1).to(torch.int32)
     # The arg name for the block table is not the same in VLLM's kernel and Tri Dao's kernel, so we need to parse it
-    flash_kwargs = {cache.get_block_table_key(flash_attn_with_kvcache): block_table[group_idx]}
-    if "s_aux" in kwargs:
-        flash_kwargs["s_aux"] = kwargs["s_aux"]  # this is only available in VLLM's FA3
+    flash_kwargs[cache.get_block_table_key(flash_attn_with_kvcache)] = block_table[group_idx]
     # Call flash_attn_with_kvcache - this updates cache in-place and computes attention
     attn_output = flash_attn_with_kvcache(
         q=q,
