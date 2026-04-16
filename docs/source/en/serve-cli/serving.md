@@ -933,6 +933,32 @@ data: {"id":"cb997e1d-98b9-414a-be89-1880288610ef","choices":[{"delta":{"content
 </hfoption>
 </hfoptions>
 
+### Multi-turn conversations
+
+To have a multi-turn conversation, include the full conversation history in the `messages` list with alternating `user` and `assistant` roles. Like all OpenAI-compatible servers, the API is stateless, so every request must contain the complete conversation history.
+
+```python
+from openai import OpenAI
+
+client = OpenAI(base_url="http://localhost:8000/v1", api_key="<random_string>")
+
+completion = client.chat.completions.create(
+    model="Qwen/Qwen2.5-0.5B-Instruct",
+    messages=[
+        {"role": "user", "content": "What is the capital of France?"},
+        {"role": "assistant", "content": "The capital of France is Paris."},
+        {"role": "user", "content": "How many people live there?"},
+    ],
+)
+print(completion.choices[0].message.content)
+```
+
+The follow-up question "How many people live there?" relies on the prior context, and the model answers about Paris accordingly.
+
+```
+As of 2021, the population of Paris is approximately 2.2 million people.
+```
+
 ## v1/responses
 
 The [Responses API](https://platform.openai.com/docs/api-reference/responses) is OpenAI's latest API endpoint for generation. It supports stateful interactions and integrates built-in tools to extend a model's capabilities. OpenAI [recommends](https://platform.openai.com/docs/guides/migrate-to-responses) using the Responses API over the Chat Completions API for new projects.
@@ -1514,6 +1540,34 @@ data: {"content_index":0,"delta":"Based ","item_id":"msg_b2c3d4e5","output_index
 </hfoption>
 </hfoptions>
 
+### Multi-turn conversations
+
+For multi-turn conversations, pass a list of messages with `role` keys in the `input` field. Like all OpenAI-compatible servers, the API is stateless, so every request must contain the complete conversation history.
+
+```python
+from openai import OpenAI
+
+client = OpenAI(base_url="http://localhost:8000/v1", api_key="<random_string>")
+
+response = client.responses.create(
+    model="Qwen/Qwen2.5-0.5B-Instruct",
+    input=[
+        {"role": "user", "content": "What is the capital of France?"},
+        {"role": "assistant", "content": "The capital of France is Paris."},
+        {"role": "user", "content": "How many people live there?"},
+    ],
+    max_output_tokens=256,
+    stream=False,
+)
+print(response.output[0].content[0].text)
+```
+
+The follow-up question "How many people live there?" relies on the prior context, and the model answers about Paris accordingly.
+
+```
+As of 2021, Paris has a population of approximately 2.8 million people.
+```
+
 ## v1/audio/transcriptions
 
 The `v1/audio/transcriptions` endpoint transcribes audio using speech-to-text models. It follows the [Audio transcription API](https://platform.openai.com/docs/api-reference/audio/createTranscription) format.
@@ -1721,11 +1775,10 @@ ssh -N -f -L 8000:localhost:8000 your_server_account@your_server_IP -p port_to_s
 
 ## Reproducibility
 
-Use `--force-model <repo_id>` to avoid per-request model hints and produce stable, repeatable runs.
+Pass a model as a positional argument to avoid per-request model hints and produce stable, repeatable runs.
 
 ```sh
-transformers serve \
-  --force-model Qwen/Qwen2.5-0.5B-Instruct \
+transformers serve Qwen/Qwen2.5-0.5B-Instruct \
   --continuous-batching \
   --dtype "bfloat16"
 ```
