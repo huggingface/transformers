@@ -847,6 +847,8 @@
         title: UMT5
       - local: model_doc/vaultgemma
         title: VaultGemma
+      - local: model_doc/voxtral_tts
+        title: Voxtral TTS
       - local: model_doc/xmod
         title: X-MOD
       - local: model_doc/xglm

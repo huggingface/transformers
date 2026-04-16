@@ -177,6 +177,7 @@ else:
             ("vision-text-dual-encoder", "VisionTextDualEncoderProcessor"),
             ("voxtral", "VoxtralProcessor"),
             ("voxtral_realtime", "VoxtralRealtimeProcessor"),
+            ("voxtral_tts", "VoxtralTtsProcessor"),
             ("wav2vec2", "Wav2Vec2Processor"),
             ("wav2vec2-bert", "Wav2Vec2Processor"),
             ("wav2vec2-conformer", "Wav2Vec2Processor"),
