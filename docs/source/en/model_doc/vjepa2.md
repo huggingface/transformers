@@ -33,7 +33,22 @@ rendered properly in your Markdown viewer.
 
 You can find all original V-JEPA2 checkpoints under the [V-JEPA 2](https://huggingface.co/collections/facebook/v-jepa-2-6841bad8413014e185b497a6) collection.
 
-This model was contributed by [koustuvs](https://huggingface.co/koustuvs), [yonigozlan](https://huggingface.co/yonigozlan) and [qubvel](https://huggingface.co/qubvel-hf). The original code can be found [here](https://github.com/facebookresearch/vjepa2).
+### V-JEPA 2.1
+
+V-JEPA 2.1 was released by Meta on 2026-03-16 with four pretrained backbones at 384 resolution:
+
+| Model | Parameters | Distilled | Checkpoint |
+|-------|-----------|-----------|------------|
+| ViT-B/16, 384 | 80M | Yes (from ViT-G) | `vjepa2.1-vitb-fpc64-384` |
+| ViT-L/16, 384 | 300M | Yes (from ViT-G) | `vjepa2.1-vitl-fpc64-384` |
+| ViT-g/16, 384 | 1B | No | `vjepa2.1-vitg-fpc64-384` |
+| ViT-G/16, 384 | 2B | No | `vjepa2.1-vitG-fpc64-384` |
+
+Key architectural differences from V-JEPA 2: corrected RoPE implementation (`repeat_interleave`), learnable modality embeddings, hierarchical feature extraction with per-layer norms, separate image patch embedding, RoPE position interpolation, and predictor context token projection (`return_all_tokens`).
+
+V-JEPA 2.1 models are loaded using the same `VJEPA2Model` class with 2.1-specific config fields set automatically by the conversion script.
+
+This model was contributed by [koustuvs](https://huggingface.co/koustuvs), [yonigozlan](https://huggingface.co/yonigozlan) and [qubvel](https://huggingface.co/qubvel-hf). V-JEPA 2.1 support was added by [davevanveen](https://huggingface.co/davevanveen). The original code can be found [here](https://github.com/facebookresearch/vjepa2).
 
 ## Usage example
 
