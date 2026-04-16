@@ -295,7 +295,9 @@ class TestFetcherTester(unittest.TestCase):
         with ExitStack() as stack:
             stack.enter_context(patch.object(tests_fetcher, "commit_flags", {"test_all": False}, create=True))
             stack.enter_context(
-                patch.object(tests_fetcher, "get_modified_python_files", return_value=["utils/check_modeling_structure.py"])
+                patch.object(
+                    tests_fetcher, "get_modified_python_files", return_value=["utils/check_modeling_structure.py"]
+                )
             )
             stack.enter_context(patch.object(tests_fetcher, "create_reverse_dependency_map", return_value={}))
             stack.enter_context(
