@@ -4278,7 +4278,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                 model=model,
                 state_dict=merged_state_dict,
                 load_config=load_config,
-                tp_plan=model._tp_plan,
+                tp_plan=model.tp_plan,
                 disk_offload_index=disk_offload_index,
             )
 
