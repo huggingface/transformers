@@ -90,7 +90,7 @@ class NandiConfig(PretrainedConfig):
         if self.head_dim is None:
             self.head_dim = self.hidden_size // self.num_attention_heads
         if self.rope_parameters is None:
-            self.rope_parameters = {"rope_theta": 100000.0}
+            self.rope_parameters = {"rope_type": "default", "rope_theta": 100000.0}
         if not self.layer_sharing:
             self.layer_sharing_repeats = 1
 
