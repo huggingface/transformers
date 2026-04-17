@@ -1007,9 +1007,11 @@ def create_causal_mask(
         allow_is_causal_skip = False
         use_vmap = True
 
-    # If we detected packing format
+    # If we detected packing format or blockwise overlay
     if packed_sequence_mask is not None:
         mask_factory_function = and_masks(mask_factory_function, packed_sequence_mask_function(packed_sequence_mask))
+        allow_is_causal_skip = False
+    if block_sequence_ids is not None:
         allow_is_causal_skip = False
 
     # We now create the mask
@@ -1106,6 +1108,10 @@ def create_bidirectional_mask(
         mask_factory_function = and_masks(mask_factory_function, and_mask_function)
         allow_is_bidirectional_skip = False
         use_vmap = True
+
+    # If we detect a blockwise overlay
+    if block_sequence_ids is not None:
+        allow_is_bidirectional_skip = False
 
     # We now create the mask
     attention_mask = mask_interface(
@@ -1230,9 +1236,11 @@ def create_sliding_window_causal_mask(
         allow_is_causal_skip = False
         use_vmap = True
 
-    # If we detected packing format
+    # If we detected packing format or blockwise overlay
     if packed_sequence_mask is not None:
         mask_factory_function = and_masks(mask_factory_function, packed_sequence_mask_function(packed_sequence_mask))
+        allow_is_causal_skip = False
+    if block_sequence_ids is not None:
         allow_is_causal_skip = False
 
     # We now create the mask
@@ -1322,6 +1330,10 @@ def create_bidirectional_sliding_window_mask(
         mask_factory_function = and_masks(mask_factory_function, and_mask_function)
         allow_is_bidirectional_skip = False
         use_vmap = True
+
+    # If we detect a blockwise overlay
+    if block_sequence_ids is not None:
+        allow_is_bidirectional_skip = False
 
     attention_mask = mask_interface(
         batch_size=batch_size,

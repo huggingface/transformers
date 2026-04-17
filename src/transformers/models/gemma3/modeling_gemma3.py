@@ -833,7 +833,7 @@ class Gemma3Model(Gemma3PreTrainedModel):
 
         # It may already have been prepared by e.g. `generate`
         if not isinstance(causal_mask_mapping := attention_mask, dict):
-            group_ids = torch.full([*inputs_embeds.size()], -1, device=inputs_embeds.device)
+            group_ids = torch.full([*inputs_embeds.size()[:-1]], -1, device=inputs_embeds.device)
             if token_type_ids is not None:
                 # First find where a new image block starts: 1 if image and previous not image
                 # The images cannot attend to future images, but can attend to all prev images and to itself bidirectionally
@@ -1060,7 +1060,7 @@ class Gemma3ForConditionalGeneration(Gemma3PreTrainedModel, GenerationMixin):
         is_first_iteration: bool | None = False,
         **kwargs,
     ) -> dict:
-        group_ids = torch.full([*inputs_embeds.size()], -1, device=inputs_embeds.device)
+        group_ids = torch.full([*inputs_embeds.size()[:-1]], -1, device=inputs_embeds.device)
         if token_type_ids is not None:
             # First find where a new image block starts: 1 if image and previous not image
             # The images cannot attend to future images, but can attend to all prev images and to itself bidirectionally

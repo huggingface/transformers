@@ -890,7 +890,7 @@ class GitModel(GitPreTrainedModel):
             attention_mask = torch.cat([extended_attention_mask, attention_mask], dim=-1)
 
         # Images attend each other bidirectionally while text remains causal
-        group_ids = torch.full([*embedding_output.size()], -1, device=embedding_output.device)
+        group_ids = torch.full([*embedding_output.size()[:-1]], -1, device=embedding_output.device)
         if token_type_ids is not None:
             # First find where a new image block starts: 1 if image and previous not image
             # The images cannot attend to future images, but can attend to all prev images and to itself bidirectionally

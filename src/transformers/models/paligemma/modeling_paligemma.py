@@ -255,7 +255,7 @@ class PaliGemmaModel(PaliGemmaPreTrainedModel):
             inputs_embeds = inputs_embeds.masked_scatter(special_image_mask, image_features)
 
         # It may already have been prepared by e.g. `generate`
-        group_ids = torch.full([*inputs_embeds.size()], -1, device=inputs_embeds.device)
+        group_ids = torch.full([*inputs_embeds.size()[:-1]], -1, device=inputs_embeds.device)
         if token_type_ids is not None:
             # Can attend bidirectionally in prefix and only causally in suffix
             group_ids = torch.where(token_type_ids == 0, 0, -1)
@@ -448,7 +448,7 @@ class PaliGemmaForConditionalGeneration(PaliGemmaPreTrainedModel, GenerationMixi
         is_first_iteration: bool | None = False,
         **kwargs,
     ) -> dict:
-        group_ids = torch.full([*inputs_embeds.size()], -1, device=inputs_embeds.device)
+        group_ids = torch.full([*inputs_embeds.size()[:-1]], -1, device=inputs_embeds.device)
         if token_type_ids is not None:
             # First find where a new image block starts: 1 if image and previous not image
             # The images cannot attend to future images, but can attend to all prev images and to itself bidirectionally
