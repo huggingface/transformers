@@ -27,6 +27,7 @@ from torch import nn
 from torch.nn import functional as F
 
 from ... import initialization as init
+from ...cache_utils import Cache
 from ...integrations import use_experts_implementation, use_kernel_forward_from_hub, use_kernelized_func
 from ...masking_utils import create_bidirectional_sliding_window_mask
 from ...modeling_layers import GenericForTokenClassification, GradientCheckpointingLayer
@@ -398,6 +399,9 @@ class PrivacyFilterEncoderLayer(GradientCheckpointingLayer):
         self,
         hidden_states: torch.Tensor,
         attention_mask: torch.Tensor | None = None,
+        position_ids: torch.LongTensor | None = None,
+        past_key_values: Cache | None = None,
+        use_cache: bool | None = False,
         position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> torch.Tensor:
@@ -406,8 +410,11 @@ class PrivacyFilterEncoderLayer(GradientCheckpointingLayer):
         # Self Attention
         hidden_states, _ = self.self_attn(
             hidden_states=hidden_states,
-            position_embeddings=position_embeddings,
             attention_mask=attention_mask,
+            position_ids=position_ids,
+            past_key_values=past_key_values,
+            use_cache=use_cache,
+            position_embeddings=position_embeddings,
             **kwargs,
         )
         hidden_states = residual + hidden_states
@@ -415,9 +422,8 @@ class PrivacyFilterEncoderLayer(GradientCheckpointingLayer):
         # Fully Connected
         residual = hidden_states
         hidden_states = self.post_attention_layernorm(hidden_states)
-        hidden_states, _ = self.mlp(hidden_states)
+        hidden_states, _ = self.mlp(hidden_states)  # diff with llama: router scores
         hidden_states = residual + hidden_states
-
         return hidden_states
 
 
