@@ -223,8 +223,11 @@ class VJEPA2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         pixel_values = torch.randn(1, 2, 3, 16, 16, device=torch_device)
         with torch.no_grad():
             outputs = model(pixel_values)
-        self.assertIsNotNone(outputs.last_hidden_state)
-        self.assertIsNotNone(outputs.predictor_output)
+        # n_dist=1: encoder returns single-norm (hidden_size)
+        self.assertEqual(outputs.last_hidden_state.shape, (1, 1, 32))
+        # predictor with return_all_tokens: context + target tokens
+        # proj_output_dim = n_hier(4) * (teacher_embed_dim(64) // n_hier(4)) = 64
+        self.assertEqual(outputs.predictor_output.last_hidden_state.shape, (1, 2, 64))
 
     def test_model_2_1_multi_distillation(self):
         """Fast test: 2.1 config with n_output_distillation=4 (multi-layer predictor embed)."""
@@ -252,8 +255,10 @@ class VJEPA2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         pixel_values = torch.randn(1, 2, 3, 16, 16, device=torch_device)
         with torch.no_grad():
             outputs = model(pixel_values)
-        self.assertIsNotNone(outputs.last_hidden_state)
-        self.assertIsNotNone(outputs.predictor_output)
+        # n_dist=4: encoder returns concatenated hierarchical (hidden_size * 4)
+        self.assertEqual(outputs.last_hidden_state.shape, (1, 1, 128))
+        # proj_output_dim = n_hier(4) * hidden_size(32) = 128
+        self.assertEqual(outputs.predictor_output.last_hidden_state.shape, (1, 2, 128))
 
     @slow
     def test_model_from_pretrained(self):
