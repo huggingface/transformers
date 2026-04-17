@@ -141,8 +141,8 @@ class Gemma3Processor(ProcessorMixin):
                 "Invalid input images. Please provide a single image or a list of images or a list of list of images."
             )
 
-    def replace_image_token(self, processed_images: dict, image_idx: int) -> str:
-        num_crops = processed_images["num_crops"][image_idx]
+    def replace_image_token(self, image_inputs: dict, image_idx: int) -> str:
+        num_crops = image_inputs["num_crops"][image_idx]
         if num_crops > 0:
             formatted_image_text = (
                 f"Here is the original image {self.full_image_sequence} and here are some crops to help you see better "

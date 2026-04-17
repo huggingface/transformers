@@ -200,9 +200,9 @@ class Idefics3Processor(ProcessorMixin):
                 "Invalid input images. Please provide a single image or a list of images or a list of list of images."
             )
 
-    def replace_image_token(self, processed_images: dict, image_idx: int) -> str:
-        image_rows = [row for row_list in processed_images["rows"] for row in row_list][image_idx]
-        image_cols = [col for col_list in processed_images["cols"] for col in col_list][image_idx]
+    def replace_image_token(self, image_inputs: dict, image_idx: int) -> str:
+        image_rows = [row for row_list in image_inputs["rows"] for row in row_list][image_idx]
+        image_cols = [col for col_list in image_inputs["cols"] for col in col_list][image_idx]
         if image_rows == 0 and image_cols == 0:
             return (
                 f"{self.fake_image_token}"

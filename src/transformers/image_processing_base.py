@@ -470,9 +470,6 @@ class ImageProcessingMixin(PushToHubMixin):
 
         cls._auto_class = auto_class
 
-    def fetch_data(self, image_url_or_urls):
-        return self.fetch_images(image_url_or_urls)
-
     def fetch_images(self, image_url_or_urls: str | list[str] | list[list[str]]):
         """
         Convert a single or a list of urls into the corresponding `PIL.Image` objects.

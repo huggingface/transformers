@@ -116,16 +116,16 @@ class Glm4vProcessor(ProcessorMixin):
             text_inputs["mm_token_type_ids"] = self.create_mm_token_type_ids(text_inputs["input_ids"])
         return BatchFeature(data={**text_inputs, **image_inputs, **videos_inputs}, tensor_type=return_tensors)
 
-    def replace_image_token(self, processed_images: dict, image_idx: int) -> str:
+    def replace_image_token(self, image_inputs: dict, image_idx: int) -> str:
         merge_length = self.image_processor.merge_size**2
-        num_image_tokens = processed_images["image_grid_thw"][image_idx].prod() // merge_length
+        num_image_tokens = image_inputs["image_grid_thw"][image_idx].prod() // merge_length
         return self.image_token * num_image_tokens
 
-    def replace_video_token(self, processed_videos: dict, video_idx: int) -> str:
+    def replace_video_token(self, video_inputs: dict, video_idx: int) -> str:
         merge_length = self.video_processor.merge_size**2
-        num_frames = processed_videos["video_grid_thw"][video_idx][0]
-        num_image_tokens = processed_videos["video_grid_thw"][video_idx].prod() // merge_length // num_frames
-        metadata = processed_videos["video_metadata"][video_idx]
+        num_frames = video_inputs["video_grid_thw"][video_idx][0]
+        num_image_tokens = video_inputs["video_grid_thw"][video_idx].prod() // merge_length // num_frames
+        metadata = video_inputs["video_metadata"][video_idx]
         video_structure = ""
 
         if metadata.fps is None:

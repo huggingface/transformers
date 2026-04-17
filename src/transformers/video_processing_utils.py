@@ -817,9 +817,6 @@ class BaseVideoProcessor(TorchvisionBackend):
 
         cls._auto_class = auto_class
 
-    def fetch_data(self, video_url_or_urls: str | list[str] | list[list[str]], sample_indices_fn=None):
-        return self.fetch_videos(video_url_or_urls)[0]
-
     def fetch_videos(self, video_url_or_urls: str | list[str] | list[list[str]], sample_indices_fn=None):
         """
         Convert a single or a list of urls into the corresponding `np.array` objects.

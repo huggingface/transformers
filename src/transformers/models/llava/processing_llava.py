@@ -67,8 +67,8 @@ class LlavaProcessor(ProcessorMixin):
         self.image_token_id = tokenizer.encode(self.image_token, add_special_tokens=False)[0]
         super().__init__(image_processor, tokenizer, chat_template=chat_template)
 
-    def replace_image_token(self, processed_images: dict, image_idx: int) -> str:
-        pixel_values = processed_images["pixel_values"][image_idx]
+    def replace_image_token(self, image_inputs: dict, image_idx: int) -> str:
+        pixel_values = image_inputs["pixel_values"][image_idx]
         height, width = get_image_size(to_numpy_array(pixel_values))
         num_image_tokens = (height // self.patch_size) * (width // self.patch_size) + self.num_additional_image_tokens
         if self.vision_feature_select_strategy == "default":

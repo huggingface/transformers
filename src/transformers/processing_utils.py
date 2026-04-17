@@ -678,16 +678,16 @@ class ProcessorMixin(PushToHubMixin):
 
         processed_images = processed_videos = processed_audio = {}
         images_replacements = videos_replacements = audio_replacements = []
-        if images is not None:
+        if images is not None and hasattr(self, "image_processor"):
             processed_images, images_replacements = self._process_images(images, **kwargs["images_kwargs"])
-        if videos is not None:
+        if videos is not None and hasattr(self, "video_processor"):
             processed_videos, videos_replacements = self._process_videos(videos, **kwargs["videos_kwargs"])
-        if audio is not None:
+        if audio is not None and hasattr(self, "feature_extractor"):
             processed_audio, audio_replacements = self._process_audio(audio, **kwargs["audio_kwargs"])
 
         text_inputs = {}
+        return_tensors = kwargs["text_kwargs"].pop("return_tensors", None)
         if getattr(self, "tokenizer", None) is not None and text is not None:
-            return_tensors = kwargs["text_kwargs"].pop("return_tensors", None)
             return_mm_token_type_ids = kwargs["text_kwargs"].pop("return_mm_token_type_ids", False)
             return_text_replacement_offsets = kwargs["text_kwargs"].pop("return_mm_token_type_ids", False)
 
@@ -711,19 +711,20 @@ class ProcessorMixin(PushToHubMixin):
         return BatchFeature(data, tensor_type=return_tensors)
 
     def _process_images(self, images: ImageInput, **kwargs):
-        images = self.image_processor.fetch_data(images)
+        images = self.image_processor.fetch_images(images)
         processed_data = self.image_processor(images, **kwargs)
         image_replacements = self.get_images_replacement(images, processed_data)
         return processed_data, image_replacements
 
     def _process_videos(self, videos: VideoInput, **kwargs):
         processed_data = self.video_processor(videos, **kwargs)
-        decoded_videos = self.video_processor.fetch_data(videos)  # FIXME: order
+        decoded_videos = self.video_processor.fetch_videos(videos)  # FIXME: order
         video_replacements = self.get_videos_replacement(decoded_videos, processed_data)
         return processed_data, video_replacements
 
     def _process_audio(self, audio: AudioInput, **kwargs):
-        audio = self.feature_extractor.fetch_data(audio)
+        # Audio processors don't yet decode before processing
+        # audio = self.feature_extractor.fetch_audio(audio)
         processed_data = self.feature_extractor(audio, **kwargs)
         audio_replacements = self.get_audio_replacement(audio, processed_data)
         return processed_data, audio_replacements
@@ -735,9 +736,9 @@ class ProcessorMixin(PushToHubMixin):
         videos: VideoInput | None = None,
         audio: AudioInput | None = None,
     ):
-        if isinstance(text, str):
-            text = [text]
-        else:
+        if text is not None:
+            if isinstance(text, str):
+                text = [text]
             # avoid in-place updates on text
             text = text.copy()
         return images, text, videos, audio

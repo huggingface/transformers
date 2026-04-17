@@ -108,27 +108,26 @@ class LlavaNextVideoProcessor(ProcessorMixin):
             - **pixel_values** -- Pixel values to be fed to a model. Returned when `images` is not `None`.
         """
 
+        self.validate_inputs(images=images, text=text, videos=videos, **kwargs)
+        images, text, videos, _ = self.prepare_inputs_layout(images=images, text=text, videos=videos)
+
         output_kwargs = self._merge_kwargs(
             LlavaNextVideoProcessorKwargs,
             tokenizer_init_kwargs=self.tokenizer.init_kwargs,
             **kwargs,
         )
 
-        if isinstance(text, str):
-            text = [text]
-        elif not isinstance(text, list) and not isinstance(text[0], str):
-            raise TypeError("Invalid input text. Please provide a string, or a list of strings")
-
-        videos_inputs = image_inputs = {}
+        image_inputs = videos_inputs = {}
+        images_replacements = videos_replacements = []
         if images is not None:
-            image_inputs = self.image_processor(images, **output_kwargs["images_kwargs"])
-
+            image_inputs, images_replacements = self._process_images(images, **output_kwargs["images_kwargs"])
         if videos is not None:
-            videos_inputs = self.video_processor(videos, **output_kwargs["videos_kwargs"])
+            videos_inputs, videos_replacements = self._process_videos(videos, **output_kwargs["videos_kwargs"])
 
-        text, text_replacement_offsets = self.get_text_replacement(
-            text, processed_mm_data={**image_inputs, **videos_inputs}
-        )
+        if images is not None or videos is not None:
+            text, text_replacement_offsets = self.get_text_replacement(
+                text, images_replacements=images_replacements, videos_replacements=videos_replacements
+            )
 
         return_tensors = output_kwargs["text_kwargs"].pop("return_tensors", None)
         text_inputs = self.tokenizer(text, **output_kwargs["text_kwargs"])
@@ -136,9 +135,10 @@ class LlavaNextVideoProcessor(ProcessorMixin):
 
         return BatchFeature(data={**text_inputs, **image_inputs, **videos_inputs}, tensor_type=return_tensors)
 
-    def replace_image_token(self, text: str, processed_mm_data: dict, batch_idx: int, image_index: int) -> str:
-        image_size = processed_mm_data["image_sizes"][batch_idx][image_index]
-        height, width = get_image_size(to_numpy_array(processed_mm_data["pixel_values"][batch_idx][0]))
+    def replace_image_token(self, image_inputs: dict | None = None, image_idx: int = 0) -> str:
+        image_size = image_inputs["image_sizes"][image_idx]
+        pixel_values = [pixel_values for sub_list in image_inputs["pixel_values"] for pixel_values in sub_list]
+        height, width = get_image_size(to_numpy_array(pixel_values[image_idx]))
         if not isinstance(image_size, (list, tuple)):
             # cast to list to avoid numerical precision errors when calculating unpadding
             image_size = image_size.tolist()
@@ -148,14 +148,14 @@ class LlavaNextVideoProcessor(ProcessorMixin):
             num_image_tokens -= 1
         return self.image_token * num_image_tokens
 
-    def replace_video_token(self, text: str, processed_mm_data: dict, batch_idx: int, video_index: int) -> str:
-        one_video = processed_mm_data.get("pixel_values_videos")[batch_idx]
-        if isinstance(one_video, (list, tuple)):
-            one_video = np.array(one_video)
+    def replace_video_token(self, video_inputs: dict | None = None, video_idx: int = 0) -> str:
+        processed_video = video_inputs["pixel_values_videos"][video_idx]
+        if isinstance(processed_video, (list, tuple)):
+            processed_video = np.array(processed_video)
         else:
-            one_video = to_numpy_array(one_video)
-        height, width = get_image_size(one_video[0])
-        num_frames = one_video.shape[0]  # frame dim is always after batch dim
+            processed_video = to_numpy_array(processed_video)
+        height, width = get_image_size(processed_video[0])
+        num_frames = processed_video.shape[0]  # frame dim is always after batch dim
 
         # no `self.num_additional_image_tokens` added because video always has a default feature selection strategy
         num_image_tokens = (height // self.patch_size) * (width // self.patch_size)
