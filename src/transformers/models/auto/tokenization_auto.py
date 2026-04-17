@@ -230,6 +230,7 @@ TOKENIZER_MAPPING_NAMES = OrderedDict[str, str | None](
         ("nezha", "BertTokenizer" if is_tokenizers_available() else None),
         ("nllb", "NllbTokenizer" if is_tokenizers_available() else None),
         ("nllb-moe", "NllbTokenizer" if is_tokenizers_available() else None),
+        ("nomic_bert", "BertTokenizer" if is_tokenizers_available() else None),
         ("nougat", "NougatTokenizer" if is_tokenizers_available() else None),
         ("nystromformer", "AlbertTokenizer" if is_tokenizers_available() else None),
         ("olmo", "GPTNeoXTokenizer" if is_tokenizers_available() else None),
@@ -259,6 +260,7 @@ TOKENIZER_MAPPING_NAMES = OrderedDict[str, str | None](
         ("plbart", "PLBartTokenizer" if is_tokenizers_available() else None),
         ("prophetnet", "ProphetNetTokenizer"),
         ("qdqbert", "BertTokenizer" if is_tokenizers_available() else None),
+        ("qianfan_ocr", "Qwen2Tokenizer" if is_tokenizers_available() else None),
         ("qwen2", "Qwen2Tokenizer" if is_tokenizers_available() else None),
         ("qwen2_5_omni", "Qwen2Tokenizer" if is_tokenizers_available() else None),
         ("qwen2_5_vl", "Qwen2Tokenizer" if is_tokenizers_available() else None),
@@ -357,7 +359,6 @@ MODELS_WITH_INCORRECT_HUB_TOKENIZER_CLASS: set[str] = {
     "internvl_chat",
     "jamba",
     "janus",
-    "kimi_k25",
     "llava",
     "llava_next",
     "minicpmv",
@@ -373,7 +374,9 @@ MODELS_WITH_INCORRECT_HUB_TOKENIZER_CLASS: set[str] = {
     "phi3_v",
     "phimoe",
     "step3p5",
+    "step3_vl",
     "vipllava",
+    "cohere_asr",
 }
 
 for model_type in MODELS_WITH_INCORRECT_HUB_TOKENIZER_CLASS:
@@ -737,7 +740,17 @@ class AutoTokenizer:
                 or tokenizer_class_from_name(tokenizer_config_class + "Fast") is not None
             )
         )
-
+        explicit_local_code = (
+            has_local_code
+            and type(config) not in TOKENIZER_MAPPING
+            and (
+                tokenizer_config_class is not None
+                and not (
+                    tokenizer_class_from_name(tokenizer_config_class)
+                    or tokenizer_class_from_name(tokenizer_config_class + "Fast")
+                ).__module__.startswith("transformers.")
+            )
+        )
         # V5: Skip remote tokenizer for custom models with incorrect hub tokenizer class
         if has_remote_code and config_model_type in MODELS_WITH_INCORRECT_HUB_TOKENIZER_CLASS:
             has_remote_code = False
@@ -757,7 +770,7 @@ class AutoTokenizer:
                 trust_remote_code, pretrained_model_name_or_path, has_local_code, has_remote_code, upstream_repo
             )
 
-        if has_remote_code and trust_remote_code:
+        if has_remote_code and trust_remote_code and not explicit_local_code:
             # BC v5: register *Fast aliases before remote code loads.
             if tokenizer_config_class:
                 tokenizer_class_from_name(tokenizer_config_class.removesuffix("Fast"))

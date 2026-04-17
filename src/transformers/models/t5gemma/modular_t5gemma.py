@@ -64,7 +64,7 @@ logger = logging.get_logger(__name__)
 
 
 @auto_docstring(checkpoint="google/t5_gemma_module-7b")
-@strict(accept_kwargs=True)
+@strict
 class T5GemmaModuleConfig(Gemma2Config):
     r"""
     query_pre_attn_scalar (`float`, *optional*, defaults to 256):
@@ -89,7 +89,7 @@ class T5GemmaModuleConfig(Gemma2Config):
 
 
 @auto_docstring(checkpoint="google/t5_gemma_module-7b")
-@strict(accept_kwargs=True)
+@strict
 class T5GemmaConfig(PreTrainedConfig):
     r"""
     encoder (`Union[T5GemmaModuleConfig, dict]`, optional, *optional*):
@@ -800,6 +800,12 @@ class T5GemmaForConditionalGeneration(T5GemmaPreTrainedModel, GenerationMixin):
 
     def set_output_embeddings(self, new_embeddings):
         self.lm_head.out_proj = new_embeddings
+        # The tying happens from decoder to lm-head, but when resizing
+        # the resized embed is assigned only to the head. Then tying weights
+        # again reverts everything back. So we have to update decoder here
+        if self.config.tie_word_embeddings:
+            self.model.decoder.embed_tokens.weight = new_embeddings.weight
+            self.model.decoder.embed_tokens.num_embeddings = new_embeddings.weight.shape[0]
 
     def get_output_embeddings(self):
         return self.lm_head.out_proj

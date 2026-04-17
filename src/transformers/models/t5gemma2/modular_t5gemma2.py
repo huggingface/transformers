@@ -74,7 +74,7 @@ logger = logging.get_logger(__name__)
 
 
 @auto_docstring(checkpoint="google/t5gemma-2-270m-270m")
-@strict(accept_kwargs=True)
+@strict
 class T5Gemma2TextConfig(Gemma3TextConfig, PreTrainedConfig):
     r"""
     query_pre_attn_scalar (`float`, *optional*, defaults to 256):
@@ -101,7 +101,7 @@ class T5Gemma2TextConfig(Gemma3TextConfig, PreTrainedConfig):
 
 
 @auto_docstring(checkpoint="google/t5gemma-2-270m-270m")
-@strict(accept_kwargs=True)
+@strict
 class T5Gemma2EncoderConfig(Gemma3Config):
     model_type = "t5gemma2_encoder"
 
@@ -112,7 +112,7 @@ class T5Gemma2EncoderConfig(Gemma3Config):
 
 
 @auto_docstring(checkpoint="google/t5gemma-2-270m-270m")
-@strict(accept_kwargs=True)
+@strict
 class T5Gemma2DecoderConfig(Gemma3TextConfig, PreTrainedConfig):
     r"""
     query_pre_attn_scalar (`float`, *optional*, defaults to 256):
@@ -139,7 +139,7 @@ class T5Gemma2DecoderConfig(Gemma3TextConfig, PreTrainedConfig):
 
 
 @auto_docstring(checkpoint="google/t5gemma-2-270m-270m")
-@strict(accept_kwargs=True)
+@strict
 class T5Gemma2Config(PreTrainedConfig):
     r"""
     encoder (`Union[T5Gemma2EncoderConfig, dict]`, optional, *optional*):
@@ -173,9 +173,9 @@ class T5Gemma2Config(PreTrainedConfig):
     encoder: T5Gemma2EncoderConfig | dict[str, Any] | None = None
     decoder: T5Gemma2DecoderConfig | dict[str, Any] | None = None
     is_encoder_decoder: bool = True
-    dropout_rate: float = 0.0
+    dropout_rate: float | int = 0.0
     attention_dropout: float | int = 0.0
-    classifier_dropout_rate: float = 0.0
+    classifier_dropout_rate: float | int = 0.0
     initializer_range: float = 0.02
     image_token_index: int = 256_001
     eoi_token_index: int | None = None

@@ -60,15 +60,15 @@ logger = logging.get_logger(__name__)
 
 
 @auto_docstring(checkpoint="google/gemma-3-4b-it")
-@strict(accept_kwargs=True)
+@strict
 class Gemma3TextConfig(Gemma2Config, PreTrainedConfig):
     r"""
+    query_pre_attn_scalar (`float`, *optional*, defaults to 256):
+        scaling factor used on the attention scores
     final_logit_softcapping (`float`, *optional*):
         Scaling factor when applying tanh softcapping on the logits.
     attn_logit_softcapping (`float`, *optional*):
         Scaling factor when applying tanh softcapping on the attention scores.
-    query_pre_attn_scalar (`float`, *optional*, defaults to 256):
-        scaling factor used on the attention scores
     use_bidirectional_attention (`bool`, *optional*, defaults to `False`):
         If True, the model will attend to all text tokens instead of using a causal mask. This does not change
         behavior for vision tokens.
@@ -152,7 +152,7 @@ class Gemma3TextConfig(Gemma2Config, PreTrainedConfig):
 
 
 @auto_docstring(checkpoint="google/gemma-3-4b-it")
-@strict(accept_kwargs=True)
+@strict
 class Gemma3Config(PreTrainedConfig):
     r"""
     mm_tokens_per_image (`int`, *optional*, defaults to 256):
@@ -650,11 +650,9 @@ def create_causal_mask_mapping(
         is_image = (token_type_ids == 1).to(inputs_embeds.device)
         is_previous_image = nn.functional.pad(is_image, (1, 0), value=0)[:, :-1]
         new_image_start = is_image & ~is_previous_image
-        image_group_ids = torch.cumsum(new_image_start.int(), dim=1) - 1
-        image_group_ids = torch.where(is_image, image_group_ids, -1)
-        mask_kwargs["or_mask_function"] = token_type_ids_mask_function(
-            token_type_ids.to(inputs_embeds.device), image_group_ids
-        )
+        group_ids = torch.cumsum(new_image_start.int(), dim=1) - 1
+        group_ids = torch.where(is_image, group_ids, -1)
+        mask_kwargs["or_mask_function"] = token_type_ids_mask_function(group_ids)
 
     return create_masks_for_generate(**mask_kwargs)
 
@@ -824,6 +822,7 @@ class Gemma3ForConditionalGeneration(PaliGemmaForConditionalGeneration):
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
             labels=labels,
+            return_dict=True,
             **lm_kwargs,
         )
 
@@ -949,6 +948,7 @@ class Gemma3ForSequenceClassification(Gemma3PreTrainedModel):
             inputs_embeds=inputs_embeds,
             token_type_ids=token_type_ids,
             use_cache=use_cache,
+            return_dict=True,
             **kwargs,
         )
         hidden_states = transformer_outputs.last_hidden_state

@@ -53,12 +53,14 @@ if is_vision_available():
 class SLANeXtModelTester:
     def __init__(
         self,
+        parent,
         batch_size=2,
         image_size=512,
         num_channels=3,
         is_training=False,
         vision_config=None,
     ):
+        self.parent = parent
         if vision_config is None:
             vision_config = {
                 "hidden_size": 1,
@@ -106,10 +108,10 @@ class SLANeXtModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
 
     def setUp(self):
         self.model_tester = SLANeXtModelTester(
+            self,
             batch_size=1,
             image_size=512,
         )
-        self.model_tester.parent = self
         self.config_tester = ConfigTester(
             self,
             config_class=SLANeXtConfig,

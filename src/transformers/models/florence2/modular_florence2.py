@@ -17,7 +17,6 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
 
-import numpy as np
 import torch.nn as nn
 import torch.nn.functional as F
 from huggingface_hub.dataclasses import strict
@@ -50,11 +49,9 @@ logger = logging.get_logger(__name__)
 
 
 @auto_docstring(checkpoint="florence-community/Florence-2-base")
-@strict(accept_kwargs=True)
+@strict
 class Florence2VisionConfig(PreTrainedConfig):
     r"""
-    window_size (`int`, *optional*, defaults to 12):
-        The window size of the model.
     depths (`Tuple[int]`, *optional*, defaults to `(1, 1, 9, 1)`):
         The depth of the model.
     patch_stride (`Tuple[int]`, *optional*, defaults to `(4, 2, 2, 2)`):
@@ -65,6 +62,8 @@ class Florence2VisionConfig(PreTrainedConfig):
         Whether to apply layer normalization before the patch embedding layer.
     num_groups (`Tuple[int]`, *optional*, defaults to `(4, 8, 16, 32)`):
         The number of groups.
+    window_size (`int`, *optional*, defaults to 12):
+        The window size of the model.
     max_temporal_embeddings (`int`, *optional*, defaults to 100):
         The configuration of the visual temporal embedding.
 
@@ -95,7 +94,7 @@ class Florence2VisionConfig(PreTrainedConfig):
     num_heads: list[int] | tuple[int, ...] = (4, 8, 16, 32)
     num_groups: list[int] | tuple[int, ...] = (4, 8, 16, 32)
     window_size: int = 12
-    drop_path_rate: float = 0.1
+    drop_path_rate: float | int = 0.1
     mlp_ratio: float = 4.0
     qkv_bias: bool = True
     activation_function: str = "gelu"
@@ -106,7 +105,7 @@ class Florence2VisionConfig(PreTrainedConfig):
 
 
 @auto_docstring(checkpoint="florence-community/Florence-2-base")
-@strict(accept_kwargs=True)
+@strict
 class Florence2Config(PreTrainedConfig):
     r"""
     Example:
@@ -321,11 +320,7 @@ class Florence2Processor(ProcessorMixin):
         self._check_special_mm_tokens(prompt_strings, text_inputs, modalities=["image"])
 
         if return_mm_token_type_ids:
-            array_ids = np.array(text_inputs["input_ids"])
-            mm_token_type_ids = np.zeros_like(text_inputs["input_ids"])
-            mm_token_type_ids[array_ids == self.image_token_id] = 1
-            text_inputs["mm_token_type_ids"] = mm_token_type_ids.tolist()
-
+            text_inputs["mm_token_type_ids"] = self.create_mm_token_type_ids(text_inputs["input_ids"])
         return BatchFeature(data={**image_inputs, **text_inputs}, tensor_type=return_tensors)
 
     def batch_decode(self, *args, **kwargs):

@@ -18,18 +18,35 @@
       title: Customizing models
     - local: monkey_patching
       title: Monkey patching
+    - local: fusion_mapping
+      title: Fusion mapping
     - local: how_to_hack_models
       title: Customizing model components
     - local: model_sharing
       title: Sharing
     - local: serialization
       title: Exporting to production
-    - local: modular_transformers
-      title: Contributing a new model to Transformers
-    - local: add_new_model
-      title: Legacy model contribution
-    - local: auto_docstring
-      title: Documenting a model
+    - isExpanded: false
+      sections:
+      - local: contributing
+        title: Contribute to Transformers
+      - local: modeling_rules
+        title: Model structure rules
+      - local: modular_transformers
+        title: Contributing a new model to Transformers
+      - local: add_vision_processing_components
+        title: Add vision processing components
+      - local: model_output_tracing
+        title: Tracing model intermediate outputs
+      - local: auto_docstring
+        title: Auto-generating docstrings
+      - local: testing
+        title: Transformers model tests
+      - local: pr_checks
+        title: Pull request checks
+      - local: add_new_model
+        title: Legacy model contribution
+      title: Contribute
     title: Models
   - isExpanded: false
     sections:
@@ -87,6 +104,8 @@
       title: Experts backends
     - local: continuous_batching
       title: Continuous batching
+    - local: continuous_batching_architecture
+      title: Continuous batching architecture
     - local: paged_attention
       title: Paged attention
     - sections:
@@ -124,6 +143,8 @@
       title: Tool use
     - local: chat_templating_writing
       title: Writing a chat template
+    - local: chat_response_parsing
+      title: Response parsing
     title: Chat with models
   - isExpanded: false
     sections:
@@ -159,12 +180,33 @@
     - local: data_collators
       title: Data collators
     - local: optimizers
-      title: Optimizers
+      title: Optimizers and schedulers
     - local: hpo_train
       title: Hyperparameter search
+    - local: trainer_recipes
+      title: Trainer features
     title: Customization
   - local: peft
     title: Parameter-efficient fine-tuning
+  - isExpanded: false
+    sections:
+    - sections:
+      - local: grad_accumulation
+        title: Gradient accumulation
+      - local: grad_checkpointing
+        title: Gradient checkpointing
+      - local: model_memory_anatomy
+        title: GPU memory usage
+      title: Memory optimization
+    - sections:
+      - local: mixed_precision_training
+        title: Mixed precision training
+      - local: torch_compile
+        title: torch.compile
+      - local: kernels
+        title: Kernels
+      title: Speed optimization
+    title: Performance
   - isExpanded: false
     sections:
     - local: accelerator_selection
@@ -174,18 +216,18 @@
     - local: fsdp
       title: FullyShardedDataParallel
     - local: deepspeed
-      title: DeepSpeed
+      title: DeepSpeed ZeRO
+    - local: deepspeed_alst
+      title: Ulysses sequence parallelism
+    - local: tensor_parallelism
+      title: Tensor parallelism
     - local: debugging
-      title: Multi-GPU debugging
-    - local: perf_train_cpu_many
-      title: Distributed CPUs
+      title: Debugging
     - local: perf_train_gpu_many
       title: Parallelism methods
     title: Distributed training
   - isExpanded: false
     sections:
-    - local: perf_train_gpu_one
-      title: GPU
     - local: perf_train_cpu
       title: CPU
     - local: perf_train_special
@@ -193,7 +235,7 @@
     - local: perf_train_gaudi
       title: Intel Gaudi
     - local: perf_hardware
-      title: Build your own machine
+      title: Building a GPU workstation
     - local: model_memory_anatomy
       title: Model training anatomy
     title: Hardware
@@ -393,15 +435,6 @@
   title: Resources
 - isExpanded: false
   sections:
-  - local: contributing
-    title: Contribute to Transformers
-  - local: testing
-    title: Transformers model tests
-  - local: pr_checks
-    title: Pull request checks
-  title: Contribute
-- isExpanded: false
-  sections:
   - sections:
     - local: model_doc/auto
       title: Auto Classes
@@ -411,6 +444,8 @@
       title: Callbacks
     - local: main_classes/configuration
       title: Configuration
+    - local: main_classes/continuous_batching
+      title: Continuous batching
     - local: main_classes/data_collator
       title: Data Collator
     - local: main_classes/logging
@@ -718,6 +753,8 @@
         title: NLLB
       - local: model_doc/nllb-moe
         title: NLLB-MoE
+      - local: model_doc/nomic_bert
+        title: NomicBERT
       - local: model_doc/nystromformer
         title: Nyströmformer
       - local: model_doc/olmo
@@ -974,6 +1011,8 @@
         title: UperNet
       - local: model_doc/uvdoc
         title: UVDoc
+      - local: model_doc/videomt
+        title: VidEoMT
       - local: model_doc/vit
         title: Vision Transformer (ViT)
       - local: model_doc/vitdet
@@ -998,6 +1037,8 @@
         title: Bark
       - local: model_doc/clap
         title: CLAP
+      - local: model_doc/cohere_asr
+        title: Cohere ASR
       - local: model_doc/csm
         title: CSM
       - local: model_doc/dac
@@ -1170,6 +1211,8 @@
         title: Gemma3
       - local: model_doc/gemma3n
         title: Gemma3n
+      - local: model_doc/gemma4
+        title: Gemma4
       - local: model_doc/git
         title: GIT
       - local: model_doc/glm46v
@@ -1246,6 +1289,8 @@
         title: mllama
       - local: model_doc/mm-grounding-dino
         title: MM Grounding DINO
+      - local: model_doc/musicflamingo
+        title: MusicFlamingo
       - local: model_doc/nougat
         title: Nougat
       - local: model_doc/omdet-turbo
@@ -1294,6 +1339,8 @@
         title: PPLCNet
       - local: model_doc/pp_lcnet_v3
         title: PPLCNetV3
+      - local: model_doc/qianfan_ocr
+        title: QianfanOCR
       - local: model_doc/qwen2_5_omni
         title: Qwen2.5-Omni
       - local: model_doc/qwen2_5_vl
@@ -1312,6 +1359,8 @@
         title: SAM3
       - local: model_doc/sam3_video
         title: SAM3 Video
+      - local: model_doc/sam3_lite_text
+        title: SAM3-LiteText
       - local: model_doc/shieldgemma2
         title: ShieldGemma2
       - local: model_doc/siglip

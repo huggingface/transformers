@@ -51,6 +51,7 @@ if is_vision_available():
 class PPOCRV5ServerRecModelTester:
     def __init__(
         self,
+        parent,
         batch_size=3,
         image_size=[48, 320],
         num_channels=3,
@@ -65,6 +66,7 @@ class PPOCRV5ServerRecModelTester:
         num_attention_heads=2,
         attention_dropout=0.0,
     ):
+        self.parent = parent
         self.batch_size = batch_size
         self.num_channels = num_channels
         self.image_size = image_size
@@ -138,8 +140,7 @@ class PPOCRV5ServerRecModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.
     model_split_percents = [0.5, 0.8]
 
     def setUp(self):
-        self.model_tester = PPOCRV5ServerRecModelTester()
-        self.model_tester.parent = self
+        self.model_tester = PPOCRV5ServerRecModelTester(self)
         self.config_tester = ConfigTester(
             self,
             config_class=PPOCRV5ServerRecConfig,
