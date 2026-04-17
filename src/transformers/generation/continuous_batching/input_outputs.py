@@ -26,7 +26,7 @@ from ...utils.metrics import traced
 from .cache import PagedAttentionCache
 from .cb_logits_processors import ContinuousBatchingLogitsProcessorList
 from .requests import TMP_TOKEN_ID, FutureRequestState, logger
-from .utils import CudaGraphBuffer, aligned_divide, attn_mask_is_needed, build_attention_mask
+from .utils import CudaGraphBuffer, aligned_divide, attn_mask_is_needed, build_attention_mask, pad_to_pow2
 
 
 @dataclass
@@ -104,6 +104,7 @@ class ContinuousBatchingIOs:
         max_graphs: int,
         return_logprobs: bool,
         logit_processor: ContinuousBatchingLogitsProcessorList,
+        use_cuda_graph_varlen: bool = False,
     ) -> None:
         """Initialize the continuous batching I/O manager. Args:
         - cache: The [`PagedAttentionCache`] instance managing the KV cache. Meant to be unique.
@@ -113,12 +114,14 @@ class ContinuousBatchingIOs:
         - max_graphs: Maximum number of CUDA graphs to cache. Uses LRU eviction when full.
         - return_logprobs: Whether to return log probabilities along with the token IDs.
         - logit_processor: The [`ContinuousBatchingLogitsProcessorList`] object used to process the logits.
+        - use_cuda_graph_varlen: Whether CUDA graphs are enabled for the varlen (prefill) path.
         """
         # Memoize attributes
         self.cache = cache
         self.device = device
         self.config = config
         self.model_dtype = model_dtype
+        self.use_cuda_graph_varlen = use_cuda_graph_varlen
         self.sliding_window = 1 if getattr(config, "sliding_window", None) is None else config.sliding_window
         self.return_logprobs = return_logprobs
         # Setup input-related accumulators
@@ -471,7 +474,7 @@ class ContinuousBatchingIOs:
             logits_processor_args=self._bulk_input_tensor[self.static_inputs :, :q_size],
             cu_seq_lens_k={},
             max_seqlen_k={},
-            attention_mask={},
+            attention_mask=None if self.attention_mask is None else {},
             read_index=[],
             write_index=[],
             cache=self.cache,
@@ -479,19 +482,21 @@ class ContinuousBatchingIOs:
             use_cache=False,
         )
 
-        # If we use constant-sized slicing, there are some "padding" queries tokens which FA has some issues with. In
-        # some models like Qwen3-4B-Instruct-2507, if we don't include these tokens in cumulative_seqlens_q, there are
-        # some NaNs in the output logits even for non-padded tokens.
+        # If there is padding, make sure the padding sequences have length 0 (ie. cumulative lengths plateau)
         if use_padding:
-            self.max_seqlen_q = max(self.max_seqlen_q, q_size - self.total_seqlen_q)
-            kwargs.max_seqlen_q = self.max_seqlen_q
-            self.cumulative_seqlens_q[self.true_batch_size + 1 :] = q_size
-            # FIXME: is there another way to avoid this? It has a very slight impact on performance (~5 tok/s)
+            kwargs.cu_seq_lens_q[self.true_batch_size + 1 :] = self.total_seqlen_q
+            # Additionally, if there are CUDA graphs, we need to pad max_seqlen so graph capture will work regardless of
+            # the future Q / KV lengths of the next batches
+            if not self.use_block_table and self.use_cuda_graph_varlen:
+                self.max_seqlen_q = q_size
+                self.max_seqlen_k = {
+                    layer_type: pad_to_pow2(self.max_seqlen_k[layer_type], self.cache.num_pages, 1024)
+                    for layer_type in self.max_seqlen_k.keys()
+                }
 
         # When using block table, max_seqlen_q and max_seqlen_k are not used by flash_attn_with_kvcache, so we set them
         # to constant `1` to avoid dynamo guards on these changing integer values. This applies throughout this method.
-        if self.use_block_table:
-            kwargs.max_seqlen_q = 1
+        kwargs.max_seqlen_q = 1 if self.use_block_table else self.max_seqlen_q
 
         # For the attributes that are lists of tensors, we construct list of tensor references
         for i in range(self.cache.num_groups):
@@ -500,29 +505,23 @@ class ContinuousBatchingIOs:
             kwargs.read_index.append(self.read_index_storage[i, :read_index_size])
             kwargs.write_index.append(self.write_index_storage[i, :write_index_size])
 
-        # For the attributes that are dict of tensors, we replace the dict with a tensor if there is only one entry
-        # When using block table, max_seqlen_k is not used, so we set it to a constant to avoid dynamo guards
-        layer_types = list(self.cumulative_seqlens_k.keys())
-        if len(layer_types) > 1:
-            kwargs.max_seqlen_k: dict[str, int] = {}
-            kwargs.cu_seq_lens_k: dict[str, torch.Tensor] = {}
-            kwargs.attention_mask: dict[str, torch.Tensor] = {}
-            for layer_type, seqlens_k in self.cumulative_seqlens_k.items():
-                kwargs.cu_seq_lens_k[layer_type] = seqlens_k[: batch_size + 1]
-                kwargs.max_seqlen_k[layer_type] = 1 if self.use_block_table else self.max_seqlen_k[layer_type]
-                if self.attention_mask is not None:
-                    k_len = kv_size if use_padding else seqlens_k[batch_size]
-                    kwargs.attention_mask[layer_type] = self.attention_mask[layer_type][..., :q_size, :k_len]
-        else:
-            layer_type = layer_types[0]
-            kwargs.cu_seq_lens_k = self.cumulative_seqlens_k[layer_type][: batch_size + 1]
-            kwargs.max_seqlen_k = 1 if self.use_block_table else self.max_seqlen_k[layer_type]
+        # For the attributes that are dict of tensors, we first fill the dict with the actual values
+        for layer_type, seqlens_k in self.cumulative_seqlens_k.items():
+            kwargs.cu_seq_lens_k[layer_type] = seqlens_k[: batch_size + 1]
+            if use_padding:
+                kwargs.cu_seq_lens_k[layer_type][self.true_batch_size + 1 :] = seqlens_k[self.true_batch_size]
+            kwargs.max_seqlen_k[layer_type] = 1 if self.use_block_table else self.max_seqlen_k[layer_type]
             if self.attention_mask is not None:
-                k_len = kv_size if use_padding else self.cumulative_seqlens_k[layer_type][batch_size]
-                kwargs.attention_mask = self.attention_mask[layer_type][..., :q_size, :k_len]
+                k_len = kv_size if use_padding else seqlens_k[batch_size]
+                kwargs.attention_mask[layer_type] = self.attention_mask[layer_type][..., :q_size, :k_len]
 
-        if self.attention_mask is None:
-            kwargs.attention_mask = None
+        # If there is only one layer type, we remove the dicts around some attributes to avoid unnecessary overhead
+        if len(self.cumulative_seqlens_k.keys()) == 1:
+            kwargs.cu_seq_lens_k = kwargs.cu_seq_lens_k.popitem()[1]  # type: ignore
+            kwargs.max_seqlen_k = kwargs.max_seqlen_k.popitem()[1]  # type: ignore
+            if self.attention_mask is not None:
+                kwargs.attention_mask = kwargs.attention_mask.popitem()[1]  # type: ignore
+
         return kwargs.asdict()  # TODO: this is imperfect, check if there is no better way to juggle dict / dataclass
 
     def get_cb_kwargs(self) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
@@ -531,16 +530,26 @@ class ContinuousBatchingIOs:
         return 3 tensors to have the same interface as when using async batching."""
         return self.carry_over_ids, self.output_ids, self.output_ids
 
+    def _get_graph_key(self) -> tuple[int, ...]:
+        # Keys for varlen path
+        if self.max_kv_read > 0:
+            return (self.num_q_tokens, self.max_kv_read, *self.max_seqlen_k.values())
+        # Keys for decode fast path
+        return (self.num_q_tokens,)
+
     def get_graph(self) -> torch.cuda.CUDAGraph | None:
-        graph = self.graphs.get_graph(self.num_q_tokens, self.max_kv_read)
+        key = self._get_graph_key()
+        graph = self.graphs.get_graph(key)
         # If this point is reached, it means the next step will be a new graph capture
         if graph is None:
             self.graphs.plan_for_new_graph()
-            logger.info(f"Creating graph for {(self.num_q_tokens, self.max_kv_read) = }")
+            logger.info(f"Creating graph for {key = }")
         return graph
 
     def set_graph(self, graph: torch.cuda.CUDAGraph) -> None:
-        self.graphs.set_graph(self.num_q_tokens, self.max_kv_read, graph)
+        key = self._get_graph_key()
+        self.graphs.set_graph(key, graph)
+        logger.info(f"Setting graph for {key = }")
 
 
 class HostDeviceIOPair:
@@ -553,13 +562,28 @@ class HostDeviceIOPair:
         max_graphs: int,
         return_logprobs: bool,
         logit_processor: ContinuousBatchingLogitsProcessorList,
+        use_cuda_graph_varlen: bool = False,
     ) -> None:
         # The host IO has automatic pinned memory because it is created on the CPU
         self.host_io = ContinuousBatchingIOs(
-            cache, config, torch.device("cpu"), model_dtype, max_graphs, return_logprobs, logit_processor
+            cache,
+            config,
+            torch.device("cpu"),
+            model_dtype,
+            max_graphs,
+            return_logprobs,
+            logit_processor,
+            use_cuda_graph_varlen,
         )
         self.device_io = ContinuousBatchingIOs(
-            cache, config, device, model_dtype, max_graphs, return_logprobs, logit_processor
+            cache,
+            config,
+            device,
+            model_dtype,
+            max_graphs,
+            return_logprobs,
+            logit_processor,
+            use_cuda_graph_varlen,
         )
         # Create events only on CUDA devices
         self.h2d_over = torch.cuda.Event() if torch.cuda.is_available() else None
@@ -637,6 +661,7 @@ class ContinuousBatchingAsyncIOs:
         max_graphs: int,
         return_logprobs: bool,
         logit_processor: ContinuousBatchingLogitsProcessorList,
+        use_cuda_graph_varlen: bool = False,
     ) -> None:
         # Async batching needs streams to function, so check is CUDA is available
         if not torch.cuda.is_available():
@@ -644,7 +669,16 @@ class ContinuousBatchingAsyncIOs:
         # IO pairs used to avoid race conditions
         self.current_pair = 0
         self.io_pairs = [
-            HostDeviceIOPair(cache, config, device, model_dtype, max_graphs, return_logprobs, logit_processor)
+            HostDeviceIOPair(
+                cache,
+                config,
+                device,
+                model_dtype,
+                max_graphs,
+                return_logprobs,
+                logit_processor,
+                use_cuda_graph_varlen,
+            )
             for _ in range(2)
         ]
         # CUDA streams
