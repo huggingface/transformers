@@ -81,6 +81,7 @@ if TYPE_CHECKING:
     from .cpmant import *
     from .csm import *
     from .ctrl import *
+    from .ctsm import *
     from .cvt import *
     from .cwm import *
     from .d_fine import *
