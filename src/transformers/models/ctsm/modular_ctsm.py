@@ -260,12 +260,6 @@ class CtsmPreTrainedModel(TimesFmPreTrainedModel):
             init.normal_(module.special_token, mean=0.0, std=self.config.initializer_range)
 
 
-def _convert_paddings_to_attention_bias(paddings: torch.Tensor, dtype: torch.dtype) -> torch.Tensor:
-    """Convert a `[B, N]` padding mask (1.0 = padded) to a `[B, 1, 1, N]` additive bias."""
-    min_value = torch.finfo(dtype).min
-    return (paddings.to(dtype) * min_value).view(paddings.shape[0], 1, 1, paddings.shape[1])
-
-
 class CtsmModel(TimesFmModel):
     r"""
     The multi-resolution CTSM encoder. The forward pass consumes two aligned streams (a coarse low-frequency
@@ -347,21 +341,17 @@ class CtsmModel(TimesFmModel):
         num_coarse_patches: int,
         dtype: torch.dtype,
     ) -> torch.Tensor:
-        """Causal mask with bidirectional attention over the coarse-resolution block."""
-        bsize, seq_len = patch_padding.shape
-        device = patch_padding.device
-        min_value = torch.finfo(dtype).min
-
-        causal = torch.triu(
-            torch.ones((seq_len, seq_len), dtype=dtype, device=device) * min_value,
-            diagonal=1,
+        """Reuse TimesFM's padding+causal 4D mask, then open the coarse-coarse block to bidirectional."""
+        attention_mask = self._prepare_4d_attention_mask(
+            attention_mask=patch_padding,
+            sequence_length=patch_padding.shape[1],
+            dtype=dtype,
+            device=patch_padding.device,
+            is_causal=True,
         )
         if num_coarse_patches > 0:
-            causal[:num_coarse_patches, :num_coarse_patches] = 0.0
-        causal = causal.view(1, 1, seq_len, seq_len)
-
-        padding_bias = _convert_paddings_to_attention_bias(patch_padding, dtype)
-        return torch.minimum(causal, padding_bias)
+            attention_mask[..., :num_coarse_patches, :num_coarse_patches] = 0.0
+        return attention_mask
 
     @merge_with_config_defaults
     @capture_outputs
