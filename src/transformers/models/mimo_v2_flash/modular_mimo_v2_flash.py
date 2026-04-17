@@ -62,7 +62,6 @@ class MiMoV2FlashConfig(PreTrainedConfig):
 
     model_type = "mimo_v2_flash"
     keys_to_ignore_at_inference = ["past_key_values"]
-    default_theta = {"full_attention": 5_000_000.0, "sliding_attention": 10_000.0}
     attribute_map = {
         "num_local_experts": "n_routed_experts",
     }
@@ -94,81 +93,33 @@ class MiMoV2FlashConfig(PreTrainedConfig):
     n_group: int = 1
     topk_group: int = 1
     norm_topk_prob: bool = True
-    routed_scaling_factor: float | None = 1.0
+    routed_scaling_factor: float = 1.0
     router_jitter_noise: float = 0.0
     mlp_layer_types: list[str] | None = None
     rope_parameters: dict | None = None
 
     def __post_init__(self, **kwargs):
-        # BC: pop hub-only fields. Some are converted to native fields below, others simply dropped.
-        hub_kwargs = {
-            key: kwargs.pop(key, None)
-            for key in (
-                "hybrid_layer_pattern",
-                "moe_layer_freq",
-                "scoring_func",
-                "topk_method",
-                "attention_value_scale",
-                "attention_chunk_size",
-                "sliding_window_size",
-                "n_shared_experts",
-                "swa_num_attention_heads",
-                "swa_num_key_value_heads",
-                "swa_qk_head_dim",
-                "swa_v_head_dim",
-                "swa_head_dim",
-            )
-        }
-
-        # Full attention: first layer and every 6th layer; rest are SWA
+        # Full attention for the first layer and every 6th layer; SWA for the rest.
         if self.layer_types is None:
-            if hub_kwargs["hybrid_layer_pattern"] is not None:
-                self.layer_types = [
-                    "sliding_attention" if p == 1 else "full_attention" for p in hub_kwargs["hybrid_layer_pattern"]
-                ]
-            else:
-                self.layer_types = [
-                    "full_attention" if (i == 0 or not ((i + 1) % 6)) else "sliding_attention"
-                    for i in range(self.num_hidden_layers)
-                ]
-
-        # MLP layer types: convert hub's `moe_layer_freq` (binary list) if given, else first dense + rest sparse
+            self.layer_types = [
+                "full_attention" if (i == 0 or not ((i + 1) % 6)) else "sliding_attention"
+                for i in range(self.num_hidden_layers)
+            ]
+        # First layer is a dense MLP, the rest are MoE.
         if self.mlp_layer_types is None:
-            if hub_kwargs["moe_layer_freq"] is not None:
-                self.mlp_layer_types = ["sparse" if f == 1 else "dense" for f in hub_kwargs["moe_layer_freq"]]
-            else:
-                self.mlp_layer_types = ["dense"] + ["sparse"] * (self.num_hidden_layers - 1)
-
-        if self.routed_scaling_factor is None:
-            self.routed_scaling_factor = 1.0
+            self.mlp_layer_types = ["dense"] + ["sparse"] * (self.num_hidden_layers - 1)
+        # Per-layer rope defaults matching the XiaomiMiMo/MiMo-V2-Flash pretrained thetas.
+        if self.rope_parameters is None:
+            self.rope_parameters = {
+                "full_attention": {"rope_type": "default", "rope_theta": 5_000_000.0, "partial_rotary_factor": 0.334},
+                "sliding_attention": {"rope_type": "default", "rope_theta": 10_000.0, "partial_rotary_factor": 0.334},
+            }
 
         super().__post_init__(**kwargs)
 
     def convert_rope_params_to_dict(self, **kwargs):
-        rope_scaling = kwargs.pop("rope_scaling", None)
-        partial_rotary_factor = kwargs.pop("partial_rotary_factor", 0.334)
-
-        # Similar to Gemma3:
-        # Try to set `rope_scaling` if available, otherwise use `rope_parameters`. If we find `rope_parameters`
-        # as arg in the inputs, we can safely assume that it is in the new format. New naming used -> new format
-        default_rope_params = {
-            "full_attention": {"rope_type": "default"},
-            "sliding_attention": {"rope_type": "default"},
-        }
-        self.rope_parameters = self.rope_parameters or default_rope_params
-
-        if rope_scaling is not None:
-            self.rope_parameters["full_attention"].update(rope_scaling)
-
-        for attn_type, theta_key in (("full_attention", "rope_theta"), ("sliding_attention", "swa_rope_theta")):
-            if self.rope_parameters.get(attn_type) is None:
-                self.rope_parameters[attn_type] = {"rope_type": "default"}
-            self.rope_parameters[attn_type].setdefault(
-                "rope_theta", kwargs.pop(theta_key, self.default_theta[attn_type])
-            )
-            self.rope_parameters[attn_type].setdefault("partial_rotary_factor", partial_rotary_factor)
-
-        # Standardize and validate the correctness of rotary position embeddings parameters
+        # Legacy hub fields (`rope_theta`, `swa_rope_theta`, `partial_rotary_factor`, `rope_scaling`) are
+        # translated into `rope_parameters` by `convert_mimo_v2_flash_weights_to_hf.py`; we only validate here.
         self.standardize_rope_params()
         return kwargs
 

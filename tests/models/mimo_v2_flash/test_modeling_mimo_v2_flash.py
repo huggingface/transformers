@@ -238,49 +238,49 @@ class MiMoV2FlashModelTest(CausalLMModelTest, unittest.TestCase):
         with self.assertRaises(AssertionError):
             torch.testing.assert_close(yarn_sin_long, original_sin_long)
 
-    def test_hub_config_backward_compatibility(self):
-        """Hub config.json uses legacy field names and extra keys that must be normalized or stripped."""
-        config = MiMoV2FlashConfig.from_dict(
+    def test_convert_config_from_hub_format(self):
+        """The conversion script maps legacy hub fields to native ones and strips hub-only keys."""
+        from transformers.models.mimo_v2_flash.convert_mimo_v2_flash_weights_to_hf import convert_config
+
+        config = convert_config(
             {
                 "model_type": "mimo_v2_flash",
                 "num_hidden_layers": 2,
                 "vocab_size": 100,
-                # Legacy fields that should be converted
+                "head_dim": 192,
                 "hybrid_layer_pattern": [0, 1],
+                "moe_layer_freq": [0, 1],
                 "partial_rotary_factor": 0.5,
                 "swa_rope_theta": 10000,
-                # Hub-only fields that should be stripped
+                "layernorm_epsilon": 1e-6,
+                "routed_scaling_factor": None,
                 "scoring_func": "sigmoid",
                 "topk_method": "noaux_tc",
                 "attention_value_scale": 0.707,
                 "attention_chunk_size": 128,
                 "sliding_window_size": 128,
                 "n_shared_experts": None,
-                # attribute_map alias (hub uses head_dim directly, same as native)
-                "head_dim": 192,
-                # Legacy SWA-prefixed fields that should be stripped (redundant with non-SWA counterparts)
                 "swa_num_attention_heads": 64,
                 "swa_num_key_value_heads": 8,
                 "swa_head_dim": 192,
                 "swa_v_head_dim": 128,
-                # None -> default
-                "routed_scaling_factor": None,
             }
         )
         config_dict = config.to_dict()
 
-        # hybrid_layer_pattern -> layer_types
         self.assertEqual(config.layer_types, ["full_attention", "sliding_attention"])
-        self.assertNotIn("hybrid_layer_pattern", config_dict)
-
-        # partial_rotary_factor / swa_rope_theta -> rope_parameters
+        self.assertEqual(config.mlp_layer_types, ["dense", "sparse"])
+        self.assertEqual(config.rms_norm_eps, 1e-6)
+        self.assertEqual(config.routed_scaling_factor, 1.0)
         self.assertEqual(config_dict["rope_parameters"]["full_attention"]["partial_rotary_factor"], 0.5)
         self.assertEqual(config_dict["rope_parameters"]["sliding_attention"]["rope_theta"], 10000)
-        self.assertNotIn("partial_rotary_factor", config_dict)
-        self.assertNotIn("swa_rope_theta", config_dict)
 
-        # Hub-only fields stripped
         for key in (
+            "hybrid_layer_pattern",
+            "moe_layer_freq",
+            "partial_rotary_factor",
+            "swa_rope_theta",
+            "layernorm_epsilon",
             "scoring_func",
             "topk_method",
             "attention_value_scale",
@@ -293,11 +293,6 @@ class MiMoV2FlashModelTest(CausalLMModelTest, unittest.TestCase):
             "swa_v_head_dim",
         ):
             self.assertNotIn(key, config_dict)
-
-        self.assertEqual(config.head_dim, 192)
-
-        # None -> default
-        self.assertEqual(config.routed_scaling_factor, 1.0)
 
     def test_layer_type_rope_parameters_keep_rotary_dims_in_sync(self):
         """Layer-specific rope parameters should produce position embeddings that match each attention rotary dim."""
