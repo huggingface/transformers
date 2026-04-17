@@ -2151,27 +2151,28 @@ class Gemma4Model(Gemma4PreTrainedModel):
 
     def __init__(self, config: Gemma4Config):
         super().__init__(config)
+        self.vision_tower = AutoModel.from_config(config.vision_config) if config.vision_config is not None else None
         self.vocab_size = config.text_config.vocab_size
 
         language_model = AutoModel.from_config(config=config.text_config)
         self.language_model = language_model
         self.vocab_size_per_layer_input = config.text_config.vocab_size_per_layer_input
-        # Grab the ones from the child
-        self._keys_to_ignore_on_load_unexpected = [
-            f"language_model.{name}" for name in self.language_model._keys_to_ignore_on_load_unexpected
-        ]
-        self.vision_tower = AutoModel.from_config(config.vision_config) if config.vision_config is not None else None
+        self.audio_tower = AutoModel.from_config(config.audio_config) if config.audio_config is not None else None
         self.embed_vision = (
             Gemma4MultimodalEmbedder(config.vision_config, config.text_config)
             if config.vision_config is not None
             else None
         )
-        self.audio_tower = AutoModel.from_config(config.audio_config) if config.audio_config is not None else None
         self.embed_audio = (
             Gemma4MultimodalEmbedder(config.audio_config, config.text_config)
             if config.audio_config is not None
             else None
         )
+
+        # Grab the ones from the child
+        self._keys_to_ignore_on_load_unexpected = [
+            f"language_model.{name}" for name in self.language_model._keys_to_ignore_on_load_unexpected
+        ]
         self.post_init()
 
     def get_input_embeddings(self):
