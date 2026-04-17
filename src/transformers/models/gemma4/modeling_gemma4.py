@@ -2283,7 +2283,7 @@ class Gemma4Model(Gemma4PreTrainedModel):
             # Larger Gemma 4 models use Gemma 3's bidirectional attention mask for vision inputs
             # Smaller Gemma models use a conventional casual attention mask
             if self.config.get_text_config().use_bidirectional_attention == "vision":
-                vision_group_ids = torch.full([*inputs_embeds.size()], -1)
+                vision_group_ids = torch.full([*inputs_embeds.size()], -1, device=inputs_embeds.device)
                 if mm_token_type_ids is not None:
                     is_vision = (mm_token_type_ids == 1) | (mm_token_type_ids == 2)
                     is_prev_vision = torch.roll(is_vision, shifts=1, dims=-1)
@@ -2550,7 +2550,7 @@ class Gemma4ForConditionalGeneration(Gemma4PreTrainedModel, GenerationMixin):
         # Larger Gemma 4 models use Gemma 3's bidirectional attention mask for vision inputs
         # Smaller Gemma models use a conventional casual attention mask
         if getattr(config.get_text_config(), "use_bidirectional_attention", None) == "vision":
-            vision_group_ids = torch.full([*inputs_embeds.size()], -1)
+            vision_group_ids = torch.full([*inputs_embeds.size()], -1, device=inputs_embeds.device)
             if mm_token_type_ids is not None:
                 is_vision = (mm_token_type_ids == 1) | (mm_token_type_ids == 2)
                 is_prev_vision = torch.roll(is_vision, shifts=1, dims=-1)
@@ -2559,7 +2559,7 @@ class Gemma4ForConditionalGeneration(Gemma4PreTrainedModel, GenerationMixin):
                 vision_group_ids = torch.cumsum(new_vision_starts.int(), dim=1) - 1
                 vision_group_ids = torch.where(is_vision, vision_group_ids, -1)
 
-            mask_kwargs["block_sequence_ids"] = (vision_group_ids,)
+            mask_kwargs["block_sequence_ids"] = vision_group_ids
 
         return create_masks_for_generate(**mask_kwargs)
 
