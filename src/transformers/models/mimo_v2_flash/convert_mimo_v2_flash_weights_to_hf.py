@@ -28,7 +28,7 @@ import argparse
 import json
 import os
 
-from transformers import MiMoV2FlashConfig, MiMoV2FlashForCausalLM
+from transformers import AutoTokenizer, MiMoV2FlashConfig, MiMoV2FlashForCausalLM
 
 
 def convert_config(original_config: dict):
@@ -98,8 +98,13 @@ def convert_mimo_v2_flash_model(input_dir, output_dir):
     config = convert_config(original_config)
     config.save_pretrained(output_dir)
 
+    # Load and convert weights
     model = MiMoV2FlashForCausalLM.from_pretrained(input_dir, config=config)
     model.save_pretrained(output_dir)
+
+    # Load and convert tokenizer
+    tokenizer = AutoTokenizer.from_pretrained(input_dir)
+    tokenizer.save_pretrained(output_dir)
 
 
 if __name__ == "__main__":
