@@ -55,7 +55,7 @@ class GptOssConfig(PreTrainedConfig):
     rope_parameters: dict | None = None
     attention_dropout: float | int = 0.0
     num_experts_per_tok: int = 4
-    router_aux_loss_coef: float = 0.9
+    router_aux_loss_coef: float = 0.001
     output_router_logits: bool = False
     use_cache: bool = True
     layer_types: list[str] | None = None

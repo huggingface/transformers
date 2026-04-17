@@ -20,7 +20,6 @@
 
 import math
 from collections.abc import Callable
-from copy import copy
 from typing import Optional
 
 import torch
@@ -30,18 +29,15 @@ from torch.nn import functional as F
 from ... import initialization as init
 from ...integrations import use_experts_implementation, use_kernel_forward_from_hub, use_kernelized_func
 from ...masking_utils import create_bidirectional_sliding_window_mask
-from ...modeling_layers import GradientCheckpointingLayer
-from ...modeling_outputs import BaseModelOutputWithPast, TokenClassifierOutput
+from ...modeling_layers import GenericForTokenClassification, GradientCheckpointingLayer
+from ...modeling_outputs import BaseModelOutput
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
-from ...modeling_utils import PreTrainedModel
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
-from ...utils.generic import maybe_autocast
-from ...utils.output_capturing import OutputRecorder
+from ...utils import TransformersKwargs, auto_docstring
+from ...utils.generic import maybe_autocast, merge_with_config_defaults
+from ...utils.output_capturing import OutputRecorder, capture_outputs
 from .configuration_privacy_filter import PrivacyFilterConfig
-
-
-logger = logging.get_logger(__name__)
 
 
 @use_kernel_forward_from_hub("RMSNorm")
@@ -63,23 +59,6 @@ class PrivacyFilterRMSNorm(nn.Module):
 
     def extra_repr(self):
         return f"{tuple(self.weight.shape)}, eps={self.variance_epsilon}"
-
-
-class PrivacyFilterTopKRouter(nn.Module):
-    def __init__(self, config):
-        super().__init__()
-        self.top_k = config.num_experts_per_tok
-        self.num_experts = config.num_local_experts
-        self.hidden_dim = config.hidden_size
-        self.weight = nn.Parameter(torch.zeros(self.num_experts, self.hidden_dim))
-        self.bias = nn.Parameter(torch.zeros(self.num_experts))
-
-    def forward(self, hidden_states: torch.Tensor):
-        hidden_states = hidden_states.float()
-        router_logits = F.linear(hidden_states, self.weight, self.bias)  # (num_tokens, num_experts)
-        router_top_value, router_indices = torch.topk(router_logits, self.top_k, dim=-1)  # (num_tokens, top_k)
-        router_scores = torch.nn.functional.softmax(router_top_value, dim=1, dtype=router_top_value.dtype)
-        return router_logits, router_scores, router_indices
 
 
 class PrivacyFilterRotaryEmbedding(nn.Module):
@@ -147,6 +126,18 @@ class PrivacyFilterRotaryEmbedding(nn.Module):
         return cos.to(x.dtype), sin.to(x.dtype)
 
 
+def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
+    """
+    This is the equivalent of torch.repeat_interleave(x, dim=1, repeats=n_rep). The hidden states go from (batch,
+    num_key_value_heads, seqlen, head_dim) to (batch, num_attention_heads, seqlen, head_dim)
+    """
+    batch, num_key_value_heads, slen, head_dim = hidden_states.shape
+    if n_rep == 1:
+        return hidden_states
+    hidden_states = hidden_states[:, :, None, :, :].expand(batch, num_key_value_heads, n_rep, slen, head_dim)
+    return hidden_states.reshape(batch, num_key_value_heads * n_rep, slen, head_dim)
+
+
 def apply_rotary_pos_emb(q, k, cos, sin, position_ids=None, unsqueeze_dim=1):
     cos = cos.unsqueeze(unsqueeze_dim)
     sin = sin.unsqueeze(unsqueeze_dim)
@@ -155,95 +146,57 @@ def apply_rotary_pos_emb(q, k, cos, sin, position_ids=None, unsqueeze_dim=1):
     return q_embed, k_embed
 
 
+def eager_attention_forward(
+    module: nn.Module,
+    query: torch.Tensor,
+    key: torch.Tensor,
+    value: torch.Tensor,
+    attention_mask: torch.Tensor | None,
+    scaling: float,
+    dropout: float | int = 0.0,
+    **kwargs,
+):
+    key_states = repeat_kv(key, module.num_key_value_groups)
+    value_states = repeat_kv(value, module.num_key_value_groups)
+    attn_weights = torch.matmul(query, key_states.transpose(2, 3)) * scaling
+    if attention_mask is not None:
+        attn_weights = attn_weights + attention_mask
+
+    sinks = module.sinks.reshape(1, -1, 1, 1).expand(query.shape[0], -1, query.shape[-2], -1)
+    combined_logits = torch.cat([attn_weights, sinks], dim=-1)
+
+    # This was not in the original implementation and slightly affect results; it prevents overflow in BF16/FP16
+    # when training with bsz>1 we clamp max values.
+
+    combined_logits = combined_logits - combined_logits.max(dim=-1, keepdim=True).values
+    probs = F.softmax(combined_logits, dim=-1, dtype=combined_logits.dtype)
+    scores = probs[..., :-1]  # we drop the sink here
+    attn_weights = nn.functional.dropout(scores, p=dropout, training=module.training).to(value_states.dtype)
+    attn_output = torch.matmul(attn_weights, value_states)
+    attn_output = attn_output.transpose(1, 2).contiguous()
+    return attn_output, attn_weights
+
+
 def _apply_rotary_emb(
     x: torch.Tensor,
     cos: torch.Tensor,
     sin: torch.Tensor,
 ) -> torch.Tensor:
+    # Interleaved instead of concatenated layout
+    # TODO: could also be chaned via conversion script (similar to Llama) but less of a priority
     first_half, second_half = x[..., ::2], x[..., 1::2]
     first_ = first_half * cos - second_half * sin
     second_ = second_half * cos + first_half * sin
     return torch.stack((first_, second_), dim=-1).flatten(-2)
 
 
-def _local_bidirectional_attention_mask(
-    attention_mask: torch.Tensor | None,
-    *,
-    batch_size: int,
-    sequence_length: int,
-    window_radius: int,
-    device: torch.device,
-) -> torch.Tensor:
-    window = 2 * window_radius + 1
-    relative_positions = torch.arange(window, device=device) - window_radius
-    key_positions = torch.arange(sequence_length, device=device)[:, None] + relative_positions[None, :]
-    valid_positions = (key_positions >= 0) & (key_positions < sequence_length)
-
-    if attention_mask is None:
-        return valid_positions.unsqueeze(0).expand(batch_size, -1, -1)
-
-    if attention_mask.dim() == 3:
-        return attention_mask.to(device=device, dtype=torch.bool)
-    if attention_mask.dim() != 4:
-        raise ValueError("Privacy Filter attention expects a 4D additive mask or a 3D local attention mask.")
-
-    if attention_mask.dtype == torch.bool:
-        full_attention_mask = attention_mask[:, 0].to(device=device)
-    else:
-        full_attention_mask = attention_mask[:, 0].to(device=device) == 0
-
-    padded_attention_mask = F.pad(full_attention_mask, (window_radius, window_radius), value=False)
-    window_attention_mask = padded_attention_mask.unfold(-1, window, 1)
-    token_positions = torch.arange(sequence_length, device=device)
-    return window_attention_mask[:, token_positions, token_positions, :] & valid_positions.unsqueeze(0)
-
-
-def _local_bidirectional_attention(
-    query: torch.Tensor,
-    key: torch.Tensor,
-    value: torch.Tensor,
-    sinks: torch.Tensor,
-    attention_mask: torch.Tensor | None,
-    *,
-    window_radius: int,
-) -> torch.Tensor:
-    batch_size, num_tokens, num_key_value_heads, num_query_groups, head_dim = query.shape
-    window = 2 * window_radius + 1
-
-    attention_mask = _local_bidirectional_attention_mask(
-        attention_mask,
-        batch_size=batch_size,
-        sequence_length=num_tokens,
-        window_radius=window_radius,
-        device=query.device,
-    )
-    padded_key = F.pad(key, (0, 0, 0, 0, window_radius, window_radius))
-    padded_value = F.pad(value, (0, 0, 0, 0, window_radius, window_radius))
-    key_window = padded_key.unfold(1, window, 1).permute(0, 1, 4, 2, 3)
-    value_window = padded_value.unfold(1, window, 1).permute(0, 1, 4, 2, 3)
-
-    scores = torch.einsum("bthqd,btwhd->bthqw", query, key_window)
-    scores = scores.float()
-    scores = scores.masked_fill(~attention_mask[:, :, None, None, :], -float("inf"))
-
-    sink_scores = (sinks * math.log(2.0)).reshape(num_key_value_heads, num_query_groups)
-    sink_scores = sink_scores[None, None, :, :, None].expand(batch_size, num_tokens, -1, -1, 1)
-    scores = torch.cat([scores, sink_scores], dim=-1)
-
-    weights = torch.softmax(scores, dim=-1)[..., :-1].to(value.dtype)
-    attn_output = torch.einsum("bthqw,btwhd->bthqd", weights, value_window)
-    return attn_output.reshape(batch_size, num_tokens, num_key_value_heads * num_query_groups * head_dim)
-
-
 @use_kernelized_func(apply_rotary_pos_emb)
 class PrivacyFilterAttention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
 
-    def __init__(self, config: PrivacyFilterConfig, layer_idx: int = 0):
+    def __init__(self, config: PrivacyFilterConfig):
         super().__init__()
-        self.layer_type = config.layer_types[layer_idx] if hasattr(config, "layer_types") else None
         self.config = config
-        self.layer_idx = layer_idx
         self.head_dim = getattr(config, "head_dim", config.hidden_size // config.num_attention_heads)
         self.num_key_value_groups = config.num_attention_heads // config.num_key_value_heads
         self.scaling = config.head_dim**-0.25
@@ -261,12 +214,8 @@ class PrivacyFilterAttention(nn.Module):
         self.o_proj = nn.Linear(
             config.num_attention_heads * self.head_dim, config.hidden_size, bias=config.attention_bias
         )
-        self.sliding_window = config.sliding_window if self.layer_type == "sliding_attention" else None
-        self.sinks = nn.Parameter(torch.empty(config.num_attention_heads, dtype=torch.float32))
-        self.num_attention_heads = config.num_attention_heads
-        self.num_key_value_heads = config.num_key_value_heads
-        self.num_query_groups = config.num_attention_heads // config.num_key_value_heads
-        self.window_radius = int(config.bidirectional_left_context)
+        self.sliding_window = config.sliding_window + 1  # Account for FA symmetry using -1
+        self.sinks = nn.Parameter(torch.empty(config.num_attention_heads))
 
     def forward(
         self,
@@ -275,55 +224,40 @@ class PrivacyFilterAttention(nn.Module):
         attention_mask: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor, None]:
-        original_dtype = hidden_states.dtype
-        if hidden_states.dtype != self.q_proj.weight.dtype:
-            hidden_states = hidden_states.to(self.q_proj.weight.dtype)
+        input_shape = hidden_states.shape[:-1]
+        hidden_shape = (*input_shape, -1, self.head_dim)
 
-        batch_size, sequence_length, _ = hidden_states.shape
-        query_states = self.q_proj(hidden_states).view(
-            batch_size, sequence_length, self.num_attention_heads, self.head_dim
-        )
-        key_states = self.k_proj(hidden_states).view(
-            batch_size, sequence_length, self.num_key_value_heads, self.head_dim
-        )
-        value_states = self.v_proj(hidden_states).view(
-            batch_size, sequence_length, self.num_key_value_heads, self.head_dim
-        )
+        query_states = self.q_proj(hidden_states).view(hidden_shape).transpose(1, 2)
+        key_states = self.k_proj(hidden_states).view(hidden_shape).transpose(1, 2)
+        value_states = self.v_proj(hidden_states).view(hidden_shape).transpose(1, 2)
 
         cos, sin = position_embeddings
-        query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin, unsqueeze_dim=2)
-        query_states = (query_states * self.scaling).view(
-            batch_size, sequence_length, self.num_key_value_heads, self.num_query_groups, self.head_dim
-        )
+        query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
+
+        # Unique: applying scale individually to each Q and K
+        query_states = query_states * self.scaling
         key_states = key_states * self.scaling
 
-        attn_output = _local_bidirectional_attention(
+        attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
+            self.config._attn_implementation, eager_attention_forward
+        )
+
+        attn_output, attn_weights = attention_interface(
+            self,
             query_states,
             key_states,
             value_states,
-            self.sinks,
             attention_mask,
-            window_radius=self.window_radius,
+            dropout=0.0 if not self.training else self.attention_dropout,
+            scaling=1.0,  # scaling applied before
+            sliding_window=self.sliding_window,
+            s_aux=self.sinks * math.log(2.0),  # additional scale for sinks
+            **kwargs,
         )
 
-        if attn_output.dtype != self.o_proj.weight.dtype:
-            attn_output = attn_output.to(self.o_proj.weight.dtype)
-        attn_output = F.linear(attn_output, self.o_proj.weight, self.o_proj.bias)
-        return attn_output.to(original_dtype), None
-
-
-def _batched_linear(
-    x: torch.Tensor,
-    weight: torch.Tensor,
-    bias: torch.Tensor | None,
-) -> torch.Tensor:
-    batch_size, num_experts, input_dim = x.shape
-    output_dim = weight.shape[-1]
-    out = torch.bmm(x.reshape(batch_size * num_experts, 1, input_dim), weight.reshape(-1, input_dim, output_dim))
-    out = out.reshape(batch_size, num_experts, output_dim)
-    if bias is not None:
-        out = out + bias
-    return out
+        attn_output = attn_output.reshape(*input_shape, -1).contiguous()
+        attn_output = self.o_proj(attn_output)
+        return attn_output, attn_weights
 
 
 @use_experts_implementation(is_transposed=True, has_bias=True)
@@ -341,48 +275,64 @@ class PrivacyFilterExperts(nn.Module):
         self.limit = 7.0
 
     def _apply_gate(self, gate_up: torch.Tensor) -> torch.Tensor:
+        # TODO: fix layout from concatenated to interleaved --> no need to change here then
+        # (otherwise, we won't be able to use megablocks kernels potentially)
         gate, up = gate_up.chunk(2, dim=-1)
         gate = gate.clamp(min=None, max=self.limit)
         up = up.clamp(min=-self.limit, max=self.limit)
-        return (gate * torch.sigmoid(self.alpha * gate)) * (up + 1)
+        glu = gate * torch.sigmoid(gate * self.alpha)
+        gated_output = (up + 1) * glu
+        return gated_output
 
-    def forward(
-        self,
-        hidden_states: torch.Tensor,
-        expert_indices: torch.Tensor,
-        expert_weights: torch.Tensor,
-        *,
-        chunk_size: int = 32,
-    ) -> torch.Tensor:
-        outputs = []
-        effective_chunk_size = chunk_size if chunk_size > 0 else hidden_states.shape[0]
-        for start in range(0, hidden_states.shape[0], effective_chunk_size):
-            end = start + effective_chunk_size
-            hidden_chunk = hidden_states[start:end]
-            indices_chunk = expert_indices[start:end]
-            weights_chunk = expert_weights[start:end]
+    def forward(self, hidden_states: torch.Tensor, router_indices=None, routing_weights=None) -> torch.Tensor:
+        next_states = torch.zeros_like(hidden_states, dtype=hidden_states.dtype, device=hidden_states.device)
+        with torch.no_grad():
+            expert_mask = torch.nn.functional.one_hot(
+                router_indices, num_classes=self.num_experts
+            )  # masking is also a class
+            expert_mask = expert_mask.permute(2, 1, 0)
+            # we sum on the top_k and on the sequence length to get which experts
+            # are hit this time around
+            expert_hit = torch.greater(expert_mask.sum(dim=(-1, -2)), 0).nonzero()
 
-            gate_up_weight = self.gate_up_proj[indices_chunk, ...].float()
-            gate_up_bias = self.gate_up_proj_bias[indices_chunk, ...].float()
-            hidden_expanded = hidden_chunk.float().unsqueeze(1).expand(-1, indices_chunk.shape[1], -1)
-            hidden_chunk = _batched_linear(hidden_expanded, gate_up_weight, gate_up_bias)
-            hidden_chunk = self._apply_gate(hidden_chunk)
+        # Key change to original gpt oss is to stay in fp32 precision for all linear projections / muls
+        for expert_idx in expert_hit:
+            # expert_idx only have 1 element, so we can use scale for fast indexing
+            expert_idx = expert_idx[0]
+            # skip masking index
+            if expert_idx == self.num_experts:
+                continue
+            top_k_pos, token_idx = torch.where(expert_mask[expert_idx])
+            current_state = hidden_states[token_idx]
+            gate_up = current_state.float() @ self.gate_up_proj[expert_idx] + self.gate_up_proj_bias[expert_idx]
+            gated_output = self._apply_gate(gate_up)
+            out = gated_output.float() @ self.down_proj[expert_idx] + self.down_proj_bias[expert_idx]
+            weighted_output = out * routing_weights[token_idx, top_k_pos, None].float()
+            next_states.index_add_(0, token_idx, weighted_output.to(hidden_states.dtype))
 
-            down_weight = self.down_proj[indices_chunk, ...].float()
-            down_bias = self.down_proj_bias[indices_chunk, ...].float()
-            hidden_chunk = _batched_linear(hidden_chunk.float(), down_weight, down_bias)
+        return next_states
 
-            if hidden_chunk.dtype != weights_chunk.dtype:
-                hidden_chunk = hidden_chunk.to(weights_chunk.dtype)
-            hidden_chunk = torch.einsum("bec,be->bc", hidden_chunk, weights_chunk)
-            hidden_chunk = hidden_chunk * expert_indices.shape[1]
-            outputs.append(hidden_chunk.to(hidden_states.dtype))
-        return torch.cat(outputs, dim=0)
+
+class PrivacyFilterTopKRouter(nn.Module):
+    def __init__(self, config):
+        super().__init__()
+        self.top_k = config.num_experts_per_tok
+        self.num_experts = config.num_local_experts
+        self.hidden_dim = config.hidden_size
+        self.weight = nn.Parameter(torch.zeros(self.num_experts, self.hidden_dim))
+        self.bias = nn.Parameter(torch.zeros(self.num_experts))
+
+    def forward(self, hidden_states):
+        # Force fp32
+        router_logits = F.linear(hidden_states.float(), self.weight, self.bias)  # (num_tokens, num_experts)
+        router_top_value, router_indices = torch.topk(router_logits, self.top_k, dim=-1)  # (num_tokens, top_k)
+        router_scores = torch.nn.functional.softmax(router_top_value, dim=1, dtype=router_top_value.dtype)
+        return router_logits, router_scores, router_indices
 
 
 @use_kernel_forward_from_hub("MegaBlocksMoeMLP")
 class PrivacyFilterMLP(nn.Module):
-    def __init__(self, config: PrivacyFilterConfig):
+    def __init__(self, config):
         super().__init__()
         self.router = PrivacyFilterTopKRouter(config)
         self.experts = PrivacyFilterExperts(config)
@@ -397,10 +347,10 @@ class PrivacyFilterMLP(nn.Module):
 
 
 class PrivacyFilterEncoderLayer(GradientCheckpointingLayer):
-    def __init__(self, config: PrivacyFilterConfig, layer_idx: int):
+    def __init__(self, config: PrivacyFilterConfig):
         super().__init__()
         self.hidden_size = config.hidden_size
-        self.self_attn = PrivacyFilterAttention(config, layer_idx)
+        self.self_attn = PrivacyFilterAttention(config)
         self.mlp = PrivacyFilterMLP(config)
         self.input_layernorm = PrivacyFilterRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.post_attention_layernorm = PrivacyFilterRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
@@ -414,6 +364,7 @@ class PrivacyFilterEncoderLayer(GradientCheckpointingLayer):
     ) -> torch.Tensor:
         residual = hidden_states
         hidden_states = self.input_layernorm(hidden_states)
+        # Self Attention
         hidden_states, _ = self.self_attn(
             hidden_states=hidden_states,
             position_embeddings=position_embeddings,
@@ -422,10 +373,13 @@ class PrivacyFilterEncoderLayer(GradientCheckpointingLayer):
         )
         hidden_states = residual + hidden_states
 
+        # Fully Connected
         residual = hidden_states
         hidden_states = self.post_attention_layernorm(hidden_states)
         hidden_states, _ = self.mlp(hidden_states)
-        return residual + hidden_states
+        hidden_states = residual + hidden_states
+
+        return hidden_states
 
 
 @auto_docstring
@@ -435,19 +389,27 @@ class PrivacyFilterPreTrainedModel(PreTrainedModel):
     supports_gradient_checkpointing = True
     _no_split_modules = ["PrivacyFilterEncoderLayer"]
     _skip_keys_device_placement = None  # No cache
-    _supports_flash_attn = False
+    _supports_flash_attn = True
     _supports_sdpa = False
-    _supports_flex_attn = False
-    _can_compile_fullgraph = False
-    _supports_attention_backend = False
+    _supports_flex_attn = True
+
+    _can_compile_fullgraph = True
+    _supports_attention_backend = True
+
     _can_record_outputs = {
         "router_logits": OutputRecorder(PrivacyFilterTopKRouter, index=0),
         "hidden_states": PrivacyFilterEncoderLayer,
         "attentions": PrivacyFilterAttention,
     }
     _keep_in_fp32_modules = ["norm", "embedding_norm", "input_layernorm", "post_attention_layernorm"]
-    _compatible_flash_implementations = None
-    _keep_in_fp32_modules_strict: list[str] = ["sinks", "router"]
+    _compatible_flash_implementations = ["kernels-community/vllm-flash-attn3", "flash_attention_4"]
+    _keep_in_fp32_modules_strict = [
+        "gate_up_proj",
+        "gate_up_proj_bias",
+        "down_proj",
+        "down_proj_bias",
+        "router",
+    ]
 
     @torch.no_grad()
     def _init_weights(self, module):
@@ -463,57 +425,27 @@ class PrivacyFilterPreTrainedModel(PreTrainedModel):
         elif isinstance(module, PrivacyFilterTopKRouter):
             init.normal_(module.weight, mean=0.0, std=std)
             init.normal_(module.bias, mean=0.0, std=std)
-        if isinstance(module, PrivacyFilterTopKRouter):
-            init.zeros_(module.bias)
-        elif isinstance(module, PrivacyFilterRotaryEmbedding):
-            rope_init_fn = module.compute_default_rope_parameters
-            if module.rope_type != "default":
-                rope_init_fn = ROPE_INIT_FUNCTIONS[module.rope_type]
-            inv_freq, module.attention_scaling = rope_init_fn(module.config, module.inv_freq.device)
-            init.copy_(module.inv_freq, inv_freq)
-            init.copy_(module.original_inv_freq, inv_freq)
-
-    @classmethod
-    def _can_set_experts_implementation(cls) -> bool:
-        # Modular conversion inherits GptOssExperts' decorator, but Privacy Filter's expert forward is checkpoint-specific.
-        return False
-
-    def get_correct_experts_implementation(self, requested_experts: str | None) -> str:
-        if requested_experts not in (None, "eager"):
-            raise ValueError("Privacy Filter only supports the eager experts implementation.")
-        return "eager"
-
-    def set_use_kernels(self, use_kernels, kernel_config=None):
-        if use_kernels:
-            raise ValueError("Privacy Filter does not support kernelized layers.")
-        super().set_use_kernels(use_kernels, kernel_config)
 
 
 @auto_docstring
 class PrivacyFilterModel(PrivacyFilterPreTrainedModel):
     def __init__(self, config: PrivacyFilterConfig):
         super().__init__(config)
-        self.padding_idx = (
-            config.pad_token_id
-            if config.pad_token_id is not None and config.pad_token_id < config.vocab_size
-            else None
-        )
+        self.padding_idx = config.pad_token_id
         self.vocab_size = config.vocab_size
+
         self.embed_tokens = nn.Embedding(config.vocab_size, config.hidden_size, self.padding_idx)
-        self.embedding_norm = PrivacyFilterRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        self.layers = nn.ModuleList(
-            [PrivacyFilterEncoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
-        )
+        self.layers = nn.ModuleList([PrivacyFilterEncoderLayer(config) for _ in range(config.num_hidden_layers)])
         self.norm = PrivacyFilterRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.rotary_emb = PrivacyFilterRotaryEmbedding(config=config)
+        self.gradient_checkpointing = False
+        self.embedding_norm = PrivacyFilterRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+
+        # Initialize weights and apply final processing
         self.post_init()
 
-    def get_input_embeddings(self):
-        return self.embed_tokens
-
-    def set_input_embeddings(self, value):
-        self.embed_tokens = value
-
+    @merge_with_config_defaults
+    @capture_outputs
     @auto_docstring
     def forward(
         self,
@@ -522,122 +454,41 @@ class PrivacyFilterModel(PrivacyFilterPreTrainedModel):
         position_ids: torch.LongTensor | None = None,
         past_key_values: None = None,
         inputs_embeds: torch.FloatTensor | None = None,
-        use_cache: bool | None = None,
-        output_attentions: bool | None = None,
-        output_hidden_states: bool | None = None,
-        return_dict: bool | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> BaseModelOutputWithPast:
+    ) -> BaseModelOutput:
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
-        if past_key_values is not None or use_cache:
-            raise ValueError("Privacy Filter is a bidirectional encoder and does not support key/value caching.")
-        if output_attentions:
-            logger.warning_once("Privacy Filter does not return attention weights.")
-
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
-        return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         if inputs_embeds is None:
             inputs_embeds = self.embed_tokens(input_ids)
         hidden_states = self.embedding_norm(inputs_embeds)
-        batch_size, sequence_length, _ = hidden_states.shape
-
-        if not isinstance(attention_mask_mapping := attention_mask, dict):
-            window_radius = self.config.bidirectional_left_context
-            if window_radius != self.config.bidirectional_right_context:
-                raise ValueError(
-                    "Privacy Filter only supports symmetric bidirectional context with the shared mask API."
-                )
-            if self.config.sliding_window != 2 * window_radius + 1:
-                raise ValueError(
-                    "`sliding_window` must equal `2 * bidirectional_left_context + 1` for Privacy Filter checkpoints."
-                )
-            mask_config = copy(self.config)
-            mask_config.sliding_window = window_radius
-            mask_kwargs = {
-                "config": mask_config,
-                "inputs_embeds": hidden_states,
-                "attention_mask": attention_mask,
-            }
-            attention_mask_mapping = {"sliding_attention": create_bidirectional_sliding_window_mask(**mask_kwargs)}
 
         if position_ids is None:
-            position_ids = torch.arange(sequence_length, device=hidden_states.device).unsqueeze(0)
-            position_ids = position_ids.expand(batch_size, -1)
-
+            position_ids = torch.arange(inputs_embeds.shape[1], device=inputs_embeds.device)
+            position_ids = position_ids.unsqueeze(0)
         position_embeddings = self.rotary_emb(hidden_states, position_ids)
-        all_hidden_states = () if output_hidden_states else None
 
-        for i, decoder_layer in enumerate(self.layers):
-            if output_hidden_states:
-                all_hidden_states += (hidden_states,)
-            hidden_states = decoder_layer(
+        attention_mask = create_bidirectional_sliding_window_mask(
+            config=self.config,
+            inputs_embeds=hidden_states,
+            attention_mask=attention_mask,
+        )
+
+        for encoder_layer in self.layers:
+            hidden_states = encoder_layer(
                 hidden_states,
                 position_embeddings=position_embeddings,
-                attention_mask=attention_mask_mapping[self.config.layer_types[i]],
+                attention_mask=attention_mask,
+                position_ids=position_ids,
+                **kwargs,
             )
 
         hidden_states = self.norm(hidden_states)
-        if output_hidden_states:
-            all_hidden_states += (hidden_states,)
 
-        if not return_dict:
-            return tuple(v for v in [hidden_states, None, all_hidden_states, None] if v is not None)
-        return BaseModelOutputWithPast(
-            last_hidden_state=hidden_states,
-            past_key_values=None,
-            hidden_states=all_hidden_states,
-            attentions=None,
-        )
+        return BaseModelOutput(last_hidden_state=hidden_states)
 
 
-@auto_docstring
-class PrivacyFilterForTokenClassification(PrivacyFilterPreTrainedModel):
-    def __init__(self, config: PrivacyFilterConfig):
-        super().__init__(config)
-        self.num_labels = config.num_labels
-        self.model = PrivacyFilterModel(config)
-        self.score = nn.Linear(config.hidden_size, config.num_labels, bias=False)
-        self.post_init()
-
-    @can_return_tuple
-    @auto_docstring
-    def forward(
-        self,
-        input_ids: torch.LongTensor | None = None,
-        attention_mask: torch.Tensor | None = None,
-        position_ids: torch.LongTensor | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
-        labels: torch.LongTensor | None = None,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple[torch.Tensor] | TokenClassifierOutput:
-        r"""
-        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Labels for computing the token classification loss. Indices should be in `[0, ..., config.num_labels - 1]`.
-        """
-        outputs = self.model(
-            input_ids,
-            attention_mask=attention_mask,
-            position_ids=position_ids,
-            inputs_embeds=inputs_embeds,
-            **kwargs,
-        )
-        sequence_output = outputs.last_hidden_state
-        logits = self.score(sequence_output)
-
-        loss = None
-        if labels is not None:
-            loss = self.loss_function(logits, labels, self.config)
-
-        return TokenClassifierOutput(
-            loss=loss,
-            logits=logits,
-            hidden_states=outputs.hidden_states,
-            attentions=outputs.attentions,
-        )
+class PrivacyFilterForTokenClassification(GenericForTokenClassification, PrivacyFilterPreTrainedModel): ...
 
 
 __all__ = ["PrivacyFilterForTokenClassification", "PrivacyFilterModel", "PrivacyFilterPreTrainedModel"]
