@@ -1470,13 +1470,14 @@ class Gemma3nTextAttention(nn.Module):
         self.config = config
         self.layer_idx = layer_idx
         self.layer_type = config.layer_types[layer_idx] if hasattr(config, "layer_types") else None
+        self.is_sliding = self.layer_type == "sliding_attention"
+        self.sliding_window = config.sliding_window if self.is_sliding else None
+
         self.head_dim = getattr(config, "head_dim", config.hidden_size // config.num_attention_heads)
         self.num_key_value_groups = config.num_attention_heads // config.num_key_value_heads
         self.scaling = 1.0
         self.attention_dropout = self.config.attention_dropout
         self.is_causal = True
-        self.sliding_window = config.sliding_window if self.layer_type == "sliding_attention" else None
-        self.is_sliding = self.layer_type == "sliding_attention"
 
         first_kv_shared_layer_idx = self.config.num_hidden_layers - self.config.num_kv_shared_layers
         self.is_kv_shared_layer = layer_idx >= first_kv_shared_layer_idx > 0
