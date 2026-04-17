@@ -11,6 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+import copy
 from collections.abc import Callable
 from dataclasses import dataclass
 
@@ -129,10 +130,8 @@ class VJEPA2Embeddings(nn.Module):
         self.patch_embeddings = VJEPA2PatchEmbeddings3D(config, hidden_size=hidden_size)
 
         if config.img_temporal_dim_size is not None:
-            img_config = VJEPA2Config(
-                **{k: v for k, v in config.to_dict().items() if k != "tubelet_size"},
-                tubelet_size=1,
-            )
+            img_config = copy.copy(config)
+            img_config.tubelet_size = 1
             self.patch_embeddings_img = VJEPA2PatchEmbeddings3D(img_config, hidden_size=hidden_size)
         else:
             self.patch_embeddings_img = None
