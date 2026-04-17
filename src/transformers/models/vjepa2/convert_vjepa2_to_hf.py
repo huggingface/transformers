@@ -271,6 +271,10 @@ def convert_predictor_keys(model_state_dict, og_predictor_state_dict, config):
             mask_token_keys_to_delete.append(key)
         if key.startswith("predictor_norm."):
             key = key.replace("predictor_norm.", "predictor.layernorm.")
+        if key == "img_mod_embed":
+            key = "predictor.embeddings.img_mod_embed"
+        if key == "video_mod_embed":
+            key = "predictor.embeddings.video_mod_embed"
         if key.startswith("predictor_proj_context."):
             key = key.replace("predictor_proj_context.", "predictor.proj_context.")
         elif key.startswith("predictor_proj."):

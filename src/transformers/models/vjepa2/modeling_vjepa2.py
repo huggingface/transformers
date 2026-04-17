@@ -231,11 +231,13 @@ class VJEPA2RopeAttention(nn.Module):
         config: VJEPA2Config,
         hidden_size: int = 1024,
         num_attention_heads: int = 16,
+        is_predictor: bool = False,
     ):
         super().__init__()
         self.config = config
         self.hidden_size = hidden_size
         self.num_attention_heads = num_attention_heads
+        self.is_predictor = is_predictor
         if hidden_size % num_attention_heads != 0:
             raise ValueError(
                 f"The hidden size {(hidden_size,)} is not a multiple of the number of attention "
@@ -255,6 +257,7 @@ class VJEPA2RopeAttention(nn.Module):
 
         self.grid_size = self.config.crop_size // self.config.patch_size
         self.grid_depth = self.config.frames_per_clip // self.config.tubelet_size
+        self.pretrained_grid_size = 256 // self.config.patch_size
 
         self.d_dim = int(2 * ((self.attention_head_size // 3) // 2))
         self.h_dim = int(2 * ((self.attention_head_size // 3) // 2))
@@ -290,10 +293,11 @@ class VJEPA2RopeAttention(nn.Module):
         height_ids = self._get_height_pos(ids)
         width_ids = (ids - tokens_per_frame * frame_ids) - tokens_per_row * height_ids
 
-        if self.config.interpolate_rope and self.grid_size > 1:
-            scale = (self.grid_size - 1.0) / max(self.grid_size - 1.0, 1.0)
-            height_ids = height_ids.float() * scale
-            width_ids = width_ids.float() * scale
+        if self.config.interpolate_rope and not self.is_predictor and self.grid_size > 1:
+            h_scale = (self.pretrained_grid_size - 1.0) / max(self.grid_size - 1.0, 1.0)
+            w_scale = (self.pretrained_grid_size - 1.0) / max(self.grid_size - 1.0, 1.0)
+            height_ids = height_ids.float() * h_scale
+            width_ids = width_ids.float() * w_scale
 
         return frame_ids, height_ids, width_ids
 
@@ -407,6 +411,7 @@ class VJEPA2Layer(GradientCheckpointingLayer):
         hidden_size: int = 1024,
         num_attention_heads: int = 16,
         mlp_ratio: float = 4.0,
+        is_predictor: bool = False,
     ):
         super().__init__()
         self.config = config
@@ -415,7 +420,7 @@ class VJEPA2Layer(GradientCheckpointingLayer):
         self.mlp_ratio = mlp_ratio
 
         self.norm1 = nn.LayerNorm(hidden_size, eps=config.layer_norm_eps)
-        self.attention = VJEPA2RopeAttention(config, hidden_size, num_attention_heads)
+        self.attention = VJEPA2RopeAttention(config, hidden_size, num_attention_heads, is_predictor=is_predictor)
         self.drop_path = VJEPA2DropPath(drop_path_rate) if config.drop_path_rate > 0.0 else nn.Identity()
         self.norm2 = nn.LayerNorm(hidden_size, eps=config.layer_norm_eps)
         self.mlp = VJEPA2MLP(config, hidden_size=hidden_size, mlp_ratio=mlp_ratio)
@@ -554,6 +559,10 @@ class VJEPA2PredictorEmbeddings(nn.Module):
         self.num_mask_tokens = config.pred_num_mask_tokens
         self.mask_tokens = nn.Parameter(torch.zeros(self.num_mask_tokens, 1, 1, config.pred_hidden_size))
 
+        if config.use_modality_embeddings:
+            self.img_mod_embed = nn.Parameter(torch.zeros(1, 1, config.pred_hidden_size))
+            self.video_mod_embed = nn.Parameter(torch.zeros(1, 1, config.pred_hidden_size))
+
         self.patch_size = config.patch_size
         self.config = config
 
@@ -631,19 +640,19 @@ class VJEPA2Predictor(nn.Module):
                     hidden_size=config.pred_hidden_size,
                     num_attention_heads=config.pred_num_attention_heads,
                     mlp_ratio=config.pred_mlp_ratio,
+                    is_predictor=True,
                 )
                 for i in range(config.pred_num_hidden_layers)
             ]
         )
         self.layernorm = nn.LayerNorm(config.pred_hidden_size, eps=config.layer_norm_eps)
 
-        n_dist = config.n_output_distillation if config.n_output_distillation > 0 else 1
+        n_hier = len(config.hierarchical_layers) if config.hierarchical_layers else 1
         if config.teacher_embed_dim is not None:
-            n_hier = len(config.hierarchical_layers) if config.hierarchical_layers else 1
             out_embed_dim = config.teacher_embed_dim // n_hier
         else:
             out_embed_dim = config.hidden_size
-        proj_output_dim = n_dist * out_embed_dim
+        proj_output_dim = n_hier * out_embed_dim
 
         self.proj = nn.Linear(config.pred_hidden_size, proj_output_dim, bias=True)
 
@@ -684,6 +693,9 @@ class VJEPA2Predictor(nn.Module):
 
         argsort = torch.argsort(position_masks, dim=1)  # [B, N]
         hidden_states, position_masks = self.sort_tokens(hidden_states, position_masks, argsort)
+
+        if self.config.use_modality_embeddings and hasattr(self.embeddings, "video_mod_embed"):
+            hidden_states = hidden_states + self.embeddings.video_mod_embed
 
         for i, layer_module in enumerate(self.layer):
             layer_outputs = layer_module(hidden_states, position_masks, **kwargs)
