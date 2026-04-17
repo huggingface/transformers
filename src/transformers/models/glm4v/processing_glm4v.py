@@ -239,27 +239,6 @@ class Glm4vProcessor(ProcessorMixin):
         model_input_names.append("mm_token_type_ids")
         return model_input_names
 
-    def create_mm_token_type_ids(self, input_ids: list) -> list[list[int]]:
-        # We have to iterate for each list separately because inputs
-        # might be non-padded lists and we can't cast numpy on that!
-        # Then cast numpy as each input for faster indexing
-        mm_token_type_ids = []
-        for input in input_ids:
-            array_ids = np.array(input)
-            mm_token_types = np.zeros_like(input)
-
-            # Replace 0 -> 2 only inside video segments because GLM4v
-            # uses the same special token to denote images and video
-            # Otherwise replace 0 -> 1 for image modality
-            starts = np.cumsum(array_ids == self.video_start_id, axis=0)
-            ends = np.cumsum(array_ids == self.video_end_id, axis=0)
-            is_video_modality = starts > ends
-
-            mm_token_types[(array_ids == self.image_token_id) & is_video_modality] = 2
-            mm_token_types[(array_ids == self.image_token_id) & (~is_video_modality)] = 1
-            mm_token_type_ids.append(mm_token_types.tolist())
-        return mm_token_type_ids
-
     def replace_frame_token_id(self, timestamp_sec, num_image_tokens: int = 1):
         return f"<|begin_of_image|>{self.image_token * num_image_tokens}<|end_of_image|>{int(timestamp_sec)}"
 
