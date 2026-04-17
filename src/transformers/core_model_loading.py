@@ -1187,21 +1187,22 @@ def _build_scatter_list(
         # No .contiguous() guard — safetensors slices materialise contiguous by construction.
 
         if tp_layer is not None:
-            shards = _batch_shard_for_scatter(full, tp_layer, world_size)
-            if shards is None:
-                shards = []
-                original_rank = tp_layer.rank
-                try:
-                    for r in range(world_size):
-                        tp_layer.rank = r
-                        s = tp_layer.shard_tensor(full, tensor_idx=None, device=local_device, dtype=None)
-                        if s._base is full:
-                            s = s.clone(memory_format=torch.contiguous_format)
-                        elif not s.is_contiguous():
-                            s = s.contiguous()
-                        shards.append(s)
-                finally:
-                    tp_layer.rank = original_rank
+            # Per-rank loop: tp_layer.shard_tensor reads self.rank, so we swap it around. Handles
+            # every TP class (Col/Row, Packed, Embedding, MoE, MLA, etc.) uniformly — no special
+            # casing. Clone views so they don't alias `full` (we want to free it ASAP).
+            shards = []
+            original_rank = tp_layer.rank
+            try:
+                for r in range(world_size):
+                    tp_layer.rank = r
+                    s = tp_layer.shard_tensor(full, tensor_idx=None, device=local_device, dtype=None)
+                    if s._base is full:
+                        s = s.clone(memory_format=torch.contiguous_format)
+                    elif not s.is_contiguous():
+                        s = s.contiguous()
+                    shards.append(s)
+            finally:
+                tp_layer.rank = original_rank
         else:
             shards = [full] * world_size
 
@@ -1227,157 +1228,6 @@ def _unpack_recv_buffer(recv_buf: torch.Tensor, layout: list) -> dict[str, tuple
         view = sl.view(dtype).reshape(shape)
         out[concrete] = (view, mapping)
     return out
-
-
-def _batch_shard_for_scatter(full_tensor: torch.Tensor, tp_layer, world_size: int) -> list[torch.Tensor] | None:
-    """Batched GPU-native pre-slice for scatter. Returns `world_size` contiguous shards or None (fall back to loop)."""
-    from transformers.integrations.tensor_parallel import (
-        ColwiseParallel,
-        EmbeddingParallel,
-        PackedColwiseParallel,
-        PackedRowwiseParallel,
-        RowwiseParallel,
-    )
-
-    # Determine shard dim from tp_layer class.
-    if isinstance(tp_layer, (ColwiseParallel, PackedColwiseParallel)):
-        shard_dim = -2 if full_tensor.ndim >= 2 else -1
-    elif isinstance(tp_layer, (RowwiseParallel, PackedRowwiseParallel)):
-        shard_dim = -1
-    elif isinstance(tp_layer, EmbeddingParallel):
-        shard_dim = 0 if hasattr(tp_layer, "_shard_dim_0") else 1  # rowwise=0, colwise=1
-        return None  # rare; not worth special-casing
-    else:
-        return None  # unknown class — caller falls back to per-rank loop
-
-    is_packed = isinstance(tp_layer, (PackedColwiseParallel, PackedRowwiseParallel))
-    dim = shard_dim % full_tensor.ndim
-
-    if not is_packed:
-        # Single `torch.chunk` → N views. `.contiguous()` is a no-op when the view is already contiguous
-        # (dim-0 slice of a contiguous source), otherwise a single GPU memcpy per shard.
-        return [c.contiguous() for c in torch.chunk(full_tensor, world_size, dim=dim)]
-
-    # Packed: two interleaved blocks along `dim` (gate + up, or similar). Split the blocks, chunk each
-    # independently, then cat per-rank to get the interleaved shard.
-    total = full_tensor.shape[dim]
-    block_size = total // 2
-    block0, block1 = full_tensor.split(block_size, dim=dim)
-    chunks0 = torch.chunk(block0, world_size, dim=dim)
-    chunks1 = torch.chunk(block1, world_size, dim=dim)
-    return [torch.cat([c0, c1], dim=dim).contiguous() for c0, c1 in zip(chunks0, chunks1)]
-
-
-def _redistribute_async(
-    realized_value: dict[str, list[torch.Tensor] | torch.Tensor],
-    mapping: WeightTransform,
-    source_rank: int,
-    device_mesh,
-    local_device,
-    meta_model_state_dict: dict[str, torch.Tensor],
-    first_param_name: str,
-) -> tuple[list, dict[str, torch.Tensor]]:
-    """
-    Start async scatter/broadcast for one mapping's realized tensors.  Returns ``(work_handles, local_params)``
-    where ``work_handles`` is a list of ``(dist.Work, kept_alive_ref)`` tuples. The caller must call
-    ``work.wait()`` on every handle before reading ``local_params``.
-
-    No per-mapping metadata broadcast: all ranks derive target shapes from the shared ``meta_model_state_dict``.
-    No per-mapping skip-flag broadcast: the caller must guarantee that ``realized_value`` is non-None
-    and non-empty (i.e. SkipParameters was not raised). Skips are handled at the caller level.
-    """
-    import torch.distributed as dist
-
-    is_source = device_mesh.get_local_rank() == source_rank
-    group = device_mesh.get_group()
-    src_global_rank = dist.get_global_rank(group, source_rank)
-    world_size = device_mesh.size()
-    tp_layer = mapping.distributed_operation
-
-    # ── build target list from the shared meta model (zero comms) ──
-    if is_source:
-        targets = []
-        for target_name, param in realized_value.items():
-            param = param[0] if isinstance(param, list) else param
-            targets.append((target_name, tuple(param.shape), param.dtype))
-    else:
-        targets = []
-        for target_name in mapping.target_patterns:
-            concrete = first_param_name.replace(mapping.target_patterns[0], target_name)
-            ref = meta_model_state_dict.get(concrete)
-            if ref is not None:
-                targets.append((concrete, tuple(ref.shape), ref.dtype))
-
-    work_handles: list[tuple] = []
-    out: dict[str, torch.Tensor] = {}
-
-    for target_name, full_shape, t_dtype in targets:
-        sharded = tp_layer is not None
-
-        if sharded and world_size > 1:
-            my_shard_shape = tp_layer.get_expected_sharded_shape(full_shape)
-
-            if is_source:
-                full_tensor = realized_value[target_name]
-                full_tensor = full_tensor[0] if isinstance(full_tensor, list) else full_tensor
-                full_tensor = full_tensor.contiguous()
-                realized_value[target_name] = None
-
-                scatter_list = _batch_shard_for_scatter(full_tensor, tp_layer, world_size)
-                if scatter_list is None:
-                    scatter_list = []
-                    original_rank = tp_layer.rank
-                    try:
-                        for r in range(world_size):
-                            tp_layer.rank = r
-                            shard = tp_layer.shard_tensor(
-                                full_tensor, tensor_idx=None, device=local_device, dtype=None
-                            )
-                            if shard._base is full_tensor:
-                                shard = shard.clone(memory_format=torch.contiguous_format)
-                            elif not shard.is_contiguous():
-                                shard = shard.contiguous()
-                            scatter_list.append(shard)
-                    finally:
-                        tp_layer.rank = original_rank
-                del full_tensor
-
-                local_param = torch.empty(my_shard_shape, dtype=t_dtype, device=local_device)
-                work = dist.scatter(
-                    local_param, scatter_list=scatter_list, src=src_global_rank, group=group, async_op=True
-                )
-                work_handles.append((work, scatter_list))
-            else:
-                local_param = torch.empty(my_shard_shape, dtype=t_dtype, device=local_device)
-                work = dist.scatter(local_param, scatter_list=None, src=src_global_rank, group=group, async_op=True)
-                work_handles.append((work, None))
-
-        elif sharded:
-            full_tensor = realized_value[target_name]
-            full_tensor = full_tensor[0] if isinstance(full_tensor, list) else full_tensor
-            full_tensor = full_tensor.contiguous()
-            realized_value[target_name] = None
-            local_param = tp_layer.shard_tensor(full_tensor, tensor_idx=None, device=local_device, dtype=None)
-            if local_param._base is full_tensor:
-                local_param = local_param.clone(memory_format=torch.contiguous_format)
-            del full_tensor
-
-        else:
-            if is_source:
-                full_tensor = realized_value[target_name]
-                full_tensor = full_tensor[0] if isinstance(full_tensor, list) else full_tensor
-                full_tensor = full_tensor.contiguous()
-                realized_value[target_name] = None
-            else:
-                full_tensor = torch.empty(full_shape, dtype=t_dtype, device=local_device)
-            if world_size > 1:
-                work = dist.broadcast(full_tensor, src=src_global_rank, group=group, async_op=True)
-                work_handles.append((work, None))
-            local_param = full_tensor
-
-        out[target_name] = local_param
-
-    return work_handles, out
 
 
 def convert_and_load_state_dict_in_model(
@@ -1701,7 +1551,10 @@ def convert_and_load_state_dict_in_model(
             world_size = device_mesh.size()
             tp_device = device_map[""]
             local_device_obj = torch.device(tp_device)
-            read_pool = ThreadPoolExecutor(max_workers=GLOBAL_WORKERS)
+            # Reuse the existing materialize thread pool for per-batch disk reads — no need to
+            # spin up a second pool of workers. Falls back to the current thread if thread_pool
+            # is None (sync-load env var, disk offload, or on-the-fly quantization).
+            read_pool = thread_pool
 
             def _read_to_cpu(tensor_slice, _dtype):
                 """Thread-pool job: read safetensors slice → CPU tensor."""
@@ -1710,9 +1563,31 @@ def convert_and_load_state_dict_in_model(
                     cpu = cpu.to(dtype=_dtype)
                 return cpu
 
-            # Pre-group batches.
+            class _ImmediateFuture:
+                """Fallback when thread_pool is None — run the job synchronously on .result()."""
+
+                __slots__ = ("_fn", "_args", "_done", "_result")
+
+                def __init__(self, fn, *args):
+                    self._fn, self._args, self._done, self._result = fn, args, False, None
+
+                def result(self):
+                    if not self._done:
+                        self._result = self._fn(*self._args)
+                        self._done = True
+                    return self._result
+
+            def _submit_read(tensor_slice, _dtype):
+                if read_pool is not None:
+                    return read_pool.submit(_read_to_cpu, tensor_slice, _dtype)
+                return _ImmediateFuture(_read_to_cpu, tensor_slice, _dtype)
+
+            # Pre-group batches and plan all layouts up front. Planning is pure CPU metadata
+            # work (no GPU, no comms) so it's cheap; doing it here lets us size the caching
+            # allocator warmup before we enter the hot loop.
             batch_items_list: list[list] = []
             owned_entries_by_batch: list[list] = []
+            planned_layouts: list[dict] = []
             for bi in range(0, len(items), BATCH_SIZE):
                 batch = items[bi : bi + BATCH_SIZE]
                 batch_items_list.append(batch)
@@ -1721,14 +1596,30 @@ def convert_and_load_state_dict_in_model(
                     if mapping_to_source_rank.get(fpn, local_rank) == local_rank:
                         owned.append((fpn, pending_entries[fpn]))
                 owned_entries_by_batch.append(owned)
+                planned_layouts.append(
+                    _plan_batch_layouts(batch, mapping_to_source_rank, local_rank, world_size, meta_model_state_dict)
+                )
+
+            # ── Caching-allocator warmup ──
+            # Peak per-batch scratch = world_size recv_bufs (one per source) + world_size packed
+            # send buffers (scatter_list). Allocating the max across all batches up front forces
+            # cudaMalloc to reserve a big block once; subsequent torch.empty(...) in the loop
+            # carves from this pool without hitting the driver.
+            peak_bytes = 0
+            for layouts in planned_layouts:
+                recv_total = sum(sum(e[-1] for e in layout) for layout in layouts.values())
+                my_layout = layouts.get(local_rank, [])
+                send_total = sum(e[-1] for e in my_layout) * world_size  # scatter_list: N bufs
+                peak_bytes = max(peak_bytes, recv_total + send_total)
+            if peak_bytes > 0 and local_device_obj.type == "cuda":
+                _warmup = torch.empty(peak_bytes, dtype=torch.uint8, device=local_device_obj)
+                del _warmup  # returns memory to the caching allocator pool, still reserved from CUDA
 
             # Submit disk reads for batch 0 immediately (they run on CPU threads).
             cur_read_futs: dict[str, list[tuple]] = {}
             if owned_entries_by_batch:
                 for fpn, entries in owned_entries_by_batch[0]:
-                    cur_read_futs[fpn] = [
-                        (tk, ok, sp, read_pool.submit(_read_to_cpu, t, dt)) for tk, ok, sp, t, dt in entries
-                    ]
+                    cur_read_futs[fpn] = [(tk, ok, sp, _submit_read(t, dt)) for tk, ok, sp, t, dt in entries]
 
             # ── Pipelined loop: scatter(N) overlaps with read+convert(N+1) ──
             # While this batch's scatter runs on the NCCL stream (async), the CPU reads and
@@ -1816,9 +1707,7 @@ def convert_and_load_state_dict_in_model(
                 nxt_read_futs: dict[str, list[tuple]] = {}
                 if batch_idx + 1 < len(batch_items_list):
                     for fpn, entries in owned_entries_by_batch[batch_idx + 1]:
-                        nxt_read_futs[fpn] = [
-                            (tk, ok, sp, read_pool.submit(_read_to_cpu, t, dt)) for tk, ok, sp, t, dt in entries
-                        ]
+                        nxt_read_futs[fpn] = [(tk, ok, sp, _submit_read(t, dt)) for tk, ok, sp, t, dt in entries]
 
                 # ── Materialize this batch's tensors (CPU→GPU) ──
                 for fpn, fut_list in cur_read_futs.items():
@@ -1838,11 +1727,11 @@ def convert_and_load_state_dict_in_model(
                         except SkipParameters:
                             skips.add(fpn)
 
-                # ── Plan + start async scatter for THIS batch ──
-                effective_batch = [bm for bm in batch if bm[0] not in skips]
-                layouts = _plan_batch_layouts(
-                    effective_batch, mapping_to_source_rank, local_rank, world_size, meta_model_state_dict
-                )
+                # ── Start async scatter for THIS batch (layouts pre-planned above) ──
+                layouts = planned_layouts[batch_idx]
+                if skips:
+                    # Filter out skipped mappings from the layout.
+                    layouts = {src: [e for e in layout if e[0] not in skips] for src, layout in layouts.items()}
                 recv_bufs, scatter_list, works = _do_scatter(
                     layouts, realized_by_name, local_rank, world_size, local_device_obj, group
                 )
@@ -1858,8 +1747,6 @@ def convert_and_load_state_dict_in_model(
             # Drain last batch
             if prev_scatter is not None:
                 _finalize_batch(*prev_scatter)
-
-            read_pool.shutdown(wait=False)
 
     # Close the pool, independently of whether the code was interrupted or finished successfully
     finally:
