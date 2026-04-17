@@ -131,6 +131,7 @@ class ResponseHandler(BaseHandler):
         chat_template_kwargs = {}
         if has_video:
             chat_template_kwargs["num_frames"] = 32
+        # updates the flat tool structure to the one expected by the `apply_chat_template` method.
         tools = self._normalize_tools(body.get("tools"))
         inputs = processor.apply_chat_template(
             processor_inputs,
