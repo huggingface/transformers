@@ -44,7 +44,7 @@ from typing import Annotated
 
 import typer
 
-from transformers.agent.output import emit
+from transformers.agent.output import out
 
 
 # Maps CLI task names to (AutoModel class name, preprocessing type)
@@ -462,8 +462,8 @@ def train(
             cmd.append("--multi_gpu")
         cmd.extend(["--module", "transformers.cli.agentic.train", "_train_inner"])
         # Pass all original args through environment
-        print(f"Launching distributed training: {' '.join(cmd)}")
-        print("Note: for full control, use `accelerate launch` directly.")
+        out.progress(f"Launching distributed training: {' '.join(cmd)}")
+        out.hint("Note: for full control, use `accelerate launch` directly.")
         # Fall through to normal training — Trainer handles multi-GPU automatically
         # when CUDA_VISIBLE_DEVICES or the accelerate launcher sets up the environment.
 
@@ -532,7 +532,7 @@ def train(
             backend=hpo,
             n_trials=hpo_trials,
         )
-        print(f"Best trial: {best_trial}")
+        out.progress(f"Best trial: {best_trial}")
     else:
         trainer.train(resume_from_checkpoint=resume_from_checkpoint)
 
@@ -541,7 +541,7 @@ def train(
     if processing_class is not None:
         processing_class.save_pretrained(output)
 
-    print(emit({"output_path": output}, task="train"))
+    out.emit({"output_path": output}, task="train")
     if push_to_hub:
         trainer.push_to_hub()
         print(f"Pushed to Hub: {hub_model_id or output}")

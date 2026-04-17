@@ -23,7 +23,7 @@ from typing import Annotated
 
 import typer
 
-from transformers.agent.output import emit
+from transformers.agent.output import out
 
 from ._common import resolve_input
 
@@ -219,7 +219,7 @@ def generate(
         output_ids = loaded_model.generate(**inputs, **gen_kwargs)
         new_tokens = output_ids[0, inputs["input_ids"].shape[1] :]
         generated = tokenizer.decode(new_tokens, skip_special_tokens=True)
-        print(emit(generated, task="generate"))
+        out.emit(generated, task="generate")
 
 
 def detect_watermark(
@@ -253,4 +253,4 @@ def detect_watermark(
     tokens = tokenizer(input_text, return_tensors="pt", add_special_tokens=False)["input_ids"][0]
     result = detector(tokens)
 
-    print(emit({"prediction": result.prediction, "confidence": result.confidence}, task="detect-watermark"))
+    out.emit({"prediction": result.prediction, "confidence": result.confidence}, task="detect-watermark")

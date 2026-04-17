@@ -22,6 +22,8 @@ from typing import Annotated
 
 import typer
 
+from transformers.agent.output import out
+
 from ._common import (
     DeviceOpt,
     DtypeOpt,
@@ -31,7 +33,6 @@ from ._common import (
     TokenOpt,
     TrustOpt,
     _load_pretrained,
-    format_output,
     resolve_input,
 )
 
@@ -171,7 +172,7 @@ def classify(
         top_idx = probs.argmax().item()
         result = [{"label": loaded_model.config.id2label[top_idx], "score": probs[top_idx].item()}]
 
-    print(format_output(result, output_json, task="classify"))
+    out.emit(result, task="classify", output_json=output_json or None)
 
 
 def ner(
@@ -235,7 +236,7 @@ def ner(
     if aggregation_strategy == "simple":
         entities = _aggregate_entities(entities, input_text)
 
-    print(format_output(entities, output_json, task="ner"))
+    out.emit(entities, task="ner", output_json=output_json or None)
 
 
 def token_classify(
@@ -294,7 +295,7 @@ def token_classify(
             }
         )
 
-    print(format_output(result, output_json, task="token-classify"))
+    out.emit(result, task="token-classify", output_json=output_json or None)
 
 
 def qa(
@@ -348,7 +349,7 @@ def qa(
         "start": start_idx,
         "end": end_idx,
     }
-    print(format_output(result, output_json, task="qa"))
+    out.emit(result, task="qa", output_json=output_json or None)
 
 
 def table_qa(
@@ -425,7 +426,7 @@ def table_qa(
         "cells": cells,
         "aggregator": _AGG_OPS.get(agg_idx, "NONE"),
     }
-    print(format_output(result, output_json, task="table-qa"))
+    out.emit(result, task="table-qa", output_json=output_json or None)
 
 
 def summarize(
@@ -472,7 +473,7 @@ def summarize(
     output_ids = loaded_model.generate(**inputs, **gen_kwargs)
     summary = tokenizer.decode(output_ids[0], skip_special_tokens=True)
     result = [{"summary_text": summary}]
-    print(format_output(result, output_json, task="summarize"))
+    out.emit(result, task="summarize", output_json=output_json or None)
 
 
 def translate(
@@ -517,7 +518,7 @@ def translate(
     output_ids = loaded_model.generate(**inputs, **gen_kwargs)
     translation = tokenizer.decode(output_ids[0], skip_special_tokens=True)
     result = [{"translation_text": translation}]
-    print(format_output(result, output_json, task="translate"))
+    out.emit(result, task="translate", output_json=output_json or None)
 
 
 def fill_mask(
@@ -577,4 +578,4 @@ def fill_mask(
             }
         )
 
-    print(format_output(result, output_json, task="fill-mask"))
+    out.emit(result, task="fill-mask", output_json=output_json or None)

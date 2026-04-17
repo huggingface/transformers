@@ -24,7 +24,7 @@ from typing import Annotated
 
 import typer
 
-from transformers.agent.output import emit
+from transformers.agent.output import out
 
 from ._common import _load_pretrained, load_image, resolve_input
 
@@ -104,13 +104,13 @@ def embed(
                 json.dump(embedding.tolist(), f)
         else:
             np.save(output, embedding)
-        print(emit({"shape": str(embedding.shape), "output_path": output}, task="embed"))
+        out.emit({"shape": str(embedding.shape), "output_path": output}, task="embed")
     else:
         flat = embedding.flatten()
         preview = ", ".join(f"{v:.6f}" for v in flat[:8])
         if len(flat) > 8:
             preview += ", ..."
-        print(emit({"shape": str(embedding.shape), "values": f"[{preview}]"}, task="embed"))
+        out.emit({"shape": str(embedding.shape), "values": f"[{preview}]"}, task="embed")
 
 
 def tokenize(
@@ -154,7 +154,7 @@ def tokenize(
 
     if output_json:
         data = {"tokens": tokens, "token_ids": token_ids, "num_tokens": len(tokens)}
-        print(emit(data, task="tokenize", output_json=True))
+        out.emit(data, task="tokenize", output_json=True)
     else:
         token_data = []
         for i, (tok, tid) in enumerate(zip(tokens, token_ids)):
@@ -162,7 +162,7 @@ def tokenize(
                 token_data.append({"index": i, "id": tid, "token": tok})
             else:
                 token_data.append({"index": i, "token": tok})
-        print(emit({"num_tokens": len(tokens), "tokens": token_data}, task="tokenize"))
+        out.emit({"num_tokens": len(tokens), "tokens": token_data}, task="tokenize")
 
 
 def inspect(
@@ -193,7 +193,7 @@ def inspect(
     config = AutoConfig.from_pretrained(model, **kwargs)
 
     if output_json:
-        print(emit(config.to_dict(), task="inspect", output_json=True))
+        out.emit(config.to_dict(), task="inspect", output_json=True)
     else:
         config_dict = config.to_dict()
         important_keys = [
@@ -213,17 +213,15 @@ def inspect(
             for k, v in config_dict.items()
             if k not in important_keys and k not in ("architectures", "model_type", "transformers_version")
         }
-        print(
-            emit(
-                {
-                    "model": model,
-                    "architecture": config_dict.get("architectures", ["unknown"]),
-                    "model_type": config_dict.get("model_type", "unknown"),
-                    **important,
-                    "additional_keys": len(remaining),
-                },
-                task="inspect",
-            )
+        out.emit(
+            {
+                "model": model,
+                "architecture": config_dict.get("architectures", ["unknown"]),
+                "model_type": config_dict.get("model_type", "unknown"),
+                **important,
+                "additional_keys": len(remaining),
+            },
+            task="inspect",
         )
 
 
@@ -283,10 +281,10 @@ def inspect_forward(
     if layers is not None:
         layer_indices = [int(i) for i in layers.split(",")]
 
-    print(f"Model: {model_id}")
-    print(f"Input tokens: {tokenizer.convert_ids_to_tokens(inputs['input_ids'][0])}")
-    print(f"Hidden state layers: {len(hidden_states)} (including embedding layer)")
-    print(f"Attention layers: {len(attentions)}")
+    out.progress(f"Model: {model_id}")
+    out.progress(f"Input tokens: {tokenizer.convert_ids_to_tokens(inputs['input_ids'][0])}")
+    out.progress(f"Hidden state layers: {len(hidden_states)} (including embedding layer)")
+    out.progress(f"Attention layers: {len(attentions)}")
 
     layer_info = []
     for i, (attn, hs) in enumerate(zip(attentions, hidden_states[1:])):
@@ -305,7 +303,7 @@ def inspect_forward(
             }
         )
 
-    print(emit({"model": model_id, "layers": layer_info}, task="inspect-forward"))
+    out.emit({"model": model_id, "layers": layer_info}, task="inspect-forward")
 
     if output is not None:
         from pathlib import Path
@@ -320,7 +318,7 @@ def inspect_forward(
             if layer_indices is not None and i not in layer_indices and i > 0:
                 continue
             np.save(out_dir / f"hidden_state_layer_{i}.npy", hs[0].cpu().numpy())
-        print(f"\nActivations saved to {output}")
+        out.progress(f"Activations saved to {output}")
 
 
 def benchmark_quantization(
@@ -367,7 +365,7 @@ def benchmark_quantization(
 
     results = []
     for method in method_list:
-        print(f"\n--- {method} ---")
+        out.progress(f"--- {method} ---")
         model_kwargs = {**common_kwargs, "device_map": "auto"}
 
         if method == "bnb-4bit":
@@ -381,7 +379,7 @@ def benchmark_quantization(
         elif method == "none":
             pass
         else:
-            print(f"  Skipping {method} — only none, bnb-4bit, bnb-8bit are supported for benchmarking.")
+            out.warning(f"Skipping {method} — only none, bnb-4bit, bnb-8bit are supported for benchmarking.")
             continue
 
         try:
@@ -414,11 +412,11 @@ def benchmark_quantization(
             }
             results.append(result)
 
-            print(f"  Tokens/sec: {tokens_per_sec:.2f}")
-            print(f"  Time: {elapsed:.3f}s")
+            out.progress(f"  Tokens/sec: {tokens_per_sec:.2f}")
+            out.progress(f"  Time: {elapsed:.3f}s")
             if mem_mb > 0:
-                print(f"  Peak memory: {mem_mb:.1f} MB")
-            print(f"  Output: {generated_text[:100]}...")
+                out.progress(f"  Peak memory: {mem_mb:.1f} MB")
+            out.progress(f"  Output: {generated_text[:100]}...")
 
             del loaded_model
             if torch.cuda.is_available():
@@ -426,8 +424,8 @@ def benchmark_quantization(
                 torch.cuda.reset_peak_memory_stats()
 
         except Exception as e:
-            print(f"  Error: {e}")
+            out.warning(f"Error with {method}: {e}")
             results.append({"method": method, "error": str(e)})
 
     if output_json:
-        print(emit(results, task="benchmark-quantization", output_json=True))
+        out.emit(results, task="benchmark-quantization", output_json=True)

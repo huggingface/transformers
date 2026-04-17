@@ -22,7 +22,7 @@ from typing import Annotated
 
 import typer
 
-from transformers.agent.output import emit
+from transformers.agent.output import out
 
 from ._common import (
     DeviceOpt,
@@ -250,7 +250,7 @@ def speak(
     )
 
     scipy.io.wavfile.write(output, sampling_rate, audio_data)
-    print(emit({"output_path": output}, task="speak"))
+    out.emit({"output_path": output}, task="speak")
 
 
 def audio_generate(
@@ -303,4 +303,4 @@ def audio_generate(
     )
 
     scipy.io.wavfile.write(output, sampling_rate, audio_data)
-    print(emit({"output_path": output}, task="audio-generate"))
+    out.emit({"output_path": output}, task="audio-generate")

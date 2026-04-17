@@ -81,8 +81,7 @@ def resolve_input(text: str | None = None, file: str | None = None) -> str:
 
 
 def format_output(result: Any, output_json: bool = False, task: str | None = None) -> str:
-    """
-    Format pipeline output for display.
+    """Format pipeline output for display.
 
     When ``output_json=True``, returns a JSON string (useful for agents that
     need to parse results programmatically). Otherwise, returns a
