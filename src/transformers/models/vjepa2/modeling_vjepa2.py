@@ -1069,6 +1069,13 @@ class VJEPA2ForVideoClassification(VJEPA2PreTrainedModel):
     def __init__(self, config: VJEPA2Config):
         super().__init__(config)
 
+        if config.n_output_distillation > 1:
+            raise ValueError(
+                f"Classification heads for hierarchical distillation outputs "
+                f"(n_output_distillation={config.n_output_distillation}) are not yet supported. "
+                f"Use VJEPA2Model for feature extraction instead."
+            )
+
         self.num_labels = config.num_labels
         self.vjepa2 = VJEPA2Model(config)
 
