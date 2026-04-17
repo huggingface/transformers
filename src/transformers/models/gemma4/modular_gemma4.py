@@ -41,6 +41,7 @@ from ...utils import (
     TransformersKwargs,
     auto_docstring,
     can_return_tuple,
+    is_accelerate_available,
     logging,
     torch_compilable_check,
 )
@@ -62,6 +63,7 @@ from ..gemma3n.modeling_gemma3n import (
     Gemma3nModel,
     Gemma3nModelOutputWithPast,
     Gemma3nMultimodalEmbedder,
+    Gemma3nPreTrainedModel,
     Gemma3nRMSNorm,
     apply_rotary_pos_emb,
     eager_attention_forward,
@@ -70,6 +72,10 @@ from ..llama.modeling_llama import LlamaRotaryEmbedding
 from ..mixtral.modeling_mixtral import MixtralExperts
 from ..moonshine_streaming.modeling_moonshine_streaming import sliding_window_mask_function
 from .configuration_gemma4 import Gemma4AudioConfig, Gemma4Config, Gemma4TextConfig, Gemma4VisionConfig
+
+
+if is_accelerate_available():
+    pass
 
 
 logger = logging.get_logger(__name__)
@@ -1152,21 +1158,15 @@ class Gemma4TextScaledWordEmbedding(Gemma3TextScaledWordEmbedding):
 # ---- Model Classes ----
 
 
-class Gemma4PreTrainedModel(PreTrainedModel):
-    config: Gemma4Config
-    supports_gradient_checkpointing = True
-    _supports_flash_attn = True
-    _supports_sdpa = True
-    _supports_flex_attn = True
-    _can_compile_fullgraph = True
-    _supports_attention_backend = True
+class Gemma4PreTrainedModel(Gemma3nPreTrainedModel):
     _no_split_modules = ["Gemma4TextDecoderLayer", "Gemma4VisionEncoderLayer", "Gemma4AudioLayer"]
-    _skip_keys_device_placement = ["past_key_values", "shared_kv_states"]
     input_modalities = ("image", "text", "video", "audio")
+    _can_record_outputs = None  # override
+    _skip_keys_device_placement = ["past_key_values", "shared_kv_states"]
 
     @torch.no_grad()
     def _init_weights(self, module):
-        super()._init_weights(module)
+        PreTrainedModel._init_weights(module)
         if isinstance(module, Gemma4VisionPatchEmbedder):
             init.ones_(module.position_embedding_table)
         elif isinstance(module, Gemma4AudioRelPositionalEncoding):
@@ -1744,6 +1744,12 @@ class Gemma4Model(Gemma3nModel):
             f"language_model.{name}" for name in self.language_model._keys_to_ignore_on_load_unexpected
         ]
 
+    def get_per_layer_input_embeddings(self):
+        return self.language_model.embed_tokens_per_layer
+
+    def set_per_layer_input_embeddings(self, value):
+        self.language_model.embed_tokens_per_layer = value
+
     @can_return_tuple
     @auto_docstring(custom_intro="Projects the last hidden state from the vision model into language model space.")
     def get_image_features(
@@ -2034,6 +2040,12 @@ class Gemma4ForConditionalGeneration(Gemma3nForConditionalGeneration):
         self._keys_to_ignore_on_load_unexpected = [
             f"model.{name}" for name in self.model._keys_to_ignore_on_load_unexpected
         ]
+
+    def get_per_layer_input_embeddings(self):
+        return self.model.get_per_layer_input_embeddings()
+
+    def set_per_layer_input_embeddings(self, value):
+        self.model.set_per_layer_input_embeddings(value)
 
     def forward(
         self,

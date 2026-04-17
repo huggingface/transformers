@@ -30,7 +30,6 @@ from ...utils import auto_docstring, is_timm_available, logging, requires_backen
 if is_timm_available():
     from timm.data import ImageNetInfo, infer_imagenet_subset
 
-
 logger = logging.get_logger(__name__)
 
 

@@ -135,7 +135,7 @@ class Lfm2VlModelTester(CausalLMModelTester):
 
         # For simplicity just set the last n tokens to the image token
         input_ids[input_ids == self.image_token_id] = self.text_config["pad_token_id"]
-        input_ids[:, -self.image_seq_length :] = self.image_token_id
+        input_ids[:, : self.image_seq_length] = self.image_token_id
 
         attention_mask = input_ids.ne(1).to(torch_device)
         inputs_dict = {
