@@ -383,7 +383,12 @@ class _BaseAutoModelClass:
         elif has_local_code:
             model_class = _get_model_class(config, cls._model_mapping)
             if model_class.config_class == config.sub_configs.get("text_config", None):
+                parent_config = config
                 config = config.get_text_config()
+                # Propagate quantization_config from the composite parent config so that
+                # `get_hf_quantizer` can correctly detect the model as pre-quantized.
+                if hasattr(parent_config, "quantization_config") and not hasattr(config, "quantization_config"):
+                    config.quantization_config = parent_config.quantization_config
             return model_class.from_pretrained(
                 pretrained_model_name_or_path, *model_args, config=config, **hub_kwargs, **kwargs
             )
