@@ -70,7 +70,7 @@ class HYV3ModelTest(CausalLMModelTest, unittest.TestCase):
 class HYV3IntegrationTest(unittest.TestCase):
     """Integration tests for HYV3 with a small randomized model."""
 
-    model_id = "hf-internal-testing/HYV3-Small"  # TODO: update
+    model_id = "hf-internal-testing/tiny-random-HYV3ForCausalLM"
 
     def setup(self):
         cleanup(torch_device, gc_collect=True)

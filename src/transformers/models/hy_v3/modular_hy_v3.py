@@ -156,12 +156,6 @@ class HYV3ExpertMLP(HunYuanMoEV1MLP):
         super().__init__(config)
         self.intermediate_size = intermediate_size or config.moe_intermediate_size
 
-    def forward(self, x: torch.Tensor, routing_weights: torch.Tensor | None = None) -> torch.Tensor:
-        intermediate = self.act_fn(self.gate_proj(x)) * self.up_proj(x)
-        if routing_weights is not None:
-            intermediate = intermediate * routing_weights.to(intermediate.dtype)
-        return self.down_proj(intermediate)
-
 
 class HYV3TopKRouter(MixtralTopKRouter):
     def __init__(self, config: HYV3Config):

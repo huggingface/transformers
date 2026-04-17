@@ -302,11 +302,9 @@ class HYV3ExpertMLP(nn.Module):
         self.down_proj = nn.Linear(self.intermediate_size, self.hidden_size, bias=False)
         self.act_fn = ACT2FN[config.hidden_act]
 
-    def forward(self, x: torch.Tensor, routing_weights: torch.Tensor | None = None) -> torch.Tensor:
-        intermediate = self.act_fn(self.gate_proj(x)) * self.up_proj(x)
-        if routing_weights is not None:
-            intermediate = intermediate * routing_weights.to(intermediate.dtype)
-        return self.down_proj(intermediate)
+    def forward(self, x):
+        down_proj = self.down_proj(self.act_fn(self.gate_proj(x)) * self.up_proj(x))
+        return down_proj
 
 
 class HYV3TopKRouter(nn.Module):
