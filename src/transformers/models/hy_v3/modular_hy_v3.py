@@ -34,7 +34,6 @@ from ...utils import (
 from ...utils.output_capturing import OutputRecorder
 from ..apertus.modeling_apertus import ApertusAttention
 from ..deepseek_v3.modeling_deepseek_v3 import DeepseekV3DecoderLayer
-from ..hunyuan_v1_moe.modeling_hunyuan_v1_moe import HunYuanMoEV1MLP
 from ..llama.modeling_llama import (
     LlamaForCausalLM,
     LlamaMLP,
@@ -144,17 +143,13 @@ class HYV3RotaryEmbedding(LlamaRotaryEmbedding):
 
 
 class HYV3MLP(LlamaMLP):
-    pass
+    def __init__(self, config: HYV3Config, intermediate_size: int | None = None):
+        super().__init__(config)
+        self.intermediate_size = intermediate_size or config.intermediate_size
 
 
 class HYV3Attention(ApertusAttention):
     pass
-
-
-class HYV3ExpertMLP(HunYuanMoEV1MLP):
-    def __init__(self, config: HYV3Config, intermediate_size: int | None = None):
-        super().__init__(config)
-        self.intermediate_size = intermediate_size or config.moe_intermediate_size
 
 
 class HYV3TopKRouter(MixtralTopKRouter):
@@ -194,7 +189,7 @@ class HYV3MoE(MiniMaxM2SparseMoeBlock):
         self.gate = HYV3TopKRouter(config)
         self.experts = HYV3Experts(config)
         shared_intermediate = config.moe_intermediate_size * config.num_shared_experts
-        self.shared_experts = HYV3ExpertMLP(config, intermediate_size=shared_intermediate)
+        self.shared_experts = HYV3MLP(config, intermediate_size=shared_intermediate)
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         batch_size, seq_len, hidden_dim = hidden_states.shape

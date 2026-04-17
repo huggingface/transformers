@@ -70,7 +70,7 @@ class HYV3ModelTest(CausalLMModelTest, unittest.TestCase):
 class HYV3IntegrationTest(unittest.TestCase):
     """Integration tests for HYV3 with a small randomized model."""
 
-    model_id = "hf-internal-testing/tiny-random-HYV3ForCausalLM"
+    model_id = "hf-internal-testing/HYV3-tiny-random"
 
     def setup(self):
         cleanup(torch_device, gc_collect=True)
@@ -87,6 +87,7 @@ class HYV3IntegrationTest(unittest.TestCase):
 
         EXPECTED_LOGITS_LEFT_UNPADDED = Expectations(
             {
+                ("cuda", (8, 6)): [[0.0608, -0.0933, 0.1348], [-0.0688, -0.1099, 0.1396], [0.0199, -0.0913, 0.1641]],
                 ("cuda", 9): [[0.063, -0.0938, 0.1348], [-0.0693, -0.1128, 0.1357], [0.0209, -0.0923, 0.1611]],
             }
         )
@@ -94,6 +95,7 @@ class HYV3IntegrationTest(unittest.TestCase):
 
         EXPECTED_LOGITS_RIGHT_UNPADDED = Expectations(
             {
+                ("cuda", (8, 6)): [[-0.0396, -0.1084,  0.0588], [-0.0100, -0.0903, 0.0747], [0.0645, -0.1172, 0.0508]],
                 ("cuda", 9): [[-0.0378, -0.1089, 0.0581], [-0.0088, -0.0908, 0.0752], [0.064, -0.1167, 0.0483]],
             }
         )
@@ -111,6 +113,7 @@ class HYV3IntegrationTest(unittest.TestCase):
         EXPECTED_TOKENS = Expectations(
             {
                 ("cuda", 9): [1, 2, 3, 8754, 20977, 8754, 8754, 8754, 8754, 8754, 8754, 8754, 8372, 8754, 8372, 21393, 8754, 8372, 21393, 8754, 8372, 21393, 8754],
+                ("cuda", (8, 6)): [1, 2, 3, 8754, 20977, 8754, 8754, 8754, 8754, 8754, 8754, 8754, 8372, 8754, 8372, 21393, 8754, 8372, 21393, 8754, 8372, 21393, 11262],
             }
         )  # fmt: skip
         expected_tokens = EXPECTED_TOKENS.get_expectation()

@@ -134,11 +134,11 @@ class HYV3RotaryEmbedding(nn.Module):
 
 
 class HYV3MLP(nn.Module):
-    def __init__(self, config):
+    def __init__(self, config: HYV3Config, intermediate_size: int | None = None):
         super().__init__()
         self.config = config
         self.hidden_size = config.hidden_size
-        self.intermediate_size = config.intermediate_size
+        self.intermediate_size = intermediate_size or config.intermediate_size
         self.gate_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=config.mlp_bias)
         self.up_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=config.mlp_bias)
         self.down_proj = nn.Linear(self.intermediate_size, self.hidden_size, bias=config.mlp_bias)
@@ -291,22 +291,6 @@ class HYV3Attention(nn.Module):
         return attn_output, attn_weights
 
 
-class HYV3ExpertMLP(nn.Module):
-    def __init__(self, config: HYV3Config, intermediate_size: int | None = None):
-        super().__init__()
-        self.config = config
-        self.hidden_size = config.hidden_size
-        self.intermediate_size = intermediate_size or config.moe_intermediate_size
-        self.gate_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=False)
-        self.up_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=False)
-        self.down_proj = nn.Linear(self.intermediate_size, self.hidden_size, bias=False)
-        self.act_fn = ACT2FN[config.hidden_act]
-
-    def forward(self, x):
-        down_proj = self.down_proj(self.act_fn(self.gate_proj(x)) * self.up_proj(x))
-        return down_proj
-
-
 class HYV3TopKRouter(nn.Module):
     def __init__(self, config: HYV3Config):
         super().__init__()
@@ -385,7 +369,7 @@ class HYV3MoE(nn.Module):
         self.register_buffer("e_score_correction_bias", torch.zeros(config.num_local_experts))
         self.enable_moe_fp32_combine = config.enable_moe_fp32_combine
         shared_intermediate = config.moe_intermediate_size * config.num_shared_experts
-        self.shared_experts = HYV3ExpertMLP(config, intermediate_size=shared_intermediate)
+        self.shared_experts = HYV3MLP(config, intermediate_size=shared_intermediate)
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         batch_size, seq_len, hidden_dim = hidden_states.shape
