@@ -24,7 +24,7 @@ from typing import Annotated
 
 import typer
 
-from transformers.agent.output import emit
+from transformers.agent.output import out
 
 from ._common import (
     DeviceOpt,
@@ -377,9 +377,10 @@ def depth(
             depth_norm = depth_np * 0.0
         depth_img = Image.fromarray(depth_norm.astype("uint8"))
         depth_img.save(output)
-        print(emit({"size": f"{depth_map.shape[0]}x{depth_map.shape[1]}", "output_path": output}, task="depth"))
+        out.progress(f"Depth map saved to {output}")
+        out.emit({"size": f"{depth_map.shape[0]}x{depth_map.shape[1]}", "output_path": output}, task="depth")
     else:
-        print(emit({"size": f"{depth_map.shape[0]}x{depth_map.shape[1]}"}, task="depth"))
+        out.emit({"size": f"{depth_map.shape[0]}x{depth_map.shape[1]}"}, task="depth")
 
 
 def keypoints(
