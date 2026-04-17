@@ -160,6 +160,8 @@ class CtsmOutputForPrediction(TimesFmOutputForPrediction):
         Point forecasts over the fine-resolution horizon.
     full_predictions (`torch.Tensor` of shape `(batch_size, horizon_length, 1 + num_quantiles)`):
         Concatenation of the mean prediction and the quantile predictions along the last axis.
+    loss (`torch.Tensor` of shape `(1,)`, *optional*, returned when `future_values` is provided):
+        Training loss combining MSE of the mean forecast and quantile loss when fine-resolution targets are supplied.
     """
 
     pass
@@ -401,9 +403,7 @@ class CtsmModel(TimesFmModel):
             past_values_fine, past_values_fine_padding, tolerance=self.config.tolerance
         )
 
-        coarse_embeddings, coarse_patch_padding = self._patchify(
-            coarse_normalized, past_values_coarse_padding
-        )
+        coarse_embeddings, coarse_patch_padding = self._patchify(coarse_normalized, past_values_coarse_padding)
         fine_embeddings, fine_patch_padding = self._patchify(fine_normalized, past_values_fine_padding)
 
         bsize, num_coarse_patches, hidden_size = coarse_embeddings.shape

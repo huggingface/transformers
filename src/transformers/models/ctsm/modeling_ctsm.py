@@ -74,6 +74,8 @@ class CtsmOutputForPrediction(BaseModelOutput):
         Point forecasts over the fine-resolution horizon.
     full_predictions (`torch.Tensor` of shape `(batch_size, horizon_length, 1 + num_quantiles)`):
         Concatenation of the mean prediction and the quantile predictions along the last axis.
+    loss (`torch.Tensor` of shape `(1,)`, *optional*, returned when `future_values` is provided):
+        Training loss combining MSE of the mean forecast and quantile loss when fine-resolution targets are supplied.
     """
 
     mean_predictions: torch.Tensor | None = None
