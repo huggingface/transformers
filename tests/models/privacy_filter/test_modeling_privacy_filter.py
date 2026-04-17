@@ -30,6 +30,7 @@ from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import (
     TEST_EAGER_MATCHES_BATCHED_AND_GROUPED_INFERENCE_PARAMETERIZATION,
     ModelTesterMixin,
+    _test_eager_matches_batched_and_grouped_inference,
     ids_tensor,
     random_attention_mask,
 )
@@ -175,7 +176,6 @@ class PrivacyFilterModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Tes
         else {}
     )
     test_all_params_have_gradient = False
-    has_attentions = False
 
     def setUp(self):
         self.model_tester = PrivacyFilterModelTester(self)
@@ -194,7 +194,9 @@ class PrivacyFilterModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Tes
 
     @parameterized.expand(TEST_EAGER_MATCHES_BATCHED_AND_GROUPED_INFERENCE_PARAMETERIZATION)
     def test_eager_matches_batched_and_grouped_inference(self, name, dtype):
-        self.skipTest("Privacy Filter only supports the eager experts implementation.")
+        if dtype != "fp32":
+            self.skipTest("Privacy filter only supports float32 precision during forward")
+        _test_eager_matches_batched_and_grouped_inference(self, name, dtype)
 
     def test_tiny_random_token_classification_logits(self):
         set_seed(42)
@@ -216,8 +218,9 @@ class PrivacyFilterModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Tes
         with tempfile.TemporaryDirectory() as tmpdirname:
             model = PrivacyFilterForTokenClassification(config).to(torch_device)
             model.save_pretrained(tmpdirname)
+            # NOTE: fp32 used to check for differences
             model = PrivacyFilterForTokenClassification.from_pretrained(
-                tmpdirname, dtype=torch.bfloat16, experts_implementation="eager"
+                tmpdirname, dtype=torch.float32, experts_implementation="eager"
             ).to(torch_device)
 
             input_ids = torch.tensor([[1, 2, 3, 4]], device=torch_device)
