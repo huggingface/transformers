@@ -256,6 +256,7 @@ class VJEPA2RopeAttention(nn.Module):
 
         self.grid_size = self.config.crop_size // self.config.patch_size
         self.grid_depth = self.config.frames_per_clip // self.config.tubelet_size
+        # matches Meta's hardcoded RoPE reference resolution (256 for patch_size=16)
         self.pretrained_grid_size = 256 // self.config.patch_size
 
         self.d_dim = int(2 * ((self.attention_head_size // 3) // 2))

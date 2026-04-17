@@ -36,6 +36,7 @@ HUB_MODELS = {
     "vit_huge": "facebook/vjepa2-vith-fpc64-256",
     "vit_giant": "facebook/vjepa2-vitg-fpc64-256",
     "vit_giant_384": "facebook/vjepa2-vitg-fpc64-384",
+    # provisional names pending Meta's Hub upload (facebookresearch/vjepa2#137)
     "vit_base_2_1_384": "facebook/vjepa2.1-vitb-fpc64-384",
     "vit_large_2_1_384": "facebook/vjepa2.1-vitl-fpc64-384",
     "vit_giant_2_1_384": "facebook/vjepa2.1-vitg-fpc64-384",
@@ -51,13 +52,6 @@ S3_MODELS = {
     "vit_large_2_1_384": "https://dl.fbaipublicfiles.com/vjepa2/vjepa2_1_vitl_dist_vitG_384.pt",
     "vit_giant_2_1_384": "https://dl.fbaipublicfiles.com/vjepa2/vjepa2_1_vitg_384.pt",
     "vit_gigantic_2_1_384": "https://dl.fbaipublicfiles.com/vjepa2/vjepa2_1_vitG_384.pt",
-}
-
-VJEPA2_1_CHECKPOINT_KEYS = {
-    "vit_base_2_1_384": "ema_encoder",
-    "vit_large_2_1_384": "ema_encoder",
-    "vit_giant_2_1_384": "target_encoder",
-    "vit_gigantic_2_1_384": "target_encoder",
 }
 
 TOKEN = os.environ.get("HF_TOKEN", None)
