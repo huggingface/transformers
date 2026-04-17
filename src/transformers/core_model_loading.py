@@ -840,12 +840,10 @@ class PrefixChange(WeightRenaming):
         if self.quantization_operation is not None:
             raise ValueError("Cannot reverse the transform with TP or quantization")
 
-        if self.prefix_to_add is not None:
-            reverse_transform = PrefixChange(prefix_to_remove=self.prefix_to_add, model_prefix=self.model_prefix)
-        else:
-            reverse_transform = PrefixChange(prefix_to_add=self.prefix_to_remove, model_prefix=self.model_prefix)
-
-        return reverse_transform
+        # Only one of the 2 can ever be used, so 1 is always None
+        return PrefixChange(
+            prefix_to_add=self.prefix_to_remove, prefix_to_remove=self.prefix_to_add, model_prefix=self.model_prefix
+        )
 
     def with_submodel_prefix(self, prefix: str) -> PrefixChange:
         new_prefix = f"{prefix}.{self.model_prefix}" if self.model_prefix != "" else prefix
