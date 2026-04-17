@@ -430,6 +430,7 @@ CONFIG_MAPPING_NAMES = OrderedDict(
         ("pp_ocrv5_mobile_rec", "PPOCRV5MobileRecConfig"),
         ("pp_ocrv5_server_det", "PPOCRV5ServerDetConfig"),
         ("pp_ocrv5_server_rec", "PPOCRV5ServerRecConfig"),
+        ("privacy_filter", "PrivacyFilterConfig"),
         ("prompt_depth_anything", "PromptDepthAnythingConfig"),
         ("prophetnet", "ProphetNetConfig"),
         ("pvt", "PvtConfig"),
