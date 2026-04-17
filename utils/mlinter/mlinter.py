@@ -93,9 +93,42 @@ def _is_rule_allowlisted_for_file(rule_id: str, file_path: Path) -> bool:
     return model_name in TRF_MODEL_DIR_ALLOWLISTS.get(rule_id, set())
 
 
-def _content_hash(text: str, enabled_rules: set[str]) -> str:
+def _find_companion_files(file_path: Path) -> list[Path]:
+    """Return companion files whose content may affect rule results for *file_path*.
+
+    Some cross-file rules inspect the configuration
+    file that sits next to a modeling/modular file.  If we don't include those
+    companions in the cache digest, editing only the config file won't
+    invalidate the cached result for the modeling file.
+    """
+    fname = file_path.name
+    if not (fname.startswith("modeling_") or fname.startswith("modular_")):
+        return []
+    model_dir = file_path.parent
+    companions: list[Path] = []
+    for prefix in ("modeling_", "modular_"):
+        if fname.startswith(prefix):
+            suffix = fname[len(prefix) :]
+            exact = model_dir / f"configuration_{suffix}"
+            if exact.exists():
+                companions.append(exact)
+                return companions
+            break
+    # Fallback: any configuration file in the same directory
+    for cfg in sorted(model_dir.glob("configuration_*.py")):
+        companions.append(cfg)
+    return companions
+
+
+def _content_hash(text: str, enabled_rules: set[str], companion_files: list[Path] | None = None) -> str:
     h = hashlib.sha256(text.encode("utf-8"))
     h.update(",".join(sorted(enabled_rules)).encode("utf-8"))
+    if companion_files:
+        for companion in companion_files:
+            try:
+                h.update(companion.read_bytes())
+            except OSError:
+                pass
     return h.hexdigest()
 
 
@@ -388,7 +421,8 @@ def main() -> int:
             try:
                 text = file_path.read_text(encoding="utf-8")
                 file_key = str(file_path)
-                digest = _content_hash(text, enabled_rules)
+                companions = _find_companion_files(file_path)
+                digest = _content_hash(text, enabled_rules, companions)
 
                 if use_cache and cache.get(file_key) == digest:
                     new_cache[file_key] = digest
