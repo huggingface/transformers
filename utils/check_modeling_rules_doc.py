@@ -33,8 +33,6 @@ python utils/check_modeling_rules_doc.py --fix_and_overwrite
 import argparse
 import os
 
-from mlinter import render_rules_reference
-
 
 CHECKER_CONFIG = {
     "name": "modeling_rules_doc",
@@ -53,8 +51,20 @@ BEGIN_MARKER = "<!-- BEGIN RULES REFERENCE -->"
 END_MARKER = "<!-- END RULES REFERENCE -->"
 
 
+def _require_mlinter():
+    try:
+        import mlinter
+    except ModuleNotFoundError as error:
+        raise ModuleNotFoundError(
+            "This script requires the standalone `transformers-mlinter` package. "
+            'Install the repo quality dependencies with `pip install -e ".[quality]"` and retry.'
+        ) from error
+
+    return mlinter
+
+
 def generate_rules_reference() -> str:
-    return render_rules_reference()
+    return _require_mlinter().render_rules_reference()
 
 
 def check_modeling_rules_doc(overwrite: bool = False):
@@ -93,4 +103,7 @@ if __name__ == "__main__":
     parser.add_argument("--fix_and_overwrite", action="store_true", help="Whether to fix inconsistencies.")
     args = parser.parse_args()
 
-    check_modeling_rules_doc(args.fix_and_overwrite)
+    try:
+        check_modeling_rules_doc(args.fix_and_overwrite)
+    except ModuleNotFoundError as error:
+        raise SystemExit(str(error)) from error

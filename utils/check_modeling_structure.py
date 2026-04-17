@@ -1,9 +1,6 @@
 #!/usr/bin/env python
 """Thin local entrypoint for the external mlinter package."""
 
-import mlinter
-
-
 CHECKER_CONFIG = {
     "name": "modeling_structure",
     "label": "Modeling file structure",
@@ -16,5 +13,21 @@ CHECKER_CONFIG = {
     "fix_args": None,
 }
 
+
+def _require_mlinter():
+    try:
+        import mlinter
+    except ModuleNotFoundError as error:
+        raise ModuleNotFoundError(
+            "This script requires the standalone `transformers-mlinter` package. "
+            'Install the repo quality dependencies with `pip install -e ".[quality]"` and retry.'
+        ) from error
+
+    return mlinter
+
+
 if __name__ == "__main__":
-    raise SystemExit(mlinter.main())
+    try:
+        raise SystemExit(_require_mlinter().main())
+    except ModuleNotFoundError as error:
+        raise SystemExit(str(error)) from error
