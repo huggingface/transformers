@@ -132,12 +132,16 @@ class CtsmConfig(TimesFmConfig):
 @auto_docstring
 class CtsmOutput(TimesFmOutput):
     r"""
+    loc (`torch.Tensor` of shape `(batch_size,)`):
+        Stream-level mean used to normalize the fine-resolution context, reused to rescale the final forecast.
+    scale (`torch.Tensor` of shape `(batch_size,)`):
+        Stream-level standard deviation of the fine-resolution context.
     loc_coarse (`torch.Tensor` of shape `(batch_size,)`):
-        Per-stream mean used to normalize the coarse-resolution context.
+        Stream-level mean used to normalize the coarse-resolution context.
     scale_coarse (`torch.Tensor` of shape `(batch_size,)`):
-        Per-stream standard deviation used to normalize the coarse-resolution context.
+        Stream-level standard deviation of the coarse-resolution context.
     num_coarse_patches (`int`):
-        Number of patches in the coarse-resolution block of the concatenated sequence.
+        Number of patches (including the optional special token) preceding the fine-resolution block.
     num_fine_patches (`int`):
         Number of patches in the fine-resolution block of the concatenated sequence.
     """
@@ -298,29 +302,44 @@ class CtsmModel(TimesFmModel):
         paddings_pad = torch.ones((paddings.shape[0], pad_len), device=paddings.device, dtype=paddings.dtype)
         return torch.cat([values_pad, values], dim=1), torch.cat([paddings_pad, paddings], dim=1)
 
-    def _patchify_and_normalize(
+    @staticmethod
+    def _normalize_with_pad(
+        context: torch.Tensor, padding: torch.Tensor, tolerance: float = 1e-8
+    ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+        """Stream-level normalization that matches the original CTSM reference.
+
+        Normalizes ``context`` using the mean and standard deviation computed over the
+        non-padded positions (``padding == 0``) across the whole context, rather than
+        TimesFM's per-first-patch statistics. The normalized tensor has padded positions
+        zeroed out and is clamped to a safe range.
+        """
+        valid = 1.0 - padding
+        count = valid.sum(dim=1, keepdim=True).clamp_min(1.0)
+        mu = (context * valid).sum(dim=1, keepdim=True) / count
+
+        seq_len_f = context.new_tensor(float(context.shape[1]))
+        filled = torch.where(padding.to(dtype=torch.bool), mu, context)
+        sigma = filled.std(dim=1, keepdim=True, unbiased=False) * torch.sqrt(seq_len_f / count)
+        sigma = sigma.clamp_min(1e-2)
+
+        normalized = (context - mu) / (sigma + tolerance)
+        normalized = normalized * valid
+        normalized = normalized.clamp(-1000.0, 1000.0)
+        return normalized, mu.squeeze(-1), sigma.squeeze(-1)
+
+    def _patchify(
         self, past_values: torch.Tensor, past_values_padding: torch.Tensor
-    ) -> tuple[torch.Tensor, torch.Tensor, tuple[torch.Tensor, torch.Tensor]]:
+    ) -> tuple[torch.Tensor, torch.Tensor]:
+        """Patchify an already stream-normalized stream and project through the input tokenizer."""
         bsize = past_values.shape[0]
         patched_inputs = past_values.view(bsize, -1, self.config.patch_length)
         patched_pads = past_values_padding.view(bsize, -1, self.config.patch_length)
 
-        patched_inputs = torch.where(
-            torch.abs(patched_pads - 1.0) < self.config.tolerance,
-            torch.tensor(0.0, dtype=patched_inputs.dtype, device=patched_inputs.device),
-            patched_inputs,
-        )
-        patched_pads = torch.where(
-            torch.abs(patched_inputs - self.config.pad_val) < self.config.tolerance,
-            torch.tensor(1.0, dtype=patched_pads.dtype, device=patched_pads.device),
-            patched_pads,
-        )
-        patched_inputs, stats = self._forward_transform(patched_inputs, patched_pads)
         patched_inputs = patched_inputs * (1.0 - patched_pads)
         concat_inputs = torch.cat([patched_inputs, patched_pads], dim=-1)
         embeddings = self.input_ff_layer(concat_inputs)
         patch_padding = torch.min(patched_pads, dim=-1)[0]
-        return embeddings, patch_padding, stats
+        return embeddings, patch_padding
 
     def _build_attention_mask(
         self,
@@ -385,12 +404,17 @@ class CtsmModel(TimesFmModel):
             past_values_fine, past_values_fine_padding, patch_length
         )
 
-        coarse_embeddings, coarse_patch_padding, stats_coarse = self._patchify_and_normalize(
-            past_values_coarse, past_values_coarse_padding
+        coarse_normalized, loc_coarse, scale_coarse = self._normalize_with_pad(
+            past_values_coarse, past_values_coarse_padding, tolerance=self.config.tolerance
         )
-        fine_embeddings, fine_patch_padding, stats_fine = self._patchify_and_normalize(
-            past_values_fine, past_values_fine_padding
+        fine_normalized, loc_fine, scale_fine = self._normalize_with_pad(
+            past_values_fine, past_values_fine_padding, tolerance=self.config.tolerance
         )
+
+        coarse_embeddings, coarse_patch_padding = self._patchify(
+            coarse_normalized, past_values_coarse_padding
+        )
+        fine_embeddings, fine_patch_padding = self._patchify(fine_normalized, past_values_fine_padding)
 
         bsize, num_coarse_patches, hidden_size = coarse_embeddings.shape
         num_fine_patches = fine_embeddings.shape[1]
@@ -439,10 +463,10 @@ class CtsmModel(TimesFmModel):
 
         return CtsmOutput(
             last_hidden_state=hidden_states,
-            loc=stats_fine[0],
-            scale=stats_fine[1],
-            loc_coarse=stats_coarse[0],
-            scale_coarse=stats_coarse[1],
+            loc=loc_fine,
+            scale=scale_fine,
+            loc_coarse=loc_coarse,
+            scale_coarse=scale_coarse,
             num_coarse_patches=num_coarse_patches + num_special,  # fine block starts here
             num_fine_patches=num_fine_patches,
         )
