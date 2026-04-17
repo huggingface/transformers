@@ -24,6 +24,8 @@ from typing import Annotated
 
 import typer
 
+from transformers.agent.output import emit
+
 from ._common import (
     DeviceOpt,
     DtypeOpt,
@@ -121,7 +123,7 @@ def image_classify(
         ]
         result = sorted(scored, key=lambda x: x["score"], reverse=True)
 
-    print(format_output(result, output_json))
+    print(format_output(result, output_json, task="image-classify"))
 
 
 def detect(
@@ -226,7 +228,7 @@ def detect(
             }
         )
 
-    print(format_output(result, output_json))
+    print(format_output(result, output_json, task="detect"))
 
 
 def segment(
@@ -312,7 +314,7 @@ def segment(
             "iou_scores": outputs.iou_scores[0, 0].tolist(),
         }
 
-    print(format_output(result, output_json))
+    print(format_output(result, output_json, task="segment"))
 
 
 def depth(
@@ -375,9 +377,9 @@ def depth(
             depth_norm = depth_np * 0.0
         depth_img = Image.fromarray(depth_norm.astype("uint8"))
         depth_img.save(output)
-        print(f"Depth map saved to {output} (size: {depth_map.shape[0]}x{depth_map.shape[1]})")
+        print(emit({"size": f"{depth_map.shape[0]}x{depth_map.shape[1]}", "output_path": output}, task="depth"))
     else:
-        print(f"Depth map size: {depth_map.shape[0]}x{depth_map.shape[1]}")
+        print(emit({"size": f"{depth_map.shape[0]}x{depth_map.shape[1]}"}, task="depth"))
 
 
 def keypoints(
@@ -425,7 +427,7 @@ def keypoints(
     pipe = pipeline("keypoint-matching", **pipe_kwargs)
     result = pipe(img1, img2)
 
-    print(format_output(result, output_json))
+    print(format_output(result, output_json, task="keypoints"))
 
 
 def video_classify(
@@ -476,4 +478,4 @@ def video_classify(
         for val, idx in zip(top_values, top_indices)
     ]
 
-    print(format_output(result, output_json))
+    print(format_output(result, output_json, task="video-classify"))

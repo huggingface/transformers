@@ -23,6 +23,8 @@ from typing import Annotated
 
 import typer
 
+from transformers.agent.output import emit
+
 from ._common import (
     DeviceOpt,
     DtypeOpt,
@@ -79,7 +81,7 @@ def vqa(
     result = processor.decode(new_tokens, skip_special_tokens=True)
 
     if output_json:
-        print(format_output({"answer": result}, output_json=True))
+        print(format_output({"answer": result}, output_json=True, task="vqa"))
     else:
         print(result)
 
@@ -136,9 +138,9 @@ def document_qa(
 
     result = {"answer": answer, "start": start_idx, "end": end_idx}
     if output_json:
-        print(format_output(result, output_json=True))
+        print(format_output(result, output_json=True, task="document-qa"))
     else:
-        print(format_output(result))
+        print(format_output(result, task="document-qa"))
 
 
 def caption(
@@ -183,7 +185,7 @@ def caption(
     result = processor.decode(new_tokens, skip_special_tokens=True)
 
     if output_json:
-        print(format_output({"caption": result}, output_json=True))
+        print(format_output({"caption": result}, output_json=True, task="caption"))
     else:
         print(result)
 
@@ -233,7 +235,7 @@ def ocr(
     result = processor.decode(new_tokens, skip_special_tokens=True)
 
     if output_json:
-        print(format_output({"text": result}, output_json=True))
+        print(format_output({"text": result}, output_json=True, task="ocr"))
     else:
         print(result)
 
@@ -304,4 +306,4 @@ def multimodal_chat(
 
     output_ids = loaded_model.generate(**inputs, max_new_tokens=max_new_tokens)
     new_tokens = output_ids[0, inputs["input_ids"].shape[1] :]
-    print(processor.decode(new_tokens, skip_special_tokens=True))
+    print(emit(processor.decode(new_tokens, skip_special_tokens=True), task="multimodal-chat"))
