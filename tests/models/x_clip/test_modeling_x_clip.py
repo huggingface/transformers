@@ -589,18 +589,6 @@ class XCLIPModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     def test_model_parallelism(self):
         pass
 
-    @unittest.skip(
-        reason="X-CLIP's hidden_states are nested in sub-outputs (text_model_output, vision_model_output), not at root level"
-    )
-    def test_flash_attn_2_inference_equivalence(self):
-        pass
-
-    @unittest.skip(
-        reason="X-CLIP's hidden_states are nested in sub-outputs (text_model_output, vision_model_output), not at root level"
-    )
-    def test_flash_attn_2_inference_equivalence_right_padding(self):
-        pass
-
     def test_load_vision_text_config(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
