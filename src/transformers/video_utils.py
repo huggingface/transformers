@@ -195,9 +195,7 @@ def make_batched_videos(videos) -> list[Union[np.ndarray, "torch.Tensor", "URL",
     """
     # Early exit for deeply nested list of image frame paths. We shouldn't flatten them
     try:
-        if isinstance(videos[0][0], (list, tuple)) and (
-            isinstance(videos[0][0][0], str) or is_valid_image(videos[0][0][0])
-        ):
+        if isinstance(videos[0][0], (list, tuple)) and isinstance(videos[0][0][0], str):
             return [image_paths for sublist in videos for image_paths in sublist]
     except (IndexError, TypeError):
         pass

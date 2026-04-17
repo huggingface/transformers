@@ -197,11 +197,8 @@ class MllamaProcessor(ProcessorMixin):
             - **pixel_values** -- Pixel values to be fed to a model. Returned when `images` is not `None`.
             TODO: add aspect_ratio_ids and aspect_ratio_mask and cross_attention_mask
         """
-        if text is not None and isinstance(text, str):
-            text = [text]
-
-        self.validate_inputs(images=images, text=text, **kwargs)
         images, text = self.prepare_inputs_layout(images=images, text=text)
+        self.validate_inputs(images=images, text=text, **kwargs)
 
         output_kwargs = self._merge_kwargs(
             MllamaProcessorKwargs,
@@ -247,6 +244,8 @@ class MllamaProcessor(ProcessorMixin):
                 text = [text]
             text = [build_string_from_input(text_item, self.bos_token, self.image_token) for text_item in text]
 
+        if images is not None:
+            images = make_nested_list_of_images(images)
         return images, text
 
     def validate_inputs(
@@ -259,20 +258,21 @@ class MllamaProcessor(ProcessorMixin):
 
         if text is not None:
             n_images_in_text = [t.count(self.image_token) for t in text]
-            images = make_nested_list_of_images(images)
-            n_images_in_images = [len(sample) for sample in images]
 
-            if any(batch_img == 0 for batch_img in n_images_in_text) and not all(
-                batch_img == 0 for batch_img in n_images_in_text
-            ):
-                raise ValueError(
-                    "If a batch of text is provided, there should be either no images or at least one image per sample"
-                )
+            if sum(n_images_in_text) > 0 and images is None:
+                raise ValueError("No image were provided, but there are image tokens in the prompt")
+            elif images is not None:
+                images = make_nested_list_of_images(images)
+                n_images_in_images = [len(sample) for sample in images]
 
-            if sum(n_images_in_text) > 0 and (n_images_in_images != n_images_in_text):
-                if images is None:
-                    raise ValueError("No image were provided, but there are image tokens in the prompt")
-                else:
+                if any(batch_img == 0 for batch_img in n_images_in_text) and not all(
+                    batch_img == 0 for batch_img in n_images_in_text
+                ):
+                    raise ValueError(
+                        "If a batch of text is provided, there should be either no images or at least one image per sample"
+                    )
+
+                if n_images_in_images != n_images_in_text:
                     add_message = ""
                     if sum(n_images_in_images) == sum(n_images_in_text) and n_images_in_images != n_images_in_text:
                         add_message = "Make sure to pass your images as a nested list, where each sub-list holds images per batch"

@@ -242,7 +242,11 @@ def conv1d_output_length(module: "torch.nn.Conv1d", input_length: int) -> int:
 
 
 def is_valid_audio(audio):
-    return is_numpy_array(audio) or is_torch_tensor(audio)
+    return (
+        is_numpy_array(audio)
+        or is_torch_tensor(audio)
+        or (isinstance(audio, (list, tuple)) and isinstance(audio[0], float))
+    )
 
 
 def is_valid_list_of_audio(audio):

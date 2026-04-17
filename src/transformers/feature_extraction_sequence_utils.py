@@ -372,7 +372,8 @@ class SequenceFeatureExtractor(FeatureExtractionMixin):
         If a single url is passed, the return value will be a single object. If a list is passed a list of objects is
         returned.
         """
-        if isinstance(audio_url_or_urls, list):
+        # Accepted input types for `raw_audio`: "np.ndarray | list[float] | list[np.ndarray] | list[list[float]]"
+        if isinstance(audio_url_or_urls, list) and not isinstance(audio_url_or_urls[0], float):
             return [self.fetch_audio(x) for x in audio_url_or_urls]
         elif isinstance(audio_url_or_urls, str):
             return load_audio(audio_url_or_urls)

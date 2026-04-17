@@ -14,7 +14,7 @@
 # limitations under the License.
 
 from ...feature_extraction_utils import BatchFeature
-from ...image_utils import ImageInput, is_valid_image, make_nested_list_of_images, valid_images
+from ...image_utils import ImageInput, make_nested_list_of_images, valid_images
 from ...processing_utils import MultiModalData, ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
 from ...utils import auto_docstring
@@ -63,12 +63,12 @@ class Gemma3Processor(ProcessorMixin):
     @auto_docstring
     def __call__(
         self,
-        images: ImageInput | None = None,
+        images: ImageInput | list[ImageInput] | None = None,
         text: TextInput | PreTokenizedInput | list[TextInput] | list[PreTokenizedInput] = None,
         **kwargs: Unpack[Gemma3ProcessorKwargs],
     ) -> BatchFeature:
-        self.validate_inputs(images=images, text=text, **kwargs)
         images, text = self.prepare_inputs_layout(images=images, text=text)
+        self.validate_inputs(images=images, text=text, **kwargs)
 
         output_kwargs = self._merge_kwargs(
             Gemma3ProcessorKwargs,
@@ -113,7 +113,7 @@ class Gemma3Processor(ProcessorMixin):
 
     def validate_inputs(
         self,
-        images: ImageInput | None = None,
+        images: ImageInput | list[ImageInput] | None = None,
         text: TextInput | PreTokenizedInput | list[TextInput] | list[PreTokenizedInput] = None,
         **kwargs: Unpack[ProcessingKwargs],
     ):
@@ -124,12 +124,17 @@ class Gemma3Processor(ProcessorMixin):
 
         if text is not None:
             n_images_in_text = [sample.count(self.boi_token) for sample in text]
-            if images is not None and isinstance(images, (list, tuple)) and is_valid_image(images[0]):
-                n_images_in_text = [sample.count(self.boi_token) for sample in text]
-                if sum(n_images_in_text) != len(images):
+            if images is not None:
+                if len(images) != len(text):
+                    raise ValueError(
+                        f"Received inconsistently sized batches of images ({len(images)}) and text ({len(text)})."
+                    )
+
+                n_images_in_images = [len(sublist) for sublist in images]
+                if n_images_in_text != n_images_in_images:
                     raise ValueError(
                         f"The total number of {self.boi_token} tokens in the prompts should be the same as the number of images passed."
-                        f" Found {sum(n_images_in_text)} {self.boi_token} tokens and {len(images)} images."
+                        f" Found {n_images_in_text} {self.boi_token} tokens and {n_images_in_images} images per sample."
                     )
             elif images is None and any(n_images_in_text):
                 raise ValueError(

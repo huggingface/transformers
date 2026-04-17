@@ -102,11 +102,8 @@ class Idefics3Processor(ProcessorMixin):
             The length of the image sequence. If not provided, the default value of self.image_seq_len is used.
             image_seq_len should be equal to int(((image_size // patch_size) ** 2) / (scale_factor**2))
         """
-        if text is not None and isinstance(text, str):
-            text = [text]
-
-        self.validate_inputs(images=images, text=text, **kwargs)
         images, text = self.prepare_inputs_layout(images=images, text=text)
+        self.validate_inputs(images=images, text=text, **kwargs)
 
         output_kwargs = self._merge_kwargs(
             Idefics3ProcessorKwargs,
@@ -183,12 +180,12 @@ class Idefics3Processor(ProcessorMixin):
 
         if text is not None:
             n_images_in_text = [sample.count(self.image_token) for sample in text]
-            if images is not None and isinstance(images, (list, tuple)) and is_valid_image(images[0]):
-                n_images_in_text = [sample.count(self.image_token) for sample in text]
-                if sum(n_images_in_text) != len(images):
+            if images is not None:
+                n_images_in_images = [len(sublist) for sublist in images]
+                if n_images_in_text != n_images_in_images:
                     raise ValueError(
                         f"The total number of {self.image_token} tokens in the prompts should be the same as the number of images passed."
-                        f" Found {sum(n_images_in_text)} {self.image_token} tokens and {len(images)} images."
+                        f" Found {n_images_in_text} {self.image_token} tokens and {n_images_in_images} images per sample."
                     )
             elif images is None and any(n_images_in_text):
                 raise ValueError(

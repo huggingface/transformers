@@ -667,8 +667,8 @@ class ProcessorMixin(PushToHubMixin):
             [`BatchFeature`]: A [`BatchFeature`] object with processed inputs in a dict format.
         """
 
-        self.validate_inputs(images=images, text=text, videos=videos, audio=audio, **kwargs)
         images, text, videos, audio = self.prepare_inputs_layout(images=images, text=text, videos=videos, audio=audio)
+        self.validate_inputs(images=images, text=text, videos=videos, audio=audio, **kwargs)
 
         kwargs = self._merge_kwargs(
             self.valid_processor_kwargs,
@@ -710,25 +710,6 @@ class ProcessorMixin(PushToHubMixin):
         data = {**text_inputs, **processed_images, **processed_videos, **processed_audio}
         return BatchFeature(data, tensor_type=return_tensors)
 
-    def _process_images(self, images: ImageInput, **kwargs):
-        images = self.image_processor.fetch_images(images)
-        processed_data = self.image_processor(images, **kwargs)
-        image_replacements = self.get_images_replacement(images, processed_data)
-        return processed_data, image_replacements
-
-    def _process_videos(self, videos: VideoInput, **kwargs):
-        processed_data = self.video_processor(videos, **kwargs)
-        decoded_videos = self.video_processor.fetch_videos(videos)  # FIXME: order
-        video_replacements = self.get_videos_replacement(decoded_videos, processed_data)
-        return processed_data, video_replacements
-
-    def _process_audio(self, audio: AudioInput, **kwargs):
-        # Audio processors don't yet decode before processing
-        # audio = self.feature_extractor.fetch_audio(audio)
-        processed_data = self.feature_extractor(audio, **kwargs)
-        audio_replacements = self.get_audio_replacement(audio, processed_data)
-        return processed_data, audio_replacements
-
     def prepare_inputs_layout(
         self,
         images: ImageInput | None = None,
@@ -756,6 +737,26 @@ class ProcessorMixin(PushToHubMixin):
 
         if images is None and text is None and videos is None and audio is None:
             raise ValueError(f"You need to provide at least one input to call {self.__class__.__name__}")
+
+    def _process_images(self, images: ImageInput, **kwargs):
+        images = self.image_processor.fetch_images(images)
+        processed_data = self.image_processor(images, **kwargs)
+        image_replacements = self.get_images_replacement(images, processed_data)
+        return processed_data, image_replacements
+
+    def _process_videos(self, videos: VideoInput, **kwargs):
+        processed_data = self.video_processor(videos, **kwargs)
+
+        videos = make_batched_videos(videos)  # FIXME: order
+        decoded_videos = self.video_processor.fetch_videos(videos)[0]
+        video_replacements = self.get_videos_replacement(decoded_videos, processed_data)
+        return processed_data, video_replacements
+
+    def _process_audio(self, audio: AudioInput, **kwargs):
+        audio = self.feature_extractor.fetch_audio(audio)
+        processed_data = self.feature_extractor(audio, **kwargs)
+        audio_replacements = self.get_audio_replacement(audio, processed_data)
+        return processed_data, audio_replacements
 
     def replace_image_token(self, image_inputs: dict | None = None, image_idx: int = 0) -> str:
         return None
@@ -791,7 +792,6 @@ class ProcessorMixin(PushToHubMixin):
         if getattr(self, "video_token", None) is None:
             return []
 
-        videos = make_batched_videos(videos)
         replacement_texts = []
         for idx in range(len(videos)):
             replacement_text = self.replace_video_token(processed_videos, video_idx=idx)
