@@ -7,7 +7,7 @@
 
 import itertools
 from collections.abc import Callable
-from typing import Any, Optional
+from typing import Any
 
 import torch
 import torch.nn.functional as F
@@ -15,19 +15,18 @@ from torch import nn
 
 from ... import initialization as init
 from ...activations import ACT2FN
-from ...cache_utils import Cache, DynamicCache
+from ...cache_utils import Cache
 from ...generation import GenerationMixin
 from ...integrations import use_kernel_forward_from_hub, use_kernel_func_from_hub
-from ...masking_utils import create_causal_mask, create_sliding_window_causal_mask
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPooling, CausalLMOutputWithPast
-from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, torch_compilable_check
-from ...utils.generic import is_flash_attention_requested, maybe_autocast, merge_with_config_defaults
+from ...utils.generic import is_flash_attention_requested, merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
-from .configuration_exaone4_5 import Exaone4_5_Config, Exaone4_5_TextConfig, Exaone4_5_VisionConfig
+from ..auto import AutoModel
+from .configuration_exaone4_5 import Exaone4_5_Config, Exaone4_5_VisionConfig
 
 
 @use_kernel_forward_from_hub("RMSNorm")
@@ -181,10 +180,7 @@ class Exaone4_5_VisionAttention(nn.Module):
         self.is_causal = False
         self.q_dim = self.num_heads * self.head_dim
         self.kv_dim = self.num_key_value_groups * self.head_dim
-        if self.num_key_value_groups == 1:
-            self.qkv = nn.Linear(self.dim, self.dim * 3, bias=True)
-        else:
-            self.qkv = nn.Linear(self.dim, self.q_dim + (self.kv_dim * 2), bias=True)
+        self.qkv = nn.Linear(self.dim, self.q_dim + (self.kv_dim * 2), bias=True)
 
     def forward(
         self,
@@ -284,11 +280,11 @@ class Exaone4_5_MLP(nn.Module):
 
 
 class Exaone4_5_VisionBlock(GradientCheckpointingLayer):
-    def __init__(self, config: Exaone4_5_VisionConfig) -> None:
+    def __init__(self, config, attn_implementation: str = "sdpa") -> None:
         super().__init__()
         self.norm1 = Exaone4_5_RMSNorm(config.hidden_size, eps=1e-6)
         self.norm2 = Exaone4_5_RMSNorm(config.hidden_size, eps=1e-6)
-        self.attn = Exaone4_5_VisionAttention(config)
+        self.attn = Exaone4_5_VisionAttention(config=config)
         self.mlp = Exaone4_5_MLP(config, bias=True)
 
     @auto_docstring
@@ -659,157 +655,6 @@ class Exaone4_5_VisionPreTrainedModel(Exaone4_5_PreTrainedModel):
         )
 
 
-class Exaone4_5_RotaryEmbedding(nn.Module):
-    inv_freq: torch.Tensor  # fix linting for `register_buffer`
-
-    def __init__(self, config: Exaone4_5_Config, device=None):
-        super().__init__()
-        self.max_seq_len_cached = config.max_position_embeddings
-        self.original_max_seq_len = config.max_position_embeddings
-
-        self.config = config
-
-        self.rope_type = self.config.rope_parameters["rope_type"]
-        rope_init_fn: Callable = self.compute_default_rope_parameters
-        if self.rope_type != "default":
-            rope_init_fn = ROPE_INIT_FUNCTIONS[self.rope_type]
-        inv_freq, self.attention_scaling = rope_init_fn(self.config, device)
-
-        self.register_buffer("inv_freq", inv_freq, persistent=False)
-        self.register_buffer("original_inv_freq", inv_freq.clone(), persistent=False)
-
-    @staticmethod
-    def compute_default_rope_parameters(
-        config: Exaone4_5_Config | None = None,
-        device: Optional["torch.device"] = None,
-        seq_len: int | None = None,
-    ) -> tuple["torch.Tensor", float]:
-        """
-        Computes the inverse frequencies according to the original RoPE implementation
-        Args:
-            config ([`~transformers.PreTrainedConfig`]):
-                The model configuration.
-            device (`torch.device`):
-                The device to use for initialization of the inverse frequencies.
-            seq_len (`int`, *optional*):
-                The current sequence length. Unused for this type of RoPE.
-        Returns:
-            Tuple of (`torch.Tensor`, `float`), containing the inverse frequencies for the RoPE embeddings and the
-            post-processing scaling factor applied to the computed cos/sin (unused in this type of RoPE).
-        """
-        base = config.rope_parameters["rope_theta"]
-        dim = getattr(config, "head_dim", None) or config.hidden_size // config.num_attention_heads
-
-        attention_factor = 1.0  # Unused in this type of RoPE
-
-        # Compute the inverse frequencies
-        inv_freq = 1.0 / (
-            base ** (torch.arange(0, dim, 2, dtype=torch.int64).to(device=device, dtype=torch.float) / dim)
-        )
-        return inv_freq, attention_factor
-
-    @torch.no_grad()
-    @dynamic_rope_update  # power user: used with advanced RoPE types (e.g. dynamic rope)
-    def forward(self, x, position_ids):
-        inv_freq_expanded = self.inv_freq[None, :, None].float().expand(position_ids.shape[0], -1, 1).to(x.device)
-        position_ids_expanded = position_ids[:, None, :].float()
-
-        device_type = x.device.type if isinstance(x.device.type, str) and x.device.type != "mps" else "cpu"
-        with maybe_autocast(device_type=device_type, enabled=False):  # Force float32
-            freqs = (inv_freq_expanded.float() @ position_ids_expanded.float()).transpose(1, 2)
-            emb = torch.cat((freqs, freqs), dim=-1)
-            cos = emb.cos() * self.attention_scaling
-            sin = emb.sin() * self.attention_scaling
-
-        return cos.to(dtype=x.dtype), sin.to(dtype=x.dtype)
-
-
-@auto_docstring
-class Exaone4_5_TextModel(Exaone4_5_PreTrainedModel):
-    config_class = Exaone4_5_TextConfig
-
-    def __init__(self, config: Exaone4_5_Config):
-        super().__init__(config)
-        self.padding_idx = config.pad_token_id
-        self.vocab_size = config.vocab_size
-
-        self.embed_tokens = nn.Embedding(config.vocab_size, config.hidden_size, self.padding_idx)
-        self.layers = nn.ModuleList(
-            [Exaone4_5_DecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
-        )
-        self.norm = Exaone4_5_RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        self.rotary_emb = Exaone4_5_RotaryEmbedding(config=config)
-        self.gradient_checkpointing = False
-
-        # Initialize weights and apply final processing
-        self.post_init()
-
-    @merge_with_config_defaults
-    @capture_outputs
-    def forward(
-        self,
-        input_ids: torch.LongTensor | None = None,
-        attention_mask: torch.Tensor | None = None,
-        position_ids: torch.LongTensor | None = None,
-        past_key_values: Cache | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
-        use_cache: bool | None = None,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | BaseModelOutputWithPast:
-        if (input_ids is None) ^ (inputs_embeds is not None):
-            raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
-
-        if inputs_embeds is None:
-            inputs_embeds = self.embed_tokens(input_ids)
-
-        if use_cache and past_key_values is None:
-            past_key_values = DynamicCache(config=self.config)
-
-        if position_ids is None:
-            past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
-            position_ids = torch.arange(inputs_embeds.shape[1], device=inputs_embeds.device) + past_seen_tokens
-            position_ids = position_ids.unsqueeze(0)
-
-        # It may already have been prepared by e.g. `generate`
-        if not isinstance(causal_mask_mapping := attention_mask, dict):
-            # Prepare mask arguments
-            mask_kwargs = {
-                "config": self.config,
-                "inputs_embeds": inputs_embeds,
-                "attention_mask": attention_mask,
-                "past_key_values": past_key_values,
-                "position_ids": position_ids,
-            }
-            # Create the masks
-            causal_mask_mapping = {
-                "full_attention": create_causal_mask(**mask_kwargs),
-            }
-            if "sliding_attention" in self.config.layer_types:
-                causal_mask_mapping["sliding_attention"] = create_sliding_window_causal_mask(**mask_kwargs)
-
-        hidden_states = inputs_embeds
-        position_embeddings = self.rotary_emb(hidden_states, position_ids)
-
-        for i, decoder_layer in enumerate(self.layers):
-            layer_type = self.config.layer_types[i]
-            hidden_states = decoder_layer(
-                hidden_states,
-                attention_mask=causal_mask_mapping[layer_type],
-                position_ids=position_ids,
-                past_key_values=past_key_values,
-                use_cache=use_cache,
-                position_embeddings=position_embeddings,
-                **kwargs,
-            )
-
-        hidden_states = self.norm(hidden_states)
-
-        return BaseModelOutputWithPast(
-            last_hidden_state=hidden_states,
-            past_key_values=past_key_values if use_cache else None,
-        )
-
-
 @auto_docstring
 class Exaone4_5_Model(Exaone4_5_PreTrainedModel):
     base_model_prefix = ""
@@ -818,12 +663,11 @@ class Exaone4_5_Model(Exaone4_5_PreTrainedModel):
     config: Exaone4_5_Config
     _no_split_modules = ["Exaone4_5_DecoderLayer", "Exaone4_5_VisionBlock"]
     config_class = Exaone4_5_Config
-    _checkpoint_conversion_mapping = {"^model": "language_model"}
 
     def __init__(self, config: Exaone4_5_Config):
         super().__init__(config)
         self.visual = Exaone4_5_VisionPreTrainedModel._from_config(config.vision_config)
-        self.language_model = Exaone4_5_TextModel._from_config(config.text_config)
+        self.language_model = AutoModel.from_config(config.text_config)
         self.rope_deltas = None  # cache rope_deltas here
 
         # Initialize weights and apply final processing
@@ -1589,6 +1433,5 @@ __all__ = [
     "Exaone4_5_ForConditionalGeneration",
     "Exaone4_5_Model",
     "Exaone4_5_PreTrainedModel",
-    "Exaone4_5_TextModel",
     "Exaone4_5_VisionPreTrainedModel",
 ]

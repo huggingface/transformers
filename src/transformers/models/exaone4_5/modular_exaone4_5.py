@@ -14,6 +14,7 @@ from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import ProcessingKwargs, Unpack
 from ...utils import TransformersKwargs, can_return_tuple
 from ...utils.generic import is_flash_attention_requested
+from ..auto import CONFIG_MAPPING, AutoConfig, AutoModel
 from ..exaone4.configuration_exaone4 import Exaone4Config
 from ..exaone4.modeling_exaone4 import Exaone4Model, Exaone4PreTrainedModel, Exaone4RMSNorm
 from ..qwen2_5_vl.configuration_qwen2_5_vl import Qwen2_5_VLVisionConfig
@@ -38,23 +39,19 @@ from ..qwen2_vl.modeling_qwen2_vl import (
 from ..qwen2_vl.video_processing_qwen2_vl import Qwen2VLVideoProcessor
 
 
+@auto_docstring(checkpoint="LGAI-EXAONE/EXAONE-4.5-33B")
 @strict
 class Exaone4_5_VisionConfig(Qwen2_5_VLVisionConfig):
     model_type = "exaone4_5_vision"
     base_config_key = "vision_config"
-    num_key_value_heads: int = 1
+    num_key_value_heads: int = 8
 
 
-class Exaone4_5_TextConfig(Exaone4Config):
-    model_type = "exaone4_5_text"
-    base_config_key = "text_config"
-    keys_to_ignore_at_inference = ["past_key_values"]
-
-
+@auto_docstring(checkpoint="LGAI-EXAONE/EXAONE-4.5-33B")
 @strict
 class Exaone4_5_Config(PreTrainedConfig):
     model_type = "exaone4_5"
-    sub_configs = {"vision_config": Exaone4_5_VisionConfig, "text_config": Exaone4_5_TextConfig}
+    sub_configs = {"vision_config": AutoConfig, "text_config": AutoConfig}
     keys_to_ignore_at_inference = ["past_key_values"]
 
     text_config: dict | PreTrainedConfig | None = None
@@ -65,39 +62,23 @@ class Exaone4_5_Config(PreTrainedConfig):
 
     def __post_init__(self, **kwargs):
         if isinstance(self.vision_config, dict):
-            self.vision_config = self.sub_configs["vision_config"](**self.vision_config)
+            self.vision_config["model_type"] = self.vision_config.get("model_type", "exaone4_5_vision")
+            self.vision_config = CONFIG_MAPPING[self.vision_config["model_type"]](**self.vision_config)
         elif self.vision_config is None:
-            self.vision_config = self.sub_configs["vision_config"]()
+            self.vision_config = CONFIG_MAPPING["exaone4_5_vision"]()
 
         if isinstance(self.text_config, dict):
-            self.text_config = self.sub_configs["text_config"](**self.text_config)
+            self.text_config["model_type"] = self.text_config.get("model_type", "exaone4")
+            self.text_config = CONFIG_MAPPING[self.text_config["model_type"]](**self.text_config)
         elif self.text_config is None:
-            self.text_config = self.sub_configs["text_config"](**kwargs)
+            self.text_config = CONFIG_MAPPING["exaone4"]()
+
+        # Keep top-level value consistent when loading configs whose tie_word_embeddings
+        # is persisted only in the nested text config.
+        if not self.tie_word_embeddings and self.text_config.tie_word_embeddings:
+            self.tie_word_embeddings = self.text_config.tie_word_embeddings
 
         super().__post_init__(**kwargs)
-
-    def __setattr__(self, key, value):
-        text_config = super().__getattribute__("__dict__").get("text_config")
-        if (
-            isinstance(text_config, PreTrainedConfig)
-            and key not in ["dtype", "architectures", "_attn_implementation_internal", "model_type"]
-            and key in text_config.__dict__
-        ):
-            setattr(text_config, key, value)
-        else:
-            super().__setattr__(key, value)
-
-    def __getattribute__(self, key):
-        if "text_config" in super().__getattribute__("__dict__") and key not in [
-            "dtype",
-            "architectures",
-            "_attn_implementation_internal",
-            "model_type",
-        ]:
-            text_config = super().__getattribute__("text_config")
-            if isinstance(text_config, PreTrainedConfig) and key in text_config.__dict__:
-                return getattr(text_config, key)
-        return super().__getattribute__(key)
 
 
 class Exaone4_5_RMSNorm(Exaone4RMSNorm):
@@ -113,9 +94,7 @@ class Exaone4_5_VisionRotaryEmbedding(Qwen2_5_VisionRotaryEmbedding):
 
 
 class Exaone4_5_PatchMerger(Qwen2_5_VLPatchMerger):
-    def __init__(self, dim: int, context_dim: int, spatial_merge_size: int = 2) -> None:
-        super().__init__(dim, context_dim, spatial_merge_size)
-        self.ln_q = Exaone4_5_RMSNorm(context_dim, eps=1e-6)
+    pass
 
 
 class Exaone4_5_VisionAttention(Qwen2_5_VLVisionAttention):
@@ -125,10 +104,7 @@ class Exaone4_5_VisionAttention(Qwen2_5_VLVisionAttention):
         self.num_key_value_groups = config.num_key_value_heads
         self.q_dim = self.num_heads * self.head_dim
         self.kv_dim = self.num_key_value_groups * self.head_dim
-        if self.num_key_value_groups == 1:
-            self.qkv = nn.Linear(self.dim, self.dim * 3, bias=True)
-        else:
-            self.qkv = nn.Linear(self.dim, self.q_dim + (self.kv_dim * 2), bias=True)
+        self.qkv = nn.Linear(self.dim, self.q_dim + (self.kv_dim * 2), bias=True)
 
     def _split_qkv(self, hidden_states: torch.Tensor):
         seq_length = hidden_states.shape[0]
@@ -218,12 +194,7 @@ class Exaone4_5_MLP(Qwen2_5_VLMLP):
 
 
 class Exaone4_5_VisionBlock(Qwen2_5_VLVisionBlock):
-    def __init__(self, config: Exaone4_5_VisionConfig):
-        super().__init__(config)
-        self.norm1 = Exaone4_5_RMSNorm(config.hidden_size, eps=1e-6)
-        self.norm2 = Exaone4_5_RMSNorm(config.hidden_size, eps=1e-6)
-        self.attn = Exaone4_5_VisionAttention(config)
-        self.mlp = Exaone4_5_MLP(config, bias=True)
+    pass
 
 
 class Exaone4_5_PreTrainedModel(Exaone4PreTrainedModel):
@@ -264,19 +235,14 @@ class Exaone4_5_VisionPreTrainedModel(Exaone4_5_PreTrainedModel, Qwen2_5_VisionT
         self.post_init()
 
 
-class Exaone4_5_TextModel(Exaone4_5_PreTrainedModel, Exaone4Model):
-    config_class = Exaone4_5_TextConfig
-
-
 class Exaone4_5_Model(Exaone4_5_PreTrainedModel, Qwen2_5_VLModel):
     config_class = Exaone4_5_Config
     base_model_prefix = ""
-    _checkpoint_conversion_mapping = {"^model": "language_model"}
 
     def __init__(self, config: Exaone4_5_Config):
         super().__init__(config)
         self.visual = Exaone4_5_VisionPreTrainedModel._from_config(config.vision_config)
-        self.language_model = Exaone4_5_TextModel._from_config(config.text_config)
+        self.language_model = AutoModel.from_config(config.text_config)
         self.post_init()
 
     @can_return_tuple
@@ -443,18 +409,6 @@ class Exaone4_5_ForConditionalGeneration(Exaone4_5_PreTrainedModel, Qwen2_5_VLFo
         return model_inputs
 
 
-class Exaone4_5_ImageProcessor(Qwen2VLImageProcessor):
-    pass
-
-
-class Exaone4_5_ImageProcessorPil(Qwen2VLImageProcessorPil):
-    pass
-
-
-class Exaone4_5_VideoProcessor(Qwen2VLVideoProcessor):
-    pass
-
-
 class Exaone4_5_ProcessorKwargs(ProcessingKwargs, total=False):
     _defaults = {
         "text_kwargs": {
@@ -465,20 +419,15 @@ class Exaone4_5_ProcessorKwargs(ProcessingKwargs, total=False):
 
 
 class Exaone4_5_Processor(Qwen2_5_VLProcessor):
-    tokenizer_class = ("GPT2Tokenizer", "GPT2TokenizerFast", "PreTrainedTokenizerFast")
+    tokenizer_class = "AutoTokenizer"
 
 
 __all__ = [
     "Exaone4_5_Config",
-    "Exaone4_5_TextConfig",
     "Exaone4_5_ForConditionalGeneration",
     "Exaone4_5_Model",
     "Exaone4_5_PreTrainedModel",
     "Exaone4_5_Processor",
-    "Exaone4_5_ImageProcessor",
-    "Exaone4_5_ImageProcessorPil",
-    "Exaone4_5_VideoProcessor",
-    "Exaone4_5_TextModel",
     "Exaone4_5_VisionPreTrainedModel",
     "Exaone4_5_VisionConfig",
 ]

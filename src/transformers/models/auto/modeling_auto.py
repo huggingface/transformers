@@ -150,7 +150,7 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("evolla", "EvollaModel"),
         ("exaone4", "Exaone4Model"),
         ("exaone4_5", "Exaone4_5_Model"),
-        ("exaone4_5_text", "Exaone4_5_TextModel"),
+        ("exaone4_5_vision", "Exaone4_5_VisionPreTrainedModel"),
         ("exaone_moe", "ExaoneMoeModel"),
         ("falcon", "FalconModel"),
         ("falcon_h1", "FalconH1Model"),

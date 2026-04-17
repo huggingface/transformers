@@ -7,10 +7,11 @@
 from huggingface_hub.dataclasses import strict
 
 from ...configuration_utils import PreTrainedConfig
-from ...modeling_rope_utils import RopeParameters
 from ...utils import auto_docstring
+from ..auto import CONFIG_MAPPING, AutoConfig
 
 
+@auto_docstring(checkpoint="LGAI-EXAONE/EXAONE-4.5-33B")
 @strict
 class Exaone4_5_VisionConfig(PreTrainedConfig):
     r"""
@@ -41,100 +42,14 @@ class Exaone4_5_VisionConfig(PreTrainedConfig):
     out_hidden_size: int = 3584
     fullatt_block_indexes: list[int] | tuple[int, ...] = (7, 15, 23, 31)
     initializer_range: float = 0.02
-    num_key_value_heads: int = 1
+    num_key_value_heads: int = 8
 
 
-@auto_docstring(checkpoint="LGAI-EXAONE/EXAONE-4.0-32B")
-@strict
-class Exaone4_5_TextConfig(PreTrainedConfig):
-    r"""
-    sliding_window_pattern (`str`, *optional*):
-        The pattern to use for sliding window attention. Can be one of:
-            - `None`: No sliding window attention is used
-            - `int`: Every `sliding_window` layers, use global attention, else use local attention.
-            - `str`: A sequence of "L" (local attention) and "G" (global attention) characters that defines the
-              attention pattern. The pattern starts from layer 0 and repeats every `sliding_window` layers. The
-              final layer always uses global attention regardless of the pattern.
-        For instance, sliding_window_pattern="LLLG" same as sliding_window=4, which means:
-            - Layer 0, 1, 2: local attention,
-            - Layer 3: global attention,
-            ...(repeated)
-
-    Example:
-
-    ```python
-    >>> from transformers import Exaone4_5_TextModel, Exaone4_5_TextConfig
-
-    >>> # Initializing a EXAONE configuration
-    >>> configuration = Exaone4_5_TextConfig()
-
-    >>> # Initializing a model from configuration
-    >>> model = Exaone4_5_TextModel(configuration)
-
-    >>> # Accessing the model configuration
-    >>> configuration = model.config
-    ```"""
-
-    model_type = "exaone4_5_text"
-    keys_to_ignore_at_inference = ["past_key_values"]
-    # Default tensor parallel plan for base model `LlamaModel`
-    base_model_tp_plan = {
-        "layers.*.self_attn.q_proj": "colwise",
-        "layers.*.self_attn.k_proj": "colwise",
-        "layers.*.self_attn.v_proj": "colwise",
-        "layers.*.self_attn.q_norm": "replicated_with_grad_allreduce",
-        "layers.*.self_attn.k_norm": "replicated_with_grad_allreduce",
-        "layers.*.self_attn.o_proj": "rowwise",
-        "layers.*.mlp.gate_proj": "colwise",
-        "layers.*.mlp.up_proj": "colwise",
-        "layers.*.mlp.down_proj": "rowwise",
-    }
-    base_model_pp_plan = {
-        "embed_tokens": (["input_ids"], ["inputs_embeds"]),
-        "layers": (["hidden_states", "attention_mask"], ["hidden_states"]),
-        "norm": (["hidden_states"], ["hidden_states"]),
-    }
-
-    vocab_size: int = 102400
-    hidden_size: int = 4096
-    intermediate_size: int = 16384
-    num_hidden_layers: int = 32
-    num_attention_heads: int = 32
-    num_key_value_heads: int = 32
-    hidden_act: str = "silu"
-    max_position_embeddings: int = 2048
-    initializer_range: float = 0.02
-    rms_norm_eps: float = 1e-5
-    use_cache: bool = True
-    bos_token_id: int | None = 0
-    eos_token_id: int | list[int] | None = 2
-    pad_token_id: int | None = None
-    tie_word_embeddings: bool = False
-    rope_parameters: RopeParameters | dict | None = None
-    attention_dropout: float | int = 0.0
-    sliding_window: int | None = 4096
-    sliding_window_pattern: str | int | None = 4
-    layer_types: list[str] | None = None
-    base_config_key = "text_config"
-
-    def __post_init__(self, **kwargs):
-        if self.sliding_window is None:
-            self.sliding_window_pattern = 0
-        if self.layer_types is None:
-            self.layer_types = [
-                "sliding_attention"
-                if ((i + 1) % (self.sliding_window_pattern) != 0 and i < self.num_hidden_layers)
-                else "full_attention"
-                for i in range(self.num_hidden_layers)
-            ]
-
-        super().__post_init__(**kwargs)
-
-
+@auto_docstring(checkpoint="LGAI-EXAONE/EXAONE-4.5-33B")
 @strict
 class Exaone4_5_Config(PreTrainedConfig):
     model_type = "exaone4_5"
-    sub_configs = {"vision_config": Exaone4_5_VisionConfig, "text_config": Exaone4_5_TextConfig}
+    sub_configs = {"vision_config": AutoConfig, "text_config": AutoConfig}
     keys_to_ignore_at_inference = ["past_key_values"]
 
     text_config: dict | PreTrainedConfig | None = None
@@ -145,39 +60,23 @@ class Exaone4_5_Config(PreTrainedConfig):
 
     def __post_init__(self, **kwargs):
         if isinstance(self.vision_config, dict):
-            self.vision_config = self.sub_configs["vision_config"](**self.vision_config)
+            self.vision_config["model_type"] = self.vision_config.get("model_type", "exaone4_5_vision")
+            self.vision_config = CONFIG_MAPPING[self.vision_config["model_type"]](**self.vision_config)
         elif self.vision_config is None:
-            self.vision_config = self.sub_configs["vision_config"]()
+            self.vision_config = CONFIG_MAPPING["exaone4_5_vision"]()
 
         if isinstance(self.text_config, dict):
-            self.text_config = self.sub_configs["text_config"](**self.text_config)
+            self.text_config["model_type"] = self.text_config.get("model_type", "exaone4")
+            self.text_config = CONFIG_MAPPING[self.text_config["model_type"]](**self.text_config)
         elif self.text_config is None:
-            self.text_config = self.sub_configs["text_config"](**kwargs)
+            self.text_config = CONFIG_MAPPING["exaone4"]()
+
+        # Keep top-level value consistent when loading configs whose tie_word_embeddings
+        # is persisted only in the nested text config.
+        if not self.tie_word_embeddings and self.text_config.tie_word_embeddings:
+            self.tie_word_embeddings = self.text_config.tie_word_embeddings
 
         super().__post_init__(**kwargs)
 
-    def __setattr__(self, key, value):
-        text_config = super().__getattribute__("__dict__").get("text_config")
-        if (
-            isinstance(text_config, PreTrainedConfig)
-            and key not in ["dtype", "architectures", "_attn_implementation_internal", "model_type"]
-            and key in text_config.__dict__
-        ):
-            setattr(text_config, key, value)
-        else:
-            super().__setattr__(key, value)
 
-    def __getattribute__(self, key):
-        if "text_config" in super().__getattribute__("__dict__") and key not in [
-            "dtype",
-            "architectures",
-            "_attn_implementation_internal",
-            "model_type",
-        ]:
-            text_config = super().__getattribute__("text_config")
-            if isinstance(text_config, PreTrainedConfig) and key in text_config.__dict__:
-                return getattr(text_config, key)
-        return super().__getattribute__(key)
-
-
-__all__ = ["Exaone4_5_Config", "Exaone4_5_TextConfig", "Exaone4_5_VisionConfig"]
+__all__ = ["Exaone4_5_Config", "Exaone4_5_VisionConfig"]
