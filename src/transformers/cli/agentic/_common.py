@@ -19,7 +19,6 @@ resolution (--text / --file / stdin), output formatting, media loading
 (images, audio, video), model loading, and shared CLI option types.
 """
 
-import json
 import sys
 from pathlib import Path
 from typing import Annotated, Any
@@ -81,36 +80,21 @@ def resolve_input(text: str | None = None, file: str | None = None) -> str:
     raise SystemExit("Error: provide --text, --file, or pipe input via stdin.")
 
 
-def format_output(result: Any, output_json: bool = False) -> str:
+def format_output(result: Any, output_json: bool = False, task: str | None = None) -> str:
     """
     Format pipeline output for display.
 
     When ``output_json=True``, returns a JSON string (useful for agents that
     need to parse results programmatically). Otherwise, returns a
     human-readable multi-line string.
+
+    If *task* is provided, delegates to :func:`transformers.agent.emit`
+    which auto-detects agent vs human context and wraps JSON output in an
+    ``{"task": ..., "result": ...}`` envelope when appropriate.
     """
-    if output_json:
-        return json.dumps(result, indent=2, default=str)
+    from transformers.agent.output import emit
 
-    if isinstance(result, list):
-        lines = []
-        for item in result:
-            if isinstance(item, dict):
-                lines.append("  ".join(f"{k}: {v}" for k, v in item.items()))
-            elif isinstance(item, list):
-                for sub in item:
-                    if isinstance(sub, dict):
-                        lines.append("  ".join(f"{k}: {v}" for k, v in sub.items()))
-                    else:
-                        lines.append(str(sub))
-            else:
-                lines.append(str(item))
-        return "\n".join(lines)
-
-    if isinstance(result, dict):
-        return "\n".join(f"{k}: {v}" for k, v in result.items())
-
-    return str(result)
+    return emit(result, task=task, output_json=output_json or None)
 
 
 def load_image(path: str):

@@ -34,6 +34,8 @@ from typing import Annotated
 
 import typer
 
+from transformers.agent.output import emit
+
 
 _EXPORT_FORMATS = ("onnx", "gguf", "executorch")
 
@@ -96,7 +98,7 @@ def _export_onnx(
 
     print(f"Exporting {model} to ONNX at {output}...")
     main_export(**export_kwargs)
-    print(f"ONNX model saved to {output}")
+    print(emit({"format": "onnx", "output_path": output}, task="export"))
 
 
 def _export_gguf(model: str, output: str, trust_remote_code: bool, token: str | None):
@@ -121,7 +123,7 @@ def _export_gguf(model: str, output: str, trust_remote_code: bool, token: str | 
     print(f"Saving as GGUF to {output}...")
     loaded_model.save_pretrained(output_path, gguf_file=output_path.name if output.endswith(".gguf") else None)
     tokenizer.save_pretrained(output_path)
-    print(f"GGUF model saved to {output}")
+    print(emit({"format": "gguf", "output_path": output}, task="export"))
 
 
 def _export_executorch(model: str, output: str, trust_remote_code: bool, token: str | None):
@@ -161,4 +163,4 @@ def _export_executorch(model: str, output: str, trust_remote_code: bool, token: 
     with open(output_path, "wb") as f:
         f.write(et_program.buffer)
 
-    print(f"ExecuTorch model saved to {output}")
+    print(emit({"format": "executorch", "output_path": output}, task="export"))

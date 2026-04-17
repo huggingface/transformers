@@ -336,7 +336,10 @@ if __name__ == "__main__":
         package_data={"": ["**/*.cu", "**/*.cpp", "**/*.cuh", "**/*.h", "**/*.pyx", "py.typed"]},
         zip_safe=False,
         extras_require=extras,
-        entry_points={"console_scripts": ["transformers=transformers.cli.transformers:main"]},
+        entry_points={
+            "console_scripts": ["transformers=transformers.cli.transformers:main"],
+            "hf.skills": ["transformers=transformers.cli.agentic._skill_derive:derive_skill_from_cli"],
+        },
         python_requires=python_requires,
         install_requires=list(install_requires),
         classifiers=[

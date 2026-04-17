@@ -22,6 +22,8 @@ from typing import Annotated
 
 import typer
 
+from transformers.agent.output import emit
+
 from ._common import (
     DeviceOpt,
     DtypeOpt,
@@ -93,7 +95,7 @@ def transcribe(
     transcription = processor.batch_decode(output_ids, skip_special_tokens=True)[0]
 
     if output_json:
-        print(format_output({"text": transcription}, output_json=True))
+        print(format_output({"text": transcription}, output_json=True, task="transcribe"))
     else:
         print(transcription)
 
@@ -195,7 +197,7 @@ def audio_classify(
         ]
         result.sort(key=lambda x: x["score"], reverse=True)
 
-    print(format_output(result, output_json))
+    print(format_output(result, output_json, task="audio-classify"))
 
 
 def speak(
@@ -248,7 +250,7 @@ def speak(
     )
 
     scipy.io.wavfile.write(output, sampling_rate, audio_data)
-    print(f"Saved audio to {output}")
+    print(emit({"output_path": output}, task="speak"))
 
 
 def audio_generate(
@@ -301,4 +303,4 @@ def audio_generate(
     )
 
     scipy.io.wavfile.write(output, sampling_rate, audio_data)
-    print(f"Saved audio to {output}")
+    print(emit({"output_path": output}, task="audio-generate"))

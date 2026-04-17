@@ -171,7 +171,7 @@ def classify(
         top_idx = probs.argmax().item()
         result = [{"label": loaded_model.config.id2label[top_idx], "score": probs[top_idx].item()}]
 
-    print(format_output(result, output_json))
+    print(format_output(result, output_json, task="classify"))
 
 
 def ner(
@@ -235,7 +235,7 @@ def ner(
     if aggregation_strategy == "simple":
         entities = _aggregate_entities(entities, input_text)
 
-    print(format_output(entities, output_json))
+    print(format_output(entities, output_json, task="ner"))
 
 
 def token_classify(
@@ -294,7 +294,7 @@ def token_classify(
             }
         )
 
-    print(format_output(result, output_json))
+    print(format_output(result, output_json, task="token-classify"))
 
 
 def qa(
@@ -348,7 +348,7 @@ def qa(
         "start": start_idx,
         "end": end_idx,
     }
-    print(format_output(result, output_json))
+    print(format_output(result, output_json, task="qa"))
 
 
 def table_qa(
@@ -425,7 +425,7 @@ def table_qa(
         "cells": cells,
         "aggregator": _AGG_OPS.get(agg_idx, "NONE"),
     }
-    print(format_output(result, output_json))
+    print(format_output(result, output_json, task="table-qa"))
 
 
 def summarize(
@@ -472,7 +472,7 @@ def summarize(
     output_ids = loaded_model.generate(**inputs, **gen_kwargs)
     summary = tokenizer.decode(output_ids[0], skip_special_tokens=True)
     result = [{"summary_text": summary}]
-    print(format_output(result, output_json))
+    print(format_output(result, output_json, task="summarize"))
 
 
 def translate(
@@ -517,7 +517,7 @@ def translate(
     output_ids = loaded_model.generate(**inputs, **gen_kwargs)
     translation = tokenizer.decode(output_ids[0], skip_special_tokens=True)
     result = [{"translation_text": translation}]
-    print(format_output(result, output_json))
+    print(format_output(result, output_json, task="translate"))
 
 
 def fill_mask(
@@ -577,4 +577,4 @@ def fill_mask(
             }
         )
 
-    print(format_output(result, output_json))
+    print(format_output(result, output_json, task="fill-mask"))

@@ -24,6 +24,8 @@ from typing import Annotated
 
 import typer
 
+from transformers.agent.output import emit
+
 from ._common import _load_pretrained, load_image, resolve_input
 
 
@@ -102,14 +104,13 @@ def embed(
                 json.dump(embedding.tolist(), f)
         else:
             np.save(output, embedding)
-        print(f"Embedding shape {embedding.shape} saved to {output}")
+        print(emit({"shape": str(embedding.shape), "output_path": output}, task="embed"))
     else:
-        print(f"Embedding shape: {embedding.shape}")
         flat = embedding.flatten()
         preview = ", ".join(f"{v:.6f}" for v in flat[:8])
         if len(flat) > 8:
             preview += ", ..."
-        print(f"Values: [{preview}]")
+        print(emit({"shape": str(embedding.shape), "values": f"[{preview}]"}, task="embed"))
 
 
 def tokenize(
@@ -153,14 +154,15 @@ def tokenize(
 
     if output_json:
         data = {"tokens": tokens, "token_ids": token_ids, "num_tokens": len(tokens)}
-        print(json.dumps(data, indent=2))
+        print(emit(data, task="tokenize", output_json=True))
     else:
-        print(f"Tokens ({len(tokens)}):")
+        token_data = []
         for i, (tok, tid) in enumerate(zip(tokens, token_ids)):
             if show_ids:
-                print(f"  {i:4d}  {tid:8d}  {tok!r}")
+                token_data.append({"index": i, "id": tid, "token": tok})
             else:
-                print(f"  {i:4d}  {tok!r}")
+                token_data.append({"index": i, "token": tok})
+        print(emit({"num_tokens": len(tokens), "tokens": token_data}, task="tokenize"))
 
 
 def inspect(
@@ -191,14 +193,9 @@ def inspect(
     config = AutoConfig.from_pretrained(model, **kwargs)
 
     if output_json:
-        print(json.dumps(config.to_dict(), indent=2, default=str))
+        print(emit(config.to_dict(), task="inspect", output_json=True))
     else:
         config_dict = config.to_dict()
-        print(f"Model: {model}")
-        print(f"Architecture: {config_dict.get('architectures', ['unknown'])}")
-        print(f"Model type: {config_dict.get('model_type', 'unknown')}")
-        print()
-
         important_keys = [
             "hidden_size",
             "num_hidden_layers",
@@ -210,17 +207,24 @@ def inspect(
             "hidden_act",
             "torch_dtype",
         ]
-        for key in important_keys:
-            if key in config_dict:
-                print(f"  {key}: {config_dict[key]}")
-
+        important = {k: config_dict[k] for k in important_keys if k in config_dict}
         remaining = {
             k: v
             for k, v in config_dict.items()
             if k not in important_keys and k not in ("architectures", "model_type", "transformers_version")
         }
-        if remaining:
-            print(f"\n  ({len(remaining)} additional config keys — use --json for full output)")
+        print(
+            emit(
+                {
+                    "model": model,
+                    "architecture": config_dict.get("architectures", ["unknown"]),
+                    "model_type": config_dict.get("model_type", "unknown"),
+                    **important,
+                    "additional_keys": len(remaining),
+                },
+                task="inspect",
+            )
+        )
 
 
 def inspect_forward(
@@ -284,16 +288,24 @@ def inspect_forward(
     print(f"Hidden state layers: {len(hidden_states)} (including embedding layer)")
     print(f"Attention layers: {len(attentions)}")
 
+    layer_info = []
     for i, (attn, hs) in enumerate(zip(attentions, hidden_states[1:])):
         if layer_indices is not None and i not in layer_indices:
             continue
-        print(f"\n  Layer {i}:")
-        print(f"    Attention shape: {list(attn.shape)} (batch, heads, seq, seq)")
-        print(f"    Hidden state shape: {list(hs.shape)} (batch, seq, hidden)")
         attn_np = attn[0].cpu().numpy()
-        print(f"    Attention mean: {attn_np.mean():.6f}, max: {attn_np.max():.6f}")
         hs_np = hs[0].cpu().numpy()
-        print(f"    Hidden state norm (mean): {np.linalg.norm(hs_np, axis=-1).mean():.4f}")
+        layer_info.append(
+            {
+                "layer": i,
+                "attention_shape": list(attn.shape),
+                "hidden_state_shape": list(hs.shape),
+                "attention_mean": float(attn_np.mean()),
+                "attention_max": float(attn_np.max()),
+                "hidden_state_norm_mean": float(np.linalg.norm(hs_np, axis=-1).mean()),
+            }
+        )
+
+    print(emit({"model": model_id, "layers": layer_info}, task="inspect-forward"))
 
     if output is not None:
         from pathlib import Path
@@ -418,4 +430,4 @@ def benchmark_quantization(
             results.append({"method": method, "error": str(e)})
 
     if output_json:
-        print(json.dumps(results, indent=2))
+        print(emit(results, task="benchmark-quantization", output_json=True))

@@ -34,6 +34,8 @@ from typing import Annotated
 
 import typer
 
+from transformers.agent.output import emit
+
 
 _QUANTIZATION_METHODS = ("bnb-4bit", "bnb-8bit", "gptq", "awq")
 
@@ -98,7 +100,7 @@ def quantize(
         loaded_model = AutoModelForCausalLM.from_pretrained(model, **model_kwargs)
         loaded_model.save_pretrained(output)
         tokenizer.save_pretrained(output)
-        print(f"Quantized model saved to {output}")
+        print(emit({"method": "bnb-4bit", "output_path": output}, task="quantize"))
 
     elif method == "bnb-8bit":
         from transformers import BitsAndBytesConfig
@@ -108,7 +110,7 @@ def quantize(
         loaded_model = AutoModelForCausalLM.from_pretrained(model, **model_kwargs)
         loaded_model.save_pretrained(output)
         tokenizer.save_pretrained(output)
-        print(f"Quantized model saved to {output}")
+        print(emit({"method": "bnb-8bit", "output_path": output}, task="quantize"))
 
     # --- GPTQ ---
     elif method == "gptq":
@@ -135,7 +137,7 @@ def quantize(
         loaded_model = AutoModelForCausalLM.from_pretrained(model, **model_kwargs)
         loaded_model.save_pretrained(output)
         tokenizer.save_pretrained(output)
-        print(f"GPTQ-quantized model saved to {output}")
+        print(emit({"method": "gptq", "output_path": output}, task="quantize"))
 
     # --- AWQ ---
     elif method == "awq":
@@ -151,7 +153,7 @@ def quantize(
         loaded_model = AutoModelForCausalLM.from_pretrained(model, **model_kwargs)
         loaded_model.save_pretrained(output)
         tokenizer.save_pretrained(output)
-        print(f"AWQ-quantized model saved to {output}")
+        print(emit({"method": "awq", "output_path": output}, task="quantize"))
 
     if push_to_hub:
         repo_id = hub_model_id or output

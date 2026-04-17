@@ -44,6 +44,8 @@ from typing import Annotated
 
 import typer
 
+from transformers.agent.output import emit
+
 
 # Maps CLI task names to (AutoModel class name, preprocessing type)
 _TASK_CONFIGS = {
@@ -539,7 +541,7 @@ def train(
     if processing_class is not None:
         processing_class.save_pretrained(output)
 
-    print(f"\nModel saved to {output}")
+    print(emit({"output_path": output}, task="train"))
     if push_to_hub:
         trainer.push_to_hub()
         print(f"Pushed to Hub: {hub_model_id or output}")
