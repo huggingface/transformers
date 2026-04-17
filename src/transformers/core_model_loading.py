@@ -1415,49 +1415,13 @@ def convert_and_load_state_dict_in_model(
             # For each mapping, the owning rank materializes the full tensor and calls
             # distribute_tensor(..., src_data_rank=source). DTensor handles the scatter
             # internally — every other rank receives its shard via NCCL. Under @no_grad the
-            # per-call overhead is ~0.1ms (vs ~270ms without) so it's viable at our scale.
-            #
-            # Profiling (Qwen2.5-14B at 8×B200): distribute_tensor = 8.7s / 480 calls = 18ms
-            # each. Scatter itself = 17.9ms of that → NCCL transfer is the floor. Dual-stream
-            # overlap was tried and: (a) barely helps (~0.8s), (b) corrupts data due to
-            # implicit sync assumptions. Single-stream is simpler and correct.
+            # per-call overhead is ~0.1ms under @no_grad (~270ms without), so at 18ms per NCCL
+            # scatter it's negligible. Explored alternatives — all_to_all_single, batch_isend_irecv,
+            # CUDA IPC, dual-stream overlap — none beat this on NVLink; the floor is NCCL transfer
+            # time (~1.6 GB/s effective per rank with 8-way cross-traffic).
             from torch.distributed.tensor import DeviceMesh as _DTensorMesh
+            from torch.distributed.tensor import Shard, distribute_tensor
 
-            world_size = device_mesh.size()
-            tp_device = device_map[""]
-            local_device_obj = torch.device(tp_device)
-            dt_mesh = _DTensorMesh.from_group(device_mesh.get_group(), local_device_obj.type)
-
-            # Pre-plan layouts (for skip handling + pipeline read scheduling).
-            batch_items_list = [items[bi : bi + 64] for bi in range(0, len(items), 64)]
-            owned_entries_by_batch = [
-                [
-                    (fpn, pending_entries[fpn])
-                    for fpn, _m in batch
-                    if mapping_to_source_rank.get(fpn, local_rank) == local_rank
-                ]
-                for batch in batch_items_list
-            ]
-
-            class _ImmediateFuture:
-                __slots__ = ("_fn", "_done", "_result")
-
-                def __init__(self, fn):
-                    self._fn, self._done, self._result = fn, False, None
-
-                def result(self):
-                    if not self._done:
-                        self._result, self._done = self._fn(), True
-                    return self._result
-
-            def _submit_read(tensor_slice, _dtype):
-                def _job():
-                    cpu = tensor_slice[...]
-                    return cpu.to(dtype=_dtype) if _dtype is not None else cpu
-
-                return thread_pool.submit(_job) if thread_pool is not None else _ImmediateFuture(_job)
-
-            # Build shard-dim lookup (tp_layer → dim) once.
             from transformers.integrations.tensor_parallel import (
                 ColwiseParallel,
                 PackedColwiseParallel,
@@ -1465,157 +1429,91 @@ def convert_and_load_state_dict_in_model(
                 RowwiseParallel,
             )
 
-            def _shard_dim_of(tp_layer, ndim):
+            world_size = device_mesh.size()
+            tp_device = device_map[""]
+            local_device_obj = torch.device(tp_device)
+            dt_mesh = _DTensorMesh.from_group(device_mesh.get_group(), local_device_obj.type)
+
+            def _shard_dim_of(tp_layer, ndim: int) -> int | None:
                 if isinstance(tp_layer, (ColwiseParallel, PackedColwiseParallel)):
                     return -2 if ndim >= 2 else -1
                 if isinstance(tp_layer, (RowwiseParallel, PackedRowwiseParallel)):
                     return -1
-                return None  # unknown class — fall back to the tp_layer's own shard_tensor
+                return None
 
-            def _restructure_for_packed_shard(full: torch.Tensor, dim: int) -> torch.Tensor:
-                """Packed tensors are laid out as [block0 | block1] along `dim`. A simple Shard()
-                would split contiguously (giving rank 0 half of block0) which is wrong. We
-                reshape so simple chunking produces the interleaved [b0_r, b1_r] pattern.
-                """
-                d = dim if dim >= 0 else full.ndim + dim
-                total = full.shape[d]
-                blk = total // 2
-                # [..., 2*blk, ...] → split at blk → two views [..., blk, ...] along d,
-                # stack+permute so chunk(N, dim=d) yields [b0_r, b1_r] interleaved.
-                a, b = full.split(blk, dim=d)
-                # stack along a new axis at d+1 → [..., blk, 2, ...] (for non-last dim)
-                # or [..., blk, 2] for last dim; then transpose last two to get [..., 2, blk, ...]
-                # Simpler: cat as [b0_chunk_0, b1_chunk_0, b0_chunk_1, b1_chunk_1, ...].
-                chunks_a = a.chunk(world_size, dim=d)
-                chunks_b = b.chunk(world_size, dim=d)
-                interleaved = [torch.cat([ca, cb], dim=d) for ca, cb in zip(chunks_a, chunks_b)]
-                return torch.cat(interleaved, dim=d).contiguous()
-
-            from torch.distributed.tensor._collective_utils import mesh_scatter
-
-            group = device_mesh.get_group()
+            def _pack_for_shard(full: torch.Tensor, dim: int) -> torch.Tensor:
+                """Reshape a packed [block0 | block1] tensor so a simple Shard() splits it into
+                interleaved [b0_r, b1_r] per rank."""
+                d = dim % full.ndim
+                a, b = full.split(full.shape[d] // 2, dim=d)
+                return torch.cat(
+                    [torch.cat([ca, cb], dim=d) for ca, cb in zip(a.chunk(world_size, d), b.chunk(world_size, d))],
+                    dim=d,
+                ).contiguous()
 
             @torch.no_grad()
-            def _distribute_async(mapping, full_or_none, source_rank, target_shape, target_dtype):
-                """Start async scatter/broadcast. Returns (work, output_tensor, post_fn).
-                Caller must call work.wait() (or let NCCL stream complete) before using output.
-                post_fn(output) produces the final local shard (handles tp_layer's post-scatter
-                logic like clone for non-contiguous views).
-                """
+            def _distribute_one(mapping, full_or_none, source_rank: int, shape, dtype) -> torch.Tensor:
+                """Distribute one tensor from source_rank to all ranks. Returns this rank's shard
+                (or the full tensor for replicated)."""
                 tp_layer = mapping.distributed_operation
                 is_source = local_rank == source_rank
-                src_global = torch.distributed.get_global_rank(group, source_rank)
+                placeholder = torch.empty(shape, dtype=dtype, device=local_device_obj)
+                src_global = torch.distributed.get_global_rank(dt_mesh.get_group(), source_rank)
 
-                # Replicated → async broadcast.
                 if tp_layer is None:
-                    t = (
-                        full_or_none
-                        if is_source
-                        else torch.empty(target_shape, dtype=target_dtype, device=local_device_obj)
-                    )
-                    work = torch.distributed.broadcast(t, src=src_global, group=group, async_op=True)
-                    return work, t, (lambda out: out)
+                    t = full_or_none if is_source else placeholder
+                    torch.distributed.broadcast(t, src=src_global, group=dt_mesh.get_group())
+                    return t
 
-                # Sharded via native mesh_scatter(async_op=True) — bypasses DTensor's sync
-                # distribute_tensor to expose the Work handle.
-                shard_dim = _shard_dim_of(tp_layer, len(target_shape))
+                shard_dim = _shard_dim_of(tp_layer, len(shape))
                 if shard_dim is not None:
-                    is_packed = isinstance(tp_layer, (PackedColwiseParallel, PackedRowwiseParallel))
-                    dim = shard_dim if shard_dim >= 0 else len(target_shape) + shard_dim
+                    t = full_or_none if is_source else placeholder
+                    if is_source and isinstance(tp_layer, (PackedColwiseParallel, PackedRowwiseParallel)):
+                        t = _pack_for_shard(t, shard_dim)
+                    return distribute_tensor(t, dt_mesh, [Shard(shard_dim)], src_data_rank=source_rank).to_local()
 
-                    # Allocate recv shard.
-                    shard_shape = list(target_shape)
-                    shard_shape[dim] = (target_shape[dim] + world_size - 1) // world_size
-                    output = torch.empty(shard_shape, dtype=target_dtype, device=local_device_obj)
+                # Fallback: broadcast full, then use the tp_layer's own shard logic.
+                t = full_or_none if is_source else placeholder
+                torch.distributed.broadcast(t, src=src_global, group=dt_mesh.get_group())
+                local = tp_layer.shard_tensor(t, tensor_idx=None, device=local_device_obj, dtype=None)
+                return local.clone(memory_format=torch.contiguous_format) if local._base is t else local
 
-                    if is_source:
-                        t = full_or_none
-                        if is_packed:
-                            t = _restructure_for_packed_shard(t, shard_dim)
-                        # Split into per-rank chunks (contiguous copies).
-                        chunks = list(torch.chunk(t, world_size, dim=dim))
-                        chunks = [c.contiguous() for c in chunks]
-                    else:
-                        chunks = None
+            # Thread-pool disk reads: schedule the current batch, materialize the previous one.
+            BATCH = 64
+            batches = [items[i : i + BATCH] for i in range(0, len(items), BATCH)]
 
-                    work = mesh_scatter(output, chunks, dt_mesh, mesh_dim=0, async_op=True, group_src=source_rank)
-                    # Keep `chunks` alive until work completes (closure captures them).
-                    return work, output, (lambda out, _keep=chunks: out)
+            def _schedule_reads(batch_idx: int):
+                if not thread_pool:
+                    return None
+                futs: dict[str, list[tuple]] = {}
+                for fpn, _m in batches[batch_idx]:
+                    if mapping_to_source_rank.get(fpn, local_rank) != local_rank:
+                        continue
+                    futs[fpn] = [
+                        (tk, ok, sp, thread_pool.submit(lambda ts, d: ts[...].to(dtype=d), t, dt))
+                        for tk, ok, sp, t, dt in pending_entries[fpn]
+                    ]
+                return futs
 
-                # Fallback: broadcast + local-slice (tp_layer owns the sharding logic).
-                t = (
-                    full_or_none
-                    if is_source
-                    else torch.empty(target_shape, dtype=target_dtype, device=local_device_obj)
-                )
-                work = torch.distributed.broadcast(t, src=src_global, group=group, async_op=True)
-
-                def _post(full_t, _tp=tp_layer):
-                    local = _tp.shard_tensor(full_t, tensor_idx=None, device=local_device_obj, dtype=None)
-                    if local._base is full_t:
-                        local = local.clone(memory_format=torch.contiguous_format)
-                    return local
-
-                return work, t, _post
-
-            # Submit disk reads for batch 0.
-            cur_read_futs: dict[str, list[tuple]] = {}
-            if owned_entries_by_batch:
-                for fpn, entries in owned_entries_by_batch[0]:
-                    cur_read_futs[fpn] = [(tk, ok, sp, _submit_read(t, dt)) for tk, ok, sp, t, dt in entries]
-
-            pbar = tqdm(total=len(items), desc="Loading weights")
-
-            # pending[i] = (work, output, post_fn, concrete, mapping) — in-flight scatter/broadcast
-            pending: list = []
-
-            def _drain(up_to: int | None = None):
-                """Wait on in-flight comms and assign params. If up_to is None, drain all."""
-                nonlocal disk_offload_index
-                if up_to is None:
-                    up_to = len(pending)
-                for work, output, post_fn, concrete, mapping in pending[:up_to]:
-                    if work is not None:
-                        work.wait()
-                    local = post_fn(output)
-                    param_device = get_device(device_map, concrete)
-                    if param_device == "disk" and (concrete not in model_buffers or offload_buffers):
-                        disk_offload_index = offload_and_maybe_resave_param(
-                            concrete,
-                            local.clone(),
-                            loading_info,
-                            disk_offload_folder,
-                            disk_offload_index,
-                            mapping,
-                        )
-                    else:
-                        set_param_for_module(
-                            model, concrete, local.clone(), loading_info, mapping.distributed_operation, hf_quantizer
-                        )
-                del pending[:up_to]
-
-            # Keep at most MAX_INFLIGHT comms in the pipeline so memory doesn't blow up.
-            MAX_INFLIGHT = 32
-
-            for batch_idx, batch in enumerate(batch_items_list):
-                # Submit NEXT batch's reads (disk I/O runs in the background on thread pool).
-                nxt_read_futs: dict[str, list[tuple]] = {}
-                if batch_idx + 1 < len(batch_items_list):
-                    for fpn, entries in owned_entries_by_batch[batch_idx + 1]:
-                        nxt_read_futs[fpn] = [(tk, ok, sp, _submit_read(t, dt)) for tk, ok, sp, t, dt in entries]
-
-                # Materialize this batch's futures → GPU.
-                for fpn, fut_list in cur_read_futs.items():
+            def _materialize(futs):
+                if not futs:
+                    return
+                for fpn, fut_list in futs.items():
                     mapping = param_name_to_load[fpn]
                     for tk, ok, sp, fut in fut_list:
                         mapping.add_tensor(tk, ok, sp, fut.result().to(device=tp_device))
 
-                # For each mapping: convert (source-only), then async-start scatter/broadcast.
+            cur_futs = _schedule_reads(0) if batches else None
+            pbar = tqdm(total=len(items), desc="Loading weights")
+
+            for bi, batch in enumerate(batches):
+                nxt_futs = _schedule_reads(bi + 1) if bi + 1 < len(batches) else None
+                _materialize(cur_futs)
+
                 for fpn, mapping in batch:
                     source_rank = mapping_to_source_rank.get(fpn, local_rank)
-                    is_source = local_rank == source_rank
                     realized = None
-                    if is_source:
+                    if local_rank == source_rank:
                         try:
                             realized = _convert_mapping(mapping, fpn)
                         except SkipParameters:
@@ -1627,24 +1525,29 @@ def convert_and_load_state_dict_in_model(
                         if ref is None:
                             continue
                         full = None
-                        if is_source and realized is not None:
+                        if realized is not None:
                             full = realized.get(concrete)
                             full = full[0] if isinstance(full, list) else full
 
-                        work, output, post_fn = _distribute_async(
-                            mapping, full, source_rank, tuple(ref.shape), ref.dtype
-                        )
-                        pending.append((work, output, post_fn, concrete, mapping))
+                        local = _distribute_one(mapping, full, source_rank, tuple(ref.shape), ref.dtype)
 
-                    # Bound the in-flight window (drain completed scatters as we go).
-                    if len(pending) >= MAX_INFLIGHT:
-                        _drain(len(pending) - MAX_INFLIGHT // 2)
+                        param_device = get_device(device_map, concrete)
+                        if param_device == "disk" and (concrete not in model_buffers or offload_buffers):
+                            disk_offload_index = offload_and_maybe_resave_param(
+                                concrete, local.clone(), loading_info, disk_offload_folder, disk_offload_index, mapping
+                            )
+                        else:
+                            set_param_for_module(
+                                model,
+                                concrete,
+                                local.clone(),
+                                loading_info,
+                                mapping.distributed_operation,
+                                hf_quantizer,
+                            )
 
-                cur_read_futs = nxt_read_futs
+                cur_futs = nxt_futs
                 pbar.update(len(batch))
-
-            # Drain any remaining in-flight comms.
-            _drain()
 
     # Close the pool, independently of whether the code was interrupted or finished successfully
     finally:
