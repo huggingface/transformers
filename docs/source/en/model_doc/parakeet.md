@@ -58,6 +58,7 @@ from transformers import pipeline
 pipe = pipeline("automatic-speech-recognition", model="nvidia/parakeet-ctc-1.1b")
 out = pipe("https://huggingface.co/datasets/hf-internal-testing/dummy-audio-samples/resolve/main/bcn_weather.mp3")
 print(out)
+# {'text': 'yesterday it was thirty five degrees in barcelona but today the temperature will go down to minus twenty degrees'}
 ```
 
 </hfoption>
@@ -94,9 +95,10 @@ Parakeet TDT transcripts include casing, and the model can also perform token ti
 ```py
 from transformers import pipeline
 
-pipe = pipeline("automatic-speech-recognition", model="nvidia/parakeet-tdt-0.6b-v3", revision="refs/pr/39")
+pipe = pipeline("automatic-speech-recognition", model="nvidia/parakeet-tdt-0.6b-v3")
 out = pipe("https://huggingface.co/datasets/hf-internal-testing/dummy-audio-samples/resolve/main/bcn_weather.mp3")
 print(out)
+# {'text': 'Yesterday it was 35 degrees in Barcelona, but today the temperature will go down to minus 20 degrees.'}
 ```
 
 </hfoption>
@@ -107,9 +109,8 @@ from transformers import AutoModelForTDT, AutoProcessor
 from datasets import load_dataset, Audio
 
 model_id = "nvidia/parakeet-tdt-0.6b-v3"
-revision = "refs/pr/39"
-processor = AutoProcessor.from_pretrained(model_id, revision=revision)
-model = AutoModelForTDT.from_pretrained(model_id, revision=revision, dtype="auto", device_map="auto")
+processor = AutoProcessor.from_pretrained(model_id)
+model = AutoModelForTDT.from_pretrained(model_id, dtype="auto", device_map="auto")
 
 ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
 ds = ds.cast_column("audio", Audio(sampling_rate=processor.feature_extractor.sampling_rate))
@@ -129,9 +130,8 @@ from datasets import Audio, load_dataset
 from transformers import AutoModelForTDT, AutoProcessor
 
 model_id = "nvidia/parakeet-tdt-0.6b-v3"
-revision = "refs/pr/39"
-processor = AutoProcessor.from_pretrained(model_id, revision=revision)
-model = AutoModelForTDT.from_pretrained(model_id, revision=revision, dtype="auto", device_map="auto")
+processor = AutoProcessor.from_pretrained(model_id)
+model = AutoModelForTDT.from_pretrained(model_id, dtype="auto", device_map="auto")
 
 ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
 ds = ds.cast_column("audio", Audio(sampling_rate=processor.feature_extractor.sampling_rate))
@@ -276,11 +276,10 @@ import torch
 from transformers import AutoModelForTDT, AutoProcessor
 
 model_id = "nvidia/parakeet-tdt-0.6b-v3"
-revision = "refs/pr/39"
 NUM_SAMPLES = 4
 
-processor = AutoProcessor.from_pretrained(model_id, revision=revision)
-model = AutoModelForTDT.from_pretrained(model_id, revision=revision, dtype=torch.bfloat16, device_map="auto")
+processor = AutoProcessor.from_pretrained(model_id)
+model = AutoModelForTDT.from_pretrained(model_id, dtype=torch.bfloat16, device_map="auto")
 model.train()
 
 ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")

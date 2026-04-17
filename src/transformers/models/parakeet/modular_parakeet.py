@@ -830,6 +830,7 @@ class ParakeetForTDT(ParakeetPreTrainedModel, ParakeetTDTGenerationMixin):
         self.encoder_projector = nn.Linear(config.encoder_config.hidden_size, config.decoder_hidden_size)
         self.decoder = ParakeetTDTDecoder(config)
         self.joint = ParakeetTDTJointNetwork(config)
+        self.max_symbols_per_step = config.max_symbols_per_step  # used in generation
 
         self.post_init()
 
@@ -864,9 +865,6 @@ class ParakeetForTDT(ParakeetPreTrainedModel, ParakeetTDTGenerationMixin):
         r"""
         decoder_input_ids (`torch.LongTensor` of shape `(batch_size, 1)`, *optional*):
             Decoder input token ids for single-step inference.
-        encoder_outputs (`tuple(torch.FloatTensor)`, *optional*):
-            Pre-computed encoder outputs (last_hidden_state, pooler_output, hidden_states, attentions, attention_mask).
-            Can be a tuple or `ParakeetEncoderModelOutput`.
         decoder_cache (`ParakeetTDTDecoderCache`, *optional*):
             Decoder LSTM cache. When provided and initialized, the cached `decoder_output` is reused
             (e.g. during blank-skipping) instead of running the decoder. When `input_ids` is provided,
@@ -874,6 +872,9 @@ class ParakeetForTDT(ParakeetPreTrainedModel, ParakeetTDTGenerationMixin):
         use_decoder_cache (`bool`, *optional*):
             Whether to use a decoder cache. When `True` and `decoder_cache` is `None`, a new cache
             is created automatically during the forward pass.
+        encoder_outputs (`tuple(torch.FloatTensor)`, *optional*):
+            Pre-computed encoder outputs (last_hidden_state, pooler_output, hidden_states, attentions, attention_mask).
+            Can be a tuple or `ParakeetEncoderModelOutput`.
 
         Example:
 

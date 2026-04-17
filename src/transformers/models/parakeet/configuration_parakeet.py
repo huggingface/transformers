@@ -135,17 +135,17 @@ class ParakeetCTCConfig(PreTrainedConfig):
 @strict
 class ParakeetTDTConfig(PreTrainedConfig):
     r"""
-    encoder_config (`Union[dict, ParakeetEncoderConfig]`, *optional*):
-        The config object or dictionary of the encoder.
     decoder_hidden_size (`int`, *optional*, defaults to 640):
         Hidden size of the LSTM prediction network and joint network.
     num_decoder_layers (`int`, *optional*, defaults to 2):
         Number of LSTM layers in the prediction network.
+    max_symbols_per_step (`int`, *optional*, defaults to 10):
+        Maximum number of symbols to emit per encoder time step during greedy decoding.
     durations (`list[int]`, *optional*, defaults to `[0, 1, 2, 3, 4]`):
         Token duration values that can be predicted. Each value represents how many frames a token or blank
         emission spans.
-    max_symbols_per_step (`int`, *optional*, defaults to 10):
-        Maximum number of symbols to emit per encoder time step during greedy decoding.
+    encoder_config (`Union[dict, ParakeetEncoderConfig]`, *optional*):
+        The config object or dictionary of the encoder.
     blank_token_id (`int`, *optional*, defaults to 8192):
         Blank token id. Different from `pad_token_id` for TDT.
 

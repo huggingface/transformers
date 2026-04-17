@@ -323,6 +323,7 @@ class ParakeetForCTCModelTester:
 @require_torch
 class ParakeetForCTCModelTest(ModelTesterMixin, unittest.TestCase):
     all_model_classes = (ParakeetForCTC,) if is_torch_available() else ()
+    all_generative_model_classes = ()  # ParakeetForCTC has a custom genereate method
     pipeline_model_mapping = (
         {
             "feature-extraction": ParakeetEncoder,
@@ -594,15 +595,11 @@ class ParakeetForTDTModelTest(ModelTesterMixin, unittest.TestCase):
     def test_generation_tester_mixin_inheritance(self):
         pass
 
-    @unittest.skip(
-        reason="ParakeetForTDT is a flat composite model without a separate base_model sub-module"
-    )
+    @unittest.skip(reason="ParakeetForTDT is a flat composite model without a separate base_model sub-module")
     def test_model_base_model_prefix(self):
         pass
 
-    @unittest.skip(
-        reason="ParakeetForTDT decoder is an LSTM prediction network without attention"
-    )
+    @unittest.skip(reason="ParakeetForTDT decoder is an LSTM prediction network without attention")
     def test_flex_attention_with_grads(self):
         pass
 
@@ -640,9 +637,8 @@ class ParakeetForTDTIntegrationTest(unittest.TestCase):
     @classmethod
     def setUp(cls):
         cls.checkpoint_name = "nvidia/parakeet-tdt-0.6b-v3"
-        cls.revision = "refs/pr/39"
         cls.dtype = torch.bfloat16
-        cls.processor = AutoProcessor.from_pretrained(cls.checkpoint_name, revision=cls.revision)
+        cls.processor = AutoProcessor.from_pretrained(cls.checkpoint_name)
 
     def tearDown(self):
         cleanup(torch_device, gc_collect=True)
@@ -672,7 +668,7 @@ class ParakeetForTDTIntegrationTest(unittest.TestCase):
         EXPECTED_TRANSCRIPTIONS = raw_data["transcriptions"]
 
         samples = self._load_datasamples(len(EXPECTED_TRANSCRIPTIONS))
-        model = ParakeetForTDT.from_pretrained(self.checkpoint_name, revision=self.revision, dtype=self.dtype, device_map="auto")
+        model = ParakeetForTDT.from_pretrained(self.checkpoint_name, dtype=self.dtype, device_map="auto")
 
         inputs = self.processor(samples, sampling_rate=self.processor.feature_extractor.sampling_rate)
         inputs.to(model.device, dtype=self.dtype)
@@ -691,7 +687,7 @@ class ParakeetForTDTIntegrationTest(unittest.TestCase):
         EXPECTED_TRANSCRIPTIONS = raw_data["transcriptions"]
 
         samples = self._load_datasamples(len(EXPECTED_TRANSCRIPTIONS))
-        model = ParakeetForTDT.from_pretrained(self.checkpoint_name, revision=self.revision, dtype=self.dtype, device_map="auto")
+        model = ParakeetForTDT.from_pretrained(self.checkpoint_name, dtype=self.dtype, device_map="auto")
 
         inputs = self.processor(samples, sampling_rate=self.processor.feature_extractor.sampling_rate)
         inputs.to(model.device, dtype=self.dtype)
@@ -715,7 +711,7 @@ class ParakeetForTDTIntegrationTest(unittest.TestCase):
 
         # Use larger precision for testing token durations and timestamps
         samples = self._load_datasamples(len(EXPECTED_TRANSCRIPTIONS))
-        model = ParakeetForTDT.from_pretrained(self.checkpoint_name, revision=self.revision, dtype=torch.float32, device_map="auto")
+        model = ParakeetForTDT.from_pretrained(self.checkpoint_name, dtype=torch.float32, device_map="auto")
 
         inputs = self.processor(samples, sampling_rate=self.processor.feature_extractor.sampling_rate)
         inputs.to(model.device, dtype=model.dtype)
@@ -754,7 +750,7 @@ class ParakeetForTDTIntegrationTest(unittest.TestCase):
         transcripts = [t.lower() for t in transcripts]
 
         # Use float32 for loss precision
-        model = ParakeetForTDT.from_pretrained(self.checkpoint_name, revision=self.revision, dtype=torch.float32, device_map="auto")
+        model = ParakeetForTDT.from_pretrained(self.checkpoint_name, dtype=torch.float32, device_map="auto")
 
         inputs = self.processor(
             audio=samples,
@@ -765,7 +761,10 @@ class ParakeetForTDTIntegrationTest(unittest.TestCase):
 
         # Test both backends: kernel (if available) and pure PyTorch
         has_kernel = _load_tdt_kernel() is not None
-        backends = [("kernel", None), ("torch", patch("transformers.loss.loss_tdt._load_tdt_kernel", return_value=None))]
+        backends = [
+            ("kernel", None),
+            ("torch", patch("transformers.loss.loss_tdt._load_tdt_kernel", return_value=None)),
+        ]
         if not has_kernel:
             backends = backends[1:]  # skip kernel test when not installed
 

@@ -1,4 +1,4 @@
-# Copyright 2025 The HuggingFace Team. All rights reserved.
+# Copyright 2026 The HuggingFace Team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -25,7 +25,11 @@ def _load_tdt_kernel():
     try:
         from ..integrations.hub_kernels import lazy_load_kernel
 
-        return lazy_load_kernel("tdt-loss")
+        kernel = lazy_load_kernel("tdt-loss")
+        if kernel is None or not hasattr(kernel, "tdt_loss"):
+            logger.warning_once("Falling back to pure PyTorch implementation.")
+            return None
+        return kernel
     except (ImportError, ModuleNotFoundError):
         return None
     except Exception as e:
@@ -73,9 +77,15 @@ def tdt_loss(
     if kernel is not None and hasattr(kernel, "tdt_loss"):
         durations_t = torch.tensor(durations, dtype=torch.int32, device=token_logits.device)
         return kernel.tdt_loss(
-            token_logits, duration_logits, targets,
-            logit_lengths, target_lengths, durations_t,
-            blank_token_id, sigma, reduction,
+            token_logits,
+            duration_logits,
+            targets,
+            logit_lengths,
+            target_lengths,
+            durations_t,
+            blank_token_id,
+            sigma,
+            reduction,
         )
 
     if reduction not in ("mean", "sum", "none"):

@@ -1,4 +1,4 @@
-# Copyright 2025 The HuggingFace Inc. team. All rights reserved.
+# Copyright 2026 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -62,6 +62,7 @@ class ParakeetTDTGenerationMixin(GenerationMixin):
     Handles transducer-specific generation logic: encoder frame tracking,
     duration accumulation, and encoder-exhaustion stopping.
     """
+
     def _get_stopping_criteria(self, *args, **kwargs):
         criteria = super()._get_stopping_criteria(*args, **kwargs)
         criteria.append(EncoderExhaustedCriteria(self))
@@ -87,8 +88,13 @@ class ParakeetTDTGenerationMixin(GenerationMixin):
         return model_kwargs
 
     def _prepare_generated_length(
-        self, generation_config, has_default_max_length, has_default_min_length,
-        model_input_name, input_ids_length, inputs_tensor,
+        self,
+        generation_config,
+        has_default_max_length,
+        has_default_min_length,
+        model_input_name,
+        input_ids_length,
+        inputs_tensor,
     ):
         # When the user hasn't explicitly set max_length/max_new_tokens, derive an upper
         # bound from the encoder capacity. The actual stopping is handled by the
@@ -97,11 +103,15 @@ class ParakeetTDTGenerationMixin(GenerationMixin):
             encoder_seq_len = self.encoder._get_subsampling_output_length(
                 torch.tensor([inputs_tensor.shape[1]], device=inputs_tensor.device)
             ).item()
-            generation_config.max_length = self.config.max_symbols_per_step * encoder_seq_len
+            generation_config.max_length = self.max_symbols_per_step * encoder_seq_len
             has_default_max_length = False  # prevent super() from overwriting
         return super()._prepare_generated_length(
-            generation_config, has_default_max_length, has_default_min_length,
-            model_input_name, input_ids_length, inputs_tensor,
+            generation_config,
+            has_default_max_length,
+            has_default_min_length,
+            model_input_name,
+            input_ids_length,
+            inputs_tensor,
         )
 
     def _prepare_model_inputs(self, *args, **kwargs):
@@ -119,7 +129,10 @@ class ParakeetTDTGenerationMixin(GenerationMixin):
         else:
             batch_size = encoder_outputs.last_hidden_state.shape[0]
             encoder_valid_lengths = torch.full(
-                (batch_size,), encoder_outputs.last_hidden_state.shape[1], dtype=torch.long, device=encoder_outputs.last_hidden_state.device
+                (batch_size,),
+                encoder_outputs.last_hidden_state.shape[1],
+                dtype=torch.long,
+                device=encoder_outputs.last_hidden_state.device,
             )
         model_kwargs["encoder_valid_lengths"] = encoder_valid_lengths
 
@@ -140,7 +153,9 @@ class ParakeetTDTGenerationMixin(GenerationMixin):
         from .modeling_parakeet import ParakeetEncoderModelOutput
 
         model_inputs = super().prepare_inputs_for_generation(input_ids, *args, **kwargs)
-        encoder_frame_idxs = model_inputs.pop("encoder_frame_idxs").to(model_inputs["encoder_outputs"].pooler_output.device)
+        encoder_frame_idxs = model_inputs.pop("encoder_frame_idxs").to(
+            model_inputs["encoder_outputs"].pooler_output.device
+        )
 
         pooler_output = model_inputs["encoder_outputs"].pooler_output
         batch_size, max_encoder_len = pooler_output.shape[0], pooler_output.shape[1]
@@ -159,7 +174,9 @@ class ParakeetTDTGenerationMixin(GenerationMixin):
         outputs = super().generate(inputs=inputs, generation_config=generation_config, **kwargs)
         durations = torch.stack(self._step_durations, dim=1)  # (batch, steps)
         # Prepend a zero duration for the decoder_start_token_id that super().generate() prepends to sequences
-        durations = torch.cat([torch.zeros(durations.shape[0], 1, dtype=durations.dtype, device=durations.device), durations], dim=1)
+        durations = torch.cat(
+            [torch.zeros(durations.shape[0], 1, dtype=durations.dtype, device=durations.device), durations], dim=1
+        )
         del self._step_durations, self._encoder_finished
 
         return ParakeetTDTGenerateOutput(

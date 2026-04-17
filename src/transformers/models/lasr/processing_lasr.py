@@ -18,6 +18,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+
 from ...audio_utils import AudioInput, make_list_of_audio
 from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
@@ -95,10 +96,6 @@ class LasrProcessor(ProcessorMixin):
     def model_input_names(self):
         feature_extractor_input_names = self.feature_extractor.model_input_names
         return feature_extractor_input_names + ["labels"]
-
-    def decode(self, *args, **kwargs):
-        """Forward arguments to [`~PreTrainedTokenizer.decode`]."""
-        self.tokenizer.decode(*args, **kwargs)
 
 
 __all__ = ["LasrProcessor"]

@@ -142,7 +142,9 @@ def extract_nemo_archive(nemo_file_path: str, extract_dir: str) -> dict[str, str
     return model_files
 
 
-def write_processor(nemo_config: dict, model_files, output_dir, model_type, push_to_repo_id=None, create_pr=True, revision=None):
+def write_processor(
+    nemo_config: dict, model_files, output_dir, model_type, push_to_repo_id=None, create_pr=True, revision=None
+):
     tokenizer_converted = ParakeetConverter(model_files["tokenizer_model_file"]).converted()
     tokenizer_converted_fast = ParakeetTokenizer(
         tokenizer_object=tokenizer_converted,
@@ -425,7 +427,11 @@ def main(
     # When revision is given (e.g. "refs/pr/3"), both pushes target that existing PR branch.
     # Otherwise, write_processor creates a new PR and returns its revision for write_model.
     pr_revision = write_processor(
-        nemo_config, model_files, output_dir, model_type, push_to_repo_id,
+        nemo_config,
+        model_files,
+        output_dir,
+        model_type,
+        push_to_repo_id,
         create_pr=create_pr if revision is None else False,
         revision=revision,
     )

@@ -26,6 +26,7 @@ import torch
 from torch import nn
 
 from ...activations import ACT2FN
+from ...generation import CompileConfig, GenerationMixin
 from ...integrations import use_kernel_func_from_hub, use_kernelized_func
 from ...masking_utils import create_bidirectional_mask
 from ...modeling_layers import GradientCheckpointingLayer
@@ -607,7 +608,7 @@ class LasrCTCGenerateOutput(ModelOutput):
     Lasr Encoder with a Connectionist Temporal Classification (CTC) head.
     """
 )
-class LasrForCTC(LasrPreTrainedModel):
+class LasrForCTC(LasrPreTrainedModel, GenerationMixin):
     config: LasrCTCConfig
 
     def __init__(self, config: LasrCTCConfig):
@@ -647,8 +648,6 @@ class LasrForCTC(LasrPreTrainedModel):
         >>> print(outputs.loss)
         ```"""
 
-        if labels is not None:
-            kwargs.setdefault("output_attention_mask", True)
         encoder_outputs = self.encoder(
             input_features=input_features,
             attention_mask=attention_mask,
@@ -694,6 +693,7 @@ class LasrForCTC(LasrPreTrainedModel):
         input_features: torch.Tensor,
         attention_mask: torch.Tensor | None = None,
         return_dict_in_generate: bool = False,
+        compile_config: CompileConfig | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> LasrCTCGenerateOutput | torch.LongTensor:
         r"""
@@ -717,8 +717,10 @@ class LasrForCTC(LasrPreTrainedModel):
         >>> print(transcription)
         ```
         """
+        model_forward = self.get_compiled_call(compile_config) if compile_config is not None else self.__call__
+
         kwargs["return_dict"] = True
-        outputs: CausalLMOutput = self.forward(
+        outputs: CausalLMOutput = model_forward(
             input_features=input_features,
             attention_mask=attention_mask,
             **kwargs,
