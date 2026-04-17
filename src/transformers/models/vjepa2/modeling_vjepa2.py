@@ -689,6 +689,7 @@ class VJEPA2Predictor(nn.Module):
         encoder_hidden_states: torch.Tensor,
         context_mask: list[torch.Tensor],
         target_mask: list[torch.Tensor],
+        is_image: bool = False,
         **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutput:
         encoder_hidden_states = apply_masks(encoder_hidden_states, context_mask)
@@ -699,7 +700,10 @@ class VJEPA2Predictor(nn.Module):
         hidden_states, position_masks = self.sort_tokens(hidden_states, position_masks, argsort)
 
         if self.config.use_modality_embeddings and hasattr(self.embeddings, "video_mod_embed"):
-            hidden_states = hidden_states + self.embeddings.video_mod_embed
+            if is_image:
+                hidden_states = hidden_states + self.embeddings.img_mod_embed
+            else:
+                hidden_states = hidden_states + self.embeddings.video_mod_embed
 
         for i, layer_module in enumerate(self.layer):
             layer_outputs = layer_module(hidden_states, position_masks, **kwargs)
@@ -1021,6 +1025,11 @@ class VJEPA2Model(VJEPA2PreTrainedModel):
         if pixel_values_videos is None:
             raise ValueError("You have to specify pixel_values_videos")
 
+        is_image = (
+            self.config.img_temporal_dim_size is not None
+            and pixel_values_videos.shape[1] == self.config.img_temporal_dim_size
+        )
+
         needs_hierarchical = not skip_predictor and self.config.n_output_distillation > 1
         encoder_outputs: BaseModelOutput = self.encoder(
             pixel_values_videos=pixel_values_videos,
@@ -1031,7 +1040,7 @@ class VJEPA2Model(VJEPA2PreTrainedModel):
 
         if context_mask is None and target_mask is None:
             B = pixel_values_videos.size(0)
-            N = sequence_output.size(1)  # ensure we are using dynamic patch size
+            N = sequence_output.size(1)
             context_mask = [torch.arange(N, device=pixel_values_videos.device).unsqueeze(0).repeat((B, 1))]
             target_mask = [torch.arange(N, device=pixel_values_videos.device).unsqueeze(0).repeat((B, 1))]
 
@@ -1040,6 +1049,7 @@ class VJEPA2Model(VJEPA2PreTrainedModel):
                 encoder_hidden_states=sequence_output,
                 context_mask=context_mask,
                 target_mask=target_mask,
+                is_image=is_image,
                 **kwargs,
             )
             predictor_output = VJEPA2WithMaskedInputPredictorOutput(
