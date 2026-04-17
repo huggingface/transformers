@@ -473,7 +473,15 @@ class CtsmModel(TimesFmModel):
 
 
 class CtsmModelForPrediction(TimesFmModelForPrediction):
-    """CTSM model with a multi-resolution prediction head and autoregressive multi-resolution decoding."""
+    """CTSM model with a multi-resolution prediction head and autoregressive multi-resolution decoding.
+
+    Note: there is no KV cache. Each autoregressive step recomputes the full forward because (1) the
+    coarse-resolution block uses bidirectional attention, so appending a new coarse patch invalidates
+    every existing coarse K/V entry, and (2) stream-level normalization is recomputed every step after
+    new predictions are appended to the raw context, which shifts every patch embedding. This matches
+    the original CTSM reference (`CTSMAttentionRoPE` explicitly raises on cache arguments) and the
+    convention of other time-series forecasters in transformers (TimesFM, PatchTST, Informer, ...).
+    """
 
     def __init__(self, config: CtsmConfig):
         super().__init__(config)
