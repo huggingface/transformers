@@ -158,10 +158,11 @@ class Idefics3Processor(ProcessorMixin):
                     # Reorganize the images to match the prompts
                     n_images_in_text = [sample.count(self.image_token) for sample in text]
                     cumsum_images_in_text = [0] + list(accumulate(n_images_in_text))
-                    images = [
+                    split_images = [
                         images[cumsum_images_in_text[i] : cumsum_images_in_text[i + 1]]
                         for i in range(len(n_images_in_text))
                     ]
+                    images = split_images + [images[cumsum_images_in_text[-1] :]]
                 else:
                     images = [images]
 

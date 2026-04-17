@@ -88,7 +88,7 @@ class Gemma3Processor(ProcessorMixin):
         return_tensors = output_kwargs["text_kwargs"].pop("return_tensors", None)
         return_mm_token_type_ids = output_kwargs["text_kwargs"].pop("return_mm_token_type_ids", False)
         text_inputs = self.tokenizer(text=text, **output_kwargs["text_kwargs"])
-        # self._check_special_mm_tokens(text, text_inputs, modalities=["image"]) # BOI token in gemma, FIXME
+        self._check_special_mm_tokens(text, text_inputs, modalities=["image"])
 
         if return_mm_token_type_ids:
             text_inputs["token_type_ids"] = self.create_mm_token_type_ids(text_inputs["input_ids"])
@@ -157,6 +157,24 @@ class Gemma3Processor(ProcessorMixin):
         else:
             return self.full_image_sequence
 
+    def _check_special_mm_tokens(self, text: list[str], text_inputs: "BatchFeature", modalities: list[str]):
+        """
+        Checks that number of special tokens in text and processed text is same. The count can be different
+        if tokenized text was truncated, leading to issues in model code.
+        """
+        # Gemma3 uses BOI token instead of image token, which changed `self.attributes`
+        token_str = self.tokenizer.image_token
+        token_id = self.image_token_id
+        if token_str is not None and token_id is not None:
+            ids_count = [list(ids).count(token_id) for ids in text_inputs["input_ids"]]
+            text_count = [sample.count(token_str) for sample in text]
+
+            if ids_count != text_count:
+                raise ValueError(
+                    f"Mismatch in `image` token count between text and `input_ids`. Got ids={ids_count} and text={text_count}. "
+                    "Likely due to `truncation='max_length'`. Please disable truncation or increase `max_length`."
+                )
+
     def _get_num_multimodal_tokens(self, image_sizes=None, **kwargs):
         """
         Computes the number of placeholder tokens needed for multimodal inputs with the given sizes.
@@ -181,12 +199,8 @@ class Gemma3Processor(ProcessorMixin):
         return MultiModalData(**vision_data)
 
     @property
-    def model_input_names(self):
-        tokenizer_input_names = self.tokenizer.model_input_names + ["token_type_ids"]
-        image_processor_input_names = self.image_processor.model_input_names
-
-        image_processor_input_names = [name for name in image_processor_input_names if name != "num_crops"]
-        return list(tokenizer_input_names + image_processor_input_names)
+    def unused_input_names(self) -> list[str]:
+        return ["num_crops"]
 
 
 __all__ = ["Gemma3Processor"]

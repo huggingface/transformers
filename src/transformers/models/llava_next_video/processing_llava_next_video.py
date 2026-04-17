@@ -108,8 +108,8 @@ class LlavaNextVideoProcessor(ProcessorMixin):
             - **pixel_values** -- Pixel values to be fed to a model. Returned when `images` is not `None`.
         """
 
-        self.validate_inputs(images=images, text=text, videos=videos, **kwargs)
         images, text, videos, _ = self.prepare_inputs_layout(images=images, text=text, videos=videos)
+        self.validate_inputs(images=images, text=text, videos=videos, **kwargs)
 
         output_kwargs = self._merge_kwargs(
             LlavaNextVideoProcessorKwargs,

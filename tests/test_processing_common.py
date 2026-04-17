@@ -595,7 +595,8 @@ class ProcessorTesterMixin:
 
         # Verify outputs match
         for key in input_image_proc:
-            torch.testing.assert_close(input_image_proc[key], input_processor[key])
+            if key in processor.model_input_names:
+                torch.testing.assert_close(input_image_proc[key], input_processor[key])
 
     def test_tokenizer_defaults(self):
         """

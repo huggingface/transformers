@@ -209,7 +209,6 @@ class MllamaProcessor(ProcessorMixin):
 
         text_inputs = {}
         if text is not None:
-            text = [build_string_from_input(text_item, self.bos_token, self.image_token) for text_item in text]
             text_inputs = self.tokenizer(text, **output_kwargs["text_kwargs"])
             self._check_special_mm_tokens(text, text_inputs, modalities=["image"])
 

@@ -83,8 +83,8 @@ class Glm4vProcessor(ProcessorMixin):
             - **video_grid_thw** -- List of video 3D grid in LLM. Returned when `videos` is not `None`.
         """
 
-        self.validate_inputs(images=images, text=text, **kwargs)
         images, text, *_ = self.prepare_inputs_layout(images=images, text=text)
+        self.validate_inputs(images=images, text=text, **kwargs)
 
         output_kwargs = self._merge_kwargs(
             Glm4vProcessorKwargs,

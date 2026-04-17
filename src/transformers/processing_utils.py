@@ -680,6 +680,7 @@ class ProcessorMixin(PushToHubMixin):
             processed_audio, audio_replacements = self._process_audio(audio, **kwargs["audio_kwargs"])
 
         text_inputs = {}
+        return_tensors = kwargs["text_kwargs"].get("return_tensors", None)
         if getattr(self, "tokenizer", None) is not None and text is not None:
             return_mm_token_type_ids = kwargs["text_kwargs"].pop("return_mm_token_type_ids", False)
             return_text_replacement_offsets = kwargs["text_kwargs"].pop("return_mm_token_type_ids", False)
@@ -699,8 +700,10 @@ class ProcessorMixin(PushToHubMixin):
             if return_mm_token_type_ids:
                 text_inputs["mm_token_type_ids"] = self.create_mm_token_type_ids(text_inputs["input_ids"])
 
+        # Pop unused keys from the inputs, e.g. inputs used only to compute number of image tokens
         data = {**text_inputs, **processed_images, **processed_videos, **processed_audio}
-        return BatchFeature(data)
+        data = {k: v for k, v in data.items() if k not in self.unused_input_names}
+        return BatchFeature(data, tensor_type=return_tensors)
 
     def prepare_inputs_layout(
         self,
@@ -1837,13 +1840,18 @@ class ProcessorMixin(PushToHubMixin):
         return self.tokenizer.decode(*args, **kwargs)
 
     @property
-    def model_input_names(self):
+    def unused_input_names(self) -> list[str]:
+        "Input names returned always by subprocessors but not used in model's `forward`"
+        return []
+
+    @property
+    def model_input_names(self) -> list[str]:
         model_input_names = []
         for attribute_name in self.get_attributes():
             attribute = getattr(self, attribute_name, None)
             attr_input_names = getattr(attribute, "model_input_names")
             model_input_names.extend(attr_input_names)
-        return model_input_names
+        return [name for name in model_input_names if name not in self.unused_input_names]
 
     @staticmethod
     def validate_init_kwargs(processor_config, valid_kwargs):
