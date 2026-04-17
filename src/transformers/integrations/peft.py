@@ -235,7 +235,10 @@ def build_peft_weight_mapping(
         return []
 
     # strip "base_model.model" and add adapter name
-    new_weight_conversions = [WeightRenaming("base_model.model.model.", "model.")]
+    new_weight_conversions = [
+        WeightRenaming("base_model.model.model.", "model."),
+        WeightRenaming("base_model.model.", ""),
+    ]
 
     prefixes = set()
     from peft.mapping import PEFT_TYPE_TO_PREFIX_MAPPING
@@ -1079,7 +1082,10 @@ def _convert_peft_config_moe(peft_config, model_type: str):
     if base_model_type is None:
         return peft_config
 
-    target_module_mapping = _MOE_TARGET_MODULE_MAPPING[base_model_type]
+    target_module_mapping = _MOE_TARGET_MODULE_MAPPING.get(base_model_type)
+    if target_module_mapping is None:
+        # Non-MoE architectures reuse _MODEL_TO_CONVERSION_PATTERN for key renaming only.
+        return peft_config
     fused_targets = _MOE_FUSED_TARGETS.get(base_model_type, {})
 
     peft_config.target_parameters = set(peft_config.target_parameters or [])

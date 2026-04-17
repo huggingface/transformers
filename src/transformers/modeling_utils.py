@@ -2771,6 +2771,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             old_num_tokens, old_embedding_dim = old_embeddings.weight.size()
 
         if old_num_tokens == new_num_tokens and not is_deepspeed_zero3_enabled():
+            old_embeddings.num_embeddings = new_num_tokens  # maybe weights are tied which doesn't update attr
             return old_embeddings
 
         if not isinstance(old_embeddings, nn.Embedding):
@@ -2910,6 +2911,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             )
 
         if old_num_tokens == new_num_tokens and not is_deepspeed_zero3_enabled():
+            old_lm_head.out_features = new_num_tokens  # maybe weights are tied which doesn't update attr
             return old_lm_head
 
         if not isinstance(old_lm_head, nn.Linear):
@@ -4623,6 +4625,10 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         # `_keys_to_ignore_on_load_unexpected` as it touches many models -> we add it manually to the existing patterns
         has_inv_freq_buffers = any(buffer.endswith("rotary_emb.inv_freq") for buffer, _ in self.named_buffers())
         additional_unexpected_patterns = [r"rotary_emb\.inv_freq"] if has_inv_freq_buffers else []
+        # Same idea for `position_ids`: used to be a persistent buffer, now `persistent=False` in most models.
+        has_position_ids_buffers = any(buffer.endswith("position_ids") for buffer, _ in self.named_buffers())
+        if has_position_ids_buffers:
+            additional_unexpected_patterns.append(r"(^|\.)position_ids$")
 
         missing_patterns = self._keys_to_ignore_on_load_missing or []
         unexpected_patterns = (self._keys_to_ignore_on_load_unexpected or []) + additional_unexpected_patterns

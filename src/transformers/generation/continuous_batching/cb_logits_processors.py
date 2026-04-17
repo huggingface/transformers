@@ -89,6 +89,8 @@ class ContinuousBatchingLogitsProcessorList:
         # Validate and optionally filter processors based on their CB support
         self._validate_processors(drop_unsupported_processors)
         self._retrieve_processors_kwargs()
+        # Static boolean to know if there is any logits processing to do. Helps with torch.compile().
+        self.do_processing = len(self.logits_processor) > 0
 
     def __repr__(self) -> str:
         return f"ContinuousBatchingLogitsProcessorList(logits_processor={self.logits_processor}, tensors_required={self.tensors_required})"
@@ -98,6 +100,7 @@ class ContinuousBatchingLogitsProcessorList:
         self.tensors_required = 0
         self.supported_keys = {}
         self.ignored_keys = set()
+        self.do_processing = False
 
     def _convert_to_per_request_processors(self) -> None:
         """Replaces the compatible logits processors with their per-request versions."""

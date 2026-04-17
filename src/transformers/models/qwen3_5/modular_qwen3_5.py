@@ -680,6 +680,7 @@ class Qwen3_5ForConditionalGeneration(Qwen3VLForConditionalGeneration):
 __all__ = [
     "Qwen3_5Config",
     "Qwen3_5TextConfig",
+    "Qwen3_5VisionConfig",
     "Qwen3_5VisionModel",
     "Qwen3_5TextModel",
     "Qwen3_5Model",

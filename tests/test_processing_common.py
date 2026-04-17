@@ -250,10 +250,20 @@ class ProcessorTesterMixin:
         import re
 
         from transformers.models.auto.configuration_auto import (
-            CONFIG_MAPPING,
             CONFIG_MAPPING_NAMES,
             SPECIAL_MODEL_TYPE_TO_MODULE_NAME,
         )
+
+        # Get the component class from the appropriate Auto mapping
+        if attribute in MODALITY_TO_AUTOPROCESSOR_MAPPING:
+            mapping_name = attribute
+        elif "tokenizer" in attribute:
+            mapping_name = "tokenizer"
+        else:
+            raise ValueError(
+                f"Unknown attribute type: '{attribute}'. "
+                f"Please override _setup_{attribute}() in your test class to provide custom setup."
+            )
 
         # Extract model_type from the test file name
         # Test files are named like test_processing_align.py or test_processor_align.py
@@ -266,32 +276,45 @@ class ProcessorTesterMixin:
             )
 
         model_type = match.group(1)
+
         if model_type not in CONFIG_MAPPING_NAMES:
             # check if the model type is a special model type
             for special_model_type, special_module_name in SPECIAL_MODEL_TYPE_TO_MODULE_NAME.items():
-                if model_type == special_module_name:
-                    model_type = special_model_type
-                    break
+                if model_type != special_module_name or special_model_type not in CONFIG_MAPPING_NAMES:
+                    continue
 
-        # Get the config class for this model type
-        if model_type not in CONFIG_MAPPING_NAMES:
+                component_class = cls.resolve_model_type_to_attribute(special_model_type, mapping_name)
+                if component_class is not None:
+                    break
+        else:
+            component_class = cls.resolve_model_type_to_attribute(model_type, mapping_name)
+
+        if component_class is None:
             raise ValueError(
-                f"Model type '{model_type}' not found in CONFIG_MAPPING_NAMES. "
+                f"Could not find {mapping_name} class for model {match.group(1)}. "
                 f"Please override _setup_{attribute}() in your test class."
             )
 
-        config_class = CONFIG_MAPPING[model_type]
+        # Handle tuple case (some mappings return tuples of classes)
+        if isinstance(component_class, tuple):
+            if use_fast:
+                component_class = component_class[-1] if component_class[-1] is not None else component_class[0]
+            else:
+                component_class = component_class[0] if component_class[0] is not None else component_class[1]
+        elif isinstance(component_class, dict):
+            if not use_fast:
+                component_class = component_class["pil"]
+            else:
+                component_class = (
+                    component_class["torchvision"] if "torchvision" in component_class else component_class["pil"]
+                )
+        return component_class
 
-        # Now get the component class from the appropriate Auto mapping
-        if attribute in MODALITY_TO_AUTOPROCESSOR_MAPPING:
-            mapping_name = attribute
-        elif "tokenizer" in attribute:
-            mapping_name = "tokenizer"
-        else:
-            raise ValueError(
-                f"Unknown attribute type: '{attribute}'. "
-                f"Please override _setup_{attribute}() in your test class to provide custom setup."
-            )
+    @staticmethod
+    def resolve_model_type_to_attribute(model_type, mapping_name):
+        from transformers.models.auto.configuration_auto import CONFIG_MAPPING
+
+        config_class = CONFIG_MAPPING[model_type]
 
         # Get the appropriate Auto mapping for this component type
         if mapping_name == "tokenizer":
@@ -316,27 +339,7 @@ class ProcessorTesterMixin:
 
             component_class = VIDEO_PROCESSOR_MAPPING.get(config_class, None)
         else:
-            raise ValueError(f"Unknown mapping for attribute: {attribute}")
-
-        if component_class is None:
-            raise ValueError(
-                f"Could not find {mapping_name} class for config {config_class.__name__}. "
-                f"Please override _setup_{attribute}() in your test class."
-            )
-
-        # Handle tuple case (some mappings return tuples of classes)
-        if isinstance(component_class, tuple):
-            if use_fast:
-                component_class = component_class[-1] if component_class[-1] is not None else component_class[0]
-            else:
-                component_class = component_class[0] if component_class[0] is not None else component_class[1]
-        elif isinstance(component_class, dict):
-            if not use_fast:
-                component_class = component_class["pil"]
-            else:
-                component_class = (
-                    component_class["torchvision"] if "torchvision" in component_class else component_class["pil"]
-                )
+            raise ValueError(f"Unknown mapping for attribute: {mapping_name}")
         return component_class
 
     @classmethod
@@ -1989,6 +1992,31 @@ class ProcessorTesterMixin:
         text_is_same = assistant_text == processor.decode(assistant_ids, clean_up_tokenization_spaces=True)
         ids_is_same = processor.tokenizer.encode(assistant_text, add_special_tokens=False), assistant_ids.tolist()
         self.assertTrue(text_is_same or ids_is_same)
+
+    @require_torch
+    def test_apply_chat_template_tool_calls_no_content(self):
+        processor = self.get_processor()
+
+        if processor.chat_template is None:
+            self.skipTest("Processor has no chat template")
+
+        if "tool" not in processor.chat_template:  # good heuristic to check if template supports tools
+            self.skipTest("Chat template does not support tools")
+
+        messages = [
+            {
+                "role": "user",
+                "content": [{"type": "text", "text": "What is the weather?"}],
+            },
+            {
+                "role": "assistant",
+                "tool_calls": [{"type": "function", "function": {"name": "get_weather", "arguments": "{}"}}],
+            },
+        ]
+
+        # Regression test for #45290: tokenize=True used to raise KeyError when "content" was missing
+        result = processor.apply_chat_template(messages, tokenize=True)
+        self.assertIsInstance(result, list)
 
     def test_get_num_multimodal_tokens_matches_processor_call(self):
         "Tests that the helper used internally in vLLM works correctly"
