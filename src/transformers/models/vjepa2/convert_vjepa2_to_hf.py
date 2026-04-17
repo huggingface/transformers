@@ -386,6 +386,9 @@ def convert_and_test_vjepa2_checkpoint(model_name, pytorch_dump_folder_path, pus
         original_predictor = original_predictor.to(device="cuda", dtype=torch.float32)
         model = model.to(device="cuda", dtype=torch.float32)
         # forward
+        is_2_1 = _is_2_1_model(model_name)
+        if is_2_1 and config.n_output_distillation > 1:
+            original_encoder.return_hierarchical = True
         original_encoder_outputs = original_encoder(pixel_values_videos.permute(0, 2, 1, 3, 4))
         B, N, _ = original_encoder_outputs.shape
         # test full mask
@@ -395,7 +398,15 @@ def convert_and_test_vjepa2_checkpoint(model_name, pytorch_dump_folder_path, pus
         outputs = model(pixel_values_videos, context_mask=context_mask, target_mask=predictor_mask)
         assert torch.allclose(outputs.last_hidden_state, original_encoder_outputs, atol=1e-3)
         predictor_outputs = outputs.predictor_output
-        assert torch.allclose(predictor_outputs.last_hidden_state, original_predictor_outputs, atol=1e-3)
+        if is_2_1 and config.return_all_tokens:
+            og_target, og_context = original_predictor_outputs
+            N_ctxt = context_mask[0].shape[1]
+            hf_context = predictor_outputs.last_hidden_state[:, :N_ctxt]
+            hf_target = predictor_outputs.last_hidden_state[:, N_ctxt:]
+            assert torch.allclose(hf_target, og_target, atol=1e-2)
+            assert torch.allclose(hf_context, og_context, atol=1e-2)
+        else:
+            assert torch.allclose(predictor_outputs.last_hidden_state, original_predictor_outputs, atol=1e-3)
         # test partial mask
         window_size = 256
         mask = torch.arange(N, device=pixel_values_videos.device).unsqueeze(0)
@@ -409,7 +420,15 @@ def convert_and_test_vjepa2_checkpoint(model_name, pytorch_dump_folder_path, pus
         outputs = model(pixel_values_videos, context_mask=context_mask, target_mask=predictor_mask)
         assert torch.allclose(outputs.last_hidden_state, original_encoder_outputs, atol=1e-3)
         predictor_outputs = outputs.predictor_output
-        assert torch.allclose(predictor_outputs.last_hidden_state, original_predictor_outputs, atol=1e-3)
+        if is_2_1 and config.return_all_tokens:
+            og_target, og_context = original_predictor_outputs
+            N_ctxt = context_mask[0].shape[1]
+            hf_context = predictor_outputs.last_hidden_state[:, :N_ctxt]
+            hf_target = predictor_outputs.last_hidden_state[:, N_ctxt:]
+            assert torch.allclose(hf_target, og_target, atol=1e-2)
+            assert torch.allclose(hf_context, og_context, atol=1e-2)
+        else:
+            assert torch.allclose(predictor_outputs.last_hidden_state, original_predictor_outputs, atol=1e-3)
 
     print("Looks ok!")
 
