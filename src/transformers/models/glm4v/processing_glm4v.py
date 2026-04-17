@@ -92,15 +92,20 @@ class Glm4vProcessor(ProcessorMixin):
             **kwargs,
         )
 
-        image_inputs, images_replacements = self._process_modality(images, "images", **output_kwargs)
-        videos_inputs, videos_replacements = self._process_modality(videos, "videos", **output_kwargs)
-        # If user has not requested video metadata, pop it
-        if not kwargs.get("return_metadata"):
-            videos_inputs.pop("video_metadata", None)
+        image_inputs = videos_inputs = {}
+        images_replacements = videos_replacements = []
+        if images is not None:
+            image_inputs, images_replacements = self._process_images(images, **output_kwargs["images_kwargs"])
+        if videos is not None:
+            videos_inputs, videos_replacements = self._process_videos(videos, **output_kwargs["videos_kwargs"])
+            # If user has not requested video metadata, pop it
+            if not kwargs.get("return_metadata"):
+                videos_inputs.pop("video_metadata", None)
 
-        text, text_replacement_offsets = self.get_text_replacement(
-            text, images_replacements=images_replacements, videos_replacements=videos_replacements
-        )
+        if images is not None or videos is not None:
+            text, text_replacement_offsets = self.get_text_replacement(
+                text, images_replacements=images_replacements, videos_replacements=videos_replacements
+            )
 
         return_tensors = output_kwargs["text_kwargs"].pop("return_tensors", None)
         return_mm_token_type_ids = output_kwargs["text_kwargs"].pop("return_mm_token_type_ids", False)

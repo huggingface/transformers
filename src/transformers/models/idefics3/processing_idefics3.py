@@ -121,7 +121,7 @@ class Idefics3Processor(ProcessorMixin):
 
         image_inputs = text_inputs = {}
         if images is not None:
-            image_inputs, images_replacements = self._process_modality(images, "images", **output_kwargs)
+            image_inputs, images_replacements = self._process_images(images, **output_kwargs["images_kwargs"])
 
             # Pop inputs unused by the model
             image_inputs.pop("rows", None)

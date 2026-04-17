@@ -33,7 +33,7 @@ from huggingface_hub import create_repo, is_offline_mode
 from huggingface_hub.dataclasses import validate_typed_dict
 from huggingface_hub.errors import EntryNotFoundError
 
-from .audio_utils import AudioInput, load_audio
+from .audio_utils import AudioInput, load_audio, make_list_of_audio
 from .dynamic_module_utils import custom_object_save
 from .feature_extraction_utils import BatchFeature
 from .image_utils import ChannelDimension, ImageInput, is_vision_available, make_flat_list_of_images
@@ -676,9 +676,14 @@ class ProcessorMixin(PushToHubMixin):
             **kwargs,
         )
 
-        processed_images, images_replacements = self._process_modality(images, "images", **kwargs)
-        processed_videos, videos_replacements = self._process_modality(videos, "videos", **kwargs)
-        processed_audio, audio_replacements = self._process_modality(audio, "audio", **kwargs)
+        processed_images = processed_videos = processed_audio = {}
+        images_replacements = videos_replacements = audio_replacements = []
+        if images is not None:
+            processed_images, images_replacements = self._process_images(images, **kwargs["images_kwargs"])
+        if videos is not None:
+            processed_videos, videos_replacements = self._process_videos(videos, **kwargs["videos_kwargs"])
+        if audio is not None:
+            processed_audio, audio_replacements = self._process_audio(audio, **kwargs["audio_kwargs"])
 
         text_inputs = {}
         if getattr(self, "tokenizer", None) is not None and text is not None:
@@ -705,29 +710,23 @@ class ProcessorMixin(PushToHubMixin):
         data = {**text_inputs, **processed_images, **processed_videos, **processed_audio}
         return BatchFeature(data, tensor_type=return_tensors)
 
-    def _process_modality(
-        self,
-        mm_data: ImageInput | VideoInput | AudioInput,
-        modality: str,
-        **kwargs,
-    ):
-        if mm_data is None:
-            return {}, []
-
-        attribute_to_kwargs = {
-            "images": "image_processor",
-            "videos": "video_processor",
-            "audio": "feature_extractor",
-        }
-
-        subprocessor = getattr(self, attribute_to_kwargs[modality])
-        processed_data = subprocessor(mm_data, **kwargs[f"{modality}_kwargs"])
-        replacement_fn: callable = getattr(self, f"get_{modality}_replacement", None)
-        image_replacements = []
-        if replacement_fn:
-            decoded_mm_data = subprocessor.fetch_data(mm_data)  # not good, esp for videos
-            image_replacements = replacement_fn(decoded_mm_data, processed_data)
+    def _process_images(self, images: ImageInput, **kwargs):
+        images = self.image_processor.fetch_data(images)
+        processed_data = self.image_processor(images, **kwargs)
+        image_replacements = self.get_images_replacement(images, processed_data)
         return processed_data, image_replacements
+
+    def _process_videos(self, videos: VideoInput, **kwargs):
+        processed_data = self.video_processor(videos, **kwargs)
+        decoded_videos = self.video_processor.fetch_data(videos)  # FIXME: order
+        video_replacements = self.get_videos_replacement(decoded_videos, processed_data)
+        return processed_data, video_replacements
+
+    def _process_audio(self, audio: AudioInput, **kwargs):
+        audio = self.feature_extractor.fetch_data(audio)
+        processed_data = self.feature_extractor(audio, **kwargs)
+        audio_replacements = self.get_audio_replacement(audio, processed_data)
+        return processed_data, audio_replacements
 
     def prepare_inputs_layout(
         self,
@@ -739,7 +738,7 @@ class ProcessorMixin(PushToHubMixin):
         if isinstance(text, str):
             text = [text]
         else:
-            # avoid in-palce updates on text
+            # avoid in-place updates on text
             text = text.copy()
         return images, text, videos, audio
 
@@ -757,17 +756,20 @@ class ProcessorMixin(PushToHubMixin):
         if images is None and text is None and videos is None and audio is None:
             raise ValueError(f"You need to provide at least one input to call {self.__class__.__name__}")
 
-    def replace_image_token(self, text: str, image_inputs: dict | None = None, image_idx: int = 0) -> str:
+    def replace_image_token(self, image_inputs: dict | None = None, image_idx: int = 0) -> str:
         return None
 
-    def replace_video_token(self, text: str, video_inputs: dict | None = None, video_idx: int = 0) -> str:
+    def replace_video_token(self, video_inputs: dict | None = None, video_idx: int = 0) -> str:
+        return None
+
+    def replace_audio_token(self, audio_inputs: dict | None = None, audio_idx: int = 0) -> str:
         return None
 
     def get_images_replacement(
         self,
         images: ImageInput,
         processed_images: dict,
-    ) -> tuple[str, list[dict[str, Any]]]:
+    ) -> list[str]:
         # Early exit if no special tokens found, nothing to replace
         if getattr(self, "image_token", None) is None:
             return []
@@ -783,7 +785,7 @@ class ProcessorMixin(PushToHubMixin):
         self,
         videos: VideoInput,
         processed_videos: dict,
-    ) -> tuple[str, list[dict[str, Any]]]:
+    ) -> list[str]:
         # Early exit if no special tokens found, nothing to replace
         if getattr(self, "video_token", None) is None:
             return []
@@ -792,6 +794,22 @@ class ProcessorMixin(PushToHubMixin):
         replacement_texts = []
         for idx in range(len(videos)):
             replacement_text = self.replace_video_token(processed_videos, video_idx=idx)
+            replacement_texts.append(replacement_text)
+        return replacement_texts
+
+    def get_audio_replacement(
+        self,
+        audio: AudioInput,
+        processed_audio: dict,
+    ) -> list[str]:
+        # Early exit if no special tokens found, nothing to replace
+        if getattr(self, "audio_token", None) is None:
+            return []
+
+        videos = make_list_of_audio(audio)
+        replacement_texts = []
+        for idx in range(len(videos)):
+            replacement_text = self.replace_audio_token(processed_audio, audio_idx=idx)
             replacement_texts.append(replacement_text)
         return replacement_texts
 

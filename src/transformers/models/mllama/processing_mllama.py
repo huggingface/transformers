@@ -216,8 +216,10 @@ class MllamaProcessor(ProcessorMixin):
             text_inputs = self.tokenizer(text, **output_kwargs["text_kwargs"])
             self._check_special_mm_tokens(text, text_inputs, modalities=["image"])
 
-        image_inputs, _ = self._process_modality(images, "images", **output_kwargs)
-        num_tiles = image_inputs.pop("num_tiles")
+        image_inputs = {}
+        if images is not None:
+            image_inputs, _ = self._process_images(images, **output_kwargs["images_kwargs"])
+            num_tiles = image_inputs.pop("num_tiles")
 
         # Create cross attention mask
         if images is not None and text is not None:

@@ -76,8 +76,11 @@ class Gemma3Processor(ProcessorMixin):
             **kwargs,
         )
 
-        image_inputs, images_replacements = self._process_modality(images, "images", **output_kwargs)
-        image_inputs.pop("num_crops", None)  # unused by model
+        image_inputs = {}
+        images_replacements = []
+        if images is not None:
+            image_inputs, images_replacements = self._process_images(images, **output_kwargs["images_kwargs"])
+            image_inputs.pop("num_crops", None)  # unused by model
 
         # Replace image tokens by the full expanded sequence
         text, text_replacement_offsets = self.get_text_replacement(text, images_replacements=images_replacements)
