@@ -36,7 +36,7 @@ class Qwen3VLVisionConfig(PreTrainedConfig):
         Indexed of layers for deepstack embeddings.
     """
 
-    model_type = "qwen3_vl"
+    model_type = "qwen3_vl_vision"
     base_config_key = "vision_config"
 
     depth: int = 27
@@ -147,4 +147,4 @@ class Qwen3VLConfig(PreTrainedConfig):
         super().__post_init__(**kwargs)
 
 
-__all__ = ["Qwen3VLConfig", "Qwen3VLTextConfig"]
+__all__ = ["Qwen3VLConfig", "Qwen3VLTextConfig", "Qwen3VLVisionConfig"]
