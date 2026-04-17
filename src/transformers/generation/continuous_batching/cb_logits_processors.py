@@ -89,7 +89,7 @@ class ContinuousBatchingLogitsProcessorList:
         # Validate and optionally filter processors based on their CB support
         self._validate_processors(drop_unsupported_processors)
         self._retrieve_processors_kwargs()
-        # Static boolean to know if there is any processing to do
+        # Static boolean to know if there is any logits processing to do. Helps with torch.compile().
         self.do_processing = len(self.logits_processor) > 0
 
     def __repr__(self) -> str:
