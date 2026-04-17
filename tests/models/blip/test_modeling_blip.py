@@ -652,10 +652,10 @@ class BlipVQAModelTester:
         config, input_ids, attention_mask, pixel_values = config_and_inputs
         inputs_dict = {
             "input_ids": input_ids,
-            "decoder_input_ids": input_ids,
+            "decoder_input_ids": input_ids.clone(),
             "attention_mask": attention_mask,
             "pixel_values": pixel_values,
-            "labels": input_ids,
+            "labels": input_ids.clone(),
         }
         return config, inputs_dict
 

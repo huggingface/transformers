@@ -645,4 +645,14 @@ class Qwen2_5OmniConfig(PreTrainedConfig):
         return self.thinker_config.get_text_config(*args, **kwargs)
 
 
-__all__ = ["Qwen2_5OmniConfig", "Qwen2_5OmniThinkerConfig", "Qwen2_5OmniTalkerConfig", "Qwen2_5OmniToken2WavConfig"]
+__all__ = [
+    "Qwen2_5OmniConfig",
+    "Qwen2_5OmniThinkerConfig",
+    "Qwen2_5OmniTalkerConfig",
+    "Qwen2_5OmniToken2WavConfig",
+    "Qwen2_5OmniAudioEncoderConfig",
+    "Qwen2_5OmniBigVGANConfig",
+    "Qwen2_5OmniDiTConfig",
+    "Qwen2_5OmniTextConfig",
+    "Qwen2_5OmniVisionEncoderConfig",
+]
