@@ -149,6 +149,8 @@ class QianfanOCRModelTest(VLMModelTest, unittest.TestCase):
 @slow
 @require_torch_accelerator
 class QianfanOCRIntegrationTest(unittest.TestCase):
+    """Original integration test values come from a 4090 (SM 89) and have been adjusted for our CI A10 (SM 86)"""
+
     def setUp(self):
         # model weights in baidu/Qianfan-OCR will be updated after this PR get released in transformers,
         # use bairongz/QianfanOCR for testing and will update back to baidu/Qianfan-OCR after weight update
@@ -187,7 +189,8 @@ class QianfanOCRIntegrationTest(unittest.TestCase):
         # fmt: off
         expected_logits = Expectations(
             {
-                ("cuda", None): torch.tensor([10.0625, 15.6875, 13.0000, 12.1875,  9.3750]),
+                ("cuda", (8, 6)): torch.tensor([10.1250, 15.8125, 13.0625, 12.3125,  9.4375]),
+                ("cuda", (8, 9)): torch.tensor([10.0625, 15.6875, 13.0000, 12.1875,  9.3750]),
             }
         )  # fmt: skip
         self.assertTrue(
@@ -220,7 +223,8 @@ class QianfanOCRIntegrationTest(unittest.TestCase):
         # fmt: off
         expected_outputs = Expectations(
             {
-                ("cuda", None): "The image features two striped cats lying down on a pink couch, seemingly asleep.",
+                ("cuda", (8, 6)): "The image features two striped cats lying down and sleeping on a pink couch. They",
+                ("cuda", (8, 9)): "The image features two striped cats lying down on a pink couch, seemingly asleep.",
             }
         )  # fmt: skip
         self.assertEqual(decoded, expected_outputs.get_expectation())
@@ -295,7 +299,8 @@ class QianfanOCRIntegrationTest(unittest.TestCase):
         )  # fmt: skip
         expected_outputs_1 = Expectations(
             {
-                ("cuda", None): "The image features two striped cats lying down on a pink couch, seemingly asleep.",
+                ("cuda", (8, 6)): "The image features two striped cats lying down and sleeping on a pink couch. The",
+                ("cuda", (8, 9)): "The image features two striped cats lying down on a pink couch, seemingly asleep.",
             }
         )  # fmt: skip
         self.assertEqual(decoded_0, expected_outputs_0.get_expectation())
