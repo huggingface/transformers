@@ -358,9 +358,14 @@ class PrivacyFilterTopKRouter(nn.Module):
 
     def forward(self, hidden_states):
         # Force fp32
-        router_logits = F.linear(hidden_states.float(), self.weight, self.bias)  # (num_tokens, num_experts)
+        router_logits = F.linear(
+            hidden_states.float(),
+            self.weight.float(),
+            self.bias.float() if self.bias is not None else None,
+        )  # (num_tokens, num_experts)
         router_top_value, router_indices = torch.topk(router_logits, self.top_k, dim=-1)  # (num_tokens, top_k)
         router_scores = torch.nn.functional.softmax(router_top_value, dim=1, dtype=router_top_value.dtype)
+        router_scores = router_scores / self.top_k
         return router_logits, router_scores, router_indices
 
 
@@ -437,18 +442,7 @@ class PrivacyFilterPreTrainedModel(PreTrainedModel):
     }
     _keep_in_fp32_modules = []
     _compatible_flash_implementations = ["kernels-community/vllm-flash-attn3", "flash_attention_4"]
-    _keep_in_fp32_modules_strict = [
-        "sinks",
-        "norm",
-        "embedding_norm",
-        "input_layernorm",
-        "post_attention_layernorm",
-        "gate_up_proj",
-        "gate_up_proj_bias",
-        "down_proj",
-        "down_proj_bias",
-        "router",
-    ]
+    _keep_in_fp32_modules_strict = ["sinks"]
 
     @torch.no_grad()
     def _init_weights(self, module):

@@ -221,7 +221,7 @@ def convert_state_dict(
             converted[q_key] = q.contiguous()
             converted[k_key] = k.contiguous()
             converted[v_key] = v.contiguous()
-        elif re.search(r"norm\.weight|sinks", new_key):
+        elif re.search(r"sinks", new_key):
             converted[new_key] = tensor.float().contiguous()
         else:
             converted[new_key] = tensor.contiguous()

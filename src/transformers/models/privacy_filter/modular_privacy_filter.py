@@ -304,9 +304,14 @@ class PrivacyFilterExperts(GptOssExperts):
 class PrivacyFilterTopKRouter(GptOssTopKRouter):
     def forward(self, hidden_states):
         # Force fp32
-        router_logits = F.linear(hidden_states.float(), self.weight, self.bias)  # (num_tokens, num_experts)
+        router_logits = F.linear(
+            hidden_states.float(),
+            self.weight.float(),
+            self.bias.float() if self.bias is not None else None,
+        )  # (num_tokens, num_experts)
         router_top_value, router_indices = torch.topk(router_logits, self.top_k, dim=-1)  # (num_tokens, top_k)
         router_scores = torch.nn.functional.softmax(router_top_value, dim=1, dtype=router_top_value.dtype)
+        router_scores = router_scores / self.top_k
         return router_logits, router_scores, router_indices
 
 
@@ -351,18 +356,7 @@ class PrivacyFilterPreTrainedModel(GptOssPreTrainedModel):
     _no_split_modules = ["PrivacyFilterEncoderLayer"]
     _skip_keys_device_placement = None  # No cache
     _keep_in_fp32_modules = []
-    _keep_in_fp32_modules_strict = [
-        "sinks",
-        "norm",
-        "embedding_norm",
-        "input_layernorm",
-        "post_attention_layernorm",
-        "gate_up_proj",
-        "gate_up_proj_bias",
-        "down_proj",
-        "down_proj_bias",
-        "router",
-    ]
+    _keep_in_fp32_modules_strict = ["sinks"]
 
     _can_record_outputs = {
         "router_logits": OutputRecorder(PrivacyFilterTopKRouter, index=0),
