@@ -33,7 +33,7 @@ python utils/check_modeling_rules_doc.py --fix_and_overwrite
 import argparse
 import os
 
-from mlinter.mlinter import TRF_RULE_SPECS, format_rule_details
+from mlinter import render_rules_reference
 
 
 CHECKER_CONFIG = {
@@ -52,10 +52,7 @@ END_MARKER = "<!-- END RULES REFERENCE -->"
 
 
 def generate_rules_reference() -> str:
-    sections = []
-    for rule_id in sorted(TRF_RULE_SPECS):
-        sections.append(format_rule_details(rule_id))
-    return "\n\n".join(sections) + "\n"
+    return render_rules_reference()
 
 
 def check_modeling_rules_doc(overwrite: bool = False):
