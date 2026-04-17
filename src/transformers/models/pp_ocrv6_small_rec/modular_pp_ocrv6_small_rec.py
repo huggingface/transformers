@@ -1,0 +1,140 @@
+# Copyright 2026 The PaddlePaddle Team and The HuggingFace Inc. team. All rights reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+import torch
+import torch.nn as nn
+from huggingface_hub.dataclasses import strict
+
+from ...backbone_utils import (
+    consolidate_backbone_kwargs_to_config,
+)
+from ...configuration_utils import PreTrainedConfig
+from ...modeling_outputs import BaseModelOutputWithNoAttention
+from ...processing_utils import Unpack
+from ...utils import (
+    TransformersKwargs,
+    auto_docstring,
+    logging,
+)
+from ...utils.generic import merge_with_config_defaults
+from ...utils.output_capturing import capture_outputs
+from ..pp_ocrv5_server_rec.configuration_pp_ocrv5_server_rec import PPOCRV5ServerRecConfig
+from ..pp_ocrv5_server_rec.modeling_pp_ocrv5_server_rec import (
+    PPOCRV5ServerRecConvLayer,
+    PPOCRV5ServerRecEncoderWithSVTR,
+    PPOCRV5ServerRecForTextRecognition,
+)
+
+
+logger = logging.get_logger(__name__)
+
+
+@auto_docstring(checkpoint="PaddlePaddle/PP-OCRv6_small_rec_safetensors")
+@strict
+class PPOCRV6SmallRecConfig(PPOCRV5ServerRecConfig):
+    def __post_init__(self, **kwargs):
+        if self.conv_kernel_size is None:
+            self.conv_kernel_size = [1, 7]
+        self.backbone_config, kwargs = consolidate_backbone_kwargs_to_config(
+            backbone_config=self.backbone_config,
+            default_config_type="pp_lcnet_v4",
+            **kwargs,
+        )
+        PreTrainedConfig.__post_init__(**kwargs)
+
+
+class PPOCRV6SmallRecConvLayer(PPOCRV5ServerRecConvLayer):
+    def __init__(
+        self,
+        in_channels: int,
+        out_channels: int,
+        kernel_size: tuple[int, int] = (3, 3),
+        stride: int = 1,
+        activation: str = "silu",
+        groups: int = 1,
+    ):
+        super().__init__()
+        self.convolution = nn.Conv2d(
+            in_channels,
+            out_channels,
+            kernel_size=kernel_size,
+            stride=stride,
+            padding=(kernel_size[0] // 2, kernel_size[1] // 2),
+            bias=False,
+            groups=groups,
+        )
+
+
+class PPOCRV6SmallRecEncoderWithSVTR(PPOCRV5ServerRecEncoderWithSVTR):
+    def __init__(
+        self,
+        config,
+    ):
+        super().__init__(config)
+        in_channels = config.backbone_config.block_configs[-1][-1][2]
+        hidden_size = config.hidden_size
+        self.conv_block = nn.ModuleList(
+            [
+                # skip_conv
+                PPOCRV6SmallRecConvLayer(
+                    in_channels=in_channels, out_channels=hidden_size, kernel_size=(1, 1), activation=config.hidden_act
+                ),
+                # conv_reduce
+                PPOCRV6SmallRecConvLayer(
+                    in_channels=in_channels, out_channels=hidden_size, kernel_size=(1, 1), activation=config.hidden_act
+                ),
+                # local_conv
+                PPOCRV6SmallRecConvLayer(
+                    in_channels=hidden_size,
+                    out_channels=hidden_size,
+                    kernel_size=config.conv_kernel_size,
+                    activation=config.hidden_act,
+                    groups=hidden_size,
+                ),
+            ]
+        )
+        self.norm = nn.LayerNorm(hidden_size, eps=config.layer_norm_eps)
+        self.post_init()
+
+    @merge_with_config_defaults
+    @capture_outputs
+    def forward(self, hidden_states: torch.FloatTensor, **kwargs: Unpack[TransformersKwargs]):
+        residual = self.conv_block[0](hidden_states)
+
+        hidden_states = self.conv_block[1](hidden_states)
+        hidden_states = hidden_states + self.conv_block[2](hidden_states)
+
+        batch_size, channels, height, width = hidden_states.shape
+        hidden_states = hidden_states.flatten(2).transpose(1, 2)
+        for block in self.svtr_block:
+            hidden_states = block(hidden_states)
+
+        hidden_states = self.norm(hidden_states)
+        hidden_states = hidden_states.view(batch_size, height, width, channels).permute(0, 3, 1, 2)
+        hidden_states = hidden_states + residual
+        hidden_states = hidden_states.squeeze(2).transpose(1, 2)
+
+        return BaseModelOutputWithNoAttention(last_hidden_state=hidden_states)
+
+
+@auto_docstring(custom_intro="PPOCR6SmallRec model for text recognition tasks.")
+class PPOCRV6SmallRecForTextRecognition(PPOCRV5ServerRecForTextRecognition):
+    pass
+
+
+__all__ = [
+    "PPOCRV6SmallRecForTextRecognition",
+    "PPOCRV6SmallRecConfig",
+    "PPOCRV6SmallRecEncoderWithSVTR",
+]

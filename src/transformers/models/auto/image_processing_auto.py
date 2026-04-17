@@ -206,6 +206,9 @@ else:
             ("pp_ocrv5_mobile_rec", {"torchvision": "PPOCRV5ServerRecImageProcessor"}),
             ("pp_ocrv5_server_det", {"torchvision": "PPOCRV5ServerDetImageProcessor"}),
             ("pp_ocrv5_server_rec", {"torchvision": "PPOCRV5ServerRecImageProcessor"}),
+            ("pp_ocrv6_base_rec", {"torchvision": "PPOCRV5ServerRecImageProcessor"}),
+            ("pp_ocrv6_small_rec", {"torchvision": "PPOCRV5ServerRecImageProcessor"}),
+            ("pp_ocrv6_tiny_rec", {"torchvision": "PPOCRV5ServerRecImageProcessor"}),
             (
                 "prompt_depth_anything",
                 {"torchvision": "PromptDepthAnythingImageProcessor", "pil": "PromptDepthAnythingImageProcessorPil"},

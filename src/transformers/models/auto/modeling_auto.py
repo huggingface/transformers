@@ -360,6 +360,9 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("pp_doclayout_v3", "PPDocLayoutV3Model"),
         ("pp_ocrv5_mobile_rec", "PPOCRV5MobileRecModel"),
         ("pp_ocrv5_server_rec", "PPOCRV5ServerRecModel"),
+        ("pp_ocrv6_base_rec", "PPOCRV6BaseRecModel"),
+        ("pp_ocrv6_small_rec", "PPOCRV6SmallRecModel"),
+        ("pp_ocrv6_tiny_rec", "PPOCRV6TinyRecModel"),
         ("prophetnet", "ProphetNetModel"),
         ("pvt", "PvtModel"),
         ("pvt_v2", "PvtV2Model"),
@@ -1147,6 +1150,9 @@ MODEL_FOR_TEXT_RECOGNITION_MAPPING_NAMES = OrderedDict(
     [
         ("pp_ocrv5_mobile_rec", "PPOCRV5MobileRecForTextRecognition"),
         ("pp_ocrv5_server_rec", "PPOCRV5ServerRecForTextRecognition"),
+        ("pp_ocrv6_base_rec", "PPOCRV6BaseRecForTextRecognition"),
+        ("pp_ocrv6_small_rec", "PPOCRV6SmallRecForTextRecognition"),
+        ("pp_ocrv6_tiny_rec", "PPOCRV6TinyRecForTextRecognition"),
     ]
 )
 
@@ -1718,6 +1724,7 @@ MODEL_FOR_BACKBONE_MAPPING_NAMES = OrderedDict(
         ("pixio", "PixioBackbone"),
         ("pp_lcnet", "PPLCNetBackbone"),
         ("pp_lcnet_v3", "PPLCNetV3Backbone"),
+        ("pp_lcnet_v4", "PPLCNetV4Backbone"),
         ("pvt_v2", "PvtV2Backbone"),
         ("resnet", "ResNetBackbone"),
         ("rt_detr_resnet", "RTDetrResNetBackbone"),
