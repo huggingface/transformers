@@ -79,7 +79,6 @@ HARDCODED_CONFIG_FOR_MODELS = {
     "parakeet": "ParakeetCTCConfig",
     "lasr": "LasrCTCConfig",
     "wav2vec2-with-lm": "Wav2Vec2Config",
-    "hy-v3": "HYV3Config",
 }
 
 _re_checkpoint = re.compile(r"\[(.+?)\]\((https://huggingface\.co/.+?)\)")
