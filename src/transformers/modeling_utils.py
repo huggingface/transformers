@@ -4472,13 +4472,13 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         from kernels import Device, Mode, kernelize
 
         def attach_hidden_kernels(module):
-            for name, fn in module.__dict__.get("_hidden_kernels", {}).items():
-                if name not in module._modules:
-                    module._modules[name] = fn  # Internal torch API to force `nn.Module` registration
+            for name, fn in getattr(module, "_hidden_kernels", {}).items():
+                if name not in dict(module.named_children()):
+                    module.register_module(name, fn)
 
         def detach_hidden_kernels(module):
-            for name in module.__dict__.get("_hidden_kernels", {}):
-                module._modules.pop(name, None)
+            for name in getattr(module, "_hidden_kernels", {}):
+                delattr(module, name)
 
         self.apply(attach_hidden_kernels)
         try:

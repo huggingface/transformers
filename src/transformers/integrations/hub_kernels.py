@@ -225,9 +225,12 @@ try:
                 )
             },
             "cuda": {
+                Mode.TRAINING: FuncRepository(
+                    repo_id="kernels-community/rotary", func_name="apply_rotary_transformers"
+                ),
                 Mode.INFERENCE: FuncRepository(
                     repo_id="kernels-community/rotary", func_name="apply_rotary_transformers"
-                )
+                ),
             },
         }
 
@@ -463,13 +466,11 @@ def use_kernelized_func(module_names: list[Callable] | Callable):
                     or getattr(fn, "kernel_layer_name", None)
                     or getattr(fn, "func_name", None)
                 )
-                name = "rotary_fn" if name == "rotary_pos_emb" else name  # BC rename
                 if name is None:
                     raise ValueError(f"Could not infer kernel function name for {fn!r}")
 
                 # Do not register as submodule! Hide it behind a dict to be removed later after registering it
                 hidden_kernels[name] = fn
-                self.__dict__[name] = fn  # BC, e.g. `self.rotary_fn(...)`
 
         cls.__init__ = new_init
         return cls
