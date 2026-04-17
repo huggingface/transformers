@@ -614,24 +614,28 @@ def _add_new_model_like_internal(
 
     # 9. Run linters
     model_init_file = repo_path / "src" / "transformers" / "models" / "__init__.py"
-    subprocess.run(
-        ["ruff", "check", new_module_folder, tests_folder, model_init_file, "--fix"],
+    subprocess.run(  # noqa: S603
+        ["ruff", "check", new_module_folder, tests_folder, model_init_file, "--fix"],  # noqa: S607
         cwd=repo_path,
         stdout=subprocess.DEVNULL,
     )
-    subprocess.run(
-        ["ruff", "format", new_module_folder, tests_folder, model_init_file],
+    subprocess.run(  # noqa: S603
+        ["ruff", "format", new_module_folder, tests_folder, model_init_file],  # noqa: S607
         cwd=repo_path,
         stdout=subprocess.DEVNULL,
     )
-    subprocess.run(
-        ["python", "utils/check_doc_toc.py", "--fix_and_overwrite"], cwd=repo_path, stdout=subprocess.DEVNULL
+    subprocess.run(  # noqa: S603
+        ["python", "utils/check_doc_toc.py", "--fix_and_overwrite"],  # noqa: S607
+        cwd=repo_path,
+        stdout=subprocess.DEVNULL,
     )
-    subprocess.run(["python", "utils/sort_auto_mappings.py"], cwd=repo_path, stdout=subprocess.DEVNULL)
+    subprocess.run(["python", "utils/sort_auto_mappings.py"], cwd=repo_path, stdout=subprocess.DEVNULL)  # noqa: S603, S607
 
     # 10. Run the modular conversion
-    subprocess.run(
-        ["python", "utils/modular_model_converter.py", new_lowercase_name], cwd=repo_path, stdout=subprocess.DEVNULL
+    subprocess.run(  # noqa: S603
+        ["python", "utils/modular_model_converter.py", new_lowercase_name],  # noqa: S607
+        cwd=repo_path,
+        stdout=subprocess.DEVNULL,
     )
 
 

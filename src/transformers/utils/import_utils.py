@@ -930,7 +930,7 @@ def is_ninja_available() -> bool:
     [ninja](https://ninja-build.org/) build system is available on the system, `False` otherwise.
     """
     try:
-        subprocess.check_output(["ninja", "--version"])
+        subprocess.check_output(["ninja", "--version"])  # noqa: S603, S607
     except Exception:
         return False
     else:
@@ -2407,6 +2407,9 @@ class _LazyModule(ModuleType):
                                     break
                                 except Exception:
                                     # If this candidate fails, try the next one
+                                    logger.debug(
+                                        "Failed to resolve %s via candidate %s, trying next.", name, candidate_name
+                                    )
                                     continue
                             else:
                                 # Candidate not in _class_to_module - might need recursive resolution
@@ -2423,6 +2426,11 @@ class _LazyModule(ModuleType):
                                         setattr(self, name, value)
                                         break
                                 except Exception:
+                                    logger.debug(
+                                        "Failed to resolve %s via recursive lookup of %s, trying next.",
+                                        name,
+                                        candidate_name,
+                                    )
                                     continue
                 except (ImportError, AttributeError):
                     pass

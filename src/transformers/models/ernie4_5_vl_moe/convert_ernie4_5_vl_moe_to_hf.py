@@ -16,6 +16,7 @@
 import argparse
 import json
 import os
+import tempfile
 from pathlib import Path
 from shutil import copyfile
 
@@ -72,7 +73,7 @@ ALL_TEXT_CONFIG_KEYS = VALID_TEXT_CONFIG_KEYS + [
     "rope_parameters",
 ]
 
-TMP_TOKENIZER_DIR = "/tmp/ernie_vl_tokenizer"
+TMP_TOKENIZER_DIR = tempfile.mkdtemp(prefix="ernie_vl_tokenizer_")
 TOKENIZER_CONFIG_FILE = "tokenizer_config.json"
 DEFAULT_CHAT_TEMPLATE = """
 {%- set image_count = namespace(value=0) -%}

@@ -113,9 +113,9 @@ def get_models_in_diff():
     Returns:
         A set containing the names of the models that have been modified (e.g. {'llama', 'whisper'}).
     """
-    fork_point_sha = subprocess.check_output("git merge-base main HEAD".split()).decode("utf-8")
+    fork_point_sha = subprocess.check_output("git merge-base main HEAD".split()).decode("utf-8")  # noqa: S603
     modified_files = (
-        subprocess.check_output(f"git diff --diff-filter=d --name-only {fork_point_sha}".split())
+        subprocess.check_output(f"git diff --diff-filter=d --name-only {fork_point_sha}".split())  # noqa: S603, S607
         .decode("utf-8")
         .split()
     )
@@ -181,7 +181,7 @@ if __name__ == "__main__":
     # Assuming there is a topological sort on the dependency mapping: if the file being checked and its dependencies
     # are not in the diff, then there it is guaranteed to have no differences. If no models are in the diff, then this
     # script will do nothing.
-    current_branch = subprocess.check_output(["git", "branch", "--show-current"], text=True).strip()
+    current_branch = subprocess.check_output(["git", "branch", "--show-current"], text=True).strip()  # noqa: S603, S607
     if current_branch == "main":
         console.print(
             "[bold red]You are developing on the main branch. We cannot identify the list of changed files and will have to check all files. This may take a while.[/bold red]"

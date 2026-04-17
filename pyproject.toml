@@ -26,7 +26,19 @@ select = [
     "UP",  # pyupgrade
     "FURB",  # refurb
     "SIM",  # flake8-simplify
-    "S110",  # bandit's try-except-pass rule
+    "S102",  # Use of `exec` detected
+    "S103",  # `os.chmod` setting a permissive mask on file or directory
+    "S104",  # Possible binding to all interfaces
+    "S108",  # Probable insecure usage of temporary file or directory
+    "S306",  # Use of `tempfile.mktemp` (use `tempfile.mkstemp` instead)
+    "S307",  # Use of `eval` detected
+    "S603",  # `subprocess` call: check for execution of untrusted input
+    "S604",  # Function call with `shell=True` parameter identified
+    "S605",  # Starting a process with a shell, possible injection
+    "S606",  # Starting a process without a shell
+    "S607",  # Starting a process with a partial executable path
+    "S110",  # `try`-`except`-`pass` detected, consider logging the exception
+    "S112",  # `try`-`except`-`continue` detected, consider logging the exception
     "C4",  # flake8-comprehensions
     "RUF013",  # Checks for the use of implicit Optional in type annotations when the default parameter value is None.
     "PERF102",  # Checks for uses of dict.items() that discard either the key or the value when iterating over the dictionary.
@@ -51,6 +63,9 @@ extend-safe-fixes = [
 "__init__.py" = ["E402", "F401", "F403", "F811"]
 "src/transformers/file_utils.py" = ["F401"]
 "src/transformers/utils/dummy_*.py" = ["F401"]
+"tests/**/*.py" = ["S104", "S603", "S607"]
+"benchmark/**/*.py" = ["S603", "S607"]
+"benchmark_v2/**/*.py" = ["S603", "S607"]
 
 [tool.ruff.lint.isort]
 lines-after-imports = 2

@@ -183,7 +183,7 @@ def _is_modeling_candidate(path: Path) -> bool:
 
 
 def _git_name_only(command: list[str]) -> list[str]:
-    result = subprocess.run(command, capture_output=True, text=True, check=False)
+    result = subprocess.run(command, capture_output=True, text=True, check=False)  # noqa: S603
     if result.returncode != 0:
         return []
     return [line for line in result.stdout.splitlines() if line.strip()]

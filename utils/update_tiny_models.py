@@ -101,6 +101,7 @@ def get_tiny_model_summary_from_hub(output_path):
                 "sha": repo_info.sha,
             }
         except Exception:
+            logger.debug("Failed to fetch repo info for %s, skipping.", repo_id)
             continue
         try:
             time.sleep(1)

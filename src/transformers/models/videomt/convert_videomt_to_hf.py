@@ -478,8 +478,8 @@ def verify_conversion_against_github_reference(
     with tempfile.TemporaryDirectory(prefix="videomt_ref_") as tmp_dir:
         repo_path = Path(reference_repo_path) if reference_repo_path is not None else Path(tmp_dir) / "videomt"
         if reference_repo_path is None:
-            subprocess.run(
-                ["git", "clone", "--depth", "1", "https://github.com/tue-mps/videomt", str(repo_path)],
+            subprocess.run(  # noqa: S603
+                ["git", "clone", "--depth", "1", "https://github.com/tue-mps/videomt", str(repo_path)],  # noqa: S607
                 check=True,
                 capture_output=True,
                 text=True,

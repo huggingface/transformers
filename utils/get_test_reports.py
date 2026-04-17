@@ -74,7 +74,7 @@ def run_pytest(
 
         print("Command:", " ".join(cmd))
         if not dry_run:
-            subprocess.run(cmd, check=False, env=env)
+            subprocess.run(cmd, check=False, env=env)  # noqa: S603
 
 
 def handle_suite(

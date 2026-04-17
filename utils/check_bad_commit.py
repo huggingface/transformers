@@ -89,8 +89,8 @@ def is_bad_commit(target_test, commit):
 
     create_script(target_test=target_test)
 
-    result = subprocess.run(
-        ["python3", "target_script.py"],
+    result = subprocess.run(  # noqa: S603
+        ["python3", "target_script.py"],  # noqa: S607
         capture_output=True,
         text=True,
     )
@@ -220,8 +220,8 @@ git bisect run python3 target_script.py
     with open("run_git_bisect.sh", "w") as fp:
         fp.write(bash.strip())
 
-    bash_result = subprocess.run(
-        ["bash", "run_git_bisect.sh"],
+    bash_result = subprocess.run(  # noqa: S603
+        ["bash", "run_git_bisect.sh"],  # noqa: S607
         check=False,
         capture_output=True,
         text=True,

@@ -3402,6 +3402,7 @@ def find_sentencepiece_model_file(pretrained_model_name_or_path, **kwargs):
                 return candidate
         except Exception:
             # TODO: tighten to OSError / ProxyError
+            logger.debug("Failed to check for %s in %s, skipping.", candidate, pretrained_model_name_or_path)
             continue
 
     subfolder = kwargs.get("subfolder", "")

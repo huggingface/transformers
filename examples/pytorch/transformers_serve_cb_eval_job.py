@@ -186,7 +186,7 @@ def main():
     print("=" * 70)
 
     # Start server with output going directly to stdout/stderr
-    server_process = subprocess.Popen(serve_cmd, stdout=None, stderr=None)
+    server_process = subprocess.Popen(serve_cmd, stdout=None, stderr=None)  # noqa: S603
 
     wait_for_server_up(server_process, port=args.port, timeout=600)
 

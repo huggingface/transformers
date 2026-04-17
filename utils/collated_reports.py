@@ -74,7 +74,7 @@ def get_commit_hash(commit_hash: str | None) -> str:
     # Get commit hash if available
     if commit_hash is None:
         try:
-            commit_hash = subprocess.check_output(["git", "rev-parse", "HEAD"]).decode("utf-8").strip()
+            commit_hash = subprocess.check_output(["git", "rev-parse", "HEAD"]).decode("utf-8").strip()  # noqa: S603, S607
         except Exception as e:
             print(f"Failed to get commit hash with {e}")
             commit_hash = "unknown"

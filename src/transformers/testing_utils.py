@@ -2544,7 +2544,7 @@ def run_command(command: list[str], return_stdout=False):
     if an error occurred while running `command`
     """
     try:
-        output = subprocess.check_output(command, stderr=subprocess.STDOUT)
+        output = subprocess.check_output(command, stderr=subprocess.STDOUT)  # noqa: S603
         if return_stdout:
             if hasattr(output, "decode"):
                 output = output.decode("utf-8")
@@ -2774,7 +2774,7 @@ def run_test_using_subprocess(func):
                 else:
                     command = [f"{sys.executable}", "-m", "pytest", f"{test}"]
 
-                subprocess.run(command, env=env, check=True, capture_output=True)
+                subprocess.run(command, env=env, check=True, capture_output=True)  # noqa: S603
             except subprocess.CalledProcessError as e:
                 exception_message = e.stdout.decode()
                 lines = exception_message.split("\n")
@@ -3799,7 +3799,7 @@ def torchrun(script: str, nproc_per_node: int, is_torchrun: bool = True, env: di
 
         # Note that the subprocess will be waited for here, and raise an error if not successful
         try:
-            _ = subprocess.run(cmd, capture_output=True, env=env, text=True, check=True)
+            _ = subprocess.run(cmd, capture_output=True, env=env, text=True, check=True)  # noqa: S603
         except subprocess.CalledProcessError as e:
             raise Exception(f"The following error was captured: {e.stderr}")
 

@@ -40,8 +40,8 @@ def main():
 
     directories = sys.argv[1:]
     print(f"Running ty check on: {', '.join(directories)}")
-    result = subprocess.run(
-        ["ty", "check", "--respect-ignore-files", "--exclude", "**/*_pb*", *directories],
+    result = subprocess.run(  # noqa: S603
+        ["ty", "check", "--respect-ignore-files", "--exclude", "**/*_pb*", *directories],  # noqa: S607
     )
     sys.exit(result.returncode)
 

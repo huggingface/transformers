@@ -14,7 +14,8 @@
 """Testing suite for the PyTorch Dia model."""
 
 import copy
-import pathlib
+import os
+import shutil
 import tempfile
 import unittest
 
@@ -546,14 +547,14 @@ class DiaForConditionalGenerationIntegrationTest(unittest.TestCase):
         audio_sample_2 = librispeech_dummy[-2]["audio"]["array"]
         # 10 and 5 codebooks as prefix - saved as files as we need wav files for the original Dia
         dac_chunk_len = 512
-        self.audio_prompt_1_path = "/tmp/dia_test_sample_1.mp3"
-        self.audio_prompt_2_path = "/tmp/dia_test_sample_2.mp3"
+        self._tmp_dir = tempfile.mkdtemp(prefix="dia_test_")
+        self.audio_prompt_1_path = os.path.join(self._tmp_dir, "dia_test_sample_1.mp3")
+        self.audio_prompt_2_path = os.path.join(self._tmp_dir, "dia_test_sample_2.mp3")
         sf.write(self.audio_prompt_1_path, audio_sample_1[: (dac_chunk_len * 10)], self.sampling_rate)
         sf.write(self.audio_prompt_2_path, audio_sample_2[: (dac_chunk_len * 5)], self.sampling_rate)
 
     def tearDown(self):
-        pathlib.Path(self.audio_prompt_1_path).unlink()
-        pathlib.Path(self.audio_prompt_2_path).unlink()
+        shutil.rmtree(self._tmp_dir, ignore_errors=True)
         cleanup(torch_device, gc_collect=True)
 
     @slow

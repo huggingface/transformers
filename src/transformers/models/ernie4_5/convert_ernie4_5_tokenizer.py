@@ -13,6 +13,7 @@
 # limitations under the License.
 
 import argparse
+import tempfile
 
 from transformers import LlamaTokenizer, LlamaTokenizerFast
 
@@ -67,6 +68,7 @@ if __name__ == "__main__":
         hf_tok.add_tokens([token], special_tokens=True)
 
     # save slow model and convert on load time
-    hf_tok.save_pretrained("/tmp/ernie4_5_tokenizer")
-    hf_tok_fast = LlamaTokenizerFast.from_pretrained("/tmp/ernie4_5_tokenizer", from_slow=True)
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        hf_tok.save_pretrained(tmp_dir)
+        hf_tok_fast = LlamaTokenizerFast.from_pretrained(tmp_dir, from_slow=True)
     hf_tok_fast.save_pretrained(args.output_dir, push_to_hub=args.push_to_hub)
