@@ -131,7 +131,7 @@ class ParakeetCTCConfig(PreTrainedConfig):
         super().__post_init__(**kwargs)
 
 
-@auto_docstring(checkpoint="bezzam/parakeet-tdt-0.6b-v3-hf")
+@auto_docstring(checkpoint="nvidia/parakeet-tdt-0.6b-v3")
 @strict
 class ParakeetTDTConfig(PreTrainedConfig):
     r"""
