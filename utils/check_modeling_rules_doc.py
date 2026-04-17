@@ -39,7 +39,9 @@ from mlinter import render_rules_reference
 CHECKER_CONFIG = {
     "name": "modeling_rules_doc",
     "label": "Modeling rules documentation",
-    "file_globs": ["docs/source/en/modeling_rules.md"],
+    # Depends on the installed `mlinter` package output, which cannot be expressed
+    # as repo file globs for the checker cache.
+    "file_globs": None,
     "check_args": [],
     "fix_args": ["--fix_and_overwrite"],
 }
