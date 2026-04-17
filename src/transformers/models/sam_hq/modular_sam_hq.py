@@ -15,6 +15,7 @@
 from dataclasses import dataclass
 
 import torch
+from huggingface_hub.dataclasses import strict
 from torch import nn
 
 from ...processing_utils import Unpack
@@ -40,21 +41,22 @@ from ..sam.modeling_sam import (
 logger = logging.get_logger(__name__)
 
 
-@auto_docstring(checkpoint="Uminosachi/sam-hq")
+@auto_docstring(checkpoint="syscv-community/sam-hq-vit-base")
+@strict
 class SamHQPromptEncoderConfig(SamPromptEncoderConfig):
     pass
 
 
-@auto_docstring(checkpoint="Uminosachi/sam-hq")
+@auto_docstring(checkpoint="syscv-community/sam-hq-vit-base")
+@strict
 class SamHQVisionConfig(SamVisionConfig):
     pass
 
 
-@auto_docstring(checkpoint="Uminosachi/sam-hq")
+@auto_docstring(checkpoint="syscv-community/sam-hq-vit-base")
+@strict
 class SamHQMaskDecoderConfig(SamMaskDecoderConfig):
     r"""
-    vit_dim (`int`, *optional*, defaults to 768):
-        Dimensionality of the Vision Transformer (ViT) used in the `SamHQMaskDecoder` module.
     mlp_dim (`int`, *optional*, defaults to 2048):
         Dimensionality of the "intermediate" (i.e., feed-forward) layer in the Transformer encoder.
     attention_downsample_rate (`int`, *optional*, defaults to 2):
@@ -65,18 +67,15 @@ class SamHQMaskDecoderConfig(SamMaskDecoderConfig):
         The number of layers in the IoU head module.
     iou_head_hidden_dim (`int`, *optional*, defaults to 256):
         The dimensionality of the hidden states in the IoU head module.
+    vit_dim (`int`, *optional*, defaults to 768):
+        Dimensionality of the Vision Transformer (ViT) used in the `SamHQMaskDecoder` module.
     """
 
-    def __init__(
-        self,
-        vit_dim=768,
-        **super_kwargs,
-    ):
-        super().__init__(**super_kwargs)
-        self.vit_dim = vit_dim
+    vit_dim: int = 768
 
 
-@auto_docstring(checkpoint="Uminosachi/sam-hq")
+@auto_docstring(checkpoint="syscv-community/sam-hq-vit-base")
+@strict
 class SamHQConfig(SamConfig):
     r"""
     prompt_encoder_config (Union[`dict`, `SamHQPromptEncoderConfig`], *optional*):

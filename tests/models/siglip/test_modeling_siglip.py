@@ -50,7 +50,6 @@ if is_torch_available():
     from torch import nn
 
     from transformers import SiglipForImageClassification, SiglipModel, SiglipTextModel, SiglipVisionModel
-    from transformers.models.siglip.modeling_siglip import SiglipVisionTransformer
 
 if is_vision_available():
     from PIL import Image
@@ -187,7 +186,7 @@ class SiglipVisionModelTest(SiglipModelTesterMixin, unittest.TestCase):
     def setUp(self):
         self.model_tester = SiglipVisionModelTester(self)
         self.config_tester = ConfigTester(
-            self, config_class=SiglipVisionConfig, has_text_modality=False, hidden_size=37
+            self, config_class=SiglipVisionConfig, has_text_modality=False, hidden_size=32
         )
 
     def test_config(self):
@@ -208,7 +207,7 @@ class SiglipVisionModelTest(SiglipModelTesterMixin, unittest.TestCase):
 
     def test_vision_transformer_get_set_input_embeddings(self):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
-        transformer = SiglipVisionTransformer(config)
+        transformer = SiglipVisionModel(config)
 
         self.assertIsInstance(transformer.get_input_embeddings(), nn.Conv2d)
 
@@ -350,7 +349,7 @@ class SiglipTextModelTest(SiglipModelTesterMixin, unittest.TestCase):
     # Copied from tests.models.clip.test_modeling_clip.CLIPTextModelTest.setUp with CLIP->Siglip
     def setUp(self):
         self.model_tester = SiglipTextModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=SiglipTextConfig, hidden_size=37)
+        self.config_tester = ConfigTester(self, config_class=SiglipTextConfig, hidden_size=32)
 
     # Copied from tests.models.clip.test_modeling_clip.CLIPTextModelTest.test_config
     def test_config(self):

@@ -211,14 +211,22 @@ print(generated_text[0])
 
 [[autodoc]] Kosmos2_5Config
 
+## Kosmos2_5TextConfig
+
+[[autodoc]] Kosmos2_5TextConfig
+
+## Kosmos2_5VisionConfig
+
+[[autodoc]] Kosmos2_5VisionConfig
+
 ## Kosmos2_5ImageProcessor
 
 [[autodoc]] Kosmos2_5ImageProcessor
     - preprocess
 
-## Kosmos2_5ImageProcessorFast
+## Kosmos2_5ImageProcessorPil
 
-[[autodoc]] Kosmos2_5ImageProcessorFast
+[[autodoc]] Kosmos2_5ImageProcessorPil
     - preprocess
 
 ## Kosmos2_5Processor

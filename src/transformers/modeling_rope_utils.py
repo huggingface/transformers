@@ -14,6 +14,7 @@
 
 import math
 import warnings
+from collections.abc import Callable
 from functools import wraps
 from typing import TYPE_CHECKING, Optional, TypedDict
 
@@ -142,7 +143,7 @@ def _compute_linear_scaling_rope_parameters(
             The model configuration. This function assumes that the config will provide at least the following
             properties:
 
-            *   rope_theta (`float`): The base wavelength from which the inverse frequencies will be derived.
+            *   rope_theta (`float`, *optional*): The base wavelength from which the inverse frequencies will be derived. Defaults to `config.default_theta` if omitted.
             *   hidden_size (`int`): The numerator when deriving a head_dim, if not provided directly.
             *   num_attention_heads (`int`): The denominator when deriving a head_dim, if not provided directly.
 
@@ -183,6 +184,76 @@ def _compute_linear_scaling_rope_parameters(
     return inv_freq, attention_factor
 
 
+def _compute_proportional_rope_parameters(
+    config: Optional["PreTrainedConfig"] = None,
+    device: Optional["torch.device"] = None,
+    seq_len: int | None = None,
+    layer_type: str | None = None,
+    head_dim_key: str = "head_dim",
+) -> tuple["torch.Tensor", float]:
+    """
+    Computes the inverse frequencies with proportional RoPE.
+
+    Args:
+        config ([`~transformers.PretrainedConfig`]):
+            The model configuration. This function assumes that the config will provide at least the following
+            properties:
+
+            *   rope_theta (`float`, *optional*): The base wavelength from which the inverse frequencies will be derived. Defaults to `config.default_theta` if omitted.
+            *   hidden_size (`int`): The numerator when deriving a head_dim, if not provided directly.
+            *   num_attention_heads (`int`): The denominator when deriving a head_dim, if not provided directly.
+
+            Additionally, this function will make use of the following properties if they are found in the config:
+
+            *   head_dim (`int`, *optional*): The size of the key-value heads in the model. If None, this value will be
+                derived as hidden_size // num_attention_heads.
+            *   partial_rotary_factor (`float`, *optional*, defaults to 1.0): The proportion of the embedding dimension
+                to apply rotary positional encoding, e.g., [0.0, 0.25, 0.5, 0.75, 1.0]. Unlike other RoPE functions
+                that use this parameter, proportional RoPE will always return an encoding that is the size of
+                `head_dim`.
+        device (`torch.device`):
+            The device to use for initialization of the inverse frequencies.
+        seq_len (`int`, *optional*):
+            The current sequence length. Unused for this type of RoPE.
+
+    Returns:
+        Tuple of (`torch.Tensor`, `float`), containing the inverse frequencies for the RoPE embeddings and the
+        post-processing scaling factor applied to the computed cos/sin (unused in this type of RoPE).
+    """
+    # For backward compatibility standardize the `rope_parameters_dict` if it uses old format
+    config.standardize_rope_params()
+    rope_parameters_dict = config.rope_parameters[layer_type] if layer_type is not None else config.rope_parameters
+
+    head_dim = getattr(config, head_dim_key, None) or config.hidden_size // config.num_attention_heads
+    base = rope_parameters_dict["rope_theta"]
+    factor = rope_parameters_dict.get("factor", 1.0)
+    rope_proportion = rope_parameters_dict.get("partial_rotary_factor", 1.0)
+
+    attention_factor = 1.0  # Unused in this type of RoPE
+
+    rope_angles = int(rope_proportion * head_dim // 2)
+
+    inv_freq_rotated = 1.0 / (
+        base
+        ** (torch.arange(0, 2 * rope_angles, 2, dtype=torch.int64).to(device=device, dtype=torch.float) / head_dim)
+    )
+
+    nope_angles = head_dim // 2 - rope_angles
+    if nope_angles > 0:
+        inv_freq = torch.cat(
+            (
+                inv_freq_rotated,
+                torch.zeros(nope_angles, dtype=torch.float32, device=device),
+            ),
+            dim=0,
+        )
+    else:
+        inv_freq = inv_freq_rotated
+
+    inv_freq /= factor
+    return inv_freq, attention_factor
+
+
 def _compute_dynamic_ntk_parameters(
     config: Optional["PreTrainedConfig"] = None,
     device: Optional["torch.device"] = None,
@@ -197,7 +268,7 @@ def _compute_dynamic_ntk_parameters(
             The model configuration. This function assumes that the config will provide at least the following
             properties:
 
-            *   rope_theta (`float`): The base wavelength from which the inverse frequencies will be derived.
+            *   rope_theta (`float`, *optional*): The base wavelength from which the inverse frequencies will be derived. Defaults to `config.default_theta` if omitted.
             *   hidden_size (`int`): The numerator when deriving a head_dim, if not provided directly.
             *   num_attention_heads (`int`): The denominator when deriving a head_dim, if not provided directly.
             *   max_position_embeddings (`int`): The default sequence length used to update the dynamic RoPE at
@@ -268,7 +339,7 @@ def _compute_yarn_parameters(
             The model configuration. This function assumes that the config will provide at least the following
             properties:
 
-            *   rope_theta (`float`): The base wavelength from which the inverse frequencies will be derived.
+            *   rope_theta (`float`, *optional*): The base wavelength from which the inverse frequencies will be derived. Defaults to `config.default_theta` if omitted.
             *   hidden_size (`int`): The numerator when deriving a head_dim, if not provided directly.
             *   num_attention_heads (`int`): The denominator when deriving a head_dim, if not provided directly.
             *   max_position_embeddings (`int`): The maximum length of the positional embeddings.
@@ -403,7 +474,7 @@ def _compute_longrope_parameters(
             The model configuration. This function assumes that the config will provide at least the following
             properties:
 
-            *   rope_theta (`float`): The base wavelength from which the inverse frequencies will be derived.
+            *   rope_theta (`float`, *optional*): The base wavelength from which the inverse frequencies will be derived. Defaults to `config.default_theta` if omitted.
             *   hidden_size (`int`): The numerator when deriving a head_dim, if not provided directly.
             *   num_attention_heads (`int`): The denominator when deriving a head_dim, if not provided directly.
             *   max_position_embeddings (`int`): The maximum length of the positional embeddings.
@@ -490,7 +561,7 @@ def _compute_llama3_parameters(
             The model configuration. This function assumes that the config will provide at least the following
             properties:
 
-            *   rope_theta (`float`): The base wavelength from which the inverse frequencies will be derived.
+            *   rope_theta (`float`, *optional*): The base wavelength from which the inverse frequencies will be derived. Defaults to `config.default_theta` if omitted.
             *   hidden_size (`int`): The numerator when deriving a head_dim, if not provided directly.
             *   num_attention_heads (`int`): The denominator when deriving a head_dim, if not provided directly.
             *   rope_parameters (`dict[str, float | int]`): The standard RoPE scaling parameters, from which the following
@@ -558,20 +629,22 @@ def _compute_llama3_parameters(
 # This maps the "rope_type" string field in rope config to the corresponding function to compute the RoPE parameters
 # from the model config. You can append new {'rope_type': callable} pairs to this rope_parameters to enable custom RoPE
 # parameterizations, as long as the callable has the same signature.
-ROPE_INIT_FUNCTIONS = {
+ROPE_INIT_FUNCTIONS: dict[str, Callable[..., tuple["torch.Tensor", float]]] = {
     "linear": _compute_linear_scaling_rope_parameters,
     "dynamic": _compute_dynamic_ntk_parameters,
     "yarn": _compute_yarn_parameters,
     "longrope": _compute_longrope_parameters,
     "llama3": _compute_llama3_parameters,
+    "proportional": _compute_proportional_rope_parameters,
 }
 
 
-class RopeParameters(TypedDict, total=False):
+class RopeParameters(TypedDict):
     """
     Args:
-        rope_theta (`float`):
-            The base period of the RoPE embeddings.
+        rope_theta (`float`, *optional*, defaults to `RotaryEmbeddingConfigMixin.default_theta`):
+            The base period of the RoPE embeddings. Optional in serialized configs — if omitted,
+            the model's `default_theta` (typically 10000.0) is used.
         rope_type (`str`, *optional*, defaults to "default"):
             The sub-variant of RoPE to use. Can be one of ['default', 'linear', 'dynamic', 'yarn', 'longrope',
             'llama3'], with 'default' being the original RoPE implementation.
@@ -608,7 +681,7 @@ class RopeParameters(TypedDict, total=False):
             Only used with 'llama3'. Scaling factor applied to high frequency components of the RoPE
     """
 
-    rope_theta: float
+    rope_theta: float | None
     rope_type: str | None
     partial_rotary_factor: float | None
     factor: float | None
@@ -628,8 +701,9 @@ class RotaryEmbeddingConfigMixin:
     """
 
     default_theta = 10_000.0
+    ignore_keys_at_rope_validation = set()
 
-    def convert_rope_params_to_dict(self, ignore_keys_at_rope_validation: set | None = None, **kwargs):
+    def convert_rope_params_to_dict(self, **kwargs):
         rope_scaling = kwargs.pop("rope_scaling", None)
         self.rope_parameters = rope_scaling or self.rope_parameters
         self.rope_parameters = self.rope_parameters if self.rope_parameters is not None else {}
@@ -645,13 +719,9 @@ class RotaryEmbeddingConfigMixin:
         partial_rotary_factor = kwargs.get("partial_rotary_factor", getattr(self, "partial_rotary_factor", None))
         if partial_rotary_factor is not None:
             self.rope_parameters.setdefault("partial_rotary_factor", partial_rotary_factor)
-            ignore_keys_at_rope_validation = (
-                set() if ignore_keys_at_rope_validation is None else set(ignore_keys_at_rope_validation)
-            )
-            ignore_keys_at_rope_validation = ignore_keys_at_rope_validation | {"partial_rotary_factor"}
+            self.ignore_keys_at_rope_validation = self.ignore_keys_at_rope_validation | {"partial_rotary_factor"}
 
         self.standardize_rope_params()
-        self.validate_rope(ignore_keys=ignore_keys_at_rope_validation)
         return kwargs
 
     def standardize_rope_params(self):
@@ -702,12 +772,14 @@ class RotaryEmbeddingConfigMixin:
 
         self.rope_parameters = rope_parameters
 
-    def validate_rope(self: "PreTrainedConfig", ignore_keys: set | None = None):
+    def validate_rope(self: "PreTrainedConfig"):
         """
         Validate the RoPE config arguments, given a `"PreTrainedConfig"` object
         """
-        rope_parameters_dict = self.rope_parameters
-        if rope_parameters_dict is None:
+        # Don't validate if no rope_parameters found (`None`) or if it's an empty dict
+        # Note that validation runs every time a new config is created, even if config is non-RoPE
+        rope_parameters_dict = getattr(self, "rope_parameters", None)
+        if not rope_parameters_dict:
             return
 
         if getattr(self, "layer_types", None) is not None and set(rope_parameters_dict.keys()).issubset(
@@ -723,41 +795,51 @@ class RotaryEmbeddingConfigMixin:
             rope_parameters["rope_type"] = rope_type
 
             if validation_fn is not None:
-                validation_fn(rope_parameters, ignore_keys=ignore_keys)
+                validation_fn(rope_parameters, ignore_keys=self.ignore_keys_at_rope_validation)
             else:
                 logger.warning(
                     f"Missing validation function in 'RotaryEmbeddingConfigMixin' for 'rope_type'='{rope_type}'"
                 )
 
     def _validate_default_rope_parameters(self, rope_parameters: dict, ignore_keys: set | None = None):
-        required_keys = {"rope_type", "rope_theta"}
+        required_keys = {"rope_type"}
+        optional_keys = {"rope_theta"}
         received_keys = set(rope_parameters.keys())
         rope_type = rope_parameters["rope_type"]
-        self._check_received_keys(rope_type, received_keys, required_keys, ignore_keys=ignore_keys)
+        self._check_received_keys(
+            rope_type, received_keys, required_keys, optional_keys=optional_keys, ignore_keys=ignore_keys
+        )
 
     def _validate_linear_rope_parameters(self, rope_parameters: dict, ignore_keys: set | None = None):
-        required_keys = {"rope_type", "factor", "rope_theta"}
+        required_keys = {"rope_type", "factor"}
+        optional_keys = {"rope_theta"}
         received_keys = set(rope_parameters.keys())
         rope_type = rope_parameters["rope_type"]
-        self._check_received_keys(rope_type, received_keys, required_keys, ignore_keys=ignore_keys)
+        self._check_received_keys(
+            rope_type, received_keys, required_keys, optional_keys=optional_keys, ignore_keys=ignore_keys
+        )
 
         factor = rope_parameters["factor"]
-        if factor is None or not isinstance(factor, float) or factor < 1.0:
-            logger.warning(f"`rope_parameters`'s factor field must be a float >= 1, got {factor}")
+        if factor is None or not isinstance(factor, (float, int)) or factor < 1.0:
+            logger.warning(f"`rope_parameters`'s factor field must be a float or int >= 1, got {factor}")
 
     def _validate_dynamic_rope_parameters(self, rope_parameters: dict, ignore_keys: set | None = None):
         required_keys = {"rope_type", "factor"}
+        optional_keys = {"rope_theta"}
         received_keys = set(rope_parameters.keys())
         rope_type = rope_parameters["rope_type"]
-        self._check_received_keys(rope_type, received_keys, required_keys, ignore_keys=ignore_keys)
+        self._check_received_keys(
+            rope_type, received_keys, required_keys, optional_keys=optional_keys, ignore_keys=ignore_keys
+        )
 
         factor = rope_parameters["factor"]
-        if factor is None or not isinstance(factor, float) or factor < 1.0:
-            logger.warning(f"`rope_parameters`'s factor field must be a float >= 1, got {factor}")
+        if factor is None or not isinstance(factor, (float, int)) or factor < 1.0:
+            logger.warning(f"`rope_parameters`'s factor field must be a float or int >= 1, got {factor}")
 
     def _validate_yarn_rope_parameters(self, rope_parameters: dict, ignore_keys: set | None = None):
-        required_keys = {"rope_type", "factor", "rope_theta", "original_max_position_embeddings"}
+        required_keys = {"rope_type", "factor", "original_max_position_embeddings"}
         optional_keys = {
+            "rope_theta",
             "attention_factor",
             "beta_fast",
             "beta_slow",
@@ -770,8 +852,8 @@ class RotaryEmbeddingConfigMixin:
         self._check_received_keys(rope_type, received_keys, required_keys, optional_keys, ignore_keys=ignore_keys)
 
         factor = rope_parameters["factor"]
-        if factor is None or not isinstance(factor, float) or factor < 1.0:
-            logger.warning(f"`rope_parameters`'s factor field must be a float >= 1, got {factor}")
+        if factor is None or not isinstance(factor, (float, int)) or factor < 1.0:
+            logger.warning(f"`rope_parameters`'s factor field must be a float or int >= 1, got {factor}")
 
         attention_factor = rope_parameters.get("attention_factor")
         if attention_factor is not None and (not isinstance(attention_factor, float) or attention_factor < 0):
@@ -779,11 +861,11 @@ class RotaryEmbeddingConfigMixin:
                 f"`rope_parameters`'s attention_factor field must be a float greater than 0, got {attention_factor}"
             )
         beta_fast = rope_parameters.get("beta_fast")
-        if beta_fast is not None and not isinstance(beta_fast, float):
-            logger.warning(f"`rope_parameters`'s beta_fast field must be a float, got {beta_fast}")
+        if beta_fast is not None and not isinstance(beta_fast, (float, int)):
+            logger.warning(f"`rope_parameters`'s beta_fast field must be a float or int, got {beta_fast}")
         beta_slow = rope_parameters.get("beta_slow")
-        if beta_slow is not None and not isinstance(beta_slow, float):
-            logger.warning(f"`rope_parameters`'s beta_slow field must be a float, got {beta_slow}")
+        if beta_slow is not None and not isinstance(beta_slow, (float, int)):
+            logger.warning(f"`rope_parameters`'s beta_slow field must be a float or int, got {beta_slow}")
 
         if (beta_fast or 32) < (beta_slow or 1):
             logger.warning(
@@ -807,8 +889,8 @@ class RotaryEmbeddingConfigMixin:
             )
 
     def _validate_longrope_rope_parameters(self, rope_parameters: dict, ignore_keys: set | None = None):
-        required_keys = {"rope_type", "short_factor", "long_factor", "rope_theta", "original_max_position_embeddings"}
-        optional_keys = {"attention_factor", "factor"}
+        required_keys = {"rope_type", "short_factor", "long_factor", "original_max_position_embeddings"}
+        optional_keys = {"rope_theta", "attention_factor", "factor"}
         received_keys = set(rope_parameters.keys())
         rope_type = rope_parameters["rope_type"]
         self._check_received_keys(rope_type, received_keys, required_keys, optional_keys, ignore_keys=ignore_keys)
@@ -818,7 +900,7 @@ class RotaryEmbeddingConfigMixin:
         dim = int(head_dim * partial_rotary_factor)
 
         short_factor = rope_parameters.get("short_factor")
-        if not isinstance(short_factor, list) and all(isinstance(x, (int, float)) for x in short_factor):
+        if not (isinstance(short_factor, list) and all(isinstance(x, (int, float)) for x in short_factor)):
             logger.warning(f"`rope_parameters`'s short_factor field must be a list of numbers, got {short_factor}")
         if len(short_factor) != dim // 2:
             logger.warning(
@@ -826,7 +908,7 @@ class RotaryEmbeddingConfigMixin:
             )
 
         long_factor = rope_parameters.get("long_factor")
-        if not isinstance(long_factor, list) and all(isinstance(x, (int, float)) for x in long_factor):
+        if not (isinstance(long_factor, list) and all(isinstance(x, (int, float)) for x in long_factor)):
             logger.warning(f"`rope_parameters`'s long_factor field must be a list of numbers, got {long_factor}")
         if len(long_factor) != dim // 2:
             logger.warning(
@@ -847,13 +929,13 @@ class RotaryEmbeddingConfigMixin:
             )
         elif factor is None and original_max_position_embeddings is None:
             logger.warning("Missing required keys in `rope_parameters`: 'factor'")
-        elif not isinstance(factor, float) or factor < 1.0:
-            logger.warning(f"`rope_parameters`'s factor field must be a float >= 1, got {factor}")
+        elif not isinstance(factor, (float, int)) or factor < 1.0:
+            logger.warning(f"`rope_parameters`'s factor field must be a float or int >= 1, got {factor}")
 
         attention_factor = rope_parameters.get("attention_factor")
-        if attention_factor is not None and (not isinstance(attention_factor, float) or attention_factor < 0.0):
+        if attention_factor is not None and (not isinstance(attention_factor, (float, int)) or attention_factor < 0.0):
             logger.warning(
-                f"`rope_parameters`'s attention_factor field must be a float greater than 0, got {attention_factor}"
+                f"`rope_parameters`'s attention_factor field must be a float or int greater than 0, got {attention_factor}"
             )
 
     def _validate_llama3_rope_parameters(self, rope_parameters: dict, ignore_keys: set | None = None):
@@ -870,15 +952,17 @@ class RotaryEmbeddingConfigMixin:
         self._check_received_keys(rope_type, received_keys, required_keys, ignore_keys=ignore_keys)
 
         factor = rope_parameters["factor"]
-        if factor is None or not isinstance(factor, float) or factor < 1.0:
-            logger.warning(f"`rope_parameters`'s factor field must be a float >= 1, got {factor}")
+        if factor is None or not isinstance(factor, (float, int)) or factor < 1.0:
+            logger.warning(f"`rope_parameters`'s factor field must be a float or int >= 1, got {factor}")
 
         low_freq_factor = rope_parameters["low_freq_factor"]
         high_freq_factor = rope_parameters["high_freq_factor"]
-        if low_freq_factor is None or not isinstance(low_freq_factor, float):
-            logger.warning(f"`rope_parameters`'s low_freq_factor field must be a float, got {low_freq_factor}")
-        if high_freq_factor is None or not isinstance(high_freq_factor, float):
-            logger.warning(f"`rope_parameters`'s high_freq_factor field must be a float, got {high_freq_factor}")
+        if low_freq_factor is None or not isinstance(low_freq_factor, (float, int)):
+            logger.warning(f"`rope_parameters`'s low_freq_factor field must be a float, or int got {low_freq_factor}")
+        if high_freq_factor is None or not isinstance(high_freq_factor, (float, int)):
+            logger.warning(
+                f"`rope_parameters`'s high_freq_factor field must be a float or int, got {high_freq_factor}"
+            )
         if high_freq_factor <= low_freq_factor:
             logger.warning(
                 "`rope_parameters`'s high_freq_factor field must be greater than low_freq_factor, got high_freq_factor="
@@ -895,6 +979,20 @@ class RotaryEmbeddingConfigMixin:
             logger.warning(
                 "`rope_parameters`'s original_max_position_embeddings field must be less than max_position_embeddings, got "
                 f"{original_max_position_embeddings} and max_position_embeddings={self.max_position_embeddings}"
+            )
+
+    def _validate_proportional_rope_parameters(self, rope_parameters: dict, ignore_keys: set | None = None):
+        required_keys = {"rope_type", "rope_theta"}
+        rope_type = rope_parameters["rope_type"]
+        received_keys = set(rope_parameters.keys())
+        self._check_received_keys(rope_type, received_keys, required_keys, ignore_keys=ignore_keys)
+
+        partial_rotary_factor = rope_parameters.get("partial_rotary_factor")
+        if partial_rotary_factor is None:
+            logger.warning(
+                "`rope_parameters`'s partial_rotary_factor is None. This will default to 1.0 in the computation, "
+                "making this equivalent to the linear_scaling RoPE type. Provide a value in the range [0.0, 1.0) to "
+                "make use of the proportional RoPE funcitonality."
             )
 
     @staticmethod
@@ -917,7 +1015,7 @@ class RotaryEmbeddingConfigMixin:
 
         # Some models need to store model-specific keys, and we don't want to throw warning at them
         if ignore_keys is not None:
-            received_keys -= ignore_keys
+            received_keys -= set(ignore_keys)
 
         missing_keys = required_keys - received_keys
         if missing_keys:
@@ -942,4 +1040,4 @@ def rope_config_validation(config: RotaryEmbeddingConfigMixin, ignore_keys: set 
         FutureWarning,
     )
     config.standardize_rope_params()
-    config.validate_rope(ignore_keys=ignore_keys)
+    config.validate_rope()

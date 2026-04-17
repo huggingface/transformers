@@ -18,6 +18,16 @@ import re
 from transformers.utils import direct_transformers_import
 
 
+CHECKER_CONFIG = {
+    "name": "config_docstrings",
+    "label": "Config docstrings",
+    # Approximate: iterates CONFIG_MAPPING at runtime via inspect.getsource(), not file globs.
+    # Only configs registered in CONFIG_MAPPING are checked; deprecated models are skipped.
+    "file_globs": ["src/transformers/models/**/configuration_*.py"],
+    "check_args": [],
+    "fix_args": None,
+}
+
 # All paths are set with the intent you should run this script from the root of the repo with the command
 # python utils/check_config_docstrings.py
 PATH_TO_TRANSFORMERS = "src/transformers"
@@ -30,7 +40,7 @@ CONFIG_MAPPING = transformers.models.auto.configuration_auto.CONFIG_MAPPING
 
 # Regex pattern used to find the checkpoint mentioned in the docstring of `config_class`.
 # For example, `[google-bert/bert-base-uncased](https://huggingface.co/google-bert/bert-base-uncased)`
-_re_checkpoint = re.compile(r"""@auto_docstring\((?s).*?checkpoint\s*=\s*["']([^"']+)["']""")
+_re_checkpoint = re.compile(r"""(?s)@auto_docstring\(.*?checkpoint\s*=\s*["']([^"']+)["']""")
 
 
 CONFIG_CLASSES_TO_IGNORE_FOR_DOCSTRING_CHECKPOINT_CHECK = {

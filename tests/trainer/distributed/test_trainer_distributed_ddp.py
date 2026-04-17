@@ -18,16 +18,17 @@ DDP-specific distributed trainer tests.
 
 import json
 import os
+import re
 
 from parameterized import parameterized
 
 from transformers.testing_utils import (
+    CaptureStderr,
     TestCasePlus,
     backend_device_count,
     execute_subprocess_async,
     get_torch_dist_unique_port,
     require_torch_multi_accelerator,
-    run_first,
     slow,
     torch_device,
 )
@@ -95,12 +96,12 @@ class DDPCommandsMixin:
         return cmd
 
 
+@slow
+@require_torch_multi_accelerator
 class TestTrainerDistributedDDP(DDPCommandsMixin, TestCasePlus):
     # -----------------------------------------------------------------------
     # accelerate launch tests
     # -----------------------------------------------------------------------
-    @run_first
-    @require_torch_multi_accelerator
     def test_eval_order(self):
         output_dir = self.get_auto_remove_tmp_dir()
         script = os.path.join(SCRIPTS_DIR, "eval_ddp.py")
@@ -111,8 +112,6 @@ class TestTrainerDistributedDDP(DDPCommandsMixin, TestCasePlus):
         )
         execute_subprocess_async(cmd, env=self.get_env())
 
-    @run_first
-    @require_torch_multi_accelerator
     def test_loss_averaging(self):
         device_count = backend_device_count(torch_device)
         min_bs = 2
@@ -167,8 +166,6 @@ class TestTrainerDistributedDDP(DDPCommandsMixin, TestCasePlus):
         self.assertLess(max(fixed_diff), 0.005)
         self.assertLess(relative_broken, 0.1)
 
-    @run_first
-    @require_torch_multi_accelerator
     def test_worker_seed(self):
         output_dir = self.get_auto_remove_tmp_dir()
         script = os.path.join(SCRIPTS_DIR, "worker_seed.py")
@@ -182,8 +179,6 @@ class TestTrainerDistributedDDP(DDPCommandsMixin, TestCasePlus):
     # -----------------------------------------------------------------------
     # torchrun vs accelerate env parity
     # -----------------------------------------------------------------------
-    @run_first
-    @require_torch_multi_accelerator
     def test_torchrun_accelerate_env_parity(self):
         """Verify torchrun and accelerate launch produce the same distributed environment for DDP."""
         script = os.path.join(SCRIPTS_DIR, "torchrun_env_check.py")
@@ -239,6 +234,37 @@ class TestTrainerDistributedDDP(DDPCommandsMixin, TestCasePlus):
                 self.assertNotIn("fsdp_version", info)
                 self.assertNotIn("deepspeed_zero_stage", info)
 
+    @parameterized.expand(
+        [
+            ("base", "--log_level info", 1),
+            ("low", "--log_level debug --log_level_replica debug", 2),
+            ("high", "--log_level error --log_level_replica debug", 1),
+            ("mixed", "--log_level error --log_level_replica error", 0),
+        ]
+    )
+    def test_log_level_replica(self, _name, extra_args_str, expected_matches):
+        """Test that log_level_replica controls logging on non-main processes."""
+        output_dir = self.get_auto_remove_tmp_dir()
+        script = os.path.join(SCRIPTS_DIR, "train.py")
+        script_args = [
+            "--output_dir",
+            output_dir,
+            "--num_train_epochs",
+            "1",
+            "--per_device_train_batch_size",
+            "4",
+            "--logging_strategy",
+            "no",
+        ]
+        if extra_args_str:
+            script_args.extend(extra_args_str.split())
+        cmd = self.get_accelerate_cmd(script, DDP_CONFIG_FILE, script_args=script_args, num_processes=2)
+        log_info_string = "Running training"
+        with CaptureStderr() as cl:
+            execute_subprocess_async(cmd, env=self.get_env())
+        n_matches = len(re.findall(log_info_string, cl.err))
+        self.assertEqual(n_matches, expected_matches)
+
 
 # ---------------------------------------------------------------------------
 # DDP training integration tests (using train.py)
@@ -246,7 +272,6 @@ class TestTrainerDistributedDDP(DDPCommandsMixin, TestCasePlus):
 
 
 @slow
-@run_first
 @require_torch_multi_accelerator
 class TestTrainerDistributedDDPCommon(DDPCommandsMixin, TrainerDistributedCommon, TestCasePlus):
     """

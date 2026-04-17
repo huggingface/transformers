@@ -21,7 +21,7 @@ from dataclasses import asdict, dataclass, field, fields
 from datetime import timedelta
 from enum import Enum
 from functools import cached_property
-from typing import Any
+from typing import Any, Literal
 
 from .debug_utils import DebugOption
 from .trainer_utils import (
@@ -391,12 +391,23 @@ class TrainingArguments:
             [swanlab](https://swanlab.cn) logging.
         project (`str`, *optional*, defaults to `"huggingface"`):
             The name of the project to use for logging. Currently, only used by Trackio.
-        trackio_space_id (`str` or `None`, *optional*, defaults to `"trackio"`):
-            The Hugging Face Space ID to deploy to when using Trackio. Should be a complete Space name like
-            `'username/reponame'` or `'orgname/reponame'`, or just `'reponame'` in which case the Space will be
-            created in the currently-logged-in Hugging Face user's namespace. If `None`, will log to a local directory.
-            Note that this Space will be public unless you set `hub_private_repo=True` or your organization's default
-            is to create private Spaces."
+        trackio_space_id (`str` or `None`, *optional*, defaults to `None`):
+            The Hugging Face Space ID to use for live Trackio logging with a Gradio-based Space. Should be a full
+            Space name like `'username/reponame'` or `'orgname/reponame'`, or just `'reponame'` (the Space is created in
+            the currently logged-in user's namespace). If `None`, metrics are logged only to a **local** directory (no
+            Space on the Hub). That Gradio Space has **read and write** access to the Trackio **Bucket**, which is what you want while
+            training is **in progress**—for example when **resuming** a partial run or **aggregating logs** from multiple
+            machines. The Space will be **public** unless you set `hub_private_repo=True` or your organization's default is to
+            create private Spaces.
+        trackio_bucket_id (`str` or `None`, *optional*, defaults to `None`):
+            Optional Hugging Face Bucket id for Trackio. If unset, Trackio derives one. Used together with a Gradio Space
+            (`trackio_space_id`) and when deploying a static Space (`trackio_static_space_id` is not `False`).
+        trackio_static_space_id (`str`, `False`, or `None`, *optional*, defaults to `None`):
+            The Hugging Face Space ID to use for static Space created after training is complete. Should be a full
+            Space name like `'username/reponame'` or `'orgname/reponame'`, or just `'reponame'` (the Space is created in
+            the currently logged-in user's namespace). If False, no static Space will be created. If None, and model is pushed to the Hub,
+            a static Space will be created with a default name and this will be linked from the model card. The Space will be public
+            unless you set `hub_private_repo=True` or your organization's default is to create private Spaces.
 
         > Evaluation
 
@@ -511,7 +522,7 @@ class TrainingArguments:
             Load the best checkpoint at the end of training. Requires `eval_strategy` to be set.
             When enabled, the best checkpoint is always saved (see `save_total_limit`).
             <Tip>
-            When `True`, `save_strategy` must match `eval_strategy`, and if using `"steps"`,
+            When `True`, `save_strategy` must match `eval_strategy` (unless `save_strategy` is `"best"`), and if using `"steps"`,
             `save_steps` must be a multiple of `eval_steps`.
             </Tip>
         metric_for_best_model (`str`, *optional*):
@@ -1045,13 +1056,29 @@ class TrainingArguments:
         metadata={"help": "The name of the project to use for logging. Currently, only used by Trackio."},
     )
     trackio_space_id: str | None = field(
-        default="trackio",
+        default=None,
         metadata={
-            "help": "The Hugging Face Space ID to deploy to when using Trackio. Should be a complete Space name like "
-            "'username/reponame' or 'orgname/reponame', or just 'reponame' in which case the Space will be created in "
-            "the currently-logged-in Hugging Face user's namespace. If `None`, will log to a local directory. Note "
-            "that this Space will be public unless you set `hub_private_repo=True` or your organization's "
-            "default is to create private Spaces."
+            "help": (
+                "Hugging Face Space id for live Gradio-based Trackio logging (read/write Bucket access). Use "
+                "'username/reponame', 'orgname/reponame', or 'reponame' (current user's namespace). None: log only "
+                "locally, no Space. Prefer trackio_static_space_id for stable post-training dashboard links. Public "
+                "unless hub_private_repo=True or org default."
+            )
+        },
+    )
+    trackio_bucket_id: str | None = field(
+        default=None,
+        metadata={"help": "Optional HF Bucket id when using a Trackio Space; if unset, Trackio picks a default."},
+    )
+    trackio_static_space_id: str | None | Literal[False] = field(
+        default=None,
+        metadata={
+            "help": (
+                "Static read-only Trackio Space over the Bucket (stable model-card links). False: no static sync on Hub "
+                "push and no freeze after training. None/str: allow static Space; for local-only logging, Hub push runs "
+                "sync(static); after training, freeze runs only if trackio_space_id was set (Gradio Space). str sets "
+                "explicit static Space id. Public unless hub_private_repo=True or org default."
+            )
         },
     )
 
@@ -1179,8 +1206,8 @@ class TrainingArguments:
         metadata={
             "help": "Whether to make the repo private. If `None` (default), the repo will be public unless the "
             "organization's default is private. This value is ignored if the repo already exists. If reporting to "
-            "Trackio with deployment to Hugging Face Spaces enabled, the same logic determines whether the Space is "
-            "private."
+            "Trackio Spaces created or synced (including on Hub push when `trackio_space_id` is None) use the same "
+            "logic for whether the Space is private."
         },
     )
     hub_model_id: str | None = field(
@@ -1510,7 +1537,9 @@ class TrainingArguments:
                 )
 
         if (
-            self.load_best_model_at_end or self.lr_scheduler_type == SchedulerType.REDUCE_ON_PLATEAU
+            self.load_best_model_at_end
+            or self.lr_scheduler_type == SchedulerType.REDUCE_ON_PLATEAU
+            or self.lr_scheduler_type == SchedulerType.GREEDY
         ) and self.metric_for_best_model is None:
             self.metric_for_best_model = "loss"
         if self.greater_is_better is None and self.metric_for_best_model is not None:
@@ -1524,6 +1553,12 @@ class TrainingArguments:
             self.report_to = []
         elif not isinstance(self.report_to, list):
             self.report_to = [self.report_to]
+
+        # Auto-enable Kubeflow integration when running inside a Kubeflow TrainJob
+        from .integrations import is_kubeflow_available
+
+        if is_kubeflow_available() and "kubeflow" not in self.report_to:
+            self.report_to = list(self.report_to) + ["kubeflow"]
 
         # ── 4. Validation ──
         self._validate_args()
@@ -1658,7 +1693,7 @@ class TrainingArguments:
         if self.load_best_model_at_end and self.save_strategy != SaveStrategy.BEST:
             if self.eval_strategy != self.save_strategy:
                 raise ValueError(
-                    "--load_best_model_at_end requires the save and eval strategy to match, but found\n- Evaluation "
+                    '--load_best_model_at_end requires the save and eval strategy to match, except when --save_strategy="best", but found\n- Evaluation '
                     f"strategy: {self.eval_strategy}\n- Save strategy: {self.save_strategy}"
                 )
             if self.eval_strategy == IntervalStrategy.STEPS and self.save_steps % self.eval_steps != 0:
@@ -1701,6 +1736,10 @@ class TrainingArguments:
                 raise ValueError("lr_scheduler_type reduce_lr_on_plateau requires an eval strategy")
             if not is_torch_available():
                 raise ValueError("lr_scheduler_type reduce_lr_on_plateau requires torch>=0.2.0")
+
+        if self.lr_scheduler_type == SchedulerType.GREEDY:
+            if self.eval_strategy == IntervalStrategy.NO:
+                raise ValueError("lr_scheduler_type greedy requires an eval strategy")
 
         if self.warmup_steps < 0:
             raise ValueError("warmup_steps must be an integer or a float")
@@ -2740,9 +2779,10 @@ class TrainingArguments:
             )
 
             fsdp_plugin_args = {}
+            fsdp_sharding = None
             for fsdp_option in self.fsdp:
                 if fsdp_option.upper() in FSDP_SHARDING_STRATEGY:
-                    fsdp_plugin_args["sharding_strategy"] = fsdp_option
+                    fsdp_sharding = fsdp_option
                 elif fsdp_option == FSDPOption.OFFLOAD:
                     fsdp_plugin_args["cpu_offload"] = True
                 elif fsdp_option == FSDPOption.AUTO_WRAP:
@@ -2758,16 +2798,20 @@ class TrainingArguments:
             fsdp_plugin_args["fsdp_version"] = fsdp_version
             prefetch_policy = self.fsdp_config.get("backward_prefetch", "NO_PREFETCH")
             if fsdp_version == 2:
+                # full_shard → True (reshard after forward), shard_grad_op → False
+                default_reshard = fsdp_sharding != "shard_grad_op" if fsdp_sharding else True
                 fsdp_plugin_args["reshard_after_forward"] = str_to_bool(
-                    str(self.fsdp_config.get("reshard_after_forward", "false")).lower()
+                    str(self.fsdp_config.get("reshard_after_forward", default_reshard)).lower()
                 )
             else:
                 fsdp_plugin_args["forward_prefetch"] = str_to_bool(
                     str(self.fsdp_config.get("forward_prefetch", "false")).lower()
                 )
                 fsdp_plugin_args["backward_prefetch"] = prefetch_policy.upper()
+                # Pass sharding strategy as reshard_after_forward (accelerate converts it to ShardingStrategy)
+                default_reshard = fsdp_sharding.upper() if fsdp_sharding else "FULL_SHARD"
                 fsdp_plugin_args["reshard_after_forward"] = str(
-                    self.fsdp_config.get("reshard_after_forward", "FULL_SHARD")
+                    self.fsdp_config.get("reshard_after_forward", default_reshard)
                 ).lower()
                 fsdp_plugin_args["use_orig_params"] = str_to_bool(
                     str(self.fsdp_config.get("use_orig_params", "true")).lower()

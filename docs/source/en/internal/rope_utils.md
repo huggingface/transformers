@@ -44,13 +44,13 @@ from transformers import LlamaConfig
 config = LlamaConfig()
 config.rope_parameters = {
     "rope_type": "default", # type of RoPE to use
-    "rope_theta": 10000.0 # base frequency parameter
+    # rope_theta is optional — omitting it uses the model’s default_theta (typically 10000.0)
 }
 
 # If we want to apply a scaled RoPE type, we need to pass extra parameters
 config.rope_parameters = {
     "rope_type": "linear",
-    "rope_theta": 10000.0,
+    "rope_theta": 10000.0,  # can be omitted to fall back to default_theta
     "factor": 8.0  # scale factor for context extension
 }
 ```

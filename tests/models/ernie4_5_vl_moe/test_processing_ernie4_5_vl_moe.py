@@ -28,7 +28,7 @@ from ...test_processing_common import ProcessorTesterMixin
 
 
 if is_vision_available():
-    from transformers import Ernie4_5_VLMoeImageProcessorFast, Ernie4_5_VLMoeProcessor
+    from transformers import Ernie4_5_VLMoeImageProcessor, Ernie4_5_VLMoeProcessor
 
 if is_torch_available():
     import torch
@@ -94,7 +94,7 @@ class Ernie4_5_VLMoeProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         self.assertEqual(processor.tokenizer.get_vocab(), tokenizer.get_vocab())
         self.assertEqual(processor.image_processor.to_json_string(), image_processor.to_json_string())
         self.assertIsInstance(processor.tokenizer, TokenizersBackend)
-        self.assertIsInstance(processor.image_processor, Ernie4_5_VLMoeImageProcessorFast)
+        self.assertIsInstance(processor.image_processor, Ernie4_5_VLMoeImageProcessor)
 
     def test_image_processor(self):
         image_processor = self.get_image_processor()
@@ -350,8 +350,8 @@ class Ernie4_5_VLMoeProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         messages[0][0]["content"][0] = {
             "type": "video",
             "url": [
-                "https://www.ilankelman.org/stopsigns/australia.jpg",
-                "https://www.ilankelman.org/stopsigns/australia.jpg",
+                "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/tasks/australia.jpg",
+                "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/tasks/australia.jpg",
             ],
         }
         out_dict_with_video = processor.apply_chat_template(

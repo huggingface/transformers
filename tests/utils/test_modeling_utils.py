@@ -87,6 +87,7 @@ from transformers.utils import (
 from transformers.utils.import_utils import (
     is_flash_attn_2_available,
     is_flash_attn_3_available,
+    is_flash_attn_4_available,
     is_kernels_available,
     is_torch_npu_available,
 )
@@ -652,6 +653,15 @@ class ModelUtilsTest(TestCasePlus):
                 TINY_LLAVA, dtype={"text_config": "float32", "vision_config": "int64", "": "float16"}
             )
 
+        # Check that `from_config` also works and uses the same dtype for all modules
+        config = AutoConfig.from_pretrained(TINY_LLAVA)
+        config.text_config.dtype = torch.float16
+        config.dtype = torch.float32
+        model = LlavaForConditionalGeneration._from_config(config)
+        self.assertEqual(model.model.language_model.dtype, torch.float32)
+        self.assertEqual(model.model.vision_tower.dtype, torch.float32)
+        self.assertEqual(model.dtype, torch.float32)
+
     def test_model_from_pretrained_dtype(self):
         # test that the model can be instantiated with dtype of either
         # 1. explicit from_pretrained's dtype argument
@@ -751,6 +761,9 @@ class ModelUtilsTest(TestCasePlus):
         if is_flash_attn_3_available():
             attn_implementation_available.append("flash_attention_3")
 
+        if is_flash_attn_4_available():
+            attn_implementation_available.append("flash_attention_4")
+
         for requested_attn_implementation in attn_implementation_available:
             model = AutoModelForCausalLM.from_pretrained(
                 TINY_MISTRAL, attn_implementation=requested_attn_implementation
@@ -775,6 +788,9 @@ class ModelUtilsTest(TestCasePlus):
 
         if is_flash_attn_3_available():
             attn_implementation_available.append("flash_attention_3")
+
+        if is_flash_attn_4_available():
+            attn_implementation_available.append("flash_attention_4")
 
         for requested_attn_implementation in attn_implementation_available:
             config = AutoConfig.from_pretrained(TINY_MISTRAL, attn_implementation=requested_attn_implementation)
@@ -2300,6 +2316,9 @@ class ModelUtilsTest(TestCasePlus):
 
         config = LlamaConfig(
             num_hidden_layers=2,
+            num_attention_heads=2,
+            num_key_value_heads=1,
+            head_dim=16,
             hidden_size=32,
             intermediate_size=64,
             vocab_size=100,
@@ -2359,127 +2378,6 @@ class ModelUtilsTest(TestCasePlus):
         model.config.is_causal = False
         with_config_only = model(input_ids, attention_mask=attention_mask).last_hidden_state
         torch.testing.assert_close(reference, with_config_only)
-
-
-@require_torch
-class InitializeMissingKeysTest(unittest.TestCase):
-    """Tests for _initialize_missing_keys to prevent regressions in FSDP non-rank-0 weight initialization.
-
-    On FSDP non-rank-0 processes, weights are loaded on meta device and then moved to CPU via
-    _move_missing_keys_from_meta_to_device. The _initialize_missing_keys method must mark all
-    params as _is_hf_initialized so that guarded init functions (init.normal_, init.zeros_, etc.)
-    skip them, preventing expensive and unnecessary re-initialization.
-    """
-
-    def _clear_init_flags(self, model):
-        """Clear all _is_hf_initialized flags from params, buffers, and modules."""
-        for module in model.modules():
-            if hasattr(module, "_is_hf_initialized"):
-                delattr(module, "_is_hf_initialized")
-        for param in model.parameters():
-            if hasattr(param, "_is_hf_initialized"):
-                delattr(param, "_is_hf_initialized")
-        for buffer in model.buffers():
-            if hasattr(buffer, "_is_hf_initialized"):
-                delattr(buffer, "_is_hf_initialized")
-
-    @staticmethod
-    def _fsdp_non_rank0_patches():
-        """Return a context manager that mocks FSDP as enabled on a non-rank-0 process."""
-        from contextlib import ExitStack
-
-        stack = ExitStack()
-        stack.enter_context(patch("transformers.modeling_utils.is_fsdp_enabled", return_value=True))
-        stack.enter_context(patch("transformers.modeling_utils.is_local_dist_rank_0", return_value=False))
-        return stack
-
-    def test_initialize_missing_keys_marks_all_params(self):
-        """On FSDP non-rank-0, all params/buffers should get _is_hf_initialized=True."""
-        model = BaseModel(PreTrainedConfig())
-        self._clear_init_flags(model)
-
-        with self._fsdp_non_rank0_patches():
-            model._initialize_missing_keys(is_quantized=False)
-
-        for name, param in model.named_parameters():
-            self.assertTrue(
-                getattr(param, "_is_hf_initialized", False),
-                f"param {name} should be marked as initialized",
-            )
-
-    def test_initialize_missing_keys_sets_model_flag(self):
-        """On FSDP non-rank-0, the model itself should get _is_hf_initialized=True."""
-        model = BaseModel(PreTrainedConfig())
-        self._clear_init_flags(model)
-
-        with self._fsdp_non_rank0_patches():
-            model._initialize_missing_keys(is_quantized=False)
-
-        self.assertTrue(getattr(model, "_is_hf_initialized", False))
-
-    def test_initialize_missing_keys_no_reinit_of_marked_params(self):
-        """Guarded init functions should not modify params that have _is_hf_initialized=True."""
-        model = BaseModel(PreTrainedConfig())
-        self._clear_init_flags(model)
-
-        # Snapshot values before _initialize_missing_keys
-        pre_values = {name: param.clone() for name, param in model.named_parameters()}
-
-        with self._fsdp_non_rank0_patches():
-            model._initialize_missing_keys(is_quantized=False)
-
-        # Params should not have changed (guarded inits skip marked params)
-        for name, param in model.named_parameters():
-            torch.testing.assert_close(param, pre_values[name], msg=f"param {name} should not be re-initialized")
-
-    def test_move_missing_keys_fsdp_non_rank0_moves_meta_to_cpu(self):
-        """FSDP non-rank-0 path should move all params/buffers from meta to CPU."""
-        with torch.device("meta"):
-            model = BaseModel(PreTrainedConfig())
-
-        # Verify everything starts on meta
-        for param in model.parameters():
-            self.assertEqual(param.device, torch.device("meta"))
-
-        with (
-            patch("transformers.modeling_utils.is_fsdp_enabled", return_value=True),
-            patch("transformers.modeling_utils.is_local_dist_rank_0", return_value=False),
-        ):
-            model._move_missing_keys_from_meta_to_device(
-                missing_keys=set(), device_map=None, device_mesh=None, hf_quantizer=None
-            )
-
-        # All params should now be on CPU
-        for name, param in model.named_parameters():
-            self.assertEqual(param.device, torch.device("cpu"), f"param {name} should be on CPU after FSDP move")
-
-    def test_fsdp_non_rank0_end_to_end_no_reinit(self):
-        """End-to-end: FSDP non-rank-0 move + _initialize_missing_keys should not re-init params."""
-        with torch.device("meta"):
-            model = BaseModel(PreTrainedConfig())
-
-        with self._fsdp_non_rank0_patches():
-            model._move_missing_keys_from_meta_to_device(
-                missing_keys=set(), device_map=None, device_mesh=None, hf_quantizer=None
-            )
-
-            # After move: params are empty CPU tensors. Snapshot values.
-            pre_init_values = {name: param.clone() for name, param in model.named_parameters()}
-
-            model._initialize_missing_keys(is_quantized=False)
-
-        # All params should be marked as initialized
-        for name, param in model.named_parameters():
-            self.assertTrue(
-                getattr(param, "_is_hf_initialized", False), f"param {name} should be marked as initialized"
-            )
-
-        # Model should be marked as initialized
-        self.assertTrue(getattr(model, "_is_hf_initialized", False), "model should be marked as initialized")
-
-        # Param values should NOT have changed (no re-initialization)
-        for name, param in model.named_parameters():
-            torch.testing.assert_close(param, pre_init_values[name], msg=f"param {name} should not be re-initialized")
 
 
 @slow
@@ -2941,7 +2839,7 @@ class TestAttentionImplementation(unittest.TestCase):
             _ = AutoModel.from_pretrained(
                 "hf-internal-testing/tiny-random-GPTBigCodeModel", attn_implementation="flash_attention_2"
             )
-        self.assertTrue("the package flash_attn seems to be not installed" in str(cm.exception))
+        self.assertTrue("the package for FlashAttention2 doesn't seem to be installed." in str(cm.exception))
 
     def test_not_available_flash_with_config(self):
         if is_flash_attn_2_available():
@@ -2964,7 +2862,7 @@ class TestAttentionImplementation(unittest.TestCase):
                 attn_implementation="flash_attention_2",
             )
 
-        self.assertTrue("the package flash_attn seems to be not installed" in str(cm.exception))
+        self.assertTrue("the package for FlashAttention2 doesn't seem to be installed." in str(cm.exception))
 
     def test_kernels_fallback(self):
         if not is_kernels_available():

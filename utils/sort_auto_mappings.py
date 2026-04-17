@@ -34,13 +34,21 @@ import os
 import re
 
 
+CHECKER_CONFIG = {
+    "name": "sort_auto_mappings",
+    "label": "Sort auto mappings",
+    "file_globs": ["src/transformers/models/auto/*.py"],
+    "check_args": ["--check_only"],
+    "fix_args": [],
+}
+
 # Path are set with the intent you should run this script from the root of the repo.
 PATH_TO_AUTO_MODULE = "src/transformers/models/auto"
 
 
 # re pattern that matches mapping introductions:
 #    SUPER_MODEL_MAPPING_NAMES = OrderedDict or SUPER_MODEL_MAPPING = OrderedDict
-_re_intro_mapping = re.compile(r"[A-Z_]+_MAPPING(\s+|_[A-Z_]+\s+)=\s+OrderedDict")
+_re_intro_mapping = re.compile(r"[A-Z_]+_MAPPING(\s+|_[A-Z_]+\s+)=\s+OrderedDict(?!\(\*)")
 # re pattern that matches identifiers in mappings
 _re_identifier = re.compile(r'\s*\(\s*"(\S[^"]+)"')
 

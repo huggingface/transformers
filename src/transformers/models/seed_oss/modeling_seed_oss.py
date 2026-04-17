@@ -466,8 +466,8 @@ class SeedOssForCausalLM(SeedOssPreTrainedModel, GenerationMixin):
         ```python
         >>> from transformers import AutoTokenizer, SeedOssForCausalLM
 
-        >>> model = SeedOssForCausalLM.from_pretrained("ByteDance-Seed/SeedOss-36B")
-        >>> tokenizer = AutoTokenizer.from_pretrained("ByteDance-Seed/SeedOss-36B")
+        >>> model = SeedOssForCausalLM.from_pretrained("ByteDance-Seed/Seed-OSS-36B-Instruct")
+        >>> tokenizer = AutoTokenizer.from_pretrained("ByteDance-Seed/Seed-OSS-36B-Instruct")
 
         >>> prompt = "Hey, are you conscious? Can you talk to me?"
         >>> inputs = tokenizer(prompt, return_tensors="pt")
