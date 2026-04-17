@@ -41,7 +41,7 @@ PRIVACY_FILTER_NER_LABELS = ("O",) + tuple(
 
 
 @auto_docstring(checkpoint="openai/privacy-filter")
-@strict(accept_kwargs=True)
+@strict
 class PrivacyFilterConfig(PreTrainedConfig):
     model_type = "privacy_filter"
     default_theta = 150000.0

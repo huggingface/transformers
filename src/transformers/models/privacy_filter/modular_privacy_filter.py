@@ -67,7 +67,7 @@ PRIVACY_FILTER_NER_LABELS = ("O",) + tuple(
 
 
 @auto_docstring(checkpoint="openai/privacy-filter")
-@strict(accept_kwargs=True)
+@strict
 class PrivacyFilterConfig(GptOssConfig):
     model_type = "privacy_filter"
     vocab_size: int = 200064
