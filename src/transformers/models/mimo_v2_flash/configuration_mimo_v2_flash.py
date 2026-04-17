@@ -74,7 +74,7 @@ class MiMoV2FlashConfig(PreTrainedConfig):
     n_group: int = 1
     topk_group: int = 1
     norm_topk_prob: bool = True
-    routed_scaling_factor: float = 1.0
+    routed_scaling_factor: float | None = 1.0
     router_jitter_noise: float = 0.0
     mlp_layer_types: list[str] | None = None
     rope_parameters: dict | None = None
@@ -95,6 +95,9 @@ class MiMoV2FlashConfig(PreTrainedConfig):
                 "full_attention": {"rope_type": "default", "rope_theta": 5_000_000.0, "partial_rotary_factor": 0.334},
                 "sliding_attention": {"rope_type": "default", "rope_theta": 10_000.0, "partial_rotary_factor": 0.334},
             }
+        # The hub config.json stores `routed_scaling_factor` as null
+        if self.routed_scaling_factor is None:
+            self.routed_scaling_factor = 1.0
 
         super().__post_init__(**kwargs)
 
