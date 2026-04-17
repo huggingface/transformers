@@ -36,7 +36,6 @@ from transformers.cli.serving.utils import (
     BaseHandler,
     GenerationState,
     Modality,
-    ToolCallParser,
     get_tool_call_config,
     parse_tool_calls,
 )
@@ -505,10 +504,6 @@ class TestChunkSSE(unittest.TestCase):
     def test_chunk_to_sse_wraps_plain_string(self):
         result = BaseHandler.chunk_to_sse("hello")
         self.assertEqual(result, "data: hello\n\n")
-
-
-QWEN_STC = "<tool_call>"
-QWEN_ETC = "</tool_call>"
 
 
 @require_serve
@@ -1573,8 +1568,8 @@ class TestToolCallUnit(unittest.TestCase):
         processor.convert_tokens_to_ids.return_value = 151657
         config = get_tool_call_config(processor, model)
         self.assertIsNotNone(config)
-        self.assertEqual(config["stc"], "<tool_call>")
-        self.assertEqual(config["etc"], "</tool_call>")
+        self.assertEqual(config["stc_id"], 151657)
+        self.assertEqual(config["etc_id"], 151657)
 
     def test_get_tool_call_config_unsupported(self):
         """None is returned for models without tool call support."""
@@ -1582,27 +1577,6 @@ class TestToolCallUnit(unittest.TestCase):
         model.config.model_type = "llama"
         processor = MagicMock(spec=[])
         self.assertIsNone(get_tool_call_config(processor, model))
-
-    def test_parser_streaming_flow(self):
-        """Streaming: tokens between start/end markers are suppressed."""
-        parser = ToolCallParser(QWEN_STC, QWEN_ETC)
-        results = []
-        for token in [
-            "Hello ",
-            "<tool_call>",
-            '{"name": "get_weather",',
-            ' "arguments": {"city": "Paris"}}',
-            "\n",
-            "</tool_call>",
-        ]:
-            results.append((token, parser.feed(token)))
-        # "Hello " → False (normal text), rest → True (suppressed)
-        self.assertFalse(results[0][1])
-        self.assertTrue(results[1][1])
-
-    def test_parser_normal_text(self):
-        parser = ToolCallParser(QWEN_STC, QWEN_ETC)
-        self.assertFalse(parser.feed("Hello world"))
 
     def test_parse_tool_calls_from_text(self):
         text = '<tool_call>\n{"name": "get_weather", "arguments": {"city": "Paris"}}\n</tool_call>'

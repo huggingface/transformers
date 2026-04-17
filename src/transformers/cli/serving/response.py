@@ -56,7 +56,6 @@ from .utils import (
     BaseGenerateManager,
     BaseHandler,
     Modality,
-    ToolCallParser,
     _StreamError,
     get_tool_call_config,
     parse_tool_calls,
@@ -303,12 +302,11 @@ class ResponseHandler(BaseHandler):
             inputs,
             gen_config,
             request_id=request_id,
-            passthrough_token_ids=tool_config["passthrough_ids"] if tool_config else None,
+            tool_config=tool_config,
         )
         input_ids = inputs["input_ids"]
         # CB returns plain lists, regular path returns tensors
         input_len = len(input_ids) if isinstance(input_ids, list) else input_ids.shape[-1]
-        parser = ToolCallParser(tool_config["stc"], tool_config["etc"]) if tool_config else None
 
         seq = 0
         output_index = 0
@@ -423,9 +421,6 @@ class ResponseHandler(BaseHandler):
                             )
                             yield "".join(sse_parts)
                             return
-
-                        if parser is not None and parser.feed(text):
-                            continue
 
                         full_text += text
                         sse_parts.append(
@@ -588,7 +583,7 @@ class ResponseHandler(BaseHandler):
 
         if tool_config is not None:
             parsed = parse_tool_calls(processor, generated_ids, tool_config["schema"])
-            if parsed is not None:
+            if parsed:
                 for i, tc in enumerate(parsed):
                     tc_id = f"{request_id}_tool_call_{i}"
                     output_items.append(

@@ -40,7 +40,6 @@ from .utils import (
     BaseGenerateManager,
     BaseHandler,
     Modality,
-    ToolCallParser,
     _StreamError,
     get_tool_call_config,
     parse_tool_calls,
@@ -187,12 +186,11 @@ class ChatCompletionHandler(BaseHandler):
             inputs,
             gen_config,
             request_id=request_id,
-            passthrough_token_ids=tool_config["passthrough_ids"] if tool_config else None,
+            tool_config=tool_config,
         )
         input_ids = inputs["input_ids"]
         # CB returns plain lists, regular path returns tensors
         input_len = len(input_ids) if isinstance(input_ids, list) else input_ids.shape[-1]
-        parser = ToolCallParser(tool_config["stc"], tool_config["etc"]) if tool_config else None
 
         async def sse_gen() -> AsyncGenerator[str, None]:
             try:
@@ -217,9 +215,6 @@ class ChatCompletionHandler(BaseHandler):
                             sse_parts.append(f'data: {{"error": "{text.msg}"}}\n\n')
                             yield "".join(sse_parts)
                             return
-
-                        if parser is not None and parser.feed(text):
-                            continue
 
                         sse_parts.append(self._build_chunk_sse(request_id, model=model_id, content=text))
 
@@ -302,7 +297,7 @@ class ChatCompletionHandler(BaseHandler):
         tool_calls = None
         if tool_config is not None:
             parsed = parse_tool_calls(processor, generated_ids, tool_config["schema"])
-            if parsed is not None:
+            if parsed:
                 tool_calls = [
                     ChatCompletionMessageToolCall(
                         id=f"{request_id}_tool_call_{i}",
