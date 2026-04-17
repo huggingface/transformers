@@ -167,6 +167,7 @@ class JanusConfig(PreTrainedConfig):
     vision_config: dict | PreTrainedConfig | None = None
     vq_config: dict | PreTrainedConfig | None = None
     image_token_id: int = 100581
+    tie_word_embeddings: bool = True
 
     def __post_init__(self, **kwargs):
         if isinstance(self.text_config, dict):

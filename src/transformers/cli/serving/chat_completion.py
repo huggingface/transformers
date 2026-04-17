@@ -35,7 +35,6 @@ if is_serve_available():
     from openai.types.chat.completion_create_params import CompletionCreateParamsStreaming
     from openai.types.completion_usage import CompletionUsage
 
-from transformers import BatchEncoding
 
 from .utils import (
     BaseGenerateManager,
@@ -134,9 +133,7 @@ class ChatCompletionHandler(BaseHandler):
             **chat_template_kwargs,
         )
         if not use_cb:
-            if not isinstance(inputs, BatchEncoding):
-                raise TypeError("Expected BatchEncoding from apply_chat_template with return_tensors='pt'")
-            inputs = inputs.to(model.device)
+            inputs = inputs.to(model.device)  # type: ignore[union-attr]
 
         gen_config = self._build_generation_config(body, model.generation_config, use_cb=use_cb)
         # TODO: remove when CB supports per-request generation config
