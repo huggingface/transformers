@@ -717,7 +717,8 @@ class ProcessorMixin(PushToHubMixin):
         videos: VideoInput | None = None,
         audio: AudioInput | None = None,
     ):
-        if text is not None:
+        # To support BC with models in pre-MLLM era, don't wrap text in list
+        if self.all_special_multimodal_tokens and text is not None:
             if isinstance(text, str):
                 text = [text]
             # avoid in-place updates on text
@@ -821,16 +822,11 @@ class ProcessorMixin(PushToHubMixin):
         videos_replacements: list[str] | None = [],
         audio_replacements: list[str] | None = [],
     ) -> tuple[list[str], list[dict[str, Any]]]:
-        special_mm_tokens = [
-            getattr(self, f"{modality}_token")
-            for modality in ["image", "video", "audio"]
-            if getattr(self, f"{modality}_token", None) is not None
-        ]
         # Early exit if no special tokens found, nothing to replace
-        if not special_mm_tokens:
+        if not self.all_special_multimodal_tokens:
             return text, None
 
-        regex_special_mm_tokens = "|".join(f"({re.escape(v)})" for v in special_mm_tokens)
+        regex_special_mm_tokens = "|".join(f"({re.escape(v)})" for v in self.all_special_multimodal_tokens)
         batch_replacement_offsets = []
         images_replacements = iter(images_replacements)
         videos_replacements = iter(videos_replacements)
@@ -882,6 +878,15 @@ class ProcessorMixin(PushToHubMixin):
             mm_token_types[np.isin(tokenizer_input, self.audio_ids)] = 3
             mm_token_type_ids.append(mm_token_types.tolist())
         return mm_token_type_ids
+
+    @property
+    def all_special_multimodal_tokens(self) -> list[str]:
+        special_mm_tokens = [
+            getattr(self, f"{modality}_token")
+            for modality in ["image", "video", "audio"]
+            if getattr(self, f"{modality}_token", None) is not None
+        ]
+        return special_mm_tokens
 
     def check_argument_for_proper_class(self, argument_name, argument):
         """
