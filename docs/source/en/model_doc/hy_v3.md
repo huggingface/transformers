@@ -15,11 +15,11 @@ rendered properly in your Markdown viewer.
 -->
 *This model was released on {release_date} and added to Hugging Face Transformers on 2026-04-17.*
 
-# HYV3
+# HY3-Preview
 
 ## Overview
 
-HunyuanV3 (HYV3) is a large-scale Mixture-of-Experts (MoE) language model developed by the Tencent HunYuan team. It features a dense-MoE hybrid architecture with 192 routed experts and 1 always-active shared expert per MoE layer, achieving strong performance with efficient inference via sparse expert activation.
+HY3-Preview is a large-scale Mixture-of-Experts (MoE) language model developed by the Tencent HunYuan team. It features a dense-MoE hybrid architecture with 192 routed experts and 1 always-active shared expert per MoE layer, achieving strong performance with efficient inference via sparse expert activation.
 
 Key architectural features:
 
