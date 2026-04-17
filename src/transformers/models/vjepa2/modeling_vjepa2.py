@@ -490,6 +490,7 @@ class VJEPA2Encoder(nn.Module):
     def forward(
         self,
         pixel_values_videos: torch.Tensor | None = None,
+        return_hierarchical: bool = True,
         **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutput:
         hidden_states = self.embeddings(pixel_values_videos)
@@ -505,8 +506,11 @@ class VJEPA2Encoder(nn.Module):
                     norm_idx = self.config.hierarchical_layers.index(i)
                     hierarchical_outputs.append(self.norms_block[norm_idx](hidden_states))
 
-        if self.norms_block is not None and hierarchical_outputs:
-            hidden_states = torch.cat(hierarchical_outputs, dim=-1)
+        if self.norms_block is not None:
+            if return_hierarchical and len(hierarchical_outputs) > 1:
+                hidden_states = torch.cat(hierarchical_outputs, dim=-1)
+            elif hierarchical_outputs:
+                hidden_states = hierarchical_outputs[-1]
         elif self.layernorm is not None:
             hidden_states = self.layernorm(hidden_states)
 
@@ -1017,8 +1021,10 @@ class VJEPA2Model(VJEPA2PreTrainedModel):
         if pixel_values_videos is None:
             raise ValueError("You have to specify pixel_values_videos")
 
+        needs_hierarchical = not skip_predictor and self.config.n_output_distillation > 1
         encoder_outputs: BaseModelOutput = self.encoder(
             pixel_values_videos=pixel_values_videos,
+            return_hierarchical=needs_hierarchical,
             **kwargs,
         )
         sequence_output = encoder_outputs.last_hidden_state
