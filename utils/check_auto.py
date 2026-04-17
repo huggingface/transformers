@@ -32,8 +32,8 @@ CHECKER_CONFIG = {
     "name": "auto_mappings",
     "label": "Generate auto mappings",
     "file_globs": [],
-    "check_args": ["--fix_and_overwrite"],
-    "fix_args": [],
+    "check_args": [],
+    "fix_args": ["--fix_and_overwrite"],
 }
 
 AUTO_GENERATED_HADER = """#                🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨

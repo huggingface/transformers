@@ -216,6 +216,18 @@ class AcmeModel(AcmePreTrainedModel):
 +        self.model = AutoModel.from_pretrained(...)
 ```
 
+### TRF015
+
+When a PreTrainedModel subclass defines _tied_weights_keys as a non-empty collection, checks that the corresponding configuration file declares a tie_word_embeddings field. Without tie_word_embeddings in the config, users cannot control weight tying behavior. The model ties weights unconditionally, breaking serialization round-trips and preventing fine-tuning with untied heads.
+
+```diff
+# configuration_foo.py
+ @strict(accept_kwargs=True)
+ class FooConfig(PreTrainedConfig):
+     hidden_size: int = 768
++    tie_word_embeddings: bool = True
+```
+
 <!-- END RULES REFERENCE -->
 
 ## Suppressing violations

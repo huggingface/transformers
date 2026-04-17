@@ -453,7 +453,7 @@ data: {"id":"f47ac10b-58cc-4372-a567-0e02b2c3d479","choices":[{"delta":{"content
 </hfoption>
 </hfoptions>
 
-### Audio completions
+### Audio-based completions
 
 Multimodal models like [Gemma 4](https://huggingface.co/google/gemma-4-E2B-it) and [Qwen2.5-Omni](https://huggingface.co/Qwen/Qwen2.5-Omni-3B) accept audio input using the OpenAI `input_audio` content type. The audio must be base64-encoded and the format (`mp3` or `wav`) must be specified.
 
@@ -711,7 +711,7 @@ completion = client.chat.completions.create(
 )
 ```
 
-### Video completions
+### Video-based completions
 
 > [!WARNING]
 > The `video_url` content type is an extension not part of the OpenAI standard and may change in future versions.
@@ -933,6 +933,32 @@ data: {"id":"cb997e1d-98b9-414a-be89-1880288610ef","choices":[{"delta":{"content
 </hfoption>
 </hfoptions>
 
+### Multi-turn conversations
+
+To have a multi-turn conversation, include the full conversation history in the `messages` list with alternating `user` and `assistant` roles. Like all OpenAI-compatible servers, the API is stateless, so every request must contain the complete conversation history.
+
+```python
+from openai import OpenAI
+
+client = OpenAI(base_url="http://localhost:8000/v1", api_key="<random_string>")
+
+completion = client.chat.completions.create(
+    model="Qwen/Qwen2.5-0.5B-Instruct",
+    messages=[
+        {"role": "user", "content": "What is the capital of France?"},
+        {"role": "assistant", "content": "The capital of France is Paris."},
+        {"role": "user", "content": "How many people live there?"},
+    ],
+)
+print(completion.choices[0].message.content)
+```
+
+The follow-up question "How many people live there?" relies on the prior context, and the model answers about Paris accordingly.
+
+```
+As of 2021, the population of Paris is approximately 2.2 million people.
+```
+
 ## v1/responses
 
 The [Responses API](https://platform.openai.com/docs/api-reference/responses) is OpenAI's latest API endpoint for generation. It supports stateful interactions and integrates built-in tools to extend a model's capabilities. OpenAI [recommends](https://platform.openai.com/docs/guides/migrate-to-responses) using the Responses API over the Chat Completions API for new projects.
@@ -1062,7 +1088,7 @@ data: {"content_index":0,"delta":"upon ","item_id":"msg_req_0","output_index":0,
 
 ### Image-based responses
 
-The Responses API also supports image, audio, and video inputs. Pass them as a list of messages using the same content types as [v1/chat/completions](#text-and-image-based-completions).
+The Responses API also supports image, audio, and video inputs.
 
 <hfoptions id="responses-images">
 <hfoption id="openai">
@@ -1075,18 +1101,11 @@ client = OpenAI(base_url="http://localhost:8000/v1", api_key="<random_string>")
 response = client.responses.create(
     model="Qwen/Qwen2.5-VL-7B-Instruct",
     input=[
+        {"type": "input_text", "text": "What's in this image?"},
         {
-            "role": "user",
-            "content": [
-                {"type": "text", "text": "What's in this image?"},
-                {
-                    "type": "image_url",
-                    "image_url": {
-                        "url": "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/diffusers/astronaut.jpg",
-                    }
-                },
-            ],
-        }
+            "type": "input_image",
+            "image_url": "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/diffusers/astronaut.jpg",
+        },
     ],
     max_output_tokens=256,
     stream=False,
@@ -1111,18 +1130,11 @@ client = OpenAI(base_url="http://localhost:8000/v1", api_key="<random_string>")
 response = client.responses.create(
     model="Qwen/Qwen2.5-VL-7B-Instruct",
     input=[
+        {"type": "input_text", "text": "What's in this image?"},
         {
-            "role": "user",
-            "content": [
-                {"type": "text", "text": "What's in this image?"},
-                {
-                    "type": "image_url",
-                    "image_url": {
-                        "url": "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/diffusers/astronaut.jpg",
-                    }
-                },
-            ],
-        }
+            "type": "input_image",
+            "image_url": "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/diffusers/astronaut.jpg",
+        },
     ],
     max_output_tokens=256,
     stream=True,
@@ -1148,13 +1160,8 @@ curl http://localhost:8000/v1/responses \
   -d '{
     "model": "Qwen/Qwen2.5-VL-7B-Instruct",
     "input": [
-      {
-        "role": "user",
-        "content": [
-          {"type": "text", "text": "What'\''s in this image?"},
-          {"type": "image_url", "image_url": {"url": "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/diffusers/astronaut.jpg"}}
-        ]
-      }
+      {"type": "input_text", "text": "What'\''s in this image?"},
+      {"type": "input_image", "image_url": "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/diffusers/astronaut.jpg"}
     ],
     "max_output_tokens": 256,
     "stream": false
@@ -1198,13 +1205,8 @@ curl http://localhost:8000/v1/responses \
     "model": "Qwen/Qwen2.5-VL-7B-Instruct",
     "stream": true,
     "input": [
-      {
-        "role": "user",
-        "content": [
-          {"type": "text", "text": "What'\''s in this image?"},
-          {"type": "image_url", "image_url": {"url": "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/diffusers/astronaut.jpg"}}
-        ]
-      }
+      {"type": "input_text", "text": "What'\''s in this image?"},
+      {"type": "input_image", "image_url": "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/diffusers/astronaut.jpg"}
     ],
     "max_output_tokens": 256
   }'
@@ -1241,13 +1243,8 @@ audio_b64 = base64.b64encode(httpx.get(audio_url, follow_redirects=True).content
 response = client.responses.create(
     model="google/gemma-4-E2B-it",
     input=[
-        {
-            "role": "user",
-            "content": [
-                {"type": "text", "text": "Transcribe this audio."},
-                {"type": "input_audio", "input_audio": {"data": audio_b64, "format": "mp3"}},
-            ],
-        }
+        {"type": "input_text", "text": "Transcribe this audio."},
+        {"type": "input_audio", "input_audio": {"data": audio_b64, "format": "mp3"}},
     ],
     max_output_tokens=256,
     stream=False,
@@ -1277,11 +1274,8 @@ audio_b64 = base64.b64encode(httpx.get(audio_url, follow_redirects=True).content
 response = client.responses.create(
     model="google/gemma-4-E2B-it",
     input=[
-        {
-            "role": "user",
-            "content": [
-                {"type": "text", "text": "Transcribe this audio."},
-                {"type": "input_audio", "input_audio": {"data": audio_b64, "format": "mp3"}},
+        {"type": "input_text", "text": "Transcribe this audio."},
+        {"type": "input_audio", "input_audio": {"data": audio_b64, "format": "mp3"}},
             ],
         }
     ],
@@ -1311,13 +1305,8 @@ cat <<EOF > /tmp/audio_request.json
 {
   "model": "google/gemma-4-E2B-it",
   "input": [
-    {
-      "role": "user",
-      "content": [
-        {"type": "text", "text": "Transcribe this audio."},
-        {"type": "input_audio", "input_audio": {"data": "$AUDIO_B64", "format": "mp3"}}
-      ]
-    }
+    {"type": "input_text", "text": "Transcribe this audio."},
+    {"type": "input_audio", "input_audio": {"data": "$AUDIO_B64", "format": "mp3"}}
   ],
   "max_output_tokens": 256,
   "stream": false
@@ -1368,13 +1357,8 @@ cat <<EOF > /tmp/audio_request.json
   "model": "google/gemma-4-E2B-it",
   "stream": true,
   "input": [
-    {
-      "role": "user",
-      "content": [
-        {"type": "text", "text": "Transcribe this audio."},
-        {"type": "input_audio", "input_audio": {"data": "$AUDIO_B64", "format": "mp3"}}
-      ]
-    }
+    {"type": "input_text", "text": "Transcribe this audio."},
+    {"type": "input_audio", "input_audio": {"data": "$AUDIO_B64", "format": "mp3"}}
   ],
   "max_output_tokens": 256
 }
@@ -1407,13 +1391,8 @@ As a convenience, audio can also be passed by URL using the `audio_url` content 
 response = client.responses.create(
     model="google/gemma-4-E2B-it",
     input=[
-        {
-            "role": "user",
-            "content": [
-                {"type": "text", "text": "Transcribe this audio."},
-                {"type": "audio_url", "audio_url": {"url": "https://huggingface.co/datasets/hf-internal-testing/dummy-audio-samples/resolve/main/obama_first_45_secs.mp3"}},
-            ],
-        }
+        {"type": "input_text", "text": "Transcribe this audio."},
+        {"type": "audio_url", "audio_url": {"url": "https://huggingface.co/datasets/hf-internal-testing/dummy-audio-samples/resolve/main/obama_first_45_secs.mp3"}},
     ],
     max_output_tokens=256,
     stream=False,
@@ -1439,13 +1418,8 @@ client = OpenAI(base_url="http://localhost:8000/v1", api_key="<random_string>")
 response = client.responses.create(
     model="google/gemma-4-E2B-it",
     input=[
-        {
-            "role": "user",
-            "content": [
-                {"type": "video_url", "video_url": {"url": "https://huggingface.co/datasets/merve/vlm_test_images/resolve/main/concert.mp4"}},
-                {"type": "text", "text": "What is happening in the video and what is the song about?"},
-            ],
-        }
+        {"type": "input_text", "text": "What is happening in the video and what is the song about?"},
+        {"type": "video_url", "video_url": {"url": "https://huggingface.co/datasets/merve/vlm_test_images/resolve/main/concert.mp4"}},
     ],
     max_output_tokens=256,
     stream=False,
@@ -1472,13 +1446,8 @@ client = OpenAI(base_url="http://localhost:8000/v1", api_key="<random_string>")
 response = client.responses.create(
     model="google/gemma-4-E2B-it",
     input=[
-        {
-            "role": "user",
-            "content": [
-                {"type": "video_url", "video_url": {"url": "https://huggingface.co/datasets/merve/vlm_test_images/resolve/main/concert.mp4"}},
-                {"type": "text", "text": "What is happening in the video and what is the song about?"},
-            ],
-        }
+        {"type": "input_text", "text": "What is happening in the video and what is the song about?"},
+        {"type": "video_url", "video_url": {"url": "https://huggingface.co/datasets/merve/vlm_test_images/resolve/main/concert.mp4"}},
     ],
     max_output_tokens=256,
     stream=True,
@@ -1506,13 +1475,8 @@ curl http://localhost:8000/v1/responses \
   -d '{
     "model": "google/gemma-4-E2B-it",
     "input": [
-      {
-        "role": "user",
-        "content": [
-          {"type": "video_url", "video_url": {"url": "https://huggingface.co/datasets/merve/vlm_test_images/resolve/main/concert.mp4"}},
-          {"type": "text", "text": "What is happening in the video and what is the song about?"}
-        ]
-      }
+      {"type": "input_text", "text": "What is happening in the video and what is the song about?"},
+      {"type": "video_url", "video_url": {"url": "https://huggingface.co/datasets/merve/vlm_test_images/resolve/main/concert.mp4"}}
     ],
     "max_output_tokens": 256,
     "stream": false
@@ -1556,13 +1520,8 @@ curl http://localhost:8000/v1/responses \
     "model": "google/gemma-4-E2B-it",
     "stream": true,
     "input": [
-      {
-        "role": "user",
-        "content": [
-          {"type": "video_url", "video_url": {"url": "https://huggingface.co/datasets/merve/vlm_test_images/resolve/main/concert.mp4"}},
-          {"type": "text", "text": "What is happening in the video and what is the song about?"}
-        ]
-      }
+      {"type": "input_text", "text": "What is happening in the video and what is the song about?"},
+      {"type": "video_url", "video_url": {"url": "https://huggingface.co/datasets/merve/vlm_test_images/resolve/main/concert.mp4"}}
     ],
     "max_output_tokens": 256
   }'
@@ -1580,6 +1539,34 @@ data: {"content_index":0,"delta":"Based ","item_id":"msg_b2c3d4e5","output_index
 
 </hfoption>
 </hfoptions>
+
+### Multi-turn conversations
+
+For multi-turn conversations, pass a list of messages with `role` keys in the `input` field. Like all OpenAI-compatible servers, the API is stateless, so every request must contain the complete conversation history.
+
+```python
+from openai import OpenAI
+
+client = OpenAI(base_url="http://localhost:8000/v1", api_key="<random_string>")
+
+response = client.responses.create(
+    model="Qwen/Qwen2.5-0.5B-Instruct",
+    input=[
+        {"role": "user", "content": "What is the capital of France?"},
+        {"role": "assistant", "content": "The capital of France is Paris."},
+        {"role": "user", "content": "How many people live there?"},
+    ],
+    max_output_tokens=256,
+    stream=False,
+)
+print(response.output[0].content[0].text)
+```
+
+The follow-up question "How many people live there?" relies on the prior context, and the model answers about Paris accordingly.
+
+```
+As of 2021, Paris has a population of approximately 2.8 million people.
+```
 
 ## v1/audio/transcriptions
 
@@ -1788,11 +1775,10 @@ ssh -N -f -L 8000:localhost:8000 your_server_account@your_server_IP -p port_to_s
 
 ## Reproducibility
 
-Use `--force-model <repo_id>` to avoid per-request model hints and produce stable, repeatable runs.
+Pass a model as a positional argument to avoid per-request model hints and produce stable, repeatable runs.
 
 ```sh
-transformers serve \
-  --force-model Qwen/Qwen2.5-0.5B-Instruct \
+transformers serve Qwen/Qwen2.5-0.5B-Instruct \
   --continuous-batching \
   --dtype "bfloat16"
 ```

@@ -212,3 +212,19 @@ diff = '''
 -        self.model = AutoModel.from_pretrained(..., trust_remote_code=True)
 +        self.model = AutoModel.from_pretrained(...)
 '''
+
+[rules.TRF015]
+description = "Models with non-empty _tied_weights_keys must have tie_word_embeddings in their Config."
+default_enabled = true
+allowlist_models = []
+
+[rules.TRF015.explanation]
+what_it_does = "When a PreTrainedModel subclass defines _tied_weights_keys as a non-empty collection, checks that the corresponding configuration file declares a tie_word_embeddings field."
+why_bad = "Without tie_word_embeddings in the config, users cannot control weight tying behavior. The model ties weights unconditionally, breaking serialization round-trips and preventing fine-tuning with untied heads."
+diff = '''
+ # configuration_foo.py
+ @strict(accept_kwargs=True)
+ class FooConfig(PreTrainedConfig):
+     hidden_size: int = 768
++    tie_word_embeddings: bool = True
+'''
