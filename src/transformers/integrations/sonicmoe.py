@@ -18,8 +18,6 @@ Provides `sonicmoe_experts_forward` registered as "sonicmoe" in the ExpertsInter
 Requirements: CUDA, `kernels`, `nvidia-cutlass-dsl`, has_gate=True, is_transposed=False.
 """
 
-import os
-
 import torch
 
 from ..utils import logging
@@ -30,15 +28,6 @@ logger = logging.get_logger(__name__)
 
 # Map activation function names from HF config to SonicMoE epilogue names
 ACT_MAP = {"silu": "swiglu", "gelu": "geglu", "relu": "reglu"}
-
-
-def _load_sonicmoe():
-    """Lazy-load the SonicMoE kernel (hub or local install)."""
-    if "CUTE_DSL_ARCH" not in os.environ:
-        major, minor = torch.cuda.get_device_capability()
-        os.environ["CUTE_DSL_ARCH"] = f"sm_{major}{minor}a" if major >= 9 else f"sm_{major}{minor}"
-
-    return lazy_load_kernel("sonic-moe")
 
 
 def sonicmoe_experts_forward(
@@ -54,18 +43,12 @@ def sonicmoe_experts_forward(
     if hidden_states.device.type != "cuda":
         raise ValueError("sonicmoe requires CUDA device")
 
-    kernel = _load_sonicmoe()
-    moe_general_routing = getattr(kernel, "moe_general_routing_inputs", None)
-    if moe_general_routing is None:
+    sonic_moe = lazy_load_kernel("sonic-moe")
+    moe_general_routing = getattr(sonic_moe, "moe_general_routing_inputs", None)
+    ActivationType = getattr(getattr(sonic_moe, "enums", None), "ActivationType", None)
+    if moe_general_routing is None or ActivationType is None:
         raise ImportError(
-            "moe_general_routing_inputs not found in kernels-community/sonic-moe. "
-            "Make sure you have the `kernels` package and `nvidia-cutlass-dsl` installed."
-        )
-
-    ActivationType = getattr(getattr(kernel, "enums", None), "ActivationType", None)
-    if ActivationType is None:
-        raise ImportError(
-            "ActivationType enum not found in kernels-community/sonic-moe. "
+            "moe_general_routing_inputs function or ActivationType enum not found in kernels-community/sonic-moe. "
             "Make sure you have the `kernels` package and `nvidia-cutlass-dsl` installed."
         )
 
@@ -74,19 +57,18 @@ def sonicmoe_experts_forward(
     num_top_k = top_k_index.size(-1)
     num_tokens = hidden_states.size(0)
     grad_enabled = torch.is_grad_enabled()
-    cuda_device_stream = torch.cuda.current_stream(device).cuda_stream
+    stream_id = torch.cuda.current_stream(device).cuda_stream
 
     # Flatten — token_indices must be int32, sorted ascending (required by sonic-moe)
-    token_idx = (
-        torch.arange(num_tokens, device=device, dtype=torch.int32).unsqueeze(1).expand(-1, num_top_k).reshape(-1)
-    )
+    token_idx = torch.arange(num_tokens, device=device).unsqueeze(1).expand(-1, num_top_k).reshape(-1).int()
     router_scores = top_k_weights.reshape(-1).to(hidden_states.dtype)
-    expert_ids = top_k_index.reshape(-1).to(torch.int32)
+    expert_ids = top_k_index.reshape(-1).int()
 
     # Map activation function
     act_name = getattr(self.config, "hidden_act", "silu").lower()
     activation_type = getattr(ActivationType, ACT_MAP.get(act_name, "swiglu").upper(), ActivationType.SWIGLU)
 
+    # Permute weights to (E, H, I) as expected by sonic-moe (E=num_experts, H=hidden_size, I=intermediate_size)
     w1 = self.gate_up_proj.permute(1, 2, 0)  # (2*I, H, E)
     w2 = self.down_proj.permute(1, 2, 0)  # (I, H, E)
     b1 = self.gate_up_proj_bias if self.has_bias else None
@@ -101,8 +83,8 @@ def sonicmoe_experts_forward(
         b1,
         w2,
         b2,
-        num_experts,
-        cuda_device_stream,
+        E=num_experts,
+        stream_id=stream_id,
         activation_type=activation_type,
         is_inference_mode_enabled=not grad_enabled,
         is_concatenated_gate_up=True,
