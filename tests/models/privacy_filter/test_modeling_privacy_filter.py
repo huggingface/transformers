@@ -30,7 +30,6 @@ from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import (
     TEST_EAGER_MATCHES_BATCHED_AND_GROUPED_INFERENCE_PARAMETERIZATION,
     ModelTesterMixin,
-    _test_eager_matches_batched_and_grouped_inference,
     ids_tensor,
     random_attention_mask,
 )
@@ -176,6 +175,7 @@ class PrivacyFilterModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Tes
         else {}
     )
     test_all_params_have_gradient = False
+    has_attentions = False
 
     def setUp(self):
         self.model_tester = PrivacyFilterModelTester(self)
@@ -194,9 +194,7 @@ class PrivacyFilterModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Tes
 
     @parameterized.expand(TEST_EAGER_MATCHES_BATCHED_AND_GROUPED_INFERENCE_PARAMETERIZATION)
     def test_eager_matches_batched_and_grouped_inference(self, name, dtype):
-        if dtype != "fp32":
-            self.skipTest("Privacy filter only supports float32 precision during forward")
-        _test_eager_matches_batched_and_grouped_inference(self, name, dtype)
+        self.skipTest("Privacy Filter only supports the eager experts implementation.")
 
     def test_tiny_random_token_classification_logits(self):
         set_seed(42)

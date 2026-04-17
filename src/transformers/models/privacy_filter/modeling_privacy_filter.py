@@ -126,55 +126,12 @@ class PrivacyFilterRotaryEmbedding(nn.Module):
         return cos.to(x.dtype), sin.to(x.dtype)
 
 
-def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
-    """
-    This is the equivalent of torch.repeat_interleave(x, dim=1, repeats=n_rep). The hidden states go from (batch,
-    num_key_value_heads, seqlen, head_dim) to (batch, num_attention_heads, seqlen, head_dim)
-    """
-    batch, num_key_value_heads, slen, head_dim = hidden_states.shape
-    if n_rep == 1:
-        return hidden_states
-    hidden_states = hidden_states[:, :, None, :, :].expand(batch, num_key_value_heads, n_rep, slen, head_dim)
-    return hidden_states.reshape(batch, num_key_value_heads * n_rep, slen, head_dim)
-
-
 def apply_rotary_pos_emb(q, k, cos, sin, position_ids=None, unsqueeze_dim=1):
     cos = cos.unsqueeze(unsqueeze_dim)
     sin = sin.unsqueeze(unsqueeze_dim)
     q_embed = _apply_rotary_emb(q, cos, sin)
     k_embed = _apply_rotary_emb(k, cos, sin)
     return q_embed, k_embed
-
-
-def eager_attention_forward(
-    module: nn.Module,
-    query: torch.Tensor,
-    key: torch.Tensor,
-    value: torch.Tensor,
-    attention_mask: torch.Tensor | None,
-    scaling: float,
-    dropout: float | int = 0.0,
-    **kwargs,
-):
-    key_states = repeat_kv(key, module.num_key_value_groups)
-    value_states = repeat_kv(value, module.num_key_value_groups)
-    attn_weights = torch.matmul(query, key_states.transpose(2, 3)) * scaling
-    if attention_mask is not None:
-        attn_weights = attn_weights + attention_mask
-
-    sinks = module.sinks.reshape(1, -1, 1, 1).expand(query.shape[0], -1, query.shape[-2], -1)
-    combined_logits = torch.cat([attn_weights, sinks], dim=-1)
-
-    # This was not in the original implementation and slightly affect results; it prevents overflow in BF16/FP16
-    # when training with bsz>1 we clamp max values.
-
-    combined_logits = combined_logits - combined_logits.max(dim=-1, keepdim=True).values
-    probs = F.softmax(combined_logits, dim=-1, dtype=combined_logits.dtype)
-    scores = probs[..., :-1]  # we drop the sink here
-    attn_weights = nn.functional.dropout(scores, p=dropout, training=module.training).to(value_states.dtype)
-    attn_output = torch.matmul(attn_weights, value_states)
-    attn_output = attn_output.transpose(1, 2).contiguous()
-    return attn_output, attn_weights
 
 
 def _apply_rotary_emb(
@@ -188,6 +145,85 @@ def _apply_rotary_emb(
     first_ = first_half * cos - second_half * sin
     second_ = second_half * cos + first_half * sin
     return torch.stack((first_, second_), dim=-1).flatten(-2)
+
+
+def _local_bidirectional_attention_mask(
+    attention_mask: torch.Tensor | None,
+    *,
+    batch_size: int,
+    sequence_length: int,
+    window_radius: int,
+    device: torch.device,
+) -> torch.Tensor:
+    window = 2 * window_radius + 1
+    relative_positions = torch.arange(window, device=device) - window_radius
+    key_positions = torch.arange(sequence_length, device=device)[:, None] + relative_positions[None, :]
+    valid_positions = (key_positions >= 0) & (key_positions < sequence_length)
+
+    if attention_mask is None:
+        return valid_positions.unsqueeze(0).expand(batch_size, -1, -1)
+
+    if attention_mask.dim() == 3:
+        return attention_mask.to(device=device, dtype=torch.bool)
+    if attention_mask.dim() != 4:
+        raise ValueError("Privacy Filter attention expects a 4D additive mask or a 3D local attention mask.")
+
+    if attention_mask.dtype == torch.bool:
+        full_attention_mask = attention_mask[:, 0].to(device=device)
+    else:
+        full_attention_mask = attention_mask[:, 0].to(device=device) == 0
+
+    padded_attention_mask = F.pad(full_attention_mask, (window_radius, window_radius), value=False)
+    window_attention_mask = padded_attention_mask.unfold(-1, window, 1)
+    token_positions = torch.arange(sequence_length, device=device)
+    return window_attention_mask[:, token_positions, token_positions, :] & valid_positions.unsqueeze(0)
+
+
+def privacy_filter_eager_attention_forward(
+    module: nn.Module,
+    query: torch.Tensor,
+    key: torch.Tensor,
+    value: torch.Tensor,
+    attention_mask: torch.Tensor | None,
+    scaling: float,
+    dropout: float | int = 0.0,
+    **kwargs,
+):
+    batch_size, num_attention_heads, num_tokens, head_dim = query.shape
+    num_key_value_heads = key.shape[1]
+    num_query_groups = num_attention_heads // num_key_value_heads
+    window_radius = int(module.config.sliding_window)
+
+    attention_mask = _local_bidirectional_attention_mask(
+        attention_mask,
+        batch_size=batch_size,
+        sequence_length=num_tokens,
+        window_radius=window_radius,
+        device=query.device,
+    )
+
+    query = query.transpose(1, 2).reshape(batch_size, num_tokens, num_key_value_heads, num_query_groups, head_dim)
+    key = key.transpose(1, 2)
+    value = value.transpose(1, 2)
+
+    window = 2 * window_radius + 1
+    padded_key = F.pad(key, (0, 0, 0, 0, window_radius, window_radius))
+    padded_value = F.pad(value, (0, 0, 0, 0, window_radius, window_radius))
+    key_window = padded_key.unfold(1, window, 1).permute(0, 1, 4, 2, 3)
+    value_window = padded_value.unfold(1, window, 1).permute(0, 1, 4, 2, 3)
+
+    scores = torch.einsum("bthqd,btwhd->bthqw", query, key_window)
+    scores = scores.float() * scaling
+    scores = scores.masked_fill(~attention_mask[:, :, None, None, :], -float("inf"))
+
+    sink_scores = kwargs["s_aux"].reshape(num_key_value_heads, num_query_groups)
+    sink_scores = sink_scores[None, None, :, :, None].expand(batch_size, num_tokens, -1, -1, 1)
+    scores = torch.cat([scores, sink_scores], dim=-1)
+
+    weights = torch.softmax(scores, dim=-1)[..., :-1]
+    weights = F.dropout(weights, p=dropout, training=module.training).to(value.dtype)
+    attn_output = torch.einsum("bthqw,btwhd->bthqd", weights, value_window)
+    return attn_output.reshape(batch_size, num_tokens, num_attention_heads, head_dim), None
 
 
 @use_kernelized_func(apply_rotary_pos_emb)
@@ -239,7 +275,7 @@ class PrivacyFilterAttention(nn.Module):
         key_states = key_states * self.scaling
 
         attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
-            self.config._attn_implementation, eager_attention_forward
+            self.config._attn_implementation, privacy_filter_eager_attention_forward
         )
 
         attn_output, attn_weights = attention_interface(
@@ -285,32 +321,30 @@ class PrivacyFilterExperts(nn.Module):
         return gated_output
 
     def forward(self, hidden_states: torch.Tensor, router_indices=None, routing_weights=None) -> torch.Tensor:
-        next_states = torch.zeros_like(hidden_states, dtype=hidden_states.dtype, device=hidden_states.device)
-        with torch.no_grad():
-            expert_mask = torch.nn.functional.one_hot(
-                router_indices, num_classes=self.num_experts
-            )  # masking is also a class
-            expert_mask = expert_mask.permute(2, 1, 0)
-            # we sum on the top_k and on the sequence length to get which experts
-            # are hit this time around
-            expert_hit = torch.greater(expert_mask.sum(dim=(-1, -2)), 0).nonzero()
+        original_dtype = hidden_states.dtype
+        hidden_states_expanded = hidden_states.float().unsqueeze(1).expand(-1, router_indices.shape[1], -1)
+        gate_up_proj = self.gate_up_proj[router_indices].float()
+        gate_up_proj_bias = self.gate_up_proj_bias[router_indices].float()
+        batch_size, num_experts_per_token, hidden_size = hidden_states_expanded.shape
+        gate_up = torch.bmm(
+            hidden_states_expanded.reshape(batch_size * num_experts_per_token, 1, hidden_size),
+            gate_up_proj.reshape(batch_size * num_experts_per_token, hidden_size, -1),
+        ).reshape(batch_size, num_experts_per_token, -1)
+        gate_up = gate_up + gate_up_proj_bias
 
-        # Key change to original gpt oss is to stay in fp32 precision for all linear projections / muls
-        for expert_idx in expert_hit:
-            # expert_idx only have 1 element, so we can use scale for fast indexing
-            expert_idx = expert_idx[0]
-            # skip masking index
-            if expert_idx == self.num_experts:
-                continue
-            top_k_pos, token_idx = torch.where(expert_mask[expert_idx])
-            current_state = hidden_states[token_idx]
-            gate_up = current_state.float() @ self.gate_up_proj[expert_idx] + self.gate_up_proj_bias[expert_idx]
-            gated_output = self._apply_gate(gate_up)
-            out = gated_output.float() @ self.down_proj[expert_idx] + self.down_proj_bias[expert_idx]
-            weighted_output = out * routing_weights[token_idx, top_k_pos, None].float()
-            next_states.index_add_(0, token_idx, weighted_output.to(hidden_states.dtype))
+        hidden_states = self._apply_gate(gate_up).float()
+        down_proj = self.down_proj[router_indices].float()
+        down_proj_bias = self.down_proj_bias[router_indices].float()
+        _, _, intermediate_size = hidden_states.shape
+        hidden_states = torch.bmm(
+            hidden_states.reshape(batch_size * num_experts_per_token, 1, intermediate_size),
+            down_proj.reshape(batch_size * num_experts_per_token, intermediate_size, -1),
+        ).reshape(batch_size, num_experts_per_token, -1)
+        hidden_states = hidden_states + down_proj_bias
 
-        return next_states
+        hidden_states = torch.einsum("bec,be->bc", hidden_states, routing_weights.float())
+        hidden_states = hidden_states * self.config.num_experts_per_tok
+        return hidden_states.to(original_dtype)
 
 
 class PrivacyFilterTopKRouter(nn.Module):
@@ -401,9 +435,14 @@ class PrivacyFilterPreTrainedModel(PreTrainedModel):
         "hidden_states": PrivacyFilterEncoderLayer,
         "attentions": PrivacyFilterAttention,
     }
-    _keep_in_fp32_modules = ["norm", "embedding_norm", "input_layernorm", "post_attention_layernorm"]
+    _keep_in_fp32_modules = []
     _compatible_flash_implementations = ["kernels-community/vllm-flash-attn3", "flash_attention_4"]
     _keep_in_fp32_modules_strict = [
+        "sinks",
+        "norm",
+        "embedding_norm",
+        "input_layernorm",
+        "post_attention_layernorm",
         "gate_up_proj",
         "gate_up_proj_bias",
         "down_proj",
@@ -425,6 +464,11 @@ class PrivacyFilterPreTrainedModel(PreTrainedModel):
         elif isinstance(module, PrivacyFilterTopKRouter):
             init.normal_(module.weight, mean=0.0, std=std)
             init.normal_(module.bias, mean=0.0, std=std)
+
+    def get_correct_experts_implementation(self, requested_experts: str | None) -> str:
+        if requested_experts not in (None, "eager"):
+            raise ValueError("Privacy Filter only supports the eager experts implementation.")
+        return "eager"
 
 
 @auto_docstring

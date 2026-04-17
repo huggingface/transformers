@@ -151,6 +151,13 @@ class PrivacyFilterConverter(TikTokenConverter):
 
 def build_config(original_config: dict[str, object], state_dict: dict[str, torch.Tensor]) -> PrivacyFilterConfig:
     initial_context_length = int(original_config["initial_context_length"])
+    bidirectional_left_context = int(original_config["bidirectional_left_context"])
+    bidirectional_right_context = int(original_config["bidirectional_right_context"])
+    if bidirectional_left_context != bidirectional_right_context:
+        raise ValueError(
+            "Privacy Filter conversion expects equal bidirectional context sizes; got "
+            f"left={bidirectional_left_context}, right={bidirectional_right_context}."
+        )
     rope_theta = float(original_config["rope_theta"])
     rope_parameters = {
         "rope_type": "yarn",
@@ -173,9 +180,7 @@ def build_config(original_config: dict[str, object], state_dict: dict[str, torch
         head_dim=int(original_config["head_dim"]),
         num_attention_heads=int(original_config["num_attention_heads"]),
         num_key_value_heads=int(original_config["num_key_value_heads"]),
-        sliding_window=int(original_config["sliding_window"]),
-        bidirectional_left_context=int(original_config["bidirectional_left_context"]),
-        bidirectional_right_context=int(original_config["bidirectional_right_context"]),
+        sliding_window=bidirectional_left_context,
         initial_context_length=initial_context_length,
         max_position_embeddings=int(original_config["max_position_embeddings"]),
         default_n_ctx=int(original_config["default_n_ctx"]),
@@ -220,6 +225,9 @@ def convert_state_dict(
             converted[new_key] = tensor.float().contiguous()
         else:
             converted[new_key] = tensor.contiguous()
+
+    if "score.bias" not in converted:
+        converted["score.bias"] = torch.zeros(config.num_labels, dtype=converted["score.weight"].dtype)
 
     return converted
 
