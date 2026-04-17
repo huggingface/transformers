@@ -2105,7 +2105,7 @@ class Gemma4ForConditionalGeneration(Gemma3nForConditionalGeneration):
                 vision_group_ids = torch.cumsum(new_vision_starts.int(), dim=1) - 1
                 vision_group_ids = torch.where(is_vision, vision_group_ids, -1)
 
-            mask_kwargs["block_sequence_ids"] = (vision_group_ids,)
+            mask_kwargs["block_sequence_ids"] = vision_group_ids
 
         return create_masks_for_generate(**mask_kwargs)
 
