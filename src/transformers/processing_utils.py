@@ -594,12 +594,6 @@ class ProcessorMixin(PushToHubMixin):
         # First, extract chat template from kwargs. It can never be a positional arg
         setattr(self, "chat_template", kwargs.pop("chat_template", None))
 
-        # Special ids used per each modality in multimodal models. Models need to
-        # override if they use special BOI/EOI/row/col/etc tokens that have to be marked
-        self.image_ids = [getattr(self, "image_token_id", None)]
-        self.video_ids = [getattr(self, "video_token_id", None)]
-        self.audio_ids = [getattr(self, "audio_token_id", None)]
-
         # Check audio tokenizer for its class but do not treat it as attr to avoid saving weights
         if (audio_tokenizer := kwargs.pop("audio_tokenizer", None)) is not None:
             proper_class = self.check_argument_for_proper_class("audio_tokenizer", audio_tokenizer)
@@ -686,20 +680,18 @@ class ProcessorMixin(PushToHubMixin):
             processed_audio, audio_replacements = self._process_audio(audio, **kwargs["audio_kwargs"])
 
         text_inputs = {}
-        return_tensors = kwargs["text_kwargs"].pop("return_tensors", None)
         if getattr(self, "tokenizer", None) is not None and text is not None:
             return_mm_token_type_ids = kwargs["text_kwargs"].pop("return_mm_token_type_ids", False)
             return_text_replacement_offsets = kwargs["text_kwargs"].pop("return_mm_token_type_ids", False)
 
-            new_text, text_replacement_offsets = self.get_text_replacement(
+            text, text_replacement_offsets = self.get_text_replacement(
                 text,
                 images_replacements,
                 videos_replacements,
                 audio_replacements,
             )
-            tokenizer = getattr(self, "tokenizer")
-            text_inputs = tokenizer(new_text, **kwargs["text_kwargs"])
-            self._check_special_mm_tokens(new_text, text_inputs, modalities=["image", "video", "audio"])
+            text_inputs = self.tokenizer(text, **kwargs["text_kwargs"])
+            self._check_special_mm_tokens(text, text_inputs, modalities=["image", "video", "audio"])
 
             if return_text_replacement_offsets:
                 text_inputs["text_replacement_offsets"] = text_replacement_offsets
@@ -708,7 +700,7 @@ class ProcessorMixin(PushToHubMixin):
                 text_inputs["mm_token_type_ids"] = self.create_mm_token_type_ids(text_inputs["input_ids"])
 
         data = {**text_inputs, **processed_images, **processed_videos, **processed_audio}
-        return BatchFeature(data, tensor_type=return_tensors)
+        return BatchFeature(data)
 
     def prepare_inputs_layout(
         self,
@@ -873,9 +865,9 @@ class ProcessorMixin(PushToHubMixin):
         for tokenizer_input in input_ids:
             tokenizer_input = np.array(tokenizer_input)
             mm_token_types = np.zeros_like(tokenizer_input)
-            mm_token_types[np.isin(tokenizer_input, self.image_ids)] = 1
-            mm_token_types[np.isin(tokenizer_input, self.video_ids)] = 2
-            mm_token_types[np.isin(tokenizer_input, self.audio_ids)] = 3
+            mm_token_types[np.isin(tokenizer_input, self.image_token_ids)] = 1
+            mm_token_types[np.isin(tokenizer_input, self.video_token_ids)] = 2
+            mm_token_types[np.isin(tokenizer_input, self.audio_token_ids)] = 3
             mm_token_type_ids.append(mm_token_types.tolist())
         return mm_token_type_ids
 
@@ -887,6 +879,21 @@ class ProcessorMixin(PushToHubMixin):
             if getattr(self, f"{modality}_token", None) is not None
         ]
         return special_mm_tokens
+
+    # Special ids used per each modality in multimodal models. Models need to
+    # override if they use special BOI/EOI/row/col/etc tokens that have to be marked
+    # These values are used to build `mm_token_type_ids`
+    @property
+    def image_token_ids(self) -> list[int]:
+        return [getattr(self, "image_token_id", None)]
+
+    @property
+    def video_token_ids(self) -> list[int]:
+        return [getattr(self, "video_token_id", None)]
+
+    @property
+    def audio_token_ids(self) -> list[int]:
+        return [getattr(self, "audio_token_id", None)]
 
     def check_argument_for_proper_class(self, argument_name, argument):
         """

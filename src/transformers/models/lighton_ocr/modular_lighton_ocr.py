@@ -153,7 +153,9 @@ class LightOnOcrProcessor(ProcessorMixin):
         self.image_break_token_id = tokenizer.image_break_token_id
         self.image_end_token_id = tokenizer.image_end_token_id
 
-        self.image_ids = [self.image_token_id, self.image_break_token_id, self.image_end_token_id]
+    @property
+    def image_token_ids(self) -> list[int]:
+        return [self.image_token_id, self.image_break_token_id, self.image_end_token_id]
 
     def __call__(
         self,

@@ -74,7 +74,10 @@ class ChameleonProcessor(ProcessorMixin):
         self.image_token_id = tokenizer.convert_tokens_to_ids(self.image_token)
         self.image_start_token_id = tokenizer.convert_tokens_to_ids(self.image_start_token)
         self.image_end_token_id = tokenizer.convert_tokens_to_ids(self.image_end_token)
-        self.image_ids = [self.image_token_id, self.image_start_token_id, self.image_end_token_id]
+
+    @property
+    def image_token_ids(self) -> list[int]:
+        return [self.image_token_id, self.image_start_token_id, self.image_end_token_id]
 
     @auto_docstring
     def __call__(

@@ -64,7 +64,10 @@ class InternVLProcessor(ProcessorMixin):
         self.image_token = tokenizer.context_image_token
         self.video_token = tokenizer.video_token
         self.image_token_id = tokenizer.context_image_token_id
-        self.image_ids = [self.image_token_id, self.start_image_token_id, self.end_image_token_id]
+
+    @property
+    def image_token_ids(self) -> list[int]:
+        return [self.image_token_id, self.start_image_token_id, self.end_image_token_id]
 
     def _insert_media_placeholders(
         self,
