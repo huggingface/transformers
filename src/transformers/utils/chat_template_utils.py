@@ -557,6 +557,9 @@ def render_jinja_template(
                     raise ValueError(
                         "continue_final_message is set but we could not find any text to continue in the final message!"
                     )
+            elif final_message == "" and chat[-1].get('reasoning_content'):
+                # If the content is empty but there is a reasoning_content field, we assume this is a message where the model is supposed to continue reasoning in the reasoning_content field, so we add the continue tag there instead
+                chat[-1]['reasoning_content'] = chat[-1]['reasoning_content'] + continue_final_message_tag
             else:
                 chat[-1]["content"] = chat[-1]["content"] + continue_final_message_tag
         if return_assistant_tokens_mask:
