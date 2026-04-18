@@ -51,11 +51,11 @@ if is_serve_available():
     from openai.types.responses.response_create_params import ResponseCreateParamsStreaming
     from openai.types.responses.response_usage import InputTokensDetails, OutputTokensDetails, ResponseUsage
 
-from transformers import BatchEncoding
 
 from .utils import (
     BaseGenerateManager,
     BaseHandler,
+    Modality,
     ToolCallParser,
     _StreamError,
     detect_tool_format,
@@ -121,6 +121,16 @@ class ResponseHandler(BaseHandler):
         messages = self._input_to_messages(body)
         processor_inputs = self.get_processor_inputs_from_messages(messages, modality)
 
+        has_video = any(
+            c.get("type") == "video"
+            for msg in processor_inputs
+            for c in (msg.get("content") if isinstance(msg.get("content"), list) else [])
+        )
+
+        # Default to 32 frames for video (Gemma 4 default); some processors load all frames otherwise
+        chat_template_kwargs = {}
+        if has_video:
+            chat_template_kwargs["num_frames"] = 32
         inputs = processor.apply_chat_template(
             processor_inputs,
             add_generation_prompt=True,
@@ -128,11 +138,11 @@ class ResponseHandler(BaseHandler):
             return_tensors=None if use_cb else "pt",
             return_dict=True,
             tokenize=True,
+            load_audio_from_video=modality == Modality.MULTIMODAL and has_video,
+            **chat_template_kwargs,
         )
         if not use_cb:
-            if not isinstance(inputs, BatchEncoding):
-                raise TypeError("Expected BatchEncoding from apply_chat_template with return_tensors='pt'")
-            inputs = inputs.to(model.device)
+            inputs = inputs.to(model.device)  # type: ignore[union-attr]
 
         gen_config = self._build_generation_config(body, model.generation_config, use_cb=use_cb)
         # TODO: remove when CB supports per-request generation config
@@ -172,14 +182,26 @@ class ResponseHandler(BaseHandler):
     def _input_to_messages(body: dict) -> list[dict]:
         """Convert the Responses API ``input`` field to a list of chat messages.
 
-        Handles string, list, and dict inputs. If ``instructions`` is provided, it is
-        prepended as a system message (or replaces an existing one).
+        The Responses API ``input`` field accepts several formats. This method normalizes
+        all of them into a standard list of messages with ``role`` and ``content`` keys.
+
+        Supported input formats:
+            1. **String**: ``input="Hello"`` → ``[{"role": "user", "content": "Hello"}]``
+            2. **Flat content list** (Responses API native, no ``role`` key):
+               ``input=[{"type": "input_text", "text": "..."}, {"type": "input_image", ...}]``
+               → wrapped as a single user message.
+            3. **Messages list** (multi-turn, with ``role`` keys):
+               ``input=[{"role": "user", "content": [...]}, {"role": "assistant", ...}]``
+               → passed through as-is.
+
+        If ``instructions`` is provided, it is prepended as a system message (or replaces
+        an existing one).
 
         Args:
             body (`dict`): The raw request body containing ``input`` and optionally ``instructions``.
 
         Returns:
-            `list[dict]`: Standard OpenAI-format chat messages.
+            `list[dict]`: Standard chat messages with ``role`` and ``content`` keys.
         """
         inp = body["input"]
         instructions = body.get("instructions")
@@ -188,7 +210,11 @@ class ResponseHandler(BaseHandler):
             messages = [{"role": "system", "content": instructions}] if instructions else []
             messages.append({"role": "user", "content": inp})
         elif isinstance(inp, list):
-            if instructions:
+            # Flat content list (no "role" key) — wrap as a single user message
+            if inp and "type" in inp[0] and "role" not in inp[0]:
+                messages = [{"role": "system", "content": instructions}] if instructions else []
+                messages.append({"role": "user", "content": inp})
+            elif instructions:
                 if inp[0]["role"] != "system":
                     messages = [{"role": "system", "content": instructions}, *inp]
                 else:
@@ -196,11 +222,8 @@ class ResponseHandler(BaseHandler):
                     messages[0]["content"] = instructions
             else:
                 messages = inp
-        elif isinstance(inp, dict):
-            messages = [{"role": "system", "content": instructions}] if instructions else []
-            messages.append(inp)
         else:
-            raise HTTPException(status_code=422, detail="'input' must be a string, list, or dict")
+            raise HTTPException(status_code=422, detail="'input' must be a string or list")
 
         return messages
 
