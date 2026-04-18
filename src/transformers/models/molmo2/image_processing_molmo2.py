@@ -24,6 +24,7 @@ from ...image_transforms import convert_to_rgb, normalize
 from ...image_utils import (
     IMAGENET_STANDARD_MEAN,
     IMAGENET_STANDARD_STD,
+    ChannelDimension,
     ImageInput,
     PILImageResampling,
     make_flat_list_of_images,
@@ -125,7 +126,7 @@ def build_resized_image(
         base_image_input_size,
         resample,
     )
-    resized = normalize(resized, image_mean, image_std)
+    resized = normalize(resized, image_mean, image_std, input_data_format=ChannelDimension.LAST)
     if len(resized.shape) == 3:
         resized = np.expand_dims(resized, 0)
     crop_patch_w = base_image_input_size[1] // image_patch_size
@@ -180,7 +181,7 @@ def build_overlapping_crops(
         [tiling_h * crop_window_size + total_margin_pixels, tiling_w * crop_window_size + total_margin_pixels],
         resample,
     )
-    src = normalize(src, image_mean, image_std)
+    src = normalize(src, image_mean, image_std, input_data_format=ChannelDimension.LAST)
 
     # Now we have to split the image into crops, and track what patches came from
     # where in `patch_idx_arr`

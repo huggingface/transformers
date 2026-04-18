@@ -23,6 +23,7 @@ from ...image_transforms import normalize
 from ...image_utils import (
     IMAGENET_STANDARD_MEAN,
     IMAGENET_STANDARD_STD,
+    ChannelDimension,
     PILImageResampling,
     SizeDict,
 )
@@ -73,7 +74,7 @@ def build_resized_image(
         base_image_input_size,
         resample,
     )
-    resized = normalize(resized, image_mean, image_std)
+    resized = normalize(resized, image_mean, image_std, input_data_format=ChannelDimension.LAST)
     if len(resized.shape) == 3:
         resized = np.expand_dims(resized, 0)
     crop_patch_w = base_image_input_size[1] // image_patch_size

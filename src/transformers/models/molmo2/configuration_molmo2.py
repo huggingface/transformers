@@ -195,6 +195,8 @@ class Molmo2Config(PreTrainedConfig):
         Token ID marking the end of a video frame.
     use_frame_special_tokens (`bool`, *optional*, defaults to `True`):
         Whether to use special tokens to delineate video frames.
+    tie_word_embeddings (`bool`, *optional*, defaults to `False`):
+        Whether the model's input and output word embeddings should be tied.
     """
 
     model_type = "molmo2"
@@ -217,6 +219,7 @@ class Molmo2Config(PreTrainedConfig):
     frame_end_token_id: int | None = None
     use_frame_special_tokens: bool = True
     initializer_range: float = 0.02
+    tie_word_embeddings: bool = False
 
     def __post_init__(self, **kwargs):
         if isinstance(self.vit_config, dict):

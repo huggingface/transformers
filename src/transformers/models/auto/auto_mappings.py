@@ -354,6 +354,8 @@ CONFIG_MAPPING_NAMES = OrderedDict(
         ("moonshine_streaming_encoder", "MoonshineStreamingEncoderConfig"),
         ("moshi", "MoshiConfig"),
         ("moshi_depth", "MoshiDepthConfig"),
+        ("molmo2", "Molmo2Config"),
+        ("molmo2_text", "Molmo2TextConfig"),
         ("mpnet", "MPNetConfig"),
         ("mpt", "MptConfig"),
         ("mra", "MraConfig"),
