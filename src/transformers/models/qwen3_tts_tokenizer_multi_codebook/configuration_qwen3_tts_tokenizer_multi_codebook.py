@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2026 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -13,11 +12,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from ...configuration_utils import PreTrainedConfig
 from ...modeling_rope_utils import RopeParameters
 from ...utils import logging
 from ..mimi.configuration_mimi import MimiConfig
 from ..qwen3_omni_moe.configuration_qwen3_omni_moe import Qwen3OmniMoeCode2WavConfig
-from ...configuration_utils import PreTrainedConfig
 
 
 logger = logging.get_logger(__name__)
@@ -174,7 +173,9 @@ class Qwen3TTSTokenizerMultiCodebookConfig(PreTrainedConfig):
 
         self.encoder_config = MimiConfig(**encoder_config) if isinstance(encoder_config, dict) else encoder_config
         self.decoder_config = (
-            Qwen3TTSTokenizerMultiCodebookCode2WavConfig(**decoder_config) if isinstance(decoder_config, dict) else decoder_config
+            Qwen3TTSTokenizerMultiCodebookCode2WavConfig(**decoder_config)
+            if isinstance(decoder_config, dict)
+            else decoder_config
         )
 
         self.encoder_valid_num_quantizers = encoder_valid_num_quantizers

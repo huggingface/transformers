@@ -20,14 +20,11 @@ import numpy as np
 import torch
 from torch import nn
 
+from ...cache_utils import DynamicCache
+from ...masking_utils import create_causal_mask, create_sliding_window_causal_mask
 from ...modeling_outputs import BaseModelOutputWithPast, ModelOutput
-from ...modeling_utils import PreTrainedModel
 from ...utils import auto_docstring, logging
-import math
-
 from ..mimi.modeling_mimi import (
-    MimiConv1d,
-    MimiConvTranspose1d,
     MimiEncoderOutput,
     MimiEuclideanCodebook,
     MimiModel,
@@ -36,21 +33,19 @@ from ..mimi.modeling_mimi import (
     MimiSplitResidualVectorQuantizer,
     MimiVectorQuantization,
 )
+from ..qwen2_5_omni.modeling_qwen2_5_omni import SnakeBeta
+from ..qwen3.modeling_qwen3 import Qwen3RotaryEmbedding
 from ..qwen3_omni_moe.modeling_qwen3_omni_moe import (
     Qwen3OmniMoeCausalConvNet,
     Qwen3OmniMoeCausalTransConvNet,
-    Qwen3OmniMoeCode2WavDecoderBlock,
     Qwen3OmniMoeCode2WavAttention,
+    Qwen3OmniMoeCode2WavDecoderBlock,
     Qwen3OmniMoeCode2WavDecoderResidualUnit,
     Qwen3OmniMoeCode2WavMlp,
     Qwen3OmniMoeCode2WavRMSNorm,
     Qwen3OmniMoeCode2WavTransformerLayer,
     Qwen3OmniMoeConvNeXtBlock,
 )
-from ..qwen2_5_omni.modeling_qwen2_5_omni import SnakeBeta
-from ..qwen3.modeling_qwen3 import Qwen3RotaryEmbedding
-from ...cache_utils import DynamicCache
-from ...masking_utils import create_causal_mask, create_sliding_window_causal_mask
 from .configuration_qwen3_tts_tokenizer_multi_codebook import (
     Qwen3TTSTokenizerMultiCodebookCode2WavConfig,
     Qwen3TTSTokenizerMultiCodebookConfig,
@@ -239,14 +234,18 @@ class Qwen3TTSTokenizerMultiCodebookDecoderBlock(Qwen3OmniMoeCode2WavDecoderBloc
 class Qwen3TTSTokenizerMultiCodebookEuclideanCodebook(MimiEuclideanCodebook):
     pass
 
+
 class Qwen3TTSTokenizerMultiCodebookVectorQuantization(MimiVectorQuantization):
     pass
+
 
 class Qwen3TTSTokenizerMultiCodebookResidualVectorQuantizer(MimiResidualVectorQuantizer):
     pass
 
+
 class Qwen3TTSTokenizerMultiCodebookSplitResidualVectorQuantizer(MimiSplitResidualVectorQuantizer):
     pass
+
 
 # ─── Decoder ─────────────────────────────────────────────────────────────────
 
@@ -271,14 +270,18 @@ class Qwen3TTSTokenizerMultiCodebookDecoder(Qwen3TTSTokenizerMultiCodebookDecode
         )
         self.quantizer = Qwen3TTSTokenizerMultiCodebookSplitResidualVectorQuantizer(quantizer_config)
 
-        self.pre_conv = Qwen3TTSTokenizerMultiCodebookCausalConvNet(config.codebook_dim, config.latent_dim, kernel_size=3)
+        self.pre_conv = Qwen3TTSTokenizerMultiCodebookCausalConvNet(
+            config.codebook_dim, config.latent_dim, kernel_size=3
+        )
 
         upsample = []
         for factor in config.upsampling_ratios:
             upsample.append(
                 nn.ModuleList(
                     [
-                        Qwen3TTSTokenizerMultiCodebookCausalTransConvNet(config.latent_dim, config.latent_dim, factor, factor),
+                        Qwen3TTSTokenizerMultiCodebookCausalTransConvNet(
+                            config.latent_dim, config.latent_dim, factor, factor
+                        ),
                         Qwen3TTSTokenizerMultiCodebookConvNeXtBlock(config.latent_dim),
                     ]
                 )
@@ -341,6 +344,7 @@ class Qwen3TTSTokenizerMultiCodebookEncoderModel(MimiModel):
         self.decoder = None
         self.decoder_transformer = None
         self.upsample = None
+
 
 # ─── Top-level Model ──────────────────────────────────────────────────────────
 

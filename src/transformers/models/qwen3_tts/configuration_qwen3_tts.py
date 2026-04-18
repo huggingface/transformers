@@ -436,7 +436,6 @@ class Qwen3TTSConfig(PreTrainedConfig):
         self.tts_eos_token_id = tts_eos_token_id
 
 
-
 __all__ = [
     "MimiConfig",
     "Qwen3TTSConfig",
