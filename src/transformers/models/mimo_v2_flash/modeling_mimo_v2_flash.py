@@ -522,7 +522,6 @@ class MiMoV2FlashPreTrainedModel(PreTrainedModel):
         if isinstance(module, MiMoV2FlashAttention) and module.sinks is not None:
             init.normal_(module.sinks, mean=0.0, std=std)
         elif isinstance(module, MiMoV2FlashTopKRouter):
-            init.normal_(module.weight, mean=0.0, std=std)
             init.zeros_(module.e_score_correction_bias)
         elif isinstance(module, MiMoV2FlashRotaryEmbedding):
             for layer_type in module.layer_types:
