@@ -20,13 +20,14 @@ import torchvision.transforms
 
 from ...image_processing_backends import TorchvisionBackend
 from ...image_processing_utils import BatchFeature, get_size_dict
-from ...image_transforms import convert_to_rgb, normalize
+from ...image_transforms import convert_to_rgb, normalize, to_channel_dimension_format
 from ...image_utils import (
     IMAGENET_STANDARD_MEAN,
     IMAGENET_STANDARD_STD,
     ChannelDimension,
     ImageInput,
     PILImageResampling,
+    infer_channel_dimension_format,
     make_flat_list_of_images,
     to_numpy_array,
     valid_images,
@@ -448,8 +449,13 @@ class Molmo2ImageProcessor(TorchvisionBackend):
         if do_convert_rgb:
             images = [convert_to_rgb(image) for image in images]
 
-        # All transformations expect numpy arrays.
+        # All transformations expect numpy arrays in HWC format.
         images = [to_numpy_array(image) for image in images]
+        # Ensure HWC layout; torch tensors and some numpy arrays arrive as CHW.
+        images = [
+            to_channel_dimension_format(image, ChannelDimension.LAST, infer_channel_dimension_format(image))
+            for image in images
+        ]
 
         data = {}
         if images is not None:
