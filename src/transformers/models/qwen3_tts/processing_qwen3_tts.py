@@ -34,64 +34,67 @@ class Qwen3TTSProcessorKwargs(ProcessingKwargs, total=False):
 
 class Qwen3TTSProcessor(ProcessorMixin):
     r"""
-    Constructs a Qwen3TTS processor which combines a Qwen tokenizer with Qwen3-TTS-specific processing.
+    Constructs a Qwen3TTS processor which combines a Qwen tokenizer and a feature extractor.
+
+    [`Qwen3TTSProcessor`] offers all the functionalities of [`Qwen3TTSFeatureExtractor`] and [`Qwen2TokenizerFast`].
+    See the [`~Qwen3TTSProcessor.__call__`] and [`~Qwen3TTSProcessor.decode`] for more information.
 
     Args:
+        feature_extractor ([`Qwen3TTSFeatureExtractor`], *optional*):
+            The feature extractor for extracting mel spectrogram features from audio.
         tokenizer ([`Qwen2TokenizerFast`], *optional*):
             The text tokenizer for encoding text inputs. Should be a Qwen2 tokenizer.
         chat_template (`str`, *optional*):
             The Jinja template to use for formatting conversations using the chat template.
     """
 
-    attributes = ["tokenizer"]
+    attributes = ["feature_extractor", "tokenizer"]
+    feature_extractor_class = "Qwen3TTSFeatureExtractor"
     tokenizer_class = ("Qwen2Tokenizer", "Qwen2TokenizerFast")
 
-    def __init__(self, tokenizer=None, chat_template=None):
-        super().__init__(tokenizer, chat_template=chat_template)
+    def __init__(self, feature_extractor=None, tokenizer=None, chat_template=None):
+        super().__init__(feature_extractor, tokenizer, chat_template=chat_template)
 
-    def __call__(self, text=None, **kwargs) -> BatchFeature:
+    def __call__(self, text=None, audio=None, **kwargs) -> BatchFeature:
         """
-        Prepare text for the Qwen3-TTS model.
+        Prepare inputs for the Qwen3-TTS model.
 
         Args:
-            text (`str` or `List[str]`):
+            text (`str` or `List[str]`, *optional*):
                 The text string or batch of text strings to be encoded.
+            audio (`np.ndarray`, `List[float]`, `List[np.ndarray]`, *optional*):
+                The audio input to extract features from. Used for speaker embedding extraction.
             **kwargs:
-                Additional keyword arguments passed to the tokenizer.
+                Additional keyword arguments passed to the tokenizer or feature extractor.
 
         Returns:
-            BatchFeature: Dictionary containing tokenized text inputs.
+            BatchFeature: Dictionary containing tokenized text and/or audio features.
         """
-        if text is None:
-            raise ValueError("You need to specify a `text` input to process.")
+        if text is None and audio is None:
+            raise ValueError("You need to specify at least one of `text` or `audio` input to process.")
 
         output_kwargs = self._merge_kwargs(
             Qwen3TTSProcessorKwargs,
-            tokenizer_init_kwargs=self.tokenizer.init_kwargs,
+            tokenizer_init_kwargs=self.tokenizer.init_kwargs if self.tokenizer is not None else {},
             **kwargs,
         )
 
-        if not isinstance(text, list):
-            text = [text]
+        data = {}
 
-        text_inputs = self.tokenizer(text, **output_kwargs["text_kwargs"])
+        if text is not None:
+            if not isinstance(text, list):
+                text = [text]
+            text_inputs = self.tokenizer(text, **output_kwargs["text_kwargs"])
+            data.update(text_inputs)
+
+        if audio is not None:
+            audio_inputs = self.feature_extractor(audio, **output_kwargs.get("audio_kwargs", {}))
+            data["input_features"] = audio_inputs["input_features"]
 
         return BatchFeature(
-            data={**text_inputs},
+            data=data,
             tensor_type=kwargs.get("return_tensors"),
         )
-
-    def batch_decode(self, *args, **kwargs):
-        """
-        This method forwards all its arguments to the tokenizer's batch_decode method.
-        """
-        return self.tokenizer.batch_decode(*args, **kwargs)
-
-    def decode(self, *args, **kwargs):
-        """
-        This method forwards all its arguments to the tokenizer's decode method.
-        """
-        return self.tokenizer.decode(*args, **kwargs)
 
     def apply_chat_template(self, conversations, chat_template=None, **kwargs):
         """
@@ -108,9 +111,9 @@ class Qwen3TTSProcessor(ProcessorMixin):
 
     @property
     def model_input_names(self):
-        """Return the input names of the underlying tokenizer."""
         tokenizer_input_names = self.tokenizer.model_input_names
-        return list(dict.fromkeys(tokenizer_input_names))
+        feature_extractor_input_names = self.feature_extractor.model_input_names
+        return list(dict.fromkeys(tokenizer_input_names + feature_extractor_input_names))
 
 
 __all__ = ["Qwen3TTSProcessor"]
