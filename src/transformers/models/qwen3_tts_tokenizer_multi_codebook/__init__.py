@@ -5,10 +5,8 @@ from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
-    from .configuration_qwen3_tts import *
-    from .feature_extraction_qwen3_tts import *
-    from .modeling_qwen3_tts import *
-    from .processing_qwen3_tts import *
+    from .configuration_qwen3_tts_tokenizer_multi_codebook import *
+    from .modeling_qwen3_tts_tokenizer_multi_codebook import *
 else:
     import sys
 
