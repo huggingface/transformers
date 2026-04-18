@@ -281,6 +281,95 @@ def get_label_list(raw_dataset, split="train") -> list[str]:
     return label_list
 
 
+def validate_and_clean_dataset(
+    raw_datasets,
+    text_column_names: str | None,
+    label_column_name: str | None,
+    is_regression: bool | None,
+    preprocessing_num_workers: int | None = None,
+) -> None:
+    """
+    Validate dataset inputs before tokenization to ensure robustness.
+    Raises ValueError with clear message if issues are found.
+    """
+    text_columns = ["sentence"] if text_column_names is None else text_column_names.split(",")
+    label_col = "label" if label_column_name is None else label_column_name
+
+    for split in raw_datasets:
+        dataset = raw_datasets[split]
+
+        # Check if text columns exist
+        missing_text_cols = [col for col in text_columns if col not in dataset.column_names]
+        if missing_text_cols:
+            raise ValueError(
+                f"Split '{split}': Text column(s) {missing_text_cols} not found in dataset.\n"
+                f"Available columns: {dataset.column_names}\n"
+                f"Hint: Use --text_column_names to specify correct text column name(s)"
+            )
+
+        # Check if label column exists (except for test split in prediction only)
+        if label_col not in dataset.column_names and split != "test":
+            raise ValueError(
+                f"Split '{split}': Label column '{label_col}' not found in dataset.\n"
+                f"Available columns: {dataset.column_names}\n"
+                f"Hint: Use --label_column_name to specify the correct label column name"
+            )
+
+        # Convert to pandas for easier validation (sample first 1000 rows for efficiency)
+        sample_size = min(len(dataset), 1000)
+        sample_indices = list(range(sample_size))
+        df = dataset.select(sample_indices).to_pandas()
+
+        # Validate text columns
+        for text_col in text_columns:
+            # Check for None/NaN values
+            null_count = df[text_col].isna().sum()
+            if null_count > 0:
+                null_samples = df[df[text_col].isna()].index.tolist()[:5]
+                raise ValueError(
+                    f"Split '{split}', column '{text_col}': Found {null_count} None/NaN text values.\n"
+                    f"Sample indices with issue: {null_samples}\n"
+                    f"Hint: Remove or fill empty text values before training"
+                )
+
+            # Check for empty strings
+            empty_count = (df[text_col].astype(str).str.strip() == "").sum()
+            if empty_count > 0:
+                empty_samples = df[df[text_col].astype(str).str.strip() == ""].index.tolist()[:5]
+                raise ValueError(
+                    f"Split '{split}', column '{text_col}': Found {empty_count} empty text values.\n"
+                    f"Sample indices with issue: {empty_samples}\n"
+                    f"Hint: Remove or fill empty text values before training"
+                )
+
+            # Check for non-string types
+            non_string_mask = ~df[text_col].apply(lambda x: isinstance(x, (str, int, float))).values
+            non_string_count = non_string_mask.sum()
+            if non_string_count > 0:
+                non_string_samples = df[non_string_mask].index.tolist()[:5]
+                non_string_types = [type(df.loc[i, text_col]) for i in non_string_samples]
+                raise ValueError(
+                    f"Split '{split}', column '{text_col}': Found {non_string_count} values with unsupported types.\n"
+                    f"Sample indices: {non_string_samples}\n"
+                    f"Sample types: {non_string_types}\n"
+                    f"Hint: Convert all text values to string type"
+                )
+
+        # Validate labels for classification (not regression)
+        if label_col in dataset.column_names and not is_regression:
+            # Check for None/NaN labels
+            null_label_count = df[label_col].isna().sum()
+            if null_label_count > 0:
+                null_label_samples = df[df[label_col].isna()].index.tolist()[:5]
+                raise ValueError(
+                    f"Split '{split}', column '{label_col}': Found {null_label_count} None/NaN label values.\n"
+                    f"Sample indices with issue: {null_label_samples}\n"
+                    f"Hint: Remove samples with missing labels or fill with valid values"
+                )
+
+        logger.info(f"Split '{split}': Validation passed for {sample_size} sampled records")
+
+
 def main():
     # See all possible arguments in src/transformers/training_args.py
     # or by passing the --help flag to this script.
@@ -410,6 +499,16 @@ def main():
         for key in raw_datasets:
             raw_datasets[key] = raw_datasets[key].rename_column(data_args.label_column_name, "label")
 
+    # Validate dataset for robustness before preprocessing
+    with training_args.main_process_first(desc="dataset validation"):
+        validate_and_clean_dataset(
+            raw_datasets,
+            text_column_names=data_args.text_column_names,
+            label_column_name=data_args.label_column_name,
+            is_regression=data_args.do_regression,
+            preprocessing_num_workers=data_args.preprocessing_num_workers,
+        )
+
     # Trying to have good defaults here, don't hesitate to tweak to your needs.
 
     is_regression = (
@@ -471,7 +570,7 @@ def main():
     # In distributed training, the .from_pretrained methods guarantee that only one local process can concurrently
     # download model & vocab.
     config = AutoConfig.from_pretrained(
-        model_args.config_name if model_args.config_name else model_args.model_name_or_path,
+        model_args.config_name or model_args.model_name_or_path,
         num_labels=num_labels,
         finetuning_task="text-classification",
         cache_dir=model_args.cache_dir,
@@ -491,7 +590,7 @@ def main():
         logger.info("setting problem type to single label classification")
 
     tokenizer = AutoTokenizer.from_pretrained(
-        model_args.tokenizer_name if model_args.tokenizer_name else model_args.model_name_or_path,
+        model_args.tokenizer_name or model_args.model_name_or_path,
         cache_dir=model_args.cache_dir,
         use_fast=model_args.use_fast_tokenizer,
         revision=model_args.model_revision,
@@ -551,18 +650,25 @@ def main():
     def preprocess_function(examples):
         if data_args.text_column_names is not None:
             text_column_names = data_args.text_column_names.split(",")
-            # join together text columns into "sentence" column
-            examples["sentence"] = examples[text_column_names[0]]
-            for column in text_column_names[1:]:
-                for i in range(len(examples[column])):
-                    examples["sentence"][i] += data_args.text_column_delimiter + examples[column][i]
-        # Tokenize the texts
+            examples["sentence"] = []
+            for i in range(len(examples[text_column_names[0]])):
+                first_text = examples[text_column_names[0]][i]
+                combined_text = str(first_text)
+
+                for column in text_column_names[1:]:
+                    text = examples[column][i]
+                    combined_text += data_args.text_column_delimiter + str(text)
+
+                examples["sentence"].append(combined_text)
+        else:
+            examples["sentence"] = [str(s) for s in examples["sentence"]]
+
         result = tokenizer(examples["sentence"], padding=padding, max_length=max_seq_length, truncation=True)
         if label_to_id is not None and "label" in examples:
             if is_multi_label:
                 result["label"] = [multi_labels_to_ids(l) for l in examples["label"]]
             else:
-                result["label"] = [(label_to_id[str(l)] if l != -1 else -1) for l in examples["label"]]
+                result["label"] = [label_to_id[str(l)] if l != -1 else -1 for l in examples["label"]]
         return result
 
     # Running the preprocessing pipeline on all the datasets
@@ -712,7 +818,6 @@ def main():
         else:
             predictions = np.argmax(predictions, axis=1)
         output_predict_file = os.path.join(training_args.output_dir, "predict_results.txt")
-        id2label = model.config.id2label
         if trainer.is_world_process_zero():
             with open(output_predict_file, "w") as writer:
                 logger.info("***** Predict results *****")
@@ -722,10 +827,10 @@ def main():
                         writer.write(f"{index}\t{item:3.3f}\n")
                     elif is_multi_label:
                         # recover from multi-hot encoding
-                        item = [id2label[i] for i in range(len(item)) if item[i] == 1]
+                        item = [label_list[i] for i in range(len(item)) if item[i] == 1]
                         writer.write(f"{index}\t{item}\n")
                     else:
-                        item = id2label[item]
+                        item = label_list[item]
                         writer.write(f"{index}\t{item}\n")
         logger.info(f"Predict results saved at {output_predict_file}")
     kwargs = {"finetuned_from": model_args.model_name_or_path, "tasks": "text-classification"}
