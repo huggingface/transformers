@@ -72,7 +72,7 @@ class FlexOlmoConfig(PreTrainedConfig):
         ),  # we need to replicate here due to the added norm on q and k
         "layers.*.self_attn.o_proj": TPStyle(
             "vocab", "allreduce"
-        )  # input is replicated due to the added norm on q and k
+        ),  # input is replicated due to the added norm on q and k
     }
     base_model_pp_plan = {
         "embed_tokens": (["input_ids"], ["inputs_embeds"]),
