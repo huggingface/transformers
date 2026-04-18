@@ -31,6 +31,14 @@ on:
       pytest_marker:
         required: false
         type: string
+      test_path_prefix:
+        required: false
+        default: "tests"
+        type: string
+      test_file_suffix:
+        required: false
+        default: ""
+        type: string
 
 env:
   HF_HOME: /mnt/cache
@@ -155,9 +163,11 @@ jobs:
           report_name_prefix: ${{ inputs.report_name_prefix }}
           pytest_marker: ${{ inputs.pytest_marker }}
           model: ${{ matrix.folders }}
+          test_path_prefix: ${{ inputs.test_path_prefix }}
+          test_file_suffix: ${{ inputs.test_file_suffix }}
         run: |
           # Map short names to actual test paths for trainer/distributed tests
-          test_path="tests/${model}"
+          test_path="${test_path_prefix}/${model}${test_file_suffix}"
           if [ "$model" = "fsdp" ]; then
             test_path="tests/trainer/distributed/test_trainer_distributed_fsdp.py"
           elif [ "$model" = "ddp" ]; then
