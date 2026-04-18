@@ -318,9 +318,6 @@ class Qwen3OmniMoeProcessor(ProcessorMixin):
 
         return list(_iter())
 
-    def apply_chat_template(self, conversations, chat_template=None, **kwargs):
-        return super().apply_chat_template(conversations, chat_template, **kwargs)
-
     def post_process_image_text_to_text(self, generated_outputs, skip_special_tokens=True, **kwargs):
         """
         Post-process the output of a vlm to decode the text.
@@ -391,6 +388,9 @@ class Qwen3OmniMoeProcessor(ProcessorMixin):
                 + ["video_second_per_grid"]
             )
         )
+
+    def apply_chat_template(self, conversations, chat_template=None, **kwargs):
+        return super().apply_chat_template(conversations, chat_template, **kwargs)
 
 
 __all__ = ["Qwen3OmniMoeProcessor"]
