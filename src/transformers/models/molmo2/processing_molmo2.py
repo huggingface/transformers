@@ -60,6 +60,17 @@ IMAGE_TOKENS = [
 
 
 class Molmo2ImagesKwargs(ImagesKwargs, total=False):
+    """
+    max_crops (`int`, *optional*):
+        Maximum number of image crops produced by the image processor.
+    overlap_margins (`list[int]`, *optional*):
+        Pixel margins `[left_right, top_bottom]` to overlap between neighboring crops.
+    patch_size (`int`, *optional*):
+        Side length in pixels of each ViT patch.
+    pooling_size (`list[int]`, *optional*):
+        `[pool_h, pool_w]` pooling window applied to patch features in the vision adapter.
+    """
+
     max_crops: int | None
     overlap_margins: list[int] | None
     patch_size: int | None
@@ -67,6 +78,15 @@ class Molmo2ImagesKwargs(ImagesKwargs, total=False):
 
 
 class Molmo2VideosKwargs(VideosKwargs, total=False):
+    """
+    patch_size (`int`, *optional*):
+        Side length in pixels of each ViT patch for video frames.
+    pooling_size (`list[int]`, *optional*):
+        `[pool_h, pool_w]` pooling window applied to video patch features.
+    max_fps (`int`, *optional*):
+        Maximum sampling rate in frames per second for short videos.
+    """
+
     patch_size: int | None
     pooling_size: list[int] | None
     max_fps: int | None
@@ -105,6 +125,22 @@ class Molmo2Processor(ProcessorMixin):
         use_frame_special_tokens: bool | None = True,
         **kwargs,
     ) -> None:
+        r"""
+        image_use_col_tokens (`bool`, *optional*, defaults to `True`):
+            Whether to append column-separator tokens (`<im_col>`) after each patch row of the high-resolution image
+            view.
+        use_single_crop_col_tokens (`bool`, *optional*):
+            Whether to append column-separator tokens after each patch row of the low-resolution (single-crop) image
+            view. If `None`, falls back to `image_use_col_tokens`.
+        use_single_crop_start_token (`bool`, *optional*, defaults to `True`):
+            Whether to start the low-resolution image view with `<low_res_im_start>` instead of the regular
+            `<im_start>`.
+        video_use_col_tokens (`bool`, *optional*, defaults to `False`):
+            Whether to append column-separator tokens after each patch row of video frames.
+        use_frame_special_tokens (`bool`, *optional*, defaults to `True`):
+            Whether to wrap each video frame with `<frame_start>` / `<frame_end>` tokens. If `False`, falls back to
+            `<im_start>` / `<im_end>`.
+        """
         super().__init__(image_processor, video_processor, tokenizer, chat_template=chat_template)
 
         self.image_placeholder_token = IMAGE_PROMPT

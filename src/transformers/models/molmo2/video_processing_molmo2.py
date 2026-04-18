@@ -158,6 +158,15 @@ def image_to_patches_and_grids(
 
 
 class Molmo2VideoProcessorKwargs(VideosKwargs, total=False):
+    """
+    patch_size (`int`, *optional*):
+        Side length in pixels of each ViT patch for video frames.
+    pooling_size (`list[int]`, *optional*):
+        `[pool_h, pool_w]` pooling window applied to video patch features.
+    max_fps (`int`, *optional*):
+        Maximum sampling rate in frames per second for short videos.
+    """
+
     patch_size: int | None
     pooling_size: list[int] | None
     max_fps: int | None
