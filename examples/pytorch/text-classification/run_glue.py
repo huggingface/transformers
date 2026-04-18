@@ -436,6 +436,9 @@ def main():
         model.config.label2id = {l: i for i, l in enumerate(label_list)}
         model.config.id2label = {id: label for label, id in config.label2id.items()}
 
+    if not training_args.do_train and not is_regression and data_args.task_name is None:
+        label_list = [model.config.id2label[i] for i in range(len(model.config.id2label))]
+
     if data_args.max_seq_length > tokenizer.model_max_length:
         logger.warning(
             f"The max_seq_length passed ({data_args.max_seq_length}) is larger than the maximum length for the "

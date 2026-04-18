@@ -408,40 +408,7 @@ def main():
 
     if data_args.label_column_name is not None and data_args.label_column_name != "label":
         for key in raw_datasets:
-            if data_args.label_column_name not in raw_datasets[key].features:
-                raise ValueError(
-                    f"Label column '{data_args.label_column_name}' not found in dataset split '{key}'. "
-                    f"Available columns are: {list(raw_datasets[key].features.keys())}. "
-                    f"Please check your --label_column_name argument."
-                )
             raw_datasets[key] = raw_datasets[key].rename_column(data_args.label_column_name, "label")
-
-    text_columns = ["sentence"] if data_args.text_column_names is None else data_args.text_column_names.split(",")
-    for split in raw_datasets:
-        available_columns = list(raw_datasets[split].features.keys())
-        for col in text_columns:
-            if col not in available_columns:
-                raise ValueError(
-                    f"Text column '{col}' not found in dataset split '{split}'. "
-                    f"Available columns are: {available_columns}. "
-                    f"Please use --text_column_names to specify correct text column name(s)."
-                )
-        if split != "test" and "label" not in available_columns:
-            raise ValueError(
-                f"Label column 'label' not found in dataset split '{split}'. "
-                f"Available columns are: {available_columns}. "
-                f"Please use --label_column_name to specify correct label column name."
-            )
-
-    if not training_args.do_train and not is_regression:
-        if not (hasattr(model.config, "label2id") and model.config.label2id):
-            raise ValueError(
-                "Classification prediction/evaluation without training requires "
-                "the loaded model to have label2id configuration. "
-                "Please use a model fine-tuned on your classification task."
-            )
-        configured_labels = set(model.config.label2id.keys())
-        logger.info(f"Model configured labels: {sorted(configured_labels)}")
 
     # Trying to have good defaults here, don't hesitate to tweak to your needs.
 
@@ -565,6 +532,7 @@ def main():
         logger.info("using label infos in the model config")
         logger.info(f"label2id: {model.config.label2id}")
         label_to_id = model.config.label2id
+        label_list = [model.config.id2label[i] for i in range(len(model.config.id2label))]
     else:  # regression
         label_to_id = None
 
@@ -576,54 +544,26 @@ def main():
     max_seq_length = min(data_args.max_seq_length, tokenizer.model_max_length)
 
     def multi_labels_to_ids(labels: list[str]) -> list[float]:
-        ids = [0.0] * len(label_to_id)
+        ids = [0.0] * len(label_to_id)  # BCELoss requires float as target type
         for label in labels:
-            label_str = str(label)
-            if label_str not in label_to_id:
-                raise ValueError(
-                    f"Label '{label}' not found in label mapping. "
-                    f"Available labels: {list(label_to_id.keys())}. "
-                    f"Please ensure all labels in the dataset match the labels used during training."
-                )
-            ids[label_to_id[label_str]] = 1.0
+            ids[label_to_id[label]] = 1.0
         return ids
 
     def preprocess_function(examples):
         if data_args.text_column_names is not None:
             text_column_names = data_args.text_column_names.split(",")
+            # join together text columns into "sentence" column
             examples["sentence"] = examples[text_column_names[0]]
             for column in text_column_names[1:]:
                 for i in range(len(examples[column])):
                     examples["sentence"][i] += data_args.text_column_delimiter + examples[column][i]
-
-        if "sentence" not in examples:
-            raise ValueError(
-                "Text column 'sentence' not found in dataset. "
-                "Please use --text_column_names to specify the correct text column name(s)."
-            )
-
-        examples["sentence"] = [str(s) if s is not None else "" for s in examples["sentence"]]
-
+        # Tokenize the texts
         result = tokenizer(examples["sentence"], padding=padding, max_length=max_seq_length, truncation=True)
-
         if label_to_id is not None and "label" in examples:
             if is_multi_label:
                 result["label"] = [multi_labels_to_ids(l) for l in examples["label"]]
             else:
-                processed_labels = []
-                for l in examples["label"]:
-                    if l == -1:
-                        processed_labels.append(-1)
-                        continue
-                    label_str = str(l)
-                    if label_str not in label_to_id:
-                        raise ValueError(
-                            f"Label '{l}' found in dataset is not recognized. "
-                            f"Valid labels are: {sorted(label_to_id.keys())}. "
-                            f"Please ensure all labels match the training label set."
-                        )
-                    processed_labels.append(label_to_id[label_str])
-                result["label"] = processed_labels
+                result["label"] = [(label_to_id[str(l)] if l != -1 else -1) for l in examples["label"]]
         return result
 
     # Running the preprocessing pipeline on all the datasets
@@ -782,10 +722,10 @@ def main():
                         writer.write(f"{index}\t{item:3.3f}\n")
                     elif is_multi_label:
                         # recover from multi-hot encoding
-                        item = [model.config.id2label[i] for i in range(len(item)) if item[i] == 1]
+                        item = [label_list[i] for i in range(len(item)) if item[i] == 1]
                         writer.write(f"{index}\t{item}\n")
                     else:
-                        item = model.config.id2label[item]
+                        item = label_list[item]
                         writer.write(f"{index}\t{item}\n")
         logger.info(f"Predict results saved at {output_predict_file}")
     kwargs = {"finetuned_from": model_args.model_name_or_path, "tasks": "text-classification"}
