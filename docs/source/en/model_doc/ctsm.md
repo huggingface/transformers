@@ -54,7 +54,7 @@ The 250M **CTSM 1.0** release checkpoint additionally introduces (over the 500M 
 
 ### Inference
 
-For horizons longer than `config.horizon_length` (128 steps), [`CtsmModelForPrediction`] runs an autoregressive multi-resolution decode loop: each step produces 128 fine-resolution predictions, the mean forecast is appended to the fine context, and every `agg_factor=60` new fine samples are mean-aggregated into a new coarse point. There is no KV cache — the coarse block's bidirectional attention and the per-step stream renormalization make the standard append-only cache unsuitable, matching both the original reference implementation and the other time-series forecasters in `transformers`.
+For `horizon_len > config.horizon_length`, [`CtsmModelForPrediction`] runs an autoregressive multi-resolution decode loop, using a [`DynamicCache`] by default (opt out with `use_cache=False`). Each step feeds only the newly-appended fine patches through the stack and attends to cached K/V for every earlier position. Stream-normalization statistics are frozen to their step-1 values so that cached K/V remains valid; the coarse block is pinned and the cache is rebuilt if the concatenated sequence would outgrow `max_position_embeddings`.
 
 The checkpoint can be found at [`cisco-ai/cisco-time-series-model-1.0`](https://huggingface.co/cisco-ai/cisco-time-series-model-1.0). The original inference code is at [github.com/splunk/cisco-time-series-model](https://github.com/splunk/cisco-time-series-model).
 

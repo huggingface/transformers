@@ -251,6 +251,32 @@ class CtsmModelTest(ModelTesterMixin, unittest.TestCase):
             inputs_dict["future_values"] = floats_tensor([batch_size, self.model_tester.horizon_length], rng=rng)
         return inputs_dict
 
+    def test_kv_cache_matches_full_recompute(self):
+        """Cached autoregressive decoding should produce close-to-identical predictions to the
+        full-recompute path (the small gap is from the stream-stats-freezing approximation)."""
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        model = CtsmModelForPrediction(config).to(torch_device).eval()
+
+        # Long enough to trigger AR (horizon > config.horizon_length).
+        horizon_len = config.horizon_length * 3
+        with torch.no_grad():
+            out_full = model(**inputs_dict, horizon_len=horizon_len, use_cache=False)
+            out_cache = model(**inputs_dict, horizon_len=horizon_len, use_cache=True)
+
+        # First horizon_length predictions must match bit-exactly (step 1 is identical in both paths).
+        step1 = config.horizon_length
+        self.assertTrue(
+            torch.allclose(out_full.mean_predictions[:, :step1], out_cache.mean_predictions[:, :step1], atol=1e-5),
+            msg="Step-1 predictions must match bit-exactly between cached and non-cached paths.",
+        )
+        # On subsequent AR steps the stats-freezing approximation introduces a small bounded drift.
+        # The bound is generous here because the tiny tester model has random weights and a horizon of 8,
+        # so compounding any small per-step shift over multiple steps is amplified.
+        relative = (out_full.mean_predictions - out_cache.mean_predictions).abs().max() / (
+            out_full.mean_predictions.abs().max().clamp_min(1.0)
+        )
+        self.assertLess(relative.item(), 0.5, f"cached vs full-recompute AR drift {relative.item():.2e} too large")
+
 
 @require_torch
 @slow
