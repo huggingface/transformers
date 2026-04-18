@@ -13,6 +13,7 @@
 # limitations under the License.
 from __future__ import annotations
 
+import contextlib
 import re
 from dataclasses import dataclass
 from typing import Literal
@@ -310,40 +311,33 @@ def _accumulate_local_param_grad(original_param: DTensor, local_grad: torch.Tens
     return local_grad
 
 
-def _materialize_local_params(module, shadow_attr: str) -> None:
-    """Swap DTensor params for detached local leaf params during one forward."""
-    if getattr(module, shadow_attr, None) is not None:
-        raise RuntimeError(f"{module.__class__.__name__} already has active local parameter shadows")
+@contextlib.contextmanager
+def _local_dtensor_params(module):
+    """Temporarily swap DTensor params for local leaf params during one forward.
 
-    param_shadows = {}
-    for param_name, param in list(module.named_parameters(recurse=False)):
+    Needed because grouped_mm / fused ops on DTensors trigger broken autograd
+    paths for ``_StridedShard``. We run forward on a plain-tensor leaf param and
+    stitch its gradient back onto the original DTensor via a hook. Restores the
+    DTensor params on exit (even on exception).
+    """
+    shadows = {}
+    for name, param in list(module.named_parameters(recurse=False)):
         if not isinstance(param, DTensor):
             continue
-
-        param_shadows[param_name] = param
-        local_param = torch.nn.Parameter(param._local_tensor.detach(), requires_grad=param.requires_grad)
+        shadows[name] = param
+        local = torch.nn.Parameter(param._local_tensor.detach(), requires_grad=param.requires_grad)
         if param.requires_grad:
-            local_param.register_hook(
-                lambda grad, original_param=param: _accumulate_local_param_grad(original_param, grad)
-            )
+            local.register_hook(lambda g, p=param: _accumulate_local_param_grad(p, g))
+        module._parameters.pop(name)
+        setattr(module, name, local)
 
-        module._parameters.pop(param_name)
-        setattr(module, param_name, local_param)
-
-    if param_shadows:
-        setattr(module, shadow_attr, param_shadows)
-
-
-def _restore_local_params(module, shadow_attr: str) -> None:
-    param_shadows = getattr(module, shadow_attr, None)
-    if param_shadows is None:
-        return
-
-    delattr(module, shadow_attr)
-    for param_name, param in param_shadows.items():
-        if hasattr(module, param_name):
-            delattr(module, param_name)
-        module.register_parameter(param_name, param)
+    try:
+        yield
+    finally:
+        for name, param in shadows.items():
+            if hasattr(module, name):
+                delattr(module, name)
+            module.register_parameter(name, param)
 
 
 class PackedColwiseParallel(ParallelStyle):
@@ -383,36 +377,34 @@ class PackedColwiseParallel(ParallelStyle):
                 ),
             )
 
-    def _prepare_input_fn(self, mod, inputs, device_mesh):
-        input_tensor = inputs[0]
-        if not isinstance(input_tensor, DTensor):
-            input_tensor = DTensor.from_local(input_tensor, device_mesh, self.input_layouts, run_check=False)
-        elif input_tensor.placements != self.input_layouts:
-            input_tensor = input_tensor.redistribute(placements=self.input_layouts)
-        input_tensor = input_tensor.to_local()
-
-        _materialize_local_params(mod, "_packed_local_params")
-        return (input_tensor,) + inputs[1:]
-
-    def _prepare_output_fn(self, mod, outputs, device_mesh):
-        _restore_local_params(mod, "_packed_local_params")
-
-        if outputs is None or self.use_local_output:
-            return outputs
-        return DTensor.from_local(
-            outputs, device_mesh, (_StridedShard(dim=-1, split_factor=self.split_factor),), run_check=False
-        )
-
     def _apply(self, module, device_mesh):
         if not isinstance(module, torch.nn.Linear):
             raise NotImplementedError("PackedColwiseParallel currently only supports nn.Linear!")
 
         self._partition_linear_fn(module, device_mesh)
-        module.register_forward_pre_hook(lambda mod, inputs: self._prepare_input_fn(mod, inputs, device_mesh))
-        module.register_forward_hook(
-            lambda mod, inputs, outputs: self._prepare_output_fn(mod, outputs, device_mesh),
-            always_call=True,
-        )
+
+        input_layouts = self.input_layouts
+        use_local_output = self.use_local_output
+        split_factor = self.split_factor
+        original_forward = module.forward
+
+        def tp_forward(input_tensor, *args, **kwargs):
+            if not isinstance(input_tensor, DTensor):
+                input_tensor = DTensor.from_local(input_tensor, device_mesh, input_layouts, run_check=False)
+            elif input_tensor.placements != input_layouts:
+                input_tensor = input_tensor.redistribute(placements=input_layouts)
+            input_tensor = input_tensor.to_local()
+
+            with _local_dtensor_params(module):
+                output = original_forward(input_tensor, *args, **kwargs)
+
+            if output is None or use_local_output:
+                return output
+            return DTensor.from_local(
+                output, device_mesh, (_StridedShard(dim=-1, split_factor=split_factor),), run_check=False
+            )
+
+        module.forward = tp_forward
         return module
 
     def __repr__(self) -> str:
@@ -506,16 +498,11 @@ class MoEExpertsParallel(ParallelStyle):
                 top_k_weights = top_k_weights.to_local()
             top_k_weights = _AllReduceBackward.apply(top_k_weights, tp_group)
 
-            # --- 3. Swap DTensor params → local for grouped_mm ---
-            _materialize_local_params(module, "_moe_local_params")
+            # --- 3. Run forward with local params (grouped_mm needs plain tensors) ---
+            with _local_dtensor_params(module):
+                output = original_forward(hidden_states, top_k_index, top_k_weights)
 
-            # --- 4. Run the original forward ---
-            output = original_forward(hidden_states, top_k_index, top_k_weights)
-
-            # --- 5. Restore DTensor params (so save_pretrained sees them) ---
-            _restore_local_params(module, "_moe_local_params")
-
-            # --- 6. Reduce partial output ---
+            # --- 4. Reduce partial output ---
             if output is None:
                 return None
             # Under TP-only each rank has a partial result; under TP+FSDP the
