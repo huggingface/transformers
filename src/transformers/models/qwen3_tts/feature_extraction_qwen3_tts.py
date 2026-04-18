@@ -16,7 +16,7 @@
 import numpy as np
 
 from ... import is_torch_available
-from ...audio_utils import mel_filter_bank, spectrogram, window_function
+from ...audio_utils import mel_filter_bank
 from ...feature_extraction_sequence_utils import SequenceFeatureExtractor
 from ...feature_extraction_utils import BatchFeature
 from ...utils import TensorType, logging
@@ -208,4 +208,5 @@ class Qwen3TTSFeatureExtractor(SequenceFeatureExtractor):
 
         return padded_inputs
 
-__all__=["Qwen3TTSFeatureExtractor"]
+
+__all__ = ["Qwen3TTSFeatureExtractor"]
