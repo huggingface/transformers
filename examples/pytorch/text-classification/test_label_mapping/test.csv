@@ -1,0 +1,7 @@
+text,label
+"This is a bad movie.",negative
+"I really enjoyed this film.",positive
+"Horrible, don't watch.",negative
+"Amazing movie, I recommend it!",positive
+"Terrible acting.",negative
+"Great story!",positive
