@@ -58,11 +58,6 @@ class LongcatFlashConfig(PreTrainedConfig):
         "layers.*.self_attn.*.q_b_proj": TPStyle("colwise", "none"),
         "layers.*.self_attn.*.kv_b_proj": TPStyle("colwise", "none"),
         "layers.*.self_attn.*.o_proj": TPStyle("rowwise", "allreduce"),
-        "layers.*.mlp.experts": TPStyle(
-            "moe_experts",
-            "allreduce",
-            shard_plan={"gate_up_proj": "packed_colwise", "down_proj": "rowwise"},
-        ),
         "layers.*.mlps.*.gate_proj": TPStyle("colwise", "none"),
         "layers.*.mlps.*.up_proj": TPStyle("colwise", "none"),
         "layers.*.mlps.*.down_proj": TPStyle("rowwise", "allreduce"),

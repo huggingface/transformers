@@ -62,12 +62,7 @@ class FlexOlmoConfig(PreTrainedConfig):
         ),  # we need to replicate here due to the added norm on q and k
         "layers.*.self_attn.o_proj": TPStyle(
             "vocab", "allreduce"
-        ),  # input is replicated due to the added norm on q and k
-        "layers.*.mlp.experts": TPStyle(
-            "moe_experts",
-            "allreduce",
-            shard_plan={"gate_up_proj": "packed_colwise", "down_proj": "rowwise"},
-        ),
+        )  # input is replicated due to the added norm on q and k
     }
     base_model_pp_plan = {
         "embed_tokens": (["input_ids"], ["inputs_embeds"]),

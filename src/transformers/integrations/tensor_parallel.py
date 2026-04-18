@@ -496,7 +496,7 @@ class MoEExpertsParallel(ParallelStyle):
         tp_group = device_mesh.get_group() if device_mesh.ndim == 1 else device_mesh.get_group("tp")
 
         def tp_forward(hidden_states, top_k_index, top_k_weights):
-            # --- 1. Localize hidden_states (backward gets all-reduce for free) ---
+            # --- 1. Localize hidden_states (backward all-reduce via DTensor) ---
             if not isinstance(hidden_states, DTensor):
                 hidden_states = DTensor.from_local(hidden_states, device_mesh, [Replicate()], run_check=False)
             hidden_states = hidden_states.to_local()

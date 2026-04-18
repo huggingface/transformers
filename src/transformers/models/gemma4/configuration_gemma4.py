@@ -124,18 +124,15 @@ class Gemma4TextConfig(PreTrainedConfig):
     model_type = "gemma4_text"
     keys_to_ignore_at_inference = ["past_key_values"]
     base_model_tp_plan = {
-        "layers.*.self_attn.q_proj": TPStyle("colwise", "none"),
-        "layers.*.self_attn.k_proj": TPStyle("colwise", "none"),
-        "layers.*.self_attn.v_proj": TPStyle("colwise", "none"),
-        "layers.*.self_attn.o_proj": TPStyle("rowwise", "allreduce"),
+        # q/k use allgather because gemma4 has q_norm/k_norm with full-sized weights
+        # that can't match sharded q/k outputs.
+        "layers.*.self_attn.q_proj": TPStyle("colwise", "allgather"),
+        "layers.*.self_attn.k_proj": TPStyle("colwise", "allgather"),
+        "layers.*.self_attn.v_proj": TPStyle("colwise", "allgather"),
+        "layers.*.self_attn.o_proj": TPStyle("vocab", "allreduce"),
         "layers.*.mlp.gate_proj": TPStyle("colwise", "none"),
         "layers.*.mlp.up_proj": TPStyle("colwise", "none"),
         "layers.*.mlp.down_proj": TPStyle("rowwise", "allreduce"),
-        "layers.*.experts": TPStyle(
-            "moe_experts",
-            "allreduce",
-            shard_plan={"gate_up_proj": "packed_colwise", "down_proj": "rowwise"},
-        ),
     }
     base_model_pp_plan = {
         "embed_tokens": (["input_ids"], ["inputs_embeds"]),

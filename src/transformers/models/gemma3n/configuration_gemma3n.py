@@ -80,10 +80,10 @@ class Gemma3nTextConfig(PreTrainedConfig):
     model_type = "gemma3n_text"
     keys_to_ignore_at_inference = ["past_key_values"]
     base_model_tp_plan = {
-        "layers.*.self_attn.q_proj": TPStyle("colwise", "none"),
-        "layers.*.self_attn.k_proj": TPStyle("colwise", "none"),
-        "layers.*.self_attn.v_proj": TPStyle("colwise", "none"),
-        "layers.*.self_attn.o_proj": TPStyle("rowwise", "allreduce"),
+        "layers.*.self_attn.q_proj": TPStyle("colwise", "allgather"),
+        "layers.*.self_attn.k_proj": TPStyle("colwise", "allgather"),
+        "layers.*.self_attn.v_proj": TPStyle("colwise", "allgather"),
+        "layers.*.self_attn.o_proj": TPStyle("vocab", "allreduce"),
         "layers.*.mlp.gate_proj": TPStyle("colwise", "none"),
         "layers.*.mlp.up_proj": TPStyle("colwise", "none"),
         "layers.*.mlp.down_proj": TPStyle("rowwise", "allreduce"),
