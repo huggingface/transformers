@@ -960,12 +960,6 @@ class Gemma3ForConditionalGeneration(Gemma3PreTrainedModel, GenerationMixin):
         self.lm_head = nn.Linear(config.text_config.hidden_size, config.text_config.vocab_size, bias=False)
         self.post_init()
 
-    def get_input_embeddings(self):
-        return self.model.get_input_embeddings()
-
-    def set_input_embeddings(self, value):
-        self.model.set_input_embeddings(value)
-
     @auto_docstring
     def get_image_features(self, pixel_values: torch.FloatTensor, **kwargs: Unpack[TransformersKwargs]):
         return self.model.get_image_features(pixel_values, **kwargs)
@@ -1041,6 +1035,7 @@ class Gemma3ForConditionalGeneration(Gemma3PreTrainedModel, GenerationMixin):
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
             labels=labels,
+            return_dict=True,
             **lm_kwargs,
         )
 
@@ -1190,6 +1185,7 @@ class Gemma3ForSequenceClassification(Gemma3PreTrainedModel):
             inputs_embeds=inputs_embeds,
             token_type_ids=token_type_ids,
             use_cache=use_cache,
+            return_dict=True,
             **kwargs,
         )
         hidden_states = transformer_outputs.last_hidden_state

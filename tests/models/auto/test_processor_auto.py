@@ -49,6 +49,7 @@ from transformers import (
 )
 from transformers.models.auto.feature_extraction_auto import get_feature_extractor_config
 from transformers.models.auto.image_processing_auto import get_image_processor_config
+from transformers.models.auto.tokenization_auto import REGISTERED_TOKENIZER_CLASSES
 from transformers.models.auto.video_processing_auto import get_video_processor_config
 from transformers.testing_utils import TOKEN, TemporaryHubRepo, get_tests_dir, is_staging_test
 from transformers.tokenization_python import TOKENIZER_CONFIG_FILE
@@ -289,6 +290,7 @@ class AutoFeatureExtractorTest(unittest.TestCase):
                 del PROCESSOR_MAPPING._extra_content[CustomConfig]
             if CustomConfig in MODEL_FOR_AUDIO_TOKENIZATION_MAPPING._extra_content:
                 del MODEL_FOR_AUDIO_TOKENIZATION_MAPPING._extra_content[CustomConfig]
+            REGISTERED_TOKENIZER_CLASSES.pop("CustomTokenizer", None)
 
     def test_from_pretrained_dynamic_processor_conflict(self):
         class NewFeatureExtractor(Wav2Vec2FeatureExtractor):
@@ -356,6 +358,7 @@ class AutoFeatureExtractorTest(unittest.TestCase):
                 del PROCESSOR_MAPPING._extra_content[CustomConfig]
             if CustomConfig in MODEL_FOR_AUDIO_TOKENIZATION_MAPPING._extra_content:
                 del MODEL_FOR_AUDIO_TOKENIZATION_MAPPING._extra_content[CustomConfig]
+            REGISTERED_TOKENIZER_CLASSES.pop("NewTokenizer", None)
 
     def test_from_pretrained_dynamic_processor_with_extra_attributes(self):
         class NewFeatureExtractor(Wav2Vec2FeatureExtractor):
@@ -394,6 +397,7 @@ class AutoFeatureExtractorTest(unittest.TestCase):
                 del PROCESSOR_MAPPING._extra_content[CustomConfig]
             if CustomConfig in MODEL_FOR_AUDIO_TOKENIZATION_MAPPING._extra_content:
                 del MODEL_FOR_AUDIO_TOKENIZATION_MAPPING._extra_content[CustomConfig]
+            REGISTERED_TOKENIZER_CLASSES.pop("NewTokenizer", None)
 
     def test_dynamic_processor_with_specific_dynamic_subcomponents(self):
         class NewFeatureExtractor(Wav2Vec2FeatureExtractor):
@@ -427,6 +431,7 @@ class AutoFeatureExtractorTest(unittest.TestCase):
                 del PROCESSOR_MAPPING._extra_content[CustomConfig]
             if CustomConfig in MODEL_FOR_AUDIO_TOKENIZATION_MAPPING._extra_content:
                 del MODEL_FOR_AUDIO_TOKENIZATION_MAPPING._extra_content[CustomConfig]
+            REGISTERED_TOKENIZER_CLASSES.pop("NewTokenizer", None)
 
     def test_auto_processor_creates_tokenizer(self):
         processor = AutoProcessor.from_pretrained("hf-internal-testing/tiny-random-bert")

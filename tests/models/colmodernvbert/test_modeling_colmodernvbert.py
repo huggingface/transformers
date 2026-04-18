@@ -49,6 +49,7 @@ class ColModernVBertForRetrievalModelTester:
         parent,
         batch_size=2,
         num_images=2,
+        seq_length=7,
         ignore_index=-100,
         text_config=None,
         is_training=False,
@@ -98,10 +99,11 @@ class ColModernVBertForRetrievalModelTester:
         self.pixel_shuffle_factor = pixel_shuffle_factor
         self.image_token_id = self.text_config["vocab_size"] - 1
         self.pad_token_id = text_config["pad_token_id"]
-        self.seq_length = (
+        self.image_seq_length = (
             int(((vision_config["image_size"] // vision_config["patch_size"]) ** 2) / (pixel_shuffle_factor**2))
             * self.num_images
         )
+        self.seq_length = seq_length + self.image_seq_length
 
         self.hidden_size = text_config["hidden_size"]
         self.num_hidden_layers = text_config["num_hidden_layers"]
@@ -136,9 +138,9 @@ class ColModernVBertForRetrievalModelTester:
         input_ids = ids_tensor([self.batch_size, self.seq_length], config.vlm_config.text_config.vocab_size)
         attention_mask = torch.ones(input_ids.shape, dtype=torch.long).to(torch_device)
 
-        # For simplicity just set the last n tokens to the image token
-        n_image_tokens_per_batch = self.seq_length
-        input_ids[:, -n_image_tokens_per_batch:] = self.image_token_id
+        # For simplicity just set the first n tokens to the image token
+        input_ids[input_ids == self.image_token_id] = self.pad_token_id
+        input_ids[:, : self.image_seq_length] = self.image_token_id
         attention_mask = input_ids.ne(1).to(torch_device)
         inputs_dict = {
             "pixel_values": pixel_values,
