@@ -860,7 +860,7 @@ class CtsmModel(CtsmPreTrainedModel):
         )
         position_embeddings = self.rotary_emb(model_input, position_ids)
 
-        past_key_values = DynamicCache() if use_cache else None
+        past_key_values = DynamicCache(config=self.config) if use_cache else None
 
         hidden_states = model_input
         for layer in self.layers[: self.config.num_hidden_layers]:
