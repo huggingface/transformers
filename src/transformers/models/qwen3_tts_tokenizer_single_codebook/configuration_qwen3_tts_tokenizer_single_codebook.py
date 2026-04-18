@@ -1,10 +1,12 @@
 from ...configuration_utils import PreTrainedConfig
 from ...modeling_rope_utils import RopeParameters
-from ...utils import auto_docstring, logging
+from ...utils import logging
+
 
 logger = logging.get_logger(__name__)
 
-class Qwen3TTSTokenizerSingleCodebookDiTConfig (PreTrainedConfig):
+
+class Qwen3TTSTokenizerSingleCodebookDiTConfig(PreTrainedConfig):
     r"""
     Configuration class for the Qwen3-TTS SingleCodebook DiT decoder.
 
@@ -188,7 +190,9 @@ class Qwen3TTSTokenizerSingleCodebookDecoderConfig(PreTrainedConfig):
             bigvgan_config = {}
             logger.info("bigvgan_config is None. Initializing BigVGAN with default values.")
 
-        self.dit_config = Qwen3TTSTokenizerSingleCodebookDiTConfig(**dit_config) if isinstance(dit_config, dict) else dit_config
+        self.dit_config = (
+            Qwen3TTSTokenizerSingleCodebookDiTConfig(**dit_config) if isinstance(dit_config, dict) else dit_config
+        )
         self.bigvgan_config = (
             Qwen3TTSTokenizerSingleCodebookDecoderBigVGANConfig(**bigvgan_config)
             if isinstance(bigvgan_config, dict)
@@ -321,10 +325,14 @@ class Qwen3TTSTokenizerSingleCodebookConfig(PreTrainedConfig):
             logger.info("decoder_config is None. Initializing SingleCodebook decoder with default values.")
 
         self.encoder_config = (
-            Qwen3TTSTokenizerSingleCodebookEncoderConfig(**encoder_config) if isinstance(encoder_config, dict) else encoder_config
+            Qwen3TTSTokenizerSingleCodebookEncoderConfig(**encoder_config)
+            if isinstance(encoder_config, dict)
+            else encoder_config
         )
         self.decoder_config = (
-            Qwen3TTSTokenizerSingleCodebookDecoderConfig(**decoder_config) if isinstance(decoder_config, dict) else decoder_config
+            Qwen3TTSTokenizerSingleCodebookDecoderConfig(**decoder_config)
+            if isinstance(decoder_config, dict)
+            else decoder_config
         )
 
         self.input_sample_rate = input_sample_rate
@@ -333,7 +341,7 @@ class Qwen3TTSTokenizerSingleCodebookConfig(PreTrainedConfig):
         self.encode_downsample_rate = encode_downsample_rate
 
 
-__all__=[
+__all__ = [
     "Qwen3TTSTokenizerSingleCodebookDiTConfig",
     "Qwen3TTSTokenizerSingleCodebookDecoderBigVGANConfig",
     "Qwen3TTSTokenizerSingleCodebookDecoderConfig",

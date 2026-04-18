@@ -44,11 +44,11 @@ from transformers import (
     Qwen3TTSConfig,
     Qwen3TTSForConditionalGeneration,
 )
-from transformers.models.qwen3_tts_tokenizer_multi_codebook.modeling_qwen3_tts_tokenizer_multi_codebook import (
-    Qwen3TTSTokenizerMultiCodebookModel,
-)
 from transformers.models.qwen3_tts_tokenizer_multi_codebook.configuration_qwen3_tts_tokenizer_multi_codebook import (
     Qwen3TTSTokenizerMultiCodebookConfig,
+)
+from transformers.models.qwen3_tts_tokenizer_multi_codebook.modeling_qwen3_tts_tokenizer_multi_codebook import (
+    Qwen3TTSTokenizerMultiCodebookModel,
 )
 
 
@@ -101,21 +101,57 @@ def create_config_from_checkpoint(checkpoint_path: Path) -> Qwen3TTSConfig:
 
     # Clean up keys not in our config
     keys_to_keep_talker = {
-        "vocab_size", "hidden_size", "intermediate_size", "num_hidden_layers",
-        "num_attention_heads", "num_key_value_heads", "head_dim", "hidden_act",
-        "max_position_embeddings", "initializer_range", "rms_norm_eps", "use_cache",
-        "tie_word_embeddings", "attention_bias", "use_sliding_window", "sliding_window",
-        "attention_dropout", "num_code_groups", "text_hidden_size", "codec_eos_token_id",
-        "codec_think_id", "codec_nothink_id", "codec_think_bos_id", "codec_think_eos_id",
-        "codec_pad_id", "codec_bos_id", "spk_id", "spk_is_dialect", "codec_language_id",
+        "vocab_size",
+        "hidden_size",
+        "intermediate_size",
+        "num_hidden_layers",
+        "num_attention_heads",
+        "num_key_value_heads",
+        "head_dim",
+        "hidden_act",
+        "max_position_embeddings",
+        "initializer_range",
+        "rms_norm_eps",
+        "use_cache",
+        "tie_word_embeddings",
+        "attention_bias",
+        "use_sliding_window",
+        "sliding_window",
+        "attention_dropout",
+        "num_code_groups",
+        "text_hidden_size",
+        "codec_eos_token_id",
+        "codec_think_id",
+        "codec_nothink_id",
+        "codec_think_bos_id",
+        "codec_think_eos_id",
+        "codec_pad_id",
+        "codec_bos_id",
+        "spk_id",
+        "spk_is_dialect",
+        "codec_language_id",
         "text_vocab_size",
     }
     keys_to_keep_code_predictor = {
-        "vocab_size", "hidden_size", "intermediate_size", "num_hidden_layers",
-        "num_attention_heads", "num_key_value_heads", "head_dim", "hidden_act",
-        "max_position_embeddings", "initializer_range", "rms_norm_eps", "use_cache",
-        "tie_word_embeddings", "attention_bias", "use_sliding_window", "sliding_window",
-        "attention_dropout", "num_code_groups", "layer_types",
+        "vocab_size",
+        "hidden_size",
+        "intermediate_size",
+        "num_hidden_layers",
+        "num_attention_heads",
+        "num_key_value_heads",
+        "head_dim",
+        "hidden_act",
+        "max_position_embeddings",
+        "initializer_range",
+        "rms_norm_eps",
+        "use_cache",
+        "tie_word_embeddings",
+        "attention_bias",
+        "use_sliding_window",
+        "sliding_window",
+        "attention_dropout",
+        "num_code_groups",
+        "layer_types",
     }
 
     talker_filtered = {k: v for k, v in talker_dict.items() if k in keys_to_keep_talker}
