@@ -133,13 +133,13 @@ def prepare_xlm_input(args, model, tokenizer, prompt_text):
 
 
 def prepare_xlnet_input(args, _, tokenizer, prompt_text):
-    prefix = args.prefix if args.prefix else args.padding_text if args.padding_text else PREFIX
+    prefix = args.prefix or (args.padding_text or PREFIX)
     prompt_text = prefix + prompt_text
     return prompt_text
 
 
 def prepare_transfoxl_input(args, _, tokenizer, prompt_text):
-    prefix = args.prefix if args.prefix else args.padding_text if args.padding_text else PREFIX
+    prefix = args.prefix or (args.padding_text or PREFIX)
     prompt_text = prefix + prompt_text
     return prompt_text
 
@@ -366,7 +366,7 @@ def main():
     args.length = adjust_length_to_model(args.length, max_sequence_length=max_seq_length)
     logger.info(args)
 
-    prompt_text = args.prompt if args.prompt else input("Model prompt >>> ")
+    prompt_text = args.prompt or input("Model prompt >>> ")
 
     # Different models need different input formatting and/or extra arguments
     requires_preprocessing = args.model_type in PREPROCESSING_FUNCTIONS
@@ -380,7 +380,7 @@ def main():
             preprocessed_prompt_text, add_special_tokens=False, return_tensors="pt", **tokenizer_kwargs
         )
     else:
-        prefix = args.prefix if args.prefix else args.padding_text
+        prefix = args.prefix or args.padding_text
         encoded_prompt = tokenizer.encode(prefix + prompt_text, add_special_tokens=False, return_tensors="pt")
     encoded_prompt = encoded_prompt.to(distributed_state.device)
 

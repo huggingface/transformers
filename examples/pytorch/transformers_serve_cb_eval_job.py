@@ -175,8 +175,8 @@ def main():
     print(f"Model: {args.model}")
     if not args.no_continuous_batching:
         print(f"CB Block Size: {args.cb_block_size}")
-        print(f"CB Num Blocks: {args.cb_num_blocks if args.cb_num_blocks else 'auto'}")
-        print(f"CB Max Batch Tokens: {args.cb_max_batch_tokens if args.cb_max_batch_tokens else 'auto'}")
+        print(f"CB Num Blocks: {args.cb_num_blocks or 'auto'}")
+        print(f"CB Max Batch Tokens: {args.cb_max_batch_tokens or 'auto'}")
         print(f"CB Max Memory: {args.cb_max_memory_percent * 100}%")
         print(f"CB CUDA Graph: {args.cb_use_cuda_graph}")
     print(f"Temperature: {args.temperature}")

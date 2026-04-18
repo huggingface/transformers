@@ -174,9 +174,7 @@ def create_causal_mask_mapping(
     # running generation with custom loop. Thus we need to infer it in a `non-perfect` way
     # NOTE: Determining prefill in that case requires checking data values, which is not compile-compatible.
     is_first_iteration = (
-        is_first_iteration
-        if is_first_iteration
-        else (past_key_values is None or not past_key_values.is_initialized or pixel_values is not None)
+        is_first_iteration or (past_key_values is None or not past_key_values.is_initialized or pixel_values is not None)
     )
 
     if is_first_iteration or not kwargs.get("use_cache", True):

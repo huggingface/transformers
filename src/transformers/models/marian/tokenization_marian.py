@@ -207,7 +207,7 @@ class MarianTokenizer(PreTrainedTokenizer):
         # Fall back to SPM model for IDs not in external vocab
         spm_model = self.spm_source if self._decode_use_source_tokenizer else self.spm_target
         piece = spm_model.IdToPiece(index)
-        return piece if piece else self.unk_token
+        return piece or self.unk_token
 
     def batch_decode(self, sequences, **kwargs):
         """

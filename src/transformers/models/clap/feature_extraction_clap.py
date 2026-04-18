@@ -296,7 +296,7 @@ class ClapFeatureExtractor(SequenceFeatureExtractor):
                 pipeline.
         """
         truncation = truncation if truncation is not None else self.truncation
-        padding = padding if padding else self.padding
+        padding = padding or self.padding
 
         if sampling_rate is not None:
             if sampling_rate != self.sampling_rate:
@@ -331,7 +331,7 @@ class ClapFeatureExtractor(SequenceFeatureExtractor):
 
         # convert to mel spectrogram, truncate and pad if needed.
         padded_inputs = [
-            self._get_input_mel(waveform, max_length if max_length else self.nb_max_samples, truncation, padding)
+            self._get_input_mel(waveform, max_length or self.nb_max_samples, truncation, padding)
             for waveform in raw_speech
         ]
 

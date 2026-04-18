@@ -191,7 +191,7 @@ class ToolCallParser:
             if result is not None:
                 tool_calls.append({"name": result[0], "arguments": result[1]})
             pos = e + len(end)
-        return tool_calls if tool_calls else None
+        return tool_calls or None
 
     def _parse_block(self, block: str) -> dict | None:
         """Parse a buffered tool call block. Returns ``{"name": str, "arguments": str}`` or None."""

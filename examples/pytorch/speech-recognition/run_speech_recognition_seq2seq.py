@@ -370,7 +370,7 @@ def main():
     # Distributed training:
     # The .from_pretrained methods guarantee that only one local process can concurrently
     config = AutoConfig.from_pretrained(
-        (model_args.config_name if model_args.config_name else model_args.model_name_or_path),
+        (model_args.config_name or model_args.model_name_or_path),
         cache_dir=model_args.cache_dir,
         revision=model_args.model_revision,
         token=model_args.token,

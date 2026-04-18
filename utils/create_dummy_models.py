@@ -664,7 +664,7 @@ def get_tiny_config(config_class, model_class=None, **model_tester_kwargs):
     # TODO: This part is necessary for Gemma3Model!
     # TODO: Make this part much better without duplicating the code and less error prone
     if not isinstance(config, config_class):
-        model_tester_class_name = config_class_to_model_tester_map.get(config_class.__name__, None)
+        model_tester_class_name = config_class_to_model_tester_map.get(config_class.__name__)
         if model_tester_class_name is not None:
             test_module = get_test_module(test_file)
             new_model_tester_class = getattr(test_module, model_tester_class_name)

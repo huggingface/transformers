@@ -67,6 +67,116 @@ require_version("datasets>=1.8.0", "To fix: pip install -r examples/pytorch/text
 logger = logging.getLogger(__name__)
 
 
+class DataValidationError(ValueError):
+    """Exception raised for data validation errors with detailed context."""
+
+    def __init__(self, message, split_name=None, sample_indices=None, column_name=None):
+        self.split_name = split_name
+        self.sample_indices = sample_indices
+        self.column_name = column_name
+        context_parts = []
+        if split_name:
+            context_parts.append(f"split='{split_name}'")
+        if column_name:
+            context_parts.append(f"column='{column_name}'")
+        if sample_indices:
+            context_parts.append(f"sample_indices={sample_indices[:5]}{'...' if len(sample_indices) > 5 else ''}")
+        context = " | ".join(context_parts)
+        full_message = f"{message} ({context})" if context else message
+        super().__init__(full_message)
+
+
+def validate_dataset_columns(dataset, split_name, required_columns):
+    """Validate that required columns exist in the dataset."""
+    available_columns = set(dataset.column_names)
+    missing_columns = [col for col in required_columns if col not in available_columns]
+    if missing_columns:
+        raise DataValidationError(
+            f"Missing required columns: {missing_columns}. Available columns: {list(available_columns)}",
+            split_name=split_name,
+        )
+
+
+def validate_text_field(dataset, split_name, text_column, max_samples_to_check=100):
+    """Validate text field for empty/None values."""
+    problematic_indices = []
+    for idx in range(min(len(dataset), max_samples_to_check)):
+        try:
+            sample = dataset[idx]
+            text_value = sample.get(text_column)
+            if text_value is None:
+                problematic_indices.append(idx)
+            elif isinstance(text_value, str) and text_value.strip() == "":
+                problematic_indices.append(idx)
+        except Exception as e:
+            raise DataValidationError(
+                f"Error accessing column '{text_column}': {str(e)}",
+                split_name=split_name,
+                column_name=text_column,
+                sample_indices=[idx],
+            )
+
+    if problematic_indices:
+        raise DataValidationError(
+            f"Found {len(problematic_indices)} samples with empty or None text in column '{text_column}'",
+            split_name=split_name,
+            column_name=text_column,
+            sample_indices=problematic_indices,
+        )
+
+
+def validate_label_field(dataset, split_name, is_regression, max_samples_to_check=100):
+    """Validate label field for missing or invalid values."""
+    if "label" not in dataset.column_names:
+        raise DataValidationError(
+            "Missing 'label' column. Dataset must have a 'label' column for classification/regression.",
+            split_name=split_name,
+        )
+
+    problematic_indices = []
+    for idx in range(min(len(dataset), max_samples_to_check)):
+        try:
+            sample = dataset[idx]
+            label_value = sample.get("label")
+            if label_value is None:
+                problematic_indices.append(idx)
+            elif not is_regression:
+                if isinstance(label_value, str) and label_value.strip() == "":
+                    problematic_indices.append(idx)
+                elif isinstance(label_value, (int, float)) and label_value == -1:
+                    pass
+        except Exception as e:
+            raise DataValidationError(
+                f"Error accessing label column: {str(e)}",
+                split_name=split_name,
+                column_name="label",
+                sample_indices=[idx],
+            )
+
+    if problematic_indices:
+        raise DataValidationError(
+            f"Found {len(problematic_indices)} samples with invalid label values (None or empty)",
+            split_name=split_name,
+            column_name="label",
+            sample_indices=problematic_indices,
+        )
+
+
+def validate_dataset_for_classification(dataset, split_name, text_columns, is_regression=False):
+    """Comprehensive validation for text classification dataset."""
+    if isinstance(text_columns, str):
+        text_columns = [text_columns]
+
+    validate_dataset_columns(dataset, split_name, text_columns)
+
+    for text_column in text_columns:
+        validate_text_field(dataset, split_name, text_column)
+
+    validate_label_field(dataset, split_name, is_regression)
+
+    logger.info(f"Dataset validation passed for {split_name} split")
+
+
 @dataclass
 class DataTrainingArguments:
     """
@@ -281,95 +391,6 @@ def get_label_list(raw_dataset, split="train") -> list[str]:
     return label_list
 
 
-def validate_and_clean_dataset(
-    raw_datasets,
-    text_column_names: str | None,
-    label_column_name: str | None,
-    is_regression: bool | None,
-    preprocessing_num_workers: int | None = None,
-) -> None:
-    """
-    Validate dataset inputs before tokenization to ensure robustness.
-    Raises ValueError with clear message if issues are found.
-    """
-    text_columns = ["sentence"] if text_column_names is None else text_column_names.split(",")
-    label_col = "label" if label_column_name is None else label_column_name
-
-    for split in raw_datasets:
-        dataset = raw_datasets[split]
-
-        # Check if text columns exist
-        missing_text_cols = [col for col in text_columns if col not in dataset.column_names]
-        if missing_text_cols:
-            raise ValueError(
-                f"Split '{split}': Text column(s) {missing_text_cols} not found in dataset.\n"
-                f"Available columns: {dataset.column_names}\n"
-                f"Hint: Use --text_column_names to specify correct text column name(s)"
-            )
-
-        # Check if label column exists (except for test split in prediction only)
-        if label_col not in dataset.column_names and split != "test":
-            raise ValueError(
-                f"Split '{split}': Label column '{label_col}' not found in dataset.\n"
-                f"Available columns: {dataset.column_names}\n"
-                f"Hint: Use --label_column_name to specify the correct label column name"
-            )
-
-        # Convert to pandas for easier validation (sample first 1000 rows for efficiency)
-        sample_size = min(len(dataset), 1000)
-        sample_indices = list(range(sample_size))
-        df = dataset.select(sample_indices).to_pandas()
-
-        # Validate text columns
-        for text_col in text_columns:
-            # Check for None/NaN values
-            null_count = df[text_col].isna().sum()
-            if null_count > 0:
-                null_samples = df[df[text_col].isna()].index.tolist()[:5]
-                raise ValueError(
-                    f"Split '{split}', column '{text_col}': Found {null_count} None/NaN text values.\n"
-                    f"Sample indices with issue: {null_samples}\n"
-                    f"Hint: Remove or fill empty text values before training"
-                )
-
-            # Check for empty strings
-            empty_count = (df[text_col].astype(str).str.strip() == "").sum()
-            if empty_count > 0:
-                empty_samples = df[df[text_col].astype(str).str.strip() == ""].index.tolist()[:5]
-                raise ValueError(
-                    f"Split '{split}', column '{text_col}': Found {empty_count} empty text values.\n"
-                    f"Sample indices with issue: {empty_samples}\n"
-                    f"Hint: Remove or fill empty text values before training"
-                )
-
-            # Check for non-string types
-            non_string_mask = ~df[text_col].apply(lambda x: isinstance(x, (str, int, float))).values
-            non_string_count = non_string_mask.sum()
-            if non_string_count > 0:
-                non_string_samples = df[non_string_mask].index.tolist()[:5]
-                non_string_types = [type(df.loc[i, text_col]) for i in non_string_samples]
-                raise ValueError(
-                    f"Split '{split}', column '{text_col}': Found {non_string_count} values with unsupported types.\n"
-                    f"Sample indices: {non_string_samples}\n"
-                    f"Sample types: {non_string_types}\n"
-                    f"Hint: Convert all text values to string type"
-                )
-
-        # Validate labels for classification (not regression)
-        if label_col in dataset.column_names and not is_regression:
-            # Check for None/NaN labels
-            null_label_count = df[label_col].isna().sum()
-            if null_label_count > 0:
-                null_label_samples = df[df[label_col].isna()].index.tolist()[:5]
-                raise ValueError(
-                    f"Split '{split}', column '{label_col}': Found {null_label_count} None/NaN label values.\n"
-                    f"Sample indices with issue: {null_label_samples}\n"
-                    f"Hint: Remove samples with missing labels or fill with valid values"
-                )
-
-        logger.info(f"Split '{split}': Validation passed for {sample_size} sampled records")
-
-
 def main():
     # See all possible arguments in src/transformers/training_args.py
     # or by passing the --help flag to this script.
@@ -498,16 +519,6 @@ def main():
     if data_args.label_column_name is not None and data_args.label_column_name != "label":
         for key in raw_datasets:
             raw_datasets[key] = raw_datasets[key].rename_column(data_args.label_column_name, "label")
-
-    # Validate dataset for robustness before preprocessing
-    with training_args.main_process_first(desc="dataset validation"):
-        validate_and_clean_dataset(
-            raw_datasets,
-            text_column_names=data_args.text_column_names,
-            label_column_name=data_args.label_column_name,
-            is_regression=data_args.do_regression,
-            preprocessing_num_workers=data_args.preprocessing_num_workers,
-        )
 
     # Trying to have good defaults here, don't hesitate to tweak to your needs.
 
@@ -647,28 +658,43 @@ def main():
             ids[label_to_id[label]] = 1.0
         return ids
 
+    if data_args.text_column_names is not None:
+        text_column_names_list = data_args.text_column_names.split(",")
+    else:
+        text_column_names_list = ["sentence"]
+
+    logger.info(f"Using text columns: {text_column_names_list}")
+
+    if data_args.dataset_name is None:
+        logger.info("Validating local dataset before preprocessing...")
+        for split_name in ["train", "validation", "test"]:
+            if split_name in raw_datasets:
+                try:
+                    validate_dataset_for_classification(
+                        raw_datasets[split_name],
+                        split_name,
+                        text_column_names_list,
+                        is_regression,
+                    )
+                except DataValidationError as e:
+                    logger.error(f"Data validation failed for {split_name} split: {e}")
+                    raise
+
     def preprocess_function(examples):
         if data_args.text_column_names is not None:
             text_column_names = data_args.text_column_names.split(",")
-            examples["sentence"] = []
-            for i in range(len(examples[text_column_names[0]])):
-                first_text = examples[text_column_names[0]][i]
-                combined_text = str(first_text)
-
-                for column in text_column_names[1:]:
-                    text = examples[column][i]
-                    combined_text += data_args.text_column_delimiter + str(text)
-
-                examples["sentence"].append(combined_text)
-        else:
-            examples["sentence"] = [str(s) for s in examples["sentence"]]
-
+            # join together text columns into "sentence" column
+            examples["sentence"] = examples[text_column_names[0]]
+            for column in text_column_names[1:]:
+                for i in range(len(examples[column])):
+                    examples["sentence"][i] += data_args.text_column_delimiter + examples[column][i]
+        # Tokenize the texts
         result = tokenizer(examples["sentence"], padding=padding, max_length=max_seq_length, truncation=True)
         if label_to_id is not None and "label" in examples:
             if is_multi_label:
                 result["label"] = [multi_labels_to_ids(l) for l in examples["label"]]
             else:
-                result["label"] = [label_to_id[str(l)] if l != -1 else -1 for l in examples["label"]]
+                result["label"] = [(label_to_id[str(l)] if l != -1 else -1) for l in examples["label"]]
         return result
 
     # Running the preprocessing pipeline on all the datasets
