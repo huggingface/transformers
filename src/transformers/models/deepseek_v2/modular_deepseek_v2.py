@@ -84,8 +84,35 @@ class DeepseekV2Config(LlamaConfig):
         "layers.*.mlp.up_proj": TPStyle("colwise", "none"),
         "layers.*.mlp.down_proj": TPStyle("rowwise", "allreduce"),
     }
-    # MLA attention is not yet compatible with sequence parallelism.
-    base_model_sp_plan = None
+    base_model_sp_plan = {
+        "embed_tokens": TPStyle("vocab", "reduce_scatter"),
+        "layers.*.input_layernorm": TPStyle("activation", "none"),
+        # MLA: don't shard q_a_proj / kv_a_proj_with_mqa — their outputs feed
+        # layernorms whose weights are full-size.  Only b-projections (after
+        # the norm) and o_proj are sharded.
+        "layers.*.self_attn": TPStyle("module", "allgather", input_key="hidden_states"),
+        "layers.*.self_attn.q_b_proj": TPStyle("colwise", "none"),
+        "layers.*.self_attn.kv_b_proj": TPStyle("colwise", "none"),
+        "layers.*.self_attn.o_proj": TPStyle("rowwise", "reduce_scatter"),
+        "layers.*.post_attention_layernorm": TPStyle("activation", "none"),
+        "layers.*.mlp": TPStyle("module", "allgather_split"),
+        "layers.*.mlp.experts": TPStyle(
+            "moe_experts",
+            "allreduce",
+            shard_plan={"gate_up_proj": "packed_colwise", "down_proj": "rowwise"},
+        ),
+        # Shared experts output must stay Replicate to match experts output
+        # (they're summed inside the MoE block, before the outer allgather_split
+        # handles the SP boundary).
+        "layers.*.mlp.shared_experts.gate_proj": TPStyle("colwise", "none"),
+        "layers.*.mlp.shared_experts.up_proj": TPStyle("colwise", "none"),
+        "layers.*.mlp.shared_experts.down_proj": TPStyle("rowwise", "allreduce"),
+        "layers.*.mlp.gate_proj": TPStyle("colwise", "none"),
+        "layers.*.mlp.up_proj": TPStyle("colwise", "none"),
+        "layers.*.mlp.down_proj": TPStyle("rowwise", "reduce_scatter"),
+        "norm": TPStyle("activation", "none"),
+        "lm_head": TPStyle("colwise", "loss_parallel"),
+    }
 
     model_type = "deepseek_v2"
     keys_to_ignore_at_inference = ["past_key_values"]
