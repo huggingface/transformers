@@ -35,8 +35,7 @@ from ..qwen2.modeling_qwen2 import eager_attention_forward, rotate_half
 from ..qwen2_5_omni.modeling_qwen2_5_omni import (
     ECAPA_TimeDelayNet,
 )
-from ..qwen3.modeling_qwen3 import Qwen3Attention, Qwen3MLP, Qwen3RMSNorm, Qwen3RotaryEmbedding
-from .generation_qwen3_tts import Qwen3TTSGenerationMixin
+from ..qwen3.modeling_qwen3 import Qwen3Attention, Qwen3MLP, Qwen3RMSNorm
 from ..qwen3_omni_moe.modeling_qwen3_omni_moe import (
     Qwen3OmniMoeRotaryEmbedding,
     Qwen3OmniMoeTalkerTextMLP,
@@ -47,6 +46,7 @@ from .configuration_qwen3_tts import (
     Qwen3TTSTalkerCodePredictorConfig,
     Qwen3TTSTalkerConfig,
 )
+from .generation_qwen3_tts import Qwen3TTSGenerationMixin
 
 
 logger = logging.get_logger(__name__)
@@ -65,6 +65,7 @@ class Qwen3TTSMlp(Qwen3MLP):
 
 class Qwen3TTSTalkerTextMLP(Qwen3OmniMoeTalkerTextMLP):
     pass
+
 
 # ─── 1D Rotary Embedding (Code Predictor) ────────────────────────────────────
 
@@ -405,6 +406,7 @@ class Qwen3TTSTalkerTextPreTrainedModel(Qwen3TTSBasePreTrainedModel):
     _no_split_modules = []
     _supports_cache_class = True
     _supports_static_cache = False
+
 
 # ─── Talker Model (text-to-acoustic) ──────────────────────────────────────────
 
@@ -1089,7 +1091,10 @@ class Qwen3TTSForConditionalGeneration(Qwen3TTSPreTrainedModel, Qwen3TTSGenerati
             else []
         )
         self.supported_languages = ["auto"]
-        if hasattr(self.config.talker_config, "codec_language_id") and self.config.talker_config.codec_language_id is not None:
+        if (
+            hasattr(self.config.talker_config, "codec_language_id")
+            and self.config.talker_config.codec_language_id is not None
+        ):
             for language_id in self.config.talker_config.codec_language_id.keys():
                 if "dialect" not in language_id:
                     self.supported_languages.append(language_id)
