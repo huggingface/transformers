@@ -54,6 +54,21 @@ class PhiConfig(PreTrainedConfig):
         "layers.*.mlp.fc1": TPStyle("colwise", "none"),
         "layers.*.mlp.fc2": TPStyle("rowwise", "allreduce"),
     }
+    base_model_sp_plan = {
+        "embed_tokens": TPStyle("vocab", "reduce_scatter"),
+        "layers.*.input_layernorm": TPStyle("activation", "none"),
+        "layers.*.self_attn": TPStyle("module", "allgather", input_key="hidden_states"),
+        "layers.*.self_attn.q_proj": TPStyle("colwise", "none"),
+        "layers.*.self_attn.k_proj": TPStyle("colwise", "none"),
+        "layers.*.self_attn.v_proj": TPStyle("colwise", "none"),
+        "layers.*.self_attn.dense": TPStyle("rowwise", "reduce_scatter"),
+        "layers.*.post_attention_layernorm": TPStyle("activation", "none"),
+        "layers.*.mlp": TPStyle("module", "allgather"),
+        "layers.*.mlp.fc1": TPStyle("colwise", "none"),
+        "layers.*.mlp.fc2": TPStyle("rowwise", "reduce_scatter"),
+        "norm": TPStyle("activation", "none"),
+        "lm_head": TPStyle("colwise", "loss_parallel"),
+    }
     base_model_pp_plan = {
         "embed_tokens": (["input_ids"], ["inputs_embeds"]),
         "embed_dropout": (["inputs_embeds"], ["inputs_embeds"]),

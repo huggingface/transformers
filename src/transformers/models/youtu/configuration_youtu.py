@@ -87,6 +87,17 @@ class YoutuConfig(PreTrainedConfig):
     rope_interleave: bool | None = True
     attention_bias: bool = False
     attention_dropout: float | int | None = 0.0
+    base_model_sp_plan = {
+        "embed_tokens": TPStyle("vocab", "reduce_scatter"),
+        "layers.*.input_layernorm": TPStyle("activation", "none"),
+        "layers.*.post_attention_layernorm": TPStyle("activation", "none"),
+        "layers.*.mlp": TPStyle("module", "allgather"),
+        "layers.*.mlp.gate_proj": TPStyle("colwise", "none"),
+        "layers.*.mlp.up_proj": TPStyle("colwise", "none"),
+        "layers.*.mlp.down_proj": TPStyle("rowwise", "reduce_scatter"),
+        "norm": TPStyle("activation", "none"),
+        "lm_head": TPStyle("colwise", "loss_parallel"),
+    }
     embedding_initializer_range: float | None = None
 
     def __post_init__(self, **kwargs):

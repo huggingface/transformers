@@ -69,6 +69,7 @@ class DeepseekV2Config(PreTrainedConfig):
         "layers.*.mlp.up_proj": TPStyle("colwise", "none"),
         "layers.*.mlp.down_proj": TPStyle("rowwise", "allreduce"),
     }
+    base_model_sp_plan = None
     base_model_pp_plan = {
         "embed_tokens": (["input_ids"], ["inputs_embeds"]),
         "layers": (["hidden_states", "attention_mask"], ["hidden_states"]),

@@ -52,6 +52,16 @@ class GPTNeoXConfig(PreTrainedConfig):
         "layers.*.mlp.dense_h_to_4h": TPStyle("colwise", "none"),
         "layers.*.mlp.dense_4h_to_h": TPStyle("rowwise", "allreduce"),
     }
+    base_model_sp_plan = {
+        "embed_tokens": TPStyle("vocab", "reduce_scatter"),
+        "layers.*.input_layernorm": TPStyle("activation", "none"),
+        "layers.*.post_attention_layernorm": TPStyle("activation", "none"),
+        "layers.*.mlp": TPStyle("module", "allgather"),
+        "layers.*.mlp.dense_h_to_4h": TPStyle("colwise", "none"),
+        "layers.*.mlp.dense_4h_to_h": TPStyle("rowwise", "reduce_scatter"),
+        "norm": TPStyle("activation", "none"),
+        "lm_head": TPStyle("colwise", "loss_parallel"),
+    }
     base_model_pp_plan = {
         "embed_in": (["input_ids"], ["inputs_embeds"]),
         "emb_dropout": (["inputs_embeds"], ["hidden_states"]),

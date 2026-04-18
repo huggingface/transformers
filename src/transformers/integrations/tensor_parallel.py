@@ -636,8 +636,9 @@ def apply_tensor_parallel(model, tp_mesh, tp_plan):
 
     if tp_plan == "auto":
         enable_sp = getattr(getattr(model.config, "distributed_config", None), "enable_sequence_parallel", False)
-        if enable_sp and hasattr(model.config, "base_model_sp_plan"):
-            base_plan = model.config.base_model_sp_plan
+        sp_plan = getattr(model.config, "base_model_sp_plan", None)
+        if enable_sp and sp_plan is not None:
+            base_plan = sp_plan
         else:
             base_plan = model.config.base_model_tp_plan or {}
 

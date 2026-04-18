@@ -84,6 +84,8 @@ class DeepseekV2Config(LlamaConfig):
         "layers.*.mlp.up_proj": TPStyle("colwise", "none"),
         "layers.*.mlp.down_proj": TPStyle("rowwise", "allreduce"),
     }
+    # MLA attention is not yet compatible with sequence parallelism.
+    base_model_sp_plan = None
 
     model_type = "deepseek_v2"
     keys_to_ignore_at_inference = ["past_key_values"]
