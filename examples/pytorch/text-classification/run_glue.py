@@ -431,13 +431,10 @@ def main():
 
     if label_to_id is not None:
         model.config.label2id = label_to_id
-        model.config.id2label = {id: label for label, id in config.label2id.items()}
+        model.config.id2label = {id: label for label, id in model.config.label2id.items()}
     elif data_args.task_name is not None and not is_regression:
         model.config.label2id = {l: i for i, l in enumerate(label_list)}
-        model.config.id2label = {id: label for label, id in config.label2id.items()}
-
-    if not training_args.do_train and not is_regression and data_args.task_name is None:
-        label_list = [model.config.id2label[i] for i in range(len(model.config.id2label))]
+        model.config.id2label = {id: label for label, id in model.config.label2id.items()}
 
     if data_args.max_seq_length > tokenizer.model_max_length:
         logger.warning(
@@ -622,7 +619,7 @@ def main():
                         if is_regression:
                             writer.write(f"{index}\t{item:3.3f}\n")
                         else:
-                            item = label_list[item]
+                            item = model.config.id2label[item]
                             writer.write(f"{index}\t{item}\n")
 
     kwargs = {"finetuned_from": model_args.model_name_or_path, "tasks": "text-classification"}
