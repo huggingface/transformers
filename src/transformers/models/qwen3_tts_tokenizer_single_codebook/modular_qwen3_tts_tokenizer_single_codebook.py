@@ -23,14 +23,14 @@ from ..qwen2_5_omni.modeling_qwen2_5_omni import (
     SnakeBeta,
     TorchActivation1d,
 )
-from .configuration_qwen3_tts_tokenizer_single_codebook import Qwen3TTSTokenizerSingleCodebookDiTConfig
 from .configuration_qwen3_tts_tokenizer_single_codebook import (
-    Qwen3TTSTokenizerSingleCodebookConfig,
     Qwen3TTSTokenizerSingleCodebookConfig,
     Qwen3TTSTokenizerSingleCodebookDecoderBigVGANConfig,
     Qwen3TTSTokenizerSingleCodebookDecoderConfig,
+    Qwen3TTSTokenizerSingleCodebookDiTConfig,
     Qwen3TTSTokenizerSingleCodebookEncoderConfig,
 )
+
 
 logger = logging.get_logger(__name__)
 
@@ -40,7 +40,6 @@ class Qwen3TTSTokenizerSingleCodebookPreTrainedModel(PreTrainedModel):
     base_model_prefix = "model"
     _no_split_modules = []
     _supports_sdpa = True
-
 
 
 class Qwen3TTSTokenizerSingleCodebookDiTDecoderLayer(DiTDecoderLayer):
@@ -245,7 +244,9 @@ class Qwen3TTSTokenizerSingleCodebookDistributedRVQ(nn.Module):
         self.register_buffer("embed", embed)
         self.register_buffer("embed_avg", embed.clone())
 
-        self.layers = nn.ModuleList([Qwen3TTSTokenizerSingleCodebookVectorQuantization(**kwargs) for _ in range(num_quantizers)])
+        self.layers = nn.ModuleList(
+            [Qwen3TTSTokenizerSingleCodebookVectorQuantization(**kwargs) for _ in range(num_quantizers)]
+        )
 
     def encode(self, x, n_q=None):
         residual = x
@@ -378,7 +379,11 @@ class Qwen3TTSTokenizerSingleCodebookResidualAttentionBlock(nn.Module):
         self.attn_ln = nn.LayerNorm(n_state)
         self.mlp_ln = nn.LayerNorm(n_state)
         self.attn = Qwen3TTSTokenizerSingleCodebookMultiHeadAttention(n_state, n_head)
-        self.mlp = nn.Sequential(Qwen3TTSTokenizerSingleCodebookLinear(n_state, n_mlp), nn.GELU(), Qwen3TTSTokenizerSingleCodebookLinear(n_mlp, n_state))
+        self.mlp = nn.Sequential(
+            Qwen3TTSTokenizerSingleCodebookLinear(n_state, n_mlp),
+            nn.GELU(),
+            Qwen3TTSTokenizerSingleCodebookLinear(n_mlp, n_state),
+        )
 
     def forward(self, x, cu_seqlens=None):
         x = x + self.attn(self.attn_ln(x), cu_seqlens=cu_seqlens)
@@ -696,6 +701,7 @@ class Qwen3TTSTokenizerSingleCodebookXVectorExtractor(nn.Module):
 
 # ── SingleCodebook Encoder PreTrainedModel + Encoder ────────────────────────
 
+
 @dataclass
 @auto_docstring
 class Qwen3TTSTokenizerSingleCodebookEncoderOutput(ModelOutput):
@@ -786,7 +792,6 @@ class Qwen3TTSTokenizerSingleCodebookEncoder(Qwen3TTSTokenizerSingleCodebookEnco
 
 
 # ── SingleCodebook Top-level model ──────────────────────────────────────────
-
 
 
 @auto_docstring(
@@ -904,6 +909,7 @@ class Qwen3TTSTokenizerSingleCodebookModel(Qwen3TTSTokenizerSingleCodebookPreTra
             return (audio_values,)
         return Qwen3TTSTokenizerSingleCodebookDecoderOutput(audio_values=audio_values)
 
+
 class CausalConv1d(nn.Conv1d):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -963,8 +969,9 @@ class Qwen3TTSTokenizerSingleCodebookAMPBlock(AMPBlock):
 
         if causal_type == "2":
             self.pre_conv = nn.Conv1d(
-                channels, channels, kernel_size, stride=1, padding=self._get_padding(kernel_size, 1))
-            
+                channels, channels, kernel_size, stride=1, padding=self._get_padding(kernel_size, 1)
+            )
+
             self.pre_act = TorchActivation1d(activation=SnakeBeta(channels))
         else:
             self.pre_conv = nn.Identity()
@@ -1128,7 +1135,10 @@ class Qwen3TTSTokenizerSingleCodebookDecoderDiTModel(Qwen2_5OmniToken2WavDiTMode
 class Qwen3TTSTokenizerSingleCodebookDecoder(Qwen2_5OmniToken2WavModel):
     config: Qwen3TTSTokenizerSingleCodebookDecoderConfig
     config_class = Qwen3TTSTokenizerSingleCodebookDecoderConfig
-    _no_split_modules = ["Qwen3TTSTokenizerSingleCodebookDecoderDiTModel", "Qwen3TTSTokenizerSingleCodebookDecoderBigVGANModel"]
+    _no_split_modules = [
+        "Qwen3TTSTokenizerSingleCodebookDecoderDiTModel",
+        "Qwen3TTSTokenizerSingleCodebookDecoderBigVGANModel",
+    ]
 
     def __init__(self, config: Qwen3TTSTokenizerSingleCodebookDecoderConfig):
         # Skip parent's __init__ to use SingleCodebook attribute names (self.dit / self.bigvgan)
@@ -1147,7 +1157,9 @@ class Qwen3TTSTokenizerSingleCodebookDecoder(Qwen2_5OmniToken2WavModel):
                 "Qwen3TTSTokenizerSingleCodebookDecoder does not support eager attention implementation, fall back to sdpa"
             )
             attn_impl = "sdpa"
-        self.dit = Qwen3TTSTokenizerSingleCodebookDecoderDiTModel._from_config(config.dit_config, attn_implementation=attn_impl)
+        self.dit = Qwen3TTSTokenizerSingleCodebookDecoderDiTModel._from_config(
+            config.dit_config, attn_implementation=attn_impl
+        )
         self.bigvgan = Qwen3TTSTokenizerSingleCodebookDecoderBigVGANModel._from_config(
             config.bigvgan_config, attn_implementation=attn_impl
         )
