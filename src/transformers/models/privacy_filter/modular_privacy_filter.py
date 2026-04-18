@@ -13,7 +13,6 @@
 # limitations under the License.
 """PyTorch Privacy Filter model."""
 
-import math
 from collections.abc import Callable
 
 import torch
@@ -252,7 +251,7 @@ class PrivacyFilterAttention(GptOssAttention):
             dropout=0.0 if not self.training else self.attention_dropout,
             scaling=1.0,  # scaling applied before
             sliding_window=self.sliding_window,
-            s_aux=self.sinks * math.log(2.0),  # additional scale for sinks
+            s_aux=self.sinks,
             **kwargs,
         )
 
@@ -348,7 +347,6 @@ class PrivacyFilterPreTrainedModel(GptOssPreTrainedModel):
 class PrivacyFilterModel(GptOssModel):
     def __init__(self, config: PrivacyFilterConfig):
         super().__init__(config)
-        self.embedding_norm = PrivacyFilterRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.layers = nn.ModuleList([PrivacyFilterEncoderLayer(config) for _ in range(config.num_hidden_layers)])
 
     @merge_with_config_defaults
@@ -368,7 +366,7 @@ class PrivacyFilterModel(GptOssModel):
 
         if inputs_embeds is None:
             inputs_embeds = self.embed_tokens(input_ids)
-        hidden_states = self.embedding_norm(inputs_embeds)
+        hidden_states = inputs_embeds
 
         if position_ids is None:
             position_ids = torch.arange(inputs_embeds.shape[1], device=inputs_embeds.device)

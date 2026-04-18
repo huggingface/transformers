@@ -18,7 +18,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import math
 from collections.abc import Callable
 from typing import Optional
 
@@ -288,7 +287,7 @@ class PrivacyFilterAttention(nn.Module):
             dropout=0.0 if not self.training else self.attention_dropout,
             scaling=1.0,  # scaling applied before
             sliding_window=self.sliding_window,
-            s_aux=self.sinks * math.log(2.0),  # additional scale for sinks
+            s_aux=self.sinks,
             **kwargs,
         )
 
@@ -312,8 +311,6 @@ class PrivacyFilterExperts(nn.Module):
         self.limit = 7.0
 
     def _apply_gate(self, gate_up: torch.Tensor) -> torch.Tensor:
-        # TODO: fix layout from concatenated to interleaved --> no need to change here then
-        # (otherwise, we won't be able to use megablocks kernels potentially)
         gate, up = gate_up.chunk(2, dim=-1)
         gate = gate.clamp(min=None, max=self.limit)
         up = up.clamp(min=-self.limit, max=self.limit)
@@ -483,7 +480,6 @@ class PrivacyFilterModel(PrivacyFilterPreTrainedModel):
         self.norm = PrivacyFilterRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.rotary_emb = PrivacyFilterRotaryEmbedding(config=config)
         self.gradient_checkpointing = False
-        self.embedding_norm = PrivacyFilterRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -505,7 +501,7 @@ class PrivacyFilterModel(PrivacyFilterPreTrainedModel):
 
         if inputs_embeds is None:
             inputs_embeds = self.embed_tokens(input_ids)
-        hidden_states = self.embedding_norm(inputs_embeds)
+        hidden_states = inputs_embeds
 
         if position_ids is None:
             position_ids = torch.arange(inputs_embeds.shape[1], device=inputs_embeds.device)
