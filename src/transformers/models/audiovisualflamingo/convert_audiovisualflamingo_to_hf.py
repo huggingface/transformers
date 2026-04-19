@@ -58,7 +58,7 @@ COMPONENT_TO_PREFIX = {
     "llm": "llm",
     "vision_tower": "vision_tower.vision_tower",
     "mm_projector": "mm_projector",
-    "sound_tower": "sound_tower.audio_tower",
+    "sound_tower": "sound_tower",
     "sound_mm_projector": "sound_mm_projector",
 }
 

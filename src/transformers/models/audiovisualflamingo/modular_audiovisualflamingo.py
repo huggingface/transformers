@@ -55,6 +55,10 @@ MM_BOS_EOS_TOKENS = {
     "sound": ["<|sound_bos|>", "<|sound_eos|>"],
 }
 
+LEGACY_CHECKPOINT_KEY_MAPPING = {
+    r"^sound_tower\.audio_tower\.": "sound_tower.",
+}
+
 
 class AudioVisualFlamingoConfig(PreTrainedConfig):
     model_type = "audiovisualflamingo"
@@ -483,72 +487,6 @@ class SoundMultimodalProjector(AudioFlamingo3MultiModalProjector):
         return self.layers(x)
 
 
-class Qwen2AudioTower(nn.Module):
-    def __init__(self, config: AudioVisualFlamingoConfig):
-        super().__init__()
-        audio_cfg = copy.deepcopy(config.audio_config)
-        audio_cfg._attn_implementation = config._attn_implementation
-        self.audio_tower = AutoModel.from_config(audio_cfg)
-        self.audio_chunk_unit_length = 3000
-
-    @property
-    def dtype(self):
-        return self.audio_tower.dtype
-
-    @property
-    def config(self):
-        return self.audio_tower.config
-
-    @property
-    def device(self):
-        return self.audio_tower.device
-
-    @property
-    def hidden_size(self):
-        return self.config.d_model
-
-    def forward(self, sounds):
-        if not isinstance(sounds, list):
-            raise NotImplementedError("Not implemented for this encoder")
-
-        sound_features = []
-        audio_output_lengths = []
-        for sound in sounds:
-            if hasattr(sound, "input_features") or (isinstance(sound, dict) and "input_features" in sound):
-                sound = sound["input_features"]
-            sound = sound.to(device=self.device, dtype=self.dtype)
-            sound_feature = self.forward_audio_tower_batch(sound)
-            sound_feature = sound_feature.to(sound.dtype)
-            sound_features.append(sound_feature)
-            audio_output_lengths.append(sound_feature.shape[1])
-
-        if len(sound_features) > 0:
-            sound_features = torch.cat(sound_features, dim=1).squeeze(0)
-        return sound_features, audio_output_lengths
-
-    def forward_audio_tower_batch(self, inp):
-        batch_size, n_mels, seq_len = inp.shape
-        chunk_length = self.audio_chunk_unit_length
-        num_chunks = (seq_len + chunk_length - 1) // chunk_length
-
-        padded_chunks = []
-        for i in range(num_chunks):
-            start_idx = i * chunk_length
-            end_idx = min(start_idx + chunk_length, seq_len)
-            chunk = inp[:, :, start_idx:end_idx]
-            if chunk.shape[2] < chunk_length:
-                pad_len = chunk_length - chunk.shape[2]
-                chunk = F.pad(chunk, (0, pad_len), mode="constant", value=0)
-            padded_chunks.append(chunk)
-
-        all_chunks = torch.cat(padded_chunks, dim=0).reshape(batch_size * num_chunks, n_mels, chunk_length)
-        chunk_outputs = self.audio_tower(all_chunks)
-        hidden_states = chunk_outputs.last_hidden_state
-        _, chunk_seq_len, hidden_size = hidden_states.shape
-        hidden_states = hidden_states.reshape(batch_size, num_chunks * chunk_seq_len, hidden_size)
-        return hidden_states
-
-
 class SiglipVisionTowerDynamicS2(nn.Module):
     def __init__(self, config: AudioVisualFlamingoConfig) -> None:
         super().__init__()
@@ -733,6 +671,12 @@ class AudioVisualFlamingoPretrainedModel(VoxtralPreTrainedModel):
 
 
 class AudioVisualFlamingoForConditionalGeneration(AudioVisualFlamingoPretrainedModel, GenerationMixin):
+    @classmethod
+    def from_pretrained(cls, *args, **kwargs):
+        key_mapping = kwargs.pop("key_mapping", None)
+        kwargs["key_mapping"] = {**LEGACY_CHECKPOINT_KEY_MAPPING, **(key_mapping or {})}
+        return super().from_pretrained(*args, **kwargs)
+
     def __init__(self, config: AudioVisualFlamingoConfig, *args, **kwargs):
         super().__init__(config)
         _ = (args, kwargs)
@@ -741,7 +685,9 @@ class AudioVisualFlamingoForConditionalGeneration(AudioVisualFlamingoPretrainedM
             raise NotImplementedError("Current AudioVisualFlamingo checkpoint requires `dynamic_s2=True`.")
         self.vision_tower = SiglipVisionTowerDynamicS2(config)
         config.mm_hidden_size = self.vision_tower.hidden_size
-        self.sound_tower = Qwen2AudioTower(config)
+        audio_cfg = copy.deepcopy(config.audio_config)
+        audio_cfg._attn_implementation = config._attn_implementation
+        self.sound_tower = AutoModel.from_config(audio_cfg)
         config.sound_hidden_size = getattr(config.audio_config, "d_model", 1280)
         self.sound_mm_projector = SoundMultimodalProjector(config)
 
@@ -916,9 +862,46 @@ class AudioVisualFlamingoForConditionalGeneration(AudioVisualFlamingoPretrainedM
             image_features = torch.stack(image_features, dim=0)
         return image_features
 
+    def _get_sound_chunk_length(self) -> int:
+        return self.sound_tower.config.max_source_positions * self.sound_tower.conv1.stride[0] * self.sound_tower.conv2.stride[0]
+
+    def _forward_sound_tower_batch(self, input_features: torch.Tensor) -> torch.Tensor:
+        batch_size, n_mels, seq_len = input_features.shape
+        chunk_length = self._get_sound_chunk_length()
+        num_chunks = (seq_len + chunk_length - 1) // chunk_length
+
+        padded_chunks = []
+        for chunk_idx in range(num_chunks):
+            start_idx = chunk_idx * chunk_length
+            end_idx = min(start_idx + chunk_length, seq_len)
+            chunk = input_features[:, :, start_idx:end_idx]
+            if chunk.shape[2] < chunk_length:
+                chunk = F.pad(chunk, (0, chunk_length - chunk.shape[2]), mode="constant", value=0)
+            padded_chunks.append(chunk)
+
+        all_chunks = torch.cat(padded_chunks, dim=0).reshape(batch_size * num_chunks, n_mels, chunk_length)
+        chunk_outputs = self.sound_tower(all_chunks, return_dict=True)
+        hidden_states = chunk_outputs.last_hidden_state
+        _, chunk_seq_len, hidden_size = hidden_states.shape
+        return hidden_states.reshape(batch_size, num_chunks * chunk_seq_len, hidden_size)
+
     def encode_sound(self, sounds, mm_info: dict | None = None):
         _ = mm_info
-        audio_features, audio_output_lengths = self.sound_tower(sounds)
+        audio_features = []
+        audio_output_lengths = []
+        for sound in sounds:
+            if hasattr(sound, "input_features") or (isinstance(sound, dict) and "input_features" in sound):
+                sound = sound["input_features"]
+            sound_dtype = sound.dtype
+            sound = sound.to(device=self.sound_tower.device, dtype=self.sound_tower.dtype)
+            sound_feature = self._forward_sound_tower_batch(sound).to(sound_dtype)
+            audio_features.append(sound_feature)
+            audio_output_lengths.append(sound_feature.shape[1])
+
+        if audio_features:
+            audio_features = torch.cat(audio_features, dim=1).squeeze(0)
+        else:
+            audio_features = []
         projector_param = next(self.sound_mm_projector.parameters(), None)
         if projector_param is not None and audio_features.dtype != projector_param.dtype:
             audio_features = audio_features.to(projector_param.dtype)
