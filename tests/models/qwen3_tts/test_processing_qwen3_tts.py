@@ -24,7 +24,7 @@ from transformers.testing_utils import require_torch, slow
 if is_torch_available():
     import torch
 
-    from transformers import Qwen3TTSProcessor
+    from transformers import Qwen3TTSFeatureExtractor, Qwen3TTSProcessor
 
 
 MODEL_ID = "Qwen/Qwen3-TTS-12Hz-0.6B-Base"
@@ -41,7 +41,8 @@ class Qwen3TTSProcessorTest(unittest.TestCase):
 
     def setUp(self):
         self.tmpdirname = tempfile.mkdtemp()
-        processor = Qwen3TTSProcessor(tokenizer=self.tokenizer)
+        feature_extractor = Qwen3TTSFeatureExtractor()
+        processor = Qwen3TTSProcessor(tokenizer=self.tokenizer, feature_extractor=feature_extractor)
         processor.save_pretrained(self.tmpdirname)
 
     def tearDown(self):
@@ -68,10 +69,12 @@ class Qwen3TTSProcessorTest(unittest.TestCase):
         self.assertEqual(processor.tokenizer.vocab_size, processor2.tokenizer.vocab_size)
 
     def test_processor_instantiation(self):
-        """Processor can be created directly from a tokenizer object."""
-        processor = Qwen3TTSProcessor(tokenizer=self.tokenizer)
+        """Processor can be created directly from a tokenizer and feature extractor."""
+        feature_extractor = Qwen3TTSFeatureExtractor()
+        processor = Qwen3TTSProcessor(tokenizer=self.tokenizer, feature_extractor=feature_extractor)
         self.assertIsNotNone(processor)
         self.assertIs(processor.tokenizer, self.tokenizer)
+        self.assertIs(processor.feature_extractor, feature_extractor)
 
     # ── Text encoding ─────────────────────────────────────────────────────────
 
