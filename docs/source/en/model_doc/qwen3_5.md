@@ -42,6 +42,10 @@ TODO
 
 [[autodoc]] Qwen3_5Config
 
+## Qwen3_5VisionConfig
+
+[[autodoc]] Qwen3_5VisionConfig
+
 ## Qwen3_5TextConfig
 
 [[autodoc]] Qwen3_5TextConfig
@@ -64,6 +68,11 @@ TODO
 ## Qwen3_5ForCausalLM
 
 [[autodoc]] Qwen3_5ForCausalLM
+    - forward
+
+## Qwen3_5ForSequenceClassification
+
+[[autodoc]] Qwen3_5ForSequenceClassification
     - forward
 
 ## Qwen3_5ForConditionalGeneration

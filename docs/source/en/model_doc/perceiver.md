@@ -128,9 +128,9 @@ audio classification, video classification, etc.
 [[autodoc]] PerceiverImageProcessor
     - preprocess
 
-## PerceiverImageProcessorFast
+## PerceiverImageProcessorPil
 
-[[autodoc]] PerceiverImageProcessorFast
+[[autodoc]] PerceiverImageProcessorPil
     - preprocess
 
 ## PerceiverTextPreprocessor

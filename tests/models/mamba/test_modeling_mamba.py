@@ -31,11 +31,7 @@ from ...test_pipeline_mixin import PipelineTesterMixin
 if is_torch_available():
     import torch
 
-    from transformers import (
-        MambaForCausalLM,
-        MambaModel,
-    )
-    from transformers.models.mamba.modeling_mamba import MambaCache
+    from transformers import CompileConfig, DynamicCache, MambaForCausalLM, MambaModel
 
 
 class MambaModelTester:
@@ -166,7 +162,6 @@ class MambaModelTester:
         outputs = model(
             input_ids[:, :-1],
             use_cache=True,
-            cache_position=torch.arange(0, config.conv_kernel, device=input_ids.device),
         )
         output_one = outputs.last_hidden_state
 
@@ -175,7 +170,6 @@ class MambaModelTester:
             input_ids[:, -1:],
             use_cache=True,
             cache_params=outputs.cache_params,
-            cache_position=torch.arange(config.conv_kernel, config.conv_kernel + 1, device=input_ids.device),
         )
         output_two = outputs.last_hidden_state
 
@@ -196,9 +190,7 @@ class MambaModelTester:
 
         # use cache
         token_emb = model.embeddings(input_ids)
-        outputs = model.layers[0].mixer.slow_forward(
-            token_emb, cache, cache_position=torch.arange(0, config.conv_kernel, device=input_ids.device)
-        )
+        outputs = model.layers[0].mixer.slow_forward(token_emb, cache)
 
         loss = torch.log1p(torch.abs(outputs.sum()))
         self.parent.assertEqual(loss.shape, ())
@@ -249,18 +241,6 @@ class MambaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
 
     def test_enable_input_require_grads(self):
         self.skipTest("Mamba currently requires CUDA/Metal/XPU to run enable_input_require_grads.")
-
-    def _check_past_key_values_for_generate(self, batch_size, past_key_values, seq_length, config):
-        self.assertIsInstance(past_key_values, MambaCache)
-
-        conv_shape = (batch_size, config.intermediate_size, config.conv_kernel)
-        ssm_shape = (batch_size, config.intermediate_size, config.state_size)
-
-        self.assertTrue(config.num_hidden_layers, len(past_key_values.conv_states))
-
-        for idx in range(len(past_key_values.conv_states)):
-            self.assertEqual(past_key_values.conv_states[idx].shape, conv_shape)
-            self.assertEqual(past_key_values.ssm_states[idx].shape, ssm_shape)
 
     def assertInterval(self, member, container, msg=None):
         r"""
@@ -321,9 +301,12 @@ class MambaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
                 dict_output = model(**dict_inputs, return_dict=True, **additional_kwargs).to_tuple()
 
                 def recursive_check(tuple_object, dict_object):
-                    if isinstance(tuple_object, MambaCache):  # MODIFIED PART START
-                        recursive_check(tuple_object.conv_states, dict_object.conv_states)
-                        recursive_check(tuple_object.ssm_states, dict_object.ssm_states)
+                    if isinstance(tuple_object, DynamicCache):  # MODIFIED PART START
+                        for idx in range(len(tuple_object)):
+                            recursive_check(tuple_object.layers[idx].conv_states, dict_object.layers[idx].conv_states)
+                            recursive_check(
+                                tuple_object.layers[idx].recurrent_states, dict_object.layers[idx].recurrent_states
+                            )
                     elif isinstance(tuple_object, (list, tuple)):  # MODIFIED PART END
                         for tuple_iterable_value, dict_iterable_value in zip(tuple_object, dict_object):
                             recursive_check(tuple_iterable_value, dict_iterable_value)
@@ -371,30 +354,6 @@ class MambaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
     @unittest.skip("The `inputs_embeds` when fed don't produce the same results.")
     def test_beam_sample_generate(self):
         pass
-
-    def test_dtype_mismatch_handled_in_cache(self):
-        config, input_ids, *args = self.model_tester.prepare_config_and_inputs()
-        model = MambaModel(config)
-        model.to(torch_device).to(torch.float16)
-        model.eval()
-
-        # Create cache with float32 dtype
-        cache_params = MambaCache(config, max_batch_size=input_ids.size(0), dtype=torch.float32, device=torch_device)
-
-        # If code is correct, no error occurs and test passes
-        outputs = model(
-            input_ids,
-            cache_params=cache_params,
-            use_cache=True,
-            cache_position=torch.arange(0, config.conv_kernel, device=input_ids.device),
-        )
-
-        self.assertIsNotNone(outputs)
-        self.assertIsNotNone(outputs.last_hidden_state)
-        self.assertEqual(
-            outputs.last_hidden_state.shape,
-            (self.model_tester.batch_size, self.model_tester.seq_length, self.model_tester.hidden_size),
-        )
 
     @unittest.skip("Mamba models do not support DDP.")
     def test_multi_gpu_data_parallel_forward(self):
@@ -495,7 +454,69 @@ class MambaIntegrationTests(unittest.TestCase):
         output_sentence = self.tokenizer.decode(output[0].tolist())
         self.assertEqual(output_sentence, expected_output)
 
-        model.forward = torch.compile(model.forward, fullgraph=True, mode="reduce-overhead")
-        output = model.generate(input_ids, max_new_tokens=20)
+        compile_config = CompileConfig(fullgraph=True, mode="reduce-overhead")
+        output = model.generate(
+            input_ids, max_new_tokens=20, cache_implementation="static", compile_config=compile_config
+        )
         output_sentence = self.tokenizer.decode(output[0].tolist())
         self.assertEqual(output_sentence, expected_output)
+
+    @pytest.mark.torch_compile_test
+    def test_compile_associative_scan_no_cache(self):
+        from transformers.models.mamba.modeling_mamba import associative_scan
+
+        if associative_scan is None:
+            self.skipTest("associative_scan is not available in this PyTorch version.")
+        if torch_device == "cpu":
+            self.skipTest("Associative scan compile test requires a torch accelerator.")
+
+        expected_output = "Hey how are you doing?\n\nI'm doing great.\n\nI"
+
+        input_ids = self.tokenizer("Hey how are you doing?", return_tensors="pt").input_ids.to(torch_device)
+        model = MambaForCausalLM.from_pretrained("state-spaces/mamba-1.4b-hf", dtype=torch.float16).to(torch_device)
+        model.eval()
+
+        output = model.generate(input_ids, do_sample=False, use_cache=False, max_new_tokens=10)
+        output_sentence = self.tokenizer.decode(output[0].tolist())
+
+        self.assertEqual(output_sentence, expected_output)
+
+        model.forward = torch.compile(model.forward)
+        output = model.generate(input_ids, do_sample=False, use_cache=False, max_new_tokens=10)
+        output_sentence = self.tokenizer.decode(output[0].tolist())
+        self.assertEqual(output_sentence, expected_output)
+
+    @pytest.mark.torch_compile_test
+    def test_associative_scan_matches_sequential(self):
+        """Compiled generate with use_associative_scan=False vs =True produces the same text."""
+        from transformers.models.mamba.modeling_mamba import associative_scan
+
+        if associative_scan is None:
+            self.skipTest("associative_scan is not available (requires torch >= 2.9.0).")
+        if torch_device == "cpu":
+            self.skipTest("Associative scan test requires a torch accelerator.")
+
+        input_ids = self.tokenizer("Hey how are you doing?", return_tensors="pt").input_ids.to(torch_device)
+
+        # Opt-out: use_associative_scan=False → compiled sequential loop
+        model = MambaForCausalLM.from_pretrained(
+            "state-spaces/mamba-1.4b-hf", dtype=torch.float16, use_associative_scan=False
+        ).to(torch_device)
+        model.eval()
+        model.forward = torch.compile(model.forward)
+        output = model.generate(input_ids, do_sample=False, use_cache=False, max_new_tokens=10)
+        expected_text = self.tokenizer.decode(output[0].tolist())
+
+        torch._dynamo.reset()
+        torch.cuda.empty_cache()
+
+        # Opt-in: use_associative_scan=True → compiled associative scan
+        model = MambaForCausalLM.from_pretrained(
+            "state-spaces/mamba-1.4b-hf", dtype=torch.float16, use_associative_scan=True
+        ).to(torch_device)
+        model.eval()
+        model.forward = torch.compile(model.forward)
+        output = model.generate(input_ids, do_sample=False, use_cache=False, max_new_tokens=10)
+        output_text = self.tokenizer.decode(output[0].tolist())
+
+        self.assertEqual(output_text, expected_text)

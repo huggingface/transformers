@@ -34,6 +34,7 @@ from ...utils import (
 from ...utils.import_utils import requires
 from ...video_processing_utils import BaseVideoProcessor
 from .auto_factory import _LazyAutoMapping
+from .auto_mappings import VIDEO_PROCESSOR_MAPPING_NAMES
 from .configuration_auto import (
     CONFIG_MAPPING_NAMES,
     AutoConfig,
@@ -50,36 +51,20 @@ if TYPE_CHECKING:
     # the transformers package is used with Microsoft's Pylance language server.
     VIDEO_PROCESSOR_MAPPING_NAMES: OrderedDict[str, tuple[str | None, str | None]] = OrderedDict()
 else:
-    VIDEO_PROCESSOR_MAPPING_NAMES = OrderedDict(
+    # Merge non-standard mapping names with auto-inferred `VIDEO_PROCESSOR_MAPPING_NAMES`
+    MISSING_VIDEO_PROCESSOR_MAPPING_NAMES = OrderedDict(
         [
-            ("ernie4_5_vl_moe", "Ernie4_5_VL_MoeVideoProcessor"),
-            ("glm46v", "Glm46VVideoProcessor"),
-            ("glm4v", "Glm4vVideoProcessor"),
             ("instructblip", "InstructBlipVideoVideoProcessor"),
-            ("instructblipvideo", "InstructBlipVideoVideoProcessor"),
-            ("internvl", "InternVLVideoProcessor"),
-            ("llava_next_video", "LlavaNextVideoVideoProcessor"),
-            ("llava_onevision", "LlavaOnevisionVideoProcessor"),
             ("pe_audio_video", "PeVideoVideoProcessor"),
-            ("pe_video", "PeVideoVideoProcessor"),
-            ("perception_lm", "PerceptionLMVideoProcessor"),
             ("qwen2_5_omni", "Qwen2VLVideoProcessor"),
             ("qwen2_5_vl", "Qwen2VLVideoProcessor"),
-            ("qwen2_vl", "Qwen2VLVideoProcessor"),
             ("qwen3_5", "Qwen3VLVideoProcessor"),
             ("qwen3_5_moe", "Qwen3VLVideoProcessor"),
             ("qwen3_omni_moe", "Qwen2VLVideoProcessor"),
-            ("qwen3_vl", "Qwen3VLVideoProcessor"),
             ("qwen3_vl_moe", "Qwen3VLVideoProcessor"),
-            ("sam2_video", "Sam2VideoVideoProcessor"),
-            ("sam3_video", "Sam3VideoVideoProcessor"),
-            ("smolvlm", "SmolVLMVideoProcessor"),
-            ("video_llama_3", "VideoLlama3VideoProcessor"),
-            ("video_llava", "VideoLlavaVideoProcessor"),
-            ("videomae", "VideoMAEVideoProcessor"),
-            ("vjepa2", "VJEPA2VideoProcessor"),
         ]
     )
+    VIDEO_PROCESSOR_MAPPING_NAMES.update(MISSING_VIDEO_PROCESSOR_MAPPING_NAMES)
 
 for model_type, video_processors in VIDEO_PROCESSOR_MAPPING_NAMES.items():
     fast_video_processor_class = video_processors
@@ -94,8 +79,8 @@ VIDEO_PROCESSOR_MAPPING = _LazyAutoMapping(CONFIG_MAPPING_NAMES, VIDEO_PROCESSOR
 
 
 def video_processor_class_from_name(class_name: str):
-    for module_name, extractors in VIDEO_PROCESSOR_MAPPING_NAMES.items():
-        if class_name in extractors:
+    for module_name, extractor in VIDEO_PROCESSOR_MAPPING_NAMES.items():
+        if class_name == extractor:
             module_name = model_type_to_module_name(module_name)
 
             module = importlib.import_module(f".{module_name}", "transformers.models")
@@ -273,7 +258,7 @@ class AutoVideoProcessor:
                 - a path to a *directory* containing a video processor file saved using the
                   [`~video_processing_utils.BaseVideoProcessor.save_pretrained`] method, e.g.,
                   `./my_model_directory/`.
-                - a path or url to a saved video processor JSON *file*, e.g.,
+                - a path to a saved video processor JSON *file*, e.g.,
                   `./my_model_directory/preprocessor_config.json`.
             cache_dir (`str` or `os.PathLike`, *optional*):
                 Path to a directory in which a downloaded pretrained model video processor should be cached if the
@@ -363,6 +348,9 @@ class AutoVideoProcessor:
 
         has_remote_code = video_processor_auto_map is not None
         has_local_code = video_processor_class is not None or type(config) in VIDEO_PROCESSOR_MAPPING
+        explicit_local_code = has_local_code and not (
+            video_processor_class or VIDEO_PROCESSOR_MAPPING[type(config)]
+        ).__module__.startswith("transformers.")
         if has_remote_code:
             if "--" in video_processor_auto_map:
                 upstream_repo = video_processor_auto_map.split("--")[0]
@@ -372,7 +360,7 @@ class AutoVideoProcessor:
                 trust_remote_code, pretrained_model_name_or_path, has_local_code, has_remote_code, upstream_repo
             )
 
-        if has_remote_code and trust_remote_code:
+        if has_remote_code and trust_remote_code and not explicit_local_code:
             class_ref = video_processor_auto_map
             video_processor_class = get_class_from_dynamic_module(class_ref, pretrained_model_name_or_path, **kwargs)
             _ = kwargs.pop("code_revision", None)
@@ -383,13 +371,14 @@ class AutoVideoProcessor:
         # Last try: we use the VIDEO_PROCESSOR_MAPPING.
         elif type(config) in VIDEO_PROCESSOR_MAPPING:
             video_processor_class = VIDEO_PROCESSOR_MAPPING[type(config)]
-
             if video_processor_class is not None:
                 return video_processor_class.from_pretrained(pretrained_model_name_or_path, *inputs, **kwargs)
-            else:
-                raise ValueError(
-                    "This video processor cannot be instantiated. Please make sure you have `torchvision` installed."
-                )
+
+        # Raise a more informative error message if torchvision isn't found, otherwise just fallback to default
+        if not is_torchvision_available():
+            raise ValueError(
+                f"{pretrained_model_name_or_path} requires `torchvision` to be installed. Please install `torchvision` and try again."
+            )
 
         raise ValueError(
             f"Unrecognized video processor in {pretrained_model_name_or_path}. Should have a "

@@ -1,6 +1,7 @@
 import unittest
 
 from tests.test_tokenization_common import TokenizerTesterMixin
+from transformers import AutoTokenizer
 from transformers.models.llama.tokenization_llama import LlamaTokenizer
 from transformers.testing_utils import (
     require_tokenizers,
@@ -35,3 +36,18 @@ class LlamaTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     def get_tokenizers(self, **kwargs):
         kwargs.setdefault("pad_token", "<PAD>")
         return super().get_tokenizers(**kwargs)
+
+    def test_load_tiktoken_tokenizer(self):
+        """Test loading a Llama tokenizer from tiktoken.model file"""
+        tokenizer = AutoTokenizer.from_pretrained("hf-internal-testing/llama3-tokenizer-tiktoken")
+
+        text = "This is a test"
+        tokens = tokenizer.encode(text, add_special_tokens=False)
+        decoded = tokenizer.decode(tokens, skip_special_tokens=True)
+        self.assertEqual(decoded, text)
+
+        tokenizer = LlamaTokenizer.from_pretrained("hf-internal-testing/llama3-tokenizer-tiktoken")
+        text = "This is a test"
+        tokens = tokenizer.encode(text, add_special_tokens=False)
+        decoded = tokenizer.decode(tokens, skip_special_tokens=True)
+        self.assertEqual(decoded, text)

@@ -66,6 +66,10 @@ Learn how to quantize models in the [Quantization](../quantization) guide.
 
 [[autodoc]] HqqConfig
 
+## MetalConfig
+
+[[autodoc]] MetalConfig
+
 ## Mxfp4Config
 
 [[autodoc]] Mxfp4Config
@@ -97,6 +101,10 @@ Learn how to quantize models in the [Quantization](../quantization) guide.
 ## QuarkConfig
 
 [[autodoc]] QuarkConfig
+
+## FourOverSixConfig
+
+[[autodoc]] FourOverSixConfig
 
 ## FPQuantConfig
 

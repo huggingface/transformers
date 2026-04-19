@@ -70,13 +70,6 @@ print(tokenizer.decode(outputs[0], skip_special_tokens=True))
 ```
 
 </hfoption>
-<hfoption id="transformers CLI">
-
-```python
-echo -e "Explain quantum computing simply." | transformers run --task text-generation --model ibm-granite/granite-3.3-8b-instruct --device 0
-```
-
-</hfoption>
 </hfoptions>
 
 Quantization reduces the memory burden of large models by representing the weights in a lower precision. Refer to the [Quantization](../quantization/overview) overview for more available quantization backends.

@@ -17,16 +17,22 @@ from functools import wraps
 
 from ..utils import logging
 from ..utils.generic import GeneralInterface
-from ..utils.import_utils import is_torch_available
+from ..utils.import_utils import (
+    is_torch_available,
+    is_torch_greater_or_equal,
+    is_torch_less_or_equal,
+    is_torchdynamo_compiling,
+)
 
 
 if is_torch_available():
     import torch
 
+
 logger = logging.get_logger(__name__)
 
 # Examples of experts class with its eager mm implementation
-# class Experts(nn.Module):
+# class Experts(torch.nn.Module):
 #     """Collection of expert weights stored as 3D tensors."""
 
 #     def __init__(self, config):
@@ -34,8 +40,8 @@ logger = logging.get_logger(__name__)
 #         self.num_experts = config.n_routed_experts
 #         self.hidden_dim = config.hidden_size
 #         self.intermediate_dim = config.moe_intermediate_size
-#         self.gate_up_proj = nn.Parameter(torch.empty(self.num_experts, 2 * self.intermediate_dim, self.hidden_dim))
-#         self.down_proj = nn.Parameter(torch.empty(self.num_experts, self.hidden_dim, self.intermediate_dim))
+#         self.gate_up_proj = torch.nn.Parameter(torch.empty(self.num_experts, 2 * self.intermediate_dim, self.hidden_dim))
+#         self.down_proj = torch.nn.Parameter(torch.empty(self.num_experts, self.hidden_dim, self.intermediate_dim))
 #         self.act_fn = ACT2FN[config.hidden_act]
 
 #     def forward(
@@ -56,9 +62,9 @@ logger = logging.get_logger(__name__)
 #                 continue
 #             top_k_pos, token_idx = torch.where(expert_mask[expert_idx])
 #             current_state = hidden_states[token_idx]
-#             gate, up = nn.functional.linear(current_state, self.gate_up_proj[expert_idx]).chunk(2, dim=-1)
+#             gate, up = torch.nn.functional.linear(current_state, self.gate_up_proj[expert_idx]).chunk(2, dim=-1)
 #             current_hidden_states = self.act_fn(gate) * up
-#             current_hidden_states = nn.functional.linear(current_hidden_states, self.down_proj[expert_idx])
+#             current_hidden_states = torch.nn.functional.linear(current_hidden_states, self.down_proj[expert_idx])
 #             current_hidden_states = current_hidden_states * top_k_weights[token_idx, top_k_pos, None]
 #             final_hidden_states.index_add_(0, token_idx, current_hidden_states.to(final_hidden_states.dtype))
 
@@ -118,90 +124,135 @@ def batched_mm_experts_forward(
 
     # Handle invalid expert IDs from Expert Parallelism (EP)
     # When EP is enabled, tokens assigned to experts on other devices are marked with sentinel value >= num_experts
-    valid_mask = expert_ids < self.num_experts
-    expert_ids_clamped = expert_ids.clamp(0, self.num_experts - 1)
+    invalid_mask = expert_ids >= self.num_experts
+    expert_ids = expert_ids.clamp(0, self.num_experts - 1)
 
     # Get current hidden states for selected samples
     selected_hidden_states = hidden_states[token_idx]
 
-    # Select expert weights and biases for selected samples (using clamped IDs for safe indexing)
-    selected_gate_up = self.gate_up_proj[expert_ids_clamped]
-    selected_down = self.down_proj[expert_ids_clamped]
-    selected_gate_up_bias = self.gate_up_proj_bias[expert_ids_clamped] if self.has_bias else None
-    selected_down_bias = self.down_proj_bias[expert_ids_clamped] if self.has_bias else None
+    # Select gate_up or just up projection weights and biases
+    if self.has_gate:
+        selected_weights = self.gate_up_proj[expert_ids]
+        selected_biases = self.gate_up_proj_bias[expert_ids] if self.has_bias else None
+    else:
+        selected_weights = self.up_proj[expert_ids]
+        selected_biases = self.up_proj_bias[expert_ids] if self.has_bias else None
 
     # --- Up projection per expert (batched) ---
-    gate_up_out = _batched_linear(
-        selected_hidden_states, selected_gate_up, selected_gate_up_bias, is_transposed=self.is_transposed
-    )  # (S, 2 * intermediate_dim)
+    proj_out = _batched_linear(
+        selected_hidden_states, selected_weights, bias=selected_biases, is_transposed=self.is_transposed
+    )  # (S, 2 * intermediate_dim) or  (S, intermediate_dim) depending on whether we have gating
 
-    # Apply gating
-    gated_out = self._apply_gate(gate_up_out)  # (S, intermediate_dim)
+    # Apply gating or activation
+    if self.has_gate:
+        # for gated experts we apply the custom/default gating mechanism
+        proj_out = self._apply_gate(proj_out)  # (S, intermediate_dim)
+    else:
+        # for non-gated experts we just apply the activation function
+        proj_out = self.act_fn(proj_out)  # (S, intermediate_dim)
+
+    # Select down projection weights and biases for selected samples
+    selected_weights = self.down_proj[expert_ids]
+    selected_biases = self.down_proj_bias[expert_ids] if self.has_bias else None
 
     # --- Down projection per expert (batched) ---
-    out_per_sample = _batched_linear(
-        gated_out, selected_down, selected_down_bias, is_transposed=self.is_transposed
+    proj_out = _batched_linear(
+        proj_out, selected_weights, bias=selected_biases, is_transposed=self.is_transposed
     )  # (S, hidden_dim)
 
     # Apply routing weights and zero out invalid expert contributions
-    if sample_weights.shape != expert_ids_clamped.shape:
-        sample_weights = sample_weights.gather(0, expert_ids_clamped)
-    out_per_sample = out_per_sample * sample_weights.unsqueeze(-1)  # (S, hidden_dim)
-    out_per_sample = out_per_sample * valid_mask.unsqueeze(-1).to(out_per_sample.dtype)
+    weighted_out = proj_out * sample_weights.unsqueeze(-1)  # (S, hidden_dim)
+    weighted_out.masked_fill_(invalid_mask.unsqueeze(-1), 0.0)  # Zero out invalid expert contributions
 
     # Accumulate results using deterministic reshape+sum instead of index_add_
-    # (index_add_ with duplicate indices is non-deterministic on CUDA due to atomicAdd)
-    final_hidden_states = out_per_sample.view(num_tokens, num_top_k, hidden_dim).sum(dim=1)
+    # index_add_ with duplicate indices is non-deterministic on CUDA due to atomicAdd
+    # index_add_ accumulates in-place using the dtype of the output tensor (fp16/bf16)
+    # reshape+sum accumulates in fp32 which is more stable for low precision training/inference.
+    final_hidden_states = weighted_out.view(num_tokens, num_top_k, hidden_dim).sum(dim=1)
 
     return final_hidden_states.to(hidden_states.dtype)
 
 
-# We wrap it as a custim op to be able to use it in torch.compile without breaking the graph capture
-@torch.library.custom_op("transformers::grouped_mm_fallback", mutates_args=())
-def _grouped_mm_fallback(
-    input: torch.Tensor,
-    weight: torch.Tensor,
-    offs: torch.Tensor,
-) -> torch.Tensor:
+# torch.compiler.disable does not work with fullgraph=True, so we implement a custom operator to opaque this function.
+# This is not "free compilation compatibility" because now inductor won't be able to optimize matmuls inside the loop,
+# but since the matmuls here have dynamic shapes, inductor wouldn't have been able to optimize them anyway.
+def _grouped_mm_fallback(input: torch.Tensor, weight: torch.Tensor, offs: torch.Tensor) -> torch.Tensor:
     """
-    Naive implementation of grouped matrix multiplication that can be used as a fallback when torch.nn.functional.grouped_mm
-    and torch._grouped_mm are not available or not compatible with torch.compile.
+    Fallback grouped matrix multiplication used when `torch.nn.functional.grouped_mm` and `torch._grouped_mm`
+    are unavailable or incompatible with `torch.compile` (e.g. non-bfloat16 weights).
 
     Args:
-        input (`torch.Tensor`):
-            Input tensor of shape (S, input_dim).
-        weight (`torch.Tensor`):
-            Weight tensor of shape (num_experts, input_dim, output_dim).
-        offs (`torch.Tensor`):
-            Offsets tensor indicating the boundaries of each group in the input tensor.
+        input (`torch.Tensor`): Input of shape (S, input_dim), sorted by expert id.
+        weight (`torch.Tensor`): Expert weights of shape (num_experts, input_dim, output_dim).
+        offs (`torch.Tensor`): Cumulative token counts per expert of shape (num_experts,).
     Returns:
-        `torch.Tensor`: Output tensor of shape (S, output_dim).
+        `torch.Tensor`: Output of shape (S, output_dim).
     """
-    output = torch.zeros(input.size(0), weight.size(2), device=input.device, dtype=input.dtype)
-    for i in range(weight.size(0)):
-        start, end = offs[i - 1], offs[i]
-        if start >= end:
+    output = torch.zeros(input.size(0), weight.size(2), device=input.device, dtype=input.dtype)  # (S, output_dim)
+
+    start = 0
+    # single cpu<->gpu sync point here,
+    # avoids multiple syncs inside the loop
+    for i, end in enumerate(offs.tolist()):
+        if start == end:
             continue
-        output[start:end] = torch.matmul(input[start:end], weight[i])
+        torch.mm(input[start:end], weight[i], out=output[start:end])
+        start = end
+
     return output
 
 
-# We register the fallback implementation as a fake op for shape inference during torch.compile graph capture
-@torch.library.register_fake("transformers::grouped_mm_fallback")
-def _grouped_mm_fallback_fake(
-    input: torch.Tensor,
-    weight: torch.Tensor,
-    offs: torch.Tensor,
-) -> torch.Tensor:
-    """Fake implementation of grouped matrix multiplication for shape inference during torch.compile graph capture."""
+def _grouped_mm_fallback_fake(input: torch.Tensor, weight: torch.Tensor, offs: torch.Tensor) -> torch.Tensor:
+    """Shape/dtype inference stub for `_grouped_mm_fallback` required by `torch.compile`."""
+    assert input.dim() == 2, f"input must be 2D (S, input_dim), got shape {tuple(input.shape)}"
+    assert weight.dim() == 3, (
+        f"weight must be 3D (num_experts, input_dim, output_dim), got shape {tuple(weight.shape)}"
+    )
+    assert offs.dim() == 1, f"offs must be 1D (num_experts,), got shape {tuple(offs.shape)}"
+    assert offs.size(0) == weight.size(0), f"offs length {offs.size(0)} must match number of experts {weight.size(0)}"
+    assert input.size(1) == weight.size(1), (
+        f"input_dim mismatch: input has {input.size(1)}, weight has {weight.size(1)}"
+    )
+    assert offs.dtype in (torch.int32, torch.int64), f"offs must be an integer tensor, got {offs.dtype}"
     return torch.empty(input.size(0), weight.size(2), device=input.device, dtype=input.dtype)
 
 
-def _can_use_grouped_mm(
-    input: torch.Tensor,
-    weight: torch.Tensor,
-    offs: torch.Tensor,
-) -> bool:
+def _grouped_mm_fallback_setup_context(ctx, inputs, output):
+    """Saves input and weight for backward; offs is stored directly as it is a non-differentiable integer tensor."""
+    ctx.save_for_backward(inputs[0], inputs[1])
+    ctx.offs = inputs[2]
+
+
+def _grouped_mm_fallback_backward(ctx, grad_output):
+    """Backward pass for `_grouped_mm_fallback`. Computes grad_input and grad_weight per expert group; offs has no gradient."""
+    input, weight = ctx.saved_tensors
+    grad_input = torch.zeros_like(input)
+    grad_weight = torch.zeros_like(weight)
+
+    start = 0
+    # single cpu<->gpu sync point here,
+    # avoids multiple syncs inside the loop
+    for i, end in enumerate(ctx.offs.tolist()):
+        if start == end:
+            continue
+        torch.mm(grad_output[start:end], weight[i].T, out=grad_input[start:end])
+        torch.mm(input[start:end].T, grad_output[start:end], out=grad_weight[i])
+        start = end
+
+    return grad_input, grad_weight, None
+
+
+if is_torch_available():
+    torch.library.custom_op("transformers::grouped_mm_fallback", _grouped_mm_fallback, mutates_args=())
+    torch.library.register_fake("transformers::grouped_mm_fallback", _grouped_mm_fallback_fake)
+    torch.library.register_autograd(
+        "transformers::grouped_mm_fallback",
+        _grouped_mm_fallback_backward,
+        setup_context=_grouped_mm_fallback_setup_context,
+    )
+
+
+def _can_use_grouped_mm(input: torch.Tensor, weight: torch.Tensor, offs: torch.Tensor) -> bool:
     """
     Check if torch.nn.functional.grouped_mm or torch._grouped_mm can be used based on availability and compatibility with torch.compile.
 
@@ -215,8 +266,32 @@ def _can_use_grouped_mm(
     Returns:
         `bool`: True if grouped_mm can be used, False otherwise.
     """
-    if torch.compiler.is_compiling() and weight.dtype != torch.bfloat16:
-        # torch.grouped_mm is not supported in torch.compile with dtypes other than bfloat16
+    if (is_torchdynamo_compiling() and weight.dtype != torch.bfloat16) or (
+        weight.device.type == "cpu"
+        # accept_dev=True is necessary for "+cpu"/"+xpu" etc.
+        and is_torch_less_or_equal("2.10.0", accept_dev=True)
+        and (weight.data_ptr() % 16 != 0 or input.data_ptr() % 16 != 0)
+    ):
+        # Under the following conditions we cannot use torch.grouped_mm and have to fall back:
+        # 1. torch.grouped_mm is not supported in torch.compile / inductor with dtypes other than bf16
+        # 2. Before PyTorch 2.11, torch.grouped_mm on CPU required 16 bytes alignment which is not
+        #    guaranteed for tensors loaded using memmap (e.g. using safetensors lazy tensor loading)
+        #    and not really necessary because the cpu path uses a fallback for-loop implementation.
+        #    issue: https://github.com/pytorch/pytorch/issues/172440
+        return False
+
+    # On CUDA, `grouped_mm` availability also depends on GPU compute capability:
+    # `torch.nn.functional.grouped_mm` in torch>=2.10 and `torch._grouped_mm` in torch>=2.9 support SM80+
+    # but older `torch._grouped_mm` requires SM90+.
+    if weight.device.type == "cuda":
+        if hasattr(torch.nn.functional, "grouped_mm"):
+            return torch.cuda.get_device_capability(weight.device) >= (8, 0)
+        if hasattr(torch, "_grouped_mm"):
+            if is_torch_greater_or_equal("2.9", accept_dev=True):
+                return torch.cuda.get_device_capability(weight.device) >= (8, 0)
+            else:
+                return torch.cuda.get_device_capability(weight.device) >= (9, 0)
+
         return False
 
     return hasattr(torch.nn.functional, "grouped_mm") or hasattr(torch, "_grouped_mm")
@@ -250,7 +325,7 @@ def _grouped_mm(
         elif hasattr(torch, "_grouped_mm"):
             return torch._grouped_mm(input.to(weight.dtype), weight, offs=offs)
 
-    return _grouped_mm_fallback(input, weight, offs)
+    return torch.ops.transformers.grouped_mm_fallback(input, weight, offs=offs)
 
 
 def _grouped_linear(
@@ -308,69 +383,73 @@ def grouped_mm_experts_forward(
     sample_weights = top_k_weights.reshape(-1)  # (S,)
     expert_ids = top_k_index.reshape(-1)  # (S,)
 
-    # Get current hidden states for selected samples
-    selected_hidden_states = hidden_states[token_idx]
-
     # Sort by expert for grouped processing
     perm = torch.argsort(expert_ids)
-    inv_perm = torch.argsort(perm)
+    inv_perm = torch.empty_like(perm)
+    inv_perm[perm] = torch.arange(perm.size(0), device=device)
+
     expert_ids_g = expert_ids[perm]
     sample_weights_g = sample_weights[perm]
-    selected_hidden_states_g = selected_hidden_states[perm]
-
-    # Select expert weights and biases for selected samples
-    # NOTE: We keep all experts here and rely on offsets to target the active ones.
-    # I have already implemented a version that only passes the active experts, but
-    # to do so I had to use torch.unique which breaks the graph capture (data-dependent).
-    # Also there were no speedup gains from it in my experiments, even in eager mode.
-    selected_gate_up = self.gate_up_proj
-    selected_down = self.down_proj
-    selected_gate_up_bias = self.gate_up_proj_bias[expert_ids_g] if self.has_bias else None
-    selected_down_bias = self.down_proj_bias[expert_ids_g] if self.has_bias else None
+    selected_hidden_states_g = hidden_states[token_idx[perm]]
 
     # Compute offsets for grouped_mm
     # using histc instead of bincount to avoid cuda graph issues
     # With deterministic algorithms, CPU only supports float input, CUDA only supports int input.
     histc_input = expert_ids_g.float() if device.type == "cpu" else expert_ids_g.int()
-    num_tokens_per_expert = torch.histc(histc_input, bins=self.num_experts, min=0, max=self.num_experts - 1)
-    offsets = torch.cumsum(num_tokens_per_expert, dim=0, dtype=torch.int32)
+    tokens_per_expert = torch.histc(histc_input, bins=self.num_experts, min=0, max=self.num_experts - 1)
+    offsets = torch.cumsum(tokens_per_expert, dim=0, dtype=torch.int32)
+
+    # Select expert weights and biases
+    # NOTE: We keep all experts here and rely on offsets to target the active ones.
+    # I have already implemented a version that only passes the active experts, but
+    # to do so I had to use torch.unique which breaks the graph capture (data-dependent).
+    # Also there were no speedup gains from it in my experiments, even in eager mode.
+    if self.has_gate:
+        selected_weights = self.gate_up_proj
+        selected_biases = self.gate_up_proj_bias[expert_ids_g] if self.has_bias else None
+    else:
+        selected_weights = self.up_proj
+        selected_biases = self.up_proj_bias[expert_ids_g] if self.has_bias else None
 
     # --- Up projection per expert (grouped) ---
-    gate_up_out = _grouped_linear(
-        selected_hidden_states_g,
-        selected_gate_up,
-        offs=offsets,
-        bias=selected_gate_up_bias,
-        is_transposed=self.is_transposed,
-    )  # (S, 2 * intermediate_dim)
+    proj_out = _grouped_linear(
+        selected_hidden_states_g, selected_weights, offsets, bias=selected_biases, is_transposed=self.is_transposed
+    )  # (S, 2 * intermediate_dim) or  (S, intermediate_dim) depending on whether we have gating
 
-    # Apply gating
-    gated_out = self._apply_gate(gate_up_out)  # (S, intermediate_dim)
+    # Apply gating or activation
+    if self.has_gate:
+        # for gated experts we apply the custom/default gating mechanism
+        proj_out = self._apply_gate(proj_out)  # (S, intermediate_dim)
+    else:
+        # for non-gated experts we just apply the activation function
+        proj_out = self.act_fn(proj_out)  # (S, intermediate_dim)
+
+    # Select down projection weights and biases
+    selected_weights = self.down_proj
+    selected_biases = self.down_proj_bias[expert_ids_g] if self.has_bias else None
 
     # --- Down projection per expert (grouped) ---
-    out_per_sample_g = _grouped_linear(
-        gated_out,
-        selected_down,
-        offs=offsets,
-        bias=selected_down_bias,
-        is_transposed=self.is_transposed,
+    proj_out = _grouped_linear(
+        proj_out, selected_weights, offsets, bias=selected_biases, is_transposed=self.is_transposed
     )  # (S, hidden_dim)
 
     # Apply routing weights
-    out_per_sample_g = out_per_sample_g * sample_weights_g.unsqueeze(-1)  # (S, hidden_dim)
+    weighted_out = proj_out * sample_weights_g.unsqueeze(-1)  # (S, hidden_dim)
 
     # Restore original order
-    out_per_sample = out_per_sample_g[inv_perm]
+    weighted_out = weighted_out[inv_perm]  # (S, hidden_dim)
 
     # Accumulate results using deterministic reshape+sum instead of index_add_
-    # (index_add_ with duplicate indices is non-deterministic on CUDA due to atomicAdd)
-    final_hidden_states = out_per_sample.view(num_tokens, num_top_k, hidden_dim).sum(dim=1)
+    # index_add_ with duplicate indices is non-deterministic on CUDA due to atomicAdd
+    # index_add_ accumulates in-place using the dtype of the output tensor (fp16/bf16)
+    # reshape+sum accumulates in fp32 which is more stable for low precision training/inference.
+    final_hidden_states = weighted_out.view(num_tokens, num_top_k, hidden_dim).sum(dim=1)
 
     return final_hidden_states.to(hidden_states.dtype)
 
 
 class ExpertsInterface(GeneralInterface):
-    """Interface for registering custom experts implementations."""
+    """Interface for registering custom experts forward functions."""
 
     _global_mapping = {
         "batched_mm": batched_mm_experts_forward,
@@ -410,13 +489,20 @@ def _default_apply_gate(self, gate_up_out: torch.Tensor) -> torch.Tensor:
 
 
 def use_experts_implementation(
-    experts_class: type[torch.nn.Module] | None = None, *, is_transposed: bool = False, has_bias: bool = False
+    experts_class: type[torch.nn.Module] | None = None,
+    *,
+    experts_interface: ExpertsInterface = ALL_EXPERTS_FUNCTIONS,
+    is_transposed: bool = False,
+    has_bias: bool = False,
+    has_gate: bool = True,
 ) -> type[torch.nn.Module]:
     """Decorator to modify experts class to support different experts implementations.
 
     Args:
         experts_class (`type[torch.nn.Module]`, *optional*):
             The experts class to modify. If not provided, returns a decorator that can be applied to the class.
+        experts_interface (`ExpertsInterface`, *optional*, defaults to `ALL_EXPERTS_FUNCTIONS`):
+            The experts interface to use for dispatching the forward method.
         is_transposed (`bool`, *optional*, defaults to `False`):
             Whether the expert weights are stored in transposed format.
         has_bias (`bool`, *optional*, defaults to `False`):
@@ -434,18 +520,18 @@ def use_experts_implementation(
         def __init__(self, config, *args, **kwargs):
             original_init(self, config, *args, **kwargs)
             self.config = config
+            self.has_gate = has_gate
             self.has_bias = has_bias
             self.is_transposed = is_transposed
 
         @wraps(original_forward)
         def forward(self, *args, **kwargs):
-            experts_forward = ALL_EXPERTS_FUNCTIONS.get_interface(
-                self.config._experts_implementation, original_forward
-            )
+            experts_forward = experts_interface.get_interface(self.config._experts_implementation, original_forward)
             return experts_forward(self, *args, **kwargs)
 
         if not hasattr(experts_class, "_apply_gate"):
             experts_class._apply_gate = _default_apply_gate
+
         experts_class.__init__ = __init__
         experts_class.forward = forward
         return experts_class

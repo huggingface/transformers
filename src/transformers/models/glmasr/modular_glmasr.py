@@ -117,11 +117,11 @@ class GlmAsrProcessor(AudioFlamingo3Processor):
                 Custom prompt(s) to include in the user turn. A list must be the same length as the batch. When `None`,
                 each sample uses `"Transcribe the input speech."`.
             **kwargs:
-                Additional keyword arguments forwarded to [`~AudioFlamingo3Processor.apply_chat_template`] (for example
+                Additional keyword arguments forwarded to [`~GlmAsrProcessor.apply_chat_template`] (for example
                 `text_kwargs`, `audio_kwargs`, ...).
 
         Returns:
-            [`BatchFeature`]: Processor outputs ready to be passed to [`AudioFlamingo3ForConditionalGeneration.generate`].
+            [`BatchFeature`]: Processor outputs ready to be passed to [`GlmAsrForConditionalGeneration.generate`].
 
         """
 
@@ -396,7 +396,6 @@ class GlmAsrForConditionalGeneration(AudioFlamingo3ForConditionalGeneration):
         inputs_embeds: torch.FloatTensor | None = None,
         labels: torch.LongTensor | None = None,
         use_cache: bool | None = None,
-        cache_position: torch.LongTensor | None = None,
         logits_to_keep: int | torch.Tensor = 0,
         **kwargs: Unpack[TransformersKwargs],
     ) -> CausalLMOutputWithPast:
@@ -436,7 +435,6 @@ class GlmAsrForConditionalGeneration(AudioFlamingo3ForConditionalGeneration):
             inputs_embeds=inputs_embeds,
             labels=labels,
             use_cache=use_cache,
-            cache_position=cache_position,
             logits_to_keep=logits_to_keep,
             **kwargs,
         )

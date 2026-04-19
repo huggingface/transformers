@@ -95,8 +95,8 @@ If you are interested in submitting a resource to be included here, please feel 
     - preprocess
     - post_process_depth_estimation
 
-## PromptDepthAnythingImageProcessorFast
+## PromptDepthAnythingImageProcessorPil
 
-[[autodoc]] PromptDepthAnythingImageProcessorFast
+[[autodoc]] PromptDepthAnythingImageProcessorPil
     - preprocess
     - post_process_depth_estimation

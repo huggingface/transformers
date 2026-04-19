@@ -450,11 +450,7 @@ class MT5ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
     pipeline_model_mapping = (
         {
             "feature-extraction": MT5Model,
-            "question-answering": MT5ForQuestionAnswering,
-            "summarization": MT5ForConditionalGeneration,
             "text-classification": MT5ForSequenceClassification,
-            "text2text-generation": MT5ForConditionalGeneration,
-            "translation": MT5ForConditionalGeneration,
             "zero-shot": MT5ForSequenceClassification,
         }
         if is_torch_available()
@@ -526,6 +522,11 @@ class MT5ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
 
     def test_config(self):
         self.config_tester.run_common_tests()
+
+    def test_tie_word_embeddings(self):
+        # Force it to True, see https://github.com/huggingface/transformers/pull/43880
+        config = MT5Config(tie_word_embeddings=False)
+        self.assertTrue(config.tie_word_embeddings)
 
     def test_shift_right(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()

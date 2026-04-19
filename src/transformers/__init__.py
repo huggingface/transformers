@@ -18,7 +18,7 @@
 # to defer the actual importing for when the objects are requested. This way `import transformers` provides the names
 # in the namespace without actually importing anything (and especially none of the backends).
 
-__version__ = "5.3.0.dev0"
+__version__ = "5.6.0.dev0"
 
 import importlib
 import sys
@@ -111,6 +111,7 @@ _import_structure = {
     "generation": [
         "AsyncTextIteratorStreamer",
         "CompileConfig",
+        "ContinuousBatchingConfig",
         "GenerationConfig",
         "TextIteratorStreamer",
         "TextStreamer",
@@ -118,6 +119,7 @@ _import_structure = {
     ],
     "hf_argparser": ["HfArgumentParser"],
     "hyperparameter_search": [],
+    "image_processing_utils_fast": [],
     "image_transforms": [],
     "integrations": [
         "is_clearml_available",
@@ -146,7 +148,6 @@ _import_structure = {
         "ImageFeatureExtractionPipeline",
         "ImageSegmentationPipeline",
         "ImageTextToTextPipeline",
-        "ImageToImagePipeline",
         "JsonPipelineDataFormat",
         "KeypointMatchingPipeline",
         "MaskGenerationPipeline",
@@ -155,21 +156,26 @@ _import_structure = {
         "PipedPipelineDataFormat",
         "Pipeline",
         "PipelineDataFormat",
-        "QuestionAnsweringPipeline",
         "TableQuestionAnsweringPipeline",
         "TextClassificationPipeline",
         "TextGenerationPipeline",
         "TextToAudioPipeline",
         "TokenClassificationPipeline",
         "VideoClassificationPipeline",
-        "VisualQuestionAnsweringPipeline",
         "ZeroShotAudioClassificationPipeline",
         "ZeroShotClassificationPipeline",
         "ZeroShotImageClassificationPipeline",
         "ZeroShotObjectDetectionPipeline",
         "pipeline",
     ],
-    "processing_utils": ["ProcessorMixin"],
+    "processing_utils": [
+        "AudioKwargs",
+        "ImagesKwargs",
+        "ProcessingKwargs",
+        "ProcessorMixin",
+        "TextKwargs",
+        "VideosKwargs",
+    ],
     "quantizers": [],
     "testing_utils": [],
     "tokenization_python": ["PreTrainedTokenizer", "PythonBackend"],
@@ -251,10 +257,12 @@ _import_structure = {
         "EetqConfig",
         "FbgemmFp8Config",
         "FineGrainedFP8Config",
+        "FourOverSixConfig",
         "FPQuantConfig",
         "GPTQConfig",
         "HiggsConfig",
         "HqqConfig",
+        "MetalConfig",
         "Mxfp4Config",
         "QuantoConfig",
         "QuarkConfig",
@@ -322,6 +330,7 @@ except OptionalDependencyNotAvailable:
         name for name in dir(dummy_vision_objects) if not name.startswith("_")
     ]
 else:
+    _import_structure["image_processing_backends"] = ["PilBackend"]
     _import_structure["image_processing_base"] = ["ImageProcessingMixin"]
     _import_structure["image_processing_utils"] = ["BaseImageProcessor"]
     _import_structure["image_utils"] = ["ImageFeatureExtractionMixin"]
@@ -336,7 +345,8 @@ except OptionalDependencyNotAvailable:
         name for name in dir(dummy_torchvision_objects) if not name.startswith("_")
     ]
 else:
-    _import_structure["image_processing_utils_fast"] = ["BaseImageProcessorFast"]
+    _import_structure.setdefault("image_processing_backends", [])
+    _import_structure["image_processing_backends"] += ["TorchvisionBackend"]
     _import_structure["video_processing_utils"] = ["BaseVideoProcessor"]
 
 # PyTorch-backed objects
@@ -452,12 +462,14 @@ else:
         "get_cosine_with_hard_restarts_schedule_with_warmup",
         "get_cosine_with_min_lr_schedule_with_warmup",
         "get_cosine_with_min_lr_schedule_with_warmup_lr_rate",
+        "get_greedy_schedule",
         "get_inverse_sqrt_schedule",
         "get_linear_schedule_with_warmup",
         "get_polynomial_decay_schedule_with_warmup",
+        "get_reduce_on_plateau_schedule",
         "get_scheduler",
         "get_wsd_schedule",
-        "get_reduce_on_plateau_schedule",
+        "GreedyLR",
     ]
     _import_structure["pytorch_utils"] = ["Conv1D", "apply_chunking_to_forward"]
     _import_structure["time_series_utils"] = []
@@ -543,6 +555,7 @@ if TYPE_CHECKING:
     from .generation import BayesianDetectorModel as BayesianDetectorModel
     from .generation import ClassifierFreeGuidanceLogitsProcessor as ClassifierFreeGuidanceLogitsProcessor
     from .generation import CompileConfig as CompileConfig
+    from .generation import ContinuousBatchingConfig as ContinuousBatchingConfig
     from .generation import ContinuousBatchingManager as ContinuousBatchingManager
     from .generation import ContinuousMixin as ContinuousMixin
     from .generation import EncoderNoRepeatNGramLogitsProcessor as EncoderNoRepeatNGramLogitsProcessor
@@ -592,9 +605,10 @@ if TYPE_CHECKING:
     from .generation import WatermarkLogitsProcessor as WatermarkLogitsProcessor
     from .generation import WhisperTimeStampLogitsProcessor as WhisperTimeStampLogitsProcessor
     from .hf_argparser import HfArgumentParser as HfArgumentParser
+    from .image_processing_backends import PilBackend as PilBackend
+    from .image_processing_backends import TorchvisionBackend as TorchvisionBackend
     from .image_processing_base import ImageProcessingMixin as ImageProcessingMixin
     from .image_processing_utils import BaseImageProcessor as BaseImageProcessor
-    from .image_processing_utils_fast import BaseImageProcessorFast as BaseImageProcessorFast
     from .image_utils import ImageFeatureExtractionMixin as ImageFeatureExtractionMixin
 
     # Integrations
@@ -620,11 +634,11 @@ if TYPE_CHECKING:
     from .modeling_utils import AttentionInterface as AttentionInterface
     from .modeling_utils import PreTrainedModel as PreTrainedModel
     from .models import *
-    from .models.mamba.modeling_mamba import MambaCache as MambaCache
     from .models.timm_wrapper import TimmWrapperImageProcessor as TimmWrapperImageProcessor
 
     # Optimization
     from .optimization import Adafactor as Adafactor
+    from .optimization import GreedyLR as GreedyLR
     from .optimization import get_constant_schedule as get_constant_schedule
     from .optimization import get_constant_schedule_with_warmup as get_constant_schedule_with_warmup
     from .optimization import get_cosine_schedule_with_warmup as get_cosine_schedule_with_warmup
@@ -637,6 +651,7 @@ if TYPE_CHECKING:
     from .optimization import (
         get_cosine_with_min_lr_schedule_with_warmup_lr_rate as get_cosine_with_min_lr_schedule_with_warmup_lr_rate,
     )
+    from .optimization import get_greedy_schedule as get_greedy_schedule
     from .optimization import get_inverse_sqrt_schedule as get_inverse_sqrt_schedule
     from .optimization import get_linear_schedule_with_warmup as get_linear_schedule_with_warmup
     from .optimization import get_polynomial_decay_schedule_with_warmup as get_polynomial_decay_schedule_with_warmup
@@ -656,7 +671,6 @@ if TYPE_CHECKING:
     from .pipelines import ImageFeatureExtractionPipeline as ImageFeatureExtractionPipeline
     from .pipelines import ImageSegmentationPipeline as ImageSegmentationPipeline
     from .pipelines import ImageTextToTextPipeline as ImageTextToTextPipeline
-    from .pipelines import ImageToImagePipeline as ImageToImagePipeline
     from .pipelines import JsonPipelineDataFormat as JsonPipelineDataFormat
     from .pipelines import KeypointMatchingPipeline as KeypointMatchingPipeline
     from .pipelines import MaskGenerationPipeline as MaskGenerationPipeline
@@ -665,20 +679,23 @@ if TYPE_CHECKING:
     from .pipelines import PipedPipelineDataFormat as PipedPipelineDataFormat
     from .pipelines import Pipeline as Pipeline
     from .pipelines import PipelineDataFormat as PipelineDataFormat
-    from .pipelines import QuestionAnsweringPipeline as QuestionAnsweringPipeline
     from .pipelines import TableQuestionAnsweringPipeline as TableQuestionAnsweringPipeline
     from .pipelines import TextClassificationPipeline as TextClassificationPipeline
     from .pipelines import TextGenerationPipeline as TextGenerationPipeline
     from .pipelines import TextToAudioPipeline as TextToAudioPipeline
     from .pipelines import TokenClassificationPipeline as TokenClassificationPipeline
     from .pipelines import VideoClassificationPipeline as VideoClassificationPipeline
-    from .pipelines import VisualQuestionAnsweringPipeline as VisualQuestionAnsweringPipeline
     from .pipelines import ZeroShotAudioClassificationPipeline as ZeroShotAudioClassificationPipeline
     from .pipelines import ZeroShotClassificationPipeline as ZeroShotClassificationPipeline
     from .pipelines import ZeroShotImageClassificationPipeline as ZeroShotImageClassificationPipeline
     from .pipelines import ZeroShotObjectDetectionPipeline as ZeroShotObjectDetectionPipeline
     from .pipelines import pipeline as pipeline
+    from .processing_utils import AudioKwargs as AudioKwargs
+    from .processing_utils import ImagesKwargs as ImagesKwargs
+    from .processing_utils import ProcessingKwargs as ProcessingKwargs
     from .processing_utils import ProcessorMixin as ProcessorMixin
+    from .processing_utils import TextKwargs as TextKwargs
+    from .processing_utils import VideosKwargs as VideosKwargs
     from .pytorch_utils import Conv1D as Conv1D
     from .pytorch_utils import apply_chunking_to_forward as apply_chunking_to_forward
 
@@ -756,10 +773,12 @@ if TYPE_CHECKING:
     from .utils.quantization_config import EetqConfig as EetqConfig
     from .utils.quantization_config import FbgemmFp8Config as FbgemmFp8Config
     from .utils.quantization_config import FineGrainedFP8Config as FineGrainedFP8Config
+    from .utils.quantization_config import FourOverSixConfig as FourOverSixConfig
     from .utils.quantization_config import FPQuantConfig as FPQuantConfig
     from .utils.quantization_config import GPTQConfig as GPTQConfig
     from .utils.quantization_config import HiggsConfig as HiggsConfig
     from .utils.quantization_config import HqqConfig as HqqConfig
+    from .utils.quantization_config import MetalConfig as MetalConfig
     from .utils.quantization_config import QuantoConfig as QuantoConfig
     from .utils.quantization_config import QuarkConfig as QuarkConfig
     from .utils.quantization_config import SinqConfig as SinqConfig
@@ -781,13 +800,15 @@ else:
         extra_objects={"__version__": __version__},
     )
 
-    def _create_tokenization_alias(alias: str, target: str) -> None:
+    def _create_module_alias(alias: str, target: str) -> None:
         """
-        Lazily redirect legacy tokenization module paths to their replacements without importing heavy deps.
+        Lazily redirect legacy module paths to their replacements without importing heavy deps.
         """
-
         module = types.ModuleType(alias)
         module.__doc__ = f"Alias module for backward compatibility with `{target}`."
+        # Set __file__ explicitly so that inspect.py's hasattr(module, '__file__') check
+        # never falls through to __getattr__ and triggers a premature (possibly circular) import.
+        module.__file__ = None
 
         def _get_target():
             return importlib.import_module(target, __name__)
@@ -798,9 +819,32 @@ else:
         sys.modules[alias] = module
         setattr(sys.modules[__name__], alias.rsplit(".", 1)[-1], module)
 
-    _create_tokenization_alias(f"{__name__}.tokenization_utils_fast", ".tokenization_utils_tokenizers")
-    _create_tokenization_alias(f"{__name__}.tokenization_utils", ".tokenization_utils_sentencepiece")
+    _create_module_alias(f"{__name__}.tokenization_utils_fast", ".tokenization_utils_tokenizers")
+    _create_module_alias(f"{__name__}.tokenization_utils", ".tokenization_utils_sentencepiece")
+    _create_module_alias(f"{__name__}.image_processing_utils_fast", ".image_processing_backends")
 
+    for _proc_file in sorted((Path(__file__).parent / "models").rglob("image_processing_*.py")):
+        _model = _proc_file.parent.name
+        _module = _proc_file.stem
+        _target = f".models.{_model}.{_module}"
+        _create_module_alias(f"{__name__}.models.{_model}.{_module}_fast", _target)
+
+        # Also map XImageProcessorFast -> XImageProcessor for backward compat with old class names.
+        def getattr_factory(target):
+            def _getattr(name):
+                new_name = name.removesuffix("Fast")
+                logger.warning(
+                    "Accessing `%s` from `%s`. Returning `%s` instead. Behavior may be "
+                    "different and this alias will be removed in future versions.",
+                    name,
+                    target,
+                    new_name,
+                )
+                return getattr(importlib.import_module(target, __name__), new_name)
+
+            return _getattr
+
+        sys.modules[f"{__name__}.models.{_model}.{_module}_fast"].__getattr__ = getattr_factory(_target)
 
 if not is_torch_available():
     logger.warning_advice(
