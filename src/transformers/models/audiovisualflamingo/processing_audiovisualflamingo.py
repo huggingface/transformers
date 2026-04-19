@@ -231,7 +231,9 @@ def _pad_or_trim_audio(audio: np.ndarray, length: int) -> np.ndarray:
 
 
 def _resolve_sound_feature_size(config) -> int:
-    sound_tower_cfg = getattr(config, "sound_tower_cfg", None)
+    sound_tower_cfg = getattr(config, "audio_config", None)
+    if sound_tower_cfg is None:
+        sound_tower_cfg = getattr(config, "sound_tower_cfg", None)
     if isinstance(sound_tower_cfg, dict):
         feature_size = sound_tower_cfg.get("num_mel_bins")
     else:

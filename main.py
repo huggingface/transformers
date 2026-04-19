@@ -1,16 +1,19 @@
 from transformers import AutoModel, AutoProcessor
 
 
-model_path = "SreyanG-NVIDIA/audiovisualflamingo-hf"
+model_path = "nvidia/audio-visual-flamingo-hf"
+runtime_kwargs = {
+    "load_audio_in_video": True,
+    "num_video_frames": 128,
+    "audio_chunk_length": "max_3600",
+}
 
 model = AutoModel.from_pretrained(
     model_path,
     device_map="auto",
-    load_audio_in_video=True,
-    num_video_frames=128,
-    audio_chunk_length="max_3600",
+    **runtime_kwargs,
 ).eval()
-processor = AutoProcessor.from_pretrained(model_path, padding_side="left", use_fast=False)
+processor = AutoProcessor.from_pretrained(model_path, padding_side="left", use_fast=False, **runtime_kwargs)
 
 conversation = [
     {

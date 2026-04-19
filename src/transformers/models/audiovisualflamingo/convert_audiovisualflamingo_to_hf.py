@@ -262,10 +262,10 @@ def _build_config(src_root: Path, tokenizer) -> AudioVisualFlamingoConfig:
     avf_kwargs = {k: top_cfg[k] for k in AVF_CONFIG_FIELDS if k in top_cfg}
 
     config = AudioVisualFlamingoConfig(
-        llm_cfg=llm_cfg,
-        vision_tower_cfg=vision_tower_cfg,
+        text_config=llm_cfg,
+        vision_config=vision_tower_cfg,
         mm_projector_cfg=mm_projector_cfg,
-        sound_tower_cfg=sound_tower_cfg,
+        audio_config=sound_tower_cfg,
         sound_mm_projector_cfg=sound_mm_projector_cfg,
         **avf_kwargs,
     )
