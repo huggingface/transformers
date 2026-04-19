@@ -20,7 +20,6 @@
 
 import itertools
 
-import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -62,20 +61,20 @@ logger = logging.get_logger(__name__)
 
 
 @auto_docstring(checkpoint="Qwen/Qwen2-VL-7B-Instruct")
-@strict(accept_kwargs=True)
+@strict
 class Qwen2_5_VLVisionConfig(PreTrainedConfig):
     r"""
     tokens_per_second (`int`, *optional*, defaults to 41):
         Number of tokens to merge for each second of video.
-    fullatt_block_indexes (`int`, *optional*, defaults to `[7, 15, 23, 31]`):
-        Indices of layers with full attention
-    out_hidden_size (`int`, *optional*, defaults to 3584):
-        The output hidden size of the vision model.
     window_size (`int`, *optional*, defaults to 11):
         Size of windows.
+    out_hidden_size (`int`, *optional*, defaults to 3584):
+        The output hidden size of the vision model.
+    fullatt_block_indexes (`int`, *optional*, defaults to `[7, 15, 23, 31]`):
+        Indices of layers with full attention
     """
 
-    model_type = "qwen2_5_vl"
+    model_type = "qwen2_5_vl_vision"
     base_config_key = "vision_config"
 
     depth: int = 32
@@ -469,7 +468,12 @@ class Qwen2_5_VLModel(Qwen2VLModel):
                 # image == 1, video == 2
                 else:
                     grid_thw = next(grid_iters[modality_type])
-                    time_interval = tokens_per_second * int(next(second_per_grid_ts))
+                    # Only apply temporal scaling for videos; still images have no
+                    # temporal dimension to space out (fixes #45325).
+                    if modality_type == 2:
+                        time_interval = tokens_per_second * int(next(second_per_grid_ts))
+                    else:
+                        time_interval = 1
                     vision_position_ids = self.get_vision_position_ids(
                         current_pos, grid_thw, 1, spatial_merge_size, time_interval, device=input_ids.device
                     )
@@ -875,12 +879,7 @@ class Qwen2_5_VLProcessor(Qwen2VLProcessor):
         self._check_special_mm_tokens(text, text_inputs, modalities=["image", "video"])
 
         if return_mm_token_type_ids:
-            array_ids = np.array(text_inputs["input_ids"])
-            mm_token_type_ids = np.zeros_like(text_inputs["input_ids"])
-            mm_token_type_ids[array_ids == self.image_token_id] = 1
-            mm_token_type_ids[array_ids == self.video_token_id] = 2
-            text_inputs["mm_token_type_ids"] = mm_token_type_ids.tolist()
-
+            text_inputs["mm_token_type_ids"] = self.create_mm_token_type_ids(text_inputs["input_ids"])
         return BatchFeature(data={**text_inputs, **image_inputs, **videos_inputs}, tensor_type=return_tensors)
 
     def _get_num_multimodal_tokens(self, image_sizes=None, video_sizes=None, **kwargs):
@@ -924,6 +923,7 @@ class Qwen2_5_VLProcessor(Qwen2VLProcessor):
 
 __all__ = [
     "Qwen2_5_VLConfig",
+    "Qwen2_5_VLVisionConfig",
     "Qwen2_5_VLTextConfig",
     "Qwen2_5_VLForConditionalGeneration",
     "Qwen2_5_VLModel",

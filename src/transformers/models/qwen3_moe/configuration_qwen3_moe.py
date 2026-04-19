@@ -21,7 +21,7 @@ from ...utils import auto_docstring
 
 
 @auto_docstring(checkpoint="Qwen/Qwen3-30B-A3B-Base")
-@strict(accept_kwargs=True)
+@strict
 class Qwen3MoeConfig(PreTrainedConfig):
     r"""
     decoder_sparse_step (`int`, *optional*, defaults to 1):
@@ -42,7 +42,8 @@ class Qwen3MoeConfig(PreTrainedConfig):
 
     >>> # Accessing the model configuration
     >>> configuration = model.config
-    ```"""
+    ```
+    """
 
     model_type = "qwen3_moe"
     keys_to_ignore_at_inference = ["past_key_values"]

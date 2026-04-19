@@ -20,7 +20,7 @@ from ...utils import auto_docstring
 
 
 @auto_docstring(checkpoint="dg845/univnet-dev")
-@strict(accept_kwargs=True)
+@strict
 class UnivNetConfig(PreTrainedConfig):
     r"""
     model_in_channels (`int`, *optional*, defaults to 64):
@@ -53,8 +53,6 @@ class UnivNetConfig(PreTrainedConfig):
         The kernel size of each 1D convolutional layer in the kernel predictor network.
     kernel_predictor_dropout (`float`, *optional*, defaults to 0.0):
         The dropout probability for each residual block in the kernel predictor network.
-    initializer_range (`float`, *optional*, defaults to 0.01):
-        The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
     leaky_relu_slope (`float`, *optional*, defaults to 0.2):
         The angle of the negative slope used by the leaky ReLU activation.
 

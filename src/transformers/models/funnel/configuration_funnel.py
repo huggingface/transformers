@@ -20,7 +20,7 @@ from ...utils import auto_docstring
 
 
 @auto_docstring(checkpoint="funnel-transformer/small")
-@strict(accept_kwargs=True)
+@strict
 class FunnelConfig(PreTrainedConfig):
     r"""
     block_sizes (`list[int]`, *optional*, defaults to `[4, 4, 4]`):

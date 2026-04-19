@@ -20,7 +20,7 @@ from ...utils import auto_docstring
 
 
 @auto_docstring(checkpoint="deepmind/language-perceiver")
-@strict(accept_kwargs=True)
+@strict
 class PerceiverConfig(PreTrainedConfig):
     r"""
     num_latents (`int`, *optional*, defaults to 256):
@@ -64,8 +64,6 @@ class PerceiverConfig(PreTrainedConfig):
         autoencoding model. This excludes the channel dimension.
     output_num_channels (`int`, *optional*, defaults to 512):
         Number of output channels for each modalitiy decoder.
-    _label_trainable_num_channels (`int`, *optional*, defaults to 1024):
-        NNumber of channels in the trainable label.
 
     Example:
 
@@ -97,7 +95,7 @@ class PerceiverConfig(PreTrainedConfig):
     self_attention_widening_factor: int = 1
     cross_attention_widening_factor: int = 1
     hidden_act: str = "gelu"
-    attention_probs_dropout_prob: float = 0.1
+    attention_probs_dropout_prob: float | int = 0.1
     initializer_range: float = 0.02
     layer_norm_eps: float = 1e-12
     use_query_residual: bool = True

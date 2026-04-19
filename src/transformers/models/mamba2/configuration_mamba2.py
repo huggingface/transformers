@@ -22,9 +22,9 @@ from ...utils import auto_docstring
 
 
 @auto_docstring(checkpoint="state-spaces/mamba2-2.8b")
-@strict(accept_kwargs=True)
+@strict
 class Mamba2Config(PreTrainedConfig):
-    """
+    r"""
     layer_norm_epsilon (`float`, *optional*, defaults to 1e-05):
         The epsilon to use in the layer normalization layers..
     expand (`int`, *optional*, defaults to 2):
@@ -102,6 +102,10 @@ class Mamba2Config(PreTrainedConfig):
                 f"({self.hidden_size * self.expand}) must equal num_heads * head_dim "
                 f"({self.num_heads * self.head_dim})."
             )
+
+    @property
+    def layer_types(self):
+        return ["mamba"] * self.num_hidden_layers
 
 
 __all__ = ["Mamba2Config"]

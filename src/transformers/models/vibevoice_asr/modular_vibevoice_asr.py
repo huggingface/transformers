@@ -16,7 +16,7 @@ from huggingface_hub.dataclasses import strict
 from torch import nn
 
 from ...cache_utils import Cache
-from ...configuration_utils import PretrainedConfig
+from ...configuration_utils import PreTrainedConfig
 from ...modeling_outputs import BaseModelOutputWithPooling, CausalLMOutputWithPast
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
@@ -32,8 +32,8 @@ logger = logging.get_logger(__name__)
 
 
 @auto_docstring(checkpoint="microsoft/VibeVoice-ASR-HF")
-@strict(accept_kwargs=True)
-class VibeVoiceAsrConfig(PretrainedConfig):
+@strict
+class VibeVoiceAsrConfig(PreTrainedConfig):
     r"""
     acoustic_tokenizer_encoder_config (`Union[VibeVoiceAcousticTokenizerConfig, dict]`, *optional*):
         The config object or dictionary of the acoustic tokenizer. This tokenizer extracts acoustic features from audio.
@@ -75,9 +75,9 @@ class VibeVoiceAsrConfig(PretrainedConfig):
         "text_config": AutoConfig,
     }
 
-    acoustic_tokenizer_encoder_config: dict | PretrainedConfig | None = None
-    semantic_tokenizer_encoder_config: dict | PretrainedConfig | None = None
-    text_config: dict | PretrainedConfig | None = None
+    acoustic_tokenizer_encoder_config: dict | PreTrainedConfig | None = None
+    semantic_tokenizer_encoder_config: dict | PreTrainedConfig | None = None
+    text_config: dict | PreTrainedConfig | None = None
     audio_token_id: int = 151648
     audio_bos_token_id: int = 151646
     audio_eos_token_id: int = 151647

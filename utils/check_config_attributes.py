@@ -20,6 +20,16 @@ from transformers.configuration_utils import PreTrainedConfig
 from transformers.utils import direct_transformers_import
 
 
+CHECKER_CONFIG = {
+    "name": "config_attributes",
+    "label": "Config attributes",
+    # Approximate: iterates CONFIG_MAPPING at runtime and also reads modeling_*.py files
+    # in each config's directory via os.listdir(). Deprecated models are skipped.
+    "file_globs": ["src/transformers/models/**/configuration_*.py", "src/transformers/models/**/modeling_*.py"],
+    "check_args": [],
+    "fix_args": None,
+}
+
 # All paths are set with the intent you should run this script from the root of the repo with the command
 # python utils/check_config_docstrings.py
 PATH_TO_TRANSFORMERS = "src/transformers"
@@ -32,6 +42,7 @@ CONFIG_MAPPING = transformers.models.auto.configuration_auto.CONFIG_MAPPING
 
 # Usually of small list of allowed attrs, but can be True to allow all
 SPECIAL_CASES_TO_ALLOW = {
+    "NougatConfig": ["decoder", "encoder"],
     "PI0Config": ["vlm_projection_dim"],
     "EuroBertConfig": ["is_causal"],  # not used directly, allows causal-bidirectional switch
     "Ernie4_5_VL_MoeConfig": ["args"],  # BC Alias
@@ -73,6 +84,8 @@ SPECIAL_CASES_TO_ALLOW = {
     "AutoformerConfig": ["num_static_real_features", "num_time_features"],
     "SamVisionConfig": ["mlp_ratio"],
     "Sam3VisionConfig": ["backbone_feature_sizes"],
+    "Sam3LiteTextViTConfig": ["global_attn_indexes", "window_size"],
+    "Sam3LiteTextVisionConfig": ["fpn_hidden_size", "scale_factors"],
     "SamHQVisionConfig": ["mlp_ratio"],
     "ClapAudioConfig": ["num_classes"],
     "ClvpDecoderConfig": ["add_cross_attention"],
@@ -99,6 +112,7 @@ SPECIAL_CASES_TO_ALLOW = {
     "ConditionalDetrConfig": True,
     "DabDetrConfig": True,
     "SwitchTransformersConfig": True,
+    "MaskFormerDetrConfig": True,
     "DetrConfig": True,
     "DFineConfig": True,
     "GroundingDinoConfig": True,
@@ -146,6 +160,8 @@ SPECIAL_CASES_TO_ALLOW = {
 # Common and important attributes, even if they do not always appear in the modeling files (can be a regex pattern)
 ATTRIBUTES_TO_ALLOW = (
     # Attr in base `PreTrainedConfig`
+    "transformers_version",
+    "architectures",
     "chunk_size_feed_forward",
     "dtype",
     "id2label",

@@ -26,7 +26,7 @@ from ...utils import auto_docstring
 
 
 @auto_docstring(checkpoint="tiiuae/falcon-mamba-7b")
-@strict(accept_kwargs=True)
+@strict
 class FalconMambaConfig(PreTrainedConfig):
     r"""
     expand (`int`, *optional*, defaults to 2):
@@ -44,13 +44,13 @@ class FalconMambaConfig(PreTrainedConfig):
     use_falcon_mambapy (`bool`, *optional*, defaults to `False`):
         This argument corresponds to `use_mambapy` in MambaConfig.
         Determines the fallback strategy during training if the CUDA-based official implementation of Mamba is not available. If `True`, the mamba.py implementation is used. If `False`, the naive and slower implementation is used. Consider switching to the naive version if memory is limited.
-    mixer_rms_eps (`float`, *optional*, defaults to 1e-06):
-        The RMS norm epsilon value that is used in the Mixer RMS norm for B, C and dt states.
     use_associative_scan (`bool`, *optional*, defaults to `True`):
         Whether to use PyTorch's `torch._higher_order_ops.associative_scan` for the parallel scan instead of the naive
         sequential implementation. The associative scan is only active during `torch.compile` tracing and
         requires torch >= 2.9.0. Both paths are tested to produce numerically identical results (see
         `test_associative_scan_matches_sequential`). Set to `False` to fall back to the sequential loop.
+    mixer_rms_eps (`float`, *optional*, defaults to 1e-06):
+        The RMS norm epsilon value that is used in the Mixer RMS norm for B, C and dt states.
 
     Example:
 
@@ -104,6 +104,10 @@ class FalconMambaConfig(PreTrainedConfig):
             math.ceil(self.hidden_size / 16) if self.time_step_rank == "auto" else self.time_step_rank
         )
         super().__post_init__(**kwargs)
+
+    @property
+    def layer_types(self):
+        return ["mamba"] * self.num_hidden_layers
 
 
 __all__ = ["FalconMambaConfig"]

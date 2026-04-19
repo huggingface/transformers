@@ -21,7 +21,7 @@ from ...utils import auto_docstring
 
 
 @auto_docstring(checkpoint="mistralai/Mistral-Small-4-119B-2603")
-@strict(accept_kwargs=True)
+@strict
 class Mistral4Config(PreTrainedConfig):
     r"""
     n_group (`int`, *optional*, defaults to 1):
@@ -126,24 +126,6 @@ class Mistral4Config(PreTrainedConfig):
         super().__post_init__(
             ignore_keys_at_rope_validation={"llama_4_scaling_beta", "max_position_embeddings"}, **kwargs
         )
-
-    def convert_rope_params_to_dict(self, ignore_keys_at_rope_validation: set | None = None, **kwargs):
-        rope_scaling = kwargs.pop("rope_scaling", None)
-        self.rope_parameters = rope_scaling or self.rope_parameters
-        self.rope_parameters = self.rope_parameters if self.rope_parameters is not None else {}
-
-        # Standardize and validate the correctness of rotary position embeddings parameters
-        self.rope_parameters.setdefault("rope_theta", kwargs.pop("rope_theta", self.default_theta))
-        self.standardize_rope_params()
-        if ignore_keys_at_rope_validation is not None:
-            self.ignore_keys_at_rope_validation = self.ignore_keys_at_rope_validation | ignore_keys_at_rope_validation
-        self.validate_rope()
-
-        # Convert to float because RoPE fn expect a float. Models on the hub were saved as int
-        for key in ["beta_fast", "beta_slow", "factor"]:
-            if key in self.rope_parameters:
-                self.rope_parameters[key] = float(self.rope_parameters[key])
-        return kwargs
 
 
 __all__ = ["Mistral4Config"]

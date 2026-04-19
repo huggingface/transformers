@@ -22,7 +22,7 @@ from ..auto import AutoConfig
 
 
 @auto_docstring(checkpoint="IDEA-Research/dab-detr-resnet-50")
-@strict(accept_kwargs=True)
+@strict
 class DabDetrConfig(PreTrainedConfig):
     r"""
     num_queries (`int`, *optional*, defaults to 300):
@@ -81,7 +81,7 @@ class DabDetrConfig(PreTrainedConfig):
     decoder_layers: int = 6
     decoder_ffn_dim: int = 2048
     decoder_attention_heads: int = 8
-    is_encoder_decoder: int = True
+    is_encoder_decoder: bool = True
     activation_function: str = "prelu"
     hidden_size: int = 256
     dropout: float | int = 0.1

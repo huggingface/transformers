@@ -24,8 +24,9 @@ from transformers.configuration_utils import PretrainedConfig
 from ...utils import get_available_devices
 from ...utils.metrics import traced
 from .cache import PagedAttentionCache
+from .cb_logits_processors import ContinuousBatchingLogitsProcessorList
 from .requests import TMP_TOKEN_ID, FutureRequestState, logger
-from .utils import CudaGraphBuffer, aligned_divide, attn_mask_is_needed, build_attention_mask
+from .utils import CudaGraphBuffer, aligned_divide, attn_mask_is_needed, build_attention_mask, pad_to_pow2
 
 
 @dataclass
@@ -48,6 +49,7 @@ class PagedAttentionArgs:
         cache: The [`PagedAttentionCache`] instance managing the KV cache.
         block_table: Block table for paged KV cache. If provided, uses `flash_attn_with_kvcache` for fused attention +
             cache update. More information in src/transformers/integrations/flash_paged.py
+        logits_processor_args: List of tensors containing the arguments for the logits processors, one per request.
         use_cache: Whether to use caching (always `False` in continuous batching as the cache is managed externally).
     """
 
@@ -63,6 +65,7 @@ class PagedAttentionArgs:
     logits_indices: torch.Tensor
     cache: PagedAttentionCache
     block_table: torch.Tensor | None
+    logits_processor_args: torch.Tensor
     use_cache: bool = False
 
     def asdict(self) -> dict[str, Any]:
@@ -79,6 +82,7 @@ class PagedAttentionArgs:
             "logits_indices": self.logits_indices,
             "cache": self.cache,
             "block_table": self.block_table,
+            "logits_processor_args": self.logits_processor_args,
             "use_cache": self.use_cache,
         }
 
@@ -89,13 +93,18 @@ class ContinuousBatchingIOs:
     batch alone.
     """
 
+    static_inputs: int = 7  # Number of static inputs always present in the bulk tensor
+
     def __init__(
         self,
         cache: PagedAttentionCache,
         config: PretrainedConfig,
         device: torch.device,
         model_dtype: torch.dtype,
-        max_graphs: int = 32,
+        max_graphs: int,
+        return_logprobs: bool,
+        logit_processor: ContinuousBatchingLogitsProcessorList,
+        use_cuda_graph_varlen: bool = False,
     ) -> None:
         """Initialize the continuous batching I/O manager. Args:
         - cache: The [`PagedAttentionCache`] instance managing the KV cache. Meant to be unique.
@@ -103,13 +112,18 @@ class ContinuousBatchingIOs:
         - device: The device to allocate tensors on. If the device is CPU, then the memory is pinned.
         - model_dtype: The data type for model computations.
         - max_graphs: Maximum number of CUDA graphs to cache. Uses LRU eviction when full.
+        - return_logprobs: Whether to return log probabilities along with the token IDs.
+        - logit_processor: The [`ContinuousBatchingLogitsProcessorList`] object used to process the logits.
+        - use_cuda_graph_varlen: Whether CUDA graphs are enabled for the varlen (prefill) path.
         """
         # Memoize attributes
         self.cache = cache
         self.device = device
         self.config = config
         self.model_dtype = model_dtype
+        self.use_cuda_graph_varlen = use_cuda_graph_varlen
         self.sliding_window = 1 if getattr(config, "sliding_window", None) is None else config.sliding_window
+        self.return_logprobs = return_logprobs
         # Setup input-related accumulators
         self.num_q_tokens = 0  # number of query tokens in the batch. Can be padded.
         self.max_kv_read = 0  # number of KV tokens read from cache (maxed across all groups). Can be padded.
@@ -121,13 +135,14 @@ class ContinuousBatchingIOs:
         self.requests_in_batch: list[FutureRequestState] = []
         self.req_id_to_new_token_position: dict[str, int] = {}  # only used for async API
         self.graphs: CudaGraphBuffer = CudaGraphBuffer(max_graphs)
+        self._trash_index = cache.trash_index
         # Setup static tensors and compute stream
-        self._setup_static_tensors()
+        self._setup_static_tensors(logit_processor=logit_processor)
         self._reset_static_tensors(full_reset=True)
         self.compute_stream = torch.cuda.Stream(device=self.device) if device.type == "cuda" else None
 
     @traced(standalone=True)
-    def _setup_static_tensors(self) -> None:
+    def _setup_static_tensors(self, logit_processor: ContinuousBatchingLogitsProcessorList) -> None:
         """Allocates static tensors for generation inputs and outputs. This is called only once at init time, to avoid
         repeated allocations and enable CUDA graphs. All tensors are allocated with maximum possible sizes.
         The allocated tensors are:
@@ -136,7 +151,7 @@ class ContinuousBatchingIOs:
           `logits_indices`, `cumulative_seqlens_k`, `carry_over_ids`.
         - `attention_mask`: Optional attention masks (only for eager/SDPA implementations)
         - `write_index` and `read_index` storage: Cache indexing tensors for each attention group
-        - `output_ids`: Storage for generated token IDs
+        - `output_ids`: Storage for generated token IDs and maybe log probabilities if return_logprobs is True
         """
         num_groups = self.cache.num_groups
         max_batch_tokens = self.cache.max_batch_tokens
@@ -146,10 +161,16 @@ class ContinuousBatchingIOs:
 
         # Small inputs are allocated as slices in a larget tensor aligned to 128 bytes (32 * 4b). This reduces the
         # reduces fragmentation, so it lowers the number of D2H transfers and speeds up transfers.
-        bulk_size = aligned_divide(max_batch_tokens + 1, 1, 32)
+        bulk_lines = self.static_inputs + logit_processor.tensors_required
+        bulk_columns = aligned_divide(max_batch_tokens + 1, 1, 32)
         self._bulk_input_tensor = torch.empty(
-            (7, bulk_size), dtype=torch.int32, device=self.device, pin_memory=pin_memory
+            (bulk_lines, bulk_columns), dtype=torch.int32, device=self.device, pin_memory=pin_memory
         )
+        # Prepare a tensor to hold the default values for the logits processors
+        self.logits_processors_defaults = torch.empty(
+            (logit_processor.tensors_required, 1), dtype=torch.int32, device=self.device
+        )
+        logit_processor.fill_defaults(self.logits_processors_defaults)
 
         self.input_ids = self._bulk_input_tensor[0, :max_batch_tokens]
         self.position_ids = self._bulk_input_tensor[1, :max_batch_tokens]
@@ -167,8 +188,9 @@ class ContinuousBatchingIOs:
             self.cumulative_seqlens_k["sliding_attention"] = sliding_attention_cumulative_seqlens_k
 
         # Output tensor and scalars
+        num_output_rows = 2 if self.return_logprobs else 1
         self.output_ids = torch.empty(
-            (max_batch_tokens + 1,), dtype=torch.int32, device=self.device, pin_memory=pin_memory
+            (num_output_rows, max_batch_tokens + 1), dtype=torch.int32, device=self.device, pin_memory=pin_memory
         )
         # Last output token is never changed and set to 0 for async carry on purpose
         self.output_ids.zero_()
@@ -200,12 +222,12 @@ class ContinuousBatchingIOs:
 
         # For other kwargs, we need a list of tensors with as many tensors as there are groups
         self.write_index_storage = torch.empty(
-            (num_groups, max_batch_tokens), dtype=torch.int32, device=self.device, pin_memory=pin_memory
+            (num_groups, max_batch_tokens), dtype=torch.int64, device=self.device, pin_memory=pin_memory
         )
         self.read_index_storage = torch.empty(
-            (num_groups, num_pages + max_batch_tokens), dtype=torch.int32, device=self.device, pin_memory=pin_memory
+            (num_groups, num_pages + max_batch_tokens), dtype=torch.int64, device=self.device, pin_memory=pin_memory
         )
-        # For read index, the +T is because there are -1 for seqlen_q when model uses a sliding window
+        # For read index, the +T is because there are sentinel indices for seqlen_q when model uses a sliding window
 
     def _transfer_inputs(
         self, other: "ContinuousBatchingIOs", stream: torch.cuda.Stream, non_blocking: bool = False
@@ -249,12 +271,14 @@ class ContinuousBatchingIOs:
         kv_len = self.read_index_storage.size(-1) if full_reset else self.max_kv_read
 
         # Reset the attributes part of the bulk input tensor in one kernel
-        self._bulk_input_tensor[:, : q_len + 1].zero_()
+        self._bulk_input_tensor[: self.static_inputs, : q_len + 1].zero_()
+        if full_reset:
+            self._bulk_input_tensor[self.static_inputs :] = self.logits_processors_defaults
         self.max_seqlen_q = 0
 
         # Reset the logits indices and output ids
         self.logits_indices[:q_len].zero_()
-        self.output_ids[:q_len].zero_()
+        self.output_ids[:, :q_len].zero_()
 
         # Reset the attributes that are either tensors or dict of tensors
         for layer_type in self.cumulative_seqlens_k:
@@ -267,15 +291,23 @@ class ContinuousBatchingIOs:
         # If this is a full reset, we reset every tensors
         if full_reset:
             self.block_table[:, :q_len].fill_(-1)
-            self.write_index_storage[:, :q_len].fill_(-2)  # -1 is used to let the cache where new states go
-            self.read_index_storage[:, : q_len + kv_len].fill_(-2)  # same
+            self.write_index_storage[:, :q_len].fill_(self._trash_index)
+            self.read_index_storage[:, : q_len + kv_len].fill_(self._trash_index)
         # If this is not a full reset, and we are going to use the block table, we only reset it
         elif self.use_block_table:
             self.block_table[:, :q_len].fill_(-1)
         # Otherwise, the read and write indices are the ones used, so we reset them
         else:
-            self.write_index_storage[:, :q_len].fill_(-2)  # -1 is used to let the cache where new states go
-            self.read_index_storage[:, : q_len + kv_len].fill_(-2)  # same
+            self.write_index_storage[:, :q_len].fill_(self._trash_index)
+            self.read_index_storage[:, : q_len + kv_len].fill_(self._trash_index)
+
+    def reset(self) -> None:
+        """Reset all relevant states for a new generation loop."""
+        self._reset_static_tensors(full_reset=True)
+        self.requests_in_batch = []
+        self.req_id_to_new_token_position = {}
+        if self.compute_stream is not None:
+            self.compute_stream.synchronize()
 
     # These getter function help create a common interface for the sync and async IOs
     def get_cumulative_seqlens(self) -> tuple[torch.Tensor, dict[str, torch.Tensor]]:
@@ -291,15 +323,22 @@ class ContinuousBatchingIOs:
         if self.compute_stream is not None:
             self.compute_stream.synchronize()
 
-    def prepare_batch_update(self) -> tuple[list[FutureRequestState], list[int]]:
+    def prepare_batch_update(self) -> tuple[list[FutureRequestState], list[int], list[float] | None]:
         requests_in_batch = self.requests_in_batch
-        new_tokens = self.output_ids[: len(self.requests_in_batch)].tolist()
-        return requests_in_batch, new_tokens
+        new_tokens = self.output_ids[0, : len(self.requests_in_batch)].tolist()
+        # If logprobs are generated, we retrieve them from the output tensor and cast them to the right dtype
+        if self.return_logprobs:
+            logprobs = self.output_ids[1, : len(self.requests_in_batch)].view(dtype=torch.float32).tolist()
+        # Otherwise, we can return an empty list because they wont be used
+        else:
+            logprobs = None
+        return requests_in_batch, new_tokens, logprobs
 
     @traced
     def prepare_batch_tensors(
         self,
         requests_in_batch: list[FutureRequestState],
+        logits_processors: ContinuousBatchingLogitsProcessorList,
         use_decode_fast_path: bool,
         num_q_tokens: int,
         max_kv_read: int,
@@ -348,7 +387,7 @@ class ContinuousBatchingIOs:
             # First we retrieve the lengths related to the request
             state = future_state.state
             past_length = state.position_offset
-            query_length = len(state.tokens_to_process)
+            query_length = future_state.query_length
             seqlens_k = self.cache.get_seqlens_k(past_length, query_length)
 
             # Update the internal state of the request
@@ -381,6 +420,12 @@ class ContinuousBatchingIOs:
 
             self.requests_in_batch.append(future_state)
 
+        # Also prepare the tensor arguments for the logits processors
+        logits_processors.prepare_tensor_args(
+            requests_in_batch=requests_in_batch,
+            arg_storage=self._bulk_input_tensor[self.static_inputs :],
+        )
+
         # When looping over request is done, we can build the actual tensors. This is faster than modifying the static
         # tensors inside the loop.
         to_tensor = partial(torch.tensor, dtype=torch.int32, device=self.device)
@@ -405,16 +450,16 @@ class ContinuousBatchingIOs:
 
         # If we are not using the block table, we populate the read and write indices
         if not self.use_block_table:
+            to_index_tensor = partial(torch.tensor, dtype=torch.int64, device=self.device)
             for i, group_read_indices, group_write_indices in zip(count(), read_index, write_index):
-                self.read_index_storage[i, : len(group_read_indices)] = to_tensor(group_read_indices)
-                self.write_index_storage[i, : len(group_write_indices)] = to_tensor(group_write_indices)
+                self.read_index_storage[i, : len(group_read_indices)] = to_index_tensor(group_read_indices)
+                self.write_index_storage[i, : len(group_write_indices)] = to_index_tensor(group_write_indices)
                 self.true_read_sizes[i] = len(group_read_indices)
                 self.true_write_sizes[i] = len(group_write_indices)
 
     def get_model_kwargs(self, use_padding: bool = False) -> dict[str, Any]:
-        """Get model keyword arguments for the current batch, eventually padding the query dimension to (padded_q_size)
-        and the keys/values dimension to (padded_kv_cache_size). The padding is only useful if we want static shapes,
-        like when using cuda graphs AND only activated if both Q and KV are padded."""
+        """Get model keyword arguments for the current batch, eventually padding the query dimension and KV dimensions
+        if use_padding is True. The padding is only useful if we want static shapes, like when using cuda graphs."""
         q_size = self.num_q_tokens
         kv_size = self.max_kv_read + self.num_q_tokens
         batch_size = self.num_q_tokens if use_padding else self.true_batch_size
@@ -426,9 +471,10 @@ class ContinuousBatchingIOs:
             cu_seq_lens_q=self.cumulative_seqlens_q[: batch_size + 1],
             max_seqlen_q=self.max_seqlen_q,
             logits_indices=self.logits_indices[:q_size],
+            logits_processor_args=self._bulk_input_tensor[self.static_inputs :, :q_size],
             cu_seq_lens_k={},
             max_seqlen_k={},
-            attention_mask={},
+            attention_mask=None if self.attention_mask is None else {},
             read_index=[],
             write_index=[],
             cache=self.cache,
@@ -436,19 +482,21 @@ class ContinuousBatchingIOs:
             use_cache=False,
         )
 
-        # If we use constant-sized slicing, there are some "padding" queries tokens which FA has some issues with. In
-        # some models like Qwen3-4B-Instruct-2507, if we don't include these tokens in cumulative_seqlens_q, there are
-        # some NaNs in the output logits even for non-padded tokens.
+        # If there is padding, make sure the padding sequences have length 0 (ie. cumulative lengths plateau)
         if use_padding:
-            self.max_seqlen_q = max(self.max_seqlen_q, q_size - self.total_seqlen_q)
-            kwargs.max_seqlen_q = self.max_seqlen_q
-            self.cumulative_seqlens_q[self.true_batch_size + 1 :] = q_size
-            # FIXME: is there another way to avoid this? It has a very slight impact on performance (~5 tok/s)
+            kwargs.cu_seq_lens_q[self.true_batch_size + 1 :] = self.total_seqlen_q
+            # Additionally, if there are CUDA graphs, we need to pad max_seqlen so graph capture will work regardless of
+            # the future Q / KV lengths of the next batches
+            if not self.use_block_table and self.use_cuda_graph_varlen:
+                self.max_seqlen_q = q_size
+                self.max_seqlen_k = {
+                    layer_type: pad_to_pow2(self.max_seqlen_k[layer_type], self.cache.num_pages, 1024)
+                    for layer_type in self.max_seqlen_k.keys()
+                }
 
         # When using block table, max_seqlen_q and max_seqlen_k are not used by flash_attn_with_kvcache, so we set them
         # to constant `1` to avoid dynamo guards on these changing integer values. This applies throughout this method.
-        if self.use_block_table:
-            kwargs.max_seqlen_q = 1
+        kwargs.max_seqlen_q = 1 if self.use_block_table else self.max_seqlen_q
 
         # For the attributes that are lists of tensors, we construct list of tensor references
         for i in range(self.cache.num_groups):
@@ -457,29 +505,23 @@ class ContinuousBatchingIOs:
             kwargs.read_index.append(self.read_index_storage[i, :read_index_size])
             kwargs.write_index.append(self.write_index_storage[i, :write_index_size])
 
-        # For the attributes that are dict of tensors, we replace the dict with a tensor if there is only one entry
-        # When using block table, max_seqlen_k is not used, so we set it to a constant to avoid dynamo guards
-        layer_types = list(self.cumulative_seqlens_k.keys())
-        if len(layer_types) > 1:
-            kwargs.max_seqlen_k: dict[str, int] = {}
-            kwargs.cu_seq_lens_k: dict[str, torch.Tensor] = {}
-            kwargs.attention_mask: dict[str, torch.Tensor] = {}
-            for layer_type, seqlens_k in self.cumulative_seqlens_k.items():
-                kwargs.cu_seq_lens_k[layer_type] = seqlens_k[: batch_size + 1]
-                kwargs.max_seqlen_k[layer_type] = 1 if self.use_block_table else self.max_seqlen_k[layer_type]
-                if self.attention_mask is not None:
-                    k_len = kv_size if use_padding else seqlens_k[batch_size]
-                    kwargs.attention_mask[layer_type] = self.attention_mask[layer_type][..., :q_size, :k_len]
-        else:
-            layer_type = layer_types[0]
-            kwargs.cu_seq_lens_k = self.cumulative_seqlens_k[layer_type][: batch_size + 1]
-            kwargs.max_seqlen_k = 1 if self.use_block_table else self.max_seqlen_k[layer_type]
+        # For the attributes that are dict of tensors, we first fill the dict with the actual values
+        for layer_type, seqlens_k in self.cumulative_seqlens_k.items():
+            kwargs.cu_seq_lens_k[layer_type] = seqlens_k[: batch_size + 1]
+            if use_padding:
+                kwargs.cu_seq_lens_k[layer_type][self.true_batch_size + 1 :] = seqlens_k[self.true_batch_size]
+            kwargs.max_seqlen_k[layer_type] = 1 if self.use_block_table else self.max_seqlen_k[layer_type]
             if self.attention_mask is not None:
-                k_len = kv_size if use_padding else self.cumulative_seqlens_k[layer_type][batch_size]
-                kwargs.attention_mask = self.attention_mask[layer_type][..., :q_size, :k_len]
+                k_len = kv_size if use_padding else seqlens_k[batch_size]
+                kwargs.attention_mask[layer_type] = self.attention_mask[layer_type][..., :q_size, :k_len]
 
-        if self.attention_mask is None:
-            kwargs.attention_mask = None
+        # If there is only one layer type, we remove the dicts around some attributes to avoid unnecessary overhead
+        if len(self.cumulative_seqlens_k.keys()) == 1:
+            kwargs.cu_seq_lens_k = kwargs.cu_seq_lens_k.popitem()[1]  # type: ignore
+            kwargs.max_seqlen_k = kwargs.max_seqlen_k.popitem()[1]  # type: ignore
+            if self.attention_mask is not None:
+                kwargs.attention_mask = kwargs.attention_mask.popitem()[1]  # type: ignore
+
         return kwargs.asdict()  # TODO: this is imperfect, check if there is no better way to juggle dict / dataclass
 
     def get_cb_kwargs(self) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
@@ -488,16 +530,26 @@ class ContinuousBatchingIOs:
         return 3 tensors to have the same interface as when using async batching."""
         return self.carry_over_ids, self.output_ids, self.output_ids
 
+    def _get_graph_key(self) -> tuple[int, ...]:
+        # Keys for varlen path
+        if self.max_kv_read > 0:
+            return (self.num_q_tokens, self.max_kv_read, *self.max_seqlen_k.values())
+        # Keys for decode fast path
+        return (self.num_q_tokens,)
+
     def get_graph(self) -> torch.cuda.CUDAGraph | None:
-        graph = self.graphs.get_graph(self.num_q_tokens, self.max_kv_read)
+        key = self._get_graph_key()
+        graph = self.graphs.get_graph(key)
         # If this point is reached, it means the next step will be a new graph capture
         if graph is None:
             self.graphs.plan_for_new_graph()
-            logger.info(f"Creating graph for {(self.num_q_tokens, self.max_kv_read) = }")
+            logger.info(f"Creating graph for {key = }")
         return graph
 
     def set_graph(self, graph: torch.cuda.CUDAGraph) -> None:
-        self.graphs.set_graph(self.num_q_tokens, self.max_kv_read, graph)
+        key = self._get_graph_key()
+        self.graphs.set_graph(key, graph)
+        logger.info(f"Setting graph for {key = }")
 
 
 class HostDeviceIOPair:
@@ -507,15 +559,43 @@ class HostDeviceIOPair:
         config: PretrainedConfig,
         device: torch.device,
         model_dtype: torch.dtype,
-        max_graphs: int = 32,
+        max_graphs: int,
+        return_logprobs: bool,
+        logit_processor: ContinuousBatchingLogitsProcessorList,
+        use_cuda_graph_varlen: bool = False,
     ) -> None:
         # The host IO has automatic pinned memory because it is created on the CPU
-        self.host_io = ContinuousBatchingIOs(cache, config, torch.device("cpu"), model_dtype, max_graphs)
-        self.device_io = ContinuousBatchingIOs(cache, config, device, model_dtype, max_graphs)
+        self.host_io = ContinuousBatchingIOs(
+            cache,
+            config,
+            torch.device("cpu"),
+            model_dtype,
+            max_graphs,
+            return_logprobs,
+            logit_processor,
+            use_cuda_graph_varlen,
+        )
+        self.device_io = ContinuousBatchingIOs(
+            cache,
+            config,
+            device,
+            model_dtype,
+            max_graphs,
+            return_logprobs,
+            logit_processor,
+            use_cuda_graph_varlen,
+        )
         # Create events only on CUDA devices
         self.h2d_over = torch.cuda.Event() if torch.cuda.is_available() else None
         self.compute_over = torch.cuda.Event() if torch.cuda.is_available() else None
         self.d2h_over = torch.cuda.Event() if torch.cuda.is_available() else None
+
+    def reset(self) -> None:
+        self.host_io.reset()
+        self.device_io.reset()
+        for event in [self.h2d_over, self.compute_over, self.d2h_over]:
+            if event is not None:
+                event.synchronize()
 
     def transfer_inputs_h2d(self, stream: torch.cuda.Stream) -> None:
         self.host_io._transfer_inputs(self.device_io, stream=stream, non_blocking=True)
@@ -568,7 +648,7 @@ class ContinuousBatchingAsyncIOs:
           - <-N: device to host transfer of batch N
           - UP N: update of batch N
 
-    You can see that the GPU is almost always busy, execpt where the █ is.
+    You can see that the GPU is almost always busy, except where the █ is.
     Proper ordering of steps is ensured through the use of CUDA events and streams.
     """
 
@@ -578,14 +658,29 @@ class ContinuousBatchingAsyncIOs:
         config: PretrainedConfig,
         device: torch.device,
         model_dtype: torch.dtype,
-        max_graphs: int = 32,
+        max_graphs: int,
+        return_logprobs: bool,
+        logit_processor: ContinuousBatchingLogitsProcessorList,
+        use_cuda_graph_varlen: bool = False,
     ) -> None:
         # Async batching needs streams to function, so check is CUDA is available
         if not torch.cuda.is_available():
             raise RuntimeError(f"Async batching requires CUDA, but {torch.cuda.is_available() = }")
         # IO pairs used to avoid race conditions
         self.current_pair = 0
-        self.io_pairs = [HostDeviceIOPair(cache, config, device, model_dtype, max_graphs) for _ in range(2)]
+        self.io_pairs = [
+            HostDeviceIOPair(
+                cache,
+                config,
+                device,
+                model_dtype,
+                max_graphs,
+                return_logprobs,
+                logit_processor,
+                use_cuda_graph_varlen,
+            )
+            for _ in range(2)
+        ]
         # CUDA streams
         self.h2d_stream = torch.cuda.Stream(device=device)
         self.d2h_stream = torch.cuda.Stream(device=device)
@@ -606,12 +701,15 @@ class ContinuousBatchingAsyncIOs:
     def prepare_batch_tensors(
         self,
         requests_in_batch: list[FutureRequestState],
+        logits_processors: ContinuousBatchingLogitsProcessorList,
         use_decode_fast_path: bool,
         num_q_tokens: int,
         max_kv_read: int,
     ) -> None:
         io_pair = self.io_pairs[self.current_pair]
-        io_pair.host_io.prepare_batch_tensors(requests_in_batch, use_decode_fast_path, num_q_tokens, max_kv_read)
+        io_pair.host_io.prepare_batch_tensors(
+            requests_in_batch, logits_processors, use_decode_fast_path, num_q_tokens, max_kv_read
+        )
         io_pair.host_io.carry_over_ids.copy_(self.infer_carry_over_ids())
 
     def infer_carry_over_ids(self) -> torch.Tensor:
@@ -664,7 +762,7 @@ class ContinuousBatchingAsyncIOs:
         before launching the forwar pass of batch N+1. This method performs the carry over, and is recorded in CUDA
         graphs if they are enabled."""
         # Compute tokens to carry over and the corresponding mask
-        carried_over_ids = prev_output_ids[carry_over_ids]
+        carried_over_ids = prev_output_ids[0, carry_over_ids]
         carried_over_mask = (carry_over_ids != -1).int()
         # Truncate everything to the right size
         carried_over_ids = carried_over_ids[: input_ids.size(1)]
@@ -701,7 +799,16 @@ class ContinuousBatchingAsyncIOs:
         self.current_pair = 1 - self.current_pair
 
     # This method is called after the switch and not during the first batch
-    def prepare_batch_update(self) -> tuple[list[FutureRequestState], list[int]]:
+    def prepare_batch_update(self) -> tuple[list[FutureRequestState], list[int], list[float] | None]:
         io_pair = self.io_pairs[self.current_pair]
         io_pair.d2h_over.synchronize()  # ty:ignore[unresolved-attribute]  <- this is always a CUDA event
         return io_pair.host_io.prepare_batch_update()
+
+    def reset(self) -> None:
+        """Reset all state for a new generation session. Used in persistent mode between sessions."""
+        self.current_pair = 0
+        for io_pair in self.io_pairs:
+            io_pair.reset()
+        self.h2d_stream.synchronize()
+        self.d2h_stream.synchronize()
+        self.compute_stream.synchronize()
