@@ -1,3 +1,19 @@
+# Copyright 2026 The Qwen team, Alibaba Group and the HuggingFace Inc. team. All rights reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+from huggingface_hub.dataclasses import strict
+
 from ...configuration_utils import PreTrainedConfig
 from ...modeling_rope_utils import RopeParameters
 from ...utils import logging
@@ -6,6 +22,7 @@ from ...utils import logging
 logger = logging.get_logger(__name__)
 
 
+@strict
 class Qwen3TTSTokenizerSingleCodebookDiTConfig(PreTrainedConfig):
     r"""
     Configuration class for the Qwen3-TTS SingleCodebook DiT decoder.
@@ -114,6 +131,7 @@ class Qwen3TTSTokenizerSingleCodebookDiTConfig(PreTrainedConfig):
         self.max_position_embeddings = max_position_embeddings
 
 
+@strict
 class Qwen3TTSTokenizerSingleCodebookDecoderBigVGANConfig(PreTrainedConfig):
     r"""
     Configuration class for the Qwen3-TTS SingleCodebook BigVGAN vocoder.
@@ -158,6 +176,7 @@ class Qwen3TTSTokenizerSingleCodebookDecoderBigVGANConfig(PreTrainedConfig):
         )
 
 
+@strict
 class Qwen3TTSTokenizerSingleCodebookDecoderConfig(PreTrainedConfig):
     r"""
     Configuration class for the Qwen3-TTS SingleCodebook decoder (DiT + BigVGAN).
@@ -200,6 +219,7 @@ class Qwen3TTSTokenizerSingleCodebookDecoderConfig(PreTrainedConfig):
         )
 
 
+@strict
 class Qwen3TTSTokenizerSingleCodebookEncoderConfig(PreTrainedConfig):
     r"""
     Configuration class for the Qwen3-TTS SingleCodebook Whisper-based VQ encoder.
@@ -280,6 +300,7 @@ class Qwen3TTSTokenizerSingleCodebookEncoderConfig(PreTrainedConfig):
         self.audio_vq_ds_rate = audio_vq_ds_rate
 
 
+@strict
 class Qwen3TTSTokenizerSingleCodebookConfig(PreTrainedConfig):
     r"""
     Configuration class for the Qwen3-TTS SingleCodebook tokenizer (Whisper VQ encoder + DiT/BigVGAN decoder).
