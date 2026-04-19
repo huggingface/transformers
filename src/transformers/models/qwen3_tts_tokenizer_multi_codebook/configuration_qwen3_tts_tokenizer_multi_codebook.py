@@ -12,6 +12,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from huggingface_hub.dataclasses import strict
+
 from ...configuration_utils import PreTrainedConfig
 from ...modeling_rope_utils import RopeParameters
 from ...utils import logging
@@ -22,6 +24,7 @@ from ..qwen3_omni_moe.configuration_qwen3_omni_moe import Qwen3OmniMoeCode2WavCo
 logger = logging.get_logger(__name__)
 
 
+@strict
 class Qwen3TTSTokenizerMultiCodebookCode2WavConfig(Qwen3OmniMoeCode2WavConfig):
     r"""
     Configuration class for the Qwen3-TTS V2 tokenizer decoder (Code2Wav).
@@ -124,6 +127,7 @@ class Qwen3TTSTokenizerMultiCodebookCode2WavConfig(Qwen3OmniMoeCode2WavConfig):
         self.upsampling_ratios = list(upsampling_ratios) if upsampling_ratios is not None else [2, 2]
 
 
+@strict
 class Qwen3TTSTokenizerMultiCodebookConfig(PreTrainedConfig):
     r"""
     Configuration class for the Qwen3-TTS V2 tokenizer (encoder + decoder).
