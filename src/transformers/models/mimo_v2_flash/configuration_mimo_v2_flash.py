@@ -102,8 +102,6 @@ class MiMoV2FlashConfig(PreTrainedConfig):
         super().__post_init__(**kwargs)
 
     def convert_rope_params_to_dict(self, **kwargs):
-        # Legacy hub fields (`rope_theta`, `swa_rope_theta`, `partial_rotary_factor`, `rope_scaling`) are
-        # translated into `rope_parameters` by `convert_mimo_v2_flash_weights_to_hf.py`; we only validate here.
         self.standardize_rope_params()
         return kwargs
 

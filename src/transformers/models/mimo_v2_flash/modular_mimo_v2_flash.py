@@ -453,15 +453,15 @@ class MiMoV2FlashModel(MixtralModel):
                 causal_mask_mapping["sliding_attention"] = create_sliding_window_causal_mask(**mask_kwargs)
 
         hidden_states = inputs_embeds
-        position_embeddings_mapping = {
-            lt: self.rotary_emb(hidden_states, position_ids, layer_type=lt) for lt in self.rotary_emb.layer_types
-        }
+        position_embeddings = {}
+        for layer_type in self.rotary_emb.layer_types:
+            position_embeddings[layer_type] = self.rotary_emb(hidden_states, position_ids, layer_type)
 
         for i, decoder_layer in enumerate(self.layers[: self.config.num_hidden_layers]):
             hidden_states = decoder_layer(
                 hidden_states,
                 attention_mask=causal_mask_mapping[self.config.layer_types[i]],
-                position_embeddings=position_embeddings_mapping[self.config.layer_types[i]],
+                position_embeddings=position_embeddings[self.config.layer_types[i]],
                 position_ids=position_ids,
                 past_key_values=past_key_values,
                 use_cache=use_cache,
