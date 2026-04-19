@@ -534,9 +534,11 @@ def sdpa_mask(
             "Please update your torch version or use `use_vmap=False` with index-based masks."
         )
 
-    # Due to a bug in versions of torch<2.5, we need to update the mask in case a query is not attending to any
-    # tokens (due to padding). See details in https://github.com/pytorch/pytorch/issues/110213
-    if not _is_torch_greater_or_equal_than_2_5 and allow_torch_fix:
+    # When a query row attends to no tokens (all keys masked via padding), some GPU SDPA backends produce NaN
+    # even in torch>=2.5. We unconditionally allow all keys for such rows so both eager and SDPA backends
+    # see a numerically valid distribution. These rows are always padding positions and are excluded from
+    # downstream pooling, so their content is unused. See https://github.com/pytorch/pytorch/issues/110213
+    if allow_torch_fix:
         attention_mask = attention_mask | torch.all(~attention_mask, dim=-1, keepdim=True)
 
     return attention_mask
@@ -610,6 +612,14 @@ def eager_mask(
         min_dtype = torch.finfo(dtype).min
         # we need 0s where the tokens should be taken into account, and -inf otherwise (mask is already of boolean type)
         mask = torch.where(mask, torch.tensor(0.0, device=mask.device, dtype=dtype), min_dtype)
+        # Prevent NaN from softmax([-inf, ..., -inf]) for rows where all keys are masked. This occurs when a
+        # padding query position's sliding window falls entirely within the padding region (e.g. a short sequence
+        # padded to match a much longer one in a batch). Unlike torch.nn.functional.scaled_dot_product_attention
+        # (which handles this natively since torch>=2.5), the manual softmax in eager attention forward does not.
+        # For such rows we allow all keys (bias=0), producing a valid uniform distribution. These rows always
+        # correspond to padding positions and are excluded from final pooling, so the result is unused.
+        all_masked_rows = (mask == min_dtype).all(dim=-1, keepdim=True)
+        mask = torch.where(all_masked_rows, torch.zeros_like(mask), mask)
     return mask
 
 
