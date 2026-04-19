@@ -431,7 +431,9 @@ class Gemma4IntegrationTest(unittest.TestCase):
         self.url1 = url_to_local_path(
             "https://huggingface.co/datasets/hf-internal-testing/fixtures-captioning/resolve/main/cow_beach_1.png"
         )
-        self.url2 = url_to_local_path("https://www.ilankelman.org/stopsigns/australia.jpg")
+        self.url2 = url_to_local_path(
+            "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/tasks/australia.jpg"
+        )
         self.messages = [
             {"role": "system", "content": [{"type": "text", "text": "You are a helpful assistant."}]},
             {

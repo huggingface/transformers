@@ -74,7 +74,7 @@ class Qwen2_5_VLVisionConfig(PreTrainedConfig):
         Indices of layers with full attention
     """
 
-    model_type = "qwen2_5_vl"
+    model_type = "qwen2_5_vl_vision"
     base_config_key = "vision_config"
 
     depth: int = 32
@@ -923,6 +923,7 @@ class Qwen2_5_VLProcessor(Qwen2VLProcessor):
 
 __all__ = [
     "Qwen2_5_VLConfig",
+    "Qwen2_5_VLVisionConfig",
     "Qwen2_5_VLTextConfig",
     "Qwen2_5_VLForConditionalGeneration",
     "Qwen2_5_VLModel",

@@ -386,6 +386,7 @@ class Qwen3OmniMoeTalkerConfig(PreTrainedConfig):
     audio_start_token_id: int = 151669
     speaker_id: dict | None = None
     initializer_range: float = 0.02
+    tie_word_embeddings: bool = False
 
     def __post_init__(self, **kwargs):
         if self.code_predictor_config is None:
@@ -2620,6 +2621,11 @@ __all__ = [
     "Qwen3OmniMoeConfig",
     "Qwen3OmniMoeThinkerConfig",
     "Qwen3OmniMoeTalkerConfig",
+    "Qwen3OmniMoeAudioEncoderConfig",
+    "Qwen3OmniMoeTalkerCodePredictorConfig",
+    "Qwen3OmniMoeTalkerTextConfig",
+    "Qwen3OmniMoeTextConfig",
+    "Qwen3OmniMoeVisionEncoderConfig",
     "Qwen3OmniMoeForConditionalGeneration",
     "Qwen3OmniMoeThinkerTextModel",
     "Qwen3OmniMoeThinkerForConditionalGeneration",
