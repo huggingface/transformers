@@ -534,11 +534,9 @@ def sdpa_mask(
             "Please update your torch version or use `use_vmap=False` with index-based masks."
         )
 
-    # When a query row attends to no tokens (all keys masked via padding), some GPU SDPA backends produce NaN
-    # even in torch>=2.5. We unconditionally allow all keys for such rows so both eager and SDPA backends
-    # see a numerically valid distribution. These rows are always padding positions and are excluded from
-    # downstream pooling, so their content is unused. See https://github.com/pytorch/pytorch/issues/110213
-    if allow_torch_fix:
+    # Due to a bug in versions of torch<2.5, we need to update the mask in case a query is not attending to any
+    # tokens (due to padding). See details in https://github.com/pytorch/pytorch/issues/110213
+    if not _is_torch_greater_or_equal_than_2_5 and allow_torch_fix:
         attention_mask = attention_mask | torch.all(~attention_mask, dim=-1, keepdim=True)
 
     return attention_mask
