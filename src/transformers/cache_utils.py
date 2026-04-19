@@ -556,6 +556,61 @@ class QuantizedLayer(DynamicLayer):
         """Returns the sequence length of the cached states."""
         return self.cumulative_length
 
+    def reorder_cache(self, beam_idx: torch.LongTensor) -> None:
+        """Reorders both the residual and quantized buffers for beam search."""
+        super().reorder_cache(beam_idx)
+        if hasattr(self, "_quantized_keys"):
+            dequant_keys = self._dequantize(self._quantized_keys)
+            dequant_values = self._dequantize(self._quantized_values)
+            dequant_keys = dequant_keys.index_select(0, beam_idx.to(dequant_keys.device))
+            dequant_values = dequant_values.index_select(0, beam_idx.to(dequant_values.device))
+            self._quantized_keys = self._quantize(dequant_keys.contiguous(), axis=self.axis_key)
+            self._quantized_values = self._quantize(dequant_values.contiguous(), axis=self.axis_value)
+
+    def crop(self, max_length: int) -> None:
+        """Crop the residual buffer; re-quantize the whole state if the crop falls inside the quantized region."""
+        if max_length < 0:
+            max_length = self.get_seq_length() - abs(max_length)
+
+        if self.get_seq_length() <= max_length:
+            return
+
+        if not hasattr(self, "_quantized_keys"):
+            super().crop(max_length)
+            self.cumulative_length = max_length
+            return
+
+        # Reconstruct the full-precision tensor, crop, and re-quantize
+        dequant_keys = self._dequantize(self._quantized_keys)
+        dequant_values = self._dequantize(self._quantized_values)
+        full_keys = torch.cat([dequant_keys, self.keys], dim=-2) if self.keys.numel() > 0 else dequant_keys
+        full_values = torch.cat([dequant_values, self.values], dim=-2) if self.values.numel() > 0 else dequant_values
+        full_keys = full_keys[..., :max_length, :]
+        full_values = full_values[..., :max_length, :]
+        self._quantized_keys = self._quantize(full_keys.contiguous(), axis=self.axis_key)
+        self._quantized_values = self._quantize(full_values.contiguous(), axis=self.axis_value)
+        self.keys = torch.tensor([], dtype=self.keys.dtype, device=self.keys.device)
+        self.values = torch.tensor([], dtype=self.values.dtype, device=self.values.device)
+        self.cumulative_length = max_length
+
+    def batch_repeat_interleave(self, repeats: int) -> None:
+        """Repeat both the residual and quantized buffers in the batch dimension."""
+        super().batch_repeat_interleave(repeats)
+        if hasattr(self, "_quantized_keys"):
+            dequant_keys = self._dequantize(self._quantized_keys).repeat_interleave(repeats, dim=0)
+            dequant_values = self._dequantize(self._quantized_values).repeat_interleave(repeats, dim=0)
+            self._quantized_keys = self._quantize(dequant_keys.contiguous(), axis=self.axis_key)
+            self._quantized_values = self._quantize(dequant_values.contiguous(), axis=self.axis_value)
+
+    def batch_select_indices(self, indices: torch.Tensor) -> None:
+        """Select batch indices from both the residual and quantized buffers."""
+        super().batch_select_indices(indices)
+        if hasattr(self, "_quantized_keys"):
+            dequant_keys = self._dequantize(self._quantized_keys)[indices, ...]
+            dequant_values = self._dequantize(self._quantized_values)[indices, ...]
+            self._quantized_keys = self._quantize(dequant_keys.contiguous(), axis=self.axis_key)
+            self._quantized_values = self._quantize(dequant_values.contiguous(), axis=self.axis_value)
+
 
 class QuantoQuantizedLayer(QuantizedLayer):
     def __init__(
