@@ -16,10 +16,7 @@ import unittest
 from parameterized import parameterized
 
 from transformers import is_torch_available
-from transformers.testing_utils import (
-    require_torch,
-    require_triton,
-)
+from transformers.testing_utils import require_torch
 
 from ...causal_lm_tester import CausalLMModelTest, CausalLMModelTester, torch_device
 
@@ -39,46 +36,15 @@ class MiMoV2FlashModelTester(CausalLMModelTester):
     if is_torch_available():
         base_model_class = MiMoV2FlashModel
 
-    def __init__(
-        self,
-        parent,
-        batch_size=2,
-        seq_length=7,
-        is_training=False,
-        use_input_mask=True,
-        use_labels=True,
-        vocab_size=99,
-        hidden_size=32,
-        num_hidden_layers=2,
-        num_attention_heads=4,
-        num_key_value_heads=2,
-        intermediate_size=64,
-        hidden_act="silu",
-        max_position_embeddings=64,
-        initializer_range=0.02,
-        pad_token_id=0,
-        bos_token_id=1,
-        eos_token_id=2,
-    ):
+    def __init__(self, parent):
         super().__init__(
             parent=parent,
-            batch_size=batch_size,
-            seq_length=seq_length,
-            is_training=is_training,
-            use_input_mask=use_input_mask,
-            use_labels=use_labels,
-            vocab_size=vocab_size,
-            hidden_size=hidden_size,
-            num_hidden_layers=num_hidden_layers,
-            num_attention_heads=num_attention_heads,
-            num_key_value_heads=num_key_value_heads,
-            intermediate_size=intermediate_size,
-            hidden_act=hidden_act,
-            max_position_embeddings=max_position_embeddings,
-            initializer_range=initializer_range,
-            pad_token_id=pad_token_id,
-            bos_token_id=bos_token_id,
-            eos_token_id=eos_token_id,
+            batch_size=2,
+            is_training=False,
+            num_attention_heads=4,
+            intermediate_size=64,
+            hidden_act="silu",
+            max_position_embeddings=64,
         )
         # MiMo-V2-Flash specific test config
         self.head_dim = 8
@@ -113,19 +79,6 @@ class MiMoV2FlashModelTest(CausalLMModelTest, unittest.TestCase):
     )
     def test_eager_padding_matches_padding_free_with_position_ids(self):
         pass
-
-    @unittest.skip(
-        "Most probably because of the MoE, the MoE and router do not treat padded vs packed sequences like dense models"
-    )
-    def test_sdpa_padding_matches_padding_free_with_position_ids(self):
-        pass
-
-    @require_triton
-    def test_flex_attention_with_grads(self):
-        super().test_flex_attention_with_grads()
-
-    def test_reverse_loading_mapping(self, check_keys_were_modified=True):
-        super().test_reverse_loading_mapping(check_keys_were_modified=check_keys_were_modified)
 
     def _check_past_key_values_for_generate(self, batch_size, past_key_values, seq_length, config):
         # SWA layers double the kv heads (see MiMoV2FlashAttention.__init__), so the per-layer
