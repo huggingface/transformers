@@ -274,6 +274,9 @@ class GraniteMoeHybridModel(GraniteMoeSharedModel):
             2. Attending to all inputs
         """
         mamba_mask = attention_mask
+        has_mamba_layers = any(t == "mamba" for t in self.config.layers_block_type)
+        if not has_mamba_layers:
+            return mamba_mask
         if (past_key_values is not None and past_key_values.has_previous_state()) or (
             attention_mask is not None and torch.all(attention_mask == 1)
         ):
