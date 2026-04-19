@@ -13,6 +13,8 @@
 # limitations under the License.
 """Qwen3-TTS configuration classes."""
 
+from huggingface_hub.dataclasses import strict
+
 from ...configuration_utils import PreTrainedConfig
 from ...modeling_rope_utils import RopeParameters
 from ...utils import auto_docstring, logging
@@ -22,6 +24,7 @@ from ..mimi.configuration_mimi import MimiConfig
 logger = logging.get_logger(__name__)
 
 
+@strict
 class Qwen3TTSSpeakerEncoderConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`Qwen3TTSSpeakerEncoder`].
@@ -77,6 +80,7 @@ class Qwen3TTSSpeakerEncoderConfig(PreTrainedConfig):
         self.sample_rate = sample_rate
 
 
+@strict
 class Qwen3TTSTalkerCodePredictorConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`Qwen3TTSTalkerCodePredictorModel`].
@@ -199,6 +203,7 @@ class Qwen3TTSTalkerCodePredictorConfig(PreTrainedConfig):
         self.num_code_groups = num_code_groups
 
 
+@strict
 class Qwen3TTSTalkerConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`Qwen3TTSTalkerModel`].
@@ -365,6 +370,7 @@ class Qwen3TTSTalkerConfig(PreTrainedConfig):
 
 
 @auto_docstring(checkpoint="Qwen/Qwen3-TTS-12Hz-0.6B-Base")
+@strict
 class Qwen3TTSConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`Qwen3TTSForConditionalGeneration`].
