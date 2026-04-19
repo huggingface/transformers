@@ -40,15 +40,19 @@ _CAN_RECORD_REGISTRY = {}
 @dataclass
 @requires(backends=("torch",))
 class OutputRecorder:
-    """
+    r"""
     Configuration for recording outputs from a model via hooks.
 
     Attributes:
         target_class (Type): The class (e.g., nn.Module) to which the hook will be attached.
         index (Optional[int]): If the output is a tuple/list, optionally record only at a specific index.
         layer_name (Optional[str]): Regex pattern (matched with `re.search`) used to filter submodules by their
-            dotted qualified name, e.g., "self_attn", "transformer.layer.3.attn", or "layers\\.1$" to target a
-            single layer index without also matching "layers.10", "layers.11", etc.
+            dotted qualified name. Examples:
+
+            - `"self_attn"`: substring match
+            - `"transformer.layer.3.attn"`: literal path
+            - `r"layers\.1$"`: anchored, targets layer 1 without also matching `layers.10`/`layers.11`/…
+            - `r"layers\.(6|12|18)$"`: picks a non-contiguous subset of layers
         class_name (Optional[str]): Name of the class to which the hook will be attached. Could be the suffix of class name in some cases.
     """
 
