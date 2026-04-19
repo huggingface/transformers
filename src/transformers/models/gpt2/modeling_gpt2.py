@@ -422,8 +422,8 @@ class GPT2PreTrainedModel(PreTrainedModel):
     _can_compile_fullgraph = True
     _can_record_outputs = {
         "hidden_states": GPT2Block,
-        "attentions": OutputRecorder(GPT2Attention, layer_name=".attn", index=1),
-        "cross_attentions": OutputRecorder(GPT2Attention, layer_name=".crossattention", index=1),
+        "attentions": OutputRecorder(GPT2Attention, layer_name=r"\.attn", index=1),
+        "cross_attentions": OutputRecorder(GPT2Attention, layer_name=r"\.crossattention", index=1),
     }
 
     # No longer used as we directly use our masks instead

@@ -444,10 +444,10 @@ class BlipTextPreTrainedModel(PreTrainedModel):
     _can_record_outputs = {
         "hidden_states": BlipTextLayer,
         "attentions": [
-            OutputRecorder(BlipTextSelfAttention, index=1, layer_name=".attention."),
+            OutputRecorder(BlipTextSelfAttention, index=1, layer_name=r"\.attention\."),
         ],
         "cross_attentions": [
-            OutputRecorder(BlipTextSelfAttention, index=1, layer_name=".crossattention."),
+            OutputRecorder(BlipTextSelfAttention, index=1, layer_name=r"\.crossattention\."),
         ],
     }
 

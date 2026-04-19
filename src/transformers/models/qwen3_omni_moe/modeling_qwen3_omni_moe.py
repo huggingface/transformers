@@ -1047,7 +1047,7 @@ class Qwen3OmniMoeVisionEncoder(Qwen3OmniMoePreTrainedModel):
     input_modalities = ("image", "video")
     _no_split_modules = ["Qwen3OmniMoeVisionBlock"]
     _can_record_outputs = {
-        "router_logits": OutputRecorder(Qwen3OmniMoeTextTopKRouter, layer_name="mlp.gate", index=0),
+        "router_logits": OutputRecorder(Qwen3OmniMoeTextTopKRouter, layer_name=r"mlp\.gate", index=0),
         "hidden_states": Qwen3OmniMoeVisionBlock,
         "attentions": Qwen3OmniMoeVisionAttention,
     }

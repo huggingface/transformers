@@ -887,10 +887,10 @@ class Blip2QFormerModel(Blip2PreTrainedModel):
     _can_record_outputs = {
         "hidden_states": Blip2QFormerLayer,
         "attentions": [
-            OutputRecorder(Blip2QFormerMultiHeadAttention, index=1, layer_name=".attention"),
+            OutputRecorder(Blip2QFormerMultiHeadAttention, index=1, layer_name=r"\.attention"),
         ],
         "cross_attentions": [
-            OutputRecorder(Blip2QFormerMultiHeadAttention, index=1, layer_name=".crossattention"),
+            OutputRecorder(Blip2QFormerMultiHeadAttention, index=1, layer_name=r"\.crossattention"),
         ],
     }
 

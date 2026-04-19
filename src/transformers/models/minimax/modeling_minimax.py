@@ -596,7 +596,7 @@ class MiniMaxPreTrainedModel(PreTrainedModel):
     _can_compile_fullgraph = False  # uses a non-compilable custom cache class MiniMaxCache
     _supports_attention_backend = True
     _can_record_outputs = {
-        "router_logits": OutputRecorder(MiniMaxTopKRouter, layer_name="mlp.gate", index=0),
+        "router_logits": OutputRecorder(MiniMaxTopKRouter, layer_name=r"mlp\.gate", index=0),
         "hidden_states": MiniMaxDecoderLayer,
         "attentions": [MiniMaxAttention, MiniMaxLightningAttention],
     }
