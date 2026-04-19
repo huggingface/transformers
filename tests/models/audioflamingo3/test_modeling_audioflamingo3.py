@@ -22,6 +22,8 @@ import pytest
 
 from transformers import (
     AudioFlamingo3Config,
+    AudioFlamingo3EncoderConfig,
+    Qwen2Config,
     AudioFlamingo3ForConditionalGeneration,
     AutoProcessor,
     is_torch_available,
@@ -43,28 +45,34 @@ if is_torch_available():
 class AudioFlamingo3ModelTester(ALMModelTester):
     config_class = AudioFlamingo3Config
     conditional_generation_class = AudioFlamingo3ForConditionalGeneration
+    text_config_class = Qwen2Config
+    audio_config_class = AudioFlamingo3EncoderConfig
+
 
     def __init__(self, parent, **kwargs):
-        kwargs.setdefault(
-            "audio_config",
-            {
-                "model_type": "audioflamingo3_encoder",
-                "hidden_size": 16,
-                "num_attention_heads": 4,
-                "intermediate_size": 16,
-                "num_hidden_layers": 2,
-                "num_mel_bins": 80,
-                "max_source_positions": 30,
-                "initializer_range": 0.02,
-            },
-        )
+        # feat_seq_length → (L-1)//2+1 after conv2 → (·-2)//2+1 after avg_pool, so
+        # feat_seq_length=60 gives 15 audio embed tokens (fits inside seq_length=32 + BOS + text).
+        kwargs.setdefault("feat_seq_length", 60)
+        # Encoder adds a learned positional embedding of size max_source_positions to post-conv2 features,
+        # so it must equal (feat_seq_length - 1) // 2 + 1.
+        kwargs.setdefault("max_source_positions", (kwargs["feat_seq_length"] - 1) // 2 + 1)
         super().__init__(parent, **kwargs)
 
     def get_audio_mask_key(self):
         return "input_features_mask"
 
-    def create_audio_mask(self, audio_features):
+    def create_audio_mask(self):
         return torch.ones([self.batch_size, self.feat_seq_length], dtype=torch.bool).to(torch_device)
+
+    def get_audio_embeds_mask(self, audio_mask):
+        # Mirrors AudioFlamingo3Encoder._get_feat_extract_output_lengths:
+        # conv2 (k=3,s=2,p=1) then avg_pool (k=2,s=2).
+        input_lengths = audio_mask.sum(-1)
+        input_lengths = (input_lengths - 1) // 2 + 1
+        output_lengths = (input_lengths - 2) // 2 + 1
+        max_len = int(output_lengths.max().item())
+        positions = torch.arange(max_len, device=audio_mask.device)[None, :]
+        return (positions < output_lengths[:, None]).long()
 
 
 @require_torch
@@ -89,19 +97,6 @@ class AudioFlamingo3ForConditionalGenerationModelTest(ALMModelTest, unittest.Tes
         "are replaced when input features are provided."
     )
     def test_inputs_embeds_matches_input_ids(self):
-        pass
-
-    @unittest.skip(reason="Compile not yet supported for AudioFlamingo3 models")
-    @pytest.mark.torch_compile_test
-    def test_sdpa_can_compile_dynamic(self):
-        pass
-
-    @unittest.skip(reason="Compile not yet supported for AudioFlamingo3 models")
-    def test_sdpa_can_dispatch_on_flash(self):
-        pass
-
-    @unittest.skip(reason="AudioFlamingo3 tests avoid right-padding equivalence; fusion is in-place.")
-    def test_flash_attn_2_inference_equivalence_right_padding(self):
         pass
 
 

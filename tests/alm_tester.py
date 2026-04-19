@@ -12,7 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import tempfile
 import unittest
 from inspect import signature
 
@@ -44,10 +43,6 @@ class ALMModelTester:
     # Key name for the audio sub-config in the main config constructor.
     # Override to "encoder_config" for models like GraniteSpeech.
     audio_config_key = "audio_config"
-
-    # Model attribute name for the audio encoder (used in SDPA dispatch tests).
-    # Set to None to skip audio encoder SDPA checking.
-    audio_tower_attr = "audio_tower"
 
     # Arguments that should be passed to the config class even if not in its signature.
     forced_config_args = ["pad_token_id"]
@@ -333,50 +328,6 @@ class ALMModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin)
     def test_config(self):
         """Test config common functionality."""
         self.config_tester.run_common_tests()
-
-    def test_sdpa_can_dispatch_composite_models(self):
-        """Verify SDPA toggles propagate correctly to audio and text sub-modules."""
-        if not self.has_attentions:
-            self.skipTest(reason="Model architecture does not support attentions")
-
-        if not self._is_composite:
-            self.skipTest(f"{self.all_model_classes[0].__name__} does not support SDPA")
-
-        for model_class in self.all_model_classes:
-            config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-            model = model_class(config)
-
-            with tempfile.TemporaryDirectory() as tmpdirname:
-                model.save_pretrained(tmpdirname)
-
-                # SDPA (default)
-                model_sdpa = model_class.from_pretrained(tmpdirname)
-                model_sdpa = model_sdpa.eval().to(torch_device)
-
-                text_attn = "sdpa" if model.language_model._supports_sdpa else "eager"
-
-                self.assertTrue(model_sdpa.config._attn_implementation == "sdpa")
-                self.assertTrue(model.language_model.config._attn_implementation == text_attn)
-
-                audio_tower_attr = self.model_tester.audio_tower_attr
-                if audio_tower_attr is not None:
-                    audio_tower = getattr(model, audio_tower_attr)
-                    audio_attn = "sdpa" if audio_tower._supports_sdpa else "eager"
-                    self.assertTrue(audio_tower.config._attn_implementation == audio_attn)
-
-                # Eager
-                model_eager = model_class.from_pretrained(tmpdirname, attn_implementation="eager")
-                model_eager = model_eager.eval().to(torch_device)
-                self.assertTrue(model_eager.config._attn_implementation == "eager")
-                self.assertTrue(model_eager.language_model.config._attn_implementation == "eager")
-
-                if audio_tower_attr is not None:
-                    self.assertTrue(getattr(model_eager, audio_tower_attr).config._attn_implementation == "eager")
-
-                for _, submodule in model_eager.named_modules():
-                    class_name = submodule.__class__.__name__
-                    if "SdpaAttention" in class_name or "SdpaSelfAttention" in class_name:
-                        raise ValueError("The eager model should not have SDPA attention layers")
 
     @unittest.skip("Audio-LMs have no separate base model without a head.")
     def test_model_base_model_prefix(self):
