@@ -458,6 +458,7 @@ class AudioVisualFlamingoPretrainedModel(PreTrainedModel):
 IGNORE_INDEX = -100
 
 LEGACY_CHECKPOINT_KEY_MAPPING = {
+    r"^vision_tower\.vision_tower\.vision_model\.": "vision_tower.vision_tower.",
     r"^sound_tower\.audio_tower\.": "sound_tower.",
 }
 
