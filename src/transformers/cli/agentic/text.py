@@ -27,7 +27,6 @@ from transformers.agent.output import out
 from ._common import (
     DeviceOpt,
     DtypeOpt,
-    JsonOpt,
     ModelOpt,
     RevisionOpt,
     TokenOpt,
@@ -83,7 +82,6 @@ def classify(
     trust_remote_code: TrustOpt = False,
     token: TokenOpt = None,
     revision: RevisionOpt = None,
-    output_json: JsonOpt = False,
 ):
     """
     Classify text into categories.
@@ -101,7 +99,7 @@ def classify(
         transformers classify --text "The stock market crashed" --labels "politics,finance,sports"
 
         # Read from file, output as JSON
-        transformers classify --file review.txt --json
+        transformers --format json classify --file review.txt
     """
     import torch
 
@@ -172,7 +170,7 @@ def classify(
         top_idx = probs.argmax().item()
         result = [{"label": loaded_model.config.id2label[top_idx], "score": probs[top_idx].item()}]
 
-    out.emit(result, task="classify", output_json=output_json or None)
+    out.emit(result, task="classify")
 
 
 def ner(
@@ -185,7 +183,6 @@ def ner(
     token: TokenOpt = None,
     revision: RevisionOpt = None,
     aggregation_strategy: Annotated[str, typer.Option(help="Entity aggregation: 'none' or 'simple'.")] = "simple",
-    output_json: JsonOpt = False,
 ):
     """
     Extract named entities from text (NER).
@@ -236,7 +233,7 @@ def ner(
     if aggregation_strategy == "simple":
         entities = _aggregate_entities(entities, input_text)
 
-    out.emit(entities, task="ner", output_json=output_json or None)
+    out.emit(entities, task="ner")
 
 
 def token_classify(
@@ -248,7 +245,6 @@ def token_classify(
     trust_remote_code: TrustOpt = False,
     token: TokenOpt = None,
     revision: RevisionOpt = None,
-    output_json: JsonOpt = False,
 ):
     """
     Tag tokens with labels (POS tagging, chunking, etc.).
@@ -295,7 +291,7 @@ def token_classify(
             }
         )
 
-    out.emit(result, task="token-classify", output_json=output_json or None)
+    out.emit(result, task="token-classify")
 
 
 def qa(
@@ -308,7 +304,6 @@ def qa(
     trust_remote_code: TrustOpt = False,
     token: TokenOpt = None,
     revision: RevisionOpt = None,
-    output_json: JsonOpt = False,
 ):
     """
     Answer a question given a context paragraph (extractive QA).
@@ -349,7 +344,7 @@ def qa(
         "start": start_idx,
         "end": end_idx,
     }
-    out.emit(result, task="qa", output_json=output_json or None)
+    out.emit(result, task="qa")
 
 
 def table_qa(
@@ -361,7 +356,6 @@ def table_qa(
     trust_remote_code: TrustOpt = False,
     token: TokenOpt = None,
     revision: RevisionOpt = None,
-    output_json: JsonOpt = False,
 ):
     """
     Answer a question about tabular data (CSV).
@@ -426,7 +420,7 @@ def table_qa(
         "cells": cells,
         "aggregator": _AGG_OPS.get(agg_idx, "NONE"),
     }
-    out.emit(result, task="table-qa", output_json=output_json or None)
+    out.emit(result, task="table-qa")
 
 
 def summarize(
@@ -440,7 +434,6 @@ def summarize(
     trust_remote_code: TrustOpt = False,
     token: TokenOpt = None,
     revision: RevisionOpt = None,
-    output_json: JsonOpt = False,
 ):
     """
     Summarize text.
@@ -473,7 +466,7 @@ def summarize(
     output_ids = loaded_model.generate(**inputs, **gen_kwargs)
     summary = tokenizer.decode(output_ids[0], skip_special_tokens=True)
     result = [{"summary_text": summary}]
-    out.emit(result, task="summarize", output_json=output_json or None)
+    out.emit(result, task="summarize")
 
 
 def translate(
@@ -486,7 +479,6 @@ def translate(
     trust_remote_code: TrustOpt = False,
     token: TokenOpt = None,
     revision: RevisionOpt = None,
-    output_json: JsonOpt = False,
 ):
     """
     Translate text between languages.
@@ -518,7 +510,7 @@ def translate(
     output_ids = loaded_model.generate(**inputs, **gen_kwargs)
     translation = tokenizer.decode(output_ids[0], skip_special_tokens=True)
     result = [{"translation_text": translation}]
-    out.emit(result, task="translate", output_json=output_json or None)
+    out.emit(result, task="translate")
 
 
 def fill_mask(
@@ -530,7 +522,6 @@ def fill_mask(
     trust_remote_code: TrustOpt = False,
     token: TokenOpt = None,
     revision: RevisionOpt = None,
-    output_json: JsonOpt = False,
 ):
     """
     Predict the masked token in a sentence.
@@ -578,4 +569,4 @@ def fill_mask(
             }
         )
 
-    out.emit(result, task="fill-mask", output_json=output_json or None)
+    out.emit(result, task="fill-mask")

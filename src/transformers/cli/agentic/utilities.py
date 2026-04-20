@@ -120,7 +120,6 @@ def tokenize(
     token: Annotated[str | None, typer.Option(help="HF Hub token.")] = None,
     trust_remote_code: Annotated[bool, typer.Option(help="Trust remote code.")] = False,
     show_ids: Annotated[bool, typer.Option("--ids", help="Show token IDs.")] = False,
-    output_json: Annotated[bool, typer.Option("--json", help="Output as JSON.")] = False,
 ):
     """
     Tokenize text and display the resulting tokens.
@@ -133,7 +132,7 @@ def tokenize(
 
         transformers tokenize --model meta-llama/Llama-3.2-1B-Instruct --text "Hello, world!"
         transformers tokenize --model meta-llama/Llama-3.2-1B-Instruct --text "Hello, world!" --ids
-        transformers tokenize --model bert-base-uncased --text "Tokenization is fun." --json
+        transformers --format json tokenize --model bert-base-uncased --text "Tokenization is fun."
     """
     from transformers import AutoTokenizer
 
@@ -152,36 +151,31 @@ def tokenize(
     token_ids = encoding["input_ids"]
     tokens = tokenizer.convert_ids_to_tokens(token_ids)
 
-    if output_json:
-        data = {"tokens": tokens, "token_ids": token_ids, "num_tokens": len(tokens)}
-        out.emit(data, task="tokenize", output_json=True)
-    else:
-        token_data = []
-        for i, (tok, tid) in enumerate(zip(tokens, token_ids)):
-            if show_ids:
-                token_data.append({"index": i, "id": tid, "token": tok})
-            else:
-                token_data.append({"index": i, "token": tok})
-        out.emit({"num_tokens": len(tokens), "tokens": token_data}, task="tokenize")
+    data = {"tokens": tokens, "num_tokens": len(tokens)}
+    if show_ids:
+        data["token_ids"] = token_ids
+    out.emit(data, task="tokenize")
 
 
 def inspect(
     model: Annotated[str, typer.Argument(help="Model ID or local path to inspect.")],
     token: Annotated[str | None, typer.Option(help="HF Hub token.")] = None,
     trust_remote_code: Annotated[bool, typer.Option(help="Trust remote code.")] = False,
-    output_json: Annotated[bool, typer.Option("--json", help="Output as JSON.")] = False,
 ):
     """
     Inspect a model's configuration without downloading weights.
 
     Shows architecture, hidden size, number of layers, vocabulary size,
-    and other key config values. Use ``--json`` for the full config dict.
+    and other key config values. Agents and ``--format json`` receive the
+    full config dict.
 
     Examples::
 
         transformers inspect meta-llama/Llama-3.2-1B-Instruct
-        transformers inspect meta-llama/Llama-3.2-1B-Instruct --json
+        transformers --format json inspect meta-llama/Llama-3.2-1B-Instruct
     """
+    from huggingface_hub.cli._output import OutputFormatWithAuto
+
     from transformers import AutoConfig
 
     kwargs = {}
@@ -190,13 +184,10 @@ def inspect(
     if trust_remote_code:
         kwargs["trust_remote_code"] = True
 
-    config = AutoConfig.from_pretrained(model, **kwargs)
+    config_dict = AutoConfig.from_pretrained(model, **kwargs).to_dict()
 
-    if output_json:
-        out.emit(config.to_dict(), task="inspect", output_json=True)
-    else:
-        config_dict = config.to_dict()
-        important_keys = [
+    if out.mode == OutputFormatWithAuto.human:
+        summary_keys = [
             "hidden_size",
             "num_hidden_layers",
             "num_attention_heads",
@@ -207,22 +198,18 @@ def inspect(
             "hidden_act",
             "torch_dtype",
         ]
-        important = {k: config_dict[k] for k in important_keys if k in config_dict}
-        remaining = {
-            k: v
-            for k, v in config_dict.items()
-            if k not in important_keys and k not in ("architectures", "model_type", "transformers_version")
-        }
+        summary = {k: config_dict[k] for k in summary_keys if k in config_dict}
         out.emit(
             {
                 "model": model,
                 "architecture": config_dict.get("architectures", ["unknown"]),
                 "model_type": config_dict.get("model_type", "unknown"),
-                **important,
-                "additional_keys": len(remaining),
+                **summary,
             },
             task="inspect",
         )
+    else:
+        out.emit(config_dict, task="inspect")
 
 
 def inspect_forward(
@@ -234,7 +221,6 @@ def inspect_forward(
     ] = None,
     token: Annotated[str | None, typer.Option(help="HF Hub token.")] = None,
     trust_remote_code: Annotated[bool, typer.Option(help="Trust remote code.")] = False,
-    output_json: Annotated[bool, typer.Option("--json", help="Output as JSON.")] = False,
 ):
     """
     Examine attention weights and hidden states from a forward pass.
@@ -332,7 +318,6 @@ def benchmark_quantization(
     max_new_tokens: Annotated[int, typer.Option(help="Tokens to generate per run.")] = 50,
     trust_remote_code: Annotated[bool, typer.Option(help="Trust remote code.")] = False,
     token: Annotated[str | None, typer.Option(help="HF Hub token.")] = None,
-    output_json: Annotated[bool, typer.Option("--json", help="Output as JSON.")] = False,
 ):
     """
     Compare quality and performance across quantization methods.
@@ -348,7 +333,7 @@ def benchmark_quantization(
         transformers benchmark-quantization --model meta-llama/Llama-3.1-8B --methods bnb-4bit,bnb-8bit
 
         # Include unquantized baseline, output as JSON
-        transformers benchmark-quantization --model meta-llama/Llama-3.1-8B --methods none,bnb-4bit,bnb-8bit --json
+        transformers --format json benchmark-quantization --model meta-llama/Llama-3.1-8B --methods none,bnb-4bit,bnb-8bit
     """
     import time
 
@@ -427,5 +412,4 @@ def benchmark_quantization(
             out.warning(f"Error with {method}: {e}")
             results.append({"method": method, "error": str(e)})
 
-    if output_json:
-        out.emit(results, task="benchmark-quantization", output_json=True)
+    out.emit(results, task="benchmark-quantization")

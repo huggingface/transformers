@@ -159,4 +159,4 @@ def quantize(
         repo_id = hub_model_id or output
         loaded_model.push_to_hub(repo_id, token=token)
         tokenizer.push_to_hub(repo_id, token=token)
-        print(f"Pushed to Hub: {repo_id}")
+        out.progress(f"Pushed to Hub: {repo_id}")

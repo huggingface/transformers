@@ -39,7 +39,7 @@ Every inference command supports:
 | `--trust-remote-code` | Trust custom model code from the Hub |
 | `--token` | HF Hub token for gated/private models |
 | `--revision` | Model revision (branch, tag, SHA) |
-| `--json` | Machine-readable JSON output |
+| `--format` | Output format: `auto` (default), `human`, `json`, `agent`, `quiet` — set at the top level, e.g. `transformers --format json classify ...` |
 
 Text commands also accept `--file` to read input from a file, or stdin
 via pipe (`echo "hello" | transformers classify`).
@@ -206,7 +206,7 @@ via pipe (`echo "hello" | transformers classify`).
 
 31. Transcribe speech with word-level timestamps
     ```bash
-    transformers transcribe --model openai/whisper-small --audio recording.wav --timestamps true --json
+    transformers --format json transcribe --model openai/whisper-small --audio recording.wav --timestamps true
     ```
 
 32. Classify an audio clip into categories
@@ -426,7 +426,7 @@ via pipe (`echo "hello" | transformers classify`).
 
 73. Compare quality across quantization methods
     ```bash
-    transformers benchmark-quantization --model meta-llama/Llama-3.1-8B --methods none,bnb-4bit,bnb-8bit --json
+    transformers --format json benchmark-quantization --model meta-llama/Llama-3.1-8B --methods none,bnb-4bit,bnb-8bit
     ```
 
 ### Export
@@ -460,7 +460,7 @@ via pipe (`echo "hello" | transformers classify`).
 
 79. Inspect a model's configuration (no weight download)
     ```bash
-    transformers inspect meta-llama/Llama-3.2-1B-Instruct --json
+    transformers --format json inspect meta-llama/Llama-3.2-1B-Instruct
     ```
 
 80. Examine attention weights and hidden states

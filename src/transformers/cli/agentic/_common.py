@@ -21,7 +21,7 @@ resolution (--text / --file / stdin), output formatting, media loading
 
 import sys
 from pathlib import Path
-from typing import Annotated, Any
+from typing import Annotated
 
 import typer
 
@@ -32,7 +32,6 @@ DtypeOpt = Annotated[str, typer.Option(help="Dtype for model weights ('auto', 'f
 TrustOpt = Annotated[bool, typer.Option(help="Trust remote code from the Hub.")]
 TokenOpt = Annotated[str | None, typer.Option(help="HF Hub token for gated/private models.")]
 RevisionOpt = Annotated[str | None, typer.Option(help="Model revision (branch, tag, or commit SHA).")]
-JsonOpt = Annotated[bool, typer.Option("--json", help="Output results as JSON.")]
 
 
 def _load_pretrained(model_cls, processor_cls, model_id, device, dtype, trust_remote_code, token, revision):
@@ -78,22 +77,6 @@ def resolve_input(text: str | None = None, file: str | None = None) -> str:
     if not sys.stdin.isatty():
         return sys.stdin.read()
     raise SystemExit("Error: provide --text, --file, or pipe input via stdin.")
-
-
-def format_output(result: Any, output_json: bool = False, task: str | None = None) -> str:
-    """Format pipeline output for display.
-
-    When ``output_json=True``, returns a JSON string (useful for agents that
-    need to parse results programmatically). Otherwise, returns a
-    human-readable multi-line string.
-
-    If *task* is provided, delegates to :func:`transformers.agent.emit`
-    which auto-detects agent vs human context and wraps JSON output in an
-    ``{"task": ..., "result": ...}`` envelope when appropriate.
-    """
-    from transformers.agent.output import emit
-
-    return emit(result, task=task, output_json=output_json or None)
 
 
 def load_image(path: str):

@@ -28,13 +28,11 @@ from transformers.agent.output import out
 from ._common import (
     DeviceOpt,
     DtypeOpt,
-    JsonOpt,
     ModelOpt,
     RevisionOpt,
     TokenOpt,
     TrustOpt,
     _load_pretrained,
-    format_output,
     load_audio,
     load_image,
 )
@@ -50,7 +48,6 @@ def vqa(
     trust_remote_code: TrustOpt = False,
     token: TokenOpt = None,
     revision: RevisionOpt = None,
-    output_json: JsonOpt = False,
 ):
     """
     Visual question answering using ``AutoModelForImageTextToText``.
@@ -80,10 +77,7 @@ def vqa(
     new_tokens = output_ids[0, inputs["input_ids"].shape[1] :]
     result = processor.decode(new_tokens, skip_special_tokens=True)
 
-    if output_json:
-        print(format_output({"answer": result}, output_json=True, task="vqa"))
-    else:
-        print(result)
+    out.emit({"answer": result}, task="vqa")
 
 
 def document_qa(
@@ -95,7 +89,6 @@ def document_qa(
     trust_remote_code: TrustOpt = False,
     token: TokenOpt = None,
     revision: RevisionOpt = None,
-    output_json: JsonOpt = False,
 ):
     """
     Extractive document question answering using
@@ -136,11 +129,7 @@ def document_qa(
     end_idx = outputs.end_logits.argmax(dim=-1).item()
     answer = processor.tokenizer.decode(inputs["input_ids"][0, start_idx : end_idx + 1], skip_special_tokens=True)
 
-    result = {"answer": answer, "start": start_idx, "end": end_idx}
-    if output_json:
-        print(format_output(result, output_json=True, task="document-qa"))
-    else:
-        print(format_output(result, task="document-qa"))
+    out.emit({"answer": answer, "start": start_idx, "end": end_idx}, task="document-qa")
 
 
 def caption(
@@ -152,7 +141,6 @@ def caption(
     trust_remote_code: TrustOpt = False,
     token: TokenOpt = None,
     revision: RevisionOpt = None,
-    output_json: JsonOpt = False,
 ):
     """
     Generate a caption for an image using ``AutoModelForImageTextToText``.
@@ -184,10 +172,7 @@ def caption(
     new_tokens = output_ids[0, inputs["input_ids"].shape[1] :]
     result = processor.decode(new_tokens, skip_special_tokens=True)
 
-    if output_json:
-        print(format_output({"caption": result}, output_json=True, task="caption"))
-    else:
-        print(result)
+    out.emit({"caption": result}, task="caption")
 
 
 def ocr(
@@ -199,7 +184,6 @@ def ocr(
     trust_remote_code: TrustOpt = False,
     token: TokenOpt = None,
     revision: RevisionOpt = None,
-    output_json: JsonOpt = False,
 ):
     """
     Extract text from an image using ``AutoModelForImageTextToText``.
@@ -234,10 +218,7 @@ def ocr(
     new_tokens = output_ids[0, inputs["input_ids"].shape[1] :]
     result = processor.decode(new_tokens, skip_special_tokens=True)
 
-    if output_json:
-        print(format_output({"text": result}, output_json=True, task="ocr"))
-    else:
-        print(result)
+    out.emit({"text": result}, task="ocr")
 
 
 def multimodal_chat(

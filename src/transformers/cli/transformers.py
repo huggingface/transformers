@@ -13,8 +13,13 @@
 # limitations under the License.
 """Transformers CLI."""
 
-from huggingface_hub import check_cli_update, typer_factory
+from typing import Annotated
 
+import typer
+from huggingface_hub import check_cli_update, typer_factory
+from huggingface_hub.cli._output import OutputFormatWithAuto
+
+from transformers.agent.output import out
 from transformers.cli.add_new_model_like import add_new_model_like
 from transformers.cli.agentic.app import register_agentic_commands
 from transformers.cli.chat import Chat
@@ -24,6 +29,22 @@ from transformers.cli.system import env, version
 
 
 app = typer_factory(help="Transformers CLI")
+
+
+def _set_format(value: OutputFormatWithAuto) -> OutputFormatWithAuto:
+    out.set_mode(value)
+    return value
+
+
+@app.callback()
+def _root(
+    format: Annotated[
+        OutputFormatWithAuto,
+        typer.Option(help="Output format.", callback=_set_format),
+    ] = OutputFormatWithAuto.auto,
+):
+    """Transformers CLI."""
+
 
 app.command()(add_new_model_like)
 app.command(name="chat")(Chat)

@@ -29,13 +29,11 @@ from transformers.agent.output import out
 from ._common import (
     DeviceOpt,
     DtypeOpt,
-    JsonOpt,
     ModelOpt,
     RevisionOpt,
     TokenOpt,
     TrustOpt,
     _load_pretrained,
-    format_output,
     load_image,
     load_video,
 )
@@ -53,7 +51,6 @@ def image_classify(
     trust_remote_code: TrustOpt = False,
     token: TokenOpt = None,
     revision: RevisionOpt = None,
-    output_json: JsonOpt = False,
 ):
     """Classify an image.
 
@@ -123,7 +120,7 @@ def image_classify(
         ]
         result = sorted(scored, key=lambda x: x["score"], reverse=True)
 
-    print(format_output(result, output_json, task="image-classify"))
+    out.emit(result, task="image-classify")
 
 
 def detect(
@@ -136,7 +133,6 @@ def detect(
     trust_remote_code: TrustOpt = False,
     token: TokenOpt = None,
     revision: RevisionOpt = None,
-    output_json: JsonOpt = False,
 ):
     """Detect objects in an image.
 
@@ -228,7 +224,7 @@ def detect(
             }
         )
 
-    print(format_output(result, output_json, task="detect"))
+    out.emit(result, task="detect")
 
 
 def segment(
@@ -243,7 +239,6 @@ def segment(
     trust_remote_code: TrustOpt = False,
     token: TokenOpt = None,
     revision: RevisionOpt = None,
-    output_json: JsonOpt = False,
 ):
     """Segment an image.
 
@@ -314,7 +309,7 @@ def segment(
             "iou_scores": outputs.iou_scores[0, 0].tolist(),
         }
 
-    print(format_output(result, output_json, task="segment"))
+    out.emit(result, task="segment")
 
 
 def depth(
@@ -391,7 +386,6 @@ def keypoints(
     trust_remote_code: TrustOpt = False,
     token: TokenOpt = None,
     revision: RevisionOpt = None,
-    output_json: JsonOpt = False,
 ):
     """Match keypoints between two images.
 
@@ -428,7 +422,7 @@ def keypoints(
     pipe = pipeline("keypoint-matching", **pipe_kwargs)
     result = pipe(img1, img2)
 
-    print(format_output(result, output_json, task="keypoints"))
+    out.emit(result, task="keypoints")
 
 
 def video_classify(
@@ -440,7 +434,6 @@ def video_classify(
     trust_remote_code: TrustOpt = False,
     token: TokenOpt = None,
     revision: RevisionOpt = None,
-    output_json: JsonOpt = False,
 ):
     """Classify a video.
 
@@ -479,4 +472,4 @@ def video_classify(
         for val, idx in zip(top_values, top_indices)
     ]
 
-    print(format_output(result, output_json, task="video-classify"))
+    out.emit(result, task="video-classify")
