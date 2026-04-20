@@ -1,3 +1,18 @@
+# Copyright 2021 Facebook AI Research & The HuggingFace Inc. team. All rights reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+"""PyTorch DeiT (Data-efficient Image Transformers) model."""
+
 from dataclasses import dataclass
 
 import torch
@@ -24,12 +39,19 @@ from .configuration_deit import DeiTConfig
 class DeiTEmbeddings(ViTEmbeddings):
     """
     Construct the CLS token, distillation token, position and patch embeddings. Optionally, also the mask token.
+
+    Differences from ViTEmbeddings:
+    - Adds a distillation token (for distillation pre-training).
+    - Position embeddings include +2 slots (CLS + distillation) instead of +1.
+    - interpolate_pos_encoding handles 2 special tokens instead of 1.
+    - forward concatenates distillation token and handles position encoding for both.
     """
 
     def __init__(self, config: DeiTConfig, use_mask_token: bool = False) -> None:
         super().__init__(config, use_mask_token=use_mask_token)
         self.cls_token = nn.Parameter(torch.zeros(1, 1, config.hidden_size))
         num_patches = self.patch_embeddings.num_patches
+        # +2: one slot for CLS, one for distillation token
         self.position_embeddings = nn.Parameter(torch.zeros(1, num_patches + 2, config.hidden_size))
         self.distillation_token = nn.Parameter(torch.zeros(1, 1, config.hidden_size))
 

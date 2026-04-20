@@ -18,8 +18,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import collections.abc
-from collections.abc import Callable
+from collections.abc import Callable, Iterable
 
 import torch
 from torch import nn
@@ -46,18 +45,16 @@ class ViTMSNPatchEmbeddings(nn.Module):
 
     def __init__(self, config: ViTMSNConfig):
         super().__init__()
-        image_size, patch_size = config.image_size, config.patch_size
-        num_channels, hidden_size = config.num_channels, config.hidden_size
+        image_size = config.image_size
+        patch_size = config.patch_size
+        image_size = image_size if isinstance(image_size, Iterable) else (image_size, image_size)
+        patch_size = patch_size if isinstance(patch_size, Iterable) else (patch_size, patch_size)
 
-        image_size = image_size if isinstance(image_size, collections.abc.Iterable) else (image_size, image_size)
-        patch_size = patch_size if isinstance(patch_size, collections.abc.Iterable) else (patch_size, patch_size)
-        num_patches = (image_size[1] // patch_size[1]) * (image_size[0] // patch_size[0])
+        self.num_patches = (image_size[1] // patch_size[1]) * (image_size[0] // patch_size[0])
         self.image_size = image_size
         self.patch_size = patch_size
-        self.num_channels = num_channels
-        self.num_patches = num_patches
-
-        self.projection = nn.Conv2d(num_channels, hidden_size, kernel_size=patch_size, stride=patch_size)
+        self.num_channels = config.num_channels
+        self.projection = nn.Conv2d(config.num_channels, config.hidden_size, kernel_size=patch_size, stride=patch_size)
 
     def forward(self, pixel_values: torch.Tensor) -> torch.Tensor:
         num_channels = pixel_values.shape[1]
@@ -307,15 +304,9 @@ class ViTMSNPreTrainedModel(PreTrainedModel):
 
     @torch.no_grad()
     def _init_weights(self, module):
-        """Initialize the weights - ViT MSN uses normal (not trunc_normal) and zeros for embeddings."""
-        if isinstance(module, (nn.Linear, nn.Conv2d)):
-            init.normal_(module.weight, mean=0.0, std=self.config.initializer_range)
-            if module.bias is not None:
-                init.zeros_(module.bias)
-        elif isinstance(module, nn.LayerNorm):
-            init.zeros_(module.bias)
-            init.ones_(module.weight)
-        elif isinstance(module, ViTMSNEmbeddings):
+        """Initialize the weights"""
+        super()._init_weights(module)
+        if isinstance(module, ViTMSNEmbeddings):
             init.zeros_(module.cls_token)
             init.zeros_(module.position_embeddings)
             if module.mask_token is not None:
@@ -334,6 +325,7 @@ class ViTMSNModel(ViTMSNPreTrainedModel):
         self.embeddings = ViTMSNEmbeddings(config, use_mask_token=use_mask_token)
         self.layers = nn.ModuleList([ViTMSNLayer(config) for _ in range(config.num_hidden_layers)])
         self.layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
+        # Initialize weights and apply final processing
         self.post_init()
 
     @merge_with_config_defaults

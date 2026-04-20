@@ -26,6 +26,7 @@ from transformers.models.beit.image_processing_beit import BeitImageProcessor
 from transformers.models.beit.image_processing_pil_beit import BeitImageProcessorPil
 
 from ...activations import ACT2FN
+from ...backbone_utils import filter_output_hidden_states
 from ...image_processing_utils import BatchFeature
 from ...image_transforms import group_images_by_shape, reorder_images
 from ...image_utils import (
@@ -38,14 +39,14 @@ from ...image_utils import (
 )
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutput, ImageClassifierOutput, SemanticSegmenterOutput
-from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...processing_utils import ImagesKwargs, Unpack
 from ...utils import TensorType, TransformersKwargs, auto_docstring
 from ...utils.generic import can_return_tuple, merge_with_config_defaults
 from ...utils.import_utils import requires
 from ...utils.output_capturing import OutputRecorder, capture_outputs
 from ..swin.modeling_swin import SwinDropPath
-from ..vit.modeling_vit import eager_attention_forward
+from ..vit.modeling_vit import ViTAttention, ViTPreTrainedModel, eager_attention_forward
 from .configuration_segformer import SegformerConfig
 
 
@@ -307,7 +308,31 @@ class SegformerOverlapPatchEmbeddings(nn.Module):
         return embeddings, height, width
 
 
-class SegformerAttention(nn.Module):
+class SegformerSequenceReduction(nn.Module):
+    """Spatially reduces key/value tokens via a strided convolution.
+
+    Projects the sequence from (B, H*W, C) → (B, H'*W', C) where H' = H / sr_ratio.
+    This reduces the O(N²) attention cost of the original sequence.
+    """
+
+    def __init__(self, hidden_size: int, sequence_reduction_ratio: int):
+        super().__init__()
+        self.sequence_reduction = nn.Conv2d(
+            hidden_size, hidden_size, kernel_size=sequence_reduction_ratio, stride=sequence_reduction_ratio
+        )
+        self.layer_norm = nn.LayerNorm(hidden_size)
+
+    def forward(self, hidden_states: torch.Tensor, height: int, width: int) -> torch.Tensor:
+        batch_size, seq_len, num_channels = hidden_states.shape
+        # (B, N, C) → (B, C, H, W) → strided conv → (B, C, H', W') → (B, H'W', C)
+        hidden_states = hidden_states.transpose(1, 2).reshape(batch_size, num_channels, height, width)
+        hidden_states = self.sequence_reduction(hidden_states)
+        hidden_states = hidden_states.reshape(batch_size, num_channels, -1).transpose(1, 2)
+        hidden_states = self.layer_norm(hidden_states)
+        return hidden_states
+
+
+class SegformerAttention(ViTAttention):
     """Efficient self-attention where keys/values are spatially reduced via strided convolution.
 
     Introduced in [PvT](https://huggingface.co/papers/2102.12122): queries attend to the full
@@ -315,33 +340,18 @@ class SegformerAttention(nn.Module):
     """
 
     def __init__(self, config, hidden_size, num_attention_heads, sequence_reduction_ratio):
-        super().__init__()
-        self.config = config
+        super().__init__(config)
+        # Override with per-stage dimensions: each Segformer stage has varying hidden sizes
         self.num_attention_heads = num_attention_heads
-
-        if hidden_size % num_attention_heads != 0:
-            raise ValueError(
-                f"The hidden size ({hidden_size}) is not a multiple of the number of attention "
-                f"heads ({num_attention_heads})"
-            )
-
         self.head_dim = hidden_size // num_attention_heads
-        self.scaling = self.head_dim**-0.5
-        self.is_causal = False
-        self.attention_dropout = config.attention_probs_dropout_prob
-        self.hidden_dropout = config.hidden_dropout_prob
-
+        # No qkv_bias in Segformer (unlike ViT)
         self.q_proj = nn.Linear(hidden_size, num_attention_heads * self.head_dim)
         self.k_proj = nn.Linear(hidden_size, num_attention_heads * self.head_dim)
         self.v_proj = nn.Linear(hidden_size, num_attention_heads * self.head_dim)
         self.o_proj = nn.Linear(num_attention_heads * self.head_dim, hidden_size)
-
-        self.sr_ratio = sequence_reduction_ratio
+        self.sequence_reduction_ratio = sequence_reduction_ratio
         if sequence_reduction_ratio > 1:
-            self.sr = nn.Conv2d(
-                hidden_size, hidden_size, kernel_size=sequence_reduction_ratio, stride=sequence_reduction_ratio
-            )
-            self.layer_norm = nn.LayerNorm(hidden_size)
+            self.sequence_reduction = SegformerSequenceReduction(hidden_size, sequence_reduction_ratio)
 
     def forward(
         self,
@@ -356,17 +366,11 @@ class SegformerAttention(nn.Module):
 
         query_states = self.q_proj(hidden_states).view(hidden_shape).transpose(1, 2)
 
-        # Sequence reduction: reshape to spatial, apply strided conv, reshape back
         kv_hidden_states = hidden_states
-        if self.sr_ratio > 1:
-            batch_size, seq_len, num_channels = hidden_states.shape
-            kv_hidden_states = hidden_states.permute(0, 2, 1).reshape(batch_size, num_channels, height, width)
-            kv_hidden_states = self.sr(kv_hidden_states)
-            kv_hidden_states = kv_hidden_states.reshape(batch_size, num_channels, -1).permute(0, 2, 1)
-            kv_hidden_states = self.layer_norm(kv_hidden_states)
+        if self.sequence_reduction_ratio > 1:
+            kv_hidden_states = self.sequence_reduction(hidden_states, height, width)
 
-        kv_input_shape = kv_hidden_states.shape[:-1]
-        kv_hidden_shape = (*kv_input_shape, -1, self.head_dim)
+        kv_hidden_shape = (*kv_hidden_states.shape[:-1], -1, self.head_dim)
         key_states = self.k_proj(kv_hidden_states).view(kv_hidden_shape).transpose(1, 2)
         value_states = self.v_proj(kv_hidden_states).view(kv_hidden_shape).transpose(1, 2)
 
@@ -387,15 +391,16 @@ class SegformerAttention(nn.Module):
 
         attn_output = attn_output.reshape(*input_shape, -1).contiguous()
         attn_output = self.o_proj(attn_output)
-        attn_output = nn.functional.dropout(attn_output, p=self.hidden_dropout, training=self.training)
 
         return attn_output, attn_weights
 
 
-class SegformerDWConv(nn.Module):
+class SegformerDepthWiseConv(nn.Module):
+    """Depthwise convolution used in the Mix-FFN to implicitly encode positional information."""
+
     def __init__(self, dim=768):
         super().__init__()
-        self.dwconv = nn.Conv2d(dim, dim, 3, 1, 1, bias=True, groups=dim)
+        self.dwconv = nn.Conv2d(dim, dim, 3, 1, 1, groups=dim)
 
     def forward(self, hidden_states, height, width):
         batch_size, seq_len, num_channels = hidden_states.shape
@@ -416,7 +421,7 @@ class SegformerMixMLP(nn.Module):
         super().__init__()
         out_features = out_features or in_features
         self.fc1 = nn.Linear(in_features, hidden_features)
-        self.dwconv = SegformerDWConv(hidden_features)
+        self.dwconv = SegformerDepthWiseConv(hidden_features)
         self.activation_fn = ACT2FN[config.hidden_act] if isinstance(config.hidden_act, str) else config.hidden_act
         self.fc2 = nn.Linear(hidden_features, out_features)
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
@@ -449,8 +454,8 @@ class SegformerLayer(GradientCheckpointingLayer):
         )
         self.drop_path = SegformerDropPath(drop_path) if drop_path > 0.0 else nn.Identity()
         self.layernorm_after = nn.LayerNorm(hidden_size)
-        mlp_hidden_size = int(hidden_size * mlp_ratio)
-        self.mlp = SegformerMixMLP(config, in_features=hidden_size, hidden_features=mlp_hidden_size)
+        self.mlp = SegformerMixMLP(config, in_features=hidden_size, hidden_features=int(hidden_size * mlp_ratio))
+        self.hidden_dropout = nn.Dropout(config.hidden_dropout_prob)
 
     def forward(
         self,
@@ -460,11 +465,14 @@ class SegformerLayer(GradientCheckpointingLayer):
         **kwargs: Unpack[TransformersKwargs],
     ) -> torch.Tensor:
         residual = hidden_states
-        hidden_states, _ = self.attention(self.layernorm_before(hidden_states), height, width, **kwargs)
+        hidden_states = self.layernorm_before(hidden_states)
+        hidden_states, _ = self.attention(hidden_states, height, width, **kwargs)
+        hidden_states = self.hidden_dropout(hidden_states)
         hidden_states = self.drop_path(hidden_states) + residual
 
         residual = hidden_states
-        hidden_states = self.mlp(self.layernorm_after(hidden_states), height, width)
+        hidden_states = self.layernorm_after(hidden_states)
+        hidden_states = self.mlp(hidden_states, height, width)
         hidden_states = self.drop_path(hidden_states) + residual
 
         return hidden_states
@@ -511,55 +519,21 @@ class SegformerStage(nn.Module):
         if self.reshape:
             batch_size = hidden_states.shape[0]
             hidden_states = hidden_states.reshape(batch_size, height, width, -1).permute(0, 3, 1, 2).contiguous()
+
         return hidden_states
 
 
-class SegformerEncoder(nn.Module):
-    """Hierarchical mix-transformer encoder with `num_encoder_blocks` stages.
-
-    Stage outputs (shape `(B, C, H, W)`) are the multi-scale feature maps consumed by
-    `SegformerDecodeHead`.
-    """
-
-    def __init__(self, config):
-        super().__init__()
-        self.config = config
-        drop_path_decays = [
-            config.drop_path_rate * i / max(sum(config.depths) - 1, 1) for i in range(sum(config.depths))
-        ]
-        self.stages = nn.ModuleList(
-            [SegformerStage(config, stage_idx, drop_path_decays) for stage_idx in range(config.num_encoder_blocks)]
-        )
-
-    def forward(
-        self,
-        pixel_values: torch.FloatTensor,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> BaseModelOutput:
-        hidden_states = pixel_values
-        for stage in self.stages:
-            hidden_states = stage(hidden_states, **kwargs)
-        return BaseModelOutput(last_hidden_state=hidden_states)
-
-
 @auto_docstring
-class SegformerPreTrainedModel(PreTrainedModel):
-    config: SegformerConfig
-    base_model_prefix = "segformer"
-    main_input_name = "pixel_values"
-    input_modalities = ("image",)
-    supports_gradient_checkpointing = True
-    _no_split_modules = None
-    _supports_sdpa = True
-    _supports_flash_attn = True
-    _supports_flex_attn = True
-    _supports_attention_backend = True
-    _can_compile_fullgraph = True
+class SegformerPreTrainedModel(ViTPreTrainedModel):
+    _no_split_modules = ["SegformerStage"]
     _can_record_outputs = {
         # capture_initial_hidden_state=False: stage 0's input is raw pixel values, not a meaningful embedding.
         "hidden_states": OutputRecorder(SegformerStage, capture_initial_hidden_state=False),
         "attentions": SegformerAttention,
     }
+
+    def _init_weights(self, module):
+        raise NotImplementedError("No need to override this method")
 
 
 @auto_docstring
@@ -568,10 +542,13 @@ class SegformerModel(SegformerPreTrainedModel):
         super().__init__(config)
         self.config = config
 
-        # hierarchical Transformer encoder
-        self.encoder = SegformerEncoder(config)
+        drop_path_decays = [
+            config.drop_path_rate * i / max(sum(config.depths) - 1, 1) for i in range(sum(config.depths))
+        ]
+        self.stages = nn.ModuleList(
+            [SegformerStage(config, stage_idx, drop_path_decays) for stage_idx in range(config.num_encoder_blocks)]
+        )
 
-        # Initialize weights and apply final processing
         self.post_init()
 
     @merge_with_config_defaults
@@ -582,8 +559,10 @@ class SegformerModel(SegformerPreTrainedModel):
         pixel_values: torch.FloatTensor,
         **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutput:
-        encoder_outputs = self.encoder(pixel_values, **kwargs)
-        return encoder_outputs
+        hidden_states = pixel_values
+        for stage in self.stages:
+            hidden_states = stage(hidden_states, **kwargs)
+        return BaseModelOutput(last_hidden_state=hidden_states)
 
 
 @auto_docstring(
@@ -666,9 +645,8 @@ class SegformerDecodeHead(nn.Module):
         # linear layers which will unify the channel dimension of each of the encoder blocks to the same config.decoder_hidden_size
         linear_projections = []
         for stage_idx in range(config.num_encoder_blocks):
-            linear_proj = SegformerMLP(config, input_dim=config.hidden_sizes[stage_idx])
-            linear_projections.append(linear_proj)
-        self.linear_c = nn.ModuleList(linear_projections)
+            linear_projections.append(SegformerMLP(config, input_dim=config.hidden_sizes[stage_idx]))
+        self.linear_projections = nn.ModuleList(linear_projections)
 
         # the following 3 layers implement the ConvModule of the original implementation
         self.linear_fuse = nn.Conv2d(
@@ -689,7 +667,7 @@ class SegformerDecodeHead(nn.Module):
         batch_size = encoder_hidden_states[-1].shape[0]
 
         all_hidden_states = ()
-        for encoder_hidden_state, linear_proj in zip(encoder_hidden_states, self.linear_c):
+        for encoder_hidden_state, linear_proj in zip(encoder_hidden_states, self.linear_projections):
             if self.config.reshape_last_stage is False and encoder_hidden_state.ndim == 3:
                 height = width = int(math.sqrt(encoder_hidden_state.shape[-1]))
                 encoder_hidden_state = (
@@ -733,6 +711,7 @@ class SegformerForSemanticSegmentation(SegformerPreTrainedModel):
         self.post_init()
 
     @can_return_tuple
+    @filter_output_hidden_states
     @auto_docstring
     def forward(
         self,
@@ -769,9 +748,6 @@ class SegformerForSemanticSegmentation(SegformerPreTrainedModel):
         if labels is not None and self.config.num_labels < 1:
             raise ValueError(f"Number of labels should be >=0: {self.config.num_labels}")
 
-        # Track whether the user requested hidden states before we override the kwarg.
-        output_hidden_states = kwargs.get("output_hidden_states", getattr(self.config, "output_hidden_states", False))
-
         # The decode head always needs all stage outputs, so force hidden_states on internally.
         kwargs["output_hidden_states"] = True
         outputs = self.segformer(pixel_values, **kwargs)
@@ -798,7 +774,7 @@ class SegformerForSemanticSegmentation(SegformerPreTrainedModel):
         return SemanticSegmenterOutput(
             loss=loss,
             logits=logits,
-            hidden_states=outputs.hidden_states if output_hidden_states else None,
+            hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
 

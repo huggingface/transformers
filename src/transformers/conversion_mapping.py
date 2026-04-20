@@ -92,7 +92,7 @@ _MODEL_TO_CONVERSION_PATTERN = {
 def _build_checkpoint_conversion_mapping():
     mapping = {
         "vit": [
-            WeightRenaming("encoder.layer", "layers"),
+            WeightRenaming(r"encoder\.layer\.", "layers."),
             WeightRenaming("attention.query", "q_proj"),
             WeightRenaming("attention.key", "k_proj"),
             WeightRenaming("attention.value", "v_proj"),
@@ -107,16 +107,16 @@ def _build_checkpoint_conversion_mapping():
             WeightRenaming("attention.output", "attention.o_proj"),
         ],
         "segformer": [
-            # Structural: three parallel ModuleLists collapsed into SegformerStage (4 stages for all variants)
-            WeightRenaming(r"encoder.patch_embeddings.(\d+).", r"encoder.stages.\1.patch_embeddings."),
-            WeightRenaming(r"encoder.block.(\d+).", r"encoder.stages.\1.blocks."),
-            WeightRenaming(r"encoder.layer_norm.(\d+)", r"encoder.stages.\1.layer_norm"),
+            # Structural: legacy `encoder.*` lists → SegformerModel.stages (no `encoder` submodule on SegformerModel)
+            WeightRenaming(r"encoder.patch_embeddings.(\d+).", r"stages.\1.patch_embeddings."),
+            WeightRenaming(r"encoder.block.(\d+).", r"stages.\1.blocks."),
+            WeightRenaming(r"encoder.layer_norm.(\d+)", r"stages.\1.layer_norm"),
             # Attention projection renames
             WeightRenaming("attention.self.query", "attention.q_proj"),
             WeightRenaming("attention.self.key", "attention.k_proj"),
             WeightRenaming("attention.self.value", "attention.v_proj"),
-            WeightRenaming("attention.self.sr", "attention.sr"),
-            WeightRenaming("attention.self.layer_norm", "attention.layer_norm"),
+            WeightRenaming("attention.self.sr", "attention.sequence_reduction.sequence_reduction"),
+            WeightRenaming("attention.self.layer_norm", "attention.sequence_reduction.layer_norm"),
             WeightRenaming("attention.output.dense", "attention.o_proj"),
             # MLP renames
             WeightRenaming("mlp.dense1", "mlp.fc1"),
@@ -124,6 +124,8 @@ def _build_checkpoint_conversion_mapping():
             # LayerNorm renames
             WeightRenaming("layer_norm_1", "layernorm_before"),
             WeightRenaming("layer_norm_2", "layernorm_after"),
+            # Decode head: legacy checkpoints name the MLP list `linear_c`
+            WeightRenaming("decode_head.linear_c", "decode_head.linear_projections"),
         ],
         "swin": [
             # Attention projection renames (SwinSelfAttention.{query,key,value} → SwinAttention.{q,k,v}_proj)
@@ -592,6 +594,7 @@ def _build_checkpoint_conversion_mapping():
     mapping["pixio"] += [
         WeightRenaming("norm1", "layernorm_before"),
         WeightRenaming("norm2", "layernorm_after"),
+        WeightRenaming(r"^encoder\.", "pixio."),
     ]
 
     mapping["minimax_m2"] = mapping["mixtral"].copy()

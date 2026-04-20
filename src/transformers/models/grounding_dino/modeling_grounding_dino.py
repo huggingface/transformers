@@ -35,6 +35,7 @@ from .configuration_grounding_dino import GroundingDinoConfig
 logger = logging.get_logger(__name__)
 
 
+# Copied from transformers.models.conditional_detr.modeling_conditional_detr.encode_sinusoidal_position_embedding
 def encode_sinusoidal_position_embedding(
     pos_tensor: torch.Tensor,
     num_pos_feats: int = 128,

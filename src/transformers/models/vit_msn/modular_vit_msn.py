@@ -24,10 +24,12 @@ from ...utils import TransformersKwargs, auto_docstring
 from ...utils.generic import can_return_tuple, merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
 from ..vit.modeling_vit import (
+    PreTrainedModel,
     ViTAttention,
     ViTEmbeddings,
     ViTLayer,
     ViTMLP,
+    ViTModel,
     ViTPatchEmbeddings,
     ViTPreTrainedModel,
 )
@@ -68,15 +70,8 @@ class ViTMSNPreTrainedModel(ViTPreTrainedModel):
 
     @torch.no_grad()
     def _init_weights(self, module):
-        """Initialize the weights - ViT MSN uses normal (not trunc_normal) and zeros for embeddings."""
-        if isinstance(module, (nn.Linear, nn.Conv2d)):
-            init.normal_(module.weight, mean=0.0, std=self.config.initializer_range)
-            if module.bias is not None:
-                init.zeros_(module.bias)
-        elif isinstance(module, nn.LayerNorm):
-            init.zeros_(module.bias)
-            init.ones_(module.weight)
-        elif isinstance(module, ViTMSNEmbeddings):
+        PreTrainedModel._init_weights(self, module)
+        if isinstance(module, ViTMSNEmbeddings):
             init.zeros_(module.cls_token)
             init.zeros_(module.position_embeddings)
             if module.mask_token is not None:
@@ -84,18 +79,14 @@ class ViTMSNPreTrainedModel(ViTPreTrainedModel):
 
 
 @auto_docstring
-class ViTMSNModel(ViTMSNPreTrainedModel):
+class ViTMSNModel(ViTModel):
     def __init__(self, config: ViTMSNConfig, use_mask_token: bool = False) -> None:
         r"""
         use_mask_token (`bool`, *optional*, defaults to `False`):
             Whether to use a mask token for masked image modeling.
         """
         super().__init__(config)
-        self.config = config
-        self.embeddings = ViTMSNEmbeddings(config, use_mask_token=use_mask_token)
-        self.layers = nn.ModuleList([ViTMSNLayer(config) for _ in range(config.num_hidden_layers)])
-        self.layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
-        self.post_init()
+        del self.pooler
 
     @merge_with_config_defaults
     @capture_outputs(tie_last_hidden_states=False)

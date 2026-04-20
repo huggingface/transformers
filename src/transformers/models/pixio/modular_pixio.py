@@ -242,13 +242,10 @@ class PixioBackbone(BackboneMixin, PixioPreTrainedModel):
         super().__init__(config)
 
         self.num_features = [config.hidden_size for _ in range(config.num_hidden_layers + 1)]
-        self.encoder = PixioModel(config)
+        self.pixio = PixioModel(config)
         self.layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
 
         self.post_init()
-
-    def get_input_embeddings(self) -> PixioPatchEmbeddings:
-        return self.encoder.embeddings.patch_embeddings
 
     @can_return_tuple
     @filter_output_hidden_states
@@ -287,7 +284,7 @@ class PixioBackbone(BackboneMixin, PixioPreTrainedModel):
         ```"""
         kwargs["output_hidden_states"] = True  # required to extract layers for the stages
 
-        output: BaseModelOutput = self.encoder(pixel_values, attention_mask, **kwargs)
+        output: BaseModelOutput = self.pixio(pixel_values, attention_mask, **kwargs)
         hidden_states = output.hidden_states
 
         feature_maps = []
@@ -296,7 +293,7 @@ class PixioBackbone(BackboneMixin, PixioPreTrainedModel):
                 if self.config.apply_layernorm:
                     hidden_state = self.layernorm(hidden_state)
                 if self.config.reshape_hidden_states:
-                    hidden_state = hidden_state[:, self.encoder.embeddings.n_cls_tokens :]
+                    hidden_state = hidden_state[:, self.pixio.embeddings.n_cls_tokens :]
                     batch_size, _, height, width = pixel_values.shape
                     patch_size = self.config.patch_size
                     hidden_state = hidden_state.reshape(batch_size, height // patch_size, width // patch_size, -1)

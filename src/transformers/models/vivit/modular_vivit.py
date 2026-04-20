@@ -13,6 +13,8 @@
 # limitations under the License.
 """PyTorch ViViT model - modular file inheriting transformer core from ViT."""
 
+from collections.abc import Iterable
+
 import torch
 from torch import nn
 
@@ -20,13 +22,16 @@ from ... import initialization as init
 from ...masking_utils import create_bidirectional_mask
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling, ImageClassifierOutput
 from ...processing_utils import Unpack
-from ...utils import TransformersKwargs, auto_docstring, logging, torch_int
+from ...utils import TransformersKwargs, auto_docstring, logging
 from ...utils.generic import can_return_tuple, merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
 from ..vit.modeling_vit import (
+    PreTrainedModel,
     ViTAttention,
+    ViTEmbeddings,
     ViTLayer,
     ViTMLP,
+    ViTModel,
     ViTPooler,
     ViTPreTrainedModel,
 )
@@ -48,77 +53,44 @@ class VivitTubeletEmbeddings(nn.Module):
     def __init__(self, config: VivitConfig):
         super().__init__()
         tubelet_size = config.tubelet_size
+        image_size = config.image_size
+        image_size = image_size if isinstance(image_size, Iterable) else (image_size, image_size)
         self.num_patches = (
             (config.num_frames // tubelet_size[0])
-            * (config.image_size // tubelet_size[1])
-            * (config.image_size // tubelet_size[2])
+            * (image_size[1] // tubelet_size[1])
+            * (image_size[2] // tubelet_size[2])
         )
         self.projection = nn.Conv3d(
             config.num_channels, config.hidden_size, kernel_size=tubelet_size, stride=tubelet_size
         )
 
     def forward(self, pixel_values: torch.Tensor) -> torch.Tensor:
-        # permute to (batch_size, num_channels, num_frames, height, width) for Conv3d
-        pixel_values = pixel_values.permute(0, 2, 1, 3, 4)
+        # transpose (batch_size, num_channels, num_frames, height, width) for Conv3d
+        pixel_values = pixel_values.transpose(1, 2)
         return self.projection(pixel_values).flatten(2).transpose(1, 2)
 
 
-class VivitEmbeddings(nn.Module):
+class VivitEmbeddings(ViTEmbeddings):
     """
     Construct the CLS token, position and tubelet patch embeddings for video input.
     """
 
     def __init__(self, config: VivitConfig):
-        nn.Module.__init__(self)
+        super().__init__()
 
         self.cls_token = nn.Parameter(torch.zeros(1, 1, config.hidden_size))
         self.patch_embeddings = VivitTubeletEmbeddings(config)
-        self.position_embeddings = nn.Parameter(
-            torch.zeros(1, self.patch_embeddings.num_patches + 1, config.hidden_size)
-        )
-        self.dropout = nn.Dropout(config.hidden_dropout_prob)
+        num_patches = self.patch_embeddings.num_patches
+        self.position_embeddings = nn.Parameter(torch.zeros(1, num_patches + 1, config.hidden_size))
         # patch_size is the spatial (height, width) part of the tubelet for pos encoding interpolation
         self.patch_size = config.tubelet_size[1:]
-        self.image_size = (config.image_size, config.image_size)
+        del self.mask_token
 
     def interpolate_pos_encoding(self, embeddings: torch.Tensor, height: int, width: int) -> torch.Tensor:
-        """
-        This method allows to interpolate the pre-trained position encodings, to be able to use the model on higher
-        resolution images. This method is also adapted to support torch.jit tracing.
-
-        Adapted from:
-        - https://github.com/facebookresearch/dino/blob/de9ee3df6cf39fac952ab558447af1fa1365362a/vision_transformer.py#L174-L194, and
-        - https://github.com/facebookresearch/dinov2/blob/e1277af2ba9496fbadf7aec6eba56e8d882d1e35/dinov2/models/vision_transformer.py#L179-L211
-        """
-        num_patches = embeddings.shape[1] - 1
-        num_positions = self.position_embeddings.shape[1] - 1
-
-        # always interpolate when tracing to ensure the exported model works for dynamic input shapes
-        if not torch.jit.is_tracing() and num_patches == num_positions and height == width:
-            return self.position_embeddings
-
-        class_pos_embed = self.position_embeddings[:, :1]
-        patch_pos_embed = self.position_embeddings[:, 1:]
-
-        dim = embeddings.shape[-1]
+        super().interpolate_pos_encoding(embeddings, height, width)
         # patch_size is a 2-tuple (height, width) for the spatial tubelet dimensions
-        new_height = height // self.patch_size[0]
-        new_width = width // self.patch_size[1]
-
-        sqrt_num_positions = torch_int(num_positions**0.5)
-        patch_pos_embed = patch_pos_embed.reshape(1, sqrt_num_positions, sqrt_num_positions, dim)
-        patch_pos_embed = patch_pos_embed.permute(0, 3, 1, 2)
-
-        patch_pos_embed = nn.functional.interpolate(
-            patch_pos_embed,
-            size=(new_height, new_width),
-            mode="bicubic",
-            align_corners=False,
-        )
-
-        patch_pos_embed = patch_pos_embed.permute(0, 2, 3, 1).view(1, -1, dim)
-
-        return torch.cat((class_pos_embed, patch_pos_embed), dim=1)
+        new_height = height // self.patch_size[0]  # noqa: F841
+        new_width = width // self.patch_size[1]  # noqa: F841
 
     def forward(self, pixel_values: torch.Tensor, interpolate_pos_encoding: bool = False) -> torch.Tensor:
         batch_size, num_frames, num_channels, height, width = pixel_values.shape
@@ -163,49 +135,27 @@ class VivitPooler(ViTPooler):
 class VivitPreTrainedModel(ViTPreTrainedModel):
     config: VivitConfig
     base_model_prefix = "vivit"
-    main_input_name = "pixel_values"
     input_modalities = ("video",)
-    supports_gradient_checkpointing = True
     _no_split_modules = ["VivitEmbeddings", "VivitLayer"]
-    _supports_sdpa = True
-    _supports_flash_attn = True
-    _supports_flex_attn = True
-    _supports_attention_backend = True
-    _can_compile_fullgraph = True
 
     @torch.no_grad()
     def _init_weights(self, module):
         """Initialize the weights"""
-        if isinstance(module, (nn.Linear, nn.Conv2d, nn.Conv3d)):
-            init.trunc_normal_(module.weight, mean=0.0, std=self.config.initializer_range)
-            if module.bias is not None:
-                init.zeros_(module.bias)
-        elif isinstance(module, nn.LayerNorm):
-            init.zeros_(module.bias)
-            init.ones_(module.weight)
-        elif isinstance(module, VivitEmbeddings):
+        PreTrainedModel._init_weights(self, module)
+        if isinstance(module, VivitEmbeddings):
             init.zeros_(module.cls_token)
             init.zeros_(module.position_embeddings)
 
 
 @auto_docstring
-class VivitModel(VivitPreTrainedModel):
+class VivitModel(ViTModel):
     def __init__(self, config: VivitConfig, add_pooling_layer: bool = True):
         r"""
         add_pooling_layer (bool, *optional*, defaults to `True`):
             Whether to add a pooling layer
         """
         super().__init__(config)
-        self.config = config
-
         self.embeddings = VivitEmbeddings(config)
-        self.layers = nn.ModuleList([VivitLayer(config) for _ in range(config.num_hidden_layers)])
-
-        self.layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
-        self.pooler = VivitPooler(config) if add_pooling_layer else None
-
-        # Initialize weights and apply final processing
-        self.post_init()
 
     @merge_with_config_defaults
     @capture_outputs(tie_last_hidden_states=False)

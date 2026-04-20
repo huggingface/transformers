@@ -177,18 +177,19 @@ class GLPNAttention(nn.Module):
         return outputs
 
 
-# Copied from transformers.models.segformer.modeling_segformer.SegformerDWConv
-class GLPNDWConv(nn.Module):
+# Copied from transformers.models.segformer.modeling_segformer.SegformerDepthWiseConv with Segformer->GLPN
+class GLPNDepthWiseConv(nn.Module):
+    """Depthwise convolution used in the Mix-FFN to implicitly encode positional information."""
+
     def __init__(self, dim=768):
         super().__init__()
-        self.dwconv = nn.Conv2d(dim, dim, 3, 1, 1, bias=True, groups=dim)
+        self.dwconv = nn.Conv2d(dim, dim, 3, 1, 1, groups=dim)
 
     def forward(self, hidden_states, height, width):
         batch_size, seq_len, num_channels = hidden_states.shape
         hidden_states = hidden_states.transpose(1, 2).view(batch_size, num_channels, height, width)
         hidden_states = self.dwconv(hidden_states)
         hidden_states = hidden_states.flatten(2).transpose(1, 2)
-
         return hidden_states
 
 
@@ -198,7 +199,7 @@ class GLPNMixFFN(nn.Module):
         super().__init__()
         out_features = out_features or in_features
         self.dense1 = nn.Linear(in_features, hidden_features)
-        self.dwconv = GLPNDWConv(hidden_features)
+        self.dwconv = GLPNDepthWiseConv(hidden_features)
         if isinstance(config.hidden_act, str):
             self.intermediate_act_fn = ACT2FN[config.hidden_act]
         else:

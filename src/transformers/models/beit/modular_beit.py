@@ -276,7 +276,7 @@ class BeitPreTrainedModel(ViTPreTrainedModel):
 
     def _init_weights(self, module):
         """Initialize the weights"""
-        PreTrainedModel._init_weights(module)
+        PreTrainedModel._init_weights(self, module)
         if isinstance(module, BeitEmbeddings):
             init.zeros_(module.cls_token)
             if module.mask_token is not None:

@@ -520,12 +520,12 @@ class SwinLayer(GradientCheckpointingLayer):
         shift_size: int = 0,
     ):
         super().__init__()
-        self.window_size = config.window_size
-        self.attention = SwinAttention(config, dim, num_heads, window_size=self.window_size)
+        self.attention = SwinAttention(config, dim, num_heads, window_size=config.window_size)
         self.layernorm_before = nn.LayerNorm(dim, eps=config.layer_norm_eps)
         self.layernorm_after = nn.LayerNorm(dim, eps=config.layer_norm_eps)
         self.mlp = SwinMLP(config, dim)
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
+        self.window_size = config.window_size
         self.shift_size = shift_size
         self.input_resolution = input_resolution
         self.drop_path = SwinDropPath(drop_path_rate) if drop_path_rate > 0.0 else nn.Identity()
@@ -746,14 +746,8 @@ class SwinPreTrainedModel(PreTrainedModel):
     @torch.no_grad()
     def _init_weights(self, module):
         """Initialize the weights"""
-        if isinstance(module, nn.Linear | nn.Conv2d):
-            init.trunc_normal_(module.weight, mean=0.0, std=self.config.initializer_range)
-            if module.bias is not None:
-                init.zeros_(module.bias)
-        elif isinstance(module, nn.LayerNorm):
-            init.zeros_(module.bias)
-            init.ones_(module.weight)
-        elif isinstance(module, SwinEmbeddings):
+        super()._init_weights(module)
+        if isinstance(module, SwinEmbeddings):
             if module.mask_token is not None:
                 init.zeros_(module.mask_token)
             if module.position_embeddings is not None:

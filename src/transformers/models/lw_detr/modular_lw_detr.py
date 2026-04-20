@@ -97,9 +97,6 @@ class LwDetrViTConfig(VitDetConfig):
 
     def __post_init__(self, **kwargs):
         self.num_windows_side = int(math.sqrt(self.num_windows))
-        # ViTAttention expects these; map from dropout_prob
-        self.attention_probs_dropout_prob = self.dropout_prob
-        self.hidden_dropout_prob = self.dropout_prob
         super().__post_init__(**kwargs)
 
     def validate_architecture(self):
@@ -225,11 +222,21 @@ class LwDetrConfig(PreTrainedConfig):
 
 
 class LwDetrViTAttention(ViTAttention):
-    """LwDetr ViT attention with k_proj bias=False."""
+    """LwDetr ViT attention with k_proj bias=False and dropout from config.dropout_prob."""
 
     def __init__(self, config: LwDetrViTConfig):
-        super().__init__(config)
+        nn.Module.__init__(self)
+        self.config = config
+        self.num_attention_heads = config.num_attention_heads
+        self.head_dim = getattr(config, "head_dim", config.hidden_size // config.num_attention_heads)
+        self.attention_dropout = config.dropout_prob
+        self.scaling = self.head_dim**-0.5
+        self.is_causal = False
+
+        self.q_proj = nn.Linear(config.hidden_size, config.num_attention_heads * self.head_dim, bias=config.qkv_bias)
         self.k_proj = nn.Linear(config.hidden_size, config.num_attention_heads * self.head_dim, bias=False)
+        self.v_proj = nn.Linear(config.hidden_size, config.num_attention_heads * self.head_dim, bias=config.qkv_bias)
+        self.o_proj = nn.Linear(config.num_attention_heads * self.head_dim, config.hidden_size, bias=True)
         self.num_key_value_groups = 1
 
 

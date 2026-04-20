@@ -4,8 +4,21 @@
 #             the file from the modular. If any change should be done, please apply the change to the
 #                          modular_deit.py file directly. One of our CI enforces this.
 #                🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨
-import collections.abc
-from collections.abc import Callable
+# Copyright 2021 Facebook AI Research & The HuggingFace Inc. team. All rights reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+from collections.abc import Callable, Iterable
 from dataclasses import dataclass
 
 import torch
@@ -33,18 +46,16 @@ class DeiTPatchEmbeddings(nn.Module):
 
     def __init__(self, config: DeiTConfig):
         super().__init__()
-        image_size, patch_size = config.image_size, config.patch_size
-        num_channels, hidden_size = config.num_channels, config.hidden_size
+        image_size = config.image_size
+        patch_size = config.patch_size
+        image_size = image_size if isinstance(image_size, Iterable) else (image_size, image_size)
+        patch_size = patch_size if isinstance(patch_size, Iterable) else (patch_size, patch_size)
 
-        image_size = image_size if isinstance(image_size, collections.abc.Iterable) else (image_size, image_size)
-        patch_size = patch_size if isinstance(patch_size, collections.abc.Iterable) else (patch_size, patch_size)
-        num_patches = (image_size[1] // patch_size[1]) * (image_size[0] // patch_size[0])
+        self.num_patches = (image_size[1] // patch_size[1]) * (image_size[0] // patch_size[0])
         self.image_size = image_size
         self.patch_size = patch_size
-        self.num_channels = num_channels
-        self.num_patches = num_patches
-
-        self.projection = nn.Conv2d(num_channels, hidden_size, kernel_size=patch_size, stride=patch_size)
+        self.num_channels = config.num_channels
+        self.projection = nn.Conv2d(config.num_channels, config.hidden_size, kernel_size=patch_size, stride=patch_size)
 
     def forward(self, pixel_values: torch.Tensor) -> torch.Tensor:
         num_channels = pixel_values.shape[1]
@@ -59,6 +70,12 @@ class DeiTPatchEmbeddings(nn.Module):
 class DeiTEmbeddings(nn.Module):
     """
     Construct the CLS token, distillation token, position and patch embeddings. Optionally, also the mask token.
+
+    Differences from ViTEmbeddings:
+    - Adds a distillation token (for distillation pre-training).
+    - Position embeddings include +2 slots (CLS + distillation) instead of +1.
+    - interpolate_pos_encoding handles 2 special tokens instead of 1.
+    - forward concatenates distillation token and handles position encoding for both.
     """
 
     def __init__(self, config: DeiTConfig, use_mask_token: bool = False) -> None:
@@ -67,6 +84,7 @@ class DeiTEmbeddings(nn.Module):
         self.mask_token = nn.Parameter(torch.zeros(1, 1, config.hidden_size)) if use_mask_token else None
         self.patch_embeddings = DeiTPatchEmbeddings(config)
         num_patches = self.patch_embeddings.num_patches
+        # +2: one slot for CLS, one for distillation token
         self.position_embeddings = nn.Parameter(torch.zeros(1, num_patches + 2, config.hidden_size))
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
         self.patch_size = config.patch_size
@@ -295,14 +313,8 @@ class DeiTPreTrainedModel(PreTrainedModel):
     @torch.no_grad()
     def _init_weights(self, module: nn.Linear | nn.Conv2d | nn.LayerNorm) -> None:
         """Initialize the weights"""
-        if isinstance(module, nn.Linear | nn.Conv2d):
-            init.trunc_normal_(module.weight, mean=0.0, std=self.config.initializer_range)
-            if module.bias is not None:
-                init.zeros_(module.bias)
-        elif isinstance(module, nn.LayerNorm):
-            init.zeros_(module.bias)
-            init.ones_(module.weight)
-        elif isinstance(module, DeiTEmbeddings):
+        super()._init_weights(module)
+        if isinstance(module, DeiTEmbeddings):
             if module.position_embeddings is not None:
                 init.trunc_normal_(module.position_embeddings, mean=0.0, std=self.config.initializer_range)
             init.trunc_normal_(module.cls_token, mean=0.0, std=self.config.initializer_range)
@@ -342,13 +354,10 @@ class DeiTModel(DeiTPreTrainedModel):
         """
         super().__init__(config)
         self.config = config
-
         self.embeddings = DeiTEmbeddings(config, use_mask_token=use_mask_token)
         self.layers = nn.ModuleList([DeiTLayer(config) for _ in range(config.num_hidden_layers)])
-
         self.layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.pooler = DeiTPooler(config) if add_pooling_layer else None
-
         # Initialize weights and apply final processing
         self.post_init()
 

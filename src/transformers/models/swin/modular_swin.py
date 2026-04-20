@@ -31,7 +31,14 @@ from ...processing_utils import Unpack
 from ...utils import ModelOutput, TransformersKwargs, auto_docstring, logging, torch_int
 from ...utils.generic import can_return_tuple, merge_with_config_defaults
 from ...utils.output_capturing import OutputRecorder, capture_outputs
-from ..vit.modeling_vit import ViTAttention, ViTLayer, ViTMLP, ViTPreTrainedModel, eager_attention_forward
+from ..vit.modeling_vit import (
+    PreTrainedModel,
+    ViTAttention,
+    ViTLayer,
+    ViTMLP,
+    ViTPreTrainedModel,
+    eager_attention_forward,
+)
 from .configuration_swin import SwinConfig
 
 
@@ -480,9 +487,9 @@ class SwinLayer(ViTLayer):
         drop_path_rate: float = 0.0,
         shift_size: int = 0,
     ):
-        self.window_size = config.window_size
         super().__init__()
-        self.attention = SwinAttention(config, dim, num_heads, window_size=self.window_size)
+        self.window_size = config.window_size
+        self.attention = SwinAttention(config, dim, num_heads, window_size=config.window_size)
         self.layernorm_before = nn.LayerNorm(dim, eps=config.layer_norm_eps)
         self.layernorm_after = nn.LayerNorm(dim, eps=config.layer_norm_eps)
         self.mlp = SwinMLP(config, dim)
@@ -698,14 +705,8 @@ class SwinPreTrainedModel(ViTPreTrainedModel):
     @torch.no_grad()
     def _init_weights(self, module):
         """Initialize the weights"""
-        if isinstance(module, nn.Linear | nn.Conv2d):
-            init.trunc_normal_(module.weight, mean=0.0, std=self.config.initializer_range)
-            if module.bias is not None:
-                init.zeros_(module.bias)
-        elif isinstance(module, nn.LayerNorm):
-            init.zeros_(module.bias)
-            init.ones_(module.weight)
-        elif isinstance(module, SwinEmbeddings):
+        PreTrainedModel._init_weights(self, module)
+        if isinstance(module, SwinEmbeddings):
             if module.mask_token is not None:
                 init.zeros_(module.mask_token)
             if module.position_embeddings is not None:
