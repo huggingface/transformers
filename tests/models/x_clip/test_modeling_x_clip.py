@@ -19,6 +19,7 @@ import unittest
 
 import numpy as np
 from huggingface_hub import hf_hub_download
+from parameterized import parameterized
 
 from transformers import XCLIPConfig, XCLIPTextConfig, XCLIPVisionConfig
 from transformers.testing_utils import (
@@ -33,6 +34,7 @@ from transformers.utils import is_torch_available, is_vision_available
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import (
+    TEST_EAGER_MATCHES_SDPA_INFERENCE_PARAMETERIZATION,
     ModelTesterMixin,
     floats_tensor,
     ids_tensor,
@@ -161,6 +163,13 @@ class XCLIPVisionModelTest(ModelTesterMixin, unittest.TestCase):
 
     @unittest.skip(reason="X-CLIP does not use inputs_embeds")
     def test_inputs_embeds(self):
+        pass
+
+    @parameterized.expand(TEST_EAGER_MATCHES_SDPA_INFERENCE_PARAMETERIZATION)
+    @unittest.skip(reason="X-CLIP needs batch size to match frames, can't crop and create new dummy inputs")
+    def test_eager_matches_sdpa_inference(
+        self, name, dtype, padding_side, use_attention_mask, output_attentions, enable_kernels
+    ):
         pass
 
     def test_model_get_set_embeddings(self):
@@ -392,6 +401,7 @@ class XCLIPTextModelTester:
 @require_torch
 class XCLIPTextModelTest(ModelTesterMixin, unittest.TestCase):
     all_model_classes = (XCLIPTextModel,) if is_torch_available() else ()
+    model_split_percents = [0.7, 0.9]
 
     def setUp(self):
         self.model_tester = XCLIPTextModelTester(self)
@@ -439,6 +449,7 @@ class XCLIPModelTester:
         vision_kwargs=None,
         projection_dim=64,
         mit_hidden_size=64,
+        prompt_num_attention_heads=4,
         is_training=True,
     ):
         if text_kwargs is None:
@@ -449,6 +460,7 @@ class XCLIPModelTester:
         self.parent = parent
         self.projection_dim = projection_dim
         self.mit_hidden_size = mit_hidden_size
+        self.prompt_num_attention_heads = prompt_num_attention_heads
         self.text_model_tester = XCLIPTextModelTester(parent, **text_kwargs)
         self.vision_model_tester = XCLIPVisionModelTester(parent, **vision_kwargs)
         self.batch_size = self.text_model_tester.batch_size  # need bs for batching_equivalence test
@@ -476,6 +488,7 @@ class XCLIPModelTester:
             text_config=self.text_model_tester.get_config().to_dict(),
             vision_config=self.vision_model_tester.get_config().to_dict(),
             projection_dim=self.projection_dim,
+            prompt_num_attention_heads=self.prompt_num_attention_heads,
         )
 
     def create_and_check_model(self, config, input_ids, attention_mask, pixel_values):
@@ -512,6 +525,7 @@ class XCLIPModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     test_resize_embeddings = False
     test_attention_outputs = False
     maxdiff = None
+    additional_model_inputs = ["pixel_values"]
 
     def setUp(self):
         self.model_tester = XCLIPModelTester(self)

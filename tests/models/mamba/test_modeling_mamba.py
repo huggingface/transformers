@@ -31,11 +31,7 @@ from ...test_pipeline_mixin import PipelineTesterMixin
 if is_torch_available():
     import torch
 
-    from transformers import (
-        MambaForCausalLM,
-        MambaModel,
-    )
-    from transformers.models.mamba.modeling_mamba import MambaCache
+    from transformers import CompileConfig, DynamicCache, MambaForCausalLM, MambaModel
 
 
 class MambaModelTester:
@@ -246,18 +242,6 @@ class MambaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
     def test_enable_input_require_grads(self):
         self.skipTest("Mamba currently requires CUDA/Metal/XPU to run enable_input_require_grads.")
 
-    def _check_past_key_values_for_generate(self, batch_size, past_key_values, seq_length, config):
-        self.assertIsInstance(past_key_values, MambaCache)
-
-        conv_shape = (batch_size, config.intermediate_size, config.conv_kernel)
-        ssm_shape = (batch_size, config.intermediate_size, config.state_size)
-
-        self.assertTrue(config.num_hidden_layers, len(past_key_values.conv_states))
-
-        for idx in range(len(past_key_values.conv_states)):
-            self.assertEqual(past_key_values.conv_states[idx].shape, conv_shape)
-            self.assertEqual(past_key_values.ssm_states[idx].shape, ssm_shape)
-
     def assertInterval(self, member, container, msg=None):
         r"""
         Simple utility function to check if a member is inside an interval.
@@ -317,9 +301,12 @@ class MambaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
                 dict_output = model(**dict_inputs, return_dict=True, **additional_kwargs).to_tuple()
 
                 def recursive_check(tuple_object, dict_object):
-                    if isinstance(tuple_object, MambaCache):  # MODIFIED PART START
-                        recursive_check(tuple_object.conv_states, dict_object.conv_states)
-                        recursive_check(tuple_object.ssm_states, dict_object.ssm_states)
+                    if isinstance(tuple_object, DynamicCache):  # MODIFIED PART START
+                        for idx in range(len(tuple_object)):
+                            recursive_check(tuple_object.layers[idx].conv_states, dict_object.layers[idx].conv_states)
+                            recursive_check(
+                                tuple_object.layers[idx].recurrent_states, dict_object.layers[idx].recurrent_states
+                            )
                     elif isinstance(tuple_object, (list, tuple)):  # MODIFIED PART END
                         for tuple_iterable_value, dict_iterable_value in zip(tuple_object, dict_object):
                             recursive_check(tuple_iterable_value, dict_iterable_value)
@@ -367,29 +354,6 @@ class MambaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
     @unittest.skip("The `inputs_embeds` when fed don't produce the same results.")
     def test_beam_sample_generate(self):
         pass
-
-    def test_dtype_mismatch_handled_in_cache(self):
-        config, input_ids, *args = self.model_tester.prepare_config_and_inputs()
-        model = MambaModel(config)
-        model.to(torch_device).to(torch.float16)
-        model.eval()
-
-        # Create cache with float32 dtype
-        cache_params = MambaCache(config, max_batch_size=input_ids.size(0), dtype=torch.float32, device=torch_device)
-
-        # If code is correct, no error occurs and test passes
-        outputs = model(
-            input_ids,
-            cache_params=cache_params,
-            use_cache=True,
-        )
-
-        self.assertIsNotNone(outputs)
-        self.assertIsNotNone(outputs.last_hidden_state)
-        self.assertEqual(
-            outputs.last_hidden_state.shape,
-            (self.model_tester.batch_size, self.model_tester.seq_length, self.model_tester.hidden_size),
-        )
 
     @unittest.skip("Mamba models do not support DDP.")
     def test_multi_gpu_data_parallel_forward(self):
@@ -490,8 +454,10 @@ class MambaIntegrationTests(unittest.TestCase):
         output_sentence = self.tokenizer.decode(output[0].tolist())
         self.assertEqual(output_sentence, expected_output)
 
-        model.forward = torch.compile(model.forward, fullgraph=True, mode="reduce-overhead")
-        output = model.generate(input_ids, max_new_tokens=20)
+        compile_config = CompileConfig(fullgraph=True, mode="reduce-overhead")
+        output = model.generate(
+            input_ids, max_new_tokens=20, cache_implementation="static", compile_config=compile_config
+        )
         output_sentence = self.tokenizer.decode(output[0].tolist())
         self.assertEqual(output_sentence, expected_output)
 

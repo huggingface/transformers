@@ -95,7 +95,7 @@ class PerceiverConfig(PreTrainedConfig):
     self_attention_widening_factor: int = 1
     cross_attention_widening_factor: int = 1
     hidden_act: str = "gelu"
-    attention_probs_dropout_prob: float = 0.1
+    attention_probs_dropout_prob: float | int = 0.1
     initializer_range: float = 0.02
     layer_norm_eps: float = 1e-12
     use_query_residual: bool = True

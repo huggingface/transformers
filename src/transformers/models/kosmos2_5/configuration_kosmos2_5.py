@@ -49,6 +49,7 @@ class Kosmos2_5TextConfig(PreTrainedConfig):
     init_std: float = 0.02
     scale_embedding: bool = True
     use_cache: bool = True
+    tie_word_embeddings: bool = True
     pad_token_id: int | None = 1
     bos_token_id: int | None = 0
     eos_token_id: int | list[int] | None = 2
@@ -92,7 +93,7 @@ class Kosmos2_5VisionConfig(PreTrainedConfig):
     num_attention_heads: int = 24
     dense_act_fn: str = "gelu_new"
     layer_norm_eps: float = 1e-6
-    dropout_rate: float = 0.0
+    dropout_rate: float | int = 0.0
     attention_dropout: float | int = 0.0
     max_num_patches: int = 4096
     initializer_factor: float = 1.0
@@ -131,4 +132,4 @@ class Kosmos2_5Config(PreTrainedConfig):
         super().__post_init__(**kwargs)
 
 
-__all__ = ["Kosmos2_5Config"]
+__all__ = ["Kosmos2_5Config", "Kosmos2_5TextConfig", "Kosmos2_5VisionConfig"]

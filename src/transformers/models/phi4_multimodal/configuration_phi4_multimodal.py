@@ -124,7 +124,7 @@ class Phi4MultimodalAudioConfig(PreTrainedConfig):
     activation: str = "swish"
     chunk_size: int = -1
     left_chunk: int = 18
-    dropout_rate: float = 0.0
+    dropout_rate: float | int = 0.0
     ext_pw_out_channel: int = 1024
     depthwise_separable_out_channel: int = 1024
     depthwise_multiplier: int = 1
@@ -198,8 +198,8 @@ class Phi4MultimodalConfig(PreTrainedConfig):
     num_hidden_layers: int = 32
     num_attention_heads: int = 32
     num_key_value_heads: int | None = 8
-    resid_pdrop: float = 0.0
-    embd_pdrop: float = 0.0
+    resid_pdrop: float | int = 0.0
+    embd_pdrop: float | int = 0.0
     attention_dropout: float | int = 0.0
     hidden_act: str = "silu"
     max_position_embeddings: int = 131072

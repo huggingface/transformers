@@ -261,7 +261,15 @@ class AutoImageProcessorTest(unittest.TestCase):
             self.assertEqual(image_processor.__class__.__name__, "NewImageProcessor")
             self.assertTrue(image_processor.is_local)
 
-            # If remote is enabled, we load from the Hub
+            # If remote code is enabled but the user explicitly registered the local one, we load the local one.
+            image_processor = AutoImageProcessor.from_pretrained(
+                "hf-internal-testing/test_dynamic_image_processor", trust_remote_code=True
+            )
+            self.assertEqual(image_processor.__class__.__name__, "NewImageProcessor")
+            self.assertTrue(image_processor.is_local)
+
+            # If remote code is enabled but local code originated from transformers, we load the remote one.
+            NewImageProcessor.__module__ = "transformers.models.custom.configuration_custom"
             image_processor = AutoImageProcessor.from_pretrained(
                 "hf-internal-testing/test_dynamic_image_processor", trust_remote_code=True
             )

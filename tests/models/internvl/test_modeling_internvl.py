@@ -214,6 +214,9 @@ class InternVLModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterM
     def test_flash_attn_2_fp32_ln(self):
         pass
 
+    def test_reverse_loading_mapping(self):
+        super().test_reverse_loading_mapping(skip_base_model=True)
+
 
 @slow
 @require_torch_accelerator
@@ -495,7 +498,7 @@ class InternVLQwen2IntegrationTest(unittest.TestCase):
         decoded_output = processor.decode(output[0, inputs["input_ids"].shape[1] :], skip_special_tokens=True)
         expected_outputs = Expectations(
             {
-                ("xpu", 3): "The man is performing a volley.",
+                ("xpu", 3): "The man is performing a forehand shot.",
                 ("cuda", 7): "The man is performing a forehand shot.",
                 ("rocm", (9, 5)): "The man is performing a volley shot.",
             }

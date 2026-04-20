@@ -49,6 +49,7 @@ class Kosmos2TextConfig(PreTrainedConfig):
     init_std: float = 0.02
     scale_embedding: bool = True
     use_cache: bool = True
+    tie_word_embeddings: bool = True
     pad_token_id: int | None = 1
     bos_token_id: int | None = 0
     eos_token_id: int | list[int] | None = 2
@@ -121,4 +122,4 @@ class Kosmos2Config(PreTrainedConfig):
         super().__post_init__(**kwargs)
 
 
-__all__ = ["Kosmos2Config"]
+__all__ = ["Kosmos2Config", "Kosmos2TextConfig", "Kosmos2VisionConfig"]

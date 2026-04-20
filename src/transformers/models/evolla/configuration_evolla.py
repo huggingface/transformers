@@ -31,6 +31,8 @@ class SaProtConfig(PreTrainedConfig):
         The id of the *mask* token in the protein sequence model.
     position_embedding_type (`str`, *optional*, defaults to `"rotary"`):
         The type of position embedding to use in the protein sequence model. Currently only `"rotary"` is supported.
+    rope_theta (`float`, *optional*, defaults to 10000.0):
+        The base period of the RoPE embeddings.
     emb_layer_norm_before (`bool`, *optional*, defaults to `False`):
         Whether to apply layer normalization before the position embedding in the protein sequence model.
     token_dropout (`bool`, *optional*, defaults to `True`):
@@ -44,12 +46,13 @@ class SaProtConfig(PreTrainedConfig):
     num_hidden_layers: int = 33
     num_attention_heads: int = 20
     intermediate_size: int = 5120
-    hidden_dropout_prob: float = 0.1
-    attention_probs_dropout_prob: float = 0.1
+    hidden_dropout_prob: float | int = 0.1
+    attention_probs_dropout_prob: float | int = 0.1
     max_position_embeddings: int = 1026
     initializer_range: float = 0.02
     layer_norm_eps: float = 1e-05
     position_embedding_type: str = "rotary"
+    rope_theta: float = 10000.0
     emb_layer_norm_before: bool = False
     token_dropout: bool = True
     is_decoder: bool = False
@@ -96,7 +99,7 @@ class EvollaConfig(PreTrainedConfig):
     >>> configuration = model.config
     ```"""
 
-    model_type = "EvollaModel"
+    model_type = "evolla"
     sub_configs = {"protein_encoder_config": SaProtConfig}
     default_theta = 500000.0
 

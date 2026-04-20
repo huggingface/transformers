@@ -283,7 +283,7 @@ class BaseVideoProcessor(TorchvisionBackend):
             if isinstance(videos[0], list):
                 # Videos sometimes are passed as a list of image URLs, especially through templates
                 videos = [
-                    torch.stack([tvF.pil_to_tensor(image) for image in images], dim=0)
+                    torch.stack([self.process_image(image) for image in images], dim=0)
                     for images in self.fetch_images(videos)
                 ]
                 if do_sample_frames:

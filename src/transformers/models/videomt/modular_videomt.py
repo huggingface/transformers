@@ -15,6 +15,7 @@
 from dataclasses import dataclass
 
 import torch
+from huggingface_hub.dataclasses import strict
 from torch import nn
 
 from ...file_utils import ModelOutput
@@ -36,6 +37,8 @@ from ..eomt.modeling_eomt import (
 )
 
 
+@auto_docstring(checkpoint="tue-mps/videomt-dinov2-small-ytvis2019")
+@strict
 class VideomtConfig(EomtConfig):
     model_type = "videomt"
 
@@ -230,12 +233,12 @@ class VideomtForUniversalSegmentation(EomtForUniversalSegmentation):
             frame_hidden_states = hidden_states[:, frame_idx]
 
             if propagated_query is None:
-                query_tokens = self.query.weight[None, :, :].expand(batch_size, -1, -1)
+                query_tokens = self.query.weight[None, :, :].expand(batch_size, -1, -1).to(frame_hidden_states.device)
             else:
-                query_tokens = self.query_updater(propagated_query) + self.query.weight[None, :, :].to(
-                    frame_hidden_states.device
-                )
-            frame_hidden_states = torch.cat((query_tokens.to(frame_hidden_states.device), frame_hidden_states), dim=1)
+                query_tokens = self.query_updater(propagated_query).to(frame_hidden_states.device) + self.query.weight[
+                    None, :, :
+                ].to(frame_hidden_states.device)
+            frame_hidden_states = torch.cat((query_tokens, frame_hidden_states), dim=1)
 
             for layer_module in self.layers[query_start_idx:]:
                 frame_hidden_states = layer_module(frame_hidden_states)
