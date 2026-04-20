@@ -1157,6 +1157,7 @@ MODEL_FOR_TEXT_RECOGNITION_MAPPING_NAMES = OrderedDict(
 
 MODEL_FOR_TABLE_RECOGNITION_MAPPING_NAMES = OrderedDict(
     [
+        ("slanet", "SLANetForTableRecognition"),
         ("slanext", "SLANeXtForTableRecognition"),
     ]
 )

@@ -383,6 +383,7 @@ if TYPE_CHECKING:
     from .shieldgemma2 import *
     from .siglip import *
     from .siglip2 import *
+    from .slanet import *
     from .slanext import *
     from .smollm3 import *
     from .smolvlm import *
