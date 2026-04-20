@@ -22,6 +22,7 @@ from transformers import (
     AutoProcessor,
     Qwen3ASRConfig,
     Qwen3ASRForConditionalGeneration,
+    Qwen3ForcedAlignerForTokenClassification,
     is_torch_available,
 )
 from transformers.testing_utils import (
@@ -270,3 +271,102 @@ class Qwen3ASRForConditionalGenerationIntegrationTest(unittest.TestCase):
         torch.testing.assert_close(gen_ids.cpu(), exp_ids)
         txt = self.processor.decode(seq, skip_special_tokens=True)
         self.assertListEqual(txt, exp_txt)
+
+
+@require_torch
+class Qwen3ForcedAlignerIntegrationTest(unittest.TestCase):
+    """
+    Integration tests for Qwen3ForcedAlignerForTokenClassification
+    reproducer scripts (create JSON fixtures directly in repo): https://gist.github.com/ebezzam/3e0551708631784aeb684e0e838299f3#file-reproducer_timestamps-py
+    """
+
+    @classmethod
+    def setUp(cls):
+        cleanup(torch_device, gc_collect=True)
+        cls.aligner_checkpoint = "bezzam/Qwen3-ForcedAligner-0.6B"
+        cls.aligner_processor = AutoProcessor.from_pretrained(cls.aligner_checkpoint)
+
+    def tearDown(self):
+        cleanup(torch_device, gc_collect=True)
+
+    def _load_aligner(self):
+        return Qwen3ForcedAlignerForTokenClassification.from_pretrained(
+            self.aligner_checkpoint,
+            device_map="auto",
+            torch_dtype=torch.bfloat16,
+        ).eval()
+
+    def _run_alignment(self, model, audio, transcript, language):
+        """Run forced alignment and return list of timestamp dicts."""
+        aligner_inputs, word_lists = self.aligner_processor.apply_forced_alignment_request(
+            audio=audio,
+            transcript=transcript,
+            language=language,
+        )
+        aligner_inputs = aligner_inputs.to(model.device, model.dtype)
+
+        with torch.inference_mode():
+            outputs = model(**aligner_inputs)
+
+        return self.aligner_processor.decode_forced_alignment(
+            logits=outputs.logits,
+            input_ids=aligner_inputs["input_ids"],
+            word_lists=word_lists,
+            timestamp_token_id=model.config.timestamp_token_id,
+            timestamp_segment_time=model.config.timestamp_segment_time,
+        )
+
+    @slow
+    def test_fixture_timestamps_single(self):
+        path = Path(__file__).parent.parent.parent / "fixtures/qwen3_asr/expected_timestamps_single.json"
+        with open(path, "r", encoding="utf-8") as f:
+            expected = json.load(f)
+
+        model = self._load_aligner()
+        audio_url = "https://huggingface.co/datasets/bezzam/audio_samples/resolve/main/librispeech_mr_quilter.wav"
+
+        timestamps = self._run_alignment(
+            model,
+            audio=audio_url,
+            transcript=expected["text"],
+            language=expected["language"],
+        )[0]
+
+        self.assertEqual(len(timestamps), len(expected["time_stamps"]))
+        for pred, exp in zip(timestamps, expected["time_stamps"]):
+            self.assertEqual(pred["text"], exp["text"])
+            self.assertAlmostEqual(pred["start_time"], exp["start_time"], places=2)
+            self.assertAlmostEqual(pred["end_time"], exp["end_time"], places=2)
+
+    @slow
+    def test_fixture_timestamps_batched(self):
+        path = Path(__file__).parent.parent.parent / "fixtures/qwen3_asr/expected_timestamps_batched.json"
+        with open(path, "r", encoding="utf-8") as f:
+            expected_batch = json.load(f)
+
+        model = self._load_aligner()
+        audio_urls = [
+            "https://huggingface.co/datasets/bezzam/audio_samples/resolve/main/librispeech_mr_quilter.wav",
+            "https://qianwen-res.oss-cn-beijing.aliyuncs.com/Qwen3-ASR-Repo/asr_zh.wav",
+        ]
+
+        batch_timestamps = self._run_alignment(
+            model,
+            audio=audio_urls,
+            transcript=[e["text"] for e in expected_batch],
+            language=[e["language"] for e in expected_batch],
+        )
+
+        self.assertEqual(len(batch_timestamps), len(expected_batch))
+        for sample_idx, (pred_ts, exp) in enumerate(zip(batch_timestamps, expected_batch)):
+            self.assertEqual(
+                len(pred_ts),
+                len(exp["time_stamps"]),
+                f"Sample {sample_idx}: expected {len(exp['time_stamps'])} timestamps, got {len(pred_ts)}",
+            )
+            for pred, exp_ts in zip(pred_ts, exp["time_stamps"]):
+                self.assertEqual(pred["text"], exp_ts["text"])
+                # Batched inference pads audio to the same length, which can shift attention patterns
+                # and cause ±1 timestamp class (80ms) drift.
+                self.assertAlmostEqual(pred["start_time"], exp_ts["start_time"], delta=0.1)
+                self.assertAlmostEqual(pred["end_time"], exp_ts["end_time"], delta=0.1)

@@ -397,7 +397,9 @@ class Qwen3ASRProcessor(ProcessorMixin):
 
     @staticmethod
     def _is_kept_char(ch: str) -> bool:
-        """Return True for characters kept during forced-alignment tokenization."""
+        """Return True for characters kept during forced-alignment tokenisation."""
+        if ch == "'":
+            return True
         cat = unicodedata.category(ch)
         return cat.startswith("L") or cat.startswith("N") or Qwen3ASRProcessor._is_cjk_char(ch)
 
