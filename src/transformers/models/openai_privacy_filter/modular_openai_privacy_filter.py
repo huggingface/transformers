@@ -47,7 +47,7 @@ from ..gpt_oss.modeling_gpt_oss import (
 logger = logging.get_logger(__name__)
 
 
-PRIVACY_FILTER_SPAN_LABELS = (
+OPENAI_PRIVACY_FILTER_SPAN_LABELS = (
     "O",
     "account_number",
     "private_address",
@@ -59,15 +59,15 @@ PRIVACY_FILTER_SPAN_LABELS = (
     "secret",
 )
 
-PRIVACY_FILTER_NER_LABELS = ("O",) + tuple(
-    f"{prefix}-{label}" for label in PRIVACY_FILTER_SPAN_LABELS if label != "O" for prefix in ("B", "I", "E", "S")
+OPENAI_PRIVACY_FILTER_NER_LABELS = ("O",) + tuple(
+    f"{prefix}-{label}" for label in OPENAI_PRIVACY_FILTER_SPAN_LABELS if label != "O" for prefix in ("B", "I", "E", "S")
 )
 
 
 @auto_docstring(checkpoint="openai/privacy-filter")
 @strict
-class PrivacyFilterConfig(GptOssConfig):
-    model_type = "privacy_filter"
+class OpenAIPrivacyFilterConfig(GptOssConfig):
+    model_type = "openai_privacy_filter"
     vocab_size: int = 200064
     hidden_size: int = 640
     intermediate_size: int = 640
@@ -95,9 +95,9 @@ class PrivacyFilterConfig(GptOssConfig):
                 "original_max_position_embeddings": 4096,
             }
 
-        requested_num_labels = kwargs.pop("num_labels", len(PRIVACY_FILTER_NER_LABELS))
-        if self.id2label is None and requested_num_labels == len(PRIVACY_FILTER_NER_LABELS):
-            self.id2label = dict(enumerate(PRIVACY_FILTER_NER_LABELS))
+        requested_num_labels = kwargs.pop("num_labels", len(OPENAI_PRIVACY_FILTER_NER_LABELS))
+        if self.id2label is None and requested_num_labels == len(OPENAI_PRIVACY_FILTER_NER_LABELS):
+            self.id2label = dict(enumerate(OPENAI_PRIVACY_FILTER_NER_LABELS))
         elif self.id2label is None:
             self.num_labels = requested_num_labels
         if self.label2id is None and self.id2label is not None:
@@ -106,11 +106,11 @@ class PrivacyFilterConfig(GptOssConfig):
         PreTrainedConfig.__post_init__(self, **kwargs)
 
 
-class PrivacyFilterRMSNorm(GptOssRMSNorm):
+class OpenAIPrivacyFilterRMSNorm(GptOssRMSNorm):
     pass
 
 
-class PrivacyFilterRotaryEmbedding(GptOssRotaryEmbedding):
+class OpenAIPrivacyFilterRotaryEmbedding(GptOssRotaryEmbedding):
     pass
 
 
@@ -157,8 +157,8 @@ def eager_attention_forward(
     return attn_output, attn_weights
 
 
-class PrivacyFilterAttention(GptOssAttention):
-    def __init__(self, config: PrivacyFilterConfig):
+class OpenAIPrivacyFilterAttention(GptOssAttention):
+    def __init__(self, config: OpenAIPrivacyFilterConfig):
         super().__init__(config)
         del self.layer_idx  # Only for caching
         del self.layer_type  # SWA only
@@ -209,7 +209,7 @@ class PrivacyFilterAttention(GptOssAttention):
         return attn_output, attn_weights
 
 
-class PrivacyFilterExperts(GptOssExperts):
+class OpenAIPrivacyFilterExperts(GptOssExperts):
     def _apply_gate(self, gate_up: torch.Tensor) -> torch.Tensor:
         # Concatenated layout instead of interleaving
         gate, up = gate_up.chunk(2, dim=-1)
@@ -254,7 +254,7 @@ class PrivacyFilterExperts(GptOssExperts):
         return next_states.to(original_dtype)
 
 
-class PrivacyFilterTopKRouter(GptOssTopKRouter):
+class OpenAIPrivacyFilterTopKRouter(GptOssTopKRouter):
     def forward(self, hidden_states):
         # Force fp32
         router_logits = F.linear(hidden_states.float(), self.weight.float(), self.bias.float())  # (num_tokens, num_experts)
@@ -265,14 +265,14 @@ class PrivacyFilterTopKRouter(GptOssTopKRouter):
         return router_logits, router_scores, router_indices
 
 
-class PrivacyFilterMLP(nn.Module):
+class OpenAIPrivacyFilterMLP(nn.Module):
     """Similar to GPT Oss but with FP32 focus + added experts scaling"""
 
     def __init__(self, config):
         super().__init__()
-        self.router = PrivacyFilterTopKRouter(config)
+        self.router = OpenAIPrivacyFilterTopKRouter(config)
         self.num_experts = config.num_experts_per_tok
-        self.experts = PrivacyFilterExperts(config)
+        self.experts = OpenAIPrivacyFilterExperts(config)
 
     def forward(self, hidden_states):
         batch_size, sequence_length, hidden_dim = hidden_states.shape
@@ -285,10 +285,10 @@ class PrivacyFilterMLP(nn.Module):
         return hidden_states, router_scores
 
 
-class PrivacyFilterEncoderLayer(GptOssDecoderLayer):
-    def __init__(self, config: PrivacyFilterConfig):
+class OpenAIPrivacyFilterEncoderLayer(GptOssDecoderLayer):
+    def __init__(self, config: OpenAIPrivacyFilterConfig):
         super().__init__(config)
-        self.self_attn = PrivacyFilterAttention(config)
+        self.self_attn = OpenAIPrivacyFilterAttention(config)
 
     def forward(
         self,
@@ -317,17 +317,17 @@ class PrivacyFilterEncoderLayer(GptOssDecoderLayer):
         return hidden_states
 
 
-class PrivacyFilterPreTrainedModel(GptOssPreTrainedModel):
-    config: PrivacyFilterConfig
-    _no_split_modules = ["PrivacyFilterEncoderLayer"]
+class OpenAIPrivacyFilterPreTrainedModel(GptOssPreTrainedModel):
+    config: OpenAIPrivacyFilterConfig
+    _no_split_modules = ["OpenAIPrivacyFilterEncoderLayer"]
     _skip_keys_device_placement = None  # No cache
     _keep_in_fp32_modules = []
     _keep_in_fp32_modules_strict = ["sinks"]
 
     _can_record_outputs = {
-        "router_logits": OutputRecorder(PrivacyFilterTopKRouter, index=0),
-        "hidden_states": PrivacyFilterEncoderLayer,
-        "attentions": PrivacyFilterAttention,
+        "router_logits": OutputRecorder(OpenAIPrivacyFilterTopKRouter, index=0),
+        "hidden_states": OpenAIPrivacyFilterEncoderLayer,
+        "attentions": OpenAIPrivacyFilterAttention,
     }
 
     def get_correct_experts_implementation(self, requested_experts: str | None) -> str:
@@ -337,10 +337,10 @@ class PrivacyFilterPreTrainedModel(GptOssPreTrainedModel):
 
 
 @auto_docstring
-class PrivacyFilterModel(GptOssModel):
-    def __init__(self, config: PrivacyFilterConfig):
+class OpenAIPrivacyFilterModel(GptOssModel):
+    def __init__(self, config: OpenAIPrivacyFilterConfig):
         super().__init__(config)
-        self.layers = nn.ModuleList([PrivacyFilterEncoderLayer(config) for _ in range(config.num_hidden_layers)])
+        self.layers = nn.ModuleList([OpenAIPrivacyFilterEncoderLayer(config) for _ in range(config.num_hidden_layers)])
 
     @merge_with_config_defaults
     @capture_outputs
@@ -386,12 +386,12 @@ class PrivacyFilterModel(GptOssModel):
         return BaseModelOutput(last_hidden_state=hidden_states)
 
 
-class PrivacyFilterForTokenClassification(GenericForTokenClassification, PrivacyFilterPreTrainedModel): ...
+class OpenAIPrivacyFilterForTokenClassification(GenericForTokenClassification, OpenAIPrivacyFilterPreTrainedModel): ...
 
 
 __all__ = [
-    "PrivacyFilterForTokenClassification",
-    "PrivacyFilterModel",
-    "PrivacyFilterPreTrainedModel",
-    "PrivacyFilterConfig",
+    "OpenAIPrivacyFilterForTokenClassification",
+    "OpenAIPrivacyFilterModel",
+    "OpenAIPrivacyFilterPreTrainedModel",
+    "OpenAIPrivacyFilterConfig",
 ]

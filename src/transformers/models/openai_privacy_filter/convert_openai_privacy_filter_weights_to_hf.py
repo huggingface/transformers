@@ -25,7 +25,7 @@ import tiktoken
 import torch
 from safetensors.torch import load_file as safe_load
 
-from transformers import PreTrainedTokenizerFast, PrivacyFilterConfig, PrivacyFilterForTokenClassification
+from transformers import OpenAIPrivacyFilterConfig, OpenAIPrivacyFilterForTokenClassification, PreTrainedTokenizerFast
 from transformers.convert_slow_tokenizer import TikTokenConverter
 
 
@@ -109,7 +109,7 @@ def get_o200k_harmony_special_tokens() -> list[str]:
     return [token for token, _ in sorted(special_tokens_map.items(), key=lambda item: item[1])]
 
 
-class PrivacyFilterConverter(TikTokenConverter):
+class OpenAIPrivacyFilterConverter(TikTokenConverter):
     def extract_vocab_merges_from_model(self, tiktoken_url: str):
         tokenizer = tiktoken.get_encoding(tiktoken_url)
         self.pattern = tokenizer._pat_str
@@ -149,7 +149,7 @@ class PrivacyFilterConverter(TikTokenConverter):
         )
 
 
-def build_config(original_config: dict[str, object], state_dict: dict[str, torch.Tensor]) -> PrivacyFilterConfig:
+def build_config(original_config: dict[str, object], state_dict: dict[str, torch.Tensor]) -> OpenAIPrivacyFilterConfig:
     initial_context_length = int(original_config["initial_context_length"])
     bidirectional_left_context = int(original_config["bidirectional_left_context"])
     bidirectional_right_context = int(original_config["bidirectional_right_context"])
@@ -169,7 +169,7 @@ def build_config(original_config: dict[str, object], state_dict: dict[str, torch
         "original_max_position_embeddings": initial_context_length,
     }
 
-    config = PrivacyFilterConfig(
+    config = OpenAIPrivacyFilterConfig(
         vocab_size=int(state_dict["embedding.weight"].shape[0]),
         num_labels=int(state_dict["unembedding.weight"].shape[0]),
         hidden_size=int(original_config["hidden_size"]),
@@ -187,12 +187,12 @@ def build_config(original_config: dict[str, object], state_dict: dict[str, torch
         rope_theta=rope_theta,
         rope_parameters=rope_parameters,
     )
-    config.architectures = ["PrivacyFilterForTokenClassification"]
+    config.architectures = ["OpenAIPrivacyFilterForTokenClassification"]
     return config
 
 
 def split_qkv_tensor(
-    tensor: torch.Tensor, config: PrivacyFilterConfig
+    tensor: torch.Tensor, config: OpenAIPrivacyFilterConfig
 ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
     q_len = config.num_attention_heads * config.head_dim
     kv_len = config.num_key_value_heads * config.head_dim
@@ -203,7 +203,7 @@ def split_qkv_tensor(
 
 
 def convert_state_dict(
-    original_state_dict: dict[str, torch.Tensor], config: PrivacyFilterConfig
+    original_state_dict: dict[str, torch.Tensor], config: OpenAIPrivacyFilterConfig
 ) -> dict[str, torch.Tensor]:
     new_keys = convert_old_keys_to_new_keys(original_state_dict.keys())
     converted = {}
@@ -233,7 +233,7 @@ def convert_state_dict(
 
 
 def write_tokenizer(save_dir: str, model_max_length: int | None):
-    converter = PrivacyFilterConverter(vocab_file="o200k_base", model_max_length=model_max_length)
+    converter = OpenAIPrivacyFilterConverter(vocab_file="o200k_base", model_max_length=model_max_length)
     converter.tokenizer.save_pretrained(save_dir)
 
 
@@ -254,7 +254,7 @@ def write_model(input_dir: str, output_dir: str):
     gc.collect()
 
     with torch.device("meta"):
-        model = PrivacyFilterForTokenClassification(config)
+        model = OpenAIPrivacyFilterForTokenClassification(config)
     model.load_state_dict(state_dict, strict=True, assign=True)
     model.save_pretrained(output_path)
     del model, state_dict
@@ -265,7 +265,7 @@ def write_model(input_dir: str, output_dir: str):
     if calibration_path.exists():
         shutil.copy2(calibration_path, output_path / "viterbi_calibration.json")
 
-    PrivacyFilterForTokenClassification.from_pretrained(output_path).eval()
+    OpenAIPrivacyFilterForTokenClassification.from_pretrained(output_path).eval()
 
 
 def main():

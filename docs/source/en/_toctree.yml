@@ -767,6 +767,8 @@
         title: OLMoE
       - local: model_doc/olmo_hybrid
         title: OlmoHybrid
+      - local: model_doc/openai_privacy_filter
+        title: OpenAI Privacy Filter
       - local: model_doc/opt
         title: OPT
       - local: model_doc/pegasus
@@ -785,8 +787,6 @@
         title: PhoBERT
       - local: model_doc/plbart
         title: PLBart
-      - local: model_doc/privacy_filter
-        title: Privacy Filter
       - local: model_doc/prophetnet
         title: ProphetNet
       - local: model_doc/qwen2

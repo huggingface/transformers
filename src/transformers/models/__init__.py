@@ -332,7 +332,7 @@ if TYPE_CHECKING:
     from .pp_lcnet_v3 import *
     from .pp_ocrv5_mobile_det import *
     from .pp_ocrv5_server_det import *
-    from .privacy_filter import *
+    from .openai_privacy_filter import *
     from .prompt_depth_anything import *
     from .prophetnet import *
     from .pvt import *

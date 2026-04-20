@@ -21,11 +21,11 @@ rendered properly in your Markdown viewer.
     </div>
 </div>
 
-# Privacy Filter
+# OpenAI Privacy Filter
 
 TODO: Actually add stuff from the model card here.
 
-Privacy Filter is an encoder model for token classification over privacy-sensitive spans. It uses a GPT-style backbone with bidirectional local attention (sliding window attention), mixture-of-experts layers, and a token classification head for named entity recognition-style privacy labels.
+OpenAI Privacy Filter is an encoder model for token classification over privacy-sensitive spans. It uses a GPT-style backbone with bidirectional local attention (sliding window attention), mixture-of-experts layers, and a token classification head for named entity recognition-style privacy labels.
 
 The example below demonstrates how to detect privacy-sensitive tokens with [`Pipeline`] or the [`AutoModelForTokenClassification`] class.
 
@@ -69,16 +69,16 @@ print(predicted_token_classes)
 
 - [Token classification task guide](../tasks/token_classification)
 
-## PrivacyFilterConfig
+## OpenAIPrivacyFilterConfig
 
-[[autodoc]] PrivacyFilterConfig
+[[autodoc]] OpenAIPrivacyFilterConfig
 
-## PrivacyFilterModel
+## OpenAIPrivacyFilterModel
 
-[[autodoc]] PrivacyFilterModel
+[[autodoc]] OpenAIPrivacyFilterModel
     - forward
 
-## PrivacyFilterForTokenClassification
+## OpenAIPrivacyFilterForTokenClassification
 
-[[autodoc]] PrivacyFilterForTokenClassification
+[[autodoc]] OpenAIPrivacyFilterForTokenClassification
     - forward

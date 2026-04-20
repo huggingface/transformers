@@ -11,19 +11,20 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Testing suite for the PyTorch PrivacyFilter model."""
+"""Testing suite for the PyTorch OpenAIPrivacyFilter model."""
 
 import unittest
 
 from parameterized import parameterized
 
 from transformers import (
-    PrivacyFilterConfig,
+    OpenAIPrivacyFilterConfig,
     is_torch_available,
-    slow,
 )
-from transformers.models.privacy_filter.configuration_privacy_filter import PRIVACY_FILTER_NER_LABELS
-from transformers.testing_utils import require_torch, torch_device
+from transformers.models.openai_privacy_filter.configuration_openai_privacy_filter import (
+    OPENAI_PRIVACY_FILTER_NER_LABELS,
+)
+from transformers.testing_utils import require_torch, slow, torch_device
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import (
@@ -38,12 +39,12 @@ from ...test_pipeline_mixin import PipelineTesterMixin
 
 if is_torch_available():
     from transformers import (
-        PrivacyFilterForTokenClassification,
-        PrivacyFilterModel,
+        OpenAIPrivacyFilterForTokenClassification,
+        OpenAIPrivacyFilterModel,
     )
 
 
-class PrivacyFilterModelTester:
+class OpenAIPrivacyFilterModelTester:
     def __init__(
         self,
         parent,
@@ -65,7 +66,7 @@ class PrivacyFilterModelTester:
         sliding_window=2,
         max_position_embeddings=64,
         initializer_range=0.02,
-        num_labels=len(PRIVACY_FILTER_NER_LABELS),
+        num_labels=len(OPENAI_PRIVACY_FILTER_NER_LABELS),
         scope=None,
     ):
         self.parent = parent
@@ -105,7 +106,7 @@ class PrivacyFilterModelTester:
         return config, input_ids, input_mask, token_labels
 
     def get_config(self):
-        return PrivacyFilterConfig(
+        return OpenAIPrivacyFilterConfig(
             vocab_size=self.vocab_size,
             pad_token_id=self.pad_token_id,
             hidden_size=self.hidden_size,
@@ -133,7 +134,7 @@ class PrivacyFilterModelTester:
         )
 
     def create_and_check_model(self, config, input_ids, input_mask, token_labels):
-        model = PrivacyFilterModel(config=config)
+        model = OpenAIPrivacyFilterModel(config=config)
         model.to(torch_device)
         model.eval()
         result = model(input_ids, attention_mask=input_mask)
@@ -142,7 +143,7 @@ class PrivacyFilterModelTester:
 
     def create_and_check_for_token_classification(self, config, input_ids, input_mask, token_labels):
         config.num_labels = self.num_labels
-        model = PrivacyFilterForTokenClassification(config=config)
+        model = OpenAIPrivacyFilterForTokenClassification(config=config)
         model.to(torch_device)
         model.eval()
         result = model(input_ids, attention_mask=input_mask, labels=token_labels)
@@ -155,19 +156,19 @@ class PrivacyFilterModelTester:
 
 
 @require_torch
-class PrivacyFilterModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
+class OpenAIPrivacyFilterModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (
         (
-            PrivacyFilterModel,
-            PrivacyFilterForTokenClassification,
+            OpenAIPrivacyFilterModel,
+            OpenAIPrivacyFilterForTokenClassification,
         )
         if is_torch_available()
         else ()
     )
     pipeline_model_mapping = (
         {
-            "feature-extraction": PrivacyFilterModel,
-            "token-classification": PrivacyFilterForTokenClassification,
+            "feature-extraction": OpenAIPrivacyFilterModel,
+            "token-classification": OpenAIPrivacyFilterForTokenClassification,
         }
         if is_torch_available()
         else {}
@@ -175,8 +176,8 @@ class PrivacyFilterModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Tes
     test_all_params_have_gradient = False
 
     def setUp(self):
-        self.model_tester = PrivacyFilterModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=PrivacyFilterConfig, hidden_size=32)
+        self.model_tester = OpenAIPrivacyFilterModelTester(self)
+        self.config_tester = ConfigTester(self, config_class=OpenAIPrivacyFilterConfig, hidden_size=32)
 
     def test_config(self):
         self.config_tester.run_common_tests()
@@ -199,6 +200,6 @@ class PrivacyFilterModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Tes
 @slow
 @require_torch
 @unittest.skip(reason="Waiting for official release and ckpts for now")
-class PrivacyModelIntegrationTest(unittest.TestCase):
+class OpenAIPrivacyFilterModelIntegrationTest(unittest.TestCase):
     def test_inference_no_head_absolute_embedding(self):
         pass
