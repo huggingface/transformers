@@ -125,6 +125,7 @@ CONFIG_MAPPING_NAMES = OrderedDict(
         ("deepseek_vl", "DeepseekVLConfig"),
         ("deepseek_vl_hybrid", "DeepseekVLHybridConfig"),
         ("deformable_detr", "DeformableDetrConfig"),
+        ("deimv2", "Deimv2Config"),
         ("deit", "DeiTConfig"),
         ("depth_anything", "DepthAnythingConfig"),
         ("depth_pro", "DepthProConfig"),
