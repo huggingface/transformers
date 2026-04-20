@@ -55,9 +55,6 @@ class GlmAsrModelTester(ALMModelTester):
     def get_audio_mask_key(self):
         return "input_features_mask"
 
-    def create_audio_mask(self):
-        return torch.ones([self.batch_size, self.feat_seq_length], dtype=torch.bool).to(torch_device)
-
     def get_audio_embeds_mask(self, audio_mask):
         # conv1 (s=1) preserves length; conv2 (s=2, k=3, p=1) halves; merge_factor=4 post-projector.
         audio_lengths = audio_mask.sum(-1)

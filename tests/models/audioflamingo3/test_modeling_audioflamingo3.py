@@ -48,7 +48,6 @@ class AudioFlamingo3ModelTester(ALMModelTester):
     text_config_class = Qwen2Config
     audio_config_class = AudioFlamingo3EncoderConfig
 
-
     def __init__(self, parent, **kwargs):
         # feat_seq_length → (L-1)//2+1 after conv2 → (·-2)//2+1 after avg_pool, so
         # feat_seq_length=60 gives 15 audio embed tokens (fits inside seq_length=32 + BOS + text).
@@ -62,6 +61,8 @@ class AudioFlamingo3ModelTester(ALMModelTester):
         return "input_features_mask"
 
     def create_audio_mask(self):
+        # Full-length mask matches real processor output and lets the audio encoder dispatch to Flash
+        # Attention (which rejects non-null attn_masks) on `test_sdpa_can_dispatch_on_flash`.
         return torch.ones([self.batch_size, self.feat_seq_length], dtype=torch.bool).to(torch_device)
 
     def get_audio_embeds_mask(self, audio_mask):

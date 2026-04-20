@@ -67,6 +67,8 @@ class MusicFlamingoModelTester(ALMModelTester):
         return "input_features_mask"
 
     def create_audio_mask(self):
+        # Deterministic full-length mask — base default uses unseeded Python `random`, which makes
+        # multi-call generation-comparison tests (e.g. assisted decoding vs greedy) flaky.
         return torch.ones([self.batch_size, self.feat_seq_length], dtype=torch.bool).to(torch_device)
 
     def get_audio_embeds_mask(self, audio_mask):

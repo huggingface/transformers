@@ -63,7 +63,9 @@ class Qwen2AudioModelTester(ALMModelTester):
         return "feature_attention_mask"
 
     def create_audio_mask(self):
-        # Qwen2Audio expects full-length mel input; mask with all 1s.
+        # Deterministic full-length mask: the base default randomizes via Python's `random`, which isn't
+        # re-seeded per test call and desynchronizes the two `prepare_config_and_inputs_for_common`
+        # invocations inside generation-comparison tests (e.g. test_greedy_generate_dict_outputs).
         return torch.ones([self.batch_size, self.feat_seq_length], dtype=torch.bool).to(torch_device)
 
     def get_audio_embeds_mask(self, audio_mask):

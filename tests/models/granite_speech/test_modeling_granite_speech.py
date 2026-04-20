@@ -90,10 +90,6 @@ class GraniteSpeechModelTester(ALMModelTester):
     def create_audio_features(self):
         return floats_tensor([self.batch_size, self.sequence_dim, self.feature_dim])
 
-    def create_audio_mask(self):
-        # Granite's encoder is fed the raw features; mask is all-ones over sequence_dim.
-        return torch.ones([self.batch_size, self.sequence_dim], dtype=torch.bool).to(torch_device)
-
     def get_audio_embeds_mask(self, audio_mask):
         # Projector produces `num_audio_tokens` embeds per sample (fixed by window_size/downsample_rate).
         return torch.ones([self.batch_size, self.num_audio_tokens], dtype=torch.long).to(torch_device)

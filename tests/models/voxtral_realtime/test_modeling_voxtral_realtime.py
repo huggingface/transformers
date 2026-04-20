@@ -79,10 +79,6 @@ class VoxtralRealtimeModelTester(ALMModelTester):
         effective_feat = self.feat_seq_length + (self._max_new_tokens or 0) * 8
         return floats_tensor([self.batch_size, self.num_mel_bins, effective_feat])
 
-    def create_audio_mask(self):
-        effective_feat = self.feat_seq_length + (self._max_new_tokens or 0) * 8
-        return torch.ones([self.batch_size, effective_feat], dtype=torch.bool).to(torch_device)
-
     def place_audio_tokens(self, input_ids, config, num_audio_tokens):
         # VoxtralRealtime fuses audio additively over the whole sequence; no placeholder token required.
         input_ids = input_ids.clone()

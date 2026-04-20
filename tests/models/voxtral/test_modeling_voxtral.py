@@ -61,9 +61,6 @@ class VoxtralModelTester(ALMModelTester):
         output_length = (self.feat_seq_length - 1) // 2 + 1
         return torch.ones([self.batch_size, output_length], dtype=torch.long).to(torch_device)
 
-    def create_audio_mask(self):
-        return torch.ones([self.batch_size, self.feat_seq_length], dtype=torch.bool).to(torch_device)
-
 
 @require_torch
 class VoxtralForConditionalGenerationModelTest(ALMModelTest, unittest.TestCase):
