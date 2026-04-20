@@ -25,7 +25,7 @@ rendered properly in your Markdown viewer.
 
 TODO: Actually add stuff from the model card here.
 
-Privacy Filter is an encoder model for token classification over privacy-sensitive spans. It uses a GPT-style backbone with bidirectional local attention, mixture-of-experts layers, and a token classification head for named entity recognition-style privacy labels.
+Privacy Filter is an encoder model for token classification over privacy-sensitive spans. It uses a GPT-style backbone with bidirectional local attention (sliding window attention), mixture-of-experts layers, and a token classification head for named entity recognition-style privacy labels.
 
 The example below demonstrates how to detect privacy-sensitive tokens with [`Pipeline`] or the [`AutoModelForTokenClassification`] class.
 
@@ -50,9 +50,9 @@ import torch
 from transformers import AutoModelForTokenClassification, AutoTokenizer
 
 tokenizer = AutoTokenizer.from_pretrained("openai/privacy-filter")
-model = AutoModelForTokenClassification.from_pretrained("openai/privacy-filter")
+model = AutoModelForTokenClassification.from_pretrained("openai/privacy-filter", device_map="auto")
 
-inputs = tokenizer("My name is Alice Smith", return_tensors="pt")
+inputs = tokenizer("My name is Alice Smith", return_tensors="pt").to(model.device)
 
 with torch.no_grad():
     outputs = model(**inputs)
