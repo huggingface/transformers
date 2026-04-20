@@ -73,6 +73,7 @@ def _register_model_output_pytree_node(output_type: type[ModelOutput]) -> None:
         _model_output_flatten,
         partial(_model_output_unflatten, output_type=output_type),
         serialized_type_name=f"{output_type.__module__}.{output_type.__name__}",
+        flatten_with_keys_fn=torch_pytree._dict_flatten_with_keys,
     )
     _registered_model_output_types.add(output_type)
 

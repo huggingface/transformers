@@ -41,6 +41,7 @@ from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPooling, ModelOutput
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
+from ...modeling_vision_utils import get_rotary_pos_ids, get_vision_cu_seqlens, get_window_index
 from ...processing_utils import Unpack
 from ...utils import (
     TransformersKwargs,
@@ -716,6 +717,86 @@ class SinusoidsPositionEmbedding(nn.Module):
         return self.positional_embedding[:seqlen, :]
 
 
+def chunk_and_pad_features(
+    input_features: torch.Tensor, feature_lens: torch.Tensor, n_window: int
+) -> tuple[torch.Tensor, torch.Tensor]:
+    """Split audio features into fixed-size chunks and pad to uniform length.
+
+    Each audio sample is split into chunks of ``n_window * 2`` frames (the last
+    chunk may be shorter), then all chunks are right-padded to the longest chunk.
+
+    Args:
+        input_features: ``(feature_dim, total_frames)`` concatenated audio features.
+        feature_lens: ``(batch_size,)`` per-sample frame counts.
+        n_window: half the target chunk size in frames.
+
+    Returns:
+        ``padded_feature``: ``(num_chunks, feature_dim, max_chunk_len)`` padded chunks.
+        ``chunk_lengths``: ``(num_chunks,)`` actual length of each chunk before padding.
+    """
+    chunk_num = torch.ceil(feature_lens / (n_window * 2)).long()
+    chunk_lengths = torch.full((chunk_num.sum(),), n_window * 2, dtype=torch.long, device=feature_lens.device)
+    tail_chunk_index = F.pad(chunk_num, (1, 0), value=-1).cumsum(0)[1:]
+    chunk_lengths[tail_chunk_index] = feature_lens % (n_window * 2)
+    chunk_lengths = torch.where(chunk_lengths == 0, n_window * 2, chunk_lengths)
+    chunk_list = input_features.T.split(chunk_lengths.tolist(), dim=0)
+    padded_feature = nn.utils.rnn.pad_sequence(chunk_list, batch_first=True).transpose(1, 2)
+    return padded_feature, chunk_lengths
+
+
+def get_audio_cu_seqlens(chunk_lengths: torch.Tensor) -> torch.Tensor:
+    """Compute cumulative sequence lengths for audio attention from chunk lengths.
+
+    Applies one stride-2 convolution length reduction, then returns cumulative
+    boundaries for flash-attention-style sequence packing.
+
+    Args:
+        chunk_lengths: ``(num_chunks,)`` pre-CNN chunk lengths.
+
+    Returns:
+        ``(num_chunks + 1,)`` int32 cumulative sequence boundaries.
+    """
+    after_conv1 = (chunk_lengths - 1) // 2 + 1
+    return F.pad(after_conv1.cumsum(0), (1, 0), value=0).to(torch.int32)
+
+
+def get_valid_indices(chunk_lengths: torch.Tensor) -> torch.Tensor:
+    """Compute flat indices of valid (non-padding) positions after one stride-2 conv.
+
+    Args:
+        chunk_lengths: ``(num_chunks,)`` pre-CNN chunk lengths.
+
+    Returns:
+        ``(total_valid,)`` flat indices into the ``(num_chunks * max_len_after_conv)`` grid.
+    """
+    after_conv1 = (chunk_lengths - 1) // 2 + 1
+    max_len = after_conv1.max().item()
+    mask = torch.arange(max_len, device=chunk_lengths.device) < after_conv1.unsqueeze(1)
+    return mask.flatten().nonzero().squeeze(-1)
+
+
+def get_pool_indices(feature_lens: torch.Tensor) -> torch.Tensor:
+    """Compute indices for stride-2 pooling over post-CNN audio features.
+
+    Selects every other position (even indices) from each sample's post-CNN
+    features, accounting for two convolution stages and variable-length samples.
+
+    Args:
+        feature_lens: ``(batch_size,)`` per-sample raw frame counts.
+
+    Returns:
+        ``(total_pairs,)`` flat indices for stride-2 pooling across concatenated samples.
+    """
+    after_conv1 = (feature_lens - 1) // 2 + 1
+    after_conv2 = (after_conv1 - 2) // 2 + 1
+    num_pairs = (after_conv2 - 1 + 1) // 2
+    offsets = F.pad(after_conv2[:-1].cumsum(0), (1, 0), value=0)
+    pair_offsets = torch.repeat_interleave(offsets, num_pairs)
+    local_indices = torch.arange(num_pairs.sum(), device=feature_lens.device)
+    local_indices -= torch.repeat_interleave(F.pad(num_pairs[:-1].cumsum(0), (1, 0), value=0), num_pairs)
+    return pair_offsets + local_indices * 2
+
+
 @auto_docstring(
     custom_intro="""
     Transformer encoder consisting of *config.encoder_layers* self attention layers. Each layer is a
@@ -765,60 +846,76 @@ class Qwen2_5OmniAudioEncoder(Qwen2_5OmniPreTrainedModel):
     def set_input_embeddings(self, value: nn.Module):
         self.conv1 = value
 
-    def _prepare_attention_mask(self, inputs_tensor: torch.Tensor, cu_seqlens: torch.Tensor) -> torch.Tensor:
-        # Flash Attention 2 doesn't need a 4D mask and relies on `cu_seqlens/max_seqlen`
-        # NOTE: the created attention masl only approximates the ragged FA2 attention by
-        # allowing bidirectional attention within `cu_seqlens` blocks, and not attending between
-        # blocks. Though it will not be a 100% match for FA2's `varlen` path
-        if is_flash_attention_requested(self.config):
-            return None
-
-        seq_length = inputs_tensor.shape[0]
-        attention_mask = torch.full(
-            [1, 1, seq_length, seq_length],
-            torch.finfo(inputs_tensor.dtype).min,
-            device=inputs_tensor.device,
-            dtype=inputs_tensor.dtype,
-        )
-        for i in range(1, len(cu_seqlens)):
-            attention_mask[..., cu_seqlens[i - 1] : cu_seqlens[i], cu_seqlens[i - 1] : cu_seqlens[i]] = 0
-        return attention_mask
-
     @merge_with_config_defaults
     @capture_outputs(tie_last_hidden_states=False)
     @auto_docstring
-    def forward(self, input_features, feature_lens=None, aftercnn_lens=None, **kwargs: Unpack[TransformersKwargs]):
+    def forward(
+        self,
+        input_features=None,
+        feature_lens=None,
+        padded_feature=None,
+        chunk_lengths=None,
+        valid_indices=None,
+        pool_indices=None,
+        cu_seqlens=None,
+        **kwargs: Unpack[TransformersKwargs],
+    ):
         r"""
         feature_lens (`torch.LongTensor` of shape `(batch_size,)`):
             mel length
-        aftercnn_lens (`torch.LongTensor` of shape `(batch_size,)`):
-            mel length after cnn
+        padded_feature (`torch.FloatTensor`, *optional*):
+            Precomputed padded audio chunks (from `chunk_and_pad_features`).
+        chunk_lengths (`torch.LongTensor`, *optional*):
+            Precomputed per-chunk lengths (from `chunk_and_pad_features`).
+        valid_indices (`torch.LongTensor`, *optional*):
+            Precomputed flat indices of valid post-CNN positions (from `get_valid_indices`).
+        pool_indices (`torch.LongTensor`, *optional*):
+            Precomputed pair indices for post-encoder average pooling (from `get_pool_indices`).
+        cu_seqlens (`torch.IntTensor`, *optional*):
+            Precomputed cumulative sequence lengths (from `get_vision_cu_seqlens`).
         """
-        chunk_num = torch.ceil(feature_lens / (self.n_window * 2)).long()
+        if padded_feature is None:
+            padded_feature, chunk_lengths = chunk_and_pad_features(input_features, feature_lens, self.n_window)
 
-        chunk_lengths = torch.full((chunk_num.sum(),), self.n_window * 2, dtype=torch.long, device=feature_lens.device)
-        tail_chunk_index = F.pad(chunk_num, (1, 0), value=-1).cumsum(0)[1:]
-        chunk_lengths[tail_chunk_index] = feature_lens % (self.n_window * 2)
-        chunk_lengths = torch.where(chunk_lengths == 0, self.n_window * 2, chunk_lengths)
+        if valid_indices is None:
+            valid_indices = get_valid_indices(chunk_lengths)
 
-        chunk_list = input_features.split(chunk_lengths.tolist(), dim=1)
-        padded_feature, padded_mask, padded_mask_after_cnn = self.padded_and_mask_function(
-            chunk_list, chunk_lengths, padding_value=0, padding_side="right"
+        if pool_indices is None:
+            pool_indices = get_pool_indices(feature_lens)
+
+        # Derive masks from chunk_lengths (traceable arithmetic + arange broadcasting)
+        padded_mask = (
+            (torch.arange(padded_feature.shape[2], device=padded_feature.device) < chunk_lengths.unsqueeze(1))
+            .unsqueeze(1)
+            .long()
         )
         padded_embed = nn.functional.gelu(self.conv1(padded_feature)) * padded_mask
         padded_embed = nn.functional.gelu(self.conv2(padded_embed)).transpose(1, 2)
-
         padded_embed = padded_embed + self.positional_embedding.positional_embedding[
             : padded_embed.shape[1], :
         ].unsqueeze(0).to(padded_embed.dtype)
-        hidden_states = padded_embed[padded_mask_after_cnn]
-        cu_seqlens = torch.cat(
-            (
-                torch.zeros(1, device=padded_mask_after_cnn.device, dtype=torch.int32),
-                padded_mask_after_cnn.sum(1).cumsum(0),
+        hidden_states = torch.index_select(padded_embed.reshape(-1, padded_embed.shape[-1]), 0, valid_indices)
+
+        if cu_seqlens is None:
+            cu_seqlens = get_audio_cu_seqlens(chunk_lengths)
+
+        # Flash Attention 2 doesn't need a 4D mask and relies on `cu_seqlens/max_seqlen`
+        # NOTE: the created attention mask only approximates the ragged FA2 attention by
+        # allowing bidirectional attention within `cu_seqlens` blocks, and not attending between
+        # blocks. Though it will not be a 100% match for FA2's `varlen` path
+        if is_flash_attention_requested(self.config):
+            attention_mask = None
+        else:
+            seq_idx = torch.arange(hidden_states.shape[0], device=hidden_states.device)
+            block_ids = torch.searchsorted(cu_seqlens[1:], seq_idx, right=True)
+            same_block = block_ids.unsqueeze(0) == block_ids.unsqueeze(1)
+            attention_mask = torch.full(
+                (hidden_states.shape[0], hidden_states.shape[0]),
+                torch.finfo(hidden_states.dtype).min,
+                dtype=hidden_states.dtype,
+                device=hidden_states.device,
             )
-        ).to(torch.int32)
-        attention_mask = self._prepare_attention_mask(hidden_states, cu_seqlens)
+            attention_mask = attention_mask.masked_fill(same_block, 0.0).unsqueeze(0).unsqueeze(0)
 
         for encoder_layer in self.layers:
             layer_outputs = encoder_layer(
@@ -829,53 +926,11 @@ class Qwen2_5OmniAudioEncoder(Qwen2_5OmniPreTrainedModel):
             )
             hidden_states = layer_outputs[0]
 
-        hidden_states_list = hidden_states.split(aftercnn_lens.tolist(), dim=0)
-        token_audio_list = []
-        for each_audio_states in hidden_states_list:
-            each_audio_states = self.avg_pooler(each_audio_states.transpose(0, 1)).transpose_(0, 1)
-            each_audio_states = self.ln_post(each_audio_states)
-            each_audio_states = self.proj(each_audio_states)
-            token_audio_list.append(each_audio_states)
-        token_audio = torch.cat(token_audio_list, dim=0)
+        # Post-process: average consecutive pairs per audio, then project
+        pooled = (hidden_states[pool_indices] + hidden_states[pool_indices + 1]) / 2
+        pooled = self.ln_post(pooled)
+        token_audio = self.proj(pooled)
         return BaseModelOutputWithPooling(last_hidden_state=token_audio)
-
-    def padded_and_mask_function(self, tensor_list, tensor_len, padding_value=0, padding_side="right"):
-        """
-        Pads a sequence of tensors to their maximum length on indicated `padding_side`.
-        Then prepares a mask so that pad tokens are not attended to.
-        """
-        max_len = tensor_len.max()
-        dim = tensor_list[0].shape[0]
-        padded_tensor = torch.full(
-            size=(len(tensor_list), dim, max_len),
-            fill_value=padding_value,
-            dtype=self.dtype,
-            device=tensor_list[0].device,
-        )
-
-        batch_mask = torch.zeros(
-            (len(tensor_len), max_len),
-            dtype=torch.long,
-            device=padded_tensor.device,
-        )
-        for i, length in enumerate(tensor_len):
-            batch_mask[i, :length] = 1
-            padded_tensor[i, :, :length] = tensor_list[i]
-
-        feature_lens_after_cnn = (tensor_len - 1) // 2 + 1
-        max_len_after_cnn = feature_lens_after_cnn.max()
-        batch_mask_after_cnn = torch.zeros(
-            (len(tensor_len), max_len_after_cnn),
-            dtype=torch.long,
-            device=padded_tensor.device,
-        )
-        for i, length in enumerate(feature_lens_after_cnn):
-            batch_mask_after_cnn[i, :length] = 1
-        return (
-            padded_tensor,
-            batch_mask.unsqueeze(1),
-            batch_mask_after_cnn.bool(),
-        )
 
     # Ignore copy
     def _get_feat_extract_output_lengths(self, input_lengths: torch.LongTensor):
@@ -1067,10 +1122,8 @@ class Qwen2_5_VisionRotaryEmbedding(nn.Module):
         inv_freq = 1.0 / (theta ** (torch.arange(0, dim, 2, dtype=torch.float) / dim))
         self.register_buffer("inv_freq", inv_freq, persistent=False)
 
-    def forward(self, seqlen: int) -> torch.Tensor:
-        seq = torch.arange(seqlen, device=self.inv_freq.device, dtype=self.inv_freq.dtype)
-        freqs = torch.outer(seq, self.inv_freq)
-        return freqs
+    def forward(self, pos_ids: torch.Tensor) -> torch.Tensor:
+        return (pos_ids.unsqueeze(-1) * self.inv_freq).flatten(1)
 
 
 class Qwen2_5_VisionPatchEmbed(nn.Module):
@@ -1152,81 +1205,17 @@ class Qwen2_5OmniVisionEncoder(Qwen2_5OmniPreTrainedModel):
 
         self.post_init()
 
-    def rot_pos_emb(self, grid_thw):
-        pos_ids = []
-        for t, h, w in grid_thw.tolist():
-            hpos_ids = torch.arange(h).unsqueeze(1).expand(-1, w)
-            hpos_ids = hpos_ids.reshape(
-                h // self.spatial_merge_size,
-                self.spatial_merge_size,
-                w // self.spatial_merge_size,
-                self.spatial_merge_size,
-            )
-            hpos_ids = hpos_ids.permute(0, 2, 1, 3)
-            hpos_ids = hpos_ids.flatten()
-
-            wpos_ids = torch.arange(w).unsqueeze(0).expand(h, -1)
-            wpos_ids = wpos_ids.reshape(
-                h // self.spatial_merge_size,
-                self.spatial_merge_size,
-                w // self.spatial_merge_size,
-                self.spatial_merge_size,
-            )
-            wpos_ids = wpos_ids.permute(0, 2, 1, 3)
-            wpos_ids = wpos_ids.flatten()
-            pos_ids.append(torch.stack([hpos_ids, wpos_ids], dim=-1).repeat(t, 1))
-        pos_ids = torch.cat(pos_ids, dim=0)
-        max_grid_size = grid_thw[:, 1:].max()
-        rotary_pos_emb_full = self.rotary_pos_emb(max_grid_size)
-        rotary_pos_emb = rotary_pos_emb_full[pos_ids].flatten(1)
-        return rotary_pos_emb
-
-    def get_window_index(self, grid_thw):
-        window_index: list = []
-        cu_window_seqlens: list = [0]
-        window_index_id = 0
-        vit_merger_window_size = self.window_size // self.spatial_merge_size // self.patch_size
-        grid_thw_list = grid_thw.tolist()
-
-        for grid_t, grid_h, grid_w in grid_thw_list:
-            llm_grid_h, llm_grid_w = (
-                grid_h // self.spatial_merge_size,
-                grid_w // self.spatial_merge_size,
-            )
-            index = torch.arange(grid_t * llm_grid_h * llm_grid_w).reshape(grid_t, llm_grid_h, llm_grid_w)
-            pad_h = vit_merger_window_size - llm_grid_h % vit_merger_window_size
-            pad_w = vit_merger_window_size - llm_grid_w % vit_merger_window_size
-            num_windows_h = (llm_grid_h + pad_h) // vit_merger_window_size
-            num_windows_w = (llm_grid_w + pad_w) // vit_merger_window_size
-            index_padded = F.pad(index, (0, pad_w, 0, pad_h), "constant", -100)
-            index_padded = index_padded.reshape(
-                grid_t,
-                num_windows_h,
-                vit_merger_window_size,
-                num_windows_w,
-                vit_merger_window_size,
-            )
-            index_padded = index_padded.permute(0, 1, 3, 2, 4).reshape(
-                grid_t,
-                num_windows_h * num_windows_w,
-                vit_merger_window_size,
-                vit_merger_window_size,
-            )
-            seqlens = (index_padded != -100).sum([2, 3]).reshape(-1)
-            index_padded = index_padded.reshape(-1)
-            index_new = index_padded[index_padded != -100]
-            window_index.append(index_new + window_index_id)
-            cu_seqlens_tmp = seqlens.cumsum(0) * self.spatial_merge_unit + cu_window_seqlens[-1]
-            cu_window_seqlens.extend(cu_seqlens_tmp.tolist())
-            window_index_id += grid_t * llm_grid_h * llm_grid_w
-        window_index = torch.cat(window_index, dim=0)
-
-        return window_index, cu_window_seqlens
-
     @merge_with_config_defaults
     @capture_outputs
     def forward(
-        self, hidden_states: torch.Tensor, grid_thw: torch.Tensor, **kwargs: Unpack[TransformersKwargs]
+        self,
+        hidden_states: torch.Tensor,
+        grid_thw: torch.Tensor,
+        cu_seqlens: torch.Tensor | None = None,
+        window_index: torch.Tensor | None = None,
+        cu_window_seqlens: torch.Tensor | None = None,
+        rotary_pos_ids: torch.Tensor | None = None,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
         """
         Args:
@@ -1234,38 +1223,41 @@ class Qwen2_5OmniVisionEncoder(Qwen2_5OmniPreTrainedModel):
                 The final hidden states of the model.
             grid_thw (`torch.Tensor` of shape `(num_images_or_videos, 3)`):
                 The temporal, height and width of feature shape of each image in LLM.
+            cu_seqlens (`torch.Tensor`, *optional*):
+                Precomputed cumulative sequence lengths (from `get_vision_cu_seqlens`).
+            cu_window_seqlens (`torch.Tensor`, *optional*):
+                Precomputed window cumulative sequence lengths (from `get_window_index`).
+            window_index (`torch.Tensor`, *optional*):
+                Precomputed window reordering index (from `get_window_index`).
+            rotary_pos_ids (`torch.Tensor`, *optional*):
+                Precomputed (row, col) position IDs (from `get_rotary_pos_ids`).
 
         Returns:
             `torch.Tensor`: hidden_states.
         """
         hidden_states = self.patch_embed(hidden_states)
-        rotary_pos_emb = self.rot_pos_emb(grid_thw)
 
-        window_index, cu_window_seqlens = self.get_window_index(grid_thw)
-        cu_window_seqlens = torch.tensor(
-            cu_window_seqlens,
-            device=hidden_states.device,
-            dtype=grid_thw.dtype if torch.jit.is_tracing() else torch.int32,
-        )
-        cu_window_seqlens = torch.unique_consecutive(cu_window_seqlens)
+        if rotary_pos_ids is None:
+            rotary_pos_ids = get_rotary_pos_ids(grid_thw, self.spatial_merge_size)
+
+        rotary_pos_emb = self.rotary_pos_emb(rotary_pos_ids)
+
+        if cu_seqlens is None:
+            cu_seqlens = get_vision_cu_seqlens(grid_thw)
+
+        if window_index is None:
+            window_index, cu_window_seqlens = get_window_index(
+                grid_thw, self.spatial_merge_size, self.window_size, self.patch_size, self.spatial_merge_unit
+            )
 
         seq_len, _ = hidden_states.size()
+        reverse_indices = torch.argsort(window_index)
         hidden_states = hidden_states.reshape(seq_len // self.spatial_merge_unit, self.spatial_merge_unit, -1)
         hidden_states = hidden_states[window_index, :, :]
         hidden_states = hidden_states.reshape(seq_len, -1)
         rotary_pos_emb = rotary_pos_emb.reshape(seq_len // self.spatial_merge_unit, self.spatial_merge_unit, -1)
         rotary_pos_emb = rotary_pos_emb[window_index, :, :]
         rotary_pos_emb = rotary_pos_emb.reshape(seq_len, -1)
-
-        cu_seqlens = torch.repeat_interleave(grid_thw[:, 1] * grid_thw[:, 2], grid_thw[:, 0]).cumsum(
-            dim=0,
-            # Select dtype based on the following factors:
-            #  - FA2 requires that cu_seqlens_q must have dtype int32
-            #  - torch.onnx.export requires that cu_seqlens_q must have same dtype as grid_thw
-            # See https://github.com/huggingface/transformers/pull/34852 for more information
-            dtype=grid_thw.dtype if torch.jit.is_tracing() else torch.int32,
-        )
-        cu_seqlens = F.pad(cu_seqlens, (1, 0), value=0)
 
         # Modification here
         for layer_num, blk in enumerate(self.blocks):
@@ -1282,7 +1274,6 @@ class Qwen2_5OmniVisionEncoder(Qwen2_5OmniPreTrainedModel):
             )
 
         merged_hidden_states = self.merger(hidden_states)
-        reverse_indices = torch.argsort(window_index)
         merged_hidden_states = merged_hidden_states[reverse_indices, :]
 
         return BaseModelOutputWithPooling(
@@ -1777,7 +1768,6 @@ class Qwen2_5OmniThinkerForConditionalGeneration(Qwen2_5OmniPreTrainedModelForCo
         audio_outputs = self.audio_tower(
             input_features,
             feature_lens=feature_lens,
-            aftercnn_lens=audio_feat_lengths,
             return_dict=True,
             **kwargs,
         )

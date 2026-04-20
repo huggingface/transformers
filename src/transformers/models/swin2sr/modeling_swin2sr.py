@@ -755,7 +755,7 @@ class Swin2SRModel(Swin2SRPreTrainedModel):
         pixel_values = nn.functional.pad(pixel_values, (0, modulo_pad_width, 0, modulo_pad_height), "reflect")
 
         # 2. normalize
-        mean = self.mean.type_as(pixel_values)
+        mean = self.mean.to(device=pixel_values.device, dtype=pixel_values.dtype)
         pixel_values = (pixel_values - mean) * self.img_range
 
         return pixel_values

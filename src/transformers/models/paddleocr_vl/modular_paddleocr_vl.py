@@ -823,9 +823,7 @@ class PaddleOCRVisionEncoder(VideoLlama3VisionEncoder):
         height_position_ids = torch.concat(split_hids, dim=0)
 
         pids = torch.stack([height_position_ids, width_position_ids], dim=-1)
-        max_grid_size = pids.max() + 1
-        rotary_embeddings_max_grid = self.rotary_pos_emb(max_grid_size)
-        rotary_embeddings = rotary_embeddings_max_grid[pids].flatten(1)
+        rotary_embeddings = self.rotary_pos_emb(pids)
         rotary_embeddings = rotary_embeddings.repeat(1, 2)
         position_embeddings = (rotary_embeddings.cos(), rotary_embeddings.sin())
 

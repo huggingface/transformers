@@ -32,6 +32,7 @@ from ...generation import GenerationMixin
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling, ModelOutput
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
+from ...modeling_vision_utils import get_rotary_pos_ids, get_vision_cu_seqlens
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, torch_compilable_check
 from ...utils.generic import is_flash_attention_requested, merge_with_config_defaults
@@ -50,39 +51,8 @@ class VideoLlama3VisionRotaryEmbedding(nn.Module):
         inv_freq = 1.0 / (theta ** (torch.arange(0, dim, 2, dtype=torch.float) / dim))
         self.register_buffer("inv_freq", inv_freq, persistent=False)
 
-    def forward(self, grid_thw, merge_sizes) -> tuple[torch.Tensor, torch.Tensor]:
-        pos_ids = []
-        for (t, h, w), merge_size in zip(grid_thw, merge_sizes):
-            hpos_ids = torch.arange(h).unsqueeze(1).expand(-1, w)
-            hpos_ids = hpos_ids.reshape(
-                h // merge_size,
-                merge_size,
-                w // merge_size,
-                merge_size,
-            )
-            hpos_ids = hpos_ids.permute(0, 2, 1, 3)
-            hpos_ids = hpos_ids.flatten()
-
-            wpos_ids = torch.arange(w).unsqueeze(0).expand(h, -1)
-            wpos_ids = wpos_ids.reshape(
-                h // merge_size,
-                merge_size,
-                w // merge_size,
-                merge_size,
-            )
-            wpos_ids = wpos_ids.permute(0, 2, 1, 3)
-            wpos_ids = wpos_ids.flatten()
-            pos_ids.append(torch.stack([hpos_ids, wpos_ids], dim=-1).repeat(t, 1))
-
-        pos_ids = torch.cat(pos_ids, dim=0)
-        max_grid_thw = grid_thw[:, 1:].max()
-
-        seq = torch.arange(max_grid_thw, device=self.inv_freq.device, dtype=self.inv_freq.dtype)
-        rotary_pos_emb_full = torch.outer(seq, self.inv_freq)
-        rotary_pos_emb = rotary_pos_emb_full[pos_ids].flatten(1)
-        emb = torch.cat((rotary_pos_emb, rotary_pos_emb), dim=-1)
-
-        return (emb.cos(), emb.sin())
+    def forward(self, pos_ids: torch.Tensor) -> torch.Tensor:
+        return (pos_ids.unsqueeze(-1) * self.inv_freq).flatten(1)
 
 
 class VideoLlama3VisionEmbeddings(nn.Module):
@@ -444,6 +414,8 @@ class VideoLlama3VisionModel(VideoLlama3PreTrainedModel):
         pixel_values: torch.Tensor,
         grid_thw: torch.Tensor,
         merge_sizes: torch.Tensor,
+        cu_seqlens: torch.Tensor | None = None,
+        rotary_pos_ids: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutput:
         r"""
@@ -451,18 +423,20 @@ class VideoLlama3VisionModel(VideoLlama3PreTrainedModel):
             The temporal, height and width dimensions of feature shape for each image. Each row contains [t, h, w] values.
         merge_sizes (`torch.Tensor` of shape `(num_images_or_videos,)`):
             The spatial downsampling ratio of each image or video feature.
+        cu_seqlens (`torch.IntTensor`, *optional*):
+            Precomputed cumulative sequence lengths (from `get_vision_cu_seqlens`).
+        rotary_pos_ids (`torch.Tensor`, *optional*):
+            Precomputed (row, col) position IDs (from `get_rotary_pos_ids`).
         """
-        position_embeddings = self.rotary_pos_emb(grid_thw, merge_sizes)
+        if rotary_pos_ids is None:
+            rotary_pos_ids = get_rotary_pos_ids(grid_thw, merge_sizes)
 
-        cu_seqlens = torch.repeat_interleave(grid_thw[:, 1] * grid_thw[:, 2], grid_thw[:, 0]).cumsum(
-            dim=0,
-            # Select dtype based on the following factors:
-            #  - FA2 requires that cu_seqlens_q must have dtype int32
-            #  - torch.onnx.export requires that cu_seqlens_q must have same dtype as grid_thw
-            # See https://github.com/huggingface/transformers/pull/34852 for more information
-            dtype=grid_thw.dtype if torch.jit.is_tracing() else torch.int32,
-        )
-        cu_seqlens = torch.nn.functional.pad(cu_seqlens, (1, 0), value=0)
+        rotary_pos_emb = self.rotary_pos_emb(rotary_pos_ids)
+        emb = torch.cat((rotary_pos_emb, rotary_pos_emb), dim=-1)
+        position_embeddings = (emb.cos(), emb.sin())
+
+        if cu_seqlens is None:
+            cu_seqlens = get_vision_cu_seqlens(grid_thw)
 
         hidden_states = self.embeddings(pixel_values.type(self.dtype))
         encoder_outputs: BaseModelOutput = self.encoder(

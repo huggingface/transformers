@@ -1996,7 +1996,7 @@ class PerceiverBasicDecoder(PerceiverAbstractDecoder):
             pos = torch.stack(indices, dim=1)
             batch_size = inputs.shape[0]
             # Map these coordinates to [-1, 1]
-            pos = -1 + 2 * pos / torch.tensor(self.output_index_dims)[None, :]
+            pos = -1 + 2 * pos / torch.tensor(self.output_index_dims, device=pos.device)[None, :]
             pos = torch.broadcast_to(pos[None], [batch_size, pos.shape[0], pos.shape[1]])
             # Construct the position encoding.
             if self.position_encoding_type == "trainable":
@@ -2471,7 +2471,7 @@ def generate_fourier_features(pos, num_bands, max_resolution=(224, 224), concat_
     min_freq = 1.0
     # Nyquist frequency at the target resolution:
     freq_bands = torch.stack(
-        [torch.linspace(start=min_freq, end=res / 2, steps=num_bands) for res in max_resolution], dim=0
+        [torch.linspace(start=min_freq, end=res / 2, steps=num_bands, device=pos.device) for res in max_resolution]
     )
 
     # Get frequency bands for each spatial dimension.

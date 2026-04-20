@@ -197,7 +197,7 @@ class Gemma4Audio2TextModelTester:
 
     def prepare_config_and_inputs(self):
         input_features = floats_tensor([self.batch_size, self.audio_seq_length, self.audio_num_channels])
-        input_features_mask = torch.ones(self.batch_size, self.audio_seq_length, dtype=torch.bool)
+        input_features_mask = torch.ones(self.batch_size, self.audio_seq_length, dtype=torch.bool, device=torch_device)
         config = self.get_config()
         return config, input_features, input_features_mask
 

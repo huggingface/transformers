@@ -20,7 +20,6 @@ from typing import Optional
 import numpy as np
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
 from huggingface_hub.dataclasses import strict
 from torchvision.transforms.v2 import functional as tvF
 
@@ -43,6 +42,7 @@ from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutputWithPooling, MoeCausalLMOutputWithPast, MoeModelOutputWithPast
 from ...modeling_rope_utils import dynamic_rope_update
 from ...modeling_utils import PreTrainedModel
+from ...modeling_vision_utils import get_rotary_pos_ids, get_vision_cu_seqlens
 from ...processing_utils import ImagesKwargs, Unpack
 from ...utils import (
     TensorType,
@@ -699,22 +699,24 @@ class Ernie4_5_VLMoeVisionTransformerPretrainedModel(Qwen2VisionTransformerPretr
     @merge_with_config_defaults
     @capture_outputs
     def forward(
-        self, hidden_states: torch.Tensor, grid_thw: torch.Tensor, **kwargs: Unpack[TransformersKwargs]
+        self,
+        hidden_states: torch.Tensor,
+        grid_thw: torch.Tensor,
+        cu_seqlens: torch.Tensor | None = None,
+        rotary_pos_ids: torch.Tensor | None = None,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
         hidden_states = self.patch_embed(hidden_states)
-        rotary_pos_emb = self.rot_pos_emb(grid_thw)
+
+        if rotary_pos_ids is None:
+            rotary_pos_ids = get_rotary_pos_ids(grid_thw, self.spatial_merge_size)
+
+        rotary_pos_emb = self.rotary_pos_emb(rotary_pos_ids)
         emb = torch.cat((rotary_pos_emb, rotary_pos_emb), dim=-1)
         position_embeddings = (emb.cos(), emb.sin())
 
-        cu_seqlens = torch.repeat_interleave(grid_thw[:, 1] * grid_thw[:, 2], grid_thw[:, 0]).cumsum(
-            dim=0,
-            # Select dtype based on the following factors:
-            #  - FA2 requires that cu_seqlens_q must have dtype int32
-            #  - torch.onnx.export requires that cu_seqlens_q must have same dtype as grid_thw
-            # See https://github.com/huggingface/transformers/pull/34852 for more information
-            dtype=grid_thw.dtype if torch.jit.is_tracing() else torch.int32,
-        )
-        cu_seqlens = F.pad(cu_seqlens, (1, 0), value=0)
+        if cu_seqlens is None:
+            cu_seqlens = get_vision_cu_seqlens(grid_thw)
 
         for block in self.blocks:
             hidden_states = block(
