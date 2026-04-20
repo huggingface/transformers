@@ -54,10 +54,6 @@ class Qwen2AudioModelTester(ALMModelTester):
         kwargs.setdefault("feat_seq_length", 60)
         # Encoder asserts input_features.shape[-1] == max_source_positions * conv1.stride * conv2.stride == 2 * max_source_positions.
         kwargs.setdefault("max_source_positions", kwargs["feat_seq_length"] // 2)
-        # Qwen2AudioEncoderConfig only maps `num_hidden_layers`; override remaining size knobs explicitly.
-        kwargs.setdefault("d_model", 32)
-        kwargs.setdefault("encoder_attention_heads", 2)
-        kwargs.setdefault("encoder_ffn_dim", 32)
         super().__init__(parent, **kwargs)
 
     def create_audio_mask(self):

@@ -47,9 +47,6 @@ class GlmAsrModelTester(ALMModelTester):
     audio_mask_key = "input_features_mask"
 
     def __init__(self, parent, **kwargs):
-        # feat_seq_length=64 → conv2 (s=2): post_conv=32 → merge_factor=4: 8 audio embed tokens.
-        kwargs.setdefault("feat_seq_length", 64)
-        kwargs.setdefault("seq_length", 35)
         kwargs.setdefault("head_dim", 8)
         super().__init__(parent, **kwargs)
 
