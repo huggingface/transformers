@@ -194,8 +194,8 @@ class PrivacyFilterModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Tes
 
     @parameterized.expand(TEST_EAGER_MATCHES_BATCHED_AND_GROUPED_INFERENCE_PARAMETERIZATION)
     def test_eager_matches_batched_and_grouped_inference(self, name, dtype):
-        if dtype != "fp32":
-            self.skipTest("Privacy filter only supports float32 precision during forward")
+        if dtype == "bf16":
+            self.skipTest("Bf16 may cause biggers fluctuations when used in combination with float casting")
         _test_eager_matches_batched_and_grouped_inference(self, name, dtype)
 
     def test_tiny_random_token_classification_logits(self):

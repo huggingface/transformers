@@ -18,7 +18,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import math
 from collections.abc import Callable
 from typing import Optional
 
@@ -151,8 +150,6 @@ def _apply_rotary_emb(
     cos: torch.Tensor,
     sin: torch.Tensor,
 ) -> torch.Tensor:
-    # Interleaved instead of concatenated layout
-    # TODO: could also be chaned via conversion script (similar to Llama) but less of a priority
     first_half, second_half = x[..., ::2], x[..., 1::2]
     first_ = first_half * cos - second_half * sin
     second_ = second_half * cos + first_half * sin
@@ -166,7 +163,6 @@ def eager_attention_forward(
     value: torch.Tensor,
     attention_mask: torch.Tensor | None,
     scaling: float,
-    s_aux: torch.Tensor,
     dropout: float | int = 0.0,
     **kwargs,
 ):
@@ -176,7 +172,7 @@ def eager_attention_forward(
     if attention_mask is not None:
         attn_weights = attn_weights + attention_mask
 
-    sinks = s_aux.reshape(1, -1, 1, 1).expand(query.shape[0], -1, query.shape[-2], -1)
+    sinks = module.sinks.reshape(1, -1, 1, 1).expand(query.shape[0], -1, query.shape[-2], -1)
     combined_logits = torch.cat([attn_weights, sinks], dim=-1)
 
     # This was not in the original implementation and slightly affect results; it prevents overflow in BF16/FP16
@@ -252,7 +248,7 @@ class PrivacyFilterAttention(nn.Module):
             dropout=0.0 if not self.training else self.attention_dropout,
             scaling=1.0,  # scaling applied before
             sliding_window=self.sliding_window,
-            s_aux=self.sinks * math.log(2.0),  # additional scale for sinks
+            s_aux=self.sinks,
             **kwargs,
         )
 
@@ -276,8 +272,6 @@ class PrivacyFilterExperts(nn.Module):
         self.limit = 7.0
 
     def _apply_gate(self, gate_up: torch.Tensor) -> torch.Tensor:
-        # TODO: fix layout from concatenated to interleaved --> no need to change here then
-        # (otherwise, we won't be able to use megablocks kernels potentially)
         gate, up = gate_up.chunk(2, dim=-1)
         gate = gate.clamp(min=None, max=self.limit)
         up = up.clamp(min=-self.limit, max=self.limit)
@@ -305,9 +299,12 @@ class PrivacyFilterExperts(nn.Module):
                 continue
             top_k_pos, token_idx = torch.where(expert_mask[expert_idx])
             current_state = hidden_states[token_idx]
-            gate_up = current_state.float() @ self.gate_up_proj[expert_idx] + self.gate_up_proj_bias[expert_idx]
+            gate_up = (
+                current_state.float() @ self.gate_up_proj[expert_idx].float()
+                + self.gate_up_proj_bias[expert_idx].float()
+            )
             gated_output = self._apply_gate(gate_up)
-            out = gated_output.float() @ self.down_proj[expert_idx] + self.down_proj_bias[expert_idx]
+            out = gated_output.float() @ self.down_proj[expert_idx].float() + self.down_proj_bias[expert_idx].float()
             weighted_output = out * routing_weights[token_idx, top_k_pos, None].float()
             next_states.index_add_(0, token_idx, weighted_output.to(hidden_states.dtype))
 
@@ -325,9 +322,13 @@ class PrivacyFilterTopKRouter(nn.Module):
 
     def forward(self, hidden_states):
         # Force fp32
-        router_logits = F.linear(hidden_states.float(), self.weight, self.bias)  # (num_tokens, num_experts)
+        router_logits = F.linear(
+            hidden_states.float(), self.weight.float(), self.bias.float()
+        )  # (num_tokens, num_experts)
         router_top_value, router_indices = torch.topk(router_logits, self.top_k, dim=-1)  # (num_tokens, top_k)
         router_scores = torch.nn.functional.softmax(router_top_value, dim=1, dtype=router_top_value.dtype)
+        # Additional scaling
+        router_scores = router_scores / self.top_k
         return router_logits, router_scores, router_indices
 
 
@@ -405,19 +406,8 @@ class PrivacyFilterPreTrainedModel(PreTrainedModel):
         "hidden_states": PrivacyFilterEncoderLayer,
         "attentions": PrivacyFilterAttention,
     }
-    _keep_in_fp32_modules = None  # Moved everything to strict
+    _keep_in_fp32_modules = []
     _compatible_flash_implementations = ["kernels-community/vllm-flash-attn3", "flash_attention_4"]
-    _keep_in_fp32_modules_strict = [
-        "norm",
-        "embedding_norm",
-        "input_layernorm",
-        "post_attention_layernorm",
-        "gate_up_proj",
-        "gate_up_proj_bias",
-        "down_proj",
-        "down_proj_bias",
-        "router",
-    ]
 
     @torch.no_grad()
     def _init_weights(self, module):
@@ -447,7 +437,6 @@ class PrivacyFilterModel(PrivacyFilterPreTrainedModel):
         self.norm = PrivacyFilterRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.rotary_emb = PrivacyFilterRotaryEmbedding(config=config)
         self.gradient_checkpointing = False
-        self.embedding_norm = PrivacyFilterRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -469,7 +458,7 @@ class PrivacyFilterModel(PrivacyFilterPreTrainedModel):
 
         if inputs_embeds is None:
             inputs_embeds = self.embed_tokens(input_ids)
-        hidden_states = self.embedding_norm(inputs_embeds)
+        hidden_states = inputs_embeds
 
         if position_ids is None:
             position_ids = torch.arange(inputs_embeds.shape[1], device=inputs_embeds.device)
