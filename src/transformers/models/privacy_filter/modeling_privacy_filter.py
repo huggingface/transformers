@@ -279,31 +279,39 @@ class PrivacyFilterExperts(nn.Module):
         gated_output = (up + 1) * glu
         return gated_output
 
-    # FIXME
     def forward(self, hidden_states: torch.Tensor, router_indices=None, routing_weights=None) -> torch.Tensor:
         original_dtype = hidden_states.dtype
-        hidden_states_expanded = hidden_states.float().unsqueeze(1).expand(-1, router_indices.shape[1], -1)
-        gate_up_proj = self.gate_up_proj[router_indices].float()
-        gate_up_proj_bias = self.gate_up_proj_bias[router_indices].float()
-        batch_size, num_experts_per_token, hidden_size = hidden_states_expanded.shape
-        gate_up = torch.bmm(
-            hidden_states_expanded.reshape(batch_size * num_experts_per_token, 1, hidden_size),
-            gate_up_proj.reshape(batch_size * num_experts_per_token, hidden_size, -1),
-        ).reshape(batch_size, num_experts_per_token, -1)
-        gate_up = gate_up + gate_up_proj_bias
 
-        hidden_states = self._apply_gate(gate_up).float()
-        down_proj = self.down_proj[router_indices].float()
-        down_proj_bias = self.down_proj_bias[router_indices].float()
-        _, _, intermediate_size = hidden_states.shape
-        hidden_states = torch.bmm(
-            hidden_states.reshape(batch_size * num_experts_per_token, 1, intermediate_size),
-            down_proj.reshape(batch_size * num_experts_per_token, intermediate_size, -1),
-        ).reshape(batch_size, num_experts_per_token, -1)
-        hidden_states = hidden_states + down_proj_bias
+        # Accumulate over fp32
+        next_states = torch.zeros_like(hidden_states, dtype=torch.float32, device=hidden_states.device)
+        with torch.no_grad():
+            expert_mask = torch.nn.functional.one_hot(
+                router_indices, num_classes=self.num_experts
+            )  # masking is also a class
+            expert_mask = expert_mask.permute(2, 1, 0)
+            # we sum on the top_k and on the sequence length to get which experts
+            # are hit this time around
+            expert_hit = torch.greater(expert_mask.sum(dim=(-1, -2)), 0).nonzero()
 
-        hidden_states = torch.einsum("bec,be->bc", hidden_states, routing_weights.float())
-        return hidden_states.to(original_dtype)
+        # Key change to original gpt oss is to stay in fp32 precision for all linear projections / muls
+        for expert_idx in expert_hit:
+            # expert_idx only have 1 element, so we can use scale for fast indexing
+            expert_idx = expert_idx[0]
+            # skip masking index
+            if expert_idx == self.num_experts:
+                continue
+            top_k_pos, token_idx = torch.where(expert_mask[expert_idx])
+            current_state = hidden_states[token_idx]
+            gate_up = (
+                current_state.float() @ self.gate_up_proj[expert_idx].float()
+                + self.gate_up_proj_bias[expert_idx].float()
+            )
+            gated_output = self._apply_gate(gate_up).float()
+            out = gated_output.float() @ self.down_proj[expert_idx].float() + self.down_proj_bias[expert_idx].float()
+            weighted_output = out * routing_weights[token_idx, top_k_pos, None].float()
+            next_states.index_add_(0, token_idx, weighted_output)
+
+        return next_states.to(original_dtype)
 
 
 class PrivacyFilterTopKRouter(nn.Module):
