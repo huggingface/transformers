@@ -25,7 +25,7 @@ logger = logging.get_logger(__name__)
 
 
 @strict
-class Qwen3TTSTokenizerMultiCodebookCode2WavConfig(Qwen3OmniMoeCode2WavConfig):
+class Qwen3TTSTokenizerMultiCodebookDecoderConfig(Qwen3OmniMoeCode2WavConfig):
     r"""
     Configuration class for the Qwen3-TTS V2 tokenizer decoder (Code2Wav).
 
@@ -152,7 +152,7 @@ class Qwen3TTSTokenizerMultiCodebookConfig(PreTrainedConfig):
     model_type = "qwen3_tts_tokenizer_multi_codebook"
     sub_configs = {
         "encoder_config": MimiConfig,
-        "decoder_config": Qwen3TTSTokenizerMultiCodebookCode2WavConfig,
+        "decoder_config": Qwen3TTSTokenizerMultiCodebookDecoderConfig,
     }
 
     def __init__(
@@ -177,7 +177,7 @@ class Qwen3TTSTokenizerMultiCodebookConfig(PreTrainedConfig):
 
         self.encoder_config = MimiConfig(**encoder_config) if isinstance(encoder_config, dict) else encoder_config
         self.decoder_config = (
-            Qwen3TTSTokenizerMultiCodebookCode2WavConfig(**decoder_config)
+            Qwen3TTSTokenizerMultiCodebookDecoderConfig(**decoder_config)
             if isinstance(decoder_config, dict)
             else decoder_config
         )
