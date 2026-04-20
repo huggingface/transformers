@@ -24,7 +24,7 @@ from ...configuration_utils import PreTrainedConfig
 from ...masking_utils import create_bidirectional_sliding_window_mask
 from ...modeling_layers import GenericForTokenClassification
 from ...modeling_outputs import BaseModelOutput
-from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, logging
 from ...utils.generic import merge_with_config_defaults
@@ -326,6 +326,11 @@ class PrivacyFilterPreTrainedModel(GptOssPreTrainedModel):
         "hidden_states": PrivacyFilterEncoderLayer,
         "attentions": PrivacyFilterAttention,
     }
+
+    def get_correct_experts_implementation(self, requested_experts: str | None) -> str:
+        """The model is very sensitive to accumulation orders, hence we default to `eager` instead"""
+        requested_experts = "eager" if requested_experts is None else requested_experts
+        return PreTrainedModel.get_correct_experts_implementation(self, requested_experts)
 
 
 @auto_docstring

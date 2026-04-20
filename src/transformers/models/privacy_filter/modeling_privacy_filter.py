@@ -428,6 +428,11 @@ class PrivacyFilterPreTrainedModel(PreTrainedModel):
             init.normal_(module.weight, mean=0.0, std=std)
             init.normal_(module.bias, mean=0.0, std=std)
 
+    def get_correct_experts_implementation(self, requested_experts: str | None) -> str:
+        """The model is very sensitive to accumulation orders, hence we default to `eager` instead"""
+        requested_experts = "eager" if requested_experts is None else requested_experts
+        return super().get_correct_experts_implementation(requested_experts)
+
 
 @auto_docstring
 class PrivacyFilterModel(PrivacyFilterPreTrainedModel):
