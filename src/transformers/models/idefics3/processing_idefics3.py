@@ -162,7 +162,11 @@ class Idefics3Processor(ProcessorMixin):
                         images[cumsum_images_in_text[i] : cumsum_images_in_text[i + 1]]
                         for i in range(len(n_images_in_text))
                     ]
-                    images = split_images + [images[cumsum_images_in_text[-1] :]]
+                    # Append the rest if any, we will error out when validating if they don't match with text
+                    if len(images) > cumsum_images_in_text[-1]:
+                        images = split_images + [images[cumsum_images_in_text[-1] :]]
+                    else:
+                        images = split_images
                 else:
                     images = [images]
 

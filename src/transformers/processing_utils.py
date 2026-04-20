@@ -797,9 +797,9 @@ class ProcessorMixin(PushToHubMixin):
             return text, None
 
         # Keep the order so we can extract groups later and replace
-        image_token = getattr(self, "image_token", None)
-        video_token = getattr(self, "video_token", None)
-        audio_tokens = getattr(self, "audio_tokens", None)
+        image_token = re.escape(getattr(self, "image_token", ""))
+        video_token = re.escape(getattr(self, "video_token", ""))
+        audio_tokens = re.escape(getattr(self, "audio_tokens", ""))
         regex_special_mm_tokens = rf"({image_token})|({video_token})|({audio_tokens})"
 
         batch_replacement_offsets = []
@@ -812,20 +812,22 @@ class ProcessorMixin(PushToHubMixin):
             expanded_sample = []
             for m in re.finditer(regex_special_mm_tokens, text[batch_idx]):
                 start, end = m.span()
+                if start == end:
+                    continue # no match
                 expanded_sample.append(text[batch_idx][last:start])
 
                 # Case 1: if the image token has match in the text
-                if m.groups()[0] is not None:
+                if m.groups()[0]:
                     replacement_text = next(images_replacements)
                     replacement_offsets.append({"type": "image"})
 
                 # Case 2: if the video token has match in the text
-                elif m.groups()[1] is not None:
+                elif m.groups()[1]:
                     replacement_text = next(videos_replacements)
                     replacement_offsets.append({"type": "video"})
 
                 # Case 3: if the audio token has match in the text
-                elif m.groups()[2] is not None:
+                elif m.groups()[2]:
                     replacement_text = next(audio_replacements)
                     replacement_offsets.append({"type": "audio"})
 
