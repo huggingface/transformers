@@ -35,19 +35,21 @@ if is_torch_available():
 class ALMModelTester:
     # If the model follows standard naming conventions, only `config_class` and
     # `conditional_generation_class` need to be set (others are optional).
+    # base_model_class = None, this should be added when #45534 is merged
     config_class = None
+    text_config_class = None
+    audio_config_class = None
     conditional_generation_class = None
-    base_model_class = None
     sequence_classification_class = None
-
-    # Key name for the audio sub-config in the main config constructor.
-    # Override to "encoder_config" for models like GraniteSpeech.
-    audio_config_key = "audio_config"
+    # These attributes are required after the initialization phase of the tester.
+    _required_attributes = ("config_class", "conditional_generation_class")
 
     # Arguments that should be passed to the config class even if not in its signature.
     forced_config_args = ["pad_token_id"]
 
-    _required_attributes = ("config_class", "conditional_generation_class")
+    # Key name for the audio sub-config in the main config constructor.
+    # Override to "encoder_config" for models like GraniteSpeech.
+    audio_config_key = "audio_config"
 
     @property
     def all_model_classes(self):
@@ -63,7 +65,13 @@ class ALMModelTester:
 
     @property
     def pipeline_model_mapping(self):
-        return {"any-to-any": self.conditional_generation_class}
+        # TODO: @eustlb, we don't have pipeline testing for audio-text-to-text
+        mapping = {
+            "feature-extraction": self.base_model_class,
+            # "audio-text-to-text": self.conditional_generation_class,
+        }
+        # TODO: should we add automatic-speech-recognition with a special flag?
+        return mapping
 
     def __init__(self, parent, **kwargs):
         self.parent = parent
@@ -92,20 +100,10 @@ class ALMModelTester:
         kwargs.setdefault("intermediate_size", 32)  # Keep this divisible by 8 for fp16/bf16/fp32 16-bytes alignment
         kwargs.setdefault("hidden_act", "gelu")
         kwargs.setdefault("max_position_embeddings", 512)
-    
-        # Optional projector config (e.g. GraniteSpeech uses a Q-Former projector)
-        kwargs.setdefault("projector_config", None)
 
         # Set all kwargs as instance attributes
         for key, value in kwargs.items():
             setattr(self, key, value)
-
-        # # Derived from text config (needed by ModelTesterMixin)
-        # self.vocab_size = self.text_config.get("vocab_size", 99)
-        # self.hidden_size = self.text_config.get("hidden_size", 32)
-        # self.num_hidden_layers = self.text_config.get("num_hidden_layers", 2)
-        # self.num_attention_heads = self.text_config.get("num_attention_heads", 4)
-        # self.encoder_seq_length = self.seq_length
 
         for required_attribute in [
             # "base_model_class", # TODO: @eustlb, there is a discrepancy here between ALMs/ VLMs. XXModel and XXForConditionalGeneration
@@ -192,7 +190,7 @@ class ALMModelTester:
                 "This likely indicates a mismatch between your feature extraction/configuration and your sequence length. "
                 "Please ensure `seq_length` is >= the number of audio embedding positions."
             )
-         
+
         input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
 
         special_tokens = [self.pad_token_id, self.bos_token_id, self.eos_token_id, self.audio_token_id]
@@ -229,7 +227,7 @@ class ALMModelTester:
     @property
     def config_args(self):
         return list(signature(self.config_class.__init__).parameters.keys())
-    
+
     @property
     def text_config_args(self):
         args = list(signature(self.text_config_class.__init__).parameters.keys())
@@ -310,9 +308,7 @@ class ALMModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin)
 
     def setUp(self):
         if self.model_tester_class is None:
-            raise ValueError(
-                "You have inherited from ALMModelTest but did not set the model_tester_class attribute."
-            )
+            raise ValueError("You have inherited from ALMModelTest but did not set the model_tester_class attribute.")
         self.model_tester = self.model_tester_class(self)
         self.config_tester = ConfigTester(self, config_class=self.model_tester.config_class, has_text_modality=False)
 
@@ -332,6 +328,11 @@ class ALMModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin)
         """Test config common functionality."""
         self.config_tester.run_common_tests()
 
+    # TODO: @eustlb, remove this once #45534 is merged
     @unittest.skip("Audio-LMs have no separate base model without a head.")
     def test_model_base_model_prefix(self):
         pass
+
+    # TODO: @eustlb, add this
+    # def test_mismatching_num_audio_tokens(self):
+    #     pass
