@@ -13,6 +13,7 @@
 # limitations under the License.
 """PyTorch Qwen3-VL model."""
 
+import warnings
 from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
@@ -520,6 +521,27 @@ class Qwen3VLVisionModel(Qwen3VLPreTrainedModel):
             pooler_output=merged_hidden_states,
             deepstack_features=deepstack_feature_lists,
         )
+
+    def rot_pos_emb(self, grid_thw: torch.Tensor) -> torch.Tensor:
+        warnings.warn(
+            f"`{self.__class__.__name__}.rot_pos_emb` is deprecated and will be removed in a future version. Use `get_rotary_pos_ids` from `transformers.vision_utils` and apply the rotary embedding module.",
+            FutureWarning,
+            stacklevel=2,
+        )
+        pos_ids = get_rotary_pos_ids(grid_thw, self.spatial_merge_size)
+        rotary_pos_emb = self.rotary_pos_emb(pos_ids)
+        return rotary_pos_emb
+
+    def fast_pos_embed_interpolate(self, grid_thw):
+        warnings.warn(
+            f"`{self.__class__.__name__}.fast_pos_embed_interpolate` is deprecated and will be removed in a future version. Use `get_pos_embed_indices` from `transformers.vision_utils` and apply `self.pos_embed`.",
+            FutureWarning,
+            stacklevel=2,
+        )
+        embed_indices, bilinear_weights = get_pos_embed_indices(
+            grid_thw, self.num_grid_per_side, self.config.spatial_merge_size
+        )
+        return (self.pos_embed(embed_indices) * bilinear_weights[:, :, None]).sum(0)
 
 
 @auto_docstring(

@@ -24,6 +24,7 @@
 # limitations under the License.
 
 import itertools
+import warnings
 from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any, Optional
@@ -454,6 +455,31 @@ class Qwen2_5_VisionTransformerPretrainedModel(Qwen2_5_VLPreTrainedModel):
             last_hidden_state=hidden_states,
             pooler_output=merged_hidden_states,
         )
+
+    def rot_pos_emb(self, grid_thw):
+        warnings.warn(
+            f"`{self.__class__.__name__}.rot_pos_emb` is deprecated and will be removed in a future version. Use `get_rotary_pos_ids` from `transformers.vision_utils` and apply the rotary embedding module.",
+            FutureWarning,
+            stacklevel=2,
+        )
+        pos_ids = get_rotary_pos_ids(grid_thw, self.spatial_merge_size)
+        rotary_pos_emb = self.rotary_pos_emb(pos_ids)
+        return rotary_pos_emb
+
+    def get_window_index(self, grid_thw):
+        warnings.warn(
+            f"`{self.__class__.__name__}.get_window_index` is deprecated and will be removed in a future version. Use `get_window_index` from `transformers.vision_utils` instead.",
+            FutureWarning,
+            stacklevel=2,
+        )
+        window_index, cu_window_seqlens = get_window_index(
+            grid_thw,
+            self.spatial_merge_size,
+            self.window_size,
+            self.patch_size,
+            self.spatial_merge_unit,
+        )
+        return window_index, cu_window_seqlens.tolist()
 
 
 @dataclass

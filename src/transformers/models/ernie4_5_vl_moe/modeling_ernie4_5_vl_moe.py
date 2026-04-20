@@ -19,6 +19,7 @@
 # limitations under the License.
 
 import itertools
+import warnings
 from collections.abc import Callable
 from typing import Any, Optional
 
@@ -931,6 +932,16 @@ class Ernie4_5_VLMoeVisionTransformerPretrainedModel(Ernie4_5_VLMoePreTrainedMod
             )
         hidden_states = self.ln(hidden_states)
         return BaseModelOutputWithPooling(last_hidden_state=hidden_states)
+
+    def rot_pos_emb(self, grid_thw):
+        warnings.warn(
+            f"`{self.__class__.__name__}.rot_pos_emb` is deprecated and will be removed in a future version. Use `get_rotary_pos_ids` from `transformers.vision_utils` and apply the rotary embedding module.",
+            FutureWarning,
+            stacklevel=2,
+        )
+        pos_ids = get_rotary_pos_ids(grid_thw, self.spatial_merge_size)
+        rotary_pos_emb = self.rotary_pos_emb(pos_ids)
+        return rotary_pos_emb
 
 
 class Ernie4_5_VLMoeVisionMLP(nn.Module):

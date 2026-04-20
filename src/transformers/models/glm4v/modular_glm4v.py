@@ -11,6 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+import warnings
 from collections.abc import Callable
 
 import numpy as np
@@ -678,6 +679,16 @@ class Glm4vVisionModel(Glm4vPreTrainedModel):
             last_hidden_state=hidden_states,
             pooler_output=merged_hidden_states,
         )
+
+    def rot_pos_emb(self, grid_thw):
+        warnings.warn(
+            f"`{self.__class__.__name__}.rot_pos_emb` is deprecated and will be removed in a future version. Use `get_rotary_pos_ids` from `transformers.vision_utils` and apply the rotary embedding module.",
+            FutureWarning,
+            stacklevel=2,
+        )
+        pos_ids = get_rotary_pos_ids(grid_thw, self.spatial_merge_size)
+        rotary_pos_emb = self.rotary_pos_emb(pos_ids)
+        return rotary_pos_emb, pos_ids
 
 
 class Glm4vTextModel(Qwen2_5_VLTextModel):

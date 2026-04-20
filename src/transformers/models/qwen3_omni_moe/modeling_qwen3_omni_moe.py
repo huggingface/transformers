@@ -20,6 +20,7 @@
 # limitations under the License.
 
 import math
+import warnings
 from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Optional
@@ -848,6 +849,73 @@ class Qwen3OmniMoeAudioEncoder(Qwen3OmniMoePreTrainedModel):
         output_lengths = (input_lengths - 2) // 2 + 1
         return input_lengths, output_lengths
 
+    def _prepare_attention_mask(self, inputs_tensor: torch.Tensor, cu_seqlens: torch.Tensor) -> torch.Tensor:
+        # Flash Attention 2 doesn't need a 4D mask and relies on `cu_seqlens/max_seqlen`
+        # NOTE: the created attention masl only approximates the ragged FA2 attention by
+        # allowing bidirectional attention within `cu_seqlens` blocks, and not attending between
+        # blocks. Though it will not be a 100% match for FA2's `varlen` path
+        warnings.warn(
+            f"`{self.__class__.__name__}._prepare_attention_mask` is deprecated and will be removed in a future version.",
+            FutureWarning,
+            stacklevel=2,
+        )
+        if is_flash_attention_requested(self.config):
+            return None
+
+        seq_length = inputs_tensor.shape[0]
+        attention_mask = torch.full(
+            [1, 1, seq_length, seq_length],
+            torch.finfo(inputs_tensor.dtype).min,
+            device=inputs_tensor.device,
+            dtype=inputs_tensor.dtype,
+        )
+        for i in range(1, len(cu_seqlens)):
+            attention_mask[..., cu_seqlens[i - 1] : cu_seqlens[i], cu_seqlens[i - 1] : cu_seqlens[i]] = 0
+        return attention_mask
+
+    def padded_and_mask_function(self, tensor_list, tensor_len, padding_value=0, padding_side="right"):
+        """
+        Pads a sequence of tensors to their maximum length on indicated `padding_side`.
+        Then prepares a mask so that pad tokens are not attended to.
+        """
+        warnings.warn(
+            f"`{self.__class__.__name__}.padded_and_mask_function` is deprecated and will be removed in a future version. Use `chunk_and_pad_features` and `get_audio_cu_seqlens` helpers instead.",
+            FutureWarning,
+            stacklevel=2,
+        )
+        max_len = tensor_len.max()
+        dim = tensor_list[0].shape[0]
+        padded_tensor = torch.full(
+            size=(len(tensor_list), dim, max_len),
+            fill_value=padding_value,
+            dtype=self.dtype,
+            device=tensor_list[0].device,
+        )
+
+        batch_mask = torch.zeros(
+            (len(tensor_len), max_len),
+            dtype=torch.long,
+            device=padded_tensor.device,
+        )
+        for i, length in enumerate(tensor_len):
+            batch_mask[i, :length] = 1
+            padded_tensor[i, :, :length] = tensor_list[i]
+
+        feature_lens_after_cnn = (tensor_len - 1) // 2 + 1
+        max_len_after_cnn = feature_lens_after_cnn.max()
+        batch_mask_after_cnn = torch.zeros(
+            (len(tensor_len), max_len_after_cnn),
+            dtype=torch.long,
+            device=padded_tensor.device,
+        )
+        for i, length in enumerate(feature_lens_after_cnn):
+            batch_mask_after_cnn[i, :length] = 1
+        return (
+            padded_tensor,
+            batch_mask.unsqueeze(1),
+            batch_mask_after_cnn.bool(),
+        )
+
 
 def rotate_half(x):
     """Rotates half the hidden dims of the input."""
@@ -1197,6 +1265,27 @@ class Qwen3OmniMoeVisionEncoder(Qwen3OmniMoePreTrainedModel):
             pooler_output=merged_hidden_states,
             deepstack_features=deepstack_feature_lists,
         )
+
+    def rot_pos_emb(self, grid_thw: torch.Tensor) -> torch.Tensor:
+        warnings.warn(
+            f"`{self.__class__.__name__}.rot_pos_emb` is deprecated and will be removed in a future version. Use `get_rotary_pos_ids` from `transformers.vision_utils` and apply the rotary embedding module.",
+            FutureWarning,
+            stacklevel=2,
+        )
+        pos_ids = get_rotary_pos_ids(grid_thw, self.spatial_merge_size)
+        rotary_pos_emb = self.rotary_pos_emb(pos_ids)
+        return rotary_pos_emb
+
+    def fast_pos_embed_interpolate(self, grid_thw):
+        warnings.warn(
+            f"`{self.__class__.__name__}.fast_pos_embed_interpolate` is deprecated and will be removed in a future version. Use `get_pos_embed_indices` from `transformers.vision_utils` and apply `self.pos_embed`.",
+            FutureWarning,
+            stacklevel=2,
+        )
+        embed_indices, bilinear_weights = get_pos_embed_indices(
+            grid_thw, self.num_grid_per_side, self.config.spatial_merge_size
+        )
+        return (self.pos_embed(embed_indices) * bilinear_weights[:, :, None]).sum(0)
 
     @property
     def deepstack_merger_list(self):

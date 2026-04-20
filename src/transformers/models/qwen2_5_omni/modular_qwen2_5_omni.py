@@ -15,6 +15,7 @@
 """PyTorch Qwen2.5Omni model (Audio, Image, Video)."""
 
 import math
+import warnings
 from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any, Optional
@@ -1421,6 +1422,49 @@ class Qwen2_5OmniAudioEncoder(Qwen2_5OmniPreTrainedModel):
         input_lengths = (input_lengths - 1) // 2 + 1
         output_lengths = (input_lengths - 2) // 2 + 1
         return input_lengths, output_lengths
+
+    def padded_and_mask_function(self, tensor_list, tensor_len, padding_value=0, padding_side="right"):
+        """
+        Pads a sequence of tensors to their maximum length on indicated `padding_side`.
+        Then prepares a mask so that pad tokens are not attended to.
+        """
+        warnings.warn(
+            f"`{self.__class__.__name__}.padded_and_mask_function` is deprecated and will be removed in a future version. Use `chunk_and_pad_features` and `get_audio_cu_seqlens` helpers instead.",
+            FutureWarning,
+            stacklevel=2,
+        )
+        max_len = tensor_len.max()
+        dim = tensor_list[0].shape[0]
+        padded_tensor = torch.full(
+            size=(len(tensor_list), dim, max_len),
+            fill_value=padding_value,
+            dtype=self.dtype,
+            device=tensor_list[0].device,
+        )
+
+        batch_mask = torch.zeros(
+            (len(tensor_len), max_len),
+            dtype=torch.long,
+            device=padded_tensor.device,
+        )
+        for i, length in enumerate(tensor_len):
+            batch_mask[i, :length] = 1
+            padded_tensor[i, :, :length] = tensor_list[i]
+
+        feature_lens_after_cnn = (tensor_len - 1) // 2 + 1
+        max_len_after_cnn = feature_lens_after_cnn.max()
+        batch_mask_after_cnn = torch.zeros(
+            (len(tensor_len), max_len_after_cnn),
+            dtype=torch.long,
+            device=padded_tensor.device,
+        )
+        for i, length in enumerate(feature_lens_after_cnn):
+            batch_mask_after_cnn[i, :length] = 1
+        return (
+            padded_tensor,
+            batch_mask.unsqueeze(1),
+            batch_mask_after_cnn.bool(),
+        )
 
 
 def apply_rotary_pos_emb_vision(tensor: torch.Tensor, freqs: torch.Tensor) -> torch.Tensor:

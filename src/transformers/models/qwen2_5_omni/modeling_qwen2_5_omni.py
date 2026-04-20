@@ -20,6 +20,7 @@
 # limitations under the License.
 
 import math
+import warnings
 from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any, Optional
@@ -940,6 +941,49 @@ class Qwen2_5OmniAudioEncoder(Qwen2_5OmniPreTrainedModel):
         output_lengths = (input_lengths - 2) // 2 + 1
         return input_lengths, output_lengths
 
+    def padded_and_mask_function(self, tensor_list, tensor_len, padding_value=0, padding_side="right"):
+        """
+        Pads a sequence of tensors to their maximum length on indicated `padding_side`.
+        Then prepares a mask so that pad tokens are not attended to.
+        """
+        warnings.warn(
+            f"`{self.__class__.__name__}.padded_and_mask_function` is deprecated and will be removed in a future version. Use `chunk_and_pad_features` and `get_audio_cu_seqlens` helpers instead.",
+            FutureWarning,
+            stacklevel=2,
+        )
+        max_len = tensor_len.max()
+        dim = tensor_list[0].shape[0]
+        padded_tensor = torch.full(
+            size=(len(tensor_list), dim, max_len),
+            fill_value=padding_value,
+            dtype=self.dtype,
+            device=tensor_list[0].device,
+        )
+
+        batch_mask = torch.zeros(
+            (len(tensor_len), max_len),
+            dtype=torch.long,
+            device=padded_tensor.device,
+        )
+        for i, length in enumerate(tensor_len):
+            batch_mask[i, :length] = 1
+            padded_tensor[i, :, :length] = tensor_list[i]
+
+        feature_lens_after_cnn = (tensor_len - 1) // 2 + 1
+        max_len_after_cnn = feature_lens_after_cnn.max()
+        batch_mask_after_cnn = torch.zeros(
+            (len(tensor_len), max_len_after_cnn),
+            dtype=torch.long,
+            device=padded_tensor.device,
+        )
+        for i, length in enumerate(feature_lens_after_cnn):
+            batch_mask_after_cnn[i, :length] = 1
+        return (
+            padded_tensor,
+            batch_mask.unsqueeze(1),
+            batch_mask_after_cnn.bool(),
+        )
+
 
 def rotate_half(x):
     """Rotates half the hidden dims of the input."""
@@ -1279,6 +1323,31 @@ class Qwen2_5OmniVisionEncoder(Qwen2_5OmniPreTrainedModel):
             last_hidden_state=hidden_states,
             pooler_output=merged_hidden_states,
         )
+
+    def rot_pos_emb(self, grid_thw):
+        warnings.warn(
+            f"`{self.__class__.__name__}.rot_pos_emb` is deprecated and will be removed in a future version. Use `get_rotary_pos_ids` from `transformers.vision_utils` and apply the rotary embedding module.",
+            FutureWarning,
+            stacklevel=2,
+        )
+        pos_ids = get_rotary_pos_ids(grid_thw, self.spatial_merge_size)
+        rotary_pos_emb = self.rotary_pos_emb(pos_ids)
+        return rotary_pos_emb
+
+    def get_window_index(self, grid_thw):
+        warnings.warn(
+            f"`{self.__class__.__name__}.get_window_index` is deprecated and will be removed in a future version. Use `get_window_index` from `transformers.vision_utils` instead.",
+            FutureWarning,
+            stacklevel=2,
+        )
+        window_index, cu_window_seqlens = get_window_index(
+            grid_thw,
+            self.spatial_merge_size,
+            self.window_size,
+            self.patch_size,
+            self.spatial_merge_unit,
+        )
+        return window_index, cu_window_seqlens.tolist()
 
 
 class Qwen2_5OmniRotaryEmbedding(nn.Module):
