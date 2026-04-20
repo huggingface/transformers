@@ -23,6 +23,7 @@ from typing import Annotated
 
 import typer
 
+from transformers.agent.output import answer as _answer
 from transformers.agent.output import out
 
 from ._common import (
@@ -77,7 +78,7 @@ def vqa(
     new_tokens = output_ids[0, inputs["input_ids"].shape[1] :]
     result = processor.decode(new_tokens, skip_special_tokens=True)
 
-    out.emit({"answer": result}, task="vqa")
+    _answer(result)
 
 
 def document_qa(
@@ -129,7 +130,7 @@ def document_qa(
     end_idx = outputs.end_logits.argmax(dim=-1).item()
     answer = processor.tokenizer.decode(inputs["input_ids"][0, start_idx : end_idx + 1], skip_special_tokens=True)
 
-    out.emit({"answer": answer, "start": start_idx, "end": end_idx}, task="document-qa")
+    out.result("Extracted answer", answer=answer, start=start_idx, end=end_idx)
 
 
 def caption(
@@ -172,7 +173,7 @@ def caption(
     new_tokens = output_ids[0, inputs["input_ids"].shape[1] :]
     result = processor.decode(new_tokens, skip_special_tokens=True)
 
-    out.emit({"caption": result}, task="caption")
+    _answer(result, key="caption")
 
 
 def ocr(
@@ -218,7 +219,7 @@ def ocr(
     new_tokens = output_ids[0, inputs["input_ids"].shape[1] :]
     result = processor.decode(new_tokens, skip_special_tokens=True)
 
-    out.emit({"text": result}, task="ocr")
+    _answer(result, key="text")
 
 
 def multimodal_chat(
@@ -287,4 +288,4 @@ def multimodal_chat(
 
     output_ids = loaded_model.generate(**inputs, max_new_tokens=max_new_tokens)
     new_tokens = output_ids[0, inputs["input_ids"].shape[1] :]
-    out.emit(processor.decode(new_tokens, skip_special_tokens=True), task="multimodal-chat")
+    _answer(processor.decode(new_tokens, skip_special_tokens=True), key="text")

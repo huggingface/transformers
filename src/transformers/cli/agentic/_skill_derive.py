@@ -15,18 +15,17 @@
 """Auto-generate a ``skill.json`` manifest by introspecting the CLI argument
 parsers already defined in ``src/transformers/cli/agentic/``.
 
-Every emitted result goes through ``out.emit(result, task=<id>)`` at runtime,
-which wraps the result in a ``{"task", "result"}`` envelope in agent/json
-modes. The manifest documents ``result`` payloads; the envelope is described
-once at the top level.
+Each command emits its result via a huggingface_hub ``Output`` primitive
+(``table``/``result``/``dict``) or the local ``answer()`` helper. With
+``--format json``, stdout is the JSON shape documented in
+``output_schemas.OUTPUT_SCHEMAS`` for each capability.
 
-Usage (programmatic)::
+Usage::
 
     from transformers.cli.agentic._skill_derive import derive_skill_from_cli
     manifest = derive_skill_from_cli()
 
-Usage (CLI)::
-
+    # or:
     python -m transformers.cli.agentic._skill_derive > skill.json
 """
 
@@ -52,10 +51,7 @@ _TYPE_MAP = {
 
 
 def _python_type_to_json(py_type: type) -> dict:
-    """Convert a Python type annotation to a JSON Schema fragment.
-
-    Handles ``str | None`` (Optional), plain types, and ``Annotated`` wrappers.
-    """
+    """Convert a Python type annotation to a JSON Schema fragment."""
     origin = get_origin(py_type)
 
     if origin is Annotated:
@@ -67,11 +63,8 @@ def _python_type_to_json(py_type: type) -> dict:
         has_none = type(None) in args
         if len(non_none) == 1:
             inner = _python_type_to_json(non_none[0])
-            if has_none:
-                # JSON Schema nullable convention
-                t = inner.get("type")
-                if isinstance(t, str):
-                    inner["type"] = [t, "null"]
+            if has_none and isinstance(inner.get("type"), str):
+                inner["type"] = [inner["type"], "null"]
             return inner
         if origin is list:
             return {"type": "array", "items": _python_type_to_json(args[0])} if args else {"type": "array"}
@@ -141,11 +134,11 @@ def derive_skill_from_cli() -> dict[str, Any]:
 
     return {
         "name": "transformers",
-        "envelope": {
-            "description": 'Every command prints {"task": <id>, "result": <outputs>} on stdout in agent/json modes.',
-            "type": "object",
-            "properties": {"task": {"type": "string"}, "result": {}},
-        },
+        "description": (
+            "Agent-invokable Transformers commands. Pass `--format json` at the top level "
+            "(e.g. `transformers --format json classify ...`) to receive the structured output "
+            "documented in each capability's `outputs` schema."
+        ),
         "capabilities": capabilities,
     }
 

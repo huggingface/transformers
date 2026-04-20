@@ -22,7 +22,7 @@ from typing import Annotated
 
 import typer
 
-from transformers.agent.output import out
+from transformers.agent.output import answer, out
 
 from ._common import (
     DeviceOpt,
@@ -91,7 +91,7 @@ def transcribe(
     output_ids = loaded_model.generate(input_features, **gen_kwargs)
     transcription = processor.batch_decode(output_ids, skip_special_tokens=True)[0]
 
-    out.emit({"text": transcription}, task="transcribe")
+    answer(transcription, key="text")
 
 
 def audio_classify(
@@ -190,7 +190,7 @@ def audio_classify(
         ]
         result.sort(key=lambda x: x["score"], reverse=True)
 
-    out.emit(result, task="audio-classify")
+    out.table(result)
 
 
 def speak(
@@ -243,7 +243,7 @@ def speak(
     )
 
     scipy.io.wavfile.write(output, sampling_rate, audio_data)
-    out.emit({"output_path": output}, task="speak")
+    out.result("Speech saved", output_path=output)
 
 
 def audio_generate(
@@ -296,4 +296,4 @@ def audio_generate(
     )
 
     scipy.io.wavfile.write(output, sampling_rate, audio_data)
-    out.emit({"output_path": output}, task="audio-generate")
+    out.result("Audio saved", output_path=output)
