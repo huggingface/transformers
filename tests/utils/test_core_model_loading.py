@@ -265,9 +265,8 @@ def _make_dtensor_shard_op(mesh, placements, param_shape, local_shape):
     op = object.__new__(DtensorShardOperation)
     op.device_mesh = mesh
     op.placements = tuple(placements)
-    ns = SimpleNamespace(shape=torch.Size(param_shape), ndim=len(param_shape))
-    ns.dim = lambda: len(param_shape)
-    op.param = ns
+    op.param_shape = tuple(param_shape)
+    op.param_ndim = len(param_shape)
     op.local_shape = tuple(local_shape)
     return op
 
@@ -876,31 +875,32 @@ class TestConvertAndLoadStateDict(unittest.TestCase):
 
 
 class TestDtensorShardOperation(unittest.TestCase):
-    """Unit tests for DtensorShardOperation.shard_tensor — one test per code path.
+    """Unit tests for DtensorShardOperation.shard_tensor.
 
-    Branch coverage map (labels [A]–[C3b] match comments in core_model_loading.py):
+    The class handles three source shapes relative to the DTensor param:
+      (a) full weight                   — interval math applies directly.
+      (b) one expert of a packed param  — skip if not owned, else drop the
+                                           expert placement and continue.
+      (c) one pack-half                 — interleaved (_StridedShard) on the
+                                           missing packed axis degrades to a
+                                           plain contiguous cut.
+    A Shard + _StridedShard on the same source dim falls back to
+    materialize-then-split.
 
-    shard_tensor()
-    ├── [A]  no sharding placements → full copy                            [test_no_shard_returns_full_tensor]
-    ├── [B]  expert path (tensor_idx set, ndim mismatch)
-    │   ├── [B1] has_expert_sharding=False → fall through to C             [test_expert_shaped_tp_only_no_expert_sharding]
-    │   ├── [B2] not owns_local_expert → None                              [test_expert_filtering]
-    │   ├── [B3] owned, no inner placements → full copy                    [test_expert_filtering]
-    │   └── [B4] owned, with inner placements → _shard_nd                  [test_expert_filtering_preserves_inner_sharding]
-    └── [C]  _shard_nd()
-        ├── [C1]  _can_shard_on_read=False → _materialize_and_split        [test_nd_strided_plus_shard_same_dim_fallback]
-        ├── [C2]  has_strided=False → contiguous slice
-        │   ├── 1D mesh                                                    [test_1d_shard_fast_path]
-        │   ├── 2D mesh                                                    [test_nd_contiguous_single_slice]
-        │   ├── negative dim                                               [test_negative_dim_normalizes_correctly]
-        │   └── uneven division                                            [test_contiguous_shard_uneven_division]
-        └── [C3] has_strided=True → _compute_dim_ranges + _slice_and_read
-            ├── [C3a] _source_tensor_needs_packing → contiguous            [test_prepacked_strided_shard_uses_contiguous_source_slice]
-            └── [C3b] _StridedShard → _strided_ranges                      [test_nd_strided_shard_disjoint_ranges]
-
-    _slice_and_read (tested directly)
-    ├── all single ranges → simple slice                                   [test_slice_and_read_all_single_ranges]
-    └── two multi-range dims → ValueError                                  [test_slice_and_read_raises_on_two_multi_range_dims]
+    Covered paths:
+        - no sharding / replicate-only                    [test_no_shard_returns_full_tensor]
+        - single-placement contiguous shard               [test_1d_single_shard,
+                                                           test_negative_dim_normalizes_correctly,
+                                                           test_contiguous_shard_uneven_division]
+        - multi-placement contiguous shard                [test_nd_contiguous_single_slice]
+        - strided shard producing disjoint intervals      [test_nd_strided_shard_disjoint_ranges]
+        - same-dim conflict → materialize+split fallback  [test_nd_strided_plus_shard_same_dim_fallback]
+        - per-expert, no expert-axis sharding             [test_expert_shaped_tp_only_no_expert_sharding]
+        - per-expert, expert axis sharded (skip/own)      [test_expert_filtering]
+        - per-expert + inner TP                           [test_expert_filtering_preserves_inner_sharding]
+        - per-expert + pre-pack axis (strided→contig)     [test_prepacked_strided_shard_uses_contiguous_source_slice]
+        - internal _slice_and_cat                         [test_slice_and_cat_all_single_ranges,
+                                                           test_slice_and_cat_raises_on_two_multi_range_dims]
     """
 
     def test_no_shard_returns_full_tensor(self):
@@ -910,8 +910,8 @@ class TestDtensorShardOperation(unittest.TestCase):
         tensor = torch.arange(16).reshape(4, 4).float()
         torch.testing.assert_close(op.shard_tensor(tensor), tensor)
 
-    def test_1d_shard_fast_path(self):
-        # TODO(3outeille): double check fast path
+    def test_1d_single_shard(self):
+        """1D mesh with a single Shard(0) → contiguous split across ranks."""
         tensor = torch.arange(16).reshape(4, 4).float()
         for rank, expected in [(0, tensor[:2]), (1, tensor[2:])]:
             mesh = FakeMesh(shape=(2,), rank=rank)
@@ -975,9 +975,9 @@ class TestDtensorShardOperation(unittest.TestCase):
             torch.testing.assert_close(op.shard_tensor(tensor, tensor_idx=0), expected, msg=f"rank {rank}")
 
     def test_expert_shaped_tp_only_no_expert_sharding(self):
-        """Expert-shaped param with TP on dim 1 but no expert sharding on dim 0 → regular _shard_nd path."""
+        """Expert-shaped param with TP on dim 1 but no expert sharding on dim 0 → plain interval loop."""
         tensor = torch.arange(8).reshape(4, 2).float()
-        # Shard(1) on 3D param maps to dim 0 of the 2D checkpoint tensor (ndim_diff=1)
+        # Shard(1) on a 3D param maps to source dim 0 (source is missing the leading expert axis).
         for rank, expected in [(0, tensor[:2]), (1, tensor[2:])]:
             mesh = FakeMesh(shape=(2,), rank=rank)
             op = _make_dtensor_shard_op(mesh, [Shard(1)], param_shape=(4, 4, 2), local_shape=(4, 2, 2))
@@ -1028,23 +1028,23 @@ class TestDtensorShardOperation(unittest.TestCase):
             op = _make_dtensor_shard_op(mesh, [Shard(0)], param_shape=(5, 4), local_shape=(local_rows, 4))
             torch.testing.assert_close(op.shard_tensor(tensor), expected[rank], msg=f"rank {rank}")
 
-    def test_slice_and_read_all_single_ranges(self):
-        """When every dim has exactly one range, _slice_and_read takes the simple slice path (no concat)."""
+    def test_slice_and_cat_all_single_ranges(self):
+        """When every dim has exactly one interval, _slice_and_cat does a single slice read (no concat)."""
         tensor = torch.arange(64).reshape(8, 8).float()
         mesh = FakeMesh(shape=(2,), rank=0)
         op = _make_dtensor_shard_op(mesh, [Shard(0)], param_shape=(8, 8), local_shape=(4, 4))
-        dim_ranges = {0: [(0, 4)], 1: [(2, 6)]}
-        result = op._slice_and_read(tensor, [8, 8], dim_ranges, None, None)
+        intervals = [[(0, 4)], [(2, 6)]]
+        result = op._slice_and_cat(tensor, intervals, None, None)
         torch.testing.assert_close(result, tensor[0:4, 2:6])
 
-    def test_slice_and_read_raises_on_two_multi_range_dims(self):
-        """Multiple disjoint ranges on two different dims → ValueError."""
+    def test_slice_and_cat_raises_on_two_multi_range_dims(self):
+        """Multiple disjoint intervals on two different dims → ValueError."""
         tensor = torch.arange(64).reshape(8, 8).float()
         mesh = FakeMesh(shape=(2,), rank=0)
         op = _make_dtensor_shard_op(mesh, [Shard(0)], param_shape=(8, 8), local_shape=(4, 4))
-        dim_ranges = {0: [(0, 2), (4, 6)], 1: [(0, 2), (4, 6)]}
+        intervals = [[(0, 2), (4, 6)], [(0, 2), (4, 6)]]
         with self.assertRaises(ValueError):
-            op._slice_and_read(tensor, [8, 8], dim_ranges, None, None)
+            op._slice_and_cat(tensor, intervals, None, None)
 
 
 class TestConversionMapping(unittest.TestCase):
