@@ -4482,11 +4482,13 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             for name in getattr(module, "_hidden_kernels", {}):
                 delattr(module, name)
 
-        self.apply(attach_hidden_kernels)
         try:
+            self.apply(attach_hidden_kernels)
+
             mode = Mode.INFERENCE if not self.training else Mode.TRAINING if mode is None else mode
             kernelize(self, device=Device(type=self.device.type), mode=mode)
             self._use_kernels = True
+
         finally:
             self.apply(detach_hidden_kernels)
 
