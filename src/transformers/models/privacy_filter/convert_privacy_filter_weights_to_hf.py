@@ -14,6 +14,7 @@
 import argparse
 import gc
 import json
+import math
 import os
 import shutil
 from collections.abc import Iterable
@@ -31,7 +32,6 @@ from transformers.convert_slow_tokenizer import TikTokenConverter
 # fmt: off
 ORIGINAL_TO_CONVERTED_KEY_MAPPING = {
     r"^embedding\.weight$":                         r"model.embed_tokens.weight",
-    r"^embedding_norm\.scale$":                     r"model.embedding_norm.weight",
     r"^norm\.scale$":                               r"model.norm.weight",
     r"^unembedding\.weight$":                       r"score.weight",
 
@@ -221,8 +221,8 @@ def convert_state_dict(
             converted[q_key] = q.contiguous()
             converted[k_key] = k.contiguous()
             converted[v_key] = v.contiguous()
-        elif re.search(r"norm\.weight|sinks", new_key):
-            converted[new_key] = tensor.float().contiguous()
+        elif re.search(r"sinks", new_key):
+            converted[new_key] = (tensor.float() * math.log(2.0)).contiguous()
         else:
             converted[new_key] = tensor.contiguous()
 
