@@ -89,6 +89,59 @@ def _build_checkpoint_conversion_mapping():
             WeightRenaming(source_patterns=r"^vision_tower", target_patterns="model.vision_tower"),
             WeightRenaming(source_patterns=r"^multi_modal_projector", target_patterns="model.multi_modal_projector"),
         ],
+        "qwen2_audio": [
+            WeightRenaming(source_patterns=r"^language_model.model", target_patterns="model.language_model"),
+            WeightRenaming(source_patterns=r"^language_model.lm_head", target_patterns="lm_head"),
+            WeightRenaming(source_patterns=r"^audio_tower", target_patterns="model.audio_tower"),
+            WeightRenaming(source_patterns=r"^multi_modal_projector", target_patterns="model.multi_modal_projector"),
+        ],
+        "voxtral": [
+            WeightRenaming(source_patterns=r"^language_model.model", target_patterns="model.language_model"),
+            WeightRenaming(source_patterns=r"^language_model.lm_head", target_patterns="lm_head"),
+            WeightRenaming(source_patterns=r"^audio_tower", target_patterns="model.audio_tower"),
+            WeightRenaming(source_patterns=r"^multi_modal_projector", target_patterns="model.multi_modal_projector"),
+        ],
+        "voxtral_realtime": [
+            WeightRenaming(source_patterns=r"^language_model.model", target_patterns="model.language_model"),
+            WeightRenaming(source_patterns=r"^language_model.lm_head", target_patterns="lm_head"),
+            WeightRenaming(source_patterns=r"^audio_tower", target_patterns="model.audio_tower"),
+            WeightRenaming(source_patterns=r"^multi_modal_projector", target_patterns="model.multi_modal_projector"),
+        ],
+        "audioflamingo3": [
+            WeightRenaming(source_patterns=r"^language_model.model", target_patterns="model.language_model"),
+            WeightRenaming(source_patterns=r"^language_model.lm_head", target_patterns="lm_head"),
+            WeightRenaming(source_patterns=r"^audio_tower", target_patterns="model.audio_tower"),
+            WeightRenaming(source_patterns=r"^multi_modal_projector", target_patterns="model.multi_modal_projector"),
+        ],
+        "glmasr": [
+            WeightRenaming(source_patterns=r"^language_model.model", target_patterns="model.language_model"),
+            WeightRenaming(source_patterns=r"^language_model.lm_head", target_patterns="lm_head"),
+            WeightRenaming(source_patterns=r"^audio_tower", target_patterns="model.audio_tower"),
+            WeightRenaming(source_patterns=r"^multi_modal_projector", target_patterns="model.multi_modal_projector"),
+        ],
+        "musicflamingo": [
+            WeightRenaming(source_patterns=r"^language_model.model", target_patterns="model.language_model"),
+            WeightRenaming(source_patterns=r"^language_model.lm_head", target_patterns="lm_head"),
+            WeightRenaming(source_patterns=r"^audio_tower", target_patterns="model.audio_tower"),
+            WeightRenaming(source_patterns=r"^multi_modal_projector", target_patterns="model.multi_modal_projector"),
+        ],
+        "granite_speech": [
+            WeightRenaming(source_patterns=r"^language_model.model", target_patterns="model.language_model"),
+            WeightRenaming(source_patterns=r"^language_model.lm_head", target_patterns="lm_head"),
+            WeightRenaming(source_patterns=r"^encoder", target_patterns="model.encoder"),
+            WeightRenaming(source_patterns=r"^projector", target_patterns="model.projector"),
+        ],
+        "vibevoice_asr": [
+            WeightRenaming(source_patterns=r"^language_model.model", target_patterns="model.language_model"),
+            WeightRenaming(source_patterns=r"^language_model.lm_head", target_patterns="lm_head"),
+            WeightRenaming(
+                source_patterns=r"^acoustic_tokenizer_encoder", target_patterns="model.acoustic_tokenizer_encoder"
+            ),
+            WeightRenaming(
+                source_patterns=r"^semantic_tokenizer_encoder", target_patterns="model.semantic_tokenizer_encoder"
+            ),
+            WeightRenaming(source_patterns=r"^multi_modal_projector", target_patterns="model.multi_modal_projector"),
+        ],
         "llava_next": [
             WeightRenaming(source_patterns=r"^language_model.model", target_patterns="model.language_model"),
             WeightRenaming(source_patterns=r"^language_model.lm_head", target_patterns="lm_head"),
