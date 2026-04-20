@@ -23,7 +23,9 @@ import pytest
 from transformers import (
     AutoProcessor,
     Qwen2AudioConfig,
+    Qwen2AudioEncoderConfig,
     Qwen2AudioForConditionalGeneration,
+    Qwen2Config,
     is_torch_available,
 )
 from transformers.testing_utils import (
@@ -43,9 +45,35 @@ if is_torch_available():
 class Qwen2AudioModelTester(ALMModelTester):
     config_class = Qwen2AudioConfig
     conditional_generation_class = Qwen2AudioForConditionalGeneration
+    text_config_class = Qwen2Config
+    audio_config_class = Qwen2AudioEncoderConfig
+
+    def __init__(self, parent, **kwargs):
+        # feat_seq_length=60 → after conv2 s=2: 30 → after avg_pool s=2: 15 audio embed tokens.
+        kwargs.setdefault("feat_seq_length", 60)
+        # Encoder asserts input_features.shape[-1] == max_source_positions * conv1.stride * conv2.stride == 2 * max_source_positions.
+        kwargs.setdefault("max_source_positions", kwargs["feat_seq_length"] // 2)
+        # Qwen2AudioEncoderConfig only maps `num_hidden_layers`; override remaining size knobs explicitly.
+        kwargs.setdefault("d_model", 32)
+        kwargs.setdefault("encoder_attention_heads", 2)
+        kwargs.setdefault("encoder_ffn_dim", 32)
+        super().__init__(parent, **kwargs)
 
     def get_audio_mask_key(self):
         return "feature_attention_mask"
+
+    def create_audio_mask(self):
+        # Qwen2Audio expects full-length mel input; mask with all 1s.
+        return torch.ones([self.batch_size, self.feat_seq_length], dtype=torch.bool).to(torch_device)
+
+    def get_audio_embeds_mask(self, audio_mask):
+        # Mirrors Qwen2AudioEncoder._get_feat_extract_output_lengths: conv2 (k=3,s=2,p=1) then avg_pool (k=2,s=2).
+        input_lengths = audio_mask.sum(-1)
+        input_lengths = (input_lengths - 1) // 2 + 1
+        output_lengths = (input_lengths - 2) // 2 + 1
+        max_len = int(output_lengths.max().item())
+        positions = torch.arange(max_len, device=audio_mask.device)[None, :]
+        return (positions < output_lengths[:, None]).long()
 
 
 @require_torch
@@ -64,6 +92,12 @@ class Qwen2AudioForConditionalGenerationModelTest(ALMModelTest, unittest.TestCas
 
     @unittest.skip(reason="Compile not yet supported because in Qwen2Audio models")
     def test_sdpa_can_dispatch_on_flash(self):
+        pass
+
+    @unittest.skip(
+        reason="inputs_embeds is the audio-fused path; can't match raw token-only embeddings."
+    )
+    def test_inputs_embeds_matches_input_ids(self):
         pass
 
 

@@ -136,14 +136,17 @@ class ALMModelTester:
         raise NotImplementedError("This method should be overridden in the subclass")
 
     def place_audio_tokens(self, input_ids, config, num_audio_tokens):
-        """Place audio placeholder tokens at random positions in input_ids. Override for different placement."""
+        """Place audio placeholder tokens contiguously after BOS. Override for different placement.
+
+        Deterministic placement (position 0 reserved for BOS; audio tokens at [1:1+n]) keeps
+        the tail of each sequence text-only, which downstream tests (e.g. resize_token_embeddings
+        overwriting column -2) rely on.
+        """
         input_ids = input_ids.clone()
         input_ids[input_ids == self.audio_token_id] = self.pad_token_id
         for i in range(input_ids.shape[0]):
             n = num_audio_tokens[i].item() if isinstance(num_audio_tokens, torch.Tensor) else num_audio_tokens
-            available_positions = torch.arange(1, input_ids.shape[1])  # skip position 0 (BOS)
-            perm = torch.randperm(len(available_positions))[:n]
-            input_ids[i, available_positions[perm]] = self.audio_token_id
+            input_ids[i, 1 : 1 + int(n)] = self.audio_token_id
         return input_ids
 
     def get_audio_feature_key(self):
@@ -249,7 +252,7 @@ class ALMModelTester:
             elif k in model_name_to_common_name and hasattr(self, model_name_to_common_name[k]):
                 kwargs[k] = getattr(self, model_name_to_common_name[k])
         kwargs["text_config"] = self.get_text_config()
-        kwargs["audio_config"] = self.get_audio_config()
+        kwargs[self.audio_config_key] = self.get_audio_config()
         return self.config_class(**kwargs)
 
     def get_text_config(self):

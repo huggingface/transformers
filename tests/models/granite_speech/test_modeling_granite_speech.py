@@ -19,7 +19,9 @@ import pytest
 
 from transformers import (
     AutoProcessor,
+    GraniteConfig,
     GraniteSpeechConfig,
+    GraniteSpeechEncoderConfig,
     GraniteSpeechForConditionalGeneration,
 )
 from transformers.testing_utils import (
@@ -48,80 +50,39 @@ if is_datasets_available():
 class GraniteSpeechModelTester(ALMModelTester):
     config_class = GraniteSpeechConfig
     conditional_generation_class = GraniteSpeechForConditionalGeneration
+    text_config_class = GraniteConfig
+    audio_config_class = GraniteSpeechEncoderConfig
     audio_config_key = "encoder_config"
-    audio_tower_attr = None  # Encoder SDPA not checked
 
     def __init__(self, parent, **kwargs):
         kwargs.setdefault("seq_length", 9)  # 7 text + 2 audio tokens
         kwargs.setdefault("num_audio_tokens", 2)
         kwargs.setdefault("sequence_dim", 844)
         kwargs.setdefault("feature_dim", 160)
-        kwargs.setdefault("audio_token_index", 0)
-        kwargs.setdefault("tie_word_embeddings", True)
-        kwargs.setdefault("initializer_range", 0.02)
         kwargs.setdefault("has_lora_adapter", True)
         kwargs.setdefault("downsample_rate", 5)
         kwargs.setdefault("window_size", 15)
-        kwargs.setdefault(
-            "text_config",
-            {
-                "model_type": "granite",
-                "is_training": True,
-                "seq_length": 7,
-                "use_token_type_ids": False,
-                "use_labels": True,
-                "vocab_size": 99,
-                "hidden_size": 32,
-                "num_hidden_layers": 2,
-                "num_attention_heads": 4,
-                "intermediate_size": 37,
-                "hidden_act": "gelu",
-                "hidden_dropout_prob": 0.1,
-                "attention_probs_dropout_prob": 0.1,
-                "max_position_embeddings": 580,
-                "type_vocab_size": 16,
-                "type_sequence_label_size": 2,
-                "initializer_range": 0.02,
-                "num_labels": 3,
-                "num_choices": 4,
-                "pad_token_id": 1,
-            },
-        )
-        kwargs.setdefault(
-            "audio_config",
-            {
-                "model_type": "granite_speech_encoder",
-                "context_size": 200,
-                "conv_expansion_factor": 2,
-                "conv_kernel_size": 15,
-                "dim_head": 32,
-                "dropout": 0.1,
-                "feedforward_mult": 4,
-                "hidden_dim": 32,
-                "input_dim": 160,
-                "num_heads": 4,
-                "num_layers": 2,
-                "output_dim": 42,
-            },
-        )
+        # GraniteSpeechEncoderConfig fields (no attribute_map, so set explicitly).
+        kwargs.setdefault("input_dim", 160)
+        kwargs.setdefault("num_layers", 2)
+        kwargs.setdefault("hidden_dim", 32)
+        kwargs.setdefault("num_heads", 4)
+        kwargs.setdefault("dim_head", 8)
+        kwargs.setdefault("feedforward_mult", 4)
+        kwargs.setdefault("context_size", 200)
+        kwargs.setdefault("conv_kernel_size", 15)
+        kwargs.setdefault("conv_expansion_factor", 2)
+        kwargs.setdefault("output_dim", 42)
+        # Q-Former projector config (passed through as a dict; ALM's get_config forwards unknowns).
         kwargs.setdefault(
             "projector_config",
             {
-                "attention_probs_dropout_prob": 0.1,
-                "cross_attention_frequency": 1,
-                "encoder_hidden_size": 32,
-                "hidden_act": "gelu",
-                "hidden_dropout_prob": 0.1,
-                "hidden_size": 32,
-                "initializer_range": 0.02,
-                "intermediate_size": 256,
-                "layer_norm_eps": 1e-12,
-                "max_position_embeddings": 2048,
                 "model_type": "blip_2_qformer",
-                "num_attention_heads": 4,
+                "hidden_size": 32,
                 "num_hidden_layers": 2,
-                "use_qformer_text_input": False,
-                "vocab_size": 30522,
+                "num_attention_heads": 4,
+                "intermediate_size": 256,
+                "encoder_hidden_size": 32,
             },
         )
         super().__init__(parent, **kwargs)
@@ -129,17 +90,16 @@ class GraniteSpeechModelTester(ALMModelTester):
     def create_audio_features(self):
         return floats_tensor([self.batch_size, self.sequence_dim, self.feature_dim])
 
+    def create_audio_mask(self):
+        # Granite's encoder is fed the raw features; mask is all-ones over sequence_dim.
+        return torch.ones([self.batch_size, self.sequence_dim], dtype=torch.bool).to(torch_device)
+
+    def get_audio_embeds_mask(self, audio_mask):
+        # Projector produces `num_audio_tokens` embeds per sample (fixed by window_size/downsample_rate).
+        return torch.ones([self.batch_size, self.num_audio_tokens], dtype=torch.long).to(torch_device)
+
     def create_attention_mask(self, input_ids):
         return torch.ones(input_ids.shape, dtype=torch.long).to(torch_device)
-
-    def get_num_audio_tokens(self, audio_features):
-        return self.num_audio_tokens
-
-    def place_audio_tokens(self, input_ids, config, num_audio_tokens):
-        input_ids = input_ids.clone()
-        input_ids[input_ids == self.audio_token_id] = self.pad_token_id
-        input_ids[:, :num_audio_tokens] = self.audio_token_id
-        return input_ids
 
     def create_and_check_granite_speech_model_fp16_forward(self, config, input_ids, input_features, attention_mask):
         model = GraniteSpeechForConditionalGeneration(config=config)
