@@ -266,7 +266,7 @@ class PrivacyFilterMLP(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.router = PrivacyFilterTopKRouter(config)
-        self.num_experts = config.num_local_experts
+        self.num_experts = config.num_experts_per_tok
         self.experts = PrivacyFilterExperts(config)
 
     def forward(self, hidden_states):
@@ -316,6 +316,7 @@ class PrivacyFilterPreTrainedModel(GptOssPreTrainedModel):
     _no_split_modules = ["PrivacyFilterEncoderLayer"]
     _skip_keys_device_placement = None  # No cache
     _keep_in_fp32_modules = []
+    _keep_in_fp32_modules_strict = ["sinks"]
 
     _can_record_outputs = {
         "router_logits": OutputRecorder(PrivacyFilterTopKRouter, index=0),
