@@ -55,16 +55,6 @@ class GraniteSpeechModelTester(ALMModelTester):
     audio_config_key = "encoder_config"
 
     def __init__(self, parent, **kwargs):
-        kwargs.setdefault("seq_length", 9)  # 7 text + 2 audio tokens
-
-        kwargs.setdefault("num_audio_tokens", 2)
-        kwargs.setdefault("sequence_dim", 844)
-        kwargs.setdefault("feature_dim", 160)
-        kwargs.setdefault("has_lora_adapter", True)
-        kwargs.setdefault("downsample_rate", 5)
-        kwargs.setdefault("window_size", 15)
-        kwargs.setdefault("dim_head", 8)
- 
         kwargs["projector_config"] = {
             "model_type": "blip_2_qformer",
             "hidden_size": 32,
@@ -77,11 +67,16 @@ class GraniteSpeechModelTester(ALMModelTester):
         super().__init__(parent, **kwargs)
 
     def create_audio_features(self):
-        return floats_tensor([self.batch_size, self.sequence_dim, self.feature_dim])
+        # GraniteSpeech expects [B, seq_len, features] (time-first), unlike the standard [B, features, seq_len]
+        return floats_tensor([self.batch_size, self.feat_seq_length, self.num_mel_bins])
 
     def get_audio_embeds_mask(self, audio_mask):
-        # Projector produces `num_audio_tokens` embeds per sample (fixed by window_size/downsample_rate).
-        return torch.ones([self.batch_size, self.num_audio_tokens], dtype=torch.long).to(torch_device)
+        # Projector: ceil(feat_seq_length / window_size) * (window_size // downsample_rate) tokens per sample.
+        import math
+
+        nblocks = math.ceil(self.feat_seq_length / self.window_size)
+        num_audio_tokens = nblocks * (self.window_size // self.downsample_rate)
+        return torch.ones([self.batch_size, num_audio_tokens], dtype=torch.long).to(torch_device)
 
     def create_attention_mask(self, input_ids):
         return torch.ones(input_ids.shape, dtype=torch.long).to(torch_device)
