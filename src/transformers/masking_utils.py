@@ -22,7 +22,11 @@ from .configuration_utils import PreTrainedConfig
 from .utils import is_torch_xpu_available, logging
 from .utils.deprecation import deprecate_kwarg
 from .utils.generic import GeneralInterface, is_flash_attention_requested
-from .utils.import_utils import is_torch_flex_attn_available, is_torch_greater_or_equal, is_tracing
+from .utils.import_utils import (
+    is_torch_flex_attn_available,
+    is_torch_greater_or_equal,
+    is_tracing,
+)
 
 
 if is_torch_flex_attn_available():
@@ -733,6 +737,7 @@ class AttentionMaskInterface(GeneralInterface):
         "flash_attention_2": flash_attention_mask,
         "flash_attention_3": flash_attention_mask,
         "flash_attention_4": flash_attention_mask,
+        "flash_attention_torch": flash_attention_mask,
         "flex_attention": flex_attention_mask,
     }
 

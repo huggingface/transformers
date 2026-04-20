@@ -259,7 +259,10 @@ def is_mlx_array(x) -> bool:
 
 
 def is_flash_attention_requested(
-    config=None, requested_attention_implementation: str | None = None, version: int | None = None
+    config=None,
+    requested_attention_implementation: str | None = None,
+    version: int | None = None,
+    allow_torch: bool | None = None,
 ) -> bool:
     """
     Checks whether some flavor of flash attention is requested or not. Optionally, checks for a specific version of
@@ -271,6 +274,7 @@ def is_flash_attention_requested(
     The different versions of flash attention are usually
     - Implementations based on the original flash attention repo: https://github.com/Dao-AILab/flash-attention
     - Kernels implementations such as: https://huggingface.co/kernels-community/vllm-flash-attn3
+    - Or native torch integrations (as of `torch 2.11.0`) if allowed via `allow_torch`
     """
     if config is not None and requested_attention_implementation is not None:
         raise ValueError(
@@ -290,8 +294,9 @@ def is_flash_attention_requested(
     # If a specific version is requested, look for a pattern of type "flash...{version}"
     if version is not None:
         return re.match(r".*flash.*" + str(version), checked_attention_implementation) is not None
-    # Otherwise, just check "flash" is in the attention implementation
-    return "flash" in checked_attention_implementation
+
+    # Otherwise, check whether "flash" is in the attention implementation or "sdpa" if `allow_torch` is enabled (flash attention via torch)
+    return "flash" in checked_attention_implementation or (allow_torch and "sdpa" in checked_attention_implementation)
 
 
 def to_py_obj(obj):
@@ -789,9 +794,9 @@ class TransformersKwargs(TypedDict, total=False):
             Turn this on to return the intermediary attention scores.
         output_router_logits (`Optional[bool]`, *optional*):
             For MoE models, this allows returning the router logits to compute the loss.
-        cu_seq_lens_q (`torch.LongTensor`, *optional*)
+        cu_seq_lens_q (`torch.IntTensor`, *optional*)
             Gets cumulative sequence length for query state.
-        cu_seq_lens_k (`torch.LongTensor`, *optional*)
+        cu_seq_lens_k (`torch.IntTensor`, *optional*)
             Gets cumulative sequence length for key state.
         max_length_q (`int`, *optional*):
             Maximum sequence length for query state.
@@ -807,8 +812,8 @@ class TransformersKwargs(TypedDict, total=False):
     output_hidden_states: bool | None
     output_attentions: bool | None
     output_router_logits: bool | None
-    cu_seq_lens_q: torch.LongTensor | None
-    cu_seq_lens_k: torch.LongTensor | None
+    cu_seq_lens_q: torch.IntTensor | None
+    cu_seq_lens_k: torch.IntTensor | None
     max_length_q: int | None
     max_length_k: int | None
     position_ids: torch.LongTensor | None
