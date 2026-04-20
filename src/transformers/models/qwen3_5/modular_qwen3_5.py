@@ -13,7 +13,7 @@
 # limitations under the License.
 """PyTorch Qwen3.5 model."""
 
-from typing import Optional, TypedDict
+from typing import Optional
 
 import torch
 import torch.nn.functional as F
@@ -54,20 +54,6 @@ from ..qwen3_vl.modeling_qwen3_vl import (
 
 
 logger = logging.get_logger(__name__)
-
-
-class Qwen3_5FlashAttentionKwargs(TypedDict, total=False):
-    """
-    Keyword arguments for Qwen3.5 fast linear-attention kernels during padding-free training.
-
-    seq_idx (`torch.IntTensor`):
-        Index of each packed sequence for the causal convolution kernel.
-    cu_seqlens (`torch.LongTensor`):
-        Cumulative sequence lengths for the FLA gated-delta kernels.
-    """
-
-    seq_idx: torch.IntTensor
-    cu_seqlens: torch.LongTensor
 
 
 @auto_docstring(checkpoint="Qwen/Qwen3.5-27B")

@@ -21,7 +21,7 @@
 import itertools
 from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Any, Optional, TypedDict
+from typing import Any, Optional
 
 import torch
 import torch.nn.functional as F
@@ -64,20 +64,6 @@ else:
     FusedRMSNormGated = None
 
 logger = logging.get_logger(__name__)
-
-
-class Qwen3_5FlashAttentionKwargs(TypedDict, total=False):
-    """
-    Keyword arguments for Qwen3.5 fast linear-attention kernels during padding-free training.
-
-    seq_idx (`torch.IntTensor`):
-        Index of each packed sequence for the causal convolution kernel.
-    cu_seqlens (`torch.LongTensor`):
-        Cumulative sequence lengths for the FLA gated-delta kernels.
-    """
-
-    seq_idx: torch.IntTensor
-    cu_seqlens: torch.LongTensor
 
 
 class Qwen3_5DynamicCache:
@@ -866,7 +852,8 @@ class Qwen3_5DecoderLayer(GradientCheckpointingLayer):
                 cache_params=past_key_values,
                 attention_mask=attention_mask,
                 seq_idx=kwargs.get("seq_idx"),
-                cu_seqlens=kwargs.get("cu_seqlens"),
+                # The chunked FLA kernel takes a single `cu_seqlens` arg; for packed self-attention this matches q-side lengths.
+                cu_seqlens=kwargs.get("cu_seq_lens_q"),
             )
         elif self.layer_type == "full_attention":
             # Self Attention
