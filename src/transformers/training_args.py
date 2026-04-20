@@ -637,6 +637,16 @@ class TrainingArguments:
         ddp_broadcast_buffers (`bool`, *optional*):
             When using distributed training, the value of the flag `broadcast_buffers` passed to
             `DistributedDataParallel`. Will default to `False` if gradient checkpointing is used, `True` otherwise.
+        ddp_static_graph (`bool`, *optional*):
+            When using distributed training, the value of the flag `static_graph` passed to
+            `DistributedDataParallel`. When set to `True`, DDP assumes the set of used/unused parameters and the
+            autograd graph topology are stable across iterations; this can resolve `Expected to have finished
+            reduction in the prior iteration...` errors caused by trainable parameters that don't contribute to the
+            loss on every step, and is generally cheaper than `ddp_find_unused_parameters=True` (one iteration-1
+            cost vs. a per-iteration autograd-graph traversal). Has no effect under FSDP or DeepSpeed; incompatible
+            with re-entrant activation checkpointing (`use_reentrant=True`). See the PyTorch
+            [`DistributedDataParallel` docs](https://docs.pytorch.org/docs/stable/generated/torch.nn.parallel.DistributedDataParallel.html)
+            for the full list of supported use cases.
         ddp_backend (`str`, *optional*):
             The backend to use for distributed training. Must be one of `"nccl"`, `"mpi"`, `"xccl"`, `"gloo"`, `"hccl"`.
         ddp_timeout (`int`, *optional*, defaults to 1800):
@@ -1373,6 +1383,15 @@ class TrainingArguments:
             "help": (
                 "When using distributed training, the value of the flag `broadcast_buffers` passed to "
                 "`DistributedDataParallel`."
+            )
+        },
+    )
+    ddp_static_graph: bool | None = field(
+        default=None,
+        metadata={
+            "help": (
+                "When using distributed training, the value of the flag `static_graph` passed to "
+                "`DistributedDataParallel`. Has no effect under FSDP or DeepSpeed."
             )
         },
     )
