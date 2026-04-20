@@ -1076,7 +1076,7 @@ class GroupedGemmParallel(TensorParallelLayer):
 
     def update_module_attributes(self, module: nn.Module):
         if hasattr(module, "num_experts"):
-            module.num_experts = self.get_expected_sharded_shape((module.num_experts,))[0]
+            module.num_experts = self.get_expected_sharded_shape((self.empty_param.shape[0],))[0]
 
 
 class RouterParallel(TensorParallelLayer):
