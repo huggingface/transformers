@@ -71,8 +71,6 @@ class Exaone4_5_Config(PreTrainedConfig):
         elif self.text_config is None:
             self.text_config = CONFIG_MAPPING["exaone4"]()
 
-        # Keep top-level value consistent when loading configs whose tie_word_embeddings
-        # is persisted only in the nested text config.
         if not self.tie_word_embeddings and self.text_config.tie_word_embeddings:
             self.tie_word_embeddings = self.text_config.tie_word_embeddings
 

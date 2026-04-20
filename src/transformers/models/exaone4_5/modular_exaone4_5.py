@@ -1,4 +1,4 @@
-"""PyTorch EXAONE 4.5-VL model."""
+"""PyTorch EXAONE 4.5 model."""
 
 from collections.abc import Callable
 
@@ -69,8 +69,6 @@ class Exaone4_5_Config(PreTrainedConfig):
         elif self.text_config is None:
             self.text_config = CONFIG_MAPPING["exaone4"]()
 
-        # Keep top-level value consistent when loading configs whose tie_word_embeddings
-        # is persisted only in the nested text config.
         if not self.tie_word_embeddings and self.text_config.tie_word_embeddings:
             self.tie_word_embeddings = self.text_config.tie_word_embeddings
 
@@ -227,6 +225,7 @@ class Exaone4_5_VisionPreTrainedModel(Exaone4_5_PreTrainedModel, Qwen2_5_VisionT
         self.post_init()
 
 
+@auto_docstring(checkpoint="LGAI-EXAONE/EXAONE-4.5-33B")
 class Exaone4_5_Model(Exaone4_5_PreTrainedModel, Qwen2_5_VLModel):
     config_class = Exaone4_5_Config
     base_model_prefix = "model"
@@ -272,6 +271,7 @@ class Exaone4_5_Model(Exaone4_5_PreTrainedModel, Qwen2_5_VLModel):
         vision_outputs.pooler_output = video_embeds
         return vision_outputs
 
+    @auto_docstring(checkpoint="LGAI-EXAONE/EXAONE-4.5-33B")
     @can_return_tuple
     def forward(
         self,
@@ -310,7 +310,6 @@ class Exaone4_5_Model(Exaone4_5_PreTrainedModel, Qwen2_5_VLModel):
             )
             inputs_embeds = inputs_embeds.masked_scatter(video_mask, video_embeds)
 
-        # EXAONE-4.5 text stack uses standard 1D RoPE from Exaone4Model.
         if position_ids is None:
             past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
             position_ids = torch.arange(
@@ -337,8 +336,15 @@ class Exaone4_5_Model(Exaone4_5_PreTrainedModel, Qwen2_5_VLModel):
         )
 
 
-@auto_docstring
+@auto_docstring(checkpoint="LGAI-EXAONE/EXAONE-4.5-33B")
 class Exaone4_5_ForConditionalGeneration(Exaone4_5_PreTrainedModel, Qwen2_5_VLForConditionalGeneration):
+    """
+    Main EXAONE 4.5 conditional generation class.
+
+    Note: Unlike Qwen2VL, the EXAONE 4.5 vision encoder uses 2D rotary positional embeddings (2D-RoPE)
+    and adopts a Grouped Query Attention (GQA) structure throughout the multimodal stack.
+    """
+
     config: Exaone4_5_Config
 
     def __init__(self, config: Exaone4_5_Config):
@@ -384,6 +390,7 @@ class Exaone4_5_ForConditionalGeneration(Exaone4_5_PreTrainedModel, Qwen2_5_VLFo
 
         return image_nums, video_nums
 
+    @auto_docstring(checkpoint="LGAI-EXAONE/EXAONE-4.5-33B")
     @can_return_tuple
     def forward(
         self,
@@ -402,6 +409,43 @@ class Exaone4_5_ForConditionalGeneration(Exaone4_5_PreTrainedModel, Qwen2_5_VLFo
         logits_to_keep: int | torch.Tensor = 0,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | CausalLMOutputWithPast:
+        r"""
+        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
+            config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
+            (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
+        image_grid_thw (`torch.LongTensor` of shape `(num_images, 3)`, *optional*):
+            The temporal, height and width of feature shape of each image in LLM.
+        video_grid_thw (`torch.LongTensor` of shape `(num_videos, 3)`, *optional*):
+            The temporal, height and width of feature shape of each video in LLM.
+        second_per_grid_ts (`torch.Tensor` of shape `(num_videos)`, *optional*):
+            The time interval (in seconds) for each grid along the temporal dimension in the 3D position IDs.
+
+        Example:
+
+        ```python
+        >>> from transformers import AutoProcessor, Exaone4_5_ForConditionalGeneration
+        >>> import torch
+
+        >>> model = Exaone4_5_ForConditionalGeneration.from_pretrained("LGAI-EXAONE/EXAONE-4.5-33B")
+        >>> processor = AutoProcessor.from_pretrained("LGAI-EXAONE/EXAONE-4.5-33B")
+
+        >>> messages = [
+        ...     {
+        ...         "role": "user",
+        ...         "content": [
+        ...             {"type": "image", "image": "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg"},
+        ...             {"type": "text", "text": "Describe the image."},
+        ...         ],
+        ...     }
+        ... ]
+        >>> inputs = processor.apply_chat_template(
+        ...     messages, tokenize=True, add_generation_prompt=True, return_dict=True, return_tensors="pt"
+        ... )
+        >>> inputs = {k: v.to(model.device) if isinstance(v, torch.Tensor) else v for k, v in inputs.items()}
+        >>> generated_ids = model.generate(**inputs, max_new_tokens=64)
+        ```
+        """
         outputs = self.model(
             input_ids=input_ids,
             pixel_values=pixel_values,
@@ -466,7 +510,6 @@ class Exaone4_5_ForConditionalGeneration(Exaone4_5_PreTrainedModel, Qwen2_5_VLFo
             is_first_iteration=is_first_iteration,
             **kwargs,
         )
-        # Disable Qwen-style M-RoPE path: EXAONE-4.5 uses text 1D RoPE + vision 2D RoPE.
         model_inputs["position_ids"] = None
         if not is_first_iteration and use_cache:
             model_inputs["pixel_values"] = None
