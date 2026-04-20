@@ -233,7 +233,7 @@ class GptOssTensorProcessor(TensorProcessor):
                 if key in hf_name:
                     hf_name = hf_name.replace(key, mapped_key)
             # Store the tensor
-            parsed_parameters["tensors"][hf_name] = torch.from_numpy(np.copy(expert_weight))
+            parsed_parameters["tensors"][hf_name] = torch.tensor(expert_weight, copy=True)
 
     def _interleave_gate_up_tensor(
         self,
@@ -268,8 +268,8 @@ class GptOssTensorProcessor(TensorProcessor):
                 if key in up_name:
                     up_name = up_name.replace(key, mapped_key)
 
-            parsed_parameters["tensors"][gate_name] = torch.from_numpy(np.copy(gate_weight))
-            parsed_parameters["tensors"][up_name] = torch.from_numpy(np.copy(up_weight))
+            parsed_parameters["tensors"][gate_name] = torch.tensor(gate_weight, copy=True)
+            parsed_parameters["tensors"][up_name] = torch.tensor(up_weight, copy=True)
 
 
 class BloomTensorProcessor(TensorProcessor):
