@@ -287,32 +287,6 @@ class PrivacyFilterEncoderLayer(GptOssDecoderLayer):
         super().__init__(config)
         self.self_attn = PrivacyFilterAttention(config)
 
-    def forward(
-        self,
-        hidden_states: torch.Tensor,
-        attention_mask: torch.Tensor | None = None,
-        position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> torch.Tensor:
-        residual = hidden_states
-        hidden_states = self.input_layernorm(hidden_states)
-        # Self Attention
-        hidden_states, _ = self.self_attn(
-            hidden_states=hidden_states,
-            position_embeddings=position_embeddings,
-            attention_mask=attention_mask,
-            **kwargs,
-        )
-        hidden_states = residual + hidden_states
-
-        # Fully Connected
-        residual = hidden_states
-        hidden_states = self.post_attention_layernorm(hidden_states)
-        hidden_states, _ = self.mlp(hidden_states)
-        hidden_states = residual + hidden_states
-
-        return hidden_states
-
 
 class PrivacyFilterPreTrainedModel(GptOssPreTrainedModel):
     config: PrivacyFilterConfig
