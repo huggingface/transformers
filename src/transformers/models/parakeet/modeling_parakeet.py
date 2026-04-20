@@ -733,6 +733,8 @@ class ParakeetForCTC(ParakeetPreTrainedModel, GenerationMixin):
         >>> print(outputs.loss)
         ```"""
 
+        if labels is not None:
+            kwargs.setdefault("output_attention_mask", True)
         encoder_outputs = self.encoder(
             input_features=input_features,
             attention_mask=attention_mask,
