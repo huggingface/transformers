@@ -416,8 +416,6 @@ class MiMoV2FlashAttention(nn.Module):
         value_states = self.v_proj(hidden_states).view(v_hidden_shape).transpose(1, 2)
 
         cos, sin = position_embeddings
-        # NOTE @casinca: this is a remnant for trying GLM inheritance and reusing their apply_rotary_pos_emb to avoid
-        # duplicating code. but could just recreate a another apply_rotary_pos_emb here too.
         query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
 
         if past_key_values is not None:
@@ -454,7 +452,6 @@ class MiMoV2FlashDecoderLayer(GradientCheckpointingLayer):
         self.mlp = MiMoV2FlashMLP(config)
         self.input_layernorm = MiMoV2FlashRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.post_attention_layernorm = MiMoV2FlashRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        # Replace the dense MLP with an MoE block on sparse layers (per `mlp_layer_types`).
         if config.mlp_layer_types[layer_idx] == "sparse":
             self.mlp = MiMoV2FlashSparseMoeBlock(config)
 

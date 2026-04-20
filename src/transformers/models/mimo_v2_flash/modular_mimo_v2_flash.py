@@ -62,9 +62,7 @@ class MiMoV2FlashConfig(PreTrainedConfig):
 
     model_type = "mimo_v2_flash"
     keys_to_ignore_at_inference = ["past_key_values"]
-    attribute_map = {
-        "num_local_experts": "n_routed_experts",
-    }
+    attribute_map = {"num_local_experts": "n_routed_experts"}
 
     vocab_size: int = 152576
     hidden_size: int = 4096
@@ -339,8 +337,6 @@ class MiMoV2FlashAttention(nn.Module):
         value_states = self.v_proj(hidden_states).view(v_hidden_shape).transpose(1, 2)
 
         cos, sin = position_embeddings
-        # NOTE @casinca: this is a remnant for trying GLM inheritance and reusing their apply_rotary_pos_emb to avoid
-        # duplicating code. but could just recreate a another apply_rotary_pos_emb here too.
         query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
 
         if past_key_values is not None:
@@ -370,7 +366,6 @@ class MiMoV2FlashAttention(nn.Module):
 class MiMoV2FlashDecoderLayer(LlamaDecoderLayer):
     def __init__(self, config: MiMoV2FlashConfig, layer_idx: int):
         super().__init__(config, layer_idx)
-        # Replace the dense MLP with an MoE block on sparse layers (per `mlp_layer_types`).
         if config.mlp_layer_types[layer_idx] == "sparse":
             self.mlp = MiMoV2FlashSparseMoeBlock(config)
 

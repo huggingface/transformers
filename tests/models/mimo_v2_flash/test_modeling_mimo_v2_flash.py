@@ -90,7 +90,7 @@ class MiMoV2FlashModelTest(CausalLMModelTest, unittest.TestCase):
             self.assertEqual(layer.keys.shape, expected_shape)
             self.assertEqual(layer.values.shape, expected_shape)
 
-    # NOTE: @casinca this is copy pasta tests from Gemma3, useful for MiMo RoPE
+    # Tests from Gemma3 adapted to MiMo
     @parameterized.expand([("linear",), ("dynamic",), ("yarn",)])
     @unittest.skip("MiMo uses per-layer-type nested rope_parameters, not compatible with shared scaling config test")
     def test_model_rope_scaling_from_config(self, scaling_type):

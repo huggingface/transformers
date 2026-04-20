@@ -43,9 +43,7 @@ class MiMoV2FlashConfig(PreTrainedConfig):
 
     model_type = "mimo_v2_flash"
     keys_to_ignore_at_inference = ["past_key_values"]
-    attribute_map = {
-        "num_local_experts": "n_routed_experts",
-    }
+    attribute_map = {"num_local_experts": "n_routed_experts"}
 
     vocab_size: int = 152576
     hidden_size: int = 4096
