@@ -13,7 +13,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import re
 
 import numpy as np
 
@@ -87,22 +86,6 @@ class AudioFlamingo3Processor(ProcessorMixin):
         self.max_audio_len = max_audio_len
         super().__init__(feature_extractor, tokenizer, chat_template=chat_template)
 
-    def _get_audio_token_length(self, audio_lengths):
-        conv_output_lengths = (audio_lengths - 1) // 2 + 1  # After conv2 downsampling
-        audio_tokens_lengths = (conv_output_lengths - 2) // 2 + 1  # After avg pooling
-        return audio_tokens_lengths
-
-    def _expand_audio_tokens(self, text, padding_mask, per_sample_windows):
-        audio_lengths = torch.stack([s.sum() for s in torch.split(padding_mask.sum(-1), per_sample_windows)])
-        audio_tokens_lengths = self._get_audio_token_length(audio_lengths)
-        audio_token_pattern = re.compile(re.escape(self.audio_token))
-        for i, audio_length in enumerate(audio_tokens_lengths):
-            text[i] = audio_token_pattern.sub(self.audio_token * audio_length, text[i])
-        return text
-
-    def _get_audio_tokens_mask(self, input_ids):
-        return input_ids == self.audio_token_id
-
     def __call__(
         self,
         text: TextInput | list[TextInput],
@@ -130,79 +113,128 @@ class AudioFlamingo3Processor(ProcessorMixin):
             [`BatchFeature`]: A dictionary with tokenized text (`input_ids`, `attention_mask`) and
             audio features (`input_features`, `input_features_mask`).
         """
+        text, audio = self.prepare_inputs_layout(text=text, audio=audio)
+        self.validate_inputs(audio=audio, text=text, **kwargs)
 
         # Merge defaults with user kwargs
-        call_kwargs = self._merge_kwargs(
+        output_kwargs = self._merge_kwargs(
             AudioFlamingo3ProcessorKwargs,
             tokenizer_init_kwargs=self.tokenizer.init_kwargs,
             **kwargs,
         )
 
-        text_kwargs = call_kwargs["text_kwargs"]
-        audio_kwargs = call_kwargs["audio_kwargs"]
-        return_tensors = text_kwargs.get("return_tensors")
+        return_tensors = output_kwargs["text_kwargs"].get("return_tensors")
+        return_text_replacement_offsets = output_kwargs["text_kwargs"].pop("return_text_replacement_offsets", False)
+        return_mm_token_type_ids = output_kwargs["text_kwargs"].pop("return_mm_token_type_ids", False)
         if return_tensors != "pt":
             raise ValueError(f"{self.__class__.__name__} only supports `return_tensors='pt'`.")
 
-        if isinstance(text, str):
-            text = [text]
-        elif not (isinstance(text, (list, tuple)) and all(isinstance(t, str) for t in text)):
-            raise ValueError("Invalid input text. Please provide a string, or a list of strings")
-
         audio_inputs = {}
+        audio_replacements = []
         if audio is not None:
-            audio = make_list_of_audio(audio)
-            if len(text) != len(audio):
-                raise ValueError(f"Got {len(text)} text but {len(audio)} audios; they must match 1:1.")
+            audio_inputs, audio_replacements = self._process_audio(audio, **output_kwargs["audio_kwargs"])
 
-            # Determine number of chunks per sample, and flatten
-            window_size = int(audio_kwargs["sampling_rate"] * self.feature_extractor.chunk_length)
-            max_windows = int(self.max_audio_len // self.feature_extractor.chunk_length)
-
-            per_sample_windows: list[int] = []
-            flat_chunks: list[np.ndarray] = []
-
-            for audio_el in audio:
-                n_samples = int(audio_el.shape[0])
-                n_win = max(1, (n_samples + window_size - 1) // window_size)
-                if n_win > max_windows:
-                    logger.warning(
-                        f"Audio duration ({n_samples / audio_kwargs['sampling_rate']:.1f}s) exceeds {self.max_audio_len}s; truncating to first {self.max_audio_len}s."
-                    )
-                    n_win = max_windows
-                per_sample_windows.append(n_win)
-
-                time_cap = min(n_samples, n_win * window_size)
-                for i in range(n_win):
-                    start = i * window_size
-                    end = min((i + 1) * window_size, time_cap)
-                    flat_chunks.append(audio_el[start:end])
-
-            # Feature extraction
-            audio_inputs = self.feature_extractor(flat_chunks, **audio_kwargs)
-            padding_mask = audio_inputs.pop("attention_mask")
-            audio_inputs["input_features_mask"] = padding_mask
-
-            # Expand audio tokens in text
-            text = self._expand_audio_tokens(text, padding_mask, per_sample_windows)
-
-        # Tokenize
-        text_inputs = self.tokenizer(text, **text_kwargs)
+        # Replace image tokens by the full expanded sequence
+        text, text_replacement_offsets = self.get_text_replacement(text, audio_replacements=audio_replacements)
+        text_inputs = self.tokenizer(text, **output_kwargs["text_kwargs"])
 
         data = {**text_inputs, **audio_inputs}
+        if return_text_replacement_offsets:
+            data["text_replacement_offsets"] = text_replacement_offsets
+
+        if return_mm_token_type_ids:
+            data["mm_token_type_ids"] = self.create_mm_token_type_ids(text_inputs["input_ids"])
+
         if output_labels:
             labels = data["input_ids"].clone()
-            labels[self._get_audio_tokens_mask(labels)] = -100
+            labels[labels == self.audio_token_id] = -100
             labels[labels == self.tokenizer.pad_token_id] = -100
             data["labels"] = labels
 
         return BatchFeature(data=data, tensor_type=return_tensors)
 
+    def prepare_inputs_layout(
+        self,
+        text: TextInput | list[TextInput] = None,
+        audio: AudioInput = None,
+    ):
+        if text is not None and isinstance(text, str):
+            text = [text]
+
+        if audio is not None:
+            audio = make_list_of_audio(audio)
+
+        return text, audio
+
+    def validate_inputs(
+        self,
+        audio: AudioInput | None = None,
+        text: TextInput | list[TextInput] | None = None,
+        **kwargs: Unpack[ProcessingKwargs],
+    ):
+        super().validate_inputs(audio=audio, text=text, **kwargs)
+
+        if text is not None and audio is not None and len(text) != len(audio):
+            raise ValueError(f"Got {len(text)} text but {len(audio)} audios; they must match 1:1.")
+
+    def _get_audio_token_length(self, audio_lengths):
+        conv_output_lengths = (audio_lengths - 1) // 2 + 1  # After conv2 downsampling
+        audio_tokens_lengths = (conv_output_lengths - 2) // 2 + 1  # After avg pooling
+        return audio_tokens_lengths
+
+    def _process_audio(self, audio: AudioInput, **kwargs):
+        sampling_rate = getattr(self.feature_extractor, "sampling_rate") or kwargs.get("sampling_rate", 16_000)
+        audio = self.feature_extractor.fetch_audio(audio, sampling_rate=sampling_rate)
+
+        # Determine number of chunks per sample, and flatten
+        window_size = int(kwargs["sampling_rate"] * self.feature_extractor.chunk_length)
+        max_windows = int(self.max_audio_len // self.feature_extractor.chunk_length)
+
+        per_sample_windows: list[int] = []
+        flat_chunks: list[np.ndarray] = []
+        for audio_el in audio:
+            n_samples = int(audio_el.shape[0])
+            n_win = max(1, (n_samples + window_size - 1) // window_size)
+            if n_win > max_windows:
+                logger.warning(
+                    f"Audio duration ({n_samples / kwargs['sampling_rate']:.1f}s) exceeds {self.max_audio_len}s; truncating to first {self.max_audio_len}s."
+                )
+                n_win = max_windows
+            per_sample_windows.append(n_win)
+
+            time_cap = min(n_samples, n_win * window_size)
+            for i in range(n_win):
+                start = i * window_size
+                end = min((i + 1) * window_size, time_cap)
+                flat_chunks.append(audio_el[start:end])
+
+        audio = self.feature_extractor.fetch_audio(audio)
+        audio_inputs = self.feature_extractor(flat_chunks, **kwargs)
+        audio_inputs["input_features_mask"] = audio_inputs.pop("attention_mask")
+
+        # AudioFlamingo doesn't have its own feature extractor and crops audio into
+        # chunks here. Save the number of tokens based on crops/padding in analogy
+        # with some vision processors
+        audio_lengths = torch.stack(
+            [s.sum() for s in torch.split(audio_inputs["input_features_mask"].sum(-1), per_sample_windows)]
+        )
+        audio_inputs["num_audio_tokens"] = self._get_audio_token_length(audio_lengths)
+
+        audio_replacements = self.get_audio_replacement(audio, audio_inputs)
+        return audio_inputs, audio_replacements
+
+    def replace_audio_token(self, audio_inputs: dict, audio_idx: int) -> str:
+        num_audio_tokens = audio_inputs["num_audio_tokens"][audio_idx]
+        return self.audio_token * num_audio_tokens
+
     @property
     def model_input_names(self) -> list[str]:
-        tok_names = self.tokenizer.model_input_names
-        fea_names = self.feature_extractor.model_input_names
-        return list(dict.fromkeys(tok_names + fea_names + ["input_features_mask"]))
+        return super().model_input_names + ["input_features_mask"]
+
+    @property
+    def unused_input_names(self) -> list[str]:
+        "Input names returned always by subprocessors but not used in model's `forward`"
+        return ["num_audio_tokens"]
 
     def apply_transcription_request(
         self,

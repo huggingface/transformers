@@ -33,7 +33,7 @@ from huggingface_hub import create_repo, is_offline_mode
 from huggingface_hub.dataclasses import validate_typed_dict
 from huggingface_hub.errors import EntryNotFoundError
 
-from .audio_utils import AudioInput, load_audio, make_list_of_audio
+from .audio_utils import AudioInput, make_list_of_audio
 from .dynamic_module_utils import custom_object_save
 from .feature_extraction_utils import BatchFeature
 from .image_utils import ChannelDimension, ImageInput, is_vision_available, make_flat_list_of_images
@@ -52,6 +52,7 @@ from .utils import (
     PROCESSOR_NAME,
     PushToHubMixin,
     TensorType,
+    auto_docstring,
     cached_file,
     copy_func,
     direct_transformers_import,
@@ -625,6 +626,7 @@ class ProcessorMixin(PushToHubMixin):
             self.check_argument_for_proper_class(attribute_name, arg)
             setattr(self, attribute_name, arg)
 
+    @auto_docstring
     def __call__(
         self,
         images: ImageInput | None = None,
@@ -633,34 +635,6 @@ class ProcessorMixin(PushToHubMixin):
         audio: AudioInput | None = None,
         **kwargs: Unpack[ProcessingKwargs],
     ):
-        """
-        Main method to prepare for model inputs. This method forwards the each modality argument to its own processor
-        along with `kwargs`. Please refer to the docstring of the each processor attributes for more information.
-
-        Args:
-            images (`PIL.Image.Image`, `np.ndarray`, `torch.Tensor`, `list[PIL.Image.Image]`, `list[np.ndarray]`, `list[torch.Tensor]`):
-                The image or batch of images to be prepared. Each image can be a PIL image, NumPy array or PyTorch
-                tensor. Both channels-first and channels-last formats are supported.
-            text (`TextInput`, `PreTokenizedInput`, `list[TextInput]`, `list[PreTokenizedInput]`, *optional*):
-                The sequence or batch of sequences to be encoded. Each sequence can be a string or a list of strings
-                (pretokenized string). If the sequences are provided as list of strings (pretokenized), you must set
-                `is_split_into_words=True` (to lift the ambiguity with a batch of sequences).
-            videos (`np.ndarray`, `torch.Tensor`, `List[np.ndarray]`, `List[torch.Tensor]`):
-                The video or batch of videos to be prepared. Each video can be a 4D NumPy array or PyTorch
-                tensor, or a nested list of 3D frames. Both channels-first and channels-last formats are supported.
-            audio (`np.ndarray`, `torch.Tensor`, `list[np.ndarray]`, `list[torch.Tensor]`):
-                The audio or batch of audio to be prepared. Each audio can be a NumPy array or PyTorch
-                tensor.
-            return_tensors (`str` or [`~utils.TensorType`], *optional*):
-                If set, will return tensors of a particular framework. Acceptable values are:
-
-                - `'pt'`: Return PyTorch `torch.Tensor` objects.
-                - `'np'`: Return NumPy `np.ndarray` objects.
-
-        Returns:
-            [`BatchFeature`]: A [`BatchFeature`] object with processed inputs in a dict format.
-        """
-
         images, text, videos, audio = self.prepare_inputs_layout(images=images, text=text, videos=videos, audio=audio)
         self.validate_inputs(images=images, text=text, videos=videos, audio=audio, **kwargs)
 
@@ -743,13 +717,14 @@ class ProcessorMixin(PushToHubMixin):
     def _process_videos(self, videos: VideoInput, **kwargs):
         processed_data = self.video_processor(videos, **kwargs)
 
-        videos = make_batched_videos(videos)  # FIXME: order
-        decoded_videos = self.video_processor.fetch_videos(videos)[0]
-        video_replacements = self.get_videos_replacement(decoded_videos, processed_data)
+        # dont fetch videos, they need to be sampled. Just flatten the list
+        videos = make_batched_videos(videos)
+        video_replacements = self.get_videos_replacement(videos, processed_data)
         return processed_data, video_replacements
 
     def _process_audio(self, audio: AudioInput, **kwargs):
-        audio = self.feature_extractor.fetch_audio(audio)
+        sampling_rate = getattr(self.feature_extractor, "sampling_rate") or kwargs.get("sampling_rate", 16_000)
+        audio = self.feature_extractor.fetch_audio(audio, sampling_rate=sampling_rate)
         processed_data = self.feature_extractor(audio, **kwargs)
         audio_replacements = self.get_audio_replacement(audio, processed_data)
         return processed_data, audio_replacements
@@ -803,9 +778,9 @@ class ProcessorMixin(PushToHubMixin):
         if getattr(self, "audio_token", None) is None:
             return []
 
-        videos = make_list_of_audio(audio)
+        audio = make_list_of_audio(audio)
         replacement_texts = []
-        for idx in range(len(videos)):
+        for idx in range(len(audio)):
             replacement_text = self.replace_audio_token(processed_audio, audio_idx=idx)
             replacement_texts.append(replacement_text)
         return replacement_texts
@@ -821,10 +796,16 @@ class ProcessorMixin(PushToHubMixin):
         if not self.all_special_multimodal_tokens:
             return text, None
 
-        regex_special_mm_tokens = "|".join(f"({re.escape(v)})" for v in self.all_special_multimodal_tokens)
+        # Keep the order so we can extract groups later and replace
+        image_token = getattr(self, "image_token", None)
+        video_token = getattr(self, "video_token", None)
+        audio_tokens = getattr(self, "audio_tokens", None)
+        regex_special_mm_tokens = rf"({image_token})|({video_token})|({audio_tokens})"
+
         batch_replacement_offsets = []
         images_replacements = iter(images_replacements)
         videos_replacements = iter(videos_replacements)
+        audio_replacements = iter(audio_replacements)
         for batch_idx in range(len(text)):
             last = 0
             replacement_offsets = []
@@ -842,6 +823,11 @@ class ProcessorMixin(PushToHubMixin):
                 elif m.groups()[1] is not None:
                     replacement_text = next(videos_replacements)
                     replacement_offsets.append({"type": "video"})
+
+                # Case 3: if the audio token has match in the text
+                elif m.groups()[2] is not None:
+                    replacement_text = next(audio_replacements)
+                    replacement_offsets.append({"type": "audio"})
 
                 # update common values such as start-end spans and replacement text
                 replacement_offsets[-1].update(
@@ -1970,14 +1956,6 @@ class ProcessorMixin(PushToHubMixin):
                     True  # force offset mapping so we can infer token boundaries
                 )
 
-        # Set the sampling rate to load the audio files if user hasn't already passed with `kwargs`
-        sampling_rate = kwargs.get("sampling_rate", processor_kwargs.get("sampling_rate"))
-        if sampling_rate is None:
-            if hasattr(self, "feature_extractor") and hasattr(self.feature_extractor, "sampling_rate"):
-                sampling_rate = self.feature_extractor.sampling_rate
-            else:
-                sampling_rate = 16_000
-
         if isinstance(conversation, (list, tuple)) and (
             isinstance(conversation[0], (list, tuple)) or hasattr(conversation[0], "content")
         ):
@@ -2038,13 +2016,13 @@ class ProcessorMixin(PushToHubMixin):
                     # Audio models do not accept nested list of audios (yet!) so we construct a flat input audio list
                     if not load_audio_from_video:
                         for fname in audio_fnames:
-                            batch_audios.append(load_audio(fname, sampling_rate=sampling_rate))
+                            batch_audios.append(fname)
                     else:
                         for fname in video_fnames:
                             # This updates the template in-place and adds audio entry
                             # to ensure `audio` token is added by jinja
                             message["content"].append({"type": "audio"})
-                            batch_audios.append(load_audio(fname, sampling_rate=sampling_rate))
+                            batch_audios.append(fname)
 
                 # Currently all processors can accept nested list of batches, but not flat list of visuals
                 # So we'll make a batched list of images and let the processor handle it
