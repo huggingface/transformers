@@ -316,17 +316,20 @@ class PagedAttentionCache:
         request_id: str,
         past_length: int,
         query_length: int,
-        read_index: list[list[int]],
+        read_index: list[list[int]] | None,
         write_index: list[list[int]],
     ) -> None:
         """Retrieve physical cache indices for reading KV states in the cache across all layer groups. This method
         coordinates with all cache managers to build the complete set of read indices needed for attention computation.
+        When read_index is None, the batch has no cache reads and we only compute the write indices.
         """
-        for cm, read_indices, write_indices in zip(self.group_cache_managers, read_index, write_index):
-            indices = cm.get_read_indices(request_id, past_length, query_length)
-            read_indices.extend(indices)
-            indices = cm.get_write_indices(request_id, past_length, query_length)
-            write_indices.extend(indices)
+        # Write indices are always computed
+        for cm, write_indices in zip(self.group_cache_managers, write_index):
+            write_indices.extend(cm.get_write_indices(request_id, past_length, query_length))
+        # Read indices are only computed if there are cache indices
+        if read_index is not None:
+            for cm, read_indices in zip(self.group_cache_managers, read_index):
+                read_indices.extend(cm.get_read_indices(request_id, past_length, query_length))
 
     def fill_block_table(
         self, request_id: str, past_length: int, query_length: int, block_table: torch.Tensor
@@ -355,25 +358,33 @@ class PagedAttentionCache:
         read_index: list[torch.Tensor],  # shape [num_layer_groups, seqlen_kv + past_length]
         write_index: list[torch.Tensor],  # shape [num_layer_groups, seqlen_q]
     ) -> tuple[torch.Tensor, torch.Tensor]:  # shape [seqlen_kv + past_length, num_kv_heads, head_dim]
-        """Update the cache with new key-value states for a specific layer. This method writes new KV states to the
-        appropriate cache locations. The behavior differs based on the layer's attention type:
+        """Update the cache with new key-value states for a specific layer, and retrieves the relevant KV states from
+        the cache for attention computation. The behavior differs based on the layer's attention type:
 
         - Full attention: New KV states are written to cache, then complete sequence is read from cache
         - Sliding window: Old KV is read from cache along with extra spaces for the new KV, then new KV is written to
             cache. This is because new KV might overwrite the old KV, so we need to read the old KV first.
 
+        When the layer's read index is empty, the batch has no cache reads (all requests are non-chunked prefills): we
+        only write to the cache and return the input KV states directly, skipping the index_select read-back.
+
         Returns the complete KV states (cached + new) for attention computation.
         """
-        # Retrieve the layer read and write indices
+        # Retrieve the layer write index and the relevant cache tensors
         group_idx, layer_idx_in_group = self.layer_index_to_group_indices[layer_idx]
         layer_read_index = read_index[group_idx]
         layer_write_index = write_index[group_idx]
-        # Select the correct cache
         k_cache = self.key_cache[layer_idx_in_group]
         v_cache = self.value_cache[layer_idx_in_group]
         # Transpose the key and value states to match the cache shape, after which shape is [seqlen_kv, num_kv_heads, head_dim]
         key_states = key_states.transpose(1, 2).squeeze(0)
         value_states = value_states.transpose(1, 2).squeeze(0)
+
+        # Case: write-only, no cache read. The input KV states already contain everything the attention needs.
+        if layer_read_index.numel() == 0:
+            k_cache.index_copy_(0, layer_write_index, key_states)
+            v_cache.index_copy_(0, layer_write_index, value_states)
+            return key_states, value_states
 
         # Case: full attention
         sliding_window = self.sliding_windows[layer_idx]
@@ -509,7 +520,7 @@ class PagedAttentionMemoryHandler:
 
     _activation_dtype = torch.bfloat16
     _input_dtype = torch.int32
-    _upper_bound_max_batch_tokens = 256
+    _upper_bound_max_batch_tokens = 1024
     _upper_bound_num_blocks = 4096
 
     def __init__(
@@ -594,7 +605,7 @@ class PagedAttentionMemoryHandler:
         self,
         num_blocks: int | None = None,
         max_batch_tokens: int | None = None,
-        max_memory_percent: float = 0.8,  # FIXME: it seems we overcommit memory, was changed from 0.9 which caused OOMs in our benchmarking CI
+        max_memory_percent: float = 0.9,
         cache_dtype: torch.dtype = torch.float16,
     ) -> tuple[int, int]:
         """Solve for the missing variable(s) in the memory polynomial (see ``_equation_coefficients``). When both
@@ -613,10 +624,15 @@ class PagedAttentionMemoryHandler:
                 coeff_n + coeff_m * m,
                 -available,
             )
-            num_blocks = min(floor(num_pages) // self.block_size, self._upper_bound_num_blocks)
-            max_batch_tokens = min(int(num_pages * m), self._upper_bound_max_batch_tokens)
+            max_batch_tokens = int(num_pages * m)
+            if max_batch_tokens > self._upper_bound_max_batch_tokens:
+                max_batch_tokens = self._upper_bound_max_batch_tokens
+                num_blocks = None  # that way we recompute num_blocks now that max_batch_tokens is clapmed
+            else:
+                num_blocks = min(floor(num_pages) // self.block_size, self._upper_bound_num_blocks)
 
-        elif num_blocks is None:
+        # Simple if so we can re-enter if max_batch_tokens was clamped
+        if num_blocks is None:
             # M given → linear in N: (coeff_n + coeff_nm·M)·N = avail − coeff_m·M − coeff_mm·M²
             M = max_batch_tokens
             num_pages = floor((available - coeff_m * M - coeff_mm * M**2) / (coeff_n + coeff_nm * M))

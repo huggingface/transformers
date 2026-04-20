@@ -219,7 +219,6 @@ class Scheduler(ABC):
                 )
                 break
 
-
             # Infer the tokens that will be present in the batch if token budget is enough
             request_tokens = self._infer_request_tokens(state, request_ids_to_remove_from_waiting)
             # Account for token budget
