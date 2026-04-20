@@ -16,17 +16,13 @@ Shared types, constants, and utilities for the serving layer.
 """
 
 import asyncio
-import base64
 import copy
 import enum
 import json
-import re
-import tempfile
 import threading
 from abc import ABC, abstractmethod
 from collections.abc import Callable
 from concurrent.futures import Future
-from io import BytesIO
 from queue import Queue
 from typing import TYPE_CHECKING
 
@@ -960,31 +956,27 @@ class BaseHandler:
                 raw_content = [{"type": "text", "text": raw_content}]
 
             for content in raw_content:
-                if content["type"] == "text":
-                    parsed["content"].append(content)
-                elif content["type"] == "image_url" and modality in (Modality.VLM, Modality.MULTIMODAL):
-                    from PIL import Image
-
-                    url = content["image_url"]["url"]
-                    if "base64" in url:
-                        image_data = re.sub("^data:image/.+;base64,", "", url)
-                        image = Image.open(BytesIO(base64.b64decode(image_data)))
-                        file = tempfile.NamedTemporaryFile(suffix=".png", delete=False)
-                        image.save(file.name)
-                        url = file.name
+                content_type = content["type"]
+                # Text: chat completions ("text") and Responses API ("input_text")
+                if content_type in ("text", "input_text"):
+                    parsed["content"].append({"type": "text", "text": content["text"]})
+                # Image: chat completions ("image_url") and Responses API ("input_image")
+                elif content_type in ("image_url", "input_image") and modality in (Modality.VLM, Modality.MULTIMODAL):
+                    # chat completions: {"image_url": {"url": "..."}}, Responses API: {"image_url": "..."}
+                    url = content["image_url"]
+                    if isinstance(url, dict):
+                        url = url["url"]
                     parsed["content"].append({"type": "image", "url": url})
-                elif content["type"] == "input_audio" and modality == Modality.MULTIMODAL:
+                # Audio: unlike images, load_audio doesn't accept raw base64 — wrap as a data URI
+                elif content_type == "input_audio" and modality == Modality.MULTIMODAL:
                     input_audio = content["input_audio"]
-                    audio_data = base64.b64decode(input_audio["data"])
-                    suffix = f".{input_audio.get('format', 'wav')}" if isinstance(input_audio, dict) else ".wav"
-                    file = tempfile.NamedTemporaryFile(suffix=suffix, delete=False)
-                    file.write(audio_data)
-                    file.flush()
-                    parsed["content"].append({"type": "audio", "url": file.name})
+                    fmt = input_audio.get("format", "wav") if isinstance(input_audio, dict) else "wav"
+                    audio_b64 = input_audio["data"]
+                    parsed["content"].append({"type": "audio", "url": f"data:audio/{fmt};base64,{audio_b64}"})
                 # Extensions (not part of the OpenAI API standard)
-                elif content["type"] == "video_url" and modality in (Modality.VLM, Modality.MULTIMODAL):
+                elif content_type == "video_url" and modality in (Modality.VLM, Modality.MULTIMODAL):
                     parsed["content"].append({"type": "video", "url": content["video_url"]["url"]})
-                elif content["type"] == "audio_url" and modality == Modality.MULTIMODAL:
+                elif content_type == "audio_url" and modality == Modality.MULTIMODAL:
                     parsed["content"].append({"type": "audio", "url": content["audio_url"]["url"]})
 
             # LLMs expect plain text, not a list of content parts
