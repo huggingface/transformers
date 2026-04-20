@@ -190,10 +190,6 @@ class AudioFlamingo3ForConditionalGenerationModelTest(ModelTesterMixin, Generati
     def test_flash_attn_2_inference_equivalence_right_padding(self):
         pass
 
-    @unittest.skip(reason="AudioFlamingo3 has no separate base model without a head.")
-    def test_model_base_model_prefix(self):
-        pass
-
     def test_sdpa_can_dispatch_composite_models(self):
         # AF3 is audio+text composite; verify SDPA toggles propagate to submodules.
         if not self.has_attentions:
@@ -213,19 +209,19 @@ class AudioFlamingo3ForConditionalGenerationModelTest(ModelTesterMixin, Generati
                 model_sdpa = model_class.from_pretrained(tmpdirname)
                 model_sdpa = model_sdpa.eval().to(torch_device)
 
-                text_attn = "sdpa" if model.language_model._supports_sdpa else "eager"
-                audio_attn = "sdpa" if model.audio_tower._supports_sdpa else "eager"
+                text_attn = "sdpa" if model.model.language_model._supports_sdpa else "eager"
+                audio_attn = "sdpa" if model.model.audio_tower._supports_sdpa else "eager"
 
                 self.assertTrue(model_sdpa.config._attn_implementation == "sdpa")
-                self.assertTrue(model.language_model.config._attn_implementation == text_attn)
-                self.assertTrue(model.audio_tower.config._attn_implementation == audio_attn)
+                self.assertTrue(model.model.language_model.config._attn_implementation == text_attn)
+                self.assertTrue(model.model.audio_tower.config._attn_implementation == audio_attn)
 
                 # Eager
                 model_eager = model_class.from_pretrained(tmpdirname, attn_implementation="eager")
                 model_eager = model_eager.eval().to(torch_device)
                 self.assertTrue(model_eager.config._attn_implementation == "eager")
-                self.assertTrue(model_eager.language_model.config._attn_implementation == "eager")
-                self.assertTrue(model_eager.audio_tower.config._attn_implementation == "eager")
+                self.assertTrue(model_eager.model.language_model.config._attn_implementation == "eager")
+                self.assertTrue(model_eager.model.audio_tower.config._attn_implementation == "eager")
 
                 for _, submodule in model_eager.named_modules():
                     class_name = submodule.__class__.__name__

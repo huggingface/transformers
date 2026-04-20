@@ -13,13 +13,15 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from dataclasses import dataclass
+
 import torch
 from torch import nn
 
 from ...activations import ACT2FN
 from ...cache_utils import Cache
 from ...masking_utils import create_bidirectional_mask
-from ...modeling_outputs import BaseModelOutputWithPooling, CausalLMOutputWithPast
+from ...modeling_outputs import BaseModelOutputWithPooling, ModelOutput
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
 from ...utils.generic import merge_with_config_defaults
@@ -28,7 +30,12 @@ from ..qwen2_audio.modeling_qwen2_audio import (
     Qwen2AudioEncoder,
     Qwen2AudioPreTrainedModel,
 )
-from ..voxtral.modeling_voxtral import VoxtralForConditionalGeneration, VoxtralMultiModalProjector
+from ..voxtral.modeling_voxtral import (
+    VoxtralForConditionalGeneration,
+    VoxtralModel,
+    VoxtralModelOutputWithPast,
+    VoxtralMultiModalProjector,
+)
 from ..whisper.modeling_whisper import WhisperAttention, WhisperEncoderLayer
 from .configuration_audioflamingo3 import AudioFlamingo3Config
 
@@ -46,6 +53,37 @@ class AudioFlamingo3EncoderLayer(WhisperEncoderLayer):
 
 class AudioFlamingo3PreTrainedModel(Qwen2AudioPreTrainedModel):
     pass
+
+
+@dataclass
+class AudioFlamingo3ModelOutputWithPast(VoxtralModelOutputWithPast):
+    pass
+
+
+@dataclass
+@auto_docstring(
+    custom_intro="""
+    Base class for AudioFlamingo3 causal language model (or autoregressive) outputs.
+    """
+)
+class AudioFlamingo3CausalLMOutputWithPast(ModelOutput):
+    r"""
+    loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
+        Language modeling loss (for next-token prediction).
+    logits (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.vocab_size)`):
+        Prediction scores of the language modeling head.
+    past_key_values (`Cache`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
+        It is a [`~cache_utils.Cache`] instance.
+    audio_hidden_states (`torch.FloatTensor`, *optional*):
+        Hidden states of the audio encoder after projection.
+    """
+
+    loss: torch.FloatTensor | None = None
+    logits: torch.FloatTensor | None = None
+    past_key_values: Cache | None = None
+    hidden_states: tuple[torch.FloatTensor] | None = None
+    attentions: tuple[torch.FloatTensor] | None = None
+    audio_hidden_states: torch.FloatTensor | None = None
 
 
 @auto_docstring(
@@ -138,17 +176,11 @@ class AudioFlamingo3MultiModalProjector(VoxtralMultiModalProjector):
 
 @auto_docstring(
     custom_intro="""
-    The AudioFlamingo3 model which consists of a fine-tuned Whisper encoder, a multi-modal projector and a Qwen2 language model.
+    The AudioFlamingo3 model (fine-tuned Whisper encoder, multi-modal projector, Qwen2 language model),
+    without a language modeling head.
     """
 )
-class AudioFlamingo3ForConditionalGeneration(VoxtralForConditionalGeneration):
-    _tp_plan = None
-    _pp_plan = None
-    _keep_in_fp32_modules_strict = None
-
-    def __init__(self, config):
-        super().__init__(config)
-
+class AudioFlamingo3Model(VoxtralModel):
     @can_return_tuple
     @auto_docstring(
         custom_intro="This method is used to get the audio embeddings from input features (a log mel spectrogram), meaning inferring the audio encoder and the multi-modal projector."
@@ -161,11 +193,7 @@ class AudioFlamingo3ForConditionalGeneration(VoxtralForConditionalGeneration):
     ) -> tuple | BaseModelOutputWithPooling:
         r"""
         input_features (`torch.FloatTensor`):
-            Float values of mel features extracted from the raw speech waveform. Raw speech waveform can be
-            obtained by loading a `.flac` or `.wav` audio file into an array of type `list[float]` or a
-            `numpy.ndarray`, *e.g.* via the soundfile library (`pip install soundfile`). To prepare the array into
-            `input_features`, the [`AutoFeatureExtractor`] should be used for extracting the mel features, padding
-            and conversion into a tensor of type `torch.FloatTensor`. See [`~WhisperFeatureExtractor.__call__`]
+            Float values of mel features extracted from the raw speech waveform.
         input_features_mask (`torch.Tensor` of shape `(batch_size, feature_sequence_length)`):
             Mask to avoid performing attention on padded feature indices.
         """
@@ -194,77 +222,17 @@ class AudioFlamingo3ForConditionalGeneration(VoxtralForConditionalGeneration):
         position_ids: torch.LongTensor | None = None,
         past_key_values: Cache | None = None,
         inputs_embeds: torch.FloatTensor | None = None,
-        labels: torch.LongTensor | None = None,
         use_cache: bool | None = None,
-        logits_to_keep: int | torch.Tensor = 0,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> CausalLMOutputWithPast:
+    ):
         r"""
         input_features_mask (`torch.Tensor` of shape `(batch_size, feature_sequence_length)`):
-            Mask to avoid performing attention on padding feature indices. Mask values selected in `[0, 1]`:
-
-            - 1 for tokens that are **not masked**,
-            - 0 for tokens that are **masked**.
-        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
-            config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
-            (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
-
-        Example:
-
-        ```python
-        >>> from transformers import AudioFlamingo3ForConditionalGeneration, AutoProcessor
-
-        >>> model_id = "nvidia/audio-flamingo-3-hf"
-        >>> processor = AutoProcessor.from_pretrained(model_id)
-        >>> model = AudioFlamingo3ForConditionalGeneration.from_pretrained(model_id, device_map="auto")
-
-        >>> conversations = [
-        >>>     [
-        >>>         {
-        >>>             "role": "user",
-        >>>             "content": [
-        >>>                 {"type": "text", "text": "Transcribe the input speech."},
-        >>>                 {
-        >>>                     "type": "audio",
-        >>>                     "path": "https://huggingface.co/datasets/nvidia/AudioSkills/resolve/main/assets/t_837b89f2-26aa-4ee2-bdf6-f73f0dd59b26.wav",
-        >>>                 },
-        >>>             ],
-        >>>         }
-        >>>     ],
-        >>>     [
-        >>>         {
-        >>>             "role": "user",
-        >>>             "content": [
-        >>>                 {
-        >>>                     "type": "text",
-        >>>                     "text": "This track feels really peaceful and introspective. What elements make it feel so calming and meditative?",
-        >>>                 },
-        >>>                 {"type": "audio", "path": "https://huggingface.co/datasets/nvidia/AudioSkills/resolve/main/assets/FPSbCAANfbJLVSwD.mp3"},
-        >>>             ],
-        >>>         }
-        >>>     ],
-        >>> ]
-
-        >>> inputs = processor.apply_chat_template(
-        >>>     conversations,
-        >>>     tokenize=True,
-        >>>     add_generation_prompt=True,
-        >>>     return_dict=True,
-        >>> ).to(model.device)
-
-        >>> outputs = model.generate(**inputs, max_new_tokens=500)
-
-        >>> decoded_outputs = processor.batch_decode(
-        >>>     outputs[:, inputs["input_ids"].shape[1]:], skip_special_tokens=True
-        >>> )
-        >>> print(decoded_outputs)
-        ["The spoken content of the audio is...", "The track's calming and meditative feel can be attributed to..."]
-        ```"""
-
+            Mask to avoid performing attention on padding feature indices.
+        """
         if inputs_embeds is None:
             inputs_embeds = self.get_input_embeddings()(input_ids)
 
+        audio_embeds = None
         if input_features is not None and input_ids is not None:
             audio_embeds = self.get_audio_features(input_features, input_features_mask, return_dict=True).pooler_output
 
@@ -274,17 +242,103 @@ class AudioFlamingo3ForConditionalGeneration(VoxtralForConditionalGeneration):
                 audio_token_mask.to(inputs_embeds.device), audio_embeds.to(inputs_embeds.device)
             )
 
-        outputs: CausalLMOutputWithPast = self.language_model(
+        outputs = self.language_model(
             inputs_embeds=inputs_embeds,
             attention_mask=attention_mask,
             position_ids=position_ids,
             past_key_values=past_key_values,
-            labels=labels,
             use_cache=use_cache,
-            logits_to_keep=logits_to_keep,
             **kwargs,
         )
-        return outputs
+
+        return AudioFlamingo3ModelOutputWithPast(
+            last_hidden_state=outputs.last_hidden_state,
+            past_key_values=outputs.past_key_values,
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
+            audio_hidden_states=audio_embeds,
+        )
+
+
+@auto_docstring(
+    custom_intro="""
+    The AudioFlamingo3 model which consists of a fine-tuned Whisper encoder, a multi-modal projector and a Qwen2 language model.
+    """
+)
+class AudioFlamingo3ForConditionalGeneration(VoxtralForConditionalGeneration):
+    _tp_plan = None
+    _pp_plan = None
+    _keep_in_fp32_modules_strict = None
+
+    def __init__(self, config):
+        super().__init__(config)
+        self.model = AudioFlamingo3Model(config)
+        self.post_init()
+
+    def get_audio_features(self, input_features, input_features_mask, **kwargs):
+        return self.model.get_audio_features(input_features, input_features_mask, **kwargs)
+
+    @can_return_tuple
+    @auto_docstring
+    def forward(
+        self,
+        input_ids: torch.LongTensor | None = None,
+        input_features: torch.FloatTensor | None = None,
+        input_features_mask: torch.Tensor | None = None,
+        attention_mask: torch.Tensor | None = None,
+        position_ids: torch.LongTensor | None = None,
+        past_key_values: Cache | None = None,
+        inputs_embeds: torch.FloatTensor | None = None,
+        labels: torch.LongTensor | None = None,
+        use_cache: bool | None = None,
+        logits_to_keep: int | torch.Tensor = 0,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> tuple | AudioFlamingo3CausalLMOutputWithPast:
+        r"""
+        input_features_mask (`torch.Tensor` of shape `(batch_size, feature_sequence_length)`):
+            Mask to avoid performing attention on padding feature indices.
+        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Labels for computing the masked language modeling loss.
+
+        Example:
+
+        ```python
+        >>> from transformers import AudioFlamingo3ForConditionalGeneration, AutoProcessor
+
+        >>> model_id = "nvidia/audio-flamingo-3-hf"
+        >>> processor = AutoProcessor.from_pretrained(model_id)
+        >>> model = AudioFlamingo3ForConditionalGeneration.from_pretrained(model_id, device_map="auto")
+        ```"""
+        outputs = self.model(
+            input_ids=input_ids,
+            input_features=input_features,
+            input_features_mask=input_features_mask,
+            attention_mask=attention_mask,
+            position_ids=position_ids,
+            past_key_values=past_key_values,
+            inputs_embeds=inputs_embeds,
+            use_cache=use_cache,
+            **kwargs,
+        )
+
+        hidden_states = outputs.last_hidden_state
+        slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
+        logits = self.lm_head(hidden_states[:, slice_indices, :])
+
+        loss = None
+        if labels is not None:
+            loss = self.loss_function(
+                logits=logits, labels=labels, vocab_size=self.config.text_config.vocab_size, **kwargs
+            )
+
+        return AudioFlamingo3CausalLMOutputWithPast(
+            loss=loss,
+            logits=logits,
+            past_key_values=outputs.past_key_values,
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
+            audio_hidden_states=outputs.audio_hidden_states,
+        )
 
     def prepare_inputs_for_generation(self, *args, is_first_iteration: bool = False, **kwargs):
         input_features = kwargs.pop("input_features", None)
@@ -301,4 +355,9 @@ class AudioFlamingo3ForConditionalGeneration(VoxtralForConditionalGeneration):
         return model_inputs
 
 
-__all__ = ["AudioFlamingo3ForConditionalGeneration", "AudioFlamingo3PreTrainedModel", "AudioFlamingo3Encoder"]
+__all__ = [
+    "AudioFlamingo3ForConditionalGeneration",
+    "AudioFlamingo3PreTrainedModel",
+    "AudioFlamingo3Encoder",
+    "AudioFlamingo3Model",
+]
