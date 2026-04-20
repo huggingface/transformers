@@ -88,4 +88,37 @@ class Qwen3ASRConfig(PreTrainedConfig):
         super().__post_init__(**kwargs)
 
 
-__all__ = ["Qwen3ASRConfig"]
+@auto_docstring(checkpoint="bezzam/Qwen3-ForcedAligner-0.6B")
+@strict
+class Qwen3ForcedAlignerConfig(Qwen3ASRConfig):
+    r"""
+    classify_num (`int`, *optional*, defaults to 5000):
+        Number of classification labels for forced alignment.
+    timestamp_token_id (`int`, *optional*, defaults to 151705):
+        Token ID for timestamp markers in the alignment output.
+    timestamp_segment_time (`int`, *optional*, defaults to 80):
+        Time segment (in milliseconds) that each timestamp token represents.
+
+    Example:
+
+    ```python
+    >>> from transformers import Qwen3ForcedAlignerForTokenClassification, Qwen3ForcedAlignerConfig
+
+    >>> # Initializing a Qwen3ForcedAligner style configuration
+    >>> configuration = Qwen3ForcedAlignerConfig()
+
+    >>> # Initializing a model from the configuration
+    >>> model = Qwen3ForcedAlignerForTokenClassification(configuration)
+
+    >>> # Accessing the model configuration
+    >>> configuration = model.config
+    ```"""
+
+    model_type = "qwen3_forced_aligner"
+
+    classify_num: int = 5000
+    timestamp_token_id: int = 151705
+    timestamp_segment_time: int = 80
+
+
+__all__ = ["Qwen3ASRConfig", "Qwen3ForcedAlignerConfig"]

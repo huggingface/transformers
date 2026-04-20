@@ -18,17 +18,17 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-
 import torch
+from torch import nn
 
 from ...cache_utils import Cache
 from ...generation import GenerationMixin
-from ...modeling_outputs import BaseModelOutputWithPooling, CausalLMOutputWithPast
+from ...modeling_outputs import BaseModelOutputWithPooling, CausalLMOutputWithPast, SequenceClassifierOutput
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
 from ..auto import AutoModel, AutoModelForCausalLM
-from .configuration_qwen3_asr import Qwen3ASRConfig
+from .configuration_qwen3_asr import Qwen3ASRConfig, Qwen3ForcedAlignerConfig
 
 
 @auto_docstring
@@ -180,4 +180,118 @@ class Qwen3ASRForConditionalGeneration(Qwen3ASRPreTrainedModel, GenerationMixin)
         return model_inputs
 
 
-__all__ = ["Qwen3ASRForConditionalGeneration", "Qwen3ASRPreTrainedModel"]
+class Qwen3ForcedAlignerPreTrainedModel(Qwen3ASRPreTrainedModel):
+    pass
+
+
+@auto_docstring(
+    custom_intro="""
+    The Qwen3 Forced Aligner model which consists of an audio encoder, a language model backbone,
+    and a token classification head for forced alignment.
+    """
+)
+class Qwen3ForcedAlignerForTokenClassification(Qwen3ForcedAlignerPreTrainedModel):
+    def __init__(self, config: Qwen3ForcedAlignerConfig):
+        super().__init__(config)
+        self.vocab_size = config.text_config.vocab_size
+        self.classify_num = config.classify_num
+        self.audio_tower = AutoModel.from_config(config.audio_config)
+        self.model = AutoModel.from_config(config.text_config)
+        self.classifier = nn.Linear(config.text_config.hidden_size, config.classify_num, bias=False)
+
+        self.post_init()
+
+    def get_input_embeddings(self):
+        return self.model.get_input_embeddings()
+
+    def set_input_embeddings(self, value):
+        self.model.set_input_embeddings(value)
+
+    def get_audio_features(
+        self,
+        input_features: torch.FloatTensor,
+        input_features_mask: torch.LongTensor,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> tuple | BaseModelOutputWithPooling:
+        r"""
+        input_features (`torch.FloatTensor`):
+            Float values of mel features extracted from the raw speech waveform.
+        input_features_mask (`torch.Tensor` of shape `(batch_size, feature_sequence_length)`):
+            Mask to avoid performing attention on padded feature indices.
+        """
+        # Flatten batched features for the Qwen3OmniMoe audio encoder
+        audio_feature_lengths = input_features_mask.sum(dim=1)
+        input_features = input_features.permute(0, 2, 1)[input_features_mask.bool()].permute(1, 0)
+
+        audio_output = self.audio_tower(
+            input_features,
+            feature_lens=audio_feature_lengths,
+            **kwargs,
+        )
+        audio_output.pooler_output = audio_output.last_hidden_state
+        return audio_output
+
+    @can_return_tuple
+    @auto_docstring
+    def forward(
+        self,
+        input_ids: torch.LongTensor | None = None,
+        input_features: torch.FloatTensor | None = None,
+        input_features_mask: torch.Tensor | None = None,
+        attention_mask: torch.Tensor | None = None,
+        position_ids: torch.LongTensor | None = None,
+        past_key_values: Cache | None = None,
+        inputs_embeds: torch.FloatTensor | None = None,
+        labels: torch.LongTensor | None = None,
+        use_cache: bool | None = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> SequenceClassifierOutput:
+        r"""
+        input_features_mask (`torch.Tensor` of shape `(batch_size, feature_sequence_length)`, *optional*):
+            Mask to avoid performing attention on padding feature indices.
+        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Labels for computing the token classification loss. Indices should be in `[0, ..., config.classify_num - 1]`.
+        """
+
+        if inputs_embeds is None:
+            inputs_embeds = self.get_input_embeddings()(input_ids)
+
+        if input_features is not None and input_ids is not None:
+            audio_embeds = self.get_audio_features(input_features, input_features_mask, return_dict=True).pooler_output
+
+            # replace text-audio token placeholders with audio embeddings
+            audio_token_mask = (input_ids == self.config.audio_token_id).unsqueeze(-1)
+            inputs_embeds = inputs_embeds.masked_scatter(
+                audio_token_mask.to(inputs_embeds.device), audio_embeds.to(inputs_embeds.device)
+            )
+
+        outputs = self.model(
+            attention_mask=attention_mask,
+            position_ids=position_ids,
+            past_key_values=past_key_values,
+            inputs_embeds=inputs_embeds,
+            use_cache=use_cache,
+            **kwargs,
+        )
+
+        hidden_states = outputs[0]
+        logits = self.classifier(hidden_states)
+
+        loss = None
+        if labels is not None:
+            loss = self.loss_function(logits=logits, labels=labels, vocab_size=self.classify_num)
+
+        return SequenceClassifierOutput(
+            loss=loss,
+            logits=logits,
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
+        )
+
+
+__all__ = [
+    "Qwen3ASRForConditionalGeneration",
+    "Qwen3ASRPreTrainedModel",
+    "Qwen3ForcedAlignerForTokenClassification",
+    "Qwen3ForcedAlignerPreTrainedModel",
+]

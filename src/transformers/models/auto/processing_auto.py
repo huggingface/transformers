@@ -146,6 +146,7 @@ else:
             ("qwen3_5", "Qwen3VLProcessor"),
             ("qwen3_5_moe", "Qwen3VLProcessor"),
             ("qwen3_asr", "Qwen3ASRProcessor"),
+            ("qwen3_forced_aligner", "Qwen3ASRProcessor"),
             ("qwen3_omni_moe", "Qwen3OmniMoeProcessor"),
             ("qwen3_vl", "Qwen3VLProcessor"),
             ("qwen3_vl_moe", "Qwen3VLProcessor"),

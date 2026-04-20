@@ -391,6 +391,7 @@ CONFIG_MAPPING_NAMES = OrderedDict[str, str](
         ("qwen3_5_text", "Qwen3_5TextConfig"),
         ("qwen3_asr", "Qwen3ASRConfig"),
         ("qwen3_audio_encoder", "Qwen3OmniMoeAudioEncoderConfig"),
+        ("qwen3_forced_aligner", "Qwen3ForcedAlignerConfig"),
         ("qwen3_moe", "Qwen3MoeConfig"),
         ("qwen3_next", "Qwen3NextConfig"),
         ("qwen3_omni_moe", "Qwen3OmniMoeConfig"),
@@ -922,6 +923,7 @@ MODEL_NAMES_MAPPING = OrderedDict[str, str](
         ("qwen3_5_text", "Qwen3_5Text"),
         ("qwen3_asr", "Qwen3ASRForConditionalGeneration"),
         ("qwen3_audio_encoder", "Qwen3AudioEncoder"),
+        ("qwen3_forced_aligner", "Qwen3ForcedAligner"),
         ("qwen3_moe", "Qwen3MoE"),
         ("qwen3_next", "Qwen3Next"),
         ("qwen3_omni_moe", "Qwen3OmniMoE"),
@@ -1158,6 +1160,7 @@ SPECIAL_MODEL_TYPE_TO_MODULE_NAME = OrderedDict[str, str](
         ("vibevoice_acoustic_tokenizer_decoder", "vibevoice_acoustic_tokenizer"),
         ("uvdoc_backbone", "uvdoc"),
         ("qwen3_audio_encoder", "qwen3_omni_moe"),
+        ("qwen3_forced_aligner", "qwen3_asr"),
         ("qwen3_omni_moe_audio_encoder", "qwen3_omni_moe"),
     ]
 )

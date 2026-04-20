@@ -29,10 +29,15 @@ Qwen3 ASR is an automatic speech recognition model from Alibaba's Qwen team that
 Available checkpoints:
 - [bezzam/Qwen3-ASR-1.7B](https://huggingface.co/bezzam/Qwen3-ASR-1.7B)
 - [bezzam/Qwen3-ASR-0.6B](https://huggingface.co/bezzam/Qwen3-ASR-0.6B)
+- [bezzam/Qwen3-ForcedAligner-0.6B](https://huggingface.co/bezzam/Qwen3-ForcedAligner-0.6B)
+
+The following languages are supported:
+- `Qwen3-ASR-1.7B` and `Qwen3-ASR-0.6B`: Chinese (zh), English (en), Cantonese (yue), Arabic (ar), German (de), French (fr), Spanish (es), Portuguese (pt), Indonesian (id), Italian (it), Korean (ko), Russian (ru), Thai (th), Vietnamese (vi), Japanese (ja), Turkish (tr), Hindi (hi), Malay (ms), Dutch (nl), Swedish (sv), Danish (da), Finnish (fi), Polish (pl), Czech (cs), Filipino (fil), Persian (fa), Greek (el), Hungarian (hu), Macedonian (mk), Romanian (ro)
+- `Qwen3-ForcedAligner-0.6B`: Chinese, English, Cantonese, French, German, Italian, Japanese, Korean, Portuguese, Russian, Spanish
 
 See the original repository at [QwenLM/Qwen3-ASR](https://github.com/QwenLM/Qwen3-ASR) for more details.
 
-This model was contributed by [Eric Bezzam](https://huggingface.co/bezzam).
+This model was contributed by [Eric Bezzam](https://huggingface.co/bezzam) and [Muhammed Tariq](https://huggingface.co/mbtariq82).
 
 ## Usage
 
@@ -219,6 +224,250 @@ print("Loss:", loss.item())
 loss.backward()
 ```
 
+### Forced alignment (word-level timestamping)
+
+Use `Qwen3ForcedAlignerForTokenClassification` to obtain word-level timestamps from a transcript. First transcribe with the ASR model, then align with the forced aligner.
+
+The following languages are supported: Chinese, English, Cantonese, French, German, Italian, Japanese, Korean, Portuguese, Russian, Spanish.
+
+#### English
+
+```python
+import torch
+from transformers import AutoProcessor, Qwen3ASRForConditionalGeneration, Qwen3ForcedAlignerForTokenClassification
+
+asr_model_id = "bezzam/Qwen3-ASR-0.6B"
+aligner_model_id = "bezzam/Qwen3-ForcedAligner-0.6B"
+
+asr_processor = AutoProcessor.from_pretrained(asr_model_id)
+asr_model = Qwen3ASRForConditionalGeneration.from_pretrained(asr_model_id, device_map="auto")
+
+aligner_processor = AutoProcessor.from_pretrained(aligner_model_id)
+aligner_model = Qwen3ForcedAlignerForTokenClassification.from_pretrained(
+    aligner_model_id, torch_dtype=torch.bfloat16, device_map="auto"
+)
+
+audio_url = "https://huggingface.co/datasets/bezzam/audio_samples/resolve/main/librispeech_mr_quilter.wav"
+
+# Step 1: Transcribe
+inputs = asr_processor.apply_transcription_request(audio=audio_url).to(asr_model.device, asr_model.dtype)
+output_ids = asr_model.generate(**inputs, max_new_tokens=256)
+generated_ids = output_ids[:, inputs["input_ids"].shape[1]:]
+parsed = asr_processor.decode(generated_ids, return_format="parsed")[0]
+transcript = parsed["transcription"]
+language = parsed["language"] or "English"
+
+# Step 2: Prepare alignment inputs
+aligner_inputs, word_lists = aligner_processor.apply_forced_alignment_request(
+    audio=audio_url, transcript=transcript, language=language,
+)
+aligner_inputs = aligner_inputs.to(aligner_model.device, aligner_model.dtype)
+
+# Step 3: Run forced aligner
+with torch.inference_mode():
+    outputs = aligner_model(**aligner_inputs)
+
+# Step 4: Decode timestamps
+timestamps = aligner_processor.decode_forced_alignment(
+    logits=outputs.logits,
+    input_ids=aligner_inputs["input_ids"],
+    word_lists=word_lists,
+    timestamp_token_id=aligner_model.config.timestamp_token_id,
+    timestamp_segment_time=aligner_model.config.timestamp_segment_time,
+)[0]
+
+for item in timestamps:
+    print(f"{item['text']:<20} {item['start_time']:>8.3f}s → {item['end_time']:>8.3f}s")
+
+"""
+Word                  Start (s)    End (s)
+------------------------------------------
+Mr                        0.560      0.800
+Quilter                   0.800      1.280
+is                        1.280      1.440
+the                       1.440      1.520
+apostle                   1.520      2.080
+...
+"""
+```
+
+#### Chinese
+
+For Chinese text, each character is aligned individually.
+
+```python
+import torch
+from transformers import AutoProcessor, Qwen3ASRForConditionalGeneration, Qwen3ForcedAlignerForTokenClassification
+
+asr_model_id = "bezzam/Qwen3-ASR-0.6B"
+aligner_model_id = "bezzam/Qwen3-ForcedAligner-0.6B"
+
+asr_processor = AutoProcessor.from_pretrained(asr_model_id)
+asr_model = Qwen3ASRForConditionalGeneration.from_pretrained(asr_model_id, device_map="auto")
+
+aligner_processor = AutoProcessor.from_pretrained(aligner_model_id)
+aligner_model = Qwen3ForcedAlignerForTokenClassification.from_pretrained(
+    aligner_model_id, torch_dtype=torch.bfloat16, device_map="auto"
+)
+
+audio_url = "https://qianwen-res.oss-cn-beijing.aliyuncs.com/Qwen3-ASR-Repo/asr_zh.wav"
+
+# Step 1: Transcribe with language hint
+inputs = asr_processor.apply_transcription_request(
+    audio=audio_url, language="Chinese",
+).to(asr_model.device, asr_model.dtype)
+output_ids = asr_model.generate(**inputs, max_new_tokens=256)
+generated_ids = output_ids[:, inputs["input_ids"].shape[1]:]
+parsed = asr_processor.decode(generated_ids, return_format="parsed")[0]
+transcript = parsed["transcription"]
+
+# Step 2–4: Align and decode
+aligner_inputs, word_lists = aligner_processor.apply_forced_alignment_request(
+    audio=audio_url, transcript=transcript, language="Chinese",
+)
+aligner_inputs = aligner_inputs.to(aligner_model.device, aligner_model.dtype)
+
+with torch.inference_mode():
+    outputs = aligner_model(**aligner_inputs)
+
+timestamps = aligner_processor.decode_forced_alignment(
+    logits=outputs.logits,
+    input_ids=aligner_inputs["input_ids"],
+    word_lists=word_lists,
+    timestamp_token_id=aligner_model.config.timestamp_token_id,
+    timestamp_segment_time=aligner_model.config.timestamp_segment_time,
+)[0]
+
+for item in timestamps:
+    print(f"{item['text']:<4} {item['start_time']:>8.3f}s → {item['end_time']:>8.3f}s")
+
+"""
+Char        Start (s)    End (s)
+--------------------------------
+甚               0.400      0.720
+至               0.720      0.960
+出               0.960      1.120
+现               1.120      1.520
+...
+"""
+```
+
+#### With another ASR model
+
+The forced aligner is model-agnostic — any ASR system can provide the transcript. Here is an example using [NVIDIA Parakeet CTC](https://huggingface.co/nvidia/parakeet-ctc-1.1b) for transcription.
+
+**Single sample:**
+
+```python
+import torch
+from datasets import Audio, load_dataset
+from transformers import AutoModelForCTC, AutoProcessor, Qwen3ForcedAlignerForTokenClassification
+
+# Load Parakeet CTC for transcription
+parakeet_processor = AutoProcessor.from_pretrained("nvidia/parakeet-ctc-1.1b")
+parakeet_model = AutoModelForCTC.from_pretrained(
+    "nvidia/parakeet-ctc-1.1b", torch_dtype="auto", device_map="cuda",
+)
+
+# Load Qwen3 Forced Aligner for timestamping
+aligner_model_id = "bezzam/Qwen3-ForcedAligner-0.6B"
+aligner_processor = AutoProcessor.from_pretrained(aligner_model_id)
+aligner_model = Qwen3ForcedAlignerForTokenClassification.from_pretrained(
+    aligner_model_id, torch_dtype=torch.bfloat16, device_map="cuda",
+)
+
+# Load audio
+ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
+ds = ds.cast_column("audio", Audio(sampling_rate=parakeet_processor.feature_extractor.sampling_rate))
+audio_array = ds[0]["audio"]["array"]
+sr = ds[0]["audio"]["sampling_rate"]
+
+# Step 1: Transcribe with Parakeet
+inputs = parakeet_processor(audio_array, sampling_rate=sr, return_tensors="pt").to(
+    parakeet_model.device, dtype=parakeet_model.dtype
+)
+with torch.inference_mode():
+    outputs = parakeet_model.generate(**inputs)
+transcript = parakeet_processor.batch_decode(outputs)[0]
+print(f"Transcript: {transcript}")
+
+# Step 2: Align with Qwen3 Forced Aligner (expects 16kHz audio)
+aligner_inputs, word_lists = aligner_processor.apply_forced_alignment_request(
+    audio=audio_array, transcript=transcript, language="English",
+)
+aligner_inputs = aligner_inputs.to(aligner_model.device, aligner_model.dtype)
+
+with torch.inference_mode():
+    aligner_outputs = aligner_model(**aligner_inputs)
+
+timestamps = aligner_processor.decode_forced_alignment(
+    logits=aligner_outputs.logits,
+    input_ids=aligner_inputs["input_ids"],
+    word_lists=word_lists,
+    timestamp_token_id=aligner_model.config.timestamp_token_id,
+    timestamp_segment_time=aligner_model.config.timestamp_segment_time,
+)[0]
+
+for item in timestamps:
+    print(f"{item['text']:<20} {item['start_time']:>8.3f}s → {item['end_time']:>8.3f}s")
+```
+
+**Batch:**
+
+```python
+import torch
+from datasets import Audio, load_dataset
+from transformers import AutoModelForCTC, AutoProcessor, Qwen3ForcedAlignerForTokenClassification
+
+parakeet_processor = AutoProcessor.from_pretrained("nvidia/parakeet-ctc-1.1b")
+parakeet_model = AutoModelForCTC.from_pretrained(
+    "nvidia/parakeet-ctc-1.1b", torch_dtype="auto", device_map="cuda",
+)
+
+aligner_model_id = "bezzam/Qwen3-ForcedAligner-0.6B"
+aligner_processor = AutoProcessor.from_pretrained(aligner_model_id)
+aligner_model = Qwen3ForcedAlignerForTokenClassification.from_pretrained(
+    aligner_model_id, torch_dtype=torch.bfloat16, device_map="cuda",
+)
+
+ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
+ds = ds.cast_column("audio", Audio(sampling_rate=parakeet_processor.feature_extractor.sampling_rate))
+audio_arrays = [ds[i]["audio"]["array"] for i in range(3)]
+sr = ds[0]["audio"]["sampling_rate"]
+
+# Batch transcribe with Parakeet
+inputs = parakeet_processor(audio_arrays, sampling_rate=sr, return_tensors="pt", padding=True).to(
+    parakeet_model.device, dtype=parakeet_model.dtype
+)
+with torch.inference_mode():
+    outputs = parakeet_model.generate(**inputs)
+transcripts = parakeet_processor.batch_decode(outputs)
+
+# Batch align with Qwen3 Forced Aligner
+aligner_inputs, word_lists = aligner_processor.apply_forced_alignment_request(
+    audio=audio_arrays, transcript=transcripts, language="English",
+)
+aligner_inputs = aligner_inputs.to(aligner_model.device, aligner_model.dtype)
+
+with torch.inference_mode():
+    aligner_outputs = aligner_model(**aligner_inputs)
+
+batch_timestamps = aligner_processor.decode_forced_alignment(
+    logits=aligner_outputs.logits,
+    input_ids=aligner_inputs["input_ids"],
+    word_lists=word_lists,
+    timestamp_token_id=aligner_model.config.timestamp_token_id,
+    timestamp_segment_time=aligner_model.config.timestamp_segment_time,
+)
+
+for i, (transcript, timestamps) in enumerate(zip(transcripts, batch_timestamps)):
+    print(f"\n[Sample {i}] {transcript}")
+    for item in timestamps[:5]:
+        print(f"  {item['text']:<20} {item['start_time']:>8.3f}s → {item['end_time']:>8.3f}s")
+    if len(timestamps) > 5:
+        print(f"  ... ({len(timestamps) - 5} more words)")
+```
+
 ### Torch compile
 
 The model can be compiled with `torch.compile` for faster inference.
@@ -322,10 +571,22 @@ print(f"Transcription: {transcription}")
 [[autodoc]] Qwen3ASRProcessor
     - __call__
     - apply_transcription_request
+    - apply_forced_alignment_request
+    - decode_forced_alignment
     - decode
 
 ## Qwen3ASRForConditionalGeneration
 
 [[autodoc]] Qwen3ASRForConditionalGeneration
+    - forward
+    - get_audio_features
+
+## Qwen3ForcedAlignerConfig
+
+[[autodoc]] Qwen3ForcedAlignerConfig
+
+## Qwen3ForcedAlignerForTokenClassification
+
+[[autodoc]] Qwen3ForcedAlignerForTokenClassification
     - forward
     - get_audio_features

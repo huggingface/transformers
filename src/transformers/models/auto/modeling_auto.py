@@ -372,6 +372,7 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("qwen3_5_text", "Qwen3_5TextModel"),
         ("qwen3_asr", "Qwen3ASRForConditionalGeneration"),
         ("qwen3_audio_encoder", "Qwen3OmniMoeAudioEncoder"),
+        ("qwen3_forced_aligner", "Qwen3ForcedAlignerForTokenClassification"),
         ("qwen3_moe", "Qwen3MoeModel"),
         ("qwen3_next", "Qwen3NextModel"),
         ("qwen3_omni_moe_audio_encoder", "Qwen3OmniMoeAudioEncoder"),
