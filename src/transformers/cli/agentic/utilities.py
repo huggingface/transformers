@@ -24,7 +24,7 @@ from typing import Annotated
 
 import typer
 
-from transformers.agent.output import out
+from transformers.agent.output import out, progress
 
 from ._common import _load_pretrained, load_image, resolve_input
 
@@ -104,13 +104,13 @@ def embed(
                 json.dump(embedding.tolist(), f)
         else:
             np.save(output, embedding)
-        out.emit({"shape": str(embedding.shape), "output_path": output}, task="embed")
+        out.result("Embeddings saved", shape=str(embedding.shape), output_path=output)
     else:
         flat = embedding.flatten()
         preview = ", ".join(f"{v:.6f}" for v in flat[:8])
         if len(flat) > 8:
             preview += ", ..."
-        out.emit({"shape": str(embedding.shape), "values": f"[{preview}]"}, task="embed")
+        out.result("Embedding preview", shape=str(embedding.shape), values=f"[{preview}]")
 
 
 def tokenize(
@@ -154,7 +154,7 @@ def tokenize(
     data = {"tokens": tokens, "num_tokens": len(tokens)}
     if show_ids:
         data["token_ids"] = token_ids
-    out.emit(data, task="tokenize")
+    out.dict(data)
 
 
 def inspect(
@@ -199,17 +199,14 @@ def inspect(
             "torch_dtype",
         ]
         summary = {k: config_dict[k] for k in summary_keys if k in config_dict}
-        out.emit(
-            {
-                "model": model,
-                "architecture": config_dict.get("architectures", ["unknown"]),
-                "model_type": config_dict.get("model_type", "unknown"),
-                **summary,
-            },
-            task="inspect",
+        out.result(
+            f"{model}",
+            architecture=config_dict.get("architectures", ["unknown"]),
+            model_type=config_dict.get("model_type", "unknown"),
+            **summary,
         )
     else:
-        out.emit(config_dict, task="inspect")
+        out.dict(config_dict)
 
 
 def inspect_forward(
@@ -267,10 +264,10 @@ def inspect_forward(
     if layers is not None:
         layer_indices = [int(i) for i in layers.split(",")]
 
-    out.progress(f"Model: {model_id}")
-    out.progress(f"Input tokens: {tokenizer.convert_ids_to_tokens(inputs['input_ids'][0])}")
-    out.progress(f"Hidden state layers: {len(hidden_states)} (including embedding layer)")
-    out.progress(f"Attention layers: {len(attentions)}")
+    progress(f"Model: {model_id}")
+    progress(f"Input tokens: {tokenizer.convert_ids_to_tokens(inputs['input_ids'][0])}")
+    progress(f"Hidden state layers: {len(hidden_states)} (including embedding layer)")
+    progress(f"Attention layers: {len(attentions)}")
 
     layer_info = []
     for i, (attn, hs) in enumerate(zip(attentions, hidden_states[1:])):
@@ -289,7 +286,7 @@ def inspect_forward(
             }
         )
 
-    out.emit({"model": model_id, "layers": layer_info}, task="inspect-forward")
+    out.dict({"model": model_id, "layers": layer_info})
 
     if output is not None:
         from pathlib import Path
@@ -304,7 +301,7 @@ def inspect_forward(
             if layer_indices is not None and i not in layer_indices and i > 0:
                 continue
             np.save(out_dir / f"hidden_state_layer_{i}.npy", hs[0].cpu().numpy())
-        out.progress(f"Activations saved to {output}")
+        progress(f"Activations saved to {output}")
 
 
 def benchmark_quantization(
@@ -350,7 +347,7 @@ def benchmark_quantization(
 
     results = []
     for method in method_list:
-        out.progress(f"--- {method} ---")
+        progress(f"--- {method} ---")
         model_kwargs = {**common_kwargs, "device_map": "auto"}
 
         if method == "bnb-4bit":
@@ -397,11 +394,11 @@ def benchmark_quantization(
             }
             results.append(result)
 
-            out.progress(f"  Tokens/sec: {tokens_per_sec:.2f}")
-            out.progress(f"  Time: {elapsed:.3f}s")
+            progress(f"  Tokens/sec: {tokens_per_sec:.2f}")
+            progress(f"  Time: {elapsed:.3f}s")
             if mem_mb > 0:
-                out.progress(f"  Peak memory: {mem_mb:.1f} MB")
-            out.progress(f"  Output: {generated_text[:100]}...")
+                progress(f"  Peak memory: {mem_mb:.1f} MB")
+            progress(f"  Output: {generated_text[:100]}...")
 
             del loaded_model
             if torch.cuda.is_available():
@@ -412,4 +409,4 @@ def benchmark_quantization(
             out.warning(f"Error with {method}: {e}")
             results.append({"method": method, "error": str(e)})
 
-    out.emit(results, task="benchmark-quantization")
+    out.table(results)

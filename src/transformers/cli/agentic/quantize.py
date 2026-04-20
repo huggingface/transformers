@@ -34,7 +34,7 @@ from typing import Annotated
 
 import typer
 
-from transformers.agent.output import out
+from transformers.agent.output import out, progress
 
 
 _QUANTIZATION_METHODS = ("bnb-4bit", "bnb-8bit", "gptq", "awq")
@@ -96,21 +96,21 @@ def quantize(
             bnb_4bit_compute_dtype="bfloat16",
             bnb_4bit_quant_type="nf4",
         )
-        out.progress(f"Loading {model} in 4-bit (BitsAndBytes NF4)...")
+        progress(f"Loading {model} in 4-bit (BitsAndBytes NF4)...")
         loaded_model = AutoModelForCausalLM.from_pretrained(model, **model_kwargs)
         loaded_model.save_pretrained(output)
         tokenizer.save_pretrained(output)
-        out.emit({"method": "bnb-4bit", "output_path": output}, task="quantize")
+        out.result("Saved quantized model", method="bnb-4bit", output_path=output)
 
     elif method == "bnb-8bit":
         from transformers import BitsAndBytesConfig
 
         model_kwargs["quantization_config"] = BitsAndBytesConfig(load_in_8bit=True)
-        out.progress(f"Loading {model} in 8-bit (BitsAndBytes)...")
+        progress(f"Loading {model} in 8-bit (BitsAndBytes)...")
         loaded_model = AutoModelForCausalLM.from_pretrained(model, **model_kwargs)
         loaded_model.save_pretrained(output)
         tokenizer.save_pretrained(output)
-        out.emit({"method": "bnb-8bit", "output_path": output}, task="quantize")
+        out.result("Saved quantized model", method="bnb-8bit", output_path=output)
 
     # --- GPTQ ---
     elif method == "gptq":
@@ -133,11 +133,11 @@ def quantize(
         )
         model_kwargs["quantization_config"] = quantization_config
 
-        out.progress(f"Quantizing {model} with GPTQ ({bits}-bit, group_size={group_size})...")
+        progress(f"Quantizing {model} with GPTQ ({bits}-bit, group_size={group_size})...")
         loaded_model = AutoModelForCausalLM.from_pretrained(model, **model_kwargs)
         loaded_model.save_pretrained(output)
         tokenizer.save_pretrained(output)
-        out.emit({"method": "gptq", "output_path": output}, task="quantize")
+        out.result("Saved quantized model", method="gptq", output_path=output)
 
     # --- AWQ ---
     elif method == "awq":
@@ -149,14 +149,14 @@ def quantize(
         )
         model_kwargs["quantization_config"] = quantization_config
 
-        out.progress(f"Quantizing {model} with AWQ ({bits}-bit, group_size={group_size})...")
+        progress(f"Quantizing {model} with AWQ ({bits}-bit, group_size={group_size})...")
         loaded_model = AutoModelForCausalLM.from_pretrained(model, **model_kwargs)
         loaded_model.save_pretrained(output)
         tokenizer.save_pretrained(output)
-        out.emit({"method": "awq", "output_path": output}, task="quantize")
+        out.result("Saved quantized model", method="awq", output_path=output)
 
     if push_to_hub:
         repo_id = hub_model_id or output
         loaded_model.push_to_hub(repo_id, token=token)
         tokenizer.push_to_hub(repo_id, token=token)
-        out.progress(f"Pushed to Hub: {repo_id}")
+        progress(f"Pushed to Hub: {repo_id}")

@@ -13,13 +13,9 @@
 # limitations under the License.
 """Transformers CLI."""
 
-from typing import Annotated
-
-import typer
 from huggingface_hub import check_cli_update, typer_factory
-from huggingface_hub.cli._output import OutputFormatWithAuto
+from huggingface_hub.cli._cli_utils import FormatWithAutoOpt, OutputFormatWithAuto
 
-from transformers.agent.output import out
 from transformers.cli.add_new_model_like import add_new_model_like
 from transformers.cli.agentic.app import register_agentic_commands
 from transformers.cli.chat import Chat
@@ -31,19 +27,11 @@ from transformers.cli.system import env, version
 app = typer_factory(help="Transformers CLI")
 
 
-def _set_format(value: OutputFormatWithAuto) -> OutputFormatWithAuto:
-    out.set_mode(value)
-    return value
-
-
 @app.callback()
-def _root(
-    format: Annotated[
-        OutputFormatWithAuto,
-        typer.Option(help="Output format.", callback=_set_format),
-    ] = OutputFormatWithAuto.auto,
-):
+def _root(format: FormatWithAutoOpt = OutputFormatWithAuto.auto):
     """Transformers CLI."""
+    # FormatWithAutoOpt's callback already called out.set_mode(format); this
+    # callback exists only to expose --format at the top level.
 
 
 app.command()(add_new_model_like)

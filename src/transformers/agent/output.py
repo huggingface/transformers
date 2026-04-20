@@ -13,77 +13,38 @@
 # limitations under the License.
 
 """
-Agent-aware output formatting for the Transformers CLI.
+Transformers CLI output helpers.
 
-Builds on the ``huggingface_hub`` output framework (``Output`` singleton,
-``is_agent()``, ``OutputFormatWithAuto``). Mode is resolved once at CLI
-startup via the top-level ``--format`` option (see ``cli/transformers.py``).
+Re-exports the shared ``huggingface_hub`` output singleton and adds two
+small helpers used by the agentic CLI:
+
+- ``answer(value, key="answer")`` — single-value result: bare text for humans
+  (so ``transformers vqa ...`` prints the answer, not ``answer: ...``), structured
+  dict in every other mode so agents keep the key.
+- ``progress(message)`` — stderr status line in human mode, suppressed otherwise.
+
+Commands use ``out.table`` / ``out.result`` / ``out.text`` / ``out.dict``
+directly for everything else — see ``huggingface_hub.cli._output``.
 """
 
-import json
 import sys
-from typing import Any
 
-from huggingface_hub.cli._output import Output, OutputFormatWithAuto
+from huggingface_hub.cli._output import OutputFormatWithAuto, out
 
 
-class TransformersOutput(Output):
-    """Transformers-specific output sink.
+def answer(value: str, key: str = "answer") -> None:
+    """Emit a single textual result.
 
-    Adds two methods on top of ``huggingface_hub.Output``:
-    - ``emit(result, task)`` — structured result, wrapped in a ``{"task", "result"}``
-      envelope for agent/json consumers, or flattened to a readable form for humans.
-    - ``progress(message)`` — status line to stderr in human mode, suppressed otherwise.
+    In human and quiet modes, prints ``value`` as a bare string. In agent/json
+    modes, prints ``{key: value}`` so programmatic consumers keep the field name.
     """
+    if out.mode in (OutputFormatWithAuto.human, OutputFormatWithAuto.quiet):
+        out.text(value)
+    else:
+        out.dict({key: value})
 
-    def emit(self, result: Any, task: str) -> None:
-        """Print a task result, shaped for the current output mode."""
-        match self.mode:
-            case OutputFormatWithAuto.json:
-                print(json.dumps({"task": task, "result": result}, default=str))
-            case OutputFormatWithAuto.agent:
-                print(json.dumps({"task": task, "result": result}, indent=2, default=str))
-            case OutputFormatWithAuto.quiet:
-                print(_quiet(result))
-            case _:
-                print(_human(result))
 
-    def progress(self, message: str) -> None:
-        """Print a progress line to stderr. Suppressed in agent/json modes."""
-        if self.mode in (OutputFormatWithAuto.agent, OutputFormatWithAuto.json, OutputFormatWithAuto.quiet):
-            return
+def progress(message: str) -> None:
+    """Print a progress line to stderr. Suppressed in agent/json/quiet modes."""
+    if out.mode == OutputFormatWithAuto.human:
         print(f"... {message}", file=sys.stderr)
-
-
-def _human(result: Any) -> str:
-    """Readable multi-line rendering for terminal users."""
-    if isinstance(result, dict):
-        # Single-key dicts (e.g. {"answer": "..."}) render as the bare value —
-        # commands like vqa/caption/ocr/transcribe are read, not parsed.
-        if len(result) == 1:
-            return str(next(iter(result.values())))
-        return "\n".join(f"{k}: {v}" for k, v in result.items())
-    if isinstance(result, list):
-        lines = []
-        for item in result:
-            if isinstance(item, dict):
-                lines.append("  ".join(f"{k}: {v}" for k, v in item.items()))
-            else:
-                lines.append(str(item))
-        return "\n".join(lines)
-    return str(result)
-
-
-def _quiet(result: Any) -> str:
-    """Single-value rendering for shell pipelines."""
-    if isinstance(result, dict):
-        return str(next(iter(result.values()), ""))
-    if isinstance(result, list) and result:
-        first = result[0]
-        if isinstance(first, dict):
-            return str(next(iter(first.values()), ""))
-        return str(first)
-    return str(result)
-
-
-out = TransformersOutput()

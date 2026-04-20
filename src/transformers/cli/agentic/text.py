@@ -22,7 +22,7 @@ from typing import Annotated
 
 import typer
 
-from transformers.agent.output import out
+from transformers.agent.output import answer, out
 
 from ._common import (
     DeviceOpt,
@@ -142,35 +142,36 @@ def classify(
             scores.append(logits.softmax(dim=-1)[0, entail_idx].item())
 
         total = sum(scores)
-        result = {
-            "sequence": input_text,
-            "labels": candidate_labels,
-            "scores": [s / total for s in scores],
-        }
-    else:
-        model_id = model or "distilbert/distilbert-base-uncased-finetuned-sst-2-english"
-        loaded_model, tokenizer = _load_pretrained(
-            AutoModelForSequenceClassification,
-            AutoTokenizer,
-            model_id,
-            device,
-            dtype,
-            trust_remote_code,
-            token,
-            revision,
+        out.dict(
+            {
+                "sequence": input_text,
+                "labels": candidate_labels,
+                "scores": [s / total for s in scores],
+            }
         )
+        return
 
-        inputs = tokenizer(input_text, return_tensors="pt", truncation=True)
-        if hasattr(loaded_model, "device"):
-            inputs = inputs.to(loaded_model.device)
-        with torch.no_grad():
-            logits = loaded_model(**inputs).logits
+    model_id = model or "distilbert/distilbert-base-uncased-finetuned-sst-2-english"
+    loaded_model, tokenizer = _load_pretrained(
+        AutoModelForSequenceClassification,
+        AutoTokenizer,
+        model_id,
+        device,
+        dtype,
+        trust_remote_code,
+        token,
+        revision,
+    )
 
-        probs = logits.softmax(dim=-1)[0]
-        top_idx = probs.argmax().item()
-        result = [{"label": loaded_model.config.id2label[top_idx], "score": probs[top_idx].item()}]
+    inputs = tokenizer(input_text, return_tensors="pt", truncation=True)
+    if hasattr(loaded_model, "device"):
+        inputs = inputs.to(loaded_model.device)
+    with torch.no_grad():
+        logits = loaded_model(**inputs).logits
 
-    out.emit(result, task="classify")
+    probs = logits.softmax(dim=-1)[0]
+    top_idx = probs.argmax().item()
+    out.table([{"label": loaded_model.config.id2label[top_idx], "score": probs[top_idx].item()}])
 
 
 def ner(
@@ -233,7 +234,7 @@ def ner(
     if aggregation_strategy == "simple":
         entities = _aggregate_entities(entities, input_text)
 
-    out.emit(entities, task="ner")
+    out.table(entities)
 
 
 def token_classify(
@@ -291,7 +292,7 @@ def token_classify(
             }
         )
 
-    out.emit(result, task="token-classify")
+    out.table(result)
 
 
 def qa(
@@ -338,13 +339,13 @@ def qa(
     answer_ids = inputs["input_ids"][0, start_idx : end_idx + 1]
     score = (outputs.start_logits[0, start_idx] + outputs.end_logits[0, end_idx]).item()
 
-    result = {
-        "answer": tokenizer.decode(answer_ids, skip_special_tokens=True),
-        "score": score,
-        "start": start_idx,
-        "end": end_idx,
-    }
-    out.emit(result, task="qa")
+    out.result(
+        "Extracted answer",
+        answer=tokenizer.decode(answer_ids, skip_special_tokens=True),
+        score=score,
+        start=start_idx,
+        end=end_idx,
+    )
 
 
 def table_qa(
@@ -414,13 +415,14 @@ def table_qa(
     else:
         answer = ", ".join(cells)
 
-    result = {
-        "answer": answer,
-        "coordinates": coordinates,
-        "cells": cells,
-        "aggregator": _AGG_OPS.get(agg_idx, "NONE"),
-    }
-    out.emit(result, task="table-qa")
+    out.dict(
+        {
+            "answer": answer,
+            "coordinates": coordinates,
+            "cells": cells,
+            "aggregator": _AGG_OPS.get(agg_idx, "NONE"),
+        }
+    )
 
 
 def summarize(
@@ -464,9 +466,7 @@ def summarize(
         gen_kwargs["min_length"] = min_length
 
     output_ids = loaded_model.generate(**inputs, **gen_kwargs)
-    summary = tokenizer.decode(output_ids[0], skip_special_tokens=True)
-    result = [{"summary_text": summary}]
-    out.emit(result, task="summarize")
+    answer(tokenizer.decode(output_ids[0], skip_special_tokens=True), key="summary_text")
 
 
 def translate(
@@ -508,9 +508,7 @@ def translate(
         gen_kwargs["max_length"] = max_length
 
     output_ids = loaded_model.generate(**inputs, **gen_kwargs)
-    translation = tokenizer.decode(output_ids[0], skip_special_tokens=True)
-    result = [{"translation_text": translation}]
-    out.emit(result, task="translate")
+    answer(tokenizer.decode(output_ids[0], skip_special_tokens=True), key="translation_text")
 
 
 def fill_mask(
@@ -569,4 +567,4 @@ def fill_mask(
             }
         )
 
-    out.emit(result, task="fill-mask")
+    out.table(result)

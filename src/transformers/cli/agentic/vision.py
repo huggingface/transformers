@@ -24,7 +24,7 @@ from typing import Annotated
 
 import typer
 
-from transformers.agent.output import out
+from transformers.agent.output import out, progress
 
 from ._common import (
     DeviceOpt,
@@ -120,7 +120,7 @@ def image_classify(
         ]
         result = sorted(scored, key=lambda x: x["score"], reverse=True)
 
-    out.emit(result, task="image-classify")
+    out.table(result)
 
 
 def detect(
@@ -224,7 +224,7 @@ def detect(
             }
         )
 
-    out.emit(result, task="detect")
+    out.table(result)
 
 
 def segment(
@@ -309,7 +309,10 @@ def segment(
             "iou_scores": outputs.iou_scores[0, 0].tolist(),
         }
 
-    out.emit(result, task="segment")
+    if isinstance(result, list):
+        out.table(result)
+    else:
+        out.dict(result)
 
 
 def depth(
@@ -372,10 +375,10 @@ def depth(
             depth_norm = depth_np * 0.0
         depth_img = Image.fromarray(depth_norm.astype("uint8"))
         depth_img.save(output)
-        out.progress(f"Depth map saved to {output}")
-        out.emit({"size": f"{depth_map.shape[0]}x{depth_map.shape[1]}", "output_path": output}, task="depth")
+        progress(f"Depth map saved to {output}")
+        out.result("Depth map saved", size=f"{depth_map.shape[0]}x{depth_map.shape[1]}", output_path=output)
     else:
-        out.emit({"size": f"{depth_map.shape[0]}x{depth_map.shape[1]}"}, task="depth")
+        out.result("Depth map computed", size=f"{depth_map.shape[0]}x{depth_map.shape[1]}")
 
 
 def keypoints(
@@ -422,7 +425,7 @@ def keypoints(
     pipe = pipeline("keypoint-matching", **pipe_kwargs)
     result = pipe(img1, img2)
 
-    out.emit(result, task="keypoints")
+    out.dict(result if isinstance(result, dict) else {"matches": result})
 
 
 def video_classify(
@@ -472,4 +475,4 @@ def video_classify(
         for val, idx in zip(top_values, top_indices)
     ]
 
-    out.emit(result, task="video-classify")
+    out.table(result)
