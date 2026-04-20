@@ -22,9 +22,11 @@ from .core_model_loading import (
     Concatenate,
     ErnieFuseAndSplitTextVisionExperts,
     MergeModulelist,
+    PrefixChange,
     Transpose,
     WeightConverter,
     WeightRenaming,
+    WeightTransform,
 )
 
 
@@ -75,6 +77,20 @@ _MODEL_TO_CONVERSION_PATTERN = {
     "pp_chart2table": "llava",
     "gemma3n_text": "qwen3_5_text",
     "qwen3_5_moe_text": "qwen3_5_text",
+    "altclip_vision_model": "clip_vision_model",
+    "chinese_clip_vision_model": "clip_vision_model",
+    "clipseg_vision_model": "clip_vision_model",
+    "metaclip_2_vision_model": "clip_vision_model",
+    "mlcd_vision": "clip_vision_model",
+    "mlcd": "clip_vision_model",
+    "siglip_vision_model": "clip_vision_model",
+    "siglip2_vision_model": "clip_vision_model",
+    "xclip_vision_model": "clip_vision_model",
+    "clipseg_text_model": "clip_text_model",
+    "metaclip_2_text_model": "clip_text_model",
+    "siglip_text_model": "clip_text_model",
+    "siglip2_text_model": "clip_text_model",
+    "xclip_text_model": "clip_text_model",
 }
 
 
@@ -96,6 +112,8 @@ def _build_checkpoint_conversion_mapping():
             WeightRenaming(source_patterns=r"^multi_modal_projector", target_patterns="model.multi_modal_projector"),
             WeightRenaming(source_patterns=r"^image_newline", target_patterns="model.image_newline"),
         ],
+        "clip_vision_model": [PrefixChange(prefix_to_remove="vision_model")],
+        "clip_text_model": [PrefixChange(prefix_to_remove="text_model")],
         "video_llava": [
             WeightRenaming(source_patterns=r"^language_model.model", target_patterns="model.language_model"),
             WeightRenaming(source_patterns=r"^language_model.lm_head", target_patterns="lm_head"),
@@ -599,17 +617,17 @@ def _build_checkpoint_conversion_mapping():
         WeightRenaming(r"transf_decoder\._decoder\.final_layer_norm", r"decoder.norm"),
         WeightRenaming(r"transf_decoder\._decoder\.layers", r"decoder.layers"),
         WeightRenaming(r"encoder_decoder_proj\.", r"decoder.proj."),
-        WeightRenaming(r"encoder\.(.+)\.self_attn\.linear_q", r"encoder.(.+).self_attn.q_proj"),
-        WeightRenaming(r"encoder\.(.+)\.self_attn\.linear_k", r"encoder.(.+).self_attn.k_proj"),
-        WeightRenaming(r"encoder\.(.+)\.self_attn\.linear_v", r"encoder.(.+).self_attn.v_proj"),
-        WeightRenaming(r"encoder\.(.+)\.self_attn\.linear_out", r"encoder.(.+).self_attn.o_proj"),
-        WeightRenaming(r"encoder\.(.+)\.self_attn\.linear_pos", r"encoder.(.+).self_attn.relative_k_proj"),
-        WeightRenaming(r"encoder\.(.+)\.self_attn\.pos_bias_u", r"encoder.(.+).self_attn.bias_u"),
-        WeightRenaming(r"encoder\.(.+)\.self_attn\.pos_bias_v", r"encoder.(.+).self_attn.bias_v"),
-        WeightRenaming(r"\.first_sub_layer\.query_net", r".self_attn.q_proj"),
-        WeightRenaming(r"\.first_sub_layer\.key_net", r".self_attn.k_proj"),
-        WeightRenaming(r"\.first_sub_layer\.value_net", r".self_attn.v_proj"),
-        WeightRenaming(r"\.first_sub_layer\.out_projection", r".self_attn.o_proj"),
+        WeightRenaming(r"encoder\.(.+)\.self_attn\.linear_q", r"encoder.\1.self_attn.q_proj"),
+        WeightRenaming(r"encoder\.(.+)\.self_attn\.linear_k", r"encoder.\1.self_attn.k_proj"),
+        WeightRenaming(r"encoder\.(.+)\.self_attn\.linear_v", r"encoder.\1.self_attn.v_proj"),
+        WeightRenaming(r"encoder\.(.+)\.self_attn\.linear_out", r"encoder.\1.self_attn.o_proj"),
+        WeightRenaming(r"encoder\.(.+)\.self_attn\.linear_pos", r"encoder.\1.self_attn.relative_k_proj"),
+        WeightRenaming(r"encoder\.(.+)\.self_attn\.pos_bias_u", r"encoder.\1.self_attn.bias_u"),
+        WeightRenaming(r"encoder\.(.+)\.self_attn\.pos_bias_v", r"encoder.\1.self_attn.bias_v"),
+        WeightRenaming(r"decoder\.(.+)\.first_sub_layer\.query_net", r"decoder.\1.self_attn.q_proj"),
+        WeightRenaming(r"decoder\.(.+)\.first_sub_layer\.key_net", r"decoder.\1.self_attn.k_proj"),
+        WeightRenaming(r"decoder\.(.+)\.first_sub_layer\.value_net", r"decoder.\1.self_attn.v_proj"),
+        WeightRenaming(r"decoder\.(.+)\.first_sub_layer\.out_projection", r"decoder.\1.self_attn.o_proj"),
         WeightRenaming(r"\.second_sub_layer\.query_net", r".encoder_attn.q_proj"),
         WeightRenaming(r"\.second_sub_layer\.key_net", r".encoder_attn.k_proj"),
         WeightRenaming(r"\.second_sub_layer\.value_net", r".encoder_attn.v_proj"),
@@ -654,10 +672,16 @@ def register_checkpoint_conversion_mapping(
     _checkpoint_conversion_mapping_cache[model_type] = mapping
 
 
-def extract_weight_conversions_for_model(model: PreTrainedModel) -> list[WeightConverter | WeightRenaming] | None:
+def extract_weight_conversions_for_model(model: PreTrainedModel, model_prefix: str) -> list[WeightTransform] | None:
     model_type = getattr(model.config, "model_type", None)
     if model_type is not None:
         model_specific_conversions = get_checkpoint_conversion_mapping(model_type)
+        # In this case, add the prefix to `PrefixChange` instances, in order to know where to add/remove the prefix
+        if model_specific_conversions is not None and model_prefix != "":
+            for i, conversion in enumerate(model_specific_conversions):
+                # In this case, add the prefix, as otherwise we don't know where we need to re-add it exactly in the module name chain
+                if isinstance(conversion, PrefixChange):
+                    model_specific_conversions[i] = conversion.with_submodel_prefix(model_prefix)
         return model_specific_conversions
     return None
 
@@ -667,7 +691,7 @@ def get_model_conversion_mapping(
     key_mapping: dict[str, str] | None = None,
     hf_quantizer: HfQuantizer | None = None,
     add_legacy: bool = True,
-) -> list[WeightConverter | WeightRenaming]:
+) -> list[WeightTransform]:
     """
     For a given `model`, obtain the weight conversion mapping if any are registered either as a simple renaming
     `_checkpoint_conversion_mapping` class argument, or in the general WeightConverter mapping.
@@ -682,22 +706,13 @@ def get_model_conversion_mapping(
     if key_mapping is not None:
         weight_conversions = [WeightRenaming(source_patterns=k, target_patterns=v) for k, v in key_mapping.items()]
 
-    # Model have several `PreTrainedModel` within with the same model type
-    # For ex: XForConditionalGeneration -> XModel. We don't want to apply the same
-    # conversion pattern twice because of that
+    # Model have several `PreTrainedModel` within with the same model type, for example: XForConditionalGeneration -> XModel
+    # We don't want to apply the same conversion pattern twice because of that
     seen_model_types = set()
-    if (conversions := extract_weight_conversions_for_model(model)) is not None:
-        weight_conversions.extend(conversions)
-        seen_model_types.add(model.config.model_type)
-
     # Recurse over submodules and collect all conversions
-    for submodule in model.modules():
-        if (
-            submodule is not model
-            and isinstance(submodule, PreTrainedModel)
-            and submodule.config.model_type not in seen_model_types
-        ):
-            conversions = extract_weight_conversions_for_model(submodule)
+    for name, submodule in model.named_modules():
+        if isinstance(submodule, PreTrainedModel) and submodule.config.model_type not in seen_model_types:
+            conversions = extract_weight_conversions_for_model(submodule, name)
             if conversions is not None:
                 weight_conversions.extend(conversions)
                 seen_model_types.add(submodule.config.model_type)
