@@ -17,18 +17,17 @@ rendered properly in your Markdown viewer.
 
 # EXAONE 4.5
 
-## Overview
+## 개요
 
-[EXAONE 4.5](https://github.com/LG-AI-EXAONE/EXAONE-4.5) model is the first open-weight vision language model developed by LG AI Research.
-Integrating a dedicated visual encoder into the existing EXAONE 4.0 framework, we expand the model's capability toward multimodality.
-EXAONE 4.5 features 33 billion parameters in total, including 1.2 billion parameters from the vision encoder. 
-EXAONE 4.5 achieves competitive performance in general benchmark while outperforming SOTA models of similar size in document understanding and Korean contextual reasoning, inheriting powerful language capabilities from our previous language models.
+[EXAONE 4.5](https://github.com/LG-AI-EXAONE/EXAONE-4.5) 모델은 LG AI연구원에서 공개한 최초의 오픈 웨이트(open-weight) 비전-자연어 모델(vision-language model)입니다. 
+전용 비전 인코더를 기존 개발된 EXAONE 4.0 프레임워크에 통합하여 모델의 능력을 비전과 자연어를 고려한 멀티모달리티로 확장했습니다. EXAONE 4.5는 1.2B 크기의 비전 인코더를 포함해 총 33B 크기의 모델로 구성됩니다. 
+EXAONE 4.5는 이전 EXAONE 모델군으로부터 이어져 온 강력한 언어 처리 능력 덕분에 범용 벤치마크에서 경쟁력 있는 성능을 달성함과 동시에, 동등 규모의 최신 SOTA 모델을 능가하는 문서 이해 능력과 한국 문화적 추론 능력을 갖추고 있습니다.
 
-For more details, please refer to the [technical report](http://arxiv.org/abs/2604.08644), [blog](https://www.lgresearch.ai/blog/view?seq=641) and [GitHub](https://github.com/LG-AI-EXAONE/EXAONE-4.5).
+더 자세한 정보는 [기술 보고서](http://arxiv.org/abs/2604.08644)나 [블로그](https://www.lgresearch.ai/blog/view?seq=641), 그리고 [공식 GitHub](https://github.com/LG-AI-EXAONE/EXAONE-4.5) 페이지를 참고해주시길 바랍니다.
 
-All model weights including quantized version are available at [Huggingface Collections](https://huggingface.co/collections/LGAI-EXAONE/exaone-45).
+양자화된 버전을 포함한 공개된 모든 체크포인트는 [Huggingface 콜렉션](https://huggingface.co/collections/LGAI-EXAONE/exaone-45)에서 확인할 수 있습니다.
 
-## Model Details
+## 모델 세부 정보
 
 ### Model Configuration of EXAONE 4.5
 
