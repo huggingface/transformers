@@ -1147,6 +1147,10 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
     # For top-level models, this attribute is currently defined in respective model code. For base models, this attribute comes
     # from `config.base_model_tp_plan` during `post_init`.
     _tp_plan: dict[str, str] = None
+    # Sequence-parallel plan used when `distributed_config.enable_sequence_parallel` is set. For top-level models, this
+    # attribute is defined on the head class (e.g. `*ForCausalLM`). For base models, it comes from
+    # `config.base_model_sp_plan` during `post_init`.
+    _sp_plan: dict[str, str] = None
     # Tensor parallel degree to which model is sharded to
     _tp_size = None
     # A pipeline parallel plan specifying the layers which may not be present on all ranks when PP is enabled. For top-level
@@ -1286,12 +1290,16 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         correctly in the case of composite models (that is, the top level model should know about those properties from its children).
         """
         # Attach the different parallel plans and tied weight keys to the top-most model, so that everything is
-        # easily available
-        self._tp_plan, self._ep_plan, self._pp_plan = {}, {}, {}
+        # easily available. Seed with the class-level plans (e.g. `*ForCausalLM._tp_plan = {"lm_head": ...}`)
+        # before the instance attribute shadows them — task-head plans live on the head class.
+        cls_tp_plan = getattr(self, "_tp_plan", None) or {}
+        cls_sp_plan = getattr(self, "_sp_plan", None) or {}
+        self._tp_plan, self._sp_plan, self._ep_plan, self._pp_plan = dict(cls_tp_plan), dict(cls_sp_plan), {}, {}
         # If current model is a base model, attach `base_model_tp_plan` and `base_model_pp_plan` from config
         if self.base_model is self:
             self._pp_plan = self.config.base_model_pp_plan.copy() if self.config.base_model_pp_plan is not None else {}
             self._tp_plan = self.config.base_model_tp_plan.copy() if self.config.base_model_tp_plan is not None else {}
+            self._sp_plan = self.config.base_model_sp_plan.copy() if self.config.base_model_sp_plan is not None else {}
             self._ep_plan = self.config.base_model_ep_plan.copy() if self.config.base_model_ep_plan is not None else {}
         # Current submodel should register its tied weights
         self.all_tied_weights_keys = self.get_expanded_tied_weights_keys(all_submodels=False)
@@ -1309,6 +1317,8 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                 self._ep_plan.update({f"{name}.{k}": v for k, v in plan.copy().items()})
             if plan := getattr(module, "_tp_plan", None):
                 self._tp_plan.update({f"{name}.{k}": v for k, v in plan.copy().items()})
+            if plan := getattr(module, "_sp_plan", None):
+                self._sp_plan.update({f"{name}.{k}": v for k, v in plan.copy().items()})
             if plan := getattr(module, "_pp_plan", None):
                 self._pp_plan.update({f"{name}.{k}": v for k, v in plan.copy().items()})
             # Always attach the keys of the children (if the children's config says to NOT tie, then it's empty)

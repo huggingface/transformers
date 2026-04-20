@@ -652,6 +652,7 @@ class LongcatFlashModel(LongcatFlashPreTrainedModel):
 class LongcatFlashForCausalLM(LongcatFlashPreTrainedModel, GenerationMixin):
     _tied_weights_keys = {"lm_head.weight": "model.embed_tokens.weight"}
     _tp_plan = {"lm_head": TPStyle("colwise", "allgather")}
+    _sp_plan = {"lm_head": TPStyle("colwise", "loss_parallel")}
     _pp_plan = {"lm_head": (["hidden_states"], ["logits"])}
     _keys_to_ignore_on_load_unexpected = [r"model\.mtp.*"]
 

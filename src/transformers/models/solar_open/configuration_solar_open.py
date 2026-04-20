@@ -49,24 +49,6 @@ class SolarOpenConfig(PreTrainedConfig):
             shard_plan={"gate_up_proj": "packed_colwise", "down_proj": "rowwise"},
         ),
     }
-    base_model_sp_plan = {
-        "embed_tokens": TPStyle("vocab", "reduce_scatter"),
-        "layers.*.input_layernorm": TPStyle("activation", "none"),
-        "layers.*.self_attn": TPStyle("module", "allgather", input_key="hidden_states"),
-        "layers.*.self_attn.q_proj": TPStyle("colwise", "none"),
-        "layers.*.self_attn.k_proj": TPStyle("colwise", "none"),
-        "layers.*.self_attn.v_proj": TPStyle("colwise", "none"),
-        "layers.*.self_attn.o_proj": TPStyle("rowwise", "reduce_scatter"),
-        "layers.*.post_attention_layernorm": TPStyle("activation", "none"),
-        "layers.*.mlp": TPStyle("module", "allgather_split"),
-        "layers.*.mlp.experts": TPStyle(
-            "moe_experts",
-            "allreduce",
-            shard_plan={"gate_up_proj": "packed_colwise", "down_proj": "rowwise"},
-        ),
-        "norm": TPStyle("activation", "none"),
-        "lm_head": TPStyle("colwise", "loss_parallel"),
-    }
     base_model_pp_plan = {
         "embed_tokens": (["input_ids"], ["inputs_embeds"]),
         "layers": (["hidden_states", "attention_mask"], ["hidden_states"]),
@@ -102,6 +84,23 @@ class SolarOpenConfig(PreTrainedConfig):
     eos_token_id: int | list[int] | None = None
     pad_token_id: int | None = None
     default_theta = 1_000_000.0
+    base_model_sp_plan = {
+        "embed_tokens": TPStyle("vocab", "reduce_scatter"),
+        "layers.*.input_layernorm": TPStyle("activation", "none"),
+        "layers.*.self_attn": TPStyle("module", "allgather", input_key="hidden_states"),
+        "layers.*.self_attn.q_proj": TPStyle("colwise", "none"),
+        "layers.*.self_attn.k_proj": TPStyle("colwise", "none"),
+        "layers.*.self_attn.v_proj": TPStyle("colwise", "none"),
+        "layers.*.self_attn.o_proj": TPStyle("rowwise", "reduce_scatter"),
+        "layers.*.post_attention_layernorm": TPStyle("activation", "none"),
+        "layers.*.mlp": TPStyle("module", "allgather_split"),
+        "layers.*.mlp.experts": TPStyle(
+            "moe_experts",
+            "allreduce",
+            shard_plan={"gate_up_proj": "packed_colwise", "down_proj": "rowwise"},
+        ),
+        "norm": TPStyle("activation", "none"),
+    }
     head_dim: int = 128
 
     def __post_init__(self, **kwargs):

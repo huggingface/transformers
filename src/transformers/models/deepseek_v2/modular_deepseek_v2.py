@@ -111,7 +111,6 @@ class DeepseekV2Config(LlamaConfig):
         "layers.*.mlp.up_proj": TPStyle("colwise", "none"),
         "layers.*.mlp.down_proj": TPStyle("rowwise", "reduce_scatter"),
         "norm": TPStyle("activation", "none"),
-        "lm_head": TPStyle("colwise", "loss_parallel"),
     }
 
     model_type = "deepseek_v2"

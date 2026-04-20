@@ -250,6 +250,7 @@ class Qwen3_5MoeForCausalLM(Qwen3NextForCausalLM):
 
 class Qwen3_5MoeForConditionalGeneration(Qwen3VLMoeForConditionalGeneration):
     _tp_plan = {"lm_head": TPStyle("colwise", "allgather")}
+    _sp_plan = {"lm_head": TPStyle("colwise", "loss_parallel")}
 
     def forward(self, **super_kwargs):
         r"""

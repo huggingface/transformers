@@ -71,7 +71,6 @@ class SolarOpenConfig(Glm4MoeConfig):
             shard_plan={"gate_up_proj": "packed_colwise", "down_proj": "rowwise"},
         ),
         "norm": TPStyle("activation", "none"),
-        "lm_head": TPStyle("colwise", "loss_parallel"),
     }
 
     vocab_size: int = 196608

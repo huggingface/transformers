@@ -60,7 +60,6 @@ class GPTNeoXConfig(PreTrainedConfig):
         "layers.*.mlp.dense_h_to_4h": TPStyle("colwise", "none"),
         "layers.*.mlp.dense_4h_to_h": TPStyle("rowwise", "reduce_scatter"),
         "norm": TPStyle("activation", "none"),
-        "lm_head": TPStyle("colwise", "loss_parallel"),
     }
     base_model_pp_plan = {
         "embed_in": (["input_ids"], ["inputs_embeds"]),

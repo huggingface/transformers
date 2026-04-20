@@ -202,7 +202,6 @@ class Phi4MultimodalConfig(PreTrainedConfig):
         "layers.*.mlp.gate_up_proj": TPStyle("colwise", "allgather"),  # fused gate/up needs full tensor for chunk
         "layers.*.mlp.down_proj": TPStyle("vocab", "reduce_scatter"),
         "norm": TPStyle("activation", "none"),
-        "lm_head": TPStyle("colwise", "loss_parallel"),
     }
     base_model_pp_plan = {
         "embed_tokens": (["input_ids"], ["inputs_embeds"]),

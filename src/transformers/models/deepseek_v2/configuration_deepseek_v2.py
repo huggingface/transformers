@@ -82,11 +82,13 @@ class DeepseekV2Config(PreTrainedConfig):
         "layers.*.post_attention_layernorm": TPStyle("activation", "none"),
         "layers.*.mlp": TPStyle("module", "allgather_split"),
         "layers.*.mlp.experts": TPStyle(
-            "moe_experts", "allreduce",
+            "moe_experts",
+            "allreduce",
             shard_plan={"gate_up_proj": "packed_colwise", "down_proj": "rowwise"},
         ),
         # Shared experts output must stay Replicate to match experts output
-        # (summed inside the MoE block, before outer allgather_split handles SP).
+        # (they're summed inside the MoE block, before the outer allgather_split
+        # handles the SP boundary).
         "layers.*.mlp.shared_experts.gate_proj": TPStyle("colwise", "none"),
         "layers.*.mlp.shared_experts.up_proj": TPStyle("colwise", "none"),
         "layers.*.mlp.shared_experts.down_proj": TPStyle("rowwise", "allreduce"),
@@ -94,7 +96,6 @@ class DeepseekV2Config(PreTrainedConfig):
         "layers.*.mlp.up_proj": TPStyle("colwise", "none"),
         "layers.*.mlp.down_proj": TPStyle("rowwise", "reduce_scatter"),
         "norm": TPStyle("activation", "none"),
-        "lm_head": TPStyle("colwise", "loss_parallel"),
     }
     base_model_pp_plan = {
         "embed_tokens": (["input_ids"], ["inputs_embeds"]),

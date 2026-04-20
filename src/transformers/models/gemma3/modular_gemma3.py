@@ -111,7 +111,6 @@ class Gemma3TextConfig(Gemma2Config, PreTrainedConfig):
         "layers.*.mlp.up_proj": TPStyle("colwise", "none"),
         "layers.*.mlp.down_proj": TPStyle("rowwise", "reduce_scatter"),
         "norm": TPStyle("activation", "none"),
-        "lm_head": TPStyle("colwise", "loss_parallel"),
     }
     default_theta = {"global": 1_000_000.0, "local": 10_000.0}
 

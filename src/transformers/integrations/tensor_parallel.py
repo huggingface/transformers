@@ -635,20 +635,15 @@ def apply_tensor_parallel(model, tp_mesh, tp_plan):
         return model
 
     if tp_plan == "auto":
-        enable_sp = getattr(getattr(model.config, "distributed_config", None), "enable_sequence_parallel", False)
-        sp_plan = getattr(model.config, "base_model_sp_plan", None)
-        if enable_sp and sp_plan is not None:
-            base_plan = sp_plan
-        else:
-            base_plan = model.config.base_model_tp_plan or {}
+        distributed_config = getattr(model.config, "distributed_config", None)
+        sp_requested = getattr(distributed_config, "enable_sequence_parallel", False)
+        sp_supported = getattr(model.config, "base_model_sp_plan", None) is not None
 
-        # Prefix base model keys (e.g. "layers.*.q_proj" → "model.layers.*.q_proj")
-        # Top-level keys like "lm_head" are kept as-is.
-        base_model_prefix = model.base_model_prefix
-        tp_plan = {}
-        for k, v in base_plan.items():
-            is_top_level = hasattr(model, k.split(".")[0])
-            tp_plan[k if is_top_level else f"{base_model_prefix}.{k}"] = v
+        enable_sp = sp_requested and sp_supported
+        if enable_sp:
+            tp_plan = dict(model._sp_plan or {})
+        else:
+            tp_plan = dict(model._tp_plan or {})
 
     parallelize_plan = {}
 

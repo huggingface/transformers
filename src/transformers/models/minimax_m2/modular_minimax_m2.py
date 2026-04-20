@@ -94,7 +94,6 @@ class MiniMaxM2Config(PreTrainedConfig):
             shard_plan={"gate_up_proj": "packed_colwise", "down_proj": "rowwise"},
         ),
         "norm": TPStyle("activation", "none"),
-        "lm_head": TPStyle("colwise", "loss_parallel"),
     }
     base_model_pp_plan = {
         "embed_tokens": (["input_ids"], ["inputs_embeds"]),

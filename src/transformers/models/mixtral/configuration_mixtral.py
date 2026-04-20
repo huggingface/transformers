@@ -79,7 +79,6 @@ class MixtralConfig(PreTrainedConfig):
             },
         ),
         "norm": TPStyle("activation", "none"),
-        "lm_head": TPStyle("colwise", "loss_parallel"),
     }
     base_model_pp_plan = {
         "embed_tokens": (["input_ids"], ["inputs_embeds"]),

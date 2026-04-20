@@ -66,7 +66,6 @@ class Starcoder2Config(PreTrainedConfig):
         "layers.*.mlp.c_fc": TPStyle("colwise", "none"),
         "layers.*.mlp.c_proj": TPStyle("rowwise", "reduce_scatter"),
         "norm": TPStyle("activation", "none"),
-        "lm_head": TPStyle("colwise", "loss_parallel"),
     }
     base_model_pp_plan = {
         "embed_tokens": (["input_ids"], ["inputs_embeds"]),
