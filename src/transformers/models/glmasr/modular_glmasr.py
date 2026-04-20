@@ -29,6 +29,7 @@ from ...utils.generic import can_return_tuple, merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
 from ..audioflamingo3.modeling_audioflamingo3 import (
     AudioFlamingo3ForConditionalGeneration,
+    AudioFlamingo3Model,
     AudioFlamingo3MultiModalProjector,
     AudioFlamingo3PreTrainedModel,
 )
@@ -351,12 +352,7 @@ class GlmAsrMultiModalProjector(AudioFlamingo3MultiModalProjector):
         self.linear_2 = nn.Linear(config.text_config.hidden_size * 2, config.text_config.hidden_size)
 
 
-@auto_docstring(
-    custom_intro="""
-    The GlmAsr model which consists of a fine-tuned Whisper encoder, a multi-modal projector and a Llama language model.
-    """
-)
-class GlmAsrForConditionalGeneration(AudioFlamingo3ForConditionalGeneration):
+class GlmAsrModel(AudioFlamingo3Model):
     @can_return_tuple
     @auto_docstring(
         custom_intro="Compute audio embeddings from log-mel input features using the audio encoder and multi-modal projector."
@@ -384,6 +380,18 @@ class GlmAsrForConditionalGeneration(AudioFlamingo3ForConditionalGeneration):
         audio_outputs.pooler_output = audio_embeds[valid_mask.to(audio_embeds.device)]
 
         return audio_outputs
+
+
+@auto_docstring(
+    custom_intro="""
+    The GlmAsr model which consists of a fine-tuned Whisper encoder, a multi-modal projector and a Llama language model.
+    """
+)
+class GlmAsrForConditionalGeneration(AudioFlamingo3ForConditionalGeneration):
+    def __init__(self, config):
+        super().__init__(config)
+        self.model = GlmAsrModel(config)
+        self.post_init()
 
     def forward(
         self,
@@ -440,4 +448,10 @@ class GlmAsrForConditionalGeneration(AudioFlamingo3ForConditionalGeneration):
         )
 
 
-__all__ = ["GlmAsrEncoder", "GlmAsrForConditionalGeneration", "GlmAsrProcessor", "GlmAsrPreTrainedModel"]
+__all__ = [
+    "GlmAsrEncoder",
+    "GlmAsrForConditionalGeneration",
+    "GlmAsrModel",
+    "GlmAsrProcessor",
+    "GlmAsrPreTrainedModel",
+]
