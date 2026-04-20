@@ -1,0 +1,66 @@
+services:
+  jaeger:
+    image: jaegertracing/all-in-one:latest
+    environment:
+      - COLLECTOR_OTLP_ENABLED=true
+    ports:
+      - "16687:16686"
+
+  pytest-trace-exporter:
+    image: python:3.12-slim
+    command:
+      - "python"
+      - "-u"
+      - "/app/pytest_trace_exporter.py"
+    environment:
+      - PYTEST_TRACE_EXPORTER_JAEGER_URL=http://jaeger:16686
+      - PYTEST_TRACE_EXPORTER_LIMIT=200
+      - PYTEST_TRACE_EXPORTER_LOOKBACK=1h
+      - PYTEST_TRACE_EXPORTER_PORT=8000
+      - PYTEST_RESOURCE_METRICS_FILE=/data/pytest-resource-metrics.jsonl
+      - PYTEST_TRACE_EXPORTER_SERVICE_NAME=transformers-pytest-demo
+    volumes:
+      - ./pytest_trace_exporter.py:/app/pytest_trace_exporter.py
+      - ./data:/data
+    depends_on:
+      - jaeger
+
+  prometheus:
+    image: prom/prometheus:latest
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml
+    depends_on:
+      - pytest-trace-exporter
+    ports:
+      - "9091:9090"
+
+  otelcol:
+    image: otel/opentelemetry-collector-contrib:latest
+    command:
+      - "--config=/etc/otelcol/config.yaml"
+    volumes:
+      - ./otelcol.yaml:/etc/otelcol/config.yaml
+    depends_on:
+      - jaeger
+    ports:
+      - "5317:4317"
+      - "5318:4318"
+
+  grafana:
+    image: grafana/grafana:latest
+    environment:
+      - GF_AUTH_ANONYMOUS_ENABLED=true
+      - GF_AUTH_ANONYMOUS_ORG_ROLE=Admin
+      - GF_AUTH_DISABLE_LOGIN_FORM=true
+      - GF_DASHBOARDS_DEFAULT_HOME_DASHBOARD_PATH=/etc/grafana/provisioning/dashboards/pytest-observability-dashboard.json
+    volumes:
+      - ./pytest-observability-dashboard.json:/etc/grafana/provisioning/dashboards/pytest-observability-dashboard.json
+      - ./grafana-dashboard.yaml:/etc/grafana/provisioning/dashboards/grafana-dashboard.yaml
+      - ./grafana-datasources.yaml:/etc/grafana/provisioning/datasources/datasources.yaml
+    depends_on:
+      - jaeger
+      - prometheus
+    ports:
+      - "3000:3000"

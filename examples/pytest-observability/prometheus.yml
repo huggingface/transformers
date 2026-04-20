@@ -1,0 +1,8 @@
+global:
+  scrape_interval: 5s
+
+scrape_configs:
+  - job_name: pytest_trace_exporter
+    static_configs:
+      - targets:
+          - pytest-trace-exporter:8000

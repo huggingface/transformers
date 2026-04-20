@@ -1,0 +1,429 @@
+{
+  "annotations": {
+    "list": [
+      {
+        "builtIn": 1,
+        "datasource": {
+          "type": "grafana",
+          "uid": "-- Grafana --"
+        },
+        "enable": true,
+        "hide": true,
+        "iconColor": "rgba(0, 211, 255, 1)",
+        "name": "Annotations & Alerts",
+        "target": {
+          "limit": 100,
+          "matchAny": false,
+          "tags": [],
+          "type": "dashboard"
+        },
+        "type": "dashboard"
+      }
+    ]
+  },
+  "editable": true,
+  "graphTooltip": 0,
+  "links": [
+    {
+      "targetBlank": true,
+      "title": "Grafana Explore",
+      "type": "link",
+      "url": "http://localhost:3000/explore?orgId=1"
+    },
+    {
+      "targetBlank": true,
+      "title": "Jaeger",
+      "type": "link",
+      "url": "http://localhost:16687"
+    }
+  ],
+  "panels": [
+    {
+      "gridPos": {
+        "h": 9,
+        "w": 12,
+        "x": 0,
+        "y": 0
+      },
+      "id": 1,
+      "options": {
+        "content": "## Main Flow\n\n1. Run pytest through `utils/configure_ci_otel.py`\n2. Copy the `trace_id` from the `OTEL TRACE START` or `OTEL TRACE END` log line\n3. Open Grafana Explore and select the `Jaeger` data source\n4. Use the `TraceID` query type to paste the trace ID directly\n\nUse Jaeger UI when you want the raw upstream interface, but Grafana is the intended main UI for trace lookup and navigation.",
+        "mode": "markdown"
+      },
+      "pluginVersion": "12.0.0",
+      "title": "Using The UI",
+      "type": "text"
+    },
+    {
+      "gridPos": {
+        "h": 9,
+        "w": 12,
+        "x": 12,
+        "y": 0
+      },
+      "id": 2,
+      "options": {
+        "content": "## Search Hints\n\nThe wrapper attaches CI and local metadata as resource attributes and Jaeger tags.\n\nUseful filters:\n\n- `service = transformers-pytest-demo`\n- `transformers.test.job = grafana_demo`\n- `transformers.test.job.id = ...`\n- `vcs.change.id = ...` in CI\n\nFor local runs, `deployment.environment=local` is also attached.",
+        "mode": "markdown"
+      },
+      "pluginVersion": "12.0.0",
+      "title": "Search Filters",
+      "type": "text"
+    },
+    {
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 9
+      },
+      "id": 3,
+      "options": {
+        "content": "## Current Demo Settings\n\n- Collector endpoint: `http://localhost:5317`\n- Grafana: `http://localhost:3000`\n- Jaeger: `http://localhost:16687`\n- Recommended service name: `transformers-pytest-demo`\n- Recommended job name: `grafana_demo`\n\nThe slow-test table is now based on average duration across all fetched traces in the exporter lookback window.",
+        "mode": "markdown"
+      },
+      "pluginVersion": "12.0.0",
+      "title": "Demo Configuration",
+      "type": "text"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "custom": {
+            "align": "auto",
+            "cellOptions": {
+              "type": "auto"
+            },
+            "inspect": false
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green"
+              }
+            ]
+          },
+          "unit": "s"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 14,
+        "w": 24,
+        "x": 0,
+        "y": 25
+      },
+      "id": 4,
+      "options": {
+        "cellHeight": "sm",
+        "footer": {
+          "countRows": false,
+          "fields": "",
+          "reducer": [
+            "sum"
+          ],
+          "show": false
+        },
+        "showHeader": true
+      },
+      "pluginVersion": "12.0.0",
+      "targets": [
+        {
+          "editorMode": "code",
+          "expr": "sort_desc(pytest_test_average_duration_seconds{service_name=~\"$service\",test_job=~\"$job\"})",
+          "format": "table",
+          "instant": true,
+          "legendFormat": "__auto",
+          "range": false,
+          "refId": "A"
+        }
+      ],
+      "title": "Slowest Tests By Average Duration",
+      "transformations": [
+        {
+          "id": "organize",
+          "options": {
+                    "excludeByName": {
+                      "Time": true,
+                      "__name__": true,
+                      "instance": true,
+                      "job": true,
+                      "provider": true,
+                      "status_code": true,
+                      "test_nodeid": true
+                    },
+                    "indexByName": {
+                      "test_module": 0,
+                      "test_class": 1,
+                      "test_function": 2,
+                      "service_name": 3,
+                      "test_job": 4,
+                      "trace_id": 5,
+                      "Value": 6
+                    },
+                    "renameByName": {
+                      "Value": "Avg Duration (s)",
+                      "test_module": "Module",
+                      "test_class": "Class",
+                      "test_function": "Function",
+                      "service_name": "Service",
+                      "test_job": "Job",
+                      "trace_id": "Trace ID"
+                    }
+                  }
+        }
+      ],
+      "type": "table"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green"
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 4,
+        "x": 0,
+        "y": 17
+      },
+      "id": 5,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "percentChangeColorMode": "standard",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "showPercentChange": false,
+        "textMode": "value"
+      },
+      "pluginVersion": "12.0.0",
+      "targets": [
+        {
+          "editorMode": "code",
+          "expr": "pytest_trace_exporter_trace_count",
+          "instant": true,
+          "legendFormat": "__auto",
+          "range": false,
+          "refId": "A"
+        }
+      ],
+      "title": "Aggregated Traces",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green"
+              }
+            ]
+          },
+          "unit": "s"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 10,
+        "x": 4,
+        "y": 17
+      },
+      "id": 6,
+      "options": {
+        "displayMode": "gradient",
+        "orientation": "horizontal",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "showUnfilled": true
+      },
+      "pluginVersion": "12.0.0",
+      "targets": [
+        {
+          "editorMode": "code",
+          "expr": "sort_desc(topk(10, pytest_test_average_cpu_time_seconds{service_name=~\"$service\",test_job=~\"$job\"}))",
+          "instant": true,
+          "legendFormat": "{{test_module}}::{{test_function}}",
+          "range": false,
+          "refId": "A"
+        }
+      ],
+      "title": "Highest Avg CPU Time",
+      "type": "bargauge"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green"
+              }
+            ]
+          },
+          "unit": "decbytes"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 10,
+        "x": 14,
+        "y": 17
+      },
+      "id": 7,
+      "options": {
+        "displayMode": "gradient",
+        "orientation": "horizontal",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "showUnfilled": true
+      },
+      "pluginVersion": "12.0.0",
+      "targets": [
+        {
+          "editorMode": "code",
+          "expr": "sort_desc(topk(10, pytest_test_average_rss_peak_bytes{service_name=~\"$service\",test_job=~\"$job\"}))",
+          "instant": true,
+          "legendFormat": "{{test_module}}::{{test_function}}",
+          "range": false,
+          "refId": "A"
+        }
+      ],
+      "title": "Highest Avg Peak RSS",
+      "type": "bargauge"
+    }
+  ],
+  "schemaVersion": 41,
+  "tags": [
+    "pytest",
+    "observability",
+    "otel"
+  ],
+  "templating": {
+    "list": [
+      {
+        "allValue": ".*",
+        "current": {
+          "selected": true,
+          "text": "All",
+          "value": "$__all"
+        },
+        "datasource": {
+          "type": "prometheus",
+          "uid": "prometheus"
+        },
+        "definition": "label_values(pytest_test_average_duration_seconds, service_name)",
+        "includeAll": true,
+        "label": "Service",
+        "multi": false,
+        "name": "service",
+        "options": [],
+        "query": {
+          "qryType": 1,
+          "query": "label_values(pytest_test_average_duration_seconds, service_name)",
+          "refId": "Prometheus-service-Variable-Query"
+        },
+        "refresh": 1,
+        "sort": 1,
+        "type": "query"
+      },
+      {
+        "allValue": ".*",
+        "current": {
+          "selected": true,
+          "text": "All",
+          "value": "$__all"
+        },
+        "datasource": {
+          "type": "prometheus",
+          "uid": "prometheus"
+                },
+                "definition": "label_values(pytest_test_average_duration_seconds{service_name=~\"$service\"}, test_job)",
+                "includeAll": true,
+                "label": "Job",
+                "multi": false,
+        "name": "job",
+                "options": [],
+                "query": {
+                  "qryType": 1,
+                  "query": "label_values(pytest_test_average_duration_seconds{service_name=~\"$service\"}, test_job)",
+                  "refId": "Prometheus-job-Variable-Query"
+                },
+        "refresh": 1,
+        "sort": 1,
+        "type": "query"
+      }
+    ]
+  },
+  "time": {
+    "from": "now-1h",
+    "to": "now"
+  },
+  "timezone": "browser",
+  "title": "Pytest Observability",
+  "uid": "pytest-observability",
+  "version": 1
+}

@@ -38,7 +38,7 @@ jobs:
 
       - name: Reinstall transformers in edit mode (remove the one installed during docker image build)
         working-directory: /transformers
-        run: python3 -m pip uninstall -y transformers && python3 -m pip install -e .[flax]
+        run: python3 -m pip uninstall -y transformers && python3 -m pip install -e .[flax] && python3 -m pip install pytest-opentelemetry
 
       - name: GPU visibility
         working-directory: /transformers
@@ -67,7 +67,7 @@ jobs:
         working-directory: /transformers
         run: |
           cat doc_tests.txt
-          python3 -m pytest -v --make-reports doc_tests_gpu_${{ env.split_keys }} --doctest-modules $(cat doc_tests.txt) -sv --doctest-continue-on-failure --doctest-glob="*.md"
+          python3 utils/configure_ci_otel.py --job-name doc_tests_gpu_${{ env.split_keys }} -- python3 -m pytest -v --make-reports doc_tests_gpu_${{ env.split_keys }} --doctest-modules $(cat doc_tests.txt) -sv --doctest-continue-on-failure --doctest-glob="*.md"
 
       - name: Failure short reports
         if: ${{ failure() }}

@@ -163,6 +163,7 @@ _deps = [
     "opentelemetry-api",
     "opentelemetry-exporter-otlp",
     "opentelemetry-sdk",
+    "pytest-opentelemetry",
 ]
 
 # This is a lookup table with items like: {"tokenizers": "tokenizers==0.9.4", "packaging": "packaging"}, i.e.
@@ -211,6 +212,7 @@ if PYTHON_MINOR_VERSION < 14:
     extras["ja"] += deps_list("sudachipy", "sudachidict_core")
 # OpenTelemetry dependencies for metrics collection in continuous batching
 extras["open-telemetry"] = deps_list("opentelemetry-api", "opentelemetry-exporter-otlp", "opentelemetry-sdk")
+extras["test-observability"] = deps_list("pytest-opentelemetry")
 
 extras["testing"] = (
     deps_list(

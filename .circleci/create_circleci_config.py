@@ -127,6 +127,8 @@ class CircleCIJob:
         self.install_steps.append("uv pip install git+https://github.com/ydshieh/pytest.git@8.4.1-ydshieh")
         # Install pytest-random-order plugin for test randomization
         self.install_steps.append("uv pip install pytest-random-order")
+        # Install pytest-opentelemetry for CI test observability. Export stays opt-in per job command.
+        self.install_steps.append("uv pip install pytest-opentelemetry")
         if self.pytest_options is None:
             self.pytest_options = {}
         if isinstance(self.tests_to_run, str):
@@ -152,6 +154,7 @@ class CircleCIJob:
 
         # Do not run tests decorated by @is_flaky on pull requests
         env["RUN_FLAKY"] = os.environ.get("CIRCLE_PULL_REQUEST", "") == ""
+        env["TRANSFORMERS_TEST_OTEL_JOB_NAME"] = self.job_name
         env.update(self.additional_env)
 
         job = {
@@ -241,7 +244,13 @@ class CircleCIJob:
             {
                 "run": {
                     "name": "Run tests",
-                    "command": f"({timeout_cmd} python3 -m pytest {marker_cmd} -n {self.pytest_num_workers} {junit_flags} {repeat_on_failure_flags} {' '.join(pytest_flags)} $(cat splitted_tests.txt) | tee tests_output.txt)",
+                    "command": self._build_pytest_command(
+                        timeout_cmd=timeout_cmd,
+                        marker_cmd=marker_cmd,
+                        junit_flags=junit_flags,
+                        repeat_on_failure_flags=repeat_on_failure_flags,
+                        pytest_flags=pytest_flags,
+                    ),
                 }
             },
             {
@@ -293,6 +302,18 @@ class CircleCIJob:
             job["parallelism"] = parallel
         job["steps"] = steps
         return job
+
+    def _build_pytest_command(
+        self,
+        *,
+        timeout_cmd: str,
+        marker_cmd: str,
+        junit_flags: str,
+        repeat_on_failure_flags: str,
+        pytest_flags: list[str],
+    ) -> str:
+        pytest_flags_str = " ".join(pytest_flags)
+        return f"""({timeout_cmd} python3 utils/configure_ci_otel.py --job-name "$TRANSFORMERS_TEST_OTEL_JOB_NAME" -- python3 -m pytest {marker_cmd} -n {self.pytest_num_workers} {junit_flags} {repeat_on_failure_flags} {pytest_flags_str} $(cat splitted_tests.txt) | tee tests_output.txt)"""
 
     @property
     def job_name(self):
