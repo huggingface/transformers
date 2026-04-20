@@ -29,11 +29,12 @@ from collections import OrderedDict, UserDict
 from collections.abc import Callable, Collection, Mapping, Sequence, Sized
 from dataclasses import dataclass
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, NamedTuple, Union
+from typing import TYPE_CHECKING, Any, Generic, NamedTuple, Union, overload
 
 import numpy as np
 from huggingface_hub import create_repo, is_offline_mode, list_repo_files
 from packaging import version
+from typing_extensions import TypeVar
 
 from . import __version__
 from .dynamic_module_utils import custom_object_save
@@ -62,7 +63,6 @@ from .utils import (
 )
 from .utils.chat_parsing_utils import recursive_parse
 from .utils.chat_template_utils import render_jinja_template
-from .utils.import_utils import PROTOBUF_IMPORT_ERROR
 
 
 if TYPE_CHECKING:
@@ -75,8 +75,7 @@ def import_protobuf_decode_error(error_message=""):
         from google.protobuf.message import DecodeError
 
         return DecodeError
-    else:
-        raise ImportError(PROTOBUF_IMPORT_ERROR.format(error_message))
+    return ()
 
 
 def flatten(arr: list):
@@ -188,7 +187,10 @@ class TokenSpan(NamedTuple):
     end: int
 
 
-class BatchEncoding(UserDict):
+_V = TypeVar("_V", default=Any)
+
+
+class BatchEncoding(UserDict, Generic[_V]):
     """
     Holds the output of the [`~tokenization_utils_base.PreTrainedTokenizerBase.__call__`],
     [`~tokenization_utils_base.PreTrainedTokenizerBase.encode_plus`] and
@@ -248,7 +250,16 @@ class BatchEncoding(UserDict):
         """
         return self._n_sequences
 
-    def __getitem__(self, item: int | str) -> Any | EncodingFast:
+    @overload
+    def __getitem__(self, item: str) -> _V: ...
+
+    @overload
+    def __getitem__(self, item: int) -> EncodingFast: ...
+
+    @overload
+    def __getitem__(self, item: slice) -> dict[str, _V]: ...
+
+    def __getitem__(self, item: int | str | slice) -> _V | EncodingFast | dict[str, _V]:
         """
         If the key is a string, returns the value of the dict associated to `key` ('input_ids', 'attention_mask',
         etc.).
@@ -753,7 +764,7 @@ class BatchEncoding(UserDict):
 
         return self
 
-    def to(self, device: str | torch.device, *, non_blocking: bool = False) -> BatchEncoding:
+    def to(self, device: str | torch.device, *, non_blocking: bool = False) -> BatchEncoding[torch.Tensor]:
         """
         Send all values to device by calling `v.to(device, non_blocking=non_blocking)` (PyTorch only).
 
@@ -1277,7 +1288,9 @@ class PreTrainedTokenizerBase(PushToHubMixin):
 
         # Named special tokens (bos_token, eos_token, etc.)
         if key_without_id in self.SPECIAL_TOKENS_ATTRIBUTES:
-            token_value = self._special_tokens_map.get(key_without_id)
+            # Use __dict__.get to avoid recursive __getattr__ when _special_tokens_map
+            # is not yet initialized (e.g. during fast tokenizer __init__)
+            token_value = self.__dict__.get("_special_tokens_map", {}).get(key_without_id)
             if token_value is None:
                 if self.verbose:
                     logger.error(f"Using {key}, but it is not set yet.")
@@ -1286,12 +1299,18 @@ class PreTrainedTokenizerBase(PushToHubMixin):
 
         # Extra special tokens
         if key_without_id == "extra_special_tokens":
-            tokens = [str(tok) for tok in self._extra_special_tokens]
+            tokens = [str(tok) for tok in self.__dict__.get("_extra_special_tokens", [])]
             return self.convert_tokens_to_ids(tokens) if key != key_without_id else tokens
 
         if key not in self.__dict__:
+            # Also check the class hierarchy (handles class-level defaults, e.g. in
+            # dynamically loaded remote code where __getattr__ may be called before
+            # the instance attribute is set)
+            for cls in type(self).__mro__:
+                if key in vars(cls):
+                    return vars(cls)[key]
             raise AttributeError(f"{self.__class__.__name__} has no attribute {key}")
-        return super().__getattr__(key)
+        return object.__getattribute__(self, key)
 
     def get_special_tokens_mask(
         self, token_ids_0: list[int], token_ids_1: list[int] | None = None, already_has_special_tokens: bool = False
@@ -1495,7 +1514,7 @@ class PreTrainedTokenizerBase(PushToHubMixin):
                 - A path to a *directory* containing vocabulary files required by the tokenizer, for instance saved
                   using the [`~tokenization_utils_base.PreTrainedTokenizerBase.save_pretrained`] method, e.g.,
                   `./my_model_directory/`.
-                - (**Deprecated**, not applicable to all derived classes) A path or url to a single saved vocabulary
+                - (**Deprecated**, not applicable to all derived classes) a path to a single saved vocabulary
                   file (if and only if the tokenizer only requires a single vocabulary file like Bert or XLNet), e.g.,
                   `./my_model_directory/vocab.txt`.
             cache_dir (`str` or `os.PathLike`, *optional*):
@@ -1669,9 +1688,14 @@ class PreTrainedTokenizerBase(PushToHubMixin):
         if "tokenizer_file" in vocab_files and not re.search(vocab_files["tokenizer_file"], "".join(remote_files)):
             # mistral tokenizer names are different, but we can still convert them if
             # mistral common is not there
-            other_pattern = r"tekken\.json|tokenizer\.model\.*"
+            other_pattern = r"tekken\.json|tokenizer\.model\.*|tiktoken\.model" + "|".join(
+                getattr(cls, "VOCAB_FILES_NAMES", {}).keys()
+            )
             if match := re.search(other_pattern, "\n".join(remote_files)):
-                vocab_files["vocab_file"] = match.group()
+                if "spm_file" in vocab_files:
+                    vocab_files["spm_file"] = match.group()
+                else:
+                    vocab_files["vocab_file"] = match.group()
 
         resolved_vocab_files = {}
         for file_id, file_path in vocab_files.items():
@@ -1815,6 +1839,7 @@ class PreTrainedTokenizerBase(PushToHubMixin):
 
         init_kwargs["name_or_path"] = pretrained_model_name_or_path
         init_kwargs["is_local"] = _is_local
+        init_kwargs["local_files_only"] = local_files_only
 
         #### Handle tokenizer serialization of added and special tokens
         added_tokens_decoder: dict[int, AddedToken] = {}
@@ -1998,7 +2023,7 @@ class PreTrainedTokenizerBase(PushToHubMixin):
 
         if push_to_hub:
             commit_message = kwargs.pop("commit_message", None)
-            repo_id = kwargs.pop("repo_id", save_directory.split(os.path.sep)[-1])
+            repo_id = kwargs.pop("repo_id", str(save_directory).split(os.path.sep)[-1])
             repo_id = create_repo(repo_id, exist_ok=True, **kwargs).repo_id
             files_timestamps = self._get_files_timestamps(save_directory)
 
@@ -3290,9 +3315,6 @@ class PreTrainedTokenizerBase(PushToHubMixin):
         Converts an output string created by generating text from a model into a parsed message dictionary.
         This method is intended for use with chat models, and will read the tokenizer's `response_schema` attribute to
         control parsing, although this can be overridden by passing a `response_schema` argument directly.
-
-        This method is currently **highly experimental** and the schema specification is likely to change in future!
-        We recommend not building production code on top of it just yet.
 
         Args:
             response (`str`):

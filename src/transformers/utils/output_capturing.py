@@ -63,9 +63,9 @@ class CompileableContextVar:
     that the access to the underlying variable is not thread-safe when compilation is triggered.
     """
 
-    def __init__(self, name, default):
-        self.context_var = ContextVar(name, default=default)
-        self.global_var = default
+    def __init__(self, name):
+        self.context_var = ContextVar(name, default=None)
+        self.global_var = None
         self.compiling = False
 
     def get(self):
@@ -73,12 +73,7 @@ class CompileableContextVar:
         if self.compiling:
             return self.global_var
         else:
-            # Set was maybe never called, so still check it here
-            if is_torchdynamo_compiling():
-                self.is_compiling = True
-                return self.global_var
-            else:
-                return self.context_var.get()
+            return self.context_var.get()
 
     def set(self, value):
         if is_torchdynamo_compiling():
@@ -97,10 +92,10 @@ class CompileableContextVar:
 
 
 # Thread/context-safe global variable
-_active_collector = CompileableContextVar("output_collector", default=None)
+_active_collector = CompileableContextVar("output_collector")
 
 
-def install_output_capuring_hook(module: nn.Module, key: str, index: int) -> None:
+def install_output_capturing_hook(module: nn.Module, key: str, index: int) -> None:
     """Install the forward hook needed to capture the output described by `key` and `index` in `module`."""
 
     def output_capturing_hook(module, args, output):
@@ -149,12 +144,12 @@ def recursively_install_hooks(
         ):
             if specs.layer_name is not None and specs.layer_name not in module_name:
                 continue
-            install_output_capuring_hook(parent_module, key, specs.index)
+            install_output_capturing_hook(parent_module, key, specs.index)
 
 
 def install_all_output_capturing_hooks(model: PreTrainedModel, prefix: str | None = None) -> None:
     """
-    Install the output recording hooks on all the modules in `model`. Tis will take care of correctly dispatching
+    Install the output recording hooks on all the modules in `model`. This will take care of correctly dispatching
     the `_can_record_outputs` property of each individual submodels in case of composite models.
     """
     # _can_record_outputs is None by default

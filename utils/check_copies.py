@@ -45,6 +45,15 @@ from collections import OrderedDict
 from transformers.utils import direct_transformers_import, logging
 
 
+CHECKER_CONFIG = {
+    "name": "copies",
+    "label": "Copied code consistency",
+    # Actual scope: all of src/transformers/**/*.py and tests/models/**/*.py via glob.glob().
+    "file_globs": ["src/transformers/**/*.py", "tests/models/**/*.py"],
+    "check_args": [],
+    "fix_args": ["--fix_and_overwrite"],
+}
+
 logger = logging.get_logger(__name__)
 
 

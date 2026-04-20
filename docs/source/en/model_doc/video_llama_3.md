@@ -204,9 +204,9 @@ model = VideoLlama3ForConditionalGeneration.from_pretrained(
 [[autodoc]] VideoLlama3VideoProcessor
     - preprocess
 
-## VideoLlama3ImageProcessorFast
+## VideoLlama3ImageProcessorPil
 
-[[autodoc]] VideoLlama3ImageProcessorFast
+[[autodoc]] VideoLlama3ImageProcessorPil
     - preprocess
 
 ## VideoLlama3Processor

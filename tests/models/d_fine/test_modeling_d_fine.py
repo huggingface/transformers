@@ -46,7 +46,7 @@ if is_torch_available():
 if is_vision_available():
     from PIL import Image
 
-from transformers import RTDetrImageProcessor
+from transformers import RTDetrImageProcessorPil
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor
@@ -692,7 +692,7 @@ def prepare_img():
 class DFineModelIntegrationTest(unittest.TestCase):
     @cached_property
     def default_image_processor(self):
-        return RTDetrImageProcessor.from_pretrained(CHECKPOINT) if is_vision_available() else None
+        return RTDetrImageProcessorPil.from_pretrained(CHECKPOINT) if is_vision_available() else None
 
     def test_inference_object_detection_head(self):
         model = DFineForObjectDetection.from_pretrained(CHECKPOINT).to(torch_device)

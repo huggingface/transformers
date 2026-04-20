@@ -173,6 +173,10 @@ class Sam3Processor(ProcessorMixin):
                 expected_format="[image level, box level]",
             )
 
+            # Auto-generate labels so padded None entries are masked out in the geometry encoder (#45059).
+            if processed_boxes is not None and processed_boxes_labels is None:
+                processed_boxes_labels = self._generate_default_box_labels(processed_boxes)
+
             # Get padding requirements for all inputs
             if processed_boxes is not None:
                 boxes_max_dims = self._get_nested_dimensions(processed_boxes)[:2]
@@ -229,6 +233,10 @@ class Sam3Processor(ProcessorMixin):
             coords = coords.reshape(-1, 4)
 
         return coords
+
+    def _generate_default_box_labels(self, processed_boxes):
+        """Generate default box labels: `point_pad_value` for None (padded) entries, 1 for real boxes."""
+        return [None if image_boxes is None else [1] * len(image_boxes) for image_boxes in processed_boxes]
 
     def _convert_to_nested_list(self, data, expected_depth, current_depth=0):
         """

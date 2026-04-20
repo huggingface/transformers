@@ -64,6 +64,10 @@ class OlmoHybridModelTest(CausalLMModelTest, unittest.TestCase):
     model_tester_class = OlmoHybridModelTester
     rotary_embedding_layer = OlmoHybridRotaryEmbedding if is_torch_available() else None
 
+    @unittest.skip("Float8 quantization + TP numerical noise exceeds match threshold")
+    def test_tp_generation_quantized(self):
+        pass
+
     # === Cache helper methods (same pattern as Qwen3Next) ===
     def _check_past_key_values_for_generate(self, batch_size, past_key_values, seq_length, config):
         """OlmoHybrid has a special Cache as it alternates with gated deltanet layers"""

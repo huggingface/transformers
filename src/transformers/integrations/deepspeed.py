@@ -491,7 +491,7 @@ def _load_state_dict_into_zero3_model(model_to_load, state_dict, load_config=Non
             for k in named_parameters:
                 if k in state_dict:
                     param = named_parameters[k]
-                    # crutial to not init the weight again
+                    # crucial to not init the weight again
                     param._is_hf_initialized = True
                     params_to_gather.append(param)
                     missing_keys.discard(k)
@@ -503,6 +503,15 @@ def _load_state_dict_into_zero3_model(model_to_load, state_dict, load_config=Non
                 with deepspeed.zero.GatheredParameters(params_to_gather, modifier_rank=0):
                     if torch.distributed.get_rank() == 0:
                         module._load_from_state_dict(*args)
+
+            # Buffers are not partitioned by ZeRO-3, load them directly
+            named_buffers = dict(module.named_buffers(prefix=prefix[:-1], recurse=False))
+            for k, buf in named_buffers.items():
+                if k in state_dict and buf is not None:
+                    missing_keys.discard(k)
+                    with torch.no_grad():
+                        buf.copy_(state_dict[k])
+                    buf._is_hf_initialized = True
 
         for name, child in module._modules.items():
             if child is not None:
@@ -703,7 +712,18 @@ def deepspeed_sp_compute_loss(accelerator, model, inputs, return_outputs, pc):
     outputs = model(**inputs)
     loss = outputs.loss
 
-    sp_group = accelerator.torch_device_mesh["sp"].get_group()
+    # Prefer DeepSpeed SP groups when using Ulysses; otherwise fall back to torch device mesh.
+    if pc.sp_backend == "deepspeed" and pc.sp_size > 1:
+        from deepspeed.utils import groups
+
+        sp_group = groups._get_sequence_parallel_group()
+    elif accelerator.torch_device_mesh is not None:
+        sp_group = accelerator.torch_device_mesh["sp"].get_group()
+    else:
+        raise ValueError(
+            "Sequence parallelism is enabled but no SP process group is available. "
+            "Ensure torch_device_mesh is initialized or sp_backend='deepspeed' with sp_size > 1."
+        )
     sp_world_size = pc.sp_size
     # differentiable weighted per-shard-loss aggregation across ranks
     losses_per_rank = torch.distributed.nn.functional.all_gather(loss, group=sp_group)
