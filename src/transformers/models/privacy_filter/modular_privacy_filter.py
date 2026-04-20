@@ -119,6 +119,7 @@ def _apply_rotary_emb(
     cos: torch.Tensor,
     sin: torch.Tensor,
 ) -> torch.Tensor:
+    # Interleaving layout instead of concatenated
     first_half, second_half = x[..., ::2], x[..., 1::2]
     first_ = first_half * cos - second_half * sin
     second_ = second_half * cos + first_half * sin
@@ -210,6 +211,7 @@ class PrivacyFilterAttention(GptOssAttention):
 
 class PrivacyFilterExperts(GptOssExperts):
     def _apply_gate(self, gate_up: torch.Tensor) -> torch.Tensor:
+        # Concatenated layout instead of interleaving
         gate, up = gate_up.chunk(2, dim=-1)
         gate = gate.clamp(min=None, max=self.limit)
         up = up.clamp(min=-self.limit, max=self.limit)
@@ -264,7 +266,7 @@ class PrivacyFilterTopKRouter(GptOssTopKRouter):
 
 
 class PrivacyFilterMLP(nn.Module):
-    """Similar to GPT Oss but with FP32 restriction (no megablocks kernel) + added experts scaling"""
+    """Similar to GPT Oss but with FP32 focus + added experts scaling"""
 
     def __init__(self, config):
         super().__init__()
@@ -277,6 +279,7 @@ class PrivacyFilterMLP(nn.Module):
         hidden_states = hidden_states.reshape(-1, hidden_dim)
         _, router_scores, router_indices = self.router(hidden_states)
         hidden_states = self.experts(hidden_states, router_indices, router_scores)
+        # Additional scaling
         hidden_states = hidden_states * self.num_experts
         hidden_states = hidden_states.reshape(batch_size, sequence_length, hidden_dim)
         return hidden_states, router_scores

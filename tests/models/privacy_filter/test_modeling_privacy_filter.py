@@ -13,7 +13,6 @@
 # limitations under the License.
 """Testing suite for the PyTorch PrivacyFilter model."""
 
-import tempfile
 import unittest
 
 from parameterized import parameterized
@@ -21,7 +20,7 @@ from parameterized import parameterized
 from transformers import (
     PrivacyFilterConfig,
     is_torch_available,
-    set_seed,
+    slow,
 )
 from transformers.models.privacy_filter.configuration_privacy_filter import PRIVACY_FILTER_NER_LABELS
 from transformers.testing_utils import require_torch, torch_device
@@ -38,8 +37,6 @@ from ...test_pipeline_mixin import PipelineTesterMixin
 
 
 if is_torch_available():
-    import torch
-
     from transformers import (
         PrivacyFilterForTokenClassification,
         PrivacyFilterModel,
@@ -198,43 +195,10 @@ class PrivacyFilterModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Tes
             self.skipTest("Bf16 may cause biggers fluctuations when used in combination with float casting")
         _test_eager_matches_batched_and_grouped_inference(self, name, dtype)
 
-    def test_tiny_random_token_classification_logits(self):
-        set_seed(42)
-        config = PrivacyFilterConfig(
-            vocab_size=32,
-            hidden_size=16,
-            intermediate_size=8,
-            num_hidden_layers=1,
-            num_attention_heads=2,
-            num_key_value_heads=1,
-            head_dim=8,
-            num_local_experts=4,
-            num_experts_per_tok=2,
-            sliding_window=1,
-            max_position_embeddings=16,
-            num_labels=5,
-            pad_token_id=31,
-        )
-        with tempfile.TemporaryDirectory() as tmpdirname:
-            model = PrivacyFilterForTokenClassification(config).to(torch_device)
-            model.save_pretrained(tmpdirname)
-            # NOTE: fp32 used to check for differences
-            model = PrivacyFilterForTokenClassification.from_pretrained(
-                tmpdirname, dtype=torch.float32, experts_implementation="eager"
-            ).to(torch_device)
 
-            input_ids = torch.tensor([[1, 2, 3, 4]], device=torch_device)
-            attention_mask = torch.ones_like(input_ids)
-            with torch.no_grad():
-                _ = model(input_ids, attention_mask=attention_mask).logits
-
-            # FIXME: changed a lot here so to recheck with original model instead
-            """self.assertEqual(logits.shape, (1, 4, 5))
-            expected_slice = torch.tensor(
-                [
-                    [0.09870907, -0.02894341, -0.00059298],
-                    [0.02090938, 0.09710200, 0.05788925],
-                ],
-                device=torch_device,
-            )
-            torch.testing.assert_close(logits[0, :2, :3], expected_slice, rtol=1e-4, atol=1e-4)"""
+@slow
+@require_torch
+@unittest.skip(reason="Waiting for official release and ckpts for now")
+class PrivacyModelIntegrationTest(unittest.TestCase):
+    def test_inference_no_head_absolute_embedding(self):
+        pass
