@@ -55,7 +55,8 @@ class OffloadingManager:
 
         # Compute the size of the CPU swap pool in blocks
         self._num_cpu_blocks = self._compute_num_cpu_blocks(cpu_offload_space_gib, safety_threshold)
-        if self._num_cpu_blocks == 0 and cpu_offload_space_gib > 0:
+        offloading_enabled = cpu_offload_space_gib is not None and cpu_offload_space_gib > 0
+        if self._num_cpu_blocks == 0 and offloading_enabled:
             logger.warning(
                 f"cpu_offload_space={cpu_offload_space_gib:.1f} GiB is too small for even one block. No CPU offloading."
             )
@@ -201,6 +202,7 @@ class OffloadingManager:
             state = future_state.state
             if not state.is_cpu_offloaded:
                 continue
+            # TODO: if the H2D copy below raises, already-popped entries leak (never returned to _free_cpu_blocks)
             # Accumulate CPU indices for this request
             cpu_indices = self._request_id_to_cpu_blocks.pop(state.request_id)
             group_counts = self._request_id_to_group_block_counts.pop(state.request_id)
@@ -213,8 +215,8 @@ class OffloadingManager:
                 all_gpu_indices.extend(gpu_blocks[:n])
                 max_allocated_blocks = max(max_allocated_blocks, n)
             # Restore the state to non-offloaded state
-            state._is_cpu_offloaded = False
-            state.allocated_blocks = max_allocated_blocks
+            state.is_cpu_offloaded = False
+            state.allocated_blocks = max_allocated_blocks  # ensures re-allocation is accounted for
             # If prefix sharing is on, these freshly allocated blocks will be deduplicated at the next update
             if cache.allow_block_sharing:
                 future_state.complete_blocks += state.position_offset // cache.block_size
@@ -233,9 +235,9 @@ class OffloadingManager:
         maybe_stream = torch.cuda.stream(self._compute_stream) if self._compute_stream is not None else nullcontext()
         with maybe_stream:
             for cpu_k, gpu_k in zip(self._cpu_key_cache, cache.key_cache):
-                gpu_k.view(*self._gpu_cache_block_shape)[gpu_ids] = cpu_k[cpu_ids].to(cache.device)
+                gpu_k.view(*self._gpu_cache_block_shape)[gpu_ids].copy_(cpu_k[cpu_ids])
             for cpu_v, gpu_v in zip(self._cpu_value_cache, cache.value_cache):
-                gpu_v.view(*self._gpu_cache_block_shape)[gpu_ids] = cpu_v[cpu_ids].to(cache.device)
+                gpu_v.view(*self._gpu_cache_block_shape)[gpu_ids].copy_(cpu_v[cpu_ids])
         self._free_cpu_blocks.update(all_cpu_indices)
 
     # ------------------------------------------------------------------
@@ -246,7 +248,7 @@ class OffloadingManager:
         """Free CPU blocks for a single request (e.g., on cancellation)."""
         if state.is_cpu_offloaded:
             self._return_cpu_blocks(state.request_id)
-            state._is_cpu_offloaded = False
+            state.is_cpu_offloaded = False
 
     def free_all_waiting_cpu_caches(self) -> None:
         """Free all CPU-offloaded caches in the waiting queue (e.g., on fail_all or reset)."""
@@ -291,15 +293,16 @@ class OffloadingManager:
             gpu_ids = torch.tensor(gpu_indices, device=self.cache.device, dtype=torch.int32)
             # Keys
             for cpu_key_cache, gpu_key_cache in zip(self._cpu_key_cache, self.cache.key_cache):
-                cpu_key_cache[cpu_ids] = gpu_key_cache.view(*self._gpu_cache_block_shape)[gpu_ids].to("cpu")
+                cpu_key_cache[cpu_ids].copy(gpu_key_cache.view(*self._gpu_cache_block_shape)[gpu_ids])
             # Values
             for cpu_value_cache, gpu_value_cache in zip(self._cpu_value_cache, self.cache.value_cache):
-                cpu_value_cache[cpu_ids] = gpu_value_cache.view(*self._gpu_cache_block_shape)[gpu_ids].to("cpu")
+                cpu_value_cache[cpu_ids].copy_(gpu_value_cache.view(*self._gpu_cache_block_shape)[gpu_ids])
+            # TODO: add asynchronous version of this
 
         # No explicit sync needed: finish_request is logical, and the next forward pass serializes on the same stream.
         self._request_id_to_cpu_blocks[request_id] = cpu_indices
         self._request_id_to_group_block_counts[request_id] = group_block_counts
-        state._is_cpu_offloaded = True
+        state.is_cpu_offloaded = True
         return True
 
     def _return_cpu_blocks(self, request_id: str) -> tuple[list[int], list[int]]:

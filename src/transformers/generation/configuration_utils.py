@@ -1591,10 +1591,10 @@ class ContinuousBatchingConfig:
             Scheduler type to use.
         return_logprobs (`bool`, *optional*, defaults to `False`):
             Whether to return log probabilities along with the generated tokens.
-        cpu_offload_space (`float`, *optional*, defaults to 1.0):
+        cpu_offload_space (`float`, *optional*, defaults to 0.0):
             CPU swap space in GiB for KV cache offloading. A pre-allocated pinned CPU buffer of this size is
             created at initialization. When the GPU cache is full, evicted requests' KV caches are copied here
-            instead of being discarded. 0 disables offloading. Default to 1.0 GiB.
+            instead of being discarded. 0 disables offloading (default).
         cpu_offload_space_safety_threshold (`float`, *optional*, defaults to 0.8):
             If `cpu_offload_space` exceeds this fraction of total system RAM, it is clamped to avoid host OOM.
             Set to 1.0 to disable the safety cap. Ignored when psutil is not available.
