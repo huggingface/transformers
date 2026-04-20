@@ -1556,7 +1556,7 @@ class ContinuousBatchingConfig:
             Number of blocks in the KV cache. Auto-inferred from GPU memory when `None`.
         max_batch_tokens (`int`, *optional*):
             Maximum number of tokens in a batch. Auto-inferred from GPU memory when `None`.
-        max_memory_percent (`float`, *optional*, defaults to 0.8):
+        max_memory_percent (`float`, *optional*, defaults to 0.9):
             Maximum percentage of free GPU memory (after the model is loaded) to use for the KV cache.
         max_blocks_per_request (`int`, *optional*, defaults to 0):
             Maximum blocks per request, used in the `flash_attn_with_kvcache` fast decode path to dimension
@@ -1608,7 +1608,13 @@ class ContinuousBatchingConfig:
     max_batch_tokens: int | None = None
 
     # The max percentage of free GPU memory (after the model is loaded) to use for the KV cache.
-    max_memory_percent: float = 0.8
+    max_memory_percent: float = 0.9
+
+    # CUDA graph pools consume extra memory beyond the KV cache (captured workspaces, kernel scratch). If True, the
+    # profiled pool size is explicitly subtracted from the cache budget: safer, but costs KV capacity. If False, we
+    # rely on the (1 - max_memory_percent) safety margin to absorb the pool, and only warn if profiling predicts it
+    # won't fit. Default is False to match vLLM's behavior and maximize cache size.
+    extra_memory_safety: bool = False
 
     # This is only used in the flash_attn_with_kvcache fast decode path to dimension the block table. If it is set to 0,
     # the fast decode path will not be used. Currently turned off by default.
