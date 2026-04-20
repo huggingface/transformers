@@ -884,8 +884,8 @@ class TestDtensorShardOperation(unittest.TestCase):
       (c) one pack-half                 — interleaved (_StridedShard) on the
                                            missing packed axis degrades to a
                                            plain contiguous cut.
-    A Shard + _StridedShard on the same source dim falls back to
-    materialize-then-split.
+    Shard after _StridedShard on the same dim composes via a flat-view cut
+    in _contiguous_intervals.
 
     Covered paths:
         - no sharding / replicate-only                    [test_no_shard_returns_full_tensor]
@@ -894,7 +894,7 @@ class TestDtensorShardOperation(unittest.TestCase):
                                                            test_contiguous_shard_uneven_division]
         - multi-placement contiguous shard                [test_nd_contiguous_single_slice]
         - strided shard producing disjoint intervals      [test_nd_strided_shard_disjoint_ranges]
-        - same-dim conflict → materialize+split fallback  [test_nd_strided_plus_shard_same_dim_fallback]
+        - Shard after _StridedShard on same dim           [test_nd_strided_plus_shard_same_dim]
         - per-expert, no expert-axis sharding             [test_expert_shaped_tp_only_no_expert_sharding]
         - per-expert, expert axis sharded (skip/own)      [test_expert_filtering]
         - per-expert + inner TP                           [test_expert_filtering_preserves_inner_sharding]
@@ -947,8 +947,8 @@ class TestDtensorShardOperation(unittest.TestCase):
             )
             torch.testing.assert_close(op.shard_tensor(tensor), expected[rank], msg=f"rank {rank}")
 
-    def test_nd_strided_plus_shard_same_dim_fallback(self):
-        """_StridedShard + Shard on same dim → materialize-then-split fallback."""
+    def test_nd_strided_plus_shard_same_dim(self):
+        """_StridedShard + Shard on the same dim: Shard takes a flat-view slice of the strided output."""
         tensor = torch.arange(16).reshape(4, 4).float()
         expected = {0: tensor[[0]], 1: tensor[[2]], 2: tensor[[1]], 3: tensor[[3]]}
         for rank in range(4):

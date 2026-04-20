@@ -887,7 +887,10 @@ class DtensorShardOperation:
         For each source dim, build a list of (start, end) intervals this
         rank owns by folding the placements:
           - Replicate        → no change.
-          - Shard            → one contiguous sub-interval per interval.
+          - Shard            → treat the current list as one flat logical
+                                sequence and take this rank's contiguous
+                                chunk (may span multiple sub-intervals when
+                                a prior _StridedShard left disjoint pieces).
           - _StridedShard    → split_factor disjoint sub-intervals.
         Then slice source with those intervals; if one dim has multiple
         intervals, concatenate the pieces along it.
@@ -899,11 +902,6 @@ class DtensorShardOperation:
         - Pre-pack source (same ndim mismatch): the packed axis does not exist
           in the source yet, so _StridedShard on it degrades to a plain
           contiguous cut — the WeightConverter recreates packing later.
-
-    Fallback
-        When Shard and _StridedShard share a tensor dim, interval arithmetic
-        cannot express the reorder: materialize the full tensor and call
-        placement._split_tensor per mesh dim instead.
     """
 
     def __init__(self, param: DTensor):
@@ -970,30 +968,41 @@ class DtensorShardOperation:
 
         # ------------------------------------------------------------------
         # Cases (a) and (c): generic interval loop.
-        #   (a) source IS the full weight → placement.dim maps 1:1 to a
-        #       source dim, interval math applies directly.
-        #   (c) source is one pack-half (same path as (a), but interleaved
-        #       _StridedShard degrades to contiguous — handled inside the
-        #       loop because the packed axis does not exist in source yet).
-        # First, a conflict check: Shard + _StridedShard on the same source
-        # dim can't be composed via interval math (the strided reorder
-        # would be cut across by Shard). Fall back to load-then-split.
-        # ------------------------------------------------------------------
-        shard_dims: set[int] = set()
-        strided_dims: set[int] = set()
-        for _, p in placements:
-            source_dim = self._source_dim(p.dim, source_shape)
-            (shard_dims if p.is_shard() else strided_dims).add(source_dim)
-        if shard_dims & strided_dims:
-            return self._materialize_and_split(source, placements, device, dtype)
-
-        # ------------------------------------------------------------------
-        # For each placement, narrow the intervals on its source dim:
-        #   Shard           → one contiguous sub-interval per existing one
-        #   _StridedShard   → split_factor disjoint sub-intervals
-        # Source dims that nobody shards stay at [(0, size)]. Two placements
-        # on the same dim fold naturally (nested cut) because each call
-        # narrows the list produced by the previous one.
+        #
+        # Build, per source dim, the list of (start, end) index ranges this
+        # rank owns. We start with "the whole axis" on every dim and then
+        # apply each placement, which narrows the list on its source dim.
+        #
+        #   Shard(d)        → treat the current list on dim d as one flat
+        #                      logical sequence and take this rank's
+        #                      contiguous chunk of it. If the prior result
+        #                      was a single interval, the output is still
+        #                      one interval (standard Shard). If it was
+        #                      multiple disjoint intervals (left behind by
+        #                      a _StridedShard on the same dim), the chunk
+        #                      may span several of them — handled by
+        #                      _contiguous_intervals' flat-walk logic.
+        #   _StridedShard   → cut each (start, end) into split_factor groups
+        #                      and keep this rank's contiguous sub-range of
+        #                      each group. List length grows by split_factor;
+        #                      _slice_and_cat will read the pieces and
+        #                      concatenate them.
+        #
+        # Example — 2×2 mesh [FSDP, TP], param (8, 8), rank coord (0, 0),
+        # placements [Shard(0), Shard(1)]:
+        #     initial       →  dim 0: [(0, 8)]   dim 1: [(0, 8)]
+        #     after Shard(0)→  dim 0: [(0, 4)]   dim 1: [(0, 8)]
+        #     after Shard(1)→  dim 0: [(0, 4)]   dim 1: [(0, 4)]
+        #     slice result  →  source[0:4, 0:4]
+        #
+        # Example — [_StridedShard(0, sf=2), Shard(0)] on size-4 dim, 2×2
+        # mesh. _StridedShard leaves rank 0 with [(0, 1), (2, 3)] (rows 0
+        # and 2 as a flat 2-row sequence). Shard then takes rank 0's half
+        # of that flat sequence → [(0, 1)]; rank 1 gets [(2, 3)].
+        #
+        # Two placements on the same tensor dim (e.g. [Shard(0), Shard(0)]
+        # when two mesh dims both split rows — 2-level FSDP) fold naturally:
+        # the second call narrows the list produced by the first.
         # ------------------------------------------------------------------
         intervals: list[list[tuple[int, int]]] = [[(0, size)] for size in source_shape]
         for mesh_dim, placement in placements:
@@ -1001,17 +1010,19 @@ class DtensorShardOperation:
             sub_mesh = self._get_sub_mesh(mesh_dim)
             rank, world_size = sub_mesh.get_local_rank(), sub_mesh.size()
 
-            # Case (c): the packed axis doesn't exist in source yet, so an
-            # interleaved (_StridedShard) placement has no groups to reorder
-            # and degrades to a plain contiguous cut. The WeightConverter
-            # recreates the packed layout later.
+            # Case (c): _StridedShard only makes sense when the packed axis
+            # actually exists in the source. If the source is a pre-pack
+            # half (w1 alone, before gate_up concat), the split_factor
+            # groups haven't been laid out yet — we just take a plain
+            # contiguous cut on this half, and the WeightConverter will
+            # rebuild the packed layout afterwards.
             is_interleaved = not placement.is_shard() and not source_missing_leading_axis
             if is_interleaved:
-                intervals[source_dim] = _strided_intervals(
+                intervals[source_dim] = self._strided_intervals(
                     intervals[source_dim], rank, world_size, placement.split_factor
                 )
             else:
-                intervals[source_dim] = _contiguous_intervals(intervals[source_dim], rank, world_size)
+                intervals[source_dim] = self._contiguous_intervals(intervals[source_dim], rank, world_size)
 
         return self._slice_and_cat(source, intervals, device, dtype)
 
@@ -1049,15 +1060,6 @@ class DtensorShardOperation:
             pieces_read.append(source[tuple(piece_slices)])
         return torch.cat(pieces_read, dim=multi_interval_dim).to(device=device, dtype=dtype)
 
-    def _materialize_and_split(self, source, placements, device, dtype):
-        """Fallback: load the full tensor, split it once per mesh dim using each placement's own rule."""
-        tensor = source if isinstance(source, torch.Tensor) else source[...]
-        for mesh_dim, placement in placements:
-            sub_mesh = self._get_sub_mesh(mesh_dim)
-            shards, _ = placement._split_tensor(tensor, sub_mesh.size(), with_padding=False, contiguous=True)
-            tensor = shards[sub_mesh.get_local_rank()]
-        return tensor.to(device=device, dtype=dtype)
-
     def _owns_expert(self, expert_idx: int) -> bool:
         """True when this rank's shard of the expert axis (param dim 0) contains expert_idx."""
         _, offsets = compute_local_shape_and_global_offset(
@@ -1090,38 +1092,60 @@ class DtensorShardOperation:
         return dim
 
 
-def _contiguous_intervals(
-    intervals: list[tuple[int, int]], rank: int, world_size: int
-) -> list[tuple[int, int]]:
-    """Narrow each interval to this rank's contiguous sub-interval (Shard semantics)."""
-    narrowed = []
-    for start, end in intervals:
-        size, offset = Shard.local_shard_size_and_offset(end - start, world_size, rank)
-        if size > 0:
-            narrowed.append((start + offset, start + offset + size))
-    return narrowed
+    def _contiguous_intervals(
+        self, intervals: list[tuple[int, int]], rank: int, world_size: int
+    ) -> list[tuple[int, int]]:
+        """Shard semantics: treat `intervals` as one flat logical sequence and take this rank's contiguous chunk of it.
 
+        For a single input interval this is a plain per-interval cut. For
+        multiple intervals (left by a prior _StridedShard on the same dim),
+        the chunk can cross range boundaries — walk the intervals and emit
+        the sub-ranges that fall inside [my_offset, my_offset + my_size) in
+        the flat view.
+        """
+        total = sum(end - start for start, end in intervals)
+        my_size, my_offset = Shard.local_shard_size_and_offset(total, world_size, rank)
+        if my_size == 0:
+            return []
 
-def _strided_intervals(
-    intervals: list[tuple[int, int]], rank: int, world_size: int, split_factor: int
-) -> list[tuple[int, int]]:
-    """Split each interval into `split_factor` groups, then shard contiguously within each group.
-
-    Produces one sub-interval per group (up to `split_factor` disjoint pieces
-    per input interval), matching _StridedShard's packed-axis layout.
-    """
-    narrowed = []
-    for start, end in intervals:
-        group_size = math.ceil((end - start) / split_factor)
-        for group_idx in range(split_factor):
-            group_start = start + group_idx * group_size
-            group_end = min(group_start + group_size, end)
-            if group_end <= group_start:
+        out: list[tuple[int, int]] = []
+        flat_pos = 0
+        slice_end = my_offset + my_size
+        for start, end in intervals:
+            length = end - start
+            interval_end_flat = flat_pos + length
+            if interval_end_flat <= my_offset:  # entirely before my slice
+                flat_pos = interval_end_flat
                 continue
-            size, offset = Shard.local_shard_size_and_offset(group_end - group_start, world_size, rank)
-            if size > 0:
-                narrowed.append((group_start + offset, group_start + offset + size))
-    return narrowed
+            if flat_pos >= slice_end:  # entirely after my slice
+                break
+            sub_start = max(0, my_offset - flat_pos)
+            sub_end = min(length, slice_end - flat_pos)
+            out.append((start + sub_start, start + sub_end))
+            flat_pos = interval_end_flat
+        return out
+
+
+    def _strided_intervals(
+        self, intervals: list[tuple[int, int]], rank: int, world_size: int, split_factor: int
+    ) -> list[tuple[int, int]]:
+        """Split each interval into `split_factor` groups, then shard contiguously within each group.
+
+        Produces one sub-interval per group (up to `split_factor` disjoint pieces
+        per input interval), matching _StridedShard's packed-axis layout.
+        """
+        narrowed = []
+        for start, end in intervals:
+            group_size = math.ceil((end - start) / split_factor)
+            for group_idx in range(split_factor):
+                group_start = start + group_idx * group_size
+                group_end = min(group_start + group_size, end)
+                if group_end <= group_start:
+                    continue
+                size, offset = Shard.local_shard_size_and_offset(group_end - group_start, world_size, rank)
+                if size > 0:
+                    narrowed.append((group_start + offset, group_start + offset + size))
+        return narrowed
 
 
 def dot_natural_key(s: str):
