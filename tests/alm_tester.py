@@ -35,7 +35,7 @@ if is_torch_available():
 class ALMModelTester:
     # If the model follows standard naming conventions, only `config_class` and
     # `conditional_generation_class` need to be set (others are optional).
-    # base_model_class = None, this should be added when #45534 is merged
+    base_model_class = None, # this should be added for most models when #45534 is merged
     config_class = None
     text_config_class = None
     audio_config_class = None
@@ -50,6 +50,7 @@ class ALMModelTester:
     # Key name for the audio sub-config in the main config constructor.
     # Override to "encoder_config" for models like GraniteSpeech.
     audio_config_key = "audio_config"
+    audio_mask_key = None  # to be set if audio-related mask has to be passed to the model's forward
 
     @property
     def all_model_classes(self):
@@ -149,11 +150,7 @@ class ALMModelTester:
 
     def get_audio_feature_key(self):
         """Key name for audio features in the inputs dict."""
-        return "input_features"
-
-    def get_audio_mask_key(self):
-        """Key name for audio attention mask. Return None if no audio mask needed."""
-        return None
+        return "input_features" 
 
     def create_audio_mask(self):
         """Create audio-level attention mask with contiguous valid regions per batch element.
@@ -217,9 +214,8 @@ class ALMModelTester:
             self.get_audio_feature_key(): audio_features,
         }
 
-        audio_mask_key = self.get_audio_mask_key()
-        if audio_mask_key is not None:
-            inputs_dict[audio_mask_key] = audio_mask
+        if self.audio_mask_key is not None:
+            inputs_dict[self.audio_mask_key] = audio_mask
 
         inputs_dict.update(self.get_additional_inputs(config, input_ids, audio_features))
         return config, inputs_dict

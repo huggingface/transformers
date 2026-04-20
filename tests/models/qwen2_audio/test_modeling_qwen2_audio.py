@@ -59,8 +59,7 @@ class Qwen2AudioModelTester(ALMModelTester):
         kwargs.setdefault("encoder_ffn_dim", 32)
         super().__init__(parent, **kwargs)
 
-    def get_audio_mask_key(self):
-        return "feature_attention_mask"
+    audio_mask_key = "feature_attention_mask"
 
     def create_audio_mask(self):
         # Deterministic full-length mask: the base default randomizes via Python's `random`, which isn't
@@ -96,9 +95,7 @@ class Qwen2AudioForConditionalGenerationModelTest(ALMModelTest, unittest.TestCas
     def test_sdpa_can_dispatch_on_flash(self):
         pass
 
-    @unittest.skip(
-        reason="inputs_embeds is the audio-fused path; can't match raw token-only embeddings."
-    )
+    @unittest.skip(reason="inputs_embeds is the audio-fused path; can't match raw token-only embeddings.")
     def test_inputs_embeds_matches_input_ids(self):
         pass
 

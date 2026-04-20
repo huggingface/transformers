@@ -63,8 +63,7 @@ class MusicFlamingoModelTester(ALMModelTester):
         kwargs.setdefault("max_source_positions", (kwargs["feat_seq_length"] - 1) // 2 + 1)
         super().__init__(parent, **kwargs)
 
-    def get_audio_mask_key(self):
-        return "input_features_mask"
+    audio_mask_key = "input_features_mask"
 
     def create_audio_mask(self):
         # Deterministic full-length mask — base default uses unseeded Python `random`, which makes

@@ -53,6 +53,11 @@ class GraniteSpeechEncoderConfig(PreTrainedConfig):
     ```"""
 
     model_type = "granite_speech_encoder"
+    attribute_map = {
+        "hidden_size": "hidden_dim",
+        "num_hidden_layers": "num_layers",
+        "num_attention_heads": "num_heads",
+    }
 
     input_dim: int = 160
     num_layers: int = 10

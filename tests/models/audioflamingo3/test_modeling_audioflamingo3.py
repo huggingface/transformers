@@ -18,14 +18,12 @@ import json
 import unittest
 from pathlib import Path
 
-import pytest
-
 from transformers import (
     AudioFlamingo3Config,
     AudioFlamingo3EncoderConfig,
-    Qwen2Config,
     AudioFlamingo3ForConditionalGeneration,
     AutoProcessor,
+    Qwen2Config,
     is_torch_available,
 )
 from transformers.testing_utils import (
@@ -57,8 +55,7 @@ class AudioFlamingo3ModelTester(ALMModelTester):
         kwargs.setdefault("max_source_positions", (kwargs["feat_seq_length"] - 1) // 2 + 1)
         super().__init__(parent, **kwargs)
 
-    def get_audio_mask_key(self):
-        return "input_features_mask"
+    audio_mask_key = "input_features_mask"
 
     def create_audio_mask(self):
         # Full-length mask matches real processor output and lets the audio encoder dispatch to Flash

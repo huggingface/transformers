@@ -91,7 +91,6 @@ class VoxtralRealtimeModelTester(ALMModelTester):
         # the base-class `audio_embeds_mask.shape[1] <= seq_length` invariant because, for this model,
         # audio embeds legitimately exceed input length during generation.
         audio_features = self.create_audio_features()
-        audio_mask = self.create_audio_mask()
 
         input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
         special_tokens = [self.pad_token_id, self.bos_token_id, self.eos_token_id, self.audio_token_id]

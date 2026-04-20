@@ -52,8 +52,7 @@ class GlmAsrModelTester(ALMModelTester):
         kwargs.setdefault("head_dim", 8)
         super().__init__(parent, **kwargs)
 
-    def get_audio_mask_key(self):
-        return "input_features_mask"
+    audio_mask_key = "input_features_mask"
 
     def get_audio_embeds_mask(self, audio_mask):
         # conv1 (s=1) preserves length; conv2 (s=2, k=3, p=1) halves; merge_factor=4 post-projector.

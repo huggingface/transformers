@@ -56,35 +56,24 @@ class GraniteSpeechModelTester(ALMModelTester):
 
     def __init__(self, parent, **kwargs):
         kwargs.setdefault("seq_length", 9)  # 7 text + 2 audio tokens
+
         kwargs.setdefault("num_audio_tokens", 2)
         kwargs.setdefault("sequence_dim", 844)
         kwargs.setdefault("feature_dim", 160)
         kwargs.setdefault("has_lora_adapter", True)
         kwargs.setdefault("downsample_rate", 5)
         kwargs.setdefault("window_size", 15)
-        # GraniteSpeechEncoderConfig fields (no attribute_map, so set explicitly).
-        kwargs.setdefault("input_dim", 160)
-        kwargs.setdefault("num_layers", 2)
-        kwargs.setdefault("hidden_dim", 32)
-        kwargs.setdefault("num_heads", 4)
         kwargs.setdefault("dim_head", 8)
-        kwargs.setdefault("feedforward_mult", 4)
-        kwargs.setdefault("context_size", 200)
-        kwargs.setdefault("conv_kernel_size", 15)
-        kwargs.setdefault("conv_expansion_factor", 2)
-        kwargs.setdefault("output_dim", 42)
-        # Q-Former projector config (passed through as a dict; ALM's get_config forwards unknowns).
-        kwargs.setdefault(
-            "projector_config",
-            {
-                "model_type": "blip_2_qformer",
-                "hidden_size": 32,
-                "num_hidden_layers": 2,
-                "num_attention_heads": 4,
-                "intermediate_size": 256,
-                "encoder_hidden_size": 32,
-            },
-        )
+ 
+        kwargs["projector_config"] = {
+            "model_type": "blip_2_qformer",
+            "hidden_size": 32,
+            "num_hidden_layers": 2,
+            "num_attention_heads": 4,
+            "intermediate_size": 256,
+            "encoder_hidden_size": 32,
+        }
+   
         super().__init__(parent, **kwargs)
 
     def create_audio_features(self):
