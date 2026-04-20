@@ -63,7 +63,6 @@ from .utils import (
 )
 from .utils.chat_parsing_utils import recursive_parse
 from .utils.chat_template_utils import render_jinja_template
-from .utils.import_utils import PROTOBUF_IMPORT_ERROR
 
 
 if TYPE_CHECKING:
@@ -76,8 +75,7 @@ def import_protobuf_decode_error(error_message=""):
         from google.protobuf.message import DecodeError
 
         return DecodeError
-    else:
-        raise ImportError(PROTOBUF_IMPORT_ERROR.format(error_message))
+    return ()
 
 
 def flatten(arr: list):
