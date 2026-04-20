@@ -18,7 +18,6 @@ from transformers.models.clip.modeling_clip import (
     CLIPEncoderLayer,
     CLIPPreTrainedModel,
     CLIPVisionModel,
-    CLIPVisionTransformer,
 )
 
 
@@ -57,3 +56,7 @@ class Multimodal2VisionPreTrainedModel(CLIPPreTrainedModel):
 # `CLIPVisionModel` inherits from `CLIPPreTrainedModel`. We need to add the 2nd base here to add the `Vision` part
 class Multimodal2VisionModel(CLIPVisionModel, Multimodal2VisionPreTrainedModel):
     _no_split_modules = ["Multimodal2VisionEncoderLayer"]
+
+    def __init__(self, config):
+        super().__init__(config)
+        self.encoder = Multimodal2VisionEncoder(config)
