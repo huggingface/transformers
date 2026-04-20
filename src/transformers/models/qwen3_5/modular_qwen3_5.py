@@ -220,10 +220,9 @@ class Qwen3_5GatedDeltaNet(Qwen3NextGatedDeltaNet):
         hidden_states: torch.Tensor,
         cache_params: Qwen3_5DynamicCache | None = None,
         attention_mask: torch.Tensor | None = None,
-        **kwargs: Unpack[Qwen3_5FlashAttentionKwargs],
+        seq_idx: torch.IntTensor | None = None,
+        cu_seqlens: torch.LongTensor | None = None,
     ):
-        seq_idx = kwargs.get("seq_idx")
-        cu_seqlens = kwargs.get("cu_seqlens")
         hidden_states = apply_mask_to_padding_states(hidden_states, attention_mask)
 
         # Set up dimensions for reshapes later
@@ -293,10 +292,6 @@ class Qwen3_5GatedDeltaNet(Qwen3NextGatedDeltaNet):
             key = key.repeat_interleave(self.num_v_heads // self.num_k_heads, dim=2)
 
         if not use_precomputed_states:
-            chunk_kwargs = {}
-            if getattr(self.chunk_gated_delta_rule, "__module__", "").startswith("fla."):
-                chunk_kwargs["cu_seqlens"] = cu_seqlens
-
             core_attn_out, last_recurrent_state = self.chunk_gated_delta_rule(
                 query,
                 key,
@@ -306,7 +301,7 @@ class Qwen3_5GatedDeltaNet(Qwen3NextGatedDeltaNet):
                 initial_state=None,
                 output_final_state=cache_params is not None,
                 use_qk_l2norm_in_kernel=True,
-                **chunk_kwargs,
+                cu_seqlens=cu_seqlens,
             )
 
         else:
@@ -381,7 +376,9 @@ class Qwen3_5DecoderLayer(GradientCheckpointingLayer):
                 hidden_states=hidden_states,
                 cache_params=past_key_values,
                 attention_mask=attention_mask,
-                **kwargs,
+                seq_idx=kwargs.get("seq_idx"),
+                # The chunked FLA kernel takes a single `cu_seqlens` arg; for packed self-attention this matches q-side lengths.
+                cu_seqlens=kwargs.get("cu_seq_lens_q"),
             )
         elif self.layer_type == "full_attention":
             # Self Attention

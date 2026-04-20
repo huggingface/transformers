@@ -1368,7 +1368,8 @@ class DataCollatorWithFlattening(DefaultDataCollator):
     - concatenates the entire mini batch into single long sequence of shape [1, total_tokens]
     - uses `separator_id` to separate sequences within the concatenated `labels`, default value is -100
     - no padding will be added, returns `input_ids`, `labels` and `position_ids` by default
-    - optionally returns the kwargs contained in FlashAttentionKwargs, plus `cu_seqlens` for FLA-style kernels
+    - optionally returns the kwargs contained in FlashAttentionKwargs
+    - optionally returns `cu_seqlens` for FLA-style kernels
     - optionally returns seq_idx indicating which sequence each token belongs to
 
     <Tip warning={true}>
@@ -1385,6 +1386,7 @@ class DataCollatorWithFlattening(DefaultDataCollator):
         return_position_ids=True,
         separator_id=-100,
         return_flash_attn_kwargs=False,
+        return_cu_seqlens=False,
         return_seq_idx=False,
         **kwargs,
     ):
@@ -1392,6 +1394,7 @@ class DataCollatorWithFlattening(DefaultDataCollator):
         self.return_position_ids = return_position_ids
         self.separator_id = separator_id
         self.return_flash_attn_kwargs = return_flash_attn_kwargs
+        self.return_cu_seqlens = return_cu_seqlens
         self.return_seq_idx = return_seq_idx
         self._int_64_keys = {"labels", "position_ids", "input_ids"}
         self._batch_dim_keys = {"labels", "position_ids", "input_ids", "seq_idx"}
@@ -1408,7 +1411,7 @@ class DataCollatorWithFlattening(DefaultDataCollator):
             batch.update({"position_ids": []})
         if self.return_seq_idx:
             batch.update({"seq_idx": []})
-        if self.return_flash_attn_kwargs:
+        if self.return_flash_attn_kwargs or self.return_cu_seqlens:
             cu_seq_lens = [0]
             max_length = 0
         for seq_idx, sample in enumerate(features):
@@ -1430,13 +1433,15 @@ class DataCollatorWithFlattening(DefaultDataCollator):
                 batch["position_ids"] += list(range(len(input_ids)))
             if self.return_seq_idx:
                 batch["seq_idx"] += [seq_idx for _ in range(len(input_ids))]
-            if self.return_flash_attn_kwargs:
+            if self.return_flash_attn_kwargs or self.return_cu_seqlens:
                 cu_seq_lens.append(cu_seq_lens[-1] + len(input_ids))
                 max_length = max(max_length, len(input_ids))
 
         if self.return_flash_attn_kwargs:
-            batch["cu_seq_lens_q"] = batch["cu_seq_lens_k"] = batch["cu_seqlens"] = cu_seq_lens
+            batch["cu_seq_lens_q"] = batch["cu_seq_lens_k"] = cu_seq_lens
             batch["max_length_q"] = batch["max_length_k"] = max_length
+        if self.return_cu_seqlens:
+            batch["cu_seqlens"] = cu_seq_lens
 
         # FlashAttentionKwargs and seq_idx are expected to be int32s.
         if return_tensors == "pt":

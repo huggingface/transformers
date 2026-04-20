@@ -19,7 +19,8 @@ import unittest
 from transformers import AutoProcessor, AutoTokenizer, DataCollatorWithFlattening, is_torch_available
 from transformers.testing_utils import (
     cleanup,
-    require_flash_linear_attention_and_causal_conv1d,
+    require_causal_conv1d,
+    require_flash_linear_attention,
     require_torch,
     require_torch_gpu,
     slow,
@@ -160,44 +161,52 @@ class Qwen3_5TextModelTest(CausalLMModelTest, unittest.TestCase):
     def test_reverse_loading_mapping(self, check_keys_were_modified=True):
         pass
 
-    @require_flash_linear_attention_and_causal_conv1d
+    @require_causal_conv1d
+    @require_flash_linear_attention
     @require_torch_gpu
     @slow
     def test_padding_free_matches_padded_fast_path_regression(self):
         torch.manual_seed(0)
-
         config = self.model_tester.get_config()
-        config.hidden_act = "silu"
-        config.max_position_embeddings = 64
         model = Qwen3_5ForCausalLM(config).to(torch_device).eval()
 
-        padded_input_ids = torch.tensor([[0, 0, 0, 1, 2, 3], [0, 0, 0, 0, 4, 5]], device=torch_device)
-        attention_mask = torch.tensor([[0, 0, 0, 1, 1, 1], [0, 0, 0, 0, 1, 1]], dtype=torch.long, device=torch_device)
-        position_ids = ((attention_mask == 1).long().cumsum(dim=1) - 1) * (attention_mask == 1).long()
-
-        features = [{"input_ids": [1, 2, 3]}, {"input_ids": [4, 5]}]
         data_collator = DataCollatorWithFlattening(
-            return_tensors="pt", return_seq_idx=True, return_flash_attn_kwargs=True
+            return_tensors="pt", return_seq_idx=True, return_flash_attn_kwargs=True, return_cu_seqlens=True
         )
-        padding_free_batch = data_collator(features)
-        padding_free_batch = {
-            key: value.to(torch_device) if torch.is_tensor(value) else value
-            for key, value in padding_free_batch.items()
-        }
+        test_cases = [
+            (
+                torch.tensor([[0, 0, 0, 1, 2, 3], [0, 0, 0, 0, 4, 5]], device=torch_device),
+                torch.tensor([[0, 0, 0, 1, 1, 1], [0, 0, 0, 0, 1, 1]], dtype=torch.long, device=torch_device),
+                [{"input_ids": [1, 2, 3]}, {"input_ids": [4, 5]}],
+            ),
+            (
+                torch.tensor([[0, 1, 2, 3, 4, 5], [0, 0, 0, 0, 0, 6]], device=torch_device),
+                torch.tensor([[0, 1, 1, 1, 1, 1], [0, 0, 0, 0, 0, 1]], dtype=torch.long, device=torch_device),
+                [{"input_ids": [1, 2, 3, 4, 5]}, {"input_ids": [6]}],
+            ),
+        ]
 
-        with torch.no_grad():
-            res_padded = model(
-                input_ids=padded_input_ids,
-                attention_mask=attention_mask,
-                position_ids=position_ids,
-                use_cache=False,
-            )
-            res_padfree = model(**padding_free_batch, use_cache=False)
+        for padded_input_ids, attention_mask, features in test_cases:
+            position_ids = ((attention_mask == 1).long().cumsum(dim=1) - 1) * (attention_mask == 1).long()
+            padding_free_batch = data_collator(features)
+            padding_free_batch = {
+                key: value.to(torch_device) if torch.is_tensor(value) else value
+                for key, value in padding_free_batch.items()
+            }
 
-        logits_padded = res_padded.logits[attention_mask.bool()]
-        logits_padfree = res_padfree.logits[0]
+            with torch.no_grad():
+                res_padded = model(
+                    input_ids=padded_input_ids,
+                    attention_mask=attention_mask,
+                    position_ids=position_ids,
+                    use_cache=False,
+                )
+                res_padfree = model(**padding_free_batch, use_cache=False)
 
-        torch.testing.assert_close(logits_padded, logits_padfree, atol=1e-5, rtol=1e-5)
+            logits_padded = res_padded.logits[attention_mask.bool()]
+            logits_padfree = res_padfree.logits[0]
+
+            torch.testing.assert_close(logits_padded, logits_padfree, atol=1e-5, rtol=1e-5)
 
 
 class Qwen3_5VisionText2TextModelTester:
