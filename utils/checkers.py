@@ -156,6 +156,7 @@ _INLINE_FILE_GLOBS = {
         "src/**/*.py",
         "utils/**/*.py",
         "scripts/**/*.py",
+        ".circleci/create_circleci_config.py",
         "benchmark/**/*.py",
         "benchmark_v2/**/*.py",
         "setup.py",
@@ -167,6 +168,7 @@ _INLINE_FILE_GLOBS = {
         "src/**/*.py",
         "utils/**/*.py",
         "scripts/**/*.py",
+        ".circleci/create_circleci_config.py",
         "benchmark/**/*.py",
         "benchmark_v2/**/*.py",
         "setup.py",
@@ -316,7 +318,7 @@ class SlidingWindow:
             self.lines.append(line.rstrip()[: self.term_width])
             self._redraw()
 
-    def finish(self, success, elapsed=None):
+    def finish(self, success, elapsed=None, show_lines=True):
         """Stop spinner and print final status title."""
         self._stop.set()
         self._thread.join()
@@ -332,10 +334,19 @@ class SlidingWindow:
                 print(f"{GREEN}✓ {self.label}{suffix}{RESET}")
             else:
                 print(f"{RED}✗ {self.label}{suffix}{RESET}")
-            # Reprint output lines
-            for line in self.lines:
-                print(line)
+            # Reprint output lines when we want to preserve the tail summary.
+            if show_lines:
+                for line in self.lines:
+                    print(line)
             sys.stdout.flush()
+
+
+def _print_output(output: str) -> None:
+    """Print captured output without truncation."""
+    if not output:
+        return
+
+    print(output, end="" if output.endswith("\n") else "\n", flush=True)
 
 
 def _run_cmd(cmd, line_callback=None):
@@ -387,7 +398,18 @@ def run_imports_checker(fix=False, line_callback=None):
     return 0, output
 
 
-RUFF_TARGETS = ["examples", "tests", "src", "utils", "scripts", "benchmark", "benchmark_v2", "setup.py", "conftest.py"]
+RUFF_TARGETS = [
+    "examples",
+    "tests",
+    "src",
+    "utils",
+    "scripts",
+    ".circleci/create_circleci_config.py",
+    "benchmark",
+    "benchmark_v2",
+    "setup.py",
+    "conftest.py",
+]
 
 
 def run_ruff_check(fix=False, line_callback=None):
@@ -528,7 +550,10 @@ def main():
                 window.add_line(f"$ {cmd_str}")
             rc, output = run_checker(name, fix=args.fix, line_callback=window.add_line)
             elapsed = time.perf_counter() - checker_start
-            window.finish(success=(rc == 0), elapsed=elapsed)
+            window.finish(success=(rc == 0), elapsed=elapsed, show_lines=(rc == 0))
+            if rc != 0:
+                print()
+                _print_output(output)
             print()
             if rc == 0 and cache is not None:
                 cache.update(name)
@@ -545,14 +570,27 @@ def main():
             if cmd_str:
                 print(f"$ {cmd_str}", flush=True)
             if is_ci:
-                rc, output = run_checker(
-                    name, fix=args.fix, line_callback=lambda line: print(line, end="", flush=True)
-                )
+                streamed_output = []
+
+                def print_line(line):
+                    streamed_output.append(line)
+                    print(line, end="", flush=True)
+
+                rc, output = run_checker(name, fix=args.fix, line_callback=print_line)
+                if rc != 0 and output:
+                    streamed_text = "".join(streamed_output)
+                    if output.startswith(streamed_text):
+                        _print_output(output[len(streamed_text) :])
+                    elif output != streamed_text:
+                        _print_output(output)
             else:
                 rc, output = run_checker(name, fix=args.fix)
-                tail = output.splitlines()[-10:]
-                if tail:
-                    print("\n".join(tail), flush=True)
+                if rc == 0:
+                    tail = output.splitlines()[-10:]
+                    if tail:
+                        print("\n".join(tail), flush=True)
+                else:
+                    _print_output(output)
             elapsed = time.perf_counter() - checker_start
             status = "OK" if rc == 0 else "FAILED"
             print(f"{status} ({format_elapsed(elapsed)})", flush=True)

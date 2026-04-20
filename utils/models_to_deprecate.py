@@ -28,7 +28,7 @@ from git import Repo
 from huggingface_hub import HfApi
 from tqdm import tqdm
 
-from transformers.models.auto.configuration_auto import DEPRECATED_MODELS, MODEL_NAMES_MAPPING
+from transformers.models.auto.configuration_auto import CONFIG_MAPPING_NAMES, DEPRECATED_MODELS
 
 
 api = HfApi()
@@ -227,7 +227,7 @@ def get_list_of_models_to_deprecate(
             if model_name in models_info:
                 models_info[model_name]["tags"].extend(extra_tags)
 
-        # Sanity check for the case with all models: the model tags must match the keys in the MODEL_NAMES_MAPPING
+        # Sanity check for the case with all models: the model tags must match the keys in the CONFIG_MAPPING_NAMES
         # (= actual model tags on the hub)
         if max_num_models == -1:
             all_model_tags = set()
@@ -235,16 +235,16 @@ def get_list_of_models_to_deprecate(
                 all_model_tags.update(models_info[model_name]["tags"])
 
             non_deprecated_model_tags = (
-                set(MODEL_NAMES_MAPPING.keys()) - set(DEPRECATED_MODELS_TAGS) - set(DEPRECATED_MODELS)
+                set(CONFIG_MAPPING_NAMES.keys()) - set(DEPRECATED_MODELS_TAGS) - set(DEPRECATED_MODELS)
             )
             if all_model_tags != non_deprecated_model_tags:
                 raise ValueError(
-                    "The tags of the `models_info` dictionary must match the keys in the `MODEL_NAMES_MAPPING`!"
+                    "The tags of the `models_info` dictionary must match the keys in the `CONFIG_MAPPING_NAMES`!"
                     "\nMissing tags in `model_info`: "
                     + str(sorted(non_deprecated_model_tags - all_model_tags))
                     + "\nExtra tags in `model_info`: "
                     + str(sorted(all_model_tags - non_deprecated_model_tags))
-                    + "\n\nYou need to update one or more of the following: `MODEL_NAMES_MAPPING`, "
+                    + "\n\nYou need to update one or more of the following: `CONFIG_MAPPING_NAMES`, "
                     "`EXTRA_TAGS_MAPPING` or `DEPRECATED_MODELS_TAGS`."
                 )
 

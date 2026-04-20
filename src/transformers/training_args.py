@@ -21,7 +21,7 @@ from dataclasses import asdict, dataclass, field, fields
 from datetime import timedelta
 from enum import Enum
 from functools import cached_property
-from typing import Any
+from typing import Any, Literal
 
 from .debug_utils import DebugOption
 from .trainer_utils import (
@@ -391,12 +391,23 @@ class TrainingArguments:
             [swanlab](https://swanlab.cn) logging.
         project (`str`, *optional*, defaults to `"huggingface"`):
             The name of the project to use for logging. Currently, only used by Trackio.
-        trackio_space_id (`str` or `None`, *optional*, defaults to `"trackio"`):
-            The Hugging Face Space ID to deploy to when using Trackio. Should be a complete Space name like
-            `'username/reponame'` or `'orgname/reponame'`, or just `'reponame'` in which case the Space will be
-            created in the currently-logged-in Hugging Face user's namespace. If `None`, will log to a local directory.
-            Note that this Space will be public unless you set `hub_private_repo=True` or your organization's default
-            is to create private Spaces."
+        trackio_space_id (`str` or `None`, *optional*, defaults to `None`):
+            The Hugging Face Space ID to use for live Trackio logging with a Gradio-based Space. Should be a full
+            Space name like `'username/reponame'` or `'orgname/reponame'`, or just `'reponame'` (the Space is created in
+            the currently logged-in user's namespace). If `None`, metrics are logged only to a **local** directory (no
+            Space on the Hub). That Gradio Space has **read and write** access to the Trackio **Bucket**, which is what you want while
+            training is **in progress**—for example when **resuming** a partial run or **aggregating logs** from multiple
+            machines. The Space will be **public** unless you set `hub_private_repo=True` or your organization's default is to
+            create private Spaces.
+        trackio_bucket_id (`str` or `None`, *optional*, defaults to `None`):
+            Optional Hugging Face Bucket id for Trackio. If unset, Trackio derives one. Used together with a Gradio Space
+            (`trackio_space_id`) and when deploying a static Space (`trackio_static_space_id` is not `False`).
+        trackio_static_space_id (`str`, `False`, or `None`, *optional*, defaults to `None`):
+            The Hugging Face Space ID to use for static Space created after training is complete. Should be a full
+            Space name like `'username/reponame'` or `'orgname/reponame'`, or just `'reponame'` (the Space is created in
+            the currently logged-in user's namespace). If False, no static Space will be created. If None, and model is pushed to the Hub,
+            a static Space will be created with a default name and this will be linked from the model card. The Space will be public
+            unless you set `hub_private_repo=True` or your organization's default is to create private Spaces.
 
         > Evaluation
 
@@ -1045,13 +1056,29 @@ class TrainingArguments:
         metadata={"help": "The name of the project to use for logging. Currently, only used by Trackio."},
     )
     trackio_space_id: str | None = field(
-        default="trackio",
+        default=None,
         metadata={
-            "help": "The Hugging Face Space ID to deploy to when using Trackio. Should be a complete Space name like "
-            "'username/reponame' or 'orgname/reponame', or just 'reponame' in which case the Space will be created in "
-            "the currently-logged-in Hugging Face user's namespace. If `None`, will log to a local directory. Note "
-            "that this Space will be public unless you set `hub_private_repo=True` or your organization's "
-            "default is to create private Spaces."
+            "help": (
+                "Hugging Face Space id for live Gradio-based Trackio logging (read/write Bucket access). Use "
+                "'username/reponame', 'orgname/reponame', or 'reponame' (current user's namespace). None: log only "
+                "locally, no Space. Prefer trackio_static_space_id for stable post-training dashboard links. Public "
+                "unless hub_private_repo=True or org default."
+            )
+        },
+    )
+    trackio_bucket_id: str | None = field(
+        default=None,
+        metadata={"help": "Optional HF Bucket id when using a Trackio Space; if unset, Trackio picks a default."},
+    )
+    trackio_static_space_id: str | None | Literal[False] = field(
+        default=None,
+        metadata={
+            "help": (
+                "Static read-only Trackio Space over the Bucket (stable model-card links). False: no static sync on Hub "
+                "push and no freeze after training. None/str: allow static Space; for local-only logging, Hub push runs "
+                "sync(static); after training, freeze runs only if trackio_space_id was set (Gradio Space). str sets "
+                "explicit static Space id. Public unless hub_private_repo=True or org default."
+            )
         },
     )
 
@@ -1179,8 +1206,8 @@ class TrainingArguments:
         metadata={
             "help": "Whether to make the repo private. If `None` (default), the repo will be public unless the "
             "organization's default is private. This value is ignored if the repo already exists. If reporting to "
-            "Trackio with deployment to Hugging Face Spaces enabled, the same logic determines whether the Space is "
-            "private."
+            "Trackio Spaces created or synced (including on Hub push when `trackio_space_id` is None) use the same "
+            "logic for whether the Space is private."
         },
     )
     hub_model_id: str | None = field(

@@ -438,10 +438,7 @@ class NemotronHModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
         pass
 
     def test_reverse_loading_mapping(self):
-        original_all_model_classes = self.all_model_classes
-        self.all_model_classes = (NemotronHForCausalLM,) if is_torch_available() else ()
-        super().test_reverse_loading_mapping()
-        self.all_model_classes = original_all_model_classes
+        super().test_reverse_loading_mapping(skip_base_model=True)
 
     # TODO(liding):
     # in test_configuration_common.py, three tests failed

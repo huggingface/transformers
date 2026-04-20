@@ -16,17 +16,13 @@ Shared types, constants, and utilities for the serving layer.
 """
 
 import asyncio
-import base64
 import copy
 import enum
 import json
-import re
-import tempfile
 import threading
 from abc import ABC, abstractmethod
 from collections.abc import Callable
 from concurrent.futures import Future
-from io import BytesIO
 from queue import Queue
 from typing import TYPE_CHECKING
 
@@ -61,6 +57,7 @@ X_REQUEST_ID = "x-request-id"
 class Modality(enum.Enum):
     LLM = "LLM"
     VLM = "VLM"
+    MULTIMODAL = "MULTIMODAL"  # supports text, image, video, and audio
     STT = "STT"
     TTS = "TTS"
 
@@ -76,132 +73,87 @@ class _GenerationCancelled(Exception):
     """Raised inside ``DirectStreamer.put()`` to abort ``model.generate()``."""
 
 
-# Model-specific tokens that mark the start/end of a tool call block.
-# TODO: extract these from the chat template at runtime instead of hardcoding.
-# Qwen/Hermes use <tool_call>/<tool_call>, Mistral uses [TOOL_CALLS], etc.
-# The markers are defined in each model's Jinja chat template.
-_TOOL_CALL_TOKENS = {
+# Fallback tool call configs for models that don't declare stc_token/etc_token/response_schema
+# on their tokenizer.
+# Keys are matched via substring against model_type (e.g. "qwen" matches "qwen2", "qwen3_vl", etc.).
+# If a model family changes its tool call format, split into separate keys (e.g. "qwen2", "qwen3").
+_TOOL_CALL_FALLBACKS = {
     "qwen": {
-        "start": "<tool_call>",
-        "end": "</tool_call>",
+        "stc": "<tool_call>",
+        "etc": "</tool_call>",
+        "schema": {
+            "x-regex-iterator": r"<tool_call>(.*?)</tool_call>",
+            "type": "array",
+            "items": {"type": "object", "x-parser": "json"},
+        },
     },
 }
 
 
-def detect_tool_format(model: "PreTrainedModel") -> dict | None:
-    """Return the tool call token format for a model, if supported.
+def get_tool_call_config(processor, model: "PreTrainedModel") -> dict | None:
+    """Return tool call config for the model, or ``None`` if tool calls are not supported.
+
+    Returns a dict with:
+        - ``schema`` (`dict`): Schema to pass to ``tokenizer.parse_response(block, schema)``.
+        - ``stc_id`` (`int`): Token ID of the start-of-tool-call delimiter.
+        - ``etc_id`` (`int`): Token ID of the end-of-tool-call delimiter.
+    """
+    tokenizer = getattr(processor, "tokenizer", processor)
+    stc = getattr(tokenizer, "stc_token", None)
+    etc = getattr(tokenizer, "etc_token", None)
+    response_schema = getattr(tokenizer, "response_schema", None)
+
+    # Models with full tokenizer config (e.g. Gemma 4)
+    if stc and etc and response_schema:
+        schema = response_schema["properties"]["tool_calls"]
+    else:
+        # Fallback: known model families without full tokenizer config
+        fallback = next((v for k, v in _TOOL_CALL_FALLBACKS.items() if k in model.config.model_type), None)
+        if fallback is None:
+            return None
+        stc, etc, schema = fallback["stc"], fallback["etc"], fallback["schema"]
+
+    stc_id = tokenizer.convert_tokens_to_ids(stc)
+    etc_id = tokenizer.convert_tokens_to_ids(etc)
+    return {"schema": schema, "stc_id": stc_id, "etc_id": etc_id}
+
+
+def _normalize_tool_call(tool_call: dict) -> dict:
+    """Normalize a parsed tool call to ``{"name": str, "arguments": str}``.
+
+    Different models return different structures from ``parse_response``:
+    - Gemma: ``{"function": {"name": ..., "arguments": {...}}}`` (nested, arguments as dict)
+    - Qwen:  ``{"name": ..., "arguments": {...}}`` (flat, arguments as dict)
+
+    The OpenAI API expects ``arguments`` as a JSON **string**, so we ``json.dumps`` it.
+    """
+    function = tool_call.get("function", tool_call)
+    arguments = function.get("arguments", {})
+    return {
+        "name": function["name"],
+        "arguments": json.dumps(arguments) if not isinstance(arguments, str) else arguments,
+    }
+
+
+def parse_tool_calls(processor, generated_ids, schema: dict) -> list[dict] | None:
+    """Parse tool calls from generated token IDs using ``tokenizer.parse_response``.
 
     Args:
-        model (`PreTrainedModel`): The loaded model.
+        processor: The processor or tokenizer.
+        generated_ids: Token IDs from generation. Passed directly to ``parse_response``
+            which decodes them internally, preserving special tokens that
+            ``skip_special_tokens=True`` would strip (e.g. Gemma's ``<|tool_call>``).
+        schema: The tool call schema (from ``response_schema`` or ``_TOOL_CALL_FALLBACKS``).
 
-    Returns:
-        `dict | None`: A dict ``{"start": str, "end": str}`` with the model's tool call
-        delimiters, or ``None`` if the model family is not recognized.
+    Returns a list of ``{"name": str, "arguments": str}`` dicts, or ``None`` if none found.
     """
-    architecture = model.config.architectures[0].lower()
-    for family in _TOOL_CALL_TOKENS:
-        if family in architecture:
-            return _TOOL_CALL_TOKENS[family]
-    return None
-
-
-class ToolCallParser:
-    """Parses tool calls from model output.
-
-    The model emits tool calls as structured text between start/end tokens
-    (e.g. ``<tool_call>{"name": "fn", "arguments": {...}}</tool_call>``).
-
-    **Streaming** (``feed``): buffers tokens between start/end markers, parses
-    the complete block when the end marker is seen, returns a ``ChoiceDeltaToolCall``.
-
-    **Non-streaming** (``parse``): extracts all tool call blocks from complete text.
-
-    Usage::
-
-        parser = ToolCallParser(tool_format={"start": ..., "end": ...})
-        for text_chunk in streamer:
-            result = parser.feed(text_chunk)
-            if result is None:
-                # Normal text — emit as content
-            elif result is ToolCallParser.CONSUMED:
-                # Buffering — skip
-            else:
-                # result is a ChoiceDeltaToolCall — emit it
-    """
-
-    def __init__(self, tool_format: dict):
-        self._tokens = tool_format
-        self._inside = False
-        self._buffer = ""
-
-    # Sentinel: token was consumed by the parser but produced no output.
-    CONSUMED = object()
-
-    def feed(self, text: str) -> object | dict | None:
-        """Feed a text chunk (streaming).
-
-        Returns:
-        - ``None`` — normal text, not a tool token. Emit as content.
-        - ``CONSUMED`` — token consumed internally (buffering/markers). Skip.
-        - A ``ChoiceDeltaToolCall`` — emit as a tool call delta.
-        """
-        if text.strip() == self._tokens["start"]:
-            self._inside = True
-            self._buffer = ""
-            return self.CONSUMED
-
-        if text.strip() == self._tokens["end"]:
-            self._inside = False
-            block = self._buffer.strip()
-            self._buffer = ""
-            return self._parse_block(block) or self.CONSUMED
-
-        if self._inside:
-            self._buffer += text
-            return self.CONSUMED
-
+    parsed = processor.parse_response(generated_ids, schema)
+    if not parsed:
         return None
-
-    @staticmethod
-    def _extract_name_and_args(block: str) -> tuple[str, str] | None:
-        """Extract (name, arguments_json) from a tool call block, or None if invalid."""
-        if not block:
-            return None
-        parsed = json.loads(block)
-        name = parsed.get("name")
-        if name is None:
-            return None
-        arguments = parsed.get("arguments", {})
-        return name, json.dumps(arguments)
-
-    @staticmethod
-    def parse(text: str, tool_format: dict) -> list[dict] | None:
-        """Parse tool calls from complete text.
-
-        Returns a list of ``{"name": str, "arguments": str}`` dicts, or ``None`` if none found.
-        """
-        start, end = tool_format["start"], tool_format["end"]
-        tool_calls = []
-        pos = 0
-        while True:
-            s = text.find(start, pos)
-            if s < 0:
-                break
-            e = text.find(end, s + len(start))
-            if e < 0:
-                break
-            result = ToolCallParser._extract_name_and_args(text[s + len(start) : e].strip())
-            if result is not None:
-                tool_calls.append({"name": result[0], "arguments": result[1]})
-            pos = e + len(end)
-        return tool_calls if tool_calls else None
-
-    def _parse_block(self, block: str) -> dict | None:
-        """Parse a buffered tool call block. Returns ``{"name": str, "arguments": str}`` or None."""
-        result = self._extract_name_and_args(block)
-        if result is None:
-            return None
-        return {"name": result[0], "arguments": result[1]}
+    if not isinstance(parsed, list):
+        parsed = [parsed]
+    tool_calls = [_normalize_tool_call(tool_call) for tool_call in parsed]
+    return tool_calls if tool_calls else None
 
 
 class DownloadAggregator:
@@ -265,7 +217,7 @@ def make_progress_tqdm_class(callback: Callable, model_id: str) -> type:
 
     download_aggregator = DownloadAggregator(callback, model_id)
 
-    class ProgressTqdm(base_tqdm):
+    class ProgressTqdm(base_tqdm):  # type: ignore[misc]
         def __init__(self, *args, **kwargs):
             self.sse_unit = kwargs.get("unit") or "it"
             kwargs["disable"] = True
@@ -333,6 +285,7 @@ class DirectStreamer:
         loop: asyncio.AbstractEventLoop,
         queue: asyncio.Queue,
         skip_special_tokens: bool = True,
+        tool_config: dict | None = None,
     ):
         """
         Args:
@@ -341,6 +294,9 @@ class DirectStreamer:
             queue (`asyncio.Queue`): The queue that receives decoded text chunks.
             skip_special_tokens (`bool`, *optional*, defaults to `True`):
                 Whether to strip special tokens during decoding.
+            tool_config (`dict`, *optional*): Tool call config from ``get_tool_call_config``.
+                When set, tokens between stc/etc delimiters (inclusive) are suppressed
+                from the queue so tool call markup is never streamed to the client.
         """
         from tokenizers.decoders import DecodeStream
 
@@ -348,9 +304,13 @@ class DirectStreamer:
         self._loop = loop
         self._queue = queue
         self._decode_stream = DecodeStream([], skip_special_tokens)
+        self._stc_id = tool_config["stc_id"] if tool_config else None
+        self._etc_id = tool_config["etc_id"] if tool_config else None
+        self._inside_tool_call = False
         self._first = True
         self._cancelled = threading.Event()
         self.total_tokens = 0
+        self.generated_token_ids: list[int] = []
 
     def put(self, value: "torch.Tensor") -> None:
         """Called by ``model.generate()`` after each decode step with new token(s)."""
@@ -362,8 +322,15 @@ class DirectStreamer:
             return
         for token_id in value.tolist():
             self.total_tokens += 1
+            self.generated_token_ids.append(token_id)
+
+            if token_id == self._stc_id:
+                self._inside_tool_call = True
+            elif token_id == self._etc_id:
+                self._inside_tool_call = False
+
             text = self._decode_stream.step(self._tokenizer, token_id)
-            if text is not None:
+            if text is not None and not self._inside_tool_call and token_id != self._etc_id:
                 self._loop.call_soon_threadsafe(self._queue.put_nowait, text)
 
     def end(self) -> None:
@@ -391,6 +358,7 @@ class CBStreamer:
         tokenizer: "tokenizers.Tokenizer",
         loop: asyncio.AbstractEventLoop,
         queue: asyncio.Queue,
+        tool_config: dict | None = None,
     ):
         """
         Args:
@@ -399,6 +367,7 @@ class CBStreamer:
             tokenizer: The Rust tokenizer (``tokenizer._tokenizer``).
             loop (`asyncio.AbstractEventLoop`): The event loop to push decoded text to.
             queue (`asyncio.Queue`): The queue that receives decoded text chunks.
+            tool_config (`dict`, *optional*): Tool call config (see ``DirectStreamer``).
         """
         from tokenizers.decoders import DecodeStream
 
@@ -408,8 +377,12 @@ class CBStreamer:
         self._queue = queue
         self._tokenizer = tokenizer
         self._decode_stream = DecodeStream([], True)
+        self._stc_id = tool_config["stc_id"] if tool_config else None
+        self._etc_id = tool_config["etc_id"] if tool_config else None
+        self._inside_tool_call = False
         self._prev_len = 0
         self.total_tokens = 0
+        self.generated_token_ids: list[int] = []
 
     def put(self, output: "GenerationOutput") -> None:
         """Decode new tokens from a CB ``GenerationOutput`` and push text to the queue."""
@@ -417,8 +390,15 @@ class CBStreamer:
         self._prev_len = len(output.generated_tokens)
         for token_id in new_tokens:
             self.total_tokens += 1
+            self.generated_token_ids.append(token_id)
+
+            if token_id == self._stc_id:
+                self._inside_tool_call = True
+            elif token_id == self._etc_id:
+                self._inside_tool_call = False
+
             text = self._decode_stream.step(self._tokenizer, token_id)
-            if text is not None:
+            if text is not None and not self._inside_tool_call and token_id != self._etc_id:
                 self._queue.put_nowait(text)
 
     def end(self) -> None:
@@ -494,6 +474,9 @@ class BaseGenerateManager(ABC):
     - :class:`CBGenerateManager` — continuous batching with paged attention.
     """
 
+    def init_cb(self, model: "PreTrainedModel", gen_config: "GenerationConfig") -> None:
+        """Initialize continuous batching. No-op for non-CB managers."""
+
     @abstractmethod
     def generate_streaming(
         self,
@@ -502,6 +485,7 @@ class BaseGenerateManager(ABC):
         inputs: dict,
         gen_config: "GenerationConfig",
         request_id: str,
+        tool_config: dict | None = None,
     ) -> tuple[asyncio.Queue, "DirectStreamer | CBStreamer"]:
         """Start streaming generation.
 
@@ -511,6 +495,8 @@ class BaseGenerateManager(ABC):
             inputs (`dict`): Tokenized inputs (tensors for sequential, lists for CB).
             gen_config (`GenerationConfig`): Generation parameters.
             request_id (`str`): Unique request identifier.
+            tool_config (`dict`, *optional*): Tool call config from ``get_tool_call_config``.
+                When set, tool call tokens (between stc/etc) are suppressed from output.
 
         Returns:
             `tuple[asyncio.Queue, DirectStreamer | CBStreamer]`: A ``(queue, streamer)`` pair
@@ -519,7 +505,7 @@ class BaseGenerateManager(ABC):
         """
 
     @abstractmethod
-    def generate_non_streaming(
+    async def generate_non_streaming(
         self,
         model: "PreTrainedModel",
         processor: "ProcessorMixin | PreTrainedTokenizerFast",
@@ -558,12 +544,17 @@ class GenerateManager(BaseGenerateManager):
         inputs: dict,
         gen_config: "GenerationConfig",
         request_id: str,
+        tool_config: dict | None = None,
     ) -> tuple[asyncio.Queue, DirectStreamer]:
         """Start streaming generation via ``model.generate()`` on the inference thread."""
         loop = asyncio.get_running_loop()
         queue: asyncio.Queue = asyncio.Queue()
-        streamer = DirectStreamer(processor._tokenizer, loop, queue, skip_special_tokens=True)
+        # ProcessorMixin exposes the fast tokenizer as .tokenizer; PreTrainedTokenizerFast is already one.
+        rust_tokenizer = getattr(processor, "tokenizer", processor)._tokenizer  # type: ignore[union-attr]
+        streamer = DirectStreamer(rust_tokenizer, loop, queue, tool_config=tool_config)
         gen_kwargs = {**inputs, "streamer": streamer, "generation_config": gen_config, "tokenizer": processor}
+        if hasattr(model, "has_talker"):
+            gen_kwargs["generation_mode"] = "text"
 
         def _run() -> None:
             try:
@@ -585,9 +576,12 @@ class GenerateManager(BaseGenerateManager):
         request_id: str,
     ) -> tuple[str, int, "torch.Tensor"]:
         """Run generation to completion via ``model.generate()`` on the inference thread."""
-        sequences = await self.async_submit(
-            model.generate, **inputs, generation_config=gen_config, tokenizer=processor
-        )
+        # Multimodal models (e.g. Qwen2.5-Omni) may generate audio alongside text by default;
+        # force text-only output since the serve layer only handles text
+        generate_kwargs = {**inputs, "generation_config": gen_config, "tokenizer": processor}
+        if hasattr(model, "has_talker"):
+            generate_kwargs["generation_mode"] = "text"
+        sequences = await self.async_submit(model.generate, **generate_kwargs)
         input_len = inputs["input_ids"].shape[-1]
         generated_ids = sequences[0, input_len:]
         text = processor.decode(generated_ids, skip_special_tokens=True)
@@ -648,20 +642,27 @@ class CBGenerateManager(BaseGenerateManager):
         inputs: dict,
         gen_config: "GenerationConfig",
         request_id: str,
+        tool_config: dict | None = None,
     ) -> tuple[asyncio.Queue, CBStreamer]:
         """Start streaming CB generation. Registers a per-request output handler."""
+        cb = self._cb
+        if cb is None:
+            raise RuntimeError("CB manager not initialized. Call `init_cb()` first.")
+
         loop = asyncio.get_running_loop()
         text_queue: asyncio.Queue = asyncio.Queue()
 
         input_ids = inputs["input_ids"]
-        request_id = self._cb.add_request(
+        request_id = cb.add_request(
             input_ids,
             request_id=request_id,
             streaming=True,
             max_new_tokens=gen_config.max_new_tokens,
             eos_token_id=gen_config.eos_token_id,
         )
-        streamer = CBStreamer(self._cb, request_id, processor._tokenizer, loop, text_queue)
+        # ProcessorMixin exposes the fast tokenizer as .tokenizer; PreTrainedTokenizerFast is already one.
+        rust_tokenizer = getattr(processor, "tokenizer", processor)._tokenizer  # type: ignore[union-attr]
+        streamer = CBStreamer(self._cb, request_id, rust_tokenizer, loop, text_queue, tool_config=tool_config)
 
         # Register a direct callback: the dispatcher calls this on the event loop with each GenerationOutput.
         # This decodes tokens and pushes text straight to the SSE text_queue
@@ -673,7 +674,7 @@ class CBGenerateManager(BaseGenerateManager):
             except Exception as e:
                 text_queue.put_nowait(_StreamError(str(e)))
 
-        self._cb.register_result_handler(request_id, _on_output)
+        cb.register_result_handler(request_id, _on_output)
         return text_queue, streamer
 
     async def generate_non_streaming(
@@ -685,6 +686,10 @@ class CBGenerateManager(BaseGenerateManager):
         request_id: str,
     ) -> tuple[str, int, list[int]]:
         """Run non-streaming CB generation. Registers a handler that resolves an asyncio.Future on completion."""
+        cb = self._cb
+        if cb is None:
+            raise RuntimeError("CB manager not initialized. Call `init_cb()` first.")
+
         input_ids = inputs["input_ids"]
         input_len = len(input_ids)
 
@@ -696,9 +701,9 @@ class CBGenerateManager(BaseGenerateManager):
             if not future.done():
                 future.set_result(result)
 
-        self._cb.register_result_handler(request_id, _on_result)
+        cb.register_result_handler(request_id, _on_result)
 
-        self._cb.add_request(
+        cb.add_request(
             input_ids,
             request_id=request_id,
             max_new_tokens=gen_config.max_new_tokens,
@@ -715,6 +720,8 @@ class CBGenerateManager(BaseGenerateManager):
     @property
     def scheduler(self) -> "Scheduler":
         """The CB scheduler (for testing/monitoring)."""
+        if self._cb is None:
+            raise RuntimeError("CB manager not initialized.")
         return self._cb.batch_processor.scheduler
 
     def stop(self) -> None:
@@ -829,7 +836,7 @@ class BaseHandler:
 
         input_keys = set(body.keys())
         if self._valid_params_class is not None:
-            unexpected = input_keys - self._valid_params_class.__mutable_keys__
+            unexpected = input_keys - getattr(self._valid_params_class, "__mutable_keys__", set())
             if unexpected:
                 raise HTTPException(status_code=422, detail=f"Unexpected fields in the request: {unexpected}")
         unused = input_keys & self._unused_fields
@@ -848,7 +855,15 @@ class BaseHandler:
 
         Returns ``(model_id, model, processor)``.
         """
+        from fastapi import HTTPException
+
         if self.model_manager.force_model is not None:
+            requested = body.get("model")
+            if requested is not None and requested != self.model_manager.force_model:
+                raise HTTPException(
+                    status_code=400,
+                    detail=(f"Server is pinned to '{self.model_manager.force_model}'; requested '{requested}'."),
+                )
             body["model"] = self.model_manager.force_model
 
         model_id = self.model_manager.process_model_name(body["model"])
@@ -910,13 +925,13 @@ class BaseHandler:
     def get_processor_inputs_from_messages(messages: list[dict], modality: Modality) -> list[dict]:
         """Convert OpenAI-format messages to the format expected by HF processors.
 
-        For LLMs, collapses list content blocks into plain text. For VLMs, converts
-        ``image_url`` content parts (including base64) into ``{"type": "image", "url": ...}``
-        entries that HF processors understand.
+        All modalities extract text. VLM additionally handles ``image_url`` and ``video_url``.
+        MULTIMODAL handles all of the above plus ``input_audio`` and ``audio_url``.
+        For LLMs, the content parts are collapsed into a plain text string.
 
         Args:
             messages (`list[dict]`): OpenAI-format chat messages.
-            modality (`Modality`): Whether the model is an LLM or VLM.
+            modality (`Modality`): The model modality (LLM, VLM, or MULTIMODAL).
 
         Returns:
             `list[dict]`: Processor-compatible messages.
@@ -926,31 +941,45 @@ class BaseHandler:
         for message in messages:
             parsed = {"role": message["role"], "content": []}
 
+            # Forward tool-use fields so apply_chat_template can handle multi-turn tool conversations
+            if "tool_calls" in message:
+                parsed["tool_calls"] = message["tool_calls"]
+            if "tool_call_id" in message:
+                parsed["tool_call_id"] = message["tool_call_id"]
+
+            # When tool_calls are present, ignore content — it's either empty or contains
+            # raw tool call markup that would confuse the chat template if rendered.
+            raw_content = [] if "tool_calls" in message else (message.get("content") or [])
+            if isinstance(raw_content, str):
+                raw_content = [{"type": "text", "text": raw_content}]
+
+            for content in raw_content:
+                content_type = content["type"]
+                # Text: chat completions ("text") and Responses API ("input_text")
+                if content_type in ("text", "input_text", "output_text"):
+                    parsed["content"].append({"type": "text", "text": content["text"]})
+                # Image: chat completions ("image_url") and Responses API ("input_image")
+                elif content_type in ("image_url", "input_image") and modality in (Modality.VLM, Modality.MULTIMODAL):
+                    # chat completions: {"image_url": {"url": "..."}}, Responses API: {"image_url": "..."}
+                    url = content["image_url"]
+                    if isinstance(url, dict):
+                        url = url["url"]
+                    parsed["content"].append({"type": "image", "url": url})
+                # Audio: unlike images, load_audio doesn't accept raw base64 — wrap as a data URI
+                elif content_type == "input_audio" and modality == Modality.MULTIMODAL:
+                    input_audio = content["input_audio"]
+                    fmt = input_audio.get("format", "wav") if isinstance(input_audio, dict) else "wav"
+                    audio_b64 = input_audio["data"]
+                    parsed["content"].append({"type": "audio", "url": f"data:audio/{fmt};base64,{audio_b64}"})
+                # Extensions (not part of the OpenAI API standard)
+                elif content_type == "video_url" and modality in (Modality.VLM, Modality.MULTIMODAL):
+                    parsed["content"].append({"type": "video", "url": content["video_url"]["url"]})
+                elif content_type == "audio_url" and modality == Modality.MULTIMODAL:
+                    parsed["content"].append({"type": "audio", "url": content["audio_url"]["url"]})
+
+            # LLMs expect plain text, not a list of content parts
             if modality == Modality.LLM:
-                if isinstance(message["content"], str):
-                    parsed["content"] = message["content"]
-                elif isinstance(message["content"], list):
-                    texts = [c["text"] for c in message["content"] if c["type"] == "text"]
-                    parsed["content"] = " ".join(texts)
-
-            elif modality == Modality.VLM:
-                if isinstance(message["content"], str):
-                    parsed["content"].append({"type": "text", "text": message["content"]})
-                else:
-                    for content in message["content"]:
-                        if content["type"] == "text":
-                            parsed["content"].append(content)
-                        elif content["type"] == "image_url":
-                            from PIL import Image
-
-                            url = content["image_url"]["url"]
-                            if "base64" in url:
-                                image_data = re.sub("^data:image/.+;base64,", "", url)
-                                image = Image.open(BytesIO(base64.b64decode(image_data)))
-                                file = tempfile.NamedTemporaryFile(suffix=".png", delete=False)
-                                image.save(file.name)
-                                url = file.name
-                            parsed["content"].append({"type": "image", "url": url})
+                parsed["content"] = " ".join(c["text"] for c in parsed["content"])
 
             processor_inputs.append(parsed)
         return processor_inputs

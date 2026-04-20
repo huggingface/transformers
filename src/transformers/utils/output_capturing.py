@@ -153,7 +153,7 @@ def recursively_install_hooks(
 
 def install_all_output_capturing_hooks(model: PreTrainedModel, prefix: str | None = None) -> None:
     """
-    Install the output recording hooks on all the modules in `model`. Tis will take care of correctly dispatching
+    Install the output recording hooks on all the modules in `model`. This will take care of correctly dispatching
     the `_can_record_outputs` property of each individual submodels in case of composite models.
     """
     # _can_record_outputs is None by default
