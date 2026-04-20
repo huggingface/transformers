@@ -58,6 +58,7 @@ class QuantizationMethod(str, Enum):
     FP8 = "fp8"
     QUARK = "quark"
     FPQUANT = "fp_quant"
+    NVFP4 = "nvfp4"
     AUTOROUND = "auto-round"
     MXFP4 = "mxfp4"
     METAL = "metal"
@@ -1446,6 +1447,44 @@ class FPQuantConfig(QuantizationConfigMixin):
         if self.transform_init not in ["hadamard", "identity", "gsr"]:
             raise ValueError("Only 'hadamard', 'identity' and 'gsr' are supported for transform_init.")
 
+        if self.modules_to_not_convert is None:
+            self.modules_to_not_convert = ["lm_head"]
+
+
+class NVFP4Config(QuantizationConfigMixin):
+    """
+    NVFP4Config is a configuration class for NVIDIA's NVFP4 format (4-bit float
+    with per-group scales + global scale) as produced by NVIDIA's ModelOpt.
+
+    Checkpoints quantized by ModelOpt store weights as `weight_packed` (2 values
+    per byte), `weight_scale` (per-16-element group, FP8), and `weight_global_scale`
+    (per-layer, FP32). Forward pass dequantizes on the fly.
+
+    Args:
+        modules_to_not_convert (`list`, *optional*):
+            List of module name patterns to keep in bf16/fp16 (e.g. `lm_head`).
+        use_triton (`bool`, *optional*, defaults to `True`):
+            Use the fused Triton dequant kernel when available. Falls back to
+            a pure-torch implementation otherwise.
+    """
+
+    def __init__(
+        self,
+        modules_to_not_convert: list[str] | None = None,
+        use_triton: bool = True,
+        **kwargs,
+    ):
+        self.modules_to_not_convert = modules_to_not_convert
+        self.use_triton = use_triton
+
+        self.quant_method = QuantizationMethod.NVFP4
+        self.post_init()
+
+    def post_init(self):
+        r"""
+        Safety checker that arguments are correct — also replaces NoneType
+        arguments with defaults.
+        """
         if self.modules_to_not_convert is None:
             self.modules_to_not_convert = ["lm_head"]
 

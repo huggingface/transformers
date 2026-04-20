@@ -1211,7 +1211,14 @@ def convert_and_load_state_dict_in_model(
     pattern_to_converter = {k: converter for converter in converters for k in converter.source_patterns}
 
     state_dict = sorted(state_dict.items(), key=lambda kv: dot_natural_key(kv[0]))
+    import gc as _gc
+    _tensor_count = 0
     for original_key, tensor in state_dict:
+        _tensor_count += 1
+        if _tensor_count % 1000 == 0:
+            _gc.collect()
+            if torch.cuda.is_available():
+                torch.cuda.empty_cache()
         # 1. Rename the key according to all renaming pattern and optional weight converter patterns
         renamed_key, source_pattern = rename_source_key(
             original_key, renamings, converters, prefix, meta_model_state_dict
