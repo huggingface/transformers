@@ -889,7 +889,13 @@ class Seq2SeqLMDecoderExportableModuleWithStaticCache(torch.nn.Module):
             self.register_buffer(f"value_cache_{i}", layer.values, persistent=False)
             self.register_buffer(f"cumulative_length_{i}", layer.cumulative_length, persistent=False)
 
-    def forward(self, decoder_input_ids, encoder_hidden_states, cache_position):
+    def forward(
+        self,
+        decoder_input_ids: torch.Tensor,
+        encoder_hidden_states: torch.Tensor,
+        cache_position: torch.Tensor,
+        encoder_attention_mask: torch.Tensor | None = None,
+    ):
         # Start by resetting static cache (it's needed to be able to run several generations with the same exported program,
         # as otherwise it's mutated in-place indefinitely - we cannot call reset in-between the `generate` as the program was
         # already exported)
@@ -900,6 +906,7 @@ class Seq2SeqLMDecoderExportableModuleWithStaticCache(torch.nn.Module):
         outputs = self.decoder(
             input_ids=decoder_input_ids,
             encoder_hidden_states=encoder_hidden_states,
+            encoder_attention_mask=encoder_attention_mask,
             past_key_values=self.cache,
             use_cache=True,
         )
@@ -947,7 +954,7 @@ class Seq2SeqLMExportableModule(torch.nn.Module):
 
         return exported_encoder
 
-    def _export_decoder(self, decoder_input_ids, encoder_hidden_states, cache_position):
+    def _export_decoder(self, decoder_input_ids, encoder_hidden_states, cache_position, encoder_attention_mask=None):
         target_device = self.full_model.device
         wrapped_decoder = (
             Seq2SeqLMDecoderExportableModuleWithStaticCache(
@@ -963,27 +970,35 @@ class Seq2SeqLMExportableModule(torch.nn.Module):
         decoder_input_ids = decoder_input_ids.to(target_device)
         encoder_hidden_states = encoder_hidden_states.to(target_device)
         cache_position = cache_position.to(target_device)
+        if encoder_attention_mask is not None:
+            encoder_attention_mask = encoder_attention_mask.to(target_device)
 
-        # Define dynamic dimension for encoder output sequence length
-        encoder_seq_len_dim = torch.export.Dim("encoder_hidden_seq_length", max=self.max_hidden_seq_length)
-
-        # Export the decoder
+        # Export the decoder.
+        # encoder_hidden_states uses a static shape to avoid a symbolic-shape
+        # conflict with the static KV cache size during torch.export. Callers
+        # that pad encoder inputs to a fixed max length (e.g. max_hidden_seq_length)
+        # should pass encoder_hidden_states of that shape.
         with torch.no_grad():
             exported_decoder = torch.export.export(
                 wrapped_decoder,
-                (decoder_input_ids, encoder_hidden_states, cache_position),
-                dynamic_shapes={
-                    "decoder_input_ids": None,
-                    "encoder_hidden_states": {1: encoder_seq_len_dim},
-                    "cache_position": None,
-                },
+                (decoder_input_ids, encoder_hidden_states, cache_position, encoder_attention_mask),
+                dynamic_shapes=None,
                 strict=True,
             )
 
         return exported_decoder
 
-    def export(self, encoder_input_ids=None, decoder_input_ids=None, encoder_hidden_states=None, cache_position=None):
+    def export(
+        self,
+        encoder_input_ids=None,
+        decoder_input_ids=None,
+        encoder_hidden_states=None,
+        cache_position=None,
+        encoder_attention_mask=None,
+    ):
         device = self.full_model.device
+        max_cache_len = self.generation_config.cache_config.get("max_cache_len")
+        batch_size = self.generation_config.cache_config.get("batch_size")
         example_encoder_input_ids = (
             encoder_input_ids
             if encoder_input_ids is not None
@@ -1001,14 +1016,22 @@ class Seq2SeqLMExportableModule(torch.nn.Module):
             encoder_hidden_states
             if encoder_hidden_states is not None
             else torch.zeros(
-                (self.generation_config.cache_config.get("batch_size"), 10, self.config.d_model),
+                (batch_size, max_cache_len, self.config.d_model),
                 dtype=torch.float32,
                 device=device,
             )
         )
+        example_encoder_attention_mask = (
+            encoder_attention_mask
+            if encoder_attention_mask is not None
+            else torch.ones((batch_size, max_cache_len), dtype=torch.long, device=device)
+        )
         self.exported_encoder = self._export_encoder(example_encoder_input_ids)
         self.exported_decoder = self._export_decoder(
-            example_decoder_input_ids, example_encoder_hidden_states, example_cache_position
+            example_decoder_input_ids,
+            example_encoder_hidden_states,
+            example_cache_position,
+            example_encoder_attention_mask,
         )
 
         # Return self to allow chaining
@@ -1025,6 +1048,22 @@ class Seq2SeqLMExportableModule(torch.nn.Module):
             # Run encoder
             encoder_output = self.exported_encoder.module()(prompt_token_ids)
 
+            # Build encoder attention mask: 1 at real token positions, 0 at padding.
+            # Assumes padding token id is 0 (standard for T5 and most seq2seq models).
+            max_cache_len = self.generation_config.cache_config.get("max_cache_len")
+            batch_size = prompt_token_ids.shape[0]
+            encoder_attention_mask = (prompt_token_ids != 0).long()
+            # Pad or trim to max_cache_len so shape matches the static export
+            if encoder_attention_mask.shape[1] < max_cache_len:
+                pad = torch.zeros(
+                    (batch_size, max_cache_len - encoder_attention_mask.shape[1]),
+                    dtype=torch.long,
+                    device=model_device,
+                )
+                encoder_attention_mask = torch.cat([encoder_attention_mask, pad], dim=1)
+            else:
+                encoder_attention_mask = encoder_attention_mask[:, :max_cache_len]
+
             # Initialize with start token (0 for T5) on the correct device
             decoder_input_ids = torch.tensor([[0]], dtype=torch.long, device=model_device)
             generated_ids = [0]
@@ -1033,7 +1072,10 @@ class Seq2SeqLMExportableModule(torch.nn.Module):
             for i in range(max_new_tokens - 1):
                 # Run decoder for next token prediction
                 logits = self.exported_decoder.module()(
-                    decoder_input_ids, encoder_output, torch.tensor([i], dtype=torch.long, device=model_device)
+                    decoder_input_ids,
+                    encoder_output,
+                    torch.tensor([i], dtype=torch.long, device=model_device),
+                    encoder_attention_mask,
                 )
 
                 # Get next token
