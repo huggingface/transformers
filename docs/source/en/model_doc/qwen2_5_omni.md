@@ -346,6 +346,26 @@ model = Qwen2_5OmniForConditionalGeneration.from_pretrained(
 
 [[autodoc]] Qwen2_5OmniConfig
 
+## Qwen2_5OmniVisionEncoderConfig
+
+[[autodoc]] Qwen2_5OmniVisionEncoderConfig
+
+## Qwen2_5OmniTextConfig
+
+[[autodoc]] Qwen2_5OmniTextConfig
+
+## Qwen2_5OmniDiTConfig
+
+[[autodoc]] Qwen2_5OmniDiTConfig
+
+## Qwen2_5OmniBigVGANConfig
+
+[[autodoc]] Qwen2_5OmniBigVGANConfig
+
+## Qwen2_5OmniAudioEncoderConfig
+
+[[autodoc]] Qwen2_5OmniAudioEncoderConfig
+
 ## Qwen2_5OmniProcessor
 
 [[autodoc]] Qwen2_5OmniProcessor

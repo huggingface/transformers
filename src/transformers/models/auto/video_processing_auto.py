@@ -34,6 +34,7 @@ from ...utils import (
 from ...utils.import_utils import requires
 from ...video_processing_utils import BaseVideoProcessor
 from .auto_factory import _LazyAutoMapping
+from .auto_mappings import VIDEO_PROCESSOR_MAPPING_NAMES
 from .configuration_auto import (
     CONFIG_MAPPING_NAMES,
     AutoConfig,
@@ -50,38 +51,20 @@ if TYPE_CHECKING:
     # the transformers package is used with Microsoft's Pylance language server.
     VIDEO_PROCESSOR_MAPPING_NAMES: OrderedDict[str, tuple[str | None, str | None]] = OrderedDict()
 else:
-    VIDEO_PROCESSOR_MAPPING_NAMES = OrderedDict(
+    # Merge non-standard mapping names with auto-inferred `VIDEO_PROCESSOR_MAPPING_NAMES`
+    MISSING_VIDEO_PROCESSOR_MAPPING_NAMES = OrderedDict(
         [
-            ("ernie4_5_vl_moe", "Ernie4_5_VLMoeVideoProcessor"),
-            ("gemma4", "Gemma4VideoProcessor"),
-            ("glm46v", "Glm46VVideoProcessor"),
-            ("glm4v", "Glm4vVideoProcessor"),
             ("instructblip", "InstructBlipVideoVideoProcessor"),
-            ("instructblipvideo", "InstructBlipVideoVideoProcessor"),
-            ("internvl", "InternVLVideoProcessor"),
-            ("llava_next_video", "LlavaNextVideoVideoProcessor"),
-            ("llava_onevision", "LlavaOnevisionVideoProcessor"),
             ("pe_audio_video", "PeVideoVideoProcessor"),
-            ("pe_video", "PeVideoVideoProcessor"),
-            ("perception_lm", "PerceptionLMVideoProcessor"),
             ("qwen2_5_omni", "Qwen2VLVideoProcessor"),
             ("qwen2_5_vl", "Qwen2VLVideoProcessor"),
-            ("qwen2_vl", "Qwen2VLVideoProcessor"),
             ("qwen3_5", "Qwen3VLVideoProcessor"),
             ("qwen3_5_moe", "Qwen3VLVideoProcessor"),
             ("qwen3_omni_moe", "Qwen2VLVideoProcessor"),
-            ("qwen3_vl", "Qwen3VLVideoProcessor"),
             ("qwen3_vl_moe", "Qwen3VLVideoProcessor"),
-            ("sam2_video", "Sam2VideoVideoProcessor"),
-            ("sam3_video", "Sam3VideoVideoProcessor"),
-            ("smolvlm", "SmolVLMVideoProcessor"),
-            ("video_llama_3", "VideoLlama3VideoProcessor"),
-            ("video_llava", "VideoLlavaVideoProcessor"),
-            ("videomae", "VideoMAEVideoProcessor"),
-            ("videomt", "VideomtVideoProcessor"),
-            ("vjepa2", "VJEPA2VideoProcessor"),
         ]
     )
+    VIDEO_PROCESSOR_MAPPING_NAMES.update(MISSING_VIDEO_PROCESSOR_MAPPING_NAMES)
 
 for model_type, video_processors in VIDEO_PROCESSOR_MAPPING_NAMES.items():
     fast_video_processor_class = video_processors
