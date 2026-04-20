@@ -26,9 +26,7 @@ from ...image_utils import ImageInput
 from ...processing_utils import MultiModalData, ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
 from ...utils import auto_docstring, logging
-from ...utils.import_utils import requires_backends
 from ...video_utils import VideoInput
-from ...vision_utils import get_rotary_pos_ids, get_vision_cu_seqlens
 
 
 logger = logging.get_logger(__name__)
@@ -85,7 +83,6 @@ class Glm46VProcessor(ProcessorMixin):
             - **image_grid_thw** -- List of image 3D grid in LLM. Returned when `images` is not `None`.
             - **video_grid_thw** -- List of video 3D grid in LLM. Returned when `videos` is not `None`.
         """
-        return_extra_tensors = kwargs.pop("return_extra_tensors", False)
         output_kwargs = self._merge_kwargs(
             Glm46VProcessorKwargs,
             tokenizer_init_kwargs=self.tokenizer.init_kwargs,
@@ -94,11 +91,6 @@ class Glm46VProcessor(ProcessorMixin):
         if images is not None:
             image_inputs = self.image_processor(images=images, **output_kwargs["images_kwargs"])
             image_grid_thw = image_inputs["image_grid_thw"]
-            if return_extra_tensors:
-                requires_backends(self, ["torch"])
-                spatial_merge_size = self.image_processor.merge_size
-                image_inputs["image_cu_seqlens"] = get_vision_cu_seqlens(image_grid_thw)
-                image_inputs["image_rotary_pos_ids"] = get_rotary_pos_ids(image_grid_thw, spatial_merge_size)
         else:
             image_inputs = {}
             image_grid_thw = None
@@ -111,11 +103,6 @@ class Glm46VProcessor(ProcessorMixin):
             else:
                 video_metadata = videos_inputs["video_metadata"]
             video_grid_thw = videos_inputs["video_grid_thw"]
-            if return_extra_tensors:
-                requires_backends(self, ["torch"])
-                spatial_merge_size = self.video_processor.merge_size
-                videos_inputs["video_cu_seqlens"] = get_vision_cu_seqlens(video_grid_thw)
-                videos_inputs["video_rotary_pos_ids"] = get_rotary_pos_ids(video_grid_thw, spatial_merge_size)
         else:
             videos_inputs = {}
             video_grid_thw = None

@@ -22,9 +22,7 @@ from ...image_utils import ImageInput
 from ...processing_utils import MultiModalData, ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
 from ...utils import auto_docstring, logging
-from ...utils.import_utils import requires_backends
 from ...video_utils import VideoInput
-from ...vision_utils import get_rotary_pos_ids, get_vision_cu_seqlens
 
 
 logger = logging.get_logger(__name__)
@@ -78,7 +76,6 @@ class VideoLlama3Processor(ProcessorMixin):
             - **image_grid_thw** -- List of image 3D grid in LLM. Returned when `images` is not `None`.
             - **video_grid_thw** -- List of video 3D grid in LLM. Returned when `videos` is not `None`.
         """
-        return_extra_tensors = kwargs.pop("return_extra_tensors", False)
         output_kwargs = self._merge_kwargs(
             VideoLlama3ProcessorKwargs,
             tokenizer_init_kwargs=self.tokenizer.init_kwargs,
@@ -90,10 +87,6 @@ class VideoLlama3Processor(ProcessorMixin):
             image_inputs = self.image_processor(images=images, **output_kwargs["images_kwargs"])
             image_grid_thw = image_inputs["image_grid_thw"]
             image_merge_sizes = image_inputs["image_merge_sizes"]
-            if return_extra_tensors:
-                requires_backends(self, ["torch"])
-                image_inputs["image_cu_seqlens"] = get_vision_cu_seqlens(image_grid_thw)
-                image_inputs["image_rotary_pos_ids"] = get_rotary_pos_ids(image_grid_thw, image_merge_sizes)
         else:
             image_grid_thw = image_merge_sizes = []
 
