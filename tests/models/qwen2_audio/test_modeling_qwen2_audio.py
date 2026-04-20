@@ -47,6 +47,7 @@ class Qwen2AudioModelTester(ALMModelTester):
     conditional_generation_class = Qwen2AudioForConditionalGeneration
     text_config_class = Qwen2Config
     audio_config_class = Qwen2AudioEncoderConfig
+    audio_mask_key = "feature_attention_mask"
 
     def __init__(self, parent, **kwargs):
         # feat_seq_length=60 → after conv2 s=2: 30 → after avg_pool s=2: 15 audio embed tokens.
@@ -58,8 +59,6 @@ class Qwen2AudioModelTester(ALMModelTester):
         kwargs.setdefault("encoder_attention_heads", 2)
         kwargs.setdefault("encoder_ffn_dim", 32)
         super().__init__(parent, **kwargs)
-
-    audio_mask_key = "feature_attention_mask"
 
     def create_audio_mask(self):
         # Deterministic full-length mask: the base default randomizes via Python's `random`, which isn't

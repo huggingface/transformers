@@ -56,14 +56,13 @@ class MusicFlamingoModelTester(ALMModelTester):
     conditional_generation_class = MusicFlamingoForConditionalGeneration
     text_config_class = Qwen2Config
     audio_config_class = AudioFlamingo3EncoderConfig
+    audio_mask_key = "input_features_mask"
 
     def __init__(self, parent, **kwargs):
         # feat_seq_length=60 → (60-1)//2+1=30 → (30-2)//2+1=15 audio embed tokens.
         kwargs.setdefault("feat_seq_length", 60)
         kwargs.setdefault("max_source_positions", (kwargs["feat_seq_length"] - 1) // 2 + 1)
         super().__init__(parent, **kwargs)
-
-    audio_mask_key = "input_features_mask"
 
     def create_audio_mask(self):
         # Deterministic full-length mask — base default uses unseeded Python `random`, which makes

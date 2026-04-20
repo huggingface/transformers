@@ -45,6 +45,7 @@ class AudioFlamingo3ModelTester(ALMModelTester):
     conditional_generation_class = AudioFlamingo3ForConditionalGeneration
     text_config_class = Qwen2Config
     audio_config_class = AudioFlamingo3EncoderConfig
+    audio_mask_key = "input_features_mask"
 
     def __init__(self, parent, **kwargs):
         # feat_seq_length → (L-1)//2+1 after conv2 → (·-2)//2+1 after avg_pool, so
@@ -54,8 +55,6 @@ class AudioFlamingo3ModelTester(ALMModelTester):
         # so it must equal (feat_seq_length - 1) // 2 + 1.
         kwargs.setdefault("max_source_positions", (kwargs["feat_seq_length"] - 1) // 2 + 1)
         super().__init__(parent, **kwargs)
-
-    audio_mask_key = "input_features_mask"
 
     def create_audio_mask(self):
         # Full-length mask matches real processor output and lets the audio encoder dispatch to Flash

@@ -44,6 +44,7 @@ class GlmAsrModelTester(ALMModelTester):
     conditional_generation_class = GlmAsrForConditionalGeneration
     text_config_class = LlamaConfig
     audio_config_class = GlmAsrEncoderConfig
+    audio_mask_key = "input_features_mask"
 
     def __init__(self, parent, **kwargs):
         # feat_seq_length=64 → conv2 (s=2): post_conv=32 → merge_factor=4: 8 audio embed tokens.
@@ -51,8 +52,6 @@ class GlmAsrModelTester(ALMModelTester):
         kwargs.setdefault("seq_length", 35)
         kwargs.setdefault("head_dim", 8)
         super().__init__(parent, **kwargs)
-
-    audio_mask_key = "input_features_mask"
 
     def get_audio_embeds_mask(self, audio_mask):
         # conv1 (s=1) preserves length; conv2 (s=2, k=3, p=1) halves; merge_factor=4 post-projector.
