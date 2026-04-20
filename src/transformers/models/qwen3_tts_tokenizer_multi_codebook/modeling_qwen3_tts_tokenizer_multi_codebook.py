@@ -26,9 +26,9 @@ from typing import Optional
 
 import numpy as np
 import torch
+import torch.nn.functional as F
 from torch import nn
 from torch.nn import Parameter
-from torch.nn import functional as F
 
 from ... import initialization as init
 from ...activations import ACT2FN
