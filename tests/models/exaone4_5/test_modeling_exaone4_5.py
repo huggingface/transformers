@@ -13,7 +13,10 @@
 # limitations under the License.
 """Testing suite for the PyTorch EXAONE 4.5 model."""
 
+import copy
 import unittest
+
+import pytest
 
 from transformers import (
     is_torch_available,
@@ -26,20 +29,139 @@ from transformers.testing_utils import (
     torch_device,
 )
 
+from ...vlm_tester import VLMModelTest, VLMModelTester
+
 
 if is_torch_available():
     import torch
 
     from transformers import (
+        Exaone4_5_Config,
         Exaone4_5_ForConditionalGeneration,
+        Exaone4_5_Model,
         Exaone4_5_Processor,
+        Exaone4_5_VisionConfig,
+        Exaone4Config,
     )
+
+
+class Exaone4_5_ModelTester(VLMModelTester):
+    base_model_class = Exaone4_5_Model
+    config_class = Exaone4_5_Config
+    text_config_class = Exaone4Config
+    vision_config_class = Exaone4_5_VisionConfig
+    conditional_generation_class = Exaone4_5_ForConditionalGeneration
+
+    def __init__(self, parent, **kwargs):
+        kwargs.setdefault("image_token_id", 3)
+        kwargs.setdefault("video_token_id", 4)
+        kwargs.setdefault("vision_start_token_id", 5)
+        kwargs.setdefault("vision_end_token_id", 6)
+        kwargs.setdefault("image_size", 16)
+        kwargs.setdefault("patch_size", 16)
+        kwargs.setdefault("num_image_tokens", 1)
+        kwargs.setdefault("hidden_act", "silu")
+        kwargs.setdefault("num_attention_heads", 4)
+        kwargs.setdefault("num_key_value_heads", 2)
+        kwargs.setdefault("head_dim", 8)
+        kwargs.setdefault("depth", 2)
+        kwargs.setdefault("num_heads", 4)
+        kwargs.setdefault("spatial_merge_size", 1)
+        kwargs.setdefault("temporal_patch_size", 2)
+        kwargs.setdefault("out_hidden_size", 32)
+        super().__init__(parent, **kwargs)
+
+        # Exaone4_5 vision config expects `in_channels` instead of `num_channels`.
+        self.in_channels = self.num_channels
+
+    def create_pixel_values(self):
+        # EXAONE 4.5 vision tower expects flattened patches:
+        # (total_patches, channels * patch_size^2 * temporal_patch_size)
+        return torch.rand(
+            self.batch_size * (self.image_size**2) // (self.patch_size**2),
+            self.num_channels * (self.patch_size**2) * self.temporal_patch_size,
+            device=torch_device,
+        )
+
+    def get_additional_inputs(self, config, input_ids, pixel_values):
+        return {"image_grid_thw": torch.tensor([[1, 1, 1]] * self.batch_size, device=torch_device)}
+
+    def get_config(self):
+        config = super().get_config()
+        # Some generic generation tests expect these attrs for VLMs.
+        config.vision_start_token_id = self.vision_start_token_id
+        config.vision_end_token_id = self.vision_end_token_id
+        return config
+
+
+@require_torch
+class Exaone4_5_ModelTest(VLMModelTest, unittest.TestCase):
+    model_tester_class = Exaone4_5_ModelTester
+
+    def test_reverse_loading_mapping(self):
+        super().test_reverse_loading_mapping(skip_base_model=True)
+
+    def test_mismatching_num_image_tokens(self):
+        config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        for model_class in self.all_model_classes:
+            model = model_class(config).to(torch_device)
+            model.eval()
+            curr_input_dict = copy.deepcopy(input_dict)
+            _ = model(**curr_input_dict)
+
+            # Test 1: fewer images than image placeholders -> should raise.
+            curr_input_dict["pixel_values"] = curr_input_dict["pixel_values"][-1:, ...]
+            if "image_sizes" in curr_input_dict:
+                curr_input_dict["image_sizes"] = curr_input_dict["image_sizes"][-1:, ...]
+            with self.assertRaises(ValueError):
+                _ = model(**curr_input_dict)
+
+            # Test 2: one image but two prompts with image placeholders -> should raise.
+            curr_input_dict = {key: val[:1] for key, val in curr_input_dict.items()}
+            for key in ["input_ids", "attention_mask", "token_type_ids"]:
+                if key in curr_input_dict and curr_input_dict[key] is not None:
+                    curr_input_dict[key] = torch.cat([curr_input_dict[key], curr_input_dict[key]], dim=0)
+            with self.assertRaises(ValueError):
+                _ = model(**curr_input_dict)
+
+            # Test 3: two images and two image placeholders -> should pass.
+            curr_input_dict["pixel_values"] = torch.cat(
+                [curr_input_dict["pixel_values"], curr_input_dict["pixel_values"]], dim=0
+            )
+            if "image_grid_thw" in curr_input_dict:
+                curr_input_dict["image_grid_thw"] = torch.cat(
+                    [curr_input_dict["image_grid_thw"], curr_input_dict["image_grid_thw"]], dim=0
+                )
+            if "image_sizes" in curr_input_dict:
+                curr_input_dict["image_sizes"] = torch.cat(
+                    [curr_input_dict["image_sizes"], curr_input_dict["image_sizes"]], dim=0
+                )
+            _ = model(**curr_input_dict)
+
+    @pytest.mark.xfail(reason="This architecture seems to not compute gradients for some layer.")
+    def test_training_gradient_checkpointing(self):
+        super().test_training_gradient_checkpointing()
+
+    @pytest.mark.xfail(reason="This architecture seems to not compute gradients for some layer.")
+    def test_training_gradient_checkpointing_use_reentrant_false(self):
+        super().test_training_gradient_checkpointing_use_reentrant_false()
+
+    @pytest.mark.xfail(reason="This architecture seems to not compute gradients for some layer.")
+    def test_training_gradient_checkpointing_use_reentrant_true(self):
+        super().test_training_gradient_checkpointing_use_reentrant_true()
+
+    @unittest.skip("Model parallel auto-sharding for EXAONE 4.5 VLM is not supported yet.")
+    def test_model_parallelism(self):
+        pass
+
+    @unittest.skip("Beam search with model parallel auto device_map is not stable for EXAONE 4.5 VLM yet.")
+    def test_model_parallel_beam_search(self):
+        pass
 
 
 @require_torch
 class Exaone4_5_IntegrationTest(unittest.TestCase):
-    # model_id = "LGAI-EXAONE/EXAONE-4.5-33B"
-    model_id = "/ex_disk/jwhwang/served_model/EXAONE-4.5-33B"
+    model_id = "LGAI-EXAONE/EXAONE-4.5-33B"
     model = None
     processor = None
 

@@ -12,11 +12,10 @@ from ...configuration_utils import PreTrainedConfig
 from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import ProcessingKwargs, Unpack
-from ...utils import TransformersKwargs, can_return_tuple
+from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
 from ...utils.generic import is_flash_attention_requested
 from ..auto import CONFIG_MAPPING, AutoConfig, AutoModel
-from ..exaone4.configuration_exaone4 import Exaone4Config
-from ..exaone4.modeling_exaone4 import Exaone4Model, Exaone4PreTrainedModel, Exaone4RMSNorm
+from ..exaone4.modeling_exaone4 import Exaone4PreTrainedModel, Exaone4RMSNorm
 from ..qwen2_5_vl.configuration_qwen2_5_vl import Qwen2_5_VLVisionConfig
 from ..qwen2_5_vl.modeling_qwen2_5_vl import (
     Qwen2_5_VisionPatchEmbed,
@@ -30,13 +29,10 @@ from ..qwen2_5_vl.modeling_qwen2_5_vl import (
     Qwen2_5_VLVisionBlock,
 )
 from ..qwen2_5_vl.processing_qwen2_5_vl import Qwen2_5_VLProcessor
-from ..qwen2_vl.image_processing_pil_qwen2_vl import Qwen2VLImageProcessorPil
-from ..qwen2_vl.image_processing_qwen2_vl import Qwen2VLImageProcessor
 from ..qwen2_vl.modeling_qwen2_vl import (
     apply_rotary_pos_emb_vision,
     eager_attention_forward,
 )
-from ..qwen2_vl.video_processing_qwen2_vl import Qwen2VLVideoProcessor
 
 
 @auto_docstring(checkpoint="LGAI-EXAONE/EXAONE-4.5-33B")
@@ -99,26 +95,21 @@ class Exaone4_5_PatchMerger(Qwen2_5_VLPatchMerger):
 
 class Exaone4_5_VisionAttention(Qwen2_5_VLVisionAttention):
     def __init__(self, config: Exaone4_5_VisionConfig):
+        self.num_key_value_heads = config.num_key_value_heads
         super().__init__(config)
         del self.qkv
-        self.num_key_value_groups = config.num_key_value_heads
+        self.num_key_value_groups = self.num_heads // self.num_key_value_heads
         self.q_dim = self.num_heads * self.head_dim
-        self.kv_dim = self.num_key_value_groups * self.head_dim
+        self.kv_dim = self.num_key_value_heads * self.head_dim
         self.qkv = nn.Linear(self.dim, self.q_dim + (self.kv_dim * 2), bias=True)
 
     def _split_qkv(self, hidden_states: torch.Tensor):
         seq_length = hidden_states.shape[0]
-        if self.num_key_value_groups == 1:
-            return self.qkv(hidden_states).reshape(seq_length, 3, self.num_heads, -1).permute(1, 0, 2, 3).unbind(0)
-
         qkv = self.qkv(hidden_states)
         q, kv = torch.split(qkv, [self.q_dim, 2 * self.kv_dim], dim=-1)
         query_states = q.view(seq_length, self.num_heads, self.head_dim)
-        kv = kv.view(seq_length, 2, self.num_key_value_groups, self.head_dim)
+        kv = kv.view(seq_length, 2, self.num_key_value_heads, self.head_dim)
         key_states, value_states = kv[:, 0], kv[:, 1]
-        repeat_factor = self.num_heads // self.num_key_value_groups
-        key_states = key_states.repeat_interleave(repeat_factor, dim=1)
-        value_states = value_states.repeat_interleave(repeat_factor, dim=1)
         return query_states, key_states, value_states
 
     def forward(
@@ -200,7 +191,8 @@ class Exaone4_5_VisionBlock(Qwen2_5_VLVisionBlock):
 class Exaone4_5_PreTrainedModel(Exaone4PreTrainedModel):
     config_class = Exaone4_5_Config
     config: Exaone4_5_Config
-    _no_split_modules = ["Exaone4_5_VisionBlock", "Exaone4_5_DecoderLayer"]
+    base_model_prefix = "model"
+    _no_split_modules = ["Exaone4_5_VisionBlock", "Exaone4DecoderLayer"]
     _skip_keys_device_placement = ["past_key_values"]
     _keys_to_ignore_on_load_unexpected = [r"mtp.*"]
 
@@ -237,13 +229,48 @@ class Exaone4_5_VisionPreTrainedModel(Exaone4_5_PreTrainedModel, Qwen2_5_VisionT
 
 class Exaone4_5_Model(Exaone4_5_PreTrainedModel, Qwen2_5_VLModel):
     config_class = Exaone4_5_Config
-    base_model_prefix = ""
+    base_model_prefix = "model"
 
     def __init__(self, config: Exaone4_5_Config):
         super().__init__(config)
         self.visual = Exaone4_5_VisionPreTrainedModel._from_config(config.vision_config)
         self.language_model = AutoModel.from_config(config.text_config)
         self.post_init()
+
+    def _get_visual_dtype_and_device(self) -> tuple[torch.dtype, torch.device]:
+        visual_dtype = self.visual.patch_embed.proj.weight.dtype
+        visual_device = self.visual.patch_embed.proj.weight.device
+        return visual_dtype, visual_device
+
+    def get_image_features(
+        self, pixel_values: torch.FloatTensor, image_grid_thw: torch.LongTensor | None = None, **kwargs
+    ):
+        visual_dtype, visual_device = self._get_visual_dtype_and_device()
+        pixel_values = pixel_values.to(device=visual_device, dtype=visual_dtype)
+        if image_grid_thw is not None:
+            image_grid_thw = image_grid_thw.to(visual_device)
+            if pixel_values.shape[0] != int(image_grid_thw.prod(-1).sum().item()):
+                raise ValueError("Image features and image tokens do not match")
+        vision_outputs = self.visual(pixel_values, grid_thw=image_grid_thw, **kwargs)
+        split_sizes = (image_grid_thw.prod(-1) // self.visual.spatial_merge_size**2).tolist()
+        image_embeds = torch.split(vision_outputs.pooler_output, split_sizes)
+        vision_outputs.pooler_output = image_embeds
+        return vision_outputs
+
+    def get_video_features(
+        self, pixel_values_videos: torch.FloatTensor, video_grid_thw: torch.LongTensor | None = None, **kwargs
+    ):
+        visual_dtype, visual_device = self._get_visual_dtype_and_device()
+        pixel_values_videos = pixel_values_videos.to(device=visual_device, dtype=visual_dtype)
+        if video_grid_thw is not None:
+            video_grid_thw = video_grid_thw.to(visual_device)
+            if pixel_values_videos.shape[0] != int(video_grid_thw.prod(-1).sum().item()):
+                raise ValueError("Video features and video tokens do not match")
+        vision_outputs = self.visual(pixel_values_videos, grid_thw=video_grid_thw, **kwargs)
+        split_sizes = (video_grid_thw.prod(-1) // self.visual.spatial_merge_size**2).tolist()
+        video_embeds = torch.split(vision_outputs.pooler_output, split_sizes)
+        vision_outputs.pooler_output = video_embeds
+        return vision_outputs
 
     @can_return_tuple
     def forward(
@@ -310,6 +337,7 @@ class Exaone4_5_Model(Exaone4_5_PreTrainedModel, Qwen2_5_VLModel):
         )
 
 
+@auto_docstring
 class Exaone4_5_ForConditionalGeneration(Exaone4_5_PreTrainedModel, Qwen2_5_VLForConditionalGeneration):
     config: Exaone4_5_Config
 
@@ -318,6 +346,43 @@ class Exaone4_5_ForConditionalGeneration(Exaone4_5_PreTrainedModel, Qwen2_5_VLFo
         self.model = Exaone4_5_Model(config)
         self.lm_head = nn.Linear(config.text_config.hidden_size, config.text_config.vocab_size, bias=False)
         self.post_init()
+
+    def _get_image_nums_and_video_nums(
+        self,
+        input_ids: torch.LongTensor | None,
+        inputs_embeds: torch.Tensor | None = None,
+    ) -> tuple[torch.Tensor, torch.Tensor]:
+        """
+        Returns per-sample counts of image and video placeholder tokens.
+
+        If `inputs_embeds` are provided, placeholder positions are inferred by comparing against
+        the embedding vectors of `image_token_id` and `video_token_id`. Otherwise, counts are
+        computed directly from `input_ids`.
+        """
+        image_token_id = self.config.image_token_id
+        video_token_id = self.config.video_token_id
+
+        if inputs_embeds is not None:
+            image_mask = (
+                inputs_embeds
+                == self.get_input_embeddings()(
+                    torch.tensor(image_token_id, dtype=torch.long, device=inputs_embeds.device)
+                )
+            )[..., 0]
+            video_mask = (
+                inputs_embeds
+                == self.get_input_embeddings()(
+                    torch.tensor(video_token_id, dtype=torch.long, device=inputs_embeds.device)
+                )
+            )[..., 0]
+        else:
+            image_mask = input_ids == image_token_id
+            video_mask = input_ids == video_token_id
+
+        image_nums = torch.sum(image_mask, dim=1)
+        video_nums = torch.sum(video_mask, dim=1)
+
+        return image_nums, video_nums
 
     @can_return_tuple
     def forward(

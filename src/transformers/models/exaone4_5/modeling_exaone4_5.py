@@ -169,17 +169,18 @@ def eager_attention_forward(
 class Exaone4_5_VisionAttention(nn.Module):
     def __init__(self, config: Exaone4_5_VisionConfig) -> None:
         super().__init__()
+        self.num_key_value_heads = config.num_key_value_heads
         self.dim = config.hidden_size
         self.num_heads = config.num_heads
         self.head_dim = self.dim // self.num_heads
-        self.num_key_value_groups = config.num_key_value_heads
+        self.num_key_value_groups = self.num_heads // self.num_key_value_heads
         self.proj = nn.Linear(self.dim, self.dim)
         self.scaling = self.head_dim**-0.5
         self.config = config
         self.attention_dropout = 0.0
         self.is_causal = False
         self.q_dim = self.num_heads * self.head_dim
-        self.kv_dim = self.num_key_value_groups * self.head_dim
+        self.kv_dim = self.num_key_value_heads * self.head_dim
         self.qkv = nn.Linear(self.dim, self.q_dim + (self.kv_dim * 2), bias=True)
 
     def forward(
@@ -251,17 +252,11 @@ class Exaone4_5_VisionAttention(nn.Module):
 
     def _split_qkv(self, hidden_states: torch.Tensor):
         seq_length = hidden_states.shape[0]
-        if self.num_key_value_groups == 1:
-            return self.qkv(hidden_states).reshape(seq_length, 3, self.num_heads, -1).permute(1, 0, 2, 3).unbind(0)
-
         qkv = self.qkv(hidden_states)
         q, kv = torch.split(qkv, [self.q_dim, 2 * self.kv_dim], dim=-1)
         query_states = q.view(seq_length, self.num_heads, self.head_dim)
-        kv = kv.view(seq_length, 2, self.num_key_value_groups, self.head_dim)
+        kv = kv.view(seq_length, 2, self.num_key_value_heads, self.head_dim)
         key_states, value_states = kv[:, 0], kv[:, 1]
-        repeat_factor = self.num_heads // self.num_key_value_groups
-        key_states = key_states.repeat_interleave(repeat_factor, dim=1)
-        value_states = value_states.repeat_interleave(repeat_factor, dim=1)
         return query_states, key_states, value_states
 
 
@@ -459,7 +454,7 @@ class Exaone4_5_PreTrainedModel(PreTrainedModel):
     config: Exaone4_5_Config
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
-    _no_split_modules = ["Exaone4_5_VisionBlock", "Exaone4_5_DecoderLayer"]
+    _no_split_modules = ["Exaone4_5_VisionBlock", "Exaone4DecoderLayer"]
     _skip_keys_device_placement = ["past_key_values"]
     _supports_flash_attn = True
     _supports_sdpa = True
@@ -657,7 +652,7 @@ class Exaone4_5_VisionPreTrainedModel(Exaone4_5_PreTrainedModel):
 
 @auto_docstring
 class Exaone4_5_Model(Exaone4_5_PreTrainedModel):
-    base_model_prefix = ""
+    base_model_prefix = "model"
     # Reference: fix gemma3 grad acc #37208
     accepts_loss_kwargs = False
     config: Exaone4_5_Config
@@ -856,10 +851,7 @@ class Exaone4_5_Model(Exaone4_5_PreTrainedModel):
     @can_return_tuple
     @auto_docstring
     def get_video_features(
-        self,
-        pixel_values_videos: torch.FloatTensor,
-        video_grid_thw: torch.LongTensor | None = None,
-        **kwargs: Unpack[TransformersKwargs],
+        self, pixel_values_videos: torch.FloatTensor, video_grid_thw: torch.LongTensor | None = None, **kwargs
     ) -> tuple | BaseModelOutputWithPooling:
         r"""
         pixel_values_videos (`torch.FloatTensor` of shape `(batch_size, num_channels, image_size, image_size)`):
@@ -867,21 +859,22 @@ class Exaone4_5_Model(Exaone4_5_PreTrainedModel):
         video_grid_thw (`torch.LongTensor` of shape `(num_videos, 3)`, *optional*):
             The temporal, height and width of feature shape of each video in LLM.
         """
-        pixel_values_videos = pixel_values_videos.type(self.visual.dtype)
+        visual_dtype, visual_device = self._get_visual_dtype_and_device()
+        pixel_values_videos = pixel_values_videos.to(device=visual_device, dtype=visual_dtype)
+        if video_grid_thw is not None:
+            video_grid_thw = video_grid_thw.to(visual_device)
+            if pixel_values_videos.shape[0] != int(video_grid_thw.prod(-1).sum().item()):
+                raise ValueError("Video features and video tokens do not match")
         vision_outputs = self.visual(pixel_values_videos, grid_thw=video_grid_thw, **kwargs)
         split_sizes = (video_grid_thw.prod(-1) // self.visual.spatial_merge_size**2).tolist()
         video_embeds = torch.split(vision_outputs.pooler_output, split_sizes)
         vision_outputs.pooler_output = video_embeds
-
         return vision_outputs
 
     @can_return_tuple
     @auto_docstring
     def get_image_features(
-        self,
-        pixel_values: torch.FloatTensor,
-        image_grid_thw: torch.LongTensor | None = None,
-        **kwargs: Unpack[TransformersKwargs],
+        self, pixel_values: torch.FloatTensor, image_grid_thw: torch.LongTensor | None = None, **kwargs
     ) -> tuple | BaseModelOutputWithPooling:
         r"""
         pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, image_size, image_size)`):
@@ -889,12 +882,16 @@ class Exaone4_5_Model(Exaone4_5_PreTrainedModel):
         image_grid_thw (`torch.LongTensor` of shape `(num_images, 3)`, *optional*):
             The temporal, height and width of feature shape of each image in LLM.
         """
-        pixel_values = pixel_values.type(self.visual.dtype)
+        visual_dtype, visual_device = self._get_visual_dtype_and_device()
+        pixel_values = pixel_values.to(device=visual_device, dtype=visual_dtype)
+        if image_grid_thw is not None:
+            image_grid_thw = image_grid_thw.to(visual_device)
+            if pixel_values.shape[0] != int(image_grid_thw.prod(-1).sum().item()):
+                raise ValueError("Image features and image tokens do not match")
         vision_outputs = self.visual(pixel_values, grid_thw=image_grid_thw, **kwargs)
         split_sizes = (image_grid_thw.prod(-1) // self.visual.spatial_merge_size**2).tolist()
         image_embeds = torch.split(vision_outputs.pooler_output, split_sizes)
         vision_outputs.pooler_output = image_embeds
-
         return vision_outputs
 
     def get_placeholder_mask(
@@ -1060,7 +1057,13 @@ class Exaone4_5_Model(Exaone4_5_PreTrainedModel):
             attentions=outputs.attentions,
         )
 
+    def _get_visual_dtype_and_device(self) -> tuple[torch.dtype, torch.device]:
+        visual_dtype = self.visual.patch_embed.proj.weight.dtype
+        visual_device = self.visual.patch_embed.proj.weight.device
+        return visual_dtype, visual_device
 
+
+@auto_docstring
 class Exaone4_5_ForConditionalGeneration(Exaone4_5_PreTrainedModel, GenerationMixin):
     _tied_weights_keys = {"lm_head.weight": "model.language_model.embed_tokens.weight"}
     # Reference: fix gemma3 grad acc #37208
@@ -1295,28 +1298,16 @@ class Exaone4_5_ForConditionalGeneration(Exaone4_5_PreTrainedModel, GenerationMi
         inputs_embeds: torch.Tensor | None = None,
     ) -> tuple[torch.Tensor, torch.Tensor]:
         """
-        Get the number of images and videos for each sample to calculate the separation length of the sample tensor.
-        These parameters are not passed through the processor to avoid unpredictable impacts from interface modifications.
+        Returns per-sample counts of image and video placeholder tokens.
 
-        Args:
-            input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
-                Indices of input sequence tokens in the vocabulary.
-
-        Returns:
-            image_nums (`torch.LongTensor` of shape `(batch_size, num_images_sample)`)
-            video_nums (`torch.LongTensor` of shape `(batch_size, num_videos_sample)`)
+        If `inputs_embeds` are provided, placeholder positions are inferred by comparing against
+        the embedding vectors of `image_token_id` and `video_token_id`. Otherwise, counts are
+        computed directly from `input_ids`.
         """
         image_token_id = self.config.image_token_id
         video_token_id = self.config.video_token_id
-        vision_start_token_id = self.config.vision_start_token_id
 
         if inputs_embeds is not None:
-            vision_start_mask = (
-                inputs_embeds
-                == self.get_input_embeddings()(
-                    torch.tensor(vision_start_token_id, dtype=torch.long, device=inputs_embeds.device)
-                )
-            )[..., 0]
             image_mask = (
                 inputs_embeds
                 == self.get_input_embeddings()(
@@ -1330,13 +1321,11 @@ class Exaone4_5_ForConditionalGeneration(Exaone4_5_PreTrainedModel, GenerationMi
                 )
             )[..., 0]
         else:
-            vision_start_mask = input_ids == vision_start_token_id
             image_mask = input_ids == image_token_id
             video_mask = input_ids == video_token_id
 
-        vision_first_mask = torch.roll(vision_start_mask, shifts=1, dims=1)
-        image_nums = torch.sum(vision_first_mask & image_mask, dim=1)
-        video_nums = torch.sum(vision_first_mask & video_mask, dim=1)
+        image_nums = torch.sum(image_mask, dim=1)
+        video_nums = torch.sum(video_mask, dim=1)
 
         return image_nums, video_nums
 
