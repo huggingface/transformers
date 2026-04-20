@@ -878,10 +878,15 @@ class Fp8Dequantize(ConversionOps):
     ) -> dict[str, torch.Tensor]:
         if len(input_dict) < 2:
             # case where we only got weights, need to check for "weight$"
-            return {full_layer_name: input_dict["weight$"]}
+            key = "weight$" if "weight$" in input_dict else next(iter(input_dict))
+            return {full_layer_name: input_dict[key]}
 
-        quantized = input_dict["weight$"][0]
-        scales = input_dict["weight_scale_inv"][0]
+        if "weight$" in input_dict:
+            quantized = input_dict["weight$"][0]
+            scales = input_dict["weight_scale_inv"][0]
+        else:
+            quantized, scales = input_dict.values()
+            quantized, scales = quantized[0], scales[0]
 
         rows, cols = quantized.shape[-2:]
         block_size = self.hf_quantizer.quantization_config.weight_block_size
