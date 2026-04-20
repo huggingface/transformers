@@ -24,13 +24,13 @@ from ...utils import auto_docstring
 
 
 @auto_docstring(checkpoint="tue-mps/coco_panoptic_eomt_large_640")
-@strict(accept_kwargs=True)
+@strict
 class EomtConfig(PreTrainedConfig):
     r"""
-    num_upscale_blocks (`int`, *optional*, defaults to 2):
-        Number of upsampling blocks used in the decoder or segmentation head.
     layerscale_value (`float`, *optional*, defaults to 1.0):
         Initial value for the LayerScale parameter.
+    num_upscale_blocks (`int`, *optional*, defaults to 2):
+        Number of upsampling blocks used in the decoder or segmentation head.
     use_swiglu_ffn (`bool`, *optional*, defaults to `False`):
         Whether to use the SwiGLU feedforward neural network.
     num_blocks (`int`, *optional*, defaults to 4):
@@ -73,7 +73,7 @@ class EomtConfig(PreTrainedConfig):
     num_hidden_layers: int = 24
     num_attention_heads: int = 16
     hidden_act: str = "gelu"
-    hidden_dropout_prob: float = 0.0
+    hidden_dropout_prob: float | int = 0.0
     initializer_range: float = 0.02
     layer_norm_eps: float = 1e-6
     image_size: int | list[int] | tuple[int, int] = 640
@@ -81,7 +81,7 @@ class EomtConfig(PreTrainedConfig):
     num_channels: int = 3
     mlp_ratio: int = 4
     layerscale_value: float = 1.0
-    drop_path_rate: float = 0.0
+    drop_path_rate: float | int = 0.0
     num_upscale_blocks: int = 2
     attention_dropout: float | int = 0.0
     use_swiglu_ffn: bool = False

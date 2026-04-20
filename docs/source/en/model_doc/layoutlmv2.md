@@ -307,9 +307,9 @@ print(encoding.keys())
 [[autodoc]] LayoutLMv2ImageProcessor
     - preprocess
 
-## LayoutLMv2ImageProcessorFast
+## LayoutLMv2ImageProcessorPil
 
-[[autodoc]] LayoutLMv2ImageProcessorFast
+[[autodoc]] LayoutLMv2ImageProcessorPil
     - preprocess
 
 ## LayoutLMv2Tokenizer

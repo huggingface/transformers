@@ -30,20 +30,18 @@ from ..auto import AutoConfig
 from ..depth_anything.modeling_depth_anything import (
     DepthAnythingPreActResidualLayer,
 )
-from ..dpt.image_processing_dpt_fast import DPTImageProcessorFast
+from ..dpt.image_processing_dpt import DPTImageProcessor
 from ..dpt.modeling_dpt import DPTReassembleLayer, _get_backbone_hidden_size
 
 
 @auto_docstring(checkpoint="facebook/dinov3-vitl16-chmv2-dpt-head")
-@strict(accept_kwargs=True)
+@strict
 class CHMv2Config(PreTrainedConfig):
     r"""
     backbone_config (`Union[dict, "PreTrainedConfig"]`, *optional*):
         The configuration of the backbone model. Only DINOv3ViTConfig is currently supported.
     patch_size (`int`, *optional*, defaults to 16):
         The patch size used by the backbone vision transformer.
-    initializer_range (`float`, *optional*, defaults to 0.02):
-        The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
     reassemble_factors (`list[float]`, *optional*, defaults to `[4, 2, 1, 0.5]`):
         The up/downsampling factors of the reassemble layers.
     post_process_channels (`list[int]`, *optional*, defaults to `[128, 256, 512, 1024]`):
@@ -142,7 +140,7 @@ class CHMv2ImageProcessorKwargs(ImagesKwargs, total=False):
     do_reduce_labels: bool
 
 
-class CHMv2ImageProcessorFast(DPTImageProcessorFast):
+class CHMv2ImageProcessor(DPTImageProcessor):
     do_resize = False
     do_pad = True
     size_divisor = 16
@@ -533,7 +531,7 @@ class CHMv2ForDepthEstimation(CHMv2PreTrainedModel):
 
 __all__ = [
     "CHMv2Config",
-    "CHMv2ImageProcessorFast",
+    "CHMv2ImageProcessor",
     "CHMv2ForDepthEstimation",
     "CHMv2PreTrainedModel",
 ]

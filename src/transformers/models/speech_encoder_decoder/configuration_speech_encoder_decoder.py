@@ -25,16 +25,9 @@ logger = logging.get_logger(__name__)
 
 
 @auto_docstring(checkpoint="")
-@strict(accept_kwargs=True)
+@strict
 class SpeechEncoderDecoderConfig(PreTrainedConfig):
     r"""
-    kwargs (*optional*):
-        Dictionary of keyword arguments. Notably:
-            - **encoder** ([`PreTrainedConfig`], *optional*) -- An instance of a configuration object that defines
-              the encoder config.
-            - **decoder** ([`PreTrainedConfig`], *optional*) -- An instance of a configuration object that defines
-              the decoder config.
-
     Examples:
 
     ```python
@@ -68,7 +61,7 @@ class SpeechEncoderDecoderConfig(PreTrainedConfig):
     sub_configs = {"encoder": AutoConfig, "decoder": AutoConfig}
     has_no_defaults_at_init = True
 
-    is_encoder_decoder: int | None = True
+    is_encoder_decoder: bool | None = True
 
     def __post_init__(self, **kwargs):
         if "encoder" not in kwargs or "decoder" not in kwargs:

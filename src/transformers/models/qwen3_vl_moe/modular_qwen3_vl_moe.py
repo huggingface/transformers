@@ -54,7 +54,7 @@ logger = logging.get_logger(__name__)
 
 
 @auto_docstring(checkpoint="Qwen/Qwen3-VL-30B-A3B-Instruct")
-@strict(accept_kwargs=True)
+@strict
 class Qwen3VLMoeTextConfig(Qwen3MoeConfig):
     r"""
     decoder_sparse_step (`int`, *optional*, defaults to 1):
@@ -124,13 +124,14 @@ class Qwen3VLMoeTextConfig(Qwen3MoeConfig):
 
 
 @auto_docstring(checkpoint="Qwen/Qwen3-VL-30B-A3B-Instruct")
-@strict(accept_kwargs=True)
+@strict
 class Qwen3VLMoeVisionConfig(Qwen3VLVisionConfig):
+    model_type = "qwen3_vl_moe_vision"
     pass
 
 
 @auto_docstring(checkpoint="Qwen/Qwen3-VL-30B-A3B-Instruct")
-@strict(accept_kwargs=True)
+@strict
 class Qwen3VLMoeConfig(Qwen3VLConfig):
     r"""
     Example:
@@ -170,8 +171,8 @@ class Qwen3VLMoeTextTopKRouter(nn.Module):
     def forward(self, hidden_states):
         hidden_states = hidden_states.reshape(-1, self.hidden_dim)
         router_logits = F.linear(hidden_states, self.weight)  # (seq_len, num_experts)
-        router_logits = torch.nn.functional.softmax(router_logits, dtype=torch.float, dim=-1)
-        router_top_value, router_indices = torch.topk(router_logits, self.top_k, dim=-1)  # (seq_len, top_k)
+        router_probs = torch.nn.functional.softmax(router_logits, dtype=torch.float, dim=-1)
+        router_top_value, router_indices = torch.topk(router_probs, self.top_k, dim=-1)  # (seq_len, top_k)
         router_top_value /= router_top_value.sum(dim=-1, keepdim=True)
         router_top_value = router_top_value.to(router_logits.dtype)
         router_scores = router_top_value
@@ -451,6 +452,7 @@ class Qwen3VLMoeForConditionalGeneration(Qwen3VLForConditionalGeneration):
 __all__ = [
     "Qwen3VLMoeConfig",
     "Qwen3VLMoeTextConfig",
+    "Qwen3VLMoeVisionConfig",
     "Qwen3VLMoeVisionModel",
     "Qwen3VLMoeForConditionalGeneration",
     "Qwen3VLMoeModel",  # noqa

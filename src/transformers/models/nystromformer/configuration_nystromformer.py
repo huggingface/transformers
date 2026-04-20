@@ -20,7 +20,7 @@ from ...utils import auto_docstring
 
 
 @auto_docstring(checkpoint="uw-madison/nystromformer-512")
-@strict(accept_kwargs=True)
+@strict
 class NystromformerConfig(PreTrainedConfig):
     r"""
     segment_means_seq_len (`int`, *optional*, defaults to 64):
@@ -57,8 +57,8 @@ class NystromformerConfig(PreTrainedConfig):
     num_attention_heads: int = 12
     intermediate_size: int = 3072
     hidden_act: str = "gelu_new"
-    hidden_dropout_prob: float = 0.1
-    attention_probs_dropout_prob: float = 0.1
+    hidden_dropout_prob: float | int = 0.1
+    attention_probs_dropout_prob: float | int = 0.1
     max_position_embeddings: int = 510
     type_vocab_size: int = 2
     segment_means_seq_len: int = 64
@@ -69,7 +69,7 @@ class NystromformerConfig(PreTrainedConfig):
     layer_norm_eps: float = 1e-5
     pad_token_id: int | None = 1
     bos_token_id: int | None = 0
-    eos_token_id: int | None = 2
+    eos_token_id: int | list[int] | None = 2
     add_cross_attention: bool = False
     tie_word_embeddings: bool = True
 

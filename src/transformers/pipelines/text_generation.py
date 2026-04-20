@@ -450,6 +450,8 @@ class TextGenerationPipeline(Pipeline):
                     split_keys[k] = v.numpy().tolist()
 
         skip_special_tokens = skip_special_tokens if skip_special_tokens is not None else True
+        if getattr(self.tokenizer, "response_schema", False):
+            skip_special_tokens = False
         for idx, sequence in enumerate(generated_sequence):
             if return_type == ReturnType.TENSORS:
                 record = {"generated_token_ids": sequence}

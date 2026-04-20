@@ -22,7 +22,7 @@ from ..auto import CONFIG_MAPPING, AutoConfig
 
 
 @auto_docstring(checkpoint="mistralai/Mistral-Small-3.1-24B-Instruct-2503")
-@strict(accept_kwargs=True)
+@strict
 class Mistral3Config(PreTrainedConfig):
     r"""
     Example:

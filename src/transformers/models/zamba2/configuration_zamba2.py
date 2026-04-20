@@ -22,7 +22,7 @@ from ...utils import auto_docstring
 
 
 @auto_docstring(checkpoint="Zyphra/Zamba2-2.7B")
-@strict(accept_kwargs=True)
+@strict
 class Zamba2Config(PreTrainedConfig):
     r"""
     mamba_ngroups (`int`, *optional*, defaults to 1):
@@ -33,6 +33,8 @@ class Zamba2Config(PreTrainedConfig):
         Whether or not to use bias in the convolution layer of the mixer block.
     chunk_size (`int`, *optional*, defaults to 256):
         Size of the chunks that will comprise the sequence.
+    use_mamba_kernels (`bool`, *optional*, defaults to `True`):
+        Flag indicating whether or not to use the fast mamba kernels.
     use_mem_eff_path (`bool`, *optional*, defaults to `False`):
         Whether or not to use the fused conv1d and scan in mamba2 layers.
     add_bias_linear (`bool`, *optional*, defaults to `False`):
@@ -66,7 +68,7 @@ class Zamba2Config(PreTrainedConfig):
     ```"""
 
     model_type = "zamba2"
-    attribute_map = {"head_dim": "attention_head_dim"}
+    attribute_map = {"layer_types": "layers_block_type", "head_dim": "attention_head_dim"}
     keys_to_ignore_at_inference = ["past_key_values"]
 
     vocab_size: int = 32000
@@ -83,6 +85,7 @@ class Zamba2Config(PreTrainedConfig):
     time_step_floor: float = 1e-4
     time_step_limit: list[float] | tuple[float, ...] | None = None
     n_mamba_heads: int = 8
+    use_mamba_kernels: bool = True
     use_conv_bias: bool = True
     chunk_size: int = 256
     use_mem_eff_path: bool = False

@@ -53,7 +53,7 @@ from ..sam2_video.processing_sam2_video import Sam2VideoProcessor
 
 
 @auto_docstring(checkpoint="facebook/sam3")
-@strict(accept_kwargs=True)
+@strict
 class Sam3TrackerVideoPromptEncoderConfig(Sam2VideoPromptEncoderConfig):
     r"""
     mask_input_channels (`int`, *optional*, defaults to 16):
@@ -75,13 +75,13 @@ class Sam3TrackerVideoProcessor(Sam2VideoProcessor):
 
 
 @auto_docstring(checkpoint="facebook/sam3")
-@strict(accept_kwargs=True)
+@strict
 class Sam3TrackerVideoMaskDecoderConfig(Sam2VideoMaskDecoderConfig):
     pass
 
 
 @auto_docstring(checkpoint="facebook/sam3")
-@strict(accept_kwargs=True)
+@strict
 class Sam3TrackerVideoConfig(PreTrainedConfig):
     r"""
     prompt_encoder_config (Union[`dict`, `Sam3TrackerVideoPromptEncoderConfig`], *optional*):
@@ -131,7 +131,7 @@ class Sam3TrackerVideoConfig(PreTrainedConfig):
     memory_attention_rope_feat_sizes (`list[int]`, *optional*, defaults to `[72, 72]`):
         The feature sizes for the Rope positional encoding.
     memory_attention_rope_dropout (`float`, *optional*, defaults to 0.1):
-            The dropout rate for the Rope positional encoding.
+        The dropout rate for the Rope positional encoding.
     memory_encoder_hidden_size (`int`, *optional*, defaults to 256):
         Dimensionality of the memory encoder hidden states.
     memory_encoder_output_channels (`int`, *optional*, defaults to 64):

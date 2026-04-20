@@ -23,7 +23,7 @@ logger = logging.get_logger(__name__)
 
 
 @auto_docstring(checkpoint="microsoft/git-base")
-@strict(accept_kwargs=True)
+@strict
 class GitVisionConfig(PreTrainedConfig):
     r"""
     Example:
@@ -58,7 +58,7 @@ class GitVisionConfig(PreTrainedConfig):
 
 
 @auto_docstring(checkpoint="microsoft/git-base")
-@strict(accept_kwargs=True)
+@strict
 class GitConfig(PreTrainedConfig):
     r"""
     num_image_with_embedding (`int`, *optional*):
@@ -89,8 +89,8 @@ class GitConfig(PreTrainedConfig):
     num_attention_heads: int = 12
     intermediate_size: int = 3072
     hidden_act: str = "gelu"
-    hidden_dropout_prob: float = 0.1
-    attention_probs_dropout_prob: float = 0.1
+    hidden_dropout_prob: float | int = 0.1
+    attention_probs_dropout_prob: float | int = 0.1
     max_position_embeddings: int = 1024
     initializer_range: float = 0.02
     layer_norm_eps: float = 1e-12
@@ -98,7 +98,7 @@ class GitConfig(PreTrainedConfig):
     use_cache: bool = True
     tie_word_embeddings: bool = False
     bos_token_id: int | None = 101
-    eos_token_id: int | None = 102
+    eos_token_id: int | list[int] | None = 102
     num_image_with_embedding: int | None = None
 
     def __post_init__(self, **kwargs):

@@ -23,7 +23,7 @@ logger = logging.get_logger(__name__)
 
 
 @auto_docstring(checkpoint="nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B-BF16")
-@strict(accept_kwargs=True)
+@strict
 class NemotronHConfig(PreTrainedConfig):
     r"""
     layers_block_type (`list`, *optional*):
@@ -35,18 +35,16 @@ class NemotronHConfig(PreTrainedConfig):
         Flag indicating whether or not to use the fast mamba kernels.
     ssm_state_size (`int`, *optional*, defaults to 128):
         The dimension of the mamba state space latents.
-    n_group (`int`, *optional*, defaults to 1):
-        Number of groups for expert routing.
     mamba_hidden_act (`str`, *optional*, defaults to `"silu"`):
         The non-linear activation function in the Mamba layers.
-    mamba_dt_min (`float`, *optional*, defaults to 0.001):
-        Minimum value for the time step in Mamba.
-    mamba_dt_max (`float`, *optional*, defaults to 0.1):
-        Maximum value for the time step in Mamba.
-    mamba_dt_limit (`tuple`, *optional*, defaults to `(0.0, inf)`):
-        Limits for the time step in Mamba.
-    mamba_dt_init_floor (`float`, *optional*, defaults to 0.0001):
-        Floor value for time step initialization in Mamba.
+    n_groups (`int`, *optional*, defaults to 8):
+        Number of groups for the evolution matrices of the Mamba layers.
+    expand (`int`, *optional*, defaults to 2):
+        Expanding factor used to determine the intermediate size in the Mamba layers.
+    use_conv_bias (`bool`, *optional*, defaults to `True`):
+        Whether or not to use bias in the convolution layer of the Mamba mixer block.
+    chunk_size (`int`, *optional*, defaults to 128):
+        Size of the chunks that will comprise the sequence in the Mamba layers.
     mamba_ssm_cache_dtype (`str`, *optional*, defaults to `"float32"`):
         Data type for Mamba SSM cache states.
     moe_shared_expert_intermediate_size (`int`, *optional*, defaults to 7688):
@@ -55,6 +53,8 @@ class NemotronHConfig(PreTrainedConfig):
         Latent size for MoE expert projections. If `None`, uses `hidden_size`.
     moe_shared_expert_overlap (`bool`, *optional*, defaults to `True`):
         Whether shared experts overlap with routed experts.
+    n_group (`int`, *optional*, defaults to 1):
+        Number of groups for expert routing.
     num_nextn_predict_layers (`int`, *optional*, defaults to 0):
         Number of additional layers for multi-token prediction. If 0, multi-token prediction is disabled.
     mtp_layers_block_type (`list`, *optional*, defaults to `['attention', 'moe']`):
@@ -77,9 +77,11 @@ class NemotronHConfig(PreTrainedConfig):
 
     >>> # Accessing the model configuration
     >>> configuration = model.config
-    ```"""
+    ```
+    """
 
     model_type = "nemotron_h"
+    attribute_map = {"layer_types": "layers_block_type"}
     keys_to_ignore_at_inference = ["past_key_values"]
 
     vocab_size: int = 131072
@@ -90,13 +92,13 @@ class NemotronHConfig(PreTrainedConfig):
     num_logits_to_keep: int = 1
     pad_token_id: int | None = 0
     bos_token_id: int | None = 1
-    eos_token_id: int | None = 2
+    eos_token_id: int | list[int] | None = 2
     num_attention_heads: int = 32
     num_key_value_heads: int = 8
     head_dim: int = 128
     max_position_embeddings: int = 4096
     attention_bias: bool = False
-    attention_dropout: float = 0.0
+    attention_dropout: float | int = 0.0
     sliding_window: int | None = None
     intermediate_size: int = 21504
     mlp_hidden_act: str = "relu2"

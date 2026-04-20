@@ -20,7 +20,7 @@ from ...utils import auto_docstring
 
 
 @auto_docstring(checkpoint="google-t5/t5-small")
-@strict(accept_kwargs=True)
+@strict
 class T5Config(PreTrainedConfig):
     r"""
     relative_attention_num_buckets (`int`, *optional*, defaults to 32):
@@ -50,14 +50,14 @@ class T5Config(PreTrainedConfig):
     num_heads: int = 8
     relative_attention_num_buckets: int = 32
     relative_attention_max_distance: int = 128
-    dropout_rate: float = 0.1
+    dropout_rate: float | int = 0.1
     layer_norm_epsilon: float = 1e-6
     initializer_factor: float = 1.0
     feed_forward_proj: str = "relu"
     is_encoder_decoder: bool = True
     use_cache: bool = True
     pad_token_id: int | None = 0
-    eos_token_id: int | None = 1
+    eos_token_id: int | list[int] | None = 1
     classifier_dropout: float | int = 0.0
     is_decoder: bool = False
 

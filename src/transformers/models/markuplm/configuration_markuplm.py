@@ -20,12 +20,9 @@ from ...utils import auto_docstring
 
 
 @auto_docstring(checkpoint="microsoft/markuplm-base")
-@strict(accept_kwargs=True)
+@strict
 class MarkupLMConfig(PreTrainedConfig):
     r"""
-    max_tree_id_unit_embeddings (`int`, *optional*, defaults to 1024):
-        The maximum value that the tree id unit embedding might ever use. Typically set this to something large
-        just in case (e.g., 1024).
     max_xpath_tag_unit_embeddings (`int`, *optional*, defaults to 256):
         The maximum value that the xpath tag unit embedding might ever use. Typically set this to something large
         just in case (e.g., 256).
@@ -36,13 +33,10 @@ class MarkupLMConfig(PreTrainedConfig):
         The id of the padding token in the xpath tags.
     subs_pad_id (`int`, *optional*, defaults to 1001):
         The id of the padding token in the xpath subscripts.
-    xpath_tag_unit_hidden_size (`int`, *optional*, defaults to 32):
-        The hidden size of each tree id unit. One complete tree index will have
-        (50*xpath_tag_unit_hidden_size)-dim.
-    max_depth (`int`, *optional*, defaults to 50):
-        The maximum depth in xpath.
     xpath_unit_hidden_size (`int`, *optional*, defaults to 32):
         The hidden size of each unit in xpath.
+    max_depth (`int`, *optional*, defaults to 50):
+        The maximum depth in xpath.
 
     Examples:
 
@@ -67,15 +61,15 @@ class MarkupLMConfig(PreTrainedConfig):
     num_attention_heads: int = 12
     intermediate_size: int = 3072
     hidden_act: str = "gelu"
-    hidden_dropout_prob: float = 0.1
-    attention_probs_dropout_prob: float = 0.1
+    hidden_dropout_prob: float | int = 0.1
+    attention_probs_dropout_prob: float | int = 0.1
     max_position_embeddings: int = 512
     type_vocab_size: int = 2
     initializer_range: float = 0.02
     layer_norm_eps: float = 1e-12
     pad_token_id: int | None = 0
     bos_token_id: int | None = 0
-    eos_token_id: int | None = 2
+    eos_token_id: int | list[int] | None = 2
     max_xpath_tag_unit_embeddings: int = 256
     max_xpath_subs_unit_embeddings: int = 1024
     tag_pad_id: int = 216

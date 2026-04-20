@@ -20,7 +20,7 @@ from huggingface_hub.dataclasses import strict
 from ...configuration_utils import PreTrainedConfig
 from ...image_processing_utils import BatchFeature
 from ...image_utils import ImageInput
-from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
+from ...processing_utils import ImagesKwargs, ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import (
     PreTokenizedInput,
     TextInput,
@@ -32,7 +32,7 @@ from ...utils import (
 from ..auto import CONFIG_MAPPING, AutoConfig, AutoModel
 from ..idefics.modeling_idefics import IdeficsBaseModelOutputWithPast, IdeficsCausalLMOutputWithPast
 from ..janus.image_processing_janus import JanusImageProcessor
-from ..janus.image_processing_janus_fast import JanusImageProcessorFast
+from ..janus.image_processing_pil_janus import JanusImageProcessorPil
 from ..janus.modeling_janus import JanusForConditionalGeneration, JanusModel, JanusPreTrainedModel
 
 
@@ -40,7 +40,7 @@ logger = logging.get_logger(__name__)
 
 
 @auto_docstring(checkpoint="deepseek-community/deepseek-vl-1.3b-chat")
-@strict(accept_kwargs=True)
+@strict
 class DeepseekVLConfig(PreTrainedConfig):
     r"""
     Example:
@@ -152,10 +152,17 @@ class DeepseekVLForConditionalGeneration(JanusForConditionalGeneration):
         raise AttributeError("Not needed for DeepseekVL")
 
 
-class DeepseekVLImageProcessor(JanusImageProcessor):
-    def __init__(self, **super_kwargs):
-        super().__init__(**super_kwargs)
+class DeepseekVLImageProcessorKwargs(ImagesKwargs, total=False):
+    r"""
+    min_size (`int`, *optional*, defaults to 14):
+        The minimum allowed size for the resized image. Ensures that neither the height nor width
+        falls below this value after resizing.
+    """
 
+    min_size: int
+
+
+class DeepseekVLImageProcessorPil(JanusImageProcessorPil):
     def postprocess(self):
         raise AttributeError("Not needed for DeepseekVL")
 
@@ -163,10 +170,7 @@ class DeepseekVLImageProcessor(JanusImageProcessor):
         raise AttributeError("Not needed for DeepseekVL")
 
 
-class DeepseekVLImageProcessorFast(JanusImageProcessorFast):
-    def __init__(self, **super_kwargs):
-        super().__init__(**super_kwargs)
-
+class DeepseekVLImageProcessor(JanusImageProcessor):
     def postprocess(self):
         raise AttributeError("Not needed for DeepseekVL")
 
@@ -266,6 +270,6 @@ __all__ = [
     "DeepseekVLModel",
     "DeepseekVLForConditionalGeneration",
     "DeepseekVLImageProcessor",
-    "DeepseekVLImageProcessorFast",
+    "DeepseekVLImageProcessorPil",
     "DeepseekVLProcessor",
 ]

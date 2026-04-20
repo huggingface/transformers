@@ -20,7 +20,7 @@ from ...utils import auto_docstring
 
 
 @auto_docstring(checkpoint="sweetcocoa/pop2piano")
-@strict(accept_kwargs=True)
+@strict
 class Pop2PianoConfig(PreTrainedConfig):
     r"""
     composer_vocab_size (`int`, *optional*, defaults to 21):
@@ -49,14 +49,14 @@ class Pop2PianoConfig(PreTrainedConfig):
     num_heads: int = 8
     relative_attention_num_buckets: int = 32
     relative_attention_max_distance: int = 128
-    dropout_rate: float = 0.1
+    dropout_rate: float | int = 0.1
     layer_norm_epsilon: float = 1e-6
     initializer_factor: float = 1.0
     feed_forward_proj: str = "gated-gelu"
     is_encoder_decoder: bool = True
     use_cache: bool = True
     pad_token_id: int | None = 0
-    eos_token_id: int | None = 1
+    eos_token_id: int | list[int] | None = 1
     dense_act_fn: str = "relu"
     is_decoder: bool = False
     tie_word_embeddings: bool = True

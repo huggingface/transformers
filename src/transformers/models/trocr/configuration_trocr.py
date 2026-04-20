@@ -20,7 +20,7 @@ from ...utils import auto_docstring
 
 
 @auto_docstring(checkpoint="microsoft/trocr-base-handwritten")
-@strict(accept_kwargs=True)
+@strict
 class TrOCRConfig(PreTrainedConfig):
     r"""
     use_learned_position_embeddings (`bool`, *optional*, defaults to `True`):
@@ -70,7 +70,7 @@ class TrOCRConfig(PreTrainedConfig):
     layernorm_embedding: bool = True
     pad_token_id: int | None = 1
     bos_token_id: int | None = 0
-    eos_token_id: int | None = 2
+    eos_token_id: int | list[int] | None = 2
     cross_attention_hidden_size: int | None = None
     is_decoder: bool = False
     tie_word_embeddings: bool = True
