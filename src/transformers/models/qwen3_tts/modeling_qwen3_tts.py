@@ -1629,6 +1629,7 @@ class Qwen3TTSTalkerForConditionalGeneration(Qwen3TTSTalkerTextPreTrainedModel, 
 
 class Qwen3TTSForConditionalGeneration(Qwen3TTSPreTrainedModel, Qwen3TTSGenerationMixin):
     config_class = Qwen3TTSConfig
+    main_input_name = "input_ids"
 
     def __init__(self, config: Qwen3TTSConfig):
         super().__init__(config)
