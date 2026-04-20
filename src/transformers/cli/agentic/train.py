@@ -544,4 +544,4 @@ def train(
     out.emit({"output_path": output}, task="train")
     if push_to_hub:
         trainer.push_to_hub()
-        print(f"Pushed to Hub: {hub_model_id or output}")
+        out.progress(f"Pushed to Hub: {hub_model_id or output}")
