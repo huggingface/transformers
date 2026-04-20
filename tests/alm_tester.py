@@ -35,7 +35,7 @@ if is_torch_available():
 class ALMModelTester:
     # If the model follows standard naming conventions, only `config_class` and
     # `conditional_generation_class` need to be set (others are optional).
-    base_model_class = None, # this should be added for most models when #45534 is merged
+    base_model_class = None  # this should be added for most models when #45534 is merged
     config_class = None
     text_config_class = None
     audio_config_class = None
