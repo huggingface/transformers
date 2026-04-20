@@ -183,7 +183,7 @@ class ContinuousBatchProcessor:
         self.q_padding_interval_size = self.cb_config.q_padding_interval_size
         self.kv_padding_interval_size = self.cb_config.kv_padding_interval_size
         self.max_cached_graphs = self.cb_config.max_cached_graphs
-        self.use_cuda_graph = self.cb_config.use_cuda_graph
+        self.use_cuda_graph_varlen, self.use_cuda_graph_decode = self.cb_config.get_cuda_graph_booleans()
 
         # Set up metrics collector
         self.max_batch_tokens = cache.max_batch_tokens
@@ -211,7 +211,8 @@ class ContinuousBatchProcessor:
             self._compiled_decode = torch.compile(self._forward_process_and_sample, **decode_config.to_dict())
 
         # Padding is turned on when either cuda graphs or compile is used
-        self._pad_inputs = self.use_cuda_graph or (varlen_config is not None or decode_config is not None)
+        use_cuda_graphs = self.use_cuda_graph_varlen or self.use_cuda_graph_decode
+        self._pad_inputs = use_cuda_graphs or (varlen_config is not None or decode_config is not None)
 
         # Setup inputs and outputs
         self.use_async_batching = self.cb_config.use_async_batching
@@ -226,6 +227,7 @@ class ContinuousBatchProcessor:
                 max_graphs=max_cached_graphs,
                 return_logprobs=self.return_logprobs,
                 logit_processor=self.logit_processor,
+                use_cuda_graph_varlen=self.use_cuda_graph_varlen,
             )
         else:
             self.inputs_and_outputs = ContinuousBatchingIOs(
@@ -236,10 +238,11 @@ class ContinuousBatchProcessor:
                 max_graphs=self.max_cached_graphs,
                 return_logprobs=self.return_logprobs,
                 logit_processor=self.logit_processor,
+                use_cuda_graph_varlen=self.use_cuda_graph_varlen,
             )
         # Set up the graph pool. This allows all graphs to share the same memory pool, which is fine because they never
         # run concurrently. This greatly saves memory.
-        self.graph_pool = torch.cuda.graph_pool_handle() if self.use_cuda_graph else None
+        self.graph_pool = torch.cuda.graph_pool_handle() if use_cuda_graphs else None
 
     def __repr__(self) -> str:
         return (
@@ -511,11 +514,13 @@ class ContinuousBatchProcessor:
         # Get the appropriate forward function (compiled or not, based on current path)
         if self.inputs_and_outputs.use_block_table:
             forward_fn = self._forward_process_and_sample if self._compiled_decode is None else self._compiled_decode
+            use_cuda_graph = self.use_cuda_graph_decode
         else:
             forward_fn = self._forward_process_and_sample if self._compiled_varlen is None else self._compiled_varlen
+            use_cuda_graph = self.use_cuda_graph_varlen
 
         # If we are not using cuda graphs, we perform the generation step and return
-        if not self.use_cuda_graph:
+        if not use_cuda_graph:
             maybe_stream = torch.cuda.stream(compute_stream) if compute_stream is not None else nullcontext()
             with maybe_stream:
                 forward_fn(model, batch_data, carry_over_ids, prev_output_ids, output_ids)
@@ -562,7 +567,7 @@ class ContinuousBatchProcessor:
         function to be easier to trace with OpenTelemetry."""
         self.inputs_and_outputs.carry_over_tokens(batch_data["input_ids"], carry_over_ids, prev_output_ids)
         logits = self._model_forward(model, batch_data).float()  # convert to fp32 to match generate
-        scores = self._process_logit(batch_data, logits) if self.logit_processor else logits
+        scores = self._process_logit(batch_data, logits) if self.logit_processor.do_processing else logits
         self._sample(scores, batch_data["logits_indices"], output_ids)
 
     @traced(span_name="model_forward")
@@ -665,7 +670,7 @@ class ContinuousBatchProcessor:
                 carry_over_ids, prev_output_ids, output_ids = self.inputs_and_outputs.get_cb_kwargs()
                 forward_fn = self._compiled_varlen or self._forward_process_and_sample
                 forward_fn_args = (model, batch_data, carry_over_ids, prev_output_ids, output_ids)
-                if self.use_cuda_graph:
+                if self.use_cuda_graph_varlen:
                     self.capture_graph(forward_fn, compute_stream, *forward_fn_args)
                 else:
                     with torch.cuda.stream(compute_stream):
@@ -703,7 +708,7 @@ class ContinuousBatchProcessor:
                     carry_over_ids, prev_output_ids, output_ids = self.inputs_and_outputs.get_cb_kwargs()
                     forward_fn = self._compiled_decode or self._forward_process_and_sample
                     forward_fn_args = (model, batch_data, carry_over_ids, prev_output_ids, output_ids)
-                    if self.use_cuda_graph:
+                    if self.use_cuda_graph_decode:
                         self.capture_graph(forward_fn, compute_stream, *forward_fn_args)
                     else:
                         with torch.cuda.stream(compute_stream):
@@ -778,7 +783,7 @@ class ContinuousBatchingManager:
 
         # Cuda graph behavior is determined below using either user-specified arguments or heuristics
         is_attn_mask_needed = attn_mask_is_needed(self.model.config)
-        self.use_cuda_graph = self.continuous_batching_config.decide_use_cuda_graphs(
+        self.continuous_batching_config.decide_use_cuda_graphs(
             compile_config=getattr(generation_config, "compile_config", None),
             is_attn_mask_needed=is_attn_mask_needed,
         )

@@ -336,6 +336,7 @@ if TYPE_CHECKING:
     from .prophetnet import *
     from .pvt import *
     from .pvt_v2 import *
+    from .qianfan_ocr import *
     from .qwen2 import *
     from .qwen2_5_omni import *
     from .qwen2_5_vl import *
