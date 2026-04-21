@@ -1951,9 +1951,9 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         """Detect whether the class supports setting its attention implementation dynamically. It is an ugly check based on
         opening the file, but avoids maintaining yet another property flag.
         """
-        class_module = sys.modules[cls.__module__]
-        # This can happen for a custom model in a jupyter notebook or repl for example - simply do not allow to set it then
-        if not hasattr(class_module, "__file__"):
+        class_module = sys.modules.get(cls.__module__)
+        # Missing module entry (e.g. cleared by a test) or custom model in a jupyter notebook / repl -> do not allow to set it
+        if class_module is None or not hasattr(class_module, "__file__"):
             return False
         class_file = class_module.__file__
         with open(class_file, "r", encoding="utf-8") as f:
@@ -1970,9 +1970,9 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         """Detect whether the class supports setting its experts implementation dynamically. It is an ugly check based on
         opening the file, but avoids maintaining yet another property flag.
         """
-        class_module = sys.modules[cls.__module__]
-        # This can happen for a custom model in a jupyter notebook or repl for example - simply do not allow to set it then
-        if not hasattr(class_module, "__file__"):
+        class_module = sys.modules.get(cls.__module__)
+        # Missing module entry (e.g. cleared by a test) or custom model in a jupyter notebook / repl -> do not allow to set it
+        if class_module is None or not hasattr(class_module, "__file__"):
             return False
         class_file = class_module.__file__
         with open(class_file, "r", encoding="utf-8") as f:
@@ -4281,7 +4281,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                 model=model,
                 state_dict=merged_state_dict,
                 load_config=load_config,
-                tp_plan=model._tp_plan,
+                tp_plan=model.tp_plan,
                 disk_offload_index=disk_offload_index,
             )
 
