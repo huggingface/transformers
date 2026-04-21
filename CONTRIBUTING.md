@@ -168,6 +168,26 @@ Adding a model to Transformers makes it available for anyone to load and fine-tu
 7. [Model structure rules](docs/source/en/modeling_rules.md) — check your files pass the static model structure rules enforced by `make typing`.
 8. [Pull request checks](docs/source/en/pr_checks.md) — understand the Hugging Face CI checks and how to run them locally before opening a PR.
 
+### Model addition timeline
+
+There are four timelines for model additions depending on the model contributor and community demand for an architecture.
+
+- Day-0 integration: ship the model in Transformers on release day. We optimize the architecture (quantization, FlashAttention, KV-cache, etc.), review early drafts, and tighten the docs before launch.
+
+  Email transformers@huggingface.co a few weeks ahead, especially for novel architectures. We'll iterate with you on a private fork until your checkpoint and release are ready.
+
+- Same-week integration: high-demand models usually land within a week, even when the author doesn't reach out.
+
+  Open an issue with the [new model template](https://github.com/huggingface/transformers/issues/new?assignees=&labels=New+model&projects=&template=new-model-addition.yml) to request one. Issues with more activity move up the queue faster.
+
+- Post-release integratio*: models without strong demand, or that we don't have bandwidth to take on, land after the upstream release.
+
+  Open issues tagged ["New model"](https://github.com/huggingface/transformers/issues?q=is%3Aopen+is%3Aissue+label%3A%22New+model%22) are the entry point for outside contributors. Start with the most-requested architectures to maximize impact. We'll review and guide you through it.
+
+- Hub-first release: ship your model directly on the Hub via Transformers' [remote-code](./models#custom-models) support, with no upstream PR required.
+
+  Popular Hub-first models often get integrated into Transformers later, which unlocks first-class docs, maintenance, and optimization. Hub-first is the lowest-friction way to add a model.
+
 ## Docs
 
 Improvements to the docs, like typos, missing content or unclear explanations, are always welcome. For docstrings, use the [Google Python Style Guide](https://google.github.io/styleguide/pyguide.html). Open a pull request directly for any documentation fix.
