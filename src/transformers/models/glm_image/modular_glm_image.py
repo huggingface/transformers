@@ -430,6 +430,14 @@ class GlmImageVisionModel(Glm4vVisionModel):
         del self.downsample
         del self.post_layernorm
 
+    def rot_pos_emb(self, grid_thw):
+        warnings.warn(
+            f"`{self.__class__.__name__}.rot_pos_emb` is deprecated and will be removed in a future version. Use `get_vision_position_ids` from `transformers.vision_utils` and apply the rotary embedding module.",
+            FutureWarning,
+            stacklevel=2,
+        )
+        return get_vision_position_ids(grid_thw, self.spatial_merge_size)
+
     @merge_with_config_defaults
     @capture_outputs
     @auto_docstring
@@ -479,14 +487,6 @@ class GlmImageVisionModel(Glm4vVisionModel):
             )
 
         return BaseModelOutputWithPooling(last_hidden_state=hidden_states)
-
-    def rot_pos_emb(self, grid_thw):
-        warnings.warn(
-            f"`{self.__class__.__name__}.rot_pos_emb` is deprecated and will be removed in a future version. Use `get_vision_position_ids` from `transformers.vision_utils` and apply the rotary embedding module.",
-            FutureWarning,
-            stacklevel=2,
-        )
-        return get_vision_position_ids(grid_thw, self.spatial_merge_size)
 
 
 class GlmImageTextModel(Glm4vTextModel):
