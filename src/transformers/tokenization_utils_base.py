@@ -1697,6 +1697,13 @@ class PreTrainedTokenizerBase(PushToHubMixin):
                 else:
                     vocab_files["vocab_file"] = match.group()
 
+        error_message = (
+            f"Can't load tokenizer for '{pretrained_model_name_or_path}'. If you were trying to load it from "
+            "'https://huggingface.co/models', make sure you don't have a local directory with the same name. "
+            f"Otherwise, make sure '{pretrained_model_name_or_path}' is the correct path to a directory "
+            f"containing all relevant files for a {cls.__name__} tokenizer."
+        )
+
         resolved_vocab_files = {}
         for file_id, file_path in vocab_files.items():
             if file_path is None:
@@ -1725,17 +1732,15 @@ class PreTrainedTokenizerBase(PushToHubMixin):
                     raise
                 except Exception:
                     # For any other exception, we throw a generic error.
-                    raise OSError(
-                        f"Can't load tokenizer for '{pretrained_model_name_or_path}'. If you were trying to load it from "
-                        "'https://huggingface.co/models', make sure you don't have a local directory with the same name. "
-                        f"Otherwise, make sure '{pretrained_model_name_or_path}' is the correct path to a directory "
-                        f"containing all relevant files for a {cls.__name__} tokenizer."
-                    )
+                    raise OSError(error_message)
                 commit_hash = extract_commit_hash(resolved_vocab_files[file_id], commit_hash)
 
-        for file_id, file_path in vocab_files.items():
-            if file_id not in resolved_vocab_files:
-                continue
+        loadable_file_ids = set(cls.vocab_files_names)
+        if "tokenizer_file" in resolved_vocab_files:
+            loadable_file_ids.add("tokenizer_file")
+        loadable_file_ids.intersection_update(resolved_vocab_files)
+        if loadable_file_ids and all(resolved_vocab_files[file_id] is None for file_id in loadable_file_ids):
+            raise OSError(error_message)
 
         return cls._from_pretrained(
             resolved_vocab_files,
