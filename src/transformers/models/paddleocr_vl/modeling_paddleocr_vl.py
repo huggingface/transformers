@@ -46,7 +46,7 @@ from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging, torch_compilable_check, torch_int
 from ...utils.generic import is_flash_attention_requested, maybe_autocast, merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
-from ...vision_utils import get_rotary_pos_ids, get_vision_cu_seqlens
+from ...vision_utils import get_vision_cu_seqlens, get_vision_position_ids
 from .configuration_paddleocr_vl import PaddleOCRTextConfig, PaddleOCRVisionConfig, PaddleOCRVLConfig
 
 
@@ -99,8 +99,8 @@ class PaddleOCRVisionRotaryEmbedding(nn.Module):
         inv_freq = 1.0 / (theta ** (torch.arange(0, dim, 2, dtype=torch.float) / dim))
         self.register_buffer("inv_freq", inv_freq, persistent=False)
 
-    def forward(self, pos_ids: torch.Tensor) -> torch.Tensor:
-        return (pos_ids.unsqueeze(-1) * self.inv_freq).flatten(1)
+    def forward(self, position_ids: torch.Tensor) -> torch.Tensor:
+        return (position_ids.unsqueeze(-1) * self.inv_freq).flatten(1)
 
 
 class PaddleOCRRotaryEmbedding(nn.Module):
@@ -822,7 +822,7 @@ class PaddleOCRVisionEncoder(nn.Module):
         grid_thw: torch.LongTensor | None = None,
         cu_seqlens: torch.Tensor | None = None,
         attention_mask: torch.Tensor | None = None,
-        rotary_pos_ids: torch.Tensor | None = None,
+        position_ids: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutput:
         r"""
@@ -836,7 +836,7 @@ class PaddleOCRVisionEncoder(nn.Module):
             The cumulative sequence lengths of each image or video feature.
         attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
             The attention_mask used in forward function shape [batch_size X sequence_length] if not None.
-        rotary_pos_ids (`torch.Tensor` of shape `(sequence_length, 2)`, *optional*):
+        position_ids (`torch.Tensor` of shape `(sequence_length, 2)`, *optional*):
             Precomputed rotary position ids as `(row, column)` pairs. If not provided, will be computed based on
             `image_grid_thw`.
         """
@@ -847,12 +847,12 @@ class PaddleOCRVisionEncoder(nn.Module):
             attention_mask=attention_mask,
         )
 
-        if rotary_pos_ids is None:
+        if position_ids is None:
             # Use merge_size=1: PaddleOCR merges patches in the projector (after the encoder),
             # unlike Qwen which merges inside the encoder, so rotary positions here are simple (row, col).
-            rotary_pos_ids = get_rotary_pos_ids(grid_thw, 1)
+            position_ids = get_vision_position_ids(grid_thw, 1)
 
-        rotary_embeddings = self.rotary_pos_emb(rotary_pos_ids)
+        rotary_embeddings = self.rotary_pos_emb(position_ids)
         rotary_embeddings = rotary_embeddings.repeat(1, 2)
         position_embeddings = (rotary_embeddings.cos(), rotary_embeddings.sin())
 
@@ -900,7 +900,7 @@ class PaddleOCRVisionTransformer(PaddleOCRVLPreTrainedModel):
         grid_thw: torch.LongTensor | None = None,
         cu_seqlens: torch.Tensor | None = None,
         attention_mask: torch.Tensor | None = None,
-        rotary_pos_ids: torch.Tensor | None = None,
+        position_ids: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutputWithPooling:
         """
@@ -920,7 +920,7 @@ class PaddleOCRVisionTransformer(PaddleOCRVLPreTrainedModel):
             grid_thw=grid_thw,
             cu_seqlens=cu_seqlens,
             attention_mask=attention_mask,
-            rotary_pos_ids=rotary_pos_ids,
+            position_ids=position_ids,
             **kwargs,
         )
 
@@ -951,7 +951,7 @@ class PaddleOCRVisionModel(PaddleOCRVLPreTrainedModel):
         pixel_values: torch.FloatTensor,
         grid_thw: torch.LongTensor | None = None,
         cu_seqlens: torch.Tensor | None = None,
-        rotary_pos_ids: torch.Tensor | None = None,
+        position_ids: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
         """
@@ -967,7 +967,7 @@ class PaddleOCRVisionModel(PaddleOCRVLPreTrainedModel):
             pixel_values=pixel_values,
             grid_thw=grid_thw,
             cu_seqlens=cu_seqlens,
-            rotary_pos_ids=rotary_pos_ids,
+            position_ids=position_ids,
             **kwargs,
         )
 
@@ -1217,7 +1217,7 @@ class PaddleOCRVLModel(PaddleOCRVLPreTrainedModel):
         pixel_values: torch.FloatTensor,
         image_grid_thw: torch.LongTensor | None = None,
         image_cu_seqlens: torch.Tensor | None = None,
-        image_rotary_pos_ids: torch.Tensor | None = None,
+        image_position_ids: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
         r"""
@@ -1231,7 +1231,7 @@ class PaddleOCRVLModel(PaddleOCRVLPreTrainedModel):
             pixel_values=pixel_values,
             grid_thw=image_grid_thw,
             cu_seqlens=image_cu_seqlens,
-            rotary_pos_ids=image_rotary_pos_ids,
+            position_ids=image_position_ids,
             return_dict=True,
             **kwargs,
         )
@@ -1398,7 +1398,7 @@ class PaddleOCRVLForConditionalGeneration(PaddleOCRVLPreTrainedModel, Generation
         pixel_values: torch.FloatTensor,
         image_grid_thw: torch.LongTensor | None = None,
         image_cu_seqlens: torch.Tensor | None = None,
-        image_rotary_pos_ids: torch.Tensor | None = None,
+        image_position_ids: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
         r"""
@@ -1408,14 +1408,12 @@ class PaddleOCRVLForConditionalGeneration(PaddleOCRVLPreTrainedModel, Generation
             The temporal, height and width of feature shape of each image in LLM.
         image_cu_seqlens (`torch.IntTensor`, *optional*):
             Precomputed cumulative sequence lengths for images (from `get_vision_cu_seqlens`).
-        image_rotary_pos_ids (`torch.LongTensor`, *optional*):
-            Precomputed (row, col) position IDs for image rotary embeddings (from `get_rotary_pos_ids`).
         """
         return self.model.get_image_features(
             pixel_values,
             image_grid_thw,
             image_cu_seqlens,
-            image_rotary_pos_ids,
+            image_position_ids,
             **kwargs,
         )
 

@@ -42,7 +42,7 @@ from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging, torch_compilable_check
 from ...utils.generic import is_flash_attention_requested, maybe_autocast, merge_with_config_defaults
 from ...utils.output_capturing import OutputRecorder, capture_outputs
-from ...vision_utils import get_rotary_pos_ids, get_vision_cu_seqlens
+from ...vision_utils import get_vision_cu_seqlens, get_vision_position_ids
 from .configuration_ernie4_5_vl_moe import Ernie4_5_VLMoeConfig, Ernie4_5_VLMoeTextConfig, Ernie4_5_VLMoeVisionConfig
 
 
@@ -857,8 +857,8 @@ class Ernie4_5_VLMoeVisionRotaryEmbedding(nn.Module):
         inv_freq = 1.0 / (theta ** (torch.arange(0, dim, 2, dtype=torch.float) / dim))
         self.register_buffer("inv_freq", inv_freq, persistent=False)
 
-    def forward(self, pos_ids: torch.Tensor) -> torch.Tensor:
-        return (pos_ids.unsqueeze(-1) * self.inv_freq).flatten(1)
+    def forward(self, position_ids: torch.Tensor) -> torch.Tensor:
+        return (position_ids.unsqueeze(-1) * self.inv_freq).flatten(1)
 
 
 @auto_docstring
@@ -900,7 +900,7 @@ class Ernie4_5_VLMoeVisionTransformerPretrainedModel(Ernie4_5_VLMoePreTrainedMod
         hidden_states: torch.Tensor,
         grid_thw: torch.Tensor,
         cu_seqlens: torch.Tensor | None = None,
-        rotary_pos_ids: torch.Tensor | None = None,
+        position_ids: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
         r"""
@@ -908,15 +908,15 @@ class Ernie4_5_VLMoeVisionTransformerPretrainedModel(Ernie4_5_VLMoePreTrainedMod
             The temporal, height and width dimensions of feature shape for each image. Each row contains [t, h, w] values.
         cu_seqlens (`torch.IntTensor`, *optional*):
             Precomputed cumulative sequence lengths (from `get_vision_cu_seqlens`).
-        rotary_pos_ids (`torch.Tensor` of shape `(total_tokens, 2)`, *optional*):
-            Precomputed (row, col) position IDs (from `get_rotary_pos_ids`).
+        position_ids (`torch.Tensor` of shape `(total_tokens, 2)`, *optional*):
+            Precomputed (row, col) position IDs (from `get_vision_position_ids`).
         """
         hidden_states = self.patch_embed(hidden_states)
 
-        if rotary_pos_ids is None:
-            rotary_pos_ids = get_rotary_pos_ids(grid_thw, self.spatial_merge_size)
+        if position_ids is None:
+            position_ids = get_vision_position_ids(grid_thw, self.spatial_merge_size)
 
-        rotary_pos_emb = self.rotary_pos_emb(rotary_pos_ids)
+        rotary_pos_emb = self.rotary_pos_emb(position_ids)
         emb = torch.cat((rotary_pos_emb, rotary_pos_emb), dim=-1)
         position_embeddings = (emb.cos(), emb.sin())
 
@@ -935,12 +935,12 @@ class Ernie4_5_VLMoeVisionTransformerPretrainedModel(Ernie4_5_VLMoePreTrainedMod
 
     def rot_pos_emb(self, grid_thw):
         warnings.warn(
-            f"`{self.__class__.__name__}.rot_pos_emb` is deprecated and will be removed in a future version. Use `get_rotary_pos_ids` from `transformers.vision_utils` and apply the rotary embedding module.",
+            f"`{self.__class__.__name__}.rot_pos_emb` is deprecated and will be removed in a future version. Use `get_vision_position_ids` from `transformers.vision_utils` and apply the rotary embedding module.",
             FutureWarning,
             stacklevel=2,
         )
-        pos_ids = get_rotary_pos_ids(grid_thw, self.spatial_merge_size)
-        rotary_pos_emb = self.rotary_pos_emb(pos_ids)
+        position_ids = get_vision_position_ids(grid_thw, self.spatial_merge_size)
+        rotary_pos_emb = self.rotary_pos_emb(position_ids)
         return rotary_pos_emb
 
 
@@ -1257,7 +1257,7 @@ class Ernie4_5_VLMoeModel(Ernie4_5_VLMoePreTrainedModel):
         pixel_values_videos: torch.FloatTensor,
         video_grid_thw: torch.LongTensor | None = None,
         video_cu_seqlens: torch.Tensor | None = None,
-        video_rotary_pos_ids: torch.Tensor | None = None,
+        video_position_ids: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
         r"""
@@ -1265,16 +1265,12 @@ class Ernie4_5_VLMoeModel(Ernie4_5_VLMoePreTrainedModel):
             The tensors corresponding to the input videos.
         video_grid_thw (`torch.LongTensor` of shape `(num_videos, 3)`, *optional*):
             The temporal, height and width of feature shape of each video in LLM.
-        video_cu_seqlens (`torch.Tensor`, *optional*):
-            Precomputed cumulative sequence lengths (from the processor).
-        video_rotary_pos_ids (`torch.Tensor`, *optional*):
-            Precomputed rotary position IDs (from the processor).
         """
         video_outputs = self.vision_tower(
             pixel_values_videos,
             video_grid_thw,
             cu_seqlens=video_cu_seqlens,
-            rotary_pos_ids=video_rotary_pos_ids,
+            position_ids=video_position_ids,
             return_dict=True,
             **kwargs,
         )
@@ -1295,7 +1291,7 @@ class Ernie4_5_VLMoeModel(Ernie4_5_VLMoePreTrainedModel):
         pixel_values: torch.FloatTensor,
         image_grid_thw: torch.LongTensor | None = None,
         image_cu_seqlens: torch.Tensor | None = None,
-        image_rotary_pos_ids: torch.Tensor | None = None,
+        image_position_ids: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
         r"""
@@ -1303,16 +1299,12 @@ class Ernie4_5_VLMoeModel(Ernie4_5_VLMoePreTrainedModel):
             The tensors corresponding to the input images.
         image_grid_thw (`torch.LongTensor` of shape `(num_images, 3)`, *optional*):
             The temporal, height and width of feature shape of each image in LLM.
-        image_cu_seqlens (`torch.Tensor`, *optional*):
-            Precomputed cumulative sequence lengths (from the processor).
-        image_rotary_pos_ids (`torch.Tensor`, *optional*):
-            Precomputed rotary position IDs (from the processor).
         """
         image_outputs = self.vision_tower(
             pixel_values,
             image_grid_thw,
             cu_seqlens=image_cu_seqlens,
-            rotary_pos_ids=image_rotary_pos_ids,
+            position_ids=image_position_ids,
             return_dict=True,
             **kwargs,
         )
@@ -1604,7 +1596,7 @@ class Ernie4_5_VLMoeForConditionalGeneration(Ernie4_5_VLMoePreTrainedModel, Gene
         pixel_values_videos: torch.FloatTensor,
         video_grid_thw: torch.LongTensor | None = None,
         video_cu_seqlens: torch.Tensor | None = None,
-        video_rotary_pos_ids: torch.Tensor | None = None,
+        video_position_ids: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
         r"""
@@ -1614,14 +1606,12 @@ class Ernie4_5_VLMoeForConditionalGeneration(Ernie4_5_VLMoePreTrainedModel, Gene
             The temporal, height and width of feature shape of each video in LLM.
         video_cu_seqlens (`torch.IntTensor`, *optional*):
             Precomputed cumulative sequence lengths for videos (from `get_vision_cu_seqlens`).
-        video_rotary_pos_ids (`torch.LongTensor`, *optional*):
-            Precomputed (row, col) position IDs for video rotary embeddings (from `get_rotary_pos_ids`).
         """
         return self.model.get_video_features(
             pixel_values_videos,
             video_grid_thw,
             video_cu_seqlens,
-            video_rotary_pos_ids,
+            video_position_ids,
             **kwargs,
         )
 
@@ -1631,7 +1621,7 @@ class Ernie4_5_VLMoeForConditionalGeneration(Ernie4_5_VLMoePreTrainedModel, Gene
         pixel_values: torch.FloatTensor,
         image_grid_thw: torch.LongTensor | None = None,
         image_cu_seqlens: torch.Tensor | None = None,
-        image_rotary_pos_ids: torch.Tensor | None = None,
+        image_position_ids: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
         r"""
@@ -1641,14 +1631,12 @@ class Ernie4_5_VLMoeForConditionalGeneration(Ernie4_5_VLMoePreTrainedModel, Gene
             The temporal, height and width of feature shape of each image in LLM.
         image_cu_seqlens (`torch.IntTensor`, *optional*):
             Precomputed cumulative sequence lengths for images (from `get_vision_cu_seqlens`).
-        image_rotary_pos_ids (`torch.LongTensor`, *optional*):
-            Precomputed (row, col) position IDs for image rotary embeddings (from `get_rotary_pos_ids`).
         """
         return self.model.get_image_features(
             pixel_values,
             image_grid_thw,
             image_cu_seqlens,
-            image_rotary_pos_ids,
+            image_position_ids,
             **kwargs,
         )
 

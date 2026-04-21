@@ -45,7 +45,7 @@ def get_vision_cu_seqlens(grid_thw: torch.Tensor) -> torch.Tensor:
     return F.pad(cu_seqlens, (1, 0), value=0)
 
 
-def get_rotary_pos_ids(grid_thw: torch.Tensor, spatial_merge_size: int | torch.Tensor) -> torch.Tensor:
+def get_vision_position_ids(grid_thw: torch.Tensor, spatial_merge_size: int | torch.Tensor) -> torch.Tensor:
     """Compute (row, col) position IDs for vision rotary embeddings.
 
     Args:
@@ -54,13 +54,13 @@ def get_rotary_pos_ids(grid_thw: torch.Tensor, spatial_merge_size: int | torch.T
             or a ``(num_images_or_videos,)`` tensor (per-image).
 
     Returns:
-        ``pos_ids``: ``(total_tokens, 2)`` long — (row, col) position per token.
+        ``position_ids``: ``(total_tokens, 2)`` long — (row, col) position per token.
     """
     device = grid_thw.device
     if isinstance(spatial_merge_size, int):
         spatial_merge_size = torch.tensor([spatial_merge_size], device=device).expand(len(grid_thw))
 
-    pos_ids = []
+    position_ids = []
     for (t, h, w), m in zip(grid_thw.tolist(), spatial_merge_size.tolist()):
         t, h, w, m = int(t), int(h), int(w), int(m)
         hpos_ids = torch.arange(h, device=device).unsqueeze(1).expand(-1, w)
@@ -68,12 +68,12 @@ def get_rotary_pos_ids(grid_thw: torch.Tensor, spatial_merge_size: int | torch.T
 
         wpos_ids = torch.arange(w, device=device).unsqueeze(0).expand(h, -1)
         wpos_ids = wpos_ids.reshape(h // m, m, w // m, m).permute(0, 2, 1, 3).flatten()
-        pos_ids.append(torch.stack([hpos_ids, wpos_ids], dim=-1).repeat(t, 1))
+        position_ids.append(torch.stack([hpos_ids, wpos_ids], dim=-1).repeat(t, 1))
 
-    return torch.cat(pos_ids, dim=0)
+    return torch.cat(position_ids, dim=0)
 
 
-def get_window_index(
+def get_vision_window_index(
     grid_thw: torch.Tensor,
     spatial_merge_size: int,
     window_size: int,
@@ -128,7 +128,7 @@ def get_window_index(
     return window_index, cu_window_seqlens
 
 
-def get_pos_embed_indices(
+def get_vision_bilinear_indices_and_weights(
     grid_thw: torch.Tensor, num_grid_per_side: int, spatial_merge_size: int
 ) -> tuple[torch.Tensor, torch.Tensor]:
     """Compute bilinear interpolation indices and weights for position embeddings.
@@ -139,7 +139,7 @@ def get_pos_embed_indices(
         spatial_merge_size: merge block size from vision config.
 
     Returns:
-        ``embed_indices``: ``(4, total_thw)`` long — bilinear corner indices into pos_embed table.
+        ``bilinear_indices``: ``(4, total_thw)`` long — bilinear corner indices into pos_embed table.
         ``bilinear_weights``: ``(4, total_thw)`` float — interpolation weights.
     """
     N = num_grid_per_side
@@ -187,6 +187,6 @@ def get_pos_embed_indices(
             idx_parts[i].append(raw_idx[i][reorder])
             weight_parts[i].append(raw_w[i][reorder])
 
-    embed_indices = torch.stack([torch.cat(p) for p in idx_parts])
+    bilinear_indices = torch.stack([torch.cat(p) for p in idx_parts])
     bilinear_weights = torch.stack([torch.cat(p) for p in weight_parts])
-    return embed_indices, bilinear_weights
+    return bilinear_indices, bilinear_weights

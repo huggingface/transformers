@@ -45,7 +45,7 @@ from ...utils import (
 from ...utils.generic import maybe_autocast, merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
 from ...video_utils import VideoInput
-from ...vision_utils import get_rotary_pos_ids, get_vision_cu_seqlens
+from ...vision_utils import get_vision_cu_seqlens, get_vision_position_ids
 from ..glm4.modeling_glm4 import Glm4MLP, Glm4RMSNorm, Glm4RotaryEmbedding, eager_attention_forward
 from ..qwen2_5_vl.modeling_qwen2_5_vl import (
     Qwen2_5_VisionPatchEmbed,
@@ -618,7 +618,7 @@ class Glm4vVisionModel(Glm4vPreTrainedModel):
         hidden_states: torch.Tensor,
         grid_thw: torch.Tensor,
         cu_seqlens: torch.Tensor | None = None,
-        rotary_pos_ids: torch.Tensor | None = None,
+        position_ids: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
         r"""
@@ -628,8 +628,8 @@ class Glm4vVisionModel(Glm4vPreTrainedModel):
             The temporal, height and width of feature shape of each image in LLM.
         cu_seqlens (`torch.Tensor`, *optional*):
             Precomputed cumulative sequence lengths (from `get_vision_cu_seqlens`).
-        rotary_pos_ids (`torch.Tensor`, *optional*):
-            Precomputed (row, col) position IDs (from `get_rotary_pos_ids`).
+        position_ids (`torch.Tensor`, *optional*):
+            Precomputed (row, col) position IDs (from `get_vision_position_ids`).
 
         Returns:
             `torch.Tensor`: hidden_states.
@@ -637,13 +637,13 @@ class Glm4vVisionModel(Glm4vPreTrainedModel):
         hidden_states = self.patch_embed(hidden_states)
         hidden_states = self.post_conv_layernorm(hidden_states)
 
-        if rotary_pos_ids is None:
-            rotary_pos_ids = get_rotary_pos_ids(grid_thw, self.spatial_merge_size)
+        if position_ids is None:
+            position_ids = get_vision_position_ids(grid_thw, self.spatial_merge_size)
 
         if cu_seqlens is None:
             cu_seqlens = get_vision_cu_seqlens(grid_thw)
 
-        rotary_emb = self.rotary_pos_emb(rotary_pos_ids)
+        rotary_emb = self.rotary_pos_emb(position_ids)
         emb = torch.cat((rotary_emb, rotary_emb), dim=-1)
         position_embeddings = (emb.cos(), emb.sin())
 
@@ -652,8 +652,8 @@ class Glm4vVisionModel(Glm4vPreTrainedModel):
             hidden_states,
             seqlens,
             grid_thw,
-            rotary_pos_ids[:, 0].to(hidden_states.device),
-            rotary_pos_ids[:, 1].to(hidden_states.device),
+            position_ids[:, 0].to(hidden_states.device),
+            position_ids[:, 1].to(hidden_states.device),
         )
 
         for blk in self.blocks:
@@ -681,13 +681,13 @@ class Glm4vVisionModel(Glm4vPreTrainedModel):
 
     def rot_pos_emb(self, grid_thw):
         warnings.warn(
-            f"`{self.__class__.__name__}.rot_pos_emb` is deprecated and will be removed in a future version. Use `get_rotary_pos_ids` from `transformers.vision_utils` and apply the rotary embedding module.",
+            f"`{self.__class__.__name__}.rot_pos_emb` is deprecated and will be removed in a future version. Use `get_vision_position_ids` from `transformers.vision_utils` and apply the rotary embedding module.",
             FutureWarning,
             stacklevel=2,
         )
-        pos_ids = get_rotary_pos_ids(grid_thw, self.spatial_merge_size)
-        rotary_pos_emb = self.rotary_pos_emb(pos_ids)
-        return rotary_pos_emb, pos_ids
+        position_ids = get_vision_position_ids(grid_thw, self.spatial_merge_size)
+        rotary_pos_emb = self.rotary_pos_emb(position_ids)
+        return rotary_pos_emb, position_ids
 
 
 class Glm4vTextModel(Qwen2_5_VLTextModel):
@@ -800,7 +800,7 @@ class Glm4vModel(Qwen2VLModel):
         pixel_values_videos: torch.FloatTensor,
         video_grid_thw: torch.LongTensor | None = None,
         video_cu_seqlens: torch.Tensor | None = None,
-        video_rotary_pos_ids: torch.Tensor | None = None,
+        video_position_ids: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
         r"""
@@ -821,7 +821,7 @@ class Glm4vModel(Qwen2VLModel):
             pixel_values_videos,
             grid_thw=flattened_video_grid_thw,
             cu_seqlens=video_cu_seqlens,
-            rotary_pos_ids=video_rotary_pos_ids,
+            position_ids=video_position_ids,
             return_dict=True,
             **kwargs,
         )

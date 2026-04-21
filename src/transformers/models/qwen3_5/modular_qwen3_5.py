@@ -30,7 +30,7 @@ from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
 from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
-from ...vision_utils import get_pos_embed_indices, get_rotary_pos_ids, get_vision_cu_seqlens
+from ...vision_utils import get_vision_bilinear_indices_and_weights, get_vision_cu_seqlens, get_vision_position_ids
 from ..qwen3.modeling_qwen3 import Qwen3ForCausalLM
 from ..qwen3_next.configuration_qwen3_next import Qwen3NextConfig
 from ..qwen3_next.modeling_qwen3_next import (
@@ -426,8 +426,8 @@ class Qwen3_5VisionModel(Qwen3VLVisionModel):
         hidden_states: torch.Tensor,
         grid_thw: torch.Tensor,
         cu_seqlens: torch.Tensor | None = None,
-        rotary_pos_ids: torch.Tensor | None = None,
-        embed_indices: torch.Tensor | None = None,
+        position_ids: torch.Tensor | None = None,
+        bilinear_indices: torch.Tensor | None = None,
         bilinear_weights: torch.Tensor | None = None,
         **kwargs,
     ) -> torch.Tensor:
@@ -439,29 +439,29 @@ class Qwen3_5VisionModel(Qwen3VLVisionModel):
                 The temporal, height and width of feature shape of each image in LLM.
             cu_seqlens (`torch.Tensor`, *optional*):
                 Precomputed cumulative sequence lengths (from `get_vision_cu_seqlens`).
-            rotary_pos_ids (`torch.Tensor` of shape `(total_tokens, 2)`, *optional*):
-                Precomputed (row, col) position IDs (from `get_rotary_pos_ids`).
-            embed_indices (`torch.Tensor` of shape `(4, total_thw)`, *optional*):
-                Bilinear corner indices into the position embedding table (from `get_pos_embed_indices`).
+            position_ids (`torch.Tensor` of shape `(total_tokens, 2)`, *optional*):
+                Precomputed (row, col) position IDs (from `get_vision_position_ids`).
+            bilinear_indices (`torch.Tensor` of shape `(4, total_thw)`, *optional*):
+                Bilinear corner indices for position embedding interpolation (from `get_vision_bilinear_indices_and_weights`).
             bilinear_weights (`torch.Tensor` of shape `(4, total_thw)`, *optional*):
-                Interpolation weights for the four bilinear corners (from `get_pos_embed_indices`).
+                Bilinear corner weights for position embedding interpolation (from `get_vision_bilinear_indices_and_weights`).
 
         Returns:
             `torch.Tensor`: hidden_states.
         """
         hidden_states = self.patch_embed(hidden_states)
 
-        if embed_indices is None or bilinear_weights is None:
-            embed_indices, bilinear_weights = get_pos_embed_indices(
+        if bilinear_indices is None or bilinear_weights is None:
+            bilinear_indices, bilinear_weights = get_vision_bilinear_indices_and_weights(
                 grid_thw, self.num_grid_per_side, self.config.spatial_merge_size
             )
-        pos_embeds = (self.pos_embed(embed_indices) * bilinear_weights[:, :, None]).sum(0)
+        pos_embeds = (self.pos_embed(bilinear_indices) * bilinear_weights[:, :, None]).sum(0)
         hidden_states = hidden_states + pos_embeds.to(hidden_states.dtype)
 
-        if rotary_pos_ids is None:
-            rotary_pos_ids = get_rotary_pos_ids(grid_thw, self.spatial_merge_size)
+        if position_ids is None:
+            position_ids = get_vision_position_ids(grid_thw, self.spatial_merge_size)
 
-        rotary_pos_emb = self.rotary_pos_emb(rotary_pos_ids)
+        rotary_pos_emb = self.rotary_pos_emb(position_ids)
 
         if cu_seqlens is None:
             cu_seqlens = get_vision_cu_seqlens(grid_thw)
@@ -580,7 +580,7 @@ class Qwen3_5Model(Qwen3VLModel):
         pixel_values: torch.FloatTensor,
         image_grid_thw: torch.LongTensor | None = None,
         image_cu_seqlens: torch.Tensor | None = None,
-        image_rotary_pos_ids: torch.Tensor | None = None,
+        image_position_ids: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
         pixel_values = pixel_values.type(self.visual.dtype)
@@ -588,7 +588,7 @@ class Qwen3_5Model(Qwen3VLModel):
             pixel_values,
             grid_thw=image_grid_thw,
             cu_seqlens=image_cu_seqlens,
-            rotary_pos_ids=image_rotary_pos_ids,
+            position_ids=image_position_ids,
             return_dict=True,
             **kwargs,
         )

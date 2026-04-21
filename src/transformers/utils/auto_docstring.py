@@ -2135,14 +2135,14 @@ class ModelArgs:
         "shape": "of shape `(num_video_patches + 1,)`",
     }
 
-    image_rotary_pos_ids = {
+    image_position_ids = {
         "description": """
     Precomputed (row, col) position IDs for image rotary embeddings.
     """,
         "shape": "of shape `(num_image_tokens, 2)`",
     }
 
-    video_rotary_pos_ids = {
+    video_position_ids = {
         "description": """
     Precomputed (row, col) position IDs for video rotary embeddings.
     """,

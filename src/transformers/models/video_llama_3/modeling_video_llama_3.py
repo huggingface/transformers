@@ -36,7 +36,7 @@ from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, torch_compilable_check
 from ...utils.generic import is_flash_attention_requested, merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
-from ...vision_utils import get_rotary_pos_ids, get_vision_cu_seqlens
+from ...vision_utils import get_vision_cu_seqlens, get_vision_position_ids
 from ..auto.modeling_auto import AutoModel
 from .configuration_video_llama_3 import VideoLlama3Config, VideoLlama3VisionConfig
 
@@ -51,8 +51,8 @@ class VideoLlama3VisionRotaryEmbedding(nn.Module):
         inv_freq = 1.0 / (theta ** (torch.arange(0, dim, 2, dtype=torch.float) / dim))
         self.register_buffer("inv_freq", inv_freq, persistent=False)
 
-    def forward(self, pos_ids: torch.Tensor) -> torch.Tensor:
-        return (pos_ids.unsqueeze(-1) * self.inv_freq).flatten(1)
+    def forward(self, position_ids: torch.Tensor) -> torch.Tensor:
+        return (position_ids.unsqueeze(-1) * self.inv_freq).flatten(1)
 
 
 class VideoLlama3VisionEmbeddings(nn.Module):
@@ -415,7 +415,7 @@ class VideoLlama3VisionModel(VideoLlama3PreTrainedModel):
         grid_thw: torch.Tensor,
         merge_sizes: torch.Tensor,
         cu_seqlens: torch.Tensor | None = None,
-        rotary_pos_ids: torch.Tensor | None = None,
+        position_ids: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutput:
         r"""
@@ -425,16 +425,16 @@ class VideoLlama3VisionModel(VideoLlama3PreTrainedModel):
             The spatial downsampling ratio of each image or video feature.
         cu_seqlens (`torch.IntTensor`, *optional*):
             Precomputed cumulative sequence lengths (from `get_vision_cu_seqlens`).
-        rotary_pos_ids (`torch.Tensor`, *optional*):
-            Precomputed (row, col) position IDs (from `get_rotary_pos_ids`).
+        position_ids (`torch.Tensor`, *optional*):
+            Precomputed (row, col) position IDs (from `get_vision_position_ids`).
         """
 
         hidden_states = self.embeddings(pixel_values.type(self.dtype))
 
-        if rotary_pos_ids is None:
-            rotary_pos_ids = get_rotary_pos_ids(grid_thw, merge_sizes)
+        if position_ids is None:
+            position_ids = get_vision_position_ids(grid_thw, merge_sizes)
 
-        rotary_pos_emb = self.rotary_pos_emb(rotary_pos_ids)
+        rotary_pos_emb = self.rotary_pos_emb(position_ids)
         emb = torch.cat((rotary_pos_emb, rotary_pos_emb), dim=-1)
         position_embeddings = (emb.cos(), emb.sin())
 
@@ -530,7 +530,7 @@ class VideoLlama3Model(VideoLlama3PreTrainedModel):
         video_grid_thw: torch.LongTensor,
         video_merge_sizes: torch.LongTensor,
         video_cu_seqlens: torch.Tensor | None = None,
-        video_rotary_pos_ids: torch.Tensor | None = None,
+        video_position_ids: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
         r"""
@@ -546,7 +546,7 @@ class VideoLlama3Model(VideoLlama3PreTrainedModel):
             image_grid_thw=video_grid_thw,
             image_merge_sizes=video_merge_sizes,
             image_cu_seqlens=video_cu_seqlens,
-            image_rotary_pos_ids=video_rotary_pos_ids,
+            image_position_ids=video_position_ids,
             **kwargs,
         )
 
@@ -558,7 +558,7 @@ class VideoLlama3Model(VideoLlama3PreTrainedModel):
         image_grid_thw: torch.LongTensor,
         image_merge_sizes: torch.LongTensor,
         image_cu_seqlens: torch.Tensor | None = None,
-        image_rotary_pos_ids: torch.Tensor | None = None,
+        image_position_ids: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
         r"""
@@ -574,7 +574,7 @@ class VideoLlama3Model(VideoLlama3PreTrainedModel):
             grid_thw=image_grid_thw,
             merge_sizes=image_merge_sizes,
             cu_seqlens=image_cu_seqlens,
-            rotary_pos_ids=image_rotary_pos_ids,
+            position_ids=image_position_ids,
             return_dict=True,
             **kwargs,
         )
@@ -766,7 +766,7 @@ class VideoLlama3ForConditionalGeneration(VideoLlama3PreTrainedModel, Generation
         video_grid_thw: torch.LongTensor | None = None,
         video_merge_sizes: torch.LongTensor | None = None,
         video_cu_seqlens: torch.Tensor | None = None,
-        video_rotary_pos_ids: torch.Tensor | None = None,
+        video_position_ids: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
         r"""
@@ -782,7 +782,7 @@ class VideoLlama3ForConditionalGeneration(VideoLlama3PreTrainedModel, Generation
             video_grid_thw,
             video_merge_sizes,
             video_cu_seqlens=video_cu_seqlens,
-            video_rotary_pos_ids=video_rotary_pos_ids,
+            video_position_ids=video_position_ids,
             **kwargs,
         )
 
@@ -794,7 +794,7 @@ class VideoLlama3ForConditionalGeneration(VideoLlama3PreTrainedModel, Generation
         image_grid_thw: torch.LongTensor | None = None,
         image_merge_sizes: torch.LongTensor | None = None,
         image_cu_seqlens: torch.Tensor | None = None,
-        image_rotary_pos_ids: torch.Tensor | None = None,
+        image_position_ids: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
         r"""
@@ -810,7 +810,7 @@ class VideoLlama3ForConditionalGeneration(VideoLlama3PreTrainedModel, Generation
             image_grid_thw,
             image_merge_sizes,
             image_cu_seqlens=image_cu_seqlens,
-            image_rotary_pos_ids=image_rotary_pos_ids,
+            image_position_ids=image_position_ids,
             **kwargs,
         )
 

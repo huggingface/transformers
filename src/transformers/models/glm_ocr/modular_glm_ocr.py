@@ -21,7 +21,7 @@ from huggingface_hub.dataclasses import strict
 from ...modeling_outputs import BaseModelOutputWithPooling
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...utils import auto_docstring
-from ...vision_utils import get_rotary_pos_ids, get_vision_cu_seqlens
+from ...vision_utils import get_vision_cu_seqlens, get_vision_position_ids
 from ..glm4v.configuration_glm4v import Glm4vConfig, Glm4vTextConfig, Glm4vVisionConfig
 from ..glm4v.modeling_glm4v import (
     Glm4vForConditionalGeneration,
@@ -252,7 +252,7 @@ class GlmOcrVisionModel(Glm4vVisionModel):
         hidden_states: torch.Tensor,
         grid_thw: torch.Tensor,
         cu_seqlens: torch.Tensor | None = None,
-        rotary_pos_ids: torch.Tensor | None = None,
+        position_ids: torch.Tensor | None = None,
         **kwargs,
     ) -> torch.Tensor:
         r"""
@@ -262,21 +262,21 @@ class GlmOcrVisionModel(Glm4vVisionModel):
             The temporal, height and width of feature shape of each image in LLM.
         cu_seqlens (`torch.Tensor`, *optional*):
             Precomputed cumulative sequence lengths (from `get_vision_cu_seqlens`).
-        rotary_pos_ids (`torch.Tensor`, *optional*):
-            Precomputed (row, col) position IDs (from `get_rotary_pos_ids`).
+        position_ids (`torch.Tensor`, *optional*):
+            Precomputed (row, col) position IDs (from `get_vision_position_ids`).
 
         Returns:
             `torch.Tensor`: hidden_states.
         """
         hidden_states = self.patch_embed(hidden_states)
 
-        if rotary_pos_ids is None:
-            rotary_pos_ids = get_rotary_pos_ids(grid_thw, self.spatial_merge_size)
+        if position_ids is None:
+            position_ids = get_vision_position_ids(grid_thw, self.spatial_merge_size)
 
         if cu_seqlens is None:
             cu_seqlens = get_vision_cu_seqlens(grid_thw)
 
-        rotary_emb = self.rotary_pos_emb(rotary_pos_ids)
+        rotary_emb = self.rotary_pos_emb(position_ids)
         emb = torch.cat((rotary_emb, rotary_emb), dim=-1)
         position_embeddings = (emb.cos(), emb.sin())
 

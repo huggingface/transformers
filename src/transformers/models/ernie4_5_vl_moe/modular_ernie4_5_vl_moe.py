@@ -52,7 +52,7 @@ from ...utils import (
 )
 from ...utils.generic import maybe_autocast, merge_with_config_defaults
 from ...utils.output_capturing import OutputRecorder, capture_outputs
-from ...vision_utils import get_rotary_pos_ids, get_vision_cu_seqlens
+from ...vision_utils import get_vision_cu_seqlens, get_vision_position_ids
 from ..ernie4_5_moe.configuration_ernie4_5_moe import Ernie4_5_MoeConfig
 from ..ernie4_5_moe.modeling_ernie4_5_moe import (
     Ernie4_5_MoeAttention,
@@ -703,15 +703,15 @@ class Ernie4_5_VLMoeVisionTransformerPretrainedModel(Qwen2VisionTransformerPretr
         hidden_states: torch.Tensor,
         grid_thw: torch.Tensor,
         cu_seqlens: torch.Tensor | None = None,
-        rotary_pos_ids: torch.Tensor | None = None,
+        position_ids: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
         hidden_states = self.patch_embed(hidden_states)
 
-        if rotary_pos_ids is None:
-            rotary_pos_ids = get_rotary_pos_ids(grid_thw, self.spatial_merge_size)
+        if position_ids is None:
+            position_ids = get_vision_position_ids(grid_thw, self.spatial_merge_size)
 
-        rotary_pos_emb = self.rotary_pos_emb(rotary_pos_ids)
+        rotary_pos_emb = self.rotary_pos_emb(position_ids)
         emb = torch.cat((rotary_pos_emb, rotary_pos_emb), dim=-1)
         position_embeddings = (emb.cos(), emb.sin())
 
@@ -971,14 +971,14 @@ class Ernie4_5_VLMoeModel(Qwen2VLModel):
         pixel_values_videos: torch.FloatTensor,
         video_grid_thw: torch.LongTensor | None = None,
         video_cu_seqlens: torch.Tensor | None = None,
-        video_rotary_pos_ids: torch.Tensor | None = None,
+        video_position_ids: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
         video_outputs = self.vision_tower(
             pixel_values_videos,
             video_grid_thw,
             cu_seqlens=video_cu_seqlens,
-            rotary_pos_ids=video_rotary_pos_ids,
+            position_ids=video_position_ids,
             return_dict=True,
             **kwargs,
         )
@@ -999,14 +999,14 @@ class Ernie4_5_VLMoeModel(Qwen2VLModel):
         pixel_values: torch.FloatTensor,
         image_grid_thw: torch.LongTensor | None = None,
         image_cu_seqlens: torch.Tensor | None = None,
-        image_rotary_pos_ids: torch.Tensor | None = None,
+        image_position_ids: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
         image_outputs = self.vision_tower(
             pixel_values,
             image_grid_thw,
             cu_seqlens=image_cu_seqlens,
-            rotary_pos_ids=image_rotary_pos_ids,
+            position_ids=image_position_ids,
             return_dict=True,
             **kwargs,
         )

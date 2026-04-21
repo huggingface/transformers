@@ -55,7 +55,7 @@ from ...utils.deprecation import deprecate_kwarg
 from ...utils.generic import is_flash_attention_requested, maybe_autocast, merge_with_config_defaults
 from ...utils.hub import cached_file
 from ...utils.output_capturing import capture_outputs
-from ...vision_utils import get_rotary_pos_ids, get_vision_cu_seqlens, get_window_index
+from ...vision_utils import get_vision_cu_seqlens, get_vision_position_ids, get_vision_window_index
 from .configuration_qwen2_5_omni import (
     Qwen2_5OmniAudioEncoderConfig,
     Qwen2_5OmniBigVGANConfig,
@@ -1165,8 +1165,8 @@ class Qwen2_5_VisionRotaryEmbedding(nn.Module):
         inv_freq = 1.0 / (theta ** (torch.arange(0, dim, 2, dtype=torch.float) / dim))
         self.register_buffer("inv_freq", inv_freq, persistent=False)
 
-    def forward(self, pos_ids: torch.Tensor) -> torch.Tensor:
-        return (pos_ids.unsqueeze(-1) * self.inv_freq).flatten(1)
+    def forward(self, position_ids: torch.Tensor) -> torch.Tensor:
+        return (position_ids.unsqueeze(-1) * self.inv_freq).flatten(1)
 
 
 class Qwen2_5_VisionPatchEmbed(nn.Module):
@@ -1257,7 +1257,7 @@ class Qwen2_5OmniVisionEncoder(Qwen2_5OmniPreTrainedModel):
         cu_seqlens: torch.Tensor | None = None,
         window_index: torch.Tensor | None = None,
         cu_window_seqlens: torch.Tensor | None = None,
-        rotary_pos_ids: torch.Tensor | None = None,
+        position_ids: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
         """
@@ -1269,27 +1269,27 @@ class Qwen2_5OmniVisionEncoder(Qwen2_5OmniPreTrainedModel):
             cu_seqlens (`torch.Tensor`, *optional*):
                 Precomputed cumulative sequence lengths (from `get_vision_cu_seqlens`).
             cu_window_seqlens (`torch.Tensor`, *optional*):
-                Precomputed window cumulative sequence lengths (from `get_window_index`).
+                Precomputed window cumulative sequence lengths (from `get_vision_window_index`).
             window_index (`torch.Tensor`, *optional*):
-                Precomputed window reordering index (from `get_window_index`).
-            rotary_pos_ids (`torch.Tensor`, *optional*):
-                Precomputed (row, col) position IDs (from `get_rotary_pos_ids`).
+                Precomputed window reordering index (from `get_vision_window_index`).
+            position_ids (`torch.Tensor`, *optional*):
+                Precomputed (row, col) position IDs (from `get_vision_position_ids`).
 
         Returns:
             `torch.Tensor`: hidden_states.
         """
         hidden_states = self.patch_embed(hidden_states)
 
-        if rotary_pos_ids is None:
-            rotary_pos_ids = get_rotary_pos_ids(grid_thw, self.spatial_merge_size)
+        if position_ids is None:
+            position_ids = get_vision_position_ids(grid_thw, self.spatial_merge_size)
 
-        rotary_pos_emb = self.rotary_pos_emb(rotary_pos_ids)
+        rotary_pos_emb = self.rotary_pos_emb(position_ids)
 
         if cu_seqlens is None:
             cu_seqlens = get_vision_cu_seqlens(grid_thw)
 
         if window_index is None:
-            window_index, cu_window_seqlens = get_window_index(
+            window_index, cu_window_seqlens = get_vision_window_index(
                 grid_thw, self.spatial_merge_size, self.window_size, self.patch_size, self.spatial_merge_unit
             )
 
@@ -1326,21 +1326,21 @@ class Qwen2_5OmniVisionEncoder(Qwen2_5OmniPreTrainedModel):
 
     def rot_pos_emb(self, grid_thw):
         warnings.warn(
-            f"`{self.__class__.__name__}.rot_pos_emb` is deprecated and will be removed in a future version. Use `get_rotary_pos_ids` from `transformers.vision_utils` and apply the rotary embedding module.",
+            f"`{self.__class__.__name__}.rot_pos_emb` is deprecated and will be removed in a future version. Use `get_vision_position_ids` from `transformers.vision_utils` and apply the rotary embedding module.",
             FutureWarning,
             stacklevel=2,
         )
-        pos_ids = get_rotary_pos_ids(grid_thw, self.spatial_merge_size)
-        rotary_pos_emb = self.rotary_pos_emb(pos_ids)
+        position_ids = get_vision_position_ids(grid_thw, self.spatial_merge_size)
+        rotary_pos_emb = self.rotary_pos_emb(position_ids)
         return rotary_pos_emb
 
-    def get_window_index(self, grid_thw):
+    def get_vision_window_index(self, grid_thw):
         warnings.warn(
-            f"`{self.__class__.__name__}.get_window_index` is deprecated and will be removed in a future version. Use `get_window_index` from `transformers.vision_utils` instead.",
+            f"`{self.__class__.__name__}.get_vision_window_index` is deprecated and will be removed in a future version. Use `get_vision_window_index` from `transformers.vision_utils` instead.",
             FutureWarning,
             stacklevel=2,
         )
-        window_index, cu_window_seqlens = get_window_index(
+        window_index, cu_window_seqlens = get_vision_window_index(
             grid_thw,
             self.spatial_merge_size,
             self.window_size,
@@ -1779,7 +1779,7 @@ class Qwen2_5OmniThinkerForConditionalGeneration(Qwen2_5OmniPreTrainedModelForCo
         pixel_values_videos: torch.FloatTensor,
         video_grid_thw: torch.LongTensor | None = None,
         video_cu_seqlens: torch.Tensor | None = None,
-        video_rotary_pos_ids: torch.Tensor | None = None,
+        video_position_ids: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
         r"""
@@ -1793,7 +1793,7 @@ class Qwen2_5OmniThinkerForConditionalGeneration(Qwen2_5OmniPreTrainedModelForCo
             pixel_values_videos,
             grid_thw=video_grid_thw,
             cu_seqlens=video_cu_seqlens,
-            rotary_pos_ids=video_rotary_pos_ids,
+            position_ids=video_position_ids,
             **kwargs,
         )
 
@@ -1804,7 +1804,7 @@ class Qwen2_5OmniThinkerForConditionalGeneration(Qwen2_5OmniPreTrainedModelForCo
         pixel_values: torch.FloatTensor,
         image_grid_thw: torch.LongTensor | None = None,
         image_cu_seqlens: torch.Tensor | None = None,
-        image_rotary_pos_ids: torch.Tensor | None = None,
+        image_position_ids: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
         r"""
@@ -1818,7 +1818,7 @@ class Qwen2_5OmniThinkerForConditionalGeneration(Qwen2_5OmniPreTrainedModelForCo
             pixel_values,
             grid_thw=image_grid_thw,
             cu_seqlens=image_cu_seqlens,
-            rotary_pos_ids=image_rotary_pos_ids,
+            position_ids=image_position_ids,
             **kwargs,
         )
 

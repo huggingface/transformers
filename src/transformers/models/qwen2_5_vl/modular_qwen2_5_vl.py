@@ -40,7 +40,7 @@ from ...utils import auto_docstring, can_return_tuple, logging
 from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
 from ...video_utils import VideoInput
-from ...vision_utils import get_rotary_pos_ids, get_vision_cu_seqlens, get_window_index
+from ...vision_utils import get_vision_cu_seqlens, get_vision_position_ids, get_vision_window_index
 from ..llama.modeling_llama import LlamaRMSNorm
 from ..qwen2_vl.configuration_qwen2_vl import Qwen2VLConfig, Qwen2VLTextConfig
 from ..qwen2_vl.modeling_qwen2_vl import (
@@ -228,7 +228,7 @@ class Qwen2_5_VisionTransformerPretrainedModel(Qwen2_5_VLPreTrainedModel):
         cu_seqlens: torch.Tensor | None = None,
         window_index: torch.Tensor | None = None,
         cu_window_seqlens: torch.Tensor | None = None,
-        rotary_pos_ids: torch.Tensor | None = None,
+        position_ids: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
         """
@@ -240,27 +240,27 @@ class Qwen2_5_VisionTransformerPretrainedModel(Qwen2_5_VLPreTrainedModel):
             cu_seqlens (`torch.Tensor`, *optional*):
                 Precomputed cumulative sequence lengths (from `get_vision_cu_seqlens`).
             window_index (`torch.Tensor`, *optional*):
-                Precomputed window reordering index (from `get_window_index`).
+                Precomputed window reordering index (from `get_vision_window_index`).
             cu_window_seqlens (`torch.Tensor`, *optional*):
-                Precomputed window cumulative sequence lengths (from `get_window_index`).
-            rotary_pos_ids (`torch.Tensor` of shape `(total_tokens, 2)`, *optional*):
-                Precomputed (row, col) position IDs (from `get_rotary_pos_ids`).
+                Precomputed window cumulative sequence lengths (from `get_vision_window_index`).
+            position_ids (`torch.Tensor` of shape `(total_tokens, 2)`, *optional*):
+                Precomputed (row, col) position IDs (from `get_vision_position_ids`).
 
         Returns:
             `torch.Tensor`: hidden_states.
         """
         hidden_states = self.patch_embed(hidden_states)
 
-        if rotary_pos_ids is None:
-            rotary_pos_ids = get_rotary_pos_ids(grid_thw, self.spatial_merge_size)
+        if position_ids is None:
+            position_ids = get_vision_position_ids(grid_thw, self.spatial_merge_size)
 
-        rotary_pos_emb = self.rotary_pos_emb(rotary_pos_ids)
+        rotary_pos_emb = self.rotary_pos_emb(position_ids)
 
         if cu_seqlens is None:
             cu_seqlens = get_vision_cu_seqlens(grid_thw)
 
         if window_index is None:
-            window_index, cu_window_seqlens = get_window_index(
+            window_index, cu_window_seqlens = get_vision_window_index(
                 grid_thw, self.spatial_merge_size, self.window_size, self.patch_size, self.spatial_merge_unit
             )
 
@@ -299,21 +299,21 @@ class Qwen2_5_VisionTransformerPretrainedModel(Qwen2_5_VLPreTrainedModel):
 
     def rot_pos_emb(self, grid_thw):
         warnings.warn(
-            f"`{self.__class__.__name__}.rot_pos_emb` is deprecated and will be removed in a future version. Use `get_rotary_pos_ids` from `transformers.vision_utils` and apply the rotary embedding module.",
+            f"`{self.__class__.__name__}.rot_pos_emb` is deprecated and will be removed in a future version. Use `get_vision_position_ids` from `transformers.vision_utils` and apply the rotary embedding module.",
             FutureWarning,
             stacklevel=2,
         )
-        pos_ids = get_rotary_pos_ids(grid_thw, self.spatial_merge_size)
-        rotary_pos_emb = self.rotary_pos_emb(pos_ids)
+        position_ids = get_vision_position_ids(grid_thw, self.spatial_merge_size)
+        rotary_pos_emb = self.rotary_pos_emb(position_ids)
         return rotary_pos_emb
 
-    def get_window_index(self, grid_thw):
+    def get_vision_window_index(self, grid_thw):
         warnings.warn(
-            f"`{self.__class__.__name__}.get_window_index` is deprecated and will be removed in a future version. Use `get_window_index` from `transformers.vision_utils` instead.",
+            f"`{self.__class__.__name__}.get_vision_window_index` is deprecated and will be removed in a future version. Use `get_vision_window_index` from `transformers.vision_utils` instead.",
             FutureWarning,
             stacklevel=2,
         )
-        window_index, cu_window_seqlens = get_window_index(
+        window_index, cu_window_seqlens = get_vision_window_index(
             grid_thw,
             self.spatial_merge_size,
             self.window_size,
@@ -520,9 +520,9 @@ class Qwen2_5_VLModel(Qwen2VLModel):
         mm_token_type_ids: torch.IntTensor | None = None,
         second_per_grid_ts: torch.Tensor | None = None,
         image_cu_seqlens: torch.Tensor | None = None,
-        image_rotary_pos_ids: torch.Tensor | None = None,
+        image_position_ids: torch.Tensor | None = None,
         video_cu_seqlens: torch.Tensor | None = None,
-        video_rotary_pos_ids: torch.Tensor | None = None,
+        video_position_ids: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | Qwen2_5_VLModelOutputWithPast:
         r"""
@@ -544,7 +544,7 @@ class Qwen2_5_VLModel(Qwen2VLModel):
                 pixel_values,
                 image_grid_thw,
                 image_cu_seqlens,
-                image_rotary_pos_ids,
+                image_position_ids,
             ).pooler_output
             image_embeds = torch.cat(image_embeds, dim=0).to(inputs_embeds.device, inputs_embeds.dtype)
             image_mask, _ = self.get_placeholder_mask(
@@ -557,7 +557,7 @@ class Qwen2_5_VLModel(Qwen2VLModel):
                 pixel_values_videos,
                 video_grid_thw,
                 video_cu_seqlens,
-                video_rotary_pos_ids,
+                video_position_ids,
             ).pooler_output
             video_embeds = torch.cat(video_embeds, dim=0).to(inputs_embeds.device, inputs_embeds.dtype)
             _, video_mask = self.get_placeholder_mask(

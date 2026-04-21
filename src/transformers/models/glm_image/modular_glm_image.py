@@ -35,7 +35,7 @@ from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, loggi
 from ...utils.generic import merge_with_config_defaults
 from ...utils.import_utils import requires
 from ...utils.output_capturing import capture_outputs
-from ...vision_utils import get_rotary_pos_ids, get_vision_cu_seqlens
+from ...vision_utils import get_vision_cu_seqlens, get_vision_position_ids
 from ..chameleon.modeling_chameleon import ChameleonVQVAE, ChameleonVQVAEModelOutput, ChameleonVQVAEVectorQuantizer
 from ..glm4v.configuration_glm4v import Glm4vTextConfig, Glm4vVisionConfig
 from ..glm4v.modeling_glm4v import (
@@ -438,7 +438,7 @@ class GlmImageVisionModel(Glm4vVisionModel):
         pixel_values: torch.Tensor,
         grid_thw: torch.Tensor,
         cu_seqlens: torch.Tensor | None = None,
-        rotary_pos_ids: torch.Tensor | None = None,
+        position_ids: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
         r"""
@@ -448,16 +448,16 @@ class GlmImageVisionModel(Glm4vVisionModel):
             The temporal, height and width of feature shape of each image.
         cu_seqlens (`torch.Tensor`, *optional*):
             Precomputed cumulative sequence lengths (from `get_vision_cu_seqlens`).
-        rotary_pos_ids (`torch.Tensor`, *optional*):
-            Precomputed (row, col) position IDs (from `get_rotary_pos_ids`).
+        position_ids (`torch.Tensor`, *optional*):
+            Precomputed (row, col) position IDs (from `get_vision_position_ids`).
 
         Returns:
             `torch.Tensor` of shape `(total_patches, hidden_size)`: Hidden states.
         """
         hidden_states = self.patch_embed(pixel_values)
 
-        if rotary_pos_ids is None:
-            rotary_pos_ids = get_rotary_pos_ids(grid_thw, self.spatial_merge_size)
+        if position_ids is None:
+            position_ids = get_vision_position_ids(grid_thw, self.spatial_merge_size)
 
         if cu_seqlens is None:
             cu_seqlens = get_vision_cu_seqlens(grid_thw)
@@ -467,8 +467,8 @@ class GlmImageVisionModel(Glm4vVisionModel):
             hidden_states,
             seqlens,
             grid_thw,
-            rotary_pos_ids[:, 0].to(hidden_states.device),
-            rotary_pos_ids[:, 1].to(hidden_states.device),
+            position_ids[:, 0].to(hidden_states.device),
+            position_ids[:, 1].to(hidden_states.device),
         )
 
         # Transformer blocks (no position_embeddings needed, already added above)
@@ -482,11 +482,11 @@ class GlmImageVisionModel(Glm4vVisionModel):
 
     def rot_pos_emb(self, grid_thw):
         warnings.warn(
-            f"`{self.__class__.__name__}.rot_pos_emb` is deprecated and will be removed in a future version. Use `get_rotary_pos_ids` from `transformers.vision_utils` and apply the rotary embedding module.",
+            f"`{self.__class__.__name__}.rot_pos_emb` is deprecated and will be removed in a future version. Use `get_vision_position_ids` from `transformers.vision_utils` and apply the rotary embedding module.",
             FutureWarning,
             stacklevel=2,
         )
-        return get_rotary_pos_ids(grid_thw, self.spatial_merge_size)
+        return get_vision_position_ids(grid_thw, self.spatial_merge_size)
 
 
 class GlmImageTextModel(Glm4vTextModel):
@@ -667,8 +667,8 @@ class GlmImageModel(Glm4vModel):
         if all_decode_position_ids:
             max_decode_len = max(x.shape[1] for x in all_decode_position_ids)
             padded_decode_pos_ids = [
-                F.pad(pos_ids, (0, max_decode_len - pos_ids.shape[1]), mode="replicate")
-                for pos_ids in all_decode_position_ids
+                F.pad(position_ids, (0, max_decode_len - position_ids.shape[1]), mode="replicate")
+                for position_ids in all_decode_position_ids
             ]
             self._cached_decode_position_ids = torch.stack(padded_decode_pos_ids, dim=0)  # [batch, 3, max_decode_len]
         else:
@@ -719,7 +719,7 @@ class GlmImageModel(Glm4vModel):
         pixel_values: torch.FloatTensor,
         image_grid_thw: torch.LongTensor | None = None,
         image_cu_seqlens: torch.Tensor | None = None,
-        image_rotary_pos_ids: torch.Tensor | None = None,
+        image_position_ids: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
         r"""
@@ -733,7 +733,7 @@ class GlmImageModel(Glm4vModel):
             pixel_values,
             grid_thw=image_grid_thw,
             cu_seqlens=image_cu_seqlens,
-            rotary_pos_ids=image_rotary_pos_ids,
+            position_ids=image_position_ids,
             return_dict=True,
             **kwargs,
         )

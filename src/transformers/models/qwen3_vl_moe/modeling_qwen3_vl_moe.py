@@ -48,7 +48,7 @@ from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, torch_compilable_check
 from ...utils.generic import is_flash_attention_requested, maybe_autocast, merge_with_config_defaults
 from ...utils.output_capturing import OutputRecorder, capture_outputs
-from ...vision_utils import get_pos_embed_indices, get_rotary_pos_ids, get_vision_cu_seqlens
+from ...vision_utils import get_vision_bilinear_indices_and_weights, get_vision_cu_seqlens, get_vision_position_ids
 from .configuration_qwen3_vl_moe import Qwen3VLMoeConfig, Qwen3VLMoeTextConfig, Qwen3VLMoeVisionConfig
 
 
@@ -401,8 +401,8 @@ class Qwen3VLMoeVisionRotaryEmbedding(nn.Module):
         inv_freq = 1.0 / (theta ** (torch.arange(0, dim, 2, dtype=torch.float) / dim))
         self.register_buffer("inv_freq", inv_freq, persistent=False)
 
-    def forward(self, pos_ids: torch.Tensor) -> torch.Tensor:
-        return (pos_ids.unsqueeze(-1) * self.inv_freq).flatten(1)
+    def forward(self, position_ids: torch.Tensor) -> torch.Tensor:
+        return (position_ids.unsqueeze(-1) * self.inv_freq).flatten(1)
 
 
 def apply_rotary_pos_emb_vision(
@@ -650,8 +650,8 @@ class Qwen3VLMoeVisionModel(Qwen3VLMoePreTrainedModel):
         hidden_states: torch.Tensor,
         grid_thw: torch.Tensor,
         cu_seqlens: torch.Tensor | None = None,
-        rotary_pos_ids: torch.Tensor | None = None,
-        embed_indices: torch.Tensor | None = None,
+        position_ids: torch.Tensor | None = None,
+        bilinear_indices: torch.Tensor | None = None,
         bilinear_weights: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithDeepstackFeatures:
@@ -663,29 +663,29 @@ class Qwen3VLMoeVisionModel(Qwen3VLMoePreTrainedModel):
                 The temporal, height and width of feature shape of each image in LLM.
             cu_seqlens (`torch.Tensor`, *optional*):
                 Precomputed cumulative sequence lengths (from `get_vision_cu_seqlens`).
-            rotary_pos_ids (`torch.Tensor` of shape `(total_tokens, 2)`, *optional*):
-                Precomputed (row, col) position IDs (from `get_rotary_pos_ids`).
-            embed_indices (`torch.Tensor` of shape `(4, total_thw)`, *optional*):
-                Bilinear corner indices into the position embedding table (from `get_pos_embed_indices`).
+            position_ids (`torch.Tensor` of shape `(total_tokens, 2)`, *optional*):
+                Precomputed (row, col) position IDs (from `get_vision_position_ids`).
+            bilinear_indices (`torch.Tensor` of shape `(4, total_thw)`, *optional*):
+                Bilinear corner indices for position embedding interpolation (from `get_vision_bilinear_indices_and_weights`).
             bilinear_weights (`torch.Tensor` of shape `(4, total_thw)`, *optional*):
-                Interpolation weights for the four bilinear corners (from `get_pos_embed_indices`).
+                Bilinear corner weights for position embedding interpolation (from `get_vision_bilinear_indices_and_weights`).
 
         Returns:
             `torch.Tensor`: hidden_states.
         """
         hidden_states = self.patch_embed(hidden_states)
 
-        if embed_indices is None or bilinear_weights is None:
-            embed_indices, bilinear_weights = get_pos_embed_indices(
+        if bilinear_indices is None or bilinear_weights is None:
+            bilinear_indices, bilinear_weights = get_vision_bilinear_indices_and_weights(
                 grid_thw, self.num_grid_per_side, self.config.spatial_merge_size
             )
-        pos_embeds = (self.pos_embed(embed_indices) * bilinear_weights[:, :, None]).sum(0)
+        pos_embeds = (self.pos_embed(bilinear_indices) * bilinear_weights[:, :, None]).sum(0)
         hidden_states = hidden_states + pos_embeds.to(hidden_states.dtype)
 
-        if rotary_pos_ids is None:
-            rotary_pos_ids = get_rotary_pos_ids(grid_thw, self.spatial_merge_size)
+        if position_ids is None:
+            position_ids = get_vision_position_ids(grid_thw, self.spatial_merge_size)
 
-        rotary_pos_emb = self.rotary_pos_emb(rotary_pos_ids)
+        rotary_pos_emb = self.rotary_pos_emb(position_ids)
 
         if cu_seqlens is None:
             cu_seqlens = get_vision_cu_seqlens(grid_thw)
@@ -720,24 +720,24 @@ class Qwen3VLMoeVisionModel(Qwen3VLMoePreTrainedModel):
 
     def rot_pos_emb(self, grid_thw: torch.Tensor) -> torch.Tensor:
         warnings.warn(
-            f"`{self.__class__.__name__}.rot_pos_emb` is deprecated and will be removed in a future version. Use `get_rotary_pos_ids` from `transformers.vision_utils` and apply the rotary embedding module.",
+            f"`{self.__class__.__name__}.rot_pos_emb` is deprecated and will be removed in a future version. Use `get_vision_position_ids` from `transformers.vision_utils` and apply the rotary embedding module.",
             FutureWarning,
             stacklevel=2,
         )
-        pos_ids = get_rotary_pos_ids(grid_thw, self.spatial_merge_size)
-        rotary_pos_emb = self.rotary_pos_emb(pos_ids)
+        position_ids = get_vision_position_ids(grid_thw, self.spatial_merge_size)
+        rotary_pos_emb = self.rotary_pos_emb(position_ids)
         return rotary_pos_emb
 
     def fast_pos_embed_interpolate(self, grid_thw):
         warnings.warn(
-            f"`{self.__class__.__name__}.fast_pos_embed_interpolate` is deprecated and will be removed in a future version. Use `get_pos_embed_indices` from `transformers.vision_utils` and apply `self.pos_embed`.",
+            f"`{self.__class__.__name__}.fast_pos_embed_interpolate` is deprecated and will be removed in a future version. Use `get_vision_bilinear_indices_and_weights` from `transformers.vision_utils` and apply `self.pos_embed`.",
             FutureWarning,
             stacklevel=2,
         )
-        embed_indices, bilinear_weights = get_pos_embed_indices(
+        bilinear_indices, bilinear_weights = get_vision_bilinear_indices_and_weights(
             grid_thw, self.num_grid_per_side, self.config.spatial_merge_size
         )
-        return (self.pos_embed(embed_indices) * bilinear_weights[:, :, None]).sum(0)
+        return (self.pos_embed(bilinear_indices) * bilinear_weights[:, :, None]).sum(0)
 
 
 class Qwen3VLMoeTextRotaryEmbedding(nn.Module):
@@ -1192,7 +1192,7 @@ class Qwen3VLMoeModel(Qwen3VLMoePreTrainedModel):
         pixel_values_videos: torch.FloatTensor,
         video_grid_thw: torch.LongTensor | None = None,
         video_cu_seqlens: torch.Tensor | None = None,
-        video_rotary_pos_ids: torch.Tensor | None = None,
+        video_position_ids: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithDeepstackFeatures:
         r"""
@@ -1206,7 +1206,7 @@ class Qwen3VLMoeModel(Qwen3VLMoePreTrainedModel):
             pixel_values_videos,
             video_grid_thw,
             image_cu_seqlens=video_cu_seqlens,
-            image_rotary_pos_ids=video_rotary_pos_ids,
+            image_position_ids=video_position_ids,
             **kwargs,
         )
 
@@ -1217,7 +1217,7 @@ class Qwen3VLMoeModel(Qwen3VLMoePreTrainedModel):
         pixel_values: torch.FloatTensor,
         image_grid_thw: torch.LongTensor | None = None,
         image_cu_seqlens: torch.Tensor | None = None,
-        image_rotary_pos_ids: torch.Tensor | None = None,
+        image_position_ids: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithDeepstackFeatures:
         r"""
@@ -1231,7 +1231,7 @@ class Qwen3VLMoeModel(Qwen3VLMoePreTrainedModel):
             pixel_values,
             grid_thw=image_grid_thw,
             cu_seqlens=image_cu_seqlens,
-            rotary_pos_ids=image_rotary_pos_ids,
+            position_ids=image_position_ids,
             return_dict=True,
             **kwargs,
         )
@@ -1347,9 +1347,9 @@ class Qwen3VLMoeModel(Qwen3VLMoePreTrainedModel):
         video_grid_thw: torch.LongTensor | None = None,
         mm_token_type_ids: torch.IntTensor | None = None,
         image_cu_seqlens: torch.Tensor | None = None,
-        image_rotary_pos_ids: torch.Tensor | None = None,
+        image_position_ids: torch.Tensor | None = None,
         video_cu_seqlens: torch.Tensor | None = None,
-        video_rotary_pos_ids: torch.Tensor | None = None,
+        video_position_ids: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | Qwen3VLMoeModelOutputWithPast:
         r"""
@@ -1372,7 +1372,7 @@ class Qwen3VLMoeModel(Qwen3VLMoePreTrainedModel):
                 pixel_values,
                 image_grid_thw,
                 image_cu_seqlens,
-                image_rotary_pos_ids,
+                image_position_ids,
                 return_dict=True,
             )
             image_embeds = image_outputs.pooler_output
@@ -1388,7 +1388,7 @@ class Qwen3VLMoeModel(Qwen3VLMoePreTrainedModel):
                 pixel_values_videos,
                 video_grid_thw,
                 video_cu_seqlens,
-                video_rotary_pos_ids,
+                video_position_ids,
                 return_dict=True,
             )
             video_embeds = video_outputs.pooler_output
@@ -1558,7 +1558,7 @@ class Qwen3VLMoeForConditionalGeneration(Qwen3VLMoePreTrainedModel, GenerationMi
         pixel_values_videos: torch.FloatTensor,
         video_grid_thw: torch.LongTensor | None = None,
         video_cu_seqlens: torch.Tensor | None = None,
-        video_rotary_pos_ids: torch.Tensor | None = None,
+        video_position_ids: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithDeepstackFeatures:
         r"""
@@ -1568,14 +1568,12 @@ class Qwen3VLMoeForConditionalGeneration(Qwen3VLMoePreTrainedModel, GenerationMi
             The temporal, height and width of feature shape of each video in LLM.
         video_cu_seqlens (`torch.IntTensor`, *optional*):
             Precomputed cumulative sequence lengths for videos (from `get_vision_cu_seqlens`).
-        video_rotary_pos_ids (`torch.LongTensor`, *optional*):
-            Precomputed (row, col) position IDs for video rotary embeddings (from `get_rotary_pos_ids`).
         """
         return self.model.get_video_features(
             pixel_values_videos,
             video_grid_thw,
             video_cu_seqlens,
-            video_rotary_pos_ids,
+            video_position_ids,
             **kwargs,
         )
 
@@ -1585,7 +1583,7 @@ class Qwen3VLMoeForConditionalGeneration(Qwen3VLMoePreTrainedModel, GenerationMi
         pixel_values: torch.FloatTensor,
         image_grid_thw: torch.LongTensor | None = None,
         image_cu_seqlens: torch.Tensor | None = None,
-        image_rotary_pos_ids: torch.Tensor | None = None,
+        image_position_ids: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithDeepstackFeatures:
         r"""
@@ -1595,14 +1593,12 @@ class Qwen3VLMoeForConditionalGeneration(Qwen3VLMoePreTrainedModel, GenerationMi
             The temporal, height and width of feature shape of each image in LLM.
         image_cu_seqlens (`torch.IntTensor`, *optional*):
             Precomputed cumulative sequence lengths for images (from `get_vision_cu_seqlens`).
-        image_rotary_pos_ids (`torch.LongTensor`, *optional*):
-            Precomputed (row, col) position IDs for image rotary embeddings (from `get_rotary_pos_ids`).
         """
         return self.model.get_image_features(
             pixel_values,
             image_grid_thw,
             image_cu_seqlens,
-            image_rotary_pos_ids,
+            image_position_ids,
             **kwargs,
         )
 
