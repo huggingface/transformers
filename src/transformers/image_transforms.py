@@ -837,7 +837,7 @@ def split_to_tiles(images: "torch.Tensor", num_tiles_height: int, num_tiles_widt
 
 
 def divide_to_patches(
-    image: Union[np.ndarray, "torch.Tensor"], patch_size: Union[int, tuple[int, int]]
+    image: Union[np.ndarray, "torch.Tensor"], patch_size: int | tuple[int, int]
 ) -> list[Union[np.ndarray, "torch.Tensor"]]:
     """
     Divides an image into patches of a specified size.
@@ -856,7 +856,7 @@ def divide_to_patches(
     height, width = get_image_size(image, channel_dim=ChannelDimension.FIRST)
     for i in range(0, height, patch_h):
         for j in range(0, width, patch_w):
-            patch = image[:, i : i + patch_h, j : j + patch_w]
+            patch = image[..., i : i + patch_h, j : j + patch_w]
             patches.append(patch)
 
     return patches
