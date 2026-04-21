@@ -52,8 +52,10 @@ from ..gemma3.modeling_gemma3 import (
     Gemma3Attention,
     Gemma3DecoderLayer,
     Gemma3ForCausalLM,
+    Gemma3ForSequenceClassification,
     Gemma3MLP,
     Gemma3RotaryEmbedding,
+    Gemma3TextForSequenceClassification,
     Gemma3TextModel,
     Gemma3TextScaledWordEmbedding,
 )
@@ -2203,6 +2205,11 @@ class Gemma4ForConditionalGeneration(Gemma3nForConditionalGeneration):
         return model_inputs
 
 
+class Gemma4ForSequenceClassification(Gemma3ForSequenceClassification):
+    pass
+
+
+
 __all__ = [
     "Gemma4AudioModel",
     "Gemma4ForCausalLM",
@@ -2211,4 +2218,5 @@ __all__ = [
     "Gemma4PreTrainedModel",
     "Gemma4TextModel",
     "Gemma4VisionModel",
+    "Gemma4ForSequenceClassification",
 ]

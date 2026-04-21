@@ -313,3 +313,8 @@ print(processor.decode(outputs[0][input_len:], skip_special_tokens=False))
 
 [[autodoc]] Gemma4ForConditionalGeneration
     - forward
+
+## Gemma4ForSequenceClassification
+
+[[autodoc]] Gemma4ForSequenceClassification
+    - forward
