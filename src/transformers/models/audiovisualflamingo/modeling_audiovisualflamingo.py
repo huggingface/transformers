@@ -546,7 +546,6 @@ class AudioVisualFlamingoForConditionalGeneration(AudioVisualFlamingoPretrainedM
         audio_cfg = copy.deepcopy(config.audio_config)
         audio_cfg._attn_implementation = config._attn_implementation
         self.sound_tower = AutoModel.from_config(audio_cfg)
-        config.sound_hidden_size = getattr(config.audio_config, "d_model", 1280)
         self.sound_mm_projector = SoundMultimodalProjector(config)
 
         text_cfg = copy.deepcopy(config.text_config)
@@ -574,11 +573,6 @@ class AudioVisualFlamingoForConditionalGeneration(AudioVisualFlamingoPretrainedM
         self.config.text_config = self.llm.config
         self.config.vision_config = self.vision_tower.config
         self.config.audio_config = self.sound_tower.config
-        self.config.sound_hidden_size = getattr(self.sound_tower.config, "d_model", 1280)
-        if getattr(self.config, "mm_projector_cfg", None) is None:
-            self.config.mm_projector_cfg = {"mm_projector_type": "mlp_downsample"}
-        if getattr(self.config, "sound_mm_projector_cfg", None) is None:
-            self.config.sound_mm_projector_cfg = {"sound_mm_projector_type": "mlp"}
         self.post_init()
 
     def get_input_embeddings(self):

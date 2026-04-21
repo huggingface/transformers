@@ -28,7 +28,11 @@ from transformers.image_utils import load_image
 from transformers.processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
 from transformers.video_utils import load_video
 
-from .configuration_audiovisualflamingo import MEDIA_TOKENS, MM_BOS_EOS_TOKENS
+from .configuration_audiovisualflamingo import AudioVisualFlamingoConfig
+
+
+MEDIA_TOKENS = AudioVisualFlamingoConfig.media_tokens
+MM_BOS_EOS_TOKENS = AudioVisualFlamingoConfig.mm_bos_eos_tokens
 
 
 _AUDIOVISUALFLAMINGO_CHAT_TEMPLATE = (

@@ -17,10 +17,9 @@
 Like the AudioFlamingo3 converter, this script:
 1) reads source component configs to build an AudioVisualFlamingoConfig programmatically,
 2) constructs processor and model objects with those configs,
-3) lets ``save_pretrained`` / ``push_to_hub`` handle all serialisation.
+3) lets the standard HF serialization APIs emit config and safetensors artifacts.
 
-No JSON files are copied or manually edited — config.json is produced entirely
-by ``model.save_pretrained()``.
+No JSON files are copied or manually edited.
 """
 
 from __future__ import annotations
@@ -33,7 +32,6 @@ from collections import defaultdict
 from pathlib import Path
 from typing import Any
 
-import torch
 from safetensors.torch import safe_open, save_model
 
 from transformers import (
@@ -110,33 +108,16 @@ AVF_CONFIG_FIELDS = {
     "mm_hidden_size",
     "image_aspect_ratio",
     "num_video_frames",
-    "fps",
     "mm_vision_select_layer",
     "mm_vision_select_feature",
-    "mm_use_im_start_end",
-    "mm_use_im_patch_token",
-    "vision_resolution",
-    "interpolate_mode",
-    "s2",
     "dynamic_s2",
     "s2_scales",
     "s2_max_split_size",
     "s2_resize_output_to_scale_idx",
-    "min_tiles",
     "max_tiles",
-    "num_time_tokens",
-    "time_token_format",
     "image_encoder",
     "video_encoder",
     "sound_encoder",
-    "ignore_index",
-    "default_image_token",
-    "default_sound_token",
-    "sentinel_token",
-    "default_im_start_token",
-    "default_im_end_token",
-    "media_tokens",
-    "mm_bos_eos_tokens",
 }
 
 
@@ -266,9 +247,7 @@ def _build_config(src_root: Path, tokenizer) -> AudioVisualFlamingoConfig:
         return cfg
 
     vision_config = _clean_component(_read_component("vision_tower"))
-    mm_projector_cfg = _clean_component(_read_component("mm_projector"))
     audio_config = _clean_component(_read_component("sound_tower"), extra_strip=SOUND_TOWER_EXTRA_KEYS_TO_STRIP)
-    sound_mm_projector_cfg = _clean_component(_read_component("sound_mm_projector"))
 
     # Extract only the fields AudioVisualFlamingoConfig cares about.
     avf_kwargs = {k: top_cfg[k] for k in AVF_CONFIG_FIELDS if k in top_cfg}
@@ -276,16 +255,13 @@ def _build_config(src_root: Path, tokenizer) -> AudioVisualFlamingoConfig:
     config = AudioVisualFlamingoConfig(
         text_config=text_config,
         vision_config=vision_config,
-        mm_projector_cfg=mm_projector_cfg,
         audio_config=audio_config,
-        sound_mm_projector_cfg=sound_mm_projector_cfg,
         **avf_kwargs,
     )
 
     # Populate media token IDs.
-    media_tokens = config.media_tokens
     media_token_ids = {}
-    for name, token in media_tokens.items():
+    for name, token in AudioVisualFlamingoConfig.media_tokens.items():
         token_id = tokenizer.convert_tokens_to_ids(token)
         if token_id is None or token_id < 0:
             tokenized = tokenizer(token, add_special_tokens=False).input_ids

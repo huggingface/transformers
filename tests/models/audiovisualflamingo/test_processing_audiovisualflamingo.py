@@ -29,9 +29,12 @@ from transformers import (
     SiglipImageProcessor,
     WhisperFeatureExtractor,
 )
-from transformers.models.audiovisualflamingo.configuration_audiovisualflamingo import MEDIA_TOKENS, MM_BOS_EOS_TOKENS
 from transformers.models.audiovisualflamingo.processing_audiovisualflamingo import _load_audio_hf_with_info
 from transformers.testing_utils import require_torch, require_vision
+
+
+MEDIA_TOKENS = AudioVisualFlamingoConfig.media_tokens
+MM_BOS_EOS_TOKENS = AudioVisualFlamingoConfig.mm_bos_eos_tokens
 
 
 def _make_audio(seconds: float, sampling_rate: int = 16_000, frequency: float = 220.0) -> np.ndarray:
