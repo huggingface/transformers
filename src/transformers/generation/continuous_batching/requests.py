@@ -179,7 +179,6 @@ class RequestState:
     remaining_prefill_tokens: list[int] = field(default_factory=list)  # Initial tokens left to process
     is_cpu_offloaded: bool = False  # True when the request's KV cache is in the CPU swap pool
 
-
     def __post_init__(self):
         # If no max length is set, we set an absurdly high value which will never be reached
         self._new_tokens_limit = 2147483647 if self.max_new_tokens is None else self.max_new_tokens

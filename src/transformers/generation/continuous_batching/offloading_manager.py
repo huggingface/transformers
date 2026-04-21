@@ -21,6 +21,7 @@ The CPU swap pool is a static set of pinned tensors allocated once at init (like
 with a simple free set — no dynamic allocation or deallocation of tensors ever happens at runtime.
 """
 
+from collections import deque
 from contextlib import nullcontext
 
 import torch
@@ -61,31 +62,30 @@ class OffloadingManager:
                 f"cpu_offload_space={cpu_offload_space_gib:.1f} GiB is too small for even one block. No CPU offloading."
             )
         # Allocate the CPU swap pool
-        layer_group_size = len(cache.key_cache)
         cpu_cache_shape = (self._num_cpu_blocks, cache.block_size, cache.num_key_value_heads, cache.head_dim)
-
         self._cpu_key_cache: list[torch.Tensor] = [
-            torch.empty(cpu_cache_shape, dtype=cache.dtype, pin_memory=True) for _ in range(layer_group_size)
+            torch.empty(cpu_cache_shape, dtype=cache.dtype, pin_memory=True) for _ in cache.key_cache
         ]
         self._cpu_value_cache: list[torch.Tensor] = [
-            torch.empty(cpu_cache_shape, dtype=cache.dtype, pin_memory=True) for _ in range(layer_group_size)
+            torch.empty(cpu_cache_shape, dtype=cache.dtype, pin_memory=True) for _ in cache.value_cache
         ]
 
-        # Record-keeping attributes
-        self._free_cpu_blocks = set(range(self._num_cpu_blocks))
+        # Pre-view the GPU cache tensors as block-shaped so the hot copy paths avoid per-op .view() calls
+        block_shape = (-1, cache.block_size, cache.num_key_value_heads, cache.head_dim)
+        self._gpu_key_views: list[torch.Tensor] = [k.view(*block_shape) for k in cache.key_cache]
+        self._gpu_value_views: list[torch.Tensor] = [v.view(*block_shape) for v in cache.value_cache]
+
+        # Record-keeping attributes. FIFO order favors contiguity when blocks are returned in bulk.
+        self._free_cpu_blocks: deque[int] = deque(range(self._num_cpu_blocks))
         self._request_id_to_cpu_blocks: dict[str, list[int]] = {}
         self._request_id_to_group_block_counts: dict[str, list[int]] = {}
-        self._gpu_cache_block_shape = (-1, self.cache.block_size, self.cache.num_key_value_heads, self.cache.head_dim)
 
         # Log the size of the CPU swap pool
-        size_in_bytes = 2 * self._cpu_key_cache[0].numel() * self._cpu_key_cache[0].element_size() * layer_group_size
+        cache_tensor = self._cpu_key_cache[0]
+        size_in_bytes = 2 * cache_tensor.numel() * cache_tensor.element_size() * len(cache.key_cache)
         logger.info(
             f"CPU swap pool initialized: {self._num_cpu_blocks} blocks ({size_in_bytes / (1024**3):.2f} GiB pinned)"
         )
-
-    # ------------------------------------------------------------------
-    # Initialization
-    # ------------------------------------------------------------------
 
     def _compute_num_cpu_blocks(self, cpu_offload_space_gib: float | None, safety_threshold: float) -> int:
         """Returns the number of blocks that can fit in the CPU swap pool."""
@@ -119,11 +119,13 @@ class OffloadingManager:
         # Else if the requested number of bytes is None, we use the max number of bytes as the requested number of bytes
         elif max_bytes is not None:
             offload_bytes = max_bytes
-            max_bytes_in_gb = max_bytes / (1024**3)
-            logger.warning(f"Using automatically sized CPU swap pool based on safety threshold: {max_bytes_in_gb = }")
+            logger.warning(f"Auto-sizing CPU swap pool from safety threshold: {max_bytes / (1024**3):.2f} GiB.")
         # Otherwise, it means the pool was supposed to be sized using psutil but it is not available
         else:
-            raise ImportError(f"{offload_bytes = } and psutil is not available: could not size the CPU swap pool.")
+            raise ImportError(
+                "cpu_offload_space=None requires psutil to auto-size the CPU swap pool. Install psutil or pass an "
+                "explicit GiB value."
+            )
 
         # Compute how many blocks fit in CPU pool
         bytes_per_block = (
@@ -137,18 +139,6 @@ class OffloadingManager:
         if bytes_per_block == 0:
             raise ValueError("The number of bytes per block is 0. This is not possible.")
         return offload_bytes // bytes_per_block
-
-    # ------------------------------------------------------------------
-    # Tiny helpers
-    # ------------------------------------------------------------------
-
-    def can_cpu_offload(self, num_blocks: int) -> bool:
-        """Returns True if there are enough free CPU blocks to offload `num_blocks`."""
-        return len(self._free_cpu_blocks) >= num_blocks
-
-    # ------------------------------------------------------------------
-    # Offloading: pick a victim, copy GPU→CPU or soft-reset
-    # ------------------------------------------------------------------
 
     def offload_one_request(self) -> None:
         """Offload one active request to make room in the GPU cache. Tries CPU offloading first; if the pool is full,
@@ -176,19 +166,15 @@ class OffloadingManager:
             # Here, the new state is the same as the old one, but with the status set to PENDING
             state._status = RequestStatus.PENDING
             new_state = state
-            logger.info(f"Offloaded request {request_id} to CPU: {len(self._free_cpu_blocks)} free blocks remaining.")
+            logger.debug(f"Offloaded request {request_id} to CPU: {len(self._free_cpu_blocks)} free blocks remaining.")
         else:
             new_state = state.create_equivalent_initial_request()
             state._status = RequestStatus.FINISHED
-            logger.info(f"Soft reset request {request_id}.")
+            logger.debug(f"Soft reset request {request_id}.")
 
         scheduler.finish_request(request_id)
         scheduler.add_waiting_request(new_state)
         scheduler.block_new_requests = True
-
-    # ------------------------------------------------------------------
-    # Restoration: copy CPU→GPU, fix up request state
-    # ------------------------------------------------------------------
 
     def restore_scheduled_requests(self, requests_in_batch: list[FutureRequestState]) -> None:
         """Restore KV caches from CPU for any CPU-offloaded requests in the scheduled batch. Indices are accumulated
@@ -220,7 +206,7 @@ class OffloadingManager:
             # If prefix sharing is on, these freshly allocated blocks will be deduplicated at the next update
             if cache.allow_block_sharing:
                 future_state.complete_blocks += state.position_offset // cache.block_size
-            logger.info(
+            logger.debug(
                 f"Restored CPU-offloaded request {state.request_id} with {len(state.initial_tokens)} prefill tokens "
                 f"and {len(state.generated_tokens)} generated tokens."
             )
@@ -234,15 +220,11 @@ class OffloadingManager:
         gpu_ids = torch.tensor(all_gpu_indices, device=cache.device, dtype=torch.int32)
         maybe_stream = torch.cuda.stream(self._compute_stream) if self._compute_stream is not None else nullcontext()
         with maybe_stream:
-            for cpu_k, gpu_k in zip(self._cpu_key_cache, cache.key_cache):
-                gpu_k.view(*self._gpu_cache_block_shape)[gpu_ids].copy_(cpu_k[cpu_ids])
-            for cpu_v, gpu_v in zip(self._cpu_value_cache, cache.value_cache):
-                gpu_v.view(*self._gpu_cache_block_shape)[gpu_ids].copy_(cpu_v[cpu_ids])
-        self._free_cpu_blocks.update(all_cpu_indices)
-
-    # ------------------------------------------------------------------
-    # Cleanup
-    # ------------------------------------------------------------------
+            for cpu_k, gpu_k in zip(self._cpu_key_cache, self._gpu_key_views):
+                gpu_k[gpu_ids].copy_(cpu_k[cpu_ids])
+            for cpu_v, gpu_v in zip(self._cpu_value_cache, self._gpu_value_views):
+                gpu_v[gpu_ids].copy_(cpu_v[cpu_ids])
+        self._free_cpu_blocks.extend(all_cpu_indices)
 
     def free_request_cpu_cache(self, state: RequestState) -> None:
         """Free CPU blocks for a single request (e.g., on cancellation)."""
@@ -260,15 +242,11 @@ class OffloadingManager:
         self.free_all_waiting_cpu_caches()
         self._request_id_to_cpu_blocks.clear()
         self._request_id_to_group_block_counts.clear()
-        self._free_cpu_blocks = set(range(self._num_cpu_blocks))
-
-    # ------------------------------------------------------------------
-    # Private: GPU↔CPU block copy using the static pool
-    # ------------------------------------------------------------------
+        self._free_cpu_blocks = deque(range(self._num_cpu_blocks))
 
     def _offload_to_cpu(self, request_id: str, state: RequestState) -> bool:
         """Copy a request's KV cache blocks from GPU to the static CPU swap pool. Returns True on success, False if
-        the pool is full. Must be called BEFORE free_blocks() for this request."""
+        the pool is full."""
 
         # Get the indices to offload from
         gpu_indices = []
@@ -280,11 +258,11 @@ class OffloadingManager:
 
         # No CPU offloading if there are no blocks to offload or not enough free blocks in the CPU swap pool
         total_gpu_blocks = len(gpu_indices)
-        if total_gpu_blocks == 0 or not self.can_cpu_offload(total_gpu_blocks):
+        if total_gpu_blocks == 0 or len(self._free_cpu_blocks) < total_gpu_blocks:
             return False
 
-        # Reserve CPU blocks from the free set
-        cpu_indices = [self._free_cpu_blocks.pop() for _ in range(total_gpu_blocks)]
+        # Reserve CPU blocks from the free pool
+        cpu_indices = [self._free_cpu_blocks.popleft() for _ in range(total_gpu_blocks)]
 
         # Offload using the compute stream so it does not interfere with current generation
         maybe_stream = torch.cuda.stream(self._compute_stream) if self._compute_stream is not None else nullcontext()
@@ -292,11 +270,11 @@ class OffloadingManager:
             cpu_ids = torch.tensor(cpu_indices, device="cpu", dtype=torch.int32)
             gpu_ids = torch.tensor(gpu_indices, device=self.cache.device, dtype=torch.int32)
             # Keys
-            for cpu_key_cache, gpu_key_cache in zip(self._cpu_key_cache, self.cache.key_cache):
-                cpu_key_cache[cpu_ids].copy(gpu_key_cache.view(*self._gpu_cache_block_shape)[gpu_ids])
+            for cpu_key_cache, gpu_key_view in zip(self._cpu_key_cache, self._gpu_key_views):
+                cpu_key_cache[cpu_ids].copy_(gpu_key_view[gpu_ids])
             # Values
-            for cpu_value_cache, gpu_value_cache in zip(self._cpu_value_cache, self.cache.value_cache):
-                cpu_value_cache[cpu_ids].copy_(gpu_value_cache.view(*self._gpu_cache_block_shape)[gpu_ids])
+            for cpu_value_cache, gpu_value_view in zip(self._cpu_value_cache, self._gpu_value_views):
+                cpu_value_cache[cpu_ids].copy_(gpu_value_view[gpu_ids])
             # TODO: add asynchronous version of this
 
         # No explicit sync needed: finish_request is logical, and the next forward pass serializes on the same stream.
@@ -306,8 +284,8 @@ class OffloadingManager:
         return True
 
     def _return_cpu_blocks(self, request_id: str) -> tuple[list[int], list[int]]:
-        """Return CPU blocks to the free set without copying anything."""
+        """Return CPU blocks to the free pool without copying anything."""
         cpu_ids = self._request_id_to_cpu_blocks.pop(request_id)
         group_counts = self._request_id_to_group_block_counts.pop(request_id)
-        self._free_cpu_blocks.update(cpu_ids)
+        self._free_cpu_blocks.extend(cpu_ids)
         return cpu_ids, group_counts
