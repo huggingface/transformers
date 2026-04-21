@@ -1333,8 +1333,8 @@ def replace_unprotected_image_processing_imports(files: dict, all_imports: list)
         node_with_same_index = next(
             v["node"] for v in body.values() if v["insert_idx"] == node_structure["insert_idx"]
         )
-        # Insert the new node before the corresponding node if the corresponding node is a class
-        if isinstance(node_with_same_index, cst.ClassDef):
+        # Insert the new node before the corresponding node if the corresponding node is a class or function
+        if isinstance(node_with_same_index, (cst.ClassDef, cst.FunctionDef)):
             nodes_to_add[name]["insert_idx"] -= 0.5
         # Otherwise, after it
         else:

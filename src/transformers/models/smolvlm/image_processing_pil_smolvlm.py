@@ -39,14 +39,6 @@ from ...processing_utils import ImagesKwargs, Unpack
 from ...utils import TensorType, auto_docstring
 
 
-def _make_pixel_mask(image: np.ndarray, output_size: tuple[int, int]) -> np.ndarray:
-    """Make pixel mask: 1=valid, 0=padding. Images are CHW."""
-    h, w = image.shape[-2:]
-    mask = np.zeros(output_size, dtype=np.int64)
-    mask[:h, :w] = 1
-    return mask
-
-
 class SmolVLMImageProcessorKwargs(ImagesKwargs, total=False):
     """
     do_image_splitting (`bool`, *optional*, defaults to `True`):
@@ -61,6 +53,14 @@ class SmolVLMImageProcessorKwargs(ImagesKwargs, total=False):
     do_image_splitting: bool
     max_image_size: dict[str, int]
     return_row_col_info: bool
+
+
+def _make_pixel_mask(image: np.ndarray, output_size: tuple[int, int]) -> np.ndarray:
+    """Make pixel mask: 1=valid, 0=padding. Images are CHW."""
+    h, w = image.shape[-2:]
+    mask = np.zeros(output_size, dtype=np.int64)
+    mask[:h, :w] = 1
+    return mask
 
 
 # Adapted from transformers.models.smolvlm.image_processing_smolvlm.MAX_IMAGE_SIZE

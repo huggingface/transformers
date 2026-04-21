@@ -51,6 +51,32 @@ if is_torch_available():
 logger = logging.get_logger(__name__)
 
 
+class Mask2FormerImageProcessorKwargs(ImagesKwargs, total=False):
+    r"""
+    ignore_index (`int`, *optional*):
+        Label to be assigned to background pixels in segmentation maps. If provided, segmentation map pixels
+        denoted with 0 (background) will be replaced with `ignore_index`.
+    do_reduce_labels (`bool`, *optional*, defaults to `False`):
+        Whether or not to decrement all label values of segmentation maps by 1. Usually used for datasets where 0
+        is used for background, and background itself is not included in all classes of a dataset (e.g. ADE20k).
+        The background label will be replaced by `ignore_index`.
+    num_labels (`int`, *optional*):
+        The number of labels in the segmentation map.
+    size_divisor (`int`, *optional*, defaults to `32`):
+        Some backbones need images divisible by a certain number. If not passed, it defaults to the value used in
+        Swin Transformer.
+    pad_size (`SizeDict`, *optional*):
+        The size to pad the images to. Must be larger than any image size provided for preprocessing. If `pad_size`
+        is not provided, images will be padded to the largest height and width in the batch.
+    """
+
+    ignore_index: int | None
+    do_reduce_labels: bool
+    num_labels: int | None
+    size_divisor: int
+    pad_size: SizeDict | None
+
+
 def convert_segmentation_map_to_binary_masks(
     segmentation_map: np.ndarray,
     instance_id_to_semantic_id: dict[int, int] | None = None,
@@ -85,32 +111,6 @@ def convert_segmentation_map_to_binary_masks(
     else:
         labels = all_labels.astype(np.int64)
     return binary_masks.astype(np.float32), labels
-
-
-class Mask2FormerImageProcessorKwargs(ImagesKwargs, total=False):
-    r"""
-    ignore_index (`int`, *optional*):
-        Label to be assigned to background pixels in segmentation maps. If provided, segmentation map pixels
-        denoted with 0 (background) will be replaced with `ignore_index`.
-    do_reduce_labels (`bool`, *optional*, defaults to `False`):
-        Whether or not to decrement all label values of segmentation maps by 1. Usually used for datasets where 0
-        is used for background, and background itself is not included in all classes of a dataset (e.g. ADE20k).
-        The background label will be replaced by `ignore_index`.
-    num_labels (`int`, *optional*):
-        The number of labels in the segmentation map.
-    size_divisor (`int`, *optional*, defaults to `32`):
-        Some backbones need images divisible by a certain number. If not passed, it defaults to the value used in
-        Swin Transformer.
-    pad_size (`SizeDict`, *optional*):
-        The size to pad the images to. Must be larger than any image size provided for preprocessing. If `pad_size`
-        is not provided, images will be padded to the largest height and width in the batch.
-    """
-
-    ignore_index: int | None
-    do_reduce_labels: bool
-    num_labels: int | None
-    size_divisor: int
-    pad_size: SizeDict | None
 
 
 # Adapted from transformers.models.mask2former.image_processing_mask2former.binary_mask_to_rle

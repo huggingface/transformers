@@ -35,6 +35,23 @@ from ...processing_utils import ImagesKwargs, Unpack
 from ...utils import TensorType, auto_docstring
 
 
+class PaddleOCRVLImageProcessorKwargs(ImagesKwargs, total=False):
+    r"""
+    patch_size (`int`, *optional*, defaults to 14):
+        The spatial patch size of the vision encoder.
+    temporal_patch_size (`int`, *optional*, defaults to 1):
+        The temporal patch size of the vision encoder.
+    merge_size (`int`, *optional*, defaults to 2):
+        The merge size of the vision encoder to llm encoder.
+    """
+
+    min_pixels: int
+    max_pixels: int
+    patch_size: int
+    temporal_patch_size: int
+    merge_size: int
+
+
 def smart_resize(
     height: int,
     width: int,
@@ -65,23 +82,6 @@ def smart_resize(
         h_bar = math.ceil(height * beta / factor) * factor
         w_bar = math.ceil(width * beta / factor) * factor
     return h_bar, w_bar
-
-
-class PaddleOCRVLImageProcessorKwargs(ImagesKwargs, total=False):
-    r"""
-    patch_size (`int`, *optional*, defaults to 14):
-        The spatial patch size of the vision encoder.
-    temporal_patch_size (`int`, *optional*, defaults to 1):
-        The temporal patch size of the vision encoder.
-    merge_size (`int`, *optional*, defaults to 2):
-        The merge size of the vision encoder to llm encoder.
-    """
-
-    min_pixels: int
-    max_pixels: int
-    patch_size: int
-    temporal_patch_size: int
-    merge_size: int
 
 
 @auto_docstring
