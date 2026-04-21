@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import copy
 import unittest
 from inspect import signature
 
@@ -145,12 +146,18 @@ class ALMModelTester:
         input_ids[input_ids == self.audio_token_id] = self.pad_token_id
         for i in range(input_ids.shape[0]):
             n = num_audio_tokens[i].item() if isinstance(num_audio_tokens, torch.Tensor) else num_audio_tokens
+            if 1 + int(n) > self.seq_length:
+                raise ValueError(
+                    f"Cannot place {int(n)} audio tokens after BOS in a sequence of length {self.seq_length}. "
+                    "This likely indicates a mismatch between your feature extraction/configuration and your sequence length. "
+                    "Please ensure `seq_length` is >= the number of audio embedding positions + 1."
+                )
             input_ids[i, 1 : 1 + int(n)] = self.audio_token_id
         return input_ids
 
     def get_audio_feature_key(self):
         """Key name for audio features in the inputs dict."""
-        return "input_features" 
+        return "input_features"
 
     def create_audio_mask(self):
         """Create audio-level attention mask with contiguous valid regions per batch element.
@@ -179,14 +186,6 @@ class ALMModelTester:
         audio_features = self.create_audio_features()
         audio_mask = self.create_audio_mask()
         audio_embeds_mask = self.get_audio_embeds_mask(audio_mask)
-
-        if audio_embeds_mask.shape[1] > self.seq_length:
-            raise ValueError(
-                f"`audio_embeds_mask` has more tokens per sequence than `seq_length` allows "
-                f"({audio_embeds_mask.shape[1]} > {self.seq_length}). "
-                "This likely indicates a mismatch between your feature extraction/configuration and your sequence length. "
-                "Please ensure `seq_length` is >= the number of audio embedding positions."
-            )
 
         input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
 
@@ -329,6 +328,70 @@ class ALMModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin)
     def test_model_base_model_prefix(self):
         pass
 
-    # TODO: @eustlb, add this
-    # def test_mismatching_num_audio_tokens(self):
-    #     pass
+    def test_mismatching_num_audio_tokens(self):
+        """
+        Tests that ALMs throw an error with explicit message saying what is wrong
+        when number of audios don't match number of audio tokens in the text.
+        Also we need to test multi-audio cases when one prompt has multiple audio tokens.
+        """
+        config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        audio_feature_key = self.model_tester.get_audio_feature_key()
+        audio_mask_key = self.model_tester.audio_mask_key
+
+        for model_class in self.all_model_classes:
+            model = model_class(config).to(torch_device)
+            model.eval()
+            curr_input_dict = copy.deepcopy(input_dict)
+            _ = model(**curr_input_dict)  # successful forward with no modifications
+
+            # Test 1: remove one audio but leave the audio tokens in the text
+            curr_input_dict[audio_feature_key] = curr_input_dict[audio_feature_key][-1:, ...]
+            if audio_mask_key is not None:
+                curr_input_dict[audio_mask_key] = curr_input_dict[audio_mask_key][-1:, ...]
+            with self.assertRaises(ValueError):
+                _ = model(**curr_input_dict)
+
+            # Test 2: add one audio but leave the audio tokens in the text
+            curr_input_dict = copy.deepcopy(input_dict)
+            curr_input_dict[audio_feature_key] = torch.cat(
+                [curr_input_dict[audio_feature_key], curr_input_dict[audio_feature_key][:1, ...]], dim=0
+            )
+            if audio_mask_key is not None:
+                curr_input_dict[audio_mask_key] = torch.cat(
+                    [curr_input_dict[audio_mask_key], curr_input_dict[audio_mask_key][:1, ...]], dim=0
+                )
+            with self.assertRaises(ValueError):
+                _ = model(**curr_input_dict)
+
+            # Test 3: duplicate the text along the seq dim so each prompt has twice as many
+            # audio tokens, while leaving the audio features unchanged -> mismatch
+            curr_input_dict = copy.deepcopy(input_dict)
+            curr_input_dict["input_ids"] = torch.cat(
+                [curr_input_dict["input_ids"], curr_input_dict["input_ids"]], dim=1
+            )
+            curr_input_dict["attention_mask"] = torch.cat(
+                [curr_input_dict["attention_mask"], curr_input_dict["attention_mask"]], dim=1
+            )
+            with self.assertRaises(ValueError):
+                _ = model(**curr_input_dict)
+
+            # Test 4: multi-audio valid case. A prompt may contain multiple audio segments;
+            # all audio segments are concatenated along the batch dim on the audio side.
+            # Duplicating input_ids along seq dim (-> [audios, audios] per prompt) and the
+            # audio features along batch dim (-> batch_size * 2) must forward successfully.
+            curr_input_dict = copy.deepcopy(input_dict)
+            curr_input_dict["input_ids"] = torch.cat(
+                [curr_input_dict["input_ids"], curr_input_dict["input_ids"]], dim=1
+            )
+            curr_input_dict["attention_mask"] = torch.cat(
+                [curr_input_dict["attention_mask"], curr_input_dict["attention_mask"]], dim=1
+            )
+            curr_input_dict[audio_feature_key] = torch.cat(
+                [curr_input_dict[audio_feature_key], curr_input_dict[audio_feature_key]], dim=0
+            )
+            if audio_mask_key is not None:
+                curr_input_dict[audio_mask_key] = torch.cat(
+                    [curr_input_dict[audio_mask_key], curr_input_dict[audio_mask_key]], dim=0
+                )
+            _ = model(**curr_input_dict)
+
