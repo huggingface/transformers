@@ -54,31 +54,40 @@ class OffloadingManager:
         # All offloading transfers run on the compute stream (stream-ordered, like the fork copy path)
         self._compute_stream: torch.cuda.Stream | None = inputs_and_outputs.compute_stream
 
+        # Bookkeeping defaults, valid whether or not the pool is allocated
+        self._cpu_key_cache: list[torch.Tensor] = []
+        self._cpu_value_cache: list[torch.Tensor] = []
+        self._gpu_key_views: list[torch.Tensor] = []
+        self._gpu_value_views: list[torch.Tensor] = []
+        self._free_cpu_blocks: deque[int] = deque()
+        self._request_id_to_cpu_blocks: dict[str, list[int]] = {}
+        self._request_id_to_group_block_counts: dict[str, list[int]] = {}
+
         # Compute the size of the CPU swap pool in blocks
         self._num_cpu_blocks = self._compute_num_cpu_blocks(cpu_offload_space_gib, safety_threshold)
         offloading_enabled = cpu_offload_space_gib is not None and cpu_offload_space_gib > 0
-        if self._num_cpu_blocks == 0 and offloading_enabled:
-            logger.warning(
-                f"cpu_offload_space={cpu_offload_space_gib:.1f} GiB is too small for even one block. No CPU offloading."
-            )
+        if self._num_cpu_blocks == 0:
+            if offloading_enabled:
+                logger.warning(
+                    f"cpu_offload_space={cpu_offload_space_gib:.1f} GiB is too small for even one block. "
+                    "No CPU offloading."
+                )
+            return None
+
         # Allocate the CPU swap pool
         cpu_cache_shape = (self._num_cpu_blocks, cache.block_size, cache.num_key_value_heads, cache.head_dim)
-        self._cpu_key_cache: list[torch.Tensor] = [
-            torch.empty(cpu_cache_shape, dtype=cache.dtype, pin_memory=True) for _ in cache.key_cache
-        ]
-        self._cpu_value_cache: list[torch.Tensor] = [
-            torch.empty(cpu_cache_shape, dtype=cache.dtype, pin_memory=True) for _ in cache.value_cache
-        ]
+        for _ in cache.key_cache:
+            self._cpu_key_cache.append(torch.empty(cpu_cache_shape, dtype=cache.dtype, pin_memory=True))
+            self._cpu_value_cache.append(torch.empty(cpu_cache_shape, dtype=cache.dtype, pin_memory=True))
 
         # Pre-view the GPU cache tensors as block-shaped so the hot copy paths avoid per-op .view() calls
         block_shape = (-1, cache.block_size, cache.num_key_value_heads, cache.head_dim)
-        self._gpu_key_views: list[torch.Tensor] = [k.view(*block_shape) for k in cache.key_cache]
-        self._gpu_value_views: list[torch.Tensor] = [v.view(*block_shape) for v in cache.value_cache]
+        for k_cache, v_cache in zip(cache.key_cache, cache.value_cache):
+            self._gpu_key_views.append(k_cache.view(*block_shape))
+            self._gpu_value_views.append(v_cache.view(*block_shape))
 
-        # Record-keeping attributes. FIFO order favors contiguity when blocks are returned in bulk.
-        self._free_cpu_blocks: deque[int] = deque(range(self._num_cpu_blocks))
-        self._request_id_to_cpu_blocks: dict[str, list[int]] = {}
-        self._request_id_to_group_block_counts: dict[str, list[int]] = {}
+        # FIFO order favors contiguity when blocks are returned in bulk
+        self._free_cpu_blocks = deque(range(self._num_cpu_blocks))
 
         # Log the size of the CPU swap pool
         cache_tensor = self._cpu_key_cache[0]
@@ -139,6 +148,10 @@ class OffloadingManager:
         if bytes_per_block == 0:
             raise ValueError("The number of bytes per block is 0. This is not possible.")
         return offload_bytes // bytes_per_block
+
+    def _stream_ctx(self):
+        """Returns a context manager that runs enclosed ops on the compute stream, or a no-op when none is set."""
+        return torch.cuda.stream(self._compute_stream) if self._compute_stream is not None else nullcontext()
 
     def offload_one_request(self) -> None:
         """Offload one active request to make room in the GPU cache. Tries CPU offloading first; if the pool is full,
@@ -218,8 +231,7 @@ class OffloadingManager:
         # Single batched copy for all requests (still, one copy per layer)
         cpu_ids = torch.tensor(all_cpu_indices, device="cpu", dtype=torch.int32)
         gpu_ids = torch.tensor(all_gpu_indices, device=cache.device, dtype=torch.int32)
-        maybe_stream = torch.cuda.stream(self._compute_stream) if self._compute_stream is not None else nullcontext()
-        with maybe_stream:
+        with self._stream_ctx():
             for cpu_k, gpu_k in zip(self._cpu_key_cache, self._gpu_key_views):
                 gpu_k[gpu_ids].copy_(cpu_k[cpu_ids])
             for cpu_v, gpu_v in zip(self._cpu_value_cache, self._gpu_value_views):
@@ -265,8 +277,7 @@ class OffloadingManager:
         cpu_indices = [self._free_cpu_blocks.popleft() for _ in range(total_gpu_blocks)]
 
         # Offload using the compute stream so it does not interfere with current generation
-        maybe_stream = torch.cuda.stream(self._compute_stream) if self._compute_stream is not None else nullcontext()
-        with maybe_stream:
+        with self._stream_ctx():
             cpu_ids = torch.tensor(cpu_indices, device="cpu", dtype=torch.int32)
             gpu_ids = torch.tensor(gpu_indices, device=self.cache.device, dtype=torch.int32)
             # Keys
