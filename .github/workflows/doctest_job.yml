@@ -17,6 +17,9 @@ env:
   OMP_NUM_THREADS: 16
   MKL_NUM_THREADS: 16
   TF_FORCE_GPU_ALLOW_GROWTH: true
+  # Self-hosted OTLP collector wiring. If the secrets are unset, configure-ci-otel is a no-op.
+  OTEL_EXPORTER_OTLP_ENDPOINT: ${{ secrets.OTEL_EXPORTER_OTLP_ENDPOINT }}
+  OTEL_EXPORTER_OTLP_HEADERS: ${{ secrets.OTEL_EXPORTER_OTLP_HEADERS }}
 
 jobs:
   run_doctests:

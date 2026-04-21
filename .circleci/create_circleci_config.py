@@ -41,6 +41,10 @@ COMMON_PYTEST_OPTIONS = {
 }
 DEFAULT_DOCKER_IMAGE = [{"image": "cimg/python:3.8.12"}]
 
+# CircleCI context holding OTLP collector config (OTEL_EXPORTER_OTLP_ENDPOINT, OTEL_EXPORTER_OTLP_HEADERS).
+# Must exist in the CircleCI org settings. If env vars are empty, configure-ci-otel is a no-op.
+CI_OTEL_CONTEXT = "transformers-otel"
+
 # Strings that commonly appear in the output of flaky tests when they fail. These are used with `pytest-rerunfailures`
 # to rerun the tests that match these patterns.
 FLAKY_TEST_FAILURE_PATTERNS = [
@@ -492,13 +496,14 @@ def create_circleci_config(folder=None):
     }
     if "CIRCLE_TOKEN" in os.environ:
         # For private forked repo. (e.g. new model addition)
-        config["workflows"] = {
-            "version": 2,
-            "run_tests": {"jobs": [{j.job_name: {"context": ["TRANSFORMERS_CONTEXT"]}} for j in jobs]},
-        }
+        job_contexts = ["TRANSFORMERS_CONTEXT", CI_OTEL_CONTEXT]
     else:
         # For public repo. (e.g. `transformers`)
-        config["workflows"] = {"version": 2, "run_tests": {"jobs": [j.job_name for j in jobs]}}
+        job_contexts = [CI_OTEL_CONTEXT]
+    config["workflows"] = {
+        "version": 2,
+        "run_tests": {"jobs": [{j.job_name: {"context": job_contexts}} for j in jobs]},
+    }
     with open(os.path.join(folder, "generated_config.yml"), "w", encoding="utf-8") as f:
         f.write(
             yaml.dump(config, sort_keys=False, default_flow_style=False)

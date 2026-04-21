@@ -43,6 +43,9 @@ env:
   HF_TOKEN: ${{ secrets.HF_HUB_READ_TOKEN }}
   TF_FORCE_GPU_ALLOW_GROWTH: true
   CUDA_VISIBLE_DEVICES: 0,1
+  # Self-hosted OTLP collector wiring. If the secrets are unset, configure-ci-otel is a no-op.
+  OTEL_EXPORTER_OTLP_ENDPOINT: ${{ secrets.OTEL_EXPORTER_OTLP_ENDPOINT }}
+  OTEL_EXPORTER_OTLP_HEADERS: ${{ secrets.OTEL_EXPORTER_OTLP_HEADERS }}
 
 jobs:
   run_models_gpu:
