@@ -189,19 +189,17 @@ class PagedAttentionCache:
             config.hidden_size + config.vocab_size,  # hidden state + logits
         )
         attention_peak = (
-            2 * page_size,  # K and V read from cache in the worst case scenario (whole cache is read)
+            2 * page_size,  # old K and V, read from cache (in the worst case scenario: whole cache is read)
             config.hidden_size + q_per_token + 2 * page_size,  # hidden state + Q + new K and V
         )
 
         memory_handler = PagedAttentionMemoryHandler(
-            block_size=self.block_size,
+            continuous_batching_config=continuous_batching_config,
             page_size=page_size,
             num_groups=self.num_groups,
             group_size=group_size,
-            lm_head_peak=lm_head_peak,
-            attention_peak=attention_peak,
+            activation_peaks=[lm_head_peak, attention_peak],
             num_attention_masks=num_attention_masks,
-            continuous_batching_config=continuous_batching_config,
         )
         num_blocks, max_batch_tokens = memory_handler.infer_num_blocks_and_max_batch_tokens(
             num_blocks=continuous_batching_config.num_blocks,
@@ -537,25 +535,21 @@ class PagedAttentionMemoryHandler:
 
     def __init__(
         self,
-        block_size: int,
+        continuous_batching_config: ContinuousBatchingConfig,
         page_size: int,
         num_groups: int,
         group_size: int,
-        lm_head_peak: tuple[int, int],
-        attention_peak: tuple[int, int],
+        activation_peaks: list[tuple[int, int]],
         num_attention_masks: int,
-        continuous_batching_config: ContinuousBatchingConfig,
     ) -> None:
-        """Initialize the memory handler. `lm_head_peak` and `attention_peak` are each a `(Δcn, Δcm)` pair giving the
-        activation memory contributions proportional to N (pages) and M (batch tokens) for that peak. Memory must
-        satisfy the constraint at every peak, so we solve each polynomial independently and take the most restrictive
-        result."""
-        self.block_size = block_size
+        """Initialize the memory handler. `peaks` is a list are `(Δcn, Δcm)` pairs giving the activation memory
+        contributions proportional to N (pages) and M (batch tokens) for that peak. Memory must satisfy the constraint
+        at every peak, so we solve each polynomial independently and take the most restrictive result."""
+        self.block_size = continuous_batching_config.block_size
         self.page_size = page_size
         self.num_groups = num_groups
         self.group_size = group_size
-        self.lm_head_peak = lm_head_peak
-        self.attention_peak = attention_peak
+        self.activation_peaks = activation_peaks
         self.num_attention_masks = num_attention_masks
         self.max_blocks_per_request = continuous_batching_config.max_blocks_per_request or 0
         # This is the number of output rows for the output_ids tensor
@@ -643,7 +637,8 @@ class PagedAttentionMemoryHandler:
             max_batch_tokens = int(num_pages * m)
             if max_batch_tokens > self._upper_bound_max_batch_tokens:
                 max_batch_tokens = self._upper_bound_max_batch_tokens
-                num_blocks = None  # recompute below now that max_batch_tokens is clamped
+                # If max_batch_tokens is clamped, we can to recompute num_blocks below to get a higher value
+                num_blocks = None
             else:
                 num_blocks = min(floor(num_pages) // self.block_size, self._upper_bound_num_blocks)
 
@@ -674,17 +669,15 @@ class PagedAttentionMemoryHandler:
         """
         available = self.get_available_memory(max_memory_percent)
         logger.info(f"Cache memory: {available}")
-
-        # Solve each peak independently, then take the element-wise min (tightest constraint wins).
-        lm_n, lm_m = self._solve_for_peak(self.lm_head_peak, available, num_blocks, max_batch_tokens, cache_dtype)
-        at_n, at_m = self._solve_for_peak(self.attention_peak, available, num_blocks, max_batch_tokens, cache_dtype)
-        num_blocks = min(lm_n, at_n)
-        max_batch_tokens = min(lm_m, at_m)
-
+        # Solve each peak independently, then take the element-wise min (tightest constraint wins)
+        num_blocks = float("inf")
+        max_batch_tokens = float("inf")
+        for peak in self.activation_peaks:
+            n_blocks, max_batch_toks = self._solve_for_peak(peak, available, num_blocks, max_batch_tokens, cache_dtype)
+            num_blocks = min(num_blocks, n_blocks)
+            max_batch_tokens = min(max_batch_tokens, max_batch_toks)
         # Validate
-        memory_footprint = self.compute_memory_footprint(
-            max_batch_tokens=max_batch_tokens, num_blocks=num_blocks, cache_dtype=cache_dtype
-        )
+        memory_footprint = self.compute_memory_footprint(max_batch_tokens, num_blocks, cache_dtype)
         if memory_footprint > available:
             raise MemoryError(f"Memory footprint {memory_footprint} is more than available memory {available}")
         return num_blocks, max_batch_tokens
@@ -694,8 +687,9 @@ class PagedAttentionMemoryHandler:
         N = num_blocks * self.block_size
         M = max_batch_tokens
 
-        def eval_peak(peak: tuple[int, int]) -> int:
+        max_memory_footprint = 0
+        for peak in self.activation_peaks:
             cn, cm, cnm, cmm = self._equation_coefficients(peak, cache_dtype)
-            return cn * N + cm * M + cnm * N * M + cmm * M * M
-
-        return max(eval_peak(self.lm_head_peak), eval_peak(self.attention_peak))
+            memory_footprint = cn * N + cm * M + cnm * N * M + cmm * M * M
+            max_memory_footprint = max(max_memory_footprint, memory_footprint)
+        return max_memory_footprint

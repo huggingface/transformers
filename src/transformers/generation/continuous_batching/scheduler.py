@@ -225,7 +225,8 @@ class Scheduler(ABC):
             request_len = min(len(request_tokens), token_budget)
 
             # Check cache budget for varlen batches. Decode batches have no KV cache budget because KV cache is not read
-            # using read_indices tensor.
+            # using read_indices tensor. We still deduct the amount ofread cache for decode requests because the batch
+            # might become a varlen batch at any point.
             is_decode_eligible = request_len == 1 and state.position_offset < self.max_decode_fast_path_length
             read_cache_needed = state.current_len()
             if self.read_cache_limit is not None:
