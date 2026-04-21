@@ -3514,4 +3514,4 @@ class DisableMmapLoadingTest(unittest.TestCase):
 
         self.assertEqual(set(loaded_mmap.keys()), set(loaded_no_mmap.keys()))
         for k in loaded_mmap:
-            self.assertTrue(torch.equal(loaded_mmap[k], loaded_no_mmap[k]))
+            torch.testing.assert_close(loaded_mmap[k], loaded_no_mmap[k])

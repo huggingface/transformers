@@ -4320,10 +4320,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             elif checkpoint_files is not None and checkpoint_files[0].endswith(".safetensors") and state_dict is None:
                 merged_state_dict = {}
                 for file in checkpoint_files:
-                    no_mmap = load_config.disable_mmap
-                    if no_mmap is None:
-                        no_mmap = _is_on_hf_mount(file)
-                    if no_mmap:
+                    if load_config.disable_mmap or _is_on_hf_mount(file):
                         with open(file, "rb") as _fh:
                             merged_state_dict.update(_safe_load_bytes(_fh.read()))
                         continue
