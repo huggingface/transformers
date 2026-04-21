@@ -15,11 +15,11 @@ rendered properly in your Markdown viewer.
 -->
 *This model was released on {release_date} and added to Hugging Face Transformers on 2026-04-17.*
 
-# HY3-Preview
+# Hy3-preview
 
 ## Overview
 
-HY3-Preview is a large-scale Mixture-of-Experts (MoE) language model developed by the Tencent HunYuan team. It features a dense-MoE hybrid architecture with 192 routed experts and 1 always-active shared expert per MoE layer, achieving strong performance with efficient inference via sparse expert activation.
+Hy3-preview is a large-scale Mixture-of-Experts (MoE) language model developed by the Tencent HunYuan team. It features a dense-MoE hybrid architecture with 192 routed experts and 1 always-active shared expert per MoE layer, achieving strong performance with efficient inference via sparse expert activation.
 
 Key architectural features:
 
@@ -37,14 +37,14 @@ Key architectural features:
 ```python
 from transformers import AutoTokenizer, AutoModelForCausalLM
 
-model_id = "tencent/HY3-Preview"
+model_id = "tencent/Hy3-preview"
 tokenizer = AutoTokenizer.from_pretrained(model_id)
 model = AutoModelForCausalLM.from_pretrained(
     model_id,
     device_map="auto",
 )
 
-inputs = tokenizer("北京是中国的首都", return_tensors="pt").to(model.device)
+inputs = tokenizer("The future of artificial intelligence is", return_tensors="pt").to(model.device)
 outputs = model.generate(**inputs, max_new_tokens=64)
 print(tokenizer.decode(outputs[0], skip_special_tokens=True))
 ```

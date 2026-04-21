@@ -222,6 +222,8 @@ class HYV3DecoderLayer(DeepseekV3DecoderLayer):
 
 
 class HYV3PreTrainedModel(LlamaPreTrainedModel):
+    # Not supporting multi-token prediction (MTP) atm
+    _keys_to_ignore_on_load_unexpected = [r"model\.layers\.80.*"]
     _keep_in_fp32_modules_strict = ["e_score_correction_bias"]
     _can_record_outputs = {
         "router_logits": OutputRecorder(HYV3TopKRouter, index=0),
