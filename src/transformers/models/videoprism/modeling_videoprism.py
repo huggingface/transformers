@@ -436,6 +436,7 @@ class VideoPrismAttention(nn.Module):
 
 class VideoPrismLayerNorm(nn.LayerNorm):
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        # a custom layernorm formula with gamma -> gamma + 1 is used in this model
         return F.layer_norm(hidden_states, self.normalized_shape, self.weight + 1, self.bias, self.eps)
 
 
@@ -592,7 +593,7 @@ class VideoPrismPreTrainedModel(PreTrainedModel):
         "VideoPrismTextEncoder",
         "VideoPrismMultiheadAttentionPoolingHead",
     ]
-    _supports_sdpa = True
+    _supports_sdpa = False
     _supports_flash_attn = True
     _supports_attention_backend = True
     _supports_flex_attention = True
@@ -603,13 +604,9 @@ class VideoPrismPreTrainedModel(PreTrainedModel):
 
     @torch.no_grad()
     def _init_weights(self, module):
+        super()._init_weights(module)
         if isinstance(module, (nn.Linear, nn.Conv3d)):
             init.lecun_normal_(module.weight)
-            init.zeros_(module.bias)
-
-        elif isinstance(module, nn.LayerNorm):
-            init.zeros_(module.bias)
-            init.ones_(module.weight)
 
         elif isinstance(module, VideoPrismSpatialEmbeddings):
             init.lecun_normal_(module.position_embeddings)
@@ -789,22 +786,13 @@ class VideoPrismTextEmbeddings(nn.Module):
         position_ids: torch.LongTensor | None = None,
         inputs_embeds: torch.FloatTensor | None = None,
     ) -> torch.Tensor:
-        seq_length = input_ids.shape[-1] if input_ids is not None else inputs_embeds.shape[-2]
-        max_position_embedding = self.position_embedding.shape[0]
-
-        if seq_length > max_position_embedding:
-            raise ValueError(
-                f"Sequence length must be less than max_position_embeddings (got `sequence length`: "
-                f"{seq_length} and max_position_embeddings: {max_position_embedding}"
-            )
-
-        if position_ids is None:
-            position_ids = self.position_ids[:, :seq_length]
-
         if inputs_embeds is None:
             inputs_embeds = self.token_embedding(input_ids)
 
-        inputs_embeds *= self.config.hidden_size**0.5
+        if position_ids is None:
+            position_ids = self.position_ids[:, : inputs_embeds.shape[1]]
+
+        inputs_embeds = inputs_embeds * self.config.hidden_size**0.5
         position_embeddings = self.position_embedding[position_ids].to(dtype=inputs_embeds.dtype)
         embeddings = inputs_embeds + position_embeddings
 
@@ -826,6 +814,7 @@ class VideoPrismTextModel(VideoPrismPreTrainedModel):
     config: VideoPrismTextConfig
     main_input_name = "input_ids"
     _no_split_modules = ["VideoPrismTextEmbeddings", "VideoPrismLayer"]
+    _input_embed_layer = "token_embedding"
 
     def __init__(self, config: VideoPrismTextConfig):
         super().__init__(config)
@@ -836,12 +825,6 @@ class VideoPrismTextModel(VideoPrismPreTrainedModel):
         self.layernorm = VideoPrismLayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.normalize = config.apply_l2norm
         self.post_init()
-
-    def get_input_embeddings(self) -> nn.Module:
-        return self.embeddings.token_embedding
-
-    def set_input_embeddings(self, value: nn.Module):
-        self.embeddings.token_embedding = value
 
     @merge_with_config_defaults
     @capture_outputs(tie_last_hidden_states=False)
@@ -870,7 +853,6 @@ class VideoPrismTextModel(VideoPrismPreTrainedModel):
                 config=self.config,
                 inputs_embeds=features,
                 attention_mask=attention_mask,
-                cache_position=torch.arange(features.shape[1], device=features.device),
                 past_key_values=None,
             )
 
@@ -942,8 +924,6 @@ class VideoPrismVideoModel(VideoPrismPreTrainedModel):
 )
 class VideoPrismClipModel(VideoPrismPreTrainedModel):
     def __init__(self, config: VideoPrismConfig):
-        if not isinstance(config, VideoPrismConfig):
-            raise TypeError(f"`config` is expected to be of type `VideoPrismConfig` but is of type {type(config)}.")
         super().__init__(config)
         self.video_model = VideoPrismVideoModel._from_config(config.vision_config)
         self.text_model = VideoPrismTextModel._from_config(config.text_config)
@@ -983,10 +963,6 @@ class VideoPrismClipModel(VideoPrismPreTrainedModel):
         text_embeddings = text_model_outputs.last_hidden_state
         video_emb_dim = video_embeddings[0].shape[-1]
         text_emb_dim = text_embeddings[0].shape[-1]
-        if video_emb_dim != text_emb_dim:
-            raise ValueError(
-                f"Dimension of video ({video_emb_dim}) and text ({text_emb_dim}) embeddings must match for similarity computation."
-            )
 
         video_embeds = video_embeddings.reshape(-1, video_emb_dim)
         text_embeds = text_embeddings.reshape(-1, text_emb_dim)
