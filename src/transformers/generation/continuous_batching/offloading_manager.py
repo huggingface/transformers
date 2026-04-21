@@ -228,8 +228,8 @@ class OffloadingManager:
             return None
 
         # Single batched copy for all requests (still, one copy per layer)
-        cpu_ids = self._cpu_ids_scratch[:len(all_cpu_indices)]
-        gpu_ids = self._gpu_ids_scratch[:len(all_cpu_indices)]
+        cpu_ids = self._cpu_ids_scratch[: len(all_cpu_indices)]
+        gpu_ids = self._gpu_ids_scratch[: len(all_cpu_indices)]
         cpu_ids.copy_(torch.as_tensor(all_cpu_indices, dtype=torch.int32))  # cpu op, not in the stream
         with self._stream_ctx():
             gpu_ids.copy_(torch.as_tensor(all_gpu_indices, dtype=torch.int32))

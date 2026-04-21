@@ -104,7 +104,7 @@ class Scheduler(ABC):
             for request_id in self._requests_to_cancel:
                 state_a = self.active_requests.pop(request_id, None)
                 state_w = self.waiting_requests.pop(request_id, None)
-                # Look for the non-None state and add it to the cancelled states list
+                # Invariant: a request is never in both queues; state_a or state_w picks the one it was in
                 state = state_a or state_w
                 if state is not None:
                     cancelled_states.append(state)
