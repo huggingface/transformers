@@ -542,8 +542,8 @@ class PagedAttentionMemoryHandler:
         activation_peaks: list[tuple[int, int]],
         num_attention_masks: int,
     ) -> None:
-        """Initialize the memory handler. `peaks` is a list are `(Δcn, Δcm)` pairs giving the activation memory
-        contributions proportional to N (pages) and M (batch tokens) for that peak. Memory must satisfy the constraint
+        """Initialize the memory handler. `activation_peaks` is a list of `(Δcn, Δcm)` pairs giving the activation memory
+        contributions proportional to N (pages) and M (batch tokens) for each peak. Memory must satisfy the constraint
         at every peak, so we solve each polynomial independently and take the most restrictive result."""
         self.block_size = continuous_batching_config.block_size
         self.page_size = page_size
@@ -637,7 +637,7 @@ class PagedAttentionMemoryHandler:
             max_batch_tokens = int(num_pages * m)
             if max_batch_tokens > self._upper_bound_max_batch_tokens:
                 max_batch_tokens = self._upper_bound_max_batch_tokens
-                # If max_batch_tokens is clamped, we can to recompute num_blocks below to get a higher value
+                # If max_batch_tokens is clamped, we recompute num_blocks below to get a higher value
                 num_blocks = None
             else:
                 num_blocks = min(floor(num_pages) // self.block_size, self._upper_bound_num_blocks)
@@ -670,14 +670,16 @@ class PagedAttentionMemoryHandler:
         available = self.get_available_memory(max_memory_percent)
         logger.info(f"Cache memory: {available}")
         # Solve each peak independently, then take the element-wise min (tightest constraint wins)
-        num_blocks = float("inf")
-        max_batch_tokens = float("inf")
+        acc_num_blocks = float("inf")
+        acc_max_batch_tokens = float("inf")
         for peak in self.activation_peaks:
-            n_blocks, max_batch_toks = self._solve_for_peak(peak, available, num_blocks, max_batch_tokens, cache_dtype)
-            num_blocks = min(num_blocks, n_blocks)
-            max_batch_tokens = min(max_batch_tokens, max_batch_toks)
+            n_blocks, m_batch_tokens = self._solve_for_peak(peak, available, num_blocks, max_batch_tokens, cache_dtype)
+            acc_num_blocks = min(acc_num_blocks, n_blocks)
+            acc_max_batch_tokens = min(acc_max_batch_tokens, m_batch_tokens)
+        # Now update the value (cannot update in loop, it would overwrite the user-passed values)
+        num_blocks, max_batch_tokens = acc_num_blocks, acc_max_batch_tokens
         # Validate
-        memory_footprint = self.compute_memory_footprint(max_batch_tokens, num_blocks, cache_dtype)
+        memory_footprint = self.compute_memory_footprint(num_blocks, max_batch_tokens, cache_dtype)
         if memory_footprint > available:
             raise MemoryError(f"Memory footprint {memory_footprint} is more than available memory {available}")
         return num_blocks, max_batch_tokens

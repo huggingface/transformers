@@ -224,13 +224,14 @@ class Scheduler(ABC):
             # Account for token budget
             request_len = min(len(request_tokens), token_budget)
 
-            # Check cache budget for varlen batches. Decode batches have no KV cache budget because KV cache is not read
-            # using read_indices tensor. We still deduct the amount ofread cache for decode requests because the batch
-            # might become a varlen batch at any point.
+            # This block checks cache budget: decode batches have infinite budget, but varlen batches don't, because KV
+            # cache is read through a fixed-sized index tensor. We keep track of the current budget in case the batch
+            # goes from decode to varlen
             is_decode_eligible = request_len == 1 and state.position_offset < self.max_decode_fast_path_length
             read_cache_needed = state.current_len()
             if self.read_cache_limit is not None:
                 read_cache_needed = min(read_cache_needed, self.read_cache_limit)
+            # A request that would change the batch from decode to varlen is rejected if the cache budget is too low
             if not (decode_fast_path and is_decode_eligible) and cache_budget < read_cache_needed:
                 continue
 
