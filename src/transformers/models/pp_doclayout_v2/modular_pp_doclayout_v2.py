@@ -44,7 +44,7 @@ from ..layoutlmv3.modeling_layoutlmv3 import (
     LayoutLMv3SelfOutput,
     LayoutLMv3TextEmbeddings,
 )
-from ..pp_doclayout_v3.image_processing_pp_doclayout_v3_fast import PPDocLayoutV3ImageProcessorFast
+from ..pp_doclayout_v3.image_processing_pp_doclayout_v3 import PPDocLayoutV3ImageProcessor
 from ..pp_doclayout_v3.modeling_pp_doclayout_v3 import PPDocLayoutV3GlobalPointer
 from ..rt_detr.modeling_rt_detr import (
     RTDetrForObjectDetection,
@@ -59,7 +59,7 @@ logger = logging.get_logger(__name__)
 
 
 @auto_docstring(checkpoint="PaddlePaddle/PP-DocLayoutV2_safetensors")
-@strict(accept_kwargs=True)
+@strict
 class PPDocLayoutV2ReadingOrderConfig(PreTrainedConfig):
     r"""
     has_relative_attention_bias (`bool`, *optional*, defaults to `True`):
@@ -103,11 +103,11 @@ class PPDocLayoutV2ReadingOrderConfig(PreTrainedConfig):
 
     hidden_size: int = 512
     num_attention_heads: int = 8
-    attention_probs_dropout_prob: float = 0.1
+    attention_probs_dropout_prob: float | int = 0.1
     has_relative_attention_bias: bool = False
     has_spatial_attention_bias: bool = True
     layer_norm_eps: float = 1e-5
-    hidden_dropout_prob: float = 0.1
+    hidden_dropout_prob: float | int = 0.1
     intermediate_size: int = 2048
     hidden_act: str = "gelu"
     num_hidden_layers: int = 6
@@ -131,11 +131,11 @@ class PPDocLayoutV2ReadingOrderConfig(PreTrainedConfig):
     relation_bias_theta: int = 10000
     relation_bias_scale: int = 100
     global_pointer_head_size: int = 64
-    gp_dropout_value: float = 0.0
+    gp_dropout_value: float | int = 0.0
 
 
 @auto_docstring(checkpoint="PaddlePaddle/PP-DocLayoutV2_safetensors")
-@strict(accept_kwargs=True)
+@strict
 class PPDocLayoutV2Config(PreTrainedConfig):
     r"""
     initializer_bias_prior_prob (`float`, *optional*):
@@ -172,13 +172,13 @@ class PPDocLayoutV2Config(PreTrainedConfig):
         Multi level features dimension for decoder
     decoder_ffn_dim (`int`, *optional*, defaults to 1024):
         Dimension of the "intermediate" (often named feed-forward) layer in decoder.
-    decoder_activation_function (`str`, *optional*, defaults to `"relu"`):
-        The non-linear activation function (function or string) in the decoder. If string, `"gelu"`,
-        `"relu"`, `"silu"` and `"gelu_new"` are supported.
     num_feature_levels (`int`, *optional*, defaults to 3):
         The number of input feature levels.
     decoder_n_points (`int`, *optional*, defaults to 4):
         The number of sampled keys in each feature level for each attention head in the decoder.
+    decoder_activation_function (`str`, *optional*, defaults to `"relu"`):
+        The non-linear activation function (function or string) in the decoder. If string, `"gelu"`,
+        `"relu"`, `"silu"` and `"gelu_new"` are supported.
     num_denoising (`int`, *optional*, defaults to 100):
         The total number of denoising tasks or queries to be used for contrastive denoising.
     label_noise_ratio (`float`, *optional*, defaults to 0.5):
@@ -295,7 +295,7 @@ class PPDocLayoutV2Config(PreTrainedConfig):
         super().__post_init__(**kwargs)
 
 
-class PPDocLayoutV2ImageProcessorFast(PPDocLayoutV3ImageProcessorFast):
+class PPDocLayoutV2ImageProcessor(PPDocLayoutV3ImageProcessor):
     def extract_custom_vertices(self):
         raise AttributeError("Not needed for PPDocLayoutV2")
 
@@ -993,7 +993,7 @@ class PPDocLayoutV2ForObjectDetection(RTDetrForObjectDetection):
 
 __all__ = [
     "PPDocLayoutV2ForObjectDetection",
-    "PPDocLayoutV2ImageProcessorFast",
+    "PPDocLayoutV2ImageProcessor",
     "PPDocLayoutV2Config",
     "PPDocLayoutV2Model",
     "PPDocLayoutV2PreTrainedModel",

@@ -25,7 +25,7 @@ from ...utils import auto_docstring
 
 
 @auto_docstring(checkpoint="HuggingFaceM4/idefics-9b")
-@strict(accept_kwargs=True)
+@strict
 class IdeficsVisionConfig(PreTrainedConfig):
     model_type = "idefics_vision"
     attribute_map = {"hidden_size": "embed_dim"}
@@ -45,7 +45,7 @@ class IdeficsVisionConfig(PreTrainedConfig):
 
 
 @auto_docstring(checkpoint="HuggingFaceM4/idefics-9b")
-@strict(accept_kwargs=True)
+@strict
 class IdeficsPerceiverConfig(PreTrainedConfig):
     r"""
     use_resampler (`bool`, *optional*, defaults to `False`):
@@ -73,9 +73,12 @@ class IdeficsPerceiverConfig(PreTrainedConfig):
 
 
 @auto_docstring(checkpoint="HuggingFaceM4/idefics-9b")
-@strict(accept_kwargs=True)
+@strict
 class IdeficsConfig(PreTrainedConfig):
     r"""
+    additional_vocab_size (`int`, *optional*, defaults to 0):
+        Additional vocabulary size of the model, typically for the special "<img>" token. Additional vocab tokens
+        are always trainable whereas regular vocab tokens can be frozen or not.
     alpha_initializer (`str`, *optional*, defaults to `"zeros"`):
         Initialization type for the alphas.
     alphas_initializer_range (`float`, *optional*, defaults to 0.0):
@@ -83,21 +86,24 @@ class IdeficsConfig(PreTrainedConfig):
         Attention.
     alpha_type (`str`, *optional*, defaults to `"float"`):
         Whether the gating alphas should be vectors or single floats.
-    additional_vocab_size (`int`, *optional*, defaults to 0):
-        Additional vocabulary size of the model, typically for the special "<img>" token. Additional vocab tokens
-        are always trainable whereas regular vocab tokens can be frozen or not.
     cross_layer_interval (`int`, *optional*, default to 1):
         Interval for cross attention (from text to image) layers.
-    qk_layer_norms (`bool`, *optional*, defaults to `False`): Whether to add layer norm after q and k
-    freeze_text_layers (`bool`, *optional*, defaults to `True`): Whether to freeze text layers
+    qk_layer_norms (`bool`, *optional*, defaults to `False`):
+        Whether to add layer norm after q and k
+    freeze_text_layers (`bool`, *optional*, defaults to `True`):
+        Whether to freeze text layers
     freeze_text_module_exceptions (`bool`, *optional*, defaults to `[]`):
         Exceptions to freezing text layers when `freeze_text_layers` is `True`
-    freeze_lm_head (`bool`, *optional*, defaults to `False`): Whether to freeze lm head
-    freeze_vision_layers (`bool`, *optional*, defaults to `True`):  Whether to freeze vision layers
+    freeze_lm_head (`bool`, *optional*, defaults to `False`):
+        Whether to freeze lm head
+    freeze_vision_layers (`bool`, *optional*, defaults to `True`):
+        Whether to freeze vision layers
     freeze_vision_module_exceptions (`bool`, *optional*, defaults to `[]`):
         Exceptions to freezing vision layers when `freeze_vision_layers` is `True`
-    use_resampler (`bool`, *optional*, defaults to `False`): Whether to use the Resampler
-    perceiver_config (`IdeficsPerceiverConfig`,  *optional*): Custom perceiver config or dict
+    use_resampler (`bool`, *optional*, defaults to `False`):
+        Whether to use the Resampler
+    perceiver_config (`IdeficsPerceiverConfig`,  *optional*):
+        Custom perceiver config or dict
 
     Example:
 
@@ -133,7 +139,7 @@ class IdeficsConfig(PreTrainedConfig):
     use_cache: bool = True
     pad_token_id: int | None = 0
     bos_token_id: int | None = 1
-    eos_token_id: int | None = 2
+    eos_token_id: int | list[int] | None = 2
     tie_word_embeddings: bool = False
     cross_layer_interval: int = 1
     qk_layer_norms: bool = False
@@ -160,4 +166,4 @@ class IdeficsConfig(PreTrainedConfig):
         super().__post_init__(**kwargs)
 
 
-__all__ = ["IdeficsConfig"]
+__all__ = ["IdeficsConfig", "IdeficsPerceiverConfig", "IdeficsVisionConfig"]

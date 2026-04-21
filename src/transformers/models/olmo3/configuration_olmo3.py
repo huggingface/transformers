@@ -26,7 +26,7 @@ from ...utils import auto_docstring
 
 
 @auto_docstring(checkpoint="allenai/Olmo-3-7B-Instruct")
-@strict(accept_kwargs=True)
+@strict
 class Olmo3Config(PreTrainedConfig):
     r"""
     Example:
@@ -75,7 +75,7 @@ class Olmo3Config(PreTrainedConfig):
     pad_token_id: int | None = 1
     bos_token_id: int | None = None
     eos_token_id: int | list[int] | None = 50279
-    tie_word_embeddings: int = False
+    tie_word_embeddings: bool = False
     rope_parameters: RopeParameters | dict | None = None
     attention_bias: bool = False
     attention_dropout: float | int = 0.0

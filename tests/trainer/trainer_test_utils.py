@@ -547,12 +547,21 @@ class TrainerIntegrationCommon:
         greater_is_better=False,
         is_pretrained=True,
     ):
-        checkpoint = os.path.join(output_dir, f"checkpoint-{(total // freq) * freq}")
+        # Get log history from the final checkpoint (could be at total if not divisible by freq)
+        final_checkpoint_step = total if total % freq != 0 else (total // freq) * freq
+        checkpoint = os.path.join(output_dir, f"checkpoint-{final_checkpoint_step}")
         log_history = TrainerState.load_from_json(os.path.join(checkpoint, "trainer_state.json")).log_history
 
-        values = [d[metric] for d in log_history]
+        values = [d[metric] for d in log_history if metric in d]
         best_value = max(values) if greater_is_better else min(values)
-        best_checkpoint = (values.index(best_value) + 1) * freq
+        best_idx = values.index(best_value)
+
+        # Determine which checkpoint corresponds to the best metric
+        # Evals happen at freq intervals, plus potentially at the final step
+        eval_steps = list(range(freq, total + 1, freq))
+        if total % freq != 0:
+            eval_steps.append(total)
+        best_checkpoint = eval_steps[best_idx]
         checkpoint = os.path.join(output_dir, f"checkpoint-{best_checkpoint}")
         if is_pretrained:
             best_model = RegressionPreTrainedModel.from_pretrained(checkpoint)

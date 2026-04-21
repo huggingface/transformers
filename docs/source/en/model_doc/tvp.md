@@ -175,9 +175,9 @@ Tips:
 [[autodoc]] TvpImageProcessor
     - preprocess
 
-## TvpImageProcessorFast
+## TvpImageProcessorPil
 
-[[autodoc]] TvpImageProcessorFast
+[[autodoc]] TvpImageProcessorPil
     - preprocess
 
 ## TvpProcessor

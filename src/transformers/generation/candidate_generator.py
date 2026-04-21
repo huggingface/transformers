@@ -750,7 +750,11 @@ class AssistantToTargetTranslator:
         This method is required for the first forward pass of `_MapInputEmbedding` where input ids are already in the assistant vocabulary space. By disabling the mapping, it ensures that the input ids are processed correctly without remapping.
 
         """
-        if self.assistant_prune_lm_head:
+        # map_input_embeddings is only initialized when _suppress_input_ids is non-empty
+        # (i.e., the assistant vocab is not a strict subset of the target vocab, such as
+        # when models share the same tokenizer but have different vocab sizes due to padding,
+        # e.g., Qwen2.5-7B (152064) + Qwen2.5-0.5B (151936))
+        if self.assistant_prune_lm_head and len(self._suppress_input_ids) > 0:
             self.map_input_embeddings.map = False
 
     def _get_assistant_to_target_input_ids(self):
@@ -1285,15 +1289,16 @@ def _prepare_position_ids(model_kwargs: dict[str, Any], new_length: int, is_enco
 
 def _prepare_token_type_ids(model_kwargs: dict[str, Any], new_length: int) -> dict[str, Any]:
     """Expands or crops the model's token_type_ids for decoding purposes, to the defined length"""
-    if "token_type_ids" not in model_kwargs or model_kwargs["token_type_ids"] is None:
+    if model_kwargs.get("token_type_ids") is None:
         return model_kwargs
 
+    # Multimodal models call this arg `mm_token_type_ids`
     token_type_ids = model_kwargs["token_type_ids"]
     final_token_type = token_type_ids[:, -1].unsqueeze(-1)
     type_length_diff = new_length - token_type_ids.shape[1]
 
     if type_length_diff < 0:
-        token_type_ids = token_type_ids[:, :type_length_diff]
+        model_kwargs["token_type_ids"] = token_type_ids[:, :type_length_diff]
     elif type_length_diff > 0:
         token_type_copies = final_token_type.repeat(1, type_length_diff)
         model_kwargs["token_type_ids"] = torch.cat([model_kwargs["token_type_ids"], token_type_copies], dim=-1)

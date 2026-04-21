@@ -105,9 +105,9 @@ print(f"The predicted class label is:{predicted_class_label}")
     - preprocess
     - post_process_semantic_segmentation
 
-## MobileViTImageProcessorFast
+## MobileViTImageProcessorPil
 
-[[autodoc]] MobileViTImageProcessorFast
+[[autodoc]] MobileViTImageProcessorPil
     - preprocess
     - post_process_semantic_segmentation
 

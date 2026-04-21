@@ -21,7 +21,7 @@ from ...utils import auto_docstring
 
 
 @auto_docstring(checkpoint="tencent/Hunyuan-A13B-Instruct")
-@strict(accept_kwargs=True)
+@strict
 class HunYuanMoEV1Config(PreTrainedConfig):
     r"""
     eod_token_id (int, *optional*, defaults to 3):
@@ -60,7 +60,7 @@ class HunYuanMoEV1Config(PreTrainedConfig):
     attention_bias: bool = False
     attention_dropout: float | int = 0.0
     num_experts: int = 1
-    moe_topk: int = 1
+    moe_topk: int | list[int] = 1
     head_dim: int | None = None
 
     def __post_init__(self, **kwargs):

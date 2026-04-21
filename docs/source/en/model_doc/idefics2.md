@@ -204,6 +204,14 @@ A list of official Hugging Face and community (indicated by 🌎) resources to h
 
 [[autodoc]] Idefics2Config
 
+## Idefics2VisionConfig
+
+[[autodoc]] Idefics2VisionConfig
+
+## Idefics2PerceiverConfig
+
+[[autodoc]] Idefics2PerceiverConfig
+
 ## Idefics2Model
 
 [[autodoc]] Idefics2Model
@@ -221,9 +229,9 @@ A list of official Hugging Face and community (indicated by 🌎) resources to h
 [[autodoc]] Idefics2ImageProcessor
     - preprocess
 
-## Idefics2ImageProcessorFast
+## Idefics2ImageProcessorPil
 
-[[autodoc]] Idefics2ImageProcessorFast
+[[autodoc]] Idefics2ImageProcessorPil
     - preprocess
 
 ## Idefics2Processor
