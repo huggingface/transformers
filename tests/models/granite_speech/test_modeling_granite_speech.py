@@ -74,8 +74,9 @@ class GraniteSpeechModelTester(ALMModelTester):
         # Projector: ceil(feat_seq_length / window_size) * (window_size // downsample_rate) tokens per sample.
         import math
 
-        nblocks = math.ceil(self.feat_seq_length / self.window_size)
-        num_audio_tokens = nblocks * (self.window_size // self.downsample_rate)
+        config = self.get_config()
+        nblocks = math.ceil(self.feat_seq_length / config.window_size)
+        num_audio_tokens = nblocks * (config.window_size // config.downsample_rate)
         return torch.ones([self.batch_size, num_audio_tokens], dtype=torch.long).to(torch_device)
 
     def create_attention_mask(self, input_ids):
