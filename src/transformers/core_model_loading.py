@@ -934,7 +934,10 @@ GLOBAL_WORKERS = min(4, os.cpu_count() or 4)
 
 
 def _materialize_copy(tensor: torch.Tensor, device=None, dtype=None) -> torch.Tensor:
-    # This slicing is what actually loads the tensor from the safetensors slice object
+    # This slicing is what actually loads the tensor from the safetensors slice object.
+    # GDS-backed slices use the target device hint to DMA directly to the right GPU.
+    if hasattr(tensor, "_set_target_device"):
+        tensor._set_target_device(device)
     tensor = tensor[...]
     if dtype is not None or device is not None:
         tensor = tensor.to(device=device, dtype=dtype)
@@ -968,6 +971,8 @@ def spawn_tp_materialize(
     return a Callable that will load the tensor synchronously when called."""
 
     def _job():
+        if hasattr(tensor, "_set_target_device"):
+            tensor._set_target_device(device)
         return sharding_method.shard_tensor(tensor, tensor_idx=tensor_idx, device=device, dtype=dtype)
 
     if thread_pool is not None:

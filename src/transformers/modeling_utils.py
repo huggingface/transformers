@@ -118,6 +118,7 @@ from .utils import (
     is_torch_xpu_available,
     logging,
 )
+from .utils.gds_io import GdsSafetensorsFile, should_use_gds
 from .utils.generic import GeneralInterface, is_flash_attention_requested
 from .utils.hub import DownloadKwargs, create_and_tag_model_card, get_checkpoint_shard_files
 from .utils.import_utils import (
@@ -4264,8 +4265,21 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                 merged_state_dict = state_dict
             elif checkpoint_files is not None and checkpoint_files[0].endswith(".safetensors") and state_dict is None:
                 merged_state_dict = {}
+                use_gds = (
+                    should_use_gds()
+                    and load_config.device_map is not None
+                    and any(is_accelerator_device(d) for d in set(load_config.device_map.values()))
+                )
                 for file in checkpoint_files:
-                    file_pointer = safe_open(file, framework="pt", device="cpu")
+                    if use_gds:
+                        try:
+                            file_pointer = GdsSafetensorsFile(file)
+                        except Exception:
+                            logger.info("GDS open failed for %s, falling back to safe_open", file)
+                            use_gds = False
+                            file_pointer = safe_open(file, framework="pt", device="cpu")
+                    else:
+                        file_pointer = safe_open(file, framework="pt", device="cpu")
                     all_pointer.add(file_pointer)
                     for k in file_pointer.keys():
                         merged_state_dict[k] = file_pointer.get_slice(k)  # don't materialize yet
