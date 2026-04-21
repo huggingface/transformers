@@ -1221,7 +1221,14 @@ class Ernie4_5_VLMoeForConditionalGeneration(Glm4vForConditionalGeneration, Gene
 
 
 class Ernie4_5_VLMoeImageProcessorKwargs(Glm4vImageProcessorKwargs):
-    pass
+    r"""
+    patch_size (`int`, *optional*, defaults to 14):
+        The spatial patch size of the vision encoder.
+    temporal_patch_size (`int`, *optional*):
+        The temporal patch size of the vision encoder. Unused in the image processor, only used for videos.
+    merge_size (`int`, *optional*, defaults to 2):
+        The merge size of the vision encoder to llm encoder.
+    """
 
 
 class Ernie4_5_VLMoeImageProcessorPil(Glm4vImageProcessorPil):
