@@ -1893,6 +1893,7 @@ class Sam3LiteTextModel(Sam3LiteTextPreTrainedModel):
         r"^tracker_model.",
         r"^tracker_neck.",
     ]
+    # DETR components create float masks from features, so flash/flex attention cannot be dispatched safely.
     _supports_flash_attn = False
     _supports_flex_attn = False
 
