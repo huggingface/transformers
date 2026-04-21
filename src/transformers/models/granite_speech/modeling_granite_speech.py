@@ -327,6 +327,8 @@ class GraniteSpeechCTCEncoder(GraniteSpeechPreTrainedModel):
     """
 )
 class GraniteSpeechForConditionalGeneration(GraniteSpeechPreTrainedModel, GenerationMixin):
+    _supports_attention_backend = True
+
     def __init__(self, config: GraniteSpeechConfig):
         super().__init__(config)
         # NOTE: It doesn't matter when we initialize from config, but we should be careful
