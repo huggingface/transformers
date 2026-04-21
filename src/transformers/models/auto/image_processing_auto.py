@@ -88,19 +88,7 @@ else:
             ("focalnet", {"torchvision": "BitImageProcessor", "pil": "BitImageProcessorPil"}),
             ("gemma3n", {"torchvision": "SiglipImageProcessor", "pil": "SiglipImageProcessorPil"}),
             ("git", {"torchvision": "CLIPImageProcessor", "pil": "CLIPImageProcessorPil"}),
-<<<<<<< HEAD
-=======
-            ("glm46v", {"torchvision": "Glm46VImageProcessor", "pil": "Glm46VImageProcessorPil"}),
-            ("glm4v", {"torchvision": "Glm4vImageProcessor", "pil": "Glm4vImageProcessorPil"}),
-            ("glm_image", {"torchvision": "GlmImageImageProcessor", "pil": "GlmImageImageProcessorPil"}),
-            ("glpn", {"torchvision": "GLPNImageProcessor", "pil": "GLPNImageProcessorPil"}),
-            ("got_ocr2", {"torchvision": "GotOcr2ImageProcessor", "pil": "GotOcr2ImageProcessorPil"}),
             ("granite4_vision", {"torchvision": "Granite4VisionImageProcessor", "pil": "Granite4VisionImageProcessorPil"}),
-            (
-                "grounding-dino",
-                {"torchvision": "GroundingDinoImageProcessor", "pil": "GroundingDinoImageProcessorPil"},
-            ),
->>>>>>> add-granite4-vision
             ("groupvit", {"torchvision": "CLIPImageProcessor", "pil": "CLIPImageProcessorPil"}),
             ("hiera", {"torchvision": "BitImageProcessor", "pil": "BitImageProcessorPil"}),
             ("ijepa", {"torchvision": "ViTImageProcessor", "pil": "ViTImageProcessorPil"}),
