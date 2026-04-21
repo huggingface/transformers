@@ -56,18 +56,18 @@ There are two points where [`Olmo2Config`] differs from [`OlmoConfig`].
 Declare new arguments as class-level type annotations with a default value. For removed arguments, assign `AttributeError()` to suppress the inherited attribute in the generated file (see [Removing attributes](#removing-attributes)).
 
 ```diff
--@auto_docstring(checkpoint="allenai/OLMo-7B-hf")
-+@auto_docstring(checkpoint="allenai/Olmo2-7B-1124-hf")
-+@strict
--class OlmoConfig(PreTrainedConfig):
-+class Olmo2Config(OlmoConfig):
-     ...
--    model_type = "olmo"
-+    model_type = "olmo2"
-     ...
-+    rms_norm_eps: float = 1e-5
--    clip_qkv: float | None = None
-+    clip_qkv = AttributeError()
+- @auto_docstring(checkpoint="allenai/OLMo-7B-hf")
++ @auto_docstring(checkpoint="allenai/Olmo2-7B-1124-hf")
++ @strict
+- class OlmoConfig(PreTrainedConfig):
++ class Olmo2Config(OlmoConfig):
+      ...
+-     model_type = "olmo"
++     model_type = "olmo2"
+      ...
++     rms_norm_eps: float = 1e-5
+-     clip_qkv: float | None = None
++     clip_qkv = AttributeError()
 ```
 
 `@auto_docstring` generates standard argument docs automatically (see the [@auto_docstring](./auto_docstring) guide). `@strict` rejects unknown kwargs at instantiation time, catching typos and stale arguments early. Add both to every config class because the decorators aren't inherited from the parent. Declare them explicitly even if the parent config already has them.
@@ -123,16 +123,16 @@ class Olmo2RotaryEmbedding(OlmoRotaryEmbedding):
 To change specific behavior, inherit and override only what differs. [`Olmo2RMSNorm`] differs from [`LlamaRMSNorm`] on one line. The multiply happens *before* casting back to the input dtype, not after.
 
 ```diff
- from ..llama.modeling_llama import LlamaRMSNorm
+  from ..llama.modeling_llama import LlamaRMSNorm
 
- class Olmo2RMSNorm(LlamaRMSNorm):
-     def forward(self, hidden_states):
-         input_dtype = hidden_states.dtype
-         hidden_states = hidden_states.to(torch.float32)
-         variance = hidden_states.pow(2).mean(-1, keepdim=True)
-         hidden_states = hidden_states * torch.rsqrt(variance + self.variance_epsilon)
--        return self.weight * hidden_states.to(input_dtype)
-+        return (self.weight * hidden_states).to(input_dtype)
+  class Olmo2RMSNorm(LlamaRMSNorm):
+      def forward(self, hidden_states):
+          input_dtype = hidden_states.dtype
+          hidden_states = hidden_states.to(torch.float32)
+          variance = hidden_states.pow(2).mean(-1, keepdim=True)
+          hidden_states = hidden_states * torch.rsqrt(variance + self.variance_epsilon)
+-         return self.weight * hidden_states.to(input_dtype)
++         return (self.weight * hidden_states).to(input_dtype)
 ```
 
 ### Attention
@@ -140,26 +140,26 @@ To change specific behavior, inherit and override only what differs. [`Olmo2RMSN
 Olmo2's attention is identical to Olmo's except it applies [`RMSNorm`] to the queries and keys, and removes qkv clipping. `super().__init__(...)` copies the parent body and appends the two new norm lines. The `forward` is fully redefined because queries and keys now pass through norms before projection. The linter also pulls in any imported functions into the generated file, including `apply_rotary_pos_emb`, `eager_attention_forward`, and their dependencies.
 
 ```diff
- class Olmo2Attention(OlmoAttention):
-     def __init__(self, config: Olmo2Config, layer_idx: int | None = None):
-         super().__init__(config, layer_idx=layer_idx)
-+        self.q_norm = Olmo2RMSNorm(config.num_attention_heads * self.head_dim, config.rms_norm_eps)
-+        self.k_norm = Olmo2RMSNorm(config.num_key_value_heads * self.head_dim, config.rms_norm_eps)
+  class Olmo2Attention(OlmoAttention):
+      def __init__(self, config: Olmo2Config, layer_idx: int | None = None):
+          super().__init__(config, layer_idx=layer_idx)
++         self.q_norm = Olmo2RMSNorm(config.num_attention_heads * self.head_dim, config.rms_norm_eps)
++         self.k_norm = Olmo2RMSNorm(config.num_key_value_heads * self.head_dim, config.rms_norm_eps)
 
-     def forward(self, ...):
-         ...
--        query_states = self.q_proj(hidden_states)
--        key_states = self.k_proj(hidden_states)
-+        query_states = self.q_norm(self.q_proj(hidden_states))
-+        key_states = self.k_norm(self.k_proj(hidden_states))
-         value_states = self.v_proj(hidden_states)
+      def forward(self, ...):
+          ...
+-         query_states = self.q_proj(hidden_states)
+-         key_states = self.k_proj(hidden_states)
++         query_states = self.q_norm(self.q_proj(hidden_states))
++         key_states = self.k_norm(self.k_proj(hidden_states))
+          value_states = self.v_proj(hidden_states)
 
--        if self.config.clip_qkv is not None:
--            query_states.clamp_(min=-self.config.clip_qkv, max=self.config.clip_qkv)
--            key_states.clamp_(min=-self.config.clip_qkv, max=self.config.clip_qkv)
--            value_states.clamp_(min=-self.config.clip_qkv, max=self.config.clip_qkv)
+-         if self.config.clip_qkv is not None:
+-             query_states.clamp_(min=-self.config.clip_qkv, max=self.config.clip_qkv)
+-             key_states.clamp_(min=-self.config.clip_qkv, max=self.config.clip_qkv)
+-             value_states.clamp_(min=-self.config.clip_qkv, max=self.config.clip_qkv)
 -
-         ...
+          ...
 ```
 
 ### DecoderLayer
@@ -169,34 +169,34 @@ After `super().__init__(...)`, overwrite the norm attributes with `Olmo2RMSNorm`
 The `forward` is rewritten to reflect the post-attention norm placement. A `forward` rewrite is only needed when an attribute is renamed, not when only its type changes.
 
 ```diff
- class Olmo2DecoderLayer(OlmoDecoderLayer):
-     def __init__(self, config: Olmo2Config, layer_idx: int):
-         super().__init__(config, layer_idx=layer_idx)
--        self.self_attn = OlmoAttention(config=config, layer_idx=layer_idx)
--        self.input_layernorm = OlmoLayerNorm(config.hidden_size)
--        self.post_attention_layernorm = OlmoLayerNorm(config.hidden_size)
-+        self.self_attn = Olmo2Attention(config=config, layer_idx=layer_idx)
-+        del self.input_layernorm
-+        self.post_attention_layernorm = Olmo2RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-+        self.post_feedforward_layernorm = Olmo2RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+  class Olmo2DecoderLayer(OlmoDecoderLayer):
+      def __init__(self, config: Olmo2Config, layer_idx: int):
+          super().__init__(config, layer_idx=layer_idx)
+-         self.self_attn = OlmoAttention(config=config, layer_idx=layer_idx)
+-         self.input_layernorm = OlmoLayerNorm(config.hidden_size)
+-         self.post_attention_layernorm = OlmoLayerNorm(config.hidden_size)
++         self.self_attn = Olmo2Attention(config=config, layer_idx=layer_idx)
++         del self.input_layernorm
++         self.post_attention_layernorm = Olmo2RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
++         self.post_feedforward_layernorm = Olmo2RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
-     def forward(self, ...):
-         residual = hidden_states
--        hidden_states = self.input_layernorm(hidden_states)
-         # Self Attention
-         hidden_states, _ = self.self_attn(...)
--        hidden_states = residual + hidden_states
-+        hidden_states = self.post_attention_layernorm(hidden_states)
-+        hidden_states = residual + hidden_states
+      def forward(self, ...):
+          residual = hidden_states
+-         hidden_states = self.input_layernorm(hidden_states)
+          # Self Attention
+          hidden_states, _ = self.self_attn(...)
+-         hidden_states = residual + hidden_states
++         hidden_states = self.post_attention_layernorm(hidden_states)
++         hidden_states = residual + hidden_states
 
-         # Fully Connected
-         residual = hidden_states
--        hidden_states = self.post_attention_layernorm(hidden_states)
-         hidden_states = self.mlp(hidden_states)
--        hidden_states = residual + hidden_states
-+        hidden_states = self.post_feedforward_layernorm(hidden_states)
-+        hidden_states = residual + hidden_states
-         return hidden_states
+          # Fully Connected
+          residual = hidden_states
+-         hidden_states = self.post_attention_layernorm(hidden_states)
+          hidden_states = self.mlp(hidden_states)
+-         hidden_states = residual + hidden_states
++         hidden_states = self.post_feedforward_layernorm(hidden_states)
++         hidden_states = residual + hidden_states
+          return hidden_states
 ```
 
 ### Model
@@ -204,17 +204,17 @@ The `forward` is rewritten to reflect the post-attention norm placement. A `forw
 Only the type of `self.norm` changes here. The `forward` method is identical to the parent's, so the linter carries it over automatically.
 
 ```diff
- class Olmo2Model(OlmoModel):
-     def __init__(self, config: Olmo2Config):
-         super().__init__(config)
--        self.layers = nn.ModuleList(
--            [OlmoDecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
--        )
--        self.norm = OlmoLayerNorm(config.hidden_size)
-+        self.norm = Olmo2RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-+        self.layers = nn.ModuleList(
-+            [Olmo2DecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
-+        )
+  class Olmo2Model(OlmoModel):
+      def __init__(self, config: Olmo2Config):
+          super().__init__(config)
+-         self.layers = nn.ModuleList(
+-             [OlmoDecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
+-         )
+-         self.norm = OlmoLayerNorm(config.hidden_size)
++         self.norm = Olmo2RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
++         self.layers = nn.ModuleList(
++             [Olmo2DecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
++         )
 ```
 
 ### Model head
@@ -511,6 +511,10 @@ class Emu3TextMLP(LlamaMLP):
 
 The linter doesn't support partial docstring inheritance yet. When adding or removing config attributes, add the full docstring directly in the modular file under the class definition.
 
-## See also
+## Next steps
 
 - [Model structure rules](./modeling_rules) are static rules enforced on all `modeling_*.py`, `modular_*.py`, and `configuration_*.py` files. Run `make typing` to check them before opening a PR.
+- [Add vision processing components](./add_vision_processing_components) walks through adding an image processor, video processor, and processor for a multimodal model.
+- [Auto-generating docstrings](./auto_docstring) shows how to use `@auto_docstring` so you don't have to hand-write argument docs for shared model APIs.
+- [Writing model tests](./testing) covers how to write integration tests for your new model and run it locally.
+- [Pull request checks](./pr_checks) explains the CI checks your PR has to pass before it can be merged, and how to reproduce and fix them locally.
