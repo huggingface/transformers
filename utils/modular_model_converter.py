@@ -1766,7 +1766,13 @@ def get_class_node_and_dependencies(
 
         relative_dependency_order = mapper.compute_relative_order(all_dependencies_to_add)
         nodes_to_add = {
-            dep: (relative_dependency_order[dep], mapper.global_nodes[dep]) for dep in all_dependencies_to_add
+            dep: (
+                relative_dependency_order[dep],
+                # If this dependency is explicitly defined in the modular, prefer the modular's version.
+                # This prevents a renamed parent class from overriding a modular-defined class of the same name.
+                modular_mapper.global_nodes[dep] if dep in modular_mapper.classes else mapper.global_nodes[dep],
+            )
+            for dep in all_dependencies_to_add
         }
 
     # No transformers (modeling file) super class, just check functions and assignments dependencies

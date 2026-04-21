@@ -475,16 +475,6 @@ def _build_checkpoint_conversion_mapping():
                 operations=[MergeModulelist(dim=0)],
             ),
         ],
-        "legacy": [
-            WeightRenaming(
-                source_patterns="LayerNorm.gamma",
-                target_patterns="LayerNorm.weight",
-            ),
-            WeightRenaming(
-                source_patterns="LayerNorm.beta",
-                target_patterns="LayerNorm.bias",
-            ),
-        ],
         "nomic_bert": [
             WeightRenaming(r"encoder.layers", r"layers"),
             WeightRenaming(r"emb_ln", r"embeddings.LayerNorm"),
@@ -523,6 +513,38 @@ def _build_checkpoint_conversion_mapping():
             WeightRenaming(source_patterns="norm1", target_patterns="post_attention_layernorm"),
             WeightRenaming(source_patterns="norm2", target_patterns="post_mlp_layernorm"),
         ],
+        "cohere_asr": [
+            WeightRenaming(r"encoder\.pre_encode\.conv\.", r"encoder.subsampling.layers."),
+            WeightRenaming(r"encoder\.pre_encode\.out\.", r"encoder.subsampling.linear."),
+            WeightRenaming(r"transf_decoder\._embedding\.position_embedding\.pos_enc", r"decoder.pos_emb.weight"),
+            WeightRenaming(r"transf_decoder\._embedding\.token_embedding", r"decoder.embed_tokens"),
+            WeightRenaming(r"transf_decoder\._embedding\.layer_norm", r"decoder.embedding_layernorm"),
+            WeightRenaming(r"transf_decoder\._decoder\.final_layer_norm", r"decoder.norm"),
+            WeightRenaming(r"transf_decoder\._decoder\.layers", r"decoder.layers"),
+            WeightRenaming(r"encoder_decoder_proj\.", r"decoder.proj."),
+            WeightRenaming(r"encoder\.(.+)\.self_attn\.linear_q", r"encoder.\1.self_attn.q_proj"),
+            WeightRenaming(r"encoder\.(.+)\.self_attn\.linear_k", r"encoder.\1.self_attn.k_proj"),
+            WeightRenaming(r"encoder\.(.+)\.self_attn\.linear_v", r"encoder.\1.self_attn.v_proj"),
+            WeightRenaming(r"encoder\.(.+)\.self_attn\.linear_out", r"encoder.\1.self_attn.o_proj"),
+            WeightRenaming(r"encoder\.(.+)\.self_attn\.linear_pos", r"encoder.\1.self_attn.relative_k_proj"),
+            WeightRenaming(r"encoder\.(.+)\.self_attn\.pos_bias_u", r"encoder.\1.self_attn.bias_u"),
+            WeightRenaming(r"encoder\.(.+)\.self_attn\.pos_bias_v", r"encoder.\1.self_attn.bias_v"),
+            WeightRenaming(r"decoder\.(.+)\.first_sub_layer\.query_net", r"decoder.\1.self_attn.q_proj"),
+            WeightRenaming(r"decoder\.(.+)\.first_sub_layer\.key_net", r"decoder.\1.self_attn.k_proj"),
+            WeightRenaming(r"decoder\.(.+)\.first_sub_layer\.value_net", r"decoder.\1.self_attn.v_proj"),
+            WeightRenaming(r"decoder\.(.+)\.first_sub_layer\.out_projection", r"decoder.\1.self_attn.o_proj"),
+            WeightRenaming(r"\.second_sub_layer\.query_net", r".encoder_attn.q_proj"),
+            WeightRenaming(r"\.second_sub_layer\.key_net", r".encoder_attn.k_proj"),
+            WeightRenaming(r"\.second_sub_layer\.value_net", r".encoder_attn.v_proj"),
+            WeightRenaming(r"\.second_sub_layer\.out_projection", r".encoder_attn.o_proj"),
+            WeightRenaming(r"\.third_sub_layer\.dense_in", r".mlp.fc1"),
+            WeightRenaming(r"\.third_sub_layer\.dense_out", r".mlp.fc2"),
+            WeightRenaming(r"\.layer_norm_1\.", r".input_layernorm."),
+            WeightRenaming(r"\.layer_norm_2\.", r".post_attention_layernorm."),
+            WeightRenaming(r"\.layer_norm_3\.", r".final_layernorm."),
+            WeightRenaming(r"\.conv\.batch_norm", r".conv.norm"),
+            WeightRenaming(r"log_softmax\.mlp\.layer0", r"proj_out"),
+        ],
         "qianfan_ocr": [
             WeightRenaming(r"^vision_model\.", r"model\.vision_tower\."),
             WeightRenaming(r"encoder\.layers\.", r"layers\."),
@@ -550,6 +572,16 @@ def _build_checkpoint_conversion_mapping():
             WeightRenaming(r"^mlp1\.1\.", r"model\.multi_modal_projector\.linear_1\."),
             WeightRenaming(r"^mlp1\.3\.", r"model\.multi_modal_projector\.linear_2\."),
         ],
+        "legacy": [
+            WeightRenaming(
+                source_patterns="LayerNorm.gamma",
+                target_patterns="LayerNorm.weight",
+            ),
+            WeightRenaming(
+                source_patterns="LayerNorm.beta",
+                target_patterns="LayerNorm.bias",
+            ),
+        ],
     }
     # The legacy mapping is added to the esm model here since the extra weight renaming do not apply to the esm model.
     mapping["esm"] += mapping["legacy"].copy()
@@ -565,77 +597,17 @@ def _build_checkpoint_conversion_mapping():
         ),
     ]
 
-    mapping["ernie4_5_moe"] = [
-        WeightRenaming("mlp.moe_statics.e_score_correction_bias", "mlp.gate.moe_statics.e_score_correction_bias"),
-        WeightConverter(
-            source_patterns=[
-                "mlp.experts.*.gate_proj.weight",
-                "mlp.experts.*.up_proj.weight",
-            ],
-            target_patterns="mlp.experts.gate_up_proj",
-            operations=[MergeModulelist(dim=0), Concatenate(dim=1)],
-        ),
-        WeightConverter(
-            source_patterns="mlp.experts.*.down_proj.weight",
-            target_patterns="mlp.experts.down_proj",
-            operations=[MergeModulelist(dim=0)],
-        ),
+    mapping["ernie4_5_moe"] = mapping["qwen2_moe"].copy()
+    mapping["ernie4_5_moe"] += [
+        WeightRenaming("mlp.moe_statics.e_score_correction_bias", "mlp.gate.moe_statics.e_score_correction_bias")
     ]
+
     mapping["minimax_m2"] = mapping["mixtral"].copy()
     mapping["minimax_m2"] += [
         WeightRenaming(".block_sparse_moe.e_score_correction_bias", ".mlp.e_score_correction_bias"),
     ]
     mapping["exaone_moe"] = mapping["qwen2_moe"].copy()
     mapping["exaone_moe"] += [WeightRenaming("mlp.e_score_correction_bias", "mlp.gate.e_score_correction_bias")]
-
-    mapping["solar_open"] = [
-        WeightConverter(
-            source_patterns=[
-                "mlp.experts.*.gate_proj.weight",
-                "mlp.experts.*.up_proj.weight",
-            ],
-            target_patterns="mlp.experts.gate_up_proj",
-            operations=[MergeModulelist(dim=0), Concatenate(dim=1)],
-        ),
-        WeightConverter(
-            source_patterns="mlp.experts.*.down_proj.weight",
-            target_patterns="mlp.experts.down_proj",
-            operations=[MergeModulelist(dim=0)],
-        ),
-    ]
-
-    mapping["cohere_asr"] = [
-        WeightRenaming(r"encoder\.pre_encode\.conv\.", r"encoder.subsampling.layers."),
-        WeightRenaming(r"encoder\.pre_encode\.out\.", r"encoder.subsampling.linear."),
-        WeightRenaming(r"transf_decoder\._embedding\.position_embedding\.pos_enc", r"decoder.pos_emb.weight"),
-        WeightRenaming(r"transf_decoder\._embedding\.token_embedding", r"decoder.embed_tokens"),
-        WeightRenaming(r"transf_decoder\._embedding\.layer_norm", r"decoder.embedding_layernorm"),
-        WeightRenaming(r"transf_decoder\._decoder\.final_layer_norm", r"decoder.norm"),
-        WeightRenaming(r"transf_decoder\._decoder\.layers", r"decoder.layers"),
-        WeightRenaming(r"encoder_decoder_proj\.", r"decoder.proj."),
-        WeightRenaming(r"encoder\.(.+)\.self_attn\.linear_q", r"encoder.\1.self_attn.q_proj"),
-        WeightRenaming(r"encoder\.(.+)\.self_attn\.linear_k", r"encoder.\1.self_attn.k_proj"),
-        WeightRenaming(r"encoder\.(.+)\.self_attn\.linear_v", r"encoder.\1.self_attn.v_proj"),
-        WeightRenaming(r"encoder\.(.+)\.self_attn\.linear_out", r"encoder.\1.self_attn.o_proj"),
-        WeightRenaming(r"encoder\.(.+)\.self_attn\.linear_pos", r"encoder.\1.self_attn.relative_k_proj"),
-        WeightRenaming(r"encoder\.(.+)\.self_attn\.pos_bias_u", r"encoder.\1.self_attn.bias_u"),
-        WeightRenaming(r"encoder\.(.+)\.self_attn\.pos_bias_v", r"encoder.\1.self_attn.bias_v"),
-        WeightRenaming(r"decoder\.(.+)\.first_sub_layer\.query_net", r"decoder.\1.self_attn.q_proj"),
-        WeightRenaming(r"decoder\.(.+)\.first_sub_layer\.key_net", r"decoder.\1.self_attn.k_proj"),
-        WeightRenaming(r"decoder\.(.+)\.first_sub_layer\.value_net", r"decoder.\1.self_attn.v_proj"),
-        WeightRenaming(r"decoder\.(.+)\.first_sub_layer\.out_projection", r"decoder.\1.self_attn.o_proj"),
-        WeightRenaming(r"\.second_sub_layer\.query_net", r".encoder_attn.q_proj"),
-        WeightRenaming(r"\.second_sub_layer\.key_net", r".encoder_attn.k_proj"),
-        WeightRenaming(r"\.second_sub_layer\.value_net", r".encoder_attn.v_proj"),
-        WeightRenaming(r"\.second_sub_layer\.out_projection", r".encoder_attn.o_proj"),
-        WeightRenaming(r"\.third_sub_layer\.dense_in", r".mlp.fc1"),
-        WeightRenaming(r"\.third_sub_layer\.dense_out", r".mlp.fc2"),
-        WeightRenaming(r"\.layer_norm_1\.", r".input_layernorm."),
-        WeightRenaming(r"\.layer_norm_2\.", r".post_attention_layernorm."),
-        WeightRenaming(r"\.layer_norm_3\.", r".final_layernorm."),
-        WeightRenaming(r"\.conv\.batch_norm", r".conv.norm"),
-        WeightRenaming(r"log_softmax\.mlp\.layer0", r"proj_out"),
-    ]
 
     for model_type, base_pattern in _MODEL_TO_CONVERSION_PATTERN.items():
         if model_type in mapping:
