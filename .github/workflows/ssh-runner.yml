@@ -185,6 +185,7 @@ jobs:
           slackToken: ${{ secrets.SLACK_CIFEEDBACK_BOT_TOKEN }}
           containerMode: true
           version: '1.84.0'
+          debugEnabled: true
           sha256sum: 'c91eb43a92c209108bfaf1237696ac2089cc3d8fcf35d570d348cbfb19d8fb31'
           #waitForSSH: true
           #sshTimeout: 15m
