@@ -75,6 +75,14 @@ class Scheduler(ABC):
         self.cache.free_blocks(request_id)
         self.active_requests.pop(request_id, None)
 
+    def pop_request_to_evict(self) -> tuple[str, RequestState]:
+        """Remove and return an active request chosen as the eviction victim for cache-pressure offload or soft reset.
+        Picks the newest active request when `block_new_requests` is set, else the oldest."""
+        if self.block_new_requests:
+            return self.active_requests.popitem()
+        request_id = next(iter(self.active_requests))
+        return request_id, self.active_requests.pop(request_id)
+
     @traced
     def get_active_request_static_outputs(self, request_id: str) -> list[int]:
         """Gets generated tokens for an active request."""
@@ -287,17 +295,21 @@ class Scheduler(ABC):
         return scheduled_requests, one_allocation_failed, decode_fast_path, num_q_tokens, max_kv_read
 
     def _get_waiting_candidates(self) -> list[RequestState]:
-        """Returns waiting requests in priority order. CPU-offloaded requests come first (they are cheaper to restore
-        than fresh requests are to prefill), then FIFO order for the rest."""
-        offloaded = []
-        fresh = []
+        """Returns waiting requests in priority order. CPU-offloaded requests are cheaper to restore than fresh ones
+        are to prefill, so they get priority, but we interleave one fresh request after each offloaded one to keep
+        fresh waiters from starving under sustained offload pressure."""
+        offloaded: deque[RequestState] = deque()
+        fresh: deque[RequestState] = deque()
         for req_id in self.waiting_requests_order:
             state = self.waiting_requests[req_id]
-            if state.is_cpu_offloaded:
-                offloaded.append(state)
-            else:
-                fresh.append(state)
-        return offloaded + fresh
+            (offloaded if state.is_cpu_offloaded else fresh).append(state)
+        ordered: list[RequestState] = []
+        while offloaded or fresh:
+            if offloaded:
+                ordered.append(offloaded.popleft())
+            if fresh:
+                ordered.append(fresh.popleft())
+        return ordered
 
     def _cleanup_waiting_queue(self, request_ids_to_remove_from_waiting: set[str]) -> None:
         """Removes processed requests from the waiting queue order."""

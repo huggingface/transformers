@@ -156,12 +156,8 @@ class OffloadingManager:
     def offload_one_request(self) -> None:
         """Offload one active request to make room in the GPU cache. Tries CPU offloading first; if the pool is full,
         falls back to the legacy soft reset."""
-        # The offloaded request is the newest (resp. oldest) if block_new_requests is True (resp. False)
         scheduler = self.scheduler
-        if scheduler.block_new_requests:
-            request_id, state = scheduler.active_requests.popitem()
-        else:
-            request_id, state = next(iter(scheduler.active_requests.items()))
+        request_id, state = scheduler.pop_request_to_evict()
         logger.info(
             f"Offloading request {request_id} with {len(state.initial_tokens)} initial tokens and "
             f"{len(state.generated_tokens)} generated tokens."
@@ -176,7 +172,8 @@ class OffloadingManager:
             # so the scheduler has at least 1 token to schedule and enters the allocation path.
             if state._status == RequestStatus.DECODING:
                 state.remaining_prefill_tokens = state.tokens_to_process[:]
-            # Here, the new state is the same as the old one, but with the status set to PENDING
+            # Here, the new state is the same as the old one, but with the status set to PENDING. We bypass the setter
+            # to avoid the lifespan bookeeping and the associated warning
             state._status = RequestStatus.PENDING
             new_state = state
             logger.debug(f"Offloaded request {request_id} to CPU: {len(self._free_cpu_blocks)} free blocks remaining.")
