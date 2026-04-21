@@ -362,6 +362,7 @@ MODELS_WITH_INCORRECT_HUB_TOKENIZER_CLASS: set[str] = {
     "llava",
     "llava_next",
     "minicpmv",
+    "minicpmv4_6",
     "minimax_m2",
     "modernbert",
     "molmo",
