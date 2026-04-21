@@ -195,7 +195,7 @@ IGNORE_NON_TESTED = (
         "SeamlessM4TTextToUnitForConditionalGeneration",  # Building part of bigger (tested) model.
         "ChameleonVQVAE",  # VQVAE here is used only for encoding (discretizing) and is tested as part of bigger model
         "SLANetSLAHead",  # Buildinere is used only for encoding (discretizing) and is tested as part of bigger model
-        "SLANetModel",  # Buildinere is used only for encoding (discretizing) and is tested as part of bigger model
+        "SLANetBackbone",  # Buildinere is used only for encoding (discretizing) and is tested as part of bigger model
         "SLANeXtSLAHead",  # Buildinere is used only for encoding (discretizing) and is tested as part of bigger model
         "SLANeXtBackbone",  # Building part of bigger (tested) model. Tested implicitly through SLANeXtForTableRecognition.
         "PPOCRV5MobileDetModel",  # Building part of bigger (tested) model. Tested implicitly through PPOCRV5MobileDetForObjectDetection.
@@ -463,7 +463,7 @@ IGNORE_NON_AUTO_CONFIGURED = PRIVATE_MODELS.copy() + [
     "JanusVQVAE",  # no autoclass for VQ-VAE models
     "JanusVisionModel",  # Building part of bigger (tested) model
     "SLANetSLAHead",  # Building part of bigger (tested) model
-    "SLANetModel",  # Building part of bigger (tested) model
+    "SLANetBackbone",  # Building part of bigger (tested) model
     "SLANeXtSLAHead",  # Building part of bigger (tested) model
     "SLANeXtBackbone",  # Building part of bigger (tested) model
     "PPOCRV5MobileDetModel",  # Building part of bigger (tested) model

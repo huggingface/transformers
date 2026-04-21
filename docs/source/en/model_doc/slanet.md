@@ -70,9 +70,9 @@ print(result['structure_score'])
 
 [[autodoc]] SLANetForTableRecognition
 
-## SLANetModel
+## SLANetBackbone
 
-[[autodoc]] SLANetModel
+[[autodoc]] SLANetBackbone
 
 ## SLANetSLAHead
 
