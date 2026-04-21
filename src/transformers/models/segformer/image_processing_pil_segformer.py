@@ -31,26 +31,16 @@ from ...image_utils import (
     PILImageResampling,
     SizeDict,
 )
-from ...processing_utils import ImagesKwargs, Unpack
+from ...processing_utils import Unpack
 from ...utils import TensorType, auto_docstring, is_torch_available, is_torchvision_available
 from ...utils.import_utils import requires
+from .image_processing_segformer import SegformerImageProcessorKwargs
 
 
 if is_torch_available():
     pass
 if is_torchvision_available():
     import torchvision.transforms.v2.functional as tvF
-
-
-class SegformerImageProcessorKwargs(ImagesKwargs, total=False):
-    r"""
-    do_reduce_labels (`bool`, *optional*, defaults to `self.do_reduce_labels`):
-        Whether or not to reduce all label values of segmentation maps by 1. Usually used for datasets where 0
-        is used for background, and background itself is not included in all classes of a dataset (e.g.
-        ADE20k). The background label will be replaced by 255.
-    """
-
-    do_reduce_labels: bool
 
 
 @requires(backends=("torch", "torchvision"))

@@ -21,24 +21,16 @@ from ...image_utils import (
     is_valid_image,
     to_numpy_array,
 )
-from ...processing_utils import ImagesKwargs, Unpack
+from ...processing_utils import Unpack
 from ...utils import TensorType, auto_docstring, is_torch_available
 from ...utils.import_utils import requires
+from .image_processing_efficientloftr import EfficientLoFTRImageProcessorKwargs
 
 
 if TYPE_CHECKING:
     from .modeling_efficientloftr import EfficientLoFTRKeypointMatchingOutput
 if is_torch_available():
     import torch
-
-
-class EfficientLoFTRImageProcessorKwargs(ImagesKwargs, total=False):
-    r"""
-    do_grayscale (`bool`, *optional*, defaults to `self.do_grayscale`):
-        Whether to convert the image to grayscale. Can be overridden by `do_grayscale` in the `preprocess` method.
-    """
-
-    do_grayscale: bool
 
 
 def is_grayscale(image: np.ndarray):
