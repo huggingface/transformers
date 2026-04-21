@@ -76,10 +76,6 @@ class MaxTimeContinuousTimeRotaryEmbedding(nn.Module):
         return angles.reshape(batch_size, seq_len, self.dim // 2)
 
 
-def _exists(val):
-    return val is not None
-
-
 class RotaryEmbedding(nn.Module):
     def __init__(
         self,
@@ -98,7 +94,7 @@ class RotaryEmbedding(nn.Module):
         self.num_freqs = num_freqs
         self.learned_freq = learned_freq
         self.max_time = max_time
-        if _exists(max_time) and freqs_for == "lang":
+        if max_time is not None and freqs_for == "lang":
             theta = max_time / (2 * pi)
         self.theta = theta
 
@@ -120,8 +116,8 @@ class RotaryEmbedding(nn.Module):
         return self.dummy.device
 
     def forward(self, t: torch.Tensor, seq_len=None, offset=0):
-        should_cache = not self.learned_freq and _exists(seq_len) and self.freqs_for != "pixel"
-        if should_cache and _exists(self.cached_freqs) and (offset + seq_len) <= self.cached_freqs.shape[0]:
+        should_cache = not self.learned_freq and seq_len is not None and self.freqs_for != "pixel"
+        if should_cache and self.cached_freqs is not None and (offset + seq_len) <= self.cached_freqs.shape[0]:
             return self.cached_freqs[offset : (offset + seq_len)].detach()
 
         freqs = self.freqs
@@ -411,48 +407,18 @@ class AudioVisualFlamingoPretrainedModel(PreTrainedModel):
                 )
         return period_fix, max_time
 
-    def _get_padding_side(self) -> str:
-        return getattr(self.config, "padding_side", "left")
-
-    def _get_model_max_length(self) -> int:
-        model_max_length = getattr(self.config, "model_max_length", None)
-        if model_max_length is None and getattr(self, "llm", None) is not None:
-            model_max_length = getattr(self.llm.config, "model_max_length", None)
-        if model_max_length is None:
-            model_max_length = 2048
-        return int(model_max_length)
-
-    def post_config(self):
-        self.training = self.llm.training
-        if self.training:
-            self.train()
-        else:
-            self.eval()
-
-        self.config.text_config = self.llm.config
-        self.config.vision_config = self.vision_tower.config
-        if getattr(self.config, "mm_projector_cfg", None) is None:
-            self.config.mm_projector_cfg = {"mm_projector_type": "mlp_downsample"}
-        if hasattr(self, "sound_tower"):
-            self.config.audio_config = self.sound_tower.config
-            self.config.sound_hidden_size = getattr(self.sound_tower.config, "d_model", 1280)
-        if getattr(self.config, "sound_mm_projector_cfg", None) is None and hasattr(self, "sound_mm_projector"):
-            self.config.sound_mm_projector_cfg = {"sound_mm_projector_type": "mlp"}
-
     def freezed_module_patch(self):
-        if self.training:
-            vision_tower = self.vision_tower
-            sound_tower = getattr(self, "sound_tower", None)
-            mm_projector = self.mm_projector
-            sound_mm_projector = getattr(self, "sound_mm_projector", None)
-            if vision_tower and not getattr(self.config, "tune_vision_tower", False):
-                vision_tower.eval()
-            if sound_tower and not getattr(self.config, "tune_sound_tower", False):
-                sound_tower.eval()
-            if mm_projector and not getattr(self.config, "tune_mm_projector", False):
-                mm_projector.eval()
-            if sound_mm_projector and not getattr(self.config, "tune_sound_mm_projector", False):
-                sound_mm_projector.eval()
+        if not self.training:
+            return
+
+        for module, flag_name in (
+            (self.vision_tower, "tune_vision_tower"),
+            (getattr(self, "sound_tower", None), "tune_sound_tower"),
+            (self.mm_projector, "tune_mm_projector"),
+            (getattr(self, "sound_mm_projector", None), "tune_sound_mm_projector"),
+        ):
+            if module is not None and not getattr(self.config, flag_name, False):
+                module.eval()
 
 
 IGNORE_INDEX = -100
@@ -562,15 +528,6 @@ def _move_rotary_module_to_device(module: nn.Module, device: torch.device) -> nn
     return module.to(device=device)
 
 
-def context_length_extension(config):
-    orig_ctx_len = getattr(config, "max_position_embeddings", None)
-    model_max_length = getattr(config, "model_max_length", None)
-    if orig_ctx_len is None or model_max_length is None or model_max_length <= orig_ctx_len:
-        return
-    scaling_factor = float(math.ceil(model_max_length / orig_ctx_len))
-    config.rope_scaling = {"type": "linear", "factor": scaling_factor}
-
-
 class AudioVisualFlamingoForConditionalGeneration(AudioVisualFlamingoPretrainedModel, GenerationMixin):
     @classmethod
     def from_pretrained(cls, *args, **kwargs):
@@ -597,14 +554,31 @@ class AudioVisualFlamingoForConditionalGeneration(AudioVisualFlamingoPretrainedM
         model_max_length = getattr(config, "model_max_length", None)
         if model_max_length is not None:
             llm_cfg.model_max_length = model_max_length
-            context_length_extension(llm_cfg)
+            orig_ctx_len = getattr(llm_cfg, "max_position_embeddings", None)
+            if orig_ctx_len is not None and model_max_length > orig_ctx_len:
+                llm_cfg.rope_scaling = {
+                    "type": "linear",
+                    "factor": float(math.ceil(model_max_length / orig_ctx_len)),
+                }
 
         self.llm = AutoModelForCausalLM.from_config(llm_cfg)
         config.hidden_size = self.llm.config.hidden_size
         self.vocab_size = self.llm.config.vocab_size
-        self.update_vocab_size = lambda: setattr(self, "vocab_size", self.llm.config.vocab_size)
         self._init_media_encoders()
-        self.post_config()
+        self.training = self.llm.training
+        if self.training:
+            self.train()
+        else:
+            self.eval()
+
+        self.config.text_config = self.llm.config
+        self.config.vision_config = self.vision_tower.config
+        self.config.audio_config = self.sound_tower.config
+        self.config.sound_hidden_size = getattr(self.sound_tower.config, "d_model", 1280)
+        if getattr(self.config, "mm_projector_cfg", None) is None:
+            self.config.mm_projector_cfg = {"mm_projector_type": "mlp_downsample"}
+        if getattr(self.config, "sound_mm_projector_cfg", None) is None:
+            self.config.sound_mm_projector_cfg = {"sound_mm_projector_type": "mlp"}
         self.post_init()
 
     def get_input_embeddings(self):
@@ -628,6 +602,35 @@ class AudioVisualFlamingoForConditionalGeneration(AudioVisualFlamingoPretrainedM
     @property
     def language_model(self):
         return self.llm
+
+    def _encode_visual_features(self, images: torch.Tensor, block_sizes: tuple[int, ...] | None = None):
+        if not getattr(self.config, "dynamic_s2", False):
+            raise NotImplementedError("Current AudioVisualFlamingo checkpoint requires `dynamic_s2=True`.")
+        if len(images) == 0:
+            return []
+
+        if block_sizes is None:
+            block_sizes = [None] * len(images)
+
+        image_features = self.vision_tower(images)
+        image_features, new_block_sizes = self.merge_features_for_dynamic_s2(image_features, block_sizes)
+        image_features = [
+            self.split_chessboard(feature, block_size[0], block_size[1])
+            for feature, block_size in zip(image_features, new_block_sizes)
+        ]
+        image_features = torch.cat([_channel_first_to_tokens(feature) for feature in image_features], dim=0)
+        image_features = self.mm_projector(image_features.to(self.device, self.dtype))
+        image_features = list(
+            image_features.split([block_size[0] * block_size[1] for block_size in new_block_sizes], dim=0)
+        )
+        image_features = [
+            self.merge_chessboard(feature, block_size[0], block_size[1])
+            for feature, block_size in zip(image_features, new_block_sizes)
+        ]
+        image_features = [_channel_first_to_tokens(feature)[0] for feature in image_features]
+        if all(feature.shape[0] == image_features[0].shape[0] for feature in image_features):
+            return torch.stack(image_features, dim=0)
+        return image_features
 
     def merge_features_for_dynamic_s2(self, image_features, block_sizes):
         scales = self.vision_tower.scales
@@ -734,39 +737,11 @@ class AudioVisualFlamingoForConditionalGeneration(AudioVisualFlamingoPretrainedM
         num_frames: list[int] | None = None,
     ):
         _ = (mm_info, num_frames)
-        if not getattr(self.config, "dynamic_s2", False):
-            raise NotImplementedError("Current AudioVisualFlamingo checkpoint requires `dynamic_s2=True`.")
-        inp_block_sizes = block_sizes
-        images = torch.cat(inp, dim=0) if len(inp) > 0 else []
-        if block_sizes is None:
-            block_sizes = [None] * len(images)
-        if len(images) > 0:
-            image_features = self.vision_tower(images)
-            image_features, new_block_sizes = self.merge_features_for_dynamic_s2(image_features, block_sizes)
-            image_features = [
-                self.split_chessboard(x, block_size[0], block_size[1])
-                for x, block_size in zip(image_features, new_block_sizes)
-            ]
-            image_features = torch.cat([_channel_first_to_tokens(x) for x in image_features], dim=0)
-        else:
-            image_features = []
-        if inp_block_sizes is None:
-            new_block_sizes = [(1, 1)] * len(image_features)
-        else:
-            raise ValueError(f"inp_block_sizes is not None: {inp_block_sizes}")
-        image_features = image_features.to(self.device, self.dtype)
-        image_features = self.mm_projector(image_features)
-        image_features = list(
-            image_features.split([block_size[0] * block_size[1] for block_size in new_block_sizes], dim=0)
-        )
-        image_features = [
-            self.merge_chessboard(x, block_size[0], block_size[1])
-            for x, block_size in zip(image_features, new_block_sizes)
-        ]
-        image_features = [_channel_first_to_tokens(x)[0] for x in image_features]
-        if all(feature.shape[0] == image_features[0].shape[0] for feature in image_features):
-            image_features = torch.stack(image_features, dim=0)
-        return image_features
+        if block_sizes is not None:
+            raise ValueError(f"Video block sizes are not supported: {block_sizes}")
+        if not inp:
+            return []
+        return self._encode_visual_features(torch.cat(inp, dim=0))
 
     def encode_images(
         self,
@@ -776,29 +751,7 @@ class AudioVisualFlamingoForConditionalGeneration(AudioVisualFlamingoPretrainedM
         num_frames: list[int] | None = None,
     ):
         _ = (mm_info, num_frames)
-        if not getattr(self.config, "dynamic_s2", False):
-            raise NotImplementedError("Current AudioVisualFlamingo checkpoint requires `dynamic_s2=True`.")
-        if block_sizes is None:
-            block_sizes = [None] * len(images)
-        image_features = self.vision_tower(images)
-        image_features, new_block_sizes = self.merge_features_for_dynamic_s2(image_features, block_sizes)
-        image_features = [
-            self.split_chessboard(x, block_size[0], block_size[1])
-            for x, block_size in zip(image_features, new_block_sizes)
-        ]
-        image_features = torch.cat([_channel_first_to_tokens(x) for x in image_features], dim=0)
-        image_features = self.mm_projector(image_features)
-        image_features = list(
-            image_features.split([block_size[0] * block_size[1] for block_size in new_block_sizes], dim=0)
-        )
-        image_features = [
-            self.merge_chessboard(x, block_size[0], block_size[1])
-            for x, block_size in zip(image_features, new_block_sizes)
-        ]
-        image_features = [_channel_first_to_tokens(x)[0] for x in image_features]
-        if all(feature.shape[0] == image_features[0].shape[0] for feature in image_features):
-            image_features = torch.stack(image_features, dim=0)
-        return image_features
+        return self._encode_visual_features(images, block_sizes=block_sizes)
 
     def _get_sound_chunk_length(self) -> int:
         return (
@@ -840,39 +793,37 @@ class AudioVisualFlamingoForConditionalGeneration(AudioVisualFlamingoPretrainedM
             audio_features.append(sound_feature)
             audio_output_lengths.append(sound_feature.shape[1])
 
-        if audio_features:
-            audio_features = torch.cat(audio_features, dim=1).squeeze(0)
-        else:
-            audio_features = []
+        if not audio_features:
+            return []
+
+        audio_features = torch.cat(audio_features, dim=1).squeeze(0)
         projector_param = next(self.sound_mm_projector.parameters(), None)
         if projector_param is not None and audio_features.dtype != projector_param.dtype:
             audio_features = audio_features.to(projector_param.dtype)
         audio_features = self.sound_mm_projector(audio_features)
-        if audio_output_lengths is not None:
-            new_audio_features = []
-            start = 0
-            for length in audio_output_lengths:
-                new_audio_features.append(audio_features[start : start + length])
-                start += length
-            audio_features = new_audio_features
-        return audio_features
+
+        split_audio_features = []
+        start = 0
+        for length in audio_output_lengths:
+            split_audio_features.append(audio_features[start : start + length])
+            start += length
+        return split_audio_features
 
     def _embed_image_features(
         self, images: list[torch.Tensor], config: dict[str, Any], mm_info: dict
     ) -> list[torch.Tensor]:
         _ = mm_info
-        images = torch.stack(images, dim=0)
-        features = self.encode_images(images, block_sizes=config.get("block_sizes"))
+        features = self.encode_images(torch.stack(images, dim=0), block_sizes=config.get("block_sizes"))
         start_embeds = self.embed_text_tokens(self._image_start_tokens)
         end_embeds = self.embed_text_tokens(self._image_end_tokens)
-        result = []
+        image_features = []
         for feature in features:
             if start_embeds is not None:
                 feature = torch.cat([start_embeds, feature], dim=0)
             if end_embeds is not None:
                 feature = torch.cat([feature, end_embeds], dim=0)
-            result.append(feature)
-        return result
+            image_features.append(feature)
+        return image_features
 
     def _embed_video_features(
         self, videos: list[torch.Tensor], config: dict[str, Any], mm_info: dict
@@ -1274,7 +1225,10 @@ class AudioVisualFlamingoForConditionalGeneration(AudioVisualFlamingoPretrainedM
         return embeds
 
     def __truncate_sequence(self, inputs: list[torch.Tensor], labels: list[torch.Tensor]):
-        model_max_length = self._get_model_max_length()
+        model_max_length = getattr(self.config, "model_max_length", None)
+        if model_max_length is None:
+            model_max_length = getattr(self.llm.config, "model_max_length", 2048)
+        model_max_length = int(model_max_length)
         if self.training and any(len(current_input) > model_max_length for current_input in inputs):
             warnings.warn(f"Truncating sequences to `model_max_length` ({model_max_length}).")
             inputs = [current_input[:model_max_length] for current_input in inputs]
@@ -1287,12 +1241,13 @@ class AudioVisualFlamingoForConditionalGeneration(AudioVisualFlamingoPretrainedM
         hidden_size = inputs[0].shape[1]
         max_length = max(inputs[k].shape[0] for k in range(batch_size))
         attention_mask = torch.ones((batch_size, max_length), dtype=torch.bool, device=device)
+        padding_side = getattr(self.config, "padding_side", "left")
         inputs_p, labels_p = [], []
         for k in range(batch_size):
             pad_size = max_length - inputs[k].shape[0]
             input_padding = torch.zeros((pad_size, hidden_size), dtype=inputs[k].dtype, device=device)
             label_padding = torch.full((pad_size,), IGNORE_INDEX, dtype=labels[k].dtype, device=device)
-            if self._get_padding_side() == "right":
+            if padding_side == "right":
                 attention_mask[k, inputs[k].shape[0] :] = False
                 input_padding = torch.cat([inputs[k], input_padding], dim=0)
                 label_padding = torch.cat([labels[k], label_padding], dim=0)
