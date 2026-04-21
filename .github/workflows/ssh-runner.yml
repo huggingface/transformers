@@ -40,6 +40,8 @@ jobs:
             echo "RUNNER=aws-g5-4xlarge-cache-ssh" >> $GITHUB_ENV
           elif [[ "$NUM_GPUS" == "multi" && "$RUNNER_TYPE" == "a10" ]]; then
             echo "RUNNER=aws-g5-12xlarge-cache-ssh" >> $GITHUB_ENV
+          elif [[ "$NUM_GPUS" == "multi" && "$RUNNER_TYPE" == "mi325" ]]; then
+            echo "RUNNER=amd-mi325-2gpu" >> $GITHUB_ENV
           else
             echo "RUNNER=" >> $GITHUB_ENV
           fi
