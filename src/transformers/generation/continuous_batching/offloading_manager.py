@@ -28,7 +28,6 @@ import torch
 
 from ...utils import is_psutil_available
 from .cache import PagedAttentionCache
-from .input_outputs import ContinuousBatchingAsyncIOs, ContinuousBatchingIOs
 from .requests import FutureRequestState, RequestState, RequestStatus, logger
 from .scheduler import Scheduler
 
@@ -46,13 +45,12 @@ class OffloadingManager:
         scheduler: Scheduler,
         cpu_offload_space_gib: float | None,
         safety_threshold: float,
-        inputs_and_outputs: ContinuousBatchingIOs | ContinuousBatchingAsyncIOs,
+        compute_stream: torch.cuda.Stream | None,
     ) -> None:
         self.cache = cache
         self.scheduler = scheduler
-
         # All offloading transfers run on the compute stream (stream-ordered, like the fork copy path)
-        self._compute_stream: torch.cuda.Stream | None = inputs_and_outputs.compute_stream
+        self._compute_stream = compute_stream
 
         # Bookkeeping defaults, valid whether or not the pool is allocated
         self._cpu_key_cache: list[torch.Tensor] = []
@@ -88,6 +86,10 @@ class OffloadingManager:
 
         # FIFO order favors contiguity when blocks are returned in bulk
         self._free_cpu_blocks = deque(range(self._num_cpu_blocks))
+
+        # Reusable int32 scratch for cpu_ids / gpu_ids (bounded by _num_cpu_blocks on both paths)
+        self._cpu_ids_scratch = torch.empty(self._num_cpu_blocks, dtype=torch.int32, pin_memory=True)
+        self._gpu_ids_scratch = torch.empty(self._num_cpu_blocks, dtype=torch.int32, device=cache.device)
 
         # Log the size of the CPU swap pool
         cache_tensor = self._cpu_key_cache[0]
@@ -213,7 +215,7 @@ class OffloadingManager:
             # Restore the state to non-offloaded state
             state.is_cpu_offloaded = False
             state.allocated_blocks = max_allocated_blocks  # ensures re-allocation is accounted for
-            # If prefix sharing is on, these freshly allocated blocks will be deduplicated at the next update
+            # Prefix sharing: restored blocks will be re-hashed during the next update
             if cache.allow_block_sharing:
                 future_state.complete_blocks += state.position_offset // cache.block_size
             logger.debug(
@@ -226,9 +228,11 @@ class OffloadingManager:
             return None
 
         # Single batched copy for all requests (still, one copy per layer)
-        cpu_ids = torch.tensor(all_cpu_indices, device="cpu", dtype=torch.int32)
-        gpu_ids = torch.tensor(all_gpu_indices, device=cache.device, dtype=torch.int32)
+        cpu_ids = self._cpu_ids_scratch[:len(all_cpu_indices)]
+        gpu_ids = self._gpu_ids_scratch[:len(all_cpu_indices)]
+        cpu_ids.copy_(torch.as_tensor(all_cpu_indices, dtype=torch.int32))  # cpu op, not in the stream
         with self._stream_ctx():
+            gpu_ids.copy_(torch.as_tensor(all_gpu_indices, dtype=torch.int32))
             for cpu_k, gpu_k in zip(self._cpu_key_cache, self._gpu_key_views):
                 gpu_k[gpu_ids].copy_(cpu_k[cpu_ids])
             for cpu_v, gpu_v in zip(self._cpu_value_cache, self._gpu_value_views):
@@ -274,9 +278,11 @@ class OffloadingManager:
         cpu_indices = [self._free_cpu_blocks.popleft() for _ in range(total_gpu_blocks)]
 
         # Offload using the compute stream so it does not interfere with current generation
+        cpu_ids = self._cpu_ids_scratch[:total_gpu_blocks]
+        gpu_ids = self._gpu_ids_scratch[:total_gpu_blocks]
+        cpu_ids.copy_(torch.as_tensor(cpu_indices, dtype=torch.int32))  # cpu op, not in the stream
         with self._stream_ctx():
-            cpu_ids = torch.tensor(cpu_indices, device="cpu", dtype=torch.int32)
-            gpu_ids = torch.tensor(gpu_indices, device=self.cache.device, dtype=torch.int32)
+            gpu_ids.copy_(torch.as_tensor(gpu_indices, dtype=torch.int32))
             # Keys
             for cpu_key_cache, gpu_key_view in zip(self._cpu_key_cache, self._gpu_key_views):
                 cpu_key_cache[cpu_ids].copy_(gpu_key_view[gpu_ids])

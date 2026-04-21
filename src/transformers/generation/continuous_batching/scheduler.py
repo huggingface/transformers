@@ -295,9 +295,9 @@ class Scheduler(ABC):
         return scheduled_requests, one_allocation_failed, decode_fast_path, num_q_tokens, max_kv_read
 
     def _get_waiting_candidates(self) -> list[RequestState]:
-        """Returns waiting requests in priority order. CPU-offloaded requests are cheaper to restore than fresh ones
-        are to prefill, so they get priority, but we interleave one fresh request after each offloaded one to keep
-        fresh waiters from starving under sustained offload pressure."""
+        """Returns waiting requests in priority order. Since CPU-offloaded requests are cheaper to restore than fresh
+        requests, they get priority, but we interleave them with fresh request to not saturate new batches with only
+        offloaded requests."""
         offloaded: deque[RequestState] = deque()
         fresh: deque[RequestState] = deque()
         for req_id in self.waiting_requests_order:

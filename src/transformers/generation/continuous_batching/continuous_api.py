@@ -251,7 +251,7 @@ class ContinuousBatchProcessor:
             scheduler=scheduler,
             cpu_offload_space_gib=continuous_batching_config.cpu_offload_space,
             safety_threshold=continuous_batching_config.cpu_offload_space_safety_threshold,
-            inputs_and_outputs=self.inputs_and_outputs,
+            compute_stream=self.inputs_and_outputs.compute_stream,
         )
 
     def __repr__(self) -> str:
