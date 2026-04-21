@@ -1784,8 +1784,7 @@ class ContinuousBatchingConfig:
         if self.kv_padding_interval_size == 0:
             self.kv_padding_interval_size = 64 * 256  # 64 blocks of 256 tokens ie. 16384 tokens
         if self.max_cached_graphs == 0:
-            # TODO: going from 32 to 10 is a temporary solution to avoid OOMs, but we should get rid of varlen CGs
-            self.max_cached_graphs = 10
+            self.max_cached_graphs = 32
 
     def resolve_compile_configs(
         self, fallback_compile_config: CompileConfig | None, is_flash_attn: bool, decode_fast_path_available: bool
