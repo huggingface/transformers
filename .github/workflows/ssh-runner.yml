@@ -80,14 +80,13 @@ jobs:
 
       - name: SMI
         run: |
-          if [[ "$RUNNER_TYPE" == "a10" ]]; then
+          if [ "$RUNNER_TYPE" == "a10" ]; then
             nvidia-smi
-          elif [[ "$RUNNER_TYPE" == "mi325" ]]; then
+          elif [ "$RUNNER_TYPE" == "mi325" ]; then
             amdsmi
           else
             echo "no smi available"
           fi
-          nvidia-smi
 
       - name: Create python alias
         run: |
