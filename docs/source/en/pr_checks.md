@@ -38,7 +38,7 @@ The code quality check covers formatting, imports, type checking, and model stru
 
 `make style` (included in `make fix-repo`) auto-fixes [Ruff](https://docs.astral.sh/ruff/) linting and formatting, `__init__.py` import sort order, and auto-mapping consistency.
 
-`make typing` performs type checking with [ty](https://docs.astral.sh/ty/) and validates model structure rules, which cover config class naming conventions and `forward()` signatures. Type errors and TRF violations are reported with specific rule numbers and must be fixed manually. Use `python -m utils.mlinter --list-rules` to see all available TRF rules and `python -m utils.mlinter --rule TRFXXX` to view the full documentation for a specific rule.
+`make typing` performs type checking with [ty](https://docs.astral.sh/ty/) and validates model structure rules, which cover config class naming conventions and `forward()` signatures. Type errors and TRF violations are reported with specific rule numbers and must be fixed manually. Use `mlinter --list-rules` to see all available TRF rules and `mlinter --rule TRFXXX` to view the full documentation for a specific rule.
 
 ## Repository consistency
 
