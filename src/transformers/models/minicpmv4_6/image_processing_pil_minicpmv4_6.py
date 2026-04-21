@@ -108,7 +108,7 @@ class MiniCPMV4_6ImageProcessorPil(PilBackend):
         best_height = ensure_divide(height, patch_size * 4)
         return best_height, best_width
 
-    def _get_refine_size(
+    def get_refine_size(
         self,
         image_size: tuple[int, int],
         grid: list[int],
@@ -186,17 +186,12 @@ class MiniCPMV4_6ImageProcessorPil(PilBackend):
         scale_resolution: int,
         patch_size: int,
         slice_mode: bool,
-        downsample_mode: str,
         return_tensors: str | TensorType | None = None,
         **kwargs,
     ) -> BatchFeature:
-        token_divisor = 4 if downsample_mode == "4x" else 16
-
         per_image_pixel_values: list[list[np.ndarray]] = []
         per_image_target_sizes: list[list[list[int]]] = []
         all_grids: list[list[int]] = []
-        all_source_visual_tokens: list[int] = []
-        all_patch_visual_tokens: list[int] = []
 
         for image in images:
             image_size = image.shape[-2:]
@@ -222,14 +217,12 @@ class MiniCPMV4_6ImageProcessorPil(PilBackend):
 
             image_pv = [self.reshape_by_patch(source_img, patch_size)]
             image_ts = [[source_height // patch_size, source_width // patch_size]]
-            source_visual_tokens = source_height * source_width // (patch_size * patch_size * token_divisor)
 
-            patch_visual_tokens = 0
             if best_grid is not None:
                 refine_img = image
                 refine_h, refine_w = image_size
                 if do_resize:
-                    refine_h, refine_w = self._get_refine_size(
+                    refine_h, refine_w = self.get_refine_size(
                         image_size, best_grid, scale_resolution, patch_size, allow_upscale=True
                     )
                     refine_img = self.resize(image, size=SizeDict(height=refine_h, width=refine_w), resample=resample)
@@ -238,7 +231,6 @@ class MiniCPMV4_6ImageProcessorPil(PilBackend):
                 grid_y, grid_x = best_grid
                 patch_height, patch_width = refine_height // grid_y, refine_width // grid_x
                 slice_patches = divide_to_patches(refine_img, (refine_height // grid_y, refine_width // grid_x))
-                patch_visual_tokens = patch_height * patch_width // (patch_size * patch_size * token_divisor)
 
                 for patch_arr in slice_patches:
                     if do_rescale:
@@ -251,18 +243,15 @@ class MiniCPMV4_6ImageProcessorPil(PilBackend):
             per_image_pixel_values.append(image_pv)
             per_image_target_sizes.append(image_ts)
             all_grids.append(best_grid if best_grid is not None else [0, 0])
-            all_source_visual_tokens.append(source_visual_tokens)
-            all_patch_visual_tokens.append(patch_visual_tokens)
 
         return BatchFeature(
             data={
                 "pixel_values": per_image_pixel_values,
                 "target_sizes": per_image_target_sizes,
                 "grids": all_grids,
-                "source_image_visual_tokens": all_source_visual_tokens,
-                "patch_visual_tokens": all_patch_visual_tokens,
             },
             tensor_type=return_tensors,
+            skip_tensor_conversion=["pixel_values"],
         )
 
 

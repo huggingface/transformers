@@ -461,6 +461,7 @@ class MiniCPMV4_6VideoProcessor(BaseVideoProcessor):
         return BatchFeature(
             data={"pixel_values_videos": processed_videos, "target_sizes_videos": target_sizes},
             tensor_type=return_tensors,
+            skip_tensor_conversion=["pixel_values_videos"],
         )
 
 

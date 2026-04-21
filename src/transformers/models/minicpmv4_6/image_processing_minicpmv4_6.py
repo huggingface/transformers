@@ -187,18 +187,14 @@ class MiniCPMV4_6ImageProcessor(TorchvisionBackend):
         scale_resolution: int,
         patch_size: int,
         slice_mode: bool,
-        downsample_mode: str,
         return_tensors: str | TensorType | None = None,
         **kwargs,
     ) -> BatchFeature:
-        token_divisor = 4 if downsample_mode == "4x" else 16
         disable_grouping = kwargs.get("disable_grouping")
 
         per_image_pixel_values: list[list[torch.Tensor]] = []
         per_image_target_sizes: list[list[list[int]]] = []
         all_grids: list[list[int]] = []
-        all_source_visual_tokens: list[int] = []
-        all_patch_visual_tokens: list[int] = []
 
         for image in images:
             image_size = image.shape[-2:]
@@ -214,11 +210,9 @@ class MiniCPMV4_6ImageProcessor(TorchvisionBackend):
                     image_size, scale_resolution, patch_size, allow_upscale=(best_grid is None)
                 )
                 source_img = self.resize(image, size=SizeDict(height=source_h, width=source_w), resample=resample)
-                source_visual_tokens = source_h * source_w // (patch_size * patch_size * token_divisor)
 
                 # Collect all patches for this image: [source, *slices]
                 image_patches = [source_img]
-                patch_visual_tokens = 0
                 patch_height = patch_width = 0
                 if best_grid is not None:
                     refine_h, refine_w = self.get_refine_size(
@@ -229,7 +223,6 @@ class MiniCPMV4_6ImageProcessor(TorchvisionBackend):
                     grid_y, grid_x = best_grid
                     patch_height, patch_width = refine_height // grid_y, refine_width // grid_x
                     slice_patches = divide_to_patches(refine_img, (patch_height, patch_width))
-                    patch_visual_tokens = patch_height * patch_width // (patch_size * patch_size * token_divisor)
                     image_patches.extend(slice_patches)
 
             # Group patches by shape and batch rescale + normalize
@@ -251,18 +244,15 @@ class MiniCPMV4_6ImageProcessor(TorchvisionBackend):
             per_image_pixel_values.append(image_pv)
             per_image_target_sizes.append(image_ts)
             all_grids.append(best_grid if best_grid is not None else [0, 0])
-            all_source_visual_tokens.append(source_visual_tokens)
-            all_patch_visual_tokens.append(patch_visual_tokens)
 
         return BatchFeature(
             data={
                 "pixel_values": per_image_pixel_values,
                 "target_sizes": per_image_target_sizes,
                 "grids": all_grids,
-                "source_image_visual_tokens": all_source_visual_tokens,
-                "patch_visual_tokens": all_patch_visual_tokens,
             },
             tensor_type=return_tensors,
+            skip_tensor_conversion=["pixel_values"],
         )
 
 
