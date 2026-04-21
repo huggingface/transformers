@@ -541,6 +541,64 @@ Linked PRs:
 - Minor change: `XXXFastImageProcessorKwargs` is removed in favor of `XXXImageProcessorKwargs` which will be shared between fast and slow processors (https://github.com/huggingface/transformers/pull/40931)
 
 
+### Image Processors
+
+The old slow/fast dual-file design — a PIL-based `image_processing_<model>.py` paired with a torchvision-based `image_processing_<model>_fast.py` — has been replaced with a named-backend architecture:
+
+- `image_processing_<model>.py` → **torchvision** backend (default; was previously `FooImageProcessorFast`)
+- `image_processing_pil_<model>.py` → **PIL** backend (was previously `FooImageProcessor`)
+
+Processor classes now inherit from `TorchvisionBackend` or `PilBackend` (defined in `image_processing_backends.py`), which provide ready-made implementations of all standard operations (`resize`, `rescale`, `normalize`, `center_crop`, `pad`) and a default `_preprocess` pipeline. `BaseImageProcessor` (in `image_processing_utils`) handles the shared preprocessing boilerplate — kwargs validation, default-filling from class attributes, and input preparation — so model-specific processors contain only what is genuinely unique to the model. Most processors now simply inherit from a backend and declare class-attribute defaults; only processors with custom logic (e.g. patch tiling) need to override `_preprocess`.
+
+The `image_processing_utils_fast` module has been removed; all shared logic now lives in `image_processing_utils`.
+
+#### `use_fast` is replaced by `backend`
+
+The `use_fast` parameter is deprecated. Use `backend` instead:
+
+```python
+# v4
+processor = AutoImageProcessor.from_pretrained("...", use_fast=True)   # torchvision
+processor = AutoImageProcessor.from_pretrained("...", use_fast=False)  # PIL
+
+# v5
+processor = AutoImageProcessor.from_pretrained("...", backend="torchvision")
+processor = AutoImageProcessor.from_pretrained("...", backend="pil")
+```
+
+When `backend` is not specified, the default is `"torchvision"` if torchvision is installed, otherwise `"pil"`. If the requested backend is unavailable, loading falls back to another available backend with a warning.
+
+#### `FooImageProcessorFast` class names are deprecated
+
+`FooImageProcessor` now refers to the torchvision-backed class (what was previously `FooImageProcessorFast`), and `FooImageProcessorPil` is the PIL-backed class (what was previously `FooImageProcessor`). Importing a `*Fast` class name still resolves correctly but emits a deprecation warning.
+
+#### `is_fast` property is deprecated
+
+Use `processor.backend == "torchvision"` instead of `processor.is_fast`.
+
+#### `AutoImageProcessor.register()` API change
+
+`slow_image_processor_class` and `fast_image_processor_class` are deprecated in favor of an `image_processor_classes` dict:
+
+```python
+# v4
+AutoImageProcessor.register(MyConfig, slow_image_processor_class=MyPilProcessor, fast_image_processor_class=MyTorchvisionProcessor)
+
+# v5
+AutoImageProcessor.register(MyConfig, image_processor_classes={"pil": MyPilProcessor, "torchvision": MyTorchvisionProcessor})
+```
+
+#### Custom backends
+
+The backend key space is open-ended. Any string (e.g. `"mlx"`, `"onnx"`) can be registered by subclassing `BaseImageProcessor`, implementing `process_image` and `_preprocess`, and calling `register_backend` on the processor class:
+
+```python
+LlavaNextImageProcessor.register_backend(name="mlx", backend_class=LlavaNextMlxProcessor, availability_check=lambda: is_mlx_available())
+processor = LlavaNextImageProcessor.from_pretrained("...", backend="mlx")
+```
+
+Linked PR: https://github.com/huggingface/transformers/pull/43514
+
 ## Modeling
 
 - Some `RotaryEmbeddings` layers will start returning a dict of tuples, in case the model uses several RoPE configurations (Gemma2, ModernBert). Each value will be a tuple of "cos, sin" per RoPE type.
