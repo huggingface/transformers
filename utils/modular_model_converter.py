@@ -1327,8 +1327,20 @@ def replace_unprotected_image_processing_imports(files: dict, all_imports: list)
         return files
 
     imported_objects = [x.name.value for x in import_from_image_processing.names]
+    nodes_to_add = {name: files["image_processing"][name] for name in imported_objects}
+    # Update the position inside the final file
+    for name, node_structure in nodes_to_add.items():
+        node_with_same_index = next(
+            v["node"] for v in body.values() if v["insert_idx"] == node_structure["insert_idx"]
+        )
+        # Insert the new node before the corresponding node if the corresponding node is a class
+        if isinstance(node_with_same_index, cst.ClassDef):
+            nodes_to_add[name]["insert_idx"] -= 0.5
+        # Otherwise, after it
+        else:
+            nodes_to_add[name]["insert_idx"] += 0.5
     # Add the nodes inside the body of `image_processing_pil`
-    body.update({name: files["image_processing"][name] for name in imported_objects})
+    body.update(nodes_to_add)
     return files
 
 

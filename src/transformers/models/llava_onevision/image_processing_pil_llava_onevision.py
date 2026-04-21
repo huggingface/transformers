@@ -36,6 +36,17 @@ from ...processing_utils import ImagesKwargs, Unpack
 from ...utils import TensorType, auto_docstring
 
 
+class LlavaOnevisionImageProcessorKwargs(ImagesKwargs, total=False):
+    r"""
+    image_grid_pinpoints (`list[list[int]]`, *optional*):
+        A list of possible resolutions to use for processing high resolution images. The best resolution is selected
+        based on the original size of the image. Can be overridden by `image_grid_pinpoints` in the `preprocess`
+        method.
+    """
+
+    image_grid_pinpoints: list[list[int]]
+
+
 @auto_docstring
 class LlavaOnevisionImageProcessorPil(PilBackend):
     model_input_names = ["pixel_values", "image_sizes", "batch_num_images"]
@@ -291,17 +302,6 @@ class LlavaOnevisionImageProcessorPil(PilBackend):
             result[:, :, start : start + width] = image
 
         return result
-
-
-class LlavaOnevisionImageProcessorKwargs(ImagesKwargs, total=False):
-    r"""
-    image_grid_pinpoints (`list[list[int]]`, *optional*):
-        A list of possible resolutions to use for processing high resolution images. The best resolution is selected
-        based on the original size of the image. Can be overridden by `image_grid_pinpoints` in the `preprocess`
-        method.
-    """
-
-    image_grid_pinpoints: list[list[int]]
 
 
 __all__ = ["LlavaOnevisionImageProcessorPil"]
