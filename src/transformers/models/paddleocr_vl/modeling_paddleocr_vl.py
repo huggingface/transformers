@@ -820,8 +820,8 @@ class PaddleOCRVisionEncoder(nn.Module):
         self,
         inputs_embeds: torch.FloatTensor,
         grid_thw: torch.LongTensor | None = None,
-        cu_seqlens: torch.Tensor | None = None,
         attention_mask: torch.Tensor | None = None,
+        cu_seqlens: torch.Tensor | None = None,
         position_ids: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutput:
@@ -832,13 +832,12 @@ class PaddleOCRVisionEncoder(nn.Module):
             than the model's internal embedding lookup matrix.
         grid_thw (`torch.LongTensor` of shape `(num_images, 3)`, *optional*):
             The temporal, height and width of feature shape of each image in LLM.
-        cu_seqlens (`torch.Tensor` of shape `(num_images + 1,)`, *optional*):
-            The cumulative sequence lengths of each image or video feature.
         attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
             The attention_mask used in forward function shape [batch_size X sequence_length] if not None.
-        position_ids (`torch.Tensor` of shape `(sequence_length, 2)`, *optional*):
-            Precomputed rotary position ids as `(row, column)` pairs. If not provided, will be computed based on
-            `image_grid_thw`.
+        cu_seqlens (`torch.IntTensor`, *optional*):
+            Precomputed cumulative sequence lengths (from `get_vision_cu_seqlens`).
+        position_ids (`torch.Tensor` of shape `(total_tokens, 2)`, *optional*):
+            Precomputed (row, col) position IDs (from `get_vision_position_ids`).
         """
         hidden_states = inputs_embeds
         attention_mask = create_bidirectional_mask(

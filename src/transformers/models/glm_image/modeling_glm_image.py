@@ -1164,8 +1164,8 @@ class GlmImageModel(GlmImagePreTrainedModel):
         if all_decode_position_ids:
             max_decode_len = max(x.shape[1] for x in all_decode_position_ids)
             padded_decode_pos_ids = [
-                F.pad(position_ids, (0, max_decode_len - position_ids.shape[1]), mode="replicate")
-                for position_ids in all_decode_position_ids
+                F.pad(pos_ids, (0, max_decode_len - pos_ids.shape[1]), mode="replicate")
+                for pos_ids in all_decode_position_ids
             ]
             self._cached_decode_position_ids = torch.stack(padded_decode_pos_ids, dim=0)  # [batch, 3, max_decode_len]
         else:
