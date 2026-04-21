@@ -178,10 +178,13 @@ jobs:
         
       - name: Tailscale # In order to be able to SSH when a test fails
         #uses: huggingface/tailscale-action@7d53c9737e53934c30290b5524d1c9b4a7c98c8a  # main
-        uses: huggingface/tailscale-action@test-2
+        uses: huggingface/tailscale-action@382cf9daef33b57fbbea5ab699de7b0ba95150e8
         with:
           authkey: ${{ secrets.TAILSCALE_SSH_AUTHKEY }}
           slackChannel: ${{ env.SLACKCHANNEL }}
           slackToken: ${{ secrets.SLACK_CIFEEDBACK_BOT_TOKEN }}
-          waitForSSH: true
-          sshTimeout: 15m
+          containerMode: true
+          version: '1.84.0'
+          sha256sum: 'c91eb43a92c209108bfaf1237696ac2089cc3d8fcf35d570d348cbfb19d8fb31'
+          #waitForSSH: true
+          #sshTimeout: 15m
