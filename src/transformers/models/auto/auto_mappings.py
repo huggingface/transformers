@@ -934,7 +934,6 @@ IMAGE_PROCESSOR_MAPPING_NAMES = OrderedDict(
         ("seggpt", {"pil": "SegGptImageProcessorPil", "torchvision": "SegGptImageProcessor"}),
         ("siglip", {"pil": "SiglipImageProcessorPil", "torchvision": "SiglipImageProcessor"}),
         ("siglip2", {"pil": "Siglip2ImageProcessorPil", "torchvision": "Siglip2ImageProcessor"}),
-        ("slanet", {"torchvision": "SLANeXtImageProcessor"}),
         ("slanext", {"torchvision": "SLANeXtImageProcessor"}),
         ("smolvlm", {"pil": "SmolVLMImageProcessorPil", "torchvision": "SmolVLMImageProcessor"}),
         ("superglue", {"pil": "SuperGlueImageProcessorPil", "torchvision": "SuperGlueImageProcessor"}),

@@ -13,7 +13,7 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was released on 2025-03-07 and added to Hugging Face Transformers on 2026-04-20.*
+*This model was released on 2025-03-07 and added to Hugging Face Transformers on 2026-04-21.*
 
 # SLANet
 
@@ -33,13 +33,15 @@ SLANet is a table structure recognition model developed by Baidu PaddlePaddle Vi
 
 ### Single input inference
 
-The example below demonstrates how to detect text with PP-OCRV5_Mobile_Det using the [`AutoModel`].
+The example below demonstrates how to detect text with SLANet using the [`AutoModel`].
 
 <hfoptions id="usage">
 <hfoption id="AutoModel">
 
 ```py
-import requests
+from io import BytesIO
+
+import httpx
 from PIL import Image
 from transformers import AutoImageProcessor, AutoModelForTableRecognition
 
@@ -47,7 +49,7 @@ model_path="PaddlePaddle/SLANet_plus_safetensors"
 model = AutoModelForTableRecognition.from_pretrained(model_path, device_map="auto")
 image_processor = AutoImageProcessor.from_pretrained(model_path)
 
-image = Image.open(requests.get("https://paddle-model-ecology.bj.bcebos.com/paddlex/imgs/demo_image/table_recognition.jpg", stream=True).raw)
+image = Image.open(BytesIO(httpx.get(image_url).content))
 inputs = image_processor(images=image, return_tensors="pt").to(model.device)
 outputs = model(**inputs)
 

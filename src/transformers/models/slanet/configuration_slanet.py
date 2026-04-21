@@ -41,9 +41,9 @@ class SLANetConfig(PreTrainedConfig):
     max_text_length (`int`, *optional*, defaults to 500):
         Maximum number of autoregressive decoding steps (tokens) for the structure and location decoder.
     csp_kernel_size (`int`, *optional*, defaults to 5):
-        The kernel size of the CSP layer.
-    csp_blocks_num (`int`, *optional*, defaults to 1):
-        Number of the CSP layer.
+        The kernel size of the Cross Stage Partial (CSP) layer.
+    csp_num_blocks (`int`, *optional*, defaults to 1):
+        Number of the Cross Stage Partial (CSP) layer.
     """
 
     model_type = "slanet"
@@ -57,7 +57,7 @@ class SLANetConfig(PreTrainedConfig):
 
     hidden_act: str = "hardswish"
     csp_kernel_size: int = 5
-    csp_blocks_num: int = 1
+    csp_num_blocks: int = 1
 
     def __post_init__(self, **kwargs):
         self.backbone_config, kwargs = consolidate_backbone_kwargs_to_config(
