@@ -3485,10 +3485,7 @@ class DisableMmapLoadingTest(unittest.TestCase):
     def test_is_on_hf_mount_no_match(self):
         from transformers.modeling_utils import _is_on_hf_mount
 
-        mounts = (
-            "proc /proc proc rw,nosuid,nodev,noexec,relatime 0 0\n"
-            "/dev/nvme0n1p1 /data ext4 rw,relatime 0 0\n"
-        )
+        mounts = "proc /proc proc rw,nosuid,nodev,noexec,relatime 0 0\n/dev/nvme0n1p1 /data ext4 rw,relatime 0 0\n"
         with patch("sys.platform", "linux"), patch("builtins.open", self._fake_open_factory(mounts)):
             self.assertFalse(_is_on_hf_mount("/data/model.safetensors"))
 
