@@ -190,7 +190,14 @@ class MiniCPMV4_6Processor(ProcessorMixin):
         )
 
     def _extract_video_frames(self, videos, **kwargs) -> list[list]:
-        """Extract frames from each video, returning a list of frame lists."""
+        """Extract frames from each video, returning a list of frame lists.
+
+        *videos* may be:
+        - a single path string,
+        - a flat list of path strings / pre-extracted frame lists,
+        - a nested list ``[[path1, path2], ...]`` produced by
+          ``apply_chat_template`` (one inner list per conversation).
+        """
         if isinstance(videos, str):
             videos = [videos]
 
@@ -198,20 +205,29 @@ class MiniCPMV4_6Processor(ProcessorMixin):
         stack_frames = kwargs.pop("stack_frames", None)
         use_ffmpeg = kwargs.pop("use_ffmpeg", None)
 
-        all_frames = []
-        for video in videos:
-            if isinstance(video, (list, tuple)):
-                all_frames.append(list(video))
-                continue
+        def _do_extract(source):
             main_frames, stacked = self.video_processor.extract_frames(
-                video, max_frames=max_frames, stack_frames=stack_frames, use_ffmpeg=use_ffmpeg,
+                source, max_frames=max_frames, stack_frames=stack_frames, use_ffmpeg=use_ffmpeg,
             )
             frames = []
             for i, frame in enumerate(main_frames):
                 frames.append(frame)
                 if stacked is not None and i < len(stacked) and stacked[i] is not None:
                     frames.append(stacked[i])
-            all_frames.append(frames)
+            return frames
+
+        all_frames = []
+        for video in videos:
+            if isinstance(video, str):
+                all_frames.append(_do_extract(video))
+            elif isinstance(video, (list, tuple)):
+                if video and isinstance(video[0], str):
+                    for v in video:
+                        all_frames.append(_do_extract(v))
+                else:
+                    all_frames.append(list(video))
+            else:
+                all_frames.append([video])
         return all_frames
 
     def post_process_image_text_to_text(self, generated_outputs, skip_special_tokens=True, **kwargs):

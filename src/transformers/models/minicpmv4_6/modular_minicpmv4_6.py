@@ -475,28 +475,35 @@ class MiniCPMV4_6ViTWindowAttentionMerger(nn.Module):
 
     def _init_weights(self):
         """Block-diagonal normal init: preserves the structural prior that each
-        2x2 window patch is processed independently at initialization."""
+        2x2 window patch is processed independently at initialization.
+
+        Uses ``init.*`` helpers so the ``_is_hf_initialized`` guard is
+        respected.  The ``linear_1`` block-diagonal init writes to *slices*
+        which do not inherit the flag, so we guard the entire block manually.
+        """
         for proj in (self.self_attn.q_proj, self.self_attn.k_proj,
                      self.self_attn.v_proj, self.self_attn.out_proj):
-            proj.weight.data.normal_()
-            proj.bias.data.zero_()
+            init.normal_(proj.weight)
+            init.zeros_(proj.bias)
 
         for ln in (self.layer_norm1, self.pre_norm):
-            ln.weight.data.fill_(1.0)
-            ln.bias.data.zero_()
+            init.ones_(ln.weight)
+            init.zeros_(ln.bias)
 
         hidden_size = self.embed_dim
         intermediate_size = self.linear_1.weight.shape[0] // 4
-        self.linear_1.weight.data.zero_()
-        for i in range(4):
-            self.linear_1.weight.data[
-                i * intermediate_size : (i + 1) * intermediate_size,
-                i * hidden_size : (i + 1) * hidden_size,
-            ].normal_()
-        self.linear_1.bias.data.normal_(std=1e-6)
+        if not getattr(self.linear_1.weight, "_is_hf_initialized", False):
+            self.linear_1.weight.data.zero_()
+            for i in range(4):
+                self.linear_1.weight.data[
+                    i * intermediate_size : (i + 1) * intermediate_size,
+                    i * hidden_size : (i + 1) * hidden_size,
+                ].normal_()
+            self.linear_1.weight._is_hf_initialized = True
+        init.normal_(self.linear_1.bias, std=1e-6)
 
-        self.linear_2.weight.data.normal_(std=0.25)
-        self.linear_2.bias.data.normal_(std=1e-6)
+        init.normal_(self.linear_2.weight, std=0.25)
+        init.normal_(self.linear_2.bias, std=1e-6)
 
     def get_window_index(self, target_sizes):
         window_h, window_w = self.window_kernel_size
@@ -507,6 +514,11 @@ class MiniCPMV4_6ViTWindowAttentionMerger(nn.Module):
         token_offset = 0
 
         for height, width in target_sizes:
+            # Cast 0-d device tensors to Python ints so that the whole function
+            # stays CPU-side integer arithmetic. `torch.arange` without `device=`
+            # always returns on CPU; mixing with a device-bound `token_offset`
+            # raises in strict PyTorch versions (2.10+).
+            height, width = int(height), int(width)
             if height % window_h != 0 or width % window_w != 0:
                 raise ValueError(
                     f"height={height}, width={width} must be divisible by window size ({window_h}, {window_w})"
