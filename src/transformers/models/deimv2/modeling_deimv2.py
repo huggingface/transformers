@@ -1078,7 +1078,7 @@ class Deimv2PreTrainedModel(PreTrainedModel):
     base_model_prefix = "deimv2"
     main_input_name = "pixel_values"
     input_modalities = ("image",)
-    _no_split_modules = [r"Deimv2HybridEncoder", r"Deimv2DecoderLayer"]
+    _no_split_modules = [r"Deimv2HybridEncoder", r"Deimv2LiteEncoder", r"Deimv2DecoderLayer"]
     _supports_sdpa = True
     _supports_flash_attn = True
     _supports_attention_backend = True
@@ -1202,7 +1202,8 @@ class Deimv2LiteEncoder(Deimv2PreTrainedModel):
 
         self.post_init()
 
-    @capture_outputs(tie_last_hidden_states=False)
+    @merge_with_config_defaults
+    @capture_outputs
     def forward(self, inputs_embeds: list[torch.Tensor], **kwargs: Unpack[TransformersKwargs]) -> Deimv2EncoderOutput:
         projected_features = [self.input_proj[i](feature) for i, feature in enumerate(inputs_embeds)]
         projected_features.append(self.down_conv1(self.down_pool1(projected_features[-1])))
@@ -2022,7 +2023,9 @@ class Deimv2ObjectDetectionOutput(ModelOutput):
     """
 )
 class Deimv2ForObjectDetection(Deimv2PreTrainedModel):
-    _no_split_modules = [r"Deimv2HybridEncoder", r"Deimv2LiteEncoder", r"Deimv2DecoderLayer"]
+    # When using clones, all layers > 0 will be clones, but layer 0 *is* required
+    # We can't initialize the model on meta device as some weights are modified during the initialization
+    _no_split_modules = None
     _tied_weights_keys = {
         r"bbox_embed.(?![0])\d+": r"bbox_embed.0",
         r"class_embed.(?![0])\d+": r"^class_embed.0",

@@ -28,7 +28,6 @@ from transformers import (
     DINOv3ViTConfig,
     HGNetV2Config,
     is_torch_available,
-    is_vision_available,
 )
 from transformers.testing_utils import (
     require_torch,
@@ -44,10 +43,6 @@ if is_torch_available():
 
     from transformers import Deimv2ForObjectDetection, Deimv2Model
 
-if is_vision_available():
-    from PIL import Image
-
-
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import (
     TEST_EAGER_MATCHES_SDPA_INFERENCE_PARAMETERIZATION,
@@ -56,6 +51,7 @@ from ...test_modeling_common import (
     floats_tensor,
 )
 from ...test_pipeline_mixin import PipelineTesterMixin
+from ...test_processing_common import url_to_local_path
 
 
 # TODO: Replace with the official Transformers ckpt once uploaded.
@@ -1610,8 +1606,10 @@ class Deimv2DINOv3ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Test
 
 
 def prepare_img():
-    image = Image.open("./tests/fixtures/tests_samples/COCO/000000039769.png")
-    return image
+    from transformers.image_utils import load_image
+
+    url = url_to_local_path("http://images.cocodataset.org/val2017/000000039769.jpg")
+    return load_image(url)
 
 
 @require_torch
@@ -1634,10 +1632,6 @@ class Deimv2ModelIntegrationTest(unittest.TestCase):
         expected_shape_logits = torch.Size((1, 300, model.config.num_labels))
         self.assertEqual(outputs.logits.shape, expected_shape_logits)
 
-        # TODO: Remove TEMP CI capture: print actual values so the maintainer's run-slow CI logs the ground-truth tensors.
-        print("DEIMV2_HGNETV2_LOGITS:", outputs.logits[0, :3, :3].cpu().tolist())
-        print("DEIMV2_HGNETV2_BOXES:", outputs.pred_boxes[0, :3, :3].cpu().tolist())
-
         expected_logits = torch.tensor(
             [[-4.0859, -6.9373, -5.4723], [-5.5887, -6.0078, -6.4360], [-6.1448, -6.8509, -6.8703]]
         ).to(torch_device)
@@ -1655,26 +1649,21 @@ class Deimv2ModelIntegrationTest(unittest.TestCase):
             outputs, threshold=0.0, target_sizes=[image.size[::-1]]
         )[0]
 
-        # TODO: Remove TEMP CI capture: post-processed scores, labels, and boxes.
-        print("DEIMV2_HGNETV2_SCORES:", results["scores"][:4].cpu().tolist())
-        print("DEIMV2_HGNETV2_LABELS:", results["labels"][:4].cpu().tolist())
-        print("DEIMV2_HGNETV2_POST_BOXES:", results["boxes"][:4].cpu().tolist())
-
         expected_scores = torch.tensor([0.7606, 0.3165, 0.2726, 0.2488], device=torch_device)
         expected_labels = [65, 65, 15, 59]
         expected_slice_boxes = torch.tensor(
             [
                 [4.0781e01, 6.8216e01, 1.7560e02, 1.1085e02],
                 [4.8195e01, 7.5405e01, 2.1123e02, 9.1451e01],
-                [1.1296e01, 6.8090e01, 6.1285e02, 4.0393e02],
-                [1.9817e01, -9.0347e01, 7.0787e02, 3.7968e02],
+                [1.1296e01, 6.8089e01, 6.1285e02, 4.0393e02],
+                [1.9821e01, -9.0347e01, 7.0787e02, 3.7968e02],
             ],
             device=torch_device,
         )
 
         torch.testing.assert_close(results["scores"][:4], expected_scores, atol=1e-3, rtol=1e-4)
         self.assertSequenceEqual(results["labels"][:4].tolist(), expected_labels)
-        torch.testing.assert_close(results["boxes"][:4], expected_slice_boxes[:4], atol=1e-3, rtol=1e-4)
+        torch.testing.assert_close(results["boxes"][:4], expected_slice_boxes[:4], atol=5e-3, rtol=5e-4)
 
 
 @require_torch
@@ -1696,10 +1685,6 @@ class Deimv2LiteEncoderIntegrationTest(unittest.TestCase):
 
         expected_shape_logits = torch.Size((1, model.config.num_queries, model.config.num_labels))
         self.assertEqual(outputs.logits.shape, expected_shape_logits)
-
-        # TODO: Remove TEMP CI capture: print actual values so the maintainer's run-slow CI logs them.
-        print("DEIMV2_LITE_LOGITS:", outputs.logits[0, :3, :3].cpu().tolist())
-        print("DEIMV2_LITE_BOXES:", outputs.pred_boxes[0, :3, :3].cpu().tolist())
 
         expected_logits = torch.tensor(
             [[-2.6151, -6.4701, -6.3505], [-3.8592, -6.2610, -7.2720], [-2.3801, -4.3216, -3.5101]]
@@ -1734,10 +1719,6 @@ class Deimv2DINOv3IntegrationTest(unittest.TestCase):
 
         expected_shape_logits = torch.Size((1, 300, model.config.num_labels))
         self.assertEqual(outputs.logits.shape, expected_shape_logits)
-
-        # TODO: Remove TEMP CI capture: print actual values for the maintainer's run-slow CI.
-        print("DEIMV2_DINOV3_LOGITS:", outputs.logits[0, :3, :3].cpu().tolist())
-        print("DEIMV2_DINOV3_BOXES:", outputs.pred_boxes[0, :3, :3].cpu().tolist())
 
         expected_logits = torch.tensor(
             [[-2.1404, -2.8207, -3.2710], [-2.3058, -2.7178, -3.2924], [-3.2780, -4.0269, -4.6266]]

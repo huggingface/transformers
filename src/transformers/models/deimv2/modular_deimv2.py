@@ -24,6 +24,7 @@ from ...backbone_utils import load_backbone
 from ...modeling_outputs import ModelOutput
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, logging
+from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import OutputRecorder, capture_outputs
 from ..auto import AutoConfig
 from ..d_fine.configuration_d_fine import DFineConfig
@@ -485,6 +486,8 @@ class Deimv2DecoderLayer(DFineDecoderLayer):
 
 
 class Deimv2PreTrainedModel(DFinePreTrainedModel):
+    _no_split_modules = [r"Deimv2HybridEncoder", r"Deimv2LiteEncoder", r"Deimv2DecoderLayer"]
+
     @torch.no_grad()
     def _init_weights(self, module):
         super()._init_weights(module)
@@ -532,7 +535,8 @@ class Deimv2LiteEncoder(Deimv2PreTrainedModel):
 
         self.post_init()
 
-    @capture_outputs(tie_last_hidden_states=False)
+    @merge_with_config_defaults
+    @capture_outputs
     def forward(self, inputs_embeds: list[torch.Tensor], **kwargs: Unpack[TransformersKwargs]) -> Deimv2EncoderOutput:
         projected_features = [self.input_proj[i](feature) for i, feature in enumerate(inputs_embeds)]
         projected_features.append(self.down_conv1(self.down_pool1(projected_features[-1])))
@@ -850,8 +854,6 @@ class Deimv2Model(DFineModel):
 
 
 class Deimv2ForObjectDetection(DFineForObjectDetection):
-    _no_split_modules = [r"Deimv2HybridEncoder", r"Deimv2LiteEncoder", r"Deimv2DecoderLayer"]
-
     @property
     def _tied_weights_keys(self):
         keys = {

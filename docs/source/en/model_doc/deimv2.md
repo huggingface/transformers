@@ -33,7 +33,6 @@ from transformers.image_utils import load_image
 url = "http://images.cocodataset.org/val2017/000000039769.jpg"
 image = load_image(url)
 
-# TODO: Replace with Transformers-compatible ckpts once uploaded.
 image_processor = AutoImageProcessor.from_pretrained("harshaljanjani/DEIMv2_HGNetv2_N_COCO_Transformers")
 model = AutoModelForObjectDetection.from_pretrained("harshaljanjani/DEIMv2_HGNetv2_N_COCO_Transformers", device_map="auto")
 
