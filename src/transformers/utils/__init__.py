@@ -150,6 +150,7 @@ from .import_utils import (
     is_hqq_available,
     is_huggingface_hub_greater_or_equal,
     is_in_notebook,
+    is_ipython_available,
     is_jinja_available,
     is_jmespath_available,
     is_jumanpp_available,

@@ -41,6 +41,7 @@ from ...utils import (
     TransformersKwargs,
     auto_docstring,
     can_return_tuple,
+    is_accelerate_available,
     logging,
     torch_compilable_check,
 )
@@ -62,6 +63,7 @@ from ..gemma3n.modeling_gemma3n import (
     Gemma3nModel,
     Gemma3nModelOutputWithPast,
     Gemma3nMultimodalEmbedder,
+    Gemma3nPreTrainedModel,
     Gemma3nRMSNorm,
     apply_rotary_pos_emb,
     eager_attention_forward,
@@ -70,6 +72,10 @@ from ..llama.modeling_llama import LlamaRotaryEmbedding
 from ..mixtral.modeling_mixtral import MixtralExperts
 from ..moonshine_streaming.modeling_moonshine_streaming import sliding_window_mask_function
 from .configuration_gemma4 import Gemma4AudioConfig, Gemma4Config, Gemma4TextConfig, Gemma4VisionConfig
+
+
+if is_accelerate_available():
+    pass
 
 
 logger = logging.get_logger(__name__)
@@ -1152,21 +1158,15 @@ class Gemma4TextScaledWordEmbedding(Gemma3TextScaledWordEmbedding):
 # ---- Model Classes ----
 
 
-class Gemma4PreTrainedModel(PreTrainedModel):
-    config: Gemma4Config
-    supports_gradient_checkpointing = True
-    _supports_flash_attn = True
-    _supports_sdpa = True
-    _supports_flex_attn = True
-    _can_compile_fullgraph = True
-    _supports_attention_backend = True
+class Gemma4PreTrainedModel(Gemma3nPreTrainedModel):
     _no_split_modules = ["Gemma4TextDecoderLayer", "Gemma4VisionEncoderLayer", "Gemma4AudioLayer"]
-    _skip_keys_device_placement = ["past_key_values", "shared_kv_states"]
     input_modalities = ("image", "text", "video", "audio")
+    _can_record_outputs = None  # override
+    _skip_keys_device_placement = ["past_key_values", "shared_kv_states"]
 
     @torch.no_grad()
     def _init_weights(self, module):
-        super()._init_weights(module)
+        PreTrainedModel._init_weights(module)
         if isinstance(module, Gemma4VisionPatchEmbedder):
             init.ones_(module.position_embedding_table)
         elif isinstance(module, Gemma4AudioRelPositionalEncoding):
@@ -1235,6 +1235,9 @@ class Gemma4TextModel(Gemma3TextModel):
         self.rotary_emb = Gemma4TextRotaryEmbedding(config)
         self.unique_layer_types = set(self.config.layer_types)
 
+        # Per-Layer Embeddings (PLE): auxiliary embedding that feeds a residual signal
+        # into each decoder layer. See `get_per_layer_inputs()` and `project_per_layer_inputs()`
+        # for the full pipeline. The embedding is packed: total dim = num_layers * per_layer_dim.
         self.hidden_size_per_layer_input = config.hidden_size_per_layer_input
         if self.hidden_size_per_layer_input:
             self.embed_tokens_per_layer = Gemma4TextScaledWordEmbedding(
@@ -1261,6 +1264,16 @@ class Gemma4TextModel(Gemma3TextModel):
                 )
 
     def get_per_layer_inputs(self, input_ids: torch.Tensor | None, inputs_embeds: torch.Tensor | None) -> torch.Tensor:
+        """Compute the token-identity component of Per-Layer Embeddings (PLE).
+
+        Looks up `input_ids` in `embed_tokens_per_layer` (a scaled embedding that multiplies
+        by `sqrt(hidden_size_per_layer_input)`) and reshapes the packed output from
+        `[batch, seq, num_hidden_layers * hidden_size_per_layer_input]` to
+        `[batch, seq, num_hidden_layers, hidden_size_per_layer_input]`.
+
+        If only `inputs_embeds` is provided (no `input_ids`), reverses the main embedding
+        to recover `input_ids` for the PLE lookup.
+        """
         if not self.hidden_size_per_layer_input:
             raise RuntimeError(
                 "Attempting to call get_per_layer_inputs() from a model initialized with a config that does not support"
@@ -1299,6 +1312,17 @@ class Gemma4TextModel(Gemma3TextModel):
         inputs_embeds: torch.Tensor,
         per_layer_inputs: torch.Tensor | None = None,
     ) -> torch.Tensor:
+        """Compute the context-aware component of PLE and combine with token-identity.
+
+        Projects `inputs_embeds` through `per_layer_model_projection` (Linear), scales by
+        `1/sqrt(hidden_size)`, reshapes to `[batch, seq, num_layers, ple_dim]`, and normalizes
+        with `per_layer_projection_norm` (RMSNorm).
+
+        If `per_layer_inputs` (the token-identity component from `get_per_layer_inputs()`)
+        is provided, combines both: `(context_projection + token_identity) * (1/sqrt(2))`.
+        If `per_layer_inputs` is None (e.g. for multimodal inputs where input_ids are not
+        available), returns just the context projection.
+        """
         if not self.hidden_size_per_layer_input:
             raise RuntimeError(
                 "Attempting to call project_per_layer_inputs() from a model initialized with a config that does not"
@@ -1720,6 +1744,12 @@ class Gemma4Model(Gemma3nModel):
             f"language_model.{name}" for name in self.language_model._keys_to_ignore_on_load_unexpected
         ]
 
+    def get_per_layer_input_embeddings(self):
+        return self.language_model.embed_tokens_per_layer
+
+    def set_per_layer_input_embeddings(self, value):
+        self.language_model.embed_tokens_per_layer = value
+
     @can_return_tuple
     @auto_docstring(custom_intro="Projects the last hidden state from the vision model into language model space.")
     def get_image_features(
@@ -2011,6 +2041,12 @@ class Gemma4ForConditionalGeneration(Gemma3nForConditionalGeneration):
             f"model.{name}" for name in self.model._keys_to_ignore_on_load_unexpected
         ]
 
+    def get_per_layer_input_embeddings(self):
+        return self.model.get_per_layer_input_embeddings()
+
+    def set_per_layer_input_embeddings(self, value):
+        self.model.set_per_layer_input_embeddings(value)
+
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
@@ -2070,25 +2106,7 @@ class Gemma4ForConditionalGeneration(Gemma3nForConditionalGeneration):
 
         loss = None
         if labels is not None:
-            # Upcast to float if we need to compute the loss to avoid potential precision issues
-            logits = logits.float()
-            shift_logits = logits[..., :-1, :]
-            shift_labels = labels[..., 1:]
-            if attention_mask is not None:
-                # we use the input attention mask to shift the logits and labels, because it is 2D.
-                # we also crop attn mask in case it is longer, which happens in PrefixTuning with peft
-                shift_attention_mask = attention_mask[:, -shift_logits.shape[1] :].to(logits.device)
-                shift_logits = shift_logits[shift_attention_mask.to(logits.device) != 0].contiguous()
-                shift_labels = shift_labels[shift_attention_mask.to(shift_labels.device) != 0].contiguous()
-            else:
-                shift_logits = shift_logits.contiguous()
-                shift_labels = shift_labels.contiguous()
-            # Flatten the tokens
-            loss_fct = nn.CrossEntropyLoss()
-
-            flat_logits = shift_logits.view(-1, self.config.get_text_config().vocab_size)
-            flat_labels = shift_labels.view(-1).to(shift_logits.device)
-            loss = loss_fct(flat_logits, flat_labels)
+            loss = self.loss_function(logits, labels, self.config.get_text_config().vocab_size, **kwargs)
 
         return Gemma4CausalLMOutputWithPast(
             loss=loss,

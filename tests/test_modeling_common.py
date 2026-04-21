@@ -44,7 +44,7 @@ from transformers import (
     set_seed,
 )
 from transformers.conversion_mapping import get_model_conversion_mapping
-from transformers.core_model_loading import WeightRenaming, process_target_pattern
+from transformers.core_model_loading import PrefixChange, WeightRenaming, process_target_pattern
 from transformers.integrations import HfDeepSpeedConfig
 from transformers.integrations.deepspeed import (
     is_deepspeed_available,
@@ -2162,6 +2162,9 @@ class ModelTesterMixin:
 
             # Check that the model can still do a forward pass successfully (every parameter should be resized)
             if not is_deepspeed_zero3_enabled():
+                # Input ids should be expanded to the new maximum size of the vocabulary
+                inputs_dict["input_ids"][:, -2] = new_model_vocab_size - 1
+
                 # A distriputed launcher is needed for the forward pass when deepspeed is enabled
                 model_inputs = self._prepare_for_class(inputs_dict, model_class)
                 model(**model_inputs)
@@ -3351,24 +3354,22 @@ class ModelTesterMixin:
                     tmpdirname, dtype=torch.bfloat16, attn_implementation="eager", device_map=torch_device
                 )
 
+                def _get_output_logits(outputs):
+                    if "hidden_states" in outputs:
+                        return outputs.hidden_states[-1]
+                    elif model.config.is_encoder_decoder:
+                        return outputs.decoder_hidden_states[-1]
+                    elif "logits_per_image" in outputs:
+                        return outputs.logits_per_image
+                    else:
+                        return outputs.logits
+
                 # First run without attention mask
                 outputs = model(**first_inputs)
-                logits_1_eager = (
-                    outputs.hidden_states[-1]
-                    if "hidden_states" in outputs
-                    else outputs.logits_per_image
-                    if not model.config.is_encoder_decoder
-                    else outputs.decoder_hidden_states[-1]
-                )
+                logits_1_eager = _get_output_logits(outputs)
                 # Second run with attention mask and padding
                 outputs = model(**second_inputs)
-                logits_2_eager = (
-                    outputs.hidden_states[-1]
-                    if "hidden_states" in outputs
-                    else outputs.logits_per_image
-                    if not model.config.is_encoder_decoder
-                    else outputs.decoder_hidden_states[-1]
-                )
+                logits_2_eager = _get_output_logits(outputs)
 
                 # Switch to FA
                 del model
@@ -3376,22 +3377,10 @@ class ModelTesterMixin:
                     tmpdirname, dtype=torch.bfloat16, attn_implementation=attn_implementation, device_map=torch_device
                 )
                 outputs = model(**first_inputs)
-                logits_1_fa = (
-                    outputs.hidden_states[-1]
-                    if "hidden_states" in outputs
-                    else outputs.logits_per_image
-                    if not model.config.is_encoder_decoder
-                    else outputs.decoder_hidden_states[-1]
-                )
+                logits_1_fa = _get_output_logits(outputs)
                 # Second run with attention mask and padding
                 outputs = model(**second_inputs)
-                logits_2_fa = (
-                    outputs.hidden_states[-1]
-                    if "hidden_states" in outputs
-                    else outputs.logits_per_image
-                    if not model.config.is_encoder_decoder
-                    else outputs.decoder_hidden_states[-1]
-                )
+                logits_2_fa = _get_output_logits(outputs)
 
                 # Check the results
                 torch.testing.assert_close(logits_1_eager, logits_1_fa, atol=atol, rtol=rtol)
@@ -4743,7 +4732,7 @@ class ModelTesterMixin:
                 len(unused_entries) == 0, f"The following entries of the TP-plan are not valid: {unused_entries}"
             )
 
-    def test_reverse_loading_mapping(self, check_keys_were_modified=True):
+    def test_reverse_loading_mapping(self, check_keys_were_modified=True, skip_base_model=False):
         """Make sure we can load and save correctly the models having any weight renaming mapping or weight conversion
         mapping.
         Note that this test would be better if we could start from the serialized keys, and check that the model
@@ -4757,6 +4746,11 @@ class ModelTesterMixin:
             check_keys_were_modified (`bool`, *optional*, defaults to `True`):
                 Whether to expect keys being modified or not. In some cases, models do not change keys but
                 their weights, e.g. via transpose, memory alignment, etc.
+            skip_base_model (`bool`, *optional*, defaults to `False`):
+                Sometimes, mappings are only visible when applied to the model with head, and not visible on the
+                base model. This allows to skip the check on the base model. See e.g. `llava` mapping where this
+                is the case. In practice, the mappings are still coherent and a base model can still be loaded from
+                the head model, thanks to the `base_model_prefix` which will remove the prefix automatically.
         """
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
 
@@ -4769,6 +4763,8 @@ class ModelTesterMixin:
         config_to_set.num_dense_layers = 1  # lfm2_moe
 
         for model_class in self.all_model_classes:
+            if skip_base_model and "For" not in model_class.__name__:
+                continue
             # Each individual model is a subtest
             with self.subTest(model_class.__name__):
                 model = model_class(copy.deepcopy(config))
@@ -4776,6 +4772,11 @@ class ModelTesterMixin:
                 conversions = get_model_conversion_mapping(model, add_legacy=False)
                 if len(conversions) == 0:
                     self.skipTest(f"No conversion found for {model_class}")
+                # The PrefixChange conersions are only there for BC with hub checkpoints, but cannot be tested
+                # for as we skip them automatically if they are not present in loaded checkpoints (we want to
+                # mess up the prefixes only if the loaded checkpoints were doing so as well)
+                if all(isinstance(conversion, PrefixChange) for conversion in conversions):
+                    self.skipTest(f"Only PrefixChange conversions found for {model_class}")
 
                 # Find the model keys, so the targets according to the conversions
                 model_keys = list(model.state_dict().keys())
@@ -4793,6 +4794,11 @@ class ModelTesterMixin:
 
                 # Check that for each conversion entry, we at least map to one key
                 for conversion in conversions:
+                    # The PrefixChange conersions are only there for BC with hub checkpoints, but cannot be tested
+                    # for as we skip them automatically if they are not present in loaded checkpoints (we want to
+                    # mess up the prefixes only if the loaded checkpoints were doing so as well)
+                    if isinstance(conversion, PrefixChange):
+                        continue
                     for source_pattern in conversion.source_patterns:
                         # Some patterns are written for gen-model only and won't be applied on base model
                         if "lm_head" in source_pattern and model_class not in [
@@ -5665,7 +5671,12 @@ def compare_state_dicts(state_dict1, state_dict2) -> bool:
     """Make sure 2 state dicts are the exact same"""
     # Make sure the keys are the exact same
     if sorted(state_dict1.keys()) != sorted(state_dict2.keys()):
-        raise ValueError("The keys of both state dict are not the same")
+        in1_not2 = sorted(set(state_dict1.keys()) - set(state_dict2.keys()))
+        in2_not1 = sorted(set(state_dict2.keys()) - set(state_dict1.keys()))
+        raise ValueError(
+            f"The keys of both state dict are not the same.\nKeys found in the first item but not second: {in1_not2}"
+            f"\nKeys found in the second item but not first: {in2_not1}"
+        )
 
     for k, v1 in state_dict1.items():
         v2 = state_dict2[k]

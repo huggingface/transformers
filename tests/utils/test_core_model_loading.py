@@ -11,6 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+import copy
 import unittest
 from types import SimpleNamespace
 
@@ -22,9 +23,12 @@ from transformers.conversion_mapping import get_checkpoint_conversion_mapping, r
 from transformers.core_model_loading import (
     Chunk,
     Concatenate,
+    Conv3dToLinear,
     ErnieFuseAndSplitTextVisionExperts,
+    LinearToConv3d,
     MergeModulelist,
     PermuteForRope,
+    PrefixChange,
     WeightConverter,
     WeightRenaming,
     build_glob_alternation,
@@ -208,10 +212,11 @@ class DummyRoot(nn.Module):
     base_model_prefix = "model"
     config: PretrainedConfig
 
-    def __init__(self, add_extra_moe=False):
+    def __init__(self, add_extra_moe=False, with_mlp=True):
         super().__init__()
         self.model = DummyTopModel(add_extra_moe)
-        self.mlp = DummyMLP()
+        if with_mlp:
+            self.mlp = DummyMLP()
 
 
 class TestConvertAndLoadStateDict(unittest.TestCase):
@@ -718,6 +723,28 @@ class TestConvertAndLoadStateDict(unittest.TestCase):
 
 
 class TestConversionMapping(unittest.TestCase):
+    def test_conv3d_linear_conversion_ops(self):
+        weight_name = "patch_embed.proj.weight"
+        kernel_size = (2, 2, 2)
+
+        def convert(converter, weight):
+            return converter.convert({weight_name: weight}, [weight_name], [weight_name])[weight_name]
+
+        conv_to_linear = Conv3dToLinear(in_channels=3, kernel_size=kernel_size)
+        linear_to_conv = LinearToConv3d(in_channels=3, kernel_size=kernel_size)
+
+        conv_weight = torch.randn(2 * 3 * 2 * 2 * 2, dtype=torch.float32).reshape(2, 3, *kernel_size)
+        linear_weight = torch.randn(2 * 24, dtype=torch.float32).reshape(2, 24)
+
+        # test conv3d -> linear
+        torch.testing.assert_close(convert(conv_to_linear, conv_weight), conv_weight.reshape(2, 24))
+        # test linear -> conv3d
+        torch.testing.assert_close(convert(linear_to_conv, linear_weight), linear_weight.reshape(2, 3, *kernel_size))
+        # test conv3d -> linear -> conv3d round trip
+        torch.testing.assert_close(
+            convert(conv_to_linear.reverse_op, convert(conv_to_linear, conv_weight)), conv_weight
+        )
+
     def test_register_checkpoint_conversion_mapping(self):
         register_checkpoint_conversion_mapping(
             "foobar",
@@ -753,6 +780,245 @@ class TestConversionMapping(unittest.TestCase):
         )
 
         self.assertEqual(len(get_checkpoint_conversion_mapping("foobarbaz")), 2)
+
+    def test_can_remove_prefix(self):
+        model = DummyRoot()
+        model.config = PretrainedConfig()
+
+        bad_serialized_checkpoints = {f"bad_name.{k}": v.clone() for k, v in model.state_dict().items()}
+        weight_mapping = [PrefixChange(prefix_to_remove="bad_name")]
+
+        loading_info, _ = convert_and_load_state_dict_in_model(
+            model,
+            bad_serialized_checkpoints,
+            LoadStateDictConfig(weight_mapping=copy.deepcopy(weight_mapping)),
+            tp_plan=None,
+        )
+
+        # Assert we can load without issues
+        self.assertEqual(loading_info.missing_keys, set())
+        self.assertEqual(loading_info.unexpected_keys, set())
+        self.assertEqual(loading_info.mismatched_keys, set())
+        self.assertEqual(loading_info.conversion_errors, {})
+
+        # Assert that re-saving will lead to the exact same state_dict, re-adding the bad prefix
+        saved_state_dict = revert_weight_conversion(model, model.state_dict())
+        self.assertEqual(set(bad_serialized_checkpoints.keys()), set(saved_state_dict.keys()))
+        for k, v in saved_state_dict.items():
+            self.assertTrue((v == bad_serialized_checkpoints[k]).all())
+
+        # Now, check that using the same conversion with already good keys works when loading and resaving
+        good_serialized_checkpoints = {k: v.clone() for k, v in model.state_dict().items()}
+
+        loading_info, _ = convert_and_load_state_dict_in_model(
+            model,
+            good_serialized_checkpoints,
+            LoadStateDictConfig(weight_mapping=copy.deepcopy(weight_mapping)),
+            tp_plan=None,
+        )
+
+        # Assert we can load without issues
+        self.assertEqual(loading_info.missing_keys, set())
+        self.assertEqual(loading_info.unexpected_keys, set())
+        self.assertEqual(loading_info.mismatched_keys, set())
+        self.assertEqual(loading_info.conversion_errors, {})
+
+        # Assert that re-saving will lead to the exact same state_dict, i.e. it will not re-add the bad prefix since it was
+        # not present at loading time
+        saved_state_dict = revert_weight_conversion(model, model.state_dict())
+        self.assertEqual(set(good_serialized_checkpoints.keys()), set(saved_state_dict.keys()))
+        for k, v in saved_state_dict.items():
+            self.assertTrue((v == good_serialized_checkpoints[k]).all())
+
+        # Now, use a fresh model, without going trough loading first, so the model won't have `_weight_conversions` attached
+        # and the prefix should not be added when saving directly (i.e. the conversion should be dropped)
+        model = DummyRoot()
+        saved_state_dict = revert_weight_conversion(model, model.state_dict())
+        model_state_dict = model.state_dict()
+        self.assertEqual(set(model_state_dict.keys()), set(saved_state_dict.keys()))
+        for k, v in saved_state_dict.items():
+            self.assertTrue((v == model_state_dict[k]).all())
+
+    def test_can_add_prefix(self):
+        # we cannot have another param next to the model, otherwise the prefix adding will already be added even with correct
+        # checkpoints starting with the prefix
+        model = DummyRoot(with_mlp=False)
+        model.config = PretrainedConfig()
+
+        bad_serialized_checkpoints = {k.removeprefix("model."): v.clone() for k, v in model.state_dict().items()}
+        weight_mapping = [PrefixChange(prefix_to_add="model")]
+
+        loading_info, _ = convert_and_load_state_dict_in_model(
+            model,
+            bad_serialized_checkpoints,
+            LoadStateDictConfig(weight_mapping=copy.deepcopy(weight_mapping)),
+            tp_plan=None,
+        )
+
+        # Assert we can load without issues
+        self.assertEqual(loading_info.missing_keys, set())
+        self.assertEqual(loading_info.unexpected_keys, set())
+        self.assertEqual(loading_info.mismatched_keys, set())
+        self.assertEqual(loading_info.conversion_errors, {})
+
+        # Assert that re-saving will lead to the exact same state_dict, re-adding the bad prefix
+        saved_state_dict = revert_weight_conversion(model, model.state_dict())
+        self.assertEqual(set(bad_serialized_checkpoints.keys()), set(saved_state_dict.keys()))
+        for k, v in saved_state_dict.items():
+            self.assertTrue((v == bad_serialized_checkpoints[k]).all())
+
+        # Now, check that using the same conversion with already good keys works when loading and resaving
+        good_serialized_checkpoints = {k: v.clone() for k, v in model.state_dict().items()}
+
+        loading_info, _ = convert_and_load_state_dict_in_model(
+            model,
+            good_serialized_checkpoints,
+            LoadStateDictConfig(weight_mapping=copy.deepcopy(weight_mapping)),
+            tp_plan=None,
+        )
+
+        # Assert we can load without issues
+        self.assertEqual(loading_info.missing_keys, set())
+        self.assertEqual(loading_info.unexpected_keys, set())
+        self.assertEqual(loading_info.mismatched_keys, set())
+        self.assertEqual(loading_info.conversion_errors, {})
+
+        # Assert that re-saving will lead to the exact same state_dict, i.e. it will not remove the prefix since it was
+        # already present at loading time
+        saved_state_dict = revert_weight_conversion(model, model.state_dict())
+        self.assertEqual(set(good_serialized_checkpoints.keys()), set(saved_state_dict.keys()))
+        for k, v in saved_state_dict.items():
+            self.assertTrue((v == good_serialized_checkpoints[k]).all())
+
+        # Now, use a fresh model, without going trough loading first, so the model won't have `_weight_conversions` attached
+        # and the prefix should not be removed when saving directly (i.e. the conversion should be dropped)
+        model = DummyRoot()
+        saved_state_dict = revert_weight_conversion(model, model.state_dict())
+        model_state_dict = model.state_dict()
+        self.assertEqual(set(model_state_dict.keys()), set(saved_state_dict.keys()))
+        for k, v in saved_state_dict.items():
+            self.assertTrue((v == model_state_dict[k]).all())
+
+    def test_can_remove_prefix_submodule(self):
+        model = DummyRoot()
+        model.config = PretrainedConfig()
+
+        bad_serialized_checkpoints = {
+            f"model.layers.bad_name.{k.replace('model.layers.', '')}" if "model.layers." in k else k: v.clone()
+            for k, v in model.state_dict().items()
+        }
+        weight_mapping = [PrefixChange(prefix_to_remove="bad_name", model_prefix="model.layers")]
+
+        loading_info, _ = convert_and_load_state_dict_in_model(
+            model,
+            bad_serialized_checkpoints,
+            LoadStateDictConfig(weight_mapping=copy.deepcopy(weight_mapping)),
+            tp_plan=None,
+        )
+
+        # Assert we can load without issues
+        self.assertEqual(loading_info.missing_keys, set())
+        self.assertEqual(loading_info.unexpected_keys, set())
+        self.assertEqual(loading_info.mismatched_keys, set())
+        self.assertEqual(loading_info.conversion_errors, {})
+
+        # Assert that re-saving will lead to the exact same state_dict, re-adding the bad prefix
+        saved_state_dict = revert_weight_conversion(model, model.state_dict())
+        self.assertEqual(set(bad_serialized_checkpoints.keys()), set(saved_state_dict.keys()))
+        for k, v in saved_state_dict.items():
+            self.assertTrue((v == bad_serialized_checkpoints[k]).all())
+
+        # Now, check that using the same conversion with already good keys works when loading and resaving
+        good_serialized_checkpoints = {k: v.clone() for k, v in model.state_dict().items()}
+
+        loading_info, _ = convert_and_load_state_dict_in_model(
+            model,
+            good_serialized_checkpoints,
+            LoadStateDictConfig(weight_mapping=copy.deepcopy(weight_mapping)),
+            tp_plan=None,
+        )
+
+        # Assert we can load without issues
+        self.assertEqual(loading_info.missing_keys, set())
+        self.assertEqual(loading_info.unexpected_keys, set())
+        self.assertEqual(loading_info.mismatched_keys, set())
+        self.assertEqual(loading_info.conversion_errors, {})
+
+        # Assert that re-saving will lead to the exact same state_dict, i.e. it will not re-add the bad prefix since it was
+        # not present at loading time
+        saved_state_dict = revert_weight_conversion(model, model.state_dict())
+        self.assertEqual(set(good_serialized_checkpoints.keys()), set(saved_state_dict.keys()))
+        for k, v in saved_state_dict.items():
+            self.assertTrue((v == good_serialized_checkpoints[k]).all())
+
+        # Now, use a fresh model, without going trough loading first, so the model won't have `_weight_conversions` attached
+        # and the prefix should not be added when saving directly (i.e. the conversion should be dropped)
+        model = DummyRoot()
+        saved_state_dict = revert_weight_conversion(model, model.state_dict())
+        model_state_dict = model.state_dict()
+        self.assertEqual(set(model_state_dict.keys()), set(saved_state_dict.keys()))
+        for k, v in saved_state_dict.items():
+            self.assertTrue((v == model_state_dict[k]).all())
+
+    def test_can_add_prefix_submodule(self):
+        # we cannot have another param next to the model, otherwise the prefix adding will already be added even with correct
+        # checkpoints starting with the prefix
+        model = DummyRoot(with_mlp=False)
+        model.config = PretrainedConfig()
+
+        bad_serialized_checkpoints = {k.replace(".layers.", "."): v.clone() for k, v in model.state_dict().items()}
+        weight_mapping = [PrefixChange(prefix_to_add="layers", model_prefix="model")]
+
+        loading_info, _ = convert_and_load_state_dict_in_model(
+            model,
+            bad_serialized_checkpoints,
+            LoadStateDictConfig(weight_mapping=copy.deepcopy(weight_mapping)),
+            tp_plan=None,
+        )
+
+        # Assert we can load without issues
+        self.assertEqual(loading_info.missing_keys, set())
+        self.assertEqual(loading_info.unexpected_keys, set())
+        self.assertEqual(loading_info.mismatched_keys, set())
+        self.assertEqual(loading_info.conversion_errors, {})
+
+        # Assert that re-saving will lead to the exact same state_dict, re-adding the bad prefix
+        saved_state_dict = revert_weight_conversion(model, model.state_dict())
+        self.assertEqual(set(bad_serialized_checkpoints.keys()), set(saved_state_dict.keys()))
+        for k, v in saved_state_dict.items():
+            self.assertTrue((v == bad_serialized_checkpoints[k]).all())
+
+        # Now, check that using the same conversion with already good keys works when loading and resaving
+        good_serialized_checkpoints = {k: v.clone() for k, v in model.state_dict().items()}
+
+        loading_info, _ = convert_and_load_state_dict_in_model(
+            model,
+            good_serialized_checkpoints,
+            LoadStateDictConfig(weight_mapping=copy.deepcopy(weight_mapping)),
+            tp_plan=None,
+        )
+
+        # Assert we can load without issues
+        self.assertEqual(loading_info.missing_keys, set())
+        self.assertEqual(loading_info.unexpected_keys, set())
+        self.assertEqual(loading_info.mismatched_keys, set())
+        self.assertEqual(loading_info.conversion_errors, {})
+
+        # Assert that re-saving will lead to the exact same state_dict, i.e. it will not remove the prefix since it was
+        # already present at loading time
+        saved_state_dict = revert_weight_conversion(model, model.state_dict())
+        self.assertEqual(set(good_serialized_checkpoints.keys()), set(saved_state_dict.keys()))
+        for k, v in saved_state_dict.items():
+            self.assertTrue((v == good_serialized_checkpoints[k]).all())
+
+        # Now, use a fresh model, without going trough loading first, so the model won't have `_weight_conversions` attached
+        # and the prefix should not be removed when saving directly (i.e. the conversion should be dropped)
+        model = DummyRoot()
+        saved_state_dict = revert_weight_conversion(model, model.state_dict())
+        model_state_dict = model.state_dict()
+        self.assertEqual(set(model_state_dict.keys()), set(saved_state_dict.keys()))
+        for k, v in saved_state_dict.items():
+            self.assertTrue((v == model_state_dict[k]).all())
 
 
 if __name__ == "__main__":

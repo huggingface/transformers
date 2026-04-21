@@ -17,7 +17,12 @@ from functools import wraps
 
 from ..utils import logging
 from ..utils.generic import GeneralInterface
-from ..utils.import_utils import is_torch_available, is_torch_less_or_equal, is_torchdynamo_compiling
+from ..utils.import_utils import (
+    is_torch_available,
+    is_torch_greater_or_equal,
+    is_torch_less_or_equal,
+    is_torchdynamo_compiling,
+)
 
 
 if is_torch_available():
@@ -275,6 +280,20 @@ def _can_use_grouped_mm(input: torch.Tensor, weight: torch.Tensor, offs: torch.T
         #    issue: https://github.com/pytorch/pytorch/issues/172440
         return False
 
+    # On CUDA, `grouped_mm` availability also depends on GPU compute capability:
+    # `torch.nn.functional.grouped_mm` in torch>=2.10 and `torch._grouped_mm` in torch>=2.9 support SM80+
+    # but older `torch._grouped_mm` requires SM90+.
+    if weight.device.type == "cuda":
+        if hasattr(torch.nn.functional, "grouped_mm"):
+            return torch.cuda.get_device_capability(weight.device) >= (8, 0)
+        if hasattr(torch, "_grouped_mm"):
+            if is_torch_greater_or_equal("2.9", accept_dev=True):
+                return torch.cuda.get_device_capability(weight.device) >= (8, 0)
+            else:
+                return torch.cuda.get_device_capability(weight.device) >= (9, 0)
+
+        return False
+
     return hasattr(torch.nn.functional, "grouped_mm") or hasattr(torch, "_grouped_mm")
 
 
@@ -364,6 +383,10 @@ def grouped_mm_experts_forward(
     sample_weights = top_k_weights.reshape(-1)  # (S,)
     expert_ids = top_k_index.reshape(-1)  # (S,)
 
+    # Handle invalid expert IDs from Expert Parallelism (EP)
+    invalid_mask = expert_ids >= self.num_experts
+    expert_ids = expert_ids.clamp(0, self.num_experts - 1)
+
     # Sort by expert for grouped processing
     perm = torch.argsort(expert_ids)
     inv_perm = torch.empty_like(perm)
@@ -414,8 +437,10 @@ def grouped_mm_experts_forward(
         proj_out, selected_weights, offsets, bias=selected_biases, is_transposed=self.is_transposed
     )  # (S, hidden_dim)
 
-    # Apply routing weights
+    # Apply routing weights and zero out invalid expert contributions from EP
     weighted_out = proj_out * sample_weights_g.unsqueeze(-1)  # (S, hidden_dim)
+    invalid_mask_g = invalid_mask[perm]
+    weighted_out.masked_fill_(invalid_mask_g.unsqueeze(-1), 0.0)
 
     # Restore original order
     weighted_out = weighted_out[inv_perm]  # (S, hidden_dim)

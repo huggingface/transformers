@@ -46,11 +46,22 @@ from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPool
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import ModelOutput, TransformersKwargs, auto_docstring, can_return_tuple, torch_compilable_check
+from ...utils import (
+    ModelOutput,
+    TransformersKwargs,
+    auto_docstring,
+    can_return_tuple,
+    is_accelerate_available,
+    torch_compilable_check,
+)
 from ...utils.generic import maybe_autocast, merge_with_config_defaults
 from ...utils.output_capturing import OutputRecorder, capture_outputs
 from ..auto.modeling_auto import AutoModel
 from .configuration_gemma4 import Gemma4AudioConfig, Gemma4Config, Gemma4TextConfig, Gemma4VisionConfig
+
+
+if is_accelerate_available():
+    from accelerate.hooks import add_hook_to_module
 
 
 @dataclass
@@ -1425,19 +1436,20 @@ class Gemma4TextScaledWordEmbedding(nn.Embedding):
         return super().forward(input_ids) * self.embed_scale.to(self.weight.dtype)
 
 
-# ---- Model Classes ----
-
-
+@auto_docstring
 class Gemma4PreTrainedModel(PreTrainedModel):
     config: Gemma4Config
+    base_model_prefix = "model"
     supports_gradient_checkpointing = True
+    _no_split_modules = ["Gemma4TextDecoderLayer", "Gemma4VisionEncoderLayer", "Gemma4AudioLayer"]
+    _skip_keys_device_placement = ["past_key_values", "shared_kv_states"]
     _supports_flash_attn = True
     _supports_sdpa = True
     _supports_flex_attn = True
+
     _can_compile_fullgraph = True
     _supports_attention_backend = True
-    _no_split_modules = ["Gemma4TextDecoderLayer", "Gemma4VisionEncoderLayer", "Gemma4AudioLayer"]
-    _skip_keys_device_placement = ["past_key_values", "shared_kv_states"]
+    _can_record_outputs = None  # override
     input_modalities = ("image", "text", "video", "audio")
 
     @torch.no_grad()
@@ -1493,6 +1505,44 @@ class Gemma4PreTrainedModel(PreTrainedModel):
             init.zeros_(module.std_bias)
             init.ones_(module.std_scale)
 
+    def get_per_layer_input_embeddings(self):
+        return self.base_model.embed_tokens_per_layer
+
+    def set_per_layer_input_embeddings(self, value):
+        self.base_model.embed_tokens_per_layer = value
+
+    def resize_token_embeddings(
+        self,
+        new_num_tokens: int | None = None,
+        pad_to_multiple_of: int | None = None,
+        mean_resizing: bool = True,
+    ) -> nn.Embedding:
+        inputs_embeds = super().resize_token_embeddings(
+            new_num_tokens=new_num_tokens,
+            pad_to_multiple_of=pad_to_multiple_of,
+            mean_resizing=mean_resizing,
+        )
+        self._resize_per_layer_embeddings(new_num_tokens, pad_to_multiple_of, mean_resizing)
+        return inputs_embeds
+
+    def _resize_per_layer_embeddings(
+        self,
+        new_num_tokens: int | None = None,
+        pad_to_multiple_of: int | None = None,
+        mean_resizing: bool = True,
+    ):
+        self.config.get_text_config().vocab_size_per_layer_input = self.vocab_size
+        if self.config.get_text_config().hidden_size_per_layer_input:
+            embed_tokens_per_layer = self.get_per_layer_input_embeddings()
+            new_embeddings_per_layer = self._get_resized_embeddings(
+                embed_tokens_per_layer, new_num_tokens, pad_to_multiple_of, mean_resizing
+            )
+            if hasattr(embed_tokens_per_layer, "_hf_hook"):
+                hook = embed_tokens_per_layer._hf_hook
+                add_hook_to_module(new_embeddings_per_layer, hook)
+            new_embeddings_per_layer.requires_grad_(embed_tokens_per_layer.weight.requires_grad)
+            self.set_per_layer_input_embeddings(new_embeddings_per_layer)
+
 
 @auto_docstring(custom_intro="The base Gemma 4 language model without a language modeling head.")
 class Gemma4TextModel(Gemma4PreTrainedModel):
@@ -1521,6 +1571,9 @@ class Gemma4TextModel(Gemma4PreTrainedModel):
         self.gradient_checkpointing = False
         self.unique_layer_types = set(self.config.layer_types)
 
+        # Per-Layer Embeddings (PLE): auxiliary embedding that feeds a residual signal
+        # into each decoder layer. See `get_per_layer_inputs()` and `project_per_layer_inputs()`
+        # for the full pipeline. The embedding is packed: total dim = num_layers * per_layer_dim.
         self.hidden_size_per_layer_input = config.hidden_size_per_layer_input
         if self.hidden_size_per_layer_input:
             self.embed_tokens_per_layer = Gemma4TextScaledWordEmbedding(
@@ -1638,6 +1691,16 @@ class Gemma4TextModel(Gemma4PreTrainedModel):
         )
 
     def get_per_layer_inputs(self, input_ids: torch.Tensor | None, inputs_embeds: torch.Tensor | None) -> torch.Tensor:
+        """Compute the token-identity component of Per-Layer Embeddings (PLE).
+
+        Looks up `input_ids` in `embed_tokens_per_layer` (a scaled embedding that multiplies
+        by `sqrt(hidden_size_per_layer_input)`) and reshapes the packed output from
+        `[batch, seq, num_hidden_layers * hidden_size_per_layer_input]` to
+        `[batch, seq, num_hidden_layers, hidden_size_per_layer_input]`.
+
+        If only `inputs_embeds` is provided (no `input_ids`), reverses the main embedding
+        to recover `input_ids` for the PLE lookup.
+        """
         if not self.hidden_size_per_layer_input:
             raise RuntimeError(
                 "Attempting to call get_per_layer_inputs() from a model initialized with a config that does not support"
@@ -1676,6 +1739,17 @@ class Gemma4TextModel(Gemma4PreTrainedModel):
         inputs_embeds: torch.Tensor,
         per_layer_inputs: torch.Tensor | None = None,
     ) -> torch.Tensor:
+        """Compute the context-aware component of PLE and combine with token-identity.
+
+        Projects `inputs_embeds` through `per_layer_model_projection` (Linear), scales by
+        `1/sqrt(hidden_size)`, reshapes to `[batch, seq, num_layers, ple_dim]`, and normalizes
+        with `per_layer_projection_norm` (RMSNorm).
+
+        If `per_layer_inputs` (the token-identity component from `get_per_layer_inputs()`)
+        is provided, combines both: `(context_projection + token_identity) * (1/sqrt(2))`.
+        If `per_layer_inputs` is None (e.g. for multimodal inputs where input_ids are not
+        available), returns just the context projection.
+        """
         if not self.hidden_size_per_layer_input:
             raise RuntimeError(
                 "Attempting to call project_per_layer_inputs() from a model initialized with a config that does not"
@@ -2331,6 +2405,12 @@ class Gemma4Model(Gemma4PreTrainedModel):
             audio_hidden_states=audio_features if input_features is not None else None,
         )
 
+    def get_per_layer_input_embeddings(self):
+        return self.language_model.embed_tokens_per_layer
+
+    def set_per_layer_input_embeddings(self, value):
+        self.language_model.embed_tokens_per_layer = value
+
     @can_return_tuple
     @auto_docstring(custom_intro="Projects the last hidden state from the audio encoder into language model space.")
     def get_audio_features(
@@ -2389,6 +2469,7 @@ class Gemma4Model(Gemma4PreTrainedModel):
 )
 class Gemma4ForConditionalGeneration(Gemma4PreTrainedModel, GenerationMixin):
     _tied_weights_keys = {"lm_head.weight": "model.language_model.embed_tokens.weight"}
+    accepts_loss_kwargs = False
     base_model_prefix = "model"
 
     def __init__(self, config: Gemma4Config):
@@ -2400,12 +2481,6 @@ class Gemma4ForConditionalGeneration(Gemma4PreTrainedModel, GenerationMixin):
             f"model.{name}" for name in self.model._keys_to_ignore_on_load_unexpected
         ]
         self.post_init()
-
-    def get_input_embeddings(self):
-        return self.model.get_input_embeddings()
-
-    def set_input_embeddings(self, value):
-        self.model.set_input_embeddings(value)
 
     @auto_docstring
     def get_image_features(
@@ -2482,25 +2557,7 @@ class Gemma4ForConditionalGeneration(Gemma4PreTrainedModel, GenerationMixin):
 
         loss = None
         if labels is not None:
-            # Upcast to float if we need to compute the loss to avoid potential precision issues
-            logits = logits.float()
-            shift_logits = logits[..., :-1, :]
-            shift_labels = labels[..., 1:]
-            if attention_mask is not None:
-                # we use the input attention mask to shift the logits and labels, because it is 2D.
-                # we also crop attn mask in case it is longer, which happens in PrefixTuning with peft
-                shift_attention_mask = attention_mask[:, -shift_logits.shape[1] :].to(logits.device)
-                shift_logits = shift_logits[shift_attention_mask.to(logits.device) != 0].contiguous()
-                shift_labels = shift_labels[shift_attention_mask.to(shift_labels.device) != 0].contiguous()
-            else:
-                shift_logits = shift_logits.contiguous()
-                shift_labels = shift_labels.contiguous()
-            # Flatten the tokens
-            loss_fct = nn.CrossEntropyLoss()
-
-            flat_logits = shift_logits.view(-1, self.config.get_text_config().vocab_size)
-            flat_labels = shift_labels.view(-1).to(shift_logits.device)
-            loss = loss_fct(flat_logits, flat_labels)
+            loss = self.loss_function(logits, labels, self.config.get_text_config().vocab_size, **kwargs)
 
         return Gemma4CausalLMOutputWithPast(
             loss=loss,
@@ -2552,6 +2609,12 @@ class Gemma4ForConditionalGeneration(Gemma4PreTrainedModel, GenerationMixin):
             model_inputs["input_features_mask"] = input_features_mask
 
         return model_inputs
+
+    def get_per_layer_input_embeddings(self):
+        return self.model.get_per_layer_input_embeddings()
+
+    def set_per_layer_input_embeddings(self, value):
+        self.model.set_per_layer_input_embeddings(value)
 
     @staticmethod
     def create_masks_for_generate(

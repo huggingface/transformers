@@ -29,7 +29,7 @@ from dataclasses import dataclass, field
 from functools import partial, wraps
 from itertools import cycle
 from threading import Thread
-from typing import Optional, TypeVar, get_type_hints
+from typing import Any, Optional, TypeVar, get_type_hints
 from zipfile import is_zipfile
 
 import torch
@@ -782,14 +782,16 @@ def _get_dtype(
                         dtype = sharded_metadata["dtype"]
                     elif state_dict is not None:
                         dtype = get_state_dict_dtype(state_dict)
+                    elif checkpoint_files is not None and checkpoint_files[0].endswith(".gguf"):
+                        dtype = torch.float32
                     else:
                         state_dict = load_state_dict(
                             checkpoint_files[0], map_location="meta", weights_only=weights_only
                         )
                         dtype = get_state_dict_dtype(state_dict)
                     logger.info(
-                        "Since the `dtype` attribute can't be found in model's config object, "
-                        "will use dtype={dtype} as derived from model's weights"
+                        f"Since the `dtype` attribute can't be found in model's config object, "
+                        f"will use dtype={dtype} as derived from model's weights"
                     )
             elif hasattr(torch, dtype):
                 dtype = getattr(torch, dtype)
@@ -1949,9 +1951,9 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         """Detect whether the class supports setting its attention implementation dynamically. It is an ugly check based on
         opening the file, but avoids maintaining yet another property flag.
         """
-        class_module = sys.modules[cls.__module__]
-        # This can happen for a custom model in a jupyter notebook or repl for example - simply do not allow to set it then
-        if not hasattr(class_module, "__file__"):
+        class_module = sys.modules.get(cls.__module__)
+        # Missing module entry (e.g. cleared by a test) or custom model in a jupyter notebook / repl -> do not allow to set it
+        if class_module is None or not hasattr(class_module, "__file__"):
             return False
         class_file = class_module.__file__
         with open(class_file, "r", encoding="utf-8") as f:
@@ -1968,9 +1970,9 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         """Detect whether the class supports setting its experts implementation dynamically. It is an ugly check based on
         opening the file, but avoids maintaining yet another property flag.
         """
-        class_module = sys.modules[cls.__module__]
-        # This can happen for a custom model in a jupyter notebook or repl for example - simply do not allow to set it then
-        if not hasattr(class_module, "__file__"):
+        class_module = sys.modules.get(cls.__module__)
+        # Missing module entry (e.g. cleared by a test) or custom model in a jupyter notebook / repl -> do not allow to set it
+        if class_module is None or not hasattr(class_module, "__file__"):
             return False
         class_file = class_module.__file__
         with open(class_file, "r", encoding="utf-8") as f:
@@ -2771,6 +2773,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             old_num_tokens, old_embedding_dim = old_embeddings.weight.size()
 
         if old_num_tokens == new_num_tokens and not is_deepspeed_zero3_enabled():
+            old_embeddings.num_embeddings = new_num_tokens  # maybe weights are tied which doesn't update attr
             return old_embeddings
 
         if not isinstance(old_embeddings, nn.Embedding):
@@ -2910,6 +2913,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             )
 
         if old_num_tokens == new_num_tokens and not is_deepspeed_zero3_enabled():
+            old_lm_head.out_features = new_num_tokens  # maybe weights are tied which doesn't update attr
             return old_lm_head
 
         if not isinstance(old_lm_head, nn.Linear):
@@ -3694,6 +3698,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         revision: str = "main",
         use_safetensors: bool | None = None,
         weights_only: bool = True,
+        fusion_config: dict[str, bool | dict[str, Any]] | None = None,
         **kwargs,
     ) -> SpecificPreTrainedModelType:
         r"""
@@ -3872,6 +3877,13 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                 Indicates whether unpickler should be restricted to loading only tensors, primitive types,
                 dictionaries and any types added via torch.serialization.add_safe_globals().
                 When set to False, we can load wrapper tensor subclass weights.
+            fusion_config (`dict[str, bool | dict[str, Any]]`, *optional*):
+                Optional fusion configuration applied before model instantiation. Each key enables a fusion family and
+                its value can either be `True` to enable that fusion with default options or a dictionary of
+                family-specific options. For example, `{"patch_embeddings": True}` enables patch embedding fusion.
+                This should only be used as an inference optimization, as it can slightly change outputs. If omitted,
+                `from_pretrained()` falls back to `config.fusion_config` when available. Refer to the fusion mapping
+                guide in `docs/source/en/fusion_mapping.md` for more details.
             key_mapping (`dict[str, str], *optional*):
                 A potential mapping of the weight names if using a model on the Hub which is compatible to a Transformers
                 architecture, but was not converted accordingly.
@@ -4068,6 +4080,11 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
 
         is_quantized = hf_quantizer is not None
 
+        # Find the correct dtype based on current state
+        config, dtype = _get_dtype(
+            dtype, checkpoint_files, config, sharded_metadata, state_dict, weights_only, hf_quantizer
+        )
+
         if gguf_file:
             from .modeling_gguf_pytorch_utils import load_gguf_checkpoint
 
@@ -4075,16 +4092,24 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             # passed directly as a kwarg from now on
             with torch.device("meta"):
                 dummy_model = cls(config)
-            state_dict = load_gguf_checkpoint(checkpoint_files[0], return_tensors=True, model_to_load=dummy_model)[
-                "tensors"
-            ]
 
-        # Find the correct dtype based on current state
-        config, dtype = _get_dtype(
-            dtype, checkpoint_files, config, sharded_metadata, state_dict, weights_only, hf_quantizer
-        )
+            state_dict = load_gguf_checkpoint(
+                checkpoint_files[0], return_tensors=True, model_to_load=dummy_model, torch_dtype=dtype
+            )["tensors"]
 
         config.name_or_path = pretrained_model_name_or_path
+
+        # Overwrite `config.fusion_config` if it is provided.
+        if fusion_config is not None:
+            config.fusion_config = copy.deepcopy(fusion_config)
+
+        # Register fusion patches
+        fusion_config = getattr(config, "fusion_config", None)
+        if fusion_config is not None:
+            from .fusion_mapping import register_fusion_patches
+
+            register_fusion_patches(cls, config, fusion_config)
+
         model_init_context = cls.get_init_context(dtype, is_quantized, _is_ds_init_called, allow_all_kernels)
 
         config = copy.deepcopy(config)  # We do not want to modify the config inplace in from_pretrained.
@@ -4256,7 +4281,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                 model=model,
                 state_dict=merged_state_dict,
                 load_config=load_config,
-                tp_plan=model._tp_plan,
+                tp_plan=model.tp_plan,
                 disk_offload_index=disk_offload_index,
             )
 
@@ -4444,15 +4469,31 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         self._loss_function = value
 
     def kernelize(self, mode=None):
+        """Temporarily register hidden kernel wrappers so `kernelize` can discover and replace them."""
         if not is_kernels_available():
             raise ValueError(
-                "Kernels are not available. To use kernels, please install kernels using `pip install kernels`"
+                "Kernels are not available. To use kernels, please install kernels using `pip install -U kernels`"
             )
         from kernels import Device, Mode, kernelize
 
-        mode = Mode.INFERENCE if not self.training else Mode.TRAINING if mode is None else mode
-        kernelize(self, device=Device(type=self.device.type), mode=mode)
-        self._use_kernels = True
+        def attach_hidden_kernels(module):
+            for name, fn in getattr(module, "_hidden_kernels", {}).items():
+                if name not in dict(module.named_children()):
+                    module.register_module(name, fn)
+
+        def detach_hidden_kernels(module):
+            for name in getattr(module, "_hidden_kernels", {}):
+                delattr(module, name)
+
+        try:
+            self.apply(attach_hidden_kernels)
+
+            mode = Mode.INFERENCE if not self.training else Mode.TRAINING if mode is None else mode
+            kernelize(self, device=Device(type=self.device.type), mode=mode)
+            self._use_kernels = True
+
+        finally:
+            self.apply(detach_hidden_kernels)
 
     @property
     def use_kernels(self) -> bool:
@@ -4516,10 +4557,10 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         # In this case we need to move everything back
         if is_fsdp_enabled() and not is_local_dist_rank_0() and not is_quantized:
             for key, param in self.named_parameters():
-                value = torch.empty_like(param, device="cpu")
+                value = torch.zeros_like(param, device="cpu")
                 _load_parameter_into_model(self, key, value)
             for key, buffer in self.named_buffers():
-                value = torch.empty_like(buffer, device="cpu")
+                value = torch.zeros_like(buffer, device="cpu")
                 _load_parameter_into_model(self, key, value)
             return
 
@@ -4589,6 +4630,10 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         # `_keys_to_ignore_on_load_unexpected` as it touches many models -> we add it manually to the existing patterns
         has_inv_freq_buffers = any(buffer.endswith("rotary_emb.inv_freq") for buffer, _ in self.named_buffers())
         additional_unexpected_patterns = [r"rotary_emb\.inv_freq"] if has_inv_freq_buffers else []
+        # Same idea for `position_ids`: used to be a persistent buffer, now `persistent=False` in most models.
+        has_position_ids_buffers = any(buffer.endswith("position_ids") for buffer, _ in self.named_buffers())
+        if has_position_ids_buffers:
+            additional_unexpected_patterns.append(r"(^|\.)position_ids$")
 
         missing_patterns = self._keys_to_ignore_on_load_missing or []
         unexpected_patterns = (self._keys_to_ignore_on_load_unexpected or []) + additional_unexpected_patterns
