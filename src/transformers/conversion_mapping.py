@@ -641,6 +641,22 @@ def _build_checkpoint_conversion_mapping():
                 operations=[MergeModulelist(dim=0)],
             ),
         ],
+        "granite4_vision": [
+            WeightRenaming(
+                source_patterns=r"(vision_tower\.)vision_model\.",
+                target_patterns=r"\1",
+            ),
+        ],
+        "legacy": [
+            WeightRenaming(
+                source_patterns="LayerNorm.gamma",
+                target_patterns="LayerNorm.weight",
+            ),
+            WeightRenaming(
+                source_patterns="LayerNorm.beta",
+                target_patterns="LayerNorm.bias",
+            ),
+        ],
         "nomic_bert": [
             WeightRenaming(r"encoder.layers", r"layers"),
             WeightRenaming(r"emb_ln", r"embeddings.LayerNorm"),
