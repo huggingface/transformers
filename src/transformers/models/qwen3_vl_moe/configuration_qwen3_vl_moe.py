@@ -64,8 +64,6 @@ class Qwen3VLMoeTextConfig(PreTrainedConfig):
         "layers.*.mlp.up_proj": "colwise",
         "layers.*.mlp.down_proj": "rowwise",
     }
-    # Expert-only EP plan: only shards MoE experts, not attention.
-    # Attention is left unsharded — FSDP2 handles attention weight distribution.
     base_model_ep_plan = {
         "layers.*.mlp.gate": "ep_router",
         "layers.*.mlp.experts.gate_up_proj": "grouped_gemm",
