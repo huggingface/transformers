@@ -647,16 +647,6 @@ def _build_checkpoint_conversion_mapping():
                 target_patterns=r"\1",
             ),
         ],
-        "legacy": [
-            WeightRenaming(
-                source_patterns="LayerNorm.gamma",
-                target_patterns="LayerNorm.weight",
-            ),
-            WeightRenaming(
-                source_patterns="LayerNorm.beta",
-                target_patterns="LayerNorm.bias",
-            ),
-        ],
         "nomic_bert": [
             WeightRenaming(r"encoder.layers", r"layers"),
             WeightRenaming(r"emb_ln", r"embeddings.LayerNorm"),
