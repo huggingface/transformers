@@ -193,7 +193,7 @@ jobs:
 
       - name: Reinstall transformers in edit mode (remove the one installed during docker image build)
         working-directory: /transformers
-        run: python3 -m pip uninstall -y transformers && python3 -m pip install -e . && python3 -m pip install pytest-opentelemetry
+        run: python3 -m pip uninstall -y transformers && python3 -m pip install -e .[ci]
 
       - name: NVIDIA-SMI
         run: |
@@ -230,7 +230,7 @@ jobs:
       - name: Run all pipeline tests on GPU
         working-directory: /transformers
         run: |
-          python3 utils/configure_ci_otel.py --job-name run_pipelines_torch_gpu -- python3 -m pytest -n 1 -v --dist=loadfile --make-reports="${machine_type}_run_pipelines_torch_gpu_test_reports" tests/pipelines
+          configure-ci-otel --job-name run_pipelines_torch_gpu -- python3 -m pytest -n 1 -v --dist=loadfile --make-reports="${machine_type}_run_pipelines_torch_gpu_test_reports" tests/pipelines
 
       - name: Failure short reports
         if: ${{ failure() }}
@@ -265,7 +265,7 @@ jobs:
 
       - name: Reinstall transformers in edit mode (remove the one installed during docker image build)
         working-directory: /transformers
-        run: python3 -m pip uninstall -y transformers && python3 -m pip install -e . && python3 -m pip install pytest-opentelemetry
+        run: python3 -m pip uninstall -y transformers && python3 -m pip install -e .[ci]
 
       - name: NVIDIA-SMI
         run: |
@@ -303,7 +303,7 @@ jobs:
         working-directory: /transformers
         run: |
           pip install -r examples/pytorch/_tests_requirements.txt
-          python3 utils/configure_ci_otel.py --job-name run_examples_gpu -- python3 -m pytest -v --make-reports="${machine_type}_run_examples_gpu_test_reports" examples/pytorch
+          configure-ci-otel --job-name run_examples_gpu -- python3 -m pytest -v --make-reports="${machine_type}_run_examples_gpu_test_reports" examples/pytorch
 
       - name: Failure short reports
         if: ${{ failure() }}
@@ -338,7 +338,7 @@ jobs:
 
       - name: Reinstall transformers in edit mode (remove the one installed during docker image build)
         working-directory: ${{ inputs.working-directory-prefix }}/transformers
-        run: python3 -m pip uninstall -y transformers && python3 -m pip install -e . && python3 -m pip install pytest-opentelemetry
+        run: python3 -m pip uninstall -y transformers && python3 -m pip install -e .[ci]
 
       - name: Update / Install some packages (for Past CI)
         if: ${{ contains(inputs.docker, '-past-') && contains(inputs.docker, '-pytorch-') }}
@@ -403,7 +403,7 @@ jobs:
       - name: Run all tests on GPU
         working-directory: ${{ inputs.working-directory-prefix }}/transformers
         run: |
-          script -q -c "python3 utils/configure_ci_otel.py --job-name run_torch_cuda_extensions_gpu -- python3 -m pytest -v -rsfE --make-reports=${machine_type}_run_torch_cuda_extensions_gpu_test_reports tests/trainer/distributed/test_trainer_distributed_deepspeed.py" test_outputs.txt
+          script -q -c "configure-ci-otel --job-name run_torch_cuda_extensions_gpu -- python3 -m pytest -v -rsfE --make-reports=${machine_type}_run_torch_cuda_extensions_gpu_test_reports tests/trainer/distributed/test_trainer_distributed_deepspeed.py" test_outputs.txt
 
       - name: Failure short reports
         if: ${{ failure() }}
@@ -453,7 +453,7 @@ jobs:
 
       - name: Reinstall transformers in edit mode (remove the one installed during docker image build)
         working-directory: /transformers
-        run: python3 -m pip uninstall -y transformers && python3 -m pip install -e . && python3 -m pip install pytest-opentelemetry
+        run: python3 -m pip uninstall -y transformers && python3 -m pip install -e .[ci]
 
       - name: NVIDIA-SMI
         run: |
@@ -492,7 +492,7 @@ jobs:
         env:
           folders: ${{ matrix.folders }}
         run: |
-          python3 utils/configure_ci_otel.py --job-name run_quantization_torch_gpu_${matrix_folders} -- python3 -m pytest -v --make-reports="${machine_type}_run_quantization_torch_gpu_${matrix_folders}_test_reports" tests/${folders}
+          configure-ci-otel --job-name run_quantization_torch_gpu_${matrix_folders} -- python3 -m pytest -v --make-reports="${machine_type}_run_quantization_torch_gpu_${matrix_folders}_test_reports" tests/${folders}
 
       - name: Failure short reports
         if: ${{ failure() }}
@@ -527,7 +527,7 @@ jobs:
 
       - name: Reinstall transformers in edit mode
         working-directory: /transformers
-        run: python3 -m pip uninstall -y transformers && python3 -m pip install -e .[testing] && python3 -m pip install pytest-opentelemetry
+        run: python3 -m pip uninstall -y transformers && python3 -m pip install -e .[testing,ci]
   
       - name: Install kernels
         working-directory: /transformers
@@ -566,7 +566,7 @@ jobs:
       - name: Run kernel tests on GPU
         working-directory: /transformers
         run: |
-          python3 utils/configure_ci_otel.py --job-name run_kernels_gpu -- python3 -m pytest -v --make-reports="${machine_type}_run_kernels_gpu_test_reports" tests/kernels/test_kernels.py
+          configure-ci-otel --job-name run_kernels_gpu -- python3 -m pytest -v --make-reports="${machine_type}_run_kernels_gpu_test_reports" tests/kernels/test_kernels.py
 
       - name: Failure short reports
         if: ${{ failure() }}

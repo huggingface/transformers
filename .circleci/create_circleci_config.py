@@ -127,8 +127,10 @@ class CircleCIJob:
         self.install_steps.append("uv pip install git+https://github.com/ydshieh/pytest.git@8.4.1-ydshieh")
         # Install pytest-random-order plugin for test randomization
         self.install_steps.append("uv pip install pytest-random-order")
-        # Install pytest-opentelemetry for CI test observability. Export stays opt-in per job command.
-        self.install_steps.append("uv pip install pytest-opentelemetry")
+        # Install transformers-ci for OTEL integration (configure-ci-otel CLI, pytest plugin). Export stays opt-in per job command.
+        self.install_steps.append(
+            "uv pip install 'transformers-ci[otel] @ git+https://github.com/huggingface/transformers-ci@main'"
+        )
         if self.pytest_options is None:
             self.pytest_options = {}
         if isinstance(self.tests_to_run, str):
@@ -313,7 +315,7 @@ class CircleCIJob:
         pytest_flags: list[str],
     ) -> str:
         pytest_flags_str = " ".join(pytest_flags)
-        return f"""({timeout_cmd} python3 utils/configure_ci_otel.py --job-name "$TRANSFORMERS_TEST_OTEL_JOB_NAME" -- python3 -m pytest {marker_cmd} -n {self.pytest_num_workers} {junit_flags} {repeat_on_failure_flags} {pytest_flags_str} $(cat splitted_tests.txt) | tee tests_output.txt)"""
+        return f"""({timeout_cmd} configure-ci-otel --job-name "$TRANSFORMERS_TEST_OTEL_JOB_NAME" -- python3 -m pytest {marker_cmd} -n {self.pytest_num_workers} {junit_flags} {repeat_on_failure_flags} {pytest_flags_str} $(cat splitted_tests.txt) | tee tests_output.txt)"""
 
     @property
     def job_name(self):
