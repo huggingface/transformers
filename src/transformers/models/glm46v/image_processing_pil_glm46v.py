@@ -26,9 +26,8 @@ import numpy as np
 from ...image_processing_backends import PilBackend
 from ...image_processing_utils import BatchFeature
 from ...image_utils import OPENAI_CLIP_MEAN, OPENAI_CLIP_STD, ImageInput, PILImageResampling, SizeDict
-from ...processing_utils import Unpack
+from ...processing_utils import ImagesKwargs, Unpack
 from ...utils import TensorType, auto_docstring
-from .image_processing_glm46v import Glm46VImageProcessorKwargs
 
 
 # Adapted from transformers.models.glm46v.image_processing_glm46v.smart_resize
@@ -66,6 +65,21 @@ def smart_resize(
         w_bar = math.ceil(width * beta / factor) * factor
 
     return h_bar, w_bar
+
+
+class Glm46VImageProcessorKwargs(ImagesKwargs, total=False):
+    """
+    patch_size (`int`, *optional*, defaults to 14):
+        The spatial patch size of the vision encoder.
+    temporal_patch_size (`int`, *optional*, defaults to 2):
+        The temporal patch size of the vision encoder.
+    merge_size (`int`, *optional*, defaults to 2):
+        The merge size of the vision encoder to llm encoder.
+    """
+
+    patch_size: int
+    temporal_patch_size: int
+    merge_size: int
 
 
 @auto_docstring

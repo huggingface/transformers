@@ -21,10 +21,9 @@ from ...image_utils import (
     is_valid_image,
     to_numpy_array,
 )
-from ...processing_utils import Unpack
+from ...processing_utils import ImagesKwargs, Unpack
 from ...utils import TensorType, auto_docstring, is_torch_available
 from ...utils.import_utils import requires
-from .image_processing_efficientloftr import EfficientLoFTRImageProcessorKwargs
 
 
 if TYPE_CHECKING:
@@ -37,6 +36,15 @@ def is_grayscale(image: np.ndarray):
     if image.shape[0] == 1:
         return True
     return np.all(image[0, ...] == image[1, ...]) and np.all(image[1, ...] == image[2, ...])
+
+
+class EfficientLoFTRImageProcessorKwargs(ImagesKwargs, total=False):
+    r"""
+    do_grayscale (`bool`, *optional*, defaults to `self.do_grayscale`):
+        Whether to convert the image to grayscale. Can be overridden by `do_grayscale` in the `preprocess` method.
+    """
+
+    do_grayscale: bool
 
 
 def convert_to_grayscale(image: ImageInput) -> ImageInput:
