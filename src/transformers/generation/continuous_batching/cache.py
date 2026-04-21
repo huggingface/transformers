@@ -183,14 +183,14 @@ class PagedAttentionCache:
             num_attention_masks = 1
 
         # Peak activations coefficients (for number of blocks and number of batch tokens)
-        q_per_token = config.num_attention_heads * self.head_dim
+        q_bytes_per_token = config.num_attention_heads * self.head_dim
         lm_head_peak = (
             0,  # number of blocks does not affect the LM head peak activation
             config.hidden_size + config.vocab_size,  # hidden state + logits
         )
         attention_peak = (
             2 * page_size,  # old K and V, read from cache (in the worst case scenario: whole cache is read)
-            config.hidden_size + q_per_token + 2 * page_size,  # hidden state + Q + new K and V
+            config.hidden_size + q_bytes_per_token + 2 * page_size,  # hidden state + Q + new K and V
         )
 
         memory_handler = PagedAttentionMemoryHandler(

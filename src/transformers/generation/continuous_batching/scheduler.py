@@ -205,7 +205,7 @@ class Scheduler(ABC):
         """
         scheduled_requests = []
         one_allocation_failed = False
-        decode_fast_path = self.cache.max_blocks_per_request > 0
+        decode_fast_path = self.cache.max_blocks_per_request > 0  # best way to check if decode fast path availability
         safety_margins = safety_margin * self.cache.num_blocks
         original_token_budget, original_cache_budget = token_budget, cache_budget
 
