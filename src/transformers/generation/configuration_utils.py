@@ -1556,8 +1556,10 @@ class ContinuousBatchingConfig:
             Number of blocks in the KV cache. Auto-inferred from GPU memory when `None`.
         max_batch_tokens (`int`, *optional*):
             Maximum number of tokens in a batch. Auto-inferred from GPU memory when `None`.
-        max_memory_percent (`float`, *optional*, defaults to 0.9):
-            Maximum percentage of free GPU memory (after the model is loaded) to use for the KV cache.
+        max_memory_percent (`float`, *optional*):
+            Maximum percentage of free GPU memory (after the model is loaded) to use for the KV cache. When `None`,
+            resolved at runtime to 0.9 if there is no logit processing and 0.8 if there is, to leave headroom for
+            vocabulary-sized temporary tensors.
         max_blocks_per_request (`int`, *optional*, defaults to 0):
             Maximum blocks per request, used in the `flash_attn_with_kvcache` fast decode path to dimension
             the block table. Setting this to 0 disables the fast decode path.
@@ -1607,8 +1609,9 @@ class ContinuousBatchingConfig:
     num_blocks: int | None = None
     max_batch_tokens: int | None = None
 
-    # The max percentage of free GPU memory (after the model is loaded) to use for the KV cache.
-    max_memory_percent: float = 0.9
+    # The max percentage of free GPU memory (after the model is loaded) to use for the KV cache. If None, auto resolved
+    # to 0.9 (no logit processing) or 0.8 (logit processing) to leave headroom for temporary tensors.
+    max_memory_percent: float | None = None
 
     # This is only used in the flash_attn_with_kvcache fast decode path to dimension the block table. If it is set to 0,
     # the fast decode path will not be used. Currently turned off by default.
@@ -1772,6 +1775,13 @@ class ContinuousBatchingConfig:
                 "disable asynchronous batching but it will degrade performance."
             )
         return self.use_async_batching
+
+    def resolve_max_memory_percent(self, has_logit_processors: bool) -> None:
+        """Resolves `max_memory_percent` when unset: 0.9 without logit processors, 0.8 with them. Active processors
+        materialize `[N, V]` intermediates (e.g. top-p sort, softmax) that get captured into the CUDA graph pool, so
+        the cache has to cede some budget to that pool."""
+        if self.max_memory_percent is None:
+            self.max_memory_percent = 0.8 if has_logit_processors else 0.9
 
     def resolve_sentinel_values(self) -> None:
         """For some parameters (padding intervals and max cached graphs), the default is a sentinel value of 0: that

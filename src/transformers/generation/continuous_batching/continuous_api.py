@@ -1032,6 +1032,8 @@ class ContinuousBatchingManager:
         self.batch_processor._generation_step(self.model)
 
     def _create_batch_processor(self) -> ContinuousBatchProcessor:
+        # Resolve max_memory_percent now that we know whether any logit processors are active.
+        self.continuous_batching_config.resolve_max_memory_percent(self.logit_processor.do_processing)
         # Create the PagedAttentionCache
         paged_attention_cache = PagedAttentionCache(
             self.model.config,
