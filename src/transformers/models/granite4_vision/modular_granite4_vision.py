@@ -109,8 +109,6 @@ class Granite4VisionConfig(LlavaNextConfig):
     use_spatial_sampling (`bool`, *optional*, defaults to `False`):
         Whether to enable spatial offset sampling, which creates 4 groups (TL, TR, BL, BR) from
         a single vision layer, each injected at a different LLM layer.
-    spatial_stride (`int`, *optional*, defaults to `2`):
-        Stride for spatial offset sampling (block size for the 2×2 offset grid).
     spatial_vision_layer (`int`, *optional*, defaults to `-1`):
         Index of the vision encoder layer used for spatial sampling.
     spatial_target_layers (`list`, *optional*, defaults to `[12, 15, 18, 21]`):
@@ -128,7 +126,6 @@ class Granite4VisionConfig(LlavaNextConfig):
     use_image_newline_parameter: bool = True
     deepstack_layer_map: list | None = None
     use_spatial_sampling: bool = False
-    spatial_stride: int = 2
     spatial_vision_layer: int = -1
     spatial_target_layers: list | None = None
     projector_dropout: float = 0.1
