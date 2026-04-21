@@ -84,6 +84,8 @@ LIGHT_MODELS: set[str] = {
 
 FILTERED_MODELS: set[str] = {
     # Models currently selected by filter_modular_dataset.py in itazap/modeling-dataset
+    "ernie4_5",
+    "ernie4_5_moe",
     "biogpt",
     "camembert",
     "conditional_detr",
@@ -117,6 +119,36 @@ FILTERED_MODELS: set[str] = {
     "qwen3_5_moe",
     "qwen3_omni_moe",
 }
+
+
+# MULTIPLE_PARENTS_MODELS: list[str] = [
+#     "aria",
+#     "biogpt",
+#     "bitnet",
+#     "conditional_detr",
+#     "deepseek_v2",
+#     "deepseek_v3",
+#     "doge",
+#     "emu3",
+#     "ernie4_5",
+#     "evolla",
+#     "glm4_moe",
+#     "granitemoe",
+#     "hunyuan_v1_moe",
+#     "jetmoe",
+#     "olmoe",
+#     "paddleocr_vl",
+#     "phi",
+#     "phi3",
+#     "phimoe",
+#     "qwen2",
+#     "qwen2_moe",
+#     "qwen3_5",
+#     "qwen3_5_moe",
+#     "qwen3_omni_moe",
+# ]
+
+# FILTERED_MODELS = MULTIPLE_PARENTS_MODELS
 
 
 def load_eval_dataset(path: Path) -> list[dict]:
