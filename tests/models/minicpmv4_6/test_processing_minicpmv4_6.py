@@ -32,6 +32,8 @@ if is_torch_available():
 @require_torchvision
 class MiniCPMV4_6ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     processor_class = MiniCPMV4_6Processor
+    # TODO: the repo isn't yet there, we need to test it works before release and skip all tests right before merge
+    # Re-enable tests after release
     model_id = "openbmb/MiniCPM-V-4_6"
 
     @classmethod

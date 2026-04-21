@@ -458,10 +458,12 @@ class MiniCPMV4_6VideoProcessor(BaseVideoProcessor):
         processed_videos = reorder_videos(processed_videos_grouped, grouped_videos_index)
         target_sizes = reorder_videos(target_sizes_grouped, grouped_videos_index)
 
+        # FIXME: clean up code and make sure all are tensors
+        processed_videos = torch.cat(processed_videos, dim=-1)
+
         return BatchFeature(
             data={"pixel_values_videos": processed_videos, "target_sizes_videos": target_sizes},
             tensor_type=return_tensors,
-            skip_tensor_conversion=["pixel_values_videos"],
         )
 
 

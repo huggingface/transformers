@@ -188,10 +188,9 @@ class MiniCPMV4_6ImageProcessor(TorchvisionBackend):
         patch_size: int,
         slice_mode: bool,
         return_tensors: str | TensorType | None = None,
+        disable_grouping: bool | None = None,
         **kwargs,
     ) -> BatchFeature:
-        disable_grouping = kwargs.get("disable_grouping")
-
         per_image_pixel_values: list[list[torch.Tensor]] = []
         per_image_target_sizes: list[list[list[int]]] = []
         all_grids: list[list[int]] = []
@@ -245,14 +244,17 @@ class MiniCPMV4_6ImageProcessor(TorchvisionBackend):
             per_image_target_sizes.append(image_ts)
             all_grids.append(best_grid if best_grid is not None else [0, 0])
 
+        # FIXME: clean up code and make sure all are tensors
+        pixel_values = [torch.stack(sublist) for sublist in per_image_pixel_values]
+        pixel_values = torch.cat(pixel_values, dim=-1)
+
         return BatchFeature(
             data={
-                "pixel_values": per_image_pixel_values,
+                "pixel_values": pixel_values,
                 "target_sizes": per_image_target_sizes,
                 "grids": all_grids,
             },
             tensor_type=return_tensors,
-            skip_tensor_conversion=["pixel_values"],
         )
 
 

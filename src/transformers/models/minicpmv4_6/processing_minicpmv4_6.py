@@ -185,7 +185,6 @@ class MiniCPMV4_6Processor(ProcessorMixin):
         return BatchFeature(
             data={**text_inputs, **image_inputs, **video_inputs},
             tensor_type=return_tensors,
-            skip_tensor_conversion=["pixel_values", "pixel_values_videos"],
         )
 
     def post_process_image_text_to_text(self, generated_outputs, skip_special_tokens=True, **kwargs):

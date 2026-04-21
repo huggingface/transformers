@@ -27,6 +27,7 @@ from ..auto import CONFIG_MAPPING, AutoConfig
 
 
 @auto_docstring(checkpoint="openbmb/MiniCPM-V-4.6")
+@strict
 class MiniCPMV4_6VisionConfig(PreTrainedConfig):
     r"""
     insert_layer_id (`int`, *optional*, defaults to 6):
@@ -57,6 +58,13 @@ class MiniCPMV4_6VisionConfig(PreTrainedConfig):
     attention_dropout: float | int = 0.0
     insert_layer_id: int = 6
 
+    def __post_init__(self, **kwargs):
+        # FIXME: why not adjust configs or do we want this to be dynamically applied?
+        # Needs a comment in code
+        if self.drop_vision_last_layer:
+            self.num_hidden_layers -= 1
+        super().__post_init__(**kwargs)
+
 
 @auto_docstring(checkpoint="openbmb/MiniCPM-V-4.6")
 @strict
@@ -86,10 +94,10 @@ class MiniCPMV4_6Config(PreTrainedConfig):
     insert_layer_id: int = 6
     image_size: int = 448
     drop_vision_last_layer: bool = False
-    image_token_id: int | None = None
+    image_token_id: int = 32000  # cannot be `None` or we get error no? Needs default
     tie_word_embeddings: bool = False
     downsample_mode: str = "16x"
-    merge_kernel_size: tuple[int, int] = (2, 2)
+    merge_kernel_size: tuple[int, int] | list[int] = (2, 2)
     merger_times: int = 1
 
     def __post_init__(self, **kwargs):

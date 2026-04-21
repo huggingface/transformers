@@ -244,14 +244,16 @@ class MiniCPMV4_6ImageProcessorPil(PilBackend):
             per_image_target_sizes.append(image_ts)
             all_grids.append(best_grid if best_grid is not None else [0, 0])
 
+        # FIXME: clean up code and make sure all are tensors
+        pixel_values = np.concatenate(per_image_pixel_values, axis=-1)
+
         return BatchFeature(
             data={
-                "pixel_values": per_image_pixel_values,
+                "pixel_values": pixel_values,
                 "target_sizes": per_image_target_sizes,
                 "grids": all_grids,
             },
             tensor_type=return_tensors,
-            skip_tensor_conversion=["pixel_values"],
         )
 
 
