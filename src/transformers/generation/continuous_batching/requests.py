@@ -27,6 +27,7 @@ if is_psutil_available():
     import psutil
 
 # This is a temporary token ID used to represent a token that is not yet generated
+# TODO: update this to 0 and check it breaks nothing + simplify carry over and time new logic
 TMP_TOKEN_ID = -1
 
 
