@@ -55,7 +55,6 @@ LEGACY_CHECKPOINT_KEY_MAPPING = {
     r"^sound_tower\.audio_tower\.": "sound_tower.",
 }
 
-
 class AudioVisualFlamingoConfig(PreTrainedConfig):
     model_type = "audiovisualflamingo"
     keys_to_ignore_at_inference = ["past_key_values"]
@@ -84,22 +83,19 @@ class AudioVisualFlamingoConfig(PreTrainedConfig):
         text_config=None,
         vision_config=None,
         audio_config=None,
-        hidden_size=None,
-        mm_hidden_size=None,
-        image_aspect_ratio=None,
-        num_video_frames=None,
         mm_vision_select_layer=None,
         mm_vision_select_feature=None,
         dynamic_s2=None,
         s2_scales=None,
         s2_max_split_size=None,
         s2_resize_output_to_scale_idx=0,
-        max_tiles: int | None = 12,
-        image_encoder: str = '{"_target_": "llava.model.encoders.BasicImageEncoder"}',
-        video_encoder: str = '{"_target_": "llava.model.encoders.TSPVideoEncoder"}',
-        sound_encoder: str = '{"_target_": "llava.model.encoders.BasicSoundEncoder"}',
+        image_encoder=None,
+        video_encoder=None,
+        sound_encoder=None,
         projector_bias=True,
         multimodal_projector_bias=True,
+        load_audio_in_video=True,
+        interleaved_vis_aud_in_video=True,
         **kwargs,
     ):
         legacy_config_aliases = {
@@ -121,32 +117,25 @@ class AudioVisualFlamingoConfig(PreTrainedConfig):
         self.vision_config = self._build_sub_config(vision_config, "siglip_vision_model")
         self.audio_config = self._build_sub_config(audio_config, "qwen2_audio_encoder")
 
-        self.hidden_size = hidden_size
-        self.mm_hidden_size = mm_hidden_size
-        self.image_aspect_ratio = image_aspect_ratio
-        self.num_video_frames = num_video_frames
         self.mm_vision_select_layer = mm_vision_select_layer
         self.mm_vision_select_feature = mm_vision_select_feature
         self.dynamic_s2 = dynamic_s2
-        self.s2_scales = s2_scales
+        self.s2_scales = list(s2_scales) if s2_scales is not None else None
         self.s2_max_split_size = s2_max_split_size
         self.s2_resize_output_to_scale_idx = s2_resize_output_to_scale_idx
-        self.max_tiles = max_tiles
 
-        self.image_encoder = image_encoder
-        self.video_encoder = video_encoder
-        self.sound_encoder = sound_encoder
-        self.audio_sampling_rate = 16000
-        self.audio_chunk_length = 120
-        self.load_audio_in_video = True
-        self.interleaved_vis_aud_in_video = True
-        self.interleaved_video_segment_duration = 30
-        self.audio_hop_length = 60
+        self.image_encoder = copy.deepcopy(image_encoder or {"_target_": "BasicImageEncoder"})
+        self.video_encoder = copy.deepcopy(video_encoder or {"_target_": "TSPVideoEncoder"})
+        self.sound_encoder = copy.deepcopy(sound_encoder or {"_target_": "BasicSoundEncoder"})
+        self.load_audio_in_video = load_audio_in_video
+        self.interleaved_vis_aud_in_video = interleaved_vis_aud_in_video
 
         self.projector_bias = projector_bias
         self.multimodal_projector_bias = multimodal_projector_bias
 
         super().__init__(**kwargs)
+
+
 def pool(x: torch.Tensor, size: int, dim: int) -> torch.Tensor:
     if x.shape[dim] % size != 0:
         remainder = x.shape[dim] % size
@@ -354,15 +343,15 @@ def _move_rotary_module_to_device(module: nn.Module, device: torch.device) -> nn
         return module.to_empty(device=device)
     return module.to(device=device)
 class MultimodalProjector(LlavaNextMultiModalProjector):
-    def __init__(self, config: AudioVisualFlamingoConfig):
+    def __init__(self, vision_hidden_size: int, text_hidden_size: int, bias: bool):
         nn.Module.__init__(self)
         self.downsample_rate = 2
         self.layers = nn.Sequential(
             nn.Identity(),
-            nn.LayerNorm(config.mm_hidden_size * 4),
-            nn.Linear(config.mm_hidden_size * 4, config.hidden_size, bias=config.multimodal_projector_bias),
+            nn.LayerNorm(vision_hidden_size * 4),
+            nn.Linear(vision_hidden_size * 4, text_hidden_size, bias=bias),
             nn.GELU(),
-            nn.Linear(config.hidden_size, config.hidden_size, bias=config.multimodal_projector_bias),
+            nn.Linear(text_hidden_size, text_hidden_size, bias=bias),
         )
 
     def forward(self, x, *args, **kwargs):
@@ -382,12 +371,12 @@ class MultimodalProjector(LlavaNextMultiModalProjector):
 
 
 class SoundMultimodalProjector(AudioFlamingo3MultiModalProjector):
-    def __init__(self, config: AudioVisualFlamingoConfig):
+    def __init__(self, audio_hidden_size: int, text_hidden_size: int, bias: bool):
         nn.Module.__init__(self)
         self.layers = nn.Sequential(
-            nn.Linear(config.audio_config.d_model, config.text_config.hidden_size, bias=config.projector_bias),
+            nn.Linear(audio_hidden_size, text_hidden_size, bias=bias),
             nn.GELU(),
-            nn.Linear(config.text_config.hidden_size, config.text_config.hidden_size, bias=config.projector_bias),
+            nn.Linear(text_hidden_size, text_hidden_size, bias=bias),
         )
 
     def forward(self, x, *args, **kwargs):
@@ -400,7 +389,9 @@ class SiglipVisionTowerDynamicS2(nn.Module):
         super().__init__()
         self.select_layer = getattr(config, "mm_vision_select_layer", -2)
         self.select_feature = getattr(config, "mm_vision_select_feature", "patch")
-        self.scales = sorted(map(int, config.s2_scales.split(",")))
+        if config.s2_scales is None:
+            raise ValueError("`config.s2_scales` must be provided when `dynamic_s2=True`.")
+        self.scales = sorted(int(scale) for scale in config.s2_scales)
         self.max_split_size = config.s2_max_split_size
         self.resize_output_to_scale_idx = getattr(config, "s2_resize_output_to_scale_idx", 0)
 
@@ -485,9 +476,9 @@ class AudioVisualFlamingoPretrainedModel(VoxtralPreTrainedModel):
             sep = cfg.get("sep_tokens")
             return start, end, sep
 
-        img_cfg = dict(self.config.image_encoder)
-        vid_cfg = dict(self.config.video_encoder)
-        snd_cfg = dict(self.config.sound_encoder)
+        img_cfg = copy.deepcopy(self.config.image_encoder)
+        vid_cfg = copy.deepcopy(self.config.video_encoder)
+        snd_cfg = copy.deepcopy(self.config.sound_encoder)
         for dct in (img_cfg, vid_cfg, snd_cfg):
             dct.pop("_target_", None)
 
@@ -558,15 +549,12 @@ class AudioVisualFlamingoForConditionalGeneration(AudioVisualFlamingoPretrainedM
     def __init__(self, config: AudioVisualFlamingoConfig, *args, **kwargs):
         super().__init__(config)
         _ = (args, kwargs)
-        self.mm_projector = MultimodalProjector(config)
         if not getattr(config, "dynamic_s2", False):
             raise NotImplementedError("Current AudioVisualFlamingo checkpoint requires `dynamic_s2=True`.")
         self.vision_tower = SiglipVisionTowerDynamicS2(config)
-        config.mm_hidden_size = self.vision_tower.hidden_size
         audio_cfg = copy.deepcopy(config.audio_config)
         audio_cfg._attn_implementation = config._attn_implementation
         self.sound_tower = AutoModel.from_config(audio_cfg)
-        self.sound_mm_projector = SoundMultimodalProjector(config)
 
         text_cfg = copy.deepcopy(config.text_config)
         text_cfg._attn_implementation = config._attn_implementation
@@ -581,7 +569,16 @@ class AudioVisualFlamingoForConditionalGeneration(AudioVisualFlamingoPretrainedM
                 }
 
         self.llm = AutoModelForCausalLM.from_config(text_cfg)
-        config.hidden_size = self.llm.config.hidden_size
+        self.mm_projector = MultimodalProjector(
+            vision_hidden_size=self.vision_tower.hidden_size,
+            text_hidden_size=self.llm.config.hidden_size,
+            bias=config.multimodal_projector_bias,
+        )
+        self.sound_mm_projector = SoundMultimodalProjector(
+            audio_hidden_size=self.sound_tower.config.d_model,
+            text_hidden_size=self.llm.config.hidden_size,
+            bias=config.projector_bias,
+        )
         self.vocab_size = self.llm.config.vocab_size
         self._init_media_encoders()
         self.training = self.llm.training

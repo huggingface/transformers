@@ -104,20 +104,28 @@ SOUND_TOWER_EXTRA_KEYS_TO_STRIP = {
 # AudioVisualFlamingoConfig.__init__ explicit parameters that we extract from
 # the source top-level config.json (excludes training-only params like *_lr).
 AVF_CONFIG_FIELDS = {
-    "hidden_size",
-    "mm_hidden_size",
-    "image_aspect_ratio",
-    "num_video_frames",
     "mm_vision_select_layer",
     "mm_vision_select_feature",
     "dynamic_s2",
     "s2_scales",
     "s2_max_split_size",
     "s2_resize_output_to_scale_idx",
-    "max_tiles",
     "image_encoder",
     "video_encoder",
     "sound_encoder",
+    "load_audio_in_video",
+    "interleaved_vis_aud_in_video",
+}
+
+PROCESSOR_CONFIG_FIELDS = {
+    "image_aspect_ratio",
+    "num_video_frames",
+    "max_tiles",
+    "interleaved_video_segment_duration",
+    "audio_sampling_rate",
+    "audio_chunk_length",
+    "audio_hop_length",
+    "mm_use_bos_eos_tokens",
 }
 
 
@@ -126,6 +134,26 @@ def _load_json(path: Path) -> dict[str, Any]:
         raise FileNotFoundError(f"Missing JSON: {path}")
     with path.open("r", encoding="utf-8") as f:
         return json.load(f)
+
+
+def _normalize_s2_scales(values):
+    if values is None:
+        return None
+    if isinstance(values, str):
+        values = values.split(",")
+    return [int(value) for value in values]
+
+
+def _normalize_encoder_config(config, default_target: str):
+    if config is None:
+        return {"_target_": default_target}
+    if isinstance(config, str):
+        config = json.loads(config)
+    config = dict(config)
+    target = config.get("_target_", default_target)
+    if isinstance(target, str):
+        config["_target_"] = target.rsplit(".", maxsplit=1)[-1]
+    return config
 
 
 # ---------------------------------------------------------------------------
@@ -251,6 +279,10 @@ def _build_config(src_root: Path, tokenizer) -> AudioVisualFlamingoConfig:
 
     # Extract only the fields AudioVisualFlamingoConfig cares about.
     avf_kwargs = {k: top_cfg[k] for k in AVF_CONFIG_FIELDS if k in top_cfg}
+    avf_kwargs["s2_scales"] = _normalize_s2_scales(avf_kwargs.get("s2_scales"))
+    avf_kwargs["image_encoder"] = _normalize_encoder_config(avf_kwargs.get("image_encoder"), "BasicImageEncoder")
+    avf_kwargs["video_encoder"] = _normalize_encoder_config(avf_kwargs.get("video_encoder"), "TSPVideoEncoder")
+    avf_kwargs["sound_encoder"] = _normalize_encoder_config(avf_kwargs.get("sound_encoder"), "BasicSoundEncoder")
 
     config = AudioVisualFlamingoConfig(
         text_config=text_config,
@@ -298,29 +330,41 @@ def write_processor(
     vision_dir = src_root / "vision_tower"
     image_processor = AutoImageProcessor.from_pretrained(str(vision_dir), use_fast=False)
 
+    top_cfg = _load_json(src_root / "config.json")
+    processor_kwargs = {key: top_cfg[key] for key in PROCESSOR_CONFIG_FIELDS if key in top_cfg}
+
     # Feature extractor: construct directly (like AF3) with feature_size from the sound tower config.
     feature_size = 128
     if isinstance(config.audio_config, dict):
         feature_size = config.audio_config.get("num_mel_bins", feature_size)
     else:
         feature_size = getattr(config.audio_config, "num_mel_bins", feature_size)
-    feature_extractor = WhisperFeatureExtractor(feature_size=feature_size, return_attention_mask=True)
+    audio_sampling_rate = processor_kwargs.get("audio_sampling_rate", 16_000)
+    audio_chunk_length = processor_kwargs.get("audio_chunk_length", 120)
+    audio_hop_length = processor_kwargs.get("audio_hop_length", 60)
+    feature_extractor = WhisperFeatureExtractor(
+        feature_size=feature_size,
+        chunk_length=audio_chunk_length if isinstance(audio_chunk_length, int) else 30,
+        sampling_rate=audio_sampling_rate,
+        hop_length=audio_hop_length,
+        return_attention_mask=True,
+    )
 
     processor = AudioVisualFlamingoProcessor(
         image_processor=image_processor,
         feature_extractor=feature_extractor,
         tokenizer=tokenizer,
-        image_aspect_ratio=config.image_aspect_ratio,
+        image_aspect_ratio=processor_kwargs.get("image_aspect_ratio"),
         s2_scales=config.s2_scales,
-        max_tiles=config.max_tiles,
-        num_video_frames=config.num_video_frames,
+        max_tiles=processor_kwargs.get("max_tiles", 12),
+        num_video_frames=processor_kwargs.get("num_video_frames"),
         load_audio_in_video=config.load_audio_in_video,
         interleaved_vis_aud_in_video=config.interleaved_vis_aud_in_video,
-        interleaved_video_segment_duration=config.interleaved_video_segment_duration,
-        mm_use_bos_eos_tokens=getattr(config, "mm_use_bos_eos_tokens", False),
-        audio_sampling_rate=config.audio_sampling_rate,
-        audio_chunk_length=config.audio_chunk_length,
-        audio_hop_length=config.audio_hop_length,
+        interleaved_video_segment_duration=processor_kwargs.get("interleaved_video_segment_duration", 30),
+        mm_use_bos_eos_tokens=processor_kwargs.get("mm_use_bos_eos_tokens", False),
+        audio_sampling_rate=audio_sampling_rate,
+        audio_chunk_length=audio_chunk_length,
+        audio_hop_length=audio_hop_length,
     )
     processor.save_pretrained(str(dst_root))
     logger.info("processor (tokenizer + preprocessors)")

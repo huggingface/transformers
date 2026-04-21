@@ -65,22 +65,19 @@ class AudioVisualFlamingoConfig(PreTrainedConfig):
         text_config=None,
         vision_config=None,
         audio_config=None,
-        hidden_size=None,
-        mm_hidden_size=None,
-        image_aspect_ratio=None,
-        num_video_frames=None,
         mm_vision_select_layer=None,
         mm_vision_select_feature=None,
         dynamic_s2=None,
         s2_scales=None,
         s2_max_split_size=None,
         s2_resize_output_to_scale_idx=0,
-        max_tiles: int | None = 12,
-        image_encoder: str = '{"_target_": "llava.model.encoders.BasicImageEncoder"}',
-        video_encoder: str = '{"_target_": "llava.model.encoders.TSPVideoEncoder"}',
-        sound_encoder: str = '{"_target_": "llava.model.encoders.BasicSoundEncoder"}',
+        image_encoder=None,
+        video_encoder=None,
+        sound_encoder=None,
         projector_bias=True,
         multimodal_projector_bias=True,
+        load_audio_in_video=True,
+        interleaved_vis_aud_in_video=True,
         **kwargs,
     ):
         legacy_config_aliases = {
@@ -102,27 +99,18 @@ class AudioVisualFlamingoConfig(PreTrainedConfig):
         self.vision_config = self._build_sub_config(vision_config, "siglip_vision_model")
         self.audio_config = self._build_sub_config(audio_config, "qwen2_audio_encoder")
 
-        self.hidden_size = hidden_size
-        self.mm_hidden_size = mm_hidden_size
-        self.image_aspect_ratio = image_aspect_ratio
-        self.num_video_frames = num_video_frames
         self.mm_vision_select_layer = mm_vision_select_layer
         self.mm_vision_select_feature = mm_vision_select_feature
         self.dynamic_s2 = dynamic_s2
-        self.s2_scales = s2_scales
+        self.s2_scales = list(s2_scales) if s2_scales is not None else None
         self.s2_max_split_size = s2_max_split_size
         self.s2_resize_output_to_scale_idx = s2_resize_output_to_scale_idx
-        self.max_tiles = max_tiles
 
-        self.image_encoder = image_encoder
-        self.video_encoder = video_encoder
-        self.sound_encoder = sound_encoder
-        self.audio_sampling_rate = 16000
-        self.audio_chunk_length = 120
-        self.load_audio_in_video = True
-        self.interleaved_vis_aud_in_video = True
-        self.interleaved_video_segment_duration = 30
-        self.audio_hop_length = 60
+        self.image_encoder = copy.deepcopy(image_encoder or {"_target_": "BasicImageEncoder"})
+        self.video_encoder = copy.deepcopy(video_encoder or {"_target_": "TSPVideoEncoder"})
+        self.sound_encoder = copy.deepcopy(sound_encoder or {"_target_": "BasicSoundEncoder"})
+        self.load_audio_in_video = load_audio_in_video
+        self.interleaved_vis_aud_in_video = interleaved_vis_aud_in_video
 
         self.projector_bias = projector_bias
         self.multimodal_projector_bias = multimodal_projector_bias

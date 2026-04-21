@@ -208,15 +208,15 @@ def space_to_depth(frames: torch.Tensor, temporal_block_size: int = 1, spatial_b
 
 
 class MultimodalProjector(nn.Module):
-    def __init__(self, config: AudioVisualFlamingoConfig):
+    def __init__(self, vision_hidden_size: int, text_hidden_size: int, bias: bool):
         super().__init__()
         self.downsample_rate = 2
         self.layers = nn.Sequential(
             nn.Identity(),
-            nn.LayerNorm(config.mm_hidden_size * 4),
-            nn.Linear(config.mm_hidden_size * 4, config.hidden_size, bias=config.multimodal_projector_bias),
+            nn.LayerNorm(vision_hidden_size * 4),
+            nn.Linear(vision_hidden_size * 4, text_hidden_size, bias=bias),
             nn.GELU(),
-            nn.Linear(config.hidden_size, config.hidden_size, bias=config.multimodal_projector_bias),
+            nn.Linear(text_hidden_size, text_hidden_size, bias=bias),
         )
 
     def forward(self, x, *args, **kwargs):
@@ -241,12 +241,12 @@ class SoundMultimodalProjector(nn.Module):
     to the LLM embedding space so they can replace `<sound>` tokens.
     """
 
-    def __init__(self, config: AudioVisualFlamingoConfig):
+    def __init__(self, audio_hidden_size: int, text_hidden_size: int, bias: bool):
         super().__init__()
         self.layers = nn.Sequential(
-            nn.Linear(config.audio_config.d_model, config.text_config.hidden_size, bias=config.projector_bias),
+            nn.Linear(audio_hidden_size, text_hidden_size, bias=bias),
             nn.GELU(),
-            nn.Linear(config.text_config.hidden_size, config.text_config.hidden_size, bias=config.projector_bias),
+            nn.Linear(text_hidden_size, text_hidden_size, bias=bias),
         )
 
     def forward(self, x, *args, **kwargs):
@@ -259,7 +259,9 @@ class SiglipVisionTowerDynamicS2(nn.Module):
         super().__init__()
         self.select_layer = getattr(config, "mm_vision_select_layer", -2)
         self.select_feature = getattr(config, "mm_vision_select_feature", "patch")
-        self.scales = sorted(map(int, config.s2_scales.split(",")))
+        if config.s2_scales is None:
+            raise ValueError("`config.s2_scales` must be provided when `dynamic_s2=True`.")
+        self.scales = sorted(int(scale) for scale in config.s2_scales)
         self.max_split_size = config.s2_max_split_size
         self.resize_output_to_scale_idx = getattr(config, "s2_resize_output_to_scale_idx", 0)
 
@@ -354,9 +356,9 @@ class AudioVisualFlamingoPretrainedModel(PreTrainedModel):
             sep = cfg.get("sep_tokens")
             return start, end, sep
 
-        img_cfg = dict(self.config.image_encoder)
-        vid_cfg = dict(self.config.video_encoder)
-        snd_cfg = dict(self.config.sound_encoder)
+        img_cfg = copy.deepcopy(self.config.image_encoder)
+        vid_cfg = copy.deepcopy(self.config.video_encoder)
+        snd_cfg = copy.deepcopy(self.config.sound_encoder)
         for dct in (img_cfg, vid_cfg, snd_cfg):
             dct.pop("_target_", None)
 
@@ -538,15 +540,12 @@ class AudioVisualFlamingoForConditionalGeneration(AudioVisualFlamingoPretrainedM
     def __init__(self, config: AudioVisualFlamingoConfig, *args, **kwargs):
         super().__init__(config)
         _ = (args, kwargs)
-        self.mm_projector = MultimodalProjector(config)
         if not getattr(config, "dynamic_s2", False):
             raise NotImplementedError("Current AudioVisualFlamingo checkpoint requires `dynamic_s2=True`.")
         self.vision_tower = SiglipVisionTowerDynamicS2(config)
-        config.mm_hidden_size = self.vision_tower.hidden_size
         audio_cfg = copy.deepcopy(config.audio_config)
         audio_cfg._attn_implementation = config._attn_implementation
         self.sound_tower = AutoModel.from_config(audio_cfg)
-        self.sound_mm_projector = SoundMultimodalProjector(config)
 
         text_cfg = copy.deepcopy(config.text_config)
         text_cfg._attn_implementation = config._attn_implementation
@@ -561,7 +560,16 @@ class AudioVisualFlamingoForConditionalGeneration(AudioVisualFlamingoPretrainedM
                 }
 
         self.llm = AutoModelForCausalLM.from_config(text_cfg)
-        config.hidden_size = self.llm.config.hidden_size
+        self.mm_projector = MultimodalProjector(
+            vision_hidden_size=self.vision_tower.hidden_size,
+            text_hidden_size=self.llm.config.hidden_size,
+            bias=config.multimodal_projector_bias,
+        )
+        self.sound_mm_projector = SoundMultimodalProjector(
+            audio_hidden_size=self.sound_tower.config.d_model,
+            text_hidden_size=self.llm.config.hidden_size,
+            bias=config.projector_bias,
+        )
         self.vocab_size = self.llm.config.vocab_size
         self._init_media_encoders()
         self.training = self.llm.training

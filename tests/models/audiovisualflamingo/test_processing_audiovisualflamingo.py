@@ -207,3 +207,23 @@ class AudioVisualFlamingoProcessorTest(unittest.TestCase):
         self.assertEqual(config.text_config.model_type, "qwen2")
         self.assertEqual(config.vision_config.model_type, "siglip_vision_model")
         self.assertEqual(config.audio_config.model_type, "qwen2_audio_encoder")
+
+    def test_config_keeps_only_canonical_runtime_fields(self):
+        config = AudioVisualFlamingoConfig(
+            s2_scales=[448, 896, 1344],
+            image_encoder={"_target_": "BasicImageEncoder"},
+            video_encoder={"_target_": "TSPVideoEncoder", "embed_time": "True"},
+            sound_encoder={"_target_": "BasicSoundEncoder", "embed_time": "True"},
+        )
+
+        self.assertEqual(config.s2_scales, [448, 896, 1344])
+        self.assertEqual(config.image_encoder["_target_"], "BasicImageEncoder")
+        self.assertEqual(config.video_encoder["_target_"], "TSPVideoEncoder")
+        self.assertEqual(config.sound_encoder["_target_"], "BasicSoundEncoder")
+
+        config_dict = config.to_dict()
+        self.assertNotIn("audio_sampling_rate", config_dict)
+        self.assertNotIn("audio_chunk_length", config_dict)
+        self.assertNotIn("audio_hop_length", config_dict)
+        self.assertNotIn("num_video_frames", config_dict)
+        self.assertNotIn("max_tiles", config_dict)
