@@ -189,6 +189,19 @@ def _tokenize(code: str) -> set[str]:
     return set(re.findall(r"\b[a-zA-Z_][a-zA-Z0-9_]*\b", code))
 
 
+def _get_suffix_candidates(name: str) -> list[str]:
+    """
+    Return all suffix candidates for a symbol name by splitting at each uppercase letter boundary.
+
+    For example, ``GraniteMoeSharedDecoderLayer`` yields
+    ``["MoeSharedDecoderLayer", "SharedDecoderLayer", "DecoderLayer", "Layer"]``,
+    and ``Ernie4_5_DecoderLayer`` yields ``["DecoderLayer", "Layer"]``.
+    Longer (more specific) suffixes come first so callers can stop at the first hit.
+    """
+    positions = [i for i in range(1, len(name)) if name[i].isupper()]
+    return [name[p:] for p in positions]
+
+
 def _leading_symbol_prefix(name: str) -> str:
     """
     Extract the leading prefix from a symbol name (e.g., 'Llama' from 'LlamaAttention').
@@ -199,8 +212,9 @@ def _leading_symbol_prefix(name: str) -> str:
     Returns:
         `str`: The leading prefix, or empty string if no match.
     """
-    # match camel-case prefix (ex. "Llama" from "LlamaAttention")
-    match = re.match(r"^([A-Z][a-z0-9]+)", name)
+    # match camel-case prefix including trailing version separators before next uppercase word
+    # e.g. "Llama" from "LlamaAttention", "Ernie4_5" from "Ernie4_5DecoderLayer"
+    match = re.match(r"^([A-Z][a-z0-9]+(?:[_\d]+(?=[A-Z]))*)", name)
     if match:
         return match.group(1)
     # match lowercase prefix followed by capital (ex. "newmodel" from "newmodelAttention")
@@ -644,6 +658,62 @@ class CodeSimilarityAnalyzer:
                 by_suffix.setdefault((model_id, suffix), idx)
         return by_name, by_suffix
 
+    def _walk_ancestors(
+        self,
+        start_model: str,
+        symbol_name: str,
+        query_embedding: np.ndarray,
+        inheritance_map: dict[str, set[str]],
+        model_symbol_by_name: dict[tuple[str, str], int],
+        model_symbol_by_suffix: dict[tuple[str, str], int],
+        self_model_normalized: str,
+        ignore_models: set[str],
+        visited: set[str],
+        already_included: set[str],
+        additions: list[tuple[str, float]],
+    ) -> None:
+        """
+        Walk up the inheritance tree from start_model, find the same symbol in each
+        ancestor (matching by suffix), score it, and collect matching candidates.
+
+        This matches symbols across models by stripping prefixes ("MoeDecoderLayer" →
+        "DecoderLayer" → "Layer") since different models use different class name
+        conventions but have conceptually similar layers.
+
+        Uses visited/already_included sets to avoid duplicates across multiple walks.
+        """
+        queue = list(inheritance_map.get(start_model, ()))
+        while queue:
+            ancestor = queue.pop(0)
+            if ancestor in visited:
+                continue
+            visited.add(ancestor)
+            # Always extend before potentially skipping, so we traverse through
+            # excluded models (e.g. the self-model) to reach their parents.
+            queue.extend(inheritance_map.get(ancestor, ()))
+            ancestor_norm = _normalize(ancestor)
+            if ancestor_norm == self_model_normalized or ancestor_norm in ignore_models:
+                continue
+
+            # Find the ancestor's equivalent of symbol_name: try progressively
+            # shorter suffixes ("MoeDecoderLayer" → "DecoderLayer" → "Layer"),
+            # then fall back to an exact name match.
+            idx = None
+            for suffix in _get_suffix_candidates(symbol_name):
+                idx = model_symbol_by_suffix.get((ancestor, suffix))
+                if idx is not None:
+                    break
+            if idx is None:
+                idx = model_symbol_by_name.get((ancestor, symbol_name))
+            if idx is None:
+                continue
+
+            identifier = self.dataset[idx]["identifier"]
+            if identifier not in already_included:
+                embedding = np.array(self.dataset[idx]["embedding"], dtype="float32")
+                additions.append((identifier, float(query_embedding @ embedding)))
+                already_included.add(identifier)
+
     def analyze_file(
         self,
         modeling_file: Path,
@@ -704,37 +774,32 @@ class CodeSimilarityAnalyzer:
                 ignore_models,
             )
 
-            # Expand results with parent models from modular inheritance.
-            # For the top 3 matches, if the matched model has a modular file that inherits from
-            # another model, find that parent's version of the same symbol and inject its score.
-            # We match by symbol suffix (e.g. "MLP" from "MistralMLP") so that e.g. looking up
-            # Llama's "LlamaMLP" works even when the query symbol is named "CohereMLP".
+            # Inject ancestor symbol scores via modular inheritance.
+            # Seeds: top-3 matches (look up parent's version of match_name) plus
+            # the self-model (look up parent's version of query_name — necessary
+            # because the self-model is excluded from top-k so its parents are
+            # otherwise unreachable through the normal expansion path).
             already_included = {ident for ident, _ in embedding_top}
-            seen_parents: set[str] = set()
+            seen_ancestors: set[str] = set()
             additions: list[tuple[str, float]] = []
-            for identifier, _score in embedding_top[:3]:
+
+            expansion_seeds: list[tuple[str, str]] = []
+            for identifier, _ in embedding_top[:3]:
                 parts = identifier.split(":", 1)
-                if len(parts) != 2:
-                    continue
-                match_relative_path, match_name = parts
-                model_id = Path(match_relative_path).parts[0] if Path(match_relative_path).parts else ""
-                match_suffix = match_name[len(_leading_symbol_prefix(match_name)) :]
-                for parent_model in inheritance_map.get(model_id, ()):
-                    if parent_model in seen_parents or _normalize(parent_model) == self_model_normalized:
-                        continue
-                    seen_parents.add(parent_model)
-                    # Look up by suffix first (e.g. "MLP" -> "LlamaMLP"), fall back to exact name
-                    parent_idx = model_symbol_by_suffix.get((parent_model, match_suffix))
-                    if parent_idx is None:
-                        parent_idx = model_symbol_by_name.get((parent_model, match_name))
-                    if parent_idx is None:
-                        continue
-                    parent_identifier = self.dataset[parent_idx]["identifier"]
-                    if parent_identifier not in already_included:
-                        parent_embedding = np.array(self.dataset[parent_idx]["embedding"], dtype="float32")
-                        parent_score = float(query_embeddings[i] @ parent_embedding)
-                        additions.append((parent_identifier, parent_score))
-                        already_included.add(parent_identifier)
+                if len(parts) == 2:
+                    model_id = Path(parts[0]).parts[0] if Path(parts[0]).parts else ""
+                    expansion_seeds.append((model_id, parts[1]))
+            if self_model:
+                expansion_seeds.append((self_model, query_name))
+
+            for seed_model, ref_name in expansion_seeds:
+                self._walk_ancestors(
+                    seed_model, ref_name, query_embeddings[i],
+                    inheritance_map, model_symbol_by_name, model_symbol_by_suffix,
+                    self_model_normalized, ignore_models,
+                    seen_ancestors, already_included, additions,
+                )
+
             if additions:
                 embedding_top = sorted(embedding_top + additions, key=lambda x: -x[1])
 
@@ -880,6 +945,7 @@ def _colorize_heading(text: str) -> str:
     return f"{ANSI_HEADER}{ANSI_BOLD}{text}{ANSI_RESET}"
 
 
+@cache
 def _build_modular_inheritance_map() -> dict[str, set[str]]:
     """
     Build a map of modular models to the base models they inherit from.
@@ -949,9 +1015,9 @@ def _compare_models(
 ) -> int:
     """
     Comparison function for sorting models by:
-    1) composite score = num_matched * mean_score (descending)
-       This balances coverage and quality: a model with fewer but higher-scoring
-       matches can rank above one with more weak matches.
+    1) composite score = num_matched * mean_score² (descending)
+       Squaring mean_score penalises weak matches exponentially, so a model with
+       fewer but higher-quality matches can rank above one with more weak matches.
     2) ancestry (base models before descendants)
     3) lexicographic model id
     """
@@ -962,8 +1028,8 @@ def _compare_models(
     scores_b = model_class_scores.get(model_b, {})
     mean_a = sum(scores_a.values()) / len(scores_a) if scores_a else 0.0
     mean_b = sum(scores_b.values()) / len(scores_b) if scores_b else 0.0
-    composite_a = len(classes_a) * mean_a
-    composite_b = len(classes_b) * mean_b
+    composite_a = len(classes_a) * mean_a ** 2
+    composite_b = len(classes_b) * mean_b ** 2
 
     # Primary: composite score (descending)
     if composite_a != composite_b:
@@ -985,9 +1051,13 @@ def _compare_models(
 
 def compute_model_class_match_summary(
     results: dict[str, dict],
+    include_functions: bool = False,
 ) -> tuple[int, list[dict[str, float | int | str | list[str]]]]:
     """
-    Build the "Model class match summary" from raw ``analyze_file`` results.
+    Build a model match summary from raw ``analyze_file`` results.
+
+    By default, only class definitions are considered. Set ``include_functions=True``
+    to include both classes and functions in the summary.
 
     Returns:
         `(total_classes, ordered_summary)` where `ordered_summary` is a list of dicts with keys
@@ -1000,14 +1070,17 @@ def compute_model_class_match_summary(
         kind = data.get("kind", "function")
         grouped.setdefault(kind, []).append((query_name, data))
 
-    class_entries = grouped.get("class", [])
-    if not class_entries:
+    summary_entries = list(grouped.get("class", []))
+    if include_functions:
+        summary_entries.extend(grouped.get("function", []))
+
+    if not summary_entries:
         return 0, []
 
-    total_classes = len(class_entries)
+    total_symbols = len(summary_entries)
     model_class_matches: dict[str, set[str]] = {}
     model_class_scores: dict[str, dict[str, float]] = {}
-    for query_name, data in class_entries:
+    for query_name, data in summary_entries:
         # For each query class, compute the best score per identifier across
         # all available metrics (embedding, jaccard) and attribute it to the
         # corresponding model so the strongest signal drives the summary.
@@ -1045,7 +1118,7 @@ def compute_model_class_match_summary(
             if (
                 classes_i.issubset(classes_j)
                 and len(classes_j) > len(classes_i)
-                and _is_descendant(model_j, model_i, inheritance_map)
+                and model_i in inheritance_map.get(model_j, set())
             ):
                 redundant_models.add(model_i)
                 break
@@ -1058,20 +1131,21 @@ def compute_model_class_match_summary(
     )
     ordered_summary: list[dict[str, float | int | str | list[str]]] = []
     for model_id, matched in sorted_models:
-        pct = 100.0 * len(matched) / total_classes
+        pct = 100.0 * len(matched) / total_symbols
         scores_for_model = model_class_scores.get(model_id, {})
         mean_score = sum(scores_for_model.values()) / len(scores_for_model) if scores_for_model else 0.0
-        matched_classes = sorted(matched)
+        matched_symbols = sorted(matched)
         ordered_summary.append(
             {
                 "model_id": model_id,
                 "num_matched": len(matched),
                 "pct": round(pct, 1),
                 "mean_score": round(mean_score, 4),
-                "matched_classes": matched_classes,
+                "matched_classes": matched_symbols,
+                "matched_symbols": matched_symbols,
             }
         )
-    return total_classes, ordered_summary
+    return total_symbols, ordered_summary
 
 
 def main():
@@ -1146,10 +1220,11 @@ def main():
     if args.ignore_models:
         ignore_models_set = {_normalize(model.strip()) for model in args.ignore_models.split(",") if model.strip()}
 
-    # Exclude models released after the query model — do this before any embedding comparison
+    # Exclude models released after the query model — do this before any embedding comparison.
+    # Keep same-day releases eligible.
     if release_date != "unknown release date":
         for model_id, model_date in dates.items():
-            if model_date >= release_date:
+            if model_date > release_date:
                 ignore_models_set.add(_normalize(model_id))
 
     results = analyzer.analyze_file(
@@ -1341,32 +1416,32 @@ def main():
                 logging.info(_format_table(headers, table_rows, row_styles))
                 logging.info("")
 
-    # Model class match summary
-    class_entries = grouped.get("class", [])
-    if class_entries:
-        total_classes, ordered_summary = compute_model_class_match_summary(results)
-        if total_classes and ordered_summary:
-            logging.info(_colorize_heading("Model class match summary"))
+    # Model summary (classes + functions)
+    total_symbols, ordered_summary = compute_model_class_match_summary(results, include_functions=True)
+    if total_symbols and ordered_summary:
+            logging.info(_colorize_heading("Model match summary (classes + functions)"))
             logging.info("")
-            logging.info(f"Total classes: {total_classes}")
+            logging.info(f"Total definitions: {total_symbols}")
             logging.info("")
-            logging.info("Models with most matched classes:")
+            logging.info("Models with most matched definitions:")
             for item in ordered_summary[:15]:
                 model_id = item["model_id"]
                 num_matched = int(item["num_matched"])
                 pct = float(item["pct"])
                 mean_score = float(item["mean_score"])
-                matched_classes = ", ".join(str(name) for name in item.get("matched_classes", []))
+                matched_symbols = ", ".join(str(name) for name in item.get("matched_symbols", []))
                 logging.info(
-                    f"  {model_id:25s}: {num_matched:2d}/{total_classes} classes ({pct:5.1f}%), "
-                    f"mean score {mean_score:.4f}, matched classes [{matched_classes}]"
+                    f"  {model_id:25s}: {num_matched:2d}/{total_symbols} definitions ({pct:5.1f}%), "
+                    f"mean score {mean_score:.4f}, matched definitions [{matched_symbols}]"
                 )
             logging.info("")
 
             if args.generate_prompt:
+                _, prompt_summary = compute_model_class_match_summary(results, include_functions=False)
+                summary_for_prompt = prompt_summary if prompt_summary else ordered_summary
                 prompt = generate_modular_prompt(
                     modeling_file=Path(modeling_file),
-                    ordered_summary=ordered_summary,
+                    ordered_summary=summary_for_prompt,
                     results=results,
                     models_root=analyzer.models_root,
                 )
