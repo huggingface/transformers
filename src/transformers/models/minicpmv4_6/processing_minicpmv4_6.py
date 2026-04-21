@@ -124,10 +124,14 @@ class MiniCPMV4_6Processor(ProcessorMixin):
         self.image_pad_token = "<|image_pad|>"
 
         special_tokens = [
-            self.image_start_token, self.image_end_token,
-            self.video_start_token, self.video_end_token,
-            self.slice_start_token, self.slice_end_token,
-            self.image_id_start_token, self.image_id_end_token,
+            self.image_start_token,
+            self.image_end_token,
+            self.video_start_token,
+            self.video_end_token,
+            self.slice_start_token,
+            self.slice_end_token,
+            self.image_id_start_token,
+            self.image_id_end_token,
             self.image_pad_token,
         ]
         tokens_to_add = [
@@ -204,7 +208,10 @@ class MiniCPMV4_6Processor(ProcessorMixin):
                 all_frames.append(list(video))
                 continue
             main_frames, stacked = self.video_processor.extract_frames(
-                video, max_frames=max_frames, stack_frames=stack_frames, use_ffmpeg=use_ffmpeg,
+                video,
+                max_frames=max_frames,
+                stack_frames=stack_frames,
+                use_ffmpeg=use_ffmpeg,
             )
             frames = []
             for i, frame in enumerate(main_frames):
@@ -299,9 +306,7 @@ class MiniCPMV4_6Processor(ProcessorMixin):
                     idx = image_index
                     image_index += 1
                     if idx >= len(per_img_pv):
-                        raise ValueError(
-                            f"Not enough images: need index {idx} but only {len(per_img_pv)} provided."
-                        )
+                        raise ValueError(f"Not enough images: need index {idx} but only {len(per_img_pv)} provided.")
                     expanded = _get_slice_image_placeholder(
                         grid=img_grids[idx],
                         image_idx=img_counter_in_sample,

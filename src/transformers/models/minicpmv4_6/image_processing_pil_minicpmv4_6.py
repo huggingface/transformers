@@ -233,9 +233,7 @@ class MiniCPMV4_6ImageProcessorPil(PilBackend):
                 )
                 _, refine_height, refine_width = refine_img.shape
                 grid_x, grid_y = best_grid
-                slice_patches = divide_to_patches(
-                    refine_img, (refine_height // grid_y, refine_width // grid_x)
-                )
+                slice_patches = divide_to_patches(refine_img, (refine_height // grid_y, refine_width // grid_x))
 
                 patch_height, patch_width = slice_patches[0].shape[1], slice_patches[0].shape[2]
                 patch_visual_tokens = patch_height * patch_width // (patch_size * patch_size * token_divisor)

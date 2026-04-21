@@ -14,7 +14,6 @@
 
 import os
 import warnings
-from collections import defaultdict
 from collections.abc import Callable, Iterable, Mapping
 from contextlib import redirect_stdout
 from dataclasses import dataclass, fields
@@ -858,37 +857,27 @@ def pad(
 
 def group_videos_by_shape(
     videos: list["torch.Tensor"],
-    *paired_inputs,
 ) -> tuple[dict[tuple[int, int], "torch.Tensor"], dict[int, tuple[tuple[int, int], int]]]:
     """
     Groups videos by shape.
-    Zero or more lists can be passes that mirror the structure of `videos`. Each element is paired 1:1 with the
-    corresponding video so it can be grouped by the same shape key. These paired values are grouped alongside
-    `videos` but are not stacked in the output, so they do not need to be tensors.
-
     Returns a dictionary with the shape as key and a list of videos with that shape as value,
     and a dictionary with the index of the video in the original list as key and the shape and index in the grouped list as value.
     """
     grouped_videos = {}
-    paired_grouped_values = [defaultdict(list) for _ in paired_inputs]
 
     grouped_videos_index = {}
-    for i, (video, *paired_values) in enumerate(zip(videos, *paired_inputs)):
+    for i, video in enumerate(videos):
         shape = video.shape[-2::]
         num_frames = video.shape[-4]  # video format BTCHW
         shape = (num_frames, *shape)
         if shape not in grouped_videos:
             grouped_videos[shape] = []
         grouped_videos[shape].append(video)
-
-        # Add pairs if any to the group
-        for paired_index, paired_value in enumerate(paired_values):
-            paired_grouped_values[paired_index][shape].append(paired_value)
         grouped_videos_index[i] = (shape, len(grouped_videos[shape]) - 1)
 
     # stack videos with the same size and number of frames
     grouped_videos = {shape: torch.stack(videos, dim=0) for shape, videos in grouped_videos.items()}
-    return grouped_videos, *paired_grouped_values, grouped_videos_index
+    return grouped_videos, grouped_videos_index
 
 
 def reorder_videos(

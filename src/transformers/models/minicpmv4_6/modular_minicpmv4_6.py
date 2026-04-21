@@ -371,8 +371,10 @@ class MiniCPMV4_6VisionTransformer(MiniCPMV4_6VisionPreTrainedModel):
             attention_mask = None
 
         attn_kwargs = {
-            "cu_seq_lens_q": cu_seqlens, "cu_seq_lens_k": cu_seqlens,
-            "max_length_q": max_seqlens, "max_length_k": max_seqlens,
+            "cu_seq_lens_q": cu_seqlens,
+            "cu_seq_lens_k": cu_seqlens,
+            "max_length_q": max_seqlens,
+            "max_length_k": max_seqlens,
         }
 
         insert_layer_id = self.config.insert_layer_id if use_vit_merger else -1
@@ -381,11 +383,17 @@ class MiniCPMV4_6VisionTransformer(MiniCPMV4_6VisionPreTrainedModel):
                 hidden_states = encoder_layer(hidden_states, attention_mask, **attn_kwargs)
                 if layer_index == insert_layer_id:
                     hidden_states, target_sizes, attention_mask, cu_seqlens, max_seqlens = self.vit_merger(
-                        hidden_states, target_sizes, attention_mask, cu_seqlens, max_seqlens,
+                        hidden_states,
+                        target_sizes,
+                        attention_mask,
+                        cu_seqlens,
+                        max_seqlens,
                     )
                     attn_kwargs = {
-                        "cu_seq_lens_q": cu_seqlens, "cu_seq_lens_k": cu_seqlens,
-                        "max_length_q": max_seqlens, "max_length_k": max_seqlens,
+                        "cu_seq_lens_q": cu_seqlens,
+                        "cu_seq_lens_k": cu_seqlens,
+                        "max_length_q": max_seqlens,
+                        "max_length_k": max_seqlens,
                     }
         else:
             encoder_outputs = self.encoder(
@@ -476,8 +484,7 @@ class MiniCPMV4_6ViTWindowAttentionMerger(nn.Module):
     def _init_weights(self):
         """Block-diagonal normal init: preserves the structural prior that each
         2x2 window patch is processed independently at initialization."""
-        for proj in (self.self_attn.q_proj, self.self_attn.k_proj,
-                     self.self_attn.v_proj, self.self_attn.out_proj):
+        for proj in (self.self_attn.q_proj, self.self_attn.k_proj, self.self_attn.v_proj, self.self_attn.out_proj):
             proj.weight.data.normal_()
             proj.bias.data.zero_()
 
@@ -590,7 +597,13 @@ class MiniCPMV4_6ViTWindowAttentionMerger(nn.Module):
             raise ValueError(f"max_seqlens ({max_seqlens}) must be divisible by 4")
         new_max_seqlens = max_seqlens // 4
 
-        return new_hidden_states, new_target_sizes, attention_mask, new_cu_seqlens, new_max_seqlens  # attention_mask=None
+        return (
+            new_hidden_states,
+            new_target_sizes,
+            attention_mask,
+            new_cu_seqlens,
+            new_max_seqlens,
+        )  # attention_mask=None
 
 
 class MiniCPMV4_6DownsampleMLP(nn.Module):
