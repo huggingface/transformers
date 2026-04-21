@@ -28,12 +28,13 @@ from __future__ import annotations
 import argparse
 import json
 import logging
+import re
 from collections import defaultdict
 from pathlib import Path
 from typing import Any
 
 import torch
-from safetensors.torch import safe_open
+from safetensors.torch import safe_open, save_model
 
 from transformers import (
     AudioVisualFlamingoConfig,
@@ -44,6 +45,8 @@ from transformers import (
     GenerationConfig,
     WhisperFeatureExtractor,
 )
+from transformers.initialization import no_init_weights
+from transformers.models.audiovisualflamingo.modeling_audiovisualflamingo import LEGACY_CHECKPOINT_KEY_MAPPING
 
 
 logger = logging.getLogger(__name__)
@@ -194,6 +197,15 @@ def _collect_component_state(src_root: Path) -> dict[str, Any]:
     return state
 
 
+def _normalize_state_dict_keys(state: dict[str, Any]) -> dict[str, Any]:
+    normalized_state = dict(state)
+    for pattern, replacement in LEGACY_CHECKPOINT_KEY_MAPPING.items():
+        renamed_keys = [key for key in normalized_state if re.match(pattern, key)]
+        for key in renamed_keys:
+            normalized_state[re.sub(pattern, replacement, key)] = normalized_state.pop(key)
+    return normalized_state
+
+
 # ---------------------------------------------------------------------------
 # Config construction
 # ---------------------------------------------------------------------------
@@ -241,9 +253,9 @@ def _build_config(src_root: Path, tokenizer) -> AudioVisualFlamingoConfig:
         p = src_root / name / "config.json"
         return _load_json(p) if p.is_file() else None
 
-    llm_cfg = _read_component("llm")
-    if llm_cfg:
-        llm_cfg = {k: v for k, v in llm_cfg.items() if k not in LLM_CFG_KEYS_TO_STRIP}
+    text_config = _read_component("llm")
+    if text_config:
+        text_config = {k: v for k, v in text_config.items() if k not in LLM_CFG_KEYS_TO_STRIP}
 
     def _clean_component(cfg, extra_strip=None):
         if cfg is None:
@@ -253,19 +265,19 @@ def _build_config(src_root: Path, tokenizer) -> AudioVisualFlamingoConfig:
             cfg = {k: v for k, v in cfg.items() if k not in extra_strip}
         return cfg
 
-    vision_tower_cfg = _clean_component(_read_component("vision_tower"))
+    vision_config = _clean_component(_read_component("vision_tower"))
     mm_projector_cfg = _clean_component(_read_component("mm_projector"))
-    sound_tower_cfg = _clean_component(_read_component("sound_tower"), extra_strip=SOUND_TOWER_EXTRA_KEYS_TO_STRIP)
+    audio_config = _clean_component(_read_component("sound_tower"), extra_strip=SOUND_TOWER_EXTRA_KEYS_TO_STRIP)
     sound_mm_projector_cfg = _clean_component(_read_component("sound_mm_projector"))
 
     # Extract only the fields AudioVisualFlamingoConfig cares about.
     avf_kwargs = {k: top_cfg[k] for k in AVF_CONFIG_FIELDS if k in top_cfg}
 
     config = AudioVisualFlamingoConfig(
-        text_config=llm_cfg,
-        vision_config=vision_tower_cfg,
+        text_config=text_config,
+        vision_config=vision_config,
         mm_projector_cfg=mm_projector_cfg,
-        audio_config=sound_tower_cfg,
+        audio_config=audio_config,
         sound_mm_projector_cfg=sound_mm_projector_cfg,
         **avf_kwargs,
     )
@@ -312,9 +324,10 @@ def write_processor(
 
     # Feature extractor: construct directly (like AF3) with feature_size from the sound tower config.
     feature_size = 128
-    sound_tower_cfg = config.sound_tower_cfg
-    if isinstance(sound_tower_cfg, dict):
-        feature_size = sound_tower_cfg.get("num_mel_bins", feature_size)
+    if isinstance(config.audio_config, dict):
+        feature_size = config.audio_config.get("num_mel_bins", feature_size)
+    else:
+        feature_size = getattr(config.audio_config, "num_mel_bins", feature_size)
     feature_extractor = WhisperFeatureExtractor(feature_size=feature_size, return_attention_mask=True)
 
     processor = AudioVisualFlamingoProcessor(
@@ -350,13 +363,14 @@ def write_model(
     tokenizer,
 ) -> AudioVisualFlamingoForConditionalGeneration:
     """Collect weights, instantiate model, load state dict, and save."""
-    state = _collect_component_state(src_root)
+    state = _normalize_state_dict_keys(_collect_component_state(src_root))
     if not state:
         raise FileNotFoundError("No component safetensors found under source component directories.")
 
-    model = AudioVisualFlamingoForConditionalGeneration(config).to(dtype=torch.bfloat16)
+    with no_init_weights():
+        model = AudioVisualFlamingoForConditionalGeneration(config)
 
-    load_res = model.load_state_dict(state, strict=True)
+    load_res = model.load_state_dict(state, strict=True, assign=True)
     if load_res.missing_keys:
         mk = load_res.missing_keys
         raise ValueError(f"Missing keys when loading: {mk[:10]}{' ...' if len(mk) > 10 else ''}")
@@ -370,7 +384,9 @@ def write_model(
         pad_token_id=tokenizer.pad_token_id or tokenizer.eos_token_id,
     )
 
-    model.save_pretrained(save_directory=str(dst_root))
+    model.config.save_pretrained(str(dst_root))
+    model.generation_config.save_pretrained(str(dst_root))
+    save_model(model, str(dst_root / "model.safetensors"), metadata={"format": "pt"}, force_contiguous=False)
     logger.info("model (config + safetensors)")
     return model
 

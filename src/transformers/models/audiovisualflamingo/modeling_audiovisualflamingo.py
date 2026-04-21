@@ -549,19 +549,19 @@ class AudioVisualFlamingoForConditionalGeneration(AudioVisualFlamingoPretrainedM
         config.sound_hidden_size = getattr(config.audio_config, "d_model", 1280)
         self.sound_mm_projector = SoundMultimodalProjector(config)
 
-        llm_cfg = copy.deepcopy(config.text_config)
-        llm_cfg._attn_implementation = config._attn_implementation
+        text_cfg = copy.deepcopy(config.text_config)
+        text_cfg._attn_implementation = config._attn_implementation
         model_max_length = getattr(config, "model_max_length", None)
         if model_max_length is not None:
-            llm_cfg.model_max_length = model_max_length
-            orig_ctx_len = getattr(llm_cfg, "max_position_embeddings", None)
+            text_cfg.model_max_length = model_max_length
+            orig_ctx_len = getattr(text_cfg, "max_position_embeddings", None)
             if orig_ctx_len is not None and model_max_length > orig_ctx_len:
-                llm_cfg.rope_scaling = {
+                text_cfg.rope_scaling = {
                     "type": "linear",
                     "factor": float(math.ceil(model_max_length / orig_ctx_len)),
                 }
 
-        self.llm = AutoModelForCausalLM.from_config(llm_cfg)
+        self.llm = AutoModelForCausalLM.from_config(text_cfg)
         config.hidden_size = self.llm.config.hidden_size
         self.vocab_size = self.llm.config.vocab_size
         self._init_media_encoders()

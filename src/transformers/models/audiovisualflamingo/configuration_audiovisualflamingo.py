@@ -70,10 +70,7 @@ class AudioVisualFlamingoConfig(PreTrainedConfig):
         text_config=None,
         vision_config=None,
         audio_config=None,
-        llm_cfg=None,
-        vision_tower_cfg=None,
         mm_projector_cfg=None,
-        sound_tower_cfg=None,
         sound_mm_projector_cfg=None,
         architectures=None,
         hidden_size=None,
@@ -113,12 +110,20 @@ class AudioVisualFlamingoConfig(PreTrainedConfig):
         audio_token_id=None,
         **kwargs,
     ):
-        if text_config is None:
-            text_config = llm_cfg
-        if vision_config is None:
-            vision_config = vision_tower_cfg
-        if audio_config is None:
-            audio_config = sound_tower_cfg
+        legacy_config_aliases = {
+            "llm_cfg": "text_config",
+            "vision_tower_cfg": "vision_config",
+            "sound_tower_cfg": "audio_config",
+        }
+        used_legacy_aliases = [key for key in legacy_config_aliases if key in kwargs]
+        if used_legacy_aliases:
+            formatted_aliases = ", ".join(
+                f"`{key}` -> `{legacy_config_aliases[key]}`" for key in sorted(used_legacy_aliases)
+            )
+            raise TypeError(
+                "AudioVisualFlamingoConfig only accepts canonical sub-config names. "
+                f"Replace legacy aliases: {formatted_aliases}."
+            )
 
         self.text_config = self._build_sub_config(text_config, "qwen2")
         self.vision_config = self._build_sub_config(vision_config, "siglip_vision_model")
@@ -172,40 +177,6 @@ class AudioVisualFlamingoConfig(PreTrainedConfig):
         self.projector_hidden_act = projector_hidden_act
 
         super().__init__(**kwargs)
-
-    def get_text_config(self, decoder=None, encoder=None):
-        _ = (decoder, encoder)
-        return self.text_config
-
-    @property
-    def llm_cfg(self):
-        return self.text_config.to_dict()
-
-    @llm_cfg.setter
-    def llm_cfg(self, value):
-        self.text_config = self._build_sub_config(value, "qwen2")
-
-    @property
-    def vision_tower_cfg(self):
-        return self.vision_config.to_dict()
-
-    @vision_tower_cfg.setter
-    def vision_tower_cfg(self, value):
-        self.vision_config = self._build_sub_config(
-            value,
-            "siglip_vision_model",
-        )
-
-    @property
-    def sound_tower_cfg(self):
-        return self.audio_config.to_dict()
-
-    @sound_tower_cfg.setter
-    def sound_tower_cfg(self, value):
-        self.audio_config = self._build_sub_config(
-            value,
-            "qwen2_audio_encoder",
-        )
 
 
 __all__ = ["AudioVisualFlamingoConfig"]

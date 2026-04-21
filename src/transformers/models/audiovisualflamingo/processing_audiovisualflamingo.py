@@ -231,13 +231,11 @@ def _pad_or_trim_audio(audio: np.ndarray, length: int) -> np.ndarray:
 
 
 def _resolve_sound_feature_size(config) -> int:
-    sound_tower_cfg = getattr(config, "audio_config", None)
-    if sound_tower_cfg is None:
-        sound_tower_cfg = getattr(config, "sound_tower_cfg", None)
-    if isinstance(sound_tower_cfg, dict):
-        feature_size = sound_tower_cfg.get("num_mel_bins")
+    audio_config = getattr(config, "audio_config", None)
+    if isinstance(audio_config, dict):
+        feature_size = audio_config.get("num_mel_bins")
     else:
-        feature_size = getattr(sound_tower_cfg, "num_mel_bins", None)
+        feature_size = getattr(audio_config, "num_mel_bins", None)
     if feature_size is None:
         feature_size = 128
     return int(feature_size)
@@ -776,7 +774,6 @@ class AudioVisualFlamingoProcessor(ProcessorMixin):
             "padding_side": self.padding_side,
             "random_audio_sample": getattr(self, "random_audio_sample", False),
             "s2_scales": self.s2_scales,
-            "sound_tower_cfg": getattr(self, "sound_tower_cfg", None),
         }
         runtime_kwargs.update(
             {
