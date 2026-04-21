@@ -34,6 +34,10 @@ from ...utils import TensorType, auto_docstring, logging
 logger = logging.get_logger(__name__)
 
 
+def ensure_divide(length: int, divisor: int) -> int:
+    return max(round(length / divisor) * divisor, divisor)
+
+
 class MiniCPMV4_6ImageProcessorPilKwargs(ImagesKwargs, total=False):
     r"""
     max_slice_nums (`int`, *optional*, defaults to 9):
@@ -64,7 +68,7 @@ class MiniCPMV4_6ImageProcessorPilKwargs(ImagesKwargs, total=False):
 @auto_docstring
 class MiniCPMV4_6ImageProcessorPil(PilBackend):
     resample = PILImageResampling.BICUBIC
-    do_resize = False
+    do_resize = True
     do_rescale = True
     do_normalize = True
     image_mean = IMAGENET_STANDARD_MEAN
@@ -79,57 +83,63 @@ class MiniCPMV4_6ImageProcessorPil(PilBackend):
     valid_kwargs = MiniCPMV4_6ImageProcessorPilKwargs
     model_input_names = ["pixel_values", "target_sizes"]
 
-    # ------------------------------------------------------------------
-    # Slicing geometry helpers (pure math, no image data)
-    # ------------------------------------------------------------------
+    def __init__(self, **kwargs: Unpack[MiniCPMV4_6ImageProcessorPilKwargs]):
+        super().__init__(**kwargs)
 
-    @staticmethod
-    def _ensure_divide(length: int, divisor: int) -> int:
-        return max(round(length / divisor) * divisor, divisor)
+    def _validate_preprocess_kwargs(self, **kwargs):
+        # Drop `do_resize`, model resizes based on auto-inferred size at run-time
+        kwargs.pop("do_resize")
+        super()._validate_preprocess_kwargs(**kwargs)
 
-    @classmethod
-    def _find_best_resize(
-        cls, original_size: tuple[int, int], scale_resolution: int, patch_size: int, allow_upscale: bool = False
+    def find_best_resize(
+        self,
+        image_size: tuple[int, int],
+        scale_resolution: int,
+        patch_size: int,
+        allow_upscale: bool = False,
     ) -> tuple[int, int]:
-        width, height = original_size
-        if (width * height > scale_resolution * scale_resolution) or allow_upscale:
+        height, width = image_size
+        if (height * width > scale_resolution * scale_resolution) or allow_upscale:
             aspect_ratio = width / height
             height = int(scale_resolution / math.sqrt(aspect_ratio))
             width = int(height * aspect_ratio)
         # factor 4 = two successive 2×2 spatial merges (ViT insert merger + downsample MLP)
-        best_width = cls._ensure_divide(width, patch_size * 4)
-        best_height = cls._ensure_divide(height, patch_size * 4)
-        return (best_width, best_height)
+        best_width = ensure_divide(width, patch_size * 4)
+        best_height = ensure_divide(height, patch_size * 4)
+        return best_height, best_width
 
-    @classmethod
     def _get_refine_size(
-        cls,
-        original_size: tuple[int, int],
+        self,
+        image_size: tuple[int, int],
         grid: list[int],
         scale_resolution: int,
         patch_size: int,
         allow_upscale: bool = False,
     ) -> tuple[int, int]:
-        width, height = original_size
-        grid_x, grid_y = grid
-        refine_width = cls._ensure_divide(width, grid_x)
-        refine_height = cls._ensure_divide(height, grid_y)
-        grid_width = refine_width / grid_x
-        grid_height = refine_height / grid_y
-        best_grid_size = cls._find_best_resize(
-            (grid_width, grid_height), scale_resolution, patch_size, allow_upscale=allow_upscale
-        )
-        return (best_grid_size[0] * grid_x, best_grid_size[1] * grid_y)
+        height, width = image_size
+        grid_y, grid_x = grid
+        refine_width = ensure_divide(width, grid_x)
+        refine_height = ensure_divide(height, grid_y)
 
-    @staticmethod
-    def _get_sliced_grid(
-        image_size: tuple[int, int], max_slice_nums: int, scale_resolution: int, never_split: bool = False
+        best_height, best_width = self.find_best_resize(
+            image_size=(refine_height / grid_y, refine_width / grid_x),
+            scale_resolution=scale_resolution,
+            patch_size=patch_size,
+            allow_upscale=allow_upscale,
+        )
+        return best_height * grid_y, best_width * grid_x
+
+    def get_sliced_grid(
+        self,
+        image_size: tuple[int, int],
+        max_slice_nums: int,
+        scale_resolution: int,
     ) -> list[int] | None:
-        original_width, original_height = image_size
+        original_height, original_width = image_size
         log_ratio = math.log(original_width / original_height)
         ratio = original_width * original_height / (scale_resolution * scale_resolution)
         multiple = min(math.ceil(ratio), max_slice_nums)
-        if multiple <= 1 or never_split:
+        if multiple <= 1:
             return None
 
         best_grid = [1, 1]
@@ -142,26 +152,17 @@ class MiniCPMV4_6ImageProcessorPil(PilBackend):
                     num_cols = num_slices // num_rows
                     error = abs(log_ratio - math.log(num_rows / num_cols))
                     if error < min_error:
-                        best_grid = [num_rows, num_cols]
+                        best_grid = [num_cols, num_rows]
                         min_error = error
         return best_grid
 
-    # ------------------------------------------------------------------
-    # NumPy array operations
-    # ------------------------------------------------------------------
-
-    @staticmethod
-    def _reshape_by_patch(image: np.ndarray, patch_size: int) -> np.ndarray:
+    def reshape_by_patch(self, image: np.ndarray, patch_size: int) -> np.ndarray:
         """Reshape ``[C, H, W]`` into NaViT patchified format ``[C, patch_size, H*W/patch_size]``."""
         num_channels, height, width = image.shape
         num_patches_h, num_patches_w = height // patch_size, width // patch_size
         patches = image.reshape(num_channels, num_patches_h, patch_size, num_patches_w, patch_size)
         patches = patches.transpose(0, 2, 1, 3, 4)
         return patches.reshape(num_channels, patch_size, -1)
-
-    # ------------------------------------------------------------------
-    # Public API
-    # ------------------------------------------------------------------
 
     @auto_docstring
     def preprocess(
@@ -175,7 +176,6 @@ class MiniCPMV4_6ImageProcessorPil(PilBackend):
         self,
         images: list[np.ndarray],
         do_resize: bool,
-        size,
         resample: "PILImageResampling | None",
         do_rescale: bool,
         rescale_factor: float,
@@ -199,43 +199,45 @@ class MiniCPMV4_6ImageProcessorPil(PilBackend):
         all_patch_visual_tokens: list[int] = []
 
         for image in images:
-            _, height, width = image.shape
-            original_size = (width, height)
+            image_size = image.shape[-2:]
+            best_grid = None
 
             if slice_mode:
-                best_grid = self._get_sliced_grid(original_size, max_slice_nums, scale_resolution)
-            else:
-                best_grid = None
+                best_grid = self.get_sliced_grid(image_size, max_slice_nums, scale_resolution)
 
-            source_wh = self._find_best_resize(
-                original_size, scale_resolution, patch_size, allow_upscale=(best_grid is None)
-            )
-            source_img = self.resize(image, size=SizeDict(height=source_wh[1], width=source_wh[0]), resample=resample)
+            source_img = image
+            source_height, source_width = image_size
+            if do_resize:
+                source_height, source_width = self.find_best_resize(
+                    image_size, scale_resolution, patch_size, allow_upscale=(best_grid is None)
+                )
+                source_img = self.resize(
+                    image, size=SizeDict(height=source_height, width=source_width), resample=resample
+                )
 
             if do_rescale:
                 source_img = self.rescale(source_img, rescale_factor)
             if do_normalize:
                 source_img = self.normalize(source_img, image_mean, image_std)
 
-            source_width, source_height = source_wh
-            source_visual_tokens = source_height * source_width // (patch_size * patch_size * token_divisor)
-
-            image_pv = [self._reshape_by_patch(source_img, patch_size)]
+            image_pv = [self.reshape_by_patch(source_img, patch_size)]
             image_ts = [[source_height // patch_size, source_width // patch_size]]
+            source_visual_tokens = source_height * source_width // (patch_size * patch_size * token_divisor)
 
             patch_visual_tokens = 0
             if best_grid is not None:
-                refine_wh = self._get_refine_size(
-                    original_size, best_grid, scale_resolution, patch_size, allow_upscale=True
-                )
-                refine_img = self.resize(
-                    image, size=SizeDict(height=refine_wh[1], width=refine_wh[0]), resample=resample
-                )
-                _, refine_height, refine_width = refine_img.shape
-                grid_x, grid_y = best_grid
-                slice_patches = divide_to_patches(refine_img, (refine_height // grid_y, refine_width // grid_x))
+                refine_img = image
+                refine_h, refine_w = image_size
+                if do_resize:
+                    refine_h, refine_w = self._get_refine_size(
+                        image_size, best_grid, scale_resolution, patch_size, allow_upscale=True
+                    )
+                    refine_img = self.resize(image, size=SizeDict(height=refine_h, width=refine_w), resample=resample)
 
-                patch_height, patch_width = slice_patches[0].shape[1], slice_patches[0].shape[2]
+                refine_height, refine_width = refine_img.shape[-2:]
+                grid_y, grid_x = best_grid
+                patch_height, patch_width = refine_height // grid_y, refine_width // grid_x
+                slice_patches = divide_to_patches(refine_img, (refine_height // grid_y, refine_width // grid_x))
                 patch_visual_tokens = patch_height * patch_width // (patch_size * patch_size * token_divisor)
 
                 for patch_arr in slice_patches:
@@ -243,7 +245,7 @@ class MiniCPMV4_6ImageProcessorPil(PilBackend):
                         patch_arr = self.rescale(patch_arr, rescale_factor)
                     if do_normalize:
                         patch_arr = self.normalize(patch_arr, image_mean, image_std)
-                    image_pv.append(self._reshape_by_patch(patch_arr, patch_size))
+                    image_pv.append(self.reshape_by_patch(patch_arr, patch_size))
                     image_ts.append([patch_height // patch_size, patch_width // patch_size])
 
             per_image_pixel_values.append(image_pv)
@@ -260,6 +262,7 @@ class MiniCPMV4_6ImageProcessorPil(PilBackend):
                 "source_image_visual_tokens": all_source_visual_tokens,
                 "patch_visual_tokens": all_patch_visual_tokens,
             },
+            tensor_type=return_tensors,
         )
 
 

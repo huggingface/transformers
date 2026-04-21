@@ -32,7 +32,7 @@ class MiniCPMV4_6ImageProcessingTester:
         num_channels=3,
         min_resolution=64,
         max_resolution=128,
-        do_resize=False,
+        do_resize=True,
         do_rescale=True,
         rescale_factor=1 / 255,
         do_normalize=True,

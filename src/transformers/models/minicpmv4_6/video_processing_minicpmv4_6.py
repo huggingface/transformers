@@ -49,7 +49,7 @@ def ensure_divide(length: int, divisor: int) -> int:
 
 class MiniCPMV4_6VideoProcessorKwargs(VideosKwargs, total=False):
     r"""
-    max_frames (`int`, *optional*, defaults to 128):
+    max_num_frames (`int`, *optional*, defaults to 128):
         Maximum number of main frames to sample per video.
     stack_frames (`int`, *optional*, defaults to 1):
         Sub-frames per second to stack.  ``1`` disables stacking.
@@ -70,7 +70,7 @@ class MiniCPMV4_6VideoProcessorKwargs(VideosKwargs, total=False):
         generation, not by the image processing pipeline itself.
     """
 
-    max_frames: int
+    max_num_frames: int
     stack_frames: int
     max_slice_nums: int
     scale_resolution: int
@@ -86,7 +86,7 @@ class MiniCPMV4_6VideoProcessorKwargs(VideosKwargs, total=False):
 )
 class MiniCPMV4_6VideoProcessor(BaseVideoProcessor):
     resample = PILImageResampling.BICUBIC
-    do_resize = False
+    do_resize = True
     do_rescale = True
     do_normalize = True
     image_mean = IMAGENET_STANDARD_MEAN
@@ -98,7 +98,7 @@ class MiniCPMV4_6VideoProcessor(BaseVideoProcessor):
     slice_mode = True
     downsample_mode = "16x"
     use_image_id = True
-    max_frames = 128
+    max_num_frames = 128
     stack_frames = 1
     valid_kwargs = MiniCPMV4_6VideoProcessorKwargs
     model_input_names = ["pixel_values_videos", "target_sizes_videos"]
@@ -106,14 +106,19 @@ class MiniCPMV4_6VideoProcessor(BaseVideoProcessor):
     def __init__(self, **kwargs: Unpack[MiniCPMV4_6VideoProcessorKwargs]):
         super().__init__(**kwargs)
 
+    def _validate_preprocess_kwargs(self, **kwargs):
+        # Drop `do_resize`, model resizes based on auto-inferred size at run-time
+        kwargs.pop("do_resize")
+        super()._validate_preprocess_kwargs(**kwargs)
+
     def sample_frames(
-        self, metadata: VideoMetadata, max_frames: int | None = None, stack_frames: int | None = None, **kwargs
+        self, metadata: VideoMetadata, max_num_frames: int | None = None, stack_frames: int | None = None, **kwargs
     ):
         """
         Args:
             metadata (`VideoMetadata`):
                 Metadata of the video containing information about total duration, fps and total number of frames.
-            max_frames (`int`, *optional*):
+            max_num_frames (`int`, *optional*):
                 The maximum number of frames that can be sampled.
             stack_frames (`int`, *optional*):
                 Sub-frames per second to stack. Value of `1` disables stacking.
@@ -127,19 +132,19 @@ class MiniCPMV4_6VideoProcessor(BaseVideoProcessor):
                 "Please pass in `VideoMetadata` object or set `do_sample_frames=False`"
             )
 
-        max_frames = max_frames if max_frames is not None else self.max_frames
+        max_num_frames = max_num_frames if max_num_frames is not None else self.max_num_frames
         stack_frames = stack_frames if stack_frames is not None else self.stack_frames
         total_num_frames, avg_fps = metadata.total_num_frames, metadata.fps
         duration = metadata.duration
         num_seconds = math.ceil(duration)
 
-        is_video_long = duration > max_frames
+        is_video_long = duration > max_num_frames
         if is_video_long:
             timestamps = [round(i * 0.1, 1) for i in range(int(duration / 0.1))]
             main_indices = [min(int(ts * avg_fps), total_num_frames - 1) for ts in timestamps]
-            # Sample frames to keep the total length at `max_frames`
-            if len(main_indices) > max_frames:
-                sampling_idxs = np.linspace(0, len(main_indices) - 1, max_frames, dtype=int)
+            # Sample frames to keep the total length at `max_num_frames`
+            if len(main_indices) > max_num_frames:
+                sampling_idxs = np.linspace(0, len(main_indices) - 1, max_num_frames, dtype=int)
                 main_indices = [main_indices[i] for i in sampling_idxs]
         else:
             main_indices = [int(i * avg_fps) for i in range(num_seconds)]
@@ -155,10 +160,10 @@ class MiniCPMV4_6VideoProcessor(BaseVideoProcessor):
                         sub_timestamps.append(timestamp)
             sub_indices = [min(int(timestamp * avg_fps), total_num_frames - 1) for timestamp in sub_timestamps]
 
-            max_frames_stack = max_frames * (stack_frames - 1)
-            if len(sub_indices) > max_frames_stack:
-                # Sample frames to keep the total length at `max_frames`
-                sampling_idxs = np.linspace(0, len(sub_indices) - 1, max_frames_stack, dtype=int)
+            max_num_frames_stack = max_num_frames * (stack_frames - 1)
+            if len(sub_indices) > max_num_frames_stack:
+                # Sample frames to keep the total length at `max_num_frames`
+                sampling_idxs = np.linspace(0, len(sub_indices) - 1, max_num_frames_stack, dtype=int)
                 sub_indices = [sub_indices[i] for i in sampling_idxs]
             indices_total += sub_indices
 
@@ -210,51 +215,53 @@ class MiniCPMV4_6VideoProcessor(BaseVideoProcessor):
 
     def find_best_resize(
         self,
-        original_size: tuple[int, int],
+        video_size: tuple[int, int],
         scale_resolution: int,
         patch_size: int,
         allow_upscale: bool = False,
     ) -> tuple[int, int]:
-        width, height = original_size
-        if (width * height > scale_resolution * scale_resolution) or allow_upscale:
+        height, width = video_size
+        if (height * width > scale_resolution * scale_resolution) or allow_upscale:
             aspect_ratio = width / height
             height = int(scale_resolution / math.sqrt(aspect_ratio))
             width = int(height * aspect_ratio)
         # factor 4 = two successive 2×2 spatial merges (ViT insert merger + downsample MLP)
-        best_width = ensure_divide(width, patch_size * 4)
         best_height = ensure_divide(height, patch_size * 4)
-        return (best_width, best_height)
+        best_width = ensure_divide(width, patch_size * 4)
+        return best_height, best_width
 
     def get_refine_size(
         self,
-        original_size: tuple[int, int],
+        video_size: tuple[int, int],
         grid: list[int],
         scale_resolution: int,
         patch_size: int,
         allow_upscale: bool = False,
     ) -> tuple[int, int]:
-        width, height = original_size
-        grid_x, grid_y = grid
+        height, width = video_size
+        grid_y, grid_x = grid
         refine_width = ensure_divide(width, grid_x)
         refine_height = ensure_divide(height, grid_y)
-        grid_width = refine_width / grid_x
-        grid_height = refine_height / grid_y
-        best_grid_size = self.find_best_resize(
-            (grid_width, grid_height), scale_resolution, patch_size, allow_upscale=allow_upscale
+
+        best_height, best_width = self.find_best_resize(
+            video_size=(refine_height / grid_y, refine_width / grid_x),
+            scale_resolution=scale_resolution,
+            patch_size=patch_size,
+            allow_upscale=allow_upscale,
         )
-        return (best_grid_size[0] * grid_x, best_grid_size[1] * grid_y)
+        return best_height * grid_y, best_width * grid_x
 
     def get_sliced_grid(
-        image_size: tuple[int, int],
+        self,
+        video_size: tuple[int, int],
         max_slice_nums: int,
         scale_resolution: int,
-        never_split: bool = False,
     ) -> list[int] | None:
-        original_width, original_height = image_size
+        original_height, original_width = video_size
         log_ratio = math.log(original_width / original_height)
         ratio = original_width * original_height / (scale_resolution * scale_resolution)
         multiple = min(math.ceil(ratio), max_slice_nums)
-        if multiple <= 1 or never_split:
+        if multiple <= 1:
             return None
 
         best_grid = [1, 1]
@@ -267,7 +274,7 @@ class MiniCPMV4_6VideoProcessor(BaseVideoProcessor):
                     num_cols = num_slices // num_rows
                     error = abs(log_ratio - math.log(num_rows / num_cols))
                     if error < min_error:
-                        best_grid = [num_rows, num_cols]
+                        best_grid = [num_cols, num_rows]
                         min_error = error
         return best_grid
 
@@ -276,8 +283,8 @@ class MiniCPMV4_6VideoProcessor(BaseVideoProcessor):
         batch, time, num_channels, height, width = videos.shape
 
         # merge B and T so unfold sees 4D (B*T, C, H, W)
-        x = videos.reshape(batch * time, num_channels, height, width)
-        patches = torch.nn.functional.unfold(x, (patch_size, patch_size), stride=(patch_size, patch_size))
+        videos = videos.reshape(batch * time, num_channels, height, width)
+        patches = torch.nn.functional.unfold(videos, (patch_size, patch_size), stride=(patch_size, patch_size))
 
         patches = patches.reshape(batch, time, num_channels, patch_size, patch_size, -1)
         patches = patches.permute(0, 1, 2, 3, 5, 4)  # (B, T, C, patch_size, num_patches, patch_size)
@@ -346,16 +353,15 @@ class MiniCPMV4_6VideoProcessor(BaseVideoProcessor):
         scale_resolution: int,
         patch_size: int,
     ):
-        height, width = video.shape[-2:]
-        original_size = (width, height)
+        video_size = video.shape[-2:]
         best_grid = None
 
         if slice_mode:
-            best_grid = self.get_sliced_grid(original_size, max_slice_nums, scale_resolution)
+            best_grid = self.get_sliced_grid(video_size, max_slice_nums, scale_resolution)
 
         # Always resize the source
-        new_width, new_height = self.find_best_resize(
-            original_size, scale_resolution, patch_size, allow_upscale=(best_grid is None)
+        new_height, new_width = self.find_best_resize(
+            video_size, scale_resolution, patch_size, allow_upscale=(best_grid is None)
         )
         source_video = self.resize(video, size=SizeDict(height=new_height, width=new_width), resample=resample)
 
@@ -363,9 +369,9 @@ class MiniCPMV4_6VideoProcessor(BaseVideoProcessor):
         patches = [source_video]
         if best_grid is not None:
             refine_width, refine_height = self.get_refine_size(
-                original_size, best_grid, scale_resolution, patch_size, allow_upscale=True
+                video_size, best_grid, scale_resolution, patch_size, allow_upscale=True
             )
-            grid_x, grid_y = best_grid
+            grid_y, grid_x = best_grid
             patch_height, patch_width = refine_height // grid_y, refine_width // grid_x
 
             refine_video = self.resize(
@@ -430,7 +436,7 @@ class MiniCPMV4_6VideoProcessor(BaseVideoProcessor):
                 )
             else:
                 video = [video]
-            resized_videos.append([*video, *sub_videos])
+            resized_videos.extend([*video, *sub_videos])
 
         # Group videos by size for further processing
         grouped_videos, grouped_videos_index = group_videos_by_shape(resized_videos)
