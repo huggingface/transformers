@@ -50,11 +50,6 @@ MM_BOS_EOS_TOKENS = {
     "sound": ["<|sound_bos|>", "<|sound_eos|>"],
 }
 
-LEGACY_CHECKPOINT_KEY_MAPPING = {
-    r"^vision_tower\.vision_tower\.vision_model\.": "vision_tower.vision_tower.",
-    r"^sound_tower\.audio_tower\.": "sound_tower.",
-}
-
 class AudioVisualFlamingoConfig(PreTrainedConfig):
     model_type = "audiovisualflamingo"
     keys_to_ignore_at_inference = ["past_key_values"]
@@ -83,8 +78,8 @@ class AudioVisualFlamingoConfig(PreTrainedConfig):
         text_config=None,
         vision_config=None,
         audio_config=None,
-        mm_vision_select_layer=None,
-        mm_vision_select_feature=None,
+        mm_vision_select_layer=-2,
+        mm_vision_select_feature="patch",
         dynamic_s2=None,
         s2_scales=None,
         s2_max_split_size=None,
@@ -387,13 +382,13 @@ class SoundMultimodalProjector(AudioFlamingo3MultiModalProjector):
 class SiglipVisionTowerDynamicS2(nn.Module):
     def __init__(self, config: AudioVisualFlamingoConfig) -> None:
         super().__init__()
-        self.select_layer = getattr(config, "mm_vision_select_layer", -2)
-        self.select_feature = getattr(config, "mm_vision_select_feature", "patch")
+        self.select_layer = config.mm_vision_select_layer
+        self.select_feature = config.mm_vision_select_feature
         if config.s2_scales is None:
             raise ValueError("`config.s2_scales` must be provided when `dynamic_s2=True`.")
         self.scales = sorted(int(scale) for scale in config.s2_scales)
         self.max_split_size = config.s2_max_split_size
-        self.resize_output_to_scale_idx = getattr(config, "s2_resize_output_to_scale_idx", 0)
+        self.resize_output_to_scale_idx = config.s2_resize_output_to_scale_idx
 
         vision_cfg = copy.deepcopy(config.vision_config)
         vision_cfg._attn_implementation = config._attn_implementation
@@ -525,7 +520,7 @@ class AudioVisualFlamingoPretrainedModel(VoxtralPreTrainedModel):
                 self._time_embeddings[key] = RotaryEmbedding(dim=trope_dim, freqs_for=time_embed_type, max_freq=256, max_time=max_time)
         return period_fix, max_time
 
-    def freezed_module_patch(self):
+    def _freeze_untrained_modules(self):
         if not self.training:
             return
 
@@ -540,12 +535,6 @@ class AudioVisualFlamingoPretrainedModel(VoxtralPreTrainedModel):
 
 
 class AudioVisualFlamingoForConditionalGeneration(AudioVisualFlamingoPretrainedModel, GenerationMixin):
-    @classmethod
-    def from_pretrained(cls, *args, **kwargs):
-        key_mapping = kwargs.pop("key_mapping", None)
-        kwargs["key_mapping"] = {**LEGACY_CHECKPOINT_KEY_MAPPING, **(key_mapping or {})}
-        return super().from_pretrained(*args, **kwargs)
-
     def __init__(self, config: AudioVisualFlamingoConfig, *args, **kwargs):
         super().__init__(config)
         _ = (args, kwargs)
@@ -1214,7 +1203,7 @@ class AudioVisualFlamingoForConditionalGeneration(AudioVisualFlamingoPretrainedM
         **kwargs,
     ) -> tuple | CausalLMOutputWithPast:
         _ = (pixel_values, seqlens_in_batch)
-        self.freezed_module_patch()
+        self._freeze_untrained_modules()
         if media_config is None:
             media_config = defaultdict(dict)
         if inputs_embeds is None:

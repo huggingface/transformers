@@ -647,9 +647,6 @@ class AudioVisualFlamingoProcessorKwargs(ProcessingKwargs, total=False):
 
 class AudioVisualFlamingoProcessor(ProcessorMixin):
     attributes = ["image_processor", "feature_extractor", "tokenizer"]
-    image_processor_class = "AutoImageProcessor"
-    feature_extractor_class = "WhisperFeatureExtractor"
-    tokenizer_class = "AutoTokenizer"
     valid_kwargs = [
         "padding_side",
         "image_aspect_ratio",

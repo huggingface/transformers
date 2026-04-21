@@ -44,7 +44,6 @@ from transformers import (
     WhisperFeatureExtractor,
 )
 from transformers.initialization import no_init_weights
-from transformers.models.audiovisualflamingo.modeling_audiovisualflamingo import LEGACY_CHECKPOINT_KEY_MAPPING
 
 
 logger = logging.getLogger(__name__)
@@ -52,6 +51,10 @@ logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
 
 DEFAULT_SRC_PATH = Path("/fs/nexus-projects/JSALT_workshop/lasha/Dev/audiovisualflamingo")
 DEFAULT_DST_PATH = Path("/fs/nexus-projects/JSALT_workshop/lasha/Dev/comni")
+LEGACY_CHECKPOINT_KEY_MAPPING = {
+    r"^vision_tower\.vision_tower\.vision_model\.": "vision_tower.vision_tower.",
+    r"^sound_tower\.audio_tower\.": "sound_tower.",
+}
 
 # Maps legacy component sub-directories to the weight-key prefix expected by
 # AudioVisualFlamingoForConditionalGeneration.
