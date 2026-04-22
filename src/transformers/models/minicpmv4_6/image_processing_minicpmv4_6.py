@@ -245,10 +245,10 @@ class MiniCPMV4_6ImageProcessor(TorchvisionBackend):
             all_grids.append(best_grid if best_grid is not None else [0, 0])
 
         all_pv = [pv for sublist in per_image_pixel_values for pv in sublist]
-        pixel_values = torch.cat(all_pv, dim=-1).unsqueeze(0) if all_pv else torch.empty(0)
+        pixel_values = torch.cat(all_pv, dim=-1).unsqueeze(0)
 
         all_ts = [ts for sublist in per_image_target_sizes for ts in sublist]
-        target_sizes = torch.tensor(all_ts, dtype=torch.int32) if all_ts else torch.zeros(0, 2, dtype=torch.int32)
+        target_sizes = torch.tensor(all_ts, dtype=torch.int32)
 
         num_patches_per_image = [len(sublist) for sublist in per_image_pixel_values]
 
