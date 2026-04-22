@@ -877,60 +877,116 @@ class TestConvertAndLoadStateDict(unittest.TestCase):
 class TestDtensorShardOperation(unittest.TestCase):
     """Unit tests for DtensorShardOperation.shard_tensor.
 
-    The class handles three source shapes relative to the DTensor param:
-      (a) full weight                   — interval math applies directly.
-      (b) one expert of a packed param  — skip if not owned, else drop the
-                                           expert placement and continue.
-      (c) one pack-half                 — interleaved (_StridedShard) on the
-                                           missing packed axis degrades to a
-                                           plain contiguous cut.
-    Shard after _StridedShard on the same dim composes via a flat-view cut
-    in _contiguous_intervals.
+    Each test mirrors a real transformer-layer scenario that produces one
+    of the placement patterns shard_tensor must handle. The docstring of
+    every test walks the interval-narrowing loop step by step so the
+    expected output is traceable by hand.
 
-    Covered paths:
-        - no sharding / replicate-only                    [test_no_shard_returns_full_tensor]
-        - single-placement contiguous shard               [test_1d_single_shard,
-                                                           test_negative_dim_normalizes_correctly,
-                                                           test_contiguous_shard_uneven_division]
-        - multi-placement contiguous shard                [test_nd_contiguous_single_slice]
-        - strided shard producing disjoint intervals      [test_nd_strided_shard_disjoint_ranges]
-        - Shard after _StridedShard on same dim           [test_nd_strided_plus_shard_same_dim]
-        - per-expert, no expert-axis sharding             [test_expert_shaped_tp_only_no_expert_sharding]
-        - per-expert, expert axis sharded (skip/own)      [test_expert_filtering]
-        - per-expert + inner TP                           [test_expert_filtering_preserves_inner_sharding]
-        - per-expert + pre-pack axis (strided→contig)     [test_prepacked_strided_shard_uses_contiguous_source_slice]
-        - internal _slice_and_cat                         [test_slice_and_cat_all_single_ranges,
-                                                           test_slice_and_cat_raises_on_two_multi_range_dims]
+    Scenarios                                                      Placement pattern
+    ---------------------------------------------------------------------------------------------
+    Row-parallel layer       (o_proj, down_proj)                   [Shard(0), Shard(1)]
+    Column-parallel layer    (q/k/v_proj, gate_up_proj, lm_head)   [_StridedShard(0, sf=TP), Shard(0)]
+    _StridedShard alone      (TP on input dim with group pattern)  [Shard(0), _StridedShard(1, sf=2)]
+    MoE expert, not owned    (mixtral experts)                     [Shard(0)] on expert dim
+    MoE expert, owned        (mixtral experts)                     [Shard(0)] on expert dim
+    MoE expert + inner TP    (experts + TP)                        [Shard(0), Shard(1)]
+    MoE TP without expert-   (experts + TP, expert axis            [Shard(1)] on inner dim
+    axis shard                 replicated)
+    Pre-pack half            (one of gate_up halves)               _StridedShard on missing packed axis
+    Replicate only           (biases, norms)                       [Replicate()]
+
+    Edge cases:
+        - uneven shard division (5 rows / 2 ranks)
+        - negative dim index normalization (Shard(-1))
+
+    Internal _slice_and_cat helper:
+        - fast path (one interval per dim)
+        - rejection of two multi-range dims
     """
 
-    def test_no_shard_returns_full_tensor(self):
-        """Replicate-only → full copy."""
-        mesh = FakeMesh(shape=(2,), rank=0)
-        op = _make_dtensor_shard_op(mesh, [Replicate()], param_shape=(4, 4), local_shape=(4, 4))
-        tensor = torch.arange(16).reshape(4, 4).float()
-        torch.testing.assert_close(op.shard_tensor(tensor), tensor)
+    # --------------------------------------------------------------
+    # Row-parallel: FSDP and TP shard different dims (no collision)
+    # --------------------------------------------------------------
+    def test_row_parallel_layer_shards_different_dims(self):
+        """Row-parallel (o_proj / down_proj) on a 2×2 mesh [FSDP, TP].
 
-    def test_1d_single_shard(self):
-        """1D mesh with a single Shard(0) → contiguous split across ranks."""
-        tensor = torch.arange(16).reshape(4, 4).float()
-        for rank, expected in [(0, tensor[:2]), (1, tensor[2:])]:
-            mesh = FakeMesh(shape=(2,), rank=rank)
-            op = _make_dtensor_shard_op(mesh, [Shard(0)], param_shape=(4, 4), local_shape=(2, 4))
-            torch.testing.assert_close(op.shard_tensor(tensor), expected, msg=f"rank {rank}")
+        param = Linear.weight, shape (out=8, in=8).
+        placements = [Shard(0), Shard(1)] — FSDP on output rows, TP on input cols.
 
-    def test_nd_contiguous_single_slice(self):
-        """nD Shard on different dims → single slice read per rank."""
+        Walk for rank (FSDP=0, TP=0):
+            init           → dim 0: [(0, 8)]   dim 1: [(0, 8)]
+            after Shard(0) → dim 0: [(0, 4)]   dim 1: [(0, 8)]
+            after Shard(1) → dim 0: [(0, 4)]   dim 1: [(0, 4)]
+            → source[0:4, 0:4]
+
+        Each of the 4 ranks owns a disjoint 4×4 quadrant.
+        """
         tensor = torch.arange(64).reshape(8, 8).float()
-        expected = {0: tensor[:4, :4], 1: tensor[:4, 4:], 2: tensor[4:, :4], 3: tensor[4:, 4:]}
+        expected = {
+            0: tensor[:4, :4],  # (FSDP=0, TP=0) top-left
+            1: tensor[:4, 4:],  # (FSDP=0, TP=1) top-right
+            2: tensor[4:, :4],  # (FSDP=1, TP=0) bottom-left
+            3: tensor[4:, 4:],  # (FSDP=1, TP=1) bottom-right
+        }
         for rank in range(4):
             mesh = FakeMesh(shape=(2, 2), rank=rank)
             op = _make_dtensor_shard_op(mesh, [Shard(0), Shard(1)], param_shape=(8, 8), local_shape=(4, 4))
             torch.testing.assert_close(op.shard_tensor(tensor), expected[rank], msg=f"rank {rank}")
 
-    def test_nd_strided_shard_disjoint_ranges(self):
-        """_StridedShard on its own dim → multiple slice reads + cat."""
+    # --------------------------------------------------------------
+    # Column-parallel: FSDP + TP both shard dim 0 (stride resolves)
+    # --------------------------------------------------------------
+    def test_column_parallel_layer_same_dim_collision(self):
+        """Column-parallel (q/k/v_proj, gate_up_proj, lm_head) on a 2×2 mesh [FSDP, TP].
+
+        param = Linear.weight, shape (out=4, in=4).
+        placements = [_StridedShard(0, sf=2), Shard(0)] — both on dim 0.
+
+        Walk for rank (FSDP=0, TP=0):
+            init                       → dim 0: [(0, 4)]   dim 1: [(0, 4)]
+            after _StridedShard(0, 2)  → dim 0: [(0, 1), (2, 3)]
+                # groups (0,2) and (2,4); FSDP 0 keeps first half of each → rows {0, 2}
+            after Shard(0)             → dim 0: [(0, 1)]
+                # view [(0,1),(2,3)] flat → {row 0, row 2}; TP 0 takes first half → row 0
+            → source[0:1, :]
+
+        Gather across FSDP: TP 0 sees rows {0,1}, TP 1 sees rows {2,3} — contiguous
+        chunks as column-parallel kernels require.
+        """
+        tensor = torch.arange(16).reshape(4, 4).float()
+        expected = {
+            0: tensor[[0]],  # (FSDP=0, TP=0)
+            1: tensor[[2]],  # (FSDP=0, TP=1)
+            2: tensor[[1]],  # (FSDP=1, TP=0)
+            3: tensor[[3]],  # (FSDP=1, TP=1)
+        }
+        for rank in range(4):
+            mesh = FakeMesh(shape=(2, 2), rank=rank)
+            op = _make_dtensor_shard_op(
+                mesh,
+                [_StridedShard(dim=0, split_factor=2), Shard(0)],
+                param_shape=(4, 4),
+                local_shape=(1, 4),
+            )
+            torch.testing.assert_close(op.shard_tensor(tensor), expected[rank], msg=f"rank {rank}")
+
+    # --------------------------------------------------------------
+    # _StridedShard alone (on its own dim): multi-interval + concat
+    # --------------------------------------------------------------
+    def test_strided_shard_alone_produces_disjoint_intervals(self):
+        """_StridedShard on its own dim (different from Shard's dim) yields multi-interval reads.
+
+        param shape (8, 8), placements = [Shard(0), _StridedShard(1, sf=2)].
+
+        Walk for rank (0, 0):
+            init                         → dim 0: [(0, 8)]   dim 1: [(0, 8)]
+            after Shard(0)               → dim 0: [(0, 4)]   dim 1: [(0, 8)]
+            after _StridedShard(1, sf=2) → dim 0: [(0, 4)]   dim 1: [(0, 2), (4, 6)]
+                # groups (0,4) and (4,8); rank 0 keeps first half of each → cols {0-1, 4-5}
+            → _slice_and_cat reads source[:4, 0:2] and source[:4, 4:6],
+              concatenates along dim 1.
+        """
         tensor = torch.arange(64).reshape(8, 8).float()
-        # Shard(0) splits rows; _StridedShard(1, split_factor=2) produces disjoint col ranges
         expected = {
             0: torch.cat([tensor[:4, :2], tensor[:4, 4:6]], dim=1),
             1: torch.cat([tensor[:4, 2:4], tensor[:4, 6:8]], dim=1),
@@ -947,22 +1003,114 @@ class TestDtensorShardOperation(unittest.TestCase):
             )
             torch.testing.assert_close(op.shard_tensor(tensor), expected[rank], msg=f"rank {rank}")
 
-    def test_nd_strided_plus_shard_same_dim(self):
-        """_StridedShard + Shard on the same dim: Shard takes a flat-view slice of the strided output."""
-        tensor = torch.arange(16).reshape(4, 4).float()
-        expected = {0: tensor[[0]], 1: tensor[[2]], 2: tensor[[1]], 3: tensor[[3]]}
+    # --------------------------------------------------------------
+    # MoE experts (case b): source.ndim == param.ndim - 1
+    # --------------------------------------------------------------
+    def test_moe_expert_not_owned_returns_none(self):
+        """Expert file belongs to another rank → return None (skip the file).
+
+        param (E=4, H=2, I=2), placements = [Shard(0)] on expert axis.
+        2-rank mesh (FSDP=2). Rank 1 owns experts {2, 3} (offset=2, size=2).
+        Loading expert_idx=0 on rank 1 → the file is for rank 0, skip.
+        """
+        mesh = FakeMesh(shape=(2,), rank=1)
+        op = _make_dtensor_shard_op(mesh, [Shard(0)], param_shape=(4, 2, 2), local_shape=(2, 2, 2))
+        expert_tensor = torch.ones(2, 2)
+        self.assertIsNone(op.shard_tensor(expert_tensor, tensor_idx=0))
+
+    def test_moe_expert_owned_without_inner_sharding(self):
+        """Expert owned and no inner sharding → keep the whole expert tensor.
+
+        Same param / placements / mesh as above. Loading expert_idx=2 on rank 1:
+            source_is_one_expert = True
+            Shard(0) dim normalizes to 0 → enters the expert branch.
+            _owns_expert(2) = True → drop Shard(0) from placements.
+            Remaining placements = [] → early return of the full source tensor.
+        """
+        mesh = FakeMesh(shape=(2,), rank=1)
+        op = _make_dtensor_shard_op(mesh, [Shard(0)], param_shape=(4, 2, 2), local_shape=(2, 2, 2))
+        expert_tensor = torch.ones(2, 2)
+        torch.testing.assert_close(op.shard_tensor(expert_tensor, tensor_idx=2), expert_tensor)
+
+    def test_moe_expert_owned_with_inner_tp(self):
+        """MoE expert sharded on expert axis (FSDP) and inner dim (TP).
+
+        param (E=4, H=4, I=2), placements = [Shard(0), Shard(1)]:
+            Shard(0) on 2-way FSDP → expert-axis shard
+            Shard(1) on 2-way TP   → inner hidden-dim shard
+        source = (H=4, I=2) for one expert, tensor_idx=1.
+
+        Walk per rank (FSDP, TP) with tensor_idx=1:
+            expert branch: rank owns expert 1 only if FSDP==0 (offset 0, size 2)
+                FSDP=1 ranks → return None
+                FSDP=0 ranks → drop Shard(0); continue with Shard(1)
+            remaining placements = [(1, Shard(1))]
+            source_dim = _source_dim(1, [4, 2]) = 1 - missing_leading(1) = 0
+            init                   → dim 0: [(0, 4)]   dim 1: [(0, 2)]
+            after Shard(1)→src 0:
+                TP=0 rank           → dim 0: [(0, 2)]  → source[:2]
+                TP=1 rank           → dim 0: [(2, 4)]  → source[2:]
+        """
+        tensor = torch.arange(8).reshape(4, 2).float()
+        expected = {
+            0: tensor[:2],  # (FSDP=0, TP=0) — owns expert 1, inner rows 0-1
+            1: tensor[2:],  # (FSDP=0, TP=1) — owns expert 1, inner rows 2-3
+            2: None,        # (FSDP=1, TP=0) — does not own expert 1
+            3: None,        # (FSDP=1, TP=1) — does not own expert 1
+        }
         for rank in range(4):
             mesh = FakeMesh(shape=(2, 2), rank=rank)
-            op = _make_dtensor_shard_op(
-                mesh,
-                [_StridedShard(dim=0, split_factor=2), Shard(0)],
-                param_shape=(4, 4),
-                local_shape=(1, 4),
-            )
-            torch.testing.assert_close(op.shard_tensor(tensor), expected[rank], msg=f"rank {rank}")
+            op = _make_dtensor_shard_op(mesh, [Shard(0), Shard(1)], param_shape=(4, 4, 2), local_shape=(2, 2, 2))
+            shard = op.shard_tensor(tensor, tensor_idx=1)
+            if expected[rank] is None:
+                self.assertIsNone(shard)
+            else:
+                torch.testing.assert_close(shard, expected[rank], msg=f"rank {rank}")
 
-    def test_prepacked_strided_shard_uses_contiguous_source_slice(self):
-        """Pre-concat w1/w3 tensors should shard contiguously before gate/up packing."""
+    def test_moe_expert_tp_only_no_expert_axis_shard(self):
+        """MoE param with TP on inner dim but no expert-axis sharding.
+
+        param (E=4, H=4, I=2), placements = [Shard(1)] — TP only, 2-rank mesh.
+        source = (H=4, I=2), tensor_idx=0.
+
+            source_is_one_expert = True, BUT Shard(1).dim normalizes to 1 ≠ 0,
+            so no placement targets the expert axis → skip the expert branch and
+            fall into the generic loop with missing_leading_dims=1.
+
+        Walk:
+            source_dim = _source_dim(1, [4, 2]) = 1 - 1 = 0
+            init                   → dim 0: [(0, 4)]   dim 1: [(0, 2)]
+            after Shard(1)→src 0:
+                rank 0              → dim 0: [(0, 2)]  → source[:2]
+                rank 1              → dim 0: [(2, 4)]  → source[2:]
+        """
+        tensor = torch.arange(8).reshape(4, 2).float()
+        for rank, expected in [(0, tensor[:2]), (1, tensor[2:])]:
+            mesh = FakeMesh(shape=(2,), rank=rank)
+            op = _make_dtensor_shard_op(mesh, [Shard(1)], param_shape=(4, 4, 2), local_shape=(4, 2, 2))
+            torch.testing.assert_close(op.shard_tensor(tensor, tensor_idx=0), expected, msg=f"rank {rank}")
+
+    # --------------------------------------------------------------
+    # Pre-pack half (case c): _StridedShard on missing packed axis
+    # --------------------------------------------------------------
+    def test_prepack_half_strided_degrades_to_contiguous(self):
+        """Pre-concat w1 / w3 tensor: _StridedShard on the packed axis degrades.
+
+        param = packed gate_up per-expert, shape (E=8, 2H=8, D=2).
+        source = (H=4, D=2) — single w1 half for one expert, tensor_idx=0.
+        placements = [_StridedShard(dim=1, sf=2)] — would stride the packed 2H dim.
+
+        source_missing_leading_axis = True (source ndim 2 < param ndim 3).
+        is_interleaved requires same ndim → False.
+        → _StridedShard falls through to _contiguous_intervals.
+        The packing is rebuilt later by the WeightConverter's Concatenate op.
+
+        Walk for rank 0 (2-rank mesh):
+            source_dim = _source_dim(1, [4, 2]) = 1 - 1 = 0
+            init                       → dim 0: [(0, 4)]   dim 1: [(0, 2)]
+            after _StridedShard→src 0  → dim 0: [(0, 2)]   dim 1: [(0, 2)]
+            → source[:2]
+        """
         tensor = torch.arange(8).reshape(4, 2).float()
         for rank, expected in [(0, tensor[:2]), (1, tensor[2:])]:
             mesh = FakeMesh(shape=(2,), rank=rank)
@@ -974,52 +1122,26 @@ class TestDtensorShardOperation(unittest.TestCase):
             )
             torch.testing.assert_close(op.shard_tensor(tensor, tensor_idx=0), expected, msg=f"rank {rank}")
 
-    def test_expert_shaped_tp_only_no_expert_sharding(self):
-        """Expert-shaped param with TP on dim 1 but no expert sharding on dim 0 → plain interval loop."""
-        tensor = torch.arange(8).reshape(4, 2).float()
-        # Shard(1) on a 3D param maps to source dim 0 (source is missing the leading expert axis).
-        for rank, expected in [(0, tensor[:2]), (1, tensor[2:])]:
-            mesh = FakeMesh(shape=(2,), rank=rank)
-            op = _make_dtensor_shard_op(mesh, [Shard(1)], param_shape=(4, 4, 2), local_shape=(4, 2, 2))
-            torch.testing.assert_close(op.shard_tensor(tensor, tensor_idx=0), expected, msg=f"rank {rank}")
-
-    def test_expert_filtering(self):
-        """Mixtral-style experts: skip non-owned, return owned."""
-        mesh = FakeMesh(shape=(2,), rank=1)
-        op = _make_dtensor_shard_op(mesh, [Shard(0)], param_shape=(4, 2, 2), local_shape=(2, 2, 2))
-        expert_tensor = torch.ones(2, 2)
-        # rank 1 owns experts 2,3 (offset=2)
-        self.assertIsNone(op.shard_tensor(expert_tensor, tensor_idx=0))
-        torch.testing.assert_close(op.shard_tensor(expert_tensor, tensor_idx=2), expert_tensor)
-
-    def test_expert_filtering_preserves_inner_sharding(self):
-        """MoE expert ownership checks should still apply TP sharding on inner dims."""
-        tensor = torch.arange(8).reshape(4, 2).float()
-        expected = {
-            0: tensor[:2],
-            1: tensor[2:],
-            2: None,
-            3: None,
-        }
-        for rank in range(4):
-            mesh = FakeMesh(shape=(2, 2), rank=rank)
-            op = _make_dtensor_shard_op(mesh, [Shard(0), Shard(1)], param_shape=(4, 4, 2), local_shape=(2, 2, 2))
-            shard = op.shard_tensor(tensor, tensor_idx=1)
-            if expected[rank] is None:
-                self.assertIsNone(shard)
-            else:
-                torch.testing.assert_close(shard, expected[rank], msg=f"rank {rank}")
-
-    def test_negative_dim_normalizes_correctly(self):
-        """Shard(-1) on a 2D tensor should shard the last dimension."""
+    # --------------------------------------------------------------
+    # Replicate only (biases, norms): no narrowing
+    # --------------------------------------------------------------
+    def test_replicate_only_returns_full_tensor(self):
+        """All placements are Replicate → placements filter drops everything
+        → early return with a full-tensor copy."""
+        mesh = FakeMesh(shape=(2,), rank=0)
+        op = _make_dtensor_shard_op(mesh, [Replicate()], param_shape=(4, 4), local_shape=(4, 4))
         tensor = torch.arange(16).reshape(4, 4).float()
-        for rank, expected in [(0, tensor[:, :2]), (1, tensor[:, 2:])]:
-            mesh = FakeMesh(shape=(2,), rank=rank)
-            op = _make_dtensor_shard_op(mesh, [Shard(-1)], param_shape=(4, 4), local_shape=(4, 2))
-            torch.testing.assert_close(op.shard_tensor(tensor), expected, msg=f"rank {rank}")
+        torch.testing.assert_close(op.shard_tensor(tensor), tensor)
 
+    # --------------------------------------------------------------
+    # Edge cases for _contiguous_intervals
+    # --------------------------------------------------------------
     def test_contiguous_shard_uneven_division(self):
-        """Shard(0) on 5 rows across 2 ranks → rank 0 gets 3 rows, rank 1 gets 2."""
+        """Size-5 axis sharded across 2 ranks: rank 0 gets 3 rows, rank 1 gets 2.
+
+        _contiguous_intervals calls Shard.local_shard_size_and_offset which
+        rounds up the per-rank share; the last rank takes whatever remains.
+        """
         tensor = torch.arange(20).reshape(5, 4).float()
         expected = {0: tensor[:3], 1: tensor[3:]}
         for rank in range(2):
@@ -1028,8 +1150,22 @@ class TestDtensorShardOperation(unittest.TestCase):
             op = _make_dtensor_shard_op(mesh, [Shard(0)], param_shape=(5, 4), local_shape=(local_rows, 4))
             torch.testing.assert_close(op.shard_tensor(tensor), expected[rank], msg=f"rank {rank}")
 
-    def test_slice_and_cat_all_single_ranges(self):
-        """When every dim has exactly one interval, _slice_and_cat does a single slice read (no concat)."""
+    def test_negative_dim_normalization(self):
+        """Shard(-1) on a 2D tensor shards the last dim (dim 1).
+
+        _norm_dim(-1) with param_ndim=2 → 2 + (-1) = 1.
+        """
+        tensor = torch.arange(16).reshape(4, 4).float()
+        for rank, expected in [(0, tensor[:, :2]), (1, tensor[:, 2:])]:
+            mesh = FakeMesh(shape=(2,), rank=rank)
+            op = _make_dtensor_shard_op(mesh, [Shard(-1)], param_shape=(4, 4), local_shape=(4, 2))
+            torch.testing.assert_close(op.shard_tensor(tensor), expected, msg=f"rank {rank}")
+
+    # --------------------------------------------------------------
+    # Internal helper: _slice_and_cat
+    # --------------------------------------------------------------
+    def test_slice_and_cat_fast_path_single_interval_per_dim(self):
+        """Every dim has exactly one interval → fast path: single slice read, no concat."""
         tensor = torch.arange(64).reshape(8, 8).float()
         mesh = FakeMesh(shape=(2,), rank=0)
         op = _make_dtensor_shard_op(mesh, [Shard(0)], param_shape=(8, 8), local_shape=(4, 4))
@@ -1037,8 +1173,10 @@ class TestDtensorShardOperation(unittest.TestCase):
         result = op._slice_and_cat(tensor, intervals, None, None)
         torch.testing.assert_close(result, tensor[0:4, 2:6])
 
-    def test_slice_and_cat_raises_on_two_multi_range_dims(self):
-        """Multiple disjoint intervals on two different dims → ValueError."""
+    def test_slice_and_cat_rejects_two_multi_interval_dims(self):
+        """Two dims with multiple disjoint ranges would require a 2D outer-product
+        of reads. Not supported → ValueError.
+        """
         tensor = torch.arange(64).reshape(8, 8).float()
         mesh = FakeMesh(shape=(2,), rank=0)
         op = _make_dtensor_shard_op(mesh, [Shard(0)], param_shape=(8, 8), local_shape=(4, 4))
