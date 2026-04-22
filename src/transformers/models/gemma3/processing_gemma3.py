@@ -38,6 +38,8 @@ class Gemma3ProcessorKwargs(ProcessingKwargs, total=False):
 
 @auto_docstring
 class Gemma3Processor(ProcessorMixin):
+    valid_processor_kwargs = Gemma3ProcessorKwargs
+
     def __init__(
         self,
         image_processor,
@@ -67,37 +69,16 @@ class Gemma3Processor(ProcessorMixin):
         text: TextInput | PreTokenizedInput | list[TextInput] | list[PreTokenizedInput] = None,
         **kwargs: Unpack[Gemma3ProcessorKwargs],
     ) -> BatchFeature:
-        images, text = self.prepare_inputs_layout(images=images, text=text)
-        self.validate_inputs(images=images, text=text, **kwargs)
-
-        output_kwargs = self._merge_kwargs(
-            Gemma3ProcessorKwargs,
-            tokenizer_init_kwargs=self.tokenizer.init_kwargs,
-            **kwargs,
-        )
-
-        image_inputs = {}
-        images_replacements = []
-        if images is not None:
-            image_inputs, images_replacements = self._process_images(images, **output_kwargs["images_kwargs"])
-            image_inputs.pop("num_crops", None)  # unused by model
-
-        # Replace image tokens by the full expanded sequence
-        text, text_replacement_offsets = self.get_text_replacement(text, images_replacements=images_replacements)
-
-        return_tensors = output_kwargs["text_kwargs"].pop("return_tensors", None)
-        return_mm_token_type_ids = output_kwargs["text_kwargs"].pop("return_mm_token_type_ids", False)
-        text_inputs = self.tokenizer(text=text, **output_kwargs["text_kwargs"])
-        self._check_special_mm_tokens(text, text_inputs, modalities=["image"])
-
-        if return_mm_token_type_ids:
-            text_inputs["token_type_ids"] = self.create_mm_token_type_ids(text_inputs["input_ids"])
-        return BatchFeature(data={**text_inputs, **image_inputs}, tensor_type=return_tensors)
+        model_inputs = super().__call__(images=images, text=text, **kwargs)
+        model_inputs["token_type_ids"] = model_inputs.pop("mm_token_type_ids", None)
+        return model_inputs
 
     def prepare_inputs_layout(
         self,
         images: ImageInput | None = None,
         text: TextInput | PreTokenizedInput | list[TextInput] | list[PreTokenizedInput] = None,
+        videos=None,
+        audio=None,
     ):
         if text is not None and isinstance(text, str):
             text = [text]
@@ -109,7 +90,7 @@ class Gemma3Processor(ProcessorMixin):
         if images and not text:
             text = [" ".join([self.boi_token] * len(image_list)) for image_list in images]
 
-        return images, text
+        return images, text, videos, audio
 
     def validate_inputs(
         self,

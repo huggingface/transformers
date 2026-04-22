@@ -71,6 +71,8 @@ class AudioFlamingo3Processor(ProcessorMixin):
                 Maximum length of audio sequences in seconds. Audio longer than this will be truncated.
     """
 
+    valid_processor_kwargs = AudioFlamingo3ProcessorKwargs
+
     def __init__(
         self,
         feature_extractor,
@@ -113,50 +115,23 @@ class AudioFlamingo3Processor(ProcessorMixin):
             [`BatchFeature`]: A dictionary with tokenized text (`input_ids`, `attention_mask`) and
             audio features (`input_features`, `input_features_mask`).
         """
-        text, audio = self.prepare_inputs_layout(text=text, audio=audio)
-        self.validate_inputs(audio=audio, text=text, **kwargs)
-
-        # Merge defaults with user kwargs
-        output_kwargs = self._merge_kwargs(
-            AudioFlamingo3ProcessorKwargs,
-            tokenizer_init_kwargs=self.tokenizer.init_kwargs,
-            **kwargs,
-        )
-
-        return_tensors = output_kwargs["text_kwargs"].get("return_tensors")
-        return_text_replacement_offsets = output_kwargs["text_kwargs"].pop("return_text_replacement_offsets", False)
-        return_mm_token_type_ids = output_kwargs["text_kwargs"].pop("return_mm_token_type_ids", False)
-        if return_tensors != "pt":
-            raise ValueError(f"{self.__class__.__name__} only supports `return_tensors='pt'`.")
-
-        audio_inputs = {}
-        audio_replacements = []
-        if audio is not None:
-            audio_inputs, audio_replacements = self._process_audio(audio, **output_kwargs["audio_kwargs"])
-
-        # Replace image tokens by the full expanded sequence
-        text, text_replacement_offsets = self.get_text_replacement(text, audio_replacements=audio_replacements)
-        text_inputs = self.tokenizer(text, **output_kwargs["text_kwargs"])
-
-        data = {**text_inputs, **audio_inputs}
-        if return_text_replacement_offsets:
-            data["text_replacement_offsets"] = text_replacement_offsets
-
-        if return_mm_token_type_ids:
-            data["mm_token_type_ids"] = self.create_mm_token_type_ids(text_inputs["input_ids"])
+        # Force tensor outputs for AudioFlamingo, other types not supported
+        kwargs["return_tensors"] = "pt"
+        model_inputs = super().__call__(audio=audio, text=text, **kwargs)
 
         if output_labels:
-            labels = data["input_ids"].clone()
+            labels = model_inputs["input_ids"].clone()
             labels[labels == self.audio_token_id] = -100
             labels[labels == self.tokenizer.pad_token_id] = -100
-            data["labels"] = labels
-
-        return BatchFeature(data=data, tensor_type=return_tensors)
+            model_inputs["labels"] = labels
+        return model_inputs
 
     def prepare_inputs_layout(
         self,
         text: TextInput | list[TextInput] = None,
         audio: AudioInput = None,
+        images=None,
+        videos=None,
     ):
         if text is not None and isinstance(text, str):
             text = [text]
@@ -164,7 +139,7 @@ class AudioFlamingo3Processor(ProcessorMixin):
         if audio is not None:
             audio = make_list_of_audio(audio)
 
-        return text, audio
+        return images, text, videos, audio
 
     def validate_inputs(
         self,

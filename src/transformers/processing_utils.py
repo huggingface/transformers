@@ -33,7 +33,7 @@ from huggingface_hub import create_repo, is_offline_mode
 from huggingface_hub.dataclasses import validate_typed_dict
 from huggingface_hub.errors import EntryNotFoundError
 
-from .audio_utils import AudioInput, make_list_of_audio
+from .audio_utils import AudioInput, load_audio, make_list_of_audio
 from .dynamic_module_utils import custom_object_save
 from .feature_extraction_utils import BatchFeature
 from .image_utils import ChannelDimension, ImageInput, is_vision_available, make_flat_list_of_images
@@ -723,20 +723,20 @@ class ProcessorMixin(PushToHubMixin):
         return processed_data, video_replacements
 
     def _process_audio(self, audio: AudioInput, **kwargs):
-        sampling_rate = getattr(self.feature_extractor, "sampling_rate") or kwargs.get("sampling_rate", 16_000)
+        sampling_rate = getattr(self.feature_extractor, "sampling_rate", None) or kwargs.get("sampling_rate", 16_000)
         audio = self.feature_extractor.fetch_audio(audio, sampling_rate=sampling_rate)
         processed_data = self.feature_extractor(audio, **kwargs)
         audio_replacements = self.get_audio_replacement(audio, processed_data)
         return processed_data, audio_replacements
 
     def replace_image_token(self, image_inputs: dict | None = None, image_idx: int = 0) -> str:
-        return None
+        return ""
 
     def replace_video_token(self, video_inputs: dict | None = None, video_idx: int = 0) -> str:
-        return None
+        return ""
 
     def replace_audio_token(self, audio_inputs: dict | None = None, audio_idx: int = 0) -> str:
-        return None
+        return ""
 
     def get_images_replacement(
         self,
@@ -813,7 +813,7 @@ class ProcessorMixin(PushToHubMixin):
             for m in re.finditer(regex_special_mm_tokens, text[batch_idx]):
                 start, end = m.span()
                 if start == end:
-                    continue # no match
+                    continue  # no match
                 expanded_sample.append(text[batch_idx][last:start])
 
                 # Case 1: if the image token has match in the text
@@ -1958,6 +1958,14 @@ class ProcessorMixin(PushToHubMixin):
                     True  # force offset mapping so we can infer token boundaries
                 )
 
+        # Set the sampling rate to load the audio files if user hasn't already passed with `kwargs`
+        sampling_rate = kwargs.get("sampling_rate", processor_kwargs.get("sampling_rate"))
+        if sampling_rate is None:
+            if hasattr(self, "feature_extractor") and hasattr(self.feature_extractor, "sampling_rate"):
+                sampling_rate = self.feature_extractor.sampling_rate
+            else:
+                sampling_rate = 16_000
+
         if isinstance(conversation, (list, tuple)) and (
             isinstance(conversation[0], (list, tuple)) or hasattr(conversation[0], "content")
         ):
@@ -2018,13 +2026,13 @@ class ProcessorMixin(PushToHubMixin):
                     # Audio models do not accept nested list of audios (yet!) so we construct a flat input audio list
                     if not load_audio_from_video:
                         for fname in audio_fnames:
-                            batch_audios.append(fname)
+                            batch_audios.append(load_audio(fname, sampling_rate=sampling_rate))
                     else:
                         for fname in video_fnames:
                             # This updates the template in-place and adds audio entry
                             # to ensure `audio` token is added by jinja
                             message["content"].append({"type": "audio"})
-                            batch_audios.append(fname)
+                            batch_audios.append(load_audio(fname, sampling_rate=sampling_rate))
 
                 # Currently all processors can accept nested list of batches, but not flat list of visuals
                 # So we'll make a batched list of images and let the processor handle it
