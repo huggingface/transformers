@@ -13,7 +13,7 @@ specific language governing permissions and limitations under the License.
 
 # Model structure rules
 
-Transformers enforces a set of static rules on every `modeling_*.py`, `modular_*.py`, and `configuration_*.py` file. The [mlinter](https://github.com/huggingface/transformers/tree/main/utils/mlinter) tool checks them as part of `make typing` and errors out if violations are found.
+Transformers enforces a set of static rules on every `modeling_*.py`, `modular_*.py`, and `configuration_*.py` file. The [mlinter](https://github.com/huggingface/transformers-mlinter) tool checks them as part of `make typing` and errors out if violations are found.
 
 These are the expected model conventions for adding or changing modeling code. They keep the codebase consistent and ensure compatibility with features like pipeline parallelism, device maps, and weight tying.
 
@@ -22,10 +22,10 @@ These are the expected model conventions for adding or changing modeling code. T
 `make typing` runs `mlinter` alongside the `ty` type checker. Run `mlinter` on its own with the following commands.
 
 ```bash
-python -m utils.mlinter                  # check all modeling files
-python -m utils.mlinter --changed-only   # check only files changed vs origin/main
-python -m utils.mlinter --list-rules     # list all rules and their enabled status
-python -m utils.mlinter --rule TRF001    # show built-in docs for a specific rule
+mlinter                  # check all modeling files
+mlinter --changed-only   # check only files changed vs origin/main
+mlinter --list-rules     # list all rules and their enabled status
+mlinter --rule TRF001    # show built-in docs for a specific rule
 ```
 
 The `--changed-only` flag is the fastest option during development. It only checks the files you've modified relative to the main branch.
@@ -52,7 +52,7 @@ Use the rule ID to look up the fix in the [rules reference](#rules-reference). T
 
 ## Rules reference
 
-Each rule below lists what it enforces and a diff showing the fix. Run `python -m utils.mlinter --rule TRF001` to see the built-in docs for any rule.
+Each rule below lists what it enforces and a diff showing the fix. Run `mlinter --rule TRF001` to see the built-in docs for any rule.
 
 <!-- BEGIN RULES REFERENCE -->
 
@@ -247,7 +247,7 @@ Don't use `trf-ignore` to silence violations that should be fixed in the code.
 
 ### `allowlist_models`
 
-For models with legacy code that can't be fixed immediately, add the model's directory name to the relevant rule's `allowlist_models` list in `utils/mlinter/rules.toml`.
+For models with legacy code that can't be fixed immediately, add the model's directory name to the relevant rule's `allowlist_models` list in the [mlinter rules.toml](https://github.com/huggingface/transformers-mlinter/blob/main/mlinter/rules.toml).
 
 ```toml
 [rules.TRF004]
