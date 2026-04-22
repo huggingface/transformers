@@ -20,6 +20,8 @@
 
 import copy
 
+from huggingface_hub.dataclasses import strict
+
 from ...configuration_utils import PreTrainedConfig
 from ..auto import CONFIG_MAPPING, AutoConfig
 
@@ -37,6 +39,7 @@ MM_BOS_EOS_TOKENS = {
 }
 
 
+@strict
 class AudioVisualFlamingoConfig(PreTrainedConfig):
     model_type = "audiovisualflamingo"
     keys_to_ignore_at_inference = ["past_key_values"]

@@ -23,6 +23,7 @@ import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+from huggingface_hub.dataclasses import strict
 from torch import broadcast_tensors, einsum
 
 from ...configuration_utils import PreTrainedConfig
@@ -51,6 +52,7 @@ MM_BOS_EOS_TOKENS = {
 }
 
 
+@strict
 class AudioVisualFlamingoConfig(PreTrainedConfig):
     model_type = "audiovisualflamingo"
     keys_to_ignore_at_inference = ["past_key_values"]
