@@ -136,6 +136,8 @@ manager.add_request(input_ids=inputs_a, temperature=0.9, top_p=0.95)
 manager.add_request(input_ids=inputs_b, temperature=0.1, top_k=10)
 ```
 
+Each parameter in [`GenerationConfig`] must be a non-default value in order to create the associated logits processor at runtime. For example, set `temperature` to a value other than `None` or `1` to support per-request temperature control. Requests with temperatures of `1` can still be created afterwards.
+
 ### Retrieving results
 
 Iterate over the manager to receive results as they arrive.
