@@ -338,11 +338,9 @@ class GlmMoeDsaAttention(nn.Module):
         # Refer: https://arxiv.org/abs/2603.12201 for more details.
         # skip_topk: when True, this layer will skip computation and reuse previous layer's topk indices.
         # next_skip_topk: when True, the next layer will skip computation and reuse this layer's topk indices.
-        self.skip_topk = config.index_topk_pattern[layer_idx] == "shared"
+        self.skip_topk = config.indexer_types[layer_idx] == "shared"
         self.next_skip_topk = (
-            config.index_topk_pattern[layer_idx + 1] == "shared"
-            if layer_idx < len(config.index_topk_pattern) - 1
-            else False
+            config.indexer_types[layer_idx + 1] == "shared" if layer_idx < len(config.indexer_types) - 1 else False
         )
 
     def forward(

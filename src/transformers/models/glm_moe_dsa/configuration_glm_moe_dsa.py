@@ -39,10 +39,8 @@ class GlmMoeDsaConfig(PreTrainedConfig):
         Head dimension for the indexer projections (DSA).
     index_n_heads (`int | None`, *optional*, defaults to 32):
         Number of heads for the indexer projections (DSA).
-    index_topk_freq (`int`, *optional*, defaults to 1):
-        Frequency interval for activating indexer Top-K selection across layers.
-    index_topk_pattern (`list[str]` or `None`, *optional*, defaults to `None`):
-        Custom layer-wise pattern for IndexCache.
+    indexer_types (`list[str]`, *optional*):
+        Indexer mode for each layer (`"full"` or `"shared"`). Defaults to first layer full, then every `index_topk_freq`-th layer full, rest shared.
 
     ```python
     >>> from transformers import GlmMoeDsaConfig, GlmMoeDsaModel
@@ -121,8 +119,7 @@ class GlmMoeDsaConfig(PreTrainedConfig):
     index_topk: int = 2048
     index_head_dim: int = 128
     index_n_heads: int = 32
-    index_topk_freq: int = 1
-    index_topk_pattern: list[str] | None = None
+    indexer_types: list[str] | None = None
 
     def __post_init__(self, **kwargs):
         self.qk_head_dim = self.qk_nope_head_dim + self.qk_rope_head_dim
@@ -133,12 +130,19 @@ class GlmMoeDsaConfig(PreTrainedConfig):
                 self.num_hidden_layers - 3
             )
 
-        # Indexer pattern: first layer full, then every N-th layer full, rest shared
-        if self.index_topk_pattern is None:
-            self.index_topk_pattern = [
-                "full" if (max(i - 1, 0) % self.index_topk_freq == 0) else "shared"
-                for i in range(self.num_hidden_layers)
-            ]
+        # Indexer layer types
+        if self.indexer_types is None:
+            pattern = kwargs.pop("index_topk_pattern", None)
+            freq = kwargs.pop("index_topk_freq", 1)
+            if pattern is not None:
+                self.indexer_types = (
+                    [{"F": "full", "S": "shared"}[c] for c in pattern] if isinstance(pattern, str) else list(pattern)
+                )
+            else:
+                # First layer full, then every freq-th layer full, rest shared
+                self.indexer_types = [
+                    "full" if (max(i - 1, 0) % freq) == 0 else "shared" for i in range(self.num_hidden_layers)
+                ]
         super().__post_init__(**kwargs)
 
 
