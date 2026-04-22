@@ -3,7 +3,7 @@
 #     "inspect-ai",
 #     "inspect-evals",
 #     "huggingface-hub",
-#     "transformers[serving] @ git+https://github.com/huggingface/transformers.git@main",
+#     "transformers[serving]==5.6.0",
 #     "openai>=2.26.0",
 #     "torchvision",
 #     "kernels",
