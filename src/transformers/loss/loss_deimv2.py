@@ -109,16 +109,29 @@ class Deimv2Loss(DFineLoss):
         return loss_map[loss](outputs, targets, indices, num_boxes)
 
     def forward(self, outputs, targets):
+        """
+        This performs the loss computation.
+
+        Args:
+             outputs (`dict`, *optional*):
+                Dictionary of tensors, see the output specification of the model for the format.
+             targets (`list[dict]`, *optional*):
+                List of dicts, such that `len(targets) == batch_size`. The expected keys in each dict depends on the
+                losses applied, see each loss' doc.
+        """
         if not self.use_dense_one_to_one:
             return super().forward(outputs, targets)
 
+        # Retrieve the matching between the outputs of the last layer and the targets
         outputs_without_aux = {k: v for k, v in outputs.items() if "auxiliary_outputs" not in k}
         indices = self.matcher(outputs_without_aux, targets)
 
+        # Compute the average number of target boxes across all nodes, for normalization purposes
         num_boxes = sum(len(t["class_labels"]) for t in targets)
         num_boxes = torch.as_tensor([num_boxes], dtype=torch.float, device=next(iter(outputs.values())).device)
         num_boxes = torch.clamp(num_boxes, min=1).item()
 
+        # Handle auxiliary outputs matching
         cached_indices = []
         indices_aux_list = []
         if "auxiliary_outputs" in outputs:
@@ -127,11 +140,13 @@ class Deimv2Loss(DFineLoss):
                 cached_indices.append(aux_indices)
                 indices_aux_list.append(aux_indices)
 
+        # Dense one-to-one matching
         indices_go = self._get_dense_o2o_indices(indices, indices_aux_list)
         num_boxes_go = sum(len(x[0]) for x in indices_go)
         num_boxes_go = torch.as_tensor([num_boxes_go], dtype=torch.float, device=next(iter(outputs.values())).device)
         num_boxes_go = torch.clamp(num_boxes_go, min=1).item()
 
+        # Compute all the requested losses
         losses = {}
         for loss in self.losses:
             use_union = loss in ("boxes", "local")
@@ -141,6 +156,7 @@ class Deimv2Loss(DFineLoss):
             l_dict = {k: l_dict[k] * self.weight_dict[k] for k in l_dict if k in self.weight_dict}
             losses.update(l_dict)
 
+        # In case of auxiliary losses, we repeat this process with the output of each intermediate layer.
         if "auxiliary_outputs" in outputs:
             for i, auxiliary_outputs in enumerate(outputs["auxiliary_outputs"]):
                 for loss in self.losses:
@@ -152,6 +168,7 @@ class Deimv2Loss(DFineLoss):
                     l_dict = {k + f"_aux_{i}": v for k, v in l_dict.items()}
                     losses.update(l_dict)
 
+        # In case of cdn auxiliary losses. For deimv2
         if "dn_auxiliary_outputs" in outputs:
             if "denoising_meta_values" not in outputs:
                 raise ValueError(
@@ -187,54 +204,49 @@ def Deimv2ForObjectDetectionLoss(
 ):
     criterion = Deimv2Loss(config)
     criterion.to(device)
-    outputs_loss = {}
+
+    outputs_loss = {"logits": logits, "pred_boxes": pred_boxes.clamp(min=0, max=1)}
     auxiliary_outputs = None
-    if config.auxiliary_loss:
-        if denoising_meta_values is not None:
-            dn_out_coord, outputs_coord = torch.split(
-                outputs_coord.clamp(min=0, max=1), denoising_meta_values["dn_num_split"], dim=2
-            )
-            dn_out_class, outputs_class = torch.split(outputs_class, denoising_meta_values["dn_num_split"], dim=2)
-            # https://github.com/Intellindust-AI-Lab/DEIMv2/blob/main/engine/deim/deim_decoder.py#L562-L571
-            # The original splits denoising queries in the decoder; here it happens in the loss since the decoder returns unsplit tensors.
-            _, logits = torch.split(logits, denoising_meta_values["dn_num_split"], dim=1)
-            _, pred_boxes = torch.split(pred_boxes, denoising_meta_values["dn_num_split"], dim=1)
-            dn_out_corners, out_corners = torch.split(predicted_corners, denoising_meta_values["dn_num_split"], dim=2)
-            dn_out_refs, out_refs = torch.split(initial_reference_points, denoising_meta_values["dn_num_split"], dim=2)
 
-            outputs_loss["logits"] = logits
-            outputs_loss["pred_boxes"] = pred_boxes.clamp(min=0, max=1)
+    if config.auxiliary_loss and denoising_meta_values is not None:
+        dn_out_coord, outputs_coord = torch.split(
+            outputs_coord.clamp(min=0, max=1), denoising_meta_values["dn_num_split"], dim=2
+        )
+        dn_out_class, outputs_class = torch.split(outputs_class, denoising_meta_values["dn_num_split"], dim=2)
+        # https://github.com/Intellindust-AI-Lab/DEIMv2/blob/main/engine/deim/deim_decoder.py#L562-L571
+        # The original splits denoising queries in the decoder; here it happens in the loss since the decoder returns unsplit tensors.
+        _, logits = torch.split(logits, denoising_meta_values["dn_num_split"], dim=1)
+        _, pred_boxes = torch.split(pred_boxes, denoising_meta_values["dn_num_split"], dim=1)
+        dn_out_corners, out_corners = torch.split(predicted_corners, denoising_meta_values["dn_num_split"], dim=2)
+        dn_out_refs, out_refs = torch.split(initial_reference_points, denoising_meta_values["dn_num_split"], dim=2)
 
-            auxiliary_outputs = _set_aux_loss2(
-                outputs_class[:, :-1].transpose(0, 1),
-                outputs_coord[:, :-1].transpose(0, 1),
-                out_corners[:, :-1].transpose(0, 1),
-                out_refs[:, :-1].transpose(0, 1),
-                out_corners[:, -1],
-                outputs_class[:, -1],
-            )
-
-            outputs_loss["auxiliary_outputs"] = auxiliary_outputs
-            outputs_loss["auxiliary_outputs"].extend(
-                _set_aux_loss([enc_topk_logits], [enc_topk_bboxes.clamp(min=0, max=1)])
-            )
-
-            dn_auxiliary_outputs = _set_aux_loss2(
-                dn_out_class.transpose(0, 1),
-                dn_out_coord.transpose(0, 1),
-                dn_out_corners.transpose(0, 1),
-                dn_out_refs.transpose(0, 1),
-                dn_out_corners[:, -1],
-                dn_out_class[:, -1],
-            )
-            outputs_loss["dn_auxiliary_outputs"] = dn_auxiliary_outputs
-            outputs_loss["denoising_meta_values"] = denoising_meta_values
-        else:
-            outputs_loss["logits"] = logits
-            outputs_loss["pred_boxes"] = pred_boxes.clamp(min=0, max=1)
-    else:
         outputs_loss["logits"] = logits
         outputs_loss["pred_boxes"] = pred_boxes.clamp(min=0, max=1)
+
+        auxiliary_outputs = _set_aux_loss2(
+            outputs_class[:, :-1].transpose(0, 1),
+            outputs_coord[:, :-1].transpose(0, 1),
+            out_corners[:, :-1].transpose(0, 1),
+            out_refs[:, :-1].transpose(0, 1),
+            out_corners[:, -1],
+            outputs_class[:, -1],
+        )
+
+        outputs_loss["auxiliary_outputs"] = auxiliary_outputs
+        outputs_loss["auxiliary_outputs"].extend(
+            _set_aux_loss([enc_topk_logits], [enc_topk_bboxes.clamp(min=0, max=1)])
+        )
+
+        dn_auxiliary_outputs = _set_aux_loss2(
+            dn_out_class.transpose(0, 1),
+            dn_out_coord.transpose(0, 1),
+            dn_out_corners.transpose(0, 1),
+            dn_out_refs.transpose(0, 1),
+            dn_out_corners[:, -1],
+            dn_out_class[:, -1],
+        )
+        outputs_loss["dn_auxiliary_outputs"] = dn_auxiliary_outputs
+        outputs_loss["denoising_meta_values"] = denoising_meta_values
 
     loss_dict = criterion(outputs_loss, labels)
 

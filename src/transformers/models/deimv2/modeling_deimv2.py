@@ -1158,6 +1158,7 @@ class Deimv2PreTrainedModel(PreTrainedModel):
             init.xavier_uniform_(module.weight_embedding.weight)
         if hasattr(module, "denoising_class_embed") and self.config.num_denoising > 0:
             init.xavier_uniform_(module.denoising_class_embed.weight)
+        PreTrainedModel._init_weights(self, module)
 
         if isinstance(module, Deimv2SwiGLUFFN):
             init.xavier_uniform_(module.gate_proj.weight)
@@ -1166,9 +1167,6 @@ class Deimv2PreTrainedModel(PreTrainedModel):
             init.constant_(module.up_proj.bias, 0)
             init.xavier_uniform_(module.down_proj.weight)
             init.constant_(module.down_proj.bias, 0)
-
-        if isinstance(module, Deimv2RMSNorm):
-            init.ones_(module.weight)
 
 
 class Deimv2LiteEncoder(Deimv2PreTrainedModel):
@@ -2023,8 +2021,6 @@ class Deimv2ObjectDetectionOutput(ModelOutput):
     """
 )
 class Deimv2ForObjectDetection(Deimv2PreTrainedModel):
-    # When using clones, all layers > 0 will be clones, but layer 0 *is* required
-    # We can't initialize the model on meta device as some weights are modified during the initialization
     _no_split_modules = None
     _tied_weights_keys = {
         r"bbox_embed.(?![0])\d+": r"bbox_embed.0",
