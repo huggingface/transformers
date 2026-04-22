@@ -20,6 +20,7 @@ from huggingface_hub.dataclasses import strict
 
 from ... import initialization as init
 from ...cache_utils import Cache
+from ...integrations.tensor_parallel import TPStyle
 from ...modeling_outputs import CausalLMOutputWithPast
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
@@ -80,6 +81,24 @@ class ExaoneMoeConfig(Exaone4Config):
     >>> configuration = model.config
     ```"""
 
+    base_model_sp_plan = {
+        "embed_tokens": TPStyle("vocab", "reduce_scatter"),
+        "layers.*.input_layernorm": TPStyle("activation", "none"),
+        "layers.*.self_attn": TPStyle("module", "allgather", input_key="hidden_states"),
+        "layers.*.self_attn.q_proj": TPStyle("colwise", "none"),
+        "layers.*.self_attn.k_proj": TPStyle("colwise", "none"),
+        "layers.*.self_attn.v_proj": TPStyle("colwise", "none"),
+        "layers.*.self_attn.q_norm": TPStyle("activation", "none", sequence_dim=2),
+        "layers.*.self_attn.k_norm": TPStyle("activation", "none", sequence_dim=2),
+        "layers.*.self_attn.o_proj": TPStyle("rowwise", "reduce_scatter"),
+        "layers.*.post_attention_layernorm": TPStyle("activation", "none"),
+        "layers.*.mlp": TPStyle("module", "allgather"),
+        "layers.*.mlp.gate_proj": TPStyle("colwise", "none"),
+        "layers.*.mlp.up_proj": TPStyle("colwise", "none"),
+        "layers.*.mlp.down_proj": TPStyle("rowwise", "reduce_scatter"),
+        "norm": TPStyle("activation", "none"),
+    }
+
     vocab_size: int = 102400
     hidden_size: int = 4096
     intermediate_size: int = 16384
@@ -118,6 +137,14 @@ class ExaoneMoeConfig(Exaone4Config):
             ]
 
         super().__post_init__(**kwargs)
+
+        # Dense layers can keep the Exaone4 MLP sharding, but sparse MoE blocks
+        # need to split their replicated output back to the sequence shard.
+        self.base_model_sp_plan = self.base_model_sp_plan.copy()
+        for layer_idx, mlp_layer_type in enumerate(self.mlp_layer_types):
+            self.base_model_sp_plan[f"layers.{layer_idx}.mlp"] = TPStyle(
+                "module", "allgather" if mlp_layer_type == "dense" else "allgather_split"
+            )
 
 
 class ExaoneMoeAttention(Exaone4Attention):

@@ -75,6 +75,7 @@ class ExaoneMoeConfig(PreTrainedConfig):
         "layers.*.mlp.up_proj": TPStyle("colwise", "none"),
         "layers.*.mlp.down_proj": TPStyle("rowwise", "allreduce"),
     }
+
     base_model_sp_plan = {
         "embed_tokens": TPStyle("vocab", "reduce_scatter"),
         "layers.*.input_layernorm": TPStyle("activation", "none"),
@@ -145,6 +146,14 @@ class ExaoneMoeConfig(PreTrainedConfig):
             ]
 
         super().__post_init__(**kwargs)
+
+        # Dense layers can keep the Exaone4 MLP sharding, but sparse MoE blocks
+        # need to split their replicated output back to the sequence shard.
+        self.base_model_sp_plan = self.base_model_sp_plan.copy()
+        for layer_idx, mlp_layer_type in enumerate(self.mlp_layer_types):
+            self.base_model_sp_plan[f"layers.{layer_idx}.mlp"] = TPStyle(
+                "module", "allgather" if mlp_layer_type == "dense" else "allgather_split"
+            )
 
 
 __all__ = ["ExaoneMoeConfig"]
