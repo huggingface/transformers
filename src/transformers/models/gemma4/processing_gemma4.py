@@ -114,7 +114,7 @@ class Gemma4Processor(ProcessorMixin):
         videos: VideoInput | None = None,
         **kwargs: Unpack[Gemma4ProcessorKwargs],
     ) -> BatchFeature:
-        model_inputs = super().__call__(images=images, text=text, videos=videos, **kwargs)
+        model_inputs = super().__call__(images=images, text=text, videos=videos, audio=audio, **kwargs)
 
         # If user has not requested video metadata, pop it
         if not kwargs.get("return_metadata"):
@@ -169,6 +169,7 @@ class Gemma4Processor(ProcessorMixin):
                     )
 
                 n_images_in_images = [len(sublist) for sublist in images]
+                print(text, images)
                 if n_images_in_text != n_images_in_images:
                     raise ValueError(
                         f"The total number of {self.image_token} tokens in the prompts should be the same as the number of images passed."
@@ -272,19 +273,11 @@ class Gemma4Processor(ProcessorMixin):
 
     @property
     def model_input_names(self):
-        model_input_names = super().model_input_names
-        model_input_names = [
-            name
-            for name in model_input_names
-            if name not in ["num_soft_tokens_per_image", "num_soft_tokens_per_video"]
-        ]
+        return super().model_input_names + ["mm_token_type_ids"]
 
-        # Include audio feature extractor input names if available
-        if self.feature_extractor is not None:
-            feature_extractor_input_names = self.feature_extractor.model_input_names
-            model_input_names.extend([name for name in feature_extractor_input_names if name not in model_input_names])
-
-        return model_input_names + ["mm_token_type_ids"]
+    @property
+    def unused_input_names(self) -> list[str]:
+        return ["num_soft_tokens_per_image", "num_soft_tokens_per_video"]
 
 
 __all__ = ["Gemma4Processor"]

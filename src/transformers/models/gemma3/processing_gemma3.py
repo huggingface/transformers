@@ -76,7 +76,7 @@ class Gemma3Processor(ProcessorMixin):
     def prepare_inputs_layout(
         self,
         images: ImageInput | None = None,
-        text: TextInput | PreTokenizedInput | list[TextInput] | list[PreTokenizedInput] = None,
+        text: TextInput | PreTokenizedInput | list[TextInput] | list[PreTokenizedInput] | None = None,
         videos=None,
         audio=None,
     ):
@@ -95,7 +95,9 @@ class Gemma3Processor(ProcessorMixin):
     def validate_inputs(
         self,
         images: ImageInput | list[ImageInput] | None = None,
-        text: TextInput | PreTokenizedInput | list[TextInput] | list[PreTokenizedInput] = None,
+        text: TextInput | PreTokenizedInput | list[TextInput] | list[PreTokenizedInput] | None = None,
+        videos=None,
+        audio=None,
         **kwargs: Unpack[ProcessingKwargs],
     ):
         super().validate_inputs(images=images, text=text, **kwargs)
@@ -178,6 +180,10 @@ class Gemma3Processor(ProcessorMixin):
             vision_data.update({"num_image_tokens": num_image_tokens, "num_image_patches": num_image_patches})
 
         return MultiModalData(**vision_data)
+
+    @property
+    def model_input_names(self) -> list[str]:
+        return super().model_input_names + ["token_type_ids"]
 
     @property
     def unused_input_names(self) -> list[str]:
