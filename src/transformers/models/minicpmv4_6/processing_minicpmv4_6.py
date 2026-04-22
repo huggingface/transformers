@@ -117,31 +117,38 @@ class MiniCPMV4_6Processor(ProcessorMixin):
         if images is not None:
             image_inputs = self.image_processor(images, **output_kwargs["images_kwargs"])
 
-            index = 0
             image_grids = image_inputs.pop("grids")
+            num_patches_per_image = image_inputs.pop("num_patches_per_image")
+            target_sizes = image_inputs["target_sizes"]
+
+            flat_index = 0
+            image_index = 0
             for i in range(len(text)):
                 while self.image_token in text[i]:
-                    num_tokens_per_patch = image_inputs["target_sizes"][index].prod(-1) * self.image_token_divisor
-                    num_patch_tokens = num_tokens_per_patch[1:].sum()
-                    num_rows, num_cols = image_grids[index]
+                    n_patches = num_patches_per_image[image_index]
+                    img_target_sizes = target_sizes[flat_index : flat_index + n_patches]
+                    num_tokens_per_patch = img_target_sizes.prod(-1) // self.image_token_divisor
+                    num_rows, num_cols = image_grids[image_index]
 
                     image_placeholder = (
-                        self.image_start_token + self.image_token * num_tokens_per_patch[0] + self.image_end_token
+                        self.image_start_token + self.image_token * int(num_tokens_per_patch[0]) + self.image_end_token
                     )
                     if use_image_id:
                         image_placeholder = (
-                            f"{self.image_id_start_token}{index}{self.image_id_end_token}" + image_placeholder
+                            f"{self.image_id_start_token}{image_index}{self.image_id_end_token}" + image_placeholder
                         )
 
                     if self.slice_mode and num_rows > 0 and num_cols > 0:
+                        per_slice_tokens = int(num_tokens_per_patch[1]) if len(num_tokens_per_patch) > 1 else 0
                         slice_placeholder = (
-                            self.slice_start_token + self.image_token * num_patch_tokens + self.slice_end_token
+                            self.slice_start_token + self.image_token * per_slice_tokens + self.slice_end_token
                         )
                         slices = [slice_placeholder * num_cols for _ in range(num_rows)]
                         image_placeholder += "\n".join(slices)
 
                     text[i] = text[i].replace(self.image_token, image_placeholder, 1)
-                    index += 1
+                    flat_index += n_patches
+                    image_index += 1
                 text[i] = text[i].replace("<|placeholder|>", self.image_token)
 
         video_inputs = {}
