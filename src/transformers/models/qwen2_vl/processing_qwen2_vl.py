@@ -20,12 +20,8 @@
 Processor class for Qwen2-VL.
 """
 
-from ...feature_extraction_utils import BatchFeature
-from ...image_utils import ImageInput
-from ...processing_utils import MultiModalData, ProcessingKwargs, ProcessorMixin, Unpack
-from ...tokenization_utils_base import PreTokenizedInput, TextInput
+from ...processing_utils import MultiModalData, ProcessingKwargs, ProcessorMixin
 from ...utils import auto_docstring, logging
-from ...video_utils import VideoInput
 
 
 logger = logging.get_logger(__name__)
@@ -42,6 +38,8 @@ class Qwen2VLProcessorKwargs(ProcessingKwargs, total=False):
 
 @auto_docstring
 class Qwen2VLProcessor(ProcessorMixin):
+    valid_processor_kwargs = Qwen2VLProcessorKwargs
+
     def __init__(self, image_processor=None, tokenizer=None, video_processor=None, chat_template=None, **kwargs):
         self.image_token = "<|image_pad|>" if not hasattr(tokenizer, "image_token") else tokenizer.image_token
         self.video_token = "<|video_pad|>" if not hasattr(tokenizer, "video_token") else tokenizer.video_token
@@ -56,58 +54,6 @@ class Qwen2VLProcessor(ProcessorMixin):
             else tokenizer.convert_tokens_to_ids(self.video_token)
         )
         super().__init__(image_processor, tokenizer, video_processor, chat_template=chat_template)
-
-    @auto_docstring
-    def __call__(
-        self,
-        images: ImageInput | None = None,
-        text: TextInput | PreTokenizedInput | list[TextInput] | list[PreTokenizedInput] = None,
-        videos: VideoInput | None = None,
-        **kwargs: Unpack[Qwen2VLProcessorKwargs],
-    ) -> BatchFeature:
-        r"""
-        Returns:
-            [`BatchFeature`]: A [`BatchFeature`] with the following fields:
-
-            - **input_ids** -- List of token ids to be fed to a model. Returned when `text` is not `None`.
-            - **attention_mask** -- List of indices specifying which tokens should be attended to by the model (when
-              `return_attention_mask=True` or if *"attention_mask"* is in `self.model_input_names` and if `text` is not
-              `None`).
-            - **pixel_values** -- Pixel values to be fed to a model. Returned when `images` is not `None`.
-            - **pixel_values_videos** -- Pixel values of videos to be fed to a model. Returned when `videos` is not `None`.
-            - **image_grid_thw** -- List of image 3D grid in LLM. Returned when `images` is not `None`.
-            - **video_grid_thw** -- List of video 3D grid in LLM. Returned when `videos` is not `None`.
-        """
-        images, text, *_ = self.prepare_inputs_layout(images=images, text=text)
-        self.validate_inputs(images=images, text=text, **kwargs)
-
-        output_kwargs = self._merge_kwargs(
-            Qwen2VLProcessorKwargs,
-            tokenizer_init_kwargs=self.tokenizer.init_kwargs,
-            **kwargs,
-        )
-
-        image_inputs = videos_inputs = {}
-        images_replacements = videos_replacements = []
-        if images is not None:
-            image_inputs, images_replacements = self._process_images(images, **output_kwargs["images_kwargs"])
-        if videos is not None:
-            videos_inputs, videos_replacements = self._process_videos(videos, **output_kwargs["videos_kwargs"])
-
-        if images is not None or videos is not None:
-            text, text_replacement_offsets = self.get_text_replacement(
-                text, images_replacements=images_replacements, videos_replacements=videos_replacements
-            )
-
-        return_tensors = output_kwargs["text_kwargs"].pop("return_tensors", None)
-        return_mm_token_type_ids = output_kwargs["text_kwargs"].pop("return_mm_token_type_ids", False)
-        text_inputs = self.tokenizer(text, **output_kwargs["text_kwargs"], return_tensors=None)
-        self._check_special_mm_tokens(text, text_inputs, modalities=["image", "video"])
-
-        if return_mm_token_type_ids:
-            text_inputs["mm_token_type_ids"] = self.create_mm_token_type_ids(text_inputs["input_ids"])
-
-        return BatchFeature(data={**text_inputs, **image_inputs, **videos_inputs}, tensor_type=return_tensors)
 
     def replace_image_token(self, image_inputs: dict, image_idx: int) -> str:
         merge_length = self.image_processor.merge_size**2

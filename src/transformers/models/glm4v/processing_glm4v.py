@@ -44,6 +44,8 @@ class Glm4vProcessorKwargs(ProcessingKwargs, total=False):
 
 @auto_docstring
 class Glm4vProcessor(ProcessorMixin):
+    valid_processor_kwargs = Glm4vProcessorKwargs
+
     def __init__(self, image_processor=None, tokenizer=None, video_processor=None, chat_template=None, **kwargs):
         self.image_token = "<|image|>" if not hasattr(tokenizer, "image_token") else tokenizer.image_token
         self.video_token = "<|video|>" if not hasattr(tokenizer, "video_token") else tokenizer.video_token
@@ -82,39 +84,12 @@ class Glm4vProcessor(ProcessorMixin):
             - **image_grid_thw** -- List of image 3D grid in LLM. Returned when `images` is not `None`.
             - **video_grid_thw** -- List of video 3D grid in LLM. Returned when `videos` is not `None`.
         """
+        model_inputs = super().__call__(images=images, text=text, videos=videos, **kwargs)
 
-        images, text, *_ = self.prepare_inputs_layout(images=images, text=text)
-        self.validate_inputs(images=images, text=text, **kwargs)
-
-        output_kwargs = self._merge_kwargs(
-            Glm4vProcessorKwargs,
-            tokenizer_init_kwargs=self.tokenizer.init_kwargs,
-            **kwargs,
-        )
-
-        image_inputs = videos_inputs = {}
-        images_replacements = videos_replacements = []
-        if images is not None:
-            image_inputs, images_replacements = self._process_images(images, **output_kwargs["images_kwargs"])
-        if videos is not None:
-            videos_inputs, videos_replacements = self._process_videos(videos, **output_kwargs["videos_kwargs"])
-            # If user has not requested video metadata, pop it
-            if not kwargs.get("return_metadata"):
-                videos_inputs.pop("video_metadata", None)
-
-        if images is not None or videos is not None:
-            text, text_replacement_offsets = self.get_text_replacement(
-                text, images_replacements=images_replacements, videos_replacements=videos_replacements
-            )
-
-        return_tensors = output_kwargs["text_kwargs"].pop("return_tensors", None)
-        return_mm_token_type_ids = output_kwargs["text_kwargs"].pop("return_mm_token_type_ids", False)
-        text_inputs = self.tokenizer(text, **output_kwargs["text_kwargs"])
-        self._check_special_mm_tokens(text, text_inputs, modalities=["image", "video"])
-
-        if return_mm_token_type_ids:
-            text_inputs["mm_token_type_ids"] = self.create_mm_token_type_ids(text_inputs["input_ids"])
-        return BatchFeature(data={**text_inputs, **image_inputs, **videos_inputs}, tensor_type=return_tensors)
+        # If user has not requested video metadata, pop it
+        if not kwargs.get("return_metadata"):
+            model_inputs.pop("video_metadata", None)
+        return model_inputs
 
     def replace_image_token(self, image_inputs: dict, image_idx: int) -> str:
         merge_length = self.image_processor.merge_size**2
