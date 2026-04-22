@@ -260,6 +260,7 @@ class MiniCPMV4_6ImageProcessor(TorchvisionBackend):
                 "num_patches_per_image": num_patches_per_image,
             },
             tensor_type=return_tensors,
+            skip_tensor_conversion=["grids", "num_patches_per_image"],
         )
 
 
