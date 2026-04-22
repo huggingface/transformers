@@ -250,6 +250,7 @@ CONFIG_MAPPING_NAMES = OrderedDict(
         ("hubert", "HubertConfig"),
         ("hunyuan_v1_dense", "HunYuanDenseV1Config"),
         ("hunyuan_v1_moe", "HunYuanMoEV1Config"),
+        ("hy_v3", "HYV3Config"),
         ("ibert", "IBertConfig"),
         ("idefics", "IdeficsConfig"),
         ("idefics2", "Idefics2Config"),
