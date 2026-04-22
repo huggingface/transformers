@@ -3290,6 +3290,11 @@ class ModelTesterMixin:
             ):
                 continue
 
+            # Some models only support a sub set of all FA implementations
+            valid_fa_implementations = model._compatible_flash_implementations
+            if valid_fa_implementations is not None and attn_implementation not in valid_fa_implementations:
+                continue
+
             # If we end up here, at least one model class was not skipped
             _has_run_at_least_one_model = True
             with tempfile.TemporaryDirectory() as tmpdirname:

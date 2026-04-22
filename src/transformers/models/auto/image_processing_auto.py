@@ -132,6 +132,7 @@ else:
             ("sam3_video", {"torchvision": "Sam3ImageProcessor"}),
             ("sam_hq", {"torchvision": "SamImageProcessor", "pil": "SamImageProcessorPil"}),
             ("shieldgemma2", {"torchvision": "Gemma3ImageProcessor", "pil": "Gemma3ImageProcessorPil"}),
+            ("slanet", {"torchvision": "SLANeXtImageProcessor"}),
             ("swiftformer", {"torchvision": "ViTImageProcessor", "pil": "ViTImageProcessorPil"}),
             ("swin", {"torchvision": "ViTImageProcessor", "pil": "ViTImageProcessorPil"}),
             ("swinv2", {"torchvision": "ViTImageProcessor", "pil": "ViTImageProcessorPil"}),

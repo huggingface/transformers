@@ -28,6 +28,7 @@ if is_serve_available():
     from fastapi.responses import JSONResponse, StreamingResponse
 
 from .chat_completion import ChatCompletionHandler
+from .completion import CompletionHandler
 from .model_manager import ModelManager
 from .response import ResponseHandler
 from .transcription import TranscriptionHandler
@@ -40,6 +41,7 @@ logger = logging.get_logger(__name__)
 def build_server(
     model_manager: ModelManager,
     chat_handler: ChatCompletionHandler,
+    completion_handler: CompletionHandler,
     response_handler: ResponseHandler,
     transcription_handler: TranscriptionHandler,
     enable_cors: bool = False,
@@ -89,6 +91,10 @@ def build_server(
     @app.post("/v1/chat/completions")
     async def chat_completions(request: Request, body: dict):
         return await chat_handler.handle_request(body, request.state.request_id)
+
+    @app.post("/v1/completions")
+    async def completions(request: Request, body: dict):
+        return await completion_handler.handle_request(body, request.state.request_id)
 
     @app.post("/v1/responses")
     async def responses(request: Request, body: dict):

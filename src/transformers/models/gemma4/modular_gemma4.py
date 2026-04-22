@@ -1660,8 +1660,6 @@ def create_causal_mask_mapping(
     past_key_values: Cache | None,
     position_ids: torch.Tensor | None,
     mm_token_type_ids: torch.Tensor | None = None,
-    pixel_values: torch.FloatTensor | None = None,
-    is_training: bool = False,
     is_first_iteration: bool | None = None,
     **kwargs,
 ) -> dict:
@@ -1671,9 +1669,6 @@ def create_causal_mask_mapping(
 
     Uses `pixel_values` as an optional input to disambiguate edge cases.
     """
-    if is_training and mm_token_type_ids is None:
-        raise ValueError("`mm_token_type_ids` is required as a model input when training")
-
     mask_kwargs = {
         "config": config.get_text_config(),
         "inputs_embeds": inputs_embeds,
@@ -1683,15 +1678,7 @@ def create_causal_mask_mapping(
     }
     sliding_mask_kwargs = mask_kwargs.copy()
 
-    # NOTE: this `may_have_image_input` logic is not flawless, it fails when we're using a cache eagerly initialized
-    # (e.g. compiled prefill) AND `pixel_values` are not provided (i.e. the image data is provided through other
-    # means). Determining prefill in that case requires checking data values, which is not compile-compatible.
-    is_first_iteration = (
-        is_first_iteration
-        if is_first_iteration is not None
-        else (past_key_values is None or not past_key_values.is_initialized or pixel_values is not None)
-    )
-    if mm_token_type_ids is not None and is_first_iteration:
+    if mm_token_type_ids is not None:
         # We need to pass an additional mask function to account for token type ids, and it needs to be an `or` (to
         # undo the causal masking)
 
@@ -1952,13 +1939,11 @@ class Gemma4Model(Gemma3nModel):
                 # Larger Gemma 4 models use Gemma 3's bidirectional attention mask for vision inputs
                 causal_mask_mapping = create_causal_mask_mapping(
                     self.config,
-                    inputs_embeds,
-                    attention_mask,
-                    past_key_values,
-                    position_ids,
-                    mm_token_type_ids,
-                    pixel_values,
-                    is_training=self.training,
+                    inputs_embeds=inputs_embeds,
+                    attention_mask=attention_mask,
+                    past_key_values=past_key_values,
+                    position_ids=position_ids,
+                    mm_token_type_ids=mm_token_type_ids,
                 )
             else:
                 # Smaller Gemma models use a conventional casual attention mask
@@ -2183,6 +2168,9 @@ class Gemma4ForConditionalGeneration(Gemma3nForConditionalGeneration):
             model_inputs["pixel_values_videos"] = pixel_values_videos
             model_inputs["input_features"] = input_features
             model_inputs["input_features_mask"] = input_features_mask
+        else:
+            # Don't pass to not apply bidirectional mask on top
+            model_inputs["mm_token_type_ids"] = None
 
         return model_inputs
 
