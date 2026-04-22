@@ -17,9 +17,7 @@
 import inspect
 import unittest
 
-import requests
 from parameterized import parameterized
-from transformers.image_utils import load_image
 
 from transformers import (
     PPOCRV5MobileDetConfig,
@@ -28,6 +26,7 @@ from transformers import (
     is_torch_available,
     is_vision_available,
 )
+from transformers.image_utils import load_image
 from transformers.testing_utils import (
     require_cv2,
     require_torch,
@@ -46,7 +45,7 @@ if is_torch_available():
     import torch
 
 if is_vision_available():
-    from PIL import Image
+    pass
 
 
 class PPOCRV5MobileDetModelTester:

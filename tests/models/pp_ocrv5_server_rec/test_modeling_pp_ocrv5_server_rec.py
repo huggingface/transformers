@@ -17,9 +17,7 @@
 import inspect
 import unittest
 
-import requests
 from parameterized import parameterized
-from transformers.image_utils import load_image
 
 from transformers import (
     AutoImageProcessor,
@@ -29,6 +27,7 @@ from transformers import (
     is_torch_available,
     is_vision_available,
 )
+from transformers.image_utils import load_image
 from transformers.testing_utils import (
     require_torch,
     require_torch_accelerator,

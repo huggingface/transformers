@@ -19,9 +19,7 @@ import math
 import tempfile
 import unittest
 
-import requests
 from parameterized import parameterized
-from transformers.image_utils import load_image
 
 from transformers import (
     PPDocLayoutV2Config,
@@ -30,6 +28,7 @@ from transformers import (
     is_torch_available,
     is_vision_available,
 )
+from transformers.image_utils import load_image
 from transformers.testing_utils import (
     cleanup,
     require_torch,
@@ -49,7 +48,7 @@ if is_torch_available():
     import torch
 
 if is_vision_available():
-    from PIL import Image
+    pass
 
 
 class PPDocLayoutV2ModelTester:

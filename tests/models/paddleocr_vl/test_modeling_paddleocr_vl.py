@@ -361,7 +361,9 @@ class PaddleOCRVLIntegrationTest(unittest.TestCase):
                 "content": [
                     {
                         "type": "image",
-                        "url": url_to_local_path("https://paddle-model-ecology.bj.bcebos.com/paddlex/imgs/demo_image/ocr_demo2.jpg"),
+                        "url": url_to_local_path(
+                            "https://paddle-model-ecology.bj.bcebos.com/paddlex/imgs/demo_image/ocr_demo2.jpg"
+                        ),
                     },
                     {"type": "text", "text": "OCR:"},
                 ],

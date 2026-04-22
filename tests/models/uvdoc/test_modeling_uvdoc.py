@@ -17,9 +17,7 @@
 import inspect
 import unittest
 
-import requests
 from parameterized import parameterized
-from transformers.image_utils import load_image
 
 from transformers import (
     AutoModel,
@@ -31,6 +29,7 @@ from transformers import (
     is_torch_available,
     is_vision_available,
 )
+from transformers.image_utils import load_image
 from transformers.testing_utils import (
     require_torch,
     require_torch_accelerator,
@@ -49,7 +48,7 @@ if is_torch_available():
     import torch
 
 if is_vision_available():
-    from PIL import Image
+    pass
 
 
 class UVDocModelTester:
@@ -312,9 +311,7 @@ class UVDocModelIntegrationTest(unittest.TestCase):
         model_path = "PaddlePaddle/UVDoc_safetensors"
         self.model = AutoModel.from_pretrained(model_path).to(torch_device)
         self.image_processor = UVDocImageProcessor()
-        img_url = url_to_local_path(
-            "https://paddle-model-ecology.bj.bcebos.com/paddlex/imgs/demo_image/doc_test.jpg"
-        )
+        img_url = url_to_local_path("https://paddle-model-ecology.bj.bcebos.com/paddlex/imgs/demo_image/doc_test.jpg")
         self.image = load_image(img_url)
 
     def test_inference_document_rectification(self):
