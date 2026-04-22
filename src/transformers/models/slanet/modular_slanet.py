@@ -117,6 +117,7 @@ class SLANetPreTrainedModel(SLANeXtPreTrainedModel):
                         if layer.bias is not None:
                             init.uniform_(layer.bias, -std, std)
 
+
 @dataclass
 @auto_docstring
 class SLANetForTableRecognitionOutput(BaseModelOutputWithNoAttention):
