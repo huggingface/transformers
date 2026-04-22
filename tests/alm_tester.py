@@ -16,54 +16,27 @@ import copy
 import unittest
 from inspect import signature
 
-from .test_configuration_common import ConfigTester
+from .multimodal_tester import MultiModalModelTest, MultiModalModelTester
 from .test_modeling_common import (
-    GenerationTesterMixin,
-    ModelTesterMixin,
     floats_tensor,
     ids_tensor,
     is_torch_available,
-    require_torch,
     torch_device,
 )
-from .test_pipeline_mixin import PipelineTesterMixin
 
 
 if is_torch_available():
     import torch
 
 
-class ALMModelTester:
-    # If the model follows standard naming conventions, only `config_class` and
-    # `conditional_generation_class` need to be set (others are optional).
-    base_model_class = None  # this should be added for most models when #45534 is merged
-    config_class = None
-    text_config_class = None
+class ALMModelTester(MultiModalModelTester):
     audio_config_class = None
-    conditional_generation_class = None
-    sequence_classification_class = None
-    # These attributes are required after the initialization phase of the tester.
-    _required_attributes = ("config_class", "conditional_generation_class")
-
-    # Arguments that should be passed to the config class even if not in its signature.
-    forced_config_args = ["pad_token_id"]
-
-    # Key name for the audio sub-config in the main config constructor.
-    # Override to "encoder_config" for models like GraniteSpeech.
     audio_config_key = "audio_config"
-    audio_mask_key = None  # to be set if audio-related mask has to be passed to the model's forward
-
-    @property
-    def all_model_classes(self):
-        return [
-            model_class
-            for model_class in (
-                self.base_model_class,
-                self.conditional_generation_class,
-                self.sequence_classification_class,
-            )
-            if model_class is not None
-        ]
+    # Name under which the audio mask is passed to the model's forward (e.g. "feature_attention_mask"
+    # for Qwen2Audio). Leave as `None` if the model does not consume a separate audio-level mask;
+    # `_prepare_modality_inputs` then skips adding it to the inputs dict.
+    audio_mask_key = None
+    _required_attributes = MultiModalModelTester._required_attributes + ("audio_config_class",)
 
     @property
     def pipeline_model_mapping(self):
@@ -76,60 +49,21 @@ class ALMModelTester:
         return mapping
 
     def __init__(self, parent, **kwargs):
-        self.parent = parent
-
         # Standard defaults
-        kwargs.setdefault("batch_size", 3)
-
-        # TODO: explain here specifically why these values are chosen
         kwargs.setdefault("seq_length", 32)
         kwargs.setdefault("feat_seq_length", 128)
 
         kwargs.setdefault("num_mel_bins", 80)
-        kwargs.setdefault("is_training", True)
-        kwargs.setdefault("use_labels", True)
         kwargs.setdefault("pad_token_id", 1)
-        kwargs.setdefault("bos_token_id", 1)
-        kwargs.setdefault("eos_token_id", 2)
         kwargs.setdefault("audio_token_id", 0)
-        kwargs.setdefault("ignore_index", -100)
-        kwargs.setdefault("scope", None)
-        kwargs.setdefault("vocab_size", 99)
-        kwargs.setdefault("hidden_size", 32)
-        kwargs.setdefault("num_hidden_layers", 2)
-        kwargs.setdefault("num_attention_heads", 2)
-        kwargs.setdefault("num_key_value_heads", 2)
-        kwargs.setdefault("intermediate_size", 32)  # Keep this divisible by 8 for fp16/bf16/fp32 16-bytes alignment
-        kwargs.setdefault("hidden_act", "gelu")
-        kwargs.setdefault("max_position_embeddings", 512)
 
-        # Set all kwargs as instance attributes
-        for key, value in kwargs.items():
-            setattr(self, key, value)
+        super().__init__(parent, **kwargs)
 
-        for required_attribute in [
-            # "base_model_class", # TODO: @eustlb, there is a discrepancy here between ALMs/ VLMs. XXModel and XXForConditionalGeneration
-            "config_class",
-            "conditional_generation_class",
-            "text_config_class",
-            "audio_config_class",
-        ]:
-            if getattr(self, required_attribute) is None:
-                raise ValueError(
-                    f"You have inherited from ALMModelTester but did not set the {required_attribute} attribute."
-                )
-
-    # Because audio-LMs have some different standards in how they handle audio tokens, we need
-    # a few methods that can be overridden if required:
+    # -- Overridable ALM-specific hooks ------------------------------------------------------
 
     def create_audio_features(self):
         """Create audio feature tensor. Override for different shapes (e.g. [B, T, features])."""
         return floats_tensor([self.batch_size, self.num_mel_bins, self.feat_seq_length])
-
-    def create_attention_mask(self, input_ids):
-        # TODO: check, this looks strange to force as default behavior
-        # Override for bidirectional attention models like Gemma3
-        return torch.tril(torch.ones_like(input_ids).to(torch_device))
 
     def get_audio_embeds_mask(self, audio_embeds_mask):
         """Get audio embeds mask from audio mask. Override for different shapes."""
@@ -174,115 +108,39 @@ class ALMModelTester:
         audio_mask = ((positions >= offsets[:, None]) & (positions < offsets[:, None] + lengths[:, None])).long()
         return audio_mask
 
-    def get_additional_inputs(self, config, input_ids, audio_features):
-        """Return dict of model-specific extra inputs (e.g. image_sizes for multi-modal)."""
-        return {}
+    # -- Hooks consumed by the shared base ---------------------------------------------------
 
-    # End of overridable methods
+    def _special_token_ids(self):
+        return super()._special_token_ids() | {self.audio_token_id}
 
-    def prepare_config_and_inputs_for_common(self):
-        # TODO: add a clear diagram that explains input prep
+    def _build_modality_sub_configs(self):
+        return {self.audio_config_key: self.get_audio_config()}
 
+    def _prepare_modality_inputs(self, input_ids, config):
+        # TODO: add a clear diagram that explains input prep ?
         audio_features = self.create_audio_features()
         audio_mask = self.create_audio_mask()
         audio_embeds_mask = self.get_audio_embeds_mask(audio_mask)
-
-        input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
-
-        special_tokens = [self.pad_token_id, self.bos_token_id, self.eos_token_id, self.audio_token_id]
-        for i in range(self.vocab_size):
-            if i not in special_tokens:
-                safe_token_id = i
-                break
-        else:
-            raise ValueError("vocab_size is too small and there is no token ID that is not a special token!")
-
-        # Avoid flaky tests, clear any special tokens in ids_tensor
-        # audio_token_id is handled separately by place_audio_tokens()
-        input_ids[input_ids == self.pad_token_id] = safe_token_id
-        input_ids[input_ids == self.eos_token_id] = safe_token_id
-
-        config = self.get_config()
         num_audio_tokens = audio_embeds_mask.sum(dim=1)
         input_ids = self.place_audio_tokens(input_ids, config, num_audio_tokens)
-        attention_mask = self.create_attention_mask(input_ids)
 
-        inputs_dict = {
-            "input_ids": input_ids,
-            "attention_mask": attention_mask,
-            self.get_audio_feature_key(): audio_features,
-        }
-
+        modality_inputs = {self.get_audio_feature_key(): audio_features}
         if self.audio_mask_key is not None:
-            inputs_dict[self.audio_mask_key] = audio_mask
+            modality_inputs[self.audio_mask_key] = audio_mask
+        return input_ids, modality_inputs, audio_features
 
-        inputs_dict.update(self.get_additional_inputs(config, input_ids, audio_features))
-        return config, inputs_dict
-
-    @property
-    def config_args(self):
-        return list(signature(self.config_class.__init__).parameters.keys())
-
-    @property
-    def text_config_args(self):
-        args = list(signature(self.text_config_class.__init__).parameters.keys())
-        for token_arg in ["pad_token_id", "bos_token_id", "eos_token_id"]:  # Not always explicitly in the sig
-            if token_arg not in args:
-                args.append(token_arg)
-        return args
+    # -- Audio sub-config construction -------------------------------------------------------
 
     @property
     def audio_config_args(self):
         return list(signature(self.audio_config_class.__init__).parameters.keys())
 
-    def get_config(self):
-        kwargs = {}
-        attribute_map = getattr(self.config_class, "attribute_map", {})
-        model_name_to_common_name = {v: k for k, v in attribute_map.items()}
-        for k in self.config_args + self.forced_config_args:
-            if hasattr(self, k) and k != "self":
-                kwargs[k] = getattr(self, k)
-            elif k in model_name_to_common_name and hasattr(self, model_name_to_common_name[k]):
-                kwargs[k] = getattr(self, model_name_to_common_name[k])
-        kwargs["text_config"] = self.get_text_config()
-        kwargs[self.audio_config_key] = self.get_audio_config()
-        return self.config_class(**kwargs)
-
-    def get_text_config(self):
-        kwargs = {}
-        attribute_map = getattr(self.text_config_class, "attribute_map", {})
-        model_name_to_common_name = {v: k for k, v in attribute_map.items()}
-        for k in self.text_config_args:
-            if hasattr(self, k) and k != "self":
-                kwargs[k] = getattr(self, k)
-            elif k in model_name_to_common_name and hasattr(self, model_name_to_common_name[k]):
-                kwargs[k] = getattr(self, model_name_to_common_name[k])
-        return self.text_config_class(**kwargs)
-
     def get_audio_config(self):
-        kwargs = {}
-        attribute_map = getattr(self.audio_config_class, "attribute_map", {})
-        model_name_to_common_name = {v: k for k, v in attribute_map.items()}
-        for k in self.audio_config_args:
-            if hasattr(self, k) and k != "self":
-                kwargs[k] = getattr(self, k)
-            elif k in model_name_to_common_name and hasattr(self, model_name_to_common_name[k]):
-                kwargs[k] = getattr(self, model_name_to_common_name[k])
+        kwargs = self._collect_kwargs(self.audio_config_args, self.audio_config_class)
         return self.audio_config_class(**kwargs)
 
-    def create_and_check_model(
-        self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
-    ):
-        model = self.base_model_class(config=config)
-        model.to(torch_device)
-        model.eval()
-        model(input_ids, attention_mask=input_mask)
-        result = model(input_ids)
-        self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
 
-
-@require_torch
-class ALMModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin):
+class ALMModelTest(MultiModalModelTest):
     """
     Base test class for Audio-Language Models.
 
@@ -293,35 +151,6 @@ class ALMModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin)
     - `all_model_classes`: Override if not using default from model_tester
     - `pipeline_model_mapping`: Override if not using default from model_tester
     """
-
-    model_tester_class = None
-    all_model_classes = None
-    pipeline_model_mapping = None
-
-    # Audio-LMs are always composite
-    _is_composite = True
-
-    def setUp(self):
-        if self.model_tester_class is None:
-            raise ValueError("You have inherited from ALMModelTest but did not set the model_tester_class attribute.")
-        self.model_tester = self.model_tester_class(self)
-        self.config_tester = ConfigTester(self, config_class=self.model_tester.config_class, has_text_modality=False)
-
-        if self.pipeline_model_mapping is None:
-            if self.all_model_classes is not None:
-                raise ValueError(
-                    "Tests that inherit from `ALMModelTest` and set `all_model_classes` must manually set "
-                    "`pipeline_model_mapping`."
-                )
-            else:
-                self.pipeline_model_mapping = self.model_tester.pipeline_model_mapping
-
-        if self.all_model_classes is None:
-            self.all_model_classes = self.model_tester.all_model_classes
-
-    def test_config(self):
-        """Test config common functionality."""
-        self.config_tester.run_common_tests()
 
     # TODO: @eustlb, remove this once #45534 is merged
     @unittest.skip("Audio-LMs have no separate base model without a head.")
@@ -394,4 +223,3 @@ class ALMModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin)
                     [curr_input_dict[audio_mask_key], curr_input_dict[audio_mask_key]], dim=0
                 )
             _ = model(**curr_input_dict)
-
