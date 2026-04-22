@@ -1162,7 +1162,6 @@ class Gemma4PreTrainedModel(Gemma3nPreTrainedModel):
     _no_split_modules = ["Gemma4TextDecoderLayer", "Gemma4VisionEncoderLayer", "Gemma4AudioLayer"]
     input_modalities = ("image", "text", "video", "audio")
     _can_record_outputs = None  # override
-    _skip_keys_device_placement = ["past_key_values", "shared_kv_states"]
 
     @torch.no_grad()
     def _init_weights(self, module):
@@ -1710,26 +1709,18 @@ def create_causal_mask_mapping(
 class Gemma4Model(Gemma3nModel):
     def __init__(self, config: Gemma4Config):
         super().__init__(config)
-        del self.vision_tower
-        del self.embed_vision
         self.vision_tower = AutoModel.from_config(config.vision_config) if config.vision_config is not None else None
         self.embed_vision = (
             Gemma4MultimodalEmbedder(config.vision_config, config.text_config)
             if config.vision_config is not None
             else None
         )
-        del self.audio_tower
-        del self.embed_audio
         self.audio_tower = AutoModel.from_config(config.audio_config) if config.audio_config is not None else None
         self.embed_audio = (
             Gemma4MultimodalEmbedder(config.audio_config, config.text_config)
             if config.audio_config is not None
             else None
         )
-        # Grab the ones from the child
-        self._keys_to_ignore_on_load_unexpected = [
-            f"language_model.{name}" for name in self.language_model._keys_to_ignore_on_load_unexpected
-        ]
 
     def get_per_layer_input_embeddings(self):
         return self.language_model.embed_tokens_per_layer
@@ -2018,13 +2009,6 @@ class Gemma4Model(Gemma3nModel):
 )
 class Gemma4ForConditionalGeneration(Gemma3nForConditionalGeneration):
     base_model_prefix = "model"
-
-    def __init__(self, config: Gemma4Config):
-        super().__init__(config)
-        # Grab the ones from the child
-        self._keys_to_ignore_on_load_unexpected = [
-            f"model.{name}" for name in self.model._keys_to_ignore_on_load_unexpected
-        ]
 
     def get_per_layer_input_embeddings(self):
         return self.model.get_per_layer_input_embeddings()

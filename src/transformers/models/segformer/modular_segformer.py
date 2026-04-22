@@ -31,20 +31,8 @@ from ...image_utils import (
     PILImageResampling,
     SizeDict,
 )
-from ...processing_utils import ImagesKwargs
 from ...utils import TensorType
 from ...utils.import_utils import requires
-
-
-class SegformerImageProcessorKwargs(ImagesKwargs, total=False):
-    r"""
-    do_reduce_labels (`bool`, *optional*, defaults to `self.do_reduce_labels`):
-        Whether or not to reduce all label values of segmentation maps by 1. Usually used for datasets where 0
-        is used for background, and background itself is not included in all classes of a dataset (e.g.
-        ADE20k). The background label will be replaced by 255.
-    """
-
-    do_reduce_labels: bool
 
 
 class SegformerImageProcessor(BeitImageProcessor):
