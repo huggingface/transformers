@@ -329,6 +329,7 @@ class MiMoV2FlashAttention(nn.Module):
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor, torch.Tensor | None]:
         input_shape = hidden_states.shape[:-1]
+        # Different head dims compared to other attentions
         qk_hidden_shape = (*input_shape, -1, self.head_dim)
         v_hidden_shape = (*input_shape, -1, self.v_head_dim)
 
