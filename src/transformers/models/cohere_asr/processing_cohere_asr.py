@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from ...audio_utils import AudioInput, make_list_of_audio
+from ...audio_utils import AudioInput
 from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
 from ...utils import auto_docstring, is_torch_available, logging
@@ -95,34 +95,15 @@ class CohereAsrProcessor(ProcessorMixin):
             sampling rate, and an error will be raised if they don't match. If not provided, a warning will be
             issued and the default sampling rate will be assumed.
         """
-        audio = make_list_of_audio(audio)
-
-        output_kwargs = self._merge_kwargs(
-            CohereAsrProcessorKwargs,
-            tokenizer_init_kwargs=self.tokenizer.init_kwargs,
-            **kwargs,
-        )
-
-        if sampling_rate is None:
-            logger.warning_once(
-                f"You've provided audio without specifying the sampling rate. It will be assumed to be {output_kwargs['audio_kwargs']['sampling_rate']}, which can result in silent errors."
-            )
-        elif sampling_rate != output_kwargs["audio_kwargs"]["sampling_rate"]:
-            raise ValueError(
-                f"The sampling rate of the audio ({sampling_rate}) does not match the sampling rate of the processor ({output_kwargs['audio_kwargs']['sampling_rate']}). Please provide resampled the audio to the expected sampling rate."
-            )
-
-        inputs = self.feature_extractor(audio, **output_kwargs["audio_kwargs"])
-
+        model_inputs = super().__call__(audio=audio, text=text, **kwargs)
         prompt_ids = self.get_decoder_prompt_ids(language=language, punctuation=punctuation)
-        batch_size = inputs["input_features"].shape[0]
-        inputs["decoder_input_ids"] = torch.tensor([prompt_ids] * batch_size, dtype=torch.long)
+        batch_size = model_inputs["input_features"].shape[0]
+        model_inputs["decoder_input_ids"] = torch.tensor([prompt_ids] * batch_size, dtype=torch.long)
 
-        if text is not None:
-            encodings = self.tokenizer(text, **output_kwargs["text_kwargs"])
-            inputs["labels"] = encodings["input_ids"]
+        if "input_ids" in model_inputs:
+            model_inputs["labels"] = model_inputs.pop("input_ids")
 
-        return inputs
+        return model_inputs
 
     def decode(self, *args, audio_chunk_index=None, language=None, **kwargs):
         texts = self.tokenizer.decode(*args, **kwargs)
