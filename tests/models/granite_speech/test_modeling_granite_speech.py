@@ -63,7 +63,7 @@ class GraniteSpeechModelTester(ALMModelTester):
             "intermediate_size": 256,
             "encoder_hidden_size": 32,
         }
-   
+
         super().__init__(parent, **kwargs)
 
     def create_audio_features(self):

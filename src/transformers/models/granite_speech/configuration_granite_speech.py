@@ -78,6 +78,7 @@ class GraniteSpeechEncoderConfig(PreTrainedConfig):
         if self.dim_head is None:
             self.dim_head = self.hidden_dim // self.num_heads
 
+
 @auto_docstring(checkpoint="ibm-granite/granite-speech-3.3-2b")
 @strict
 class GraniteSpeechConfig(PreTrainedConfig):
