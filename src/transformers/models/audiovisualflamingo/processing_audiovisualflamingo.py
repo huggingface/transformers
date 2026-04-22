@@ -59,6 +59,7 @@ _AUDIOVISUALFLAMINGO_CHAT_TEMPLATE = (
 
 _VIDEO_METADATA_KEYS = {"fps", "frames_indices", "total_num_frames", "video_path", "video_url"}
 
+
 def _looks_like_video_metadata(meta) -> bool:
     if meta is None:
         return False
@@ -84,8 +85,7 @@ def _merge_media_config(target: defaultdict, source: defaultdict) -> None:
                 target[modality][key] = value
             elif target[modality][key] != value:
                 raise ValueError(
-                    f"Conflicting `{modality}` media config for key `{key}`: "
-                    f"{target[modality][key]!r} != {value!r}"
+                    f"Conflicting `{modality}` media config for key `{key}`: {target[modality][key]!r} != {value!r}"
                 )
 
 
@@ -778,12 +778,18 @@ class AudioVisualFlamingoProcessor(ProcessorMixin):
         }
         runtime_kwargs.update(
             {
-                "audio_chunk_length": output_kwargs["audio_kwargs"].get("chunk_length", runtime_kwargs["audio_chunk_length"]),
-                "audio_hop_length": output_kwargs["audio_kwargs"].get("hop_length", runtime_kwargs["audio_hop_length"]),
+                "audio_chunk_length": output_kwargs["audio_kwargs"].get(
+                    "chunk_length", runtime_kwargs["audio_chunk_length"]
+                ),
+                "audio_hop_length": output_kwargs["audio_kwargs"].get(
+                    "hop_length", runtime_kwargs["audio_hop_length"]
+                ),
                 "audio_sampling_rate": output_kwargs["audio_kwargs"].get(
                     "sampling_rate", runtime_kwargs["audio_sampling_rate"]
                 ),
-                "num_video_frames": output_kwargs["videos_kwargs"].get("num_frames", runtime_kwargs["num_video_frames"]),
+                "num_video_frames": output_kwargs["videos_kwargs"].get(
+                    "num_frames", runtime_kwargs["num_video_frames"]
+                ),
                 "padding_side": output_kwargs["text_kwargs"].get("padding_side", runtime_kwargs["padding_side"]),
             }
         )
@@ -1022,7 +1028,10 @@ class AudioVisualFlamingoProcessor(ProcessorMixin):
         )
         return list(
             dict.fromkeys(
-                tokenizer_input_names + image_processor_input_names + feature_extractor_input_names + ["media", "media_config"]
+                tokenizer_input_names
+                + image_processor_input_names
+                + feature_extractor_input_names
+                + ["media", "media_config"]
             )
         )
 

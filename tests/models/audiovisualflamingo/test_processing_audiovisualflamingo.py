@@ -199,9 +199,32 @@ class AudioVisualFlamingoProcessorTest(unittest.TestCase):
 
     def test_standard_component_configs_resolve_to_subconfigs(self):
         config = AudioVisualFlamingoConfig(
-            text_config={"model_type": "qwen2", "hidden_size": 64, "intermediate_size": 128, "num_hidden_layers": 2, "num_attention_heads": 8, "num_key_value_heads": 8, "vocab_size": 256},
-            vision_config={"model_type": "siglip_vision_model", "hidden_size": 32, "intermediate_size": 64, "num_hidden_layers": 2, "num_attention_heads": 4, "image_size": 384, "patch_size": 14},
-            audio_config={"model_type": "qwen2_audio_encoder", "num_mel_bins": 128, "encoder_layers": 2, "encoder_attention_heads": 4, "encoder_ffn_dim": 64, "d_model": 32},
+            text_config={
+                "model_type": "qwen2",
+                "hidden_size": 64,
+                "intermediate_size": 128,
+                "num_hidden_layers": 2,
+                "num_attention_heads": 8,
+                "num_key_value_heads": 8,
+                "vocab_size": 256,
+            },
+            vision_config={
+                "model_type": "siglip_vision_model",
+                "hidden_size": 32,
+                "intermediate_size": 64,
+                "num_hidden_layers": 2,
+                "num_attention_heads": 4,
+                "image_size": 384,
+                "patch_size": 14,
+            },
+            audio_config={
+                "model_type": "qwen2_audio_encoder",
+                "num_mel_bins": 128,
+                "encoder_layers": 2,
+                "encoder_attention_heads": 4,
+                "encoder_ffn_dim": 64,
+                "d_model": 32,
+            },
         )
 
         self.assertEqual(config.text_config.model_type, "qwen2")

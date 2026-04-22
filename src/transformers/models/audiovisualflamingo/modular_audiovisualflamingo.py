@@ -50,6 +50,7 @@ MM_BOS_EOS_TOKENS = {
     "sound": ["<|sound_bos|>", "<|sound_eos|>"],
 }
 
+
 class AudioVisualFlamingoConfig(PreTrainedConfig):
     model_type = "audiovisualflamingo"
     keys_to_ignore_at_inference = ["past_key_values"]
@@ -337,6 +338,8 @@ def _move_rotary_module_to_device(module: nn.Module, device: torch.device) -> nn
             ).to(device=device)
         return module.to_empty(device=device)
     return module.to(device=device)
+
+
 class MultimodalProjector(LlavaNextMultiModalProjector):
     def __init__(self, vision_hidden_size: int, text_hidden_size: int, bias: bool):
         nn.Module.__init__(self)
@@ -512,12 +515,16 @@ class AudioVisualFlamingoPretrainedModel(VoxtralPreTrainedModel):
             self._time_embeddings[key] = MaxTimeContinuousTimeRotaryEmbedding(**kwargs)
         elif key == "video":
             if time_embed_type == "lang":
-                self._time_embeddings[key] = RotaryEmbedding(dim=trope_dim, freqs_for="lang", theta=trope_theta, max_time=max_time)
+                self._time_embeddings[key] = RotaryEmbedding(
+                    dim=trope_dim, freqs_for="lang", theta=trope_theta, max_time=max_time
+                )
             elif time_embed_type == "pixel":
                 self._time_embeddings[key] = RotaryEmbedding(dim=trope_dim, freqs_for="pixel", max_freq=256)
         elif key == "sound":
             if time_embed_type in ("pixel", "lang"):
-                self._time_embeddings[key] = RotaryEmbedding(dim=trope_dim, freqs_for=time_embed_type, max_freq=256, max_time=max_time)
+                self._time_embeddings[key] = RotaryEmbedding(
+                    dim=trope_dim, freqs_for=time_embed_type, max_freq=256, max_time=max_time
+                )
         return period_fix, max_time
 
     def _freeze_untrained_modules(self):
@@ -672,7 +679,9 @@ class AudioVisualFlamingoForConditionalGeneration(AudioVisualFlamingoPretrainedM
             output_size = cur_features_each_scale[resize_output_to_scale_idx].shape[-2:]
             cur_features = torch.cat(
                 [
-                    F.interpolate(cur_features_each_scale[i].to(torch.float32), size=output_size, mode="area").to(cur_features_each_scale[i].dtype)
+                    F.interpolate(cur_features_each_scale[i].to(torch.float32), size=output_size, mode="area").to(
+                        cur_features_each_scale[i].dtype
+                    )
                     for i in range(len(cur_features_each_scale))
                 ],
                 dim=1,
@@ -696,7 +705,11 @@ class AudioVisualFlamingoForConditionalGeneration(AudioVisualFlamingoPretrainedM
         assert height % num_split_h == 0 and width % num_split_w == 0
         split_h, split_w = height // num_split_h, width // num_split_w
         return torch.cat(
-            [x[:, :, i * split_h : (i + 1) * split_h, j * split_w : (j + 1) * split_w] for i in range(num_split_h) for j in range(num_split_w)],
+            [
+                x[:, :, i * split_h : (i + 1) * split_h, j * split_w : (j + 1) * split_w]
+                for i in range(num_split_h)
+                for j in range(num_split_w)
+            ],
             dim=0,
         )
 
@@ -712,7 +725,10 @@ class AudioVisualFlamingoForConditionalGeneration(AudioVisualFlamingoPretrainedM
         return torch.cat(
             [
                 torch.cat(
-                    [x[(i * num_split_w + j) * base_batch : (i * num_split_w + j + 1) * base_batch] for j in range(num_split_w)],
+                    [
+                        x[(i * num_split_w + j) * base_batch : (i * num_split_w + j + 1) * base_batch]
+                        for j in range(num_split_w)
+                    ],
                     dim=-1,
                 )
                 for i in range(num_split_h)
@@ -720,7 +736,13 @@ class AudioVisualFlamingoForConditionalGeneration(AudioVisualFlamingoPretrainedM
             dim=-2,
         )
 
-    def encode_video(self, inp, block_sizes: tuple[int, ...] | None = None, mm_info: dict | None = None, num_frames: list[int] | None = None):
+    def encode_video(
+        self,
+        inp,
+        block_sizes: tuple[int, ...] | None = None,
+        mm_info: dict | None = None,
+        num_frames: list[int] | None = None,
+    ):
         _ = (mm_info, num_frames)
         if block_sizes is not None:
             raise ValueError(f"Video block sizes are not supported: {block_sizes}")
@@ -728,12 +750,22 @@ class AudioVisualFlamingoForConditionalGeneration(AudioVisualFlamingoPretrainedM
             return []
         return self._encode_visual_features(torch.cat(inp, dim=0))
 
-    def encode_images(self, images, block_sizes: tuple[int, ...] | None = None, mm_info: dict | None = None, num_frames: list[int] | None = None):
+    def encode_images(
+        self,
+        images,
+        block_sizes: tuple[int, ...] | None = None,
+        mm_info: dict | None = None,
+        num_frames: list[int] | None = None,
+    ):
         _ = (mm_info, num_frames)
         return self._encode_visual_features(images, block_sizes=block_sizes)
 
     def _get_sound_chunk_length(self) -> int:
-        return self.sound_tower.config.max_source_positions * self.sound_tower.conv1.stride[0] * self.sound_tower.conv2.stride[0]
+        return (
+            self.sound_tower.config.max_source_positions
+            * self.sound_tower.conv1.stride[0]
+            * self.sound_tower.conv2.stride[0]
+        )
 
     def _forward_sound_tower_batch(self, input_features: torch.Tensor) -> torch.Tensor:
         batch_size, n_mels, seq_len = input_features.shape
@@ -784,7 +816,9 @@ class AudioVisualFlamingoForConditionalGeneration(AudioVisualFlamingoPretrainedM
             start += length
         return split_audio_features
 
-    def _embed_image_features(self, images: list[torch.Tensor], config: dict[str, Any], mm_info: dict) -> list[torch.Tensor]:
+    def _embed_image_features(
+        self, images: list[torch.Tensor], config: dict[str, Any], mm_info: dict
+    ) -> list[torch.Tensor]:
         _ = mm_info
         features = self.encode_images(torch.stack(images, dim=0), block_sizes=config.get("block_sizes"))
         start_embeds = self.embed_text_tokens(self._image_start_tokens)
@@ -798,7 +832,9 @@ class AudioVisualFlamingoForConditionalGeneration(AudioVisualFlamingoPretrainedM
             image_features.append(feature)
         return image_features
 
-    def _embed_video_features(self, videos: list[torch.Tensor], config: dict[str, Any], mm_info: dict) -> list[torch.Tensor]:
+    def _embed_video_features(
+        self, videos: list[torch.Tensor], config: dict[str, Any], mm_info: dict
+    ) -> list[torch.Tensor]:
         _ = config
         num_frames = [video.shape[0] for video in videos]
         features = self.encode_video(videos, mm_info=mm_info, num_frames=num_frames)
@@ -837,12 +873,16 @@ class AudioVisualFlamingoForConditionalGeneration(AudioVisualFlamingoPretrainedM
             max_length = max(original_lengths)
             for i in range(len(times_list)):
                 if len(times_list[i]) < max_length:
-                    times_list[i] = torch.cat([times_list[i], torch.zeros(max_length - len(times_list[i])).to(times_list[i].device)])
+                    times_list[i] = torch.cat(
+                        [times_list[i], torch.zeros(max_length - len(times_list[i])).to(times_list[i].device)]
+                    )
             times_tensor = torch.stack(times_list, dim=0)
             time_embeds_all = self._time_embeddings["video"](times_tensor, dtype=features[0].dtype)
             new_time_embeds = []
             for i in range(len(times_list)):
-                new_time_embeds.append(time_embeds_all[i][: original_lengths[i]].unsqueeze(1).expand(-1, features[0].shape[1], -1))
+                new_time_embeds.append(
+                    time_embeds_all[i][: original_lengths[i]].unsqueeze(1).expand(-1, features[0].shape[1], -1)
+                )
             new_time_embeds[0] = new_time_embeds[0] + 0 * time_embeds_all.mean()
 
         new_features, video_idx = [], 0
@@ -857,7 +897,9 @@ class AudioVisualFlamingoForConditionalGeneration(AudioVisualFlamingoPretrainedM
                 else:
                     times = torch.tensor(video_info[j]["video_frame_times"]).to(device)
                 if self._video_time_embed_type == "learned_embed":
-                    feature = self._tsp_process(feature, start_embeds, end_embeds, sep_embeds, time_embed=new_time_embeds[video_idx])
+                    feature = self._tsp_process(
+                        feature, start_embeds, end_embeds, sep_embeds, time_embed=new_time_embeds[video_idx]
+                    )
                 else:
                     feature = self._tsp_process(feature, start_embeds, end_embeds, sep_embeds, times=times)
                 new_features.append(feature)
@@ -865,7 +907,15 @@ class AudioVisualFlamingoForConditionalGeneration(AudioVisualFlamingoPretrainedM
         assert video_idx == len(features)
         return new_features
 
-    def _tsp_process(self, inputs: torch.Tensor, start_token_embeds: torch.Tensor | None, end_token_embeds: torch.Tensor | None, sep_token_embeds: torch.Tensor | None, times: torch.Tensor | None = None, time_embed: torch.Tensor | None = None) -> torch.Tensor:
+    def _tsp_process(
+        self,
+        inputs: torch.Tensor,
+        start_token_embeds: torch.Tensor | None,
+        end_token_embeds: torch.Tensor | None,
+        sep_token_embeds: torch.Tensor | None,
+        times: torch.Tensor | None = None,
+        time_embed: torch.Tensor | None = None,
+    ) -> torch.Tensor:
         num_frames, num_spatial_tokens = inputs.shape[:2]
         spatial_length = int(num_spatial_tokens**0.5)
         outputs = []
@@ -882,14 +932,20 @@ class AudioVisualFlamingoForConditionalGeneration(AudioVisualFlamingoPretrainedM
                         pooled_times = times
                         if len(pooled_times) % temporal_pool != 0:
                             remainder = len(pooled_times) % temporal_pool
-                            pooled_times = torch.cat([pooled_times, pooled_times[-remainder:].mean().expand(temporal_pool - remainder)])
+                            pooled_times = torch.cat(
+                                [pooled_times, pooled_times[-remainder:].mean().expand(temporal_pool - remainder)]
+                            )
                         new_times = pool(pooled_times, temporal_pool, 0)
                     else:
                         new_times = times
                     pos_emb = _move_rotary_module_to_device(self._time_embeddings["video"], device)
                     self._time_embeddings["video"] = pos_emb
                     if self._video_period_fix == "True":
-                        angle = new_times.to(device) / self._video_max_time * 2 * np.pi if self._video_max_time is not None else new_times.to(device)
+                        angle = (
+                            new_times.to(device) / self._video_max_time * 2 * np.pi
+                            if self._video_max_time is not None
+                            else new_times.to(device)
+                        )
                     elif self._video_period_fix == "MTCT":
                         time_values = new_times.unsqueeze(0) if new_times.ndim == 1 else new_times
                         freqs = pos_emb(time_values.float()).squeeze(0).unsqueeze(1)
@@ -898,21 +954,31 @@ class AudioVisualFlamingoForConditionalGeneration(AudioVisualFlamingoPretrainedM
                         angle = (-new_times * 2 * np.pi).to(device)
                     if self._video_period_fix != "MTCT":
                         freqs = pos_emb.get_axial_freqs(new_times.shape[0], features.shape[-2]).to(device)
-                        angle_exp = angle.unsqueeze(1).unsqueeze(2).expand(new_times.shape[0], features.shape[-2], freqs.shape[-1])
+                        angle_exp = (
+                            angle.unsqueeze(1)
+                            .unsqueeze(2)
+                            .expand(new_times.shape[0], features.shape[-2], freqs.shape[-1])
+                        )
                         features = apply_rotary_emb(freqs * angle_exp, features)
                 elif self._video_time_embed_type == "learned_embed":
                     features = features + time_embed
             if start_token_embeds is not None:
-                features = torch.cat([start_token_embeds.unsqueeze(0).expand(features.shape[0], -1, -1), features], dim=1)
+                features = torch.cat(
+                    [start_token_embeds.unsqueeze(0).expand(features.shape[0], -1, -1), features], dim=1
+                )
             if end_token_embeds is not None:
-                features = torch.cat([features, end_token_embeds.unsqueeze(0).expand(features.shape[0], -1, -1)], dim=1)
+                features = torch.cat(
+                    [features, end_token_embeds.unsqueeze(0).expand(features.shape[0], -1, -1)], dim=1
+                )
             features = features.flatten(0, 1)
             if sep_token_embeds is not None:
                 features = torch.cat([features, sep_token_embeds], dim=0)
             outputs.append(features)
         return torch.cat(outputs, dim=0)
 
-    def _embed_sound_features(self, sounds: list[torch.Tensor], config: dict[str, Any], mm_info: dict) -> list[torch.Tensor]:
+    def _embed_sound_features(
+        self, sounds: list[torch.Tensor], config: dict[str, Any], mm_info: dict
+    ) -> list[torch.Tensor]:
         _ = config
         features = self.encode_sound(sounds, mm_info=mm_info)
         start_embeds = self.embed_text_tokens(self._sound_start_tokens)
@@ -937,7 +1003,12 @@ class AudioVisualFlamingoForConditionalGeneration(AudioVisualFlamingoPretrainedM
                         chunk_length = audio_info[j]["new_audio_chunk_length"]
                         seconds_per_embed = chunk_length / feature.shape[0]
                         audio_start = audio_info[j]["audio_start_sec"]
-                        times = torch.tensor([audio_start + k * seconds_per_embed + seconds_per_embed / 2 for k in range(feature.shape[0])]).to(device)
+                        times = torch.tensor(
+                            [
+                                audio_start + k * seconds_per_embed + seconds_per_embed / 2
+                                for k in range(feature.shape[0])
+                            ]
+                        ).to(device)
                     times_list.append(times)
                     audio_idx += 1
             times_tensor = torch.stack(times_list, dim=0)
@@ -955,9 +1026,13 @@ class AudioVisualFlamingoForConditionalGeneration(AudioVisualFlamingoPretrainedM
                     chunk_length = audio_info[j]["new_audio_chunk_length"]
                     seconds_per_embed = chunk_length / feature.shape[0]
                     audio_start = audio_info[j]["audio_start_sec"]
-                    times = torch.tensor([audio_start + k * seconds_per_embed + seconds_per_embed / 2 for k in range(feature.shape[0])]).to(device)
+                    times = torch.tensor(
+                        [audio_start + k * seconds_per_embed + seconds_per_embed / 2 for k in range(feature.shape[0])]
+                    ).to(device)
                 if self._sound_time_embed_type == "learned_embed":
-                    feature = self._process_sound_feature(feature, start_embeds, end_embeds, time_embed=time_embeds_all[audio_idx])
+                    feature = self._process_sound_feature(
+                        feature, start_embeds, end_embeds, time_embed=time_embeds_all[audio_idx]
+                    )
                 else:
                     feature = self._process_sound_feature(feature, start_embeds, end_embeds, times=times)
                 new_features.append(feature)
@@ -965,7 +1040,14 @@ class AudioVisualFlamingoForConditionalGeneration(AudioVisualFlamingoPretrainedM
         assert audio_idx == feature_count
         return new_features
 
-    def _process_sound_feature(self, features: torch.Tensor, start_token_embeds: torch.Tensor | None, end_token_embeds: torch.Tensor | None, times: torch.Tensor | None = None, time_embed: torch.Tensor | None = None) -> torch.Tensor:
+    def _process_sound_feature(
+        self,
+        features: torch.Tensor,
+        start_token_embeds: torch.Tensor | None,
+        end_token_embeds: torch.Tensor | None,
+        times: torch.Tensor | None = None,
+        time_embed: torch.Tensor | None = None,
+    ) -> torch.Tensor:
         features = features.to(self.device)
         device = features.device
         if self._sound_embed_time:
@@ -974,7 +1056,11 @@ class AudioVisualFlamingoForConditionalGeneration(AudioVisualFlamingoPretrainedM
                 pos_emb = _move_rotary_module_to_device(self._time_embeddings["sound"], device)
                 self._time_embeddings["sound"] = pos_emb
                 if self._sound_period_fix == "True":
-                    angle = new_times.to(device) / self._sound_max_time * 2 * np.pi if self._sound_max_time is not None else new_times.to(device)
+                    angle = (
+                        new_times.to(device) / self._sound_max_time * 2 * np.pi
+                        if self._sound_max_time is not None
+                        else new_times.to(device)
+                    )
                 elif self._sound_period_fix == "MTCT":
                     freqs = pos_emb(new_times.float()).squeeze(0)
                     features = apply_rotary_emb(freqs, features)
@@ -993,7 +1079,14 @@ class AudioVisualFlamingoForConditionalGeneration(AudioVisualFlamingoPretrainedM
             features = torch.cat([features, end_token_embeds], dim=0)
         return features
 
-    def _embed(self, input_ids: torch.Tensor, media: dict[str, list[torch.Tensor]], media_config: dict[str, dict[str, Any]], labels: torch.Tensor | None, attention_mask: torch.Tensor | None) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+    def _embed(
+        self,
+        input_ids: torch.Tensor,
+        media: dict[str, list[torch.Tensor]],
+        media_config: dict[str, dict[str, Any]],
+        labels: torch.Tensor | None,
+        attention_mask: torch.Tensor | None,
+    ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         media = copy.deepcopy(media)
         media_config = copy.deepcopy(media_config)
         labels = labels if labels is not None else torch.full_like(input_ids, IGNORE_INDEX)
@@ -1027,26 +1120,40 @@ class AudioVisualFlamingoForConditionalGeneration(AudioVisualFlamingoPretrainedM
                         video_embeds_idx += 1
                         continue
                     if video_sound_embeds_idx >= len(media_embeds["sound"]):
-                        raise ValueError(f"Sound embeddings index {video_sound_embeds_idx} out of bounds for video_info[{k}][{i}]")
+                        raise ValueError(
+                            f"Sound embeddings index {video_sound_embeds_idx} out of bounds for video_info[{k}][{i}]"
+                        )
                     segment_aud_indices_list = video_info[k][i]["segment_aud_indices_list"]
                     segment_vis_indices_list = video_info[k][i]["segment_vis_indices_list"]
-                    vis_fea_len_per_frame = media_embeds["video"][video_embeds_idx].shape[0] / video_info[k][i]["expected_frame_count"]
-                    aud_fea_len_per_stft_frame = media_embeds["sound"][video_sound_embeds_idx].shape[0] / audio_info[k][i]["new_audio_n_stft_frames"]
+                    vis_fea_len_per_frame = (
+                        media_embeds["video"][video_embeds_idx].shape[0] / video_info[k][i]["expected_frame_count"]
+                    )
+                    aud_fea_len_per_stft_frame = (
+                        media_embeds["sound"][video_sound_embeds_idx].shape[0]
+                        / audio_info[k][i]["new_audio_n_stft_frames"]
+                    )
                     vis_end = 0
                     aud_end = 0
                     new_video_embed = []
                     for j in range(len(segment_vis_indices_list)):
                         vis_aud_fea = []
                         if len(segment_vis_indices_list[j]) > 0:
-                            new_frames = [int(np.ceil((frame + 1) * vis_fea_len_per_frame)) for frame in segment_vis_indices_list[j]]
+                            new_frames = [
+                                int(np.ceil((frame + 1) * vis_fea_len_per_frame))
+                                for frame in segment_vis_indices_list[j]
+                            ]
                             vis_fea_end = min(new_frames[-1], media_embeds["video"][video_embeds_idx].shape[0])
                             vis_fea = media_embeds["video"][video_embeds_idx][vis_end:vis_fea_end]
                             vis_end = vis_fea_end
                             vis_aud_fea.append(vis_fea)
                         vis_aud_fea.append(sep_embed)
                         if len(segment_aud_indices_list[j]) > 0:
-                            new_audio_indices = [int(np.ceil(fea * aud_fea_len_per_stft_frame)) for fea in segment_aud_indices_list[j]]
-                            aud_fea_end = min(new_audio_indices[-1], media_embeds["sound"][video_sound_embeds_idx].shape[0])
+                            new_audio_indices = [
+                                int(np.ceil(fea * aud_fea_len_per_stft_frame)) for fea in segment_aud_indices_list[j]
+                            ]
+                            aud_fea_end = min(
+                                new_audio_indices[-1], media_embeds["sound"][video_sound_embeds_idx].shape[0]
+                            )
                             aud_fea = media_embeds["sound"][video_sound_embeds_idx][aud_end:aud_fea_end]
                             vis_aud_fea.append(aud_fea)
                             aud_end = aud_fea_end
@@ -1080,7 +1187,9 @@ class AudioVisualFlamingoForConditionalGeneration(AudioVisualFlamingoPretrainedM
                         sound_embeds_idx += 1
                     end = pos + 1
                     current_input = media_embeds[name].popleft()
-                    current_label = torch.full([current_input.shape[0]], IGNORE_INDEX, device=labels[k].device, dtype=labels[k].dtype)
+                    current_label = torch.full(
+                        [current_input.shape[0]], IGNORE_INDEX, device=labels[k].device, dtype=labels[k].dtype
+                    )
                 else:
                     end = pos
                     while end < len(labels[k]) and input_ids[k][end].item() not in media_tokens:
@@ -1099,7 +1208,9 @@ class AudioVisualFlamingoForConditionalGeneration(AudioVisualFlamingoPretrainedM
         inputs, labels = self.__truncate_sequence(inputs, labels)
         return self.__batchify_sequence(inputs, labels)
 
-    def __embed_media_tokens(self, media: dict[str, list[torch.Tensor]], media_config: dict[str, dict[str, Any]], mm_info):
+    def __embed_media_tokens(
+        self, media: dict[str, list[torch.Tensor]], media_config: dict[str, dict[str, Any]], mm_info
+    ):
         embeds = defaultdict(deque)
         embed_fn = {
             "image": self._embed_image_features,
@@ -1111,7 +1222,10 @@ class AudioVisualFlamingoForConditionalGeneration(AudioVisualFlamingoPretrainedM
                 sound_media = media.get(name, [])
                 if len(sound_media) == 0:
                     continue
-                if not all(hasattr(sound, "input_features") or (isinstance(sound, dict) and "input_features" in sound) for sound in sound_media):
+                if not all(
+                    hasattr(sound, "input_features") or (isinstance(sound, dict) and "input_features" in sound)
+                    for sound in sound_media
+                ):
                     raise ValueError("Expected pre-extracted sound features in `media['sound']`.")
             if len(media[name]) > 0:
                 embeds[name] = deque(embed_fn[name](media[name], media_config[name], mm_info))
@@ -1179,10 +1293,23 @@ class AudioVisualFlamingoForConditionalGeneration(AudioVisualFlamingoPretrainedM
             if max_length % self.pad_to_multiple_of != 0:
                 max_length = ((max_length // self.pad_to_multiple_of) + 1) * self.pad_to_multiple_of
                 difference = max_length - cur_length
-                inputs_embeds_p = torch.cat((inputs_embeds_p, torch.full((batch_size, difference, hidden_size), self.llm.pad_token_id).to(inputs_embeds_p)), dim=1)
-                labels_p = torch.cat((labels_p, torch.full((batch_size, difference), IGNORE_INDEX).to(labels_p)), dim=1)
-                attention_mask_p = torch.cat((attention_mask_p, torch.zeros((batch_size, difference), dtype=torch.bool).to(attention_mask_p)), dim=1)
-                position_ids_p = torch.cat((position_ids_p, torch.full((batch_size, difference), -1).to(position_ids_p)), dim=1)
+                inputs_embeds_p = torch.cat(
+                    (
+                        inputs_embeds_p,
+                        torch.full((batch_size, difference, hidden_size), self.llm.pad_token_id).to(inputs_embeds_p),
+                    ),
+                    dim=1,
+                )
+                labels_p = torch.cat(
+                    (labels_p, torch.full((batch_size, difference), IGNORE_INDEX).to(labels_p)), dim=1
+                )
+                attention_mask_p = torch.cat(
+                    (attention_mask_p, torch.zeros((batch_size, difference), dtype=torch.bool).to(attention_mask_p)),
+                    dim=1,
+                )
+                position_ids_p = torch.cat(
+                    (position_ids_p, torch.full((batch_size, difference), -1).to(position_ids_p)), dim=1
+                )
         return inputs_embeds_p, attention_mask_p, position_ids_p, labels_p
 
     def forward(
@@ -1214,9 +1341,13 @@ class AudioVisualFlamingoForConditionalGeneration(AudioVisualFlamingoPretrainedM
                 if attention_mask is None:
                     attention_mask = torch.ones_like(input_ids, dtype=torch.bool)
             else:
-                inputs_embeds, labels, attention_mask = self._embed(input_ids, media, media_config, labels, attention_mask)
+                inputs_embeds, labels, attention_mask = self._embed(
+                    input_ids, media, media_config, labels, attention_mask
+                )
         if force_packing or (packing and self.training and not dpo_forward):
-            inputs_embeds, attention_mask, position_ids, labels = self.repack_multimodal_data(inputs_embeds, attention_mask, position_ids, labels)
+            inputs_embeds, attention_mask, position_ids, labels = self.repack_multimodal_data(
+                inputs_embeds, attention_mask, position_ids, labels
+            )
         llm_param = next(self.llm.parameters(), None)
         if llm_param is not None and inputs_embeds.dtype != llm_param.dtype:
             inputs_embeds = inputs_embeds.to(llm_param.dtype)
@@ -1232,9 +1363,22 @@ class AudioVisualFlamingoForConditionalGeneration(AudioVisualFlamingoPretrainedM
             return outputs.logits, labels
         return outputs
 
-    def prepare_inputs_for_generation(self, input_ids, past_key_values=None, inputs_embeds=None, media=None, media_config=None, attention_mask=None, cache_position=None, use_cache=True, **kwargs):
+    def prepare_inputs_for_generation(
+        self,
+        input_ids,
+        past_key_values=None,
+        inputs_embeds=None,
+        media=None,
+        media_config=None,
+        attention_mask=None,
+        cache_position=None,
+        use_cache=True,
+        **kwargs,
+    ):
         is_first_iteration = bool(kwargs.get("is_first_iteration", False))
-        is_first_step = is_first_iteration or past_key_values is None or (cache_position is not None and cache_position[0] == 0)
+        is_first_step = (
+            is_first_iteration or past_key_values is None or (cache_position is not None and cache_position[0] == 0)
+        )
         if is_first_step and inputs_embeds is None and media is not None:
             if media_config is None:
                 media_config = defaultdict(dict)
@@ -1263,10 +1407,21 @@ class AudioVisualFlamingoForConditionalGeneration(AudioVisualFlamingoPretrainedM
         model_inputs["media_config"] = None
         return model_inputs
 
-    def _update_model_kwargs_for_generation(self, outputs: ModelOutput, model_kwargs: dict[str, Any], is_encoder_decoder: bool = False, num_new_tokens: int = 1) -> dict[str, Any]:
+    def _update_model_kwargs_for_generation(
+        self,
+        outputs: ModelOutput,
+        model_kwargs: dict[str, Any],
+        is_encoder_decoder: bool = False,
+        num_new_tokens: int = 1,
+    ) -> dict[str, Any]:
         attention_mask = model_kwargs.get("attention_mask")
         logits = getattr(outputs, "logits", None)
-        if model_kwargs.get("media") is not None and attention_mask is not None and logits is not None and attention_mask.shape[-1] != logits.shape[-2]:
+        if (
+            model_kwargs.get("media") is not None
+            and attention_mask is not None
+            and logits is not None
+            and attention_mask.shape[-1] != logits.shape[-2]
+        ):
             batch_size = attention_mask.shape[0]
             seq_len = logits.shape[-2]
             model_kwargs["attention_mask"] = attention_mask.new_ones((batch_size, seq_len))
@@ -1277,7 +1432,9 @@ class AudioVisualFlamingoForConditionalGeneration(AudioVisualFlamingoPretrainedM
                 model_kwargs["position_ids"] = position_ids
             model_kwargs["media"] = None
             model_kwargs["media_config"] = None
-        return super()._update_model_kwargs_for_generation(outputs, model_kwargs, is_encoder_decoder=is_encoder_decoder, num_new_tokens=num_new_tokens)
+        return super()._update_model_kwargs_for_generation(
+            outputs, model_kwargs, is_encoder_decoder=is_encoder_decoder, num_new_tokens=num_new_tokens
+        )
 
 
 __all__ = [
