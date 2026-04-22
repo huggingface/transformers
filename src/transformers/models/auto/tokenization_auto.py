@@ -704,8 +704,8 @@ class AutoTokenizer:
             else:
                 tokenizer_auto_map = tokenizer_config["auto_map"].get("AutoTokenizer", None)
 
-        # if there is a config, we can check that the tokenizer class != than model class and can thus assume we need to use TokenizersBackend
-        # Skip this early exit if auto_map is present (custom tokenizer with trust_remote_code)
+        # if there is a config, we can check that the tokenizer class != than model class.
+        # Use the config class if it's a specialized tokenizer, otherwise fall back to TokenizersBackend.
         if (
             tokenizer_auto_map is None
             and tokenizer_config_class is not None
@@ -715,15 +715,20 @@ class AutoTokenizer:
             and (TOKENIZER_MAPPING_NAMES.get(config_model_type).removesuffix("Fast"))
             != (tokenizer_config_class.removesuffix("Fast"))
         ):
-            # new model, but we ignore it unless the model type is the same
-            if TokenizersBackend is not None:
-                try:
-                    return TokenizersBackend.from_pretrained(pretrained_model_name_or_path, *inputs, **kwargs)
-                except Exception as e:
-                    logger.debug(f"Failed to use TokenizersBackend: {e}")
+            tokenizer_class = tokenizer_class_from_name(tokenizer_config_class)
+            if tokenizer_class is not None and tokenizer_class.__name__ not in (
+                "TokenizersBackend",
+                "PythonBackend",
+                "PreTrainedTokenizerFast",
+            ):
+                return tokenizer_class.from_pretrained(pretrained_model_name_or_path, *inputs, **kwargs)
 
-            return tokenizer_class_from_name(tokenizer_config_class).from_pretrained(
-                pretrained_model_name_or_path, *inputs, **kwargs
+            if TokenizersBackend is not None:
+                return TokenizersBackend.from_pretrained(pretrained_model_name_or_path, *inputs, **kwargs)
+
+            raise ValueError(
+                f"Tokenizer class '{tokenizer_config_class}' specified in the tokenizer config was not found. "
+                f"The tokenizer may need to be converted or re-saved."
             )
 
         if "_commit_hash" in tokenizer_config:

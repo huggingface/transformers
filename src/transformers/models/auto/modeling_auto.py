@@ -210,6 +210,7 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("gpt_oss", "GptOssModel"),
         ("gptj", "GPTJModel"),
         ("granite", "GraniteModel"),
+        ("granite_speech", "GraniteSpeechForConditionalGeneration"),
         ("granitemoe", "GraniteMoeModel"),
         ("granitemoehybrid", "GraniteMoeHybridModel"),
         ("granitemoeshared", "GraniteMoeSharedModel"),
@@ -223,6 +224,7 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("hubert", "HubertModel"),
         ("hunyuan_v1_dense", "HunYuanDenseV1Model"),
         ("hunyuan_v1_moe", "HunYuanMoEV1Model"),
+        ("hy_v3", "HYV3Model"),
         ("ibert", "IBertModel"),
         ("idefics", "IdeficsModel"),
         ("idefics2", "Idefics2Model"),
@@ -327,6 +329,7 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("omdet-turbo", "OmDetTurboForObjectDetection"),
         ("oneformer", "OneFormerModel"),
         ("openai-gpt", "OpenAIGPTModel"),
+        ("openai_privacy_filter", "OpenAIPrivacyFilterModel"),
         ("opt", "OPTModel"),
         ("ovis2", "Ovis2Model"),
         ("owlv2", "Owlv2Model"),
@@ -680,6 +683,7 @@ MODEL_FOR_CAUSAL_LM_MAPPING_NAMES = OrderedDict(
         ("helium", "HeliumForCausalLM"),
         ("hunyuan_v1_dense", "HunYuanDenseV1ForCausalLM"),
         ("hunyuan_v1_moe", "HunYuanMoEV1ForCausalLM"),
+        ("hy_v3", "HYV3ForCausalLM"),
         ("jais2", "Jais2ForCausalLM"),
         ("jamba", "JambaForCausalLM"),
         ("jetmoe", "JetMoeForCausalLM"),
@@ -1160,6 +1164,7 @@ MODEL_FOR_TEXT_RECOGNITION_MAPPING_NAMES = OrderedDict(
 
 MODEL_FOR_TABLE_RECOGNITION_MAPPING_NAMES = OrderedDict(
     [
+        ("slanet", "SLANetForTableRecognition"),
         ("slanext", "SLANeXtForTableRecognition"),
     ]
 )
@@ -1306,6 +1311,9 @@ MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
         ("nemotron", "NemotronForSequenceClassification"),
         ("nomic_bert", "NomicBertForSequenceClassification"),
         ("nystromformer", "NystromformerForSequenceClassification"),
+        ("olmo", "OlmoForSequenceClassification"),
+        ("olmo2", "Olmo2ForSequenceClassification"),
+        ("olmo3", "Olmo3ForSequenceClassification"),
         ("openai-gpt", "OpenAIGPTForSequenceClassification"),
         ("opt", "OPTForSequenceClassification"),
         ("perceiver", "PerceiverForSequenceClassification"),
@@ -1521,6 +1529,7 @@ MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
         ("nemotron", "NemotronForTokenClassification"),
         ("nomic_bert", "NomicBertForTokenClassification"),
         ("nystromformer", "NystromformerForTokenClassification"),
+        ("openai_privacy_filter", "OpenAIPrivacyFilterForTokenClassification"),
         ("persimmon", "PersimmonForTokenClassification"),
         ("phi", "PhiForTokenClassification"),
         ("phi3", "Phi3ForTokenClassification"),

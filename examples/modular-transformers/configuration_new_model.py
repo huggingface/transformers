@@ -13,7 +13,7 @@ from ...utils import auto_docstring
 
 
 @auto_docstring(checkpoint="google/new_model-7b")
-@strict(accept_kwargs=True)
+@strict
 class NewModelConfig(PreTrainedConfig):
     r"""
     use_bidirectional_attention (`bool`, *optional*):

@@ -167,6 +167,8 @@ class VibeVoiceAsrPreTrainedModel(VibeVoiceAcousticTokenizerPreTrainedModel):
     """
 )
 class VibeVoiceAsrForConditionalGeneration(AudioFlamingo3ForConditionalGeneration):
+    _supports_attention_backend = True
+
     def __init__(self, config: VibeVoiceAsrConfig):
         super().__init__(config)
         self.acoustic_tokenizer_encoder = AutoModel.from_config(config.acoustic_tokenizer_encoder_config)
