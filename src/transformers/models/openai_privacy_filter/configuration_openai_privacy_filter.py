@@ -47,6 +47,9 @@ OPENAI_PRIVACY_FILTER_NER_LABELS = ("O",) + tuple(
 @strict
 class OpenAIPrivacyFilterConfig(PreTrainedConfig):
     model_type = "openai_privacy_filter"
+    attribute_map = {
+        "num_experts": "num_local_experts",
+    }
     default_theta = 150000.0
     base_model_pp_plan = {
         "embed_tokens": (["input_ids"], ["inputs_embeds"]),
@@ -71,7 +74,6 @@ class OpenAIPrivacyFilterConfig(PreTrainedConfig):
     num_key_value_heads: int = 2
     sliding_window: int = 128
     tie_word_embeddings: bool = False
-    hidden_act: str = "silu"
     initializer_range: float = 0.02
     max_position_embeddings: int = 131072
     rms_norm_eps: float = 1e-5

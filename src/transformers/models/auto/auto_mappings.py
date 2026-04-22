@@ -750,7 +750,6 @@ SPECIAL_MODEL_TYPE_TO_MODULE_NAME = OrderedDict(
         ("nllb-moe", "nllb_moe"),
         ("omdet-turbo", "omdet_turbo"),
         ("openai-gpt", "openai"),
-        ("openai_privacy_filter", "openai_privacy_filter"),
         ("owlv2_text_model", "owlv2"),
         ("owlv2_vision_model", "owlv2"),
         ("owlvit_text_model", "owlvit"),

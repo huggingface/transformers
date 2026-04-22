@@ -60,7 +60,10 @@ OPENAI_PRIVACY_FILTER_SPAN_LABELS = (
 )
 
 OPENAI_PRIVACY_FILTER_NER_LABELS = ("O",) + tuple(
-    f"{prefix}-{label}" for label in OPENAI_PRIVACY_FILTER_SPAN_LABELS if label != "O" for prefix in ("B", "I", "E", "S")
+    f"{prefix}-{label}"
+    for label in OPENAI_PRIVACY_FILTER_SPAN_LABELS
+    if label != "O"
+    for prefix in ("B", "I", "E", "S")
 )
 
 
@@ -79,6 +82,7 @@ class OpenAIPrivacyFilterConfig(GptOssConfig):
     pad_token_id: int | None = 199999
     eos_token_id: int | list[int] | None = 199999
     layer_types = AttributeError()  # SWA only
+    hidden_act = AttributeError()  # Not used as it's expert MLPs only
 
     def __post_init__(self, **kwargs):
         if self.num_key_value_heads is None:
@@ -257,7 +261,9 @@ class OpenAIPrivacyFilterExperts(GptOssExperts):
 class OpenAIPrivacyFilterTopKRouter(GptOssTopKRouter):
     def forward(self, hidden_states):
         # Force fp32
-        router_logits = F.linear(hidden_states.float(), self.weight.float(), self.bias.float())  # (num_tokens, num_experts)
+        router_logits = F.linear(
+            hidden_states.float(), self.weight.float(), self.bias.float()
+        )  # (num_tokens, num_experts)
         router_top_value, router_indices = torch.topk(router_logits, self.top_k, dim=-1)  # (num_tokens, top_k)
         router_scores = torch.nn.functional.softmax(router_top_value, dim=1, dtype=router_top_value.dtype)
         # Additional scaling
@@ -350,7 +356,6 @@ class OpenAIPrivacyFilterModel(GptOssModel):
         input_ids: torch.LongTensor | None = None,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
-        past_key_values: None = None,
         inputs_embeds: torch.FloatTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutput:
