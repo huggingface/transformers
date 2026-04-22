@@ -20,7 +20,7 @@ from huggingface_hub.dataclasses import strict
 from ...configuration_utils import PreTrainedConfig
 from ...image_processing_utils import BatchFeature
 from ...image_utils import ImageInput
-from ...processing_utils import ImagesKwargs, ProcessingKwargs, ProcessorMixin, Unpack
+from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import (
     PreTokenizedInput,
     TextInput,
@@ -150,16 +150,6 @@ class DeepseekVLForConditionalGeneration(JanusForConditionalGeneration):
 
     def generate(self):
         raise AttributeError("Not needed for DeepseekVL")
-
-
-class DeepseekVLImageProcessorKwargs(ImagesKwargs, total=False):
-    r"""
-    min_size (`int`, *optional*, defaults to 14):
-        The minimum allowed size for the resized image. Ensures that neither the height nor width
-        falls below this value after resizing.
-    """
-
-    min_size: int
 
 
 class DeepseekVLImageProcessorPil(JanusImageProcessorPil):
