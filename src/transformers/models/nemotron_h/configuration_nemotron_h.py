@@ -200,7 +200,7 @@ class NemotronHConfig(PreTrainedConfig):
                 f"`layers_block_type` must be a list of strings. Got type: {type(self.layers_block_type)}"
             )
 
-        valid_types = {"mamba", "attention", "moe"}
+        valid_types = {"mamba", "attention", "moe", "mlp"}
         if not all(block_type in valid_types for block_type in self.layers_block_type):
             invalid = set(self.layers_block_type) - valid_types
             raise ValueError(f"`layers_block_type` contains invalid types: {invalid}. Must be one of: {valid_types}")
@@ -218,7 +218,7 @@ class NemotronHConfig(PreTrainedConfig):
                     f"`mtp_layers_block_type` must be a list of strings. Got type: {type(self.mtp_layers_block_type)}"
                 )
 
-            valid_types = {"mamba", "attention", "moe"}
+            valid_types = {"mamba", "attention", "moe", "mlp"}
             if not all(block_type in valid_types for block_type in self.mtp_layers_block_type):
                 invalid = set(self.mtp_layers_block_type) - valid_types
                 raise ValueError(
@@ -261,13 +261,13 @@ class NemotronHConfig(PreTrainedConfig):
     @staticmethod
     def _list_to_pattern(layers_list: list) -> str:
         """Convert list of layer types back to pattern string (for backward compatibility)."""
-        reverse_mapping = {"mamba": "M", "moe": "E", "attention": "*"}
+        reverse_mapping = {"mamba": "M", "moe": "E", "attention": "*", "mlp": "-"}
         return "".join(reverse_mapping[layer_type] for layer_type in layers_list)
 
     @staticmethod
     def _pattern_to_list(pattern: str) -> list:
         """Convert pattern string to list of layer types (for backward compatibility)."""
-        pattern_mapping = {"M": "mamba", "E": "moe", "*": "attention"}
+        pattern_mapping = {"M": "mamba", "E": "moe", "*": "attention", "-": "mlp"}
         return [pattern_mapping[char] for char in pattern]
 
 

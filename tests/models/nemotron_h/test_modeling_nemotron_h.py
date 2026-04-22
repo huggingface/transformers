@@ -386,8 +386,8 @@ class NemotronHModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
 
         # Check each layer has the correct shape
         for layer, layer_type in zip(past_key_values.layers, config.layer_types):
-            # Moe layers have a default mamba cache instantiated, but it stays empty as the layer does not use it
-            if layer_type == "moe":
+            # MoE/MLP layers have a default mamba cache instantiated, but it stays empty as the layer does not use it
+            if layer_type in ("moe", "mlp"):
                 self.assertEqual(layer.conv_states, None)
                 self.assertEqual(layer.recurrent_states, None)
             # Attention layer cache
@@ -399,7 +399,7 @@ class NemotronHModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
                 self.assertEqual(layer.conv_states.shape, conv_shape)
                 self.assertEqual(layer.recurrent_states.shape, recurrent_shape)
             else:
-                raise ValueError("Unknown layer type.")
+                raise ValueError(f"Unknown layer type: {layer_type}")
 
     def setUp(self):
         self.model_tester = NemotronHModelTester(self)
@@ -804,6 +804,128 @@ class NemotronHModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
         original_pattern = "ME*ME*E"
         roundtrip_pattern = NemotronHConfig._list_to_pattern(NemotronHConfig._pattern_to_list(original_pattern))
         self.assertEqual(original_pattern, roundtrip_pattern)
+
+        # Test MLP layer type (dash pattern)
+        pattern_with_mlp = "M-M*"
+        layers = NemotronHConfig._pattern_to_list(pattern_with_mlp)
+        self.assertEqual(layers, ["mamba", "mlp", "mamba", "attention"])
+
+        # Test roundtrip with MLP
+        roundtrip = NemotronHConfig._list_to_pattern(NemotronHConfig._pattern_to_list("M-M-*E"))
+        self.assertEqual(roundtrip, "M-M-*E")
+
+    def test_mlp_layer_type_config(self):
+        """Test that 'mlp' is accepted as a valid layer type in config (regression test for Nemotron-H models
+        that use '-' / 'mlp' standalone layers in their hybrid_override_pattern)."""
+        # Config with mlp layers via layers_block_type list
+        config = NemotronHConfig(
+            vocab_size=100, hidden_size=32, layers_block_type=["mamba", "mlp", "mamba", "attention", "mlp"]
+        )
+        self.assertEqual(config.num_hidden_layers, 5)
+        self.assertEqual(config.layers_block_type[1], "mlp")
+        self.assertEqual(config.layers_block_type[4], "mlp")
+
+        # Config with mlp layers via legacy hybrid_override_pattern (the '-' character)
+        config2 = NemotronHConfig(vocab_size=100, hidden_size=32, hybrid_override_pattern="M-M*-")
+        self.assertEqual(config2.layers_block_type, ["mamba", "mlp", "mamba", "attention", "mlp"])
+        self.assertEqual(config2.hybrid_override_pattern, "M-M*-")
+
+    @require_torch
+    def test_mlp_layer_type_forward(self):
+        """Test that a tiny NemotronH model with MLP layers can run a forward pass (regression test)."""
+        config = NemotronHConfig(
+            vocab_size=99,
+            hidden_size=32,
+            layers_block_type=["mamba", "mlp", "mamba", "attention", "mlp"],
+            num_attention_heads=4,
+            num_key_value_heads=2,
+            head_dim=32,
+            intermediate_size=40,
+            use_mamba_kernels=False,
+            ssm_state_size=16,
+            mamba_num_heads=8,
+            mamba_n_groups=8,
+            mamba_head_dim=16,
+            mamba_d_conv=4,
+            mamba_expand=2,
+            mamba_chunk_size=64,
+        )
+
+        model = NemotronHModel(config=config)
+        model.to(torch_device)
+        model.eval()
+
+        input_ids = ids_tensor([2, 7], config.vocab_size).to(torch_device)
+        with torch.no_grad():
+            result = model(input_ids)
+        self.assertEqual(result.last_hidden_state.shape, (2, 7, 32))
+
+    @require_torch
+    def test_mlp_layer_type_causal_lm(self):
+        """Test that NemotronHForCausalLM with MLP layers can generate tokens (regression test)."""
+        config = NemotronHConfig(
+            vocab_size=99,
+            hidden_size=32,
+            layers_block_type=["mamba", "mlp", "mamba", "attention", "mlp"],
+            num_attention_heads=4,
+            num_key_value_heads=2,
+            head_dim=32,
+            intermediate_size=40,
+            use_mamba_kernels=False,
+            ssm_state_size=16,
+            mamba_num_heads=8,
+            mamba_n_groups=8,
+            mamba_head_dim=16,
+            mamba_d_conv=4,
+            mamba_expand=2,
+            mamba_chunk_size=64,
+        )
+
+        model = NemotronHForCausalLM(config=config)
+        model.to(torch_device)
+        model.eval()
+
+        input_ids = ids_tensor([1, 5], config.vocab_size).to(torch_device)
+        with torch.no_grad():
+            output = model.generate(input_ids, max_new_tokens=3, do_sample=False, use_cache=True)
+        # Should have generated 3 new tokens
+        self.assertEqual(output.shape[1], 5 + 3)
+
+    @require_torch
+    def test_mlp_layer_type_nemotron_h_pattern(self):
+        """Test with a pattern resembling real Nemotron-H models (e.g. Nano-4B: M-M-M-MM-M-M*-...)."""
+        # Use a shortened version of the real Nano-4B pattern
+        config = NemotronHConfig(
+            vocab_size=99,
+            hidden_size=32,
+            hybrid_override_pattern="M-M-*M-M",
+            num_attention_heads=4,
+            num_key_value_heads=2,
+            head_dim=32,
+            intermediate_size=40,
+            use_mamba_kernels=False,
+            ssm_state_size=16,
+            mamba_num_heads=8,
+            mamba_n_groups=8,
+            mamba_head_dim=16,
+            mamba_d_conv=4,
+            mamba_expand=2,
+            mamba_chunk_size=64,
+        )
+
+        self.assertEqual(
+            config.layers_block_type,
+            ["mamba", "mlp", "mamba", "mlp", "attention", "mamba", "mlp", "mamba"],
+        )
+
+        model = NemotronHForCausalLM(config=config)
+        model.to(torch_device)
+        model.eval()
+
+        input_ids = ids_tensor([1, 5], config.vocab_size).to(torch_device)
+        with torch.no_grad():
+            result = model(input_ids)
+        self.assertEqual(result.logits.shape, (1, 5, 99))
 
 
 @require_torch
