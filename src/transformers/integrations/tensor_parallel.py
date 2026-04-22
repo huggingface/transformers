@@ -1145,7 +1145,6 @@ class RouterParallel(TensorParallelLayer):
 
         if num_experts % ep_size != 0:
             raise ValueError(
-                f"The number of experts must be divisible by number of ep_size: {mod.num_experts} % {ep_size} != 0"
                 f"The number of experts must be divisible by number of ep_size: {num_experts} % {ep_size} != 0"
             )
         num_local_experts = num_experts // ep_size
