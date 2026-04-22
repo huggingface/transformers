@@ -82,7 +82,8 @@ class NemotronHDenseModelTester:
         self.vocab_size = vocab_size
         self.hidden_size = hidden_size
         self.hybrid_override_pattern = hybrid_override_pattern
-        self.num_hidden_layers = len(hybrid_override_pattern)
+        # `-` is absorbed as an FFN tail; each `M`/`*` counts as one logical decoder layer.
+        self.num_hidden_layers = sum(1 for c in hybrid_override_pattern if c in ("M", "*"))
         self.num_attention_heads = num_attention_heads
         self.num_key_value_heads = num_key_value_heads
         self.head_dim = head_dim
@@ -262,7 +263,7 @@ class NemotronHDenseModelTester:
         if mamba_layer_idx is None:
             self.parent.skipTest("No mamba layer found in the model configuration.")
 
-        token_emb = model.embeddings(input_ids.to(torch_device))
+        token_emb = model.embed_tokens(input_ids.to(torch_device))
         mamba_mixer = model.layers[mamba_layer_idx].mamba
 
         outputs_fast = mamba_mixer.cuda_kernels_forward(token_emb)
@@ -339,10 +340,7 @@ class NemotronHDenseModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineT
         recurrent_shape = self._get_recurrent_state_shape(batch_size, config)
 
         for layer, layer_type in zip(past_key_values.layers, config.layer_types):
-            if layer_type == "mlp":
-                self.assertIsNone(getattr(layer, "conv_states", None))
-                self.assertIsNone(getattr(layer, "recurrent_states", None))
-            elif layer_type == "attention":
+            if layer_type == "attention":
                 self.assertEqual(layer.keys.shape, attention_shape)
                 self.assertEqual(layer.values.shape, attention_shape)
             elif layer_type == "mamba":
@@ -519,43 +517,29 @@ class NemotronHDenseModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineT
             _ = model(**dummy_inputs)
 
     def test_hybrid_override_pattern_validation(self):
-        """`hybrid_override_pattern` only accepts M/*/-."""
-        config = NemotronHDenseConfig(vocab_size=100, hidden_size=32, hybrid_override_pattern="M-*-")
-        self.assertEqual(config.layer_types, ["mamba", "mlp", "attention", "mlp"])
-        self.assertEqual(config.num_hidden_layers, 4)
+        """`hybrid_override_pattern` only accepts M/*/- (MoE `E` rejected)."""
+        config = NemotronHDenseConfig(vocab_size=100, hidden_size=32, hybrid_override_pattern="M-M-*-")
+        self.assertEqual(config.layer_types, ["mamba", "mamba", "attention"])
+        self.assertEqual(config.num_hidden_layers, 3)
 
-        with self.assertRaises(ValueError):
+        with self.assertRaises((ValueError, StrictDataclassClassValidationError)):
             NemotronHDenseConfig(vocab_size=100, hidden_size=32, hybrid_override_pattern="M*E")
 
-        with self.assertRaises((StrictDataclassClassValidationError, ValueError)):
-            NemotronHDenseConfig(
-                vocab_size=100,
-                hidden_size=32,
-                layers_block_type=["mamba", "moe", "attention"],
-            )
-
     def test_layer_types_property(self):
-        config = NemotronHDenseConfig(vocab_size=100, hidden_size=32, hybrid_override_pattern="M-*-")
-        self.assertEqual(config.layer_types, ["mamba", "mlp", "attention", "mlp"])
-        self.assertEqual(config.layers_block_type, ["mamba", "mlp", "attention", "mlp"])
-        self.assertEqual(config.num_hidden_layers, 4)
-
-    def test_legacy_layers_block_type_kwarg(self):
-        config = NemotronHDenseConfig(
-            vocab_size=100, hidden_size=32, layers_block_type=["mamba", "mlp", "attention", "mlp"]
-        )
-        self.assertEqual(config.hybrid_override_pattern, "M-*-")
-        self.assertEqual(config.num_hidden_layers, 4)
+        config = NemotronHDenseConfig(vocab_size=100, hidden_size=32, hybrid_override_pattern="M-M-*-")
+        self.assertEqual(config.layer_types, ["mamba", "mamba", "attention"])
+        self.assertEqual(config.layers_block_type, ["mamba", "mamba", "attention"])
+        self.assertEqual(config.num_hidden_layers, 3)
 
     def test_config_roundtrip_save_load(self):
-        config1 = NemotronHDenseConfig(vocab_size=100, hidden_size=32, hybrid_override_pattern="M-*M")
+        config1 = NemotronHDenseConfig(vocab_size=100, hidden_size=32, hybrid_override_pattern="M-*-M-")
 
         with tempfile.TemporaryDirectory() as tmpdir:
             config1.save_pretrained(tmpdir)
             config2 = NemotronHDenseConfig.from_pretrained(tmpdir)
 
-            self.assertEqual(config2.hybrid_override_pattern, "M-*M")
-            self.assertEqual(config2.num_hidden_layers, 4)
+            self.assertEqual(config2.hybrid_override_pattern, "M-*-M-")
+            self.assertEqual(config2.num_hidden_layers, 3)
             self.assertEqual(config2.vocab_size, 100)
             self.assertEqual(config2.hidden_size, 32)
 

@@ -22,20 +22,45 @@ from ...utils import auto_docstring, logging
 logger = logging.get_logger(__name__)
 
 
-# Dense Nemotron-H uses only mamba / attention / mlp blocks. The `E` (moe) character is
-# intentionally rejected: MoE checkpoints must use `NemotronHSparseConfig`.
-_DENSE_PATTERN_TO_TYPE = {"M": "mamba", "*": "attention", "-": "mlp"}
-_DENSE_TYPE_TO_PATTERN = {v: k for k, v in _DENSE_PATTERN_TO_TYPE.items()}
-_DENSE_VALID_CHARS = set(_DENSE_PATTERN_TO_TYPE)
+# Pattern characters in the released Nemotron-H config:
+#   `M` = mamba mixer, `*` = attention mixer, `-` = mlp FFN tail.
+# In this model the FFN is baked into every decoder layer (Jamba-style), so
+# each `-` belongs to the preceding `M` or `*` and only `M` / `*` drive layer count.
+_DENSE_VALID_CHARS = {"M", "*", "-"}
+
+
+def _collapse_pattern_to_layer_types(pattern: str) -> list[str]:
+    """Convert a per-char `hybrid_override_pattern` into a per-decoder-layer list.
+
+    Every `M` becomes a ``"mamba"`` layer (mamba + mlp), every `*` becomes a
+    ``"hybrid"`` layer (attention + mlp). Standalone `-` characters are ignored
+    — they represent the implicit FFN tail of the preceding `M` / `*`.
+    """
+    layer_types: list[str] = []
+    for char in pattern:
+        if char == "M":
+            layer_types.append("mamba")
+        elif char == "*":
+            layer_types.append("attention")
+        elif char == "-":
+            continue
+        else:
+            raise ValueError(
+                f"NemotronHDenseConfig `hybrid_override_pattern` got invalid char {char!r}; "
+                f"must only contain {sorted(_DENSE_VALID_CHARS)} (M=mamba, *=attention, -=mlp). "
+                "Use NemotronHSparseConfig for MoE (E) patterns."
+            )
+    return layer_types
 
 
 @auto_docstring(checkpoint="nvidia/Nemotron-H-8B-Base-8K")
 @strict
 class NemotronHDenseConfig(PreTrainedConfig):
     r"""
-    hybrid_override_pattern (`str`, *optional*, defaults to `"M-M*M-M*"`):
-        Pattern describing the block sequence. Each character is one block:
-        `M` = mamba, `*` = attention, `-` = mlp. Length determines the number of layers.
+    hybrid_override_pattern (`str`, *optional*, defaults to `"M-M-M*-"`):
+        Per-sub-block sequence (from the released Nemotron-H config). `M` = mamba,
+        `*` = attention, `-` = mlp FFN tail. Each `M` and `*` becomes one decoder
+        layer (with an mlp tail baked in); `-` is absorbed.
     num_logits_to_keep (`int`, *optional*, defaults to 1):
         Number of prompt logits to calculate during generation. If `None`, all logits will be calculated.
     use_mamba_kernels (`bool`, *optional*, defaults to `True`):
@@ -75,7 +100,7 @@ class NemotronHDenseConfig(PreTrainedConfig):
 
     vocab_size: int = 131072
     hidden_size: int = 4096
-    hybrid_override_pattern: str = "M-M*M-M*"
+    hybrid_override_pattern: str = "M-M-M*-"
     tie_word_embeddings: bool = False
     use_cache: bool = True
     num_logits_to_keep: int = 1
@@ -127,40 +152,24 @@ class NemotronHDenseConfig(PreTrainedConfig):
         self.use_conv_bias = kwargs.pop("mamba_conv_bias", self.use_conv_bias)
         self.chunk_size = kwargs.pop("mamba_chunk_size", self.chunk_size)
 
-        # BC: accept `layers_block_type=[...]` and convert to pattern.
-        layers_block_type = kwargs.pop("layers_block_type", None)
-        if layers_block_type is not None:
-            invalid_types = set(layers_block_type) - set(_DENSE_TYPE_TO_PATTERN)
-            if invalid_types:
-                raise ValueError(
-                    f"NemotronHDenseConfig only accepts {sorted(_DENSE_TYPE_TO_PATTERN)} in `layers_block_type`, "
-                    f"got {sorted(invalid_types)}. MoE configs must use NemotronHSparseConfig."
-                )
-            self.hybrid_override_pattern = "".join(_DENSE_TYPE_TO_PATTERN[t] for t in layers_block_type)
-
-        # Dense has no multi-token prediction; drop MTP-related kwargs silently.
+        # Drop unsupported kwargs (MTP is not modeled; layer counts are derived).
         kwargs.pop("num_nextn_predict_layers", None)
         kwargs.pop("mtp_hybrid_override_pattern", None)
         kwargs.pop("mtp_layers_block_type", None)
-        # num_hidden_layers is derived from the pattern length.
         kwargs.pop("num_hidden_layers", None)
+        kwargs.pop("layers_block_type", None)
 
         if self.num_key_value_heads is None:
             self.num_key_value_heads = self.num_attention_heads
 
-        invalid = set(self.hybrid_override_pattern) - _DENSE_VALID_CHARS
-        if invalid:
-            raise ValueError(
-                f"NemotronHDenseConfig `hybrid_override_pattern` must only contain {sorted(_DENSE_VALID_CHARS)} "
-                f"(M=mamba, *=attention, -=mlp). Got invalid chars: {sorted(invalid)}. "
-                "Use NemotronHSparseConfig for MoE (E) patterns."
-            )
+        # Validate by parsing: raises on unknown chars.
+        _collapse_pattern_to_layer_types(self.hybrid_override_pattern)
 
         super().__post_init__(**kwargs)
 
     @property
     def layer_types(self) -> list[str]:
-        return [_DENSE_PATTERN_TO_TYPE[c] for c in self.hybrid_override_pattern]
+        return _collapse_pattern_to_layer_types(self.hybrid_override_pattern)
 
     @property
     def layers_block_type(self) -> list[str]:
@@ -168,7 +177,7 @@ class NemotronHDenseConfig(PreTrainedConfig):
 
     @property
     def num_hidden_layers(self) -> int:
-        return len(self.hybrid_override_pattern)
+        return len(self.layer_types)
 
     @num_hidden_layers.setter
     def num_hidden_layers(self, value):

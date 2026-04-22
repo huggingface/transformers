@@ -20,23 +20,23 @@ from torch import nn
 
 from ... import initialization as init
 from ...activations import ACT2FN
-from ...cache_utils import Cache
 from ...integrations import use_experts_implementation
 from ...modeling_layers import GradientCheckpointingLayer
 from ...models.deepseek_v3.modeling_deepseek_v3 import DeepseekV3MoE, DeepseekV3TopkRouter
+from ...models.jamba.modeling_jamba import JambaPreTrainedModel
 from ...models.mixtral.modeling_mixtral import MixtralExperts
 from ...models.nemotron_h_dense.modeling_nemotron_h_dense import (
     NemotronHDenseAttention,
-    NemotronHDenseDecoderLayer,
+    NemotronHDenseAttentionDecoderLayer,
     NemotronHDenseForCausalLM,
     NemotronHDenseMamba,
+    NemotronHDenseMambaDecoderLayer,
     NemotronHDenseMLP,
     NemotronHDenseModel,
     NemotronHDensePreTrainedModel,
     NemotronHDenseRMSNorm,
 )
-from ...processing_utils import Unpack
-from ...utils import TransformersKwargs, logging
+from ...utils import logging
 from .configuration_nemotron_h_sparse import NemotronHSparseConfig
 
 
@@ -61,8 +61,7 @@ class NemotronHSparseAttention(NemotronHDenseAttention):
 
 @use_experts_implementation(has_gate=False)
 class NemotronHSparseExperts(MixtralExperts):
-    """Non-gated MoE experts — the Nemotron-H sparse MLP is up_proj → act → down_proj
-    with no gating, otherwise identical to :class:`MixtralExperts`."""
+    """Non-gated MoE experts — up_proj → act → down_proj, otherwise identical to :class:`MixtralExperts`."""
 
     def __init__(self, config: NemotronHSparseConfig):
         nn.Module.__init__(self)
@@ -105,7 +104,7 @@ class NemotronHSparseTopkRouter(DeepseekV3TopkRouter):
 
 
 class NemotronHSparseMoE(DeepseekV3MoE):
-    """Routed experts + one shared-expert MLP."""
+    """Routed experts + one shared-expert MLP. Drop-in FFN for Nemotron-H Sparse layers."""
 
     def __init__(self, config: NemotronHSparseConfig):
         super().__init__(config)
@@ -116,66 +115,35 @@ class NemotronHSparseMoE(DeepseekV3MoE):
         )
 
 
-class NemotronHSparseDecoderLayer(NemotronHDenseDecoderLayer):
-    """Single decoder layer. ``layer_type`` picks exactly one of mamba / attention / moe."""
-
+class NemotronHSparseMambaDecoderLayer(NemotronHDenseMambaDecoderLayer):
     def __init__(self, config: NemotronHSparseConfig, layer_idx: int):
         GradientCheckpointingLayer.__init__(self)
-        self.layer_idx = layer_idx
-        self.layer_type = config.layer_types[layer_idx]
+        self.mamba = NemotronHSparseMamba(config, layer_idx=layer_idx)
+        self.feed_forward = NemotronHSparseMoE(config)
         self.input_layernorm = NemotronHSparseRMSNorm(config.hidden_size, eps=config.layer_norm_epsilon)
+        self.pre_ff_layernorm = NemotronHSparseRMSNorm(config.hidden_size, eps=config.layer_norm_epsilon)
 
-        self.mamba = None
-        self.self_attn = None
-        self.block_sparse_moe = None
 
-        if self.layer_type == "mamba":
-            self.mamba = NemotronHSparseMamba(config, layer_idx=layer_idx)
-        elif self.layer_type == "attention":
-            self.self_attn = NemotronHSparseAttention(config, layer_idx=layer_idx)
-        elif self.layer_type == "moe":
-            self.block_sparse_moe = NemotronHSparseMoE(config)
-        else:
-            raise ValueError(f"Unknown layer_type {self.layer_type!r} for NemotronHSparseDecoderLayer.")
+class NemotronHSparseAttentionDecoderLayer(NemotronHDenseAttentionDecoderLayer):
+    def __init__(self, config: NemotronHSparseConfig, layer_idx: int):
+        GradientCheckpointingLayer.__init__(self)
+        self.self_attn = NemotronHSparseAttention(config, layer_idx)
+        self.feed_forward = NemotronHSparseMoE(config)
+        self.input_layernorm = NemotronHSparseRMSNorm(config.hidden_size, eps=config.layer_norm_epsilon)
+        self.pre_ff_layernorm = NemotronHSparseRMSNorm(config.hidden_size, eps=config.layer_norm_epsilon)
 
-    def forward(
-        self,
-        hidden_states: torch.Tensor,
-        attention_mask: torch.Tensor | None = None,
-        mamba_attention_mask: torch.Tensor | None = None,
-        position_ids: torch.LongTensor | None = None,
-        past_key_values: Cache | None = None,
-        use_cache: bool | None = False,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> torch.Tensor:
-        residual = hidden_states
-        hidden_states = self.input_layernorm(hidden_states.to(dtype=self.input_layernorm.weight.dtype))
 
-        if self.mamba is not None:
-            hidden_states = self.mamba(
-                hidden_states=hidden_states,
-                cache_params=past_key_values,
-                attention_mask=mamba_attention_mask,
-            )
-        elif self.self_attn is not None:
-            hidden_states, _ = self.self_attn(
-                hidden_states=hidden_states,
-                attention_mask=attention_mask,
-                past_key_values=past_key_values,
-                position_ids=position_ids,
-                **kwargs,
-            )
-        else:
-            hidden_states = self.block_sparse_moe(hidden_states)
-
-        return residual + hidden_states
+ALL_DECODER_LAYER_TYPES = {
+    "mamba": NemotronHSparseMambaDecoderLayer,
+    "attention": NemotronHSparseAttentionDecoderLayer,
+}
 
 
 class NemotronHSparsePreTrainedModel(NemotronHDensePreTrainedModel):
     config: NemotronHSparseConfig
-    _no_split_modules = ["NemotronHSparseDecoderLayer"]
+    _no_split_modules = ["NemotronHSparseMambaDecoderLayer", "NemotronHSparseAttentionDecoderLayer"]
     _can_record_outputs = {
-        "hidden_states": NemotronHSparseDecoderLayer,
+        "hidden_states": [NemotronHSparseMambaDecoderLayer, NemotronHSparseAttentionDecoderLayer],
         "attentions": NemotronHSparseAttention,
     }
     _keep_in_fp32_modules_strict = ["e_score_correction_bias"]
@@ -193,15 +161,28 @@ class NemotronHSparsePreTrainedModel(NemotronHDensePreTrainedModel):
 
 class NemotronHSparseModel(NemotronHDenseModel):
     def __init__(self, config: NemotronHSparseConfig):
-        super().__init__(config)
+        JambaPreTrainedModel.__init__(self, config)
+        self.padding_idx = config.pad_token_id
+        self.vocab_size = config.vocab_size
+        self.embed_tokens = nn.Embedding(config.vocab_size, config.hidden_size, self.padding_idx)
         self.layers = nn.ModuleList(
-            [NemotronHSparseDecoderLayer(config, layer_idx=idx) for idx in range(config.num_hidden_layers)]
+            [
+                ALL_DECODER_LAYER_TYPES[config.layer_types[i]](config, layer_idx=i)
+                for i in range(config.num_hidden_layers)
+            ]
         )
+        self.final_layernorm = NemotronHSparseRMSNorm(config.hidden_size, eps=config.layer_norm_epsilon)
+        self.gradient_checkpointing = False
         self.post_init()
 
 
 class NemotronHSparseForCausalLM(NemotronHDenseForCausalLM):
-    pass
+    def __init__(self, config: NemotronHSparseConfig):
+        JambaPreTrainedModel.__init__(self, config)
+        self.model = NemotronHSparseModel(config)
+        self.vocab_size = config.vocab_size
+        self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
+        self.post_init()
 
 
 __all__ = [

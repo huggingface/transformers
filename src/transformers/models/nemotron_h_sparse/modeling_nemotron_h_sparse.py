@@ -40,8 +40,9 @@ from ...integrations import (
 )
 from ...masking_utils import create_causal_mask
 from ...modeling_layers import GradientCheckpointingLayer
-from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
+from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast, MoeModelOutputWithPast
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
+from ...models.jamba.modeling_jamba import JambaPreTrainedModel
 from ...models.zamba2.modeling_zamba2 import Zamba2RMSNormGated
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, is_torchdynamo_compiling, logging
@@ -153,12 +154,7 @@ class NemotronHSparseMamba(nn.Module):
         )
 
         projection_size = self.intermediate_size + self.conv_dim + self.num_heads
-
-        self.in_proj = nn.Linear(
-            self.hidden_size,
-            projection_size,
-            bias=config.use_bias,
-        )
+        self.in_proj = nn.Linear(self.hidden_size, projection_size, bias=config.use_bias)
         # selective projection used to make dt, B and C input dependent
 
         # time step projection (discretization)
@@ -169,12 +165,10 @@ class NemotronHSparseMamba(nn.Module):
         # The core is to load them, compute the discrete states, then write the updated state. Keeps the memory bounded
         A = torch.arange(1, self.num_heads + 1)
         self.A_log = nn.Parameter(torch.log(A))
-
         self.norm = Zamba2RMSNormGated(
             self.intermediate_size, group_size=self.intermediate_size // self.n_groups, eps=config.layer_norm_epsilon
         )
         self.D = nn.Parameter(torch.ones(self.num_heads))
-
         self.out_proj = nn.Linear(self.intermediate_size, self.hidden_size, bias=config.use_bias)
 
         global causal_conv1d_update, causal_conv1d_fn
@@ -564,7 +558,6 @@ class NemotronHSparseMamba(nn.Module):
         if is_fast_path_available and "cuda" in self.in_proj.weight.device.type and not is_torchdynamo_compiling():
             with torch.cuda.stream(torch.cuda.default_stream(hidden_states.device)):
                 return self.cuda_kernels_forward(hidden_states, cache_params, attention_mask)
-
         return self.torch_forward(hidden_states, cache_params, attention_mask)
 
 
@@ -590,7 +583,7 @@ class NemotronHSparseRMSNorm(nn.Module):
 
 
 class NemotronHSparseMLP(nn.Module):
-    def __init__(self, config, intermediate_size=None):
+    def __init__(self, config, intermediate_size: int | None = None):
         super().__init__()
         self.config = config
         self.hidden_size = config.hidden_size
@@ -730,8 +723,7 @@ class NemotronHSparseAttention(nn.Module):
 
 @use_experts_implementation(has_gate=False)
 class NemotronHSparseExperts(nn.Module):
-    """Non-gated MoE experts — the Nemotron-H sparse MLP is up_proj → act → down_proj
-    with no gating, otherwise identical to :class:`MixtralExperts`."""
+    """Non-gated MoE experts — up_proj → act → down_proj, otherwise identical to :class:`MixtralExperts`."""
 
     def __init__(self, config: NemotronHSparseConfig):
         super().__init__()
@@ -785,7 +777,7 @@ class NemotronHSparseTopkRouter(nn.Module):
 
 
 class NemotronHSparseMoE(nn.Module):
-    """Routed experts + one shared-expert MLP."""
+    """Routed experts + one shared-expert MLP. Drop-in FFN for Nemotron-H Sparse layers."""
 
     def __init__(self, config: NemotronHSparseConfig):
         super().__init__()
@@ -838,79 +830,95 @@ class NemotronHSparseMoE(nn.Module):
         return hidden_states
 
 
-class NemotronHSparseDecoderLayer(GradientCheckpointingLayer):
-    """Single decoder layer. ``layer_type`` picks exactly one of mamba / attention / moe."""
-
+class NemotronHSparseMambaDecoderLayer(GradientCheckpointingLayer):
     def __init__(self, config: NemotronHSparseConfig, layer_idx: int):
         super().__init__()
-        self.layer_idx = layer_idx
-        self.layer_type = config.layer_types[layer_idx]
+        self.mamba = NemotronHSparseMamba(config, layer_idx=layer_idx)
+        self.feed_forward = NemotronHSparseMoE(config)
         self.input_layernorm = NemotronHSparseRMSNorm(config.hidden_size, eps=config.layer_norm_epsilon)
-
-        self.mamba = None
-        self.self_attn = None
-        self.block_sparse_moe = None
-
-        if self.layer_type == "mamba":
-            self.mamba = NemotronHSparseMamba(config, layer_idx=layer_idx)
-        elif self.layer_type == "attention":
-            self.self_attn = NemotronHSparseAttention(config, layer_idx=layer_idx)
-        elif self.layer_type == "moe":
-            self.block_sparse_moe = NemotronHSparseMoE(config)
-        else:
-            raise ValueError(f"Unknown layer_type {self.layer_type!r} for NemotronHSparseDecoderLayer.")
+        self.pre_ff_layernorm = NemotronHSparseRMSNorm(config.hidden_size, eps=config.layer_norm_epsilon)
 
     def forward(
         self,
         hidden_states: torch.Tensor,
         attention_mask: torch.Tensor | None = None,
-        mamba_attention_mask: torch.Tensor | None = None,
+        position_ids: torch.LongTensor | None = None,
+        past_key_values: Cache | None = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> torch.FloatTensor:
+        residual = hidden_states
+        hidden_states = self.input_layernorm(hidden_states)
+        hidden_states = self.mamba(
+            hidden_states=hidden_states,
+            cache_params=past_key_values,
+            attention_mask=attention_mask,
+        )
+        hidden_states = residual + hidden_states
+        residual = hidden_states
+        hidden_states = self.pre_ff_layernorm(hidden_states)
+        hidden_states = self.feed_forward(hidden_states)
+        hidden_states = residual + hidden_states
+        return hidden_states
+
+
+class NemotronHSparseAttentionDecoderLayer(GradientCheckpointingLayer):
+    """Hybrid decoder layer: norm → self-attention → residual → norm → mlp → residual."""
+
+    def __init__(self, config: NemotronHSparseConfig, layer_idx: int):
+        super().__init__()
+        self.self_attn = NemotronHSparseAttention(config, layer_idx)
+        self.feed_forward = NemotronHSparseMoE(config)
+        self.input_layernorm = NemotronHSparseRMSNorm(config.hidden_size, eps=config.layer_norm_epsilon)
+        self.pre_ff_layernorm = NemotronHSparseRMSNorm(config.hidden_size, eps=config.layer_norm_epsilon)
+
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
         past_key_values: Cache | None = None,
         use_cache: bool | None = False,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> torch.Tensor:
+    ) -> torch.FloatTensor:
         residual = hidden_states
-        hidden_states = self.input_layernorm(hidden_states.to(dtype=self.input_layernorm.weight.dtype))
-
-        if self.mamba is not None:
-            hidden_states = self.mamba(
-                hidden_states=hidden_states,
-                cache_params=past_key_values,
-                attention_mask=mamba_attention_mask,
-            )
-        elif self.self_attn is not None:
-            hidden_states, _ = self.self_attn(
-                hidden_states=hidden_states,
-                attention_mask=attention_mask,
-                past_key_values=past_key_values,
-                position_ids=position_ids,
-                **kwargs,
-            )
-        else:
-            hidden_states = self.block_sparse_moe(hidden_states)
-
-        return residual + hidden_states
+        hidden_states = self.input_layernorm(hidden_states)
+        hidden_states, _ = self.self_attn(
+            hidden_states=hidden_states,
+            attention_mask=attention_mask,
+            position_ids=position_ids,
+            past_key_values=past_key_values,
+            use_cache=use_cache,
+            **kwargs,
+        )
+        hidden_states = residual + hidden_states
+        residual = hidden_states
+        hidden_states = self.pre_ff_layernorm(hidden_states)
+        hidden_states = self.feed_forward(hidden_states)
+        hidden_states = residual + hidden_states
+        return hidden_states
 
 
 class NemotronHSparsePreTrainedModel(PreTrainedModel):
     config: NemotronHSparseConfig
     base_model_prefix = "model"
-    _no_split_modules = ["NemotronHSparseDecoderLayer"]
-    _skip_keys_device_placement = ["past_key_values"]
+    supports_gradient_checkpointing = True
+    _no_split_modules = ["NemotronHSparseMambaDecoderLayer", "NemotronHSparseAttentionDecoderLayer"]
+    _skip_keys_device_placement = "past_key_values"
     _supports_flash_attn = True
-    _supports_flash_attn_2 = True
     _supports_sdpa = True
-    _supports_flex_attn = True
     _is_stateful = True
     _can_record_outputs = {
-        "hidden_states": NemotronHSparseDecoderLayer,
+        "hidden_states": [NemotronHSparseMambaDecoderLayer, NemotronHSparseAttentionDecoderLayer],
         "attentions": NemotronHSparseAttention,
     }
+    _supports_flash_attn_2 = True
+    _supports_flex_attn = True
     _keep_in_fp32_modules_strict = ["e_score_correction_bias"]
 
     @torch.no_grad()
     def _init_weights(self, module):
+        # Skip Jamba's _init_weights (references JambaMambaMixer / JambaExperts); run nn-level init directly.
+
         super()._init_weights(module)
         if isinstance(module, NemotronHSparseMamba):
             A = torch.arange(1, self.config.mamba_num_heads + 1)
@@ -922,16 +930,13 @@ class NemotronHSparsePreTrainedModel(PreTrainedModel):
                 * (math.log(self.config.time_step_max) - math.log(self.config.time_step_min))
                 + math.log(self.config.time_step_min)
             ).clamp(min=self.config.time_step_floor)
-
             inv_dt = dt + torch.log(-torch.expm1(-dt))
-            with torch.no_grad():
-                init.copy_(module.dt_bias, inv_dt)
+            init.copy_(module.dt_bias, inv_dt)
             module.dt_bias._no_reinit = True
 
         if isinstance(module, nn.Linear):
-            if module.bias is not None:
-                if not getattr(module.bias, "_no_reinit", False):
-                    init.zeros_(module.bias)
+            if module.bias is not None and not getattr(module.bias, "_no_reinit", False):
+                init.zeros_(module.bias)
         elif isinstance(module, nn.Embedding):
             init.normal_(module.weight, std=self.config.initializer_range)
 
@@ -939,9 +944,8 @@ class NemotronHSparsePreTrainedModel(PreTrainedModel):
             for name, p in module.named_parameters():
                 if name == "out_proj.weight":
                     init.kaiming_uniform_(p, a=math.sqrt(5))
-                    with torch.no_grad():
-                        p_new = p / math.sqrt(self.config.num_hidden_layers)
-                        init.copy_(p, p_new)
+                    p_new = p / math.sqrt(self.config.num_hidden_layers)
+                    init.copy_(p, p_new)
         if isinstance(module, NemotronHSparseTopkRouter):
             init.normal_(module.weight, mean=0.0, std=self.config.initializer_range)
             init.zeros_(module.e_score_correction_bias)
@@ -950,49 +954,54 @@ class NemotronHSparsePreTrainedModel(PreTrainedModel):
             init.normal_(module.down_proj, mean=0.0, std=self.config.initializer_range)
 
 
+ALL_DECODER_LAYER_TYPES = {
+    "attention": NemotronHSparseAttentionDecoderLayer,
+    "mamba": NemotronHSparseMambaDecoderLayer,
+}
+
+
+@auto_docstring
 class NemotronHSparseModel(NemotronHSparsePreTrainedModel):
     def __init__(self, config: NemotronHSparseConfig):
-        super().__init__(config)
-
-        self.embeddings = nn.Embedding(config.vocab_size, config.hidden_size)
+        JambaPreTrainedModel.__init__(self, config)
+        self.padding_idx = config.pad_token_id
+        self.vocab_size = config.vocab_size
+        self.embed_tokens = nn.Embedding(config.vocab_size, config.hidden_size, self.padding_idx)
         self.layers = nn.ModuleList(
-            [NemotronHSparseDecoderLayer(config, layer_idx=idx) for idx in range(config.num_hidden_layers)]
+            [
+                ALL_DECODER_LAYER_TYPES[config.layer_types[i]](config, layer_idx=i)
+                for i in range(config.num_hidden_layers)
+            ]
         )
-        self.norm_f = NemotronHSparseRMSNorm(config.hidden_size, eps=config.layer_norm_epsilon)
+        self.final_layernorm = NemotronHSparseRMSNorm(config.hidden_size, eps=config.layer_norm_epsilon)
+        self.gradient_checkpointing = False
         self.post_init()
-
-    def get_input_embeddings(self):
-        return self.embeddings
-
-    def set_input_embeddings(self, new_embeddings):
-        self.embeddings = new_embeddings
 
     @merge_with_config_defaults
     @capture_outputs
+    @auto_docstring
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
         past_key_values: Cache | None = None,
+        inputs_embeds: torch.FloatTensor | None = None,
         use_cache: bool | None = None,
-        attention_mask: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> BaseModelOutputWithPast:
+    ) -> MoeModelOutputWithPast:
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
 
         if inputs_embeds is None:
-            inputs_embeds = self.embeddings(input_ids)
+            inputs_embeds = self.embed_tokens(input_ids)
 
         if use_cache and past_key_values is None:
             past_key_values = DynamicCache(config=self.config)
 
-        hidden_states = inputs_embeds
-
         if position_ids is None:
             past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
-            position_ids = torch.arange(hidden_states.shape[1], device=hidden_states.device) + past_seen_tokens
+            position_ids = torch.arange(inputs_embeds.shape[1], device=inputs_embeds.device) + past_seen_tokens
             position_ids = position_ids.unsqueeze(0)
 
         causal_mask = create_causal_mask(
@@ -1002,37 +1011,50 @@ class NemotronHSparseModel(NemotronHSparsePreTrainedModel):
             past_key_values=past_key_values,
             position_ids=position_ids,
         )
+        mamba_mask = self._update_mamba_mask(attention_mask, past_key_values)
+        hidden_states = inputs_embeds
+        for decoder_layer in self.layers:
+            layer_mask = mamba_mask if isinstance(decoder_layer, NemotronHSparseMambaDecoderLayer) else causal_mask
 
-        for layer in self.layers:
-            hidden_states = layer(
+            hidden_states = decoder_layer(
                 hidden_states,
-                attention_mask=causal_mask,
-                mamba_attention_mask=attention_mask,
+                attention_mask=layer_mask,
                 position_ids=position_ids,
                 past_key_values=past_key_values,
                 use_cache=use_cache,
                 **kwargs,
             )
 
-        hidden_states = self.norm_f(hidden_states)
+        hidden_states = self.final_layernorm(hidden_states)
 
-        return BaseModelOutputWithPast(
+        return MoeModelOutputWithPast(
             last_hidden_state=hidden_states,
-            past_key_values=past_key_values if use_cache else None,
+            past_key_values=past_key_values,
         )
+
+    def _update_mamba_mask(self, attention_mask, past_key_values):
+        """
+        No need for zeroing states when
+            1. Cached forward
+            2. Attending to all inputs
+        """
+        mamba_mask = attention_mask
+        if (past_key_values is not None and past_key_values.has_previous_state()) or (
+            attention_mask is not None and torch.all(attention_mask == 1)
+        ):
+            mamba_mask = None
+        return mamba_mask
 
 
 # Adapted from transformers.models.jamba.modeling_jamba.JambaForCausalLM with Jamba->NemotronHSparse, JAMBA->NEMOTRON_H_SPARSE
 class NemotronHSparseForCausalLM(NemotronHSparsePreTrainedModel, GenerationMixin):
-    _tied_weights_keys = {}
+    _tied_weights_keys = {"lm_head.weight": "model.embed_tokens.weight"}
 
     def __init__(self, config: NemotronHSparseConfig):
-        super().__init__(config)
+        JambaPreTrainedModel.__init__(self, config)
         self.model = NemotronHSparseModel(config)
         self.vocab_size = config.vocab_size
         self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
-
-        # Initialize weights and apply final processing
         self.post_init()
 
     @can_return_tuple
@@ -1047,8 +1069,8 @@ class NemotronHSparseForCausalLM(NemotronHSparsePreTrainedModel, GenerationMixin
         labels: torch.LongTensor | None = None,
         use_cache: bool | None = None,
         logits_to_keep: int | torch.Tensor = 0,
-        **kwargs,
-    ) -> CausalLMOutputWithPast:
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> tuple | CausalLMOutputWithPast:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
@@ -1071,7 +1093,7 @@ class NemotronHSparseForCausalLM(NemotronHSparsePreTrainedModel, GenerationMixin
         >>> tokenizer.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0]
         "Hey, are you conscious? Can you talk to me?\nI'm not conscious, but I can talk to you."
         ```"""
-        outputs = self.model(
+        outputs: BaseModelOutputWithPast = self.model(
             input_ids=input_ids,
             attention_mask=attention_mask,
             position_ids=position_ids,
@@ -1081,13 +1103,19 @@ class NemotronHSparseForCausalLM(NemotronHSparsePreTrainedModel, GenerationMixin
             **kwargs,
         )
 
-        hidden_states = outputs[0]
+        hidden_states = outputs.last_hidden_state
+        # Only compute necessary logits, and do not upcast them to float if we are not computing the loss
         slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
-        logits = self.lm_head(hidden_states[:, slice_indices, :]).float()
+        logits = self.lm_head(hidden_states[:, slice_indices, :])
 
         loss = None
         if labels is not None:
-            loss = self.loss_function(logits, labels, self.vocab_size, **kwargs)
+            loss = self.loss_function(
+                logits,
+                labels,
+                self.vocab_size,
+                **kwargs,
+            )
 
         return CausalLMOutputWithPast(
             loss=loss,
