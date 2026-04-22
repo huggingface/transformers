@@ -354,7 +354,7 @@ class MiMoV2FlashAttention(nn.Module):
             dropout=0.0 if not self.training else self.attention_dropout,
             scaling=self.scaling,
             sliding_window=self.sliding_window,
-            s_aux=self.sinks,
+            s_aux=self.sinks,  # Optional sinks, only when in SWA layer
             **kwargs,
         )
 
