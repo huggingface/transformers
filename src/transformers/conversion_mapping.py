@@ -516,16 +516,6 @@ def _build_checkpoint_conversion_mapping():
             WeightRenaming(r"segmentation_head\.query_features_proj", r"query_features_proj"),
             WeightRenaming(r"segmentation_head\.bias", r"segmentation_bias"),
         ],
-        "legacy": [
-            WeightRenaming(
-                source_patterns="LayerNorm.gamma",
-                target_patterns="LayerNorm.weight",
-            ),
-            WeightRenaming(
-                source_patterns="LayerNorm.beta",
-                target_patterns="LayerNorm.bias",
-            ),
-        ],
         "nomic_bert": [
             WeightRenaming(r"encoder.layers", r"layers"),
             WeightRenaming(r"emb_ln", r"embeddings.LayerNorm"),
