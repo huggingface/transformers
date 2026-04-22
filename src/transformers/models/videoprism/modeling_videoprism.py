@@ -639,6 +639,9 @@ class VideoPrismPreTrainedModel(PreTrainedModel):
 )
 class VideoPrismVisionModel(VideoPrismPreTrainedModel):
     config: VideoPrismVisionConfig
+    input_modalities = ("video",)
+    base_model_prefix = "vision_model"
+    _input_embed_layer = "patch_embedding"
 
     def __init__(self, config: VideoPrismVisionConfig):
         super().__init__(config)
@@ -812,6 +815,8 @@ def l2norm(x: torch.FloatTensor, dim: int = -1, eps: float = 1e-6):
 )
 class VideoPrismTextModel(VideoPrismPreTrainedModel):
     config: VideoPrismTextConfig
+    input_modalities = ("text",)
+    base_model_prefix = "text_model"
     main_input_name = "input_ids"
     _no_split_modules = ["VideoPrismTextEmbeddings", "VideoPrismLayer"]
     _input_embed_layer = "token_embedding"
@@ -1004,6 +1009,9 @@ class VideoPrismClipModel(VideoPrismPreTrainedModel):
 )
 class VideoPrismForVideoClassification(VideoPrismPreTrainedModel):
     config: VideoPrismVisionConfig
+    input_modalities = ("video",)
+    base_model_prefix = "vision_model"
+    _input_embed_layer = "patch_embedding"
 
     def __init__(self, config: VideoPrismVisionConfig):
         if not isinstance(config, VideoPrismVisionConfig):
