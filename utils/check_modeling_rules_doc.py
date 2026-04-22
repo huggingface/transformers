@@ -12,8 +12,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """
-Keep `## Rules reference` section ofdocs/source/en/modeling_rules.m in sync
-with utils/mlinter/rules.toml.
+Keep `## Rules reference` section of docs/source/en/modeling_rules.md in sync
+with the rules defined in the mlinter package.
 
 Usage (from the root of the repo):
 
@@ -32,13 +32,14 @@ python utils/check_modeling_rules_doc.py --fix_and_overwrite
 
 import argparse
 import os
-import sys
 
 
 CHECKER_CONFIG = {
     "name": "modeling_rules_doc",
     "label": "Modeling rules documentation",
-    "file_globs": ["utils/mlinter/rules.toml", "docs/source/en/modeling_rules.md"],
+    # Depends on the installed `mlinter` package output, which cannot be expressed
+    # as repo file globs for the checker cache.
+    "file_globs": None,
     "check_args": [],
     "fix_args": ["--fix_and_overwrite"],
 }
@@ -50,15 +51,20 @@ BEGIN_MARKER = "<!-- BEGIN RULES REFERENCE -->"
 END_MARKER = "<!-- END RULES REFERENCE -->"
 
 
-sys.path.insert(0, ROOT)
-from utils.mlinter.mlinter import TRF_RULE_SPECS, format_rule_details  # noqa: E402
+def _require_mlinter():
+    try:
+        import mlinter
+    except ModuleNotFoundError as error:
+        raise ModuleNotFoundError(
+            "This script requires the standalone `transformers-mlinter` package. "
+            'Install the repo quality dependencies with `pip install -e ".[quality]"` and retry.'
+        ) from error
+
+    return mlinter
 
 
 def generate_rules_reference() -> str:
-    sections = []
-    for rule_id in sorted(TRF_RULE_SPECS):
-        sections.append(format_rule_details(rule_id))
-    return "\n\n".join(sections) + "\n"
+    return _require_mlinter().render_rules_reference()
 
 
 def check_modeling_rules_doc(overwrite: bool = False):
@@ -88,7 +94,7 @@ def check_modeling_rules_doc(overwrite: bool = False):
     else:
         raise ValueError(
             "The rules reference section in docs/source/en/modeling_rules.md is out of sync "
-            "with utils/mlinter/rules.toml. Run `make fix-repo` to regenerate it."
+            "with the mlinter package's rules. Run `make fix-repo` to regenerate it."
         )
 
 
@@ -97,4 +103,7 @@ if __name__ == "__main__":
     parser.add_argument("--fix_and_overwrite", action="store_true", help="Whether to fix inconsistencies.")
     args = parser.parse_args()
 
-    check_modeling_rules_doc(args.fix_and_overwrite)
+    try:
+        check_modeling_rules_doc(args.fix_and_overwrite)
+    except ModuleNotFoundError as error:
+        raise SystemExit(str(error)) from error
