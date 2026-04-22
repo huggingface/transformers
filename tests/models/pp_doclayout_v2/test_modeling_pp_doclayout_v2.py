@@ -26,7 +26,6 @@ from transformers import (
     PPDocLayoutV2ForObjectDetection,
     PPDocLayoutV2ImageProcessor,
     is_torch_available,
-    is_vision_available,
 )
 from transformers.image_utils import load_image
 from transformers.testing_utils import (
@@ -46,9 +45,6 @@ from ...test_processing_common import url_to_local_path
 
 if is_torch_available():
     import torch
-
-if is_vision_available():
-    pass
 
 
 class PPDocLayoutV2ModelTester:

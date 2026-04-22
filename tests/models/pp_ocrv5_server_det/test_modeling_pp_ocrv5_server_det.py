@@ -46,9 +46,6 @@ from ...test_processing_common import url_to_local_path
 if is_torch_available():
     import torch
 
-if is_vision_available():
-    pass
-
 
 class PPOCRV5ServerDetModelTester:
     def __init__(
