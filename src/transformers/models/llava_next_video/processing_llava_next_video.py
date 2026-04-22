@@ -43,8 +43,8 @@ class LlavaNextVideoProcessorKwargs(ProcessingKwargs, total=False):
 
 @auto_docstring
 class LlavaNextVideoProcessor(ProcessorMixin):
-    # video and image processor share same args, but have different processing logic
-    # only image processor config is saved in the hub
+    valid_processor_kwargs = LlavaNextVideoProcessorKwargs
+
     def __init__(
         self,
         video_processor=None,

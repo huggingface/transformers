@@ -32,6 +32,8 @@ class AyaVisionProcessorKwargs(ProcessingKwargs, total=False):
 
 @auto_docstring
 class AyaVisionProcessor(ProcessorMixin):
+    valid_processor_kwargs = AyaVisionProcessorKwargs
+
     def __init__(
         self,
         image_processor=None,

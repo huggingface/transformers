@@ -49,6 +49,8 @@ class CohereAsrProcessorKwargs(ProcessingKwargs, total=False):
 @auto_docstring
 @requires(backends=("torch",))
 class CohereAsrProcessor(ProcessorMixin):
+    valid_processor_kwargs = CohereAsrProcessorKwargs
+
     def __init__(self, feature_extractor, tokenizer):
         super().__init__(feature_extractor, tokenizer)
 

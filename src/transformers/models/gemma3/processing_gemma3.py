@@ -98,7 +98,7 @@ class Gemma3Processor(ProcessorMixin):
         text: TextInput | PreTokenizedInput | list[TextInput] | list[PreTokenizedInput] = None,
         **kwargs: Unpack[ProcessingKwargs],
     ):
-        super().validate_inputs(images, text, **kwargs)
+        super().validate_inputs(images=images, text=text, **kwargs)
 
         if text is None and images is None:
             raise ValueError("You must provide either `text` or `images`.")

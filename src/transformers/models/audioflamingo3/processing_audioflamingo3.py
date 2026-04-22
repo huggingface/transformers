@@ -124,7 +124,7 @@ class AudioFlamingo3Processor(ProcessorMixin):
             labels[labels == self.audio_token_id] = -100
             labels[labels == self.tokenizer.pad_token_id] = -100
             model_inputs["labels"] = labels
-        return model_inputs
+        return BatchFeature(data=model_inputs, tensor_type="pt")
 
     def prepare_inputs_layout(
         self,

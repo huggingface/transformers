@@ -105,7 +105,7 @@ class Glm4vProcessor(ProcessorMixin):
 
         if metadata.fps is None:
             logger.warning_once(
-                "SmolVLM requires frame timestamps to construct prompts, but the `fps` of the input video could not be inferred. "
+                "GLM4V requires frame timestamps to construct prompts, but the `fps` of the input video could not be inferred. "
                 "Probably `video_metadata` was missing from inputs and you passed pre-sampled frames. "
                 "Defaulting to `fps=24`. Please provide `video_metadata` for more accurate results."
             )

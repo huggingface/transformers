@@ -61,6 +61,8 @@ class AriaProcessorKwargs(ProcessingKwargs, total=False):
 
 @auto_docstring
 class AriaProcessor(ProcessorMixin):
+    valid_processor_kwargs = AriaProcessorKwargs
+
     def __init__(
         self,
         image_processor=None,

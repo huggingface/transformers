@@ -166,6 +166,8 @@ def build_string_from_input(prompt: str, bos_token: str, image_token: str) -> st
 
 @auto_docstring
 class MllamaProcessor(ProcessorMixin):
+    valid_processor_kwargs = MllamaProcessorKwargs
+
     def __init__(self, image_processor, tokenizer, chat_template=None):
         if not hasattr(tokenizer, "image_token"):
             self.image_token = "<|image|>"

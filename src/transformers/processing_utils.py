@@ -729,13 +729,13 @@ class ProcessorMixin(PushToHubMixin):
         audio_replacements = self.get_audio_replacement(audio, processed_data)
         return processed_data, audio_replacements
 
-    def replace_image_token(self, image_inputs: dict | None = None, image_idx: int = 0) -> str:
+    def replace_image_token(self, image_inputs: dict, image_idx: int) -> str:
         return ""
 
-    def replace_video_token(self, video_inputs: dict | None = None, video_idx: int = 0) -> str:
+    def replace_video_token(self, video_inputs: dict, video_idx: int) -> str:
         return ""
 
-    def replace_audio_token(self, audio_inputs: dict | None = None, audio_idx: int = 0) -> str:
+    def replace_audio_token(self, audio_inputs: dict, audio_idx: int) -> str:
         return ""
 
     def get_images_replacement(
