@@ -49,7 +49,7 @@ from ..qwen3_moe.modeling_qwen3_moe import Qwen3MoeExperts
 logger = logging.get_logger(__name__)
 
 
-@auto_docstring(custom_intro="HYV3")
+@auto_docstring(checkpoint="tencent/Hy3-preview")
 @strict
 class HYV3Config(PreTrainedConfig):
     r"""
