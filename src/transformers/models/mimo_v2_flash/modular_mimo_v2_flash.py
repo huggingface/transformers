@@ -329,6 +329,7 @@ class MiMoV2FlashAttention(nn.Module):
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor, torch.Tensor | None]:
         input_shape = hidden_states.shape[:-1]
+        # Different head dims compared to other attentions
         qk_hidden_shape = (*input_shape, -1, self.head_dim)
         v_hidden_shape = (*input_shape, -1, self.v_head_dim)
 
@@ -354,7 +355,7 @@ class MiMoV2FlashAttention(nn.Module):
             dropout=0.0 if not self.training else self.attention_dropout,
             scaling=self.scaling,
             sliding_window=self.sliding_window,
-            s_aux=self.sinks,
+            s_aux=self.sinks,  # Optional sinks, only when in SWA layer
             **kwargs,
         )
 
