@@ -61,7 +61,7 @@ class MyModelTest(CausalLMModelTest, unittest.TestCase):
 
 These two classes give full test coverage for `MyModel` and all its head classes (`MyModelForCausalLM`, `MyModelForSequenceClassification`, etc.). See [tests/models/llama/test_modeling_llama.py](https://github.com/huggingface/transformers/blob/main/tests/models/llama/test_modeling_llama.py) for a real example.
 
-`CausalLMModelTester` only requires `base_model_class`. The tester strips the `Model` suffix to get a base name (`LlamaModel` becomes `Llama`), then appends suffixes like `Config` or `ForCausalLM` to discover related classes. If a class doesn't exist in the module, the attribute stays `None` and the corresponding tests are skipped.
+`CausalLMModelTester` only requires `base_model_class`. The tester strips the `Model` suffix to get a base name (`LlamaModel` becomes `Llama`), then appends suffixes like `Config` or `ForCausalLM` to discover related classes. If a class doesn't exist in the module, the attribute stays `None` and the tester skips the corresponding tests.
 
 ### Overriding defaults
 
@@ -80,6 +80,19 @@ class MyModelTest(CausalLMModelTest, unittest.TestCase):
     model_tester_class = MyModelTester
     # disable embedding resize tests
     test_resize_embeddings = False
+```
+
+For models that need custom constructor parameters on the tester, override `__init__` and call `super().__init__(parent=parent)` before setting extra attributes. See [tests/models/youtu/test_modeling_youtu.py](https://github.com/huggingface/transformers/blob/main/tests/models/youtu/test_modeling_youtu.py) for a real example.
+
+```py
+class YoutuModelTester(CausalLMModelTester):
+    if is_torch_available():
+        base_model_class = YoutuModel
+
+    def __init__(self, parent, kv_lora_rank=16, q_lora_rank=32):
+        super().__init__(parent=parent)
+        self.kv_lora_rank = kv_lora_rank
+        self.q_lora_rank = q_lora_rank
 ```
 
 ## Write tests for a vision-language model
@@ -125,7 +138,7 @@ VLM tests differ from `CausalLMModelTest` in a few ways.
 - You must set `config_class`, `text_config_class`, `vision_config_class`, and `conditional_generation_class` on the tester.
 - `VLMModelTest` doesn't include `TrainingTesterMixin` or `TensorParallelTesterMixin`.
 - The tester's `__init__` accepts vision parameters (`image_size`, `patch_size`, `num_channels`, `num_image_tokens`) from `**kwargs` and `setdefault()`.
-- `ConfigTester` uses `has_text_modality=False` since the top-level config isn't a text model config.
+- `ConfigTester` uses `has_text_modality=False` because the top-level config is a composite config rather than a text model config.
 
 ## Write tests for other architectures
 
@@ -135,7 +148,7 @@ For encoder-only, encoder-decoder, audio, or other non-standard architectures, b
 
 Every model test file follows the same structure.
 
-1. `ModelTester` (plain class) creates tiny configs and dummy inputs for testing.
+1. `ModelTester` (plain class) creates tiny configs and dummy inputs for testing, and can also hold small regression tests specific to the model.
 2. `ModelTest` (`unittest.TestCase` + mixins) inherits auto-generated tests and runs them against every model variant.
 
 `ModelTest` calls `prepare_config_and_inputs_for_common()` on the tester to get a `(config, inputs_dict)` tuple. All mixins rely on `prepare_config_and_inputs_for_common()` for test data.
@@ -156,7 +169,7 @@ Pick the mixins your model needs.
 
 See [tests/models/modernbert/test_modeling_modernbert.py](https://github.com/huggingface/transformers/blob/main/tests/models/modernbert/test_modeling_modernbert.py) for a complete working example. The key steps are outlined below.
 
-1. The `ModelTester` class builds tiny configs and dummy inputs. Keep dimensions small so tests finish in seconds on CPU. Three tensor helper functions are available to build inputs.
+1. The `ModelTester` class builds tiny configs and dummy inputs. Keep dimensions small so tests finish in seconds on CPU. Use the three tensor helpers below to build inputs.
 
     - `ids_tensor(shape, vocab_size)`: Random integer tensor in `[0, vocab_size)`. Use for `input_ids`, `token_type_ids`, and label tensors.
     - `random_attention_mask(shape)`: Binary tensor (0s and 1s) where the first token is always 1. Use for `attention_mask`.
@@ -175,13 +188,14 @@ Test files live in `tests/models/mymodel/` following the structure shown below.
 ```text
 tests/models/mymodel/
 ├── __init__.py
-├── test_modeling_mymodel.py          # model tests (required)
-├── test_tokenization_mymodel.py      # tokenizer tests (if custom tokenizer)
-├── test_image_processing_mymodel.py  # image processor tests (if vision model)
-└── test_processing_mymodel.py        # processor tests (if multimodal)
+├── test_modeling_mymodel.py            # model tests (required)
+├── test_tokenization_mymodel.py        # tokenizer tests (if custom tokenizer)
+├── test_image_processing_mymodel.py    # image processor tests (if vision model)
+├── test_feature_extraction_mymodel.py  # feature extractor tests (if audio/speech model)
+└── test_processing_mymodel.py          # processor tests (if multimodal)
 ```
 
-Tokenizer tests follow the same pattern. Inherit `TokenizerTesterMixin` from `tests/test_tokenization_common.py`, set a few attributes, and get auto-generated tests. See [tests/models/modernbert/test_tokenization_modernbert.py](https://github.com/huggingface/transformers/blob/main/tests/models/modernbert/test_tokenization_modernbert.py) for an example.
+Tokenizer tests follow the same pattern. Inherit `TokenizerTesterMixin` from `tests/test_tokenization_common.py`, set a few attributes, and get auto-generated tests. See [tests/models/llama/test_tokenization_llama.py](https://github.com/huggingface/transformers/blob/main/tests/models/llama/test_tokenization_llama.py) for an example.
 
 ## Config tests
 
@@ -220,14 +234,20 @@ Mixin tests use tiny configs with random weights to verify model behavior quickl
 
 ### Writing integration tests
 
-Place integration tests in a separate test class and mark them with `@slow`. Each test downloads real weights, runs inference, and checks outputs against expected values.
+Place integration tests in a separate test class and mark them with `@slow`. Each test downloads real weights, runs inference, and checks outputs against expected values. Call `cleanup(torch_device, gc_collect=False)` in `setUp` and `tearDown` to avoid memory residuals.
 
 ```py
 import torch
 from transformers import AutoTokenizer
-from transformers.testing_utils import require_torch, slow, torch_device
+from transformers.testing_utils import cleanup, require_torch, slow, torch_device
 
 class MyModelIntegrationTest(unittest.TestCase):
+    def setUp(self):
+        cleanup(torch_device, gc_collect=False)
+
+    def tearDown(self):
+        cleanup(torch_device, gc_collect=False)
+
     @slow
     @require_torch
     def test_inference(self):
@@ -244,6 +264,43 @@ class MyModelIntegrationTest(unittest.TestCase):
 ```
 
 Mark any test with `@slow` if it downloads weights, loads a large dataset, or takes more than a few seconds. The [pull request CI](./pr_checks) skips slow tests, but the nightly schedule runs them.
+
+#### Generation integration tests
+
+Use `do_sample=False` in generation tests so the output is deterministic across runs and hardware. For Mixture-of-Experts models, also call `model.set_experts_implementation("eager")` before generating to force a stable expert dispatch path. Without it, small numerical differences in the router can flip which expert handles a token and change the output.
+
+```py
+@slow
+@require_torch
+def test_generate(self):
+    model = MyModelForCausalLM.from_pretrained("myorg/mymodel-base").to(torch_device)
+    tokenizer = AutoTokenizer.from_pretrained("myorg/mymodel-base")
+    inputs = tokenizer("Hello, world", return_tensors="pt").to(torch_device)
+
+    # model.set_experts_implementation("eager")  # uncomment for MoE models
+    generated_ids = model.generate(**inputs, max_new_tokens=20, do_sample=False)
+    output = tokenizer.batch_decode(generated_ids, skip_special_tokens=True)
+    self.assertEqual(output, ["Hello, world! This is the expected continuation..."])
+```
+
+#### Hardware-specific expectations
+
+Transformers CI runs slow tests on an NVIDIA A10. Numerical results can vary slightly across GPU generations, so integration tests use the [Expectations](https://github.com/huggingface/transformers/blob/main/src/transformers/testing_utils.py#L3247) class to register per-device expected values. `Expectations` picks the best match for the current hardware based on `(device_type, (major, minor))` SM keys, and falls back to a default when nothing matches.
+
+Run `torch.cuda.get_device_capability()` to print your local SM version (e.g. `(8, 6)` for an A10, `(9, 0)` for H100).
+
+```py
+from transformers.testing_utils import Expectations
+
+expected_texts = Expectations(
+    {
+        ("cuda", (8, 6)): ["Hello, world! This is the A10 continuation..."],
+        ("cuda", (9, 0)): ["Hello, world! This is the H100 continuation..."],
+    }
+).get_expectation()
+
+self.assertEqual(output, expected_texts)
+```
 
 ### Creating tiny models
 
@@ -265,7 +322,7 @@ Upload them to the Hub.
 python utils/create_dummy_models.py output_dir -m your_model_type --upload --organization hf-internal-testing
 ```
 
-Each model is named `hf-internal-testing/tiny-random-{ModelClassName}` and recorded in `tests/utils/tiny_model_summary.json`. A CI workflow (`.github/workflows/check_tiny_models.yml`) regenerates tiny models daily.
+Each model uses the name `hf-internal-testing/tiny-random-{ModelClassName}` and gets recorded in `tests/utils/tiny_model_summary.json`. A CI workflow (`.github/workflows/check_tiny_models.yml`) regenerates tiny models daily.
 
 ## Control what gets tested
 
