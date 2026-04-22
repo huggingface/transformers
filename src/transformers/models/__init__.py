@@ -191,6 +191,7 @@ if TYPE_CHECKING:
     from .hubert import *
     from .hunyuan_v1_dense import *
     from .hunyuan_v1_moe import *
+    from .hy_v3 import *
     from .ibert import *
     from .idefics import *
     from .idefics2 import *
@@ -383,6 +384,7 @@ if TYPE_CHECKING:
     from .shieldgemma2 import *
     from .siglip import *
     from .siglip2 import *
+    from .slanet import *
     from .slanext import *
     from .smollm3 import *
     from .smolvlm import *
