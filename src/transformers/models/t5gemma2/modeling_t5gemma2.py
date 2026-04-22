@@ -706,7 +706,7 @@ class T5Gemma2PreTrainedModel(PreTrainedModel):
                 init.copy_(getattr(module, f"{layer_type}_inv_freq"), curr_inv_freq)
                 init.copy_(getattr(module, f"{layer_type}_original_inv_freq"), curr_inv_freq)
 
-    def prepare_decoder_input_ids_from_labels(self, input_ids):
+    def prepare_decoder_input_ids_from_labels(self, labels: torch.Tensor):
         """
         Shifts input_ids to the right, prepends the decoder_start_token_id, and handles
         pad_token_id replacement for labels that were -100.
@@ -720,8 +720,8 @@ class T5Gemma2PreTrainedModel(PreTrainedModel):
             raise ValueError("self.model.config.decoder.bos_token_id has to be defined. ")
 
         # shift inputs to the right
-        shifted_input_ids = input_ids.new_zeros(input_ids.shape)
-        shifted_input_ids[..., 1:] = input_ids[..., :-1].clone()
+        shifted_input_ids = labels.new_zeros(labels.shape)
+        shifted_input_ids[..., 1:] = labels[..., :-1].clone()
         shifted_input_ids[..., 0] = decoder_start_token_id
 
         if pad_token_id is None:
