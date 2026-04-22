@@ -46,7 +46,7 @@ from ...modeling_utils import PreTrainedModel
 from ...processing_utils import ProcessorMixin, Unpack
 from ...tokenization_utils_base import TextInput
 from ...utils import auto_docstring, can_return_tuple, logging
-from ...utils.generic import TransformersKwargs, is_flash_attention_requested, merge_with_config_defaults
+from ...utils.generic import TransformersKwargs, merge_with_config_defaults
 from ...utils.output_capturing import OutputRecorder, capture_outputs
 from ...video_utils import VideoInput, make_batched_videos
 from ..mimi.modeling_mimi import MimiLayerScale
@@ -1033,33 +1033,10 @@ class Qwen3OmniMoeAudioEncoder(Qwen2_5OmniAudioEncoder):
         padded_embed = padded_embed + positional_embedding
         hidden_states = torch.index_select(padded_embed.reshape(-1, padded_embed.shape[-1]), 0, valid_indices)
 
-        # Flash Attention 2 doesn't need a 4D mask and relies on `cu_seqlens/max_seqlen`
-        # NOTE: the created attention mask only approximates the ragged FA2 attention by
-        # allowing bidirectional attention within `cu_seqlens` blocks, and not attending between
-        # blocks. Though it will not be a 100% match for FA2's `varlen` path
-        if is_flash_attention_requested(self.config):
-            attention_mask = None
-        else:
-            seq_idx = torch.arange(hidden_states.shape[0], device=hidden_states.device)
-            block_ids = torch.searchsorted(cu_seqlens[1:], seq_idx, right=True)
-            same_block = block_ids.unsqueeze(0) == block_ids.unsqueeze(1)
-            attention_mask = (
-                torch.full(
-                    (hidden_states.shape[0], hidden_states.shape[0]),
-                    torch.finfo(hidden_states.dtype).min,
-                    dtype=hidden_states.dtype,
-                    device=hidden_states.device,
-                )
-                .masked_fill(same_block, 0.0)
-                .unsqueeze(0)
-                .unsqueeze(0)
-            )
-
         for encoder_layer in self.layers:
             layer_outputs = encoder_layer(
                 hidden_states,
                 cu_seqlens,
-                attention_mask=attention_mask,
             )
             hidden_states = layer_outputs[0]
 

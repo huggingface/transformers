@@ -22,12 +22,8 @@ use untraceable ops (``repeat_interleave``, ``.tolist()``, ``nonzero()``, loops)
 
 from __future__ import annotations
 
-from .utils.import_utils import is_torch_available
-
-
-if is_torch_available():
-    import torch
-    import torch.nn.functional as F
+import torch
+import torch.nn.functional as F
 
 
 def get_vision_cu_seqlens(grid_thw: torch.Tensor) -> torch.Tensor:
