@@ -12,12 +12,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """
-Convert a MiMo-V2-Flash checkpoint from the original XiaomiMiMo/MiMo-V2-Flash Hub layout
-(hub-format `config.json` + remote-code safetensors) to the native transformers format.
-
+Rewrite the Hub-format `config.json` of XiaomiMiMo/MiMo-V2-Flash into the native
+`MiMoV2FlashConfig` layout. Safetensors and the tokenizer are reused as-is.
 Per-expert MoE weights and the `attention_sink_bias` → `sinks` rename are handled by the
-entry for `"mimo_v2_flash"` in `src/transformers/conversion_mapping.py` when the model is
-loaded via `from_pretrained`, so only the config needs explicit remapping here.
+`"mimo_v2_flash"` entry in `src/transformers/conversion_mapping.py` at load time, so no
+weight modification is needed here.
 
 Sample usage:
     python src/transformers/models/mimo_v2_flash/convert_mimo_v2_flash_weights_to_hf.py \
@@ -28,7 +27,7 @@ import argparse
 import json
 import os
 
-from transformers import AutoTokenizer, MiMoV2FlashConfig, MiMoV2FlashForCausalLM
+from transformers import MiMoV2FlashConfig
 
 
 def convert_config(original_config: dict):
@@ -98,14 +97,6 @@ def convert_mimo_v2_flash_model(input_dir, output_dir):
     config = convert_config(original_config)
     config.save_pretrained(output_dir)
 
-    # Load and convert weights
-    model = MiMoV2FlashForCausalLM.from_pretrained(input_dir, config=config)
-    model.save_pretrained(output_dir)
-
-    # Load and convert tokenizer
-    tokenizer = AutoTokenizer.from_pretrained(input_dir)
-    tokenizer.save_pretrained(output_dir)
-
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
@@ -117,7 +108,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "output_dir",
         type=str,
-        help="Location to write the converted HF model.",
+        help=("Location to write the converted `config.json`."),
     )
     args = parser.parse_args()
     convert_mimo_v2_flash_model(args.input_dir, args.output_dir)
