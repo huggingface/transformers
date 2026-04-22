@@ -676,7 +676,7 @@ def build_pipeline_init_args(
     docstring += r"""
         task (`str`, defaults to `""`):
             A task-identifier for the pipeline.
-        num_workers (`int`, *optional*, defaults to 8):
+        num_workers (`int`, *optional*, defaults to 0):
             When the pipeline will use *DataLoader* (when passing a dataset, on GPU for a Pytorch model), the number of
             workers to be used.
         batch_size (`int`, *optional*, defaults to 1):
