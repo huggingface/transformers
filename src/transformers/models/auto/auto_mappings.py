@@ -380,6 +380,7 @@ CONFIG_MAPPING_NAMES = OrderedDict(
         ("omdet-turbo", "OmDetTurboConfig"),
         ("oneformer", "OneFormerConfig"),
         ("openai-gpt", "OpenAIGPTConfig"),
+        ("openai_privacy_filter", "OpenAIPrivacyFilterConfig"),
         ("opt", "OPTConfig"),
         ("ovis2", "Ovis2Config"),
         ("owlv2", "Owlv2Config"),

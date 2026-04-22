@@ -296,6 +296,7 @@ if TYPE_CHECKING:
     from .omdet_turbo import *
     from .oneformer import *
     from .openai import *
+    from .openai_privacy_filter import *
     from .opt import *
     from .ovis2 import *
     from .owlv2 import *
