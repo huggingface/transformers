@@ -2300,21 +2300,19 @@ class GenerationMixin(ContinuousMixin):
                     f"negative_prompt_attention_mask is not supported for continuous batching. Got {negative_prompt_attention_mask = }"
                 )
 
+            cb_generation_config = self._prepare_generation_config(generation_config, **kwargs)[0]
+
             # others are ignored
             if synced_gpus is not None:
                 logger.warning(f"synced_gpus is not ignored for continuous batching. Got {synced_gpus = }")
-            num_return_sequences = kwargs.get("num_return_sequences", 1)
-            num_beams = kwargs.get("num_beams", 1)
-            if num_return_sequences > 1 or num_beams > 1:  # FIXME: remove this once CB supports it (which is planned)
-                logger.warning(
-                    f"num_return_sequences and num_beams are not supported for continuous batching yet. "
-                    f"Got {num_return_sequences = } and {num_beams = }. "
-                )
+            num_beams = cb_generation_config.num_beams if cb_generation_config.num_beams is not None else 1
+            if num_beams > 1:  # FIXME: remove this once CB supports it (which is planned)
+                logger.warning(f"num_beams is not supported for continuous batching yet. Got {num_beams = }.")
 
             # switch to CB
             outputs = self.generate_batch(
                 inputs=inputs,
-                generation_config=self._prepare_generation_config(generation_config, **kwargs)[0],
+                generation_config=cb_generation_config,
                 **kwargs,
             )
             sequences = [
