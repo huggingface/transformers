@@ -1739,7 +1739,11 @@ class PreTrainedTokenizerBase(PushToHubMixin):
         if loadable_file_ids and "tokenizer_file" in resolved_vocab_files:
             loadable_file_ids.add("tokenizer_file")
         loadable_file_ids.intersection_update(resolved_vocab_files)
-        if loadable_file_ids and all(resolved_vocab_files[file_id] is None for file_id in loadable_file_ids):
+        if (
+            (local_files_only or is_local)
+            and loadable_file_ids
+            and all(resolved_vocab_files[file_id] is None for file_id in loadable_file_ids)
+        ):
             raise OSError(error_message)
 
         return cls._from_pretrained(
