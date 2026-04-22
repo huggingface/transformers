@@ -43,6 +43,7 @@ CONFIG_MAPPING = transformers.models.auto.configuration_auto.CONFIG_MAPPING
 # Usually of small list of allowed attrs, but can be True to allow all
 SPECIAL_CASES_TO_ALLOW = {
     "GlmMoeDsaConfig:": ["index_topk_freq"],
+    "HYV3Config": ["output_router_logits"],
     "NougatConfig": ["decoder", "encoder"],
     "PI0Config": ["vlm_projection_dim"],
     "EuroBertConfig": ["is_causal"],  # not used directly, allows causal-bidirectional switch
@@ -85,8 +86,6 @@ SPECIAL_CASES_TO_ALLOW = {
     "AutoformerConfig": ["num_static_real_features", "num_time_features"],
     "SamVisionConfig": ["mlp_ratio"],
     "Sam3VisionConfig": ["backbone_feature_sizes"],
-    "Sam3LiteTextViTConfig": ["global_attn_indexes", "window_size"],
-    "Sam3LiteTextVisionConfig": ["fpn_hidden_size", "scale_factors"],
     "SamHQVisionConfig": ["mlp_ratio"],
     "ClapAudioConfig": ["num_classes"],
     "ClvpDecoderConfig": ["add_cross_attention"],
