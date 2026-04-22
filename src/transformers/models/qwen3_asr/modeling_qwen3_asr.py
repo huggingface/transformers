@@ -23,7 +23,7 @@ from torch import nn
 
 from ...cache_utils import Cache
 from ...generation import GenerationMixin
-from ...modeling_outputs import BaseModelOutputWithPooling, CausalLMOutputWithPast, SequenceClassifierOutput
+from ...modeling_outputs import BaseModelOutputWithPooling, CausalLMOutputWithPast, TokenClassifierOutput
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
@@ -290,7 +290,7 @@ class Qwen3ASRForForcedAlignment(Qwen3ASRPreTrainedModel):
         labels: torch.LongTensor | None = None,
         use_cache: bool | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> SequenceClassifierOutput:
+    ) -> TokenClassifierOutput:
         r"""
         input_features_mask (`torch.Tensor` of shape `(batch_size, feature_sequence_length)`, *optional*):
             Mask to avoid performing attention on padding feature indices.
@@ -317,7 +317,7 @@ class Qwen3ASRForForcedAlignment(Qwen3ASRPreTrainedModel):
         if labels is not None:
             loss = self.loss_function(logits=logits, labels=labels, vocab_size=self.num_timestamp_bins)
 
-        return SequenceClassifierOutput(
+        return TokenClassifierOutput(
             loss=loss,
             logits=logits,
             hidden_states=outputs.hidden_states,

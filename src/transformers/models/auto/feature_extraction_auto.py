@@ -69,6 +69,7 @@ FEATURE_EXTRACTOR_MAPPING_NAMES = OrderedDict(
         ("qwen2_5_omni", "WhisperFeatureExtractor"),
         ("qwen2_audio", "WhisperFeatureExtractor"),
         ("qwen3_asr", "WhisperFeatureExtractor"),
+        ("qwen3_forced_aligner", "WhisperFeatureExtractor"),
         ("qwen3_omni_moe", "WhisperFeatureExtractor"),
         ("seamless_m4t", "SeamlessM4TFeatureExtractor"),
         ("seamless_m4t_v2", "SeamlessM4TFeatureExtractor"),
