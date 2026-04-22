@@ -769,6 +769,8 @@
         title: OLMoE
       - local: model_doc/olmo_hybrid
         title: OlmoHybrid
+      - local: model_doc/openai_privacy_filter
+        title: OpenAI Privacy Filter
       - local: model_doc/opt
         title: OPT
       - local: model_doc/pegasus
