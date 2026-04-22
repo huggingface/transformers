@@ -1908,9 +1908,7 @@ class Trainer:
                 return loss_mb.reduce_mean().detach().to(self.args.device)
 
             with self.compute_loss_context_manager():
-                loss = self.compute_loss(
-                    model, inputs, num_items_in_batch=num_items_in_batch, return_outputs=True
-                )
+                loss = self.compute_loss(model, inputs, num_items_in_batch=num_items_in_batch, return_outputs=True)
             outputs = None
             if isinstance(loss, tuple):
                 loss, outputs = loss
@@ -1990,12 +1988,7 @@ class Trainer:
                 continue
             if key in skip_top_level:
                 continue
-            if (
-                isinstance(value, torch.Tensor)
-                and value.numel() == 1
-                and key != "loss"
-                and "loss" in key.lower()
-            ):
+            if isinstance(value, torch.Tensor) and value.numel() == 1 and key != "loss" and "loss" in key.lower():
                 collected[key] = value
         return collected
 
