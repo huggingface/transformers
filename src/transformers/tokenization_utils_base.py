@@ -1412,6 +1412,11 @@ class PreTrainedTokenizerBase(PushToHubMixin):
         Args:
             special_tokens: Dictionary of {token_name: token_value}
         """
+        if isinstance(special_tokens, list):
+            raise ValueError(
+                "This model's tokenizer config uses the list-based `extra_special_tokens` format "
+                "introduced in transformers v5. Please upgrade: pip install 'transformers>=5.0.0'"
+            )
         self.SPECIAL_TOKENS_ATTRIBUTES = self.SPECIAL_TOKENS_ATTRIBUTES + list(special_tokens.keys())
         for key, value in special_tokens.items():
             if isinstance(value, (str, AddedToken)):
