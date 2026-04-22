@@ -244,17 +244,23 @@ class MiniCPMV4_6ImageProcessor(TorchvisionBackend):
             per_image_target_sizes.append(image_ts)
             all_grids.append(best_grid if best_grid is not None else [0, 0])
 
-        # FIXME: clean up code and make sure all are tensors
-        pixel_values = [torch.stack(sublist) for sublist in per_image_pixel_values]
-        pixel_values = torch.cat(pixel_values, dim=-1)
+        all_pv = [pv for sublist in per_image_pixel_values for pv in sublist]
+        pixel_values = torch.cat(all_pv, dim=-1).unsqueeze(0)
+
+        all_ts = [ts for sublist in per_image_target_sizes for ts in sublist]
+        target_sizes = torch.tensor(all_ts, dtype=torch.int32)
+
+        num_patches_per_image = [len(sublist) for sublist in per_image_pixel_values]
 
         return BatchFeature(
             data={
                 "pixel_values": pixel_values,
-                "target_sizes": per_image_target_sizes,
+                "target_sizes": target_sizes,
                 "grids": all_grids,
+                "num_patches_per_image": num_patches_per_image,
             },
             tensor_type=return_tensors,
+            skip_tensor_conversion=["grids", "num_patches_per_image"],
         )
 
 

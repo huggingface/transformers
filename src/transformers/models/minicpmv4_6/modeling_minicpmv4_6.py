@@ -26,6 +26,7 @@ import torch
 import torch.nn.functional as F
 from torch import nn
 
+from ... import initialization as init
 from ...activations import ACT2FN
 from ...generation import GenerationMixin
 from ...modeling_layers import GradientCheckpointingLayer
@@ -576,9 +577,7 @@ class MiniCPMV4_6Merger(nn.Module):
         # Downsample `self.merger_times - 1` times and finally apply projection into LLM space
         self.mlp = nn.ModuleList(
             [
-                MiniCPMV4_6DownsampleMLP(
-                    hidden_size, llm_embed_dim if i == self.merger_times - 1 else hidden_size, self.merge_kernel_size
-                )
+                MiniCPMV4_6DownsampleMLP(hidden_size, llm_embed_dim if i == self.merger_times - 1 else hidden_size)
                 for i in range(self.merger_times)
             ]
         )

@@ -540,7 +540,7 @@ class MiniCPMV4_6Merger(nn.Module):
         self.mlp = nn.ModuleList(
             [
                 MiniCPMV4_6DownsampleMLP(
-                    hidden_size, llm_embed_dim if i == self.merger_times - 1 else hidden_size, self.merge_kernel_size
+                    hidden_size, llm_embed_dim if i == self.merger_times - 1 else hidden_size
                 )
                 for i in range(self.merger_times)
             ]
