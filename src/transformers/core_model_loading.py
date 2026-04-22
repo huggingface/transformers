@@ -881,22 +881,18 @@ class DtensorShardOperation:
                             dims (e.g. Shard(1) on H).
 
     (c) One half of a pack — source smaller than param on the packed axis
-        Some weights are concatenated at load time (gate+up → gate_up,
-        Q+K+V → qkv). The checkpoint stores each half separately
-        (e.g. `w1` before concat with `w3`), so source is smaller than
-        param along the packed axis.
+        Some params are built by concatenating two checkpoint tensors
+        (gate+up → gate_up, Q+K+V → qkv). Each half is loaded on its own,
+        so source is smaller than param on that axis.
         Example: param = (2H, D), source = (H, D) for just `w1`.
-        → _StridedShard on the packed axis cannot stride over a pack
-            that does not exist yet, so it degrades to a plain contiguous
-            cut here. The WeightConverter re-creates the packing later by
-            concatenating the per-half results.
+        → _StridedShard can't stride a pack that doesn't exist yet, so on
+            the packed axis it falls back to a plain contiguous cut. The
+            WeightConverter concatenates the halves afterwards.
 
     (b) + (c) co-occurring
-        MoE models where each expert is *also* stored pre-pack — e.g.
-        `experts.2.w1.weight` is one expert (b) AND only half of the
-        gate_up pack (c). Handled in order: resolve the expert axis
-        first (b), then run the generic interval loop over whatever
-        placements remain (c behavior falls out naturally).
+        MoE checkpoint that is both per-expert and pre-pack (e.g.
+        `experts.2.w1.weight`). Resolve the expert axis first (b); the
+        generic loop then handles the remaining dims with (c) behavior.
     """
 
     def __init__(self, param: DTensor):
@@ -910,34 +906,6 @@ class DtensorShardOperation:
     def shard_tensor(
         self, source: torch.Tensor, tensor_idx: int | None = None, device=None, dtype=None
     ) -> torch.Tensor | None:
-        # Idea
-        # ----
-        # Mesh convention: [FSDP, TP]; FSDP shards dim 0; TP shards dim 0
-        # (ColwiseParallel) or dim 1 (RowwiseParallel).
-        #
-        # Two placement layouts show up in practice:
-        #
-        # ── Case 1: FSDP and TP on different dims — [Shard(0), Shard(1)] ──
-        # Arises on row-parallel layers (o_proj, down_proj). No collision:
-        #
-        #   2×2 mesh, param (8, 8), rank (0, 0):
-        #     initial        → dim 0: [(0, 8)]  dim 1: [(0, 8)]
-        #     after Shard(0) → dim 0: [(0, 4)]  dim 1: [(0, 8)]
-        #     after Shard(1) → dim 0: [(0, 4)]  dim 1: [(0, 4)]
-        #     → source[0:4, 0:4]
-        #
-        # ── Case 2: FSDP and TP on the same dim — [_StridedShard(0, sf),
-        #    Shard(0)] ────────────────────────────────────────────────────
-        # Arises on column-parallel layers (q/k/v/qkv_proj, gate/up/gate_up
-        # _proj, lm_head). Both want dim 0 → collision; the stride resolves
-        # it so TP still sees contiguous chunks:
-        #
-        #   2×2 mesh, size-4 dim 0, sf=2:
-        #     after _StridedShard(0, sf=2): split (0,4) into 2 groups
-        #         (0,2) and (2,4); each FSDP rank keeps its half of each →
-        #         FSDP 0 → [(0,1),(2,3)]   FSDP 1 → [(1,2),(3,4)]
-        #     after Shard(0): view the list flat, take TP rank's half →
-        #         (0,0)→row 0  (0,1)→row 2  (1,0)→row 1  (1,1)→row 3
         source_shape = list(source.shape) if isinstance(source, torch.Tensor) else source.get_shape()
 
         source_missing_leading_axis = self.param_ndim > len(source_shape)
@@ -963,30 +931,15 @@ class DtensorShardOperation:
                 # Expert axis was the only sharding → keep the whole expert tensor.
                 return source[...].to(device=device, dtype=dtype)
         
-        # How this maps to the code below
-        # -------------------------------
-        # - intervals[d] (line: intervals = [[(0, size)] ...]) is the
-        #   per-dim range list, initialized to the whole source axis.
-        # - Each loop iteration picks one helper to narrow
-        #   intervals[source_dim]. The default rule is:
-        #       Shard         → _contiguous_intervals
-        #       _StridedShard → _strided_intervals
-        #   ...but there is one exception: if `source` has fewer dims
-        #   than `param` (cases b or c), _StridedShard *also* falls back
-        #   to _contiguous_intervals. That is what `is_interleaved`
-        #   encodes in a single line.
-
-        #   All four combinations:
-        #
-        #     placement type  source ndim       → branch                 case
-        #     Shard           same as param     → _contiguous_intervals  (a)
-        #     _StridedShard   same as param     → _strided_intervals     (a)
-        #     Shard           less than param   → _contiguous_intervals  (b)/(c)
-        #     _StridedShard   less than param   → _contiguous_intervals  (b)/(c)
-
+        # Example - case (a) full weight
+        #   input  (source_shape=(8, 16), placements=[Shard(0)], world_size=2):
+        #       intervals -> [[(0, 8)], [(0, 16)]]         # whole range on every source dim
+        #   output:
+        #       rank 0: intervals -> [[(0, 4)], [(0, 16)]]  # → source[0:4, 0:16]
+        #       rank 1: intervals -> [[(4, 8)], [(0, 16)]]  # → source[4:8, 0:16]
         intervals: list[list[tuple[int, int]]] = [[(0, size)] for size in source_shape]
         for mesh_dim, placement in placements:
-            source_dim = self._source_dim(placement.dim, source_shape)
+            source_dim = self._param_dim_to_source_dim(placement.dim, source_shape)
             sub_mesh = self._get_sub_mesh(mesh_dim)
             rank, world_size = sub_mesh.get_local_rank(), sub_mesh.size()
 
@@ -997,7 +950,8 @@ class DtensorShardOperation:
                 )
             else:
                 intervals[source_dim] = self._contiguous_intervals(intervals[source_dim], rank, world_size)
-        # Finally, read the source with those intervals (concatenating along a multi-interval dim if any).
+
+        # Read the source with those intervals (concatenating along a multi-interval dim if any).
         return self._slice_and_cat(source, intervals, device, dtype)
 
     def _strided_intervals(
@@ -1033,12 +987,6 @@ class DtensorShardOperation:
     ) -> list[tuple[int, int]]:
         """Shard semantics: treat `intervals` as one flat logical sequence and take this rank's contiguous chunk of it.
 
-        For a single input interval this is a plain per-interval cut. For
-        multiple intervals (left by a prior _StridedShard on the same dim),
-        the chunk can cross range boundaries — walk the intervals and emit
-        the sub-ranges that fall inside [my_offset, my_offset + my_size) in
-        the flat view.
-
         Examples:
             Single interval, plain split:
                 intervals = [(0, 8)], world_size = 2
@@ -1051,15 +999,6 @@ class DtensorShardOperation:
                     flat view = [row 0, row 2], rank 0 owns first half
                     rank 0 → [(0, 1)]    (row 0 only)
                     rank 1 → [(2, 3)]    (row 2 only)
-
-            Multiple intervals, chunk crosses a boundary:
-                intervals = [(0, 2), (4, 6)], world_size = 2, rank = 0
-                    flat view = [0,1,2,3] mapped to rows [0,1,4,5];
-                    rank 0 owns flat positions 0..1 → rows 0..1
-                    → [(0, 2)]
-                Same with world_size = 4, rank = 1:
-                    rank 1 owns flat position 1 → row 1
-                    → [(1, 2)]
         """
         total = sum(end - start for start, end in intervals)
         my_size, my_offset = Shard.local_shard_size_and_offset(total, world_size, rank)
@@ -1090,6 +1029,21 @@ class DtensorShardOperation:
         owns on that source dim. At most one dim may have more than one
         piece (from _StridedShard); two such dims would require a 2D outer
         product of reads and are rejected.
+
+        Examples:
+            1) Single interval per dim — one contiguous read:
+                source shape = [8, 4]
+                intervals = [[(0, 4)], [(0, 4)]]
+                    → source[0:4, 0:4]
+
+            2) Multi-interval on one dim — read each piece, concat on that dim:
+                source shape = [8, 4]
+                intervals = [[(0, 2), (4, 6)], [(0, 4)]]
+                    → cat([source[0:2, 0:4], source[4:6, 0:4]], dim=0)
+
+            3) Multi-interval on two dims — rejected:
+                intervals = [[(0, 2), (4, 6)], [(0, 1), (2, 3)]]
+                    → ValueError (would require a 2D outer product of reads)
         """
         multi_interval_dim: int | None = None
         slices: list[slice] = []
@@ -1126,21 +1080,40 @@ class DtensorShardOperation:
         return first_owned_expert <= expert_idx < first_owned_expert + self.local_shape[0]
 
     def _get_sub_mesh(self, mesh_dim: int):
-        """1-D sub-mesh along a single mesh axis (e.g. just the TP axis)."""
         if self.device_mesh.ndim > 1:
             return self.device_mesh[self.device_mesh.mesh_dim_names[mesh_dim]]
         return self.device_mesh
 
     def _norm_dim(self, dim: int) -> int:
-        """Normalize a (possibly negative) param dim to a non-negative index."""
         return dim if dim >= 0 else self.param_ndim + dim
 
-    def _source_dim(self, placement_dim: int, source_shape) -> int:
+    def _param_dim_to_source_dim(self, placement_dim: int, source_shape) -> int:
         """Map a placement's param dim onto the corresponding source-tensor dim.
 
         When the source has fewer dims than the param (expert or pre-pack
         source), leading axes are absent: any placement dim past the missing
         prefix shifts down by the difference.
+
+        Examples:
+            1) No missing dims (common case) — source and param align, no shift:
+                param shape = [out, in], source shape = [out, in]
+                    placement_dim = 1 → source_dim = 1
+
+            2) Stacked experts — source is one expert (missing `num_experts` axis):
+                param shape = [8, 4096, 2048], source shape = [4096, 2048]
+                missing_leading_dims = 1
+                    placement_dim = 1 (out) → source_dim = 0
+                    placement_dim = 2 (in)  → source_dim = 1
+
+            3) Packed QKV — source is one of Q/K/V (missing pack axis):
+                param shape = [3, 4096, 4096], source shape = [4096, 4096]
+                missing_leading_dims = 1
+                    placement_dim = 1 → source_dim = 0
+
+            4) Two missing leading dims (stacked experts + packed QKV):
+                param shape = [8, 3, 4096, 4096], source shape = [4096, 4096]
+                missing_leading_dims = 2
+                    placement_dim = 3 → source_dim = 1
         """
         dim = self._norm_dim(placement_dim)
         missing_leading_dims = self.param_ndim - len(source_shape)

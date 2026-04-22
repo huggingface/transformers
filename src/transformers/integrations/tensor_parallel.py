@@ -282,11 +282,13 @@ class PrepareModuleInputOutput(ParallelStyle):
 
 
 def _accumulate_local_param_grad(original_param: DTensor, local_grad: torch.Tensor) -> torch.Tensor:
-    """Copy a detached local grad into the original DTensor parameter.
+    """Stitch a local grad back onto the original DTensor parameter.
 
-    Packed ``_StridedShard`` parameters cannot rely on autograd through
-    ``DTensor.to_local()`` on older torch releases, so we materialize a local leaf
-    parameter for the forward and stitch its gradient back manually here.
+    During forward we replace the DTensor param with a detached plain-tensor
+    leaf (see ``_local_dtensor_params``) because ``grouped_mm`` / fused ops do
+    not accept DTensor inputs. That swap breaks the autograd link between the
+    local leaf's grad and the DTensor param's ``.grad``, so this tensor hook
+    runs on the leaf and copies/accumulates the grad onto the original DTensor.
     """
     tensor_meta = original_param._spec.tensor_meta
     detached_grad = local_grad.detach()
@@ -315,9 +317,10 @@ def _accumulate_local_param_grad(original_param: DTensor, local_grad: torch.Tens
 def _local_dtensor_params(module):
     """Temporarily swap DTensor params for local leaf params during one forward.
 
-    Needed because grouped_mm / fused ops on DTensors trigger broken autograd
-    paths for ``_StridedShard``. We run forward on a plain-tensor leaf param and
-    stitch its gradient back onto the original DTensor via a hook. Restores the
+    Needed because ``grouped_mm`` / fused ops do not accept DTensor inputs: we
+    forward through a detached plain-tensor leaf, then rely on
+    ``_accumulate_local_param_grad`` (registered as a tensor hook on the leaf)
+    to copy the backward grad onto the original DTensor param. Restores the
     DTensor params on exit (even on exception).
     """
     shadows = {}
