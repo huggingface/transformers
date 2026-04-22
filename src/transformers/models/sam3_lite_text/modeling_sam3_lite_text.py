@@ -19,7 +19,7 @@
 # limitations under the License.
 
 import math
-from collections.abc import Callable, Iterable
+from collections.abc import Callable
 from dataclasses import dataclass
 
 import numpy as np
@@ -47,7 +47,6 @@ from .configuration_sam3_lite_text import (
     Sam3LiteTextGeometryEncoderConfig,
     Sam3LiteTextMaskDecoderConfig,
     Sam3LiteTextTextConfig,
-    Sam3LiteTextViTConfig,
 )
 
 
@@ -341,140 +340,6 @@ class Sam3LiteTextTextEmbeddings(nn.Module):
         return hidden_states
 
 
-class Sam3LiteTextViTRotaryEmbedding(nn.Module):
-    """
-    Vision Rotary Position Embedding for SAM3_LITE_TEXT, following transformers library standards.
-    Supports 2D (axial) rotary embeddings for spatial dimensions.
-    """
-
-    def __init__(self, config: Sam3LiteTextViTConfig, end_x: int, end_y: int, scale: float = 1.0):
-        super().__init__()
-        dim = config.hidden_size // config.num_attention_heads
-        # Ensure even dimension for proper axial splitting
-        if dim % 4 != 0:
-            raise ValueError("Dimension must be divisible by 4 for axial RoPE")
-        self.end_x, self.end_y = end_x, end_y
-        self.dim = dim
-        self.rope_theta = config.rope_theta
-        self.scale = scale
-        freqs = 1.0 / (config.rope_theta ** (torch.arange(0, dim, 4)[: (dim // 4)].float() / dim))
-
-        flattened_indices = torch.arange(end_x * end_y, dtype=torch.long)
-        x_positions = (flattened_indices % end_x) * scale
-        y_positions = torch.div(flattened_indices, end_x, rounding_mode="floor") * scale
-        freqs_x = torch.outer(x_positions, freqs).float()
-        freqs_y = torch.outer(y_positions, freqs).float()
-        inv_freq = torch.cat([freqs_x, freqs_y], dim=-1)
-        inv_freq = inv_freq.repeat_interleave(2, dim=-1)
-        # directly register the cos and sin embeddings as we have a fixed feature shape
-        self.register_buffer("rope_embeddings_cos", inv_freq.cos(), persistent=False)
-        self.register_buffer("rope_embeddings_sin", inv_freq.sin(), persistent=False)
-
-    @torch.no_grad()
-    def forward(self) -> tuple[torch.Tensor, torch.Tensor]:
-        # As the feature map size is fixed for each stage, we can just return the pre-computed embeddings.
-        return self.rope_embeddings_cos, self.rope_embeddings_sin
-
-
-class Sam3LiteTextViTPatchEmbeddings(nn.Module):
-    """
-    This class turns `pixel_values` of shape `(batch_size, num_channels, height, width)` into the initial
-    `hidden_states` (patch embeddings) of shape `(batch_size, seq_length, hidden_size)` to be consumed by a
-    Transformer.
-    """
-
-    def __init__(self, config: Sam3LiteTextViTConfig):
-        super().__init__()
-        image_size, patch_size = config.pretrain_image_size, config.patch_size
-        num_channels, hidden_size = config.num_channels, config.hidden_size
-
-        image_size = image_size if isinstance(image_size, Iterable) else (image_size, image_size)
-        patch_size = patch_size if isinstance(patch_size, Iterable) else (patch_size, patch_size)
-        num_patches = (image_size[1] // patch_size[1]) * (image_size[0] // patch_size[0])
-        self.image_size = image_size
-        self.patch_size = patch_size
-        self.num_channels = num_channels
-        self.num_patches = num_patches
-
-        self.projection = nn.Conv2d(num_channels, hidden_size, kernel_size=patch_size, stride=patch_size, bias=False)
-
-    def forward(self, pixel_values: torch.Tensor) -> torch.Tensor:
-        embeddings = self.projection(pixel_values.to(self.projection.weight.dtype)).flatten(2).transpose(1, 2)
-        return embeddings
-
-
-class Sam3LiteTextViTEmbeddings(nn.Module):
-    """
-    Construct the patch embeddings and position embeddings for SAM3_LITE_TEXT ViT.
-
-    Position embeddings are tiled (not interpolated) when resizing to match different input sizes.
-    """
-
-    def __init__(self, config: Sam3LiteTextViTConfig):
-        super().__init__()
-
-        self.patch_embeddings = Sam3LiteTextViTPatchEmbeddings(config)
-        num_patches = self.patch_embeddings.num_patches
-        self.position_embeddings = nn.Parameter(
-            torch.randn(1, num_patches, config.hidden_size)
-        )  # !Remove cls token in convert weights!
-
-        self.dropout = nn.Dropout(config.hidden_dropout)
-        self.patch_size = config.patch_size
-
-    def _tile_position_embeddings(
-        self,
-        position_embeddings: torch.Tensor,
-        height: int,
-        width: int,
-    ) -> torch.Tensor:
-        """
-        Tile position embeddings to match target spatial dimensions.
-        Args:
-            position_embeddings: Shape [1, num_pretrain_patches, hidden_size]
-            height: Target height in patches
-            width: Target width in patches
-
-        Returns:
-            Shape [1, height * width, hidden_size]
-        """
-        pretrain_size = int(position_embeddings.shape[1] ** 0.5)
-
-        # Skip tiling if sizes match (but always tile during tracing for consistent graph)
-        if not torch.jit.is_tracing() and pretrain_size == height and pretrain_size == width:
-            return position_embeddings.reshape(1, height * width, -1)
-
-        # Tile position embeddings to match target spatial dimensions
-        hidden_size = position_embeddings.shape[-1]
-        pos_embed = position_embeddings.reshape(1, pretrain_size, pretrain_size, hidden_size).permute(0, 3, 1, 2)
-        repeat_h = height // pretrain_size + 1
-        repeat_w = width // pretrain_size + 1
-        pos_embed = pos_embed.tile([1, 1, repeat_h, repeat_w])[:, :, :height, :width]
-        return pos_embed.permute(0, 2, 3, 1).reshape(1, height * width, hidden_size)
-
-    def forward(
-        self,
-        pixel_values: torch.Tensor,
-        interpolate_pos_encoding: bool = False,
-    ) -> torch.Tensor:
-        height, width = pixel_values.shape[-2:]
-        embeddings = self.patch_embeddings(pixel_values)
-
-        # Calculate spatial dimensions in patches
-        height_patches = height // self.patch_size
-        width_patches = width // self.patch_size
-
-        position_embeddings = self._tile_position_embeddings(
-            self.position_embeddings,
-            height_patches,
-            width_patches,
-        )
-        embeddings = embeddings + position_embeddings
-        embeddings = self.dropout(embeddings)
-
-        return embeddings
-
-
 @auto_docstring
 class Sam3LiteTextPreTrainedModel(PreTrainedModel):
     config_class = Sam3LiteTextConfig
@@ -490,21 +355,6 @@ class Sam3LiteTextPreTrainedModel(PreTrainedModel):
     @torch.no_grad()
     def _init_weights(self, module):
         super()._init_weights(module)
-        if isinstance(module, Sam3LiteTextViTEmbeddings):
-            init.normal_(module.position_embeddings, mean=0.0, std=self.config.initializer_range)
-        elif isinstance(module, Sam3LiteTextViTRotaryEmbedding):
-            end_x, end_y = module.end_x, module.end_y
-            dim = module.dim
-            freqs = 1.0 / (module.rope_theta ** (torch.arange(0, dim, 4)[: (dim // 4)].float() / dim))
-            flattened_indices = torch.arange(end_x * end_y, dtype=torch.long)
-            x_positions = (flattened_indices % end_x) * module.scale
-            y_positions = torch.div(flattened_indices, end_x, rounding_mode="floor") * module.scale
-            freqs_x = torch.outer(x_positions, freqs).float()
-            freqs_y = torch.outer(y_positions, freqs).float()
-            inv_freq = torch.cat([freqs_x, freqs_y], dim=-1)
-            inv_freq = inv_freq.repeat_interleave(2, dim=-1)
-            init.copy_(module.rope_embeddings_cos, inv_freq.cos())
-            init.copy_(module.rope_embeddings_sin, inv_freq.sin())
         if isinstance(module, Sam3LiteTextTextPositionEmbedding):
             init.normal_(module.position_embedding, std=module.position_embedding.shape[-1] ** -0.5)
         elif isinstance(module, Sam3LiteTextTextModel):

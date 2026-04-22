@@ -44,7 +44,6 @@ from transformers import (
     TrainingArguments,
     default_data_collator,
     logging,
-    set_seed,
 )
 from transformers.integrations import activate_neftune
 from transformers.loss.loss_utils import ForCausalLMLoss
@@ -141,6 +140,47 @@ class TrainerMixedPrecisionTest(TestCasePlus, TrainerIntegrationCommon):
 
 
 # ---------------------------------------------------------------------------
+# DDP kwargs forwarding tests
+# ---------------------------------------------------------------------------
+
+
+@require_torch
+class TrainerDDPKwargsTest(TestCasePlus):
+    """The `ddp_*` TrainingArguments fields must reach DistributedDataParallelKwargs."""
+
+    def _get_ddp_kwargs(self, **training_args_overrides):
+        """Build a Trainer, run _build_accelerator_args, return the DDP kwargs dict."""
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            args = TrainingArguments(output_dir=tmp_dir, max_steps=1, **training_args_overrides)
+            trainer = Trainer(model=RegressionModel(), args=args, train_dataset=RegressionDataset())
+            accelerator_args = trainer._build_accelerator_args()
+            (handler,) = accelerator_args["kwargs_handlers"]
+            return handler
+
+    def test_ddp_static_graph_true_reaches_accelerator(self):
+        """ddp_static_graph=True is forwarded as static_graph=True to DistributedDataParallelKwargs."""
+        handler = self._get_ddp_kwargs(ddp_static_graph=True)
+        self.assertTrue(handler.static_graph)
+
+    def test_ddp_static_graph_false_reaches_accelerator(self):
+        """ddp_static_graph=False is forwarded as static_graph=False."""
+        handler = self._get_ddp_kwargs(ddp_static_graph=False)
+        self.assertFalse(handler.static_graph)
+
+    def test_ddp_static_graph_none_preserves_default(self):
+        """ddp_static_graph=None (default) must NOT override DistributedDataParallelKwargs' own default (False).
+
+        Regression guard: the conditional in _build_accelerator_args must keep static_graph out of ddp_kwargs
+        when the flag is unset, otherwise clusters not configured for it would silently switch behavior.
+        """
+        handler = self._get_ddp_kwargs()  # ddp_static_graph unset
+        # DistributedDataParallelKwargs default is False. If our conditional is broken and we always injected
+        # the attribute, this would still be False only by coincidence. Cross-check with ddp_static_graph=True
+        # (above) that the kwarg IS plumbed when set — together these tests pin both directions.
+        self.assertFalse(handler.static_graph)
+
+
+# ---------------------------------------------------------------------------
 # Gradient accumulation tests
 # ---------------------------------------------------------------------------
 
@@ -149,234 +189,8 @@ class TrainerMixedPrecisionTest(TestCasePlus, TrainerIntegrationCommon):
 class TrainerGradientAccumulationTest(TestCasePlus, TrainerIntegrationCommon):
     """Tests for gradient accumulation loss alignment and batch counting."""
 
-    def setUp(self):
-        super().setUp()
-
-        with tempfile.TemporaryDirectory() as tmp_dir:
-            trainer = get_regression_trainer(learning_rate=0.1, output_dir=tmp_dir)
-            trainer.train()
-            self.default_trained_model = (trainer.model.a, trainer.model.b)
-
-    def check_trained_model(self, model, **kwargs):
-        (a, b) = self.default_trained_model
-        torch.testing.assert_close(model.a, a, **kwargs)
-        torch.testing.assert_close(model.b, b, **kwargs)
-
-    def test_gradient_accumulation(self):
-        # Training with half the batch size but accumulation steps as 2 should give the same training losses.
-        with tempfile.TemporaryDirectory() as tmp_dir:
-            trainer = get_regression_trainer(
-                gradient_accumulation_steps=2, per_device_train_batch_size=4, learning_rate=0.1, output_dir=tmp_dir
-            )
-            trainer.train()
-            self.check_trained_model(trainer.model)
-
-    @slow
-    def test_gradient_accumulation_loss_alignment_with_model_loss(self):
-        set_seed(42)
-
-        model_name = "nickypro/tinyllama-15M"
-        dataset_name = "wikitext"
-        dataset_config = "wikitext-2-raw-v1"
-        dataset = datasets.load_dataset(dataset_name, dataset_config, split="train[:40]")
-        tokenizer = AutoTokenizer.from_pretrained(model_name)
-
-        tokenizer.pad_token = tokenizer.eos_token
-
-        def tokenize_function(examples):
-            return tokenizer(examples["text"], max_length=16, padding="max_length", truncation=True)
-
-        tokenized_dataset = dataset.map(tokenize_function, batched=True, remove_columns=dataset.column_names)
-
-        data_collator = DataCollatorForLanguageModeling(tokenizer=tokenizer, mlm=False)
-
-        args_kwargs = {
-            "logging_steps": 1,
-            "max_steps": 5,
-            "learning_rate": 3e-4,
-            "disable_tqdm": True,
-        }
-
-        with tempfile.TemporaryDirectory() as tmp_dir:
-            args = TrainingArguments(
-                tmp_dir,
-                **args_kwargs,
-            )
-            # train with base loss
-            set_seed(42)
-            model = AutoModelForCausalLM.from_pretrained(model_name, dtype=torch.float32)
-            base_loss_callback = StoreLossCallback()
-            trainer = Trainer(
-                model,
-                args,
-                train_dataset=tokenized_dataset,
-                callbacks=[base_loss_callback],
-                data_collator=data_collator,
-            )
-            assert trainer.model_accepts_loss_kwargs
-            trainer.train()
-
-            args = TrainingArguments(
-                tmp_dir,
-                **args_kwargs,
-                gradient_accumulation_steps=2,
-                per_device_train_batch_size=4,
-            )
-
-            # train with gradient accumulation
-            set_seed(42)
-            model = AutoModelForCausalLM.from_pretrained(model_name, dtype=torch.float32)
-            grad_accum_loss_callback = StoreLossCallback()
-            trainer = Trainer(
-                model,
-                args,
-                train_dataset=tokenized_dataset,
-                callbacks=[grad_accum_loss_callback],
-                data_collator=data_collator,
-            )
-            assert trainer.model_accepts_loss_kwargs
-            trainer.train()
-
-            # train with broken loss
-            set_seed(42)
-            model = AutoModelForCausalLM.from_pretrained(model_name, dtype=torch.float32)
-            broken_loss_callback = StoreLossCallback()
-            trainer = Trainer(
-                model,
-                args,
-                train_dataset=tokenized_dataset,
-                callbacks=[broken_loss_callback],
-                data_collator=data_collator,
-            )
-            # disable model_accepts_loss_kwargs so that "num_items_in_batch" is not passed to the model
-            trainer.model_accepts_loss_kwargs = False
-            trainer.train()
-
-        # Calculate the difference between the base loss and the grad_accum loss
-        diff_truth = [
-            abs(base - grad) for base, grad in zip(base_loss_callback.losses, grad_accum_loss_callback.losses)
-        ]
-        diff_broken = [abs(base - grad) for base, grad in zip(base_loss_callback.losses, broken_loss_callback.losses)]
-
-        # all diff truth should be quite close
-        self.assertLess(max(diff_truth), 0.01, f"Difference {max(diff_truth)} is not within 0.01")
-        # max diff broken should be very off ("very off" is arbitrary, but as long as it's bigger than 0.1, it's fine)
-        self.assertGreater(max(diff_broken), 0.7, f"Difference {max(diff_broken)} is not greater than 0.7")
-
-        loss_base = sum(base_loss_callback.losses)
-        loss_broken = sum(broken_loss_callback.losses)
-
-        # mean/sum loss should not vary too much.
-        relative_diff = abs(loss_base - loss_broken) / max(loss_base, loss_broken)
-        self.assertLess(relative_diff, 0.2, f"Relative difference {relative_diff} is not within 0.2")
-
-    def test_gradient_accumulation_loss_alignment_with_loss_func(self):
-        set_seed(42)
-
-        model_name = "roneneldan/TinyStories-33M"
-        dataset_name = "Salesforce/wikitext"
-        dataset_config = "wikitext-2-raw-v1"
-        dataset = datasets.load_dataset(dataset_name, dataset_config, split="train[:40]")
-        tokenizer = AutoTokenizer.from_pretrained(model_name)
-
-        tokenizer.pad_token = tokenizer.eos_token
-
-        def tokenize_function(examples):
-            return tokenizer(examples["text"], max_length=16, padding="max_length", truncation=True)
-
-        tokenized_dataset = dataset.map(tokenize_function, batched=True)
-
-        tokenizer.pad_token = tokenizer.eos_token
-        data_collator = DataCollatorForLanguageModeling(tokenizer=tokenizer, mlm=False)
-
-        model = AutoModelForCausalLM.from_pretrained(model_name)
-
-        def compute_loss(logits, labels, vocab_size, num_items_in_batch, disable_num_items_in_batch=False):
-            if disable_num_items_in_batch:
-                num_items_in_batch = None
-            return ForCausalLMLoss(logits["logits"], labels, vocab_size, num_items_in_batch)
-
-        loss_fn = partial(compute_loss, vocab_size=model.config.vocab_size)
-
-        base_loss_callback = StoreLossCallback()
-
-        args_kwargs = {
-            "logging_steps": 1,
-            "max_steps": 5,
-            "learning_rate": 3e-4,
-            "disable_tqdm": True,
-        }
-
-        with tempfile.TemporaryDirectory() as tmp_dir:
-            args = TrainingArguments(
-                tmp_dir,
-                **args_kwargs,
-            )
-            trainer = Trainer(
-                model,
-                args,
-                train_dataset=tokenized_dataset,
-                callbacks=[base_loss_callback],
-                compute_loss_func=loss_fn,
-                data_collator=data_collator,
-            )
-            trainer.train()
-
-        grad_accum_loss_callback = StoreLossCallback()
-        with tempfile.TemporaryDirectory() as tmp_dir:
-            args = TrainingArguments(
-                tmp_dir,
-                **args_kwargs,
-                gradient_accumulation_steps=2,
-                per_device_train_batch_size=4,
-            )
-            set_seed(42)
-            model = AutoModelForCausalLM.from_pretrained(model_name)
-            trainer = Trainer(
-                model,
-                args,
-                train_dataset=tokenized_dataset,
-                callbacks=[grad_accum_loss_callback],
-                compute_loss_func=loss_fn,
-                data_collator=data_collator,
-            )
-            trainer.train()
-
-            set_seed(42)
-            model = AutoModelForCausalLM.from_pretrained(model_name)
-            broken_loss_callback = StoreLossCallback()
-            # we need to disable num_items_in_batch because since we are passing a custom loss,
-            # we make the assumption that num_items_in_batch is handled correctly
-            loss_fn = partial(compute_loss, vocab_size=model.config.vocab_size, disable_num_items_in_batch=True)
-            trainer = Trainer(
-                model,
-                args,
-                train_dataset=tokenized_dataset,
-                callbacks=[broken_loss_callback],
-                compute_loss_func=loss_fn,
-                data_collator=data_collator,
-            )
-            trainer.train()
-
-            # Calculate the difference between the base loss and the grad_accum loss
-            diff_truth = [
-                abs(base - grad) for base, grad in zip(base_loss_callback.losses, grad_accum_loss_callback.losses)
-            ]
-            diff_broken = [
-                abs(base - grad) for base, grad in zip(base_loss_callback.losses, broken_loss_callback.losses)
-            ]
-
-            # all diff truth should be quite close
-            self.assertLess(max(diff_truth), 0.01, f"Difference {max(diff_truth)} is not within 0.01")
-
-            # max diff broken should be very off
-            self.assertGreater(max(diff_broken), 3, f"Difference {max(diff_broken)} is not greater than 3")
-
     def test_gradient_accumulation_steps_not_leaked_to_accelerator(self):
-        """
-        Regression test: the Trainer should not pass its gradient_accumulation_steps
-        to the Accelerator.
-        """
+        """The Trainer must not pass its gradient_accumulation_steps to the Accelerator. See #45305."""
         with tempfile.TemporaryDirectory() as tmp_dir:
             args = TrainingArguments(
                 output_dir=tmp_dir,
@@ -384,79 +198,119 @@ class TrainerGradientAccumulationTest(TestCasePlus, TrainerIntegrationCommon):
                 gradient_accumulation_steps=4,
                 max_steps=1,
             )
-            trainer = Trainer(
-                model=RegressionModel(),
-                args=args,
-                train_dataset=RegressionDataset(),
-            )
-            self.assertEqual(
-                trainer.accelerator.gradient_accumulation_steps,
-                1,
-                "Trainer should not leak gradient_accumulation_steps to the Accelerator. ",
-            )
+            trainer = Trainer(model=RegressionModel(), args=args, train_dataset=RegressionDataset())
+            self.assertEqual(trainer.accelerator.gradient_accumulation_steps, 1)
 
-    def test_gradient_accumulation_grad_norm_consistency(self):
+    @classmethod
+    def setUpClass(cls):
+        super().setUpClass()
+        cls._ga_model_name = "trl-internal-testing/tiny-Qwen2ForCausalLM-2.5"
+        tokenizer = AutoTokenizer.from_pretrained(cls._ga_model_name)
+        tokenizer.pad_token = tokenizer.eos_token
+        dataset = datasets.load_dataset("Salesforce/wikitext", "wikitext-2-raw-v1", split="train[:200]")
+        # Filter empty samples to avoid nan losses with small batch sizes
+        dataset = dataset.filter(lambda ex: len(ex["text"].strip()) > 0)
+        cls._ga_dataset = dataset.map(
+            lambda ex: tokenizer(ex["text"], max_length=16, padding="max_length", truncation=True), batched=True
+        )
+        cls._ga_data_collator = DataCollatorForLanguageModeling(tokenizer=tokenizer, mlm=False)
+
+    def _check_gradient_accumulation(
+        self,
+        base_batch_size,
+        gas_batch_size,
+        gas_steps,
+        loss_tolerance,
+        model_accepts_loss_kwargs=True,
+        compute_loss_func=None,
+    ):
         """
-        Verify that gradient norms are consistent with and without gradient accumulation.
-        Training with per_device_train_batch_size=8, GAS=1 should produce the same
-        grad_norm as per_device_train_batch_size=1, GAS=8 (same effective batch).
-
-        This catches regressions where accelerator.backward() spuriously divides
-        loss by GAS when num_items_in_batch already handles the averaging.
+        Train twice with the same effective batch (base_batch_size vs gas_batch_size * gas_steps)
+        and assert grad norms and losses match.
         """
-        config = LlamaConfig(vocab_size=100, hidden_size=32, num_hidden_layers=2, num_attention_heads=4)
+        model_name = self._ga_model_name
+        args_kwargs = {"logging_steps": 1, "max_steps": 3, "learning_rate": 1e-4, "max_grad_norm": 0.0}
+        trainer_kwargs = {"train_dataset": self._ga_dataset, "data_collator": self._ga_data_collator}
+        if compute_loss_func is not None:
+            trainer_kwargs["compute_loss_func"] = compute_loss_func
 
-        x = torch.randint(0, 100, (128,))
-        train_dataset = RepeatDataset(x)
-
-        args_kwargs = {
-            "logging_steps": 1,
-            "max_steps": 3,
-            "learning_rate": 1e-4,
-            "max_grad_norm": 0.0,  # disable clipping so raw grad norms are visible
-        }
-
-        # Baseline: large batch, no accumulation
-        set_seed(42)
         with tempfile.TemporaryDirectory() as tmp_dir:
-            model = LlamaForCausalLM(config)
-            base_callback = StoreLossCallback()
+            model = AutoModelForCausalLM.from_pretrained(model_name, dtype=torch.float32)
             args = TrainingArguments(
-                tmp_dir, per_device_train_batch_size=8, gradient_accumulation_steps=1, **args_kwargs
+                tmp_dir, per_device_train_batch_size=base_batch_size, gradient_accumulation_steps=1, **args_kwargs
             )
-            trainer = Trainer(model, args, train_dataset=train_dataset, callbacks=[base_callback])
+            base_callback = StoreLossCallback()
+            trainer = Trainer(model, args, callbacks=[base_callback], **trainer_kwargs)
+            if not model_accepts_loss_kwargs:
+                trainer.model_accepts_loss_kwargs = False
             trainer.train()
             base_grad_norms = [h["grad_norm"] for h in trainer.state.log_history if "grad_norm" in h]
 
-        # GAS run: small batch, accumulation to match effective batch
-        set_seed(42)
-        with tempfile.TemporaryDirectory() as tmp_dir:
-            model = LlamaForCausalLM(config)
-            gas_callback = StoreLossCallback()
+            model = AutoModelForCausalLM.from_pretrained(model_name, dtype=torch.float32)
             args = TrainingArguments(
-                tmp_dir, per_device_train_batch_size=1, gradient_accumulation_steps=8, **args_kwargs
+                tmp_dir,
+                per_device_train_batch_size=gas_batch_size,
+                gradient_accumulation_steps=gas_steps,
+                **args_kwargs,
             )
-            trainer = Trainer(model, args, train_dataset=train_dataset, callbacks=[gas_callback])
+            gas_callback = StoreLossCallback()
+            trainer = Trainer(model, args, callbacks=[gas_callback], **trainer_kwargs)
+            if not model_accepts_loss_kwargs:
+                trainer.model_accepts_loss_kwargs = False
             trainer.train()
             gas_grad_norms = [h["grad_norm"] for h in trainer.state.log_history if "grad_norm" in h]
 
-        # Grad norms should be close (not exactly equal due to padding/token count differences)
         for step, (base_gn, gas_gn) in enumerate(zip(base_grad_norms, gas_grad_norms)):
             ratio = gas_gn / base_gn if base_gn > 0 else float("inf")
             self.assertAlmostEqual(
-                ratio,
-                1.0,
-                delta=0.3,
-                msg=f"Step {step}: grad_norm ratio {ratio:.2f} (base={base_gn:.4f}, gas={gas_gn:.4f}). "
-                f"A ratio near {args_kwargs.get('gradient_accumulation_steps', 8)} indicates GAS leak.",
+                ratio, 1.0, delta=0.1, msg=f"Step {step}: grad_norm ratio {ratio:.2f} — GAS leak suspected"
             )
+        loss_diff = [abs(b - g) for b, g in zip(base_callback.losses, gas_callback.losses)]
+        self.assertLess(max(loss_diff), loss_tolerance, f"Loss difference {max(loss_diff)} exceeds {loss_tolerance}")
 
-        # Losses should also be close
-        diff = [abs(b - g) for b, g in zip(base_callback.losses, gas_callback.losses)]
-        self.assertLess(
-            max(diff),
-            0.1,
-            f"Loss difference {max(diff)} between base and GAS runs is too large.",
+    def test_gradient_accumulation_grad_norm_with_num_items_in_batch(self):
+        """
+        With model_accepts_loss_kwargs=True the model handles loss averaging via
+        num_items_in_batch. Grad norms and losses must match between a large-batch
+        baseline and an equivalent GAS run.
+        """
+        # Tight tolerance: num_items_in_batch properly averages loss across micro-batches
+        self._check_gradient_accumulation(base_batch_size=8, gas_batch_size=1, gas_steps=8, loss_tolerance=0.001)
+        self._check_gradient_accumulation(base_batch_size=8, gas_batch_size=4, gas_steps=2, loss_tolerance=0.001)
+
+    def test_gradient_accumulation_grad_norm_without_num_items_in_batch(self):
+        """
+        With model_accepts_loss_kwargs=False the Trainer scales loss by GAS
+        itself. Grad norms and losses must still match between a large-batch
+        baseline and an equivalent GAS run.
+        """
+        # Looser tolerance: without num_items_in_batch each micro-batch is independently
+        # mean-reduced, so losses won't match as tightly.
+        self._check_gradient_accumulation(
+            base_batch_size=8,
+            gas_batch_size=4,
+            gas_steps=2,
+            loss_tolerance=0.1,
+            model_accepts_loss_kwargs=False,
+        )
+
+    def test_gradient_accumulation_grad_norm_with_compute_loss_func(self):
+        """
+        With a custom compute_loss_func that uses num_items_in_batch, grad norms
+        and losses must match between a large-batch baseline and an equivalent GAS run.
+        """
+        vocab_size = AutoModelForCausalLM.from_pretrained(self._ga_model_name, dtype=torch.float32).config.vocab_size
+
+        def compute_loss(logits, labels, vocab_size, num_items_in_batch):
+            return ForCausalLMLoss(logits["logits"], labels, vocab_size, num_items_in_batch)
+
+        # Tight tolerance: compute_loss_func uses num_items_in_batch to properly average loss
+        self._check_gradient_accumulation(
+            base_batch_size=8,
+            gas_batch_size=1,
+            gas_steps=8,
+            loss_tolerance=0.001,
+            compute_loss_func=partial(compute_loss, vocab_size=vocab_size),
         )
 
     @require_torch_multi_accelerator
