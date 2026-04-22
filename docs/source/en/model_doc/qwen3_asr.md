@@ -259,7 +259,7 @@ transcript = parsed["transcription"]
 language = parsed["language"] or "English"
 
 # Step 2: Prepare alignment inputs
-aligner_inputs, word_lists = aligner_processor.apply_forced_alignment_request(
+aligner_inputs, word_lists = aligner_processor.prepare_forced_aligner_inputs(
     audio=audio_url, transcript=transcript, language=language,
 )
 aligner_inputs = aligner_inputs.to(aligner_model.device, aligner_model.dtype)
@@ -322,7 +322,7 @@ parsed = asr_processor.decode(generated_ids, return_format="parsed")[0]
 transcript = parsed["transcription"]
 
 # Step 2–4: Align and decode
-aligner_inputs, word_lists = aligner_processor.apply_forced_alignment_request(
+aligner_inputs, word_lists = aligner_processor.prepare_forced_aligner_inputs(
     audio=audio_url, transcript=transcript, language="Chinese",
 )
 aligner_inputs = aligner_inputs.to(aligner_model.device, aligner_model.dtype)
@@ -391,7 +391,7 @@ transcript = parakeet_processor.batch_decode(outputs)[0]
 print(f"Transcript: {transcript}")
 
 # Step 2: Align with Qwen3 Forced Aligner (expects 16kHz audio)
-aligner_inputs, word_lists = aligner_processor.apply_forced_alignment_request(
+aligner_inputs, word_lists = aligner_processor.prepare_forced_aligner_inputs(
     audio=audio_array, transcript=transcript, language="English",
 )
 aligner_inputs = aligner_inputs.to(aligner_model.device, aligner_model.dtype)
@@ -442,7 +442,7 @@ with torch.inference_mode():
 transcripts = parakeet_processor.batch_decode(outputs)
 
 # Batch align with Qwen3 Forced Aligner
-aligner_inputs, word_lists = aligner_processor.apply_forced_alignment_request(
+aligner_inputs, word_lists = aligner_processor.prepare_forced_aligner_inputs(
     audio=audio_arrays, transcript=transcripts, language="English",
 )
 aligner_inputs = aligner_inputs.to(aligner_model.device, aligner_model.dtype)
@@ -568,7 +568,7 @@ print(f"Transcription: {transcription}")
 [[autodoc]] Qwen3ASRProcessor
     - __call__
     - apply_transcription_request
-    - apply_forced_alignment_request
+    - prepare_forced_aligner_inputs
     - decode_forced_alignment
     - decode
 

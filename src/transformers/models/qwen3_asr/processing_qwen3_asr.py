@@ -16,7 +16,6 @@ import re
 import unicodedata
 
 import numpy as np
-import torch
 
 from ...audio_utils import AudioInput, make_list_of_audio
 from ...feature_extraction_utils import BatchFeature
@@ -125,8 +124,8 @@ class Qwen3ASRProcessor(ProcessorMixin):
         # Replace audio tokens in text
         audio_lengths = _get_feat_extract_output_lengths(data["input_features_mask"].sum(-1)).cpu().numpy()
         audio_token_pattern = re.compile(re.escape(self.audio_token))
-        for i, num_tokens in enumerate(audio_lengths):
-            text[i] = audio_token_pattern.sub(self.audio_token * int(num_tokens), text[i])
+        for sample_idx, num_tokens in enumerate(audio_lengths):
+            text[sample_idx] = audio_token_pattern.sub(self.audio_token * int(num_tokens), text[sample_idx])
 
         # Prepare text
         text_inputs = self.tokenizer(text, **text_kwargs)
@@ -141,6 +140,39 @@ class Qwen3ASRProcessor(ProcessorMixin):
             data["labels"] = labels
 
         return BatchFeature(data=data, tensor_type=return_tensors)
+
+    @staticmethod
+    def _normalize_audio(audio: AudioInput) -> list:
+        """Normalize audio input(s) into a flat list."""
+        if isinstance(audio, str):
+            return [audio]
+        if isinstance(audio, (list, tuple)) and audio and all(isinstance(a, str) for a in audio):
+            return list(audio)
+        return make_list_of_audio(audio)
+
+    @staticmethod
+    def _normalize_languages(
+        language: str | list[str] | None, batch_size: int, allow_broadcast: bool = False
+    ) -> list[str | None]:
+        """Broadcast / validate a language argument to match batch_size."""
+        if language is None:
+            return [None] * batch_size
+        if isinstance(language, str):
+            return [language] * batch_size
+        if isinstance(language, (list, tuple)):
+            if allow_broadcast and len(language) == 1 and batch_size > 1:
+                return list(language) * batch_size
+            if len(language) != batch_size:
+                raise ValueError(f"Got {len(language)} language(s) for {batch_size} sample(s); counts must match.")
+            return list(language)
+        raise TypeError("`language` must be a string, a list of strings, or `None`.")
+
+    @staticmethod
+    def _audio_content_item(audio_item) -> dict:
+        """Build a chat-template content dict for a single audio item."""
+        if isinstance(audio_item, str):
+            return {"type": "audio", "path": audio_item}
+        return {"type": "audio", "audio": audio_item}
 
     def apply_transcription_request(
         self,
@@ -166,42 +198,18 @@ class Qwen3ASRProcessor(ProcessorMixin):
             [`BatchFeature`]: Processor outputs ready to be passed to
             [`Qwen3ASRForConditionalGeneration.generate`].
         """
-        if isinstance(audio, str):
-            audio_items: list = [audio]
-        elif isinstance(audio, (list, tuple)) and audio and all(isinstance(a, str) for a in audio):
-            audio_items = list(audio)
-        else:
-            audio_items = list(make_list_of_audio(audio))
-
+        audio_items = self._normalize_audio(audio)
         batch_size = len(audio_items)
         if batch_size == 0:
             raise ValueError("`audio` must contain at least one sample.")
-
-        if language is None:
-            languages = [None] * batch_size
-        elif isinstance(language, str):
-            languages = [language] * batch_size
-        elif isinstance(language, (list, tuple)):
-            if len(language) != batch_size:
-                raise ValueError(
-                    f"Received {len(language)} language(s) for {batch_size} audio sample(s); counts must match."
-                )
-            languages = list(language)
-        else:
-            raise TypeError("`language` must be a string, a list of strings, or `None`.")
+        languages = self._normalize_languages(language, batch_size)
 
         conversations = []
         for lang, audio_item in zip(languages, audio_items):
-            content = []
-            if isinstance(audio_item, str):
-                content.append({"type": "audio", "path": audio_item})
-            else:
-                content.append({"type": "audio", "audio": audio_item})
-
             messages = []
             if lang is not None:
                 messages.append({"role": "system", "content": [{"type": "text", "text": lang}]})
-            messages.append({"role": "user", "content": content})
+            messages.append({"role": "user", "content": [self._audio_content_item(audio_item)]})
             conversations.append(messages)
 
         return self.apply_chat_template(
@@ -242,11 +250,21 @@ class Qwen3ASRProcessor(ProcessorMixin):
         return decoded
 
     @staticmethod
-    def _strip_chat_prefix(text: str) -> str:
-        """Strip chat template prefixes like ``system\\n...\\nassistant\\n``."""
+    def _parse_single_output(text: str) -> dict:
+        """Parse a single decoded ASR string into language + transcription."""
         if "assistant\n" in text:
             text = text.split("assistant\n", 1)[-1]
-        return text
+        marker = "<asr_text>"
+        if marker not in text:
+            return {"language": None, "transcription": text}
+        prefix, transcription = text.split(marker, 1)
+        prefix = prefix.strip()
+        language = None
+        if prefix.startswith("language "):
+            language = prefix[len("language ") :].strip()
+        elif prefix:
+            language = prefix
+        return {"language": language, "transcription": transcription.strip()}
 
     @staticmethod
     def parse_output(text: str | list[str]) -> dict | list[dict]:
@@ -264,30 +282,9 @@ class Qwen3ASRProcessor(ProcessorMixin):
             ``"language"`` (str or None) and ``"transcription"`` (str).
             Returns the original string as the transcription if parsing fails.
         """
-        is_single = isinstance(text, str)
-        if is_single:
-            text = [text]
-
-        results = []
-        for t in text:
-            t = Qwen3ASRProcessor._strip_chat_prefix(t)
-            marker = "<asr_text>"
-            language = None
-            transcription = t
-
-            if marker in t:
-                prefix, transcription = t.split(marker, 1)
-                transcription = transcription.strip()
-                # prefix is "language <LANG>"
-                prefix = prefix.strip()
-                if prefix.startswith("language "):
-                    language = prefix[len("language ") :].strip()
-                elif prefix:
-                    language = prefix
-
-            results.append({"language": language, "transcription": transcription})
-
-        return results[0] if is_single else results
+        if isinstance(text, str):
+            return Qwen3ASRProcessor._parse_single_output(text)
+        return [Qwen3ASRProcessor._parse_single_output(raw_text) for raw_text in text]
 
     @staticmethod
     def extract_transcription(text: str | list[str]) -> str | list[str]:
@@ -304,50 +301,47 @@ class Qwen3ASRProcessor(ProcessorMixin):
             `str` or `list[str]`: Extracted transcription(s). Returns the
             original string if ``<asr_text>`` is not found.
         """
-        is_single = isinstance(text, str)
-        if is_single:
-            text = [text]
-
-        results = []
-        for t in text:
-            t = Qwen3ASRProcessor._strip_chat_prefix(t)
-            marker = "<asr_text>"
-            if marker in t:
-                t = t.split(marker, 1)[-1].strip()
-            results.append(t)
-
-        return results[0] if is_single else results
-
-    # ── Forced alignment helpers ──
+        if isinstance(text, str):
+            return Qwen3ASRProcessor._parse_single_output(text)["transcription"]
+        return [Qwen3ASRProcessor._parse_single_output(raw_text)["transcription"] for raw_text in text]
 
     @staticmethod
-    def _is_cjk_char(ch: str) -> bool:
+    def _is_cjk_char(char: str) -> bool:
         """
         Return True for CJK ideograph characters.
         Original: https://github.com/QwenLM/Qwen3-ASR/blob/c17a131fe028b2e428b6e80a33d30bb4fa57b8df/qwen_asr/inference/qwen3_forced_aligner.py#L62
         """
-        cp = ord(ch)
+        codepoint = ord(char)
         return (
-            (0x4E00 <= cp <= 0x9FFF)
-            or (0x3400 <= cp <= 0x4DBF)
-            or (0x20000 <= cp <= 0x2A6DF)
-            or (0x2A700 <= cp <= 0x2B73F)
-            or (0x2B740 <= cp <= 0x2B81F)
-            or (0x2B820 <= cp <= 0x2CEAF)
-            or (0xF900 <= cp <= 0xFAFF)
-            or (0x2F800 <= cp <= 0x2FA1F)
+            (0x4E00 <= codepoint <= 0x9FFF)
+            or (0x3400 <= codepoint <= 0x4DBF)
+            or (0x20000 <= codepoint <= 0x2A6DF)
+            or (0x2A700 <= codepoint <= 0x2B73F)
+            or (0x2B740 <= codepoint <= 0x2B81F)
+            or (0x2B820 <= codepoint <= 0x2CEAF)
+            or (0xF900 <= codepoint <= 0xFAFF)
+            or (0x2F800 <= codepoint <= 0x2FA1F)
         )
 
     @staticmethod
-    def _is_kept_char(ch: str) -> bool:
+    def _is_kept_char(char: str) -> bool:
         """Return True for characters kept during forced-alignment tokenisation."""
-        if ch == "'":
+        if char == "'":
             return True
-        cat = unicodedata.category(ch)
-        return cat.startswith("L") or cat.startswith("N") or Qwen3ASRProcessor._is_cjk_char(ch)
+        category = unicodedata.category(char)
+        return category.startswith("L") or category.startswith("N") or Qwen3ASRProcessor._is_cjk_char(char)
 
     @staticmethod
-    def tokenize_for_alignment(text: str, language: str | None = None) -> list[str]:
+    def _clean_tokens(raw_tokens) -> list[str]:
+        """Filter each raw token to kept characters, dropping empty results."""
+        return [
+            cleaned
+            for token in raw_tokens
+            if (cleaned := "".join(char for char in token if Qwen3ASRProcessor._is_kept_char(char)))
+        ]
+
+    @staticmethod
+    def split_words_for_alignment(text: str | list[str], language: str | None = None) -> list[str]:
         """
         Split text into word-level tokens suitable for forced alignment.
         Original: https://github.com/QwenLM/Qwen3-ASR/blob/c17a131fe028b2e428b6e80a33d30bb4fa57b8df/qwen_asr/inference/qwen3_forced_aligner.py#L101-L145
@@ -382,13 +376,7 @@ class Qwen3ASRProcessor(ProcessorMixin):
                 raise ImportError(
                     "Japanese forced alignment requires the `nagisa` package. Install it with: pip install nagisa"
                 )
-            raw_tokens = nagisa.tagging(text)
-            tokens = []
-            for w in raw_tokens.words:
-                cleaned = "".join(ch for ch in w if Qwen3ASRProcessor._is_kept_char(ch))
-                if cleaned:
-                    tokens.append(cleaned)
-            return tokens
+            return Qwen3ASRProcessor._clean_tokens(nagisa.tagging(text).words)
 
         if lang == "korean":
             try:
@@ -397,103 +385,93 @@ class Qwen3ASRProcessor(ProcessorMixin):
                 raise ImportError(
                     "Korean forced alignment requires the `soynlp` package. Install it with: pip install soynlp"
                 )
-            ko_tokenizer = LTokenizer()
-            raw_tokens = ko_tokenizer.tokenize(text)
-            tokens = []
-            for w in raw_tokens:
-                cleaned = "".join(ch for ch in w if Qwen3ASRProcessor._is_kept_char(ch))
-                if cleaned:
-                    tokens.append(cleaned)
-            return tokens
+            return Qwen3ASRProcessor._clean_tokens(LTokenizer().tokenize(text))
 
         # Default: CJK characters individually, space-delimited words otherwise
         tokens: list[str] = []
-        buf: list[str] = []
+        char_buffer: list[str] = []
 
-        def flush():
-            if buf:
-                word = "".join(buf).strip()
+        def flush_buffer():
+            if char_buffer:
+                word = "".join(char_buffer)
                 if word:
                     tokens.append(word)
-                buf.clear()
+                char_buffer.clear()
 
-        for ch in text:
-            if Qwen3ASRProcessor._is_cjk_char(ch):
-                flush()
-                tokens.append(ch)
-            elif ch.isspace():
-                flush()
-            elif Qwen3ASRProcessor._is_kept_char(ch):
-                buf.append(ch)
-        flush()
+        for char in text:
+            if Qwen3ASRProcessor._is_cjk_char(char):
+                flush_buffer()
+                tokens.append(char)
+            elif char.isspace():
+                flush_buffer()
+            elif Qwen3ASRProcessor._is_kept_char(char):
+                char_buffer.append(char)
+        flush_buffer()
         return tokens
 
     @staticmethod
     def _fix_timestamps(raw: np.ndarray) -> list[int]:
         """
+        Monotonize predicted timestamps using longest increasing subsequence, then interpolate outliers.
         Original: https://github.com/QwenLM/Qwen3-ASR/blob/c17a131fe028b2e428b6e80a33d30bb4fa57b8df/qwen_asr/inference/qwen3_forced_aligner.py#L147
         """
         data = raw.tolist()
-        n = len(data)
-        if n == 0:
+        num_values = len(data)
+        if num_values == 0:
             return []
 
-        dp = [1] * n
-        parent = [-1] * n
-        for i in range(1, n):
-            for j in range(i):
-                if data[j] <= data[i] and dp[j] + 1 > dp[i]:
-                    dp[i] = dp[j] + 1
-                    parent[i] = j
+        # Find longest increasing subsequence (LIS) via O(n²) DP
+        dp = [1] * num_values
+        parent = [-1] * num_values
+        for current in range(1, num_values):
+            for prev in range(current):
+                if data[prev] <= data[current] and dp[prev] + 1 > dp[current]:
+                    dp[current] = dp[prev] + 1
+                    parent[current] = prev
 
-        max_idx = dp.index(max(dp))
-        lis_idx: list[int] = []
-        idx = max_idx
-        while idx != -1:
-            lis_idx.append(idx)
-            idx = parent[idx]
-        lis_idx.reverse()
+        # Backtrack to get LIS indices
+        is_normal = [False] * num_values
+        trace_idx = dp.index(max(dp))
+        while trace_idx != -1:
+            is_normal[trace_idx] = True
+            trace_idx = parent[trace_idx]
 
-        is_normal = [False] * n
-        for idx in lis_idx:
-            is_normal[idx] = True
-
+        # Interpolate non-LIS positions
         result = data.copy()
-        i = 0
-        while i < n:
-            if not is_normal[i]:
-                j = i
-                while j < n and not is_normal[j]:
-                    j += 1
-                count = j - i
-                left = next((result[k] for k in range(i - 1, -1, -1) if is_normal[k]), None)
-                right = next((result[k] for k in range(j, n) if is_normal[k]), None)
-                if count <= 2:
-                    for k in range(i, j):
-                        if left is None:
-                            result[k] = right
-                        elif right is None:
-                            result[k] = left
-                        else:
-                            result[k] = left if (k - (i - 1)) <= (j - k) else right
-                else:
-                    if left is not None and right is not None:
-                        step = (right - left) / (count + 1)
-                        for k in range(i, j):
-                            result[k] = left + step * (k - i + 1)
-                    elif left is not None:
-                        for k in range(i, j):
-                            result[k] = left
-                    elif right is not None:
-                        for k in range(i, j):
-                            result[k] = right
-                i = j
+        block_start = 0
+        while block_start < num_values:
+            if is_normal[block_start]:
+                block_start += 1
+                continue
+            # Find contiguous block of outlier values [block_start, block_end)
+            block_end = block_start
+            while block_end < num_values and not is_normal[block_end]:
+                block_end += 1
+            block_len = block_end - block_start
+            left = next((result[pos] for pos in range(block_start - 1, -1, -1) if is_normal[pos]), None)
+            right = next((result[pos] for pos in range(block_end, num_values) if is_normal[pos]), None)
+            if block_len <= 2:
+                for pos in range(block_start, block_end):
+                    if left is None:
+                        result[pos] = right
+                    elif right is None:
+                        result[pos] = left
+                    else:
+                        result[pos] = left if (pos - (block_start - 1)) <= (block_end - pos) else right
             else:
-                i += 1
+                fill = left if left is not None else right
+                if left is not None and right is not None:
+                    step = (right - left) / (block_len + 1)
+                    for pos in range(block_start, block_end):
+                        result[pos] = left + step * (pos - block_start + 1)
+                elif fill is not None:
+                    for pos in range(block_start, block_end):
+                        result[pos] = fill
+            block_start = block_end
 
         return [int(v) for v in result]
 
-    def apply_forced_alignment_request(
+    def prepare_forced_aligner_inputs(
         self,
         audio: AudioInput,
         transcript: str | list[str],
@@ -528,44 +506,18 @@ class Qwen3ASRProcessor(ProcessorMixin):
         if isinstance(transcript, str):
             transcript = [transcript]
 
-        if isinstance(audio, str):
-            audio_items: list = [audio]
-        elif isinstance(audio, (list, tuple)) and audio and all(isinstance(a, str) for a in audio):
-            audio_items = list(audio)
-        else:
-            audio_items = list(make_list_of_audio(audio))
-
+        audio_items = self._normalize_audio(audio)
         batch_size = len(audio_items)
         if len(transcript) != batch_size:
             raise ValueError(f"Got {len(transcript)} transcript(s) but {batch_size} audio(s); they must match 1:1.")
 
-        if language is None:
-            languages: list[str | None] = [None] * batch_size
-        elif isinstance(language, str):
-            languages = [language] * batch_size
-        elif isinstance(language, (list, tuple)):
-            if len(language) == 1 and batch_size > 1:
-                languages = list(language) * batch_size
-            elif len(language) != batch_size:
-                raise ValueError(f"Got {len(language)} language(s) for {batch_size} audio(s); they must match 1:1.")
-            else:
-                languages = list(language)
-        else:
-            raise TypeError("`language` must be a string, a list of strings, or `None`.")
-
-        word_lists = [self.tokenize_for_alignment(t, lang) for t, lang in zip(transcript, languages)]
+        languages = self._normalize_languages(language, batch_size, allow_broadcast=True)
+        word_lists = [self.split_words_for_alignment(t, lang) for t, lang in zip(transcript, languages)]
 
         conversations = []
         for wl, audio_item in zip(word_lists, audio_items):
-            content = []
-            if isinstance(audio_item, str):
-                content.append({"type": "audio", "path": audio_item})
-            else:
-                content.append({"type": "audio", "audio": audio_item})
-            # Each word becomes a separate text item; the chat template joins them with <timestamp><timestamp> markers.
-            for word in wl:
-                content.append({"type": "text", "text": word})
-
+            content = [self._audio_content_item(audio_item)]
+            content.extend({"type": "text", "text": word} for word in wl)
             conversations.append([{"role": "user", "content": content}])
 
         inputs = self.apply_chat_template(
@@ -578,8 +530,8 @@ class Qwen3ASRProcessor(ProcessorMixin):
 
     def decode_forced_alignment(
         self,
-        logits: torch.Tensor,
-        input_ids: torch.LongTensor,
+        logits,
+        input_ids,
         word_lists: list[list[str]],
         timestamp_token_id: int,
         timestamp_segment_time: float | None = None,
@@ -594,13 +546,12 @@ class Qwen3ASRProcessor(ProcessorMixin):
                 Input token IDs used for the forward pass.
             word_lists (`list[list[str]]`):
                 Word-level token lists as returned by
-                [`~Qwen3ASRProcessor.apply_forced_alignment_request`].
+                [`~Qwen3ASRProcessor.prepare_forced_aligner_inputs`].
             timestamp_token_id (`int`):
                 Token ID of the ``<timestamp>`` marker (from
                 ``model.config.timestamp_token_id``).
             timestamp_segment_time (`float`, *optional*):
-                Milliseconds per timestamp class. If not provided, uses
-                ``self.timestamp_segment_time``.
+                Milliseconds per timestamp class. If not provided, uses `self.timestamp_segment_time`.
 
         Returns:
             `list[list[dict]]`: One list per sample.  Each inner list contains dicts
@@ -612,23 +563,20 @@ class Qwen3ASRProcessor(ProcessorMixin):
         pred_ids = logits.argmax(dim=-1)
         batch_results = []
 
-        for i, word_list in enumerate(word_lists):
-            mask = input_ids[i] == timestamp_token_id
-            masked_pred = pred_ids[i][mask]
+        for sample_idx, word_list in enumerate(word_lists):
+            mask = input_ids[sample_idx] == timestamp_token_id
+            masked_pred = pred_ids[sample_idx][mask]
             raw_ms = (masked_pred.float() * timestamp_segment_time).cpu().numpy()
             fixed_ms = self._fix_timestamps(raw_ms)
 
-            items = []
-            for j, word in enumerate(word_list):
-                start_ms = fixed_ms[j * 2]
-                end_ms = fixed_ms[j * 2 + 1]
-                items.append(
-                    {
-                        "text": word,
-                        "start_time": round(start_ms / 1000.0, 3),
-                        "end_time": round(end_ms / 1000.0, 3),
-                    }
-                )
+            items = [
+                {
+                    "text": word,
+                    "start_time": round(fixed_ms[word_idx * 2] / 1000.0, 3),
+                    "end_time": round(fixed_ms[word_idx * 2 + 1] / 1000.0, 3),
+                }
+                for word_idx, word in enumerate(word_list)
+            ]
             batch_results.append(items)
 
         return batch_results

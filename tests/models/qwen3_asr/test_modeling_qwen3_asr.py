@@ -298,7 +298,7 @@ class Qwen3ForcedAlignerIntegrationTest(unittest.TestCase):
 
     def _run_alignment(self, model, audio, transcript, language):
         """Run forced alignment and return list of timestamp dicts."""
-        aligner_inputs, word_lists = self.aligner_processor.apply_forced_alignment_request(
+        aligner_inputs, word_lists = self.aligner_processor.prepare_forced_aligner_inputs(
             audio=audio,
             transcript=transcript,
             language=language,
