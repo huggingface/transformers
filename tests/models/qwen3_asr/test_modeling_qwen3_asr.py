@@ -63,7 +63,7 @@ class Qwen3ASRModelTester:
             "tie_word_embeddings": False,
         }
         audio_config = {
-            "model_type": "qwen3_audio_encoder",
+            "model_type": "qwen3_omni_moe_audio_encoder",
             "num_mel_bins": self.num_mel_bins,
             "d_model": 8,
             "encoder_layers": 1,
@@ -313,7 +313,6 @@ class Qwen3ForcedAlignerIntegrationTest(unittest.TestCase):
             input_ids=aligner_inputs["input_ids"],
             word_lists=word_lists,
             timestamp_token_id=model.config.timestamp_token_id,
-            timestamp_segment_time=model.config.timestamp_segment_time,
         )
 
     @slow

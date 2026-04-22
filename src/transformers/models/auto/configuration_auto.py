@@ -37,6 +37,7 @@ CONFIG_MAPPING_NAMES.update(
     {
         "EvollaModel": "EvollaConfig",
         "mlcd": "MLCDVisionConfig",
+        "qwen3_forced_aligner": "Qwen3ForcedAlignerConfig",
         "vibevoice_acoustic_tokenizer_decoder": "VibeVoiceAcousticTokenizerDecoderConfig",
         "vibevoice_acoustic_tokenizer_encoder": "VibeVoiceAcousticTokenizerEncoderConfig",
     }
@@ -49,6 +50,7 @@ CONFIG_MAPPING_NAMES = OrderedDict(**{"gpt-sw3": "GPT2Config"}, **CONFIG_MAPPING
 SPECIAL_MODEL_TYPE_TO_MODULE_NAME.update(
     {
         "EvollaModel": "evolla",
+        "qwen3_forced_aligner": "qwen3_asr",
         "vibevoice_acoustic_tokenizer_encoder": "vibevoice_acoustic_tokenizer",
         "vibevoice_acoustic_tokenizer_decoder": "vibevoice_acoustic_tokenizer",
     }

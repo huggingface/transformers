@@ -80,15 +80,15 @@ logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
 
 # fmt: off
 STATE_DICT_MAPPING_ASR = {
-    r"^thinker\.audio_tower\.": r"audio_tower.",
-    r"^thinker\.lm_head\.": r"language_model.lm_head.",
-    r"^thinker\.model\.": r"language_model.model.",
+    r"^thinker\.audio_tower\.": r"model.audio_tower.",
+    r"^thinker\.lm_head\.": r"lm_head.",
+    r"^thinker\.model\.": r"model.language_model.",
 }
 
 STATE_DICT_MAPPING_FORCED_ALIGNER = {
-    r"^thinker\.audio_tower\.": r"audio_tower.",
+    r"^thinker\.audio_tower\.": r"model.audio_tower.",
     r"^thinker\.lm_head\.": r"classifier.",
-    r"^thinker\.model\.": r"model.",
+    r"^thinker\.model\.": r"model.language_model.",
 }
 # fmt: on
 

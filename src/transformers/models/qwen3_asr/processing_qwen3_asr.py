@@ -65,10 +65,14 @@ class Qwen3ASRProcessor(ProcessorMixin):
             The text tokenizer.
         chat_template (`Optional[str]`, *optional*):
             The Jinja template to use for formatting the conversation. If not provided, the default chat template is used.
+        timestamp_segment_time (`int`, *optional*, defaults to 80):
+            The segment time in milliseconds used for grouping timestamps during forced alignment. This should match the
+            value used during training of the forced aligner model.
     """
 
-    def __init__(self, feature_extractor=None, tokenizer=None, chat_template=None):
+    def __init__(self, feature_extractor=None, tokenizer=None, chat_template=None, timestamp_segment_time: int = 80):
         super().__init__(feature_extractor, tokenizer, chat_template=chat_template)
+        self.timestamp_segment_time = timestamp_segment_time
         self.audio_token = self.tokenizer.audio_token
         self.audio_token_id = self.tokenizer.convert_tokens_to_ids(self.audio_token)
         self.audio_bos_token = self.tokenizer.audio_bos_token
@@ -578,7 +582,7 @@ class Qwen3ASRProcessor(ProcessorMixin):
         input_ids: torch.LongTensor,
         word_lists: list[list[str]],
         timestamp_token_id: int,
-        timestamp_segment_time: float,
+        timestamp_segment_time: float | None = None,
     ) -> list[list[dict]]:
         """
         Decode forced aligner model outputs into word-level timestamps.
@@ -594,15 +598,17 @@ class Qwen3ASRProcessor(ProcessorMixin):
             timestamp_token_id (`int`):
                 Token ID of the ``<timestamp>`` marker (from
                 ``model.config.timestamp_token_id``).
-            timestamp_segment_time (`float`):
-                Milliseconds per timestamp class (from
-                ``model.config.timestamp_segment_time``).
+            timestamp_segment_time (`float`, *optional*):
+                Milliseconds per timestamp class. If not provided, uses
+                ``self.timestamp_segment_time``.
 
         Returns:
             `list[list[dict]]`: One list per sample.  Each inner list contains dicts
             with keys ``"text"`` (`str`), ``"start_time"`` (`float`, seconds), and
             ``"end_time"`` (`float`, seconds).
         """
+        if timestamp_segment_time is None:
+            timestamp_segment_time = self.timestamp_segment_time
         pred_ids = logits.argmax(dim=-1)
         batch_results = []
 

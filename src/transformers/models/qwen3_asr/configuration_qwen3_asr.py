@@ -56,13 +56,14 @@ class Qwen3ASRConfig(PreTrainedConfig):
     pad_token_id: int = 151645
     eos_token_id: list[int] | tuple[int, ...] | int = (151643, 151645)
     initializer_range: float = 0.02
+    tie_word_embeddings: bool = True
 
     def __post_init__(self, **kwargs):
         if isinstance(self.audio_config, dict):
-            self.audio_config["model_type"] = self.audio_config.get("model_type", "qwen3_audio_encoder")
+            self.audio_config["model_type"] = self.audio_config.get("model_type", "qwen3_omni_moe_audio_encoder")
             self.audio_config = CONFIG_MAPPING[self.audio_config["model_type"]](**self.audio_config)
         elif self.audio_config is None:
-            self.audio_config = CONFIG_MAPPING["qwen3_audio_encoder"](
+            self.audio_config = CONFIG_MAPPING["qwen3_omni_moe_audio_encoder"](
                 encoder_layers=24,
                 encoder_attention_heads=16,
                 encoder_ffn_dim=4096,
@@ -96,8 +97,6 @@ class Qwen3ForcedAlignerConfig(Qwen3ASRConfig):
         Number of classification labels for forced alignment.
     timestamp_token_id (`int`, *optional*, defaults to 151705):
         Token ID for timestamp markers in the alignment output.
-    timestamp_segment_time (`int`, *optional*, defaults to 80):
-        Time segment (in milliseconds) that each timestamp token represents.
 
     Example:
 
@@ -118,7 +117,6 @@ class Qwen3ForcedAlignerConfig(Qwen3ASRConfig):
 
     classify_num: int = 5000
     timestamp_token_id: int = 151705
-    timestamp_segment_time: int = 80
 
 
 __all__ = ["Qwen3ASRConfig", "Qwen3ForcedAlignerConfig"]

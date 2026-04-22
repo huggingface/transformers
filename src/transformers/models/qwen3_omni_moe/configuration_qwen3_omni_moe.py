@@ -666,7 +666,6 @@ __all__ = [
     "Qwen3OmniMoeConfig",
     "Qwen3OmniMoeThinkerConfig",
     "Qwen3OmniMoeTalkerConfig",
-    "Qwen3OmniMoeAudioEncoderConfig",
     "Qwen3OmniMoeTalkerCodePredictorConfig",
     "Qwen3OmniMoeTalkerTextConfig",
     "Qwen3OmniMoeTextConfig",

@@ -13,6 +13,7 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
+*This model was released on {release_date} and added to Hugging Face Transformers on 2026-04-22.*
 
 # Qwen3 ASR
 
@@ -273,7 +274,6 @@ timestamps = aligner_processor.decode_forced_alignment(
     input_ids=aligner_inputs["input_ids"],
     word_lists=word_lists,
     timestamp_token_id=aligner_model.config.timestamp_token_id,
-    timestamp_segment_time=aligner_model.config.timestamp_segment_time,
 )[0]
 
 for item in timestamps:
@@ -335,7 +335,6 @@ timestamps = aligner_processor.decode_forced_alignment(
     input_ids=aligner_inputs["input_ids"],
     word_lists=word_lists,
     timestamp_token_id=aligner_model.config.timestamp_token_id,
-    timestamp_segment_time=aligner_model.config.timestamp_segment_time,
 )[0]
 
 for item in timestamps:
@@ -405,7 +404,6 @@ timestamps = aligner_processor.decode_forced_alignment(
     input_ids=aligner_inputs["input_ids"],
     word_lists=word_lists,
     timestamp_token_id=aligner_model.config.timestamp_token_id,
-    timestamp_segment_time=aligner_model.config.timestamp_segment_time,
 )[0]
 
 for item in timestamps:
@@ -457,7 +455,6 @@ batch_timestamps = aligner_processor.decode_forced_alignment(
     input_ids=aligner_inputs["input_ids"],
     word_lists=word_lists,
     timestamp_token_id=aligner_model.config.timestamp_token_id,
-    timestamp_segment_time=aligner_model.config.timestamp_segment_time,
 )
 
 for i, (transcript, timestamps) in enumerate(zip(transcripts, batch_timestamps)):
@@ -574,6 +571,10 @@ print(f"Transcription: {transcription}")
     - apply_forced_alignment_request
     - decode_forced_alignment
     - decode
+
+## Qwen3ASRModel
+
+[[autodoc]] Qwen3ASRModel
 
 ## Qwen3ASRForConditionalGeneration
 
