@@ -17,6 +17,7 @@ import unittest
 
 import pytest
 from parameterized import parameterized
+from pytest import mark
 
 from transformers import (
     AutoTokenizer,
@@ -27,6 +28,7 @@ from transformers import (
 from transformers.testing_utils import (
     Expectations,
     cleanup,
+    require_deterministic_for_xpu,
     require_flash_attn,
     require_flash_attn_3,
     require_flash_attn_4,
@@ -37,7 +39,6 @@ from transformers.testing_utils import (
     slow,
     torch_device,
 )
-from pytest import mark
 
 from ...causal_lm_tester import CausalLMModelTest, CausalLMModelTester
 from ...generation.test_utils import GenerationTesterMixin
@@ -501,6 +502,7 @@ class Gemma4IntegrationTest(unittest.TestCase):
     def tearDown(self):
         cleanup(torch_device, gc_collect=True)
 
+    @require_deterministic_for_xpu
     def test_model_with_image(self):
         model = Gemma4ForConditionalGeneration.from_pretrained(self.model_name, device_map=torch_device)
 
@@ -519,12 +521,13 @@ class Gemma4IntegrationTest(unittest.TestCase):
         EXPECTED_TEXTS = Expectations(
             {
                 ("cuda", 8): ['This image shows a **brown and white cow** standing on a **sandy beach** with the **ocean and a blue sky** in the background'],
-                ("xpu", 3): ['This image shows a **brown and white cow standing on a sandy beach**.\n\nHere are some more details about the image:\n\n*   **Subject'],
+                ("xpu", 3): ['This image shows a **brown and white cow standing on a sandy beach near the ocean**.\n\nHere are some details about the image:\n\n*   '],
             }
         )  # fmt: skip
         EXPECTED_TEXT = EXPECTED_TEXTS.get_expectation()
         self.assertEqual(output_text, EXPECTED_TEXT)
 
+    @require_deterministic_for_xpu
     def test_model_with_image_batch(self):
         model = Gemma4ForConditionalGeneration.from_pretrained(self.model_name, device_map=torch_device)
 
@@ -575,6 +578,7 @@ class Gemma4IntegrationTest(unittest.TestCase):
         EXPECTED_TEXT = EXPECTED_TEXTS.get_expectation()
         self.assertEqual(output_text, EXPECTED_TEXT)
 
+    @require_deterministic_for_xpu
     def test_model_multiimage(self):
         model = Gemma4ForConditionalGeneration.from_pretrained(self.model_name, device_map=torch_device)
 
@@ -638,6 +642,7 @@ class Gemma4IntegrationTest(unittest.TestCase):
         EXPECTED_TEXT = EXPECTED_TEXTS.get_expectation()
         self.assertEqual(output_text, EXPECTED_TEXT)
 
+    @require_deterministic_for_xpu
     def test_model_text_only(self):
         model = AutoModelForCausalLM.from_pretrained(self.model_name, device_map=torch_device)
         tokenizer = AutoTokenizer.from_pretrained(self.model_name, padding_side="left")
@@ -657,7 +662,7 @@ class Gemma4IntegrationTest(unittest.TestCase):
             {
                 ("cuda", (8, 0)): ['## The Algorithmic Mind\n\nA whisper starts, a seed unseen,\nOf data vast, a vibrant sheen.\nA sea of numbers,'],
                 ("cuda", (8, 6)): ['## The Algorithmic Mind\n\nA tapestry of data, vast and deep,\nWhere silent numbers in their slumber sleep.\nA sea of text'],
-                ("xpu", 3): ['## The Algorithmic Mind\n\nA tapestry of data, vast and deep,\nWhere silent numbers in their slumber sleep.\nA sea of text'],
+                ("xpu", 3): ['## The Algorithmic Mind\n\nA whisper starts in silicon deep,\nWhere data streams in endless sweep.\nNo flesh and blood, no beating'],
             }
         )  # fmt: skip
         EXPECTED_TEXT = EXPECTED_TEXTS.get_expectation()
@@ -688,6 +693,7 @@ class Gemma4IntegrationTest(unittest.TestCase):
 
     # Note: we do not test FA2 as the head dim is 512 on some layers, which is not compatible with the kernels
     @parameterized.expand([("sdpa",), ("eager",)])
+    @require_deterministic_for_xpu
     def test_generation_beyond_sliding_window(self, attn_implementation: str):
         """Test that we can correctly generate beyond the sliding window. Outputs for every attention functions
         should be coherent and identical.
