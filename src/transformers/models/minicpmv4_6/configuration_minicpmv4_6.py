@@ -58,13 +58,6 @@ class MiniCPMV4_6VisionConfig(PreTrainedConfig):
     attention_dropout: float | int = 0.0
     insert_layer_id: int = 6
 
-    def __post_init__(self, **kwargs):
-        # FIXME: why not adjust configs or do we want this to be dynamically applied?
-        # Needs a comment in code
-        if self.drop_vision_last_layer:
-            self.num_hidden_layers -= 1
-        super().__post_init__(**kwargs)
-
 
 @auto_docstring(checkpoint="openbmb/MiniCPM-V-4.6")
 @strict
