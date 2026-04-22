@@ -129,6 +129,20 @@ class Gemma4TextModelTest(CausalLMModelTest, unittest.TestCase):
     def test_tp_generation_quantized(self):
         pass
 
+    @unittest.skip(
+        "Under non-bf16 dtypes, MoE grouped_mm falls back to "
+        "_grouped_mm_fallback_backward which is incompatible with torch.compile."
+    )
+    def test_flash_attn_2_can_compile_with_attention_mask_None_without_graph_break(self):
+        pass
+
+    @unittest.skip(
+        "Under non-bf16 dtypes, MoE grouped_mm falls back to "
+        "_grouped_mm_fallback_backward which is incompatible with torch.compile."
+    )
+    def test_torch_compile_for_training(self):
+        pass
+
 
 class Gemma4Audio2TextModelTester:
     def __init__(
