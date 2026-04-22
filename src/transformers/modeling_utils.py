@@ -1977,7 +1977,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         if applicable_experts not in base_experts_fns:
             message = (
                 f'Specified `experts_implementation="{applicable_experts}"` is not supported. The only possible arguments are '
-                f'{valid_experts_str}.'
+                f"{valid_experts_str}."
             )
             raise ValueError(message)
 

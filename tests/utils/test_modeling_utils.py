@@ -2835,9 +2835,7 @@ class TestAttentionImplementation(unittest.TestCase):
         with patch.dict(ALL_EXPERTS_FUNCTIONS._global_mapping, {}, clear=False):
             ALL_EXPERTS_FUNCTIONS.register(experts_implementation, custom_experts_forward)
 
-            self.assertEqual(
-                model.get_correct_experts_implementation(experts_implementation), experts_implementation
-            )
+            self.assertEqual(model.get_correct_experts_implementation(experts_implementation), experts_implementation)
 
     def test_not_available_flash(self):
         if is_flash_attn_2_available():
