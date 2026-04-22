@@ -27,6 +27,8 @@ rendered properly in your Markdown viewer.
 
 Qwen3 ASR is an automatic speech recognition model from Alibaba's Qwen team that combines a Qwen3 Omni-style audio encoder with a Qwen3 language model decoder for speech-to-text transcription. The model supports automatic language detection and multilingual transcription.
 
+A forced aligner model is also included. It uses the same audio encoder model with a classification head that predicts a word's length. This model can be used with the transcript from any ASR model (see the example below with Parakeet CTC).
+
 Available checkpoints:
 - [bezzam/Qwen3-ASR-1.7B](https://huggingface.co/bezzam/Qwen3-ASR-1.7B)
 - [bezzam/Qwen3-ASR-0.6B](https://huggingface.co/bezzam/Qwen3-ASR-0.6B)
@@ -227,15 +229,20 @@ loss.backward()
 
 ### Forced alignment (word-level timestamping)
 
-Use `Qwen3ForcedAlignerForTokenClassification` to obtain word-level timestamps from a transcript. First transcribe with the ASR model, then align with the forced aligner.
+Use `Qwen3ASRForForcedAlignment` to obtain word-level timestamps from a transcript. First transcribe with the ASR model, then align with the forced aligner.
 
 The following languages are supported: Chinese, English, Cantonese, French, German, Italian, Japanese, Korean, Portuguese, Russian, Spanish.
+
+Japanese requires the `nagisa` library, while Korean requires the `soynlp` library:
+```
+pip install nagisa soynlp
+```
 
 #### English
 
 ```python
 import torch
-from transformers import AutoProcessor, Qwen3ASRForConditionalGeneration, Qwen3ForcedAlignerForTokenClassification
+from transformers import AutoProcessor, Qwen3ASRForConditionalGeneration, Qwen3ASRForForcedAlignment
 
 asr_model_id = "bezzam/Qwen3-ASR-0.6B"
 aligner_model_id = "bezzam/Qwen3-ForcedAligner-0.6B"
@@ -244,7 +251,7 @@ asr_processor = AutoProcessor.from_pretrained(asr_model_id)
 asr_model = Qwen3ASRForConditionalGeneration.from_pretrained(asr_model_id, device_map="auto")
 
 aligner_processor = AutoProcessor.from_pretrained(aligner_model_id)
-aligner_model = Qwen3ForcedAlignerForTokenClassification.from_pretrained(
+aligner_model = Qwen3ASRForForcedAlignment.from_pretrained(
     aligner_model_id, torch_dtype=torch.bfloat16, device_map="auto"
 )
 
@@ -297,7 +304,7 @@ For Chinese text, each character is aligned individually.
 
 ```python
 import torch
-from transformers import AutoProcessor, Qwen3ASRForConditionalGeneration, Qwen3ForcedAlignerForTokenClassification
+from transformers import AutoProcessor, Qwen3ASRForConditionalGeneration, Qwen3ASRForForcedAlignment
 
 asr_model_id = "bezzam/Qwen3-ASR-0.6B"
 aligner_model_id = "bezzam/Qwen3-ForcedAligner-0.6B"
@@ -306,7 +313,7 @@ asr_processor = AutoProcessor.from_pretrained(asr_model_id)
 asr_model = Qwen3ASRForConditionalGeneration.from_pretrained(asr_model_id, device_map="auto")
 
 aligner_processor = AutoProcessor.from_pretrained(aligner_model_id)
-aligner_model = Qwen3ForcedAlignerForTokenClassification.from_pretrained(
+aligner_model = Qwen3ASRForForcedAlignment.from_pretrained(
     aligner_model_id, torch_dtype=torch.bfloat16, device_map="auto"
 )
 
@@ -353,14 +360,14 @@ Char        Start (s)    End (s)
 
 #### With another ASR model
 
-The forced aligner is model-agnostic — any ASR system can provide the transcript. Here is an example using [NVIDIA Parakeet CTC](https://huggingface.co/nvidia/parakeet-ctc-1.1b) for transcription.
+The forced aligner is model-agnostic, meaning any ASR system can provide the transcript. Below is an example using [NVIDIA Parakeet CTC](https://huggingface.co/nvidia/parakeet-ctc-1.1b) for transcription.
 
 **Single sample:**
 
 ```python
 import torch
 from datasets import Audio, load_dataset
-from transformers import AutoModelForCTC, AutoProcessor, Qwen3ForcedAlignerForTokenClassification
+from transformers import AutoModelForCTC, AutoProcessor, Qwen3ASRForForcedAlignment
 
 # Load Parakeet CTC for transcription
 parakeet_processor = AutoProcessor.from_pretrained("nvidia/parakeet-ctc-1.1b")
@@ -371,7 +378,7 @@ parakeet_model = AutoModelForCTC.from_pretrained(
 # Load Qwen3 Forced Aligner for timestamping
 aligner_model_id = "bezzam/Qwen3-ForcedAligner-0.6B"
 aligner_processor = AutoProcessor.from_pretrained(aligner_model_id)
-aligner_model = Qwen3ForcedAlignerForTokenClassification.from_pretrained(
+aligner_model = Qwen3ASRForForcedAlignment.from_pretrained(
     aligner_model_id, torch_dtype=torch.bfloat16, device_map="cuda",
 )
 
@@ -387,7 +394,7 @@ inputs = parakeet_processor(audio_array, sampling_rate=sr, return_tensors="pt").
 )
 with torch.inference_mode():
     outputs = parakeet_model.generate(**inputs)
-transcript = parakeet_processor.batch_decode(outputs)[0]
+transcript = parakeet_processor.decode(outputs)[0]
 print(f"Transcript: {transcript}")
 
 # Step 2: Align with Qwen3 Forced Aligner (expects 16kHz audio)
@@ -415,7 +422,7 @@ for item in timestamps:
 ```python
 import torch
 from datasets import Audio, load_dataset
-from transformers import AutoModelForCTC, AutoProcessor, Qwen3ForcedAlignerForTokenClassification
+from transformers import AutoModelForCTC, AutoProcessor, Qwen3ASRForForcedAlignment
 
 parakeet_processor = AutoProcessor.from_pretrained("nvidia/parakeet-ctc-1.1b")
 parakeet_model = AutoModelForCTC.from_pretrained(
@@ -424,7 +431,7 @@ parakeet_model = AutoModelForCTC.from_pretrained(
 
 aligner_model_id = "bezzam/Qwen3-ForcedAligner-0.6B"
 aligner_processor = AutoProcessor.from_pretrained(aligner_model_id)
-aligner_model = Qwen3ForcedAlignerForTokenClassification.from_pretrained(
+aligner_model = Qwen3ASRForForcedAlignment.from_pretrained(
     aligner_model_id, torch_dtype=torch.bfloat16, device_map="cuda",
 )
 
@@ -439,7 +446,7 @@ inputs = parakeet_processor(audio_arrays, sampling_rate=sr, return_tensors="pt",
 )
 with torch.inference_mode():
     outputs = parakeet_model.generate(**inputs)
-transcripts = parakeet_processor.batch_decode(outputs)
+transcripts = parakeet_processor.decode(outputs)
 
 # Batch align with Qwen3 Forced Aligner
 aligner_inputs, word_lists = aligner_processor.prepare_forced_aligner_inputs(
@@ -586,8 +593,8 @@ print(f"Transcription: {transcription}")
 
 [[autodoc]] Qwen3ForcedAlignerConfig
 
-## Qwen3ForcedAlignerForTokenClassification
+## Qwen3ASRForForcedAlignment
 
-[[autodoc]] Qwen3ForcedAlignerForTokenClassification
+[[autodoc]] Qwen3ASRForForcedAlignment
     - forward
     - get_audio_features

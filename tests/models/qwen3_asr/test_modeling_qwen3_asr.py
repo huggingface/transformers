@@ -22,7 +22,8 @@ from transformers import (
     AutoProcessor,
     Qwen3ASRConfig,
     Qwen3ASRForConditionalGeneration,
-    Qwen3ForcedAlignerForTokenClassification,
+    Qwen3ASRForForcedAlignment,
+    Qwen3ASRModel,
     is_torch_available,
 )
 from transformers.testing_utils import (
@@ -126,7 +127,7 @@ class Qwen3ASRModelTester:
 
 @require_torch
 class Qwen3ASRForConditionalGenerationModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
-    all_model_classes = (Qwen3ASRForConditionalGeneration,) if is_torch_available() else ()
+    all_model_classes = (Qwen3ASRForConditionalGeneration, Qwen3ASRModel) if is_torch_available() else ()
     pipeline_model_mapping = (
         {
             "audio-text-to-text": Qwen3ASRForConditionalGeneration,
@@ -276,7 +277,6 @@ class Qwen3ASRForConditionalGenerationIntegrationTest(unittest.TestCase):
 @require_torch
 class Qwen3ForcedAlignerIntegrationTest(unittest.TestCase):
     """
-    Integration tests for Qwen3ForcedAlignerForTokenClassification
     reproducer scripts (create JSON fixtures directly in repo): https://gist.github.com/ebezzam/3e0551708631784aeb684e0e838299f3#file-reproducer_timestamps-py
     """
 
@@ -290,7 +290,7 @@ class Qwen3ForcedAlignerIntegrationTest(unittest.TestCase):
         cleanup(torch_device, gc_collect=True)
 
     def _load_aligner(self):
-        return Qwen3ForcedAlignerForTokenClassification.from_pretrained(
+        return Qwen3ASRForForcedAlignment.from_pretrained(
             self.aligner_checkpoint,
             device_map="auto",
             torch_dtype=torch.bfloat16,

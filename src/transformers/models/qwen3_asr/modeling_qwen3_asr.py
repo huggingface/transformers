@@ -249,12 +249,12 @@ class Qwen3ASRForConditionalGeneration(Qwen3ASRPreTrainedModel, GenerationMixin)
     and a token classification head for forced alignment.
     """
 )
-class Qwen3ForcedAlignerForTokenClassification(Qwen3ASRPreTrainedModel):
+class Qwen3ASRForForcedAlignment(Qwen3ASRPreTrainedModel):
     def __init__(self, config: Qwen3ForcedAlignerConfig):
         super().__init__(config)
-        self.classify_num = config.classify_num
+        self.num_timestamp_bins = config.num_timestamp_bins
         self.model = Qwen3ASRModel(config)
-        self.classifier = nn.Linear(config.text_config.hidden_size, config.classify_num, bias=False)
+        self.classifier = nn.Linear(config.text_config.hidden_size, config.num_timestamp_bins, bias=False)
 
         self.post_init()
 
@@ -295,7 +295,7 @@ class Qwen3ForcedAlignerForTokenClassification(Qwen3ASRPreTrainedModel):
         input_features_mask (`torch.Tensor` of shape `(batch_size, feature_sequence_length)`, *optional*):
             Mask to avoid performing attention on padding feature indices.
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Labels for computing the token classification loss. Indices should be in `[0, ..., config.classify_num - 1]`.
+            Labels for computing the forced alignment loss. Indices should be in `[0, ..., config.num_timestamp_bins - 1]`.
         """
 
         outputs = self.model(
@@ -315,7 +315,7 @@ class Qwen3ForcedAlignerForTokenClassification(Qwen3ASRPreTrainedModel):
 
         loss = None
         if labels is not None:
-            loss = self.loss_function(logits=logits, labels=labels, vocab_size=self.classify_num)
+            loss = self.loss_function(logits=logits, labels=labels, vocab_size=self.num_timestamp_bins)
 
         return SequenceClassifierOutput(
             loss=loss,
@@ -329,5 +329,5 @@ __all__ = [
     "Qwen3ASRForConditionalGeneration",
     "Qwen3ASRModel",
     "Qwen3ASRPreTrainedModel",
-    "Qwen3ForcedAlignerForTokenClassification",
+    "Qwen3ASRForForcedAlignment",
 ]

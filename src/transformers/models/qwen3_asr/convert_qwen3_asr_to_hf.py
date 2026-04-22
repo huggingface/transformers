@@ -68,9 +68,9 @@ from transformers import (
     GenerationConfig,
     Qwen3ASRConfig,
     Qwen3ASRForConditionalGeneration,
+    Qwen3ASRForForcedAlignment,
     Qwen3ASRProcessor,
     Qwen3ForcedAlignerConfig,
-    Qwen3ForcedAlignerForTokenClassification,
     WhisperFeatureExtractor,
 )
 
@@ -155,7 +155,7 @@ def clean_config(src_root: Path, model_type: str) -> dict:
             config_dict["initializer_range"] = thinker_config["initializer_range"]
         # Forced aligner specific
         if model_type == "forced_aligner" and "classify_num" in thinker_config:
-            config_dict["classify_num"] = thinker_config["classify_num"]
+            config_dict["num_timestamp_bins"] = thinker_config["classify_num"]
 
     # Audio config: strip non-standard fields
     if "audio_config" in config_dict:
@@ -295,7 +295,7 @@ def write_forced_aligner_model(src_root: Path, dst_root: Path):
     """Convert and write a Qwen3 Forced Aligner model."""
     config_dict = clean_config(src_root, "forced_aligner")
     config = Qwen3ForcedAlignerConfig(**config_dict)
-    model = Qwen3ForcedAlignerForTokenClassification(config).to(torch.bfloat16)
+    model = Qwen3ASRForForcedAlignment(config).to(torch.bfloat16)
 
     state = load_state_dict(src_root)
     state = convert_state_dict(state, STATE_DICT_MAPPING_FORCED_ALIGNER)
@@ -373,7 +373,7 @@ def main() -> None:
         if model_type == "asr":
             _ = Qwen3ASRForConditionalGeneration.from_pretrained(args.push_to_hub)
         else:
-            _ = Qwen3ForcedAlignerForTokenClassification.from_pretrained(args.push_to_hub)
+            _ = Qwen3ASRForForcedAlignment.from_pretrained(args.push_to_hub)
         logger.info("Verification successful!")
 
 

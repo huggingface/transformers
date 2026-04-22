@@ -299,21 +299,25 @@ class Qwen3ASRForConditionalGeneration(Qwen3ASRPreTrainedModel, GenerationMixin)
 @strict
 class Qwen3ForcedAlignerConfig(Qwen3ASRConfig):
     r"""
-    classify_num (`int`, *optional*, defaults to 5000):
-        Number of classification labels for forced alignment.
+    num_timestamp_bins (`int`, *optional*, defaults to 5000):
+        Number of discrete timestamp bins the model can predict. Each bin corresponds
+        to a time offset of ``timestamp_segment_time`` milliseconds (set on the processor),
+        so the maximum representable duration is ``num_timestamp_bins * timestamp_segment_time`` ms
+        (e.g. 5000 * 80 ms = 400 s).
     timestamp_token_id (`int`, *optional*, defaults to 151705):
-        Token ID for timestamp markers in the alignment output.
+        Token ID of the ``<timestamp>`` marker in the tokenizer vocabulary. These markers
+        delimit word boundaries in the forced-alignment input sequence.
 
     Example:
 
     ```python
-    >>> from transformers import Qwen3ForcedAlignerForTokenClassification, Qwen3ForcedAlignerConfig
+    >>> from transformers import Qwen3ASRForForcedAlignment, Qwen3ForcedAlignerConfig
 
     >>> # Initializing a Qwen3ForcedAligner style configuration
     >>> configuration = Qwen3ForcedAlignerConfig()
 
     >>> # Initializing a model from the configuration
-    >>> model = Qwen3ForcedAlignerForTokenClassification(configuration)
+    >>> model = Qwen3ASRForForcedAlignment(configuration)
 
     >>> # Accessing the model configuration
     >>> configuration = model.config
@@ -321,7 +325,7 @@ class Qwen3ForcedAlignerConfig(Qwen3ASRConfig):
 
     model_type = "qwen3_forced_aligner"
 
-    classify_num: int = 5000
+    num_timestamp_bins: int = 5000
     timestamp_token_id: int = 151705
 
 
@@ -331,12 +335,12 @@ class Qwen3ForcedAlignerConfig(Qwen3ASRConfig):
     and a token classification head for forced alignment.
     """
 )
-class Qwen3ForcedAlignerForTokenClassification(Qwen3ASRPreTrainedModel):
+class Qwen3ASRForForcedAlignment(Qwen3ASRPreTrainedModel):
     def __init__(self, config: Qwen3ForcedAlignerConfig):
         super().__init__(config)
-        self.classify_num = config.classify_num
+        self.num_timestamp_bins = config.num_timestamp_bins
         self.model = Qwen3ASRModel(config)
-        self.classifier = nn.Linear(config.text_config.hidden_size, config.classify_num, bias=False)
+        self.classifier = nn.Linear(config.text_config.hidden_size, config.num_timestamp_bins, bias=False)
 
         self.post_init()
 
@@ -377,7 +381,7 @@ class Qwen3ForcedAlignerForTokenClassification(Qwen3ASRPreTrainedModel):
         input_features_mask (`torch.Tensor` of shape `(batch_size, feature_sequence_length)`, *optional*):
             Mask to avoid performing attention on padding feature indices.
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Labels for computing the token classification loss. Indices should be in `[0, ..., config.classify_num - 1]`.
+            Labels for computing the forced alignment loss. Indices should be in `[0, ..., config.num_timestamp_bins - 1]`.
         """
 
         outputs = self.model(
@@ -397,7 +401,7 @@ class Qwen3ForcedAlignerForTokenClassification(Qwen3ASRPreTrainedModel):
 
         loss = None
         if labels is not None:
-            loss = self.loss_function(logits=logits, labels=labels, vocab_size=self.classify_num)
+            loss = self.loss_function(logits=logits, labels=labels, vocab_size=self.num_timestamp_bins)
 
         return SequenceClassifierOutput(
             loss=loss,
@@ -413,5 +417,5 @@ __all__ = [
     "Qwen3ASRModel",
     "Qwen3ASRPreTrainedModel",
     "Qwen3ForcedAlignerConfig",
-    "Qwen3ForcedAlignerForTokenClassification",
+    "Qwen3ASRForForcedAlignment",
 ]

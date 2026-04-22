@@ -245,6 +245,10 @@ The following auto classes are available for the following audio tasks.
 
 [[autodoc]] AutoModelForAudioTokenization
 
+### AutoModelForForcedAlignment
+
+[[autodoc]] AutoModelForForcedAlignment
+
 ## Multimodal
 
 The following auto classes are available for the following multimodal tasks.
