@@ -22,7 +22,6 @@ from huggingface_hub.dataclasses import strict
 from ... import initialization as init
 from ...backbone_utils import load_backbone
 from ...modeling_outputs import ModelOutput
-from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, logging
 from ...utils.generic import merge_with_config_defaults
@@ -492,7 +491,6 @@ class Deimv2PreTrainedModel(DFinePreTrainedModel):
     @torch.no_grad()
     def _init_weights(self, module):
         super()._init_weights(module)
-        PreTrainedModel._init_weights(self, module)
 
         if isinstance(module, Deimv2SwiGLUFFN):
             init.xavier_uniform_(module.gate_proj.weight)
@@ -853,7 +851,7 @@ class Deimv2Model(DFineModel):
 
 
 class Deimv2ForObjectDetection(DFineForObjectDetection):
-    _no_split_modules = None
+    _no_split_modules = AttributeError()  # Don't have the same restriction as DFine
 
     @property
     def _tied_weights_keys(self):
