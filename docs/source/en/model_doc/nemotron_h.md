@@ -27,6 +27,13 @@ rendered properly in your Markdown viewer.
 
 [NemotronH](https://huggingface.co/papers/2504.03624) is a hybrid architecture combining attention and state-space layers for efficient long-context language modeling. It interleaves Mamba2 and transformer blocks, using a fixed ratio to balance expressiveness with linear-time sequence processing.
 
+> [!NOTE]
+> ``nemotron_h`` is now a thin backward-compat dispatcher over two dedicated architectures:
+> [`NemotronHDense`](./nemotron_h_dense) (Nemotron-H / Nemotron-v2, MLP feed-forward) and
+> [`NemotronHSparse`](./nemotron_h_sparse) (Nemotron-3, MoE feed-forward). Loading an existing
+> ``model_type: nemotron_h`` checkpoint automatically routes to the right subclass based on its
+> ``hybrid_override_pattern``. New code should target the split classes directly.
+
 The example below demonstrates how to generate text with [`Pipeline`] or the [`AutoModelForCausalLM`] class.
 
 <hfoptions id="usage">
@@ -73,9 +80,7 @@ print(tokenizer.decode(output[0], skip_special_tokens=True))
 ## NemotronHModel
 
 [[autodoc]] NemotronHModel
-    - forward
 
 ## NemotronHForCausalLM
 
 [[autodoc]] NemotronHForCausalLM
-    - forward

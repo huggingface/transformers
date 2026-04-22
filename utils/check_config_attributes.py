@@ -54,6 +54,26 @@ SPECIAL_CASES_TO_ALLOW = {
     "Lfm2Config": ["full_attn_idxs"],
     "DiaConfig": ["delay_pattern"],
     "BambaConfig": ["attn_layer_indices"],
+    "NemotronHDenseConfig": [
+        "attention_bias",  # BC — kept for config-json round-trips
+        "expand",  # BC — legacy mamba_expand alias
+        "hidden_dropout",  # BC
+        "hybrid_override_pattern",  # parsed into layer_types / num_hidden_layers at init
+        "mamba_proj_bias",  # BC
+        "residual_in_fp32",  # used by `_init_weights` for residual rescale
+        "sliding_window",  # BC — dense Nemotron-H never uses sliding attention
+    ],
+    "NemotronHSparseConfig": [
+        "attention_bias",
+        "expand",
+        "hidden_dropout",
+        "hybrid_override_pattern",
+        "mamba_proj_bias",
+        "moe_shared_expert_overlap",  # BC — carried over from Nemotron-3 config
+        "n_shared_experts",  # BC — declared in the released config but the modeling uses a single shared MLP
+        "residual_in_fp32",
+        "sliding_window",
+    ],
     "Dots1Config": ["max_window_layers"],
     "JambaConfig": ["attn_layer_offset", "attn_layer_period", "expert_layer_offset", "expert_layer_period"],
     "JetMoeConfig": ["output_router_logits"],

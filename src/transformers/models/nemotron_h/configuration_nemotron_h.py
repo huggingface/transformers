@@ -28,7 +28,7 @@ checkpoints on the Hub (``model_type: nemotron_h``) continue to load. Instantiat
 from __future__ import annotations
 
 from ...configuration_utils import PreTrainedConfig
-from ...utils import logging
+from ...utils import auto_docstring, logging
 from ..nemotron_h_dense.configuration_nemotron_h_dense import NemotronHDenseConfig
 from ..nemotron_h_sparse.configuration_nemotron_h_sparse import NemotronHSparseConfig
 
@@ -53,8 +53,9 @@ def _resolve_nemotron_h_class(kwargs: dict) -> type[PreTrainedConfig]:
     return NemotronHSparseConfig if _is_sparse_kwargs(kwargs) else NemotronHDenseConfig
 
 
+@auto_docstring(checkpoint="nvidia/Nemotron-H-8B-Base-8K")
 class NemotronHConfig(PreTrainedConfig):
-    """Dispatcher shim for backward compatibility with ``model_type: nemotron_h``.
+    r"""Dispatcher shim for backward compatibility with ``model_type: nemotron_h``.
 
     Use :class:`NemotronHDenseConfig` or :class:`NemotronHSparseConfig` directly
     for new code. Instantiating this class redirects to the appropriate one

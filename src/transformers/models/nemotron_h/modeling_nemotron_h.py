@@ -20,13 +20,23 @@ on the config.
 """
 
 from ...utils import logging
-from ..nemotron_h_dense.modeling_nemotron_h_dense import (
+
+# These imports are intentional: `nemotron_h` is a backward-compat shim that routes
+# to the dense / sparse implementations via `__new__` / `from_pretrained`. The lint
+# rules below catch cross-model imports that usually indicate poor modular hygiene,
+# but here the cross-reference is the whole point of this file.
+# trf-ignore: TRF009
+from ..nemotron_h_dense.modeling_nemotron_h_dense import (  # trf-ignore: TRF009
     NemotronHDenseForCausalLM,
     NemotronHDenseModel,
     NemotronHDensePreTrainedModel,
 )
-from ..nemotron_h_sparse.configuration_nemotron_h_sparse import NemotronHSparseConfig
-from ..nemotron_h_sparse.modeling_nemotron_h_sparse import (
+
+# trf-ignore: TRF009
+from ..nemotron_h_sparse.configuration_nemotron_h_sparse import NemotronHSparseConfig  # trf-ignore: TRF009
+
+# trf-ignore: TRF009
+from ..nemotron_h_sparse.modeling_nemotron_h_sparse import (  # trf-ignore: TRF009
     NemotronHSparseForCausalLM,
     NemotronHSparseModel,
     NemotronHSparsePreTrainedModel,
@@ -45,10 +55,7 @@ def _dispatch_from_pretrained(pretrained_model_name_or_path, dense_cls, sparse_c
 
     config = kwargs.pop("config", None)
     if config is None:
-        config = AutoConfig.from_pretrained(
-            pretrained_model_name_or_path,
-            trust_remote_code=kwargs.get("trust_remote_code", False),
-        )
+        config = AutoConfig.from_pretrained(pretrained_model_name_or_path, **kwargs)
     target_cls = _pick_target(config, dense_cls, sparse_cls)
     return target_cls.from_pretrained(pretrained_model_name_or_path, *args, config=config, **kwargs)
 
