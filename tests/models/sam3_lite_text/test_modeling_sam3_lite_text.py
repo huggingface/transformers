@@ -661,6 +661,13 @@ class Sam3LiteTextModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Test
     def test_sdpa_can_dispatch_on_flash(self):
         pass
 
+    @unittest.skip(
+        reason="Sam3LiteTextModel creates float attention masks from features (with gradients) in the DETR "
+        "encoder/decoder, which Flash Attention requires to be None."
+    )
+    def test_flash_attn_2_can_dispatch_composite_models(self):
+        pass
+
     def test_model_outputs_equivalence(self):
         """
         Test that tuple and dict outputs are equivalent.
