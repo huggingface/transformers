@@ -594,7 +594,7 @@ class NemotronHRMSNorm(nn.Module):
 
 
 class NemotronHMLP(nn.Module):
-    def __init__(self, config, intermediate_size=None):
+    def __init__(self, config, intermediate_size=None, **kwargs):
         super().__init__()
         self.config = config
         self.hidden_size = config.hidden_size
