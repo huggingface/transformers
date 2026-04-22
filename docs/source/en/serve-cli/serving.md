@@ -1703,7 +1703,7 @@ data: {"status": "ready", "model": "org/model@main", "cached": true}
 The `transformers serve` server supports OpenAI-style function calling. Models trained for tool-use generate structured function calls that your application executes.
 
 > [!NOTE]
-> Tool calling works with any model whose tokenizer declares tool call tokens. Qwen and Gemma 4 work out of the box.
+> Tool calling works with any model whose tokenizer declares tool call tokens. Qwen and Gemma 4 work out of the box. Open an [issue](https://github.com/huggingface/transformers/issues/new/choose) to request support for a specific model.
 
 Define tools as a list of function specifications following the OpenAI format.
 
@@ -1767,7 +1767,9 @@ for event in response:
 
 ### Multi-turn tool calling
 
-After the model returns a tool call, execute the function locally, then send the result back in a follow-up request to get the model's final answer. The pattern differs slightly between the two APIs.
+After the model returns a tool call, execute the function locally, then send the result back in a follow-up request to get the model's final answer. The pattern differs slightly between the two APIs. See the [OpenAI function calling guide](https://developers.openai.com/api/docs/guides/function-calling?api-mode=chat) for the full spec.
+
+The examples below reuse the `tools` list defined above.
 
 <hfoptions id="multi-turn-tool-calling">
 <hfoption id="v1/chat/completions">
@@ -1775,10 +1777,6 @@ After the model returns a tool call, execute the function locally, then send the
 Pass the tool result as a `role: "tool"` message with the matching `tool_call_id`.
 
 ```py
-from openai import OpenAI
-
-client = OpenAI(base_url="http://localhost:8000/v1", api_key="<KEY>")
-
 # Model returns a tool call
 messages = [{"role": "user", "content": "What's the weather like in San Francisco?"}]
 response = client.chat.completions.create(
@@ -1813,14 +1811,9 @@ print(final_response.choices[0].message.content)
 Pass the tool result as a `function_call_output` item in the `input` list of the follow-up request.
 
 ```py
-from openai import OpenAI
-
-client = OpenAI(base_url="http://localhost:8000/v1", api_key="<KEY>")
-
 user_message = {"role": "user", "content": "What's the weather like in San Francisco?"}
 response = client.responses.create(
     model="Qwen/Qwen2.5-7B-Instruct",
-    instructions="You are a helpful weather assistant. Use the get_weather tool to answer questions.",
     input=[user_message],
     tools=tools,
     stream=False,
@@ -1831,7 +1824,6 @@ result = {"temperature": 22, "condition": "sunny"}
 
 final_response = client.responses.create(
     model="Qwen/Qwen2.5-7B-Instruct",
-    instructions="You are a helpful weather assistant. Use the get_weather tool to answer questions.",
     input=[
         user_message,
         tool_call.model_dump(exclude_none=True),
