@@ -14,6 +14,7 @@
 
 
 import math
+from dataclasses import dataclass
 
 import torch
 import torch.nn as nn
@@ -27,14 +28,11 @@ from ...modeling_outputs import BaseModelOutputWithNoAttention
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
-from ...utils.generic import merge_with_config_defaults
-from ...utils.output_capturing import capture_outputs
 from ..auto import AutoConfig
 from ..pp_lcnet.modeling_pp_lcnet import PPLCNetConvLayer, PPLCNetDepthwiseSeparableConvLayer
 from ..slanext.configuration_slanext import SLANeXtConfig
 from ..slanext.modeling_slanext import (
     SLANeXtForTableRecognition,
-    SLANeXtForTableRecognitionOutput,
     SLANeXtPreTrainedModel,
     SLANeXtSLAHead,
 )
@@ -59,7 +57,7 @@ class SLANetConfig(SLANeXtConfig):
     csp_kernel_size (`int`, *optional*, defaults to 5):
         The kernel size of the Cross Stage Partial (CSP) layer.
     csp_num_blocks (`int`, *optional*, defaults to 1):
-        Number of the Cross Stage Partial (CSP) layer.
+        Number of blocks within the Cross Stage Partial (CSP) layer.
     """
 
     sub_configs = {"backbone_config": AutoConfig}
@@ -119,9 +117,18 @@ class SLANetPreTrainedModel(SLANeXtPreTrainedModel):
                         if layer.bias is not None:
                             init.uniform_(layer.bias, -std, std)
 
+@dataclass
+@auto_docstring
+class SLANetForTableRecognitionOutput(BaseModelOutputWithNoAttention):
+    r"""
+    head_hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
+        Hidden-states of the SLANetSLAHead at each prediction step, varies up to max `self.config.max_text_length` states (depending on early exits).
+    head_attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
+        Attentions of the SLANetSLAHead at each prediction step, varies up to max `self.config.max_text_length` attentions (depending on early exits).
+    """
 
-class SLANetForTableRecognitionOutput(SLANeXtForTableRecognitionOutput):
-    pass
+    head_hidden_states: torch.FloatTensor | None = None
+    head_attentions: torch.FloatTensor | None = None
 
 
 class SLANetSLAHead(SLANeXtSLAHead):
@@ -226,8 +233,8 @@ class SLANetCSPPAN(nn.Module):
 
     def __init__(
         self,
-        in_channel_list,
         config,
+        in_channel_list,
     ):
         super().__init__()
         out_channels = config.post_conv_out_channels
@@ -319,15 +326,15 @@ class SLANetBackbone(SLANetPreTrainedModel):
     def __init__(self, config: SLANetConfig):
         super().__init__(config)
         self.vision_backbone = load_backbone(config)
-        self.post_csp_pan = SLANetCSPPAN(self.vision_backbone.num_features[2:], config)
+        self.post_csp_pan = SLANetCSPPAN(config, self.vision_backbone.num_features[2:])
 
         self.post_init()
 
-    @merge_with_config_defaults
-    @capture_outputs
+    @can_return_tuple
+    @auto_docstring
     def forward(
         self, hidden_states: torch.FloatTensor, **kwargs: Unpack[TransformersKwargs]
-    ) -> tuple[torch.FloatTensor] | SLANetForTableRecognitionOutput:
+    ) -> tuple[torch.FloatTensor] | BaseModelOutputWithNoAttention:
         outputs = self.vision_backbone(hidden_states, **kwargs)
         hidden_states = self.post_csp_pan(outputs.feature_maps)
         return BaseModelOutputWithNoAttention(

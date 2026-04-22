@@ -43,7 +43,7 @@ class SLANetConfig(PreTrainedConfig):
     csp_kernel_size (`int`, *optional*, defaults to 5):
         The kernel size of the Cross Stage Partial (CSP) layer.
     csp_num_blocks (`int`, *optional*, defaults to 1):
-        Number of the Cross Stage Partial (CSP) layer.
+        Number of blocks within the Cross Stage Partial (CSP) layer.
     """
 
     model_type = "slanet"
