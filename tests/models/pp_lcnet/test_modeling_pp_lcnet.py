@@ -19,6 +19,7 @@ import unittest
 
 import requests
 from parameterized import parameterized
+from transformers.image_utils import load_image
 
 from transformers import (
     PPLCNetBackbone,
@@ -40,13 +41,11 @@ from ...test_backbone_common import BackboneTesterMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor
 from ...test_pipeline_mixin import PipelineTesterMixin
+from ...test_processing_common import url_to_local_path
 
 
 if is_torch_available():
     import torch
-
-if is_vision_available():
-    from PIL import Image
 
 
 class PPLCNetModelTester:
@@ -282,8 +281,10 @@ class PPLCNetModelIntegrationTest(unittest.TestCase):
         model_path = "PaddlePaddle/PP-LCNet_x1_0_doc_ori_safetensors"
         self.model = PPLCNetForImageClassification.from_pretrained(model_path).to(torch_device)
         self.image_processor = PPLCNetImageProcessor.from_pretrained(model_path) if is_vision_available() else None
-        url = "https://paddle-model-ecology.bj.bcebos.com/paddlex/imgs/demo_image/img_rot180_demo.jpg"
-        self.image = Image.open(requests.get(url, stream=True).raw)
+        img_url = url_to_local_path(
+            "https://paddle-model-ecology.bj.bcebos.com/paddlex/imgs/demo_image/img_rot180_demo.jpg"
+        )
+        self.image = load_image(img_url)
 
     def test_inference_image_classification_head(self):
         inputs = self.image_processor(images=self.image, return_tensors="pt").to(torch_device)

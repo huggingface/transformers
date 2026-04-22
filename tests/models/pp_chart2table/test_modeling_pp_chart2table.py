@@ -17,6 +17,7 @@ import unittest
 
 from transformers import AutoModelForImageTextToText, AutoProcessor
 from transformers.testing_utils import cleanup, require_torch, require_vision, slow, torch_device
+from ...test_processing_common import url_to_local_path
 
 
 @slow
@@ -33,7 +34,7 @@ class PPChart2TableIntegrationTest(unittest.TestCase):
                 "content": [
                     {
                         "type": "image",
-                        "url": "https://paddle-model-ecology.bj.bcebos.com/paddlex/imgs/demo_image/chart_parsing_02.png",
+                        "url": url_to_local_path("https://paddle-model-ecology.bj.bcebos.com/paddlex/imgs/demo_image/chart_parsing_02.png"),
                     },
                 ],
             },

@@ -19,6 +19,7 @@ import unittest
 
 import requests
 from parameterized import parameterized
+from transformers.image_utils import load_image
 
 from transformers import (
     PPOCRV5MobileDetConfig,
@@ -38,6 +39,7 @@ from transformers.testing_utils import (
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor
+from ...test_processing_common import url_to_local_path
 
 
 if is_torch_available():
@@ -242,8 +244,10 @@ class PPOCRV5MobileDetModelIntegrationTest(unittest.TestCase):
         self.image_processor = (
             PPOCRV5ServerDetImageProcessor.from_pretrained(model_path) if is_vision_available() else None
         )
-        url = "https://paddle-model-ecology.bj.bcebos.com/paddlex/imgs/demo_image/general_ocr_001.png"
-        self.image = Image.open(requests.get(url, stream=True).raw)
+        img_url = url_to_local_path(
+            "https://paddle-model-ecology.bj.bcebos.com/paddlex/imgs/demo_image/general_ocr_001.png"
+        )
+        self.image = load_image(img_url)
 
     def test_inference_object_detection_head(self):
         inputs = self.image_processor(images=self.image, return_tensors="pt").to(torch_device)

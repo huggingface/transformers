@@ -21,6 +21,7 @@ import unittest
 
 import requests
 from parameterized import parameterized
+from transformers.image_utils import load_image
 
 from transformers import (
     PPDocLayoutV2Config,
@@ -41,6 +42,7 @@ from transformers.testing_utils import (
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor
 from ...test_pipeline_mixin import PipelineTesterMixin
+from ...test_processing_common import url_to_local_path
 
 
 if is_torch_available():
@@ -583,8 +585,10 @@ class PPDocLayoutV2ModelIntegrationTest(unittest.TestCase):
         model_path = "PaddlePaddle/PP-DocLayoutV2_safetensors"
         self.model = PPDocLayoutV2ForObjectDetection.from_pretrained(model_path).to(torch_device)
         self.image_processor = PPDocLayoutV2ImageProcessor.from_pretrained(model_path)
-        url = "https://paddle-model-ecology.bj.bcebos.com/paddlex/imgs/demo_image/layout_demo.jpg"
-        self.image = Image.open(requests.get(url, stream=True).raw)
+        img_url = url_to_local_path(
+            "https://paddle-model-ecology.bj.bcebos.com/paddlex/imgs/demo_image/layout_demo.jpg"
+        )
+        self.image = load_image(img_url)
 
     def tearDown(self):
         cleanup(torch_device, gc_collect=True)
