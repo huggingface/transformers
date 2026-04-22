@@ -276,7 +276,7 @@ class NemotronHSparseModelTester:
             self.parent.skipTest("No mamba layer found in the model configuration.")
 
         token_emb = model.embeddings(input_ids.to(torch_device))
-        mamba_mixer = model.layers[mamba_layer_idx].mixer
+        mamba_mixer = model.layers[mamba_layer_idx].mamba
 
         outputs_fast = mamba_mixer.cuda_kernels_forward(token_emb)
         outputs_slow = mamba_mixer.torch_forward(token_emb)

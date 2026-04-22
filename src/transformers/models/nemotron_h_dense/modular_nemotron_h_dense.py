@@ -44,7 +44,7 @@ logger = logging.get_logger(__name__)
 is_fast_path_available = False
 
 
-class NemotronHDenseMamba2Mixer(Zamba2MambaMixer):
+class NemotronHDenseMamba(Zamba2MambaMixer):
     def __init__(self, config: NemotronHDenseConfig, layer_idx: int | None = None):
         super().__init__(config, layer_idx)
         self.ssm_state_size = config.ssm_state_size
@@ -112,78 +112,68 @@ class NemotronHDenseMLP(NemotronMLP):
 
 
 class NemotronHDenseAttention(JambaAttention):
+    pass
+
+
+class NemotronHDenseDecoderLayer(GradientCheckpointingLayer):
+    """Single decoder layer. ``layer_type`` picks exactly one of mamba / attention / mlp."""
+
+    def __init__(self, config: NemotronHDenseConfig, layer_idx: int):
+        super().__init__()
+        self.layer_idx = layer_idx
+        self.layer_type = config.layer_types[layer_idx]
+        self.input_layernorm = NemotronHDenseRMSNorm(config.hidden_size, eps=config.layer_norm_epsilon)
+
+        self.mamba = None
+        self.self_attn = None
+        self.mlp = None
+
+        if self.layer_type == "mamba":
+            self.mamba = NemotronHDenseMamba(config, layer_idx=layer_idx)
+        elif self.layer_type == "attention":
+            self.self_attn = NemotronHDenseAttention(config, layer_idx=layer_idx)
+        elif self.layer_type == "mlp":
+            self.mlp = NemotronHDenseMLP(config)
+        else:
+            raise ValueError(f"Unknown layer_type {self.layer_type!r} for NemotronHDenseDecoderLayer.")
+
     def forward(
         self,
         hidden_states: torch.Tensor,
         attention_mask: torch.Tensor | None = None,
-        past_key_values: Cache | None = None,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple[torch.Tensor, torch.Tensor | None]:
-        return super().forward(hidden_states, attention_mask, past_key_values, **kwargs)
-
-
-MIXER_TYPES = {
-    "mamba": NemotronHDenseMamba2Mixer,
-    "attention": NemotronHDenseAttention,
-    "mlp": NemotronHDenseMLP,
-}
-
-
-class NemotronHDenseBlock(GradientCheckpointingLayer):
-    """
-    A single transformer block in the dense Nemotron-H model. Each block holds one of
-    Mamba, Attention, or MLP mixer, applies pre-normalization then the mixer, and adds
-    a residual connection.
-    """
-
-    def __init__(self, config, layer_idx):
-        super().__init__()
-        self.config = config
-        self.layer_idx = layer_idx
-        self.norm = NemotronHDenseRMSNorm(config.hidden_size, eps=config.layer_norm_epsilon)
-
-        self.block_type = config.layer_types[layer_idx]
-
-        mixer_kwargs = {"config": config}
-        if self.block_type != "mlp":
-            mixer_kwargs["layer_idx"] = layer_idx
-        self.mixer = MIXER_TYPES[self.block_type](**mixer_kwargs)
-
-    def forward(
-        self,
-        hidden_states,
-        past_key_values: Cache | None = None,
-        attention_mask: torch.Tensor | None = None,
+        mamba_attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
+        past_key_values: Cache | None = None,
         use_cache: bool | None = False,
         **kwargs: Unpack[TransformersKwargs],
-    ):
+    ) -> torch.Tensor:
         residual = hidden_states
-        hidden_states = self.norm(hidden_states.to(dtype=self.norm.weight.dtype))
+        hidden_states = self.input_layernorm(hidden_states.to(dtype=self.input_layernorm.weight.dtype))
 
-        if self.block_type == "mamba":
-            hidden_states = self.mixer(hidden_states, cache_params=past_key_values, attention_mask=attention_mask)
-        elif self.block_type == "attention":
-            hidden_states, _ = self.mixer(
+        if self.mamba is not None:
+            hidden_states = self.mamba(
                 hidden_states=hidden_states,
-                past_key_values=past_key_values,
+                cache_params=past_key_values,
+                attention_mask=mamba_attention_mask,
+            )
+        elif self.self_attn is not None:
+            hidden_states, _ = self.self_attn(
+                hidden_states=hidden_states,
                 attention_mask=attention_mask,
+                past_key_values=past_key_values,
                 position_ids=position_ids,
-                user_cache=use_cache,
                 **kwargs,
             )
         else:
-            hidden_states = self.mixer(hidden_states)
+            hidden_states = self.mlp(hidden_states)
 
-        hidden_states = residual + hidden_states
-
-        return hidden_states
+        return residual + hidden_states
 
 
 class NemotronHDensePreTrainedModel(PreTrainedModel):
     config: NemotronHDenseConfig
     base_model_prefix = "model"
-    _no_split_modules = ["NemotronHDenseBlock"]
+    _no_split_modules = ["NemotronHDenseDecoderLayer"]
     _skip_keys_device_placement = ["past_key_values"]
     _supports_flash_attn = True
     _supports_flash_attn_2 = True
@@ -191,14 +181,14 @@ class NemotronHDensePreTrainedModel(PreTrainedModel):
     _supports_flex_attn = True
     _is_stateful = True
     _can_record_outputs = {
-        "hidden_states": NemotronHDenseBlock,
+        "hidden_states": NemotronHDenseDecoderLayer,
         "attentions": NemotronHDenseAttention,
     }
 
     @torch.no_grad()
     def _init_weights(self, module):
         super()._init_weights(module)
-        if isinstance(module, NemotronHDenseMamba2Mixer):
+        if isinstance(module, NemotronHDenseMamba):
             A = torch.arange(1, self.config.mamba_num_heads + 1)
             init.copy_(module.A_log, torch.log(A))
             init.ones_(module.D)
@@ -231,14 +221,13 @@ class NemotronHDensePreTrainedModel(PreTrainedModel):
 
 
 class NemotronHDenseModel(NemotronHDensePreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: NemotronHDenseConfig):
         super().__init__(config)
 
         self.embeddings = nn.Embedding(config.vocab_size, config.hidden_size)
         self.layers = nn.ModuleList(
-            [NemotronHDenseBlock(config, layer_idx=idx) for idx in range(config.num_hidden_layers)]
+            [NemotronHDenseDecoderLayer(config, layer_idx=idx) for idx in range(config.num_hidden_layers)]
         )
-
         self.norm_f = NemotronHDenseRMSNorm(config.hidden_size, eps=config.layer_norm_epsilon)
         self.post_init()
 
@@ -253,13 +242,13 @@ class NemotronHDenseModel(NemotronHDensePreTrainedModel):
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
-        inputs_embeds: torch.LongTensor | None = None,
+        inputs_embeds: torch.FloatTensor | None = None,
         position_ids: torch.LongTensor | None = None,
         past_key_values: Cache | None = None,
         use_cache: bool | None = None,
         attention_mask: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | BaseModelOutputWithPast:
+    ) -> BaseModelOutputWithPast:
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
 
@@ -278,25 +267,17 @@ class NemotronHDenseModel(NemotronHDensePreTrainedModel):
 
         causal_mask = create_causal_mask(
             config=self.config,
-            input_embeds=inputs_embeds,
+            inputs_embeds=inputs_embeds,
             attention_mask=attention_mask,
             past_key_values=past_key_values,
             position_ids=position_ids,
         )
-        mamba_mask = self._update_mamba_mask(attention_mask, past_key_values)
 
-        block_type_to_mask = {
-            "mamba": mamba_mask,
-            "attention": causal_mask,
-        }
-
-        for layer_idx, mixer_block in enumerate(self.layers):
-            # Parameter-free blocks (mlp / moe) do not need a mask.
-            layer_mask = block_type_to_mask.get(mixer_block.block_type)
-
-            hidden_states = mixer_block(
+        for layer in self.layers:
+            hidden_states = layer(
                 hidden_states,
-                attention_mask=layer_mask,
+                attention_mask=causal_mask,
+                mamba_attention_mask=attention_mask,
                 position_ids=position_ids,
                 past_key_values=past_key_values,
                 use_cache=use_cache,
@@ -309,14 +290,6 @@ class NemotronHDenseModel(NemotronHDensePreTrainedModel):
             last_hidden_state=hidden_states,
             past_key_values=past_key_values if use_cache else None,
         )
-
-    def _update_mamba_mask(self, attention_mask, past_key_values):
-        mamba_mask = attention_mask
-        if (past_key_values is not None and past_key_values.has_previous_state()) or (
-            attention_mask is not None and torch.all(attention_mask == 1)
-        ):
-            mamba_mask = None
-        return mamba_mask
 
 
 class NemotronHDenseForCausalLM(ZambaForCausalLM):
@@ -335,7 +308,7 @@ class NemotronHDenseForCausalLM(ZambaForCausalLM):
         use_cache: bool | None = None,
         logits_to_keep: int | torch.Tensor = 0,
         **kwargs,
-    ) -> tuple | CausalLMOutputWithPast:
+    ) -> CausalLMOutputWithPast:
         outputs = self.model(
             input_ids=input_ids,
             attention_mask=attention_mask,

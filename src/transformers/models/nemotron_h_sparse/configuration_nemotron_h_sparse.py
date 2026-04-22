@@ -56,8 +56,6 @@ class NemotronHSparseConfig(PreTrainedConfig):
         Data type for Mamba SSM cache states.
     moe_shared_expert_intermediate_size (`int`, *optional*, defaults to 7688):
         Dimension of the MLP representations in shared experts.
-    moe_latent_size (`int`, *optional*):
-        Latent size for MoE expert projections. If `None`, uses `hidden_size`.
     moe_shared_expert_overlap (`bool`, *optional*, defaults to `True`):
         Whether shared experts overlap with routed experts.
     n_group (`int`, *optional*, defaults to 1):
@@ -119,7 +117,6 @@ class NemotronHSparseConfig(PreTrainedConfig):
     n_shared_experts: int = 1
     moe_intermediate_size: int = 7688
     moe_shared_expert_intermediate_size: int = 7688
-    moe_latent_size: int | None = None
     moe_shared_expert_overlap: bool = True
     num_experts_per_tok: int = 2
     routed_scaling_factor: float | int = 1.0
@@ -160,6 +157,8 @@ class NemotronHSparseConfig(PreTrainedConfig):
         kwargs.pop("num_nextn_predict_layers", None)
         kwargs.pop("mtp_hybrid_override_pattern", None)
         kwargs.pop("mtp_layers_block_type", None)
+        # Latent-expert projections are not present in released Nemotron-3 configs.
+        kwargs.pop("moe_latent_size", None)
         # num_hidden_layers is derived from the pattern length.
         kwargs.pop("num_hidden_layers", None)
 
