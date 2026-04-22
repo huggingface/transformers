@@ -160,6 +160,13 @@ class VoxtralRealtimeForConditionalGenerationModelTest(ALMModelTest, unittest.Te
         super().test_generate_with_and_without_position_ids()
 
     @unittest.skip(
+        reason="This test does not apply to VoxtralRealtime: audio tokens are not replaced in inputs_embeds, "
+        "audio and text embeddings are summed instead."
+    )
+    def test_mismatching_num_audio_tokens(self):
+        pass
+
+    @unittest.skip(
         reason="This test does not apply to VoxtralRealtime since input_features must be provided along input_ids"
     )
     def test_flash_attention_2_continue_generate_with_position_ids(self):
