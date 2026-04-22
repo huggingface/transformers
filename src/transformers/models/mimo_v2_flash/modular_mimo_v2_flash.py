@@ -277,7 +277,7 @@ def eager_attention_forward(
         sinks = module.sinks.reshape(1, -1, 1, 1).expand(query.shape[0], -1, query.shape[-2], -1)
         attn_weights = torch.cat([attn_weights, sinks], dim=-1)
 
-    # Subtract max for BF16/FP16 numerical stability (same as Arthur's fix in gpt-oss).
+    # Subtract max for BF16/FP16 numerical stability
     attn_weights = attn_weights - attn_weights.max(dim=-1, keepdim=True).values
     probs = F.softmax(attn_weights, dim=-1, dtype=attn_weights.dtype)
 
