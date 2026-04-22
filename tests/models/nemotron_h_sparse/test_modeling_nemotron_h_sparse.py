@@ -1,4 +1,4 @@
-# Copyright 2024-2025 NVIDIA Corporation and The HuggingFace Inc. team. All rights reserved.
+# Copyright 2024-2026 NVIDIA Corporation and The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -11,7 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Testing suite for the PyTorch NemotronH model."""
+"""Testing suite for the PyTorch NemotronHSparse model."""
 
 import tempfile
 import unittest
@@ -19,7 +19,7 @@ import unittest
 import pytest
 from huggingface_hub.errors import StrictDataclassClassValidationError
 
-from transformers import AutoTokenizer, NemotronHConfig, NemotronHForCausalLM, is_torch_available
+from transformers import AutoTokenizer, NemotronHSparseConfig, NemotronHSparseForCausalLM, is_torch_available
 from transformers.testing_utils import (
     require_bitsandbytes,
     require_flash_attn,
@@ -39,10 +39,10 @@ from ...test_pipeline_mixin import PipelineTesterMixin
 if is_torch_available():
     import torch
 
-    from transformers import DynamicCache, NemotronHForCausalLM, NemotronHModel
+    from transformers import DynamicCache, NemotronHSparseForCausalLM, NemotronHSparseModel
 
 
-class NemotronHModelTester:
+class NemotronHSparseModelTester:
     def __init__(
         self,
         parent,
@@ -53,11 +53,10 @@ class NemotronHModelTester:
         use_labels=True,
         vocab_size=99,
         hidden_size=32,
-        layers_block_type=["mamba", "moe", "mamba", "attention", "moe"],
+        hybrid_override_pattern="ME*ME",
         num_attention_heads=4,
         num_key_value_heads=2,
         head_dim=32,
-        intermediate_size=40,
         moe_intermediate_size=40,
         moe_shared_expert_intermediate_size=40,
         mlp_hidden_act="relu2",
@@ -67,7 +66,6 @@ class NemotronHModelTester:
         initializer_range=0.02,
         num_labels=3,
         num_choices=4,
-        # Mamba-specific params
         ssm_state_size=16,
         mamba_num_heads=8,
         mamba_n_groups=8,
@@ -75,7 +73,6 @@ class NemotronHModelTester:
         mamba_d_conv=4,
         mamba_expand=2,
         mamba_chunk_size=64,
-        # MoE params
         n_routed_experts=8,
         n_shared_experts=1,
         num_experts_per_tok=2,
@@ -88,13 +85,11 @@ class NemotronHModelTester:
         self.use_labels = use_labels
         self.vocab_size = vocab_size
         self.hidden_size = hidden_size
-        self.layers_block_type = layers_block_type
-        # num_hidden_layers is now derived from layers_block_type length
-        self.num_hidden_layers = len(layers_block_type)
+        self.hybrid_override_pattern = hybrid_override_pattern
+        self.num_hidden_layers = len(hybrid_override_pattern)
         self.num_attention_heads = num_attention_heads
         self.num_key_value_heads = num_key_value_heads
         self.head_dim = head_dim
-        self.intermediate_size = intermediate_size
         self.moe_intermediate_size = moe_intermediate_size
         self.moe_shared_expert_intermediate_size = moe_shared_expert_intermediate_size
         self.mlp_hidden_act = mlp_hidden_act
@@ -105,7 +100,6 @@ class NemotronHModelTester:
         self.num_labels = num_labels
         self.num_choices = num_choices
 
-        # Mamba params
         self.ssm_state_size = ssm_state_size
         self.mamba_num_heads = mamba_num_heads
         self.mamba_n_groups = mamba_n_groups
@@ -114,7 +108,6 @@ class NemotronHModelTester:
         self.mamba_expand = mamba_expand
         self.mamba_chunk_size = mamba_chunk_size
 
-        # MoE params
         self.n_routed_experts = n_routed_experts
         self.n_shared_experts = n_shared_experts
         self.num_experts_per_tok = num_experts_per_tok
@@ -139,14 +132,13 @@ class NemotronHModelTester:
         return config, input_ids, input_mask, sequence_labels, token_labels, choice_labels
 
     def get_config(self):
-        return NemotronHConfig(
+        return NemotronHSparseConfig(
             vocab_size=self.vocab_size,
             hidden_size=self.hidden_size,
-            layers_block_type=self.layers_block_type,
+            hybrid_override_pattern=self.hybrid_override_pattern,
             num_attention_heads=self.num_attention_heads,
             num_key_value_heads=self.num_key_value_heads,
             head_dim=self.head_dim,
-            intermediate_size=self.intermediate_size,
             moe_intermediate_size=self.moe_intermediate_size,
             moe_shared_expert_intermediate_size=self.moe_shared_expert_intermediate_size,
             mlp_hidden_act=self.mlp_hidden_act,
@@ -189,7 +181,7 @@ class NemotronHModelTester:
         )
 
     def create_and_check_model(self, config, input_ids, input_mask, _sequence_labels, _token_labels, _choice_labels):
-        model = NemotronHModel(config=config)
+        model = NemotronHSparseModel(config=config)
         model.to(torch_device)
         model.eval()
         result = model(input_ids, attention_mask=input_mask)
@@ -205,7 +197,7 @@ class NemotronHModelTester:
         token_labels,
         _choice_labels,
     ):
-        model = NemotronHForCausalLM(config=config)
+        model = NemotronHSparseForCausalLM(config=config)
         model.to(torch_device)
         model.eval()
         result = model(input_ids, attention_mask=input_mask, labels=token_labels)
@@ -225,11 +217,10 @@ class NemotronHModelTester:
     ):
         config.is_decoder = True
         config.add_cross_attention = False
-        model = NemotronHForCausalLM(config=config)
+        model = NemotronHSparseForCausalLM(config=config)
         model.to(torch_device)
         model.eval()
 
-        # first forward pass
         outputs = model(
             input_ids,
             attention_mask=input_mask,
@@ -237,11 +228,9 @@ class NemotronHModelTester:
         )
         past_key_values = outputs.past_key_values
 
-        # create hypothetical multiple next token and extent to next_input_ids
         next_tokens = ids_tensor((self.batch_size, 1), config.vocab_size)
         next_mask = ids_tensor((self.batch_size, 1), vocab_size=2)
 
-        # append to next input_ids and
         next_input_ids = torch.cat([input_ids, next_tokens], dim=-1)
         next_attention_mask = torch.cat([input_mask, next_mask], dim=-1)
 
@@ -257,23 +246,15 @@ class NemotronHModelTester:
             output_hidden_states=True,
         )["hidden_states"][0]
 
-        # select random slice
         random_slice_idx = ids_tensor((1,), output_from_past.shape[-1]).item()
         output_from_no_past_slice = output_from_no_past[:, -1:, random_slice_idx].detach()
         output_from_past_slice = output_from_past[:, :, random_slice_idx].detach()
 
         self.parent.assertTrue(output_from_past_slice.shape[1] == next_tokens.shape[1])
-
-        # test that outputs are equal for slice
         self.parent.assertTrue(torch.allclose(output_from_past_slice, output_from_no_past_slice, atol=1e-3))
 
     def create_and_check_mamba2_slow_vs_fast_forward(self, config, input_ids, *args):
-        """
-        Test that cuda_kernels_forward and torch_forward produce consistent outputs.
-        This ensures that the optimized CUDA kernel path and the pure PyTorch path
-        are equivalent.
-        """
-        model = NemotronHModel(config)
+        model = NemotronHSparseModel(config)
         model.eval()
 
         if not (is_mamba_ssm_available() and is_causal_conv1d_available()):
@@ -285,10 +266,8 @@ class NemotronHModelTester:
 
         model.to(torch_device)
 
-        # Get the first mamba layer for testing
-        # Find the index of the first mamba layer
         mamba_layer_idx = None
-        for idx, layer_type in enumerate(config.layers_block_type):
+        for idx, layer_type in enumerate(config.layer_types):
             if layer_type == "mamba":
                 mamba_layer_idx = idx
                 break
@@ -296,23 +275,17 @@ class NemotronHModelTester:
         if mamba_layer_idx is None:
             self.parent.skipTest("No mamba layer found in the model configuration.")
 
-        # Get embeddings
         token_emb = model.embeddings(input_ids.to(torch_device))
-
-        # Get the mamba mixer from the first mamba block
         mamba_mixer = model.layers[mamba_layer_idx].mixer
 
-        # Test without cache
         outputs_fast = mamba_mixer.cuda_kernels_forward(token_emb)
         outputs_slow = mamba_mixer.torch_forward(token_emb)
 
         self.parent.assertTrue(torch.allclose(outputs_fast, outputs_slow, atol=1e-3, rtol=1e-3))
 
-        # Test with cache
         cache_params = DynamicCache(config=config)
         outputs_fast_cached = mamba_mixer.cuda_kernels_forward(token_emb, cache_params=cache_params)
 
-        # Reset cache for fair comparison
         cache_params_slow = DynamicCache(config=config)
         outputs_slow_cached = mamba_mixer.torch_forward(token_emb, cache_params=cache_params_slow)
 
@@ -333,19 +306,19 @@ class NemotronHModelTester:
 
 
 @require_torch
-class NemotronHModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
+class NemotronHSparseModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (
         (
-            NemotronHModel,
-            NemotronHForCausalLM,
+            NemotronHSparseModel,
+            NemotronHSparseForCausalLM,
         )
         if is_torch_available()
         else ()
     )
     pipeline_model_mapping = (
         {
-            "feature-extraction": NemotronHModel,
-            "text-generation": NemotronHForCausalLM,
+            "feature-extraction": NemotronHSparseModel,
+            "text-generation": NemotronHSparseForCausalLM,
         }
         if is_torch_available()
         else {}
@@ -364,37 +337,27 @@ class NemotronHModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
         return (batch_size, config.mamba_num_heads, config.mamba_head_dim, config.ssm_state_size)
 
     def _check_past_key_values_for_generate(self, batch_size, past_key_values, seq_length, config):
-        # Raise a useful error, asking to explicitly override the method
         if not isinstance(past_key_values, DynamicCache):
             raise ValueError("The cache does not use the correct Cache")
 
-        # Use the correct config
         config = config.get_text_config(decoder=True)
 
-        # (batch, kv heads, seq_length, head_dim)
-        # Only pure mamba models do not have num_attention_heads defined in config, so it can never be 1 in practice for attention models
         num_attention_heads = getattr(config, "num_attention_heads", 1)
         num_kv_heads = getattr(config, "num_key_value_heads", num_attention_heads)
         hidden_size = getattr(config, "d_model", config.hidden_size)
         head_dim = getattr(config, "head_dim", hidden_size // num_attention_heads)
 
-        # For cross attention cache, the seq_length depends on the model, so we remove that dim
         attention_shape = (batch_size, num_kv_heads, seq_length, head_dim)
-        # For mamba layers
         conv_shape = self._get_conv_state_shape(batch_size, config)
         recurrent_shape = self._get_recurrent_state_shape(batch_size, config)
 
-        # Check each layer has the correct shape
         for layer, layer_type in zip(past_key_values.layers, config.layer_types):
-            # Moe layers have a default mamba cache instantiated, but it stays empty as the layer does not use it
             if layer_type == "moe":
                 self.assertEqual(layer.conv_states, None)
                 self.assertEqual(layer.recurrent_states, None)
-            # Attention layer cache
             elif layer_type == "attention":
                 self.assertEqual(layer.keys.shape, attention_shape)
                 self.assertEqual(layer.values.shape, attention_shape)
-            # Mamba layer cache
             elif layer_type == "mamba":
                 self.assertEqual(layer.conv_states.shape, conv_shape)
                 self.assertEqual(layer.recurrent_states.shape, recurrent_shape)
@@ -402,26 +365,23 @@ class NemotronHModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
                 raise ValueError("Unknown layer type.")
 
     def setUp(self):
-        self.model_tester = NemotronHModelTester(self)
+        self.model_tester = NemotronHSparseModelTester(self)
         self.config_tester = ConfigTester(
-            self, config_class=NemotronHConfig, common_properties=["hidden_size", "num_attention_heads"]
+            self, config_class=NemotronHSparseConfig, common_properties=["hidden_size", "num_attention_heads"]
         )
-        # Save original settings
         self._original_deterministic = torch.are_deterministic_algorithms_enabled()
         self._original_cudnn_deterministic = torch.backends.cudnn.deterministic
         self._original_cudnn_benchmark = torch.backends.cudnn.benchmark
-        # Apply deterministic settings for NemotronH tests
         torch.use_deterministic_algorithms(True)
         torch.backends.cudnn.deterministic = True
         torch.backends.cudnn.benchmark = False
 
     def tearDown(self):
-        # Restore original settings
         torch.use_deterministic_algorithms(self._original_deterministic)
         torch.backends.cudnn.deterministic = self._original_cudnn_deterministic
         torch.backends.cudnn.benchmark = self._original_cudnn_benchmark
 
-    @unittest.skip(reason="NemotronH needs at least 3 layers to test (mamba, moe, attention)")
+    @unittest.skip(reason="NemotronHSparse needs at least 3 layers to test (mamba, moe, attention)")
     def test_num_layers_is_small(self):
         pass
 
@@ -429,7 +389,7 @@ class NemotronHModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
     def test_flash_attention_2_padding_matches_padding_free_with_position_ids(self):
         pass
 
-    @unittest.skip(reason="NemotronH has hybrid cache.")
+    @unittest.skip(reason="NemotronHSparse has hybrid cache.")
     def test_generate_continue_from_inputs_embeds(self):
         pass
 
@@ -439,14 +399,6 @@ class NemotronHModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
 
     def test_reverse_loading_mapping(self):
         super().test_reverse_loading_mapping(skip_base_model=True)
-
-    # TODO(liding):
-    # in test_configuration_common.py, three tests failed
-    # create_and_test_config_to_json_file
-    # create_and_test_config_from_and_save_pretrained
-    # create_and_test_config_from_and_save_pretrained_composite
-    # def test_config(self):
-    #     self.config_tester.run_common_tests()
 
     def test_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
@@ -461,16 +413,10 @@ class NemotronHModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
         self.model_tester.create_and_check_decoder_model_past_large_inputs(*config_and_inputs)
 
     def test_mamba2_slow_vs_fast_forward(self):
-        """
-        Test that cuda_kernels_forward and torch_forward produce consistent outputs.
-        """
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_mamba2_slow_vs_fast_forward(*config_and_inputs)
 
     def test_attention_outputs(self):
-        r"""
-        Overriding the test_attention_outputs test as the NemotronH model outputs attention only for its attention layers
-        """
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         config.return_dict = True
 
@@ -478,11 +424,9 @@ class NemotronHModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
         encoder_seq_length = getattr(self.model_tester, "encoder_seq_length", seq_len)
         encoder_key_length = getattr(self.model_tester, "key_length", encoder_seq_length)
 
-        # Count attention layers from hybrid pattern
         num_attention_layers = config.hybrid_override_pattern.count("*")
 
         for model_class in self.all_model_classes:
-            print(f"Testing model class: {model_class}")
             inputs_dict["output_attentions"] = True
             inputs_dict["output_hidden_states"] = False
             config.return_dict = True
@@ -496,7 +440,6 @@ class NemotronHModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
             attentions = outputs.attentions
             self.assertEqual(len(attentions), num_attention_layers)
 
-            # check that output_attentions also work using config
             del inputs_dict["output_attentions"]
             config.output_attentions = True
             model = model_class(config)
@@ -515,7 +458,6 @@ class NemotronHModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
 
             out_len = len(outputs)
 
-            # Check attention is always last and order is fine
             inputs_dict["output_attentions"] = True
             inputs_dict["output_hidden_states"] = True
             model = model_class(config)
@@ -542,10 +484,6 @@ class NemotronHModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
     @pytest.mark.flash_attn_test
     @slow
     def test_flash_attn_2_fp32_ln(self):
-        r"""
-        Overriding the test_flash_attn_2_fp32_ln test as the NemotronH model, like Zamba2, doesn't support
-        right padding + use cache with FA2
-        """
         from transformers import BitsAndBytesConfig
 
         for model_class in self.all_generative_model_classes:
@@ -557,7 +495,6 @@ class NemotronHModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
 
                 dummy_input = inputs_dict[model.main_input_name]
                 dummy_attention_mask = inputs_dict.get("attention_mask", torch.ones_like(dummy_input))
-                # NOTE: NemotronH does not support right padding + use_cache with FA2.
                 dummy_attention_mask[:, -1] = 1
 
                 model = model_class.from_pretrained(
@@ -568,20 +505,14 @@ class NemotronHModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
                 )
 
                 for _, param in model.named_parameters():
-                    # upcast only layer norms
                     if (param.dtype == torch.float16) or (param.dtype == torch.bfloat16):
                         param.data = param.data.to(torch.float32)
 
                 _ = model(dummy_input)
-                # with attention mask
                 _ = model(dummy_input, attention_mask=dummy_attention_mask)
 
     @require_torch_accelerator
     def test_flex_attention_with_grads(self):
-        """
-        Overwriting as the base hidden size is big enough for compile.
-        Manipulation of dims causes issues due to other constraints not being satisfied anymore.
-        """
         for model_class in self.all_model_classes:
             config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
             config._attn_implementation = "flex_attention"
@@ -589,83 +520,68 @@ class NemotronHModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
             model = model_class(config).to(device=torch_device)
             self.assertTrue(model.config._attn_implementation == "flex_attention")
 
-            # Elaborate workaround for encoder-decoder models as some do not specify their main input
             dummy_inputs = {model.main_input_name: inputs_dict[model.main_input_name].to(torch_device)}
             if config.is_encoder_decoder:
                 dummy_inputs["decoder_input_ids"] = inputs_dict["decoder_input_ids"].to(torch_device)
                 dummy_inputs["decoder_attention_mask"] = inputs_dict["decoder_attention_mask"].to(torch_device)
 
-            # If this does not raise an error, the test passes (see https://github.com/huggingface/transformers/pull/35605)
             _ = model(**dummy_inputs)
 
-    def test_layers_block_type_validation(self):
-        """Test that layers_block_type is validated correctly"""
-
-        # Valid list - should work
-        config = NemotronHConfig(
-            vocab_size=100, hidden_size=32, layers_block_type=["mamba", "moe", "attention", "moe"]
-        )
-        self.assertEqual(len(config.layers_block_type), 4)
+    def test_hybrid_override_pattern_validation(self):
+        """`hybrid_override_pattern` only accepts M/*/E."""
+        config = NemotronHSparseConfig(vocab_size=100, hidden_size=32, hybrid_override_pattern="ME*E")
+        self.assertEqual(config.layer_types, ["mamba", "moe", "attention", "moe"])
         self.assertEqual(config.num_hidden_layers, 4)
 
-        # Invalid layer type - should raise error
-        with self.assertRaises(StrictDataclassClassValidationError):
-            NemotronHConfig(
+        with self.assertRaises(ValueError):
+            NemotronHSparseConfig(vocab_size=100, hidden_size=32, hybrid_override_pattern="M-*")
+
+        with self.assertRaises((StrictDataclassClassValidationError, ValueError)):
+            NemotronHSparseConfig(
                 vocab_size=100,
                 hidden_size=32,
-                layers_block_type=["mamba", "moe", "attention", "invalid"],  # "invalid" is not valid
+                layers_block_type=["mamba", "mlp", "attention"],
             )
 
-    def test_layers_block_type(self):
-        """Test that layers_block_type works correctly and backward compatibility"""
-        # Create config with explicit list
-        config = NemotronHConfig(
-            vocab_size=100, hidden_size=32, layers_block_type=["mamba", "moe", "attention", "moe"]
-        )
-
-        # Test direct access to layers_block_type
-        self.assertEqual(config.layers_block_type[0], "mamba")
-        self.assertEqual(config.layers_block_type[1], "moe")
-        self.assertEqual(config.layers_block_type[2], "attention")
-        self.assertEqual(config.layers_block_type[3], "moe")
-
-        # Test that num_hidden_layers is derived from layers_block_type length
+    def test_layer_types_property(self):
+        config = NemotronHSparseConfig(vocab_size=100, hidden_size=32, hybrid_override_pattern="ME*E")
+        self.assertEqual(config.layer_types, ["mamba", "moe", "attention", "moe"])
+        self.assertEqual(config.layers_block_type, ["mamba", "moe", "attention", "moe"])
         self.assertEqual(config.num_hidden_layers, 4)
 
-        # Test backward compatibility - hybrid_override_pattern property
+    def test_legacy_layers_block_type_kwarg(self):
+        config = NemotronHSparseConfig(
+            vocab_size=100, hidden_size=32, layers_block_type=["mamba", "moe", "attention", "moe"]
+        )
         self.assertEqual(config.hybrid_override_pattern, "ME*E")
+        self.assertEqual(config.num_hidden_layers, 4)
 
-        # Test the model tester config
-        config2 = self.model_tester.get_config()
-        self.assertEqual(len(config2.layers_block_type), 5)
-        self.assertEqual(config2.layers_block_type[0], "mamba")
-        self.assertEqual(config2.layers_block_type[1], "moe")
-        self.assertEqual(config2.layers_block_type[2], "mamba")
-        self.assertEqual(config2.layers_block_type[3], "attention")
-        self.assertEqual(config2.layers_block_type[4], "moe")
+    def test_mtp_kwargs_ignored(self):
+        """MTP kwargs are silently dropped — MTP is not modeled in transformers."""
+        config = NemotronHSparseConfig(
+            hybrid_override_pattern="ME*E",
+            num_nextn_predict_layers=2,
+            mtp_hybrid_override_pattern="*E",
+        )
+        self.assertFalse(hasattr(config, "num_nextn_predict_layers"))
+        self.assertFalse(hasattr(config, "mtp_hybrid_override_pattern"))
 
     def test_generate_with_and_without_cache(self):
-        """Test that generation with and without cache produces identical outputs"""
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         config = config_and_inputs[0]
 
-        # Create model
-        model = NemotronHForCausalLM(config=config)
+        model = NemotronHSparseForCausalLM(config=config)
         model.to(torch_device)
         model.eval()
 
-        # Create input for generation (smaller sequence for faster test)
-        input_ids = ids_tensor([1, 5], config.vocab_size)  # batch_size=1, seq_len=5
+        input_ids = ids_tensor([1, 5], config.vocab_size)
         input_ids = input_ids.to(torch_device)
 
-        # Set seed for reproducibility
         torch.manual_seed(0)
         if torch.cuda.is_available():
             torch.cuda.manual_seed_all(0)
 
-        # Generate with cache
         with torch.no_grad():
-            print("running generate with cache")
             output_with_cache = model.generate(
                 input_ids,
                 max_new_tokens=5,
@@ -673,14 +589,11 @@ class NemotronHModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
                 use_cache=True,
             )
 
-        # Reset seed
         torch.manual_seed(0)
         if torch.cuda.is_available():
             torch.cuda.manual_seed_all(0)
 
-        # Generate without cache
         with torch.no_grad():
-            print("running generate without cache")
             output_without_cache = model.generate(
                 input_ids,
                 max_new_tokens=5,
@@ -688,126 +601,23 @@ class NemotronHModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
                 use_cache=False,
             )
 
-        print(f"output_with_cache: {output_with_cache}")
-        print(f"output_without_cache: {output_without_cache}")
-
-        # Outputs should be identical
-        self.assertTrue(
-            torch.equal(output_with_cache, output_without_cache),
-            msg=f"Outputs differ:\n  With cache: {output_with_cache}\n  Without cache: {output_without_cache}",
-        )
-
-    def test_legacy_hybrid_override_pattern(self):
-        """Test backward compatibility with legacy hybrid_override_pattern"""
-        # Create config using legacy hybrid_override_pattern
-        config = NemotronHConfig(vocab_size=100, hidden_size=32, hybrid_override_pattern="ME*E")
-
-        # Test that it's converted to layers_block_type
-        self.assertEqual(config.layers_block_type, ["mamba", "moe", "attention", "moe"])
-        self.assertEqual(config.num_hidden_layers, 4)
-        self.assertEqual(config.hybrid_override_pattern, "ME*E")
-
-        # Test with longer pattern
-        config2 = NemotronHConfig(vocab_size=100, hidden_size=32, hybrid_override_pattern="MEME*EME")
-        self.assertEqual(
-            config2.layers_block_type, ["mamba", "moe", "mamba", "moe", "attention", "moe", "mamba", "moe"]
-        )
-        self.assertEqual(config2.num_hidden_layers, 8)
-
-    def test_num_hidden_layers_deprecated(self):
-        """Test that num_hidden_layers is now derived from layers_block_type length"""
-        # Test that num_hidden_layers is derived from layers_block_type
-        config = NemotronHConfig(layers_block_type=["mamba", "moe", "attention", "moe", "mamba", "attention"])
-        self.assertEqual(config.num_hidden_layers, 6)
-
-        # Test that num_hidden_layers parameter is ignored when layers_block_type is provided
-        config2 = NemotronHConfig(
-            layers_block_type=["mamba", "moe", "attention"],
-            num_hidden_layers=10,  # This should be ignored
-        )
-        # Should use layers_block_type length, not the parameter
-        self.assertEqual(config2.num_hidden_layers, 3)
-
-    def test_legacy_config_json_loading(self):
-        """Test loading legacy config.json with hybrid_override_pattern and num_hidden_layers"""
-        import json
-
-        # Create a legacy config.json
-        legacy_config = {
-            "model_type": "nemotron_3",
-            "vocab_size": 100,
-            "hidden_size": 32,
-            "num_hidden_layers": 6,
-            "hybrid_override_pattern": "MEME*E",
-            "num_attention_heads": 4,
-        }
-
-        with tempfile.TemporaryDirectory() as tmpdir:
-            config_path = f"{tmpdir}/config.json"
-            with open(config_path, "w") as f:
-                json.dump(legacy_config, f)
-
-            # Load the config
-            config = NemotronHConfig.from_json_file(config_path)
-
-            # Verify conversion
-            self.assertEqual(len(config.layers_block_type), 6)
-            self.assertEqual(config.num_hidden_layers, 6)
-            self.assertEqual(config.layers_block_type, ["mamba", "moe", "mamba", "moe", "attention", "moe"])
-            self.assertEqual(config.hybrid_override_pattern, "MEME*E")
-
-    def test_mtp_backward_compatibility(self):
-        """Test MTP backward compatibility with mtp_hybrid_override_pattern"""
-        config = NemotronHConfig(
-            layers_block_type=["mamba", "moe", "attention", "moe"],
-            num_nextn_predict_layers=2,
-            mtp_hybrid_override_pattern="*E",
-        )
-
-        # Verify conversion
-        self.assertEqual(config.mtp_layers_block_type, ["attention", "moe"])
-        self.assertEqual(config.mtp_hybrid_override_pattern, "*E")
+        self.assertTrue(torch.equal(output_with_cache, output_without_cache))
 
     def test_config_roundtrip_save_load(self):
-        """Test that config can be saved and loaded correctly"""
-        # Create config with new format
-        config1 = NemotronHConfig(
-            vocab_size=100, hidden_size=32, layers_block_type=["mamba", "attention", "moe", "attention"]
-        )
+        config1 = NemotronHSparseConfig(vocab_size=100, hidden_size=32, hybrid_override_pattern="M*EM")
 
         with tempfile.TemporaryDirectory() as tmpdir:
-            # Save
             config1.save_pretrained(tmpdir)
+            config2 = NemotronHSparseConfig.from_pretrained(tmpdir)
 
-            # Load
-            config2 = NemotronHConfig.from_pretrained(tmpdir)
-
-            # Verify
-            self.assertEqual(config2.layers_block_type, ["mamba", "attention", "moe", "attention"])
+            self.assertEqual(config2.hybrid_override_pattern, "M*EM")
             self.assertEqual(config2.num_hidden_layers, 4)
             self.assertEqual(config2.vocab_size, 100)
             self.assertEqual(config2.hidden_size, 32)
 
-    def test_pattern_conversion_methods(self):
-        """Test the pattern conversion utility methods"""
-        # Test _pattern_to_list
-        pattern = "M*EME*"
-        layers_list = NemotronHConfig._pattern_to_list(pattern)
-        self.assertEqual(layers_list, ["mamba", "attention", "moe", "mamba", "moe", "attention"])
-
-        # Test _list_to_pattern
-        layers_list = ["mamba", "moe", "attention", "moe"]
-        pattern = NemotronHConfig._list_to_pattern(layers_list)
-        self.assertEqual(pattern, "ME*E")
-
-        # Test roundtrip
-        original_pattern = "ME*ME*E"
-        roundtrip_pattern = NemotronHConfig._list_to_pattern(NemotronHConfig._pattern_to_list(original_pattern))
-        self.assertEqual(original_pattern, roundtrip_pattern)
-
 
 @require_torch
-class NemotronHModelIntegrationTest(unittest.TestCase):
+class NemotronHSparseModelIntegrationTest(unittest.TestCase):
     model = None
     tokenizer = None
 
@@ -816,21 +626,18 @@ class NemotronHModelIntegrationTest(unittest.TestCase):
     def setUpClass(cls):
         model_id = "dmax123/tiny-nemotron-dummy-weights"
         revision = "081dbac3061bb16c0c458c1798b1d9d7bc135c95"
-        cls.model = NemotronHForCausalLM.from_pretrained(model_id, dtype=torch.bfloat16, revision=revision)
+        cls.model = NemotronHSparseForCausalLM.from_pretrained(model_id, dtype=torch.bfloat16, revision=revision)
         cls.tokenizer = AutoTokenizer.from_pretrained(model_id, revision=revision)
 
     def setUp(self):
-        # Save original settings
         self._original_deterministic = torch.are_deterministic_algorithms_enabled()
         self._original_cudnn_deterministic = torch.backends.cudnn.deterministic
         self._original_cudnn_benchmark = torch.backends.cudnn.benchmark
-        # Apply deterministic settings for NemotronH tests
         torch.use_deterministic_algorithms(True)
         torch.backends.cudnn.deterministic = True
         torch.backends.cudnn.benchmark = False
 
     def tearDown(self):
-        # Restore original settings
         torch.use_deterministic_algorithms(self._original_deterministic)
         torch.backends.cudnn.deterministic = self._original_cudnn_deterministic
         torch.backends.cudnn.benchmark = self._original_cudnn_benchmark

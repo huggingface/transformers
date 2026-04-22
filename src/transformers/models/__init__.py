@@ -282,6 +282,8 @@ if TYPE_CHECKING:
     from .nanochat import *
     from .nemotron import *
     from .nemotron_h import *
+    from .nemotron_h_dense import *
+    from .nemotron_h_sparse import *
     from .nllb import *
     from .nllb_moe import *
     from .nomic_bert import *

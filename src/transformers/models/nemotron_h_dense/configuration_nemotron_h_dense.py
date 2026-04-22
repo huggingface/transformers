@@ -1,0 +1,179 @@
+# Copyright 2024-2026 NVIDIA Corporation and The HuggingFace Inc. team. All rights reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+"""NemotronHDense model configuration"""
+
+from huggingface_hub.dataclasses import strict
+
+from ...configuration_utils import PreTrainedConfig
+from ...utils import auto_docstring, logging
+
+
+logger = logging.get_logger(__name__)
+
+
+# Dense Nemotron-H uses only mamba / attention / mlp blocks. The `E` (moe) character is
+# intentionally rejected: MoE checkpoints must use `NemotronHSparseConfig`.
+_DENSE_PATTERN_TO_TYPE = {"M": "mamba", "*": "attention", "-": "mlp"}
+_DENSE_TYPE_TO_PATTERN = {v: k for k, v in _DENSE_PATTERN_TO_TYPE.items()}
+_DENSE_VALID_CHARS = set(_DENSE_PATTERN_TO_TYPE)
+
+
+@auto_docstring(checkpoint="nvidia/Nemotron-H-8B-Base-8K")
+@strict
+class NemotronHDenseConfig(PreTrainedConfig):
+    r"""
+    hybrid_override_pattern (`str`, *optional*, defaults to `"M-M*M-M*"`):
+        Pattern describing the block sequence. Each character is one block:
+        `M` = mamba, `*` = attention, `-` = mlp. Length determines the number of layers.
+    num_logits_to_keep (`int`, *optional*, defaults to 1):
+        Number of prompt logits to calculate during generation. If `None`, all logits will be calculated.
+    use_mamba_kernels (`bool`, *optional*, defaults to `True`):
+        Flag indicating whether or not to use the fast mamba kernels.
+    ssm_state_size (`int`, *optional*, defaults to 128):
+        The dimension of the mamba state space latents.
+    mamba_hidden_act (`str`, *optional*, defaults to `"silu"`):
+        The non-linear activation function in the Mamba layers.
+    n_groups (`int`, *optional*, defaults to 8):
+        Number of groups for the evolution matrices of the Mamba layers.
+    expand (`int`, *optional*, defaults to 2):
+        Expanding factor used to determine the intermediate size in the Mamba layers.
+    use_conv_bias (`bool`, *optional*, defaults to `True`):
+        Whether or not to use bias in the convolution layer of the Mamba mixer block.
+    chunk_size (`int`, *optional*, defaults to 128):
+        Size of the chunks that will comprise the sequence in the Mamba layers.
+    mamba_ssm_cache_dtype (`str`, *optional*, defaults to `"float32"`):
+        Data type for Mamba SSM cache states.
+    use_bias (`bool`, *optional*, defaults to `False`):
+        Whether to use bias in the model.
+    residual_in_fp32 (`bool`, *optional*, defaults to `False`):
+        Whether or not residuals should be in `float32`.
+    rescale_prenorm_residual (`bool`, *optional*, defaults to `True`):
+        Whether to rescale the pre-normalization residual connections.
+
+    ```python
+    >>> from transformers import NemotronHDenseModel, NemotronHDenseConfig
+
+    >>> configuration = NemotronHDenseConfig()
+    >>> model = NemotronHDenseModel(configuration)
+    >>> configuration = model.config
+    ```
+    """
+
+    model_type = "nemotron_h_dense"
+    keys_to_ignore_at_inference = ["past_key_values"]
+
+    vocab_size: int = 131072
+    hidden_size: int = 4096
+    hybrid_override_pattern: str = "M-M*M-M*"
+    tie_word_embeddings: bool = False
+    use_cache: bool = True
+    num_logits_to_keep: int = 1
+    pad_token_id: int | None = 0
+    bos_token_id: int | None = 1
+    eos_token_id: int | list[int] | None = 2
+    num_attention_heads: int = 32
+    num_key_value_heads: int = 8
+    head_dim: int = 128
+    max_position_embeddings: int = 4096
+    attention_bias: bool = False
+    attention_dropout: float | int = 0.0
+    sliding_window: int | None = None
+    intermediate_size: int = 21504
+    mlp_hidden_act: str = "relu2"
+    mlp_bias: bool = False
+    use_mamba_kernels: bool = True
+    ssm_state_size: int = 128
+    mamba_num_heads: int = 128
+    mamba_head_dim: int = 64
+    mamba_hidden_act: str = "silu"
+    n_groups: int = 8
+    conv_kernel: int = 4
+    expand: int = 2
+    time_step_min: float = 0.001
+    time_step_max: float = 0.1
+    time_step_limit: list[float] | tuple[float, ...] = (0.0, float("inf"))
+    time_step_floor: float = 1e-4
+    use_conv_bias: bool = True
+    chunk_size: int = 128
+    mamba_proj_bias: bool = False
+    mamba_ssm_cache_dtype: str = "float32"
+    use_bias: bool = False
+    initializer_range: float = 0.02
+    layer_norm_epsilon: float = 1e-5
+    residual_in_fp32: bool = False
+    hidden_dropout: float | int = 0.0
+    rescale_prenorm_residual: bool = True
+
+    def __post_init__(self, **kwargs):
+        # BC: legacy mamba_* kwarg aliases.
+        self.n_groups = kwargs.pop("mamba_n_groups", self.n_groups)
+        self.conv_kernel = kwargs.pop("mamba_d_conv", self.conv_kernel)
+        self.expand = kwargs.pop("mamba_expand", self.expand)
+        self.time_step_min = kwargs.pop("mamba_dt_min", self.time_step_min)
+        self.time_step_max = kwargs.pop("mamba_dt_max", self.time_step_max)
+        self.time_step_limit = kwargs.pop("mamba_dt_limit", self.time_step_limit)
+        self.time_step_floor = kwargs.pop("mamba_dt_init_floor", self.time_step_floor)
+        self.use_conv_bias = kwargs.pop("mamba_conv_bias", self.use_conv_bias)
+        self.chunk_size = kwargs.pop("mamba_chunk_size", self.chunk_size)
+
+        # BC: accept `layers_block_type=[...]` and convert to pattern.
+        layers_block_type = kwargs.pop("layers_block_type", None)
+        if layers_block_type is not None:
+            invalid_types = set(layers_block_type) - set(_DENSE_TYPE_TO_PATTERN)
+            if invalid_types:
+                raise ValueError(
+                    f"NemotronHDenseConfig only accepts {sorted(_DENSE_TYPE_TO_PATTERN)} in `layers_block_type`, "
+                    f"got {sorted(invalid_types)}. MoE configs must use NemotronHSparseConfig."
+                )
+            self.hybrid_override_pattern = "".join(_DENSE_TYPE_TO_PATTERN[t] for t in layers_block_type)
+
+        # Dense has no multi-token prediction; drop MTP-related kwargs silently.
+        kwargs.pop("num_nextn_predict_layers", None)
+        kwargs.pop("mtp_hybrid_override_pattern", None)
+        kwargs.pop("mtp_layers_block_type", None)
+        # num_hidden_layers is derived from the pattern length.
+        kwargs.pop("num_hidden_layers", None)
+
+        if self.num_key_value_heads is None:
+            self.num_key_value_heads = self.num_attention_heads
+
+        invalid = set(self.hybrid_override_pattern) - _DENSE_VALID_CHARS
+        if invalid:
+            raise ValueError(
+                f"NemotronHDenseConfig `hybrid_override_pattern` must only contain {sorted(_DENSE_VALID_CHARS)} "
+                f"(M=mamba, *=attention, -=mlp). Got invalid chars: {sorted(invalid)}. "
+                "Use NemotronHSparseConfig for MoE (E) patterns."
+            )
+
+        super().__post_init__(**kwargs)
+
+    @property
+    def layer_types(self) -> list[str]:
+        return [_DENSE_PATTERN_TO_TYPE[c] for c in self.hybrid_override_pattern]
+
+    @property
+    def layers_block_type(self) -> list[str]:
+        return self.layer_types
+
+    @property
+    def num_hidden_layers(self) -> int:
+        return len(self.hybrid_override_pattern)
+
+    @num_hidden_layers.setter
+    def num_hidden_layers(self, value):
+        # BC: ignore; length is derived from `hybrid_override_pattern`.
+        pass
+
+
+__all__ = ["NemotronHDenseConfig"]

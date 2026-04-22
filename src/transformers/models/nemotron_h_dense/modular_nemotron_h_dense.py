@@ -1,5 +1,5 @@
 # Copyright 2024 The HuggingFace Inc. team. All rights reserved.
-# Copyright (c) 2025, NVIDIA CORPORATION. All rights reserved.
+# Copyright (c) 2026, NVIDIA CORPORATION. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -23,12 +23,10 @@ from torch import nn
 from ... import initialization as init
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
-from ...integrations import use_experts_implementation
 from ...masking_utils import create_causal_mask
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
 from ...modeling_utils import PreTrainedModel
-from ...models.deepseek_v3.modeling_deepseek_v3 import DeepseekV3MoE, DeepseekV3TopkRouter
 from ...models.jamba.modeling_jamba import JambaAttention
 from ...models.llama.modeling_llama import LlamaRMSNorm
 from ...models.nemotron.modeling_nemotron import NemotronMLP
@@ -38,7 +36,7 @@ from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, is_torchdynamo_compiling, logging
 from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
-from .configuration_nemotron_h import NemotronHConfig
+from .configuration_nemotron_h_dense import NemotronHDenseConfig
 
 
 logger = logging.get_logger(__name__)
@@ -46,8 +44,8 @@ logger = logging.get_logger(__name__)
 is_fast_path_available = False
 
 
-class NemotronHMamba2Mixer(Zamba2MambaMixer):
-    def __init__(self, config: NemotronHConfig, layer_idx: int | None = None):
+class NemotronHDenseMamba2Mixer(Zamba2MambaMixer):
+    def __init__(self, config: NemotronHDenseConfig, layer_idx: int | None = None):
         super().__init__(config, layer_idx)
         self.ssm_state_size = config.ssm_state_size
         self.conv_kernel_size = config.conv_kernel
@@ -70,7 +68,6 @@ class NemotronHMamba2Mixer(Zamba2MambaMixer):
             padding=self.conv_kernel_size - 1,
         )
 
-        # projection of the input hidden states
         projection_size = self.intermediate_size + self.conv_dim + self.num_heads
 
         self.in_proj = nn.Linear(
@@ -93,22 +90,19 @@ class NemotronHMamba2Mixer(Zamba2MambaMixer):
         **kwargs,
     ):
         if is_fast_path_available and "cuda" in self.in_proj.weight.device.type and not is_torchdynamo_compiling():
-            # Use cuda stream to avoid NaN when using multiple GPUs, which is caused by multi-GPU synchronization issue.
-            # Mamba might launch on the default cuda stream that not strictly respect the current Pytorch cuda stream.
-            # This leads to kernel reading uninitialized memory before the data transfer is complete.
             with torch.cuda.stream(torch.cuda.default_stream(hidden_states.device)):
                 return self.cuda_kernels_forward(hidden_states, cache_params, attention_mask)
 
         return self.torch_forward(hidden_states, cache_params, attention_mask)
 
 
-class NemotronHRMSNorm(LlamaRMSNorm):
+class NemotronHDenseRMSNorm(LlamaRMSNorm):
     pass
 
 
-class NemotronHMLP(NemotronMLP):
+class NemotronHDenseMLP(NemotronMLP):
     def __init__(self, config, intermediate_size=None):
-        nn.Module.__init__()
+        nn.Module.__init__(self)
         self.config = config
         self.hidden_size = config.hidden_size
         self.intermediate_size = intermediate_size or config.intermediate_size
@@ -117,117 +111,7 @@ class NemotronHMLP(NemotronMLP):
         self.act_fn = ACT2FN[config.mlp_hidden_act]
 
 
-@use_experts_implementation(has_gate=False)
-class NemotronHExperts(nn.Module):
-    """
-    Collection of expert weights stored as 3D tensors.
-
-    **Architecture Note**: Unlike Mixtral or DeepSeek which use gated MLPs,
-    NemotronH uses a standard MLP architecture with only up_proj and down_proj
-    """
-
-    def __init__(self, config):
-        super().__init__()
-        self.num_experts = config.n_routed_experts
-        self.hidden_dim = config.hidden_size
-        self.intermediate_dim = config.moe_intermediate_size
-
-        # Determine input/output dimension based on whether latent projection is used
-        input_dim = config.moe_latent_size if config.moe_latent_size is not None else config.hidden_size
-
-        # All expert weights stored as 3D tensors: (num_experts, out_dim, in_dim)
-        # up_proj: (num_experts, intermediate_dim, input_dim)
-        self.up_proj = nn.Parameter(torch.empty(self.num_experts, self.intermediate_dim, input_dim))
-        # down_proj: (num_experts, input_dim, intermediate_dim)
-        self.down_proj = nn.Parameter(torch.empty(self.num_experts, input_dim, self.intermediate_dim))
-
-        self.act_fn = ACT2FN[config.mlp_hidden_act]
-
-    def forward(self, hidden_states: torch.Tensor, top_k_index: torch.Tensor, top_k_weights: torch.Tensor):
-        final_hidden_states = torch.zeros_like(hidden_states, dtype=top_k_weights.dtype)
-
-        # Create expert mask to identify which tokens go to which experts
-        with torch.no_grad():
-            expert_mask = torch.nn.functional.one_hot(top_k_index, num_classes=self.num_experts)
-            expert_mask = expert_mask.permute(2, 1, 0)  # (num_experts, num_experts_per_tok, num_tokens)
-            # Only iterate over experts that have at least one token assigned
-            expert_hit = torch.greater(expert_mask.sum(dim=(-1, -2)), 0).nonzero().squeeze(-1)
-
-        for expert_idx in expert_hit:
-            expert_idx = expert_idx.item()
-            # Find which tokens are routed to this expert
-            top_k_pos, token_idx = torch.where(expert_mask[expert_idx])
-
-            if token_idx.numel() == 0:
-                continue
-
-            # Get input for this expert
-            current_state = hidden_states[token_idx]
-
-            # Expert computation: down_proj(act_fn(up_proj(x)))
-            # No gating mechanism unlike Mixtral which uses: down_proj(act_fn(gate_proj(x)) * up_proj(x))
-            current_hidden_states = torch.nn.functional.linear(current_state, self.up_proj[expert_idx])
-            current_hidden_states = self.act_fn(current_hidden_states)
-            current_hidden_states = torch.nn.functional.linear(current_hidden_states, self.down_proj[expert_idx])
-
-            # Apply routing weights
-            current_hidden_states = current_hidden_states * top_k_weights[token_idx, top_k_pos, None]
-
-            # Accumulate into final output
-            final_hidden_states.index_add_(0, token_idx, current_hidden_states.to(final_hidden_states.dtype))
-
-        return final_hidden_states.to(hidden_states.dtype)
-
-
-class NemotronHMoE(DeepseekV3MoE):
-    """
-    Mixture-of-Experts (MoE) module for NemotronH.
-
-    Unique architectures:
-    - Uses non-gated MLP experts (NemotronHExperts) instead of gated experts
-    - Adds optional latent projection for computational efficiency
-    """
-
-    def __init__(self, config, layer_idx: int | None = None):
-        super().__init__(config)
-
-        # Replace with NemotronH-specific experts (non-gated MLP architecture)
-        self.experts = NemotronHExperts(config)
-        self.gate = NemotronHTopkRouter(config)
-
-        # Override shared_experts to use NemotronHMLP with correct intermediate size
-        self.shared_experts = NemotronHMLP(config=config, intermediate_size=config.moe_shared_expert_intermediate_size)
-
-        # NemotronH-specific latent projection layers
-        if config.moe_latent_size is not None:
-            self.fc1_latent_proj = nn.Linear(config.hidden_size, config.moe_latent_size, bias=config.mlp_bias)
-            self.fc2_latent_proj = nn.Linear(config.moe_latent_size, config.hidden_size, bias=config.mlp_bias)
-        else:
-            self.fc1_latent_proj = nn.Identity()
-            self.fc2_latent_proj = nn.Identity()
-
-    def forward(self, hidden_states):
-        residuals = hidden_states
-        orig_shape = hidden_states.shape
-        router_logits = self.gate(hidden_states)
-        topk_indices, topk_weights = self.route_tokens_to_experts(router_logits)
-        hidden_states = hidden_states.view(-1, hidden_states.shape[-1])
-
-        # NemotronH-specific: latent projection
-        hidden_states = self.fc1_latent_proj(hidden_states)
-        hidden_states = self.experts(hidden_states, topk_indices, topk_weights)
-        hidden_states = self.fc2_latent_proj(hidden_states)
-
-        hidden_states = hidden_states.view(*orig_shape)
-        hidden_states = hidden_states + self.shared_experts(residuals)
-        return hidden_states
-
-
-class NemotronHTopkRouter(DeepseekV3TopkRouter):
-    pass
-
-
-class NemotronHAttention(JambaAttention):
+class NemotronHDenseAttention(JambaAttention):
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -239,36 +123,26 @@ class NemotronHAttention(JambaAttention):
 
 
 MIXER_TYPES = {
-    "mamba": NemotronHMamba2Mixer,
-    "attention": NemotronHAttention,
-    "moe": NemotronHMoE,
-    "mlp": NemotronHMLP,
+    "mamba": NemotronHDenseMamba2Mixer,
+    "attention": NemotronHDenseAttention,
+    "mlp": NemotronHDenseMLP,
 }
 
 
-class NemotronHBlock(GradientCheckpointingLayer):
+class NemotronHDenseBlock(GradientCheckpointingLayer):
     """
-    A single transformer block in the NemotronH model.
-
-    This block can contain different types of mixers (Mamba, Attention, MLP, or MoE)
-    depending on the configuration. Each block applies pre-normalization followed by
-    the mixer, then adds a residual connection.
-
-    Args:
-        config (`NemotronHConfig`):
-            Model configuration specifying the block architecture.
-        layer_idx (`int`):
-            Index of this block in the model. Used to determine the block type from
-            `config.layers_block_type[layer_idx]`.
+    A single transformer block in the dense Nemotron-H model. Each block holds one of
+    Mamba, Attention, or MLP mixer, applies pre-normalization then the mixer, and adds
+    a residual connection.
     """
 
     def __init__(self, config, layer_idx):
         super().__init__()
         self.config = config
         self.layer_idx = layer_idx
-        self.norm = NemotronHRMSNorm(config.hidden_size, eps=config.layer_norm_epsilon)
+        self.norm = NemotronHDenseRMSNorm(config.hidden_size, eps=config.layer_norm_epsilon)
 
-        self.block_type = config.layers_block_type[layer_idx]
+        self.block_type = config.layer_types[layer_idx]
 
         mixer_kwargs = {"config": config}
         if self.block_type != "mlp":
@@ -306,10 +180,10 @@ class NemotronHBlock(GradientCheckpointingLayer):
         return hidden_states
 
 
-class NemotronHPreTrainedModel(PreTrainedModel):
-    config: NemotronHConfig
+class NemotronHDensePreTrainedModel(PreTrainedModel):
+    config: NemotronHDenseConfig
     base_model_prefix = "model"
-    _no_split_modules = ["NemotronHBlock"]
+    _no_split_modules = ["NemotronHDenseBlock"]
     _skip_keys_device_placement = ["past_key_values"]
     _supports_flash_attn = True
     _supports_flash_attn_2 = True
@@ -317,20 +191,14 @@ class NemotronHPreTrainedModel(PreTrainedModel):
     _supports_flex_attn = True
     _is_stateful = True
     _can_record_outputs = {
-        "hidden_states": NemotronHBlock,
-        "attentions": NemotronHAttention,
+        "hidden_states": NemotronHDenseBlock,
+        "attentions": NemotronHDenseAttention,
     }
-    _keep_in_fp32_modules_strict = [
-        "e_score_correction_bias",
-    ]
-    _keys_to_ignore_on_load_unexpected = [r"mtp.*"]
 
     @torch.no_grad()
     def _init_weights(self, module):
-        """Initialize the weights."""
         super()._init_weights(module)
-        if isinstance(module, NemotronHMamba2Mixer):
-            # Initialize A_log and D parameters
+        if isinstance(module, NemotronHDenseMamba2Mixer):
             A = torch.arange(1, self.config.mamba_num_heads + 1)
             init.copy_(module.A_log, torch.log(A))
             init.ones_(module.D)
@@ -341,18 +209,10 @@ class NemotronHPreTrainedModel(PreTrainedModel):
                 + math.log(self.config.time_step_min)
             ).clamp(min=self.config.time_step_floor)
 
-            # # Inverse of softplus: https://github.com/pytorch/pytorch/issues/72759
             inv_dt = dt + torch.log(-torch.expm1(-dt))
             with torch.no_grad():
                 init.copy_(module.dt_bias, inv_dt)
             module.dt_bias._no_reinit = True
-        elif isinstance(module, NemotronHTopkRouter):
-            init.normal_(module.weight, mean=0.0, std=self.config.initializer_range)
-            init.zeros_(module.e_score_correction_bias)
-        elif isinstance(module, NemotronHExperts):
-            # Initialize expert weights
-            init.normal_(module.up_proj, mean=0.0, std=self.config.initializer_range)
-            init.normal_(module.down_proj, mean=0.0, std=self.config.initializer_range)
 
         if isinstance(module, nn.Linear):
             if module.bias is not None:
@@ -362,33 +222,24 @@ class NemotronHPreTrainedModel(PreTrainedModel):
             init.normal_(module.weight, std=self.config.initializer_range)
 
         if self.config.rescale_prenorm_residual:
-            # Reinitialize selected weights subject to the OpenAI GPT-2 Paper Scheme:
-            #   > A modified initialization which accounts for the accumulation on the residual path with model depth. Scale
-            #   > the weights of residual layers at initialization by a factor of 1/√N where N is the # of residual layers.
-            #   >   -- GPT-2 :: https://openai.com/blog/better-language-models/
-            #
-            # Reference (Megatron-LM): https://github.com/NVIDIA/Megatron-LM/blob/main/megatron/model/gpt_model.py
             for name, p in module.named_parameters():
                 if name == "out_proj.weight":
-                    # Special Scaled Initialization --> There are 2 Layer Norms per Transformer Block
-                    # Following Pytorch init, except scale by 1/sqrt(2 * n_layer)
-                    # We need to reinit p since this code could be called multiple times
-                    # Having just p *= scale would repeatedly scale it down
                     init.kaiming_uniform_(p, a=math.sqrt(5))
                     with torch.no_grad():
                         p_new = p / math.sqrt(self.config.num_hidden_layers)
                         init.copy_(p, p_new)
 
 
-class NemotronHModel(NemotronHPreTrainedModel):
+class NemotronHDenseModel(NemotronHDensePreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
 
         self.embeddings = nn.Embedding(config.vocab_size, config.hidden_size)
-        self.layers = nn.ModuleList([NemotronHBlock(config, layer_idx=idx) for idx in range(config.num_hidden_layers)])
+        self.layers = nn.ModuleList(
+            [NemotronHDenseBlock(config, layer_idx=idx) for idx in range(config.num_hidden_layers)]
+        )
 
-        self.norm_f = NemotronHRMSNorm(config.hidden_size, eps=config.layer_norm_epsilon)
-        # Initialize weights and apply final processing
+        self.norm_f = NemotronHDenseRMSNorm(config.hidden_size, eps=config.layer_norm_epsilon)
         self.post_init()
 
     def get_input_embeddings(self):
@@ -409,7 +260,7 @@ class NemotronHModel(NemotronHPreTrainedModel):
         attention_mask: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPast:
-        if (input_ids is None) ^ (inputs_embeds is not None):  # ^ is python for xor
+        if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
 
         if inputs_embeds is None:
@@ -434,16 +285,14 @@ class NemotronHModel(NemotronHPreTrainedModel):
         )
         mamba_mask = self._update_mamba_mask(attention_mask, past_key_values)
 
-        # Map block types to their corresponding masks
         block_type_to_mask = {
             "mamba": mamba_mask,
             "attention": causal_mask,
-            "moe": None,
-            "mlp": None,
         }
 
         for layer_idx, mixer_block in enumerate(self.layers):
-            layer_mask = block_type_to_mask[mixer_block.block_type]
+            # Parameter-free blocks (mlp / moe) do not need a mask.
+            layer_mask = block_type_to_mask.get(mixer_block.block_type)
 
             hidden_states = mixer_block(
                 hidden_states,
@@ -462,11 +311,6 @@ class NemotronHModel(NemotronHPreTrainedModel):
         )
 
     def _update_mamba_mask(self, attention_mask, past_key_values):
-        """
-        No need for zeroing states when
-            1. Cached forward
-            2. Attending to all inputs
-        """
         mamba_mask = attention_mask
         if (past_key_values is not None and past_key_values.has_previous_state()) or (
             attention_mask is not None and torch.all(attention_mask == 1)
@@ -475,7 +319,7 @@ class NemotronHModel(NemotronHPreTrainedModel):
         return mamba_mask
 
 
-class NemotronHForCausalLM(ZambaForCausalLM):
+class NemotronHDenseForCausalLM(ZambaForCausalLM):
     _tied_weights_keys = {}
 
     @can_return_tuple
@@ -503,7 +347,6 @@ class NemotronHForCausalLM(ZambaForCausalLM):
         )
 
         hidden_states = outputs[0]
-        # Only compute necessary logits, and do not upcast them to float if we are not computing the loss
         slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
         logits = self.lm_head(hidden_states[:, slice_indices, :]).float()
 
@@ -521,7 +364,7 @@ class NemotronHForCausalLM(ZambaForCausalLM):
 
 
 __all__ = [
-    "NemotronHPreTrainedModel",
-    "NemotronHModel",
-    "NemotronHForCausalLM",
+    "NemotronHDensePreTrainedModel",
+    "NemotronHDenseModel",
+    "NemotronHDenseForCausalLM",
 ]

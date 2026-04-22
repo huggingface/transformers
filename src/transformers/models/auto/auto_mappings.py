@@ -367,6 +367,8 @@ CONFIG_MAPPING_NAMES = OrderedDict(
         ("nanochat", "NanoChatConfig"),
         ("nemotron", "NemotronConfig"),
         ("nemotron_h", "NemotronHConfig"),
+        ("nemotron_h_dense", "NemotronHDenseConfig"),
+        ("nemotron_h_sparse", "NemotronHSparseConfig"),
         ("nllb-moe", "NllbMoeConfig"),
         ("nomic_bert", "NomicBertConfig"),
         ("nougat", "NougatConfig"),
