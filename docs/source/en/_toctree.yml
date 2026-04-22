@@ -1365,6 +1365,8 @@
         title: SigLIP
       - local: model_doc/siglip2
         title: SigLIP2
+      - local: model_doc/slanet
+        title: SLANet
       - local: model_doc/slanext
         title: SLANeXt
       - local: model_doc/smollm3

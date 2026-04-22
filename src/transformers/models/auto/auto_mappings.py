@@ -529,6 +529,7 @@ CONFIG_MAPPING_NAMES = OrderedDict(
         ("siglip2_vision_model", "Siglip2VisionConfig"),
         ("siglip_text_model", "SiglipTextConfig"),
         ("siglip_vision_model", "SiglipVisionConfig"),
+        ("slanet", "SLANetConfig"),
         ("slanext", "SLANeXtConfig"),
         ("smollm3", "SmolLM3Config"),
         ("smolvlm", "SmolVLMConfig"),
