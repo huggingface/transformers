@@ -25,7 +25,6 @@ from ... import initialization as init
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
 from ...configuration_utils import PreTrainedConfig
-from ...integrations import use_kernelized_func
 from ...masking_utils import (
     create_bidirectional_mask,
     create_causal_mask,
@@ -901,7 +900,6 @@ class Gemma4TextRotaryEmbedding(Gemma3RotaryEmbedding):
             setattr(self, f"{layer_type}_attention_scaling", curr_attention_scaling)
 
 
-@use_kernelized_func(apply_rotary_pos_emb)
 class Gemma4TextAttention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
 

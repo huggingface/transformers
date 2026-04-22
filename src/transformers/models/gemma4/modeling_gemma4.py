@@ -1133,7 +1133,6 @@ class Gemma4TextRotaryEmbedding(nn.Module):
         return cos.to(dtype=x.dtype), sin.to(dtype=x.dtype)
 
 
-@use_kernelized_func(apply_rotary_pos_emb)
 class Gemma4TextAttention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
 
