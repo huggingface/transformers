@@ -119,7 +119,6 @@ class MiMoV2FlashConfig(PreTrainedConfig):
         super().__post_init__(**kwargs)
 
     def convert_rope_params_to_dict(self, **kwargs):
-        self.standardize_rope_params()
         return kwargs
 
     base_model_tp_plan = {
