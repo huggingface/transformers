@@ -1736,7 +1736,7 @@ class PreTrainedTokenizerBase(PushToHubMixin):
                 commit_hash = extract_commit_hash(resolved_vocab_files[file_id], commit_hash)
 
         loadable_file_ids = set(cls.vocab_files_names)
-        if "tokenizer_file" in resolved_vocab_files:
+        if loadable_file_ids and "tokenizer_file" in resolved_vocab_files:
             loadable_file_ids.add("tokenizer_file")
         loadable_file_ids.intersection_update(resolved_vocab_files)
         if loadable_file_ids and all(resolved_vocab_files[file_id] is None for file_id in loadable_file_ids):
