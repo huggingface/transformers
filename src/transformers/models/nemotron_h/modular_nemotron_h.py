@@ -106,8 +106,8 @@ class NemotronHRMSNorm(LlamaRMSNorm):
     pass
 
 
-class NemotronHMLP(NemotronMLP):
-    def __init__(self, config, intermediate_size=None):
+class NemotronHMLP(NemotronMLP, nn.Module):
+    def __init__(self, config, intermediate_size=None, **kwargs):
         nn.Module.__init__()
         self.config = config
         self.hidden_size = config.hidden_size
