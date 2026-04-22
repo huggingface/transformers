@@ -196,9 +196,7 @@ class NemotronHConfig(PreTrainedConfig):
         Validate layers_block_type list.
         """
         if not isinstance(self.layer_types, list):
-            raise ValueError(
-                f"`layers_block_type` must be a list of strings. Got type: {type(self.layer_types)}"
-            )
+            raise ValueError(f"`layers_block_type` must be a list of strings. Got type: {type(self.layer_types)}")
 
         valid_types = {"mamba", "attention", "moe", "mlp"}
         if not all(block_type in valid_types for block_type in self.layer_types):
