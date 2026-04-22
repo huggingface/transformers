@@ -239,6 +239,10 @@ model = Qwen2_5_VLForConditionalGeneration.from_pretrained(
 
 [[autodoc]] Qwen2_5_VLConfig
 
+## Qwen2_5_VLVisionConfig
+
+[[autodoc]] Qwen2_5_VLVisionConfig
+
 ## Qwen2_5_VLTextConfig
 
 [[autodoc]] Qwen2_5_VLTextConfig
