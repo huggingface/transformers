@@ -18,6 +18,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+
 from collections.abc import Callable
 from typing import Optional
 
@@ -30,6 +31,7 @@ from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationMixin
 from ...integrations import use_experts_implementation, use_kernel_forward_from_hub
+from ...integrations.dsa_kernels import act_quant, fp8_index
 from ...masking_utils import create_causal_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import GradientCheckpointingLayer
@@ -64,11 +66,12 @@ class GlmMoeDsaRMSNorm(nn.Module):
         return f"{tuple(self.weight.shape)}, eps={self.variance_epsilon}"
 
 
-def rotate_half(x):
-    """Rotates half the hidden dims of the input."""
-    x1 = x[..., : x.shape[-1] // 2]
-    x2 = x[..., x.shape[-1] // 2 :]
-    return torch.cat((-x2, x1), dim=-1)
+def rotate_activation(x: torch.Tensor) -> torch.Tensor:
+    assert x.dtype == torch.bfloat16
+    from fast_hadamard_transform import hadamard_transform
+
+    hidden_size = x.size(-1)
+    return hadamard_transform(x, scale=hidden_size**-0.5)
 
 
 def apply_rotary_pos_emb(
@@ -93,13 +96,14 @@ def apply_rotary_pos_emb(
     Returns:
         `torch.Tensor`: Tensor with rotary embeddings applied, same shape as input.
     """
-    cos = cos.unsqueeze(unsqueeze_dim)
-    sin = sin.unsqueeze(unsqueeze_dim)
-
-    # Split-half (NeoX/Llama style): (x[:d/2], x[d/2:])
-    # This matches llama's apply_rotary_pos_emb logic.
-    x_rotated = (x * cos) + (rotate_half(x) * sin)
-    return x_rotated
+    # Interleaved (GPT-J style): (x[0], x[1]), (x[2], x[3]), ...
+    # RotaryEmbedding outputs cos/sin with repeated halves for NeoX compatibility,
+    # while interleaved rotation expects [.., D/2] frequencies.
+    cos = cos[..., : x.shape[-1] // 2].unsqueeze(unsqueeze_dim)
+    sin = sin[..., : x.shape[-1] // 2].unsqueeze(unsqueeze_dim)
+    x1 = x[..., ::2]
+    x2 = x[..., 1::2]
+    return torch.stack((x1 * cos - x2 * sin, x2 * cos + x1 * sin), dim=-1).flatten(-2)
 
 
 class GlmMoeDsaIndexer(nn.Module):
@@ -107,8 +111,7 @@ class GlmMoeDsaIndexer(nn.Module):
     Dynamic Sparse Attention (DSA) indexer for selecting top-k tokens.
 
     The Indexer has its own lightweight projections (wq_b, wk) separate from the
-    main MLA attention. It uses non-interleaved (NeoX/Llama) RoPE, unlike the main attention
-    which uses interleaved RoPE.
+    main MLA attention.
 
     **Cache strategy**: The Indexer manages its own key cache (`_cached_keys`) separately
     from the DynamicCache used by MLA attention, since DynamicCache is sized for exactly
@@ -137,9 +140,12 @@ class GlmMoeDsaIndexer(nn.Module):
         # Keeping it as a plain Linear prevents FP8 conversion (see `_keep_in_fp32_modules`).
         self.weights_proj = nn.Linear(self.hidden_size, self.n_heads, bias=False)
         self.softmax_scale = self.head_dim**-0.5
+        self.scale_fmt = "ue8m0"
+        self.quant_block_size = 128
 
         # Indexer maintains its own key cache (not in DynamicCache, which is sized for attention layers only)
         self._cached_keys: torch.Tensor | None = None
+        self._cached_keys_scales: torch.Tensor | None = None
 
     @torch.no_grad()
     def forward(
@@ -187,19 +193,29 @@ class GlmMoeDsaIndexer(nn.Module):
         k_pe = apply_rotary_pos_emb(k_pe.unsqueeze(2), cos, sin, unsqueeze_dim=2).squeeze(2)  # [B, S, rope_D]
         k = torch.cat([k_pe, k_nope], dim=-1)  # [B, S, D]
 
+        q = rotate_activation(q)  # [B, S, H, D]
+        k = rotate_activation(k)  # [B, S, D]
+        q_fp8, q_scale = act_quant(q, self.quant_block_size, self.scale_fmt)
+        k_fp8, k_scale = act_quant(k, self.quant_block_size, self.scale_fmt)
+
         # === Key cache (managed by the indexer, not DynamicCache) ===
         # Reset cache on prefill (new prompt) to avoid stale keys / batch-size mismatch
         if seq_len > 1:
             self._cached_keys = None
+            self._cached_keys_scales = None
 
         if use_cache:
             if self._cached_keys is not None:
-                k_cached = torch.cat([self._cached_keys, k], dim=1)  # [B, T, D]
+                k_cached = torch.cat([self._cached_keys, k_fp8], dim=1)  # [B, T, D]
+                k_scale_cached = torch.cat([self._cached_keys_scales, k_scale.squeeze(-1)], dim=1)  # [B, T]
             else:
-                k_cached = k
+                k_cached = k_fp8
+                k_scale_cached = k_scale.squeeze(-1)
             self._cached_keys = k_cached
+            self._cached_keys_scales = k_scale_cached
         else:
-            k_cached = k
+            k_cached = k_fp8
+            k_scale_cached = k_scale.squeeze(-1)
 
         # === Scoring ===
         # Reference: weights = weights_proj(x.float()) * n_heads^(-0.5)
@@ -213,19 +229,17 @@ class GlmMoeDsaIndexer(nn.Module):
         # Don't force fp32 inputs here: the checkpoint stores `weights_proj.weight` in bf16.
         # Use native dtype for matmul, then upcast the result for scoring stability.
         weights = self.weights_proj(hidden_states).float() * (self.n_heads**-0.5)  # [B, S, H]
+        weights = weights * q_scale.squeeze(-1) * self.softmax_scale  # [B, S, H]
 
-        # q·k^T per head: [B, S, H, D] @ [B, T, D]^T → [B, S, H, T]
-        scores = torch.einsum("bshd,btd->bsht", q.float(), k_cached.float()) * self.softmax_scale
-        scores = F.relu(scores)
-        # Weight per head and sum across heads → [B, S, T]
-        index_scores = torch.einsum("bsht,bsh->bst", scores, weights)
+        index_score = fp8_index(
+            q_fp8.contiguous(), weights.contiguous(), k_cached.contiguous(), k_scale_cached.contiguous()
+        )  # [B, S, T]
 
         if attention_mask is not None:
-            index_scores = index_scores + attention_mask
+            index_score = index_score + attention_mask
 
-        total_len = index_scores.shape[-1]
-        topk = min(self.index_topk, total_len)
-        topk_indices = index_scores.topk(topk, dim=-1).indices  # [B, S, topk]
+        actual_topk = min(self.index_topk, index_score.shape[-1])
+        topk_indices = index_score.topk(actual_topk, dim=-1)[1]  # [B, S, actual_topk]
         return topk_indices
 
 

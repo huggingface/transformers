@@ -18,6 +18,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+
 from huggingface_hub.dataclasses import strict
 
 from ...configuration_utils import PreTrainedConfig
@@ -114,6 +115,7 @@ class GlmMoeDsaConfig(PreTrainedConfig):
     mlp_layer_types: list[str] | None = None
     attention_bias: bool = False
     attention_dropout: float | int = 0.0
+    num_experts: int = 256
     index_topk: int = 2048
     index_head_dim: int = 128
     index_n_heads: int = 32
