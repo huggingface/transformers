@@ -18,7 +18,6 @@ from io import BytesIO
 from urllib.request import urlopen
 
 import librosa
-import pytest
 
 from transformers import (
     AutoProcessor,
