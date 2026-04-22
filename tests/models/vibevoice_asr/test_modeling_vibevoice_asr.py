@@ -17,7 +17,6 @@ import tempfile
 import unittest
 from pathlib import Path
 
-import pytest
 from parameterized import parameterized
 
 from transformers import (
@@ -148,19 +147,6 @@ class VibeVoiceAsrForConditionalGenerationModelTest(ModelTesterMixin, Generation
         reason="This test does not apply to VibeVoiceAsr since inputs_embeds corresponding to audio tokens are replaced when input features are provided."
     )
     def test_inputs_embeds_matches_input_ids(self):
-        pass
-
-    @unittest.skip(reason="Compile not yet supported for VibeVoiceAsr models")
-    @pytest.mark.torch_compile_test
-    def test_sdpa_can_compile_dynamic(self):
-        pass
-
-    @unittest.skip(reason="Compile not yet supported for VibeVoiceAsr models")
-    def test_sdpa_can_dispatch_on_flash(self):
-        pass
-
-    @unittest.skip(reason="VibeVoiceAsr tests avoid right-padding equivalence; fusion is in-place.")
-    def test_flash_attn_2_inference_equivalence_right_padding(self):
         pass
 
     @unittest.skip(reason="VibeVoiceAsr has no separate base model without a head.")

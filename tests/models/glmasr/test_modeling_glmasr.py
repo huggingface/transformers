@@ -15,8 +15,6 @@
 
 import unittest
 
-import pytest
-
 from transformers import (
     AutoProcessor,
     GlmAsrConfig,
@@ -75,19 +73,6 @@ class GlmAsrForConditionalGenerationModelTest(ALMModelTest, unittest.TestCase):
         reason="This test does not apply to GlmAsr since inputs_embeds corresponding to audio tokens are replaced when input features are provided."
     )
     def test_inputs_embeds_matches_input_ids(self):
-        pass
-
-    @unittest.skip(reason="Compile not yet supported for GlmAsr models")
-    @pytest.mark.torch_compile_test
-    def test_sdpa_can_compile_dynamic(self):
-        pass
-
-    @unittest.skip(reason="Compile not yet supported for GlmAsr models")
-    def test_sdpa_can_dispatch_on_flash(self):
-        pass
-
-    @unittest.skip(reason="GlmAsr tests avoid right-padding equivalence; fusion is in-place.")
-    def test_flash_attn_2_inference_equivalence_right_padding(self):
         pass
 
 

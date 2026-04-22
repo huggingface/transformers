@@ -81,11 +81,6 @@ class Qwen2AudioForConditionalGenerationModelTest(ALMModelTest, unittest.TestCas
     model_tester_class = Qwen2AudioModelTester
     pipeline_model_mapping = {"any-to-any": Qwen2AudioForConditionalGeneration} if is_torch_available() else {}
 
-    @unittest.skip(reason="Compile not yet supported because in Qwen2Audio models")
-    @pytest.mark.torch_compile_test
-    def test_sdpa_can_compile_dynamic(self):
-        pass
-
     @unittest.skip(reason="inputs_embeds is the audio-fused path; can't match raw token-only embeddings.")
     def test_inputs_embeds_matches_input_ids(self):
         pass

@@ -19,8 +19,6 @@ import os
 import unittest
 from pathlib import Path
 
-import pytest
-
 from transformers import (
     AudioFlamingo3EncoderConfig,
     AutoProcessor,
@@ -158,19 +156,6 @@ class MusicFlamingoForConditionalGenerationModelTest(ALMModelTest, unittest.Test
         reason="This test does not apply to MusicFlamingo since High-level inputs_embeds corresponding to audio tokens are replaced when input features are provided."
     )
     def test_inputs_embeds_matches_input_ids(self):
-        pass
-
-    @unittest.skip(reason="Compile not yet supported for MusicFlamingo models")
-    @pytest.mark.torch_compile_test
-    def test_sdpa_can_compile_dynamic(self):
-        pass
-
-    @unittest.skip(reason="Compile not yet supported for MusicFlamingo models")
-    def test_sdpa_can_dispatch_on_flash(self):
-        pass
-
-    @unittest.skip(reason="MusicFlamingo tests avoid right-padding equivalence; fusion is in-place.")
-    def test_flash_attn_2_inference_equivalence_right_padding(self):
         pass
 
 

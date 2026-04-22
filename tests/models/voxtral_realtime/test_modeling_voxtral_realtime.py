@@ -159,10 +159,6 @@ class VoxtralRealtimeForConditionalGenerationModelTest(ALMModelTest, unittest.Te
     def test_generate_with_and_without_position_ids(self):
         super().test_generate_with_and_without_position_ids()
 
-    @unittest.skip(reason="VoxtralRealtime does not have a base model")
-    def test_model_base_model_prefix(self):
-        pass
-
     @unittest.skip(
         reason="This test does not apply to VoxtralRealtime since input_features must be provided along input_ids"
     )
