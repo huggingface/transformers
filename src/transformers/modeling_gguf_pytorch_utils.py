@@ -265,6 +265,81 @@ class MambaTensorProcessor(TensorProcessor):
         return GGUFTensor(weights, name, {})
 
 
+class Qwen35TensorProcessor(TensorProcessor):
+    """Qwen3.5 tensor processor for SSM transforms and linear-attention head reordering."""
+
+    def __init__(self, config=None):
+        super().__init__(config=config)
+        self.num_k_heads = self.config.get("linear_num_key_heads")
+        self.num_v_heads = self.config.get("linear_num_value_heads")
+        self.head_k_dim = self.config.get("linear_key_head_dim")
+        self.head_v_dim = self.config.get("linear_value_head_dim")
+        if self.head_v_dim is None and None not in (self.config.get("ssm_inner_size"), self.num_v_heads):
+            self.head_v_dim = self.config["ssm_inner_size"] // self.num_v_heads
+
+    def _reverse_reorder_v_heads(self, weights: np.ndarray, dim: int, head_dim: int) -> np.ndarray:
+        if None in (self.num_k_heads, self.num_v_heads, head_dim) or self.num_k_heads == self.num_v_heads:
+            return weights
+
+        num_v_per_k = self.num_v_heads // self.num_k_heads
+        if dim < 0:
+            dim += weights.ndim
+
+        shape = list(weights.shape)
+        new_shape = shape[:dim] + [num_v_per_k, self.num_k_heads, head_dim] + shape[dim + 1 :]
+        weights = weights.reshape(new_shape)
+        weights = weights.swapaxes(dim, dim + 1)
+        return weights.reshape(shape)
+
+    def process(self, weights, name, **kwargs):
+        # SSM-specific transforms
+        if "norm.weight" in name and "ssm_norm.weight" not in name:
+            weights = weights - 1
+        if "attn_qkv.weight" in name and None not in (
+            self.num_k_heads,
+            self.num_v_heads,
+            self.head_k_dim,
+            self.head_v_dim,
+        ):
+            q_dim = self.head_k_dim * self.num_k_heads
+            k_dim = self.head_k_dim * self.num_k_heads
+            q = weights[:q_dim]
+            k = weights[q_dim : q_dim + k_dim]
+            v = weights[q_dim + k_dim :]
+            v = self._reverse_reorder_v_heads(v, 0, self.head_v_dim)
+            weights = np.concatenate([q, k, v], axis=0)
+        elif "attn_gate.weight" in name:
+            weights = self._reverse_reorder_v_heads(weights, 0, self.head_v_dim)
+        elif "ssm_alpha.weight" in name or "ssm_beta.weight" in name:
+            weights = self._reverse_reorder_v_heads(weights, 0, 1)
+        elif "ssm_out.weight" in name:
+            weights = self._reverse_reorder_v_heads(weights, 1, self.head_v_dim)
+        if "ssm_conv1d.weight" in name:
+            if None not in (self.num_k_heads, self.num_v_heads, self.head_k_dim, self.head_v_dim):
+                qk_channels = self.head_k_dim * self.num_k_heads * 2
+                qk_part = weights[:qk_channels]
+                v_part = self._reverse_reorder_v_heads(weights[qk_channels:], 0, self.head_v_dim)
+                weights = np.concatenate([qk_part, v_part], axis=0)
+            # GGUF shape is (inner_size, conv_kernel), HF expects (inner_size, 1, conv_kernel)
+            weights = np.expand_dims(weights, axis=1)
+        if name.endswith("ssm_a.weight") or name.endswith("ssm_a"):
+            # llama.cpp stores -exp(A_log), need to convert back to A_log
+            weights = np.log(-weights)
+            weights = self._reverse_reorder_v_heads(weights, 0, 1)
+        if "ssm_dt.bias" in name:
+            # GGUF maps ssm_dt.bias -> linear_attn.dt_proj.bias, but HF model uses linear_attn.dt_bias
+            tensor_key_mapping = kwargs.get("tensor_key_mapping")
+            parsed_parameters = kwargs.get("parsed_parameters")
+            if tensor_key_mapping is not None and parsed_parameters is not None:
+                parts = name.split(".")
+                bid = parts[1]
+                hf_name = f"model.layers.{bid}.linear_attn.dt_bias"
+                weights = self._reverse_reorder_v_heads(weights, 0, 1)
+                parsed_parameters["tensors"][hf_name] = torch.from_numpy(np.copy(weights))
+                return GGUFTensor(weights, None, {})
+        return GGUFTensor(weights, name, {})
+
+
 class NemotronTensorProcessor(TensorProcessor):
     def __init__(self, config=None):
         super().__init__(config=config)
@@ -361,6 +436,7 @@ TENSOR_PROCESSORS = {
     "t5encoder": T5TensorProcessor,
     "gpt2": GPT2TensorProcessor,
     "mamba": MambaTensorProcessor,
+    "qwen35": Qwen35TensorProcessor,
     "nemotron": NemotronTensorProcessor,
     "gemma2": Gemma2TensorProcessor,
     "gemma3": Gemma2TensorProcessor,
@@ -416,6 +492,8 @@ def get_gguf_hf_weights_map(
         model_type = "t5"
     elif model_type == "minimax_m2":
         model_type = "minimax-m2"
+    elif model_type in ("qwen3_5", "qwen3_5_text"):
+        model_type = "qwen35"
     arch = None
     for key, value in MODEL_ARCH_NAMES.items():
         if value == model_type:
@@ -526,6 +604,8 @@ def load_gguf_checkpoint(gguf_checkpoint_path, return_tensors=False, model_to_lo
         updated_architecture = "qwen3_moe"
     elif "minimax-m2" in architecture:
         updated_architecture = "minimax_m2"
+    elif "qwen35" in architecture:
+        updated_architecture = "qwen35"
 
     # For stablelm architecture, we need to set qkv_bias and use_parallel_residual from tensors
     # If `qkv_bias=True`, qkv_proj with bias will be present in the tensors
@@ -588,6 +668,10 @@ def load_gguf_checkpoint(gguf_checkpoint_path, return_tensors=False, model_to_lo
     # Gemma3 GGUF checkpoint only contains weights of text backbone
     if parsed_parameters["config"]["model_type"] == "gemma3":
         parsed_parameters["config"]["model_type"] = "gemma3_text"
+
+    # Qwen3.5 GGUF checkpoint only contains weights of text backbone
+    if parsed_parameters["config"].get("model_type") == "qwen35":
+        parsed_parameters["config"]["model_type"] = "qwen3_5_text"
 
     # MiniMax-M2: convert expert_gating_func integer to scoring_func string
     if parsed_parameters["config"].get("model_type") == "minimax_m2":
