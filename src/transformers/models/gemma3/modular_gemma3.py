@@ -539,7 +539,7 @@ class Gemma3TextModel(Gemma2Model):
         # embed positions
         hidden_states = inputs_embeds
         position_embeddings = {}
-        for layer_type in self.config.layer_types:
+        for layer_type in set(self.config.layer_types):
             position_embeddings[layer_type] = self.rotary_emb(hidden_states, position_ids, layer_type)
 
         for i, decoder_layer in enumerate(self.layers[: self.config.num_hidden_layers]):
