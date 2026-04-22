@@ -501,7 +501,7 @@ def render_jinja_template(
     documents: ChatType | None = None,
     chat_template: str | None = None,
     return_assistant_tokens_mask: bool = False,
-    continue_final_message: bool = False,
+    continue_final_message: bool | str = False,
     add_generation_prompt: bool = False,
     **kwargs,
 ) -> str:
@@ -543,9 +543,11 @@ def render_jinja_template(
             chat = chat.messages
         if continue_final_message:
             chat = deepcopy(chat)
-            final_message = chat[-1].get("content")
-            if final_message is None:
-                raise ValueError("continue_final_message is set but the final message has no content to continue!")
+            continue_final_message = continue_final_message if isinstance(continue_final_message, str) else "content"
+            
+            if (final_message := chat[-1].get(continue_final_message)) is None:
+                raise ValueError(f"continue_final_message is set but the final message has no \"{continue_final_message}\" to continue!")
+            
             elif isinstance(final_message, (list, tuple)):
                 for content_block in reversed(final_message):
                     if "text" in content_block:
@@ -557,11 +559,8 @@ def render_jinja_template(
                     raise ValueError(
                         "continue_final_message is set but we could not find any text to continue in the final message!"
                     )
-            elif final_message == "" and chat[-1].get('reasoning_content'):
-                # If the content is empty but there is a reasoning_content field, we assume this is a message where the model is supposed to continue reasoning in the reasoning_content field, so we add the continue tag there instead
-                chat[-1]['reasoning_content'] = chat[-1]['reasoning_content'] + continue_final_message_tag
             else:
-                chat[-1]["content"] = chat[-1]["content"] + continue_final_message_tag
+                chat[-1][continue_final_message] = chat[-1][continue_final_message] + continue_final_message_tag
         if return_assistant_tokens_mask:
             rendered_chat, generation_indices = _render_with_assistant_indices(
                 compiled_template=compiled_template,
@@ -589,6 +588,7 @@ def render_jinja_template(
                     "applying the chat template! This can happen if the chat template deletes portions of "
                     "the final message. Please verify the chat template and final message in your chat to "
                     "ensure they are compatible."
+                    f"Final message to continue: {final_message.strip()}\nRendered chat:\n{rendered_chat}"
                 )
             tag_loc = rendered_chat.rindex(continue_final_message_tag.strip())
             if rendered_chat[tag_loc : tag_loc + len(continue_final_message_tag)] == continue_final_message_tag:
