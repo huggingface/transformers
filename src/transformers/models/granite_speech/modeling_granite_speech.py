@@ -33,6 +33,7 @@ from ...utils import (
     logging,
     torch_compilable_check,
 )
+from ...utils.deprecation import forward_base_model_attrs
 from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
 from ..auto import AutoModel
@@ -473,6 +474,7 @@ class GraniteSpeechModel(GraniteSpeechPreTrainedModel):
         )
 
 
+@forward_base_model_attrs(version="5.7")
 class GraniteSpeechForConditionalGeneration(GraniteSpeechPreTrainedModel, GenerationMixin):
     _tied_weights_keys = {"lm_head.weight": "model.language_model.embed_tokens.weight"}
 

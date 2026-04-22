@@ -37,6 +37,7 @@ from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, is_torch_available
+from ...utils.deprecation import forward_base_model_attrs
 from ...utils.generic import can_return_tuple, maybe_autocast, merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
 from ..auto import AutoModel
@@ -504,6 +505,7 @@ class GlmAsrCausalLMOutputWithPast(ModelOutput):
     The GlmAsr model which consists of a fine-tuned Whisper encoder, a multi-modal projector and a Llama language model.
     """
 )
+@forward_base_model_attrs(version="5.7")
 class GlmAsrForConditionalGeneration(GlmAsrPreTrainedModel, GenerationMixin):
     _tied_weights_keys = {"lm_head.weight": "model.language_model.embed_tokens.weight"}
     _tp_plan = None

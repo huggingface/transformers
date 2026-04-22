@@ -31,6 +31,7 @@ from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPool
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, is_torchdynamo_compiling
+from ...utils.deprecation import forward_base_model_attrs
 from ..auto import AutoModel
 from .configuration_vibevoice_asr import VibeVoiceAsrConfig
 
@@ -442,6 +443,7 @@ class VibeVoiceAsrModel(VibeVoiceAsrPreTrainedModel):
     The VibeVoice ASR model with pre-trained acoustic tokenizers and a language model.
     """
 )
+@forward_base_model_attrs(version="5.7")
 class VibeVoiceAsrForConditionalGeneration(VibeVoiceAsrPreTrainedModel, GenerationMixin):
     _tied_weights_keys = {"lm_head.weight": "model.language_model.embed_tokens.weight"}
 

@@ -41,6 +41,7 @@ from ...models.voxtral.modeling_voxtral import (
 )
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, is_torchdynamo_compiling, logging
+from ...utils.deprecation import forward_base_model_attrs
 from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
 from .configuration_voxtral_realtime import VoxtralRealtimeEncoderConfig
@@ -628,6 +629,7 @@ class VoxtralRealtimeModel(VoxtralRealtimePreTrainedModel):
         )
 
 
+@forward_base_model_attrs(version="5.7")
 class VoxtralRealtimeForConditionalGeneration(VoxtralRealtimePreTrainedModel, GenerationMixin):
     _tied_weights_keys = {"lm_head.weight": "model.language_model.embed_tokens.weight"}
 

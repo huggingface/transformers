@@ -35,6 +35,7 @@ from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, is_torch_available
+from ...utils.deprecation import forward_base_model_attrs
 from ..auto import AutoModel
 from .configuration_musicflamingo import MusicFlamingoConfig
 
@@ -382,6 +383,7 @@ class MusicFlamingoCausalLMOutputWithPast(ModelOutput):
     The MusicFlamingo model which consists of a fine-tuned Whisper encoder, rotary time embedding, a multi-modal projector, and a Qwen2 language model.
     """
 )
+@forward_base_model_attrs(version="5.7")
 class MusicFlamingoForConditionalGeneration(MusicFlamingoPreTrainedModel, GenerationMixin):
     _tied_weights_keys = {"lm_head.weight": "model.language_model.embed_tokens.weight"}
     _tp_plan = None

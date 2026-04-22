@@ -24,6 +24,7 @@ from ...masking_utils import create_bidirectional_mask
 from ...modeling_outputs import BaseModelOutputWithPooling, ModelOutput
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
+from ...utils.deprecation import forward_base_model_attrs
 from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
 from ..qwen2_audio.modeling_qwen2_audio import (
@@ -265,6 +266,7 @@ class AudioFlamingo3Model(VoxtralModel):
     The AudioFlamingo3 model which consists of a fine-tuned Whisper encoder, a multi-modal projector and a Qwen2 language model.
     """
 )
+@forward_base_model_attrs(version="5.7")
 class AudioFlamingo3ForConditionalGeneration(VoxtralForConditionalGeneration):
     _tp_plan = None
     _pp_plan = None

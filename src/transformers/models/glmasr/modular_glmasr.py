@@ -25,6 +25,7 @@ from ...modeling_outputs import BaseModelOutputWithPooling, CausalLMOutputWithPa
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, is_torch_available, logging
+from ...utils.deprecation import forward_base_model_attrs
 from ...utils.generic import can_return_tuple, merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
 from ..audioflamingo3.modeling_audioflamingo3 import (
@@ -387,6 +388,7 @@ class GlmAsrModel(AudioFlamingo3Model):
     The GlmAsr model which consists of a fine-tuned Whisper encoder, a multi-modal projector and a Llama language model.
     """
 )
+@forward_base_model_attrs(version="5.7")
 class GlmAsrForConditionalGeneration(AudioFlamingo3ForConditionalGeneration):
     def __init__(self, config):
         super().__init__(config)

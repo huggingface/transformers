@@ -28,6 +28,7 @@ from ...modeling_outputs import (
 )
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
+from ...utils.deprecation import forward_base_model_attrs
 from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
 from ..auto import AutoModel
@@ -265,6 +266,7 @@ class VoxtralModel(VoxtralPreTrainedModel):
     The Voxtral model, which consists of a Whisper encoder, a multi-modal projector and a LLama language model.
     """
 )
+@forward_base_model_attrs(version="5.7")
 class VoxtralForConditionalGeneration(VoxtralPreTrainedModel, GenerationMixin):
     _tied_weights_keys = {"lm_head.weight": "model.language_model.embed_tokens.weight"}
 

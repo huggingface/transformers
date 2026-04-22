@@ -28,6 +28,7 @@ from ...modeling_outputs import (
 )
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
+from ...utils.deprecation import forward_base_model_attrs
 from ..auto import CONFIG_MAPPING, AutoConfig, AutoModel
 from ..qwen2.modeling_qwen2 import Qwen2RMSNorm
 from ..vibevoice_acoustic_tokenizer.modeling_vibevoice_acoustic_tokenizer import (
@@ -359,6 +360,7 @@ class VibeVoiceAsrModel(VibeVoiceAsrPreTrainedModel):
     The VibeVoice ASR model with pre-trained acoustic tokenizers and a language model.
     """
 )
+@forward_base_model_attrs(version="5.7")
 class VibeVoiceAsrForConditionalGeneration(VibeVoiceAsrPreTrainedModel, GenerationMixin):
     _tied_weights_keys = {"lm_head.weight": "model.language_model.embed_tokens.weight"}
 

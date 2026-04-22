@@ -173,3 +173,59 @@ def deprecate_kwarg(
         return wrapped_func
 
     return wrapper
+
+
+def forward_base_model_attrs(version: str):
+    """
+    Class decorator that forwards attribute access to the base model (`self.<base_model_prefix>`)
+    when the attribute is not found on the instance directly, and warns that direct access on the
+    outer class is deprecated.
+
+    Intended for backward compatibility during refactors that move submodules from the outer
+    `*ForConditionalGeneration` class down to the inner base model — e.g. `model.language_model`
+    becoming `model.model.language_model`.
+
+    Apply only to the outer wrapper class (the `*ForConditionalGeneration`), not to the inner
+    base model itself. The decorator relies on `base_model_prefix` being set on the class (which
+    `PreTrainedModel` subclasses always do).
+
+    Args:
+        version (`str`):
+            The Transformers version in which direct access will be removed (e.g. `"5.7"`).
+    """
+
+    def decorator(cls):
+        # Resolve the inherited __getattr__ (typically nn.Module's, which looks up
+        # submodules/parameters/buffers) so we can delegate to it without recursing.
+        inherited_getattr = cls.__getattr__
+
+        def __getattr__(self, name):
+            # First, the normal nn.Module lookup (submodules, parameters, buffers).
+            try:
+                return inherited_getattr(self, name)
+            except AttributeError:
+                pass
+            # Only forward public attributes to the base model — private names are
+            # framework internals (e.g. `_is_hf_initialized`) and shouldn't warn.
+            if name.startswith("_"):
+                raise AttributeError(f"{type(self).__name__!r} object has no attribute {name!r}")
+            prefix = type(self).base_model_prefix
+            try:
+                base = inherited_getattr(self, prefix)
+            except AttributeError:
+                raise AttributeError(f"{type(self).__name__!r} object has no attribute {name!r}")
+            if hasattr(base, name):
+                if not is_torchdynamo_compiling():
+                    warnings.warn(
+                        f"Accessing `{name}` directly on `{type(self).__name__}` is deprecated and "
+                        f"will be removed in Transformers v{version}. Use `.{prefix}.{name}` instead.",
+                        FutureWarning,
+                        stacklevel=2,
+                    )
+                return getattr(base, name)
+            raise AttributeError(f"{type(self).__name__!r} object has no attribute {name!r}")
+
+        cls.__getattr__ = __getattr__
+        return cls
+
+    return decorator

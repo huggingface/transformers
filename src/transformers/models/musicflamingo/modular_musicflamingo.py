@@ -27,6 +27,7 @@ from ...modeling_outputs import BaseModelOutputWithPooling, CausalLMOutputWithPa
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, is_torch_available
+from ...utils.deprecation import forward_base_model_attrs
 from ..audioflamingo3.configuration_audioflamingo3 import AudioFlamingo3Config
 from ..audioflamingo3.modeling_audioflamingo3 import (
     AudioFlamingo3ForConditionalGeneration,
@@ -388,6 +389,7 @@ class MusicFlamingoModel(AudioFlamingo3Model):
     The MusicFlamingo model which consists of a fine-tuned Whisper encoder, rotary time embedding, a multi-modal projector, and a Qwen2 language model.
     """
 )
+@forward_base_model_attrs(version="5.7")
 class MusicFlamingoForConditionalGeneration(AudioFlamingo3ForConditionalGeneration):
     def __init__(self, config: MusicFlamingoConfig):
         super().__init__(config)
