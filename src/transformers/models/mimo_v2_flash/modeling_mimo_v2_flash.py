@@ -379,27 +379,25 @@ class MiMoV2FlashAttention(nn.Module):
     def __init__(self, config: MiMoV2FlashConfig, layer_idx: int):
         super().__init__()
         # SWA layers double the kv heads vs full-attention and have attention sinks.
-        # Locals go before super() so they stay in scope for the overrides the modular converter
-        # places at their parent's position (it appends post-super locals to the end instead).
         is_swa = config.layer_types[layer_idx] == "sliding_attention"
         num_kv_heads = config.num_key_value_heads * 2 if is_swa else config.num_key_value_heads
+        num_attn_heads = config.num_attention_heads
         self.layer_type = config.layer_types[layer_idx] if hasattr(config, "layer_types") else None
         self.config = config
         self.layer_idx = layer_idx
         self.head_dim = getattr(config, "head_dim", config.hidden_size // config.num_attention_heads)
-        self.num_key_value_groups = config.num_attention_heads // num_kv_heads
+        self.num_key_value_groups = num_attn_heads // num_kv_heads
         self.scaling = self.head_dim**-0.5
         self.attention_dropout = config.attention_dropout
         self.is_causal = True
-        self.q_proj = nn.Linear(
-            config.hidden_size, config.num_attention_heads * self.head_dim, bias=config.attention_bias
-        )
+
+        self.q_proj = nn.Linear(config.hidden_size, num_attn_heads * self.head_dim, bias=config.attention_bias)
         self.k_proj = nn.Linear(config.hidden_size, num_kv_heads * self.head_dim, bias=config.attention_bias)
         self.v_proj = nn.Linear(config.hidden_size, num_kv_heads * config.v_head_dim, bias=config.attention_bias)
-        self.o_proj = nn.Linear(config.num_attention_heads * config.v_head_dim, config.hidden_size, bias=False)
+        self.o_proj = nn.Linear(num_attn_heads * config.v_head_dim, config.hidden_size, bias=False)
         self.sliding_window = config.sliding_window if self.layer_type == "sliding_attention" else None
         self.v_head_dim = config.v_head_dim
-        self.sinks = nn.Parameter(torch.empty(config.num_attention_heads), requires_grad=False) if is_swa else None
+        self.sinks = nn.Parameter(torch.empty(num_attn_heads), requires_grad=False) if is_swa else None
 
     def forward(
         self,

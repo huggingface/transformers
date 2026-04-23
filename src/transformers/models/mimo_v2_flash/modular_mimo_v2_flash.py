@@ -33,7 +33,7 @@ from ...utils.output_capturing import capture_outputs
 from ..deepseek_v3.modeling_deepseek_v3 import DeepseekV3ForCausalLM
 from ..gemma3.modeling_gemma3 import Gemma3RotaryEmbedding
 from ..glm4_moe.configuration_glm4_moe import Glm4MoeConfig
-from ..glm4_moe.modeling_glm4_moe import apply_rotary_pos_emb  # noqa: F401
+from ..glm4_moe.modeling_glm4_moe import Glm4MoeMLP, apply_rotary_pos_emb  # noqa: F401
 from ..llama.modeling_llama import LlamaDecoderLayer, repeat_kv
 from ..mixtral.modeling_mixtral import (
     MixtralExperts,
@@ -43,7 +43,6 @@ from ..mixtral.modeling_mixtral import (
     MixtralSparseMoeBlock,
 )
 from ..qwen2.modeling_qwen2 import Qwen2Attention
-from ..qwen2_moe.modeling_qwen2_moe import Qwen2MoeMLP
 
 
 @auto_docstring(checkpoint="XiaomiMiMo/MiMo-V2-Flash")
@@ -249,7 +248,7 @@ class MiMoV2FlashSparseMoeBlock(MixtralSparseMoeBlock):
     pass
 
 
-class MiMoV2FlashMLP(Qwen2MoeMLP):
+class MiMoV2FlashMLP(Glm4MoeMLP):
     pass
 
 
