@@ -16,7 +16,6 @@
 
 from functools import lru_cache
 
-from huggingface_hub.errors import EntryNotFoundError, RepositoryNotFoundError, RevisionNotFoundError
 from packaging import version
 
 from .. import __version__
