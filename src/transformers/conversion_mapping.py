@@ -599,10 +599,8 @@ def _build_checkpoint_conversion_mapping():
         WeightRenaming(source_patterns=r"mlp\.expert_bias", target_patterns="mlp.e_score_correction_bias"),
         WeightRenaming(source_patterns=r"mlp\.shared_mlp\.", target_patterns="mlp.shared_experts."),
     ]
-
     mapping["qwen3_5_moe_text"] = mapping["qwen3_5_text"].copy()
     mapping["qwen3_5_moe_text"] += mapping["qwen2_moe"].copy()
-
 
     for model_type, base_pattern in _MODEL_TO_CONVERSION_PATTERN.items():
         if model_type in mapping:
