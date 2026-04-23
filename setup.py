@@ -124,7 +124,7 @@ _deps = [
     "rjieba",
     "rouge-score!=0.0.7,!=0.0.8,!=0.1,!=0.1.1",
     "ruff==0.14.10",
-    "transformers-mlinter @ git+https://github.com/huggingface/transformers-mlinter@b9d319ce264c106f97a959d926ef42bc3c0ea4d1",
+    "transformers-mlinter==0.1.0",
     "ty==0.0.20",
     # `sacrebleu` not used in `transformers`. However, it is needed in several tests, when a test calls
     # `evaluate.load("sacrebleu")`. This metric is used in the examples that we use to test the `Trainer` with, in the
@@ -295,7 +295,7 @@ class DepsTableUpdateCommand(Command):
         pass
 
     def run(self):
-        if SUPPORTED_PYTHON_VERSIONS[0] >= PYTHON_MINOR_VERSION:
+        if SUPPORTED_PYTHON_VERSIONS[0] > PYTHON_MINOR_VERSION:
             print(
                 f"Table updated only when running 3.{SUPPORTED_PYTHON_VERSIONS[0]}.x, detected version is {sys.version}."
             )
@@ -328,7 +328,7 @@ if __name__ == "__main__":
 
     setup(
         name="transformers",
-        version="5.6.0.dev0",  # expected format is one of x.y.z.dev0, or x.y.z.rc1 or x.y.z (no to dashes, yes to dots)
+        version="5.7.0.dev0",  # expected format is one of x.y.z.dev0, or x.y.z.rc1 or x.y.z (no to dashes, yes to dots)
         author="The Hugging Face team (past and future) with the help of all our contributors (https://github.com/huggingface/transformers/graphs/contributors)",
         author_email="transformers@huggingface.co",
         description="Transformers: the model-definition framework for state-of-the-art machine learning models in text, vision, audio, and multimodal models, for both inference and training.",

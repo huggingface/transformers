@@ -24,6 +24,7 @@ The `transformers serve` CLI is a lightweight option for local or self-hosted se
 The `transformers serve` command spawns a local server compatible with the [OpenAI SDK](https://platform.openai.com/docs/overview). The server works with many third-party applications and supports the REST APIs below.
 
 - `/v1/chat/completions` for text, image, audio, and video requests
+- `/v1/completions` for legacy text completions from a freeform prompt
 - `/v1/responses` supports the [Responses API](https://platform.openai.com/docs/api-reference/responses)
 - `/v1/audio/transcriptions` for audio transcriptions
 - `/v1/models` lists available models for third-party integrations
@@ -958,6 +959,86 @@ The follow-up question "How many people live there?" relies on the prior context
 ```
 As of 2021, the population of Paris is approximately 2.2 million people.
 ```
+
+## v1/completions
+
+The `v1/completions` API is based on the [legacy Completions API](https://platform.openai.com/docs/api-reference/completions). Unlike `/v1/chat/completions`, it takes a freeform text `prompt` instead of chat messages and returns generated text in `choices[].text`. This is useful for base (non-instruct) models and text completion tasks where a chat template is not needed. It also supports `suffix` for fill-in-the-middle text insertion.
+
+<hfoptions id="legacy-completion">
+<hfoption id="curl">
+
+```shell
+curl -X POST http://localhost:8000/v1/completions \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "Qwen/Qwen2.5-0.5B",
+    "prompt": "The capital of France is",
+    "max_tokens": 20
+  }'
+```
+
+The command returns the following response.
+
+```json
+{
+  "id": "chatcmpl-abc123",
+  "object": "text_completion",
+  "created": 1234567890,
+  "model": "Qwen/Qwen2.5-0.5B@main",
+  "choices": [
+    {
+      "text": " Paris, and the capital of the United States is Washington, D.C.",
+      "index": 0,
+      "logprobs": null,
+      "finish_reason": "stop"
+    }
+  ],
+  "usage": {
+    "prompt_tokens": 5,
+    "completion_tokens": 16,
+    "total_tokens": 21
+  }
+}
+```
+
+</hfoption>
+<hfoption id="openai">
+
+```python
+from openai import OpenAI
+
+client = OpenAI(base_url="http://localhost:8000/v1", api_key="<random_string>")
+
+# Non-streaming
+completion = client.completions.create(
+    model="Qwen/Qwen2.5-0.5B",
+    prompt="The capital of France is",
+    max_tokens=20,
+)
+print(completion.choices[0].text)
+```
+
+The [OpenAI](https://platform.openai.com/docs/quickstart) client returns the following.
+
+```shell
+ Paris, and the capital of the United States is Washington, D.C.
+```
+
+Streaming is also supported.
+
+```python
+stream = client.completions.create(
+    model="Qwen/Qwen2.5-0.5B",
+    prompt="The capital of France is",
+    max_tokens=20,
+    stream=True,
+)
+for chunk in stream:
+    print(chunk.choices[0].text, end="")
+```
+
+</hfoption>
+</hfoptions>
 
 ## v1/responses
 
