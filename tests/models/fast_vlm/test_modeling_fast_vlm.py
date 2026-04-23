@@ -281,6 +281,7 @@ class FastVlmForConditionalGenerationIntegrationTest(unittest.TestCase):
         image1 = Image.open(requests.get("https://llava-vl.github.io/static/images/view.jpg", stream=True).raw)
         image2 = Image.open(requests.get("http://images.cocodataset.org/val2017/000000039769.jpg", stream=True).raw)
 
+        self.processor.tokenizer.padding_side = "left"
         inputs = self.processor(images=[image1, image2], text=prompts, return_tensors="pt", padding=True).to(
             torch_device,
             dtype=model.dtype,
@@ -290,7 +291,7 @@ class FastVlmForConditionalGenerationIntegrationTest(unittest.TestCase):
 
         EXPECTED_DECODED_TEXT = [
             "user\n\nWhat are the things I should be cautious about when I visit this place? What should I bring with me?\nassistant\n\nWhen visiting this serene place, it's essential to be mindful of the following:\n\n1. **",
-            "user\n\nWhat is this?\nassistant\nThe image depicts two cats lying on a pink surface, which could be a couch or a"
+            "user\n\nWhat is this?\nassistant\n\nThe image depicts two cats, one of which is a tabby, lying on a pink surface"
         ]  # fmt: skip
 
         self.assertEqual(
