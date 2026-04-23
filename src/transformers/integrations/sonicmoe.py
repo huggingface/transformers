@@ -18,6 +18,8 @@ Provides `sonicmoe_experts_forward` registered as "sonicmoe" in the ExpertsInter
 Requirements: CUDA, `kernels`, `nvidia-cutlass-dsl`, has_gate=True, is_transposed=False.
 """
 
+import functools
+
 import torch
 
 from ..utils import logging
@@ -28,6 +30,44 @@ logger = logging.get_logger(__name__)
 
 # Map activation function names from HF config to SonicMoE epilogue names
 ACT_MAP = {"silu": "swiglu", "gelu": "geglu", "relu": "reglu"}
+
+
+@functools.cache
+def _load_sonic_kernel():
+    """
+    Load sonic-moe once and return its required symbols.
+
+    Raises:
+        ImportError if the kernel or required symbols are not found.
+
+    Returns:
+        Tuple of (ActivationType, moe_general_routing_inputs function) from the sonic-moe kernel.
+    """
+
+    kernel = lazy_load_kernel("sonic-moe")
+    if kernel is None:
+        raise ImportError(
+            "sonic-moe kernel not found. Make sure you have the `kernels` and `nvidia-cutlass-dsl` packages installed."
+        )
+
+    ActivationType = getattr(getattr(kernel, "enums", None), "ActivationType", None)
+    moe_general_routing_inputs = getattr(kernel, "moe_general_routing_inputs", None)
+
+    missing = [
+        name
+        for name, attr in [
+            ("enums.ActivationType", ActivationType),
+            ("moe_general_routing_inputs", moe_general_routing_inputs),
+        ]
+        if attr is None
+    ]
+    if missing:
+        raise ImportError(
+            f"sonic-moe kernel is missing required symbols: {', '.join(missing)}. "
+            "Make sure you have the `kernels` package and `nvidia-cutlass-dsl` installed."
+        )
+
+    return ActivationType, moe_general_routing_inputs
 
 
 def sonicmoe_experts_forward(
@@ -43,21 +83,13 @@ def sonicmoe_experts_forward(
     if hidden_states.device.type != "cuda":
         raise ValueError("sonicmoe requires CUDA device")
 
-    sonic_moe = lazy_load_kernel("sonic-moe")
-    moe_general_routing = getattr(sonic_moe, "moe_general_routing_inputs", None)
-    ActivationType = getattr(getattr(sonic_moe, "enums", None), "ActivationType", None)
-    if moe_general_routing is None or ActivationType is None:
-        raise ImportError(
-            "moe_general_routing_inputs function or ActivationType enum not found in kernels-community/sonic-moe. "
-            "Make sure you have the `kernels` package and `nvidia-cutlass-dsl` installed."
-        )
+    ActivationType, moe_general_routing_inputs = _load_sonic_kernel()
 
     device = hidden_states.device
-    num_experts = self.num_experts
     num_top_k = top_k_index.size(-1)
     num_tokens = hidden_states.size(0)
     grad_enabled = torch.is_grad_enabled()
-    stream_id = torch.cuda.current_stream(device).cuda_stream
+    stream_id = torch.cuda.current_stream(device).cuda_stream  # this breaks torch.compile on some versions
 
     # Flatten — token_indices must be int32, sorted ascending (required by sonic-moe)
     token_idx = torch.arange(num_tokens, device=device).unsqueeze(1).expand(-1, num_top_k).reshape(-1).int()
@@ -68,13 +100,13 @@ def sonicmoe_experts_forward(
     act_name = getattr(self.config, "hidden_act", "silu").lower()
     activation_type = getattr(ActivationType, ACT_MAP.get(act_name, "swiglu").upper(), ActivationType.SWIGLU)
 
-    # Permute weights to (E, H, I) as expected by sonic-moe (E=num_experts, H=hidden_size, I=intermediate_size)
+    # Permute weights as expected by sonic-moe (E=num_experts, H=hidden_size, I=intermediate_size)
     w1 = self.gate_up_proj.permute(1, 2, 0)  # (2*I, H, E)
     w2 = self.down_proj.permute(1, 2, 0)  # (I, H, E)
     b1 = self.gate_up_proj_bias if self.has_bias else None
     b2 = self.down_proj_bias if self.has_bias else None
 
-    output, _ = moe_general_routing(
+    output, _ = moe_general_routing_inputs(
         hidden_states,
         router_scores,
         token_idx,
@@ -83,11 +115,11 @@ def sonicmoe_experts_forward(
         b1,
         w2,
         b2,
-        E=num_experts,
+        E=self.num_experts,
         stream_id=stream_id,
         activation_type=activation_type,
         is_inference_mode_enabled=not grad_enabled,
-        is_concatenated_gate_up=True,
+        concat_layout=self.is_concatenated_layout,
     )
 
     return output
