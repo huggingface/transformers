@@ -45,7 +45,6 @@ from transformers import pipeline
 pipeline = pipeline(
     task="text-generation",
     model="CohereLabs/c4ai-command-r7b-12-2024",
-    dtype=torch.float16,
     device_map=0
 )
 
@@ -65,7 +64,6 @@ from transformers import AutoTokenizer, AutoModelForCausalLM
 tokenizer = AutoTokenizer.from_pretrained("CohereLabs/c4ai-command-r7b-12-2024")
 model = AutoModelForCausalLM.from_pretrained(
     "CohereLabs/c4ai-command-r7b-12-2024",
-    dtype=torch.float16,
     device_map="auto",
     attn_implementation="sdpa"
 )
@@ -106,7 +104,6 @@ bnb_config = BitsAndBytesConfig(load_in_4bit=True)
 tokenizer = AutoTokenizer.from_pretrained("CohereLabs/c4ai-command-r7b-12-2024")
 model = AutoModelForCausalLM.from_pretrained(
     "CohereLabs/c4ai-command-r7b-12-2024",
-    dtype=torch.float16,
     device_map="auto",
     quantization_config=bnb_config,
     attn_implementation="sdpa"

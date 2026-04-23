@@ -37,8 +37,7 @@ from transformers import pipeline
 
 pipe = pipeline(
     task="text-generation",
-    model="Qwen/Qwen3-30B-A3B",
-    dtype=torch.bfloat16,
+    model="Qwen/Qwen3-30B-A3B",,
 )
 pipe("The key to effective reasoning is")
 ```
@@ -53,7 +52,6 @@ from transformers import AutoModelForCausalLM, AutoTokenizer
 tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen3-30B-A3B")
 model = AutoModelForCausalLM.from_pretrained(
     "Qwen/Qwen3-30B-A3B",
-    dtype=torch.bfloat16,
     device_map="auto",
 )
 input_ids = tokenizer("The key to effective reasoning is", return_tensors="pt").to(model.device)

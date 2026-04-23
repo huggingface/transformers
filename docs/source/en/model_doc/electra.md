@@ -45,7 +45,6 @@ from transformers import pipeline
 classifier = pipeline(
     task="text-classification",
     model="bhadresh-savani/electra-base-emotion",
-    dtype=torch.float16,
     device=0
 )
 classifier("This restaurant has amazing food!")
@@ -63,7 +62,6 @@ tokenizer = AutoTokenizer.from_pretrained(
 )
 model = AutoModelForSequenceClassification.from_pretrained(
     "bhadresh-savani/electra-base-emotion",
-    dtype=torch.float16
 )
 inputs = tokenizer("ELECTRA is more efficient than BERT", return_tensors="pt")
 

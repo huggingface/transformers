@@ -45,7 +45,6 @@ pipeline = pipeline(
     task="text-classification",
     model="microsoft/deberta-v2-xlarge-mnli",
     device=0,
-    dtype=torch.float16
 )
 result = pipeline("DeBERTa-v2 is great at understanding context!")
 print(result)
@@ -63,7 +62,6 @@ tokenizer = AutoTokenizer.from_pretrained(
 )
 model = AutoModelForSequenceClassification.from_pretrained(
     "microsoft/deberta-v2-xlarge-mnli",
-    dtype=torch.float16,
     device_map="auto"
 )
 

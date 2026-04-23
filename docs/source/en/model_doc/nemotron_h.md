@@ -38,8 +38,7 @@ from transformers import pipeline
 
 pipe = pipeline(
     task="text-generation",
-    model="nvidia/Nemotron-H-8B-Reasoning-128K",
-    dtype=torch.bfloat16,
+    model="nvidia/Nemotron-H-8B-Reasoning-128K",,
 )
 pipe("Plants create energy through a process known as")
 ```
@@ -54,7 +53,6 @@ from transformers import AutoModelForCausalLM, AutoTokenizer
 tokenizer = AutoTokenizer.from_pretrained("nvidia/Nemotron-H-8B-Reasoning-128K")
 model = AutoModelForCausalLM.from_pretrained(
     "nvidia/Nemotron-H-8B-Reasoning-128K",
-    dtype=torch.bfloat16,
     device_map="auto",
 )
 input_ids = tokenizer("Plants create energy through a process known as", return_tensors="pt").to(model.device)

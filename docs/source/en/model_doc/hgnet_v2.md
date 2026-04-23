@@ -43,7 +43,6 @@ from transformers import pipeline
 pipeline = pipeline(
     task="image-classification",
     model="ustc-community/hgnet-v2",
-    dtype=torch.float16,
     device=0
 )
 pipeline("http://images.cocodataset.org/val2017/000000039769.jpg")

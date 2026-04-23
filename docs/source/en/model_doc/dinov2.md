@@ -40,7 +40,6 @@ from transformers import pipeline
 pipe = pipeline(
     task="image-classification",
     model="facebook/dinov2-small-imagenet1k-1-layer",
-    dtype=torch.float16,
     device=0
 )
 
@@ -61,7 +60,6 @@ image = Image.open(requests.get(url, stream=True).raw)
 processor = AutoImageProcessor.from_pretrained("facebook/dinov2-small-imagenet1k-1-layer")
 model = AutoModelForImageClassification.from_pretrained(
     "facebook/dinov2-small-imagenet1k-1-layer",
-    dtype=torch.float16,
     device_map="auto",
     attn_implementation="sdpa"
 )
@@ -96,7 +94,6 @@ quantization_config = TorchAoConfig(quant_type=quant_config)
 
 model = AutoModelForImageClassification.from_pretrained(
     'facebook/dinov2-giant-imagenet1k-1-layer',
-    dtype=torch.bfloat16,
     device_map="auto",
     quantization_config=quantization_config
 )

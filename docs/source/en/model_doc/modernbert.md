@@ -44,7 +44,6 @@ from transformers import pipeline
 pipeline = pipeline(
     task="fill-mask",
     model="answerdotai/ModernBERT-base",
-    dtype=torch.float16,
     device=0
 )
 pipeline("Plants create [MASK] through a process known as photosynthesis.")
@@ -62,7 +61,6 @@ tokenizer = AutoTokenizer.from_pretrained(
 )
 model = AutoModelForMaskedLM.from_pretrained(
     "answerdotai/ModernBERT-base",
-    dtype=torch.float16,
     device_map="auto",
     attn_implementation="sdpa"
 )
@@ -119,7 +117,7 @@ inputs = prepare_text_for_padding_free(
     ["The capital of France is [MASK].", "ModernBERT is a [MASK] model."]
 )
 model = AutoModelForMaskedLM.from_pretrained(
-    model_id, attn_implementation="flash_attention_2", dtype=torch.bfloat16, device_map="cuda"
+    model_id, attn_implementation="flash_attention_2", device_map="cuda"
 )
 
 # Optional: use torch.compile for faster inference

@@ -45,7 +45,6 @@ from transformers import pipeline
 pipeline = pipeline(
     task="text-generation",
     model="meta-llama/Llama-2-7b-hf",
-    dtype=torch.float16,
     device=0
 )
 pipeline("Plants create energy through a process known as")
@@ -63,7 +62,6 @@ tokenizer = AutoTokenizer.from_pretrained(
 )
 model = AutoModelForCausalLM.from_pretrained(
     "meta-llama/Llama-2-7b-hf",
-    dtype=torch.float16,
     device_map="auto",
     attn_implementation="sdpa"
 )
@@ -95,7 +93,6 @@ from transformers import TorchAoConfig, AutoModelForCausalLM, AutoTokenizer
 quantization_config = TorchAoConfig("int4_weight_only", group_size=128)
 model = AutoModelForCausalLM.from_pretrained(
     "meta-llama/Llama-2-13b-hf",
-    dtype=torch.bfloat16,
     device_map="auto",
     quantization_config=quantization_config
 )

@@ -46,7 +46,6 @@ from transformers import pipeline
 pipe = pipeline(
     task="automatic-speech-recognition",
     model="UsefulSensors/moonshine-streaming-tiny",
-    dtype=torch.float16,
     device=0
 )
 pipe("https://huggingface.co/datasets/Narsil/asr_dummy/resolve/main/mlk.flac")
@@ -63,7 +62,6 @@ from transformers import AutoProcessor, MoonshineStreamingForConditionalGenerati
 processor = AutoProcessor.from_pretrained("UsefulSensors/moonshine-streaming-tiny")
 model = MoonshineStreamingForConditionalGeneration.from_pretrained(
     "UsefulSensors/moonshine-streaming-tiny",
-    dtype=torch.float16,
     device_map="auto",
     attn_implementation="sdpa"
 )

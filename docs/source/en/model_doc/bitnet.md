@@ -86,7 +86,6 @@ model_id = "microsoft/bitnet-b1.58-2B-4T"
 tokenizer = AutoTokenizer.from_pretrained(model_id)
 model = AutoModelForCausalLM.from_pretrained(
     model_id,
-    dtype=torch.bfloat16
 )
 
 # Apply the chat template

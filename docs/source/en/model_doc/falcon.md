@@ -44,7 +44,6 @@ from transformers import pipeline
 pipeline = pipeline(
     task="text-generation",
     model="tiiuae/falcon-7b-instruct",
-    dtype=torch.bfloat16,
     device=0
 )
 pipeline(
@@ -65,7 +64,6 @@ from transformers import AutoTokenizer, AutoModelForCausalLM
 tokenizer = AutoTokenizer.from_pretrained("tiiuae/falcon-7b-instruct")
 model = AutoModelForCausalLM.from_pretrained(
     "tiiuae/falcon-7b-instruct",
-    dtype=torch.bfloat16,
     device_map="auto",
     attn_implementation="sdpa",
 )
@@ -97,15 +95,13 @@ from transformers import AutoTokenizer, AutoModelForCausalLM, BitsAndBytesConfig
 
 quantization_config = BitsAndBytesConfig(
     load_in_4bit=True,
-    bnb_4bit_compute_dtype=torch.bfloat16,
-    bnb_4bit_quant_type="nf4",
+    bnb_4bit_compute_bnb_4bit_quant_type="nf4",
     bnb_4bit_use_double_quant=True,
 )
 
 tokenizer = AutoTokenizer.from_pretrained("tiiuae/falcon-7b")
 model = AutoModelForCausalLM.from_pretrained(
     "tiiuae/falcon-7b",
-    dtype=torch.bfloat16,
     device_map="auto",
     quantization_config=quantization_config,
 )

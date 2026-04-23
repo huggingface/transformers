@@ -53,7 +53,6 @@ import torch
 
 model = GlmImageForConditionalGeneration.from_pretrained(
     pretrained_model_name_or_path="zai-org/GLM-Image/vision_language_encoder",
-    dtype=torch.bfloat16,
     device_map="cuda:0"
 )
 processor = AutoProcessor.from_pretrained(

@@ -37,8 +37,7 @@ from transformers import pipeline
 
 pipe = pipeline(
     task="text-generation",
-    model="openai/gpt-oss-20b",
-    dtype=torch.bfloat16,
+    model="openai/gpt-oss-20b",,
 )
 pipe("Plants create energy through a process known as")
 ```
@@ -53,7 +52,6 @@ from transformers import AutoModelForCausalLM, AutoTokenizer
 tokenizer = AutoTokenizer.from_pretrained("openai/gpt-oss-20b")
 model = AutoModelForCausalLM.from_pretrained(
     "openai/gpt-oss-20b",
-    dtype=torch.bfloat16,
     device_map="auto",
 )
 input_ids = tokenizer("Plants create energy through a process known as", return_tensors="pt").to(model.device)

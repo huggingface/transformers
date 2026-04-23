@@ -46,7 +46,6 @@ from transformers import pipeline
 pipe = pipeline(
     task="text-generation",
     model="allenai/OLMoE-1B-7B-0125",
-    dtype=torch.float16,
     device=0,
 )
 

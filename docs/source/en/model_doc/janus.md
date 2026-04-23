@@ -66,8 +66,7 @@ messages = [
 # Set generation mode to `text` to perform text generation.
 processor = JanusProcessor.from_pretrained(model_id)
 model = JanusForConditionalGeneration.from_pretrained(model_id,     
-        dtype=torch.bfloat16,
-        device_map="auto")
+            device_map="auto")
 
 inputs = processor.apply_chat_template(
     messages,
@@ -76,7 +75,7 @@ inputs = processor.apply_chat_template(
     tokenize=True,
     return_dict=True,
     return_tensors="pt",
-).to(model.device, dtype=torch.bfloat16)
+).to(model.device)
 
 output = model.generate(**inputs, max_new_tokens=40,generation_mode='text',do_sample=True)
 text = processor.decode(output[0], skip_special_tokens=True)
@@ -128,7 +127,7 @@ messages = [
 # Load model and processor
 processor = JanusProcessor.from_pretrained(model_id)
 model = JanusForConditionalGeneration.from_pretrained(
-    model_id, dtype=torch.bfloat16, device_map="auto"
+    model_id, device_map="auto"
 )
 
 inputs = processor.apply_chat_template(
@@ -139,7 +138,7 @@ inputs = processor.apply_chat_template(
     padding=True,
     return_dict=True,
     return_tensors="pt"
-).to(model.device, dtype=torch.bfloat16)
+).to(model.device)
 
 # Generate response
 output = model.generate(**inputs, max_new_tokens=40, generation_mode='text', do_sample=False)
@@ -160,8 +159,7 @@ from transformers import JanusForConditionalGeneration, JanusProcessor
 model_id = "deepseek-community/Janus-Pro-1B"
 processor = JanusProcessor.from_pretrained(model_id)
 model = JanusForConditionalGeneration.from_pretrained(model_id,
-        dtype=torch.bfloat16,
-        device_map="auto")
+            device_map="auto")
 
 messages = [
     {
@@ -173,7 +171,7 @@ messages = [
 ]
 
 prompt = processor.apply_chat_template(messages, add_generation_prompt=True)
-inputs = processor(text=prompt,generation_mode="image",return_tensors="pt").to(model.device, dtype=torch.bfloat16)
+inputs = processor(text=prompt,generation_mode="image",return_tensors="pt").to(model.device)
 
 # Set num_return_sequence parameter to generate multiple images per prompt.
 model.generation_config.num_return_sequences = 2

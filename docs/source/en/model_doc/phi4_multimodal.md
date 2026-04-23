@@ -54,7 +54,7 @@ model_path = "microsoft/Phi-4-multimodal-instruct"
 device = Accelerator().device
 
 processor = AutoProcessor.from_pretrained(model_path)
-model = AutoModelForCausalLM.from_pretrained(model_path, device_map=device, dtype=torch.float16)
+model = AutoModelForCausalLM.from_pretrained(model_path, device_map=device)
 
 model.load_adapter(model_path, adapter_name="vision", device_map=device, adapter_kwargs={"subfolder": 'vision-lora'})
 

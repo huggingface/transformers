@@ -97,7 +97,7 @@ def read_video_pyav(container, indices):
     return np.stack([x.to_ndarray(format="rgb24") for x in frames])
 
 # Load the model in half-precision
-model = VideoLlavaForConditionalGeneration.from_pretrained("LanguageBind/Video-LLaVA-7B-hf", dtype=torch.float16, device_map="auto")
+model = VideoLlavaForConditionalGeneration.from_pretrained("LanguageBind/Video-LLaVA-7B-hf", device_map="auto")
 processor = VideoLlavaProcessor.from_pretrained("LanguageBind/Video-LLaVA-7B-hf")
 
 # Load the video as an np.arrau, sampling uniformly 8 frames
@@ -192,8 +192,7 @@ To load and run a model using Flash Attention-2, simply add `attn_implementation
 from transformers import VideoLlavaForConditionalGeneration
 
 model = VideoLlavaForConditionalGeneration.from_pretrained(
-    "LanguageBind/Video-LLaVA-7B-hf", 
-    dtype=torch.float16, 
+    "LanguageBind/Video-LLaVA-7B-hf", , 
     attn_implementation="flash_attention_2",
 ).to(0)
 ```

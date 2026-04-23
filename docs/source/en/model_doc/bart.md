@@ -40,7 +40,6 @@ from transformers import pipeline
 fill_mask_pipeline = pipeline(
     task="fill-mask",
     model="facebook/bart-large",
-    dtype=torch.float16,
     device=0
 )
 pipeline("Plants create <mask> through a process known as photosynthesis.")
@@ -59,7 +58,6 @@ tokenizer = AutoTokenizer.from_pretrained(
 )
 model = AutoModelForMaskedLM.from_pretrained(
     "facebook/bart-large",
-    dtype=torch.float16,
     device_map="auto",
     attn_implementation="sdpa"
 )

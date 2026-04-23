@@ -45,7 +45,6 @@ tokenizer = AutoTokenizer.from_pretrained(
 )
 model = BartForConditionalGeneration.from_pretrained(
     "vinai/bartpho-word",
-    dtype=torch.float16,
     device_map="auto",
 )
 

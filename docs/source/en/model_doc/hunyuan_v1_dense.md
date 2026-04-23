@@ -36,8 +36,7 @@ from transformers import pipeline
 
 pipe = pipeline(
     task="text-generation",
-    model="tencent/Hunyuan-0.5B-Pretrain",
-    dtype=torch.bfloat16,
+    model="tencent/Hunyuan-0.5B-Pretrain",,
 )
 pipe("The future of artificial intelligence is")
 ```
@@ -52,7 +51,6 @@ from transformers import AutoModelForCausalLM, AutoTokenizer
 tokenizer = AutoTokenizer.from_pretrained("tencent/Hunyuan-0.5B-Pretrain")
 model = AutoModelForCausalLM.from_pretrained(
     "tencent/Hunyuan-0.5B-Pretrain",
-    dtype=torch.bfloat16,
     device_map="auto",
 )
 input_ids = tokenizer("The future of artificial intelligence is", return_tensors="pt").to(model.device)

@@ -123,7 +123,7 @@ import torch
 from transformers import LlavaNextVideoForConditionalGeneration, LlavaNextVideoProcessor
 
 # Load the model in half-precision
-model = LlavaNextVideoForConditionalGeneration.from_pretrained("llava-hf/LLaVA-NeXT-Video-7B-hf", dtype=torch.float16, device_map="auto")
+model = LlavaNextVideoForConditionalGeneration.from_pretrained("llava-hf/LLaVA-NeXT-Video-7B-hf", device_map="auto")
 processor = LlavaNextVideoProcessor.from_pretrained("llava-hf/LLaVA-NeXT-Video-7B-hf")
 
 # Load the video as an np.array, sampling uniformly 8 frames (can sample more for longer videos)
@@ -233,8 +233,7 @@ To load and run a model using Flash Attention-2, simply add `attn_implementation
 from transformers import LlavaNextVideoForConditionalGeneration
 
 model = LlavaNextVideoForConditionalGeneration.from_pretrained(
-    "llava-hf/LLaVA-NeXT-Video-7B-hf", 
-    dtype=torch.float16, 
+    "llava-hf/LLaVA-NeXT-Video-7B-hf", , 
     attn_implementation="flash_attention_2",
 ).to(0)
 ```

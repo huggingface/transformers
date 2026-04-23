@@ -49,7 +49,7 @@ The example below demonstrates how to chat with [`Pipeline`] or the [`AutoModel`
 ...     {"role": "user", "content": "Do you have mayonnaise recipes?"}
 ... ]
 
->>> chatbot = pipeline("text-generation", model="mistralai/Mistral-7B-Instruct-v0.3", dtype=torch.bfloat16, device=0)
+>>> chatbot = pipeline("text-generation", model="mistralai/Mistral-7B-Instruct-v0.3", device=0)
 >>> chatbot(messages)
 ```
 
@@ -60,7 +60,7 @@ The example below demonstrates how to chat with [`Pipeline`] or the [`AutoModel`
 >>> import torch
 >>> from transformers import AutoModelForCausalLM, AutoTokenizer
 
->>> model = AutoModelForCausalLM.from_pretrained("mistralai/Mistral-7B-Instruct-v0.3", dtype=torch.bfloat16, attn_implementation="sdpa", device_map="auto")
+>>> model = AutoModelForCausalLM.from_pretrained("mistralai/Mistral-7B-Instruct-v0.3", attn_implementation="sdpa", device_map="auto")
 >>> tokenizer = AutoTokenizer.from_pretrained("mistralai/Mistral-7B-Instruct-v0.3")
 
 >>> messages = [
@@ -101,7 +101,7 @@ The example below uses [bitsandbytes](../quantization/bitsandbytes) to only quan
 ...         bnb_4bit_compute_dtype="torch.float16",
 ... )
 
->>> model = AutoModelForCausalLM.from_pretrained("mistralai/Mistral-7B-Instruct-v0.3", quantization_config=True, dtype=torch.bfloat16, device_map="auto")
+>>> model = AutoModelForCausalLM.from_pretrained("mistralai/Mistral-7B-Instruct-v0.3", quantization_config=True, device_map="auto")
 >>> tokenizer = AutoTokenizer.from_pretrained("mistralai/Mistral-7B-Instruct-v0.3")
 
 >>> prompt = "My favourite condiment is"

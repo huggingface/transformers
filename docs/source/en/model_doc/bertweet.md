@@ -43,7 +43,6 @@ from transformers import pipeline
 pipeline = pipeline(
     task="fill-mask",
     model="vinai/bertweet-base",
-    dtype=torch.float16,
     device=0
 )
 pipeline("Plants create <mask> through a process known as photosynthesis.")
@@ -61,7 +60,6 @@ tokenizer = AutoTokenizer.from_pretrained(
 )
 model = AutoModelForMaskedLM.from_pretrained(
     "vinai/bertweet-base",
-    dtype=torch.float16,
     device_map="auto"
 )
 inputs = tokenizer("Plants create <mask> through a process known as photosynthesis.", return_tensors="pt").to(model.device)

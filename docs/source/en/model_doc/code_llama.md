@@ -42,7 +42,6 @@ from transformers import pipeline
 pipe = pipeline(
     "text-generation",
     model="meta-llama/CodeLlama-7b-hf",
-    dtype=torch.float16,
     device_map=0
 )
 
@@ -65,7 +64,6 @@ from transformers import AutoModelForCausalLM, AutoTokenizer
 tokenizer = AutoTokenizer.from_pretrained("meta-llama/CodeLlama-7b-hf")
 model = AutoModelForCausalLM.from_pretrained(
     "meta-llama/CodeLlama-7b-hf",
-    dtype=torch.float16,
     device_map="auto",
     attn_implementation="sdpa"
 )
@@ -106,7 +104,6 @@ bnb_config = BitsAndBytesConfig(load_in_4bit=True, bnb_4bit_compute_dtype=torch.
 tokenizer = CodeLlamaTokenizer.from_pretrained("meta-llama/CodeLlama-34b-hf")
 model = AutoModelForCausalLM.from_pretrained(
    "meta-llama/CodeLlama-34b-hf",
-   dtype=torch.bfloat16,
    device_map="auto",
    quantization_config=bnb_config
 )

@@ -57,7 +57,6 @@ import torch
 # Load model and processor
 model = GraniteSpeechForConditionalGeneration.from_pretrained(
     "ibm-granite/granite-3.2-8b-speech",
-    torch_dtype=torch.bfloat16,
     device_map="auto"
 )
 processor = GraniteSpeechProcessor.from_pretrained("ibm-granite/granite-3.2-8b-speech")
@@ -87,7 +86,6 @@ import torch
 
 model = GraniteSpeechForConditionalGeneration.from_pretrained(
     "ibm-granite/granite-3.2-8b-speech",
-    torch_dtype=torch.bfloat16,
     device_map="auto"
 )
 processor = GraniteSpeechProcessor.from_pretrained("ibm-granite/granite-3.2-8b-speech")
@@ -128,7 +126,6 @@ import torch
 
 model = GraniteSpeechForConditionalGeneration.from_pretrained(
     "ibm-granite/granite-3.2-8b-speech",
-    torch_dtype=torch.bfloat16,
     device_map="auto"
 )
 processor = GraniteSpeechProcessor.from_pretrained("ibm-granite/granite-3.2-8b-speech")

@@ -43,7 +43,6 @@ tokenizer = AutoTokenizer.from_pretrained(
 )
 model = AutoModelForSeq2SeqLM.from_pretrained(
     "google/byt5-small",
-    dtype=torch.float16,
     device_map="auto"
 )
 
@@ -71,7 +70,6 @@ quantization_config = TorchAoConfig("int4_weight_only", group_size=128)
 
 model = AutoModelForSeq2SeqLM.from_pretrained(
     "google/byt5-xl",
-    dtype=torch.bfloat16,
     device_map="auto",
     quantization_config=quantization_config
 )

@@ -42,7 +42,6 @@ from transformers import pipeline
 chatbot = pipeline(
     task="text-generation",
     model="karpathy/nanochat-d32",
-    dtype=torch.bfloat16,
     device=0
 )
 
@@ -67,7 +66,6 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 tokenizer = AutoTokenizer.from_pretrained(model_id)
 model = AutoModelForCausalLM.from_pretrained(
     model_id,
-    dtype=torch.bfloat16,
     device_map="auto",
 )
 

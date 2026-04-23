@@ -53,7 +53,6 @@ import torch
 pipeline = pipeline(
     "object-detection", 
     model="AnnaZhang/lwdetr_small_60e_coco",
-    dtype=torch.float16,
     device_map=0
 )
 

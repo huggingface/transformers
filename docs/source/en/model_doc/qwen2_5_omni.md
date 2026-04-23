@@ -337,7 +337,6 @@ from transformers import Qwen2_5OmniForConditionalGeneration
 model = Qwen2_5OmniForConditionalGeneration.from_pretrained(
     "Qwen/Qwen2.5-Omni-7B",
     device_map="auto",
-    dtype=torch.bfloat16,
     attn_implementation="flash_attention_2",
 )
 ```

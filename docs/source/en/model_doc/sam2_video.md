@@ -59,7 +59,7 @@ from accelerate import Accelerator
 >>> import torch
 
 >>> device = Accelerator().device
->>> model = Sam2VideoModel.from_pretrained("facebook/sam2.1-hiera-tiny").to(device, dtype=torch.bfloat16)
+>>> model = Sam2VideoModel.from_pretrained("facebook/sam2.1-hiera-tiny").to(device)
 >>> processor = Sam2VideoProcessor.from_pretrained("facebook/sam2.1-hiera-tiny")
 
 >>> # Load video frames (example assumes you have a list of PIL Images)
@@ -74,7 +74,6 @@ from accelerate import Accelerator
 >>> inference_session = processor.init_video_session(
 ...     video=video_frames,
 ...     inference_device=device,
-...     dtype=torch.bfloat16,
 ... )
 
 >>> # Add click on first frame to select object
@@ -193,7 +192,6 @@ For real-time applications, SAM2 supports processing video frames as they arrive
 >>> # Initialize session for streaming
 >>> inference_session = processor.init_video_session(
 ...     inference_device=device,
-...     dtype=torch.bfloat16,
 ... )
 
 >>> # Process frames one by one
@@ -229,7 +227,6 @@ Track multiple objects simultaneously in video by adding them all at once:
 >>> inference_session = processor.init_video_session(
 ...     video=video_frames,
 ...     inference_device=device,
-...     dtype=torch.bfloat16,
 ... )
 
 >>> # Add multiple objects on the first frame using batch processing

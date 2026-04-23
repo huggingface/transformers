@@ -30,8 +30,7 @@ from transformers import pipeline
 
 pipe = pipeline(
     task="text-generation",
-    model="openbmb/cpm-ant-10b",
-    dtype=torch.bfloat16,
+    model="openbmb/cpm-ant-10b",,
 )
 pipe("今天天气很好，")
 ```
@@ -46,7 +45,6 @@ from transformers import CpmAntForCausalLM, CpmAntTokenizer
 tokenizer = CpmAntTokenizer.from_pretrained("openbmb/cpm-ant-10b")
 model = CpmAntForCausalLM.from_pretrained(
     "openbmb/cpm-ant-10b",
-    dtype=torch.bfloat16,
     device_map="auto",
 )
 input_ids = tokenizer("今天天气很好，", return_tensors="pt").to(model.device)

@@ -43,7 +43,6 @@ from transformers import pipeline
 pipeline = pipeline(
     task="image-classification",
     model="microsoft/dit-base-finetuned-rvlcdip",
-    dtype=torch.float16,
     device=0
 )
 pipeline("https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/model_doc/dit-example.jpg")

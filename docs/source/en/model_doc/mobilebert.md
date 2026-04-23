@@ -41,7 +41,6 @@ from transformers import pipeline
 pipeline = pipeline(
     task="fill-mask",
     model="google/mobilebert-uncased",
-    dtype=torch.float16,
     device=0
 )
 pipeline("The capital of France is [MASK].")
@@ -59,7 +58,6 @@ tokenizer = AutoTokenizer.from_pretrained(
 )
 model = AutoModelForMaskedLM.from_pretrained(
     "google/mobilebert-uncased",
-    dtype=torch.float16,
     device_map="auto",
 )
 inputs = tokenizer("The capital of France is [MASK].", return_tensors="pt").to(model.device)

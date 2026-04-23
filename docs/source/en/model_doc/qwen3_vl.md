@@ -37,7 +37,6 @@ from transformers import Qwen3VLForConditionalGeneration, AutoProcessor
 
 model = Qwen3VLForConditionalGeneration.from_pretrained(
     "Qwen/Qwen3-VL",
-    dtype=torch.float16,
     device_map="auto",
     attn_implementation="sdpa"
 )

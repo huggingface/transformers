@@ -47,8 +47,7 @@ from transformers import AutoTokenizer, AutoModelForSeq2SeqLM
 tokenizer = AutoTokenizer.from_pretrained("google/t5gemma-2b-2b-prefixlm-it")
 model = AutoModelForSeq2SeqLM.from_pretrained(
     "google/t5gemma-2b-2b-prefixlm-it",
-    device_map="auto",
-    dtype=torch.bfloat16,
+    device_map="auto",,
 )
 
 messages = [

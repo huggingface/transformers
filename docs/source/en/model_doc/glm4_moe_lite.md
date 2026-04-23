@@ -37,8 +37,7 @@ from transformers import pipeline
 
 pipe = pipeline(
     task="text-generation",
-    model="zai-org/GLM-4.7-Flash",
-    dtype=torch.bfloat16,
+    model="zai-org/GLM-4.7-Flash",,
 )
 pipe("The key to efficient language models is")
 ```
@@ -53,7 +52,6 @@ from transformers import AutoModelForCausalLM, AutoTokenizer
 tokenizer = AutoTokenizer.from_pretrained("zai-org/GLM-4.7-Flash")
 model = AutoModelForCausalLM.from_pretrained(
     "zai-org/GLM-4.7-Flash",
-    dtype=torch.bfloat16,
     device_map="auto",
 )
 input_ids = tokenizer("The key to efficient language models is", return_tensors="pt").to(model.device)

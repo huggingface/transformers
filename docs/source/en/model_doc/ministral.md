@@ -40,7 +40,7 @@ The example below demonstrates how to use Ministral for text generation:
 >>> import torch
 >>> from transformers import AutoModelForCausalLM, AutoTokenizer
 
->>> model = AutoModelForCausalLM.from_pretrained("mistralai/Ministral-8B-Instruct-2410", torch_dtype=torch.bfloat16, attn_implementation="sdpa", device_map="auto")
+>>> model = AutoModelForCausalLM.from_pretrained("mistralai/Ministral-8B-Instruct-2410", attn_implementation="sdpa", device_map="auto")
 >>> tokenizer = AutoTokenizer.from_pretrained("mistralai/Ministral-8B-Instruct-2410")
 
 >>> messages = [

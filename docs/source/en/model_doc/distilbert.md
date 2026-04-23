@@ -45,7 +45,6 @@ from transformers import pipeline
 classifier = pipeline(
     task="text-classification",
     model="distilbert-base-uncased-finetuned-sst-2-english",
-    dtype=torch.float16,
     device=0
 )
 
@@ -67,7 +66,6 @@ tokenizer = AutoTokenizer.from_pretrained(
 )
 model = AutoModelForSequenceClassification.from_pretrained(
     "distilbert/distilbert-base-uncased-finetuned-sst-2-english",
-    dtype=torch.float16,
     device_map="auto",
     attn_implementation="sdpa"
 )

@@ -180,8 +180,7 @@ To load and run a model using Flash Attention-2, simply add `attn_implementation
 from transformers import VideoLlama3ForConditionalGeneration
 
 model = VideoLlama3ForConditionalGeneration.from_pretrained(
-    "lkhl/VideoLLaMA3-2B-Image-HF", 
-    dtype=torch.bfloat16, 
+    "lkhl/VideoLLaMA3-2B-Image-HF", , 
     attn_implementation="flash_attention_2",
 )
 ```

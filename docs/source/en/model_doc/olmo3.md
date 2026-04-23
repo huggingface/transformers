@@ -44,7 +44,6 @@ from transformers import pipeline
 pipe = pipeline(
     task="text-generation",
     model="allenai/TBA",
-    dtype=torch.bfloat16,
     device=0,
 )
 
@@ -65,7 +64,6 @@ tokenizer = AutoTokenizer.from_pretrained(
 
 model = AutoModelForCausalLM.from_pretrained(
     "allenai/TBA",
-    dtype=torch.bfloat16,
     device_map="auto",
     attn_implementation="sdpa"
 )
@@ -100,7 +98,6 @@ tokenizer = AutoTokenizer.from_pretrained(
 model = AutoModelForCausalLM.from_pretrained(
     "allenai/TBA",
     quantization_config=torchao_config,
-    dtype=torch.bfloat16,
     device_map="auto",
     attn_implementation="sdpa"
 )

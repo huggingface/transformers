@@ -82,7 +82,6 @@ from transformers import pipeline
 pipeline = pipeline(
     task="image-text-to-text",
     model="google/gemma-4-E2B-it",
-    dtype=torch.bfloat16
 )
 pipeline(
     images="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg",
@@ -99,7 +98,6 @@ from transformers import AutoProcessor, AutoModelForImageTextToText
 
 model = AutoModelForImageTextToText.from_pretrained(
     "google/gemma-4-E2B-it",
-    dtype=torch.bfloat16,
     device_map="auto",
     attn_implementation="sdpa"
 )
@@ -172,7 +170,6 @@ messages = [
 
 model = AutoModelForCausalLM.from_pretrained(
     "google/gemma-4-E2B-it",
-    dtype=torch.bfloat16,
     device_map="auto",
     attn_implementation="sdpa"
 )
@@ -216,7 +213,6 @@ messages = [
 
 model = AutoModelForMultimodalLM.from_pretrained(
     "google/gemma-4-E2B-it",
-    dtype=torch.bfloat16,
     device_map="auto",
     attn_implementation="sdpa"
 )

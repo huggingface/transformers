@@ -43,7 +43,6 @@ from transformers import pipeline
 pipeline = pipeline(
     task="fill-mask",
     model="moussaKam/barthez",
-    dtype=torch.float16,
     device=0
 )
 pipeline("Les plantes produisent <mask> grâce à un processus appelé photosynthèse.")
@@ -61,7 +60,6 @@ tokenizer = AutoTokenizer.from_pretrained(
 )
 model = AutoModelForMaskedLM.from_pretrained(
     "moussaKam/barthez",
-    dtype=torch.float16,
     device_map="auto",
 )
 inputs = tokenizer("Les plantes produisent <mask> grâce à un processus appelé photosynthèse.", return_tensors="pt").to(model.device)

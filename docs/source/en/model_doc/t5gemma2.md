@@ -43,7 +43,6 @@ from transformers import pipeline
 generator = pipeline(
     "image-text-to-text",
     model="google/t5gemma-2-270m-270m",
-    dtype=torch.bfloat16,
     device_map="auto",
 )
 
@@ -66,8 +65,7 @@ from transformers import AutoProcessor, AutoModelForSeq2SeqLM
 processor = AutoProcessor.from_pretrained("google/t5gemma-2-270m-270m")
 model = AutoModelForSeq2SeqLM.from_pretrained(
     "google/t5gemma-2-270m-270m",
-    device_map="auto",
-    dtype=torch.bfloat16,
+    device_map="auto",,
 )
 
 url = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/bee.jpg"

@@ -45,7 +45,6 @@ from transformers import pipeline
 pipe = pipeline(
     task="text-generation",
     model="Qwen/Qwen2-1.5B-Instruct",
-    dtype=torch.bfloat16,
     device_map=0
 )
 
@@ -66,7 +65,6 @@ from transformers import AutoModelForCausalLM, AutoTokenizer
 
 model = AutoModelForCausalLM.from_pretrained(
     "Qwen/Qwen2-1.5B-Instruct",
-    dtype=torch.bfloat16,
     device_map="auto",
     attn_implementation="sdpa"
 )
@@ -123,15 +121,13 @@ from transformers import AutoTokenizer, AutoModelForCausalLM, BitsAndBytesConfig
 
 quantization_config = BitsAndBytesConfig(
     load_in_4bit=True,
-    bnb_4bit_compute_dtype=torch.bfloat16,
-    bnb_4bit_quant_type="nf4",
+    bnb_4bit_compute_bnb_4bit_quant_type="nf4",
     bnb_4bit_use_double_quant=True,
 )
 
 tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen2-7B")
 model = AutoModelForCausalLM.from_pretrained(
     "Qwen/Qwen2-7B",
-    dtype=torch.bfloat16,
     device_map="auto",
     quantization_config=quantization_config,
     attn_implementation="flash_attention_2"

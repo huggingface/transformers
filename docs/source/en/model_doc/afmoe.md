@@ -55,7 +55,6 @@ from transformers import pipeline
 pipeline = pipeline(
     task="text-generation",
     model="arcee-ai/Trinity-Mini",
-    torch_dtype=torch.bfloat16,
     device=0
 )
 
@@ -73,7 +72,6 @@ from transformers import AutoTokenizer, AfmoeForCausalLM
 tokenizer = AutoTokenizer.from_pretrained("arcee-ai/Trinity-Mini")
 model = AfmoeForCausalLM.from_pretrained(
     "arcee-ai/Trinity-Mini",
-    torch_dtype=torch.bfloat16,
     device_map="auto"
 )
 

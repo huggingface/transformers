@@ -177,7 +177,6 @@ dtype = torch.bfloat16
 
 model = Kosmos2_5ForConditionalGeneration.from_pretrained(repo,
                                                           device_map=device,
-                                                          torch_dtype=dtype,
                                                           attn_implementation="flash_attention_2")
 processor = AutoProcessor.from_pretrained(repo)
 

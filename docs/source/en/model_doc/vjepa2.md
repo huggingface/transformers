@@ -47,7 +47,6 @@ import numpy as np
 processor = AutoVideoProcessor.from_pretrained("facebook/vjepa2-vitl-fpc64-256")
 model = AutoModel.from_pretrained(
     "facebook/vjepa2-vitl-fpc64-256",
-    dtype=torch.float16,
     device_map="auto",
     attn_implementation="sdpa"
 )

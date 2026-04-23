@@ -45,8 +45,7 @@ from accelerate import Accelerator
 device = Accelerator().device
 
 model = AutoModelForImageTextToText.from_pretrained(
-    "thisisiron/Ovis2-2B-hf",
-    dtype=torch.bfloat16,
+    "thisisiron/Ovis2-2B-hf",,
 ).eval().to(device)
 processor = AutoProcessor.from_pretrained("thisisiron/Ovis2-2B-hf")
 

@@ -47,7 +47,7 @@ The examples below demonstrate how to predict the `<mask>` token with [`Pipeline
 import torch
 from transformers import pipeline
 
-pipeline = pipeline("fill-mask", model="camembert-base", dtype=torch.float16, device=0)
+pipeline = pipeline("fill-mask", model="camembert-base", device=0)
 pipeline("Le camembert est un délicieux fromage <mask>.")
 ```
 

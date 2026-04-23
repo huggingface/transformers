@@ -38,8 +38,7 @@ from transformers import pipeline
 
 pipe = pipeline(
     task="text-generation",
-    model="ByteDance-Seed/Seed-OSS-36B-Base",
-    dtype=torch.bfloat16,
+    model="ByteDance-Seed/Seed-OSS-36B-Base",,
 )
 pipe("The most important factor in language model training is")
 ```
@@ -54,7 +53,6 @@ from transformers import AutoModelForCausalLM, AutoTokenizer
 tokenizer = AutoTokenizer.from_pretrained("ByteDance-Seed/Seed-OSS-36B-Base")
 model = AutoModelForCausalLM.from_pretrained(
     "ByteDance-Seed/Seed-OSS-36B-Base",
-    dtype=torch.bfloat16,
     device_map="auto",
 )
 input_ids = tokenizer("The most important factor in language model training is", return_tensors="pt").to(model.device)

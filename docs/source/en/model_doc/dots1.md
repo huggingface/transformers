@@ -37,8 +37,7 @@ from transformers import pipeline
 
 pipe = pipeline(
     task="text-generation",
-    model="rednote-hilab/dots.llm1.base",
-    dtype=torch.bfloat16,
+    model="rednote-hilab/dots.llm1.base",,
 )
 pipe("The advantage of mixture-of-experts models is")
 ```
@@ -53,7 +52,6 @@ from transformers import AutoModelForCausalLM, AutoTokenizer
 tokenizer = AutoTokenizer.from_pretrained("rednote-hilab/dots.llm1.base")
 model = AutoModelForCausalLM.from_pretrained(
     "rednote-hilab/dots.llm1.base",
-    dtype=torch.bfloat16,
     device_map="auto",
 )
 input_ids = tokenizer("The advantage of mixture-of-experts models is", return_tensors="pt").to(model.device)

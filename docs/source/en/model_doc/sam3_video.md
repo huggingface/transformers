@@ -53,7 +53,7 @@ Process a video with all frames already available using text prompts:
 >>> import torch
 
 >>> device = Accelerator().device
->>> model = Sam3VideoModel.from_pretrained("facebook/sam3").to(device, dtype=torch.bfloat16)
+>>> model = Sam3VideoModel.from_pretrained("facebook/sam3").to(device)
 >>> processor = Sam3VideoProcessor.from_pretrained("facebook/sam3")
 
 >>> # Load video frames
@@ -67,7 +67,6 @@ Process a video with all frames already available using text prompts:
 ...     inference_device=device,
 ...     processing_device="cpu",
 ...     video_storage_device="cpu",
-...     dtype=torch.bfloat16,
 ... )
 
 >>> # Add text prompt to detect and track objects
@@ -107,7 +106,6 @@ You can also track multiple object categories simultaneously by providing multip
 ...     inference_device=device,
 ...     processing_device="cpu",
 ...     video_storage_device="cpu",
-...     dtype=torch.bfloat16,
 ... )
 >>>
 >>> prompts = ["person", "bed", "lamp"]
@@ -146,7 +144,6 @@ For real-time applications, SAM3 Video supports processing video frames as they 
 ...     inference_device=device,
 ...     processing_device="cpu",
 ...     video_storage_device="cpu",
-...     dtype=torch.bfloat16,
 ... )
 
 >>> # Add text prompt
@@ -201,7 +198,7 @@ For faster inference or lower memory usage:
 ```python
 >>> config = Sam3VideoConfig.from_pretrained("facebook/sam3")
 >>> config.image_size = 560
->>> model = Sam3VideoModel.from_pretrained("facebook/sam3", config=config).to(device, dtype=torch.bfloat16)
+>>> model = Sam3VideoModel.from_pretrained("facebook/sam3", config=config).to(device)
 >>> processor = Sam3VideoProcessor.from_pretrained("facebook/sam3", size={"height": 560, "width": 560})
 ```
 

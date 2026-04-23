@@ -44,7 +44,7 @@ The example below demonstrates how to translate text with [`Pipeline`] or the [`
 import torch
 from transformers import pipeline
 
-pipeline = pipeline(task="translation", model="facebook/nllb-200-distilled-600M", src_lang="eng_Latn", tgt_lang="fra_Latn", dtype=torch.float16, device=0)
+pipeline = pipeline(task="translation", model="facebook/nllb-200-distilled-600M", src_lang="eng_Latn", tgt_lang="fra_Latn", device=0)
 pipeline("UN Chief says there is no military solution in Syria")
 ```
 

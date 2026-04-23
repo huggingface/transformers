@@ -83,7 +83,7 @@ from accelerate import Accelerator, set_seed
 >>> set_seed(0)
 
 >>> tokenizer = AutoTokenizer.from_pretrained("stabilityai/stablelm-3b-4e1t")
->>> model = AutoModelForCausalLM.from_pretrained("stabilityai/stablelm-3b-4e1t", dtype=torch.bfloat16, attn_implementation="flash_attention_2")  # doctest: +SKIP
+>>> model = AutoModelForCausalLM.from_pretrained("stabilityai/stablelm-3b-4e1t", attn_implementation="flash_attention_2")  # doctest: +SKIP
 >>> model.to(device)  # doctest: +SKIP
 
 >>> model_inputs = tokenizer("The weather is always wonderful in", return_tensors="pt").to(model.device)

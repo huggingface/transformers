@@ -337,7 +337,6 @@ from transformers import Qwen3OmniMoeForConditionalGeneration
 model = Qwen3OmniMoeForConditionalGeneration.from_pretrained(
     "Qwen/Qwen3-Omni-30B-A3B-Instruct",
     device_map="auto",
-    dtype=torch.bfloat16,
     attn_implementation="flash_attention_2",
 )
 ```

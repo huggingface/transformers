@@ -44,7 +44,6 @@ from transformers import pipeline
 pipeline = pipeline(
     task="visual-question-answering",
     model="Salesforce/blip-vqa-base",
-    dtype=torch.float16,
     device=0
 )
 url = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg"
@@ -63,7 +62,6 @@ from transformers import AutoProcessor, AutoModelForVisualQuestionAnswering
 processor = AutoProcessor.from_pretrained("Salesforce/blip-vqa-base")
 model = AutoModelForVisualQuestionAnswering.from_pretrained(
     "Salesforce/blip-vqa-base",
-    dtype=torch.float16,
     device_map="auto"
 )
 

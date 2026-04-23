@@ -39,8 +39,7 @@ from transformers import pipeline
 
 pipe = pipeline(
     task="image-feature-extraction",
-    model="facebook/dinov3-vits16-pretrain-lvd1689m",
-    dtype=torch.bfloat16,
+    model="facebook/dinov3-vits16-pretrain-lvd1689m",,
 )
 
 pipe("https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg")
@@ -60,7 +59,6 @@ image = load_image(url)
 processor = AutoImageProcessor.from_pretrained("facebook/dinov3-vits16-pretrain-lvd1689m")
 model = AutoModel.from_pretrained(
     "facebook/dinov3-vits16-pretrain-lvd1689m",
-    dtype=torch.float16,
     device_map="auto",
     attn_implementation="sdpa"
 )
@@ -98,7 +96,6 @@ quantization_config = TorchAoConfig(quant_type=quant_type)
 
 model = AutoModel.from_pretrained(
     "facebook/dinov3-vit7b16-pretrain-lvd1689m",
-    dtype=torch.bfloat16,
     device_map="auto",
     quantization_config=quantization_config
 )

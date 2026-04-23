@@ -48,7 +48,6 @@ pipeline = pipeline(
     task="image-text-to-text",
     model="llava-hf/llava-v1.6-mistral-7b-hf",
     device=0,
-    dtype=torch.bfloat16
 )
 messages = [
     {
@@ -79,7 +78,7 @@ from accelerate import Accelerator
 device = Accelerator().device
 
 processor = AutoProcessor.from_pretrained("llava-hf/llava-v1.6-mistral-7b-hf")
-model = LlavaNextForConditionalGeneration.from_pretrained("llava-hf/llava-v1.6-mistral-7b-hf", dtype=torch.float16).to(device)
+model = LlavaNextForConditionalGeneration.from_pretrained("llava-hf/llava-v1.6-mistral-7b-hf").to(device)
 
 url = "https://github.com/haotian-liu/LLaVA/blob/1a91fc274d7c35a9b50b3cb29c4247ae5837ce39/images/llava_v1_5_radar.jpg?raw=true"
 image = Image.open(requests.get(url, stream=True).raw)
@@ -115,8 +114,7 @@ from transformers import AutoModelForImageTextToText, AutoProcessor, BitsAndByte
 
 quant_config = BitsAndBytesConfig(
     load_in_4bit=True,
-    bnb_4bit_compute_dtype=torch.float16,
-    bnb_4bit_quant_type="nf4"
+    bnb_4bit_compute_bnb_4bit_quant_type="nf4"
 )
 
 processor = AutoProcessor.from_pretrained("llava-hf/llava-v1.6-mistral-7b-hf")
@@ -169,7 +167,7 @@ import requests, torch
 
 processor = LlavaNextProcessor.from_pretrained("llava-hf/llava-v1.6-mistral-7b-hf")
 model = LlavaNextForConditionalGeneration.from_pretrained(
-    "llava-hf/llava-v1.6-mistral-7b-hf", dtype=torch.float16, device_map="auto"
+    "llava-hf/llava-v1.6-mistral-7b-hf", device_map="auto"
 )
 
 # Load multiple images

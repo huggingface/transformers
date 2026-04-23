@@ -43,7 +43,6 @@ from transformers import pipeline
 pipeline = pipeline(
     task="text-generation",
     model="CohereForAI/c4ai-command-r-v01",
-    dtype=torch.float16,
     device=0
 )
 pipeline("Plants create energy through a process known as")
@@ -57,7 +56,7 @@ import torch
 from transformers import AutoTokenizer, AutoModelForCausalLM
 
 tokenizer = AutoTokenizer.from_pretrained("CohereForAI/c4ai-command-r-v01")
-model = AutoModelForCausalLM.from_pretrained("CohereForAI/c4ai-command-r-v01", dtype=torch.float16, device_map="auto", attn_implementation="sdpa")
+model = AutoModelForCausalLM.from_pretrained("CohereForAI/c4ai-command-r-v01", device_map="auto", attn_implementation="sdpa")
 
 # format message with the Command-R chat template
 messages = [{"role": "user", "content": "How do plants make energy?"}]
@@ -93,7 +92,7 @@ from transformers import BitsAndBytesConfig, AutoTokenizer, AutoModelForCausalLM
 
 bnb_config = BitsAndBytesConfig(load_in_4bit=True)
 tokenizer = AutoTokenizer.from_pretrained("CohereForAI/c4ai-command-r-v01")
-model = AutoModelForCausalLM.from_pretrained("CohereForAI/c4ai-command-r-v01", dtype=torch.float16, device_map="auto", quantization_config=bnb_config, attn_implementation="sdpa")
+model = AutoModelForCausalLM.from_pretrained("CohereForAI/c4ai-command-r-v01", device_map="auto", quantization_config=bnb_config, attn_implementation="sdpa")
 
 # format message with the Command-R chat template
 messages = [{"role": "user", "content": "How do plants make energy?"}]

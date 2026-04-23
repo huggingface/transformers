@@ -322,7 +322,7 @@ num_runs = 20
 
 # Load processor + model
 processor = AutoProcessor.from_pretrained(model_id)
-model = VibeVoiceAsrForConditionalGeneration.from_pretrained(model_id, torch_dtype=torch.bfloat16,).to("cuda")
+model = VibeVoiceAsrForConditionalGeneration.from_pretrained(model_id, device_map="cuda")
 
 # Prepare static inputs
 chat_template = [

@@ -83,7 +83,7 @@ This example demonstrates how to perform inference on a single image with the In
 
 >>> model_checkpoint = "OpenGVLab/InternVL3-1B-hf"
 >>> processor = AutoProcessor.from_pretrained(model_checkpoint)
->>> model = AutoModelForImageTextToText.from_pretrained(model_checkpoint, device_map="auto", dtype=torch.bfloat16)
+>>> model = AutoModelForImageTextToText.from_pretrained(model_checkpoint, device_map="auto")
 
 >>> messages = [
 ...     {
@@ -95,7 +95,7 @@ This example demonstrates how to perform inference on a single image with the In
 ...     }
 ... ]
 
->>> inputs = processor.apply_chat_template(messages, add_generation_prompt=True, tokenize=True, return_dict=True, return_tensors="pt").to(model.device, dtype=torch.bfloat16)
+>>> inputs = processor.apply_chat_template(messages, add_generation_prompt=True, tokenize=True, return_dict=True, return_tensors="pt").to(model.device)
 
 >>> generate_ids = model.generate(**inputs, max_new_tokens=50)
 >>> decoded_output = processor.decode(generate_ids[0, inputs["input_ids"].shape[1] :], skip_special_tokens=True)
@@ -114,7 +114,7 @@ This example shows how to generate text using the InternVL model without providi
 
 >>> model_checkpoint = "OpenGVLab/InternVL3-1B-hf"
 >>> processor = AutoProcessor.from_pretrained(model_checkpoint)
->>> model = AutoModelForImageTextToText.from_pretrained(model_checkpoint, device_map="auto", dtype=torch.bfloat16)
+>>> model = AutoModelForImageTextToText.from_pretrained(model_checkpoint, device_map="auto")
 
 >>> messages = [
 ...     {
@@ -125,7 +125,7 @@ This example shows how to generate text using the InternVL model without providi
 ...     }
 ... ]
 
->>> inputs = processor.apply_chat_template(messages, add_generation_prompt=True, tokenize=True, return_dict=True, return_tensors="pt").to(torch_device, dtype=torch.bfloat16)
+>>> inputs = processor.apply_chat_template(messages, add_generation_prompt=True, tokenize=True, return_dict=True, return_tensors="pt").to(torch_device)
 
 >>> generate_ids = model.generate(**inputs, max_new_tokens=50)
 >>> decoded_output = processor.decode(generate_ids[0, inputs["input_ids"].shape[1] :], skip_special_tokens=True)
@@ -144,7 +144,7 @@ InternVL models also support batched image and text inputs.
 
 >>> model_checkpoint = "OpenGVLab/InternVL3-1B-hf"
 >>> processor = AutoProcessor.from_pretrained(model_checkpoint)
->>> model = AutoModelForImageTextToText.from_pretrained(model_checkpoint, device_map="auto", dtype=torch.bfloat16)
+>>> model = AutoModelForImageTextToText.from_pretrained(model_checkpoint, device_map="auto")
 
 >>> messages = [
 ...     [
@@ -168,7 +168,7 @@ InternVL models also support batched image and text inputs.
 ... ]
 
 
->>> inputs = processor.apply_chat_template(messages, padding=True, add_generation_prompt=True, tokenize=True, return_dict=True, return_tensors="pt").to(model.device, dtype=torch.bfloat16)
+>>> inputs = processor.apply_chat_template(messages, padding=True, add_generation_prompt=True, tokenize=True, return_dict=True, return_tensors="pt").to(model.device)
 
 >>> output = model.generate(**inputs, max_new_tokens=25)
 
@@ -188,7 +188,7 @@ This implementation of the InternVL models supports batched text-images inputs w
 
 >>> model_checkpoint = "OpenGVLab/InternVL3-1B-hf"
 >>> processor = AutoProcessor.from_pretrained(model_checkpoint)
->>> model = AutoModelForImageTextToText.from_pretrained(model_checkpoint, device_map="auto", dtype=torch.bfloat16)
+>>> model = AutoModelForImageTextToText.from_pretrained(model_checkpoint, device_map="auto")
 
 >>> messages = [
 ...     [
@@ -212,7 +212,7 @@ This implementation of the InternVL models supports batched text-images inputs w
 ...     ],
 >>> ]
 
->>> inputs = processor.apply_chat_template(messages, padding=True, add_generation_prompt=True, tokenize=True, return_dict=True, return_tensors="pt").to(model.device, dtype=torch.bfloat16)
+>>> inputs = processor.apply_chat_template(messages, padding=True, add_generation_prompt=True, tokenize=True, return_dict=True, return_tensors="pt").to(model.device)
 
 >>> output = model.generate(**inputs, max_new_tokens=25)
 
@@ -253,7 +253,7 @@ InternVL models can also handle video inputs. Here is an example of how to perfo
 ...     tokenize=True,
 ...     return_dict=True,
 ...     num_frames=8,
->>> ).to(model.device, dtype=torch.float16)
+>>> ).to(model.device)
 
 >>> output = model.generate(**inputs, max_new_tokens=25)
 
@@ -272,7 +272,7 @@ This example showcases how to handle a batch of chat conversations with interlea
 
 >>> model_checkpoint = "OpenGVLab/InternVL3-1B-hf"
 >>> processor = AutoProcessor.from_pretrained(model_checkpoint)
->>> model = AutoModelForImageTextToText.from_pretrained(model_checkpoint, device_map="auto", dtype=torch.bfloat16)
+>>> model = AutoModelForImageTextToText.from_pretrained(model_checkpoint, device_map="auto")
 
 >>> messages = [
 ...     [
@@ -311,7 +311,7 @@ This example showcases how to handle a batch of chat conversations with interlea
 ...     tokenize=True,
 ...     return_dict=True,
 ...     return_tensors="pt",
->>> ).to(model.device, dtype=torch.bfloat16)
+>>> ).to(model.device)
 
 >>> outputs = model.generate(**inputs, max_new_tokens=25)
 

@@ -68,7 +68,7 @@ To load and run a model using Flash Attention 2, refer to the snippet below:
 from accelerate import Accelerator
 >>> device = Accelerator().device # the device to load the model onto
 
->>> model = AutoModelForCausalLM.from_pretrained("bigcode/gpt_bigcode-santacoder", dtype=torch.float16, attn_implementation="flash_attention_2")
+>>> model = AutoModelForCausalLM.from_pretrained("bigcode/gpt_bigcode-santacoder", attn_implementation="flash_attention_2")
 >>> tokenizer = AutoTokenizer.from_pretrained("bigcode/gpt_bigcode-santacoder")
 
 >>> prompt = "def hello_world():"

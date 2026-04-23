@@ -47,7 +47,6 @@ pipeline = pipeline(
     task="image-text-to-text",
     model="google/gemma-3-4b-pt",
     device=0,
-    dtype=torch.bfloat16
 )
 pipeline(
     "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg",
@@ -64,7 +63,6 @@ from transformers import AutoProcessor, Gemma3ForConditionalGeneration
 
 model = Gemma3ForConditionalGeneration.from_pretrained(
     "google/gemma-3-4b-it",
-    dtype=torch.bfloat16,
     device_map="auto",
     attn_implementation="sdpa"
 )
@@ -114,7 +112,6 @@ from transformers import TorchAoConfig, Gemma3ForConditionalGeneration, AutoProc
 quantization_config = TorchAoConfig("int4_weight_only", group_size=128)
 model = Gemma3ForConditionalGeneration.from_pretrained(
     "google/gemma-3-27b-it",
-    dtype=torch.bfloat16,
     device_map="auto",
     quantization_config=quantization_config
 )
@@ -215,8 +212,7 @@ visualizer("<img>What is shown in this image?")
     )
     model = AutoModelForCausalLM.from_pretrained(
         "google/gemma-3-1b-pt",
-        dtype=torch.bfloat16,
-        device_map="auto",
+            device_map="auto",
         attn_implementation="sdpa"
     )
     input_ids = tokenizer("Plants create energy through a process known as", return_tensors="pt").to(model.device)

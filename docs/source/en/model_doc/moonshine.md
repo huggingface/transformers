@@ -44,7 +44,6 @@ from transformers import pipeline
 pipeline = pipeline(
     task="automatic-speech-recognition",
     model="UsefulSensors/moonshine-base",
-    dtype=torch.float16,
     device=0
 )
 pipeline("https://huggingface.co/datasets/Narsil/asr_dummy/resolve/main/mlk.flac")

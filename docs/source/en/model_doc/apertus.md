@@ -45,7 +45,6 @@ from transformers import pipeline
 pipeline = pipeline(
     task="text-generation",
     model="swiss-ai/Apertus-8B",
-    dtype=torch.bfloat16,
     device=0
 )
 pipeline("Plants create energy through a process known as")
@@ -63,7 +62,6 @@ tokenizer = AutoTokenizer.from_pretrained(
 )
 model = AutoModelForCausalLM.from_pretrained(
     "swiss-ai/Apertus-8B",
-    dtype=torch.bfloat16,
     device_map="auto",
     attn_implementation="sdpa"
 )

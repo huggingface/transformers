@@ -42,7 +42,6 @@ from transformers import pipeline
 pipeline = pipeline(
     task="image-classification",
     model="google/mobilenet_v2_1.4_224",
-    dtype=torch.float16,
     device=0
 )
 pipeline("https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg")

@@ -76,7 +76,7 @@ import torch
 from transformers import AutoProcessor, FastVlmForConditionalGeneration
 
 # Load the model in half-precision
-model = FastVlmForConditionalGeneration.from_pretrained("KamilaMila/FastVLM-0.5B", dtype=torch.bfloat16, device_map="auto")
+model = FastVlmForConditionalGeneration.from_pretrained("KamilaMila/FastVLM-0.5B", device_map="auto")
 processor = AutoProcessor.from_pretrained("KamilaMila/FastVLM-0.5B")
 
 conversation = [
@@ -111,7 +111,7 @@ import torch
 from transformers import AutoProcessor, FastVlmForConditionalGeneration
 
 # Load the model in half-precision
-model = FastVlmForConditionalGeneration.from_pretrained("KamilaMila/FastVLM-0.5B", dtype=torch.bfloat16, device_map="auto")
+model = FastVlmForConditionalGeneration.from_pretrained("KamilaMila/FastVLM-0.5B", device_map="auto")
 processor = AutoProcessor.from_pretrained("KamilaMila/FastVLM-0.5B")
 
 

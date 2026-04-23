@@ -47,7 +47,6 @@ pipeline = pipeline(
     task="translation",
     model="facebook/mbart-large-50-many-to-many-mmt",
     device=0,
-    dtype=torch.float16,
     src_lang="en_XX",
     tgt_lang="fr_XX",
 )
@@ -63,7 +62,7 @@ from transformers import AutoModelForSeq2SeqLM, AutoTokenizer
 
 article_en = "UN Chief Says There Is No Military Solution in Syria"
 
-model = AutoModelForSeq2SeqLM.from_pretrained("facebook/mbart-large-50-many-to-many-mmt", dtype=torch.bfloat16, attn_implementation="sdpa", device_map="auto")
+model = AutoModelForSeq2SeqLM.from_pretrained("facebook/mbart-large-50-many-to-many-mmt", attn_implementation="sdpa", device_map="auto")
 tokenizer = AutoTokenizer.from_pretrained("facebook/mbart-large-50-many-to-many-mmt")
 
 tokenizer.src_lang = "en_XX"
@@ -85,7 +84,7 @@ print(tokenizer.batch_decode(generated_tokens, skip_special_tokens=True))
     import torch
     from transformers import AutoModelForSeq2SeqLM, AutoTokenizer
 
-    model = AutoModelForSeq2SeqLM.from_pretrained("facebook/mbart-large-en-ro", dtype=torch.bfloat16, attn_implementation="sdpa", device_map="auto")
+    model = AutoModelForSeq2SeqLM.from_pretrained("facebook/mbart-large-en-ro", attn_implementation="sdpa", device_map="auto")
     tokenizer = MBartTokenizer.from_pretrained("facebook/mbart-large-en-ro", src_lang="en_XX")
 
     article = "UN Chief Says There Is No Military Solution in Syria"
@@ -102,7 +101,7 @@ print(tokenizer.batch_decode(generated_tokens, skip_special_tokens=True))
     import torch
     from transformers import AutoModelForSeq2SeqLM, AutoTokenizer
 
-    model = AutoModelForSeq2SeqLM.from_pretrained("facebook/mbart-large-50-many-to-many-mmt", dtype=torch.bfloat16, attn_implementation="sdpa", device_map="auto")
+    model = AutoModelForSeq2SeqLM.from_pretrained("facebook/mbart-large-50-many-to-many-mmt", attn_implementation="sdpa", device_map="auto")
     tokenizer = MBartTokenizer.from_pretrained("facebook/mbart-large-50-many-to-many-mmt")
 
     article_ar = "الأمين العام للأمم المتحدة يقول إنه لا يوجد حل عسكري في سوريا."

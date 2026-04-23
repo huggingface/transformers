@@ -52,7 +52,6 @@ tokenizer = AutoTokenizer.from_pretrained("transformers-community/dbrx-instruct"
 model = DbrxForCausalLM.from_pretrained(
     "transformers-community/dbrx-instruct",
     device_map="auto",
-    dtype=torch.bfloat16,
     token="YOUR_HF_TOKEN",
     )
 
@@ -74,7 +73,6 @@ tokenizer = AutoTokenizer.from_pretrained("transformers-community/dbrx-instruct"
 model = DbrxForCausalLM.from_pretrained(
     "transformers-community/dbrx-instruct",
     device_map="auto",
-    dtype=torch.bfloat16,
     token="YOUR_HF_TOKEN",
     attn_implementation="flash_attention_2",
     )
@@ -97,7 +95,6 @@ tokenizer = AutoTokenizer.from_pretrained("transformers-community/dbrx-instruct"
 model = DbrxForCausalLM.from_pretrained(
     "transformers-community/dbrx-instruct",
     device_map="auto",
-    dtype=torch.bfloat16,
     token="YOUR_HF_TOKEN",
     attn_implementation="sdpa",
     )

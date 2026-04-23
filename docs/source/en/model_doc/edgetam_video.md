@@ -54,7 +54,7 @@ from accelerate import Accelerator
 >>> import torch
 
 >>> device = Accelerator().device
->>> model = EdgeTamVideoModel.from_pretrained("yonigozlan/edgetam-video-1").to(device, dtype=torch.bfloat16)
+>>> model = EdgeTamVideoModel.from_pretrained("yonigozlan/edgetam-video-1").to(device)
 >>> processor = Sam2VideoProcessor.from_pretrained("yonigozlan/edgetam-video-1")
 
 >>> # Load video frames (example assumes you have a list of PIL Images)
@@ -69,7 +69,6 @@ from accelerate import Accelerator
 >>> inference_session = processor.init_video_session(
 ...     video=video_frames,
 ...     inference_device=device,
-...     dtype=torch.bfloat16,
 ... )
 
 >>> # Add click on first frame to select object
@@ -188,7 +187,6 @@ For real-time applications, EdgeTAM Video supports processing video frames as th
 >>> # Initialize session for streaming
 >>> inference_session = processor.init_video_session(
 ...     inference_device=device,
-...     dtype=torch.bfloat16,
 ... )
 
 >>> # Process frames one by one
@@ -227,7 +225,6 @@ Track multiple objects simultaneously in video by adding them all at once:
 >>> inference_session = processor.init_video_session(
 ...     video=video_frames,
 ...     inference_device=device,
-...     dtype=torch.bfloat16,
 ... )
 
 >>> # Add multiple objects on the first frame using batch processing

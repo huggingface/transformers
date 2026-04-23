@@ -53,7 +53,7 @@ from accelerate import Accelerator
 >>> import torch
 
 >>> device = Accelerator().device
->>> model = Sam3TrackerVideoModel.from_pretrained("facebook/sam3").to(device, dtype=torch.bfloat16)
+>>> model = Sam3TrackerVideoModel.from_pretrained("facebook/sam3").to(device)
 >>> processor = Sam3TrackerVideoProcessor.from_pretrained("facebook/sam3")
 
 >>> # Load video frames (example assumes you have a list of PIL Images)
@@ -68,7 +68,6 @@ from accelerate import Accelerator
 >>> inference_session = processor.init_video_session(
 ...     video=video_frames,
 ...     inference_device=device,
-...     dtype=torch.bfloat16,
 ... )
 
 >>> # Add click on first frame to select object
@@ -187,7 +186,6 @@ For real-time applications, Sam3TrackerVideo supports processing video frames as
 >>> # Initialize session for streaming
 >>> inference_session = processor.init_video_session(
 ...     inference_device=device,
-...     dtype=torch.bfloat16,
 ... )
 
 >>> # Process frames one by one
@@ -223,7 +221,6 @@ Track multiple objects simultaneously in video by adding them all at once:
 >>> inference_session = processor.init_video_session(
 ...     video=video_frames,
 ...     inference_device=device,
-...     dtype=torch.bfloat16,
 ... )
 
 >>> # Add multiple objects on the first frame using batch processing

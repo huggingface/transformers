@@ -47,7 +47,6 @@ feature_extractor = pipeline(
     task="image-feature-extraction",
     model="facebook/ijepa_vith14_1k",
     device=0,
-    dtype=torch.bfloat16
 )
 features = feature_extractor("https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg", return_tensors=True)  
 
@@ -101,8 +100,7 @@ from datasets import load_dataset
 quantization_config = BitsAndBytesConfig(
     load_in_4bit=True,
     bnb_4bit_quant_type="nf4",
-    bnb_4bit_compute_dtype=torch.bfloat16,
-    bnb_4bit_use_double_quant=True,
+    bnb_4bit_compute_bnb_4bit_use_double_quant=True,
 )
 
 url_1 = "http://images.cocodataset.org/val2017/000000039769.jpg"

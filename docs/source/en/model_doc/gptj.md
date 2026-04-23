@@ -99,7 +99,7 @@ from accelerate import Accelerator
 >>> import torch
 
 >>> device = Accelerator().device
->>> model = GPTJForCausalLM.from_pretrained("EleutherAI/gpt-j-6B", dtype=torch.float16).to(device)
+>>> model = GPTJForCausalLM.from_pretrained("EleutherAI/gpt-j-6B").to(device)
 >>> tokenizer = AutoTokenizer.from_pretrained("EleutherAI/gpt-j-6B")
 
 >>> prompt = (

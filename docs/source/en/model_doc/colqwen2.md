@@ -49,7 +49,6 @@ model_name = "vidore/colqwen2-v1.0-hf"
 
 model = ColQwen2ForRetrieval.from_pretrained(
     model_name,
-    dtype=torch.bfloat16,
     device_map="auto",  # "cpu", "cuda", "xpu" or "mps" for Apple Silicon
     attn_implementation="flash_attention_2" if is_flash_attn_2_available() else "sdpa",
 )
@@ -169,7 +168,6 @@ model_name = "Sahil-Kabir/colqwen2.5-v0.2-hf" # An existing compatible checkpoin
 
 model = ColQwen2ForRetrieval.from_pretrained(
     model_name,
-    dtype=torch.bfloat16,
     device_map="auto",
     attn_implementation="flash_attention_2" if is_flash_attn_2_available() else "sdpa"
 )
