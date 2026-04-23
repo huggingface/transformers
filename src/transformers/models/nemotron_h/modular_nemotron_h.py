@@ -326,6 +326,13 @@ class NemotronHPreTrainedModel(PreTrainedModel):
         """Initialize the weights."""
         super()._init_weights(module)
         if isinstance(module, NemotronHMamba2Mixer):
+            # Respect _no_reinit: once a Mamba2 mixer has been initialised (or
+            # its params have been loaded from a checkpoint in a previous
+            # load cycle), skip re-initialisation. Without this, a second
+            # pass of _init_weights would overwrite checkpoint values for
+            # A_log / D / dt_bias with fresh random draws.
+            if getattr(module.dt_bias, "_no_reinit", False):
+                return
             # Initialize A_log and D parameters
             A = torch.arange(1, self.config.mamba_num_heads + 1)
             init.copy_(module.A_log, torch.log(A))
@@ -366,14 +373,19 @@ class NemotronHPreTrainedModel(PreTrainedModel):
             # Reference (Megatron-LM): https://github.com/NVIDIA/Megatron-LM/blob/main/megatron/model/gpt_model.py
             for name, p in module.named_parameters():
                 if name == "out_proj.weight":
+                    # Respect _no_reinit so checkpoint-loaded weights are
+                    # not silently overwritten when _init_weights is invoked
+                    # a second time (e.g. post-load safety pass in
+                    # transformers >= 5).
+                    if getattr(p, "_no_reinit", False):
+                        continue
                     # Special Scaled Initialization --> There are 2 Layer Norms per Transformer Block
                     # Following Pytorch init, except scale by 1/sqrt(2 * n_layer)
-                    # We need to reinit p since this code could be called multiple times
-                    # Having just p *= scale would repeatedly scale it down
                     init.kaiming_uniform_(p, a=math.sqrt(5))
                     with torch.no_grad():
                         p_new = p / math.sqrt(self.config.num_hidden_layers)
                         init.copy_(p, p_new)
+                    p._no_reinit = True
 
 
 class NemotronHModel(NemotronHPreTrainedModel):
