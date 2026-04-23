@@ -21,6 +21,7 @@ import torch.nn.functional as F
 from huggingface_hub.dataclasses import strict
 from torch import nn
 
+from ... import initialization as init
 from ...activations import ACT2FN
 from ...configuration_utils import PreTrainedConfig
 from ...generation import GenerationMixin
