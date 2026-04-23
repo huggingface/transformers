@@ -191,22 +191,6 @@ def _build_checkpoint_conversion_mapping():
             WeightRenaming("attention_layer_norm", "input_layernorm"),
             WeightRenaming("feedforward_layer_norm", "post_attention_layernorm"),
         ],
-        "qwen3_5_moe_text": [
-            PrefixChange(prefix_to_remove="language_model", model_prefix="model"),
-            WeightConverter(
-                source_patterns=[
-                    "mlp.experts.*.gate_proj.weight",
-                    "mlp.experts.*.up_proj.weight",
-                ],
-                target_patterns="mlp.experts.gate_up_proj",
-                operations=[MergeModulelist(dim=0), Concatenate(dim=1)],
-            ),
-            WeightConverter(
-                source_patterns="mlp.experts.*.down_proj.weight",
-                target_patterns="mlp.experts.down_proj",
-                operations=[MergeModulelist(dim=0)],
-            ),
-        ],
         "qwen3_5_text": [PrefixChange(prefix_to_remove="language_model", model_prefix="model")],
         "sam3_tracker": [
             WeightRenaming(
@@ -615,6 +599,10 @@ def _build_checkpoint_conversion_mapping():
         WeightRenaming(source_patterns=r"mlp\.expert_bias", target_patterns="mlp.e_score_correction_bias"),
         WeightRenaming(source_patterns=r"mlp\.shared_mlp\.", target_patterns="mlp.shared_experts."),
     ]
+
+    mapping["qwen3_5_moe_text"] = mapping["qwen3_5_text"].copy()
+    mapping["qwen3_5_moe_text"] += mapping["qwen2_moe"].copy()
+
 
     for model_type, base_pattern in _MODEL_TO_CONVERSION_PATTERN.items():
         if model_type in mapping:
