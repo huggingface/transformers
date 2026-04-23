@@ -142,28 +142,38 @@ class MiniCPMV4_6Processor(ProcessorMixin):
             if not isinstance(video_target_sizes, torch.Tensor):
                 video_target_sizes = torch.as_tensor(video_target_sizes, dtype=torch.int32)
             num_frames = video_inputs.pop("num_frames")
-            video_grid = video_inputs.pop("grids_videos")
-            grid_rows, grid_cols = video_grid
+            video_grids = video_inputs.pop("grids_videos")
+            num_patches_per_frame = video_inputs.pop("num_patches_per_frame")
 
-            num_tokens_per_patch = video_target_sizes.prod(-1) // video_token_divisor
-
+            flat_index = 0
             video_index = 0
             for i in range(len(text)):
                 while self.video_token in text[i]:
-                    # Build per-frame placeholder: overview + slice grid (mirroring image pattern)
-                    overview_tokens = int(num_tokens_per_patch[0])
-                    frame_placeholder = (
-                        self.image_start_token + "<|placeholder|>" * overview_tokens + self.image_end_token
-                    )
-                    if self.slice_mode and grid_rows > 0 and grid_cols > 0:
-                        per_slice_tokens = int(num_tokens_per_patch[1]) if len(num_tokens_per_patch) > 1 else 0
-                        slice_placeholder = (
-                            self.slice_start_token + "<|placeholder|>" * per_slice_tokens + self.slice_end_token
-                        )
-                        slices = [slice_placeholder * grid_cols for _ in range(grid_rows)]
-                        frame_placeholder += "\n".join(slices)
+                    video_placeholder = ""
+                    for f in range(num_frames):
+                        n_patches = num_patches_per_frame[f]
+                        frame_ts = video_target_sizes[flat_index : flat_index + n_patches]
+                        frame_tokens = frame_ts.prod(-1) // video_token_divisor
+                        grid_rows, grid_cols = video_grids[f]
 
-                    video_placeholder = frame_placeholder * num_frames
+                        frame_placeholder = (
+                            self.image_start_token
+                            + "<|placeholder|>" * int(frame_tokens[0])
+                            + self.image_end_token
+                        )
+                        if self.slice_mode and grid_rows > 0 and grid_cols > 0:
+                            per_slice_tokens = int(frame_tokens[1]) if len(frame_tokens) > 1 else 0
+                            slice_placeholder = (
+                                self.slice_start_token
+                                + "<|placeholder|>" * per_slice_tokens
+                                + self.slice_end_token
+                            )
+                            slices = [slice_placeholder * grid_cols for _ in range(grid_rows)]
+                            frame_placeholder += "\n".join(slices)
+
+                        video_placeholder += frame_placeholder
+                        flat_index += n_patches
+
                     if use_image_id:
                         video_placeholder = (
                             f"{self.image_id_start_token}{video_index}{self.image_id_end_token}" + video_placeholder
