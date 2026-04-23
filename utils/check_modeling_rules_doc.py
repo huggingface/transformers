@@ -46,7 +46,7 @@ CHECKER_CONFIG = {
 
 ROOT = Path(__file__).resolve().parent.parent
 DOC_PATH = ROOT / "docs" / "source" / "en" / "modeling_rules.md"
-RULES_TOML_PATH = Path(__file__).resolve().with_name("rules.toml")
+RULES_TOML_PATH = ROOT / "utils" / "rules.toml"
 
 BEGIN_MARKER = "<!-- BEGIN RULES REFERENCE -->"
 END_MARKER = "<!-- END RULES REFERENCE -->"
