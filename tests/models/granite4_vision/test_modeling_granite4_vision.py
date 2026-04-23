@@ -21,10 +21,10 @@ import requests
 from transformers import (
     AutoProcessor,
     CLIPVisionConfig,
-    GraniteConfig,
     Granite4VisionConfig,
     Granite4VisionForConditionalGeneration,
     Granite4VisionModel,
+    GraniteConfig,
     is_torch_available,
     is_vision_available,
 )
@@ -205,9 +205,9 @@ class Granite4VisionIntegrationTest(unittest.TestCase):
 
     @slow
     def test_small_model_integration_test(self):
-        model = Granite4VisionForConditionalGeneration.from_pretrained(
-            self.model_id, torch_dtype=torch.bfloat16
-        ).to(torch_device)
+        model = Granite4VisionForConditionalGeneration.from_pretrained(self.model_id, torch_dtype=torch.bfloat16).to(
+            torch_device
+        )
 
         prompt = self.make_prompt("Describe this image briefly.")
         inputs = self.processor(text=prompt, images=self.image, return_tensors="pt").to(model.device)
@@ -219,9 +219,9 @@ class Granite4VisionIntegrationTest(unittest.TestCase):
 
     @slow
     def test_small_model_integration_test_batch(self):
-        model = Granite4VisionForConditionalGeneration.from_pretrained(
-            self.model_id, torch_dtype=torch.bfloat16
-        ).to(torch_device)
+        model = Granite4VisionForConditionalGeneration.from_pretrained(self.model_id, torch_dtype=torch.bfloat16).to(
+            torch_device
+        )
 
         url2 = "http://images.cocodataset.org/val2017/000000001000.jpg"
         image2 = Image.open(requests.get(url2, stream=True).raw)
@@ -242,16 +242,18 @@ class Granite4VisionIntegrationTest(unittest.TestCase):
 
     @slow
     def test_small_model_integration_test_batch_matches_single(self):
-        model = Granite4VisionForConditionalGeneration.from_pretrained(
-            self.model_id, torch_dtype=torch.bfloat16
-        ).to(torch_device)
+        model = Granite4VisionForConditionalGeneration.from_pretrained(self.model_id, torch_dtype=torch.bfloat16).to(
+            torch_device
+        )
 
         prompt = self.make_prompt("What do you see in this image?")
 
         # Single inference
         inputs_single = self.processor(text=prompt, images=self.image, return_tensors="pt").to(model.device)
         output_single = model.generate(**inputs_single, max_new_tokens=30, do_sample=False)
-        decoded_single = self.processor.decode(output_single[0, inputs_single["input_ids"].shape[1] :], skip_special_tokens=True)
+        decoded_single = self.processor.decode(
+            output_single[0, inputs_single["input_ids"].shape[1] :], skip_special_tokens=True
+        )
 
         # Batch inference (same image as first in batch)
         url2 = "http://images.cocodataset.org/val2017/000000001000.jpg"
@@ -263,6 +265,8 @@ class Granite4VisionIntegrationTest(unittest.TestCase):
             padding=True,
         ).to(model.device)
         output_batch = model.generate(**inputs_batch, max_new_tokens=30, do_sample=False)
-        decoded_batch = self.processor.decode(output_batch[0, inputs_batch["input_ids"].shape[1] :], skip_special_tokens=True)
+        decoded_batch = self.processor.decode(
+            output_batch[0, inputs_batch["input_ids"].shape[1] :], skip_special_tokens=True
+        )
 
         self.assertEqual(decoded_single, decoded_batch)
