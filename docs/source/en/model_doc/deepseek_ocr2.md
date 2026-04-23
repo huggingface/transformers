@@ -24,7 +24,7 @@ The DeepSeek-OCR-2 model was proposed in [Visual Causal Flow: A Novel Approach t
 
 DeepSeek-OCR-2 is an OCR-specialized vision-language model built on a distinctive architecture: a SAM ViT-B vision encoder feeds into a Qwen2 hybrid attention encoder, which is connected through an MLP projector to a DeepSeek-V2 Mixture-of-Experts (MoE) language model. A key feature of the model is its hybrid attention mechanism, which applies bidirectional attention over image tokens and causal attention over query tokens, enabling efficient and accurate document understanding.
 
-<img src="https://huggingface.co/deepseek-ai/DeepSeek-OCR-2/resolve/main/assets/fig1.png" width="800">
+<img src="https://huggingface.co/deepseek-ai/DeepSeek-OCR-2/resolve/main/assets/fig1.png" width="600">
 
 <small> DeepSeek-OCR 2: Visual Causal Flow.</small>
 
@@ -36,20 +36,19 @@ This model was contributed by [thisisiron](https://huggingface.co/thisisiron).
 ### Plain OCR
 
 ```python
->>> import torch
->>> from transformers import AutoProcessor, AutoModelForImageTextToText
+from transformers import AutoProcessor, AutoModelForImageTextToText
 
->>> model = AutoModelForImageTextToText.from_pretrained(
-...     "thisisiron/DeepSeek-OCR-2-hf", dtype=torch.bfloat16, device_map="auto"
-... )
->>> processor = AutoProcessor.from_pretrained("thisisiron/DeepSeek-OCR-2-hf")
+model = AutoModelForImageTextToText.from_pretrained(
+    "thisisiron/DeepSeek-OCR-2-hf", device_map="auto"
+)
+processor = AutoProcessor.from_pretrained("thisisiron/DeepSeek-OCR-2-hf")
 
->>> image = "https://huggingface.co/datasets/hf-internal-testing/fixtures_got_ocr/resolve/main/image_ocr.jpg"
->>> inputs = processor(images=image, text="<image>\nFree OCR.", return_tensors="pt").to(model.device, dtype=torch.bfloat16)
+image = "https://huggingface.co/datasets/hf-internal-testing/fixtures_got_ocr/resolve/main/image_ocr.jpg"
+inputs = processor(images=image, text="<image>\nFree OCR.", return_tensors="pt").to(model.device)
 
->>> generate_ids = model.generate(**inputs, do_sample=False, max_new_tokens=4096)
->>> processor.decode(generate_ids[0, inputs["input_ids"].shape[1] :], skip_special_tokens=True)
-"R&D QUALITY IMPROVEMENT\nSUGGESTION/SOLUTION FORM\nName/Phone Ext. : (...)"
+generate_ids = model.generate(**inputs, do_sample=False, max_new_tokens=256)
+processor.decode(generate_ids[0, inputs["input_ids"].shape[1] :], skip_special_tokens=True)
+# "R&D QUALITY IMPROVEMENT\nSUGGESTION/SOLUTION FORM\nName/Phone Ext. : (...)"
 ```
 
 ### Grounding with markdown conversion
@@ -57,15 +56,15 @@ This model was contributed by [thisisiron](https://huggingface.co/thisisiron).
 The `<|grounding|>` token enables coordinate-aware output with `<|ref|>` and `<|det|>` tags.
 
 ```python
->>> inputs = processor(
-...     images=image,
-...     text="<image>\n<|grounding|>Convert the document to markdown.",
-...     return_tensors="pt",
-... ).to(model.device, dtype=torch.bfloat16)
+inputs = processor(
+    images=image,
+    text="<image>\n<|grounding|>Convert the document to markdown.",
+    return_tensors="pt",
+).to(model.device)
 
->>> generate_ids = model.generate(**inputs, do_sample=False, max_new_tokens=4096)
->>> processor.decode(generate_ids[0, inputs["input_ids"].shape[1] :], skip_special_tokens=False)
-"<|ref|>title<|/ref|><|det|>[[330, 198, 558, 230]]<|/det|>\n# R&D QUALITY (...)"
+generate_ids = model.generate(**inputs, do_sample=False, max_new_tokens=256)
+processor.decode(generate_ids[0, inputs["input_ids"].shape[1] :], skip_special_tokens=False)
+# "<|ref|>title<|/ref|><|det|>[[330, 198, 558, 230]]<|/det|>\n# R&D QUALITY (...)"
 ```
 
 ## DeepseekOcr2Config
