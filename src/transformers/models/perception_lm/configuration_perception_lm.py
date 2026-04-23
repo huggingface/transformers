@@ -39,6 +39,7 @@ class PerceptionLMConfig(PreTrainedConfig):
     projector_pooling_ratio: int = 1
     image_token_id: int = 128002
     video_token_id: int = 128003
+    tie_word_embeddings: bool | None = None
 
     def __post_init__(self, **kwargs):
         if isinstance(self.vision_config, dict):
@@ -53,6 +54,9 @@ class PerceptionLMConfig(PreTrainedConfig):
             self.text_config = CONFIG_MAPPING[self.text_config["model_type"]](**self.text_config)
         elif self.text_config is None:
             self.text_config = CONFIG_MAPPING["llama"]()
+
+        if self.tie_word_embeddings is None:
+            self.tie_word_embeddings = getattr(self.text_config, "tie_word_embeddings", False)
 
         super().__post_init__(**kwargs)
 

@@ -91,11 +91,13 @@ class Gemma4TextConfig(PreTrainedConfig):
         attend bidirectionally while text tokens use causal attention. When set to `"all"`,
         all tokens use bidirectional attention.
     vocab_size_per_layer_input (`int`, defaults to 262144):
-        Vocabulary size for the per-layer input embeddings. Used by models with per-layer
-        residual streams where a smaller embedding is added at each decoder layer.
+        Vocabulary size for the per-layer input embeddings (PLE). Used by models with
+        per-layer residual streams where a smaller embedding is added at each decoder layer.
     hidden_size_per_layer_input (`int`, defaults to 256):
-        Hidden dimension for the per-layer input embeddings. Controls the width of the
-        per-layer residual embedding vectors.
+        Per-layer hidden dimension for the PLE system. The actual embedding weight has shape
+        `[vocab_size_per_layer_input, num_hidden_layers * hidden_size_per_layer_input]`
+        because all layers are packed into a single table. See the [Gemma4](https://huggingface.co/docs/transformers/main/en/model_doc/gemma4#per-layer-embeddings-ple) docs
+        for a description of the full PLE pipeline.
     num_global_key_value_heads (`int`, *optional*):
         Number of key-value heads for global (full) attention layers. If `None`, defaults
         to `num_key_value_heads`.
@@ -134,6 +136,16 @@ class Gemma4TextConfig(PreTrainedConfig):
         "layers.*.mlp.down_proj": "rowwise",
         "layers.*.experts.gate_up_proj": "packed_colwise",
         "layers.*.experts.down_proj": "rowwise",
+        "layers.*.experts": "moe_tp_experts",
+    }
+    base_model_ep_plan = {
+        # EP plan for google/gemma-4-26B-A4B-it: do not tp in attention (num_global_key_value_heads=2 too small to partition)
+        "layers.*.mlp.gate_proj": "colwise",
+        "layers.*.mlp.up_proj": "colwise",
+        "layers.*.mlp.down_proj": "rowwise",
+        "layers.*.router": "ep_router",
+        "layers.*.experts.gate_up_proj": "grouped_gemm",
+        "layers.*.experts.down_proj": "grouped_gemm",
         "layers.*.experts": "moe_tp_experts",
     }
     base_model_pp_plan = {
