@@ -445,7 +445,7 @@ class AnyToAnyPipeline(Pipeline):
 
         # Decode inputs and outputs the same way to remove input text from generated text if present
         skip_special_tokens = skip_special_tokens if skip_special_tokens is not None else True
-        if getattr(self.tokenizer, "response_schema", False):
+        if getattr(self.tokenizer, "response_format", None) or getattr(self.tokenizer, "response_schema", None):
             skip_special_tokens = False
         generation_mode = postprocess_kwargs["generation_mode"] or "text"
         if generation_mode == "image" and hasattr(self.model, "decode_image_tokens"):
@@ -495,7 +495,9 @@ class AnyToAnyPipeline(Pipeline):
                         ]
                     else:
                         # When we're not starting from a prefill, the output is a new assistant message
-                        if getattr(self.tokenizer, "response_schema", False):
+                        if getattr(self.tokenizer, "response_format", None) or getattr(
+                            self.tokenizer, "response_schema", None
+                        ):
                             assistant_message = self.tokenizer.parse_response(generated_text)
                         else:
                             assistant_message = {"role": "assistant", "content": generated_text}
