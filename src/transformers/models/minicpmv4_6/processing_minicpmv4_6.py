@@ -54,8 +54,6 @@ class MiniCPMV4_6Processor(ProcessorMixin):
 
         self.image_start_token = tokenizer.image_start_token
         self.image_end_token = tokenizer.image_end_token
-        self.video_start_token = tokenizer.video_start_token
-        self.video_end_token = tokenizer.video_end_token
         self.slice_start_token = tokenizer.slice_start_token
         self.slice_end_token = tokenizer.slice_end_token
         self.image_id_start_token = tokenizer.image_id_start_token
@@ -149,7 +147,7 @@ class MiniCPMV4_6Processor(ProcessorMixin):
                     # Build per-frame placeholder: overview + slice grid (mirroring image pattern)
                     overview_tokens = int(num_tokens_per_patch[0])
                     frame_placeholder = (
-                        self.video_start_token + "<|placeholder|>" * overview_tokens + self.video_end_token
+                        self.image_start_token + "<|placeholder|>" * overview_tokens + self.image_end_token
                     )
                     if self.slice_mode and grid_rows > 0 and grid_cols > 0:
                         per_slice_tokens = int(num_tokens_per_patch[1]) if len(num_tokens_per_patch) > 1 else 0
