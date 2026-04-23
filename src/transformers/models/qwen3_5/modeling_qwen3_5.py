@@ -430,18 +430,14 @@ class Qwen3_5GatedDeltaNet(nn.Module):
         # Set up dimensions for reshapes later
         batch_size, seq_len, _ = hidden_states.shape
 
-        use_precomputed_states = (
-            cache_params is not None and cache_params.has_previous_state(self.layer_idx) and seq_len == 1
-        )
-        # Multi-token forward after a prior forward has populated the cache (e.g. chunked prefill
-        # continuation or speculative verification). The single-token fused kernel can't be used
-        # here, so we fall into the chunked kernel and must carry forward both the cached conv
-        # context and the cached recurrent state; otherwise the first-position outputs silently
-        # diverge from the equivalent single-token decode.
-        use_cached_chunk = cache_params is not None and cache_params.has_previous_state(self.layer_idx) and seq_len > 1
+        # We have cached `conv_state` / `recurrent_state` to continue from. The two cached modes
+        # (single-token decode and chunk-tokens continuation) share the state read here; they only
+        # diverge in how the conv input is assembled and which kernel consumes the states below,
+        # which we gate locally on `seq_len`.
+        use_precomputed_states = cache_params is not None and cache_params.has_previous_state(self.layer_idx)
 
         # getting projected states from cache if it exists
-        if use_precomputed_states or use_cached_chunk:
+        if use_precomputed_states:
             conv_state = cache_params.layers[self.layer_idx].conv_states
             recurrent_state = cache_params.layers[self.layer_idx].recurrent_states
 
@@ -454,9 +450,8 @@ class Qwen3_5GatedDeltaNet(nn.Module):
         b = self.in_proj_b(hidden_states)
         a = self.in_proj_a(hidden_states)
 
-        if use_precomputed_states:
-            # 2. Convolution sequence transformation
-            # NOTE: the conv state is updated in `causal_conv1d_update`
+        if use_precomputed_states and seq_len == 1:
+            # Single-token cached decode: the fused per-step kernel updates the conv state in-place.
             mixed_qkv = self.causal_conv1d_update(
                 mixed_qkv,
                 conv_state,
@@ -465,9 +460,10 @@ class Qwen3_5GatedDeltaNet(nn.Module):
                 self.activation,
             )
         else:
-            if use_cached_chunk:
-                # Prepend the cached conv context so the causal conv sees the correct left-context
-                # when continuing a prior forward rather than starting from zero-padding.
+            if use_precomputed_states:
+                # Multi-token cached continuation (`seq_len > 1`, cache already populated). Prepend
+                # the cached conv context so the causal conv sees the correct left-context rather
+                # than zero-padding.
                 mixed_qkv = torch.cat([conv_state, mixed_qkv], dim=-1)
             if cache_params is not None:
                 new_conv_state = F.pad(mixed_qkv, (self.conv_kernel_size - mixed_qkv.shape[-1], 0))
@@ -482,7 +478,7 @@ class Qwen3_5GatedDeltaNet(nn.Module):
                 )
             else:
                 mixed_qkv = F.silu(self.conv1d(mixed_qkv)[:, :, : mixed_qkv.shape[-1]])
-            if use_cached_chunk:
+            if use_precomputed_states:
                 # Drop the prepended context; only this chunk's outputs remain.
                 mixed_qkv = mixed_qkv[:, :, -seq_len:]
 
@@ -508,19 +504,7 @@ class Qwen3_5GatedDeltaNet(nn.Module):
             query = query.repeat_interleave(self.num_v_heads // self.num_k_heads, dim=2)
             key = key.repeat_interleave(self.num_v_heads // self.num_k_heads, dim=2)
 
-        if not use_precomputed_states:
-            core_attn_out, last_recurrent_state = self.chunk_gated_delta_rule(
-                query,
-                key,
-                value,
-                g=g,
-                beta=beta,
-                initial_state=recurrent_state if use_cached_chunk else None,
-                output_final_state=cache_params is not None,
-                use_qk_l2norm_in_kernel=True,
-            )
-
-        else:
+        if use_precomputed_states and seq_len == 1:
             core_attn_out, last_recurrent_state = self.recurrent_gated_delta_rule(
                 query,
                 key,
@@ -528,6 +512,18 @@ class Qwen3_5GatedDeltaNet(nn.Module):
                 g=g,
                 beta=beta,
                 initial_state=recurrent_state,
+                output_final_state=cache_params is not None,
+                use_qk_l2norm_in_kernel=True,
+            )
+
+        else:
+            core_attn_out, last_recurrent_state = self.chunk_gated_delta_rule(
+                query,
+                key,
+                value,
+                g=g,
+                beta=beta,
+                initial_state=recurrent_state if use_precomputed_states else None,
                 output_final_state=cache_params is not None,
                 use_qk_l2norm_in_kernel=True,
             )
