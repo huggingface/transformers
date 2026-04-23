@@ -74,14 +74,12 @@ import numpy as np
 
 from torchcodec.decoders import VideoDecoder
 from transformers import AutoVideoProcessor, AutoModelForVideoClassification
-from accelerate import Accelerator
 
-device = Accelerator().device
 
 # Load model and video preprocessor
 hf_repo = "facebook/vjepa2-vitl-fpc16-256-ssv2"
 
-model = AutoModelForVideoClassification.from_pretrained(hf_repo).to(device)
+model = AutoModelForVideoClassification.from_pretrained(hf_repo, device_map="auto")
 processor = AutoVideoProcessor.from_pretrained(hf_repo)
 
 # To load a video, sample the number of frames according to the model.

@@ -49,7 +49,7 @@ import requests
 
 device = "cuda" if torch.cuda.is_available() else "cpu"
 
-model = Sam3Model.from_pretrained("facebook/sam3").to(device)
+model = Sam3Model.from_pretrained("facebook/sam3", device_map="auto")
 processor = Sam3Processor.from_pretrained("facebook/sam3")
 
 # Load image
@@ -57,7 +57,7 @@ image_url = "http://images.cocodataset.org/val2017/000000077595.jpg"
 image = Image.open(requests.get(image_url, stream=True).raw).convert("RGB")
 
 # Segment using text prompt
-inputs = processor(images=image, text="ear", return_tensors="pt").to(device)
+inputs = processor(images=image, text="ear", return_tensors="pt").to(model.device)
 
 with torch.no_grad():
     outputs = model(**inputs)
@@ -93,7 +93,7 @@ inputs = processor(
     input_boxes=input_boxes,
     input_boxes_labels=input_boxes_labels,
     return_tensors="pt"
-).to(device)
+).to(model.device)
 
 with torch.no_grad():
     outputs = model(**inputs)
@@ -128,7 +128,7 @@ inputs = processor(
     input_boxes=input_boxes,
     input_boxes_labels=input_boxes_labels,
     return_tensors="pt"
-).to(device)
+).to(model.device)
 
 with torch.no_grad():
     outputs = model(**inputs)
@@ -159,7 +159,7 @@ inputs = processor(
     input_boxes=input_boxes,
     input_boxes_labels=[[0]],  # 0 = negative (exclude this region)
     return_tensors="pt"
-).to(device)
+).to(model.device)
 
 with torch.no_grad():
     outputs = model(**inputs)
@@ -189,7 +189,7 @@ images = [
 # Different text prompt for each image
 text_prompts = ["ear", "dial"]
 
-inputs = processor(images=images, text=text_prompts, return_tensors="pt").to(device)
+inputs = processor(images=images, text=text_prompts, return_tensors="pt").to(model.device)
 
 with torch.no_grad():
     outputs = model(**inputs)
@@ -221,7 +221,7 @@ inputs = processor(
     input_boxes=[None, [box2_xyxy]],  # Only second image has box
     input_boxes_labels=[None, [1]],  # Positive box for second image
     return_tensors="pt"
-).to(device)
+).to(model.device)
 
 with torch.no_grad():
     outputs = model(**inputs)
@@ -241,7 +241,7 @@ results = processor.post_process_instance_segmentation(
 SAM3 also provides semantic segmentation alongside instance masks:
 
 ```python
-inputs = processor(images=image, text="ear", return_tensors="pt").to(device)
+inputs = processor(images=image, text="ear", return_tensors="pt").to(model.device)
 
 with torch.no_grad():
     outputs = model(**inputs)
@@ -268,7 +268,7 @@ import requests
 
 device = "cuda" if torch.cuda.is_available() else "cpu"
 
-model = Sam3Model.from_pretrained("facebook/sam3").to(device)
+model = Sam3Model.from_pretrained("facebook/sam3", device_map="auto")
 processor = Sam3Processor.from_pretrained("facebook/sam3")
 
 # Load image
@@ -276,7 +276,7 @@ image_url = "http://images.cocodataset.org/val2017/000000077595.jpg"
 image = Image.open(requests.get(image_url, stream=True).raw).convert("RGB")
 
 # Pre-process image and compute vision embeddings once
-img_inputs = processor(images=image, return_tensors="pt").to(device)
+img_inputs = processor(images=image, return_tensors="pt").to(model.device)
 with torch.no_grad():
     vision_embeds = model.get_vision_features(pixel_values=img_inputs.pixel_values)
 
@@ -285,7 +285,7 @@ text_prompts = ["ear", "eye", "nose"]
 all_results = []
 
 for prompt in text_prompts:
-    text_inputs = processor(text=prompt, return_tensors="pt").to(device)
+    text_inputs = processor(text=prompt, return_tensors="pt").to(model.device)
     with torch.no_grad():
         outputs = model(vision_embeds=vision_embeds, **text_inputs)
 ...
@@ -313,12 +313,12 @@ import requests
 
 device = "cuda" if torch.cuda.is_available() else "cpu"
 
-model = Sam3Model.from_pretrained("facebook/sam3").to(device)
+model = Sam3Model.from_pretrained("facebook/sam3", device_map="auto")
 processor = Sam3Processor.from_pretrained("facebook/sam3")
 
 # Pre-compute text embeddings once
 text_prompt = "ear"
-text_inputs = processor(text=text_prompt, return_tensors="pt").to(device)
+text_inputs = processor(text=text_prompt, return_tensors="pt").to(model.device)
 with torch.no_grad():
     text_embeds = model.get_text_features(**text_inputs)
 
@@ -334,7 +334,7 @@ images = [Image.open(requests.get(url, stream=True).raw).convert("RGB") for url 
 all_results = []
 
 for image in images:
-    img_inputs = processor(images=image, return_tensors="pt").to(device)
+    img_inputs = processor(images=image, return_tensors="pt").to(model.device)
     with torch.no_grad():
         outputs = model(
             pixel_values=img_inputs.pixel_values,
@@ -365,7 +365,7 @@ For faster inference or lower memory usage:
 ```python
 config = Sam3Config.from_pretrained("facebook/sam3")
 config.image_size = 560
-model = Sam3Model.from_pretrained("facebook/sam3", config=config).to(device)
+model = Sam3Model.from_pretrained("facebook/sam3", config=config, device_map="auto")
 processor = Sam3Processor.from_pretrained("facebook/sam3", size={"height": 560, "width": 560})
 ```
 

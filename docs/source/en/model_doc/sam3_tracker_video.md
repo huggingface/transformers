@@ -49,11 +49,9 @@ This model was contributed by [yonigozlan](https://huggingface.co/yonigozlan) an
 
 ```python
 from transformers import Sam3TrackerVideoModel, Sam3TrackerVideoProcessor
-from accelerate import Accelerator
 import torch
 
-device = Accelerator().device
-model = Sam3TrackerVideoModel.from_pretrained("facebook/sam3").to(device)
+model = Sam3TrackerVideoModel.from_pretrained("facebook/sam3", device_map="auto")
 processor = Sam3TrackerVideoProcessor.from_pretrained("facebook/sam3")
 
 # Load video frames (example assumes you have a list of PIL Images)

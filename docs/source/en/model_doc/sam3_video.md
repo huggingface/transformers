@@ -49,11 +49,9 @@ Process a video with all frames already available using text prompts:
 
 ```python
 from transformers import Sam3VideoModel, Sam3VideoProcessor
-from accelerate import Accelerator
 import torch
 
-device = Accelerator().device
-model = Sam3VideoModel.from_pretrained("facebook/sam3").to(device)
+model = Sam3VideoModel.from_pretrained("facebook/sam3", device_map="auto")
 processor = Sam3VideoProcessor.from_pretrained("facebook/sam3")
 
 # Load video frames
@@ -198,7 +196,7 @@ For faster inference or lower memory usage:
 ```python
 config = Sam3VideoConfig.from_pretrained("facebook/sam3")
 config.image_size = 560
-model = Sam3VideoModel.from_pretrained("facebook/sam3", config=config).to(device)
+model = Sam3VideoModel.from_pretrained("facebook/sam3", config=config, device_map="auto")
 processor = Sam3VideoProcessor.from_pretrained("facebook/sam3", size={"height": 560, "width": 560})
 ```
 

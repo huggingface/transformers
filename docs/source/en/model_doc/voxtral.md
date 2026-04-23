@@ -48,9 +48,7 @@ The model supports audio-text instructions, including multi-turn and multi-audio
 ```python
 import torch
 from transformers import VoxtralForConditionalGeneration, AutoProcessor
-from accelerate import Accelerator
 
-device = Accelerator().device
 repo_id = "mistralai/Voxtral-Mini-3B-2507"
 
 processor = AutoProcessor.from_pretrained(repo_id)
@@ -70,7 +68,7 @@ conversation = [
 ]
 
 inputs = processor.apply_chat_template(conversation)
-inputs = inputs.to(device)
+inputs = inputs.to(model.device)
 
 outputs = model.generate(**inputs, max_new_tokens=500)
 decoded_outputs = processor.batch_decode(outputs[:, inputs.input_ids.shape[1]:], skip_special_tokens=True)
@@ -86,9 +84,7 @@ print("=" * 80)
 ```python
 import torch
 from transformers import VoxtralForConditionalGeneration, AutoProcessor
-from accelerate import Accelerator
 
-device = Accelerator().device
 repo_id = "mistralai/Voxtral-Mini-3B-2507"
 
 processor = AutoProcessor.from_pretrained(repo_id)
@@ -112,7 +108,7 @@ conversation = [
 ]
 
 inputs = processor.apply_chat_template(conversation)
-inputs = inputs.to(device)
+inputs = inputs.to(model.device)
 
 outputs = model.generate(**inputs, max_new_tokens=500)
 decoded_outputs = processor.batch_decode(outputs[:, inputs.input_ids.shape[1]:], skip_special_tokens=True)
@@ -128,9 +124,7 @@ print("=" * 80)
 ```python
 import torch
 from transformers import VoxtralForConditionalGeneration, AutoProcessor
-from accelerate import Accelerator
 
-device = Accelerator().device
 repo_id = "mistralai/Voxtral-Mini-3B-2507"
 
 processor = AutoProcessor.from_pretrained(repo_id)
@@ -168,7 +162,7 @@ conversation = [
 ]
 
 inputs = processor.apply_chat_template(conversation)
-inputs = inputs.to(device)
+inputs = inputs.to(model.device)
 
 outputs = model.generate(**inputs, max_new_tokens=500)
 decoded_outputs = processor.batch_decode(outputs[:, inputs.input_ids.shape[1]:], skip_special_tokens=True)
@@ -184,9 +178,7 @@ print("=" * 80)
 ```python
 import torch
 from transformers import VoxtralForConditionalGeneration, AutoProcessor
-from accelerate import Accelerator
 
-device = Accelerator().device
 repo_id = "mistralai/Voxtral-Mini-3B-2507"
 
 processor = AutoProcessor.from_pretrained(repo_id)
@@ -205,7 +197,7 @@ conversation = [
 ]
 
 inputs = processor.apply_chat_template(conversation)
-inputs = inputs.to(device)
+inputs = inputs.to(model.device)
 
 outputs = model.generate(**inputs, max_new_tokens=500)
 decoded_outputs = processor.batch_decode(outputs[:, inputs.input_ids.shape[1]:], skip_special_tokens=True)
@@ -221,9 +213,7 @@ print("=" * 80)
 ```python
 import torch
 from transformers import VoxtralForConditionalGeneration, AutoProcessor
-from accelerate import Accelerator
 
-device = Accelerator().device
 repo_id = "mistralai/Voxtral-Mini-3B-2507"
 
 processor = AutoProcessor.from_pretrained(repo_id)
@@ -242,7 +232,7 @@ conversation = [
 ]
 
 inputs = processor.apply_chat_template(conversation)
-inputs = inputs.to(device)
+inputs = inputs.to(model.device)
 
 outputs = model.generate(**inputs, max_new_tokens=500)
 decoded_outputs = processor.batch_decode(outputs[:, inputs.input_ids.shape[1]:], skip_special_tokens=True)
@@ -258,9 +248,7 @@ print("=" * 80)
 ```python
 import torch
 from transformers import VoxtralForConditionalGeneration, AutoProcessor
-from accelerate import Accelerator
 
-device = Accelerator().device
 repo_id = "mistralai/Voxtral-Mini-3B-2507"
 
 processor = AutoProcessor.from_pretrained(repo_id)
@@ -301,7 +289,7 @@ conversations = [
 ]
 
 inputs = processor.apply_chat_template(conversations)
-inputs = inputs.to(device)
+inputs = inputs.to(model.device)
 
 outputs = model.generate(**inputs, max_new_tokens=500)
 decoded_outputs = processor.batch_decode(outputs[:, inputs.input_ids.shape[1]:], skip_special_tokens=True)
@@ -321,9 +309,7 @@ It also support automatic language detection.
 ```python
 import torch
 from transformers import VoxtralForConditionalGeneration, AutoProcessor
-from accelerate import Accelerator
 
-device = Accelerator().device
 repo_id = "mistralai/Voxtral-Mini-3B-2507"
 
 processor = AutoProcessor.from_pretrained(repo_id)
@@ -335,7 +321,7 @@ inputs = processor.apply_transcription_request(language="en", audio="https://hug
 # # but you can also let the model detect the language automatically
 # inputs = processor.apply_transcription_request(audio="https://huggingface.co/datasets/hf-internal-testing/dummy-audio-samples/resolve/main/obama.mp3", model_id=repo_id) 
 
-inputs = inputs.to(device)
+inputs = inputs.to(model.device)
 outputs = model.generate(**inputs, max_new_tokens=500)
 decoded_outputs = processor.batch_decode(outputs[:, inputs.input_ids.shape[1]:], skip_special_tokens=True)
 

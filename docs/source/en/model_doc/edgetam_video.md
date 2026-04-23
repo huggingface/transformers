@@ -50,11 +50,9 @@ EdgeTAM Video's key strength is its ability to track objects across video frames
 
 ```python
 from transformers import EdgeTamVideoModel, Sam2VideoProcessor
-from accelerate import Accelerator
 import torch
 
-device = Accelerator().device
-model = EdgeTamVideoModel.from_pretrained("yonigozlan/edgetam-video-1").to(device)
+model = EdgeTamVideoModel.from_pretrained("yonigozlan/edgetam-video-1", device_map="auto")
 processor = Sam2VideoProcessor.from_pretrained("yonigozlan/edgetam-video-1")
 
 # Load video frames (example assumes you have a list of PIL Images)

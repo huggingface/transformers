@@ -47,15 +47,13 @@ import requests
 from PIL import Image
 import torch
 from transformers import DepthProImageProcessor, DepthProForDepthEstimation
-from accelerate import Accelerator
 
-device = Accelerator().device
 
 url = 'http://images.cocodataset.org/val2017/000000039769.jpg'
 image = Image.open(requests.get(url, stream=True).raw)
 
 image_processor = DepthProImageProcessor.from_pretrained("apple/DepthPro-hf")
-model = DepthProForDepthEstimation.from_pretrained("apple/DepthPro-hf").to(device)
+model = DepthProForDepthEstimation.from_pretrained("apple/DepthPro-hf", device_map="auto")
 
 inputs = image_processor(images=image, return_tensors="pt").to(model.device)
 

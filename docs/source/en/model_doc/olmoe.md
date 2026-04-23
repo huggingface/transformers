@@ -59,15 +59,13 @@ print(result)
 ```py
 import torch
 from transformers import AutoModelForCausalLM, AutoTokenizer
-from accelerate import Accelerator
 
-device = Accelerator().device
 
-model = AutoModelForCausalLM.from_pretrained("allenai/OLMoE-1B-7B-0924", attn_implementation="sdpa", dtype="auto", device_map="auto").to(device)
+model = AutoModelForCausalLM.from_pretrained("allenai/OLMoE-1B-7B-0924", attn_implementation="sdpa", dtype="auto", device_map="auto")
 tokenizer = AutoTokenizer.from_pretrained("allenai/OLMoE-1B-7B-0924")
 
 inputs = tokenizer("Bitcoin is", return_tensors="pt")
-inputs = {k: v.to(device) for k, v in inputs.items()}
+inputs = {k: v.to(model.device) for k, v in inputs.items()}
 output = model.generate(**inputs, max_length=64)
 print(tokenizer.decode(output[0]))
 ```
@@ -80,9 +78,7 @@ The example below uses [bitsandbytes](../quantization/bitsandbytes) to only quan
 ```py
 import torch
 from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig
-from accelerate import Accelerator
 
-device = Accelerator().device
 
 quantization_config = BitsAndBytesConfig(
    load_in_4bit=True,
@@ -91,11 +87,11 @@ quantization_config = BitsAndBytesConfig(
    bnb_4bit_quant_type="nf4"
 )
 
-model = AutoModelForCausalLM.from_pretrained("allenai/OLMoE-1B-7B-0924", attn_implementation="sdpa", dtype="auto", device_map="auto", quantization_config=quantization_config).to(device)
+model = AutoModelForCausalLM.from_pretrained("allenai/OLMoE-1B-7B-0924", attn_implementation="sdpa", dtype="auto", device_map="auto", quantization_config=quantization_config)
 tokenizer = AutoTokenizer.from_pretrained("allenai/OLMoE-1B-7B-0924")
 
 inputs = tokenizer("Bitcoin is", return_tensors="pt")
-inputs = {k: v.to(device) for k, v in inputs.items()}
+inputs = {k: v.to(model.device) for k, v in inputs.items()}
 output = model.generate(**inputs, max_length=64)
 print(tokenizer.decode(output[0]))
 ```

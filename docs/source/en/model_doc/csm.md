@@ -39,10 +39,8 @@ CSM can be used to simply generate speech from a text prompt:
 ```python
 import torch
 from transformers import CsmForConditionalGeneration, AutoProcessor
-from accelerate import Accelerator
 
 model_id = "sesame/csm-1b"
-device = Accelerator().device
 
 # load the model and the processor
 processor = AutoProcessor.from_pretrained(model_id)
@@ -50,7 +48,7 @@ model = CsmForConditionalGeneration.from_pretrained(model_id, device_map=device)
 
 # prepare the inputs
 text = "[0]The past is just a story we tell ourselves." # `[0]` for speaker id 0
-inputs = processor(text, add_special_tokens=True).to(device)
+inputs = processor(text, add_special_tokens=True).to(model.device)
 
 # another equivalent way to prepare the inputs
 conversation = [
@@ -74,11 +72,9 @@ CSM can be used to generate speech given a conversation, allowing consistency in
 ```python
 import torch
 from transformers import CsmForConditionalGeneration, AutoProcessor
-from accelerate import Accelerator
 from datasets import load_dataset, Audio
 
 model_id = "sesame/csm-1b"
-device = Accelerator().device
 
 # load the model and the processor
 processor = AutoProcessor.from_pretrained(model_id)
@@ -120,11 +116,9 @@ CSM supports batched inference!
 ```python
 import torch
 from transformers import CsmForConditionalGeneration, AutoProcessor
-from accelerate import Accelerator
 from datasets import load_dataset, Audio
 
 model_id = "sesame/csm-1b"
-device = Accelerator().device
 
 # load the model and the processor
 processor = AutoProcessor.from_pretrained(model_id)
@@ -310,11 +304,9 @@ CSM Transformers integration supports training!
 
 ```python
 from transformers import CsmForConditionalGeneration, AutoProcessor
-from accelerate import Accelerator
 from datasets import load_dataset, Audio
 
 model_id = "sesame/csm-1b"
-device = Accelerator().device
 
 # load the model and the processor
 processor = AutoProcessor.from_pretrained(model_id)

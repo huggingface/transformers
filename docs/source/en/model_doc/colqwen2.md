@@ -107,10 +107,8 @@ import torch
 from PIL import Image
 
 from transformers import BitsAndBytesConfig, ColQwen2ForRetrieval, ColQwen2Processor
-from accelerate import Accelerator
 
 model_name = "vidore/colqwen2-v1.0-hf"
-device = Accelerator().device
 
 # 4-bit quantization configuration
 bnb_config = BitsAndBytesConfig(

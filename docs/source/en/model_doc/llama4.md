@@ -202,7 +202,6 @@ tensor-parallel in the future.
 
 ```py
 from transformers import Llama4ForConditionalGeneration, AutoTokenizer
-from accelerate import Accelerator
 import torch
 import time
 
@@ -224,7 +223,6 @@ messages = [
 ]
 input_ids = tokenizer.apply_chat_template(messages, add_generation_prompt=True, return_tensors="pt")
 
-device = Accelerator().device
 torch_device_module = getattr(torch, device, torch.cuda)
 torch_device_module.synchronize()
 start = time.time()

@@ -102,7 +102,7 @@ tokenizer = AutoTokenizer.from_pretrained("MiniMaxAI/MiniMax-Text-01-hf")
 prompt = "My favourite condiment is"
 
 model_inputs = tokenizer([prompt], return_tensors="pt").to(model.device)
-model.to(device)
+model.to(model.device)
 
 generated_ids = model.generate(**model_inputs, max_new_tokens=100, do_sample=True)
 tokenizer.batch_decode(generated_ids)[0]

@@ -119,15 +119,14 @@ print(answer)
     ```py
     import re
     from transformers import DonutProcessor, VisionEncoderDecoderModel
-    from accelerate import Accelerator
-    from datasets import load_dataset
+        from datasets import load_dataset
     import torch
 
     processor = DonutProcessor.from_pretrained("naver-clova-ix/donut-base-finetuned-rvlcdip")
     model = VisionEncoderDecoderModel.from_pretrained("naver-clova-ix/donut-base-finetuned-rvlcdip")
 
     device = Accelerator().device
-    model.to(device)  # doctest: +IGNORE_RESULT
+    model.to(model.device)  # doctest: +IGNORE_RESULT
 
     # load document image
     dataset = load_dataset("hf-internal-testing/example-documents", split="test")
@@ -140,8 +139,8 @@ print(answer)
     pixel_values = processor(image, return_tensors="pt").pixel_values
 
     outputs = model.generate(
-        pixel_values.to(device),
-        decoder_input_ids=decoder_input_ids.to(device),
+        pixel_values.to(model.device),
+        decoder_input_ids=decoder_input_ids.to(model.device),
         max_length=model.decoder.config.max_position_embeddings,
         pad_token_id=processor.tokenizer.pad_token_id,
         eos_token_id=processor.tokenizer.eos_token_id,
@@ -161,8 +160,7 @@ print(answer)
 
     ```py
     import re
-    from accelerate import Accelerator
-    from datasets import load_dataset
+        from datasets import load_dataset
     from transformers import DonutProcessor, VisionEncoderDecoderModel
     import torch
 
@@ -170,7 +168,7 @@ print(answer)
     model = VisionEncoderDecoderModel.from_pretrained("naver-clova-ix/donut-base-finetuned-cord-v2")
 
     device = Accelerator().device
-    model.to(device)  # doctest: +IGNORE_RESULT
+    model.to(model.device)  # doctest: +IGNORE_RESULT
 
     # load document image
     dataset = load_dataset("hf-internal-testing/example-documents", split="test")
@@ -183,8 +181,8 @@ print(answer)
     pixel_values = processor(image, return_tensors="pt").pixel_values
 
     outputs = model.generate(
-        pixel_values.to(device),
-        decoder_input_ids=decoder_input_ids.to(device),
+        pixel_values.to(model.device),
+        decoder_input_ids=decoder_input_ids.to(model.device),
         max_length=model.decoder.config.max_position_embeddings,
         pad_token_id=processor.tokenizer.pad_token_id,
         eos_token_id=processor.tokenizer.eos_token_id,

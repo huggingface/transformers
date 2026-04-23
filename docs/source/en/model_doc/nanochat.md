@@ -79,7 +79,7 @@ inputs = tokenizer.apply_chat_template(
     tokenize=True,
     return_dict=True,
     return_tensors="pt"
-).to(device)
+).to(model.device)
 
 with torch.no_grad():
     outputs = model.generate(

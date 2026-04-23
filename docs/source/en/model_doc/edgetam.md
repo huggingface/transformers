@@ -62,14 +62,12 @@ You can segment objects by providing a single point click on the object you want
 
 ```python
 from transformers import Sam2Processor, EdgeTamModel
-from accelerate import Accelerator
 import torch
 from PIL import Image
 import requests
 
-device = Accelerator().device
 
-model = EdgeTamModel.from_pretrained("yonigozlan/edgetam-1").to(device)
+model = EdgeTamModel.from_pretrained("yonigozlan/edgetam-1", device_map="auto")
 processor = Sam2Processor.from_pretrained("yonigozlan/edgetam-1")
 
 image_url = "https://huggingface.co/datasets/hf-internal-testing/sam2-fixtures/resolve/main/truck.jpg"
@@ -101,7 +99,7 @@ You can provide multiple points to refine the segmentation:
 input_points = [[[[500, 375], [1125, 625]]]]  # Multiple points for refinement
 input_labels = [[[1, 1]]]  # Both positive clicks
 
-inputs = processor(images=raw_image, input_points=input_points, input_labels=input_labels, return_tensors="pt").to(device)
+inputs = processor(images=raw_image, input_points=input_points, input_labels=input_labels, return_tensors="pt").to(model.device)
 
 with torch.no_grad():
     outputs = model(**inputs)
@@ -119,7 +117,7 @@ EdgeTAM also supports bounding box inputs for segmentation:
 # Define bounding box as [x_min, y_min, x_max, y_max]
 input_boxes = [[[75, 275, 1725, 850]]]
 
-inputs = processor(images=raw_image, input_boxes=input_boxes, return_tensors="pt").to(device)
+inputs = processor(images=raw_image, input_boxes=input_boxes, return_tensors="pt").to(model.device)
 
 with torch.no_grad():
     outputs = model(**inputs)
@@ -138,7 +136,7 @@ You can segment multiple objects simultaneously:
 input_points = [[[[500, 375]], [[650, 750]]]]  # Points for two objects in same image
 input_labels = [[[1], [1]]]  # Positive clicks for both objects
 
-inputs = processor(images=raw_image, input_points=input_points, input_labels=input_labels, return_tensors="pt").to(device)
+inputs = processor(images=raw_image, input_points=input_points, input_labels=input_labels, return_tensors="pt").to(model.device)
 
 with torch.no_grad():
     outputs = model(**inputs, multimask_output=False)
@@ -159,14 +157,12 @@ Process multiple images simultaneously for improved efficiency:
 
 ```python
 from transformers import Sam2Processor, EdgeTamModel
-from accelerate import Accelerator
 import torch
 from PIL import Image
 import requests
 
-device = Accelerator().device
 
-model = EdgeTamModel.from_pretrained("yonigozlan/edgetam-1").to(device)
+model = EdgeTamModel.from_pretrained("yonigozlan/edgetam-1", device_map="auto")
 processor = Sam2Processor.from_pretrained("yonigozlan/edgetam-1")
 
 # Load multiple images
@@ -208,7 +204,7 @@ input_labels = [
     [[1]]  # Dog image: positive click for the object
 ]
 
-inputs = processor(images=raw_images, input_points=input_points, input_labels=input_labels, return_tensors="pt").to(device)
+inputs = processor(images=raw_images, input_points=input_points, input_labels=input_labels, return_tensors="pt").to(model.device)
 
 with torch.no_grad():
     outputs = model(**inputs, multimask_output=False)
@@ -236,7 +232,7 @@ input_labels = [
     [[1], [1, 1]]  # Groceries image: positive clicks for refinement
 ]
 
-inputs = processor(images=raw_images, input_points=input_points, input_labels=input_labels, return_tensors="pt").to(device)
+inputs = processor(images=raw_images, input_points=input_points, input_labels=input_labels, return_tensors="pt").to(model.device)
 
 with torch.no_grad():
     outputs = model(**inputs, multimask_output=False)
@@ -258,7 +254,7 @@ input_boxes = [
 # Update images for this example
 raw_images = [raw_images[0], groceries_image]  # truck and groceries
 
-inputs = processor(images=raw_images, input_boxes=input_boxes, return_tensors="pt").to(device)
+inputs = processor(images=raw_images, input_boxes=input_boxes, return_tensors="pt").to(model.device)
 
 with torch.no_grad():
     outputs = model(**inputs, multimask_output=False)
@@ -278,7 +274,7 @@ EdgeTAM can use masks from previous predictions as input to refine segmentation:
 # Get initial segmentation
 input_points = [[[[500, 375]]]]
 input_labels = [[[1]]]
-inputs = processor(images=raw_image, input_points=input_points, input_labels=input_labels, return_tensors="pt").to(device)
+inputs = processor(images=raw_image, input_points=input_points, input_labels=input_labels, return_tensors="pt").to(model.device)
 
 with torch.no_grad():
     outputs = model(**inputs)
@@ -294,7 +290,7 @@ inputs = processor(
     input_labels=new_input_labels,
     original_sizes=inputs["original_sizes"],
     return_tensors="pt",
-).to(device)
+).to(model.device)
 
 with torch.no_grad():
     refined_outputs = model(

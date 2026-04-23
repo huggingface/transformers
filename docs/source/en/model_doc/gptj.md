@@ -39,15 +39,13 @@ This model was contributed by [Stella Biderman](https://huggingface.co/stellaath
 
 ```python
 from transformers import GPTJForCausalLM
-from accelerate import Accelerator
 import torch
 
-device = Accelerator().device
 model = GPTJForCausalLM.from_pretrained(
     "EleutherAI/gpt-j-6B",
     revision="float16",
     dtype=torch.float16,
-).to(device)
+, device_map="auto")
 ```
 
 - The model should fit on 16GB GPU for inference. For training/fine-tuning it would take much more GPU RAM. Adam
@@ -95,11 +93,9 @@ gen_text = tokenizer.batch_decode(gen_tokens)[0]
 
 ```python
 from transformers import GPTJForCausalLM, AutoTokenizer
-from accelerate import Accelerator
 import torch
 
-device = Accelerator().device
-model = GPTJForCausalLM.from_pretrained("EleutherAI/gpt-j-6B").to(device)
+model = GPTJForCausalLM.from_pretrained("EleutherAI/gpt-j-6B", device_map="auto")
 tokenizer = AutoTokenizer.from_pretrained("EleutherAI/gpt-j-6B")
 
 prompt = (

@@ -113,10 +113,8 @@ Here's how to load the model and perform inference in half-precision (`torch.flo
 
 ```python
 from transformers import AutoProcessor, LlavaOnevisionForConditionalGeneration
-from accelerate import Accelerator
 import torch
 
-device = Accelerator().device
 
 processor = AutoProcessor.from_pretrained("llava-hf/llava-onevision-qwen2-7b-ov-hf") 
 model = LlavaOnevisionForConditionalGeneration.from_pretrained(

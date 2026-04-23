@@ -36,7 +36,6 @@ rendered properly in your Markdown viewer.
 import torch
 from datasets import load_dataset, Audio
 from transformers import KyutaiSpeechToTextProcessor, KyutaiSpeechToTextForConditionalGeneration
-from accelerate import Accelerator
 
 # 1. load the model and the processor
 torch_device = Accelerator().device
@@ -70,7 +69,6 @@ print(processor.batch_decode(output_tokens, skip_special_tokens=True))
 import torch
 from datasets import load_dataset, Audio
 from transformers import KyutaiSpeechToTextProcessor, KyutaiSpeechToTextForConditionalGeneration
-from accelerate import Accelerator
 
 # 1. load the model and the processor
 torch_device = Accelerator().device

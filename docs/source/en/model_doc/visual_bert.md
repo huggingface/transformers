@@ -49,7 +49,7 @@ def get_visual_embeddings_simple(image, device=None):
     
     model = torchvision.models.resnet50(pretrained=True)
     model = torch.nn.Sequential(*list(model.children())[:-1])
-    model.to(device)
+    model.to(model.device)
     model.eval()
     
     transform = torchvision.transforms.Compose([
@@ -69,7 +69,7 @@ def get_visual_embeddings_simple(image, device=None):
     else:
         raise ValueError("Image must be a PIL Image or path to image file")
     
-    image_tensor = transform(image).unsqueeze(0).to(device)
+    image_tensor = transform(image).unsqueeze(0).to(model.device)
     
     with torch.no_grad():
         features = model(image_tensor)

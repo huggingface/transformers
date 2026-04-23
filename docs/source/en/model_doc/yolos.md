@@ -61,12 +61,10 @@ import torch
 from PIL import Image
 import requests
 from transformers import AutoImageProcessor, AutoModelForObjectDetection
-from accelerate import Accelerator
 
-device = Accelerator().device
 
 processor = AutoImageProcessor.from_pretrained("hustvl/yolos-base")
-model = AutoModelForObjectDetection.from_pretrained("hustvl/yolos-base", attn_implementation="sdpa").to(device)
+model = AutoModelForObjectDetection.from_pretrained("hustvl/yolos-base", attn_implementation="sdpa", device_map="auto")
 
 url = "https://huggingface.co/datasets/Narsil/image_dummy/raw/main/parrots.png"
 image = Image.open(requests.get(url, stream=True).raw).convert("RGB")

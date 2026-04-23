@@ -57,10 +57,8 @@ import torch
 from PIL import Image
 import requests
 from transformers import SamHQModel, SamHQProcessor
-from accelerate import Accelerator
 
-device = Accelerator().device
-model = SamHQModel.from_pretrained("syscv-community/sam-hq-vit-base").to(device)
+model = SamHQModel.from_pretrained("syscv-community/sam-hq-vit-base", device_map="auto")
 processor = SamHQProcessor.from_pretrained("syscv-community/sam-hq-vit-base")
 
 img_url = "https://huggingface.co/ybelkada/segment-anything/resolve/main/assets/car.png"
@@ -84,10 +82,8 @@ import torch
 from PIL import Image
 import requests
 from transformers import SamHQModel, SamHQProcessor
-from accelerate import Accelerator
 
-device = Accelerator().device
-model = SamHQModel.from_pretrained("syscv-community/sam-hq-vit-base").to(device)
+model = SamHQModel.from_pretrained("syscv-community/sam-hq-vit-base", device_map="auto")
 processor = SamHQProcessor.from_pretrained("syscv-community/sam-hq-vit-base")
 
 img_url = "https://huggingface.co/ybelkada/segment-anything/resolve/main/assets/car.png"

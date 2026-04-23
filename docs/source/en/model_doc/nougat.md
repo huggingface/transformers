@@ -63,15 +63,13 @@ import re
 from PIL import Image
 
 from transformers import NougatProcessor, AutoModelForImageTextToText
-from accelerate import Accelerator
 from datasets import load_dataset
 import torch
 
 processor = NougatProcessor.from_pretrained("facebook/nougat-base")
 model = AutoModelForImageTextToText.from_pretrained("facebook/nougat-base")
 
-device = Accelerator().device
-model.to(device)  # doctest: +IGNORE_RESULT
+model.to(model.device)  # doctest: +IGNORE_RESULT
 
 # prepare PDF image for the model
 filepath = hf_hub_download(repo_id="hf-internal-testing/fixtures_docvqa", filename="nougat_paper.png", repo_type="dataset")
@@ -80,7 +78,7 @@ pixel_values = processor(image, return_tensors="pt").pixel_values
 
 # generate transcription (here we only generate 30 tokens)
 outputs = model.generate(
-    pixel_values.to(device),
+    pixel_values.to(model.device),
     min_length=1,
     max_new_tokens=30,
     bad_words_ids=[[processor.tokenizer.unk_token_id]],

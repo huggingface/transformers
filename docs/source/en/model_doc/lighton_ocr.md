@@ -52,7 +52,7 @@ inputs = processor.apply_chat_template(
     return_dict=True,
     return_tensors="pt",
 )
-inputs = {k: v.to(device=device, dtype=dtype) if v.is_floating_point() else v.to(device) for k, v in inputs.items()}
+inputs = {k: v.to(device=device, dtype=dtype) if v.is_floating_point() else v.to(model.device) for k, v in inputs.items()}
 
 output_ids = model.generate(**inputs, max_new_tokens=1024)
 generated_ids = output_ids[0, inputs["input_ids"].shape[1] :]

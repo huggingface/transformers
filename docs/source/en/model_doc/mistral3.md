@@ -67,14 +67,12 @@ outputs[0]["generated_text"]
 ```py
 import torch
 from transformers import AutoProcessor, AutoModelForImageTextToText
-from accelerate import Accelerator 
 
-torch_device = Accelerator().device
 model_checkpoint = "mistralai/Mistral-Small-3.1-24B-Instruct-2503"
 processor = AutoProcessor.from_pretrained(model_checkpoint)
 model = AutoModelForImageTextToText.from_pretrained(
     model_checkpoint, 
-    device_map=torch_device, 
+    device_map="auto", 
 )
 
 messages = [
@@ -110,7 +108,6 @@ decoded_output
 ```py
 import torch
 from transformers import AutoProcessor, AutoModelForImageTextToText
-from accelerate import Accelerator
 
 torch_device = Accelerator().device
 model_checkpoint = ".mistralai/Mistral-Small-3.1-24B-Instruct-2503"
@@ -151,7 +148,6 @@ print(decoded_output)
 ```py
 import torch
 from transformers import AutoProcessor, AutoModelForImageTextToText
-from accelerate import Accelerator
 
 torch_device = Accelerator().device
 model_checkpoint = "mistralai/Mistral-Small-3.1-24B-Instruct-2503"
@@ -195,7 +191,6 @@ messages = [
 ```py
 import torch
 from transformers import AutoProcessor, AutoModelForImageTextToText, BitsAndBytesConfig
-from accelerate import Accelerator
 
 torch_device = Accelerator().device
 model_checkpoint = "mistralai/Mistral-Small-3.1-24B-Instruct-2503"

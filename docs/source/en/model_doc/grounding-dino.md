@@ -51,13 +51,11 @@ import requests
 import torch
 from PIL import Image
 from transformers import AutoProcessor, AutoModelForZeroShotObjectDetection
-from accelerate import Accelerator
 
 model_id = "IDEA-Research/grounding-dino-tiny"
-device = Accelerator().device
 
 processor = AutoProcessor.from_pretrained(model_id)
-model = AutoModelForZeroShotObjectDetection.from_pretrained(model_id).to(device)
+model = AutoModelForZeroShotObjectDetection.from_pretrained(model_id, device_map="auto")
 
 image_url = "http://images.cocodataset.org/val2017/000000039769.jpg"
 image = Image.open(requests.get(image_url, stream=True).raw)

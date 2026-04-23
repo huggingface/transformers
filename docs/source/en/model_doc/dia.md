@@ -43,7 +43,6 @@ tokens and decodes them back into audio.
 
 ```python
 from transformers import AutoProcessor, DiaForConditionalGeneration
-from accelerate import Accelerator
 
 torch_device = Accelerator().device
 model_checkpoint = "nari-labs/Dia-1.6B-0626"
@@ -66,7 +65,6 @@ processor.save_audio(outputs, "example.wav")
 ```python
 from datasets import load_dataset, Audio
 from transformers import AutoProcessor, DiaForConditionalGeneration
-from accelerate import Accelerator
 
 torch_device = Accelerator().device
 model_checkpoint = "nari-labs/Dia-1.6B-0626"
@@ -94,7 +92,6 @@ processor.save_audio(outputs, "example_with_audio.wav")
 ```python
 from datasets import load_dataset, Audio
 from transformers import AutoProcessor, DiaForConditionalGeneration
-from accelerate import Accelerator
 
 torch_device = Accelerator().device
 model_checkpoint = "nari-labs/Dia-1.6B-0626"

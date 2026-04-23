@@ -75,12 +75,10 @@ The example below uses [bitsandbytes](..quantization/bitsandbytes) to quantize t
 ```py
 import torch
 from transformers import BitsAndBytesConfig, AutoTokenizer, AutoModelForCausalLM
-from accelerate import Accelerator
 
-device = Accelerator().device
 
 bnb_config = BitsAndBytesConfig(load_in_8bit=True)
-model = AutoModelForCausalLM.from_pretrained("facebook/opt-13b", attn_implementation="sdpa", quantization_config=bnb_config).to(device)
+model = AutoModelForCausalLM.from_pretrained("facebook/opt-13b", attn_implementation="sdpa", quantization_config=bnb_config, device_map="auto")
 tokenizer = AutoTokenizer.from_pretrained("facebook/opt-13b")
 
 prompt = ("Once upon a time, in a land far, far away, ")

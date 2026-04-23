@@ -45,18 +45,16 @@ import torch
 import requests
 from PIL import Image
 from transformers import ViTImageProcessor, ViTMAEForPreTraining
-from accelerate import Accelerator
 
-device = Accelerator().device
 
 url = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg"
 image = Image.open(requests.get(url, stream=True).raw)
 
 processor = ViTImageProcessor.from_pretrained("facebook/vit-mae-base")
 inputs = processor(image, return_tensors="pt")
-inputs = {k: v.to(device) for k, v in inputs.items()}
+inputs = {k: v.to(model.device) for k, v in inputs.items()}
 
-model = ViTMAEForPreTraining.from_pretrained("facebook/vit-mae-base", attn_implementation="sdpa").to(device)
+model = ViTMAEForPreTraining.from_pretrained("facebook/vit-mae-base", attn_implementation="sdpa", device_map="auto")
 with torch.no_grad():
     outputs = model(**inputs)
 

@@ -88,7 +88,7 @@ To load a model using Flash Attention 2, we can pass the argument `attn_implemen
 ```python
 from transformers import GPTNeoXForCausalLM, GPTNeoXTokenizerFast
 
-model = GPTNeoXForCausalLM.from_pretrained("EleutherAI/gpt-neox-20b", attn_implementation="flash_attention_2").to(device)
+model = GPTNeoXForCausalLM.from_pretrained("EleutherAI/gpt-neox-20b", attn_implementation="flash_attention_2", device_map="auto")
 ...
 ```
 

@@ -40,13 +40,11 @@ from torchvision import io
 from typing import Dict
 from transformers.image_utils import load_images, load_video
 from transformers import AutoModelForImageTextToText, AutoTokenizer, AutoProcessor
-from accelerate import Accelerator
 
-device = Accelerator().device
 
 model = AutoModelForImageTextToText.from_pretrained(
     "thisisiron/Ovis2-2B-hf",,
-).eval().to(device)
+).eval().to(model.device)
 processor = AutoProcessor.from_pretrained("thisisiron/Ovis2-2B-hf")
 
 messages = [

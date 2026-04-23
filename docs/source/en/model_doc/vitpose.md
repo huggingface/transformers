@@ -37,9 +37,7 @@ import numpy as np
 import supervision as sv
 from PIL import Image
 from transformers import AutoProcessor, RTDetrForObjectDetection, VitPoseForPoseEstimation
-from accelerate import Accelerator
 
-device = Accelerator().device
 
 url = "https://www.fcbarcelona.com/fcbarcelona/photo/2021/01/31/3c55a19f-dfc1-4451-885e-afd14e890a11/mini_2021-01-31-BARCELONA-ATHLETIC-BILBAOI-30.JPG"
 image = Image.open(requests.get(url, stream=True).raw)
@@ -126,7 +124,7 @@ image = Image.open(requests.get(url, stream=True).raw)
 person_image_processor = AutoProcessor.from_pretrained("PekingU/rtdetr_r50vd_coco_o365")
 person_model = RTDetrForObjectDetection.from_pretrained("PekingU/rtdetr_r50vd_coco_o365", device_map=device)
 
-inputs = person_image_processor(images=image, return_tensors="pt").to(device)
+inputs = person_image_processor(images=image, return_tensors="pt").to(model.device)
 
 with torch.no_grad():
     outputs = person_model(**inputs)
@@ -147,7 +145,7 @@ quantization_config = TorchAoConfig("int4_weight_only", group_size=128)
 image_processor = AutoProcessor.from_pretrained("usyd-community/vitpose-plus-huge")
 model = VitPoseForPoseEstimation.from_pretrained("usyd-community/vitpose-plus-huge", device_map=device, quantization_config=quantization_config)
 
-inputs = image_processor(image, boxes=[person_boxes], return_tensors="pt").to(device)
+inputs = image_processor(image, boxes=[person_boxes], return_tensors="pt").to(model.device)
 
 with torch.no_grad():
     outputs = model(**inputs)
@@ -164,8 +162,7 @@ image_pose_result = pose_results[0]
 
     ```py
     from transformers import AutoProcessor, VitPoseForPoseEstimation
-    from accelerate import Accelerator
-
+    
     device = Accelerator().device
 
     image_processor = AutoProcessor.from_pretrained("usyd-community/vitpose-plus-base")

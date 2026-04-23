@@ -46,7 +46,6 @@ import torch
 import requests
 from PIL import Image, ImageDraw
 from transformers import AutoProcessor, Kosmos2_5ForConditionalGeneration
-from accelerate import Accelerator
 
 repo = "microsoft/kosmos-2.5"
 device = "cuda:0"
@@ -66,7 +65,7 @@ raw_width, raw_height = image.size
 scale_height = raw_height / height
 scale_width = raw_width / width
 
-inputs = {k: v.to(device) if v is not None else None for k, v in inputs.items()}
+inputs = {k: v.to(model.device) if v is not None else None for k, v in inputs.items()}
 inputs["flattened_patches"] = inputs["flattened_patches"].to(dtype)
 generated_ids = model.generate(
     **inputs,
@@ -86,7 +85,6 @@ import torch
 import requests
 from PIL import Image, ImageDraw
 from transformers import AutoProcessor, Kosmos2_5ForConditionalGeneration
-from accelerate import Accelerator
 
 repo = "microsoft/kosmos-2.5"
 device = "cuda:0"
@@ -113,7 +111,7 @@ scale_width = raw_width / width
 # scale_height = raw_height / height[0]
 # scale_width = raw_width / width[0]
 
-inputs = {k: v.to(device) if v is not None else None for k, v in inputs.items()}
+inputs = {k: v.to(model.device) if v is not None else None for k, v in inputs.items()}
 inputs["flattened_patches"] = inputs["flattened_patches"].to(dtype)
 generated_ids = model.generate(
     **inputs,
@@ -195,7 +193,7 @@ raw_width, raw_height = image.size
 scale_height = raw_height / height
 scale_width = raw_width / width
 
-inputs = {k: v.to(device) if v is not None else None for k, v in inputs.items()}
+inputs = {k: v.to(model.device) if v is not None else None for k, v in inputs.items()}
 inputs["flattened_patches"] = inputs["flattened_patches"].to(dtype)
 generated_ids = model.generate(
     **inputs,

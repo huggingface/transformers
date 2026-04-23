@@ -98,7 +98,7 @@ collator = DataCollatorWithFlattening(return_flash_attn_kwargs=True)
 
 def prepare_text_for_padding_free(texts):
     # base tokenization with padding and subsequent flattening
-    inputs_dict = tokenizer(texts, return_tensors="pt", padding=True).to("cuda")
+    inputs_dict = tokenizer(texts, return_tensors="pt", padding=True).to(model.device)
     flattened_features = collator(
         [
             {"input_ids": i[a.bool()].tolist()}
@@ -108,7 +108,7 @@ def prepare_text_for_padding_free(texts):
 
     for k, v in flattened_features.items():
         if isinstance(v, torch.Tensor):
-            flattened_features[k] = v.to("cuda")
+            flattened_features[k] = v.to(model.device)
 
     return flattened_features
 
