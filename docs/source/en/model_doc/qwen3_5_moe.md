@@ -1,4 +1,4 @@
-<!--Copyright 2026 The Qwen Team and The HuggingFace Inc. team. All rights reserved.
+<!--Copyright 2026 The Qwen Team and The HuggingFace Team. All rights reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with
 the License. You may obtain a copy of the License at
@@ -15,56 +15,73 @@ rendered properly in your Markdown viewer.
 -->
 *This model was released on 2026-01-01 and added to Hugging Face Transformers on 2026-02-09.*
 
-<div style="float: right;">
-    <div class="flex flex-wrap space-x-1">
-<img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
-<img alt="FlashAttention" src="https://img.shields.io/badge/%E2%9A%A1%EF%B8%8E%20FlashAttention-eae0c8?style=flat">
-<img alt="SDPA" src="https://img.shields.io/badge/SDPA-DE3412?style=flat&logo=pytorch&logoColor=white">    </div>
-</div>
+# Qwen3.5 MoE
 
-# Qwen3.5 Moe
+[Qwen3.5 MoE](https://qwen.ai/blog?id=qwen3.5) is the sparse-expert variant of Qwen3.5. It keeps the same natively multimodal decoder and 3:1 Gated DeltaNet / Gated Attention backbone, but replaces dense FFNs with a 256-expert sparse mixture — 8 routed experts are activated per token, plus 1 shared expert — so total parameters scale well past the dense checkpoints while active compute per token stays much smaller.
 
-[Qwen3.5 Moe](https://huggingface.co/papers/2502.13923) TODO @shuaibai @bozheng
+This family includes `Qwen/Qwen3.5-35B-A3B` (35B total / 3B active), `Qwen/Qwen3.5-122B-A10B`, and the flagship `Qwen/Qwen3.5-397B-A17B`. The text tower reuses `Qwen3NextSparseMoeBlock` and expert kernels from Qwen3-Next; the vision tower is inherited from Qwen3-VL.
 
-Model usage
+You can find all the official Qwen3.5 MoE checkpoints under the [Qwen](https://huggingface.co/Qwen) organization.
+
+## Quickstart
 
 <hfoptions id="usage">
+<hfoption id="Pipeline">
+
+```py
+import torch
+from transformers import pipeline
+
+pipe = pipeline(
+    task="text-generation",
+    model="Qwen/Qwen3.5-35B-A3B",
+    torch_dtype=torch.bfloat16,
+    device_map="auto",
+)
+print(pipe("The capital of France is", max_new_tokens=20)[0]["generated_text"])
+```
+
+</hfoption>
 <hfoption id="AutoModel">
 
 ```py
-TODO
+import torch
+from transformers import AutoTokenizer, Qwen3_5MoeForCausalLM
+
+tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen3.5-35B-A3B")
+model = Qwen3_5MoeForCausalLM.from_pretrained(
+    "Qwen/Qwen3.5-35B-A3B",
+    torch_dtype=torch.bfloat16,
+    device_map="auto",
+)
+
+inputs = tokenizer("Explain mixture-of-experts in one paragraph.", return_tensors="pt").to(model.device)
+generated_ids = model.generate(**inputs, max_new_tokens=64)
+print(tokenizer.decode(generated_ids[0], skip_special_tokens=True))
 ```
 
 </hfoption>
 </hfoptions>
 
+## Usage tips and notes
+
+- When training or fine-tuning, set `output_router_logits=True` so the forward returns router logits and the load-balancing auxiliary loss is added to the total loss (scaled by `router_aux_loss_coef`, default `0.001`). Without it, experts can collapse to a few popular slots.
+- [`Qwen3_5MoeCausalLMOutputWithPast`] includes a `router_logits` field. Downstream code that destructures model outputs by position needs to account for it or switch to keyword access.
+- For `Qwen3.5-35B-A3B`, the text config uses `hidden_size=2048` across 40 layers, 256 experts with 8 routed + 1 shared per token, and `moe_intermediate_size=512` — very different shapes from the dense Qwen3.5 checkpoints, so weights are not interchangeable.
+- Native context is 262,144 tokens. To reach the advertised ~1M context, enable YaRN rope scaling via the config's `rope_scaling` field — plain loading gives you the native window only.
+- As with Qwen3.5, linear-attention layers depend on optional `causal_conv1d` and `fla` packages; falling back to the pure PyTorch path is functional but slower.
+
 ## Qwen3_5MoeConfig
 
 [[autodoc]] Qwen3_5MoeConfig
 
-## Qwen3OmniMoeVisionEncoderConfig
-
-[[autodoc]] Qwen3OmniMoeVisionEncoderConfig
-
-## Qwen3OmniMoeTextConfig
-
-[[autodoc]] Qwen3OmniMoeTextConfig
-
-## Qwen3OmniMoeTalkerTextConfig
-
-[[autodoc]] Qwen3OmniMoeTalkerTextConfig
-
-## Qwen3OmniMoeTalkerCodePredictorConfig
-
-[[autodoc]] Qwen3OmniMoeTalkerCodePredictorConfig
-
-## Qwen3OmniMoeAudioEncoderConfig
-
-[[autodoc]] Qwen3OmniMoeAudioEncoderConfig
-
 ## Qwen3_5MoeTextConfig
 
 [[autodoc]] Qwen3_5MoeTextConfig
+
+## Qwen3_5MoeVisionConfig
+
+[[autodoc]] Qwen3_5MoeVisionConfig
 
 ## Qwen3_5MoeVisionModel
 
