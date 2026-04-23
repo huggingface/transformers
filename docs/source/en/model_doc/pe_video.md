@@ -33,17 +33,15 @@ from transformers.video_utils import load_video
 processor = AutoProcessor.from_pretrained("facebook/pe-av-large")
 model = PeVideoModel.from_pretrained(
     "facebook/pe-av-large",
-    torch_dtype=torch.bfloat16,
     device_map="auto",
 )
 
 video, _ = load_video("https://huggingface.co/datasets/hf-internal-testing/fixtures_videos/resolve/main/tennis.mp4")
 labels = ["a person playing tennis", "a person cooking", "a cat sleeping"]
 
-video_inputs = processor.video_processor(video, num_frames=16, return_tensors="pt")
-text_inputs = processor.tokenizer(labels, padding=True, return_tensors="pt")
+video_inputs = processor.video_processor(video, num_frames=16, return_tensors="pt").to(model.device)
+text_inputs = processor.tokenizer(labels, padding=True, return_tensors="pt").to(model.device)
 inputs = {**video_inputs, **text_inputs}
-inputs = {k: v.to(model.device) for k, v in inputs.items()}
 
 with torch.no_grad():
     outputs = model(**inputs)

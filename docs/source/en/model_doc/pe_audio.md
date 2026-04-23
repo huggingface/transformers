@@ -33,7 +33,6 @@ from transformers import AutoProcessor, PeAudioModel
 processor = AutoProcessor.from_pretrained("facebook/pe-av-large")
 model = PeAudioModel.from_pretrained(
     "facebook/pe-av-large",
-    torch_dtype=torch.bfloat16,
     device_map="auto",
 )
 
@@ -41,10 +40,9 @@ ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="v
 audio = ds[0]["audio"]["array"]
 labels = ["a dog barking", "a person speaking", "music playing"]
 
-audio_inputs = processor.feature_extractor(audio, sampling_rate=48_000, return_tensors="pt")
-text_inputs = processor.tokenizer(labels, padding=True, return_tensors="pt")
+audio_inputs = processor.feature_extractor(audio, sampling_rate=48_000, return_tensors="pt").to(model.device)
+text_inputs = processor.tokenizer(labels, padding=True, return_tensors="pt").to(model.device)
 inputs = {**audio_inputs, **text_inputs}
-inputs = {k: v.to(model.device) for k, v in inputs.items()}
 
 with torch.no_grad():
     outputs = model(**inputs)
