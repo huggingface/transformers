@@ -73,6 +73,11 @@ _MODEL_TO_CONVERSION_PATTERN = {
     "qwen2_5_vl": "qwen2_vl",
     "sam3_tracker_video": "sam3_tracker",
     "pp_chart2table": "llava",
+    "voxtral": "qwen2_audio",
+    "voxtral_realtime": "qwen2_audio",
+    "audioflamingo3": "qwen2_audio",
+    "glmasr": "qwen2_audio",
+    "musicflamingo": "qwen2_audio",
     "gemma3n_text": "qwen3_5_text",
     "qwen3_5_moe_text": "qwen3_5_text",
 }
@@ -90,36 +95,6 @@ def _build_checkpoint_conversion_mapping():
             WeightRenaming(source_patterns=r"^multi_modal_projector", target_patterns="model.multi_modal_projector"),
         ],
         "qwen2_audio": [
-            WeightRenaming(source_patterns=r"^language_model.model", target_patterns="model.language_model"),
-            WeightRenaming(source_patterns=r"^language_model.lm_head", target_patterns="lm_head"),
-            WeightRenaming(source_patterns=r"^audio_tower", target_patterns="model.audio_tower"),
-            WeightRenaming(source_patterns=r"^multi_modal_projector", target_patterns="model.multi_modal_projector"),
-        ],
-        "voxtral": [
-            WeightRenaming(source_patterns=r"^language_model.model", target_patterns="model.language_model"),
-            WeightRenaming(source_patterns=r"^language_model.lm_head", target_patterns="lm_head"),
-            WeightRenaming(source_patterns=r"^audio_tower", target_patterns="model.audio_tower"),
-            WeightRenaming(source_patterns=r"^multi_modal_projector", target_patterns="model.multi_modal_projector"),
-        ],
-        "voxtral_realtime": [
-            WeightRenaming(source_patterns=r"^language_model.model", target_patterns="model.language_model"),
-            WeightRenaming(source_patterns=r"^language_model.lm_head", target_patterns="lm_head"),
-            WeightRenaming(source_patterns=r"^audio_tower", target_patterns="model.audio_tower"),
-            WeightRenaming(source_patterns=r"^multi_modal_projector", target_patterns="model.multi_modal_projector"),
-        ],
-        "audioflamingo3": [
-            WeightRenaming(source_patterns=r"^language_model.model", target_patterns="model.language_model"),
-            WeightRenaming(source_patterns=r"^language_model.lm_head", target_patterns="lm_head"),
-            WeightRenaming(source_patterns=r"^audio_tower", target_patterns="model.audio_tower"),
-            WeightRenaming(source_patterns=r"^multi_modal_projector", target_patterns="model.multi_modal_projector"),
-        ],
-        "glmasr": [
-            WeightRenaming(source_patterns=r"^language_model.model", target_patterns="model.language_model"),
-            WeightRenaming(source_patterns=r"^language_model.lm_head", target_patterns="lm_head"),
-            WeightRenaming(source_patterns=r"^audio_tower", target_patterns="model.audio_tower"),
-            WeightRenaming(source_patterns=r"^multi_modal_projector", target_patterns="model.multi_modal_projector"),
-        ],
-        "musicflamingo": [
             WeightRenaming(source_patterns=r"^language_model.model", target_patterns="model.language_model"),
             WeightRenaming(source_patterns=r"^language_model.lm_head", target_patterns="lm_head"),
             WeightRenaming(source_patterns=r"^audio_tower", target_patterns="model.audio_tower"),
