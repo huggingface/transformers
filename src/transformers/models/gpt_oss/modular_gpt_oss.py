@@ -65,7 +65,7 @@ class GptOssRMSNorm(LlamaRMSNorm):
         return (self.weight * hidden_states).to(input_dtype)  # main diff with Llama
 
 
-@use_experts_implementation(is_transposed=True, has_bias=True)
+@use_experts_implementation(is_concatenated=False, is_transposed=True, has_bias=True)
 class GptOssExperts(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -342,8 +342,6 @@ class GptOssPreTrainedModel(LlamaPreTrainedModel):
 
 
 class GptOssModel(MixtralModel):
-    _no_split_modules = ["GptOssDecoderLayer"]
-
     @merge_with_config_defaults
     @capture_outputs
     @auto_docstring

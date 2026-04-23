@@ -1303,6 +1303,47 @@ def protect_torch_imports_for_pil(imports: list[cst.CSTNode]) -> list[cst.CSTNod
     return other_imports + result
 
 
+def replace_unprotected_image_processing_imports(files: dict, all_imports: list) -> dict:
+    """
+    Because `image_processing` file uses non-protected torchvision and torch imports, we need to duplicate the nodes
+    inside `image_processing_pil` instead of importing them directly from `.image_processing_xxx`, which would crash if
+    torchvision is not installed.
+    """
+    if not ("image_processing" in files and "image_processing_pil" in files):
+        return files
+
+    body = files["image_processing_pil"]
+    needed_imports = get_needed_imports(body, all_imports)
+    import_from_image_processing = None
+    for import_node in needed_imports:
+        if isinstance(import_node, cst.SimpleStatementLine) and isinstance(import_node.body[0], cst.ImportFrom):
+            import_node = import_node.body[0]
+            full_name = get_full_attribute_name(import_node.module)
+            if re.search(r"^image_processing_(?!(?:backends)|(?:utils))", full_name):
+                import_from_image_processing = import_node
+                break
+
+    if import_from_image_processing is None:
+        return files
+
+    imported_objects = [x.name.value for x in import_from_image_processing.names]
+    nodes_to_add = {name: files["image_processing"][name] for name in imported_objects}
+    # Update the position inside the final file
+    for name, node_structure in nodes_to_add.items():
+        node_with_same_index = next(
+            v["node"] for v in body.values() if v["insert_idx"] == node_structure["insert_idx"]
+        )
+        # Insert the new node before the corresponding node if the corresponding node is a class or function
+        if isinstance(node_with_same_index, (cst.ClassDef, cst.FunctionDef)):
+            nodes_to_add[name]["insert_idx"] -= 0.5
+        # Otherwise, after it
+        else:
+            nodes_to_add[name]["insert_idx"] += 0.5
+    # Add the nodes inside the body of `image_processing_pil`
+    body.update(nodes_to_add)
+    return files
+
+
 def split_all_assignment(node: cst.CSTNode, model_name: str) -> dict[str, cst.CSTNode]:
     """Split the `__all__` assignment found in the modular between each corresponding files."""
     all_all_per_file = {}
@@ -1692,10 +1733,6 @@ def check_dependencies_and_create_import_node(
         class_file_type = find_file_type(class_name, new_name)
         # In this case, we need to remove it from the dependencies and create a new import instead
         if class_file_type != file_type:
-            # image_processing_pil and image_processing must never depend on each other.
-            # When a PIL class needs an image_processing class, inline it instead of importing.
-            if file_type == "image_processing_pil" and class_file_type == "image_processing":
-                continue
             corrected_dependencies.remove(class_name)
             import_statement = f"from .{class_file_type}_{new_name} import {class_name}"
             new_imports[class_name] = cst.parse_statement(import_statement)
@@ -1748,14 +1785,7 @@ def get_class_node_and_dependencies(
         # Remove all classes explicitly defined in modular from the dependencies. Otherwise, if a class is referenced
         # before its new modular definition, it may be wrongly imported from elsewhere as a dependency if it matches
         # another class from a modeling file after renaming, even though it would be added after anyway (leading to duplicates)
-        # Exception: for image_processing_pil files, image_processing modular classes must be inlined (not excluded),
-        # because these two files must never import from each other.
-        classes_to_exclude = set(modular_mapper.classes.keys())
-        if file_type == "image_processing_pil":
-            classes_to_exclude -= {
-                k for k in classes_to_exclude if find_file_type(k, model_name) == "image_processing"
-            }
-        new_node_dependencies -= classes_to_exclude
+        new_node_dependencies -= set(modular_mapper.classes.keys())
 
         # The node was modified -> look for all recursive dependencies of the new node
         all_dependencies_to_add = find_all_dependencies(
@@ -1766,13 +1796,7 @@ def get_class_node_and_dependencies(
 
         relative_dependency_order = mapper.compute_relative_order(all_dependencies_to_add)
         nodes_to_add = {
-            dep: (
-                relative_dependency_order[dep],
-                # If this dependency is explicitly defined in the modular, prefer the modular's version.
-                # This prevents a renamed parent class from overriding a modular-defined class of the same name.
-                modular_mapper.global_nodes[dep] if dep in modular_mapper.classes else mapper.global_nodes[dep],
-            )
-            for dep in all_dependencies_to_add
+            dep: (relative_dependency_order[dep], mapper.global_nodes[dep]) for dep in all_dependencies_to_add
         }
 
     # No transformers (modeling file) super class, just check functions and assignments dependencies
@@ -1861,6 +1885,11 @@ def create_modules(
         new_imports_code = {mapper.python_module.code_for_node(node).strip() for node in new_imports}
         all_imports.extend(new_imports)
         all_imports_code.update(new_imports_code)
+
+    # Because `image_processing` file uses non-protected torchvision and torch imports, we need to duplicate the nodes
+    # here instead of importing from `.image_processing_model`, which would crash if torchvision is not installed
+    if "image_processing" in files and "image_processing_pil" in files:
+        files = replace_unprotected_image_processing_imports(files, all_imports)
 
     # Find the correct imports, and write the new modules
     for file, body in files.items():

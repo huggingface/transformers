@@ -129,6 +129,11 @@ print(tokenizer.decode(output[0], skip_special_tokens=True))
 
 [[autodoc]] Olmo3ForCausalLM
 
+## Olmo3ForSequenceClassification
+
+[[autodoc]] Olmo3ForSequenceClassification
+    - forward
+
 ## Olmo3Model
 
 [[autodoc]] Olmo3Model

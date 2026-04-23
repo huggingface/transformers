@@ -85,6 +85,10 @@ print(output_text)
 
 [[autodoc]] Qwen3VLMoeConfig
 
+## Qwen3VLMoeVisionConfig
+
+[[autodoc]] Qwen3VLMoeVisionConfig
+
 ## Qwen3VLMoeTextConfig
 
 [[autodoc]] Qwen3VLMoeTextConfig
