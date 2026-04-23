@@ -4902,6 +4902,20 @@ def caching_allocator_warmup(model: PreTrainedModel, expanded_device_map: dict, 
 
     total_byte_count = get_total_byte_count(model, accelerator_device_map, hf_quantizer)
 
+    # Under TP we stream tensors through the redistribute path and explicitly `del` the full-tensor receive
+    # buffers right after sharding. A large upfront warm-up reservation interacts badly with that flow: it
+    # either over-reserves (if byte_count is off — e.g. still BF16 when the quantizer hasn't flipped the param
+    # dtype yet), or it fragments the pool so subsequent per-mapping `torch.empty(shape)` calls for the
+    # receive buffer can't find a contiguous slot. Skipping the warm-up in that case is strictly safer — the
+    # allocator just grows naturally as we load.
+    is_tp_loading = (
+        torch.distributed.is_available()
+        and torch.distributed.is_initialized()
+        and len(getattr(model, "_tp_plan", None) or {}) > 0
+    )
+    if is_tp_loading:
+        return
+
     # This will kick off the caching allocator to avoid having to Malloc afterwards
     for device, byte_count in total_byte_count.items():
         if device.type in ["cuda", "xpu"]:
