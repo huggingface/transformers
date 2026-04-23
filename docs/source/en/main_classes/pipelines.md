@@ -34,6 +34,7 @@ pipeline but can provide additional quality of life.
 Simple call on one item:
 
 ```python
+>>> from transformers import pipeline
 >>> pipe = pipeline("text-classification")
 >>> pipe("This restaurant is awesome")
 [{'label': 'POSITIVE', 'score': 0.9998743534088135}]
