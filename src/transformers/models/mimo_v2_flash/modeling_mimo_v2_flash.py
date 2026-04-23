@@ -545,7 +545,6 @@ class MiMoV2FlashModel(MiMoV2FlashPreTrainedModel):
         self.norm = MiMoV2FlashRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.rotary_emb = MiMoV2FlashRotaryEmbedding(config=config)
         self.gradient_checkpointing = False
-        self.has_sliding_layers = "sliding_attention" in self.rotary_emb.layer_types
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -576,7 +575,7 @@ class MiMoV2FlashModel(MiMoV2FlashPreTrainedModel):
             position_ids = torch.arange(inputs_embeds.shape[1], device=inputs_embeds.device) + past_seen_tokens
             position_ids = position_ids.unsqueeze(0)
 
-        # Build causal mask mapping: full attention + optional sliding window
+        # Build causal mask mapping: full attention + sliding window
         if not isinstance(causal_mask_mapping := attention_mask, dict):
             mask_kwargs = {
                 "config": self.config,
@@ -587,13 +586,12 @@ class MiMoV2FlashModel(MiMoV2FlashPreTrainedModel):
             }
             causal_mask_mapping = {
                 "full_attention": create_causal_mask(**mask_kwargs),
+                "sliding_attention": create_sliding_window_causal_mask(**mask_kwargs),
             }
-            if self.has_sliding_layers:
-                causal_mask_mapping["sliding_attention"] = create_sliding_window_causal_mask(**mask_kwargs)
 
         hidden_states = inputs_embeds
         position_embeddings = {}
-        for layer_type in self.rotary_emb.layer_types:
+        for layer_type in set(self.config.layer_types):
             position_embeddings[layer_type] = self.rotary_emb(hidden_states, position_ids, layer_type)
 
         for i, decoder_layer in enumerate(self.layers[: self.config.num_hidden_layers]):

@@ -380,7 +380,6 @@ class MiMoV2FlashPreTrainedModel(MixtralPreTrainedModel):
 
 @auto_docstring
 class MiMoV2FlashModel(MixtralModel):
-
     @merge_with_config_defaults
     @capture_outputs
     @auto_docstring
@@ -408,7 +407,7 @@ class MiMoV2FlashModel(MixtralModel):
             position_ids = torch.arange(inputs_embeds.shape[1], device=inputs_embeds.device) + past_seen_tokens
             position_ids = position_ids.unsqueeze(0)
 
-        # Build causal mask mapping: full attention + optional sliding window
+        # Build causal mask mapping: full attention + sliding window
         if not isinstance(causal_mask_mapping := attention_mask, dict):
             mask_kwargs = {
                 "config": self.config,
@@ -419,9 +418,8 @@ class MiMoV2FlashModel(MixtralModel):
             }
             causal_mask_mapping = {
                 "full_attention": create_causal_mask(**mask_kwargs),
+                "sliding_attention": create_sliding_window_causal_mask(**mask_kwargs),
             }
-            if self.has_sliding_layers:
-                causal_mask_mapping["sliding_attention"] = create_sliding_window_causal_mask(**mask_kwargs)
 
         hidden_states = inputs_embeds
         position_embeddings = {}
