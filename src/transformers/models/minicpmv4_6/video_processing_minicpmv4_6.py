@@ -474,6 +474,7 @@ class MiniCPMV4_6VideoProcessor(BaseVideoProcessor):
                 "num_frames": num_frames,
             },
             tensor_type=return_tensors,
+            skip_tensor_conversion=["grids_videos", "num_frames"],
         )
 
 

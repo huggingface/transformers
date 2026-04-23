@@ -89,7 +89,7 @@ class MiniCPMV4_6Config(PreTrainedConfig):
     insert_layer_id: int = 6
     image_size: int = 448
     drop_vision_last_layer: bool = False
-    image_token_id: int = 32000  # cannot be `None` or we get error no? Needs default
+    image_token_id: int | None = None
     video_token_id: int | None = None
     tie_word_embeddings: bool = False
     downsample_mode: str = "16x"

@@ -762,7 +762,7 @@ class MiniCPMV4_6Model(MiniCPMV4_6PreTrainedModel):
         if inputs_embeds is None:
             inputs_embeds = self.get_input_embeddings()(input_ids)
 
-        if pixel_values is not None:
+        if pixel_values is not None and self.config.image_token_id is not None:
             image_features = self._process_visual_features(pixel_values, target_sizes, inputs_embeds, downsample_mode)
             mask = self.get_placeholder_mask(input_ids, inputs_embeds, image_features, self.config.image_token_id)
             inputs_embeds = inputs_embeds.masked_scatter(mask, image_features)
