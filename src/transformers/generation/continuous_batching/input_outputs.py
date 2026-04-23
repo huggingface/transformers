@@ -14,7 +14,6 @@
 from contextlib import nullcontext
 from dataclasses import dataclass
 from functools import partial
-from itertools import count
 from typing import Any
 
 import torch
@@ -250,10 +249,11 @@ class ContinuousBatchingIOs:
             # Only transfer block_table for decode-only batches (when it's actually used)
             if self.use_block_table:
                 other.block_table.copy_(self.block_table, non_blocking=non_blocking)
-            # Otherwise, we transfer the read and write indices
+            # Otherwise, we transfer the write indices (and read indices if the batch uses any cache reads)
             else:
                 other.write_index_storage.copy_(self.write_index_storage, non_blocking=non_blocking)
-                other.read_index_storage.copy_(self.read_index_storage, non_blocking=non_blocking)
+                if self.max_kv_read > 0:
+                    other.read_index_storage.copy_(self.read_index_storage, non_blocking=non_blocking)
             # Transfer the attention masks if needed
             if self.attention_mask is not None and other.attention_mask is not None:
                 for layer_type in self.attention_mask.keys():
@@ -373,14 +373,15 @@ class ContinuousBatchingIOs:
         self.requests_in_batch = []
         self.req_id_to_new_token_position = {}
 
-        # Prepare accumulators
+        # Prepare accumulators. For batches with no past cache to read, we leave read_index empty: the cache.update
+        # will detect the 0-size indices and skip the read.
         input_ids = []
         position_ids = []
         cumulative_seqlens_q = [0]
         logits_indices = []
         cumulative_seqlens_k = {layer_type: [0] for layer_type in self.cumulative_seqlens_k.keys()}
-        read_index = [[] for _ in range(self.cache.num_groups)]
         write_index = [[] for _ in range(self.cache.num_groups)]
+        read_index = None if self.max_kv_read == 0 else [[] for _ in range(self.cache.num_groups)]
 
         # Go through all the requests in the batch
         for i, future_state in enumerate(requests_in_batch):
@@ -448,14 +449,16 @@ class ContinuousBatchingIOs:
                     sliding_window=self.sliding_window if layer_type == "sliding_attention" else 1,
                 )
 
-        # If we are not using the block table, we populate the read and write indices
+        # If we are not using the block table, we populate the write indices (and maybe the read indices)
         if not self.use_block_table:
             to_index_tensor = partial(torch.tensor, dtype=torch.int64, device=self.device)
-            for i, group_read_indices, group_write_indices in zip(count(), read_index, write_index):
-                self.read_index_storage[i, : len(group_read_indices)] = to_index_tensor(group_read_indices)
+            for i, group_write_indices in enumerate(write_index):
                 self.write_index_storage[i, : len(group_write_indices)] = to_index_tensor(group_write_indices)
-                self.true_read_sizes[i] = len(group_read_indices)
                 self.true_write_sizes[i] = len(group_write_indices)
+            if read_index is not None:
+                for i, group_read_indices in enumerate(read_index):
+                    self.read_index_storage[i, : len(group_read_indices)] = to_index_tensor(group_read_indices)
+                    self.true_read_sizes[i] = len(group_read_indices)
 
     def get_model_kwargs(self, use_padding: bool = False) -> dict[str, Any]:
         """Get model keyword arguments for the current batch, eventually padding the query dimension and KV dimensions
@@ -500,10 +503,14 @@ class ContinuousBatchingIOs:
 
         # For the attributes that are lists of tensors, we construct list of tensor references
         for i in range(self.cache.num_groups):
-            read_index_size = kv_size if use_padding else self.true_read_sizes[i]
             write_index_size = q_size if use_padding else self.true_write_sizes[i]
-            kwargs.read_index.append(self.read_index_storage[i, :read_index_size])
             kwargs.write_index.append(self.write_index_storage[i, :write_index_size])
+            # If there is no cache to read, pass a list of empty tensors so `cache.update` uses the write-only fast path
+            if self.max_kv_read == 0:
+                read_index_size = 0
+            else:
+                read_index_size = kv_size if use_padding else self.true_read_sizes[i]
+            kwargs.read_index.append(self.read_index_storage[i, :read_index_size])
 
         # For the attributes that are dict of tensors, we first fill the dict with the actual values
         for layer_type, seqlens_k in self.cumulative_seqlens_k.items():
@@ -531,11 +538,11 @@ class ContinuousBatchingIOs:
         return self.carry_over_ids, self.output_ids, self.output_ids
 
     def _get_graph_key(self) -> tuple[int, ...]:
-        # Keys for varlen path
-        if self.max_kv_read > 0:
-            return (self.num_q_tokens, self.max_kv_read, *self.max_seqlen_k.values())
         # Keys for decode fast path
-        return (self.num_q_tokens,)
+        if self.use_block_table:
+            return (self.num_q_tokens,)
+        # Keys for varlen path
+        return (self.num_q_tokens, self.max_kv_read, *self.max_seqlen_k.values())
 
     def get_graph(self) -> torch.cuda.CUDAGraph | None:
         key = self._get_graph_key()
