@@ -22,7 +22,7 @@ from transformers import (
     AutoProcessor,
     AutoTokenizer,
     Qwen2TokenizerFast,
-    WhisperFeatureExtractor,
+    Qwen3ASRFeatureExtractor,
 )
 from transformers.models.qwen3_asr.processing_qwen3_asr import Qwen3ASRProcessor
 from transformers.testing_utils import (
@@ -86,7 +86,7 @@ class Qwen3ASRProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
         self.assertEqual(reloaded.tokenizer.get_vocab(), tokenizer.get_vocab())
         self.assertEqual(reloaded.feature_extractor.to_json_string(), feature_extractor.to_json_string())
-        self.assertIsInstance(reloaded.feature_extractor, WhisperFeatureExtractor)
+        self.assertIsInstance(reloaded.feature_extractor, Qwen3ASRFeatureExtractor)
         self.assertIsInstance(reloaded.tokenizer, Qwen2TokenizerFast)
 
     @require_torch

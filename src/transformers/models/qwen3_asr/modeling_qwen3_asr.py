@@ -18,17 +18,31 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import math
+from collections.abc import Callable
+
+import numpy as np
 import torch
+import torch.nn.functional as F
 from torch import nn
 
-from ...cache_utils import Cache
+from ... import initialization as init
+from ...activations import ACT2FN
+from ...cache_utils import Cache, EncoderDecoderCache
 from ...generation import GenerationMixin
+from ...modeling_flash_attention_utils import FlashAttentionKwargs
+from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutputWithPooling, CausalLMOutputWithPast, TokenClassifierOutput
-from ...modeling_utils import PreTrainedModel
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
+from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
+from ...utils.generic import is_flash_attention_requested, merge_with_config_defaults
+from ...utils.output_capturing import capture_outputs
 from ..auto import AutoModel
-from .configuration_qwen3_asr import Qwen3ASRConfig, Qwen3ForcedAlignerConfig
+from .configuration_qwen3_asr import Qwen3ASRConfig, Qwen3ASREncoderConfig, Qwen3ForcedAlignerConfig
+
+
+logger = logging.get_logger(__name__)
 
 
 @auto_docstring
@@ -37,18 +51,447 @@ class Qwen3ASRPreTrainedModel(PreTrainedModel):
     base_model_prefix = "model"
     input_modalities = ("audio", "text")
     supports_gradient_checkpointing = True
-    _no_split_modules = ["Qwen3OmniMoeAudioEncoderLayer", "Qwen3DecoderLayer"]
+    _no_split_modules = ["Qwen3ASREncoderLayer", "Qwen3DecoderLayer"]
     _skip_keys_device_placement = "past_key_values"
     _supports_flash_attn = True
     _supports_sdpa = True
-    _can_compile_fullgraph = False  # Audio encoder has data-dependent ops (same as Qwen3OmniMoe)
+    _can_compile_fullgraph = True
     _supports_attention_backend = True
+
+    def _init_weights(self, module):
+        super()._init_weights(module)
+        # `SinusoidsPositionEmbedding.positional_embedding` is a non-persistent buffer, so
+        # `from_pretrained`'s meta-device init leaves it as zeros — recompute the sin/cos table here.
+        if isinstance(module, SinusoidsPositionEmbedding):
+            log_timescale_increment = np.log(module.max_timescale) / (module.channels // 2 - 1)
+            inv_timescales = torch.exp(-log_timescale_increment * torch.arange(module.channels // 2).float())
+            scaled_time = torch.arange(module.length)[:, np.newaxis] * inv_timescales[np.newaxis, :]
+            init.copy_(
+                module.positional_embedding,
+                torch.cat([torch.sin(scaled_time), torch.cos(scaled_time)], dim=1),
+            )
+
+
+def eager_attention_forward(
+    module: nn.Module,
+    query: torch.Tensor,
+    key: torch.Tensor,
+    value: torch.Tensor,
+    attention_mask: torch.Tensor | None,
+    scaling: float | None = None,
+    dropout: float = 0.0,
+    **kwargs,
+):
+    if scaling is None:
+        scaling = query.size(-1) ** -0.5
+
+    attn_weights = torch.matmul(query, key.transpose(2, 3)) * scaling
+    if attention_mask is not None:
+        attn_weights = attn_weights + attention_mask
+
+    attn_weights = nn.functional.softmax(attn_weights, dim=-1)
+
+    attn_weights = nn.functional.dropout(attn_weights, p=dropout, training=module.training)
+    attn_output = torch.matmul(attn_weights, value)
+    attn_output = attn_output.transpose(1, 2).contiguous()
+
+    return attn_output, attn_weights
+
+
+class Qwen3ASRAttention(nn.Module):
+    """Multi-headed attention from 'Attention Is All You Need' paper"""
+
+    def __init__(
+        self,
+        embed_dim: int,
+        num_heads: int,
+        dropout: float = 0.0,
+        is_decoder: bool = False,
+        bias: bool = True,
+        is_causal: bool = False,
+        layer_idx: int | None = None,
+        config: Qwen3ASRConfig | None = None,
+    ):
+        super().__init__()
+        self.embed_dim = embed_dim
+        self.num_heads = num_heads
+        self.dropout = dropout
+        self.head_dim = embed_dim // num_heads
+        self.config = config
+
+        if (self.head_dim * num_heads) != self.embed_dim:
+            raise ValueError(
+                f"embed_dim must be divisible by num_heads (got `embed_dim`: {self.embed_dim}"
+                f" and `num_heads`: {num_heads})."
+            )
+        self.scaling = self.head_dim**-0.5
+        self.is_decoder = is_decoder
+        self.is_causal = is_causal
+
+        if layer_idx is None and is_decoder:
+            logger.warning_once(
+                f"Instantiating a decoder {self.__class__.__name__} without passing `layer_idx` is not recommended and "
+                "will to errors during the forward call, if caching is used. Please make sure to provide a `layer_idx` "
+                "when creating this class."
+            )
+        self.layer_idx = layer_idx
+
+        self.k_proj = nn.Linear(embed_dim, embed_dim, bias=False)
+        self.v_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
+        self.q_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
+        self.out_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
+
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        key_value_states: torch.Tensor | None = None,
+        past_key_values: Cache | None = None,
+        attention_mask: torch.Tensor | None = None,
+        output_attentions: bool = False,
+        # TODO: we need a refactor so that the different attention modules can get their specific kwargs
+        # ATM, we have mixed things encoder, decoder, and encoder-decoder attn
+        **kwargs: Unpack[FlashAttentionKwargs],
+    ) -> tuple[torch.Tensor, torch.Tensor | None, tuple[torch.Tensor] | None]:
+        """Input shape: Batch x Time x Channel"""
+
+        # if key_value_states are provided this layer is used as a cross-attention layer
+        # for the decoder
+        is_cross_attention = key_value_states is not None
+
+        input_shape = hidden_states.shape[:-1]
+        hidden_shape = (*input_shape, -1, self.head_dim)
+
+        # Scaling is susceptible to floating point arithmetics' inprecisions
+        # which can lead to different results (this is dependent from model
+        # to model, e.g. qwen3_asr is one such case). We therefore keep the
+        # original order of scaling to follow the original implementation
+        # and enforce no scaling (1.0) in the attention call below.
+        query_states = (self.q_proj(hidden_states) * self.scaling).view(hidden_shape).transpose(1, 2).contiguous()
+
+        # Check is encoder-decoder model is being used. Otherwise we'll get `DynamicCache`
+        if past_key_values is not None and isinstance(past_key_values, EncoderDecoderCache):
+            is_updated = past_key_values.is_updated.get(self.layer_idx)
+            if is_cross_attention:
+                # after the first generated id, we can subsequently re-use all key/value_states from cache
+                past_key_values.is_updated[self.layer_idx] = True
+                past_key_values = past_key_values.cross_attention_cache
+            else:
+                past_key_values = past_key_values.self_attention_cache
+
+        # use key_value_states if cross attention
+        current_states = key_value_states if key_value_states is not None else hidden_states
+        if is_cross_attention and past_key_values and is_updated:
+            # reuse k,v, cross_attentions
+            key_states = past_key_values.layers[self.layer_idx].keys
+            value_states = past_key_values.layers[self.layer_idx].values
+        else:
+            # Use the query's batch dimension for kv view so that a different-batch
+            # encoder output (e.g. in tests) gets absorbed into the sequence axis,
+            # preserving backward-compatible behaviour.
+            kv_shape = (input_shape[0], -1, self.num_heads, self.head_dim)
+            key_states = self.k_proj(current_states).view(kv_shape).transpose(1, 2).contiguous()
+            value_states = self.v_proj(current_states).view(kv_shape).transpose(1, 2).contiguous()
+            if past_key_values is not None:
+                key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx)
+
+        attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
+            self.config._attn_implementation, eager_attention_forward
+        )
+
+        attn_output, attn_weights = attention_interface(
+            self,
+            query_states,
+            key_states,
+            value_states,
+            attention_mask,
+            dropout=0.0 if not self.training else self.dropout,
+            scaling=1.0,
+            output_attentions=output_attentions,
+            **kwargs,
+        )
+
+        attn_output = attn_output.reshape(*input_shape, -1).contiguous()
+        attn_output = self.out_proj(attn_output)
+
+        return attn_output, attn_weights
+
+
+class Qwen3ASREncoderLayer(GradientCheckpointingLayer):
+    def __init__(self, config: Qwen3ASRConfig):
+        super().__init__()
+        self.embed_dim = config.d_model
+
+        self.self_attn = Qwen3ASRAttention(
+            embed_dim=self.embed_dim,
+            num_heads=config.encoder_attention_heads,
+            dropout=config.attention_dropout,
+            config=config,
+        )
+        self.self_attn_layer_norm = nn.LayerNorm(self.embed_dim)
+        self.dropout = config.dropout
+        self.activation_fn = ACT2FN[config.activation_function]
+        self.activation_dropout = config.activation_dropout
+        self.fc1 = nn.Linear(self.embed_dim, config.encoder_ffn_dim)
+        self.fc2 = nn.Linear(config.encoder_ffn_dim, self.embed_dim)
+        self.final_layer_norm = nn.LayerNorm(self.embed_dim)
+
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        attention_mask: torch.Tensor,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> torch.Tensor:
+        """
+        Args:
+            hidden_states (`torch.FloatTensor`): input to the layer of shape `(batch, seq_len, embed_dim)`
+            attention_mask (`torch.FloatTensor`): attention mask of size
+                `(batch, 1, tgt_len, src_len)` where padding elements are indicated by very large negative values.
+        """
+        residual = hidden_states
+        hidden_states = self.self_attn_layer_norm(hidden_states)
+        hidden_states, _ = self.self_attn(
+            hidden_states=hidden_states,
+            attention_mask=attention_mask,
+            **kwargs,
+        )
+        hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
+        hidden_states = residual + hidden_states
+
+        residual = hidden_states
+        hidden_states = self.final_layer_norm(hidden_states)
+        hidden_states = self.activation_fn(self.fc1(hidden_states))
+        hidden_states = nn.functional.dropout(hidden_states, p=self.activation_dropout, training=self.training)
+        hidden_states = self.fc2(hidden_states)
+        hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
+        hidden_states = residual + hidden_states
+
+        if hidden_states.dtype == torch.float16:
+            clamp_value = torch.finfo(hidden_states.dtype).max - 1000
+            hidden_states = torch.clamp(hidden_states, min=-clamp_value, max=clamp_value)
+
+        return hidden_states
+
+
+class SinusoidsPositionEmbedding(nn.Module):
+    def __init__(self, length, channels, max_timescale=10000):
+        super().__init__()
+        self.length = length
+        self.channels = channels
+        self.max_timescale = max_timescale
+        if channels % 2 != 0:
+            raise ValueError("SinusoidsPositionEmbedding needs even channels input")
+        log_timescale_increment = np.log(max_timescale) / (channels // 2 - 1)
+        inv_timescales = torch.exp(-log_timescale_increment * torch.arange(channels // 2).float())
+        scaled_time = torch.arange(length)[:, np.newaxis] * inv_timescales[np.newaxis, :]
+        self.register_buffer(
+            "positional_embedding",
+            torch.cat([torch.sin(scaled_time), torch.cos(scaled_time)], dim=1),
+            persistent=False,
+        )
+
+    def forward(self, seqlen: int):
+        return self.positional_embedding[:seqlen, :]
+
+
+@auto_docstring(
+    custom_intro="""
+    The audio model for Qwen3 ASR without any head or projection on top.
+    """
+)
+class Qwen3ASREncoder(Qwen3ASRPreTrainedModel):
+    config: Qwen3ASREncoderConfig
+    main_input_name = "input_features"
+    input_modalities = "audio"
+    _no_split_modules = ["Qwen3ASREncoderLayer"]
+    _supports_sdpa = True
+    _can_record_outputs = {
+        "hidden_states": Qwen3ASREncoderLayer,
+        "attentions": Qwen3ASRAttention,
+    }
+    _can_compile_fullgraph = True
+
+    def __init__(self, config: Qwen3ASREncoderConfig):
+        super().__init__(config)
+        self.dropout = config.dropout
+
+        embed_dim = config.d_model
+        self.num_mel_bins = config.num_mel_bins
+        self.max_source_positions = config.max_source_positions
+        self.embed_scale = math.sqrt(embed_dim) if config.scale_embedding else 1.0
+        self.n_window = config.n_window
+        self.positional_embedding = SinusoidsPositionEmbedding(self.max_source_positions, embed_dim)
+        self.layers = nn.ModuleList([Qwen3ASREncoderLayer(config) for _ in range(config.encoder_layers)])
+        self.ln_post = nn.LayerNorm(config.d_model)
+        self.gradient_checkpointing = False
+        self.conv2d1 = nn.Conv2d(1, config.downsample_hidden_size, 3, 2, padding=1)
+        self.conv2d2 = nn.Conv2d(config.downsample_hidden_size, config.downsample_hidden_size, 3, 2, padding=1)
+        self.conv2d3 = nn.Conv2d(config.downsample_hidden_size, config.downsample_hidden_size, 3, 2, padding=1)
+        self.conv_out = nn.Linear(
+            config.downsample_hidden_size * ((((config.num_mel_bins + 1) // 2 + 1) // 2 + 1) // 2),
+            config.d_model,
+            bias=False,
+        )
+        self.proj1 = nn.Linear(config.d_model, config.d_model)
+        self.act = ACT2FN[config.activation_function]
+        self.proj2 = nn.Linear(config.d_model, config.output_dim)
+        self.n_window_infer = self.config.n_window_infer
+        # Initialize weights and apply final processing
+        self.post_init()
+
+    def _freeze_parameters(self):
+        for param in self.parameters():
+            param.requires_grad = False
+        self._requires_grad = False
+
+    def get_input_embeddings(self) -> nn.Module:
+        return self.conv2d1
+
+    def set_input_embeddings(self, value):
+        self.conv2d1 = value
+
+    def _prepare_attention_mask(self, inputs_tensor: torch.Tensor, cu_seqlens: torch.Tensor) -> torch.Tensor:
+        # Flash Attention 2 doesn't need a 4D mask and relies on `cu_seqlens/max_seqlen`
+        # NOTE: the created attention masl only approximates the ragged FA2 attention by
+        # allowing bidirectional attention within `cu_seqlens` blocks, and not attending between
+        # blocks. Though it will not be a 100% match for FA2's `varlen` path
+        if is_flash_attention_requested(self.config):
+            return None
+
+        seq_length = inputs_tensor.shape[0]
+        attention_mask = torch.full(
+            [1, 1, seq_length, seq_length],
+            torch.finfo(inputs_tensor.dtype).min,
+            device=inputs_tensor.device,
+            dtype=inputs_tensor.dtype,
+        )
+        for i in range(1, len(cu_seqlens)):
+            attention_mask[..., cu_seqlens[i - 1] : cu_seqlens[i], cu_seqlens[i - 1] : cu_seqlens[i]] = 0
+        return attention_mask
+
+    @merge_with_config_defaults
+    @capture_outputs(tie_last_hidden_states=False)
+    @auto_docstring
+    def forward(
+        self,
+        input_features: torch.Tensor,
+        input_features_mask: torch.Tensor,
+        **kwargs,
+    ) -> BaseModelOutputWithPooling:
+        r"""
+        Args:
+            input_features (`torch.FloatTensor` of shape `(batch_size, num_mel_bins, padded_feature_length)`):
+                Log-mel features. `padded_feature_length` must be a multiple of `self.n_window * 2`.
+            input_features_mask (`torch.LongTensor` of shape `(batch_size, padded_feature_length)`):
+                1 for valid mel frames and 0 for padding.
+        """
+        batch_size, num_mel_bins, padded_feature_length = input_features.shape
+        chunk_len = self.n_window * 2
+        num_chunks = padded_feature_length // chunk_len
+
+        # (B, M, N*L) -> (B*N, 1, M, L): per-chunk batch via reshape, no data-dependent split.
+        chunked = (
+            input_features.view(batch_size, num_mel_bins, num_chunks, chunk_len)
+            .permute(0, 2, 1, 3)
+            .reshape(batch_size * num_chunks, 1, num_mel_bins, chunk_len)
+        )
+
+        padded_embed = F.gelu(self.conv2d1(chunked))
+        padded_embed = F.gelu(self.conv2d2(padded_embed))
+        padded_embed = F.gelu(self.conv2d3(padded_embed))
+        bn, c, f, t = padded_embed.size()
+        padded_embed = self.conv_out(padded_embed.permute(0, 3, 1, 2).contiguous().view(bn, t, c * f))
+        padded_embed = padded_embed + self.positional_embedding.positional_embedding[:t, :].to(padded_embed.dtype)
+        padded_embed = padded_embed.view(batch_size, num_chunks, t, -1)
+
+        # Mask out post-cnn positions that came from zero-padded mel frames.
+        chunk_mel_lens = input_features_mask.view(batch_size, num_chunks, chunk_len).sum(dim=-1)
+        chunk_post_cnn_lens = self._post_cnn_length(chunk_mel_lens)
+        post_cnn_positions = torch.arange(t, device=input_features.device)
+        mask_after_cnn = post_cnn_positions[None, None, :] < chunk_post_cnn_lens[:, :, None]
+
+        # Keep a padded per-sample sequence and pass an explicit attention mask so the encoder remains
+        # torch.compile-friendly without changing sequence length.
+        sequence_length = num_chunks * t
+        sequence_hidden_states = padded_embed.reshape(batch_size, sequence_length, -1)
+        sequence_mask = mask_after_cnn.reshape(batch_size, sequence_length).to(dtype=torch.long)
+
+        hidden_states = sequence_hidden_states
+        attention_mask = (
+            sequence_mask if is_flash_attention_requested(self.config) else self.invert_attention_mask(sequence_mask)
+        )
+
+        for encoder_layer in self.layers:
+            hidden_states = encoder_layer(hidden_states, attention_mask=attention_mask, **kwargs)
+            hidden_states = hidden_states * sequence_mask.to(hidden_states.dtype).unsqueeze(-1)
+
+        hidden_states = self.ln_post(hidden_states)
+        hidden_states = self.proj1(hidden_states)
+        hidden_states = self.act(hidden_states)
+        hidden_states = self.proj2(hidden_states)
+        return BaseModelOutputWithPooling(last_hidden_state=hidden_states)
+
+    def padded_and_mask_function(self, tensor_list, tensor_len, padding_value=0, padding_side="right"):
+        """
+        Pads a sequence of tensors to their maximum length on indicated `padding_side`.
+        Then prepares a mask so that pad tokens are not attended to.
+        """
+        max_len = tensor_len.max()
+        dim = tensor_list[0].shape[0]
+        padded_tensor = torch.full(
+            size=(len(tensor_list), dim, max_len),
+            fill_value=padding_value,
+            dtype=self.dtype,
+            device=tensor_list[0].device,
+        )
+
+        batch_mask = torch.zeros(
+            (len(tensor_len), max_len),
+            dtype=torch.long,
+            device=padded_tensor.device,
+        )
+        for i, length in enumerate(tensor_len):
+            batch_mask[i, :length] = 1
+            padded_tensor[i, :, :length] = tensor_list[i]
+
+        feature_lens_after_cnn = (tensor_len - 1) // 2 + 1
+        max_len_after_cnn = feature_lens_after_cnn.max()
+        batch_mask_after_cnn = torch.zeros(
+            (len(tensor_len), max_len_after_cnn),
+            dtype=torch.long,
+            device=padded_tensor.device,
+        )
+        for i, length in enumerate(feature_lens_after_cnn):
+            batch_mask_after_cnn[i, :length] = 1
+        return (
+            padded_tensor,
+            batch_mask.unsqueeze(1),
+            batch_mask_after_cnn.bool(),
+        )
+
+    @staticmethod
+    def _post_cnn_length(lengths: torch.Tensor) -> torch.Tensor:
+        """Length after three (k=3, s=2, p=1) convolutions; zero-length input stays zero."""
+        for _ in range(3):
+            lengths = torch.where(lengths > 0, (lengths - 1) // 2 + 1, torch.zeros_like(lengths))
+        return lengths
+
+
+def _get_feat_extract_output_lengths(input_lengths, n_window=50):
+    """
+    Computes the output length of the convolutional layers and the output length of the audio encoder
+    """
+
+    chunk_len = n_window * 2
+    input_lengths_leave = input_lengths % chunk_len
+    feat_lengths = (input_lengths_leave - 1) // 2 + 1
+    output_lengths = ((feat_lengths - 1) // 2 + 1 - 1) // 2 + 1 + (input_lengths // chunk_len) * 13
+    return output_lengths
 
 
 class Qwen3ASRModel(Qwen3ASRPreTrainedModel):
     def __init__(self, config: Qwen3ASRConfig):
         super().__init__(config)
-        self.audio_tower = AutoModel.from_config(config.audio_config)
+        self.audio_tower = Qwen3ASREncoder(config.audio_config)
         self.language_model = AutoModel.from_config(config.text_config)
         self.post_init()
 
@@ -72,16 +515,18 @@ class Qwen3ASRModel(Qwen3ASRPreTrainedModel):
         input_features_mask (`torch.Tensor` of shape `(batch_size, feature_sequence_length)`):
             Mask to avoid performing attention on padded feature indices.
         """
-        # Flatten batched features for the Qwen3OmniMoe audio encoder
-        audio_feature_lengths = input_features_mask.sum(dim=1)
-        input_features = input_features.permute(0, 2, 1)[input_features_mask.bool()].permute(1, 0)
-
         audio_output = self.audio_tower(
-            input_features,
-            feature_lens=audio_feature_lengths,
+            input_features=input_features,
+            input_features_mask=input_features_mask,
             **kwargs,
         )
-        audio_output.pooler_output = audio_output.last_hidden_state
+        audio_embeds = audio_output.last_hidden_state
+        input_lengths = input_features_mask.sum(-1).to(torch.long)
+        audio_token_lengths = _get_feat_extract_output_lengths(input_lengths, self.config.audio_config.n_window)
+        valid_mask = (
+            torch.arange(audio_embeds.shape[1], device=audio_embeds.device)[None, :] < audio_token_lengths[:, None]
+        )
+        audio_output.pooler_output = audio_embeds[valid_mask]
         return audio_output
 
     @can_return_tuple
@@ -250,6 +695,8 @@ class Qwen3ASRForConditionalGeneration(Qwen3ASRPreTrainedModel, GenerationMixin)
     """
 )
 class Qwen3ASRForForcedAlignment(Qwen3ASRPreTrainedModel):
+    config_class = Qwen3ForcedAlignerConfig
+
     def __init__(self, config: Qwen3ForcedAlignerConfig):
         super().__init__(config)
         self.num_timestamp_bins = config.num_timestamp_bins

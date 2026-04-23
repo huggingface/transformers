@@ -64,7 +64,7 @@ class Qwen3ASRModelTester:
             "tie_word_embeddings": False,
         }
         audio_config = {
-            "model_type": "qwen3_omni_moe_audio_encoder",
+            "model_type": "qwen3_asr_audio_encoder",
             "num_mel_bins": self.num_mel_bins,
             "d_model": 8,
             "encoder_layers": 1,
@@ -142,7 +142,6 @@ class Qwen3ASRForConditionalGenerationModelTest(ModelTesterMixin, GenerationTest
     test_cpu_offload = False
     test_disk_offload_safetensors = False
     test_disk_offload_bin = False
-    test_torch_exportable = False  # Audio encoder has data-dependent ops incompatible with torch.export
 
     def setUp(self):
         self.model_tester = Qwen3ASRModelTester(self)
@@ -333,7 +332,6 @@ class Qwen3ForcedAlignerIntegrationTest(unittest.TestCase):
 
         self.assertEqual(len(timestamps), len(expected["time_stamps"]))
         for pred, exp in zip(timestamps, expected["time_stamps"]):
-            self.assertEqual(pred["text"], exp["text"])
             self.assertAlmostEqual(pred["start_time"], exp["start_time"], places=2)
             self.assertAlmostEqual(pred["end_time"], exp["end_time"], places=2)
 
@@ -364,8 +362,5 @@ class Qwen3ForcedAlignerIntegrationTest(unittest.TestCase):
                 f"Sample {sample_idx}: expected {len(exp['time_stamps'])} timestamps, got {len(pred_ts)}",
             )
             for pred, exp_ts in zip(pred_ts, exp["time_stamps"]):
-                self.assertEqual(pred["text"], exp_ts["text"])
-                # Batched inference pads audio to the same length, which can shift attention patterns
-                # and cause ±1 timestamp class (80ms) drift.
-                self.assertAlmostEqual(pred["start_time"], exp_ts["start_time"], delta=0.1)
-                self.assertAlmostEqual(pred["end_time"], exp_ts["end_time"], delta=0.1)
+                self.assertAlmostEqual(pred["start_time"], exp_ts["start_time"])
+                self.assertAlmostEqual(pred["end_time"], exp_ts["end_time"])

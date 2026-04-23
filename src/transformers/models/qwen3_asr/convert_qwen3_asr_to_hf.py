@@ -67,11 +67,11 @@ from transformers import (
     AutoTokenizer,
     GenerationConfig,
     Qwen3ASRConfig,
+    Qwen3ASRFeatureExtractor,
     Qwen3ASRForConditionalGeneration,
     Qwen3ASRForForcedAlignment,
     Qwen3ASRProcessor,
     Qwen3ForcedAlignerConfig,
-    WhisperFeatureExtractor,
 )
 
 
@@ -106,8 +106,15 @@ def map_old_key_to_new(old_key: str, mapping: dict[str, str]) -> str:
 def convert_state_dict(original_state_dict: dict[str, Any], mapping: dict[str, str]) -> dict[str, Any]:
     """Convert checkpoint state dict to transformers format."""
     new_state_dict = {}
+    # `Qwen3ASRAudioAttention` inherits from `WhisperAttention`, which hardcodes `bias=False` on
+    # `k_proj` — drop the k_proj bias entries from the source checkpoint (they're mathematically
+    # redundant for softmax attention: a per-query constant that cancels out during softmax).
+    k_proj_bias_re = re.compile(r"audio_tower\.layers\.\d+\.self_attn\.k_proj\.bias$")
     for old_key, tensor in original_state_dict.items():
         new_key = map_old_key_to_new(old_key, mapping)
+        if k_proj_bias_re.search(new_key):
+            logger.debug(f"Dropping redundant k_proj bias: {old_key}")
+            continue
         new_state_dict[new_key] = tensor
         if old_key != new_key:
             logger.debug(f"Converted: {old_key} -> {new_key}")
@@ -233,7 +240,7 @@ def write_processor(src_root: Path, dst_root: Path, model_type: str):
                 chat_template = chat_template_data.get("chat_template")
 
     processor = Qwen3ASRProcessor(
-        feature_extractor=WhisperFeatureExtractor(feature_size=128),
+        feature_extractor=Qwen3ASRFeatureExtractor(),
         tokenizer=tokenizer,
         chat_template=chat_template,
     )

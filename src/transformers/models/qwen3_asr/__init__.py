@@ -19,6 +19,7 @@ from ...utils.import_utils import define_import_structure
 
 if TYPE_CHECKING:
     from .configuration_qwen3_asr import *
+    from .feature_extraction_qwen3_asr import *
     from .modeling_qwen3_asr import *
     from .processing_qwen3_asr import *
 else:

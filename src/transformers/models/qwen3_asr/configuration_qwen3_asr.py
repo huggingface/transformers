@@ -27,6 +27,46 @@ from ..auto import CONFIG_MAPPING, AutoConfig
 
 @auto_docstring(checkpoint="bezzam/Qwen3-ASR-1.7B")
 @strict
+class Qwen3ASREncoderConfig(PreTrainedConfig):
+    r"""
+    max_source_positions (`int`, *optional*, defaults to 1500):
+        The maximum sequence length that this model might ever be used with.
+    n_window (`int`, *optional*, defaults to 50):
+        Half the number of mel frames in one encoder chunk. Each chunk processed by the conv stack has
+        ``2 * n_window`` mel frames (1 second of audio at 16 kHz with a 10 ms hop).
+    n_window_infer (`int`, *optional*, defaults to 800):
+        Number of mel frames worth of audio over which each attention window spans. Must be a multiple
+        of ``n_window * 2`` so attention windows align with encoder chunks.
+    downsample_hidden_size (`int`, *optional*, defaults to 480):
+        Hidden size of the convolutional downsampling stack.
+    output_dim (`int`, *optional*, defaults to 3584):
+        Dimensionality of the output.
+    """
+
+    model_type = "qwen3_asr_audio_encoder"
+    attribute_map = {"num_hidden_layers": "encoder_layers"}
+
+    num_mel_bins: int = 128
+    encoder_layers: int = 24
+    encoder_attention_heads: int = 16
+    encoder_ffn_dim: int = 4096
+    d_model: int = 1024
+    dropout: float | int = 0.0
+    attention_dropout: float | int = 0.0
+    activation_function: str = "gelu"
+    activation_dropout: float | int = 0.0
+    scale_embedding: bool = False
+    initializer_range: float = 0.02
+    max_source_positions: int = 1500
+
+    n_window: int = 50
+    output_dim: int = 3584
+    n_window_infer: int = 800
+    downsample_hidden_size: int = 480
+
+
+@auto_docstring(checkpoint="bezzam/Qwen3-ASR-1.7B")
+@strict
 class Qwen3ASRConfig(PreTrainedConfig):
     r"""
     audio_token_id (`int`, *optional*, defaults to 151676):
@@ -60,10 +100,10 @@ class Qwen3ASRConfig(PreTrainedConfig):
 
     def __post_init__(self, **kwargs):
         if isinstance(self.audio_config, dict):
-            self.audio_config["model_type"] = self.audio_config.get("model_type", "qwen3_omni_moe_audio_encoder")
+            self.audio_config["model_type"] = self.audio_config.get("model_type", "qwen3_asr_audio_encoder")
             self.audio_config = CONFIG_MAPPING[self.audio_config["model_type"]](**self.audio_config)
         elif self.audio_config is None:
-            self.audio_config = CONFIG_MAPPING["qwen3_omni_moe_audio_encoder"](
+            self.audio_config = CONFIG_MAPPING["qwen3_asr_audio_encoder"](
                 encoder_layers=24,
                 encoder_attention_heads=16,
                 encoder_ffn_dim=4096,
@@ -123,4 +163,4 @@ class Qwen3ForcedAlignerConfig(Qwen3ASRConfig):
     timestamp_token_id: int = 151705
 
 
-__all__ = ["Qwen3ASRConfig", "Qwen3ForcedAlignerConfig"]
+__all__ = ["Qwen3ASREncoderConfig", "Qwen3ASRConfig", "Qwen3ForcedAlignerConfig"]

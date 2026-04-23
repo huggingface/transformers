@@ -34,6 +34,7 @@ class Qwen3ASRProcessorKwargs(ProcessingKwargs, total=False):
             "padding": True,
             "truncation": False,
             "return_attention_mask": True,
+            "n_window": 50,  # should match config.n_window
         },
         "common_kwargs": {"return_tensors": "pt"},
     }
@@ -122,7 +123,11 @@ class Qwen3ASRProcessor(ProcessorMixin):
         data["input_features_mask"] = data.pop("attention_mask")
 
         # Replace audio tokens in text
-        audio_lengths = _get_feat_extract_output_lengths(data["input_features_mask"].sum(-1)).cpu().numpy()
+        audio_lengths = (
+            _get_feat_extract_output_lengths(data["input_features_mask"].sum(-1), audio_kwargs["n_window"])
+            .cpu()
+            .numpy()
+        )
         audio_token_pattern = re.compile(re.escape(self.audio_token))
         for sample_idx, num_tokens in enumerate(audio_lengths):
             text[sample_idx] = audio_token_pattern.sub(self.audio_token * int(num_tokens), text[sample_idx])
@@ -526,6 +531,13 @@ class Qwen3ASRProcessor(ProcessorMixin):
             return_dict=True,
             **kwargs,
         )
+
+        attention_mask = inputs.get("attention_mask", None)
+        if attention_mask is not None:
+            position_ids = attention_mask.long().cumsum(-1) - 1
+            position_ids.masked_fill_(attention_mask == 0, 0)
+            inputs["position_ids"] = position_ids
+
         return inputs, word_lists
 
     def decode_forced_alignment(

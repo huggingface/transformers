@@ -522,7 +522,7 @@ no_compile_time = (time.time() - start) / num_runs
 print(f"Without compile: {no_compile_time:.4f}s")
 
 # With compile
-model = torch.compile(model)
+model = torch.compile(model, fullgraph=True)
 with torch.no_grad():
     for _ in range(num_warmup):
         _ = model(**inputs)
@@ -535,7 +535,7 @@ torch.cuda.synchronize()
 compile_time = (time.time() - start) / num_runs
 print(f"With compile:    {compile_time:.4f}s")
 print(f"Speedup: {no_compile_time / compile_time:.2f}x")
-# ~1.70x speedup observed on A100
+# ~2.5x speedup observed on A100
 ```
 
 ### Pipeline usage
@@ -570,6 +570,17 @@ print(f"Transcription: {transcription}")
 
 [[autodoc]] Qwen3ASRConfig
 
+
+## Qwen3ASREncoderConfig
+
+[[autodoc]] Qwen3ASREncoderConfig
+
+
+## Qwen3ASRFeatureExtractor
+
+[[autodoc]] Qwen3ASRFeatureExtractor
+    - __call__
+
 ## Qwen3ASRProcessor
 
 [[autodoc]] Qwen3ASRProcessor
@@ -578,6 +589,10 @@ print(f"Transcription: {transcription}")
     - prepare_forced_aligner_inputs
     - decode_forced_alignment
     - decode
+
+## Qwen3ASREncoder
+
+[[autodoc]] Qwen3ASREncoder
 
 ## Qwen3ASRModel
 
