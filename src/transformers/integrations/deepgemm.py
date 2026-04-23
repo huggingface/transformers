@@ -27,7 +27,7 @@ import functools
 import torch
 
 from ..utils import logging
-from ..utils.import_utils import get_cuda_runtime_version, resolve_internal_import
+from ..utils.import_utils import get_cuda_runtime_version, is_kernels_available, resolve_internal_import
 from .hub_kernels import lazy_load_kernel
 
 
@@ -50,8 +50,12 @@ def _load_deepgemm_kernel():
 
     Returns:
         Tuple of (fp8_gemm_nt, m_grouped_fp8_gemm_nt_contiguous,
-                  m_grouped_bf16_gemm_nt_contiguous, per_token_cast_to_fp8) from the deep-gemm kernel.
+                  m_grouped_bf16_gemm_nt_contiguous, m_grouped_bf16_gemm_nn_contiguous,
+                  per_token_cast_to_fp8) from the deep-gemm kernel.
     """
+    if not is_kernels_available():
+        raise ImportError("deep-gemm kernel requires the `kernels` package. Install it with `pip install -U kernels`.")
+
     if not torch.cuda.is_available():
         raise ImportError(
             "deep-gemm kernel requires CUDA, but CUDA is not available. Use a different `experts_implementation`."
@@ -82,6 +86,7 @@ def _load_deepgemm_kernel():
     fp8_gemm_nt = getattr(kernel, "fp8_gemm_nt", None)
     m_grouped_fp8_gemm_nt_contiguous = getattr(kernel, "m_grouped_fp8_gemm_nt_contiguous", None)
     m_grouped_bf16_gemm_nt_contiguous = getattr(kernel, "m_grouped_bf16_gemm_nt_contiguous", None)
+    m_grouped_bf16_gemm_nn_contiguous = getattr(kernel, "m_grouped_bf16_gemm_nn_contiguous", None)
     per_token_cast_to_fp8 = resolve_internal_import(kernel, chained_path="utils.per_token_cast_to_fp8")
 
     missing = [
@@ -90,6 +95,7 @@ def _load_deepgemm_kernel():
             ("fp8_gemm_nt", fp8_gemm_nt),
             ("m_grouped_fp8_gemm_nt_contiguous", m_grouped_fp8_gemm_nt_contiguous),
             ("m_grouped_bf16_gemm_nt_contiguous", m_grouped_bf16_gemm_nt_contiguous),
+            ("m_grouped_bf16_gemm_nn_contiguous", m_grouped_bf16_gemm_nn_contiguous),
             ("utils.per_token_cast_to_fp8", per_token_cast_to_fp8),
         ]
         if attr is None
@@ -100,7 +106,13 @@ def _load_deepgemm_kernel():
             "Please update the `kernels` package (`pip install -U kernels`)."
         )
 
-    return fp8_gemm_nt, m_grouped_fp8_gemm_nt_contiguous, m_grouped_bf16_gemm_nt_contiguous, per_token_cast_to_fp8
+    return (
+        fp8_gemm_nt,
+        m_grouped_fp8_gemm_nt_contiguous,
+        m_grouped_bf16_gemm_nt_contiguous,
+        m_grouped_bf16_gemm_nn_contiguous,
+        per_token_cast_to_fp8,
+    )
 
 
 def fp8_deepgemm_matmul(
@@ -120,7 +132,7 @@ def fp8_deepgemm_matmul(
         Bs: (N//128, K//128) float32 — per-block weight scales
         output_dtype: desired output dtype.
     """
-    fp8_gemm_nt, _, _, _ = _load_deepgemm_kernel()
+    fp8_gemm_nt, _, _, _, _ = _load_deepgemm_kernel()
     A_2d = A.view(-1, A.shape[-1])
     As_2d = As.view(-1, As.shape[-1])
     output = torch.empty(A_2d.shape[0], B.shape[0], device=A.device, dtype=output_dtype)
@@ -192,7 +204,7 @@ def fp8_deepgemm_experts_forward(
     if self.block_size[0] != 128 or self.block_size[1] != 128:
         raise ValueError(f"deep-gemm requires block_size=(128, 128), got {self.block_size}")
 
-    _, m_grouped_fp8_gemm_nt_contiguous, _, per_token_cast_to_fp8 = _load_deepgemm_kernel()
+    _, m_grouped_fp8_gemm_nt_contiguous, _, _, per_token_cast_to_fp8 = _load_deepgemm_kernel()
 
     device = hidden_states.device
     num_top_k = top_k_index.size(-1)
@@ -268,18 +280,15 @@ def bf16_deepgemm_experts_forward(
     top_k_index: torch.Tensor,
     top_k_weights: torch.Tensor,
 ) -> torch.Tensor:
-    if self.is_transposed:
-        raise ValueError("deepgemm bf16 path requires non-transposed weights (is_transposed=False)")
-    if not self.has_gate:
-        raise ValueError("deepgemm bf16 path requires gated experts (has_gate=True)")
-    if self.has_bias:
-        raise ValueError(
-            "deepgemm bf16 path does not support bias (m_grouped_bf16_gemm_nt_contiguous has no bias input)"
-        )
-    if hidden_states.device.type != "cuda":
-        raise ValueError("deepgemm bf16 path requires CUDA device")
+    if hidden_states.dtype != torch.bfloat16:
+        raise ValueError(f"deepgemm bf16 path requires bfloat16 hidden states, got {hidden_states.dtype}")
 
-    _, _, m_grouped_bf16_gemm_nt_contiguous, _ = _load_deepgemm_kernel()
+    _, _, m_grouped_bf16_gemm_nt_contiguous, m_grouped_bf16_gemm_nn_contiguous, _ = _load_deepgemm_kernel()
+    # Non-transposed HF experts have weight layout (E, N, K) -> NT kernel.
+    # Transposed HF experts have weight layout (E, K, N) -> NN kernel.
+    m_grouped_bf16_gemm = (
+        m_grouped_bf16_gemm_nn_contiguous if self.is_transposed else m_grouped_bf16_gemm_nt_contiguous
+    )
 
     device = hidden_states.device
     num_top_k = top_k_index.size(-1)
@@ -301,8 +310,8 @@ def bf16_deepgemm_experts_forward(
     inv_perm[perm] = torch.arange(perm.size(0), device=device)
 
     expert_ids_g = expert_ids[perm]
-    sample_weights_g = sample_weights[perm]
     invalid_mask_g = invalid_mask[perm]
+    sample_weights_g = sample_weights[perm]
     selected_hidden_states_g = hidden_states[token_idx[perm]]
 
     sorted_to_padded, grouped_layout, total_padded_rows = _build_deepgemm_contiguous_layout(
@@ -311,18 +320,30 @@ def bf16_deepgemm_experts_forward(
     use_psum_layout = torch.cuda.get_device_capability(device)[0] >= 10
 
     # --- Up projection per expert (deep-gemm grouped contiguous, bf16) ---
+    w_up = self.gate_up_proj if self.has_gate else self.up_proj
+    # Output dim is the last weight axis when transposed (E, K, N), second axis when not (E, N, K).
+    up_out_dim = w_up.shape[-1] if self.is_transposed else w_up.shape[1]
     act = _pad_for_deepgemm(selected_hidden_states_g, sorted_to_padded, total_padded_rows)
-    proj_out = torch.zeros(total_padded_rows, self.gate_up_proj.shape[1], device=device, dtype=hidden_states.dtype)
-    m_grouped_bf16_gemm_nt_contiguous(
-        act, self.gate_up_proj, proj_out, grouped_layout, use_psum_layout=use_psum_layout
-    )
+    proj_out = torch.zeros(total_padded_rows, up_out_dim, device=device, dtype=hidden_states.dtype)
+    m_grouped_bf16_gemm(act, w_up, proj_out, grouped_layout, use_psum_layout=use_psum_layout)
 
-    # Apply gating
-    proj_out = self._apply_gate(proj_out)
+    # The kernel has no bias input -> add per-expert bias post-GEMM; padding rows get discarded at unpad time.
+    if self.has_bias:
+        up_bias = self.gate_up_proj_bias if self.has_gate else self.up_proj_bias
+        proj_out = proj_out + _pad_for_deepgemm(up_bias[expert_ids_g], sorted_to_padded, total_padded_rows)
+
+    # Apply gating or activation
+    if self.has_gate:
+        proj_out = self._apply_gate(proj_out)
+    else:
+        proj_out = self.act_fn(proj_out)
 
     # --- Down projection per expert (deep-gemm grouped contiguous, bf16) ---
     out = torch.zeros(total_padded_rows, hidden_dim, device=device, dtype=hidden_states.dtype)
-    m_grouped_bf16_gemm_nt_contiguous(proj_out, self.down_proj, out, grouped_layout, use_psum_layout=use_psum_layout)
+    m_grouped_bf16_gemm(proj_out, self.down_proj, out, grouped_layout, use_psum_layout=use_psum_layout)
+
+    if self.has_bias:
+        out = out + _pad_for_deepgemm(self.down_proj_bias[expert_ids_g], sorted_to_padded, total_padded_rows)
 
     # Remove padding rows
     out = _unpad_from_deepgemm_contiguous_layout(out, sorted_to_padded)
