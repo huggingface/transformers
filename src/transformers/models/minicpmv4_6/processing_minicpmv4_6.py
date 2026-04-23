@@ -90,6 +90,9 @@ class MiniCPMV4_6Processor(ProcessorMixin):
         use_image_id = output_kwargs["images_kwargs"].pop("use_image_id", None)
         use_image_id = use_image_id if use_image_id is not None else self.default_use_image_id
 
+        img_downsample = output_kwargs["images_kwargs"].get("downsample_mode", self.image_processor.downsample_mode)
+        image_token_divisor = 4 if img_downsample == "4x" else 16
+
         image_inputs = {}
         if images is not None:
             image_inputs = self.image_processor(images, **output_kwargs["images_kwargs"])
@@ -104,7 +107,7 @@ class MiniCPMV4_6Processor(ProcessorMixin):
                 while self.image_token in text[i]:
                     n_patches = num_patches_per_image[image_index]
                     img_target_sizes = target_sizes[flat_index : flat_index + n_patches]
-                    num_tokens_per_patch = img_target_sizes.prod(-1) // self.image_token_divisor
+                    num_tokens_per_patch = img_target_sizes.prod(-1) // image_token_divisor
                     num_rows, num_cols = image_grids[image_index]
 
                     image_placeholder = (
@@ -128,6 +131,9 @@ class MiniCPMV4_6Processor(ProcessorMixin):
                     image_index += 1
                 text[i] = text[i].replace("<|placeholder|>", self.image_token)
 
+        vid_downsample = output_kwargs["videos_kwargs"].get("downsample_mode", self.video_processor.downsample_mode)
+        video_token_divisor = 4 if vid_downsample == "4x" else 16
+
         video_inputs = {}
         if videos is not None:
             video_inputs = self.video_processor(videos, **output_kwargs["videos_kwargs"])
@@ -139,7 +145,7 @@ class MiniCPMV4_6Processor(ProcessorMixin):
             video_grid = video_inputs.pop("grids_videos")
             grid_rows, grid_cols = video_grid
 
-            num_tokens_per_patch = video_target_sizes.prod(-1) // self.video_token_divisor
+            num_tokens_per_patch = video_target_sizes.prod(-1) // video_token_divisor
 
             video_index = 0
             for i in range(len(text)):
