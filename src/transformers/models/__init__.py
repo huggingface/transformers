@@ -192,6 +192,7 @@ if TYPE_CHECKING:
     from .hubert import *
     from .hunyuan_v1_dense import *
     from .hunyuan_v1_moe import *
+    from .hy_v3 import *
     from .ibert import *
     from .idefics import *
     from .idefics2 import *
@@ -296,6 +297,7 @@ if TYPE_CHECKING:
     from .omdet_turbo import *
     from .oneformer import *
     from .openai import *
+    from .openai_privacy_filter import *
     from .opt import *
     from .ovis2 import *
     from .owlv2 import *
@@ -337,6 +339,7 @@ if TYPE_CHECKING:
     from .prophetnet import *
     from .pvt import *
     from .pvt_v2 import *
+    from .qianfan_ocr import *
     from .qwen2 import *
     from .qwen2_5_omni import *
     from .qwen2_5_vl import *
@@ -383,6 +386,7 @@ if TYPE_CHECKING:
     from .shieldgemma2 import *
     from .siglip import *
     from .siglip2 import *
+    from .slanet import *
     from .slanext import *
     from .smollm3 import *
     from .smolvlm import *

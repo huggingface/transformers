@@ -91,6 +91,12 @@ class Qwen3VLMoeTextConfig(Qwen3MoeConfig):
         "layers.*.mlp.up_proj": "colwise",
         "layers.*.mlp.down_proj": "rowwise",
     }
+    base_model_ep_plan = {
+        "layers.*.mlp.gate": "ep_router",
+        "layers.*.mlp.experts.gate_up_proj": "grouped_gemm",
+        "layers.*.mlp.experts.down_proj": "grouped_gemm",
+        "layers.*.mlp.experts": "moe_tp_experts",
+    }
     base_model_pp_plan = {
         "embed_tokens": (["input_ids"], ["inputs_embeds"]),
         "layers": (["hidden_states", "attention_mask"], ["hidden_states"]),
@@ -126,6 +132,7 @@ class Qwen3VLMoeTextConfig(Qwen3MoeConfig):
 @auto_docstring(checkpoint="Qwen/Qwen3-VL-30B-A3B-Instruct")
 @strict
 class Qwen3VLMoeVisionConfig(Qwen3VLVisionConfig):
+    model_type = "qwen3_vl_moe_vision"
     pass
 
 
@@ -451,6 +458,7 @@ class Qwen3VLMoeForConditionalGeneration(Qwen3VLForConditionalGeneration):
 __all__ = [
     "Qwen3VLMoeConfig",
     "Qwen3VLMoeTextConfig",
+    "Qwen3VLMoeVisionConfig",
     "Qwen3VLMoeVisionModel",
     "Qwen3VLMoeForConditionalGeneration",
     "Qwen3VLMoeModel",  # noqa
