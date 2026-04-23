@@ -5381,7 +5381,10 @@ class ModelTesterMixin:
                 elif hasattr(audio_config, "hidden_size"):
                     hidden_size = audio_config.hidden_size
                 elif hasattr(audio_config, "encoder_config"):
-                    hidden_size = audio_config.encoder_config.hidden_dim
+                    if hasattr(audio_config.encoder_config, "hidden_size"):
+                        hidden_size = audio_config.encoder_config.hidden_size
+                    else:
+                        hidden_size = audio_config.encoder_config.hidden_dim
                 elif hasattr(audio_config, "encoder_ffn_dim"):
                     hidden_size = audio_config.encoder_ffn_dim
                 self.assertEqual(

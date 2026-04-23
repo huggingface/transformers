@@ -176,6 +176,8 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
             self.type = "seq2seq_whisper"
         elif model.__class__.__name__ in MODEL_FOR_SPEECH_SEQ_2_SEQ_MAPPING_NAMES.values():
             self.type = "seq2seq"
+        elif model.config.model_type == "parakeet_tdt":
+            self.type = "tdt"
         elif decoder is not None:
             self.decoder = decoder
             self.type = "ctc_with_lm"
@@ -534,7 +536,7 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
                 if stride is not None:
                     out["stride"] = stride
 
-        else:
+        elif self.type in {"ctc", "ctc_with_lm"}:
             inputs = {
                 self.model.main_input_name: model_inputs.pop(self.model.main_input_name),
                 "attention_mask": attention_mask,
@@ -555,6 +557,17 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
                     out["stride"] = rescale_stride([stride], ratio)[0]
                 else:
                     out["stride"] = rescale_stride(stride, ratio)
+        elif self.type == "tdt":
+            inputs = {
+                self.model.main_input_name: model_inputs.pop(self.model.main_input_name),
+            }
+            if "attention_mask" in model_inputs:
+                inputs["attention_mask"] = model_inputs.pop("attention_mask")
+            outputs = self.model.generate(**inputs)
+            out = {"tokens": outputs.sequences}
+        else:
+            raise ValueError("Unsupported model type {self.type}.")
+
         # Leftover
         extra = model_inputs
         return {"is_last": is_last, **out, **extra}

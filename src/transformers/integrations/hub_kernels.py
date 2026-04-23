@@ -289,6 +289,7 @@ _HUB_KERNEL_MAPPING: dict[str, dict[str, str]] = {
     "falcon_mamba-ssm": {"repo_id": "kernels-community/mamba-ssm", "version": 1},
     "finegrained-fp8": {"repo_id": "kernels-community/finegrained-fp8", "version": 1},
     "deep-gemm": {"repo_id": "kernels-community/deep-gemm", "version": 1},
+    "tdt-loss": {"repo_id": "eustlb/tdt-loss", "revision": "v1"},
 }
 
 _KERNEL_MODULE_MAPPING: dict[str, ModuleType | None] = {}
@@ -375,10 +376,12 @@ def lazy_load_kernel(kernel_name: str, mapping: dict[str, ModuleType | None] = _
             repo_id = _HUB_KERNEL_MAPPING[kernel_name]["repo_id"]
             revision = _HUB_KERNEL_MAPPING[kernel_name].get("revision", None)
             version = _HUB_KERNEL_MAPPING[kernel_name].get("version", None)
-            kernel = get_kernel(repo_id, revision=revision, version=version)
+            # Since we only read from `_HUB_KERNEL_MAPPING`, we can allow all kernels
+            kernel = get_kernel(repo_id, revision=revision, version=version, allow_all_kernels=True)
             mapping[kernel_name] = kernel
-        except FileNotFoundError:
+        except FileNotFoundError as e:
             mapping[kernel_name] = None
+            logger.warning_once(f"Failed to load kernel {kernel_name}: {e}")
         except AssertionError:
             # Happens when torch is built without an accelerator backend; fall back to slow path.
             mapping[kernel_name] = None

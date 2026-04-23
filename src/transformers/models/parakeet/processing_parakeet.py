@@ -27,6 +27,7 @@ class ParakeetProcessorKwargs(ProcessingKwargs, total=False):
             "sampling_rate": 16000,
             "padding": "longest",
             "return_attention_mask": True,
+            "subsampling_factor": 8,
         },
         "text_kwargs": {
             "padding": True,
@@ -39,7 +40,13 @@ class ParakeetProcessorKwargs(ProcessingKwargs, total=False):
 
 @auto_docstring
 class ParakeetProcessor(ProcessorMixin):
-    def __init__(self, feature_extractor, tokenizer):
+    def __init__(self, feature_extractor, tokenizer, blank_token="<blank>"):
+        """
+        blank_token (`str`, *optional*, defaults to `"<blank>"`):
+            Blank token for TDT decoding.
+        """
+        self.blank_token = blank_token
+        self.blank_token_id = tokenizer.convert_tokens_to_ids(blank_token)
         super().__init__(feature_extractor, tokenizer)
 
     @auto_docstring
@@ -83,12 +90,78 @@ class ParakeetProcessor(ProcessorMixin):
             return inputs
         else:
             inputs["labels"] = encodings["input_ids"]
+            # Prepend blank token to labels to form decoder_input_ids.
+            # The TDT decoder expects [blank, label_0, ..., label_{U-1}] as input,
+            if isinstance(text, str):
+                text = [text]
+            decoder_text = [self.blank_token + t for t in text]
+            decoder_encodings = self.tokenizer(decoder_text, **output_kwargs["text_kwargs"])
+            inputs["decoder_input_ids"] = decoder_encodings["input_ids"]
             return inputs
 
     @property
     def model_input_names(self):
         feature_extractor_input_names = self.feature_extractor.model_input_names
-        return feature_extractor_input_names + ["labels"]
+        return feature_extractor_input_names + ["labels", "decoder_input_ids"]
+
+    def decode(self, *args, durations=None, **kwargs):
+        """
+        Forward arguments to [`~PreTrainedTokenizer.decode`] and post-process the timestamps (if provided for TDT) as
+        in the NeMo library.
+        """
+        decoded = self.tokenizer.decode(*args, **kwargs)
+
+        if durations is not None:
+            token_ids = args[0]
+            # Derive per-step frame indices from cumulative sum of durations.
+            timestamps = durations.cumsum(dim=-1) - durations
+
+            output_kwargs = self._merge_kwargs(
+                ParakeetProcessorKwargs,
+                tokenizer_init_kwargs=self.tokenizer.init_kwargs,
+            )
+            frame_rate = (
+                self.feature_extractor.hop_length
+                / self.feature_extractor.sampling_rate
+                * output_kwargs["audio_kwargs"]["subsampling_factor"]
+            )
+            proc_timestamps = []
+            for batch_ids, batch_timestamps, batch_durations in zip(token_ids, timestamps, durations):
+                # See `compute_rnnt_timestamps` in NeMo: https://github.com/NVIDIA-NeMo/NeMo/blob/1692a8fb97e1aadc883cfadd2a57c4e8a1b793aa/nemo/collections/asr/parts/submodules/rnnt_decoding.py#L993
+                # Filter padding and blank tokens
+                skip_ids = {self.tokenizer.pad_token_id, self.blank_token_id}
+                non_blank_indices = [i for i, token_id in enumerate(batch_ids) if int(token_id) not in skip_ids]
+                non_blank_ids = [batch_ids[i] for i in non_blank_indices]
+                decoded_tokens = [self.tokenizer.decode([token_id]) for token_id in non_blank_ids]
+                timestamp_dict = [
+                    {
+                        "token": token_str,
+                        "start": int(batch_timestamps[i]),
+                        "end": int(batch_timestamps[i] + batch_durations[i]),
+                    }
+                    for token_str, i in zip(decoded_tokens, non_blank_indices)
+                ]
+                timestamp_dict = self._refine_timestamps_tdt(timestamp_dict)
+
+                # Convert to seconds
+                for offset in timestamp_dict:
+                    offset["start"] = offset["start"] * frame_rate
+                    offset["end"] = offset["end"] * frame_rate
+                proc_timestamps.append(timestamp_dict)
+
+            return decoded, proc_timestamps
+        return decoded
+
+    def _refine_timestamps_tdt(
+        self, char_offsets, supported_punctuation=["?", "'", "¡", "¿", "-", ":", ",", "%", "/", ".", "!"]
+    ):
+        for i, offset in enumerate(char_offsets):
+            # If token is a punctuation mark, set its start and end offset as start and end of previous token
+            if offset["token"] in supported_punctuation and i > 0:
+                offset["start"] = char_offsets[i - 1]["end"]
+                offset["end"] = offset["start"]
+
+        return char_offsets
 
 
 __all__ = ["ParakeetProcessor"]
