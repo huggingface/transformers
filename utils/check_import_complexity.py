@@ -37,7 +37,7 @@ from types import ModuleType
 from typing import Any
 
 
-MAX_IMPORT_COUNT = 1000
+MAX_IMPORT_COUNT = 750
 
 
 ROOT_DIR = Path(__file__).resolve().parents[1]
