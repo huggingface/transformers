@@ -273,7 +273,9 @@ def bf16_deepgemm_experts_forward(
     if not self.has_gate:
         raise ValueError("deepgemm bf16 path requires gated experts (has_gate=True)")
     if self.has_bias:
-        raise ValueError("deepgemm bf16 path does not support bias (m_grouped_bf16_gemm_nt_contiguous has no bias input)")
+        raise ValueError(
+            "deepgemm bf16 path does not support bias (m_grouped_bf16_gemm_nt_contiguous has no bias input)"
+        )
     if hidden_states.device.type != "cuda":
         raise ValueError("deepgemm bf16 path requires CUDA device")
 
@@ -310,9 +312,7 @@ def bf16_deepgemm_experts_forward(
 
     # --- Up projection per expert (deep-gemm grouped contiguous, bf16) ---
     act = _pad_for_deepgemm(selected_hidden_states_g, sorted_to_padded, total_padded_rows)
-    proj_out = torch.zeros(
-        total_padded_rows, self.gate_up_proj.shape[1], device=device, dtype=hidden_states.dtype
-    )
+    proj_out = torch.zeros(total_padded_rows, self.gate_up_proj.shape[1], device=device, dtype=hidden_states.dtype)
     m_grouped_bf16_gemm_nt_contiguous(
         act, self.gate_up_proj, proj_out, grouped_layout, use_psum_layout=use_psum_layout
     )
@@ -322,9 +322,7 @@ def bf16_deepgemm_experts_forward(
 
     # --- Down projection per expert (deep-gemm grouped contiguous, bf16) ---
     out = torch.zeros(total_padded_rows, hidden_dim, device=device, dtype=hidden_states.dtype)
-    m_grouped_bf16_gemm_nt_contiguous(
-        proj_out, self.down_proj, out, grouped_layout, use_psum_layout=use_psum_layout
-    )
+    m_grouped_bf16_gemm_nt_contiguous(proj_out, self.down_proj, out, grouped_layout, use_psum_layout=use_psum_layout)
 
     # Remove padding rows
     out = _unpad_from_deepgemm_contiguous_layout(out, sorted_to_padded)
