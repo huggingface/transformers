@@ -590,7 +590,12 @@ def _test_eager_matches_batched_and_grouped_inference(self, name, dtype):
             "grouped_mm": Mock(wraps=grouped_mm_experts_forward),
         }
 
-        if is_kernels_available() and torch.cuda.is_available() and torch.cuda.get_device_capability() >= (9, 0):
+        if (
+            dtype != torch.float32
+            and is_kernels_available()
+            and torch.cuda.is_available()
+            and torch.cuda.get_device_capability() >= (9, 0)
+        ):
             # we also need nvidia-cutlass-dsl and apache-tvm-ffi
             mocks["sonicmoe"] = Mock(wraps=sonicmoe_experts_forward)
             implementations.append("sonicmoe")
