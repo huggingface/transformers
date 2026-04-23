@@ -66,7 +66,7 @@ messages = [
     },
 ]
 
-tokenized = tokenizer.apply_chat_template(messages, return_tensors="pt", return_dict=True)
+tokenized = tokenizer.apply_chat_template(messages, return_tensors="pt", return_dict=True).to(model.device)
 
 tokenized["input_ids"] = tokenized["input_ids"].to(device="cuda")
 tokenized["pixel_values"] = tokenized["pixel_values"].to(dtype=torch.bfloat16, device="cuda")

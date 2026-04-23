@@ -90,7 +90,7 @@ image = Image.open(BytesIO(response.content))
     
 visual_embeds = get_visual_embeddings_simple(image)
     
-inputs = tokenizer("What is shown in this image?", return_tensors="pt")
+inputs = tokenizer("What is shown in this image?", return_tensors="pt").to(model.device)
     
 visual_token_type_ids = torch.ones(visual_embeds.shape[:-1], dtype=torch.long)
 visual_attention_mask = torch.ones(visual_embeds.shape[:-1], dtype=torch.float)

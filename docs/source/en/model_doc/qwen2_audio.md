@@ -106,7 +106,7 @@ for message in conversation:
                     sr=processor.feature_extractor.sampling_rate)[0]
                 )
 
-inputs = processor(text=text, audio=audios, return_tensors="pt", padding=True)
+inputs = processor(text=text, audio=audios, return_tensors="pt", padding=True).to(model.device)
 inputs.input_ids = inputs.input_ids.to(model.device)
 
 generate_ids = model.generate(**inputs, max_length=256)
@@ -156,7 +156,7 @@ for message in conversation:
                         sr=processor.feature_extractor.sampling_rate)[0]
                 )
 
-inputs = processor(text=text, audio=audios, return_tensors="pt", padding=True)
+inputs = processor(text=text, audio=audios, return_tensors="pt", padding=True).to(model.device)
 inputs.input_ids = inputs.input_ids.to(model.device)
 
 generate_ids = model.generate(**inputs, max_length=256)
@@ -213,7 +213,7 @@ for conversation in conversations:
                             sr=processor.feature_extractor.sampling_rate)[0]
                     )
 
-inputs = processor(text=text, audio=audios, return_tensors="pt", padding=True)
+inputs = processor(text=text, audio=audios, return_tensors="pt", padding=True).to(model.device)
 inputs['input_ids'] = inputs['input_ids'].to(model.device)
 inputs.input_ids = inputs.input_ids.to(model.device)
 

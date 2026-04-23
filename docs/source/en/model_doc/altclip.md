@@ -46,7 +46,7 @@ processor = AltCLIPProcessor.from_pretrained("BAAI/AltCLIP")
 url = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg"
 image = Image.open(requests.get(url, stream=True).raw)
 
-inputs = processor(text=["a photo of a cat", "a photo of a dog"], images=image, return_tensors="pt", padding=True)
+inputs = processor(text=["a photo of a cat", "a photo of a dog"], images=image, return_tensors="pt", padding=True).to(model.device)
 
 outputs = model(**inputs)
 logits_per_image = outputs.logits_per_image  # this is the image-text similarity score
@@ -81,7 +81,7 @@ processor = AltCLIPProcessor.from_pretrained("BAAI/AltCLIP")
 url = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg"
 image = Image.open(requests.get(url, stream=True).raw)
 
-inputs = processor(text=["a photo of a cat", "a photo of a dog"], images=image, return_tensors="pt", padding=True)
+inputs = processor(text=["a photo of a cat", "a photo of a dog"], images=image, return_tensors="pt", padding=True).to(model.device)
 
 outputs = model(**inputs)
 logits_per_image = outputs.logits_per_image  # this is the image-text similarity score

@@ -61,10 +61,10 @@ dataset = load_dataset("halabi2016/arabic_speech_corpus", split="test", streamin
 audio_sample = next(iter(dataset))["audio"]
 
 # now, process it
-audio_inputs = processor(audio=audio_sample["array"], return_tensors="pt")
+audio_inputs = processor(audio=audio_sample["array"], return_tensors="pt").to(model.device)
 
 # now, process some English text as well
-text_inputs = processor(text = "Hello, my dog is cute", src_lang="eng", return_tensors="pt")
+text_inputs = processor(text = "Hello, my dog is cute", src_lang="eng", return_tensors="pt").to(model.device)
 ```
 
 ### Speech

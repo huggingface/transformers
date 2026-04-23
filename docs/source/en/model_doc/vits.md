@@ -132,7 +132,7 @@ Audio(waveform, rate=model.config.sampling_rate)
    text = "이봐 무슨 일이야"
    uromanized_text = uromanize(text, uroman_path=os.environ["UROMAN"])
 
-   inputs = tokenizer(text=uromanized_text, return_tensors="pt")
+   inputs = tokenizer(text=uromanized_text, return_tensors="pt").to(model.device)
 
    set_seed(555)  # make deterministic
    with torch.no_grad():

@@ -111,7 +111,7 @@ html_string = """
  </html>"""
 
 # note that you can also add provide all tokenizer parameters here such as padding, truncation
-encoding = processor(html_string, return_tensors="pt")
+encoding = processor(html_string, return_tensors="pt").to(model.device)
 print(encoding.keys())
 dict_keys(['input_ids', 'token_type_ids', 'attention_mask', 'xpath_tags_seq', 'xpath_subs_seq'])
 ```
@@ -129,7 +129,7 @@ processor.parse_html = False
 
 nodes = ["hello", "world", "how", "are"]
 xpaths = ["/html/body/div/li[1]/div/span", "/html/body/div/li[1]/div/span", "html/body", "html/body/div"]
-encoding = processor(nodes=nodes, xpaths=xpaths, return_tensors="pt")
+encoding = processor(nodes=nodes, xpaths=xpaths, return_tensors="pt").to(model.device)
 print(encoding.keys())
 dict_keys(['input_ids', 'token_type_ids', 'attention_mask', 'xpath_tags_seq', 'xpath_subs_seq'])
 ```
@@ -151,7 +151,7 @@ processor.parse_html = False
 nodes = ["hello", "world", "how", "are"]
 xpaths = ["/html/body/div/li[1]/div/span", "/html/body/div/li[1]/div/span", "html/body", "html/body/div"]
 node_labels = [1, 2, 2, 1]
-encoding = processor(nodes=nodes, xpaths=xpaths, node_labels=node_labels, return_tensors="pt")
+encoding = processor(nodes=nodes, xpaths=xpaths, node_labels=node_labels, return_tensors="pt").to(model.device)
 print(encoding.keys())
 dict_keys(['input_ids', 'token_type_ids', 'attention_mask', 'xpath_tags_seq', 'xpath_subs_seq', 'labels'])
 ```
@@ -179,7 +179,7 @@ html_string = """
  </html>"""
 
 question = "What's his name?"
-encoding = processor(html_string, questions=question, return_tensors="pt")
+encoding = processor(html_string, questions=question, return_tensors="pt").to(model.device)
 print(encoding.keys())
 dict_keys(['input_ids', 'token_type_ids', 'attention_mask', 'xpath_tags_seq', 'xpath_subs_seq'])
 ```
@@ -198,7 +198,7 @@ processor.parse_html = False
 nodes = ["hello", "world", "how", "are"]
 xpaths = ["/html/body/div/li[1]/div/span", "/html/body/div/li[1]/div/span", "html/body", "html/body/div"]
 question = "What's his name?"
-encoding = processor(nodes=nodes, xpaths=xpaths, questions=question, return_tensors="pt")
+encoding = processor(nodes=nodes, xpaths=xpaths, questions=question, return_tensors="pt").to(model.device)
 print(encoding.keys())
 dict_keys(['input_ids', 'token_type_ids', 'attention_mask', 'xpath_tags_seq', 'xpath_subs_seq'])
 ```

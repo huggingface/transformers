@@ -182,7 +182,7 @@ outputs = model.generate(**inputs,
                          )
 # Perform post-processing on the generated token ids.
 decoded_image = model.decode_image_tokens(outputs)
-images = processor.postprocess(list(decoded_image.float()),return_tensors="PIL.Image.Image")
+images = processor.postprocess(list(decoded_image.float()),return_tensors="PIL.Image.Image").to(model.device)
 # Save the image
 for i, image in enumerate(images['pixel_values']):
     image.save(f"result{i}.png")

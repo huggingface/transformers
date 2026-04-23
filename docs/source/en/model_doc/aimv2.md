@@ -43,7 +43,7 @@ image = Image.open(requests.get(url, stream=True).raw)
 processor = AutoImageProcessor.from_pretrained("apple/aimv2-large-patch14-native")
 model = AutoModel.from_pretrained("apple/aimv2-large-patch14-native", device_map="auto")
 
-inputs = processor(images=image, return_tensors="pt")
+inputs = processor(images=image, return_tensors="pt").to(model.device)
 outputs = model(**inputs)
 ```
 

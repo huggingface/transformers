@@ -89,7 +89,7 @@ image_processor = ViTImageProcessor.from_pretrained("nlpconnect/vit-gpt2-image-c
 # let's perform inference on an image
 url = "http://images.cocodataset.org/val2017/000000039769.jpg"
 image = Image.open(requests.get(url, stream=True).raw)
-pixel_values = image_processor(image, return_tensors="pt").pixel_values
+pixel_values = image_processor(image, return_tensors="pt").to(model.device).pixel_values
 
 # autoregressively generate caption (uses greedy decoding by default)
 generated_ids = model.generate(pixel_values)
@@ -119,7 +119,7 @@ model.config.pad_token_id = tokenizer.pad_token_id
 
 dataset = load_dataset("huggingface/cats-image")
 image = dataset["test"]["image"][0]
-pixel_values = image_processor(image, return_tensors="pt").pixel_values
+pixel_values = image_processor(image, return_tensors="pt").to(model.device).pixel_values
 
 labels = tokenizer(
     "an image of two cats chilling on a couch",

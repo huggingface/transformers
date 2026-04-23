@@ -41,7 +41,7 @@ model = VoxtralRealtimeForConditionalGeneration.from_pretrained(repo_id, device_
 ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
 audio = ds[0]["audio"]["array"]
 
-inputs = processor(audio, return_tensors="pt")
+inputs = processor(audio, return_tensors="pt").to(model.device)
 inputs = inputs.to(model.device, dtype=model.dtype)
 
 outputs = model.generate(**inputs)
@@ -67,7 +67,7 @@ model = VoxtralRealtimeForConditionalGeneration.from_pretrained(repo_id, device_
 ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
 audio = [ds[i]["audio"]["array"] for i in range(2)]
 
-inputs = processor(audio, return_tensors="pt")
+inputs = processor(audio, return_tensors="pt").to(model.device)
 inputs = inputs.to(model.device, dtype=model.dtype)
 
 outputs = model.generate(**inputs)

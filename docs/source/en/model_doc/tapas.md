@@ -289,7 +289,7 @@ queries = [
     "What is the total number of movies?",
 ]
 table = pd.DataFrame.from_dict(data)
-inputs = tokenizer(table=table, queries=queries, padding="max_length", return_tensors="pt")
+inputs = tokenizer(table=table, queries=queries, padding="max_length", return_tensors="pt").to(model.device)
 outputs = model(**inputs)
 predicted_answer_coordinates, predicted_aggregation_indices = tokenizer.convert_logits_to_predictions(
     inputs, outputs.logits.detach(), outputs.logits_aggregation.detach()

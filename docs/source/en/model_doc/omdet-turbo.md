@@ -61,7 +61,7 @@ model = OmDetTurboForObjectDetection.from_pretrained("omlab/omdet-turbo-swin-tin
 url = "http://images.cocodataset.org/val2017/000000039769.jpg"
 image = Image.open(requests.get(url, stream=True).raw)
 text_labels = ["cat", "remote"]
-inputs = processor(image, text=text_labels, return_tensors="pt")
+inputs = processor(image, text=text_labels, return_tensors="pt").to(model.device)
 
 with torch.no_grad():
     outputs = model(**inputs)

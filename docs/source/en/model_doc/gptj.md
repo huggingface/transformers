@@ -78,7 +78,7 @@ prompt = (
     "researchers was the fact that the unicorns spoke perfect English."
 )
 
-input_ids = tokenizer(prompt, return_tensors="pt").input_ids
+input_ids = tokenizer(prompt, return_tensors="pt").to(model.device).input_ids
 
 gen_tokens = model.generate(
     input_ids,

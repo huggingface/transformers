@@ -140,7 +140,7 @@ conversation = [
     },
 ]
 
-inputs = processor.apply_chat_template(conversation, num_frames=8, add_generation_prompt=True, tokenize=True, return_dict=True, return_tensors="pt")
+inputs = processor.apply_chat_template(conversation, num_frames=8, add_generation_prompt=True, tokenize=True, return_dict=True, return_tensors="pt").to(model.device)
 
 out = model.generate(**inputs, max_new_tokens=60)
 processor.batch_decode(out, skip_special_tokens=True, clean_up_tokenization_spaces=True)
@@ -176,7 +176,7 @@ conversation = [
             ],
     },
 ]
-inputs = processor.apply_chat_template(conversation, num_frames=8, add_generation_prompt=True, tokenize=True, return_dict=True, padding=True, return_tensors="pt")
+inputs = processor.apply_chat_template(conversation, num_frames=8, add_generation_prompt=True, tokenize=True, return_dict=True, padding=True, return_tensors="pt").to(model.device)
 
 # Generate
 generate_ids = model.generate(**inputs, max_length=50)

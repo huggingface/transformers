@@ -45,7 +45,7 @@ model = EncodecModel.from_pretrained("facebook/encodec_24khz", device_map="auto"
 processor = AutoProcessor.from_pretrained("facebook/encodec_24khz")
 librispeech_dummy = librispeech_dummy.cast_column("audio", Audio(sampling_rate=processor.sampling_rate))
 audio_sample = librispeech_dummy[-1]["audio"]["array"]
-inputs = processor(raw_audio=audio_sample, sampling_rate=processor.sampling_rate, return_tensors="pt")
+inputs = processor(raw_audio=audio_sample, sampling_rate=processor.sampling_rate, return_tensors="pt").to(model.device)
 
 encoder_outputs = model.encode(inputs["input_values"], inputs["padding_mask"])
 # `encoder_outputs.audio_codes` contains discrete codes

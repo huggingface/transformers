@@ -98,7 +98,7 @@ audio, sr = librosa.load("<your_audio_file_here>", sr=44100)  # feel free to cha
 model = Pop2PianoForConditionalGeneration.from_pretrained("sweetcocoa/pop2piano", device_map="auto")
 processor = Pop2PianoProcessor.from_pretrained("sweetcocoa/pop2piano")
 
-inputs = processor(audio=audio, sampling_rate=sr, return_tensors="pt")
+inputs = processor(audio=audio, sampling_rate=sr, return_tensors="pt").to(model.device)
 model_output = model.generate(input_features=inputs["input_features"], composer="composer1")
 tokenizer_output = processor.batch_decode(
     token_ids=model_output, feature_extractor_output=inputs
@@ -118,7 +118,7 @@ audio2, sr2 = librosa.load("<your_second_audio_file_here>", sr=44100)
 model = Pop2PianoForConditionalGeneration.from_pretrained("sweetcocoa/pop2piano", device_map="auto")
 processor = Pop2PianoProcessor.from_pretrained("sweetcocoa/pop2piano")
 
-inputs = processor(audio=[audio1, audio2], sampling_rate=[sr1, sr2], return_attention_mask=True, return_tensors="pt")
+inputs = processor(audio=[audio1, audio2], sampling_rate=[sr1, sr2], return_attention_mask=True, return_tensors="pt").to(model.device)
 # Since we now generating in batch(2 audios) we must pass the attention_mask
 model_output = model.generate(
     input_features=inputs["input_features"],

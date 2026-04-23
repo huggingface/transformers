@@ -72,7 +72,7 @@ messages = [
     },
 ]
 
-inputs = processor.apply_chat_template(messages, return_tensors="pt", tokenize=True, return_dict=True, reasoning_effort="high")
+inputs = processor.apply_chat_template(messages, return_tensors="pt", tokenize=True, return_dict=True, reasoning_effort="high").to(model.device)
 inputs = inputs.to(model.device)
 
 output = model.generate(

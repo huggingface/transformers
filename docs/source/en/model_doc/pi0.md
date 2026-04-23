@@ -53,7 +53,7 @@ processor = PI0Processor.from_pretrained("google/paligemma2-3b-mix-224")
 
 prompt = "Pick up the object"
 image = load_image("https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/vla_pi0.jpg")
-inputs = processor(image, prompt, return_tensors="pt")
+inputs = processor(image, prompt, return_tensors="pt").to(model.device)
 
 state = torch.randn(1, 32) # change with actual robot state
 actions = model.sample_actions(**inputs, state=state, num_steps=3)

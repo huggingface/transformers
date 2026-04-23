@@ -80,7 +80,7 @@ processor = Wav2Vec2Processor.from_pretrained("facebook/wav2vec2-xls-r-300m-en-t
 
 # let's perform inference on a piece of English speech (which we'll translate to German)
 ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
-input_values = processor(ds[0]["audio"]["array"], return_tensors="pt").input_values
+input_values = processor(ds[0]["audio"]["array"], return_tensors="pt").to(model.device).input_values
 
 # autoregressively generate transcription (uses greedy decoding by default)
 generated_ids = model.generate(input_values)
@@ -112,10 +112,10 @@ model.config.pad_token_id = tokenizer.pad_token_id
 
 # load an audio input and pre-process (normalise mean/std to 0/1)
 ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
-input_values = feature_extractor(ds[0]["audio"]["array"], return_tensors="pt").input_values
+input_values = feature_extractor(ds[0]["audio"]["array"], return_tensors="pt").to(model.device).input_values
 
 # load its corresponding transcription and tokenize to generate labels
-labels = tokenizer(ds[0]["text"], return_tensors="pt").input_ids
+labels = tokenizer(ds[0]["text"], return_tensors="pt").to(model.device).input_ids
 
 # the forward function automatically creates the correct decoder_input_ids
 loss = model(input_values=input_values, labels=labels).loss

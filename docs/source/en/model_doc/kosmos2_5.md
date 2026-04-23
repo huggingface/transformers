@@ -48,9 +48,7 @@ from PIL import Image, ImageDraw
 from transformers import AutoProcessor, Kosmos2_5ForConditionalGeneration
 
 repo = "microsoft/kosmos-2.5"
-device = "cuda:0"
-dtype = torch.bfloat16
-model = Kosmos2_5ForConditionalGeneration.from_pretrained(repo, device_map="auto", dtype=dtype)
+model = Kosmos2_5ForConditionalGeneration.from_pretrained(repo, device_map="auto")
 processor = AutoProcessor.from_pretrained(repo)
 
 # sample image
@@ -58,7 +56,7 @@ url = "https://huggingface.co/microsoft/kosmos-2.5/resolve/main/receipt_00008.pn
 image = Image.open(requests.get(url, stream=True).raw)
 
 prompt = "<md>"
-inputs = processor(text=prompt, images=image, return_tensors="pt")
+inputs = processor(text=prompt, images=image, return_tensors="pt").to(model.device)
 
 height, width = inputs.pop("height"), inputs.pop("width")
 raw_width, raw_height = image.size
@@ -87,9 +85,7 @@ from PIL import Image, ImageDraw
 from transformers import AutoProcessor, Kosmos2_5ForConditionalGeneration
 
 repo = "microsoft/kosmos-2.5"
-device = "cuda:0"
-dtype = torch.bfloat16
-model = Kosmos2_5ForConditionalGeneration.from_pretrained(repo, device_map="auto", dtype=dtype)
+model = Kosmos2_5ForConditionalGeneration.from_pretrained(repo, device_map="auto")
 processor = AutoProcessor.from_pretrained(repo)
 
 # sample image
@@ -98,14 +94,14 @@ image = Image.open(requests.get(url, stream=True).raw)
 
 # bs = 1
 prompt = "<ocr>"
-inputs = processor(text=prompt, images=image, return_tensors="pt")
+inputs = processor(text=prompt, images=image, return_tensors="pt").to(model.device)
 height, width = inputs.pop("height"), inputs.pop("width")
 raw_width, raw_height = image.size
 scale_height = raw_height / height
 scale_width = raw_width / width
 
 # bs > 1, batch generation
-# inputs = processor(text=[prompt, prompt], images=[image,image], return_tensors="pt")
+# inputs = processor(text=[prompt, prompt], images=[image,image], return_tensors="pt").to(model.device)
 # height, width = inputs.pop("height"), inputs.pop("width")
 # raw_width, raw_height = image.size
 # scale_height = raw_height / height[0]
@@ -186,7 +182,7 @@ image = Image.open(requests.get(url, stream=True).raw)
 question = "What is the sub total of the receipt?"
 template = "<md>A chat between a curious user and an artificial intelligence assistant. The assistant gives helpful, detailed, and polite answers to the user's questions. USER: {} ASSISTANT:"
 prompt = template.format(question)
-inputs = processor(text=prompt, images=image, return_tensors="pt")
+inputs = processor(text=prompt, images=image, return_tensors="pt").to(model.device)
 
 height, width = inputs.pop("height"), inputs.pop("width")
 raw_width, raw_height = image.size

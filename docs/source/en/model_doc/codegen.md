@@ -56,7 +56,7 @@ tokenizer = AutoTokenizer.from_pretrained(checkpoint)
 
 text = "def hello_world():"
 
-completion = model.generate(**tokenizer(text, return_tensors="pt"))
+completion = model.generate(**tokenizer(text, return_tensors="pt").to(model.device))
 
 print(tokenizer.decode(completion[0]))
 def hello_world():

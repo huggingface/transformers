@@ -69,7 +69,7 @@ model = MoonshineStreamingForConditionalGeneration.from_pretrained(
 ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
 audio_sample = ds[0]["audio"]
 
-inputs = processor(audio_sample["array"], return_tensors="pt")
+inputs = processor(audio_sample["array"], return_tensors="pt").to(model.device)
 inputs = inputs.to(model.device)
 
 generated_ids = model.generate(**inputs, max_new_tokens=100)

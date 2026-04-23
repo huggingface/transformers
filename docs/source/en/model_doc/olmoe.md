@@ -64,7 +64,7 @@ from transformers import AutoModelForCausalLM, AutoTokenizer
 model = AutoModelForCausalLM.from_pretrained("allenai/OLMoE-1B-7B-0924", attn_implementation="sdpa", dtype="auto", device_map="auto")
 tokenizer = AutoTokenizer.from_pretrained("allenai/OLMoE-1B-7B-0924")
 
-inputs = tokenizer("Bitcoin is", return_tensors="pt")
+inputs = tokenizer("Bitcoin is", return_tensors="pt").to(model.device)
 inputs = {k: v.to(model.device) for k, v in inputs.items()}
 output = model.generate(**inputs, max_length=64)
 print(tokenizer.decode(output[0]))
@@ -90,7 +90,7 @@ quantization_config = BitsAndBytesConfig(
 model = AutoModelForCausalLM.from_pretrained("allenai/OLMoE-1B-7B-0924", attn_implementation="sdpa", dtype="auto", device_map="auto", quantization_config=quantization_config)
 tokenizer = AutoTokenizer.from_pretrained("allenai/OLMoE-1B-7B-0924")
 
-inputs = tokenizer("Bitcoin is", return_tensors="pt")
+inputs = tokenizer("Bitcoin is", return_tensors="pt").to(model.device)
 inputs = {k: v.to(model.device) for k, v in inputs.items()}
 output = model.generate(**inputs, max_length=64)
 print(tokenizer.decode(output[0]))

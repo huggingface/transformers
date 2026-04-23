@@ -56,7 +56,7 @@ tokenizer = GPTNeoXTokenizerFast.from_pretrained("EleutherAI/gpt-neox-20b")
 
 prompt = "GPTNeoX20B is a 20B-parameter autoregressive Transformer model developed by EleutherAI."
 
-input_ids = tokenizer(prompt, return_tensors="pt").input_ids
+input_ids = tokenizer(prompt, return_tensors="pt").to(model.device).input_ids
 
 gen_tokens = model.generate(
     input_ids,

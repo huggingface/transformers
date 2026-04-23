@@ -63,7 +63,7 @@ image = Image.open(requests.get(url, stream=True).raw)
 model = HGNetV2ForImageClassification.from_pretrained("ustc-community/hgnet-v2", device_map="auto")
 processor = AutoImageProcessor.from_pretrained("ustc-community/hgnet-v2")
 
-inputs = processor(images=image, return_tensors="pt")
+inputs = processor(images=image, return_tensors="pt").to(model.device)
 with torch.no_grad():
     logits = model(**inputs).logits
 predicted_class_id = logits.argmax(dim=-1).item()

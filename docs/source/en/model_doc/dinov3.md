@@ -134,7 +134,7 @@ print("Pooled output shape:", pooled_output.shape)
   print("Patch size:", patch_size) # 16
   print("Num register tokens:", model.config.num_register_tokens) # 4
 
-  inputs = processor(images=image, return_tensors="pt")
+  inputs = processor(images=image, return_tensors="pt").to(model.device)
   print("Preprocessed image size:", inputs.pixel_values.shape)  # [1, 3, 224, 224]
 
   batch_size, _, img_height, img_width = inputs.pixel_values.shape

@@ -90,8 +90,6 @@ from transformers import AutoModelForCTC, AutoProcessor
 from datasets import load_dataset, Audio
 import torch
 
-device = "cuda" if torch.cuda.is_available() else "cpu"
-
 processor = AutoProcessor.from_pretrained("nvidia/parakeet-ctc-1.1b")
 model = AutoModelForCTC.from_pretrained("nvidia/parakeet-ctc-1.1b", dtype="auto", device_map="auto")
 
@@ -130,7 +128,7 @@ class TimerContext:
 
 
 inputs = processor(speech_samples[0], **processor_kwargs)
-inputs.to(device, dtype=model.dtype)
+inputs.to(model.device, dtype=model.dtype)
 print("\n" + "="*50)
 print("First generation - compiling...")
 # Generate with the compiled model
@@ -139,7 +137,7 @@ with TimerContext("First generation"):
 print(processor.batch_decode(outputs))
 
 inputs = processor(speech_samples[1], **processor_kwargs)
-inputs.to(device, dtype=model.dtype)
+inputs.to(model.device, dtype=model.dtype)
 print("\n" + "="*50)
 print("Second generation - recording CUDA graphs...")
 with TimerContext("Second generation"):
@@ -147,7 +145,7 @@ with TimerContext("Second generation"):
 print(processor.batch_decode(outputs))
 
 inputs = processor(speech_samples[2], **processor_kwargs)
-inputs.to(device, dtype=model.dtype)
+inputs.to(model.device, dtype=model.dtype)
 print("\n" + "="*50)
 print("Third generation - fast !!!")
 with TimerContext("Third generation"):
@@ -155,7 +153,7 @@ with TimerContext("Third generation"):
 print(processor.batch_decode(outputs))
 
 inputs = processor(speech_samples[3], **processor_kwargs)
-inputs.to(device, dtype=model.dtype)
+inputs.to(model.device, dtype=model.dtype)
 print("\n" + "="*50)
 print("Fourth generation - still fast !!!")
 with TimerContext("Fourth generation"):
@@ -170,8 +168,6 @@ from transformers import AutoModelForCTC, AutoProcessor
 from datasets import load_dataset, Audio
 import torch
 
-device = "cuda" if torch.cuda.is_available() else "cpu"
-
 processor = AutoProcessor.from_pretrained("nvidia/parakeet-ctc-1.1b")
 model = AutoModelForCTC.from_pretrained("nvidia/parakeet-ctc-1.1b", dtype="auto", device_map="auto")
 
@@ -182,7 +178,7 @@ text_samples = [el for el in ds["text"][:5]]
 
 # passing `text` to the processor will prepare inputs' `labels` key
 inputs = processor(audio=speech_samples, text=text_samples, sampling_rate=processor.feature_extractor.sampling_rate)
-inputs.to(device, dtype=model.dtype)
+inputs.to(model.device, dtype=model.dtype)
 
 outputs = model(**inputs)
 outputs.loss.backward()

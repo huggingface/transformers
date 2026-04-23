@@ -69,7 +69,7 @@ dataset = load_dataset("hf-internal-testing/example-documents", split="test")
 image = dataset[0]["image"]
 question = "What time is the coffee break?"
 task_prompt = f"<s_docvqa><s_question>{question}</s_question><s_answer>"
-inputs = processor(image, task_prompt, return_tensors="pt")
+inputs = processor(image, task_prompt, return_tensors="pt").to(model.device)
 
 outputs = model.generate(
     input_ids=inputs.input_ids,
@@ -101,7 +101,7 @@ dataset = load_dataset("hf-internal-testing/example-documents", split="test")
 image = dataset[0]["image"]
 question = "What time is the coffee break?"
 task_prompt = f"<s_docvqa><s_question>{question}</s_question><s_answer>"
-inputs = processor(image, task_prompt, return_tensors="pt")
+inputs = processor(image, task_prompt, return_tensors="pt").to(model.device)
 
 outputs = model.generate(
     input_ids=inputs.input_ids,
@@ -134,9 +134,9 @@ print(answer)
 
     # prepare decoder inputs
     task_prompt = "<s_rvlcdip>"
-    decoder_input_ids = processor.tokenizer(task_prompt, add_special_tokens=False, return_tensors="pt").input_ids
+    decoder_input_ids = processor.tokenizer(task_prompt, add_special_tokens=False, return_tensors="pt").to(model.device).input_ids
 
-    pixel_values = processor(image, return_tensors="pt").pixel_values
+    pixel_values = processor(image, return_tensors="pt").to(model.device).pixel_values
 
     outputs = model.generate(
         pixel_values.to(model.device),
@@ -176,9 +176,9 @@ print(answer)
 
     # prepare decoder inputs
     task_prompt = "<s_cord-v2>"
-    decoder_input_ids = processor.tokenizer(task_prompt, add_special_tokens=False, return_tensors="pt").input_ids
+    decoder_input_ids = processor.tokenizer(task_prompt, add_special_tokens=False, return_tensors="pt").to(model.device).input_ids
 
-    pixel_values = processor(image, return_tensors="pt").pixel_values
+    pixel_values = processor(image, return_tensors="pt").to(model.device).pixel_values
 
     outputs = model.generate(
         pixel_values.to(model.device),

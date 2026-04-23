@@ -135,7 +135,7 @@ visualizer("<img> What is in this image?")
     ```py
     prompt = "What is in this image?"
     answer = "a pallas cat"
-    inputs = processor(images=image, text=prompt, suffix=answer, return_tensors="pt")
+    inputs = processor(images=image, text=prompt, suffix=answer, return_tensors="pt").to(model.device)
     ```
 
 - PaliGemma can support multiple input images if it is fine-tuned to accept multiple images. For example, the [NLVR2](https://huggingface.co/google/paligemma-3b-ft-nlvr2-448) checkpoint supports multiple images. Pass the images as a list to the processor.
@@ -159,7 +159,7 @@ visualizer("<img> What is in this image?")
         ).raw
     )
 
-    inputs = processor(images=[[cat_image, cow_image]], text=prompt, return_tensors="pt")
+    inputs = processor(images=[[cat_image, cow_image]], text=prompt, return_tensors="pt").to(model.device)
 
     output = model.generate(**inputs, max_new_tokens=20, cache_implementation="static")
     print(processor.decode(output[0], skip_special_tokens=True))

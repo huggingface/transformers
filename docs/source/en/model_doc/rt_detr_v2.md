@@ -57,7 +57,7 @@ image = Image.open(requests.get(url, stream=True).raw)
 image_processor = RTDetrImageProcessor.from_pretrained("PekingU/rtdetr_v2_r18vd")
 model = RTDetrV2ForObjectDetection.from_pretrained("PekingU/rtdetr_v2_r18vd", device_map="auto")
 
-inputs = image_processor(images=image, return_tensors="pt")
+inputs = image_processor(images=image, return_tensors="pt").to(model.device)
 
 with torch.no_grad():
     outputs = model(**inputs)

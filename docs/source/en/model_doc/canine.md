@@ -77,7 +77,7 @@ sequence_output = outputs.last_hidden_state
 
     tokenizer = AutoTokenizer("google/canine-c")
     inputs = ["Life is like a box of chocolates.", "You never know what you gonna get."]
-    encoding = tokenizer(inputs, padding="longest", truncation=True, return_tensors="pt")
+    encoding = tokenizer(inputs, padding="longest", truncation=True, return_tensors="pt").to(model.device)
     ```
 
 - CANINE is primarily designed to be fine-tuned on a downstream task. The pretrained model can be used for either masked language modeling or next sentence prediction.

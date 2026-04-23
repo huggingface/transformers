@@ -51,7 +51,7 @@ url = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/
 image = Image.open(requests.get(url, stream=True).raw)
 
 processor = ViTImageProcessor.from_pretrained("facebook/vit-mae-base")
-inputs = processor(image, return_tensors="pt")
+inputs = processor(image, return_tensors="pt").to(model.device)
 inputs = {k: v.to(model.device) for k, v in inputs.items()}
 
 model = ViTMAEForPreTraining.from_pretrained("facebook/vit-mae-base", attn_implementation="sdpa", device_map="auto")

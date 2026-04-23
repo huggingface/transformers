@@ -226,7 +226,7 @@ image = Image.open(
 ).convert("RGB")
 words = ["hello", "world"]
 boxes = [[1, 2, 3, 4], [5, 6, 7, 8]]  # make sure to normalize your bounding boxes
-encoding = processor(image, words, boxes=boxes, return_tensors="pt")
+encoding = processor(image, words, boxes=boxes, return_tensors="pt").to(model.device)
 print(encoding.keys())
 # dict_keys(['input_ids', 'token_type_ids', 'attention_mask', 'bbox', 'image'])
 ```
@@ -251,7 +251,7 @@ image = Image.open(
 words = ["hello", "world"]
 boxes = [[1, 2, 3, 4], [5, 6, 7, 8]]  # make sure to normalize your bounding boxes
 word_labels = [1, 2]
-encoding = processor(image, words, boxes=boxes, word_labels=word_labels, return_tensors="pt")
+encoding = processor(image, words, boxes=boxes, word_labels=word_labels, return_tensors="pt").to(model.device)
 print(encoding.keys())
 # dict_keys(['input_ids', 'token_type_ids', 'attention_mask', 'bbox', 'labels', 'image'])
 ```
@@ -271,7 +271,7 @@ image = Image.open(
     "name_of_your_document - can be a png, jpg, etc. of your documents (PDFs must be converted to images)."
 ).convert("RGB")
 question = "What's his name?"
-encoding = processor(image, question, return_tensors="pt")
+encoding = processor(image, question, return_tensors="pt").to(model.device)
 print(encoding.keys())
 # dict_keys(['input_ids', 'token_type_ids', 'attention_mask', 'bbox', 'image'])
 ```
@@ -293,7 +293,7 @@ image = Image.open(
 question = "What's his name?"
 words = ["hello", "world"]
 boxes = [[1, 2, 3, 4], [5, 6, 7, 8]]  # make sure to normalize your bounding boxes
-encoding = processor(image, question, words, boxes=boxes, return_tensors="pt")
+encoding = processor(image, question, words, boxes=boxes, return_tensors="pt").to(model.device)
 print(encoding.keys())
 # dict_keys(['input_ids', 'token_type_ids', 'attention_mask', 'bbox', 'image'])
 ```

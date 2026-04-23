@@ -46,7 +46,7 @@ processor = AutoImageProcessor.from_pretrained("facebook/dinov3-vitl16-chmv2-dpt
 model = AutoModelForDepthEstimation.from_pretrained("facebook/dinov3-vitl16-chmv2-dpt-head", device_map="auto")
 
 image = Image.open("image.tif")
-inputs = processor(images=image, return_tensors="pt")
+inputs = processor(images=image, return_tensors="pt").to(model.device)
 
 with torch.no_grad():
     outputs = model(**inputs)

@@ -61,7 +61,7 @@ processor = Speech2TextProcessor.from_pretrained("facebook/s2t-small-librispeech
 
 ds = load_dataset("hf-internal-testing/librispeech_asr_demo", "clean", split="validation")
 
-inputs = processor(ds[0]["audio"]["array"], sampling_rate=ds[0]["audio"]["sampling_rate"], return_tensors="pt")
+inputs = processor(ds[0]["audio"]["array"], sampling_rate=ds[0]["audio"]["sampling_rate"], return_tensors="pt").to(model.device)
 generated_ids = model.generate(inputs["input_features"], attention_mask=inputs["attention_mask"])
 
 transcription = processor.batch_decode(generated_ids, skip_special_tokens=True)
@@ -87,7 +87,7 @@ processor = Speech2TextProcessor.from_pretrained("facebook/s2t-medium-mustc-mult
 
 ds = load_dataset("hf-internal-testing/librispeech_asr_demo", "clean", split="validation")
 
-inputs = processor(ds[0]["audio"]["array"], sampling_rate=ds[0]["audio"]["sampling_rate"], return_tensors="pt")
+inputs = processor(ds[0]["audio"]["array"], sampling_rate=ds[0]["audio"]["sampling_rate"], return_tensors="pt").to(model.device)
 generated_ids = model.generate(
     inputs["input_features"],
     attention_mask=inputs["attention_mask"],

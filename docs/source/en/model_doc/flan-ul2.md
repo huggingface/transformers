@@ -45,7 +45,7 @@ from transformers import AutoModelForSeq2SeqLM, AutoTokenizer, BitsAndBytesConfi
 model = AutoModelForSeq2SeqLM.from_pretrained("google/flan-ul2", quantization_config=BitsAndBytesConfig(load_in_8bit=True), device_map="auto")
 tokenizer = AutoTokenizer.from_pretrained("google/flan-ul2")
 
-inputs = tokenizer("A step by step recipe to make bolognese pasta:", return_tensors="pt")
+inputs = tokenizer("A step by step recipe to make bolognese pasta:", return_tensors="pt").to(model.device)
 outputs = model.generate(**inputs)
 print(tokenizer.batch_decode(outputs, skip_special_tokens=True))
 ['In a large skillet, brown the ground beef and onion over medium heat. Add the garlic']

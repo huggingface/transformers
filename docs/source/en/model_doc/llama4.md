@@ -91,7 +91,7 @@ tokenizer = AutoTokenizer.from_pretrained(model_id)
 messages = [
     {"role": "user", "content": "Who are you?"},
 ]
-inputs = tokenizer.apply_chat_template(messages, add_generation_prompt=True, return_tensors="pt", return_dict=True)
+inputs = tokenizer.apply_chat_template(messages, add_generation_prompt=True, return_tensors="pt", return_dict=True).to(model.device)
 
 model = Llama4ForConditionalGeneration.from_pretrained(
     model_id,
@@ -221,7 +221,7 @@ model = Llama4ForConditionalGeneration.from_pretrained(
 messages = [
     {"role": "user", "content": f"Look at the following texts: [{very_long_text}]\n\n\n\nWhat are the books, and who wrote them? Make me a nice list."},
 ]
-input_ids = tokenizer.apply_chat_template(messages, add_generation_prompt=True, return_tensors="pt")
+input_ids = tokenizer.apply_chat_template(messages, add_generation_prompt=True, return_tensors="pt").to(model.device)
 
 torch_device_module = getattr(torch, device, torch.cuda)
 torch_device_module.synchronize()
@@ -326,7 +326,7 @@ tokenizer = AutoTokenizer.from_pretrained(model_id)
 messages = [
     {"role": "user", "content": "Who are you?"},
 ]
-inputs = tokenizer.apply_chat_template(messages, add_generation_prompt=True, return_tensors="pt", return_dict=True)
+inputs = tokenizer.apply_chat_template(messages, add_generation_prompt=True, return_tensors="pt", return_dict=True).to(model.device)
 
 model = Llama4ForConditionalGeneration.from_pretrained(
     model_id,
@@ -355,7 +355,7 @@ tokenizer = AutoTokenizer.from_pretrained(model_id)
 messages = [
     {"role": "user", "content": "Who are you?"},
 ]
-inputs = tokenizer.apply_chat_template(messages, add_generation_prompt=True, return_tensors="pt", return_dict=True)
+inputs = tokenizer.apply_chat_template(messages, add_generation_prompt=True, return_tensors="pt", return_dict=True).to(model.device)
 
 model = Llama4ForConditionalGeneration.from_pretrained(
     model_id,

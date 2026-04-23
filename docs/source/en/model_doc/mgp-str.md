@@ -61,7 +61,7 @@ model = MgpstrForSceneTextRecognition.from_pretrained('alibaba-damo/mgp-str-base
 url = "https://i.postimg.cc/ZKwLg2Gw/367-14.png"
 image = Image.open(requests.get(url, stream=True).raw).convert("RGB")
 
-pixel_values = processor(images=image, return_tensors="pt").pixel_values
+pixel_values = processor(images=image, return_tensors="pt").to(model.device).pixel_values
 outputs = model(pixel_values)
 
 generated_text = processor.batch_decode(outputs.logits)['generated_text']

@@ -48,7 +48,7 @@ from transformers import AutoModelForSeq2SeqLM, AutoTokenizer
 model = AutoModelForSeq2SeqLM.from_pretrained("google/madlad400-3b-mt", device_map="auto")
 tokenizer = AutoTokenizer.from_pretrained("google/madlad400-3b-mt")
 
-inputs = tokenizer("<2pt> I love pizza!", return_tensors="pt")
+inputs = tokenizer("<2pt> I love pizza!", return_tensors="pt").to(model.device)
 outputs = model.generate(**inputs)
 print(tokenizer.batch_decode(outputs, skip_special_tokens=True))
 ['Eu amo pizza!']

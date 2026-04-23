@@ -37,7 +37,7 @@ from transformers import AutoTokenizer, AutoModelForCausalLM
 
 tokenizer = AutoTokenizer.from_pretrained("SmallDoge/Doge-20M")
 model = AutoModelForCausalLM.from_pretrained("SmallDoge/Doge-20M", device_map="auto")
-inputs = tokenizer("Hey how are you doing?", return_tensors="pt")
+inputs = tokenizer("Hey how are you doing?", return_tensors="pt").to(model.device)
 
 outputs = model.generate(**inputs, max_new_tokens=100)
 print(tokenizer.batch_decode(outputs))

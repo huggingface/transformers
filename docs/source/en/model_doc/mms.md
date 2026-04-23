@@ -130,7 +130,7 @@ Now we process the audio data, pass the processed audio data to the model and tr
 just like we usually do for [`Wav2Vec2ForCTC`].
 
 ```py
-inputs = processor(en_sample, sampling_rate=16_000, return_tensors="pt")
+inputs = processor(en_sample, sampling_rate=16_000, return_tensors="pt").to(model.device)
 
 with torch.no_grad():
     outputs = model(**inputs).logits
@@ -148,7 +148,7 @@ We pass the target language as an input - `"fra"` for French.
 processor.tokenizer.set_target_lang("fra")
 model.load_adapter("fra")
 
-inputs = processor(fr_sample, sampling_rate=16_000, return_tensors="pt")
+inputs = processor(fr_sample, sampling_rate=16_000, return_tensors="pt").to(model.device)
 
 with torch.no_grad():
     outputs = model(**inputs).logits
@@ -196,7 +196,7 @@ from transformers import VitsTokenizer, VitsModel, set_seed
 tokenizer = VitsTokenizer.from_pretrained("facebook/mms-tts-eng")
 model = VitsModel.from_pretrained("facebook/mms-tts-eng", device_map="auto")
 
-inputs = tokenizer(text="Hello - my dog is cute", return_tensors="pt")
+inputs = tokenizer(text="Hello - my dog is cute", return_tensors="pt").to(model.device)
 
 set_seed(555)  # make deterministic
 
@@ -277,7 +277,7 @@ def uromanize(input_string, uroman_path):
 text = "이봐 무슨 일이야"
 uromanized_text = uromanize(text, uroman_path=os.environ["UROMAN"])
 
-inputs = tokenizer(text=uromanized_text, return_tensors="pt")
+inputs = tokenizer(text=uromanized_text, return_tensors="pt").to(model.device)
 
 set_seed(555)  # make deterministic
 with torch.no_grad():
@@ -298,7 +298,7 @@ from transformers import VitsTokenizer, VitsModel, set_seed
 tokenizer = VitsTokenizer.from_pretrained("facebook/mms-tts-eng")
 model = VitsModel.from_pretrained("facebook/mms-tts-eng", device_map="auto")
 
-inputs = tokenizer(text="Hello - my dog is cute", return_tensors="pt")
+inputs = tokenizer(text="Hello - my dog is cute", return_tensors="pt").to(model.device)
 
 # make deterministic
 set_seed(555)
@@ -356,7 +356,7 @@ Now we process the audio data, pass the processed audio data to the model to cla
 
 ```py
 # English
-inputs = processor(en_sample, sampling_rate=16_000, return_tensors="pt")
+inputs = processor(en_sample, sampling_rate=16_000, return_tensors="pt").to(model.device)
 
 with torch.no_grad():
     outputs = model(**inputs).logits
@@ -366,7 +366,7 @@ detected_lang = model.config.id2label[lang_id]
 # 'eng'
 
 # Arabic
-inputs = processor(ar_sample, sampling_rate=16_000, return_tensors="pt")
+inputs = processor(ar_sample, sampling_rate=16_000, return_tensors="pt").to(model.device)
 
 with torch.no_grad():
     outputs = model(**inputs).logits

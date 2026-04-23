@@ -106,7 +106,7 @@ print(tokenizer.decode(outputs[0]))
    input_ids = tokenizer(
        "This is a long article to summarize", add_special_tokens=False, return_tensors="pt"
    ).input_ids
-   labels = tokenizer("This is a short summary", return_tensors="pt").input_ids
+   labels = tokenizer("This is a short summary", return_tensors="pt").to(model.device).input_ids
 
    # train
    loss = bert2bert(input_ids=input_ids, decoder_input_ids=labels, labels=labels).loss

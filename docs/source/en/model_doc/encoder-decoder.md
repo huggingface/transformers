@@ -121,7 +121,7 @@ model = EncoderDecoderModel.from_pretrained(model_name, device_map="auto")
 input_text = "Plants create energy through a process known as"
 
 # Encode the input text
-inputs = tokenizer(input_text, return_tensors="pt", add_special_tokens=False).input_ids
+inputs = tokenizer(input_text, return_tensors="pt", add_special_tokens=False).to(model.device).input_ids
 
 # Generate the translated output
 outputs = model.generate(inputs)[0]

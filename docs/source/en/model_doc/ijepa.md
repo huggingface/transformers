@@ -48,7 +48,7 @@ feature_extractor = pipeline(
     model="facebook/ijepa_vith14_1k",
     device=0,
 )
-features = feature_extractor("https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg", return_tensors=True)  
+features = feature_extractor("https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg", return_tensors=True).to(model.device)  
 
 print(f"Feature shape: {features.shape}")
 
@@ -74,7 +74,7 @@ model = AutoModel.from_pretrained("facebook/ijepa_vith14_1k", dtype="auto", attn
 
 
 def infer(image):  
-    inputs = processor(image, return_tensors="pt")  
+    inputs = processor(image, return_tensors="pt").to(model.device)  
     outputs = model(**inputs)  
     return outputs.last_hidden_state.mean(dim=1)  
 
@@ -113,7 +113,7 @@ model = AutoModel.from_pretrained("facebook/ijepa_vitg16_22k", quantization_conf
 
 
 def infer(image):
-    inputs = processor(image, return_tensors="pt")
+    inputs = processor(image, return_tensors="pt").to(model.device)
     outputs = model(**inputs)
     return outputs.last_hidden_state.mean(dim=1)
 

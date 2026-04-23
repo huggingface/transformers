@@ -176,7 +176,7 @@ texts = [
 ]
 
 # NOTE: lowercasing and padding/truncation to length 64 are applied automatically by the processor pipeline.
-inputs = processor(text=texts, return_tensors="pt")
+inputs = processor(text=texts, return_tensors="pt").to(model.device)
 
 with torch.no_grad():
     text_features = model.get_text_features(**inputs)

@@ -65,7 +65,7 @@ Tarell Brown and Donald Strickland will compete to replace Spencer with the 49er
 """
 )
 
-input_ids = tokenizer([text], return_tensors="pt")["input_ids"]
+input_ids = tokenizer([text], return_tensors="pt").to(model.device)["input_ids"]
 logits = model(input_ids).logits
 
 masked_index = (input_ids[0] == tokenizer.mask_token_id).nonzero().item()
@@ -84,8 +84,8 @@ tokenizer.decode(predictions).split()
 - [`LongformerForMaskedLM`] is trained like [`RobertaForMaskedLM`] and should be used as shown below.
 
   ```py
-    input_ids = tokenizer.encode("This is a sentence from [MASK] training data", return_tensors="pt")
-    mlm_labels = tokenizer.encode("This is a sentence from the training data", return_tensors="pt")
+    input_ids = tokenizer.encode("This is a sentence from [MASK] training data", return_tensors="pt").to(model.device)
+    mlm_labels = tokenizer.encode("This is a sentence from the training data", return_tensors="pt").to(model.device)
     loss = model(input_ids, labels=input_ids, masked_lm_labels=mlm_labels)[0]
     ```
 

@@ -74,7 +74,7 @@ from datasets import load_dataset, Audio
 
 # Load processor and model
 processor = AutoProcessor.from_pretrained("google/medasr")
-model = AutoModelForCTC.from_pretrained("google/medasr", dtype="auto", device_map="auto")
+model = AutoModelForCTC.from_pretrained("google/medasr", device_map="auto")
 
 # Load a small example dataset and prepare batch
 ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")

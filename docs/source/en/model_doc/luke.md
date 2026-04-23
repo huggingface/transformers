@@ -93,7 +93,7 @@ tokenizer = LukeTokenizer.from_pretrained("studio-ousia/luke-base")
 
 text = "Beyoncé lives in Los Angeles."
 entity_spans = [(0, 7)]  # character-based entity span corresponding to "Beyoncé"
-inputs = tokenizer(text, entity_spans=entity_spans, add_prefix_space=True, return_tensors="pt")
+inputs = tokenizer(text, entity_spans=entity_spans, add_prefix_space=True, return_tensors="pt").to(model.device)
 outputs = model(**inputs)
 word_last_hidden_state = outputs.last_hidden_state
 entity_last_hidden_state = outputs.entity_last_hidden_state
@@ -104,7 +104,7 @@ entities = [
     "Los Angeles",
 ]  # Wikipedia entity titles corresponding to the entity mentions "Beyoncé" and "Los Angeles"
 entity_spans = [(0, 7), (17, 28)]  # character-based entity spans corresponding to "Beyoncé" and "Los Angeles"
-inputs = tokenizer(text, entities=entities, entity_spans=entity_spans, add_prefix_space=True, return_tensors="pt")
+inputs = tokenizer(text, entities=entities, entity_spans=entity_spans, add_prefix_space=True, return_tensors="pt").to(model.device)
 outputs = model(**inputs)
 word_last_hidden_state = outputs.last_hidden_state
 entity_last_hidden_state = outputs.entity_last_hidden_state
@@ -113,7 +113,7 @@ entity_last_hidden_state = outputs.entity_last_hidden_state
 model = LukeForEntityPairClassification.from_pretrained("studio-ousia/luke-large-finetuned-tacred", device_map="auto")
 tokenizer = LukeTokenizer.from_pretrained("studio-ousia/luke-large-finetuned-tacred")
 entity_spans = [(0, 7), (17, 28)]  # character-based entity spans corresponding to "Beyoncé" and "Los Angeles"
-inputs = tokenizer(text, entity_spans=entity_spans, return_tensors="pt")
+inputs = tokenizer(text, entity_spans=entity_spans, return_tensors="pt").to(model.device)
 outputs = model(**inputs)
 logits = outputs.logits
 predicted_class_idx = int(logits[0].argmax())

@@ -51,7 +51,7 @@ feature_extractor = AutoFeatureExtractor.from_pretrained("kyutai/mimi")
 # load audio sample
 librispeech_dummy = librispeech_dummy.cast_column("audio", Audio(sampling_rate=feature_extractor.sampling_rate))
 audio_sample = librispeech_dummy[-1]["audio"]["array"]
-inputs = feature_extractor(raw_audio=audio_sample, sampling_rate=feature_extractor.sampling_rate, return_tensors="pt")
+inputs = feature_extractor(raw_audio=audio_sample, sampling_rate=feature_extractor.sampling_rate, return_tensors="pt").to(model.device)
 
 encoder_outputs = model.encode(inputs["input_values"], inputs["padding_mask"])
 audio_values = model.decode(encoder_outputs.audio_codes, inputs["padding_mask"])[0]

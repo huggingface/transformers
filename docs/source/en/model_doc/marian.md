@@ -106,7 +106,7 @@ model = MarianMTModel.from_pretrained(model_name, device_map="auto")
 src_texts = ["arb>> Hello, how are you today?"]
 
 # Tokenize and translate
-inputs = tokenizer(src_texts, return_tensors="pt", padding=True, truncation=True)
+inputs = tokenizer(src_texts, return_tensors="pt", padding=True, truncation=True).to(model.device)
 translated = model.generate(**inputs)
 
 # Decode and print result
@@ -130,7 +130,7 @@ model = MarianMTModel.from_pretrained(model_name, device_map="auto")
 src_texts = [">>fr<< Hello, how are you today?"]
 
 # Tokenize and translate
-inputs = tokenizer(src_texts, return_tensors="pt", padding=True, truncation=True)
+inputs = tokenizer(src_texts, return_tensors="pt", padding=True, truncation=True).to(model.device)
 translated = model.generate(**inputs)
 
 # Decode and print result

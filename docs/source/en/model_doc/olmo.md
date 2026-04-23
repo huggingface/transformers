@@ -102,7 +102,7 @@ model = AutoModelForCausalLM.from_pretrained(
 
 tokenizer = AutoTokenizer.from_pretrained("allenai/OLMo-7B-hf")
 
-inputs = tokenizer("Bitcoin is", return_tensors="pt")
+inputs = tokenizer("Bitcoin is", return_tensors="pt").to(model.device)
 inputs = {k: v.to(model.device) for k, v in inputs.items()}
 
 output = model.generate(**inputs, max_length=64)

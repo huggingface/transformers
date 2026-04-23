@@ -57,7 +57,7 @@ messages = [
 
 # Prepare inputs
 prompt = processor.apply_chat_template(messages)
-inputs = processor(text=prompt, images=[image], return_tensors="pt")
+inputs = processor(text=prompt, images=[image], return_tensors="pt").to(model.device)
 
 # Inference
 with torch.no_grad():

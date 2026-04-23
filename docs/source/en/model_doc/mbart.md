@@ -88,7 +88,7 @@ print(tokenizer.batch_decode(generated_tokens, skip_special_tokens=True))
     tokenizer = MBartTokenizer.from_pretrained("facebook/mbart-large-en-ro", src_lang="en_XX")
 
     article = "UN Chief Says There Is No Military Solution in Syria"
-    inputs = tokenizer(article, return_tensors="pt")
+    inputs = tokenizer(article, return_tensors="pt").to(model.device)
 
     translated_tokens = model.generate(**inputs, decoder_start_token_id=tokenizer.lang_code_to_id["ro_RO"])
     tokenizer.batch_decode(translated_tokens, skip_special_tokens=True)[0]
@@ -107,7 +107,7 @@ print(tokenizer.batch_decode(generated_tokens, skip_special_tokens=True))
     article_ar = "الأمين العام للأمم المتحدة يقول إنه لا يوجد حل عسكري في سوريا."
     tokenizer.src_lang = "ar_AR"
 
-    encoded_ar = tokenizer(article_ar, return_tensors="pt")
+    encoded_ar = tokenizer(article_ar, return_tensors="pt").to(model.device)
     generated_tokens = model.generate(**encoded_ar, forced_bos_token_id=tokenizer.lang_code_to_id["en_XX"])
     tokenizer.batch_decode(generated_tokens, skip_special_tokens=True)
     ```

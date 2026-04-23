@@ -57,7 +57,7 @@ mname = "facebook/blenderbot-400M-distill"
 model = BlenderbotForConditionalGeneration.from_pretrained(mname, device_map="auto")
 tokenizer = BlenderbotTokenizer.from_pretrained(mname)
 UTTERANCE = "My friends are cool but they eat too many carbs."
-inputs = tokenizer([UTTERANCE], return_tensors="pt")
+inputs = tokenizer([UTTERANCE], return_tensors="pt").to(model.device)
 reply_ids = model.generate(**inputs)
 print(tokenizer.batch_decode(reply_ids))
 ["<s> That's unfortunate. Are they trying to lose weight or are they just trying to be healthier?</s>"]

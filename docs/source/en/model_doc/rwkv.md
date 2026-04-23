@@ -41,7 +41,7 @@ from transformers import AutoTokenizer, RwkvConfig, RwkvModel
 model = RwkvModel.from_pretrained("sgugger/rwkv-430M-pile", device_map="auto")
 tokenizer = AutoTokenizer.from_pretrained("sgugger/rwkv-430M-pile")
 
-inputs = tokenizer("This is an example.", return_tensors="pt")
+inputs = tokenizer("This is an example.", return_tensors="pt").to(model.device)
 # Feed everything to the model
 outputs = model(inputs["input_ids"])
 output_whole = outputs.last_hidden_state

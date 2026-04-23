@@ -80,7 +80,7 @@ Emu3 can also generate images from textual input. Here is how you can do it:
 
 ```python
 processor = Emu3Processor.from_pretrained("BAAI/Emu3-Gen-hf")
-model = Emu3ForConditionalGeneration.from_pretrained("BAAI/Emu3-Gen-hf", dtype="bfloat16", device_map="auto", attn_implementation="flash_attention_2")
+model = Emu3ForConditionalGeneration.from_pretrained("BAAI/Emu3-Gen-hf", device_map="auto", attn_implementation="flash_attention_2")
 
 
 inputs = processor(
@@ -106,7 +106,7 @@ def prefix_allowed_tokens_fn(batch_id, input_ids):
     eos_token_id = torch.tensor([processor.tokenizer.eos_token_id], device=model.device)
     pad_token_id = torch.tensor([processor.tokenizer.pad_token_id], device=model.device)
     eof_token_id = torch.tensor([processor.tokenizer.eof_token_id], device=model.device)
-    eol_token_id = processor.tokenizer.encode("<|extra_200|>", return_tensors="pt")[0]
+    eol_token_id = processor.tokenizer.encode("<|extra_200|>", return_tensors="pt").to(model.device)[0]
 
     position = torch.nonzero(input_ids == image_wrapper_token_id, as_tuple=True)[0][0]
     offset = input_ids.shape[0] - position
@@ -134,7 +134,7 @@ out = model.generate(
 )
 
 image = model.decode_image_tokens(out.sequences[:, inputs.input_ids.shape[1]: ], height=HEIGHT, width=WIDTH)
-images = processor.postprocess(list(image.float()), return_tensors="PIL.Image.Image") # internally we convert to np but it's not supported in bf16 precision
+images = processor.postprocess(list(image.float()), return_tensors="PIL.Image.Image").to(model.device) # internally we convert to np but it's not supported in bf16 precision
 for i, image in enumerate(images['pixel_values']):
     image.save(f"result{i}.png")
 

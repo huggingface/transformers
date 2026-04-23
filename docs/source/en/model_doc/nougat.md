@@ -74,7 +74,7 @@ model.to(model.device)  # doctest: +IGNORE_RESULT
 # prepare PDF image for the model
 filepath = hf_hub_download(repo_id="hf-internal-testing/fixtures_docvqa", filename="nougat_paper.png", repo_type="dataset")
 image = Image.open(filepath)
-pixel_values = processor(image, return_tensors="pt").pixel_values
+pixel_values = processor(image, return_tensors="pt").to(model.device).pixel_values
 
 # generate transcription (here we only generate 30 tokens)
 outputs = model.generate(

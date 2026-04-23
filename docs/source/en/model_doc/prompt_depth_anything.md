@@ -53,7 +53,7 @@ prompt_depth = Image.open(requests.get(prompt_depth_url, stream=True).raw)
 # the prompt depth can be None, and the model will output a monocular relative depth.
 
 # prepare image for the model
-inputs = image_processor(images=image, return_tensors="pt", prompt_depth=prompt_depth)
+inputs = image_processor(images=image, return_tensors="pt", prompt_depth=prompt_depth).to(model.device)
 
 with torch.no_grad():
     outputs = model(**inputs)

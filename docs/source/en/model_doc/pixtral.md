@@ -113,7 +113,7 @@ chat = [
 ]
 
 prompt = processor.apply_chat_template(chat, tokenize=False, add_generation_prompt=True)
-inputs = processor(text=prompt, images=[dog_image, mountain_image], return_tensors="pt")
+inputs = processor(text=prompt, images=[dog_image, mountain_image], return_tensors="pt").to(model.device)
 
 inputs["pixel_values"] = inputs["pixel_values"].to(model.dtype)
 inputs = {k: v.to(model.device) for k, v in inputs.items()}

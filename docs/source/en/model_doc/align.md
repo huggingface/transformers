@@ -118,7 +118,7 @@ for label, score in zip(candidate_labels, probs):
   texts = ["a photo of a cat", "a photo of a dog"]
   
   # Process image and text inputs
-  inputs = processor(images=image, text=texts, return_tensors="pt")
+  inputs = processor(images=image, text=texts, return_tensors="pt").to(model.device)
   
   # Get the embeddings
   with torch.no_grad():

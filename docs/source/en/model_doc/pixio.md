@@ -42,7 +42,7 @@ image = Image.open(requests.get(url, stream=True).raw)
 processor = AutoImageProcessor.from_pretrained("facebook/pixio-vith16")
 model = AutoModel.from_pretrained("facebook/pixio-vith16", device_map="auto")
 
-inputs = processor(images=image, return_tensors="pt")
+inputs = processor(images=image, return_tensors="pt").to(model.device)
 outputs = model(**inputs)
 features_norm = outputs.last_hidden_state # class tokens + patch tokens after last LayerNorm
 features = outputs.hidden_states[-1] # class tokens + patch tokens before last LayerNorm
@@ -70,7 +70,7 @@ features = outputs.hidden_states[-1] # class tokens + patch tokens before last L
   model = AutoModel.from_pretrained('facebook/pixio-vith16', device_map="auto")
   patch_size = model.config.patch_size
 
-  inputs = processor(images=image, return_tensors="pt")
+  inputs = processor(images=image, return_tensors="pt").to(model.device)
   print(inputs.pixel_values.shape)  # [1, 3, 256, 256]
   batch_size, rgb, img_height, img_width = inputs.pixel_values.shape
   num_patches_height, num_patches_width = img_height // patch_size, img_width // patch_size
@@ -101,7 +101,7 @@ features = outputs.hidden_states[-1] # class tokens + patch tokens before last L
 
   compiled_model = torch.compile(model)
 
-  inputs = processor(images=image, return_tensors="pt")
+  inputs = processor(images=image, return_tensors="pt").to(model.device)
   outputs = compiled_model(**inputs)
   last_hidden_states = outputs.last_hidden_state
   ```

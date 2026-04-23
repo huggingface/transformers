@@ -65,7 +65,7 @@ images = [image1, image2]
 processor = AutoImageProcessor.from_pretrained("zju-community/efficientloftr")
 model = AutoModelForKeypointMatching.from_pretrained("zju-community/efficientloftr", device_map="auto")
 
-inputs = processor(images, return_tensors="pt")
+inputs = processor(images, return_tensors="pt").to(model.device)
 with torch.inference_mode():
     outputs = model(**inputs)
 
@@ -92,7 +92,7 @@ processed_outputs = processor.post_process_keypoint_matching(outputs, image_size
     
     # EfficientLoFTR requires pairs of images
     images = [image1, image2]
-    inputs = processor(images, return_tensors="pt")
+    inputs = processor(images, return_tensors="pt").to(model.device)
     with torch.inference_mode():
         outputs = model(**inputs)
     

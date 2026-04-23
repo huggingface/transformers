@@ -72,7 +72,7 @@ url = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/
 image = Image.open(requests.get(url, stream=True).raw)
 prompt = "<start_of_image> in this image, there is"
 
-model_inputs = processor(text=prompt, images=image, return_tensors="pt")
+model_inputs = processor(text=prompt, images=image, return_tensors="pt").to(model.device)
 generation = model.generate(**model_inputs, max_new_tokens=20, do_sample=False)
 print(processor.decode(generation[0]))
 ```

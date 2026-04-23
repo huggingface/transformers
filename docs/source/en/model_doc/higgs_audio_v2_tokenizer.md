@@ -43,7 +43,7 @@ model = HiggsAudioV2TokenizerModel.from_pretrained(model_id, device_map="auto")
 dummy_dataset = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
 dummy_dataset = dummy_dataset.cast_column("audio", Audio(sampling_rate=feature_extractor.sampling_rate))
 audio_sample = dummy_dataset[-1]["audio"]["array"]
-inputs = feature_extractor(raw_audio=audio_sample, sampling_rate=feature_extractor.sampling_rate, return_tensors="pt")
+inputs = feature_extractor(raw_audio=audio_sample, sampling_rate=feature_extractor.sampling_rate, return_tensors="pt").to(model.device)
 
 # encode and decode
 encoder_outputs = model.encode(inputs["input_values"])

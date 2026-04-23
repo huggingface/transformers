@@ -66,7 +66,7 @@ sampling_rate = dataset.features["audio"].sampling_rate
 processor = AutoProcessor.from_pretrained("facebook/hubert-base-ls960")
 model = AutoModelForCTC.from_pretrained("facebook/hubert-base-ls960", device_map="auto", attn_implementation="sdpa")
 
-inputs = processor(dataset[0]["audio"]["array"], sampling_rate=sampling_rate, return_tensors="pt")
+inputs = processor(dataset[0]["audio"]["array"], sampling_rate=sampling_rate, return_tensors="pt").to(model.device)
 with torch.no_grad():
     logits = model(**inputs).logits
 predicted_ids = torch.argmax(logits, dim=-1)
@@ -101,7 +101,7 @@ sampling_rate = dataset.features["audio"].sampling_rate
 processor = AutoProcessor.from_pretrained("facebook/hubert-base-ls960")
 model = AutoModelForCTC.from_pretrained("facebook/hubert-base-ls960", quantization_config=bnb_config, device_map="auto", attn_implementation="sdpa")
 
-inputs = processor(dataset[0]["audio"]["array"], sampling_rate=sampling_rate, return_tensors="pt")
+inputs = processor(dataset[0]["audio"]["array"], sampling_rate=sampling_rate, return_tensors="pt").to(model.device)
 with torch.no_grad():
     logits = model(**inputs).logits
 predicted_ids = torch.argmax(logits, dim=-1)

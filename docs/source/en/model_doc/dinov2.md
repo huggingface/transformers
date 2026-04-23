@@ -64,7 +64,7 @@ model = AutoModelForImageClassification.from_pretrained(
     attn_implementation="sdpa"
 )
 
-inputs = processor(images=image, return_tensors="pt")
+inputs = processor(images=image, return_tensors="pt").to(model.device)
 logits = model(**inputs).logits
 predicted_class_idx = logits.argmax(-1).item()
 print("Predicted class:", model.config.id2label[predicted_class_idx])
@@ -98,7 +98,7 @@ model = AutoModelForImageClassification.from_pretrained(
     quantization_config=quantization_config
 )
 
-inputs = processor(images=image, return_tensors="pt")
+inputs = processor(images=image, return_tensors="pt").to(model.device)
 outputs = model(**inputs)
 logits = outputs.logits
 predicted_class_idx = logits.argmax(-1).item()
@@ -126,7 +126,7 @@ print("Predicted class:", model.config.id2label[predicted_class_idx])
   model = AutoModel.from_pretrained('facebook/dinov2-base', device_map="auto")
   patch_size = model.config.patch_size
 
-  inputs = processor(images=image, return_tensors="pt")
+  inputs = processor(images=image, return_tensors="pt").to(model.device)
   print(inputs.pixel_values.shape)  # [1, 3, 224, 224]
   batch_size, rgb, img_height, img_width = inputs.pixel_values.shape
   num_patches_height, num_patches_width = img_height // patch_size, img_width // patch_size
@@ -156,7 +156,7 @@ print("Predicted class:", model.config.id2label[predicted_class_idx])
   processor = AutoImageProcessor.from_pretrained('facebook/dinov2-base')
   model = AutoModel.from_pretrained('facebook/dinov2-base', device_map="auto")
 
-  inputs = processor(images=image, return_tensors="pt")
+  inputs = processor(images=image, return_tensors="pt").to(model.device)
   outputs = model(**inputs)
   last_hidden_states = outputs[0]
 

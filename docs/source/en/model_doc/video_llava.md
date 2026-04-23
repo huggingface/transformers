@@ -109,7 +109,7 @@ video = read_video_pyav(container, indices)
 
 # For better results, we recommend to prompt the model in the following format
 prompt = "USER: <video>\nWhy is this funny? ASSISTANT:"
-inputs = processor(text=prompt, videos=video, return_tensors="pt")
+inputs = processor(text=prompt, videos=video, return_tensors="pt").to(model.device)
 
 out = model.generate(**inputs, max_new_tokens=60)
 processor.batch_decode(out, skip_special_tokens=True, clean_up_tokenization_spaces=True)
@@ -135,7 +135,7 @@ url = "http://images.cocodataset.org/val2017/000000039769.jpg"
 image = Image.open(requests.get(url, stream=True).raw)
 prompt = "USER: <image>\nHow many cats are there in the image? ASSISTANT: There are two cats. USER: <video>\nWhy is this video funny? ASSISTANT:"
 
-inputs = processor(text=prompt, images=image, videos=clip, padding=True, return_tensors="pt")
+inputs = processor(text=prompt, images=image, videos=clip, padding=True, return_tensors="pt").to(model.device)
 
 # Generate
 generate_ids = model.generate(**inputs, max_length=50)

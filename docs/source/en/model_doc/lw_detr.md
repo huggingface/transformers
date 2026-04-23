@@ -75,7 +75,7 @@ image_processor = AutoImageProcessor.from_pretrained("AnnaZhang/lwdetr_small_60e
 model = AutoModelForObjectDetection.from_pretrained("AnnaZhang/lwdetr_small_60e_coco", device_map="auto")
 
 # prepare image for the model
-inputs = image_processor(images=image, return_tensors="pt")
+inputs = image_processor(images=image, return_tensors="pt").to(model.device)
 
 with torch.no_grad():
     outputs = model(**inputs)

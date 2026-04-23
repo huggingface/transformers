@@ -47,7 +47,7 @@ tokenizer = AutoTokenizer.from_pretrained("cl-tohoku/bert-base-japanese")
 ## Input Japanese Text
 line = "吾輩は猫である。"
 
-inputs = tokenizer(line, return_tensors="pt")
+inputs = tokenizer(line, return_tensors="pt").to(model.device)
 
 print(tokenizer.decode(inputs["input_ids"][0]))
 [CLS] 吾輩 は 猫 で ある 。 [SEP]
@@ -64,7 +64,7 @@ tokenizer = AutoTokenizer.from_pretrained("cl-tohoku/bert-base-japanese-char")
 ## Input Japanese Text
 line = "吾輩は猫である。"
 
-inputs = tokenizer(line, return_tensors="pt")
+inputs = tokenizer(line, return_tensors="pt").to(model.device)
 
 print(tokenizer.decode(inputs["input_ids"][0]))
 [CLS] 吾 輩 は 猫 で あ る 。 [SEP]

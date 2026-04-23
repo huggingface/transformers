@@ -53,7 +53,7 @@ from transformers import HerbertTokenizer, RobertaModel
 tokenizer = HerbertTokenizer.from_pretrained("allegro/herbert-klej-cased-tokenizer-v1")
 model = RobertaModel.from_pretrained("allegro/herbert-klej-cased-v1", device_map="auto")
 
-encoded_input = tokenizer.encode("Kto ma lepszą sztukę, ma lepszy rząd – to jasne.", return_tensors="pt")
+encoded_input = tokenizer.encode("Kto ma lepszą sztukę, ma lepszy rząd – to jasne.", return_tensors="pt").to(model.device)
 outputs = model(encoded_input)
 
 # HerBERT can also be loaded using AutoTokenizer and AutoModel:

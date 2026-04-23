@@ -76,7 +76,7 @@ messages = [
     },
 ]
 
-inputs = processor.apply_chat_template(messages, add_generation_prompt=True, tokenize=True, return_dict=True, return_tensors="pt")
+inputs = processor.apply_chat_template(messages, add_generation_prompt=True, tokenize=True, return_dict=True, return_tensors="pt").to(model.device)
 ipnuts = inputs.to(model.device, torch.bfloat16)
 
 output = model.generate(
@@ -123,7 +123,7 @@ messages = [
     },
 ]
 
-inputs = processor.apply_chat_template(messages, add_generation_prompt=True, tokenize=True, return_dict=True, return_tensors="pt")
+inputs = processor.apply_chat_template(messages, add_generation_prompt=True, tokenize=True, return_dict=True, return_tensors="pt").to(model.device)
 inputs = inputs.to(model.device, torch.bfloat16)
 
 output = model.generate(

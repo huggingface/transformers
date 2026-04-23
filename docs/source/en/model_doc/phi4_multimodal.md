@@ -54,7 +54,7 @@ model_path = "microsoft/Phi-4-multimodal-instruct"
 processor = AutoProcessor.from_pretrained(model_path)
 model = AutoModelForCausalLM.from_pretrained(model_path, device_map="auto")
 
-model.load_adapter(model_path, adapter_name="vision", device_map=device, adapter_kwargs={"subfolder": 'vision-lora'})
+model.load_adapter(model_path, adapter_name="vision", device_map="auto", adapter_kwargs={"subfolder": 'vision-lora'})
 
 messages = [
     {
@@ -103,7 +103,7 @@ model_path = "microsoft/Phi-4-multimodal-instruct"
 processor = AutoProcessor.from_pretrained(model_path)
 model = AutoModelForCausalLM.from_pretrained(model_path, device_map="auto",  dtype=torch.float16)
 
-model.load_adapter(model_path, adapter_name="speech", device_map=device, adapter_kwargs={"subfolder": 'speech-lora'})
+model.load_adapter(model_path, adapter_name="speech", device_map="auto", adapter_kwargs={"subfolder": 'speech-lora'})
 model.set_adapter("speech")
 audio_url = "https://upload.wikimedia.org/wikipedia/commons/b/b0/Barbara_Sahakian_BBC_Radio4_The_Life_Scientific_29_May_2012_b01j5j24.flac"
 messages = [

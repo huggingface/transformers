@@ -155,7 +155,7 @@ streaming_inference_session = processor.add_text_prompt(
 streaming_outputs_per_frame = {}
 for frame_idx, frame in enumerate(video_frames[:50]):  # Process first 50 frames
     # First, process the frame using the processor
-    inputs = processor(images=frame, device=device, return_tensors="pt")
+    inputs = processor(images=frame, device=device, return_tensors="pt").to(model.device)
 ...
     # Process frame using streaming inference - pass the processed pixel_values
     model_outputs = model(

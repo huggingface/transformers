@@ -74,7 +74,7 @@ tokenizer = AutoTokenizer.from_pretrained("facebook/nllb-moe-54b")
 model = AutoModelForSeq2SeqLM.from_pretrained("facebook/nllb-moe-54b", device_map="auto")
 
 article = "Previously, Ring's CEO, Jamie Siminoff, remarked the company started when his doorbell wasn't audible from his shop in his garage."
-inputs = tokenizer(article, return_tensors="pt")
+inputs = tokenizer(article, return_tensors="pt").to(model.device)
 
 translated_tokens = model.generate(
     **inputs, forced_bos_token_id=tokenizer.lang_code_to_id["fra_Latn"], max_length=50
@@ -97,7 +97,7 @@ tokenizer = AutoTokenizer.from_pretrained("facebook/nllb-moe-54b", src_lang="ron
 model = AutoModelForSeq2SeqLM.from_pretrained("facebook/nllb-moe-54b", device_map="auto")
 
 article = "Şeful ONU spune că nu există o soluţie militară în Siria"
-inputs = tokenizer(article, return_tensors="pt")
+inputs = tokenizer(article, return_tensors="pt").to(model.device)
 
 translated_tokens = model.generate(
     **inputs, forced_bos_token_id=tokenizer.lang_code_to_id["deu_Latn"], max_length=30

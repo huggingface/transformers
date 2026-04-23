@@ -42,7 +42,7 @@ audio = load_audio(
     sampling_rate=16000,
 )
 
-inputs = processor(audio, sampling_rate=16000, return_tensors="pt", language="en")
+inputs = processor(audio, sampling_rate=16000, return_tensors="pt", language="en").to(model.device)
 inputs.to(model.device, dtype=model.dtype)
 
 outputs = model.generate(**inputs, max_new_tokens=256)
@@ -55,8 +55,8 @@ print(text)
 Pass `punctuation=False` to obtain lower-cased output without punctuation marks.
 
 ```python
-inputs_pnc = processor(audio, sampling_rate=16000, return_tensors="pt", language="en", punctuation=True)
-inputs_nopnc = processor(audio, sampling_rate=16000, return_tensors="pt", language="en", punctuation=False)
+inputs_pnc = processor(audio, sampling_rate=16000, return_tensors="pt", language="en", punctuation=True).to(model.device)
+inputs_nopnc = processor(audio, sampling_rate=16000, return_tensors="pt", language="en", punctuation=False).to(model.device)
 ```
 
 ### Long-form transcription
@@ -70,7 +70,7 @@ audio_long = load_audio(
     sampling_rate=16000,
 )
 
-inputs = processor(audio=audio_long, return_tensors="pt", language="en", sampling_rate=16000)
+inputs = processor(audio=audio_long, return_tensors="pt", language="en", sampling_rate=16000).to(model.device)
 audio_chunk_index = inputs.get("audio_chunk_index")
 inputs.to(model.device, dtype=model.dtype)
 
@@ -94,7 +94,7 @@ audio_long = load_audio(
     sampling_rate=16000,
 )
 
-inputs = processor([audio_short, audio_long], sampling_rate=16000, return_tensors="pt", language="en")
+inputs = processor([audio_short, audio_long], sampling_rate=16000, return_tensors="pt", language="en").to(model.device)
 audio_chunk_index = inputs.get("audio_chunk_index")
 inputs.to(model.device, dtype=model.dtype)
 
@@ -115,7 +115,7 @@ audio_es = load_audio(
     sampling_rate=16000,
 )
 
-inputs = processor(audio_es, sampling_rate=16000, return_tensors="pt", language="es", punctuation=True)
+inputs = processor(audio_es, sampling_rate=16000, return_tensors="pt", language="es", punctuation=True).to(model.device)
 inputs.to(model.device, dtype=model.dtype)
 
 outputs = model.generate(**inputs, max_new_tokens=256)

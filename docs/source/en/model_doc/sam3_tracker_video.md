@@ -188,7 +188,7 @@ inference_session = processor.init_video_session(
 
 # Process frames one by one
 for frame_idx, frame in enumerate(video_frames[:10]):  # Process first 10 frames
-    inputs = processor(images=frame, device=device, return_tensors="pt")
+    inputs = processor(images=frame, device=device, return_tensors="pt").to(model.device)
 ...
     if frame_idx == 0:
         # Add point input on first frame

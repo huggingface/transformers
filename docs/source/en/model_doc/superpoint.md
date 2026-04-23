@@ -49,7 +49,7 @@ image = Image.open(requests.get(url, stream=True).raw)
 processor = AutoImageProcessor.from_pretrained("magic-leap-community/superpoint")
 model = SuperPointForKeypointDetection.from_pretrained("magic-leap-community/superpoint", device_map="auto")
 
-inputs = processor(image, return_tensors="pt")
+inputs = processor(image, return_tensors="pt").to(model.device)
 with torch.no_grad():
     outputs = model(**inputs)
 
@@ -77,7 +77,7 @@ processed_outputs = processor.post_process_keypoint_detection(outputs, [image_si
     url_image_2 = "http://images.cocodataset.org/test-stuff2017/000000000568.jpg"
     image_2 = Image.open(requests.get(url_image_2, stream=True).raw)
     images = [image_1, image_2]
-    inputs = processor(images, return_tensors="pt")
+    inputs = processor(images, return_tensors="pt").to(model.device)
     # Example of handling dynamic keypoint output
     outputs = model(**inputs)
     keypoints = outputs.keypoints  # Shape varies per image
@@ -92,7 +92,7 @@ processed_outputs = processor.post_process_keypoint_detection(outputs, [image_si
     ```py
     # Batch processing example
     images = [image1, image2, image3]
-    inputs = processor(images, return_tensors="pt")
+    inputs = processor(images, return_tensors="pt").to(model.device)
     outputs = model(**inputs)
     image_sizes = [(img.height, img.width) for img in images]
     processed_outputs = processor.post_process_keypoint_detection(outputs, image_sizes)

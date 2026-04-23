@@ -71,7 +71,7 @@ model = BridgeTowerForContrastiveLearning.from_pretrained("BridgeTower/bridgetow
 scores = dict()
 for text in texts:
     # prepare inputs
-    encoding = processor(image, text, return_tensors="pt")
+    encoding = processor(image, text, return_tensors="pt").to(model.device)
     outputs = model(**encoding)
     scores[text] = outputs
 ```
@@ -94,7 +94,7 @@ model = BridgeTowerForImageAndTextRetrieval.from_pretrained("BridgeTower/bridget
 scores = dict()
 for text in texts:
     # prepare inputs
-    encoding = processor(image, text, return_tensors="pt")
+    encoding = processor(image, text, return_tensors="pt").to(model.device)
     outputs = model(**encoding)
     scores[text] = outputs.logits[0, 1].item()
 ```
@@ -114,7 +114,7 @@ processor = BridgeTowerProcessor.from_pretrained("BridgeTower/bridgetower-base-i
 model = BridgeTowerForMaskedLM.from_pretrained("BridgeTower/bridgetower-base-itm-mlm", device_map="auto")
 
 # prepare inputs
-encoding = processor(image, text, return_tensors="pt")
+encoding = processor(image, text, return_tensors="pt").to(model.device)
 
 # forward pass
 outputs = model(**encoding)

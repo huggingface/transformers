@@ -75,7 +75,7 @@ model = AfmoeForCausalLM.from_pretrained(
     device_map="auto"
 )
 
-inputs = tokenizer("The key innovation in mixture of experts is", return_tensors="pt")
+inputs = tokenizer("The key innovation in mixture of experts is", return_tensors="pt").to(model.device)
 with torch.no_grad():
     outputs = model.generate(**inputs, max_new_tokens=50)
 

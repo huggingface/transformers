@@ -62,7 +62,7 @@ from transformers import FastSpeech2ConformerTokenizer, FastSpeech2ConformerMode
 import soundfile as sf
 
 tokenizer = FastSpeech2ConformerTokenizer.from_pretrained("espnet/fastspeech2_conformer")
-inputs = tokenizer("Hello, my dog is cute.", return_tensors="pt")
+inputs = tokenizer("Hello, my dog is cute.", return_tensors="pt").to(model.device)
 input_ids = inputs["input_ids"]
 
 model = FastSpeech2ConformerModel.from_pretrained("espnet/fastspeech2_conformer", device_map="auto")
@@ -82,7 +82,7 @@ from transformers import FastSpeech2ConformerTokenizer, FastSpeech2ConformerWith
 import soundfile as sf
 
 tokenizer = FastSpeech2ConformerTokenizer.from_pretrained("espnet/fastspeech2_conformer")
-inputs = tokenizer("Hello, my dog is cute.", return_tensors="pt")
+inputs = tokenizer("Hello, my dog is cute.", return_tensors="pt").to(model.device)
 input_ids = inputs["input_ids"]
 
 model = FastSpeech2ConformerWithHifiGan.from_pretrained("espnet/fastspeech2_conformer_with_hifigan")

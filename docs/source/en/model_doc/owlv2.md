@@ -56,7 +56,7 @@ model = Owlv2ForObjectDetection.from_pretrained("google/owlv2-base-patch16-ensem
 url = "http://images.cocodataset.org/val2017/000000039769.jpg"
 image = Image.open(requests.get(url, stream=True).raw)
 text_labels = [["a photo of a cat", "a photo of a dog"]]
-inputs = processor(text=text_labels, images=image, return_tensors="pt")
+inputs = processor(text=text_labels, images=image, return_tensors="pt").to(model.device)
 outputs = model(**inputs)
 
 # Target image sizes (height, width) to rescale box predictions [batch_size, 2]

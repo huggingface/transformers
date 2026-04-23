@@ -57,7 +57,7 @@ tokenizer = AutoTokenizer.from_pretrained(model_id, revision=revision)
 model = AutoModel.from_pretrained(model_id, revision=revision, device_map="auto")
 
 sentences = ['search_document: TSNE is a dimensionality reduction algorithm created by Laurens van Der Maaten']
-encoded_input = tokenizer(sentences, padding=True, truncation=True, return_tensors='pt')
+encoded_input = tokenizer(sentences, padding=True, truncation=True, return_tensors='pt').to(model.device)
 
 with torch.no_grad():
     model_output = model(**encoded_input)
@@ -87,7 +87,7 @@ tokenizer = AutoTokenizer.from_pretrained(model_id, revision=revision)
 model = AutoModel.from_pretrained(model_id, revision=revision, device_map="auto")
 
 sentences = ['search_query: Who is Laurens van Der Maaten?']
-encoded_input = tokenizer(sentences, padding=True, truncation=True, return_tensors='pt')
+encoded_input = tokenizer(sentences, padding=True, truncation=True, return_tensors='pt').to(model.device)
 
 with torch.no_grad():
     model_output = model(**encoded_input)
@@ -117,7 +117,7 @@ tokenizer = AutoTokenizer.from_pretrained(model_id, revision=revision)
 model = AutoModel.from_pretrained(model_id, revision=revision, device_map="auto")
 
 sentences = ['clustering: the quick brown fox']
-encoded_input = tokenizer(sentences, padding=True, truncation=True, return_tensors='pt')
+encoded_input = tokenizer(sentences, padding=True, truncation=True, return_tensors='pt').to(model.device)
 
 with torch.no_grad():
     model_output = model(**encoded_input)
@@ -147,7 +147,7 @@ tokenizer = AutoTokenizer.from_pretrained(model_id, revision=revision)
 model = AutoModel.from_pretrained(model_id, revision=revision, device_map="auto")
 
 sentences = ['classification: the quick brown fox']
-encoded_input = tokenizer(sentences, padding=True, truncation=True, return_tensors='pt')
+encoded_input = tokenizer(sentences, padding=True, truncation=True, return_tensors='pt').to(model.device)
 
 with torch.no_grad():
     model_output = model(**encoded_input)

@@ -56,7 +56,7 @@ model = AutoModelForCausalLM.from_pretrained(
 )
 
 # prepare the model input
-inputs = tokenizer("Hey, are you conscious? Can you talk to me?", return_tensors="pt")
+inputs = tokenizer("Hey, are you conscious? Can you talk to me?", return_tensors="pt").to(model.device)
 prompt = "Hey, are you conscious? Can you talk to me?"
 messages = [
     {"role": "user", "content": prompt}
