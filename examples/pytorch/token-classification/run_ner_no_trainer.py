@@ -15,7 +15,7 @@
 
 # /// script
 # dependencies = [
-#     "transformers==5.6.0",
+#     "transformers==5.6.1",
 #     "accelerate >= 0.12.0",
 #     "seqeval",
 #     "datasets >= 1.8.0",

@@ -16,7 +16,7 @@
 
 # /// script
 # dependencies = [
-#     "transformers==5.6.0",
+#     "transformers==5.6.1",
 #     "accelerate >= 0.21.0",
 #     "sentencepiece != 0.1.92",
 #     "protobuf",
