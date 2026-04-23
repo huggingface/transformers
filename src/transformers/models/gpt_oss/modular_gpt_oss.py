@@ -338,8 +338,6 @@ class GptOssPreTrainedModel(LlamaPreTrainedModel):
 
 
 class GptOssModel(MixtralModel):
-    _no_split_modules = ["GptOssDecoderLayer"]
-
     @merge_with_config_defaults
     @capture_outputs
     @auto_docstring

@@ -13,7 +13,6 @@
 # limitations under the License.
 import torch
 import torch.nn as nn
-import triton
 from torch.nn import functional as F
 
 from ..activations import ACT2FN
@@ -157,6 +156,11 @@ def _load_deepgemm_kernel():
         )
 
     _deepgemm_available = True
+
+
+def _cdiv(a: int, b: int) -> int:
+    """Ceiling division."""
+    return (a + b - 1) // b
 
 
 def w8a8_fp8_matmul(
@@ -603,8 +607,8 @@ class FP8Experts(nn.Module):
         if self.has_gate:
             gu_proj_out, gu_proj_in = 2 * self.intermediate_dim, self.hidden_dim
             self.gate_up_proj = nn.Parameter(torch.empty(self.num_experts, gu_proj_out, gu_proj_in, dtype=dtype))
-            gu_scale_out = triton.cdiv(gu_proj_out, self.block_size[0]) if self.block_size is not None else 1
-            gu_scale_in = triton.cdiv(gu_proj_in, self.block_size[1]) if self.block_size is not None else 1
+            gu_scale_out = _cdiv(gu_proj_out, self.block_size[0]) if self.block_size is not None else 1
+            gu_scale_in = _cdiv(gu_proj_in, self.block_size[1]) if self.block_size is not None else 1
             self.gate_up_proj_scale_inv = nn.Parameter(
                 torch.empty(self.num_experts, gu_scale_out, gu_scale_in, dtype=torch.float32)
             )
@@ -612,8 +616,8 @@ class FP8Experts(nn.Module):
         else:
             u_proj_out, u_proj_in = self.intermediate_dim, self.hidden_dim
             self.up_proj = nn.Parameter(torch.empty(self.num_experts, u_proj_out, u_proj_in, dtype=dtype))
-            u_scale_out = triton.cdiv(u_proj_out, self.block_size[0]) if self.block_size is not None else 1
-            u_scale_in = triton.cdiv(u_proj_in, self.block_size[1]) if self.block_size is not None else 1
+            u_scale_out = _cdiv(u_proj_out, self.block_size[0]) if self.block_size is not None else 1
+            u_scale_in = _cdiv(u_proj_in, self.block_size[1]) if self.block_size is not None else 1
             self.up_proj_scale_inv = nn.Parameter(
                 torch.empty(self.num_experts, u_scale_out, u_scale_in, dtype=torch.float32)
             )
@@ -621,8 +625,8 @@ class FP8Experts(nn.Module):
 
         d_proj_out, d_proj_in = self.hidden_dim, self.intermediate_dim
         self.down_proj = nn.Parameter(torch.empty(self.num_experts, d_proj_out, d_proj_in, dtype=dtype))
-        d_scale_out = triton.cdiv(d_proj_out, self.block_size[0]) if self.block_size is not None else 1
-        d_scale_in = triton.cdiv(d_proj_in, self.block_size[1]) if self.block_size is not None else 1
+        d_scale_out = _cdiv(d_proj_out, self.block_size[0]) if self.block_size is not None else 1
+        d_scale_in = _cdiv(d_proj_in, self.block_size[1]) if self.block_size is not None else 1
         self.down_proj_scale_inv = nn.Parameter(
             torch.empty(self.num_experts, d_scale_out, d_scale_in, dtype=torch.float32)
         )
