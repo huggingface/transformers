@@ -609,10 +609,6 @@ class DeepseekOcr2Config(PreTrainedConfig):
     r"""
     vision_config (`dict` or `DeepseekOcr2VisionConfig`, *optional*):
         Configuration for the vision encoders. Defaults to `DeepseekOcr2VisionConfig()`.
-    projector_input_dim (`int`, *optional*, defaults to 896):
-        Input dimensionality of the visual projector.
-    projector_n_embed (`int`, *optional*, defaults to 1280):
-        Output dimensionality of the visual projector (language model embedding size).
     """
 
     model_type = "deepseek_ocr2"
@@ -624,8 +620,6 @@ class DeepseekOcr2Config(PreTrainedConfig):
     vision_config: dict | PreTrainedConfig | None = None
     text_config: dict | PreTrainedConfig | None = None
     image_token_id: int = 128815
-    projector_input_dim: int = 896
-    projector_n_embed: int = 1280
 
     def __post_init__(self, **kwargs):
         if self.vision_config is None:
@@ -678,7 +672,7 @@ class DeepseekOcr2PreTrainedModel(LlavaNextPreTrainedModel):
             if module.pos_embed is not None:
                 init.zeros_(module.pos_embed)
         elif isinstance(module, DeepseekOcr2Model):
-            embed_std = 1 / math.sqrt(self.config.projector_n_embed)
+            embed_std = 1 / math.sqrt(self.config.text_config.hidden_size)
             init.normal_(module.view_separator, mean=0.0, std=embed_std)
 
 
@@ -932,10 +926,12 @@ class DeepseekOcr2Model(LlavaNextModel):
         del self.image_newline
 
         self.vision_tower = DeepseekOcr2VisionModel(config.vision_config)
-        self.multi_modal_projector = nn.Linear(config.projector_input_dim, config.projector_n_embed)
+        self.multi_modal_projector = nn.Linear(
+            config.vision_config.encoder_config.hidden_size, config.text_config.hidden_size
+        )
 
         # Learnable separator between local and global views (initialized in `_init_weights`).
-        self.view_separator = nn.Parameter(torch.empty(config.projector_n_embed))
+        self.view_separator = nn.Parameter(torch.empty(config.text_config.hidden_size))
 
         self.language_model = DeepseekOcr2TextModel(config.text_config)
 

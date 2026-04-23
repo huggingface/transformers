@@ -146,7 +146,7 @@ class DeepseekOcr2PreTrainedModel(PreTrainedModel):
             if module.pos_embed is not None:
                 init.zeros_(module.pos_embed)
         elif isinstance(module, DeepseekOcr2Model):
-            embed_std = 1 / math.sqrt(self.config.projector_n_embed)
+            embed_std = 1 / math.sqrt(self.config.text_config.hidden_size)
             init.normal_(module.view_separator, mean=0.0, std=embed_std)
 
 
@@ -1427,14 +1427,16 @@ class DeepseekOcr2Model(DeepseekOcr2PreTrainedModel):
         super().__init__(config)
 
         self.vision_tower = DeepseekOcr2VisionModel(config.vision_config)
-        self.multi_modal_projector = nn.Linear(config.projector_input_dim, config.projector_n_embed)
+        self.multi_modal_projector = nn.Linear(
+            config.vision_config.encoder_config.hidden_size, config.text_config.hidden_size
+        )
 
         self.vocab_size = config.text_config.vocab_size
 
         self.language_model = DeepseekOcr2TextModel(config.text_config)
 
         # Learnable separator between local and global views (initialized in `_init_weights`).
-        self.view_separator = nn.Parameter(torch.empty(config.projector_n_embed))
+        self.view_separator = nn.Parameter(torch.empty(config.text_config.hidden_size))
         self.post_init()
 
     def get_input_embeddings(self):

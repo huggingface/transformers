@@ -272,10 +272,6 @@ class DeepseekOcr2Config(PreTrainedConfig):
     r"""
     vision_config (`dict` or `DeepseekOcr2VisionConfig`, *optional*):
         Configuration for the vision encoders. Defaults to `DeepseekOcr2VisionConfig()`.
-    projector_input_dim (`int`, *optional*, defaults to 896):
-        Input dimensionality of the visual projector.
-    projector_n_embed (`int`, *optional*, defaults to 1280):
-        Output dimensionality of the visual projector (language model embedding size).
     """
 
     model_type = "deepseek_ocr2"
@@ -287,8 +283,6 @@ class DeepseekOcr2Config(PreTrainedConfig):
     vision_config: dict | PreTrainedConfig | None = None
     text_config: dict | PreTrainedConfig | None = None
     image_token_id: int = 128815
-    projector_input_dim: int = 896
-    projector_n_embed: int = 1280
 
     def __post_init__(self, **kwargs):
         if self.vision_config is None:

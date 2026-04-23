@@ -138,9 +138,6 @@ class DeepseekOcr2VisionText2TextModelTester:
             vision_config=vision_cfg,
             text_config=self.text_config,
             image_token_id=self.image_token_index,
-            projector_input_dim=self.encoder_config["hidden_size"],  # 64
-            projector_n_embed=self.text_config["hidden_size"],  # 128
-            projector_type="linear",
         )
 
     def prepare_config_and_inputs(self):
