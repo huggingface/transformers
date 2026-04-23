@@ -1180,7 +1180,8 @@ class GraniteMoeHybridModel(GraniteMoeHybridPreTrainedModel):
             attention_mask=attention_mask,
             past_key_values=past_key_values,
         )
-        mamba_mask = self._update_mamba_mask(attention_mask, past_key_values)
+        has_mamba_layers = any(t == "mamba" for t in self.config.layers_block_type)
+        mamba_mask = self._update_mamba_mask(attention_mask, past_key_values) if has_mamba_layers else None
 
         # embed positions
         hidden_states = inputs_embeds
@@ -1214,9 +1215,6 @@ class GraniteMoeHybridModel(GraniteMoeHybridPreTrainedModel):
             2. Attending to all inputs
         """
         mamba_mask = attention_mask
-        has_mamba_layers = any(t == "mamba" for t in self.config.layers_block_type)
-        if not has_mamba_layers:
-            return mamba_mask
         if (past_key_values is not None and past_key_values.has_previous_state()) or (
             attention_mask is not None and torch.all(attention_mask == 1)
         ):
