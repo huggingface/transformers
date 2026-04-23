@@ -340,15 +340,9 @@ def DFineForObjectDetectionLoss(
             dn_out_coord, normal_out_coord = torch.split(
                 outputs_coord.clamp(min=0, max=1), denoising_meta_values["dn_num_split"], dim=2
             )
-            dn_out_class, normal_out_class = torch.split(
-                outputs_class, denoising_meta_values["dn_num_split"], dim=2
-            )
-            dn_out_corners, out_corners = torch.split(
-                predicted_corners, denoising_meta_values["dn_num_split"], dim=2
-            )
-            dn_out_refs, out_refs = torch.split(
-                initial_reference_points, denoising_meta_values["dn_num_split"], dim=2
-            )
+            dn_out_class, normal_out_class = torch.split(outputs_class, denoising_meta_values["dn_num_split"], dim=2)
+            dn_out_corners, out_corners = torch.split(predicted_corners, denoising_meta_values["dn_num_split"], dim=2)
+            dn_out_refs, out_refs = torch.split(initial_reference_points, denoising_meta_values["dn_num_split"], dim=2)
         else:
             normal_out_coord = outputs_coord.clamp(min=0, max=1)
             normal_out_class = outputs_class
