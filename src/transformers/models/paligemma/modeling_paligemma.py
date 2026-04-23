@@ -255,7 +255,7 @@ class PaliGemmaModel(PaliGemmaPreTrainedModel):
             inputs_embeds = inputs_embeds.masked_scatter(special_image_mask, image_features)
 
         # It may already have been prepared by e.g. `generate`
-        group_ids = torch.full([*inputs_embeds.size()[:-1]], -1, device=inputs_embeds.device)
+        group_ids = torch.full([*inputs_embeds.size()[:-1]], 0, device=inputs_embeds.device)
         if token_type_ids is not None:
             # Can attend bidirectionally in prefix and only causally in suffix
             group_ids = torch.where(token_type_ids == 0, 0, -1)
