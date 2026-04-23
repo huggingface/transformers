@@ -356,6 +356,7 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("plbart", "PLBartModel"),
         ("poolformer", "PoolFormerModel"),
         ("pp_doclayout_v3", "PPDocLayoutV3Model"),
+        ("pp_formulanet", "PPFormulaNetModel"),
         ("pp_ocrv5_mobile_rec", "PPOCRV5MobileRecModel"),
         ("pp_ocrv5_server_rec", "PPOCRV5ServerRecModel"),
         ("prophetnet", "ProphetNetModel"),
@@ -1149,6 +1150,7 @@ MODEL_FOR_DEPTH_ESTIMATION_MAPPING_NAMES = OrderedDict(
 
 MODEL_FOR_TEXT_RECOGNITION_MAPPING_NAMES = OrderedDict(
     [
+        ("pp_formulanet", "PPFormulaNetForTextRecognition"),
         ("pp_ocrv5_mobile_rec", "PPOCRV5MobileRecForTextRecognition"),
         ("pp_ocrv5_server_rec", "PPOCRV5ServerRecForTextRecognition"),
     ]
