@@ -17,6 +17,12 @@ from .content_parsers import CONTENT_PARSERS
 
 
 SUPPORTED_VERSION = 1
+_ALLOWED_FIELD_KEYS = {
+    "open", "open_pattern", "close", "close_pattern",
+    "content", "content_args", "repeats", "optional", "assemble", "coerce",
+}  # fmt: skip
+_ALLOWED_TOP_KEYS = {"version", "defaults", "fields"}
+_COERCE_OPTS = {"int", "float", "bool"}
 
 
 @dataclass
@@ -46,35 +52,23 @@ class ResponseFormatSpec:
 
     @property
     def implicit_field_name(self) -> str | None:
-        for name, f in self.fields.items():
-            if f.is_implicit:
-                return name
-        return None
+        return next((n for n, f in self.fields.items() if f.is_implicit), None)
 
 
-_ALLOWED_FIELD_KEYS = {
-    "open",
-    "open_pattern",
-    "close",
-    "close_pattern",
-    "content",
-    "content_args",
-    "repeats",
-    "optional",
-    "assemble",
-    "coerce",
-}
-_ALLOWED_TOP_KEYS = {"version", "defaults", "fields"}
-_COERCE_OPTS = {"int", "float", "bool"}
+def _compile(name: str, key: str, pattern: str) -> re.Pattern:
+    try:
+        return re.compile(pattern, re.DOTALL)
+    except re.error as e:
+        raise ValueError(f"Field '{name}': invalid {key} regex: {e}") from e
 
 
-def validate_spec(spec_dict: dict) -> None:
-    """Validate a response_format dict. Raises ValueError on malformed specs."""
+def load_spec(spec_dict: dict) -> ResponseFormatSpec:
+    """Validate and load a response_format dict into a ResponseFormatSpec."""
     if not isinstance(spec_dict, dict):
         raise ValueError(f"response_format must be a dict, got {type(spec_dict).__name__}")
-    unknown_top = set(spec_dict) - _ALLOWED_TOP_KEYS
-    if unknown_top:
-        raise ValueError(f"Unknown keys in response_format: {sorted(unknown_top)}")
+    unknown = set(spec_dict) - _ALLOWED_TOP_KEYS
+    if unknown:
+        raise ValueError(f"Unknown keys in response_format: {sorted(unknown)}")
     version = spec_dict.get("version", SUPPORTED_VERSION)
     if version != SUPPORTED_VERSION:
         raise ValueError(f"Unsupported response_format version: {version}")
@@ -84,13 +78,15 @@ def validate_spec(spec_dict: dict) -> None:
     fields_raw = spec_dict.get("fields", {})
     if not isinstance(fields_raw, dict) or not fields_raw:
         raise ValueError("response_format.fields must be a non-empty dict")
-    implicit = 0
+
+    fields: dict[str, FieldSpec] = {}
+    implicit_fields: list[str] = []
     for name, fd in fields_raw.items():
         if not isinstance(fd, dict):
             raise ValueError(f"Field '{name}' must be a dict")
-        unknown = set(fd) - _ALLOWED_FIELD_KEYS
-        if unknown:
-            raise ValueError(f"Field '{name}': unknown keys {sorted(unknown)}")
+        bad = set(fd) - _ALLOWED_FIELD_KEYS
+        if bad:
+            raise ValueError(f"Field '{name}': unknown keys {sorted(bad)}")
         if "open" in fd and "open_pattern" in fd:
             raise ValueError(f"Field '{name}': cannot specify both 'open' and 'open_pattern'")
         if "close" in fd and "close_pattern" in fd:
@@ -100,48 +96,32 @@ def validate_spec(spec_dict: dict) -> None:
             raise ValueError(
                 f"Field '{name}': unknown content parser '{content}'. Available: {sorted(CONTENT_PARSERS)}"
             )
-        if fd.get("coerce") is not None and fd["coerce"] not in _COERCE_OPTS:
+        coerce = fd.get("coerce")
+        if coerce is not None and coerce not in _COERCE_OPTS:
             raise ValueError(f"Field '{name}': coerce must be one of {sorted(_COERCE_OPTS)}")
         if "open" not in fd and "open_pattern" not in fd:
-            implicit += 1
-        if "open_pattern" in fd:
-            try:
-                re.compile(fd["open_pattern"])
-            except re.error as e:
-                raise ValueError(f"Field '{name}': invalid open_pattern regex: {e}") from e
-        if "close_pattern" in fd:
-            try:
-                re.compile(fd["close_pattern"])
-            except re.error as e:
-                raise ValueError(f"Field '{name}': invalid close_pattern regex: {e}") from e
-    if implicit > 1:
-        raise ValueError(
-            "At most one field may omit 'open'/'open_pattern' (that field becomes the "
-            "implicit-open / leftover sink). Found: "
-            + ", ".join(n for n, fd in fields_raw.items() if "open" not in fd and "open_pattern" not in fd)
-        )
-
-
-def load_spec(spec_dict: dict) -> ResponseFormatSpec:
-    """Validate and load a response_format dict into a ResponseFormatSpec."""
-    validate_spec(spec_dict)
-    fields: dict[str, FieldSpec] = {}
-    for name, fd in spec_dict["fields"].items():
+            implicit_fields.append(name)
         fields[name] = FieldSpec(
             name=name,
             open_literal=fd.get("open"),
-            open_pattern=re.compile(fd["open_pattern"], re.DOTALL) if "open_pattern" in fd else None,
+            open_pattern=_compile(name, "open_pattern", fd["open_pattern"]) if "open_pattern" in fd else None,
             close_literal=fd.get("close"),
-            close_pattern=re.compile(fd["close_pattern"], re.DOTALL) if "close_pattern" in fd else None,
-            content=fd.get("content", "text"),
+            close_pattern=_compile(name, "close_pattern", fd["close_pattern"]) if "close_pattern" in fd else None,
+            content=content,
             content_args=fd.get("content_args", {}),
             repeats=fd.get("repeats", False),
             optional=fd.get("optional", True),
             assemble=fd.get("assemble"),
-            coerce=fd.get("coerce"),
+            coerce=coerce,
         )
-    return ResponseFormatSpec(
-        version=spec_dict.get("version", SUPPORTED_VERSION),
-        defaults=dict(spec_dict.get("defaults", {})),
-        fields=fields,
-    )
+    if len(implicit_fields) > 1:
+        raise ValueError(
+            "At most one field may omit 'open'/'open_pattern' (that field becomes the "
+            f"implicit-open / leftover sink). Found: {', '.join(implicit_fields)}"
+        )
+    return ResponseFormatSpec(version=version, defaults=dict(defaults), fields=fields)
+
+
+def validate_spec(spec_dict: dict) -> None:
+    """Validate a response_format dict. Raises ValueError on malformed specs."""
+    load_spec(spec_dict)
