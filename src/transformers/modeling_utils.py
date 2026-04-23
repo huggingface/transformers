@@ -66,6 +66,7 @@ from .integrations.accelerate import (
 )
 from .integrations.deepspeed import _load_state_dict_into_zero3_model
 from .integrations.eager_paged import eager_paged_attention_forward
+from .integrations.finegrained_fp8 import ALL_FP8_EXPERTS_FUNCTIONS
 from .integrations.flash_attention import flash_attention_forward
 from .integrations.flash_paged import paged_attention_forward
 from .integrations.flex_attention import flex_attention_forward
@@ -83,7 +84,6 @@ from .integrations.tensor_parallel import (
     shard_and_distribute_module,
     verify_tp_plan,
 )
-from .integrations.finegrained_fp8 import ALL_FP8_EXPERTS_FUNCTIONS
 from .loss.loss_utils import LOSS_MAPPING
 from .modeling_flash_attention_utils import (
     FLASH_ATTENTION_COMPATIBILITY_MATRIX,
