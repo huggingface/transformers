@@ -833,7 +833,14 @@ class Gemma3Model(Gemma3PreTrainedModel):
 
         # It may already have been prepared by e.g. `generate`
         if not isinstance(causal_mask_mapping := attention_mask, dict):
-            group_ids = torch.full([*inputs_embeds.size()[:-1]], -1, device=inputs_embeds.device)
+            mask_kwargs = {
+                "config": self.config.get_text_config(),
+                "inputs_embeds": inputs_embeds,
+                "attention_mask": attention_mask,
+                "past_key_values": past_key_values,
+                "position_ids": position_ids,
+            }
+
             if token_type_ids is not None:
                 # First find where a new image block starts: 1 if image and previous not image
                 # The images cannot attend to future images, but can attend to all prev images and to itself bidirectionally
@@ -842,18 +849,10 @@ class Gemma3Model(Gemma3PreTrainedModel):
                 new_image_start = is_image & ~is_previous_image
                 group_ids = torch.cumsum(new_image_start.int(), dim=1) - 1
                 group_ids = torch.where(is_image, group_ids, -1)
-
-            mask_kwargs = {
-                "config": self.config.get_text_config(),
-                "inputs_embeds": inputs_embeds,
-                "attention_mask": attention_mask,
-                "past_key_values": past_key_values,
-                "position_ids": position_ids,
-                "block_sequence_ids": group_ids,
-            }
-            sliding_mask_kwargs = mask_kwargs.copy()
+                mask_kwargs["block_sequence_ids"] = group_ids
 
             # Create the masks
+            sliding_mask_kwargs = mask_kwargs.copy()
             causal_mask_mapping = {
                 "full_attention": create_causal_mask(**mask_kwargs),
                 "sliding_attention": create_sliding_window_causal_mask(**sliding_mask_kwargs),
@@ -1063,7 +1062,14 @@ class Gemma3ForConditionalGeneration(Gemma3PreTrainedModel, GenerationMixin):
         is_first_iteration: bool | None = False,
         **kwargs,
     ) -> dict:
-        group_ids = torch.full([*inputs_embeds.size()[:-1]], -1, device=inputs_embeds.device)
+        mask_kwargs = {
+            "config": config.get_text_config(),
+            "inputs_embeds": inputs_embeds,
+            "attention_mask": attention_mask,
+            "past_key_values": past_key_values,
+            "position_ids": position_ids,
+        }
+
         if token_type_ids is not None:
             # First find where a new image block starts: 1 if image and previous not image
             # The images cannot attend to future images, but can attend to all prev images and to itself bidirectionally
@@ -1072,15 +1078,9 @@ class Gemma3ForConditionalGeneration(Gemma3PreTrainedModel, GenerationMixin):
             new_image_start = is_image & ~is_previous_image
             group_ids = torch.cumsum(new_image_start.int(), dim=1) - 1
             group_ids = torch.where(is_image, group_ids, -1)
+            mask_kwargs["block_sequence_ids"] = group_ids
 
-        return create_masks_for_generate(
-            config=config.get_text_config(),
-            inputs_embeds=inputs_embeds,
-            block_sequence_ids=group_ids,
-            attention_mask=attention_mask,
-            past_key_values=past_key_values,
-            position_ids=position_ids,
-        )
+        return create_masks_for_generate(**mask_kwargs)
 
 
 class Gemma3ForSequenceClassification(Gemma3PreTrainedModel):
