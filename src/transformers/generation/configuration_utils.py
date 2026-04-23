@@ -19,6 +19,7 @@ import os
 from abc import ABC, abstractmethod
 from collections.abc import Callable
 from dataclasses import dataclass, is_dataclass
+from math import ceil
 from typing import TYPE_CHECKING, Any, Optional, Union
 
 from huggingface_hub import create_repo
@@ -1620,9 +1621,9 @@ class ContinuousBatchingConfig:
             Maximum percentage of free GPU memory (after the model is loaded) to use for the KV cache. When `None`,
             resolved at runtime to 0.9 if there is no logit processing and 0.8 if there is, to leave headroom for
             vocabulary-sized temporary tensors.
-        max_blocks_per_request (`int`, *optional*, defaults to 0):
+        max_blocks_per_request (`int`, *optional*):
             Maximum blocks per request, used in the `flash_attn_with_kvcache` fast decode path to dimension
-            the block table. Setting this to 0 disables the fast decode path.
+            the block table. Setting this to 0 disables the fast decode path. Default is None (auto-inferred).
         allow_block_sharing (`bool`, *optional*, defaults to `True`):
             Whether to allow block sharing for prefix caching. Block sharing can only be allowed, never forced,
             as some models do not support it. Disable if you have few short prompts but long generation lengths.
@@ -1919,3 +1920,15 @@ class ContinuousBatchingConfig:
         # Modify in place
         self.varlen_compile_config = varlen_config
         self.decode_compile_config = decode_config
+
+    def resolve_using_hints(self, workload_hints: dict[str, int] | None) -> None:
+        """Resolves the config using workload hints. If the hints are not provided, we use a default value."""
+        if workload_hints is None:
+            return None
+        num_requests = workload_hints.get("num_requests", 0)
+        max_request_length = workload_hints.get("max_request_length", 0)
+        # The max number of block per request is an even number large enough to hold the max request length
+        if max_request_length:
+            blocks_per_request = int(ceil(max_request_length / self.block_size)) + 1
+            self.max_blocks_per_request = blocks_per_request + (blocks_per_request % 2)
+        # TODO: BUG: Q padding interval

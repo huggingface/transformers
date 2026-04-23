@@ -268,8 +268,15 @@ class ContinuousBatchProcessor:
             torch.cuda.empty_cache()
 
     def _ensure_decode_fast_path_is_available(self) -> None:
-        """Ensures the decode fast path is available. If it is not, set the max blocks per request to 0."""
-        if self.cache.max_blocks_per_request > 0:
+        """Ensures the decode fast path is available. If it is not, set the max blocks per request to 0. If it is
+        available, and no user-provided max blocks per request, set it to 32 as a good default."""
+        # First, set max blocks per request to 32 if it needs to be auto-inferred
+        user_requested = self.cb_config.max_blocks_per_request is not None
+        if not user_requested:
+            self.cache.max_blocks_per_request = 32
+
+        # Then, if the decode fast path is not turned off, check if it is available
+        if self.cache.max_blocks_per_request != 0:
             # NOTE: block table should be available with FA2 and FA3, but there seems to be an issue with FA2 atm
             if is_flash_attention_requested(self.config, version=3):
                 flash_attn_with_kvcache = lazy_import_paged_flash_attention(self.config._attn_implementation)[1]
@@ -278,13 +285,15 @@ class ContinuousBatchProcessor:
                     torch.cuda.is_available(),  # Block table is only supported on CUDA
                     flash_attn_with_kvcache is not None,  # The `flash_attn_with_kvcache` fn is needed
                 ]
-                if not all(conditions):
+                # Throw a warning only if the decode fast path was requested by the user
+                if not all(conditions) and user_requested:
                     logger.warning(
                         f"Although {self.cache.max_blocks_per_request = }, the decode fast path is not available "
                         f"because the one condition is not met: {conditions}."
                     )
                     self.cache.max_blocks_per_request = 0
-            else:
+            # Same, throw a warning only if the decode fast path was requested by the user
+            elif user_requested:
                 logger.warning(
                     f"Although {self.cache.max_blocks_per_request = }, the decode fast path is not available "
                     f"because the attention implementation is not FA3. Got {self.config._attn_implementation = }."
@@ -1140,6 +1149,7 @@ class ContinuousMixin:
         self,
         generation_config: GenerationConfig | None = None,
         continuous_batching_config: ContinuousBatchingConfig | None = None,
+        workload_hints: dict[str, int] | None = None,
         **deprecated_kwargs,
     ) -> ContinuousBatchingManager:
         """Initialize a manager for continuous batching inference.
@@ -1147,6 +1157,8 @@ class ContinuousMixin:
         Args:
             generation_config: An optional generation configuration, which may contain a CompileConfig object
             continuous_batching_config: An optional continuous batching configuration
+            workload_hints: Optional workload hints to help the continuous batching manager make better decisions for
+                default values. Keys accepted are: num_requests, max_request_length.
             **deprecated_kwargs: Deprecated arguments that are now passed in the continuous_batching_config. Those are:
                 max_queue_size, q_padding_interval_size, kv_padding_interval_size, allow_block_sharing,
                 use_async_batching, max_cached_graphs
@@ -1182,6 +1194,7 @@ class ContinuousMixin:
             else:
                 continuous_batching_config = ContinuousBatchingConfig()
         continuous_batching_config.account_for_cb_deprecated_arguments(**deprecated_kwargs)
+        continuous_batching_config.resolve_using_hints(workload_hints)
 
         # Create and return the manager
         return ContinuousBatchingManager(
@@ -1205,6 +1218,7 @@ class ContinuousMixin:
         continuous_batching_config: ContinuousBatchingConfig | None = None,
         persistent_manager: bool = False,
         warmup: bool = True,
+        workload_hints: dict[str, int] | None = None,
         **deprecated_kwargs,
     ) -> Generator[ContinuousBatchingManager]:
         """A context manager to safely use the continuous batching manager. Arguments are similar to the ones of
@@ -1216,6 +1230,7 @@ class ContinuousMixin:
         manager = self.init_continuous_batching(
             generation_config=generation_config,
             continuous_batching_config=continuous_batching_config,
+            workload_hints=workload_hints,
             **deprecated_kwargs,
         )
         if warmup and not manager.warmed_up:
@@ -1284,13 +1299,21 @@ class ContinuousMixin:
         for depr_key in deprecated_keys:
             if depr_key in kwargs:
                 deprecated_kwargs[depr_key] = kwargs.pop(depr_key)
-        # Extract max_new_tokens from kwargs because it's the only expected kwarg
-        max_new_tokens = kwargs.pop("max_new_tokens", None)
 
         # Compute the total number of requests
         gen_cfg = self.generation_config if generation_config is None else generation_config
         num_return_sequences = gen_cfg.num_return_sequences if gen_cfg.num_return_sequences is not None else 1
         num_requests = len(inputs) * num_return_sequences
+
+        # Extract max_new_tokens from kwargs because it's the only expected kwarg
+        max_new_tokens = kwargs.pop("max_new_tokens", None)
+        max_new_tokens = gen_cfg.max_new_tokens if max_new_tokens is None else max_new_tokens
+
+        # Compute workload hints
+        workload_hints = {
+            "num_requests": len(inputs),
+            "max_request_length": max(len(input_ids) for input_ids in inputs) + max_new_tokens,
+        }
 
         # Prepare context managers for the main loop
         manager_cm = self.continuous_batching_context_manager(
@@ -1300,6 +1323,7 @@ class ContinuousMixin:
             timeout=5,
             persistent_manager=persistent_manager,
             warmup=warmup,
+            workload_hints=workload_hints,
             **deprecated_kwargs,
         )
         logging_cm = logging_redirect_tqdm([logger])
