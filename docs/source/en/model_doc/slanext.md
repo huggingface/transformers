@@ -45,7 +45,7 @@ from PIL import Image
 from transformers import AutoImageProcessor, AutoModelForTableRecognition
 
 model_path="PaddlePaddle/SLANeXt_wired_safetensors"
-model = AutoModelForTableRecognition.from_pretrained(model_path, dtype=torch.float32, device_map="auto")
+model = AutoModelForTableRecognition.from_pretrained(model_path, device_map="auto")
 image_processor = AutoImageProcessor.from_pretrained(model_path)
 
 image = Image.open(requests.get("https://paddle-model-ecology.bj.bcebos.com/paddlex/imgs/demo_image/table_recognition.jpg", stream=True).raw)

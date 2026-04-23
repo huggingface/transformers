@@ -47,7 +47,6 @@ import torch
 from PIL import Image
 import requests
 
-device = "cuda" if torch.cuda.is_available() else "cpu"
 
 model = Sam3Model.from_pretrained("facebook/sam3", device_map="auto")
 processor = Sam3Processor.from_pretrained("facebook/sam3")
@@ -266,7 +265,6 @@ import torch
 from PIL import Image
 import requests
 
-device = "cuda" if torch.cuda.is_available() else "cpu"
 
 model = Sam3Model.from_pretrained("facebook/sam3", device_map="auto")
 processor = Sam3Processor.from_pretrained("facebook/sam3")
@@ -311,7 +309,6 @@ import torch
 from PIL import Image
 import requests
 
-device = "cuda" if torch.cuda.is_available() else "cpu"
 
 model = Sam3Model.from_pretrained("facebook/sam3", device_map="auto")
 processor = Sam3Processor.from_pretrained("facebook/sam3")

@@ -51,8 +51,7 @@ import soundfile as sf
 from transformers import Qwen2_5OmniForConditionalGeneration, Qwen2_5OmniProcessor
 
 model = Qwen2_5OmniForConditionalGeneration.from_pretrained(
-    "Qwen/Qwen2.5-Omni-7B",
-    dtype="auto",
+    "Qwen/Qwen2.5-Omni-7B",,
     device_map="auto"
 )
 processor = Qwen2_5OmniProcessor.from_pretrained("Qwen/Qwen2.5-Omni-7B")
@@ -107,8 +106,7 @@ To generate only text output and save compute by not loading the audio generatio
 from transformers import Qwen2_5OmniThinkerForConditionalGeneration, Qwen2_5OmniProcessor
 
 model = Qwen2_5OmniThinkerForConditionalGeneration.from_pretrained(
-    "Qwen/Qwen2.5-Omni-7B",
-    dtype="auto",
+    "Qwen/Qwen2.5-Omni-7B",,
     device_map="auto",
 )
 processor = Qwen2_5OmniProcessor.from_pretrained("Qwen/Qwen2.5-Omni-7B")
@@ -164,8 +162,7 @@ import soundfile as sf
 from transformers import Qwen2_5OmniForConditionalGeneration, Qwen2_5OmniProcessor
 
 model = Qwen2_5OmniForConditionalGeneration.from_pretrained(
-    "Qwen/Qwen2.5-Omni-7B",
-    dtype="auto",
+    "Qwen/Qwen2.5-Omni-7B",,
     device_map="auto"
 )
 processor = Qwen2_5OmniProcessor.from_pretrained("Qwen/Qwen2.5-Omni-7B")
@@ -287,8 +284,7 @@ The model supports both text and audio outputs, if users do not need audio outpu
 
 ```python
 model = Qwen2_5OmniForConditionalGeneration.from_pretrained(
-    "Qwen/Qwen2.5-Omni-7B",
-    dtype="auto",
+    "Qwen/Qwen2.5-Omni-7B",,
     device_map="auto",
     enable_audio_output=False,
 )
@@ -298,8 +294,7 @@ In order to obtain a flexible experience, we recommend that users set `enable_au
 
 ```python
 model = Qwen2_5OmniForConditionalGeneration.from_pretrained(
-    "Qwen/Qwen2.5-Omni-7B",
-    dtype="auto",
+    "Qwen/Qwen2.5-Omni-7B",,
     device_map="auto",
     enable_audio_output=True,
 )

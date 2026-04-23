@@ -45,7 +45,6 @@ from transformers import PI0Processor, PI0ForConditionalGeneration
 
 model = PI0ForConditionalGeneration.from_pretrained(
     "lerobot/pi0_base",
-    dtype=torch.float32,
     device_map="auto",
     attn_implementation="sdpa"
 )

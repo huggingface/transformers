@@ -45,7 +45,7 @@ import torch
 from transformers import AutoProcessor, LlavaForConditionalGeneration
 
 model_id = "mistral-community/pixtral-12b"
-model = LlavaForConditionalGeneration.from_pretrained(model_id, dtype="auto", device_map="auto")
+model = LlavaForConditionalGeneration.from_pretrained(model_id, device_map="auto")
 processor = AutoProcessor.from_pretrained(model_id)
 
 url_dog = "https://picsum.photos/id/237/200/300"

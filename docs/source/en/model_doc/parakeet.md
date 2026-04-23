@@ -63,10 +63,9 @@ from transformers import AutoModelForCTC, AutoProcessor
 from datasets import load_dataset, Audio
 import torch
 
-device = "cuda" if torch.cuda.is_available() else "cpu"
 
 processor = AutoProcessor.from_pretrained("nvidia/parakeet-ctc-1.1b")
-model = AutoModelForCTC.from_pretrained("nvidia/parakeet-ctc-1.1b", dtype="auto", device_map="auto")
+model = AutoModelForCTC.from_pretrained("nvidia/parakeet-ctc-1.1b", device_map="auto")
 
 ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
 ds = ds.cast_column("audio", Audio(sampling_rate=processor.feature_extractor.sampling_rate))
@@ -91,7 +90,7 @@ from datasets import load_dataset, Audio
 import torch
 
 processor = AutoProcessor.from_pretrained("nvidia/parakeet-ctc-1.1b")
-model = AutoModelForCTC.from_pretrained("nvidia/parakeet-ctc-1.1b", dtype="auto", device_map="auto")
+model = AutoModelForCTC.from_pretrained("nvidia/parakeet-ctc-1.1b", device_map="auto")
 
 ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
 ds = ds.cast_column("audio", Audio(sampling_rate=processor.feature_extractor.sampling_rate))
@@ -169,7 +168,7 @@ from datasets import load_dataset, Audio
 import torch
 
 processor = AutoProcessor.from_pretrained("nvidia/parakeet-ctc-1.1b")
-model = AutoModelForCTC.from_pretrained("nvidia/parakeet-ctc-1.1b", dtype="auto", device_map="auto")
+model = AutoModelForCTC.from_pretrained("nvidia/parakeet-ctc-1.1b", device_map="auto")
 
 ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
 ds = ds.cast_column("audio", Audio(sampling_rate=processor.feature_extractor.sampling_rate))

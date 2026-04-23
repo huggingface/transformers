@@ -166,7 +166,6 @@ from PIL import Image, ImageDraw
 from transformers import AutoProcessor, Kosmos2_5ForConditionalGeneration
 
 repo = "microsoft/kosmos-2.5-chat"
-device = "cuda:0"
 dtype = torch.bfloat16
 
 model = Kosmos2_5ForConditionalGeneration.from_pretrained(repo,

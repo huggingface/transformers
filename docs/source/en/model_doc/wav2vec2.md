@@ -174,7 +174,6 @@ dataset = dataset.map(map_to_array, remove_columns=["audio"])
 
 
 def map_to_pred(batch, pool):
-    device = Accelerator().device
     inputs = processor(batch["speech"], sampling_rate=16_000, padding=True, return_tensors="pt").to(model.device)
     inputs = {k: v.to(model.device) for k, v in inputs.items()}
 

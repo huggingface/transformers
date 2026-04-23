@@ -38,11 +38,10 @@ from datasets import load_dataset, Audio
 from transformers import KyutaiSpeechToTextProcessor, KyutaiSpeechToTextForConditionalGeneration
 
 # 1. load the model and the processor
-torch_device = Accelerator().device
 model_id = "kyutai/stt-2.6b-en-trfs"
 
 processor = KyutaiSpeechToTextProcessor.from_pretrained(model_id)
-model = KyutaiSpeechToTextForConditionalGeneration.from_pretrained(model_id, device_map=torch_device, dtype="auto")
+model = KyutaiSpeechToTextForConditionalGeneration.from_pretrained(model_id, device_map="auto")
 
 # 2. load audio samples
 ds = load_dataset(
@@ -71,11 +70,10 @@ from datasets import load_dataset, Audio
 from transformers import KyutaiSpeechToTextProcessor, KyutaiSpeechToTextForConditionalGeneration
 
 # 1. load the model and the processor
-torch_device = Accelerator().device
 model_id = "kyutai/stt-2.6b-en-trfs"
 
 processor = KyutaiSpeechToTextProcessor.from_pretrained(model_id)
-model = KyutaiSpeechToTextForConditionalGeneration.from_pretrained(model_id, device_map=torch_device, dtype="auto")
+model = KyutaiSpeechToTextForConditionalGeneration.from_pretrained(model_id, device_map="auto")
 
 # 2. load audio samples
 ds = load_dataset(

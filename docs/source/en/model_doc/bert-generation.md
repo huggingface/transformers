@@ -41,7 +41,7 @@ The example below demonstrates how to use BertGeneration with [`EncoderDecoderMo
 import torch
 from transformers import EncoderDecoderModel, AutoTokenizer
 
-model = EncoderDecoderModel.from_pretrained("google/roberta2roberta_L-24_discofuse", dtype="auto", device_map="auto")
+model = EncoderDecoderModel.from_pretrained("google/roberta2roberta_L-24_discofuse", device_map="auto")
 tokenizer = AutoTokenizer.from_pretrained("google/roberta2roberta_L-24_discofuse")
 
 input_ids = tokenizer(
@@ -72,8 +72,8 @@ quantization_config = BitsAndBytesConfig(
 model = EncoderDecoderModel.from_pretrained(
     "google/roberta2roberta_L-24_discofuse",
     quantization_config=quantization_config,
-    dtype="auto"
- device_map="auto")
+    device_map="auto",
+)
 tokenizer = AutoTokenizer.from_pretrained("google/roberta2roberta_L-24_discofuse")
 
 input_ids = tokenizer(

@@ -83,8 +83,7 @@ print(pipe(text=message, max_new_tokens=20, return_full_text=False))
 from transformers import AutoModelForImageTextToText, AutoProcessor
 
 model = AutoModelForImageTextToText.from_pretrained(
-    "baidu/ERNIE-4.5-VL-28B-A3B-PT",
-    dtype="auto",
+    "baidu/ERNIE-4.5-VL-28B-A3B-PT",,
     device_map="auto",  # Use tp_plan="auto" instead to enable Tensor Parallelism!
     revision="refs/pr/11",
 )
@@ -134,8 +133,7 @@ The model can process video data and generate text based on the content of the v
 from transformers import AutoModelForImageTextToText, AutoProcessor
 
 model = AutoModelForImageTextToText.from_pretrained(
-    "baidu/ERNIE-4.5-VL-28B-A3B-PT",
-    dtype="auto",
+    "baidu/ERNIE-4.5-VL-28B-A3B-PT",,
     device_map="auto",  # Use tp_plan="auto" instead to enable Tensor Parallelism!
     revision="refs/pr/11",
 )

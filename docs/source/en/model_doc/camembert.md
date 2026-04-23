@@ -60,7 +60,7 @@ import torch
 from transformers import AutoTokenizer, AutoModelForMaskedLM
 
 tokenizer = AutoTokenizer.from_pretrained("camembert-base")
-model = AutoModelForMaskedLM.from_pretrained("camembert-base", dtype="auto", device_map="auto", attn_implementation="sdpa")
+model = AutoModelForMaskedLM.from_pretrained("camembert-base", device_map="auto", attn_implementation="sdpa")
 inputs = tokenizer("Le camembert est un délicieux fromage <mask>.", return_tensors="pt").to(model.device)
 
 with torch.no_grad():

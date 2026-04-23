@@ -49,7 +49,7 @@ from transformers import AutoModelForCTC, AutoProcessor
 from datasets import load_dataset, Audio
 
 processor = AutoProcessor.from_pretrained("google/medasr")
-model = AutoModelForCTC.from_pretrained("google/medasr", dtype="auto", device_map="auto")
+model = AutoModelForCTC.from_pretrained("google/medasr", device_map="auto")
 
 ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
 ds = ds.cast_column("audio", Audio(sampling_rate=processor.feature_extractor.sampling_rate))

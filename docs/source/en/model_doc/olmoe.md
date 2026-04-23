@@ -61,7 +61,7 @@ import torch
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
 
-model = AutoModelForCausalLM.from_pretrained("allenai/OLMoE-1B-7B-0924", attn_implementation="sdpa", dtype="auto", device_map="auto")
+model = AutoModelForCausalLM.from_pretrained("allenai/OLMoE-1B-7B-0924", attn_implementation="sdpa", device_map="auto")
 tokenizer = AutoTokenizer.from_pretrained("allenai/OLMoE-1B-7B-0924")
 
 inputs = tokenizer("Bitcoin is", return_tensors="pt").to(model.device)
@@ -87,7 +87,7 @@ quantization_config = BitsAndBytesConfig(
    bnb_4bit_quant_type="nf4"
 )
 
-model = AutoModelForCausalLM.from_pretrained("allenai/OLMoE-1B-7B-0924", attn_implementation="sdpa", dtype="auto", device_map="auto", quantization_config=quantization_config)
+model = AutoModelForCausalLM.from_pretrained("allenai/OLMoE-1B-7B-0924", attn_implementation="sdpa", device_map="auto", quantization_config=quantization_config)
 tokenizer = AutoTokenizer.from_pretrained("allenai/OLMoE-1B-7B-0924")
 
 inputs = tokenizer("Bitcoin is", return_tensors="pt").to(model.device)

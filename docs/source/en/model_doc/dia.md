@@ -44,12 +44,11 @@ tokens and decodes them back into audio.
 ```python
 from transformers import AutoProcessor, DiaForConditionalGeneration
 
-torch_device = Accelerator().device
 model_checkpoint = "nari-labs/Dia-1.6B-0626"
 
 text = ["[S1] Dia is an open weights text to dialogue model."]
 processor = AutoProcessor.from_pretrained(model_checkpoint)
-inputs = processor(text=text, padding=True, return_tensors="pt").to(torch_device)
+inputs = processor(text=text, padding=True, return_tensors="pt").to(model.device)
 
 model = DiaForConditionalGeneration.from_pretrained(model_checkpoint).to(torch_device, device_map="auto")
 outputs = model.generate(**inputs, max_new_tokens=256)  # corresponds to around ~2s
@@ -66,7 +65,6 @@ processor.save_audio(outputs, "example.wav")
 from datasets import load_dataset, Audio
 from transformers import AutoProcessor, DiaForConditionalGeneration
 
-torch_device = Accelerator().device
 model_checkpoint = "nari-labs/Dia-1.6B-0626"
 
 ds = load_dataset("hf-internal-testing/dailytalk-dummy", split="train")
@@ -76,7 +74,7 @@ audio = ds[-1]["audio"]["array"]
 text = ["[S1] I know. It's going to save me a lot of money, I hope. [S2] I sure hope so for you."]
 
 processor = AutoProcessor.from_pretrained(model_checkpoint)
-inputs = processor(text=text, audio=audio, padding=True, return_tensors="pt").to(torch_device)
+inputs = processor(text=text, audio=audio, padding=True, return_tensors="pt").to(model.device)
 prompt_len = processor.get_audio_prompt_len(inputs["decoder_attention_mask"])
 
 model = DiaForConditionalGeneration.from_pretrained(model_checkpoint).to(torch_device, device_map="auto")
@@ -93,7 +91,6 @@ processor.save_audio(outputs, "example_with_audio.wav")
 from datasets import load_dataset, Audio
 from transformers import AutoProcessor, DiaForConditionalGeneration
 
-torch_device = Accelerator().device
 model_checkpoint = "nari-labs/Dia-1.6B-0626"
 
 ds = load_dataset("hf-internal-testing/dailytalk-dummy", split="train")
@@ -110,7 +107,7 @@ inputs = processor(
     output_labels=True,
     padding=True,
     return_tensors="pt"
-).to(torch_device)
+).to(model.device)
 
 model = DiaForConditionalGeneration.from_pretrained(model_checkpoint).to(torch_device, device_map="auto")
 out = model(**inputs)

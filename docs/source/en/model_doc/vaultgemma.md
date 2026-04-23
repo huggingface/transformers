@@ -49,8 +49,7 @@ from transformers import pipeline
 
 pipe = pipeline(
     task="text-generation",
-    model="google/vaultgemma-1b",
-    dtype="auto",
+    model="google/vaultgemma-1b",,
     device_map="auto",
 )
 
@@ -69,7 +68,7 @@ from transformers import AutoTokenizer, AutoModelForCausalLM
 
 model_id = "google/vaultgemma-1b"
 tokenizer = AutoTokenizer.from_pretrained(model_id)
-model = AutoModelForCausalLM.from_pretrained(model_id, device_map="auto", dtype="auto")
+model = AutoModelForCausalLM.from_pretrained(model_id, device_map="auto")
 
 text = "Tell me an unknown interesting biology fact about the brain."
 input_ids = tokenizer(text, return_tensors="pt").to(model.device)

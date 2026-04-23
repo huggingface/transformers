@@ -54,7 +54,7 @@ you can check the [model card](https://huggingface.co/zai-org/GLM-ASR-Nano-2512)
 from transformers import AutoModelForSeq2SeqLM, AutoProcessor
 
 processor = AutoProcessor.from_pretrained("zai-org/GLM-ASR-Nano-2512")
-model = AutoModelForSeq2SeqLM.from_pretrained("zai-org/GLM-ASR-Nano-2512", dtype="auto", device_map="auto")
+model = AutoModelForSeq2SeqLM.from_pretrained("zai-org/GLM-ASR-Nano-2512", device_map="auto")
 
 inputs = processor.apply_transcription_request("https://huggingface.co/datasets/hf-internal-testing/dummy-audio-samples/resolve/main/bcn_weather.mp3")
 
@@ -78,7 +78,7 @@ The processor's `apply_transcription_request` is equivalent to using the chat te
 from transformers import GlmAsrForConditionalGeneration, AutoProcessor
 
 processor = AutoProcessor.from_pretrained("zai-org/GLM-ASR-Nano-2512")
-model = GlmAsrForConditionalGeneration.from_pretrained("zai-org/GLM-ASR-Nano-2512", dtype="auto", device_map="auto")
+model = GlmAsrForConditionalGeneration.from_pretrained("zai-org/GLM-ASR-Nano-2512", device_map="auto")
 
 inputs = processor.apply_transcription_request("https://huggingface.co/datasets/hf-internal-testing/dummy-audio-samples/resolve/main/bcn_weather.mp3")
 
@@ -118,7 +118,7 @@ from transformers import GlmAsrForConditionalGeneration, AutoProcessor
 from datasets import load_dataset, Audio
 
 processor = AutoProcessor.from_pretrained("zai-org/GLM-ASR-Nano-2512")
-model = GlmAsrForConditionalGeneration.from_pretrained("zai-org/GLM-ASR-Nano-2512", dtype="auto", device_map="auto")
+model = GlmAsrForConditionalGeneration.from_pretrained("zai-org/GLM-ASR-Nano-2512", device_map="auto")
 
 # loading audio directly from dataset
 ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
@@ -173,7 +173,7 @@ conversation = [
     ],
 ]
 
-model = GlmAsrForConditionalGeneration.from_pretrained(checkpoint_name, device_map="auto", dtype="auto")
+model = GlmAsrForConditionalGeneration.from_pretrained(checkpoint_name, device_map="auto")
 
 inputs = processor.apply_chat_template(
     conversation, tokenize=True, add_generation_prompt=True, return_dict=True

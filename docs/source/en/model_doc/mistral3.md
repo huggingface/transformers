@@ -109,10 +109,9 @@ decoded_output
 import torch
 from transformers import AutoProcessor, AutoModelForImageTextToText
 
-torch_device = Accelerator().device
 model_checkpoint = ".mistralai/Mistral-Small-3.1-24B-Instruct-2503"
 processor = AutoProcessor.from_pretrained(model_checkpoint)
-model = AutoModelForImageTextToText.from_pretrained(model_checkpoint, device_map=torch_device)
+model = AutoModelForImageTextToText.from_pretrained(model_checkpoint, device_map="auto")
 
 SYSTEM_PROMPT = "You are a conversational agent that always answers straight to the point, always end your accurate response with an ASCII drawing of a cat."
 user_prompt = "Give me 5 non-formal ways to say 'See you later' in French."
@@ -149,10 +148,9 @@ print(decoded_output)
 import torch
 from transformers import AutoProcessor, AutoModelForImageTextToText
 
-torch_device = Accelerator().device
 model_checkpoint = "mistralai/Mistral-Small-3.1-24B-Instruct-2503"
 processor = AutoProcessor.from_pretrained(model_checkpoint)
-model = AutoModelForImageTextToText.from_pretrained(model_checkpoint, device_map=torch_device)
+model = AutoModelForImageTextToText.from_pretrained(model_checkpoint, device_map="auto")
 
 messages = [
      [
@@ -192,7 +190,6 @@ messages = [
 import torch
 from transformers import AutoProcessor, AutoModelForImageTextToText, BitsAndBytesConfig
 
-torch_device = Accelerator().device
 model_checkpoint = "mistralai/Mistral-Small-3.1-24B-Instruct-2503"
 processor = AutoProcessor.from_pretrained(model_checkpoint)
 quantization_config = BitsAndBytesConfig(load_in_4bit=True)

@@ -34,7 +34,7 @@ The example below demonstrates how to generate text based on an image with [`Pip
 
 ```python
 from transformers import pipeline
-generator = pipeline("text-generation", model="microsoft/Phi-4-multimodal-instruct", dtype="auto", device=0)
+generator = pipeline("text-generation", model="microsoft/Phi-4-multimodal-instruct", device=0)
 
 prompt = "Explain the concept of multimodal AI in simple terms."
 

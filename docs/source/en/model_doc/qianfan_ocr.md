@@ -48,7 +48,7 @@ This model was contributed by the [Baidu Qianfan Team](https://github.com/baidub
 ```python
 from transformers import AutoProcessor, AutoModelForImageTextToText
 
-model = AutoModelForImageTextToText.from_pretrained("baidu/Qianfan-OCR", dtype="auto", device_map="auto")
+model = AutoModelForImageTextToText.from_pretrained("baidu/Qianfan-OCR", device_map="auto")
 processor = AutoProcessor.from_pretrained("baidu/Qianfan-OCR")
 
 image = "https://huggingface.co/datasets/hf-internal-testing/fixtures_got_ocr/resolve/main/image_ocr.jpg"
@@ -67,7 +67,7 @@ For documents with complex layouts, cluttered elements, or non-standard reading 
 ```python
 from transformers import AutoProcessor, AutoModelForImageTextToText
 
-model = AutoModelForImageTextToText.from_pretrained("baidu/Qianfan-OCR", dtype="auto", device_map="auto")
+model = AutoModelForImageTextToText.from_pretrained("baidu/Qianfan-OCR", device_map="auto")
 processor = AutoProcessor.from_pretrained("baidu/Qianfan-OCR")
 
 image = "https://huggingface.co/datasets/hf-internal-testing/fixtures_got_ocr/resolve/main/image_ocr.jpg"
@@ -84,7 +84,7 @@ processor.decode(generate_ids[0, inputs["input_ids"].shape[1]:], skip_special_to
 ```python
 from transformers import AutoProcessor, AutoModelForImageTextToText
 
-model = AutoModelForImageTextToText.from_pretrained("baidu/Qianfan-OCR", dtype="auto", device_map="auto")
+model = AutoModelForImageTextToText.from_pretrained("baidu/Qianfan-OCR", device_map="auto")
 processor = AutoProcessor.from_pretrained("baidu/Qianfan-OCR")
 
 image1 = "https://huggingface.co/datasets/hf-internal-testing/fixtures_got_ocr/resolve/main/image_ocr.jpg"

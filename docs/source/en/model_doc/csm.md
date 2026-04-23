@@ -175,7 +175,6 @@ from transformers import CsmForConditionalGeneration, AutoProcessor
 from datasets import load_dataset
 
 model_id = "sesame/csm-1b"
-device = "cuda"
 
 # set logs to ensure no recompilation and graph breaks
 torch._logging.set_logs(graph_breaks=True, recompiles=True, cudagraphs=True)

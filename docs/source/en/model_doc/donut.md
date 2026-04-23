@@ -125,7 +125,6 @@ print(answer)
     processor = DonutProcessor.from_pretrained("naver-clova-ix/donut-base-finetuned-rvlcdip")
     model = VisionEncoderDecoderModel.from_pretrained("naver-clova-ix/donut-base-finetuned-rvlcdip", device_map="auto")
 
-    device = Accelerator().device
     model.to(model.device)  # doctest: +IGNORE_RESULT
 
     # load document image
@@ -167,7 +166,6 @@ print(answer)
     processor = DonutProcessor.from_pretrained("naver-clova-ix/donut-base-finetuned-cord-v2")
     model = VisionEncoderDecoderModel.from_pretrained("naver-clova-ix/donut-base-finetuned-cord-v2", device_map="auto")
 
-    device = Accelerator().device
     model.to(model.device)  # doctest: +IGNORE_RESULT
 
     # load document image

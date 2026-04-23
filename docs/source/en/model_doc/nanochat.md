@@ -61,7 +61,6 @@ import torch
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
 model_id = "karpathy/nanochat-d32"
-device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 tokenizer = AutoTokenizer.from_pretrained(model_id)
 model = AutoModelForCausalLM.from_pretrained(

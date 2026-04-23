@@ -55,7 +55,7 @@ pipeline("UN Chief says there is no military solution in Syria")
 from transformers import AutoModelForSeq2SeqLM, AutoTokenizer
 
 tokenizer = AutoTokenizer.from_pretrained("facebook/nllb-200-distilled-600M")
-model = AutoModelForSeq2SeqLM.from_pretrained("facebook/nllb-200-distilled-600M", dtype="auto", attn_implementation="sdpa", device_map="auto")
+model = AutoModelForSeq2SeqLM.from_pretrained("facebook/nllb-200-distilled-600M", attn_implementation="sdpa", device_map="auto")
 
 article = "UN Chief says there is no military solution in Syria"
 inputs = tokenizer(article, return_tensors="pt").to(model.device)
