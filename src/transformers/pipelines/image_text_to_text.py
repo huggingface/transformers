@@ -415,7 +415,7 @@ class ImageTextToTextPipeline(Pipeline):
 
         # Decode inputs and outputs the same way to remove input text from generated text if present
         skip_special_tokens = skip_special_tokens if skip_special_tokens is not None else True
-        if getattr(self.tokenizer, "response_schema", False):
+        if getattr(self.tokenizer, "response_format", None) or getattr(self.tokenizer, "response_schema", None):
             skip_special_tokens = False
         generated_texts = self.processor.post_process_image_text_to_text(
             generated_sequence, skip_special_tokens=skip_special_tokens, **postprocess_kwargs
@@ -461,7 +461,9 @@ class ImageTextToTextPipeline(Pipeline):
                         ]
                     else:
                         # When we're not starting from a prefill, the output is a new assistant message
-                        if getattr(self.tokenizer, "response_schema", False):
+                        if getattr(self.tokenizer, "response_format", None) or getattr(
+                            self.tokenizer, "response_schema", None
+                        ):
                             assistant_message = self.tokenizer.parse_response(generated_text)
                         else:
                             assistant_message = {"role": "assistant", "content": generated_text}

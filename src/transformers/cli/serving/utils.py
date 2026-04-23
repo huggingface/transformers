@@ -108,9 +108,15 @@ _TOOL_CALL_FALLBACKS = {
         "stc": "<tool_call>",
         "etc": "</tool_call>",
         "schema": {
-            "x-regex-iterator": r"<tool_call>(.*?)</tool_call>",
-            "type": "array",
-            "items": {"type": "object", "x-parser": "json"},
+            "defaults": {},
+            "fields": {
+                "tool_calls": {
+                    "open": "<tool_call>",
+                    "close": "</tool_call>",
+                    "repeats": True,
+                    "content": "json",
+                },
+            },
         },
     },
     # Qwen 3.5 family wraps tool calls in <tool_call>...</tool_call> (single-token delimiters,
@@ -148,10 +154,18 @@ def get_tool_call_config(processor, model: "PreTrainedModel") -> dict | None:
     tokenizer = getattr(processor, "tokenizer", processor)
     stc = getattr(tokenizer, "stc_token", None)
     etc = getattr(tokenizer, "etc_token", None)
+    response_format = getattr(tokenizer, "response_format", None)
     response_schema = getattr(tokenizer, "response_schema", None)
 
-    # Models with full tokenizer config (e.g. Gemma 4)
-    if stc and etc and response_schema:
+    schema: dict | None = None
+    # Prefer the new-style response_format (e.g. Gemma 4).
+    if stc and etc and response_format and "tool_calls" in response_format.get("fields", {}):
+        schema = {
+            "defaults": {},
+            "fields": {"tool_calls": response_format["fields"]["tool_calls"]},
+        }
+    # Legacy response_schema path (still supported for old tokenizers).
+    elif stc and etc and response_schema:
         schema = response_schema["properties"]["tool_calls"]
     else:
         # Fallback: known model families without full tokenizer config. Matched by exact
@@ -197,6 +211,9 @@ def parse_tool_calls(processor, generated_ids, schema: dict) -> list[dict] | Non
     Returns a list of ``{"name": str, "arguments": str}`` dicts, or ``None`` if none found.
     """
     parsed = processor.parse_response(generated_ids, schema)
+    # The new response_format path returns a dict like {"tool_calls": [...]}; unwrap.
+    if isinstance(parsed, dict) and "tool_calls" in parsed:
+        parsed = parsed["tool_calls"]
     if not parsed:
         return None
     if not isinstance(parsed, list):
