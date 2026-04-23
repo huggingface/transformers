@@ -356,7 +356,7 @@ def eager_attention_forward(
         sinks = module.sinks.reshape(1, -1, 1, 1).expand(query.shape[0], -1, query.shape[-2], -1)
         attn_weights = torch.cat([attn_weights, sinks], dim=-1)
 
-    # Subtract max for BF16/FP16 numerical stability (same as Arthur's fix in gpt-oss).
+    # Subtract max for BF16/FP16 numerical stability
     attn_weights = attn_weights - attn_weights.max(dim=-1, keepdim=True).values
     probs = F.softmax(attn_weights, dim=-1, dtype=attn_weights.dtype)
 
@@ -408,6 +408,7 @@ class MiMoV2FlashAttention(nn.Module):
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor, torch.Tensor | None]:
         input_shape = hidden_states.shape[:-1]
+        # Different head dims compared to other attentions
         qk_hidden_shape = (*input_shape, -1, self.head_dim)
         v_hidden_shape = (*input_shape, -1, self.v_head_dim)
 
@@ -433,7 +434,7 @@ class MiMoV2FlashAttention(nn.Module):
             dropout=0.0 if not self.training else self.attention_dropout,
             scaling=self.scaling,
             sliding_window=self.sliding_window,
-            s_aux=self.sinks,
+            s_aux=self.sinks,  # Optional sinks, only when in SWA layer
             **kwargs,
         )
 

@@ -22,6 +22,7 @@
 from huggingface_hub.dataclasses import strict
 
 from ...configuration_utils import PreTrainedConfig
+from ...modeling_rope_utils import RopeParameters
 from ...utils import auto_docstring
 
 
@@ -43,39 +44,62 @@ class MiMoV2FlashConfig(PreTrainedConfig):
 
     model_type = "mimo_v2_flash"
     keys_to_ignore_at_inference = ["past_key_values"]
-    attribute_map = {"num_local_experts": "n_routed_experts"}
 
+    base_model_tp_plan = {
+        "layers.*.self_attn.q_proj": "colwise",
+        "layers.*.self_attn.k_proj": "colwise",
+        "layers.*.self_attn.v_proj": "colwise",
+        "layers.*.self_attn.o_proj": "rowwise",
+        "layers.*.self_attn.sinks": "colwise",
+        "layers.*.mlp.gate_proj": "colwise",
+        "layers.*.mlp.up_proj": "colwise",
+        "layers.*.mlp.down_proj": "rowwise",
+        "layers.*.mlp.experts.gate_up_proj": "packed_colwise",
+        "layers.*.mlp.experts.down_proj": "rowwise",
+        "layers.*.mlp.experts": "moe_tp_experts",
+    }
+    base_model_pp_plan = {
+        "embed_tokens": (["input_ids"], ["inputs_embeds"]),
+        "layers": (["hidden_states", "attention_mask"], ["hidden_states"]),
+        "norm": (["hidden_states"], ["hidden_states"]),
+    }
+    attribute_map = {
+        "num_local_experts": "n_routed_experts",
+    }
+
+    # Overrides from Glm4MoeConfig
     vocab_size: int = 152576
     hidden_size: int = 4096
     intermediate_size: int = 16384
-    moe_intermediate_size: int = 2048
     num_hidden_layers: int = 48
     num_attention_heads: int = 64
     num_key_value_heads: int = 4
-    head_dim: int = 192
-    v_head_dim: int = 128
-    pad_token_id: int | None = None
-    bos_token_id: int | None = 1
-    eos_token_id: int | list[int] | None = None
     hidden_act: str = "silu"
     max_position_embeddings: int = 131072
     initializer_range: float = 0.02
     rms_norm_eps: float = 1e-5
     use_cache: bool = True
     tie_word_embeddings: bool = False
+    rope_parameters: RopeParameters | dict | None = None
     attention_bias: bool = False
-    attention_dropout: float = 0.0
-    sliding_window: int = 128
-    layer_types: list[str] | None = None
-    n_routed_experts: int = 256
+    attention_dropout: float | int = 0.0
+    moe_intermediate_size: int = 2048
     num_experts_per_tok: int = 8
+    n_routed_experts: int = 256
+    routed_scaling_factor: float | None = 1.0
     n_group: int = 1
     topk_group: int = 1
     norm_topk_prob: bool = True
-    routed_scaling_factor: float | None = 1.0
-    router_jitter_noise: float = 0.0
+    bos_token_id: int | None = 1
+    eos_token_id: int | list[int] | None = None
+    pad_token_id: int | None = None
+    # MiMo-V2-Flash specific
+    head_dim: int = 192
+    v_head_dim: int = 128
+    sliding_window: int = 128
+    layer_types: list[str] | None = None
     mlp_layer_types: list[str] | None = None
-    rope_parameters: dict | None = None
+    router_jitter_noise: float = 0.0
 
     def __post_init__(self, **kwargs):
         # Full attention for the first layer and every 6th layer; SWA for the rest.
@@ -100,33 +124,7 @@ class MiMoV2FlashConfig(PreTrainedConfig):
         super().__post_init__(**kwargs)
 
     def convert_rope_params_to_dict(self, **kwargs):
-        self.standardize_rope_params()
         return kwargs
-
-    base_model_tp_plan = {
-        "layers.*.self_attn.q_proj": "colwise",
-        "layers.*.self_attn.k_proj": "colwise",
-        "layers.*.self_attn.v_proj": "colwise",
-        "layers.*.self_attn.o_proj": "rowwise",
-        "layers.*.self_attn.sinks": "colwise",
-        "layers.*.mlp.gate_proj": "colwise",
-        "layers.*.mlp.up_proj": "colwise",
-        "layers.*.mlp.down_proj": "rowwise",
-        "layers.*.mlp.experts.gate_up_proj": "packed_colwise",
-        "layers.*.mlp.experts.down_proj": "rowwise",
-        "layers.*.mlp.experts": "moe_tp_experts",
-    }
-    base_model_ep_plan = {
-        "layers.*.mlp.gate": "ep_router",
-        "layers.*.mlp.experts.gate_up_proj": "grouped_gemm",
-        "layers.*.mlp.experts.down_proj": "grouped_gemm",
-        "layers.*.mlp.experts": "moe_tp_experts",
-    }
-    base_model_pp_plan = {
-        "embed_tokens": (["input_ids"], ["inputs_embeds"]),
-        "layers": (["hidden_states", "attention_mask"], ["hidden_states"]),
-        "norm": (["hidden_states"], ["hidden_states"]),
-    }
 
 
 __all__ = ["MiMoV2FlashConfig"]
