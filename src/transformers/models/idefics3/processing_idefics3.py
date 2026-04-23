@@ -112,8 +112,8 @@ class Idefics3Processor(ProcessorMixin):
         )
 
         image_seq_len = image_seq_len if image_seq_len is not None else self.image_seq_len
-        return_text_replacement_offsets = output_kwargs["text_kwargs"].pop("return_mm_token_type_ids", False)
-        # return_mm_token_type_ids = output_kwargs["text_kwargs"].pop("return_mm_token_type_ids", False)
+        return_text_replacement_offsets = output_kwargs["text_kwargs"].pop("return_text_replacement_offsets", False)
+        return_mm_token_type_ids = output_kwargs["text_kwargs"].pop("return_mm_token_type_ids", False)
         return_tensors = output_kwargs["text_kwargs"].pop("return_tensors", None)
 
         image_inputs = text_inputs = {}
@@ -131,8 +131,22 @@ class Idefics3Processor(ProcessorMixin):
                 text_inputs = self.tokenizer(text, **output_kwargs["text_kwargs"])
                 if return_text_replacement_offsets:
                     text_inputs["text_replacement_offsets"] = text_replacement_offsets
-                # if return_mm_token_type_ids:
-                #     text_inputs["mm_token_type_ids"] = self.create_mm_token_type_ids(text_inputs["input_ids"], batch_image_seq_lengths)
+
+                batch_image_seq_lengths = []
+                for batch_id, text_replacement_offset in enumerate(text_replacement_offsets):
+                    image_seq_lens = []
+                    for data in text_replacement_offset:
+                        start, end = data["new_span"]
+                        start_id_pos = text_inputs.char_to_token(batch_id, start)
+                        end_id_pos = text_inputs.char_to_token(batch_id, end - 1)
+                        # Add one to go from zero-indexing to actual length
+                        image_seq_lens.append(end_id_pos - start_id_pos + 1)
+                    batch_image_seq_lengths.append(image_seq_lens)
+
+                if return_mm_token_type_ids:
+                    text_inputs["mm_token_type_ids"] = self.create_mm_token_type_ids(
+                        text_inputs["input_ids"], batch_image_seq_lengths
+                    )
                 self._check_special_mm_tokens(text, text_inputs, modalities=["image"])
 
         elif text is not None:
