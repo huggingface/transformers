@@ -232,7 +232,7 @@ from transformers import AutoProcessor, AutoModelForImageTextToText, BitsAndByte
 model_checkpoint = "OpenGVLab/InternVL3-8B-hf"
 quantization_config = BitsAndBytesConfig(load_in_4bit=True)
 processor = AutoProcessor.from_pretrained(model_checkpoint)
-model = AutoModelForImageTextToText.from_pretrained(model_checkpoint, quantization_config=quantization_config)
+model = AutoModelForImageTextToText.from_pretrained(model_checkpoint, quantization_config=quantization_config, device_map="auto")
 
 messages = [
     {

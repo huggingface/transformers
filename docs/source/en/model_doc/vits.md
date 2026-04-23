@@ -111,7 +111,7 @@ Audio(waveform, rate=model.config.sampling_rate)
    import subprocess
 
    tokenizer = VitsTokenizer.from_pretrained("facebook/mms-tts-kor")
-   model = VitsModel.from_pretrained("facebook/mms-tts-kor")
+   model = VitsModel.from_pretrained("facebook/mms-tts-kor", device_map="auto")
 
    def uromanize(input_string, uroman_path):
        """Convert non-Roman strings to Roman using the `uroman` perl package."""

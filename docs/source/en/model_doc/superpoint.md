@@ -47,7 +47,7 @@ url = "http://images.cocodataset.org/val2017/000000039769.jpg"
 image = Image.open(requests.get(url, stream=True).raw)
 
 processor = AutoImageProcessor.from_pretrained("magic-leap-community/superpoint")
-model = SuperPointForKeypointDetection.from_pretrained("magic-leap-community/superpoint")
+model = SuperPointForKeypointDetection.from_pretrained("magic-leap-community/superpoint", device_map="auto")
 
 inputs = processor(image, return_tensors="pt")
 with torch.no_grad():
@@ -71,7 +71,7 @@ processed_outputs = processor.post_process_keypoint_detection(outputs, [image_si
     from PIL import Image
     import requests
     processor = AutoImageProcessor.from_pretrained("magic-leap-community/superpoint")
-    model = SuperPointForKeypointDetection.from_pretrained("magic-leap-community/superpoint")
+    model = SuperPointForKeypointDetection.from_pretrained("magic-leap-community/superpoint", device_map="auto")
     url_image_1 = "http://images.cocodataset.org/val2017/000000039769.jpg"
     image_1 = Image.open(requests.get(url_image_1, stream=True).raw)
     url_image_2 = "http://images.cocodataset.org/test-stuff2017/000000000568.jpg"

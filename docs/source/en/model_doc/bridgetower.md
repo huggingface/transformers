@@ -65,7 +65,7 @@ image = Image.open(requests.get(url, stream=True).raw)
 texts = ["An image of two cats chilling on a couch", "A football player scoring a goal"]
 
 processor = BridgeTowerProcessor.from_pretrained("BridgeTower/bridgetower-large-itm-mlm-itc")
-model = BridgeTowerForContrastiveLearning.from_pretrained("BridgeTower/bridgetower-large-itm-mlm-itc")
+model = BridgeTowerForContrastiveLearning.from_pretrained("BridgeTower/bridgetower-large-itm-mlm-itc", device_map="auto")
 
 # forward pass
 scores = dict()
@@ -88,7 +88,7 @@ image = Image.open(requests.get(url, stream=True).raw)
 texts = ["An image of two cats chilling on a couch", "A football player scoring a goal"]
 
 processor = BridgeTowerProcessor.from_pretrained("BridgeTower/bridgetower-base-itm-mlm")
-model = BridgeTowerForImageAndTextRetrieval.from_pretrained("BridgeTower/bridgetower-base-itm-mlm")
+model = BridgeTowerForImageAndTextRetrieval.from_pretrained("BridgeTower/bridgetower-base-itm-mlm", device_map="auto")
 
 # forward pass
 scores = dict()
@@ -111,7 +111,7 @@ image = Image.open(requests.get(url, stream=True).raw).convert("RGB")
 text = "a <mask> looking out of the window"
 
 processor = BridgeTowerProcessor.from_pretrained("BridgeTower/bridgetower-base-itm-mlm")
-model = BridgeTowerForMaskedLM.from_pretrained("BridgeTower/bridgetower-base-itm-mlm")
+model = BridgeTowerForMaskedLM.from_pretrained("BridgeTower/bridgetower-base-itm-mlm", device_map="auto")
 
 # prepare inputs
 encoding = processor(image, text, return_tensors="pt")

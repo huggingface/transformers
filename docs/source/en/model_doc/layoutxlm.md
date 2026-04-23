@@ -47,7 +47,7 @@ One can directly plug in the weights of LayoutXLM into a LayoutLMv2 model, like 
 ```python
 from transformers import LayoutLMv2Model
 
-model = LayoutLMv2Model.from_pretrained("microsoft/layoutxlm-base")
+model = LayoutLMv2Model.from_pretrained("microsoft/layoutxlm-base", device_map="auto")
 ```
 
 Note that LayoutXLM has its own tokenizer, based on

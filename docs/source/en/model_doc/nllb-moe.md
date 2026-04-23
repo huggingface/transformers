@@ -71,7 +71,7 @@ for the list of all BCP-47 in the Flores 200 dataset.
 from transformers import AutoModelForSeq2SeqLM, AutoTokenizer
 
 tokenizer = AutoTokenizer.from_pretrained("facebook/nllb-moe-54b")
-model = AutoModelForSeq2SeqLM.from_pretrained("facebook/nllb-moe-54b")
+model = AutoModelForSeq2SeqLM.from_pretrained("facebook/nllb-moe-54b", device_map="auto")
 
 article = "Previously, Ring's CEO, Jamie Siminoff, remarked the company started when his doorbell wasn't audible from his shop in his garage."
 inputs = tokenizer(article, return_tensors="pt")
@@ -94,7 +94,7 @@ See example below for a translation from romanian to german:
 from transformers import AutoModelForSeq2SeqLM, AutoTokenizer
 
 tokenizer = AutoTokenizer.from_pretrained("facebook/nllb-moe-54b", src_lang="ron_Latn")
-model = AutoModelForSeq2SeqLM.from_pretrained("facebook/nllb-moe-54b")
+model = AutoModelForSeq2SeqLM.from_pretrained("facebook/nllb-moe-54b", device_map="auto")
 
 article = "Şeful ONU spune că nu există o soluţie militară în Siria"
 inputs = tokenizer(article, return_tensors="pt")

@@ -43,7 +43,7 @@ This model was contributed by [AI Sweden Models](https://huggingface.co/AI-Swede
 from transformers import AutoTokenizer, AutoModelForCausalLM
 
 tokenizer = AutoTokenizer.from_pretrained("AI-Sweden-Models/gpt-sw3-356m")
-model = AutoModelForCausalLM.from_pretrained("AI-Sweden-Models/gpt-sw3-356m")
+model = AutoModelForCausalLM.from_pretrained("AI-Sweden-Models/gpt-sw3-356m", device_map="auto")
 
 input_ids = tokenizer("Träd är fina för att", return_tensors="pt")["input_ids"]
 

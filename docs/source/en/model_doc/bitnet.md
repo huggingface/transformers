@@ -86,7 +86,7 @@ model_id = "microsoft/bitnet-b1.58-2B-4T"
 tokenizer = AutoTokenizer.from_pretrained(model_id)
 model = AutoModelForCausalLM.from_pretrained(
     model_id,
-)
+ device_map="auto")
 
 # Apply the chat template
 messages = [

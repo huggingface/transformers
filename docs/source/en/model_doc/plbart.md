@@ -80,7 +80,7 @@ from transformers import PLBartForConditionalGeneration, PLBartTokenizer
 tokenizer = PLBartTokenizer.from_pretrained("uclanlp/plbart-python-en_XX", src_lang="python", tgt_lang="en_XX")
 example_python_phrase = "def maximum(a,b,c):NEW_LINE_INDENTreturn max([a,b,c])"
 inputs = tokenizer(example_python_phrase, return_tensors="pt")
-model = PLBartForConditionalGeneration.from_pretrained("uclanlp/plbart-python-en_XX")
+model = PLBartForConditionalGeneration.from_pretrained("uclanlp/plbart-python-en_XX", device_map="auto")
 translated_tokens = model.generate(**inputs, decoder_start_token_id=tokenizer.lang_code_to_id["en_XX"])
 tokenizer.batch_decode(translated_tokens, skip_special_tokens=True)[0]
 "Returns the maximum value of a b c."

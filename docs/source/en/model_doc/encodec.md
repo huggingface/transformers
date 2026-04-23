@@ -41,7 +41,7 @@ from datasets import load_dataset, Audio
 from transformers import EncodecModel, AutoProcessor
 librispeech_dummy = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
 
-model = EncodecModel.from_pretrained("facebook/encodec_24khz")
+model = EncodecModel.from_pretrained("facebook/encodec_24khz", device_map="auto")
 processor = AutoProcessor.from_pretrained("facebook/encodec_24khz")
 librispeech_dummy = librispeech_dummy.cast_column("audio", Audio(sampling_rate=processor.sampling_rate))
 audio_sample = librispeech_dummy[-1]["audio"]["array"]

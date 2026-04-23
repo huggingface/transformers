@@ -65,7 +65,7 @@ image2 = Image.open(requests.get(url_image2, stream=True).raw)
 images = [image1, image2]
 
 processor = AutoImageProcessor.from_pretrained("magic-leap-community/superglue_outdoor")
-model = AutoModel.from_pretrained("magic-leap-community/superglue_outdoor")
+model = AutoModel.from_pretrained("magic-leap-community/superglue_outdoor", device_map="auto")
 
 inputs = processor(images, return_tensors="pt")
 with torch.inference_mode():
@@ -90,7 +90,7 @@ processed_outputs = processor.post_process_keypoint_matching(outputs, image_size
     import requests
 
     processor = AutoImageProcessor.from_pretrained("magic-leap-community/superglue_outdoor")
-    model = AutoModel.from_pretrained("magic-leap-community/superglue_outdoor")
+    model = AutoModel.from_pretrained("magic-leap-community/superglue_outdoor", device_map="auto")
 
     # SuperGlue requires pairs of images
     images = [image1, image2]

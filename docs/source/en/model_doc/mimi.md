@@ -45,7 +45,7 @@ from transformers import MimiModel, AutoFeatureExtractor
 librispeech_dummy = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
 
 # load model and feature extractor
-model = MimiModel.from_pretrained("kyutai/mimi")
+model = MimiModel.from_pretrained("kyutai/mimi", device_map="auto")
 feature_extractor = AutoFeatureExtractor.from_pretrained("kyutai/mimi")
 
 # load audio sample

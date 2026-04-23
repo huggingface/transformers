@@ -56,7 +56,7 @@ from PIL import Image
 from transformers import AutoProcessor, OmDetTurboForObjectDetection
 
 processor = AutoProcessor.from_pretrained("omlab/omdet-turbo-swin-tiny-hf")
-model = OmDetTurboForObjectDetection.from_pretrained("omlab/omdet-turbo-swin-tiny-hf")
+model = OmDetTurboForObjectDetection.from_pretrained("omlab/omdet-turbo-swin-tiny-hf", device_map="auto")
 
 url = "http://images.cocodataset.org/val2017/000000039769.jpg"
 image = Image.open(requests.get(url, stream=True).raw)
@@ -97,7 +97,7 @@ from PIL import Image
 from transformers import AutoProcessor, OmDetTurboForObjectDetection
 
 processor = AutoProcessor.from_pretrained("omlab/omdet-turbo-swin-tiny-hf")
-model = OmDetTurboForObjectDetection.from_pretrained("omlab/omdet-turbo-swin-tiny-hf")
+model = OmDetTurboForObjectDetection.from_pretrained("omlab/omdet-turbo-swin-tiny-hf", device_map="auto")
 
 url1 = "http://images.cocodataset.org/val2017/000000039769.jpg"
 image1 = Image.open(BytesIO(requests.get(url1).content)).convert("RGB")

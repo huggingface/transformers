@@ -182,7 +182,7 @@ from transformers import VideoLlama3ForConditionalGeneration
 model = VideoLlama3ForConditionalGeneration.from_pretrained(
     "lkhl/VideoLLaMA3-2B-Image-HF", , 
     attn_implementation="flash_attention_2",
-)
+ device_map="auto")
 ```
 
 ## VideoLlama3Config

@@ -146,7 +146,7 @@ visualizer("<img> What is in this image?")
     from PIL import Image
     from transformers import TorchAoConfig, AutoProcessor, PaliGemmaForConditionalGeneration
 
-    model = PaliGemmaForConditionalGeneration.from_pretrained("google/paligemma-3b-ft-nlvr2-448")
+    model = PaliGemmaForConditionalGeneration.from_pretrained("google/paligemma-3b-ft-nlvr2-448", device_map="auto")
     processor = AutoProcessor.from_pretrained("google/paligemma-3b-ft-nlvr2-448")
 
     prompt = "Are these two images the same?"

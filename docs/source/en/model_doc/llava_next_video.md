@@ -235,7 +235,7 @@ from transformers import LlavaNextVideoForConditionalGeneration
 model = LlavaNextVideoForConditionalGeneration.from_pretrained(
     "llava-hf/LLaVA-NeXT-Video-7B-hf", , 
     attn_implementation="flash_attention_2",
-).to(0)
+).to(0, device_map="auto")
 ```
 
 ## LlavaNextVideoConfig

@@ -40,7 +40,7 @@ url = "http://images.cocodataset.org/val2017/000000039769.jpg"
 image = Image.open(requests.get(url, stream=True).raw)
 
 processor = AutoImageProcessor.from_pretrained("facebook/pixio-vith16")
-model = AutoModel.from_pretrained("facebook/pixio-vith16")
+model = AutoModel.from_pretrained("facebook/pixio-vith16", device_map="auto")
 
 inputs = processor(images=image, return_tensors="pt")
 outputs = model(**inputs)
@@ -67,7 +67,7 @@ features = outputs.hidden_states[-1] # class tokens + patch tokens before last L
   print(image.height, image.width)  # [480, 640]
 
   processor = AutoImageProcessor.from_pretrained('facebook/pixio-vith16')
-  model = AutoModel.from_pretrained('facebook/pixio-vith16')
+  model = AutoModel.from_pretrained('facebook/pixio-vith16', device_map="auto")
   patch_size = model.config.patch_size
 
   inputs = processor(images=image, return_tensors="pt")
@@ -97,7 +97,7 @@ features = outputs.hidden_states[-1] # class tokens + patch tokens before last L
   image = Image.open(requests.get(url, stream=True).raw)
 
   processor = AutoImageProcessor.from_pretrained('facebook/pixio-vith16')
-  model = AutoModel.from_pretrained('facebook/pixio-vith16')
+  model = AutoModel.from_pretrained('facebook/pixio-vith16', device_map="auto")
 
   compiled_model = torch.compile(model)
 

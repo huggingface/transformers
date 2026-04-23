@@ -119,7 +119,7 @@ import torch
 processor = AutoProcessor.from_pretrained("llava-hf/llava-onevision-qwen2-7b-ov-hf") 
 model = LlavaOnevisionForConditionalGeneration.from_pretrained(
     "llava-hf/llava-onevision-qwen2-7b-ov-hf",
-    device_map=device
+    device_map="auto"
 )
 
 # prepare image and text prompt, using the appropriate prompt template
@@ -284,7 +284,7 @@ from transformers import LlavaOnevisionForConditionalGeneration
 model = LlavaOnevisionForConditionalGeneration.from_pretrained(
     model_id,
     use_flash_attention_2=True
-).to(0)
+).to(0, device_map="auto")
 ```
 
 ## LlavaOnevisionConfig

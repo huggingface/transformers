@@ -65,7 +65,7 @@ tokenizer = FastSpeech2ConformerTokenizer.from_pretrained("espnet/fastspeech2_co
 inputs = tokenizer("Hello, my dog is cute.", return_tensors="pt")
 input_ids = inputs["input_ids"]
 
-model = FastSpeech2ConformerModel.from_pretrained("espnet/fastspeech2_conformer")
+model = FastSpeech2ConformerModel.from_pretrained("espnet/fastspeech2_conformer", device_map="auto")
 output_dict = model(input_ids, return_dict=True)
 spectrogram = output_dict["spectrogram"]
 

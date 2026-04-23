@@ -39,7 +39,7 @@ from huggingface_hub import hf_hub_download
 from transformers import ColModernVBertProcessor, ColModernVBertForRetrieval
 
 processor = ColModernVBertProcessor.from_pretrained("ModernVBERT/colmodernvbert-hf")
-model = ColModernVBertForRetrieval.from_pretrained("ModernVBERT/colmodernvbert-hf")
+model = ColModernVBertForRetrieval.from_pretrained("ModernVBERT/colmodernvbert-hf", device_map="auto")
 
 # Load the test dataset
 queries = [

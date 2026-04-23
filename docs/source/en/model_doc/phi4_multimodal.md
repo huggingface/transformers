@@ -52,7 +52,7 @@ from transformers import AutoModelForCausalLM, AutoProcessor, GenerationConfig
 model_path = "microsoft/Phi-4-multimodal-instruct"
 
 processor = AutoProcessor.from_pretrained(model_path)
-model = AutoModelForCausalLM.from_pretrained(model_path, device_map=device)
+model = AutoModelForCausalLM.from_pretrained(model_path, device_map="auto")
 
 model.load_adapter(model_path, adapter_name="vision", device_map=device, adapter_kwargs={"subfolder": 'vision-lora'})
 
@@ -101,7 +101,7 @@ from transformers import AutoModelForCausalLM, AutoProcessor, GenerationConfig
 model_path = "microsoft/Phi-4-multimodal-instruct"
 
 processor = AutoProcessor.from_pretrained(model_path)
-model = AutoModelForCausalLM.from_pretrained(model_path, device_map=device,  dtype=torch.float16)
+model = AutoModelForCausalLM.from_pretrained(model_path, device_map="auto",  dtype=torch.float16)
 
 model.load_adapter(model_path, adapter_name="speech", device_map=device, adapter_kwargs={"subfolder": 'speech-lora'})
 model.set_adapter("speech")

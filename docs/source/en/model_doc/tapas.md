@@ -83,15 +83,15 @@ Initializing a model with a pre-trained base and randomly initialized classifica
 from transformers import TapasConfig, TapasForQuestionAnswering
 
 # for example, the base sized model with default SQA configuration
-model = TapasForQuestionAnswering.from_pretrained("google/tapas-base")
+model = TapasForQuestionAnswering.from_pretrained("google/tapas-base", device_map="auto")
 
 # or, the base sized model with WTQ configuration
 config = TapasConfig.from_pretrained("google/tapas-base-finetuned-wtq")
-model = TapasForQuestionAnswering.from_pretrained("google/tapas-base", config=config)
+model = TapasForQuestionAnswering.from_pretrained("google/tapas-base", config=config, device_map="auto")
 
 # or, the base sized model with WikiSQL configuration
 config = TapasConfig("google-base-finetuned-wikisql-supervised")
-model = TapasForQuestionAnswering.from_pretrained("google/tapas-base", config=config)
+model = TapasForQuestionAnswering.from_pretrained("google/tapas-base", config=config, device_map="auto")
 ```
 
 Of course, you don't necessarily have to follow one of these three ways in which TAPAS was fine-tuned. You can also experiment by defining any hyperparameters you want when initializing [`TapasConfig`], and then create a [`TapasForQuestionAnswering`] based on that configuration. For example, if you have a dataset that has both conversational questions and questions that might involve aggregation, then you can do it this way. Here's an example:
@@ -102,7 +102,7 @@ from transformers import TapasConfig, TapasForQuestionAnswering
 # you can initialize the classification heads any way you want (see docs of TapasConfig)
 config = TapasConfig(num_aggregation_labels=3, average_logits_per_cell=True)
 # initializing the pre-trained base sized model with our custom classification heads
-model = TapasForQuestionAnswering.from_pretrained("google/tapas-base", config=config)
+model = TapasForQuestionAnswering.from_pretrained("google/tapas-base", config=config, device_map="auto")
 ```
 
 What you can also do is start from an already fine-tuned checkpoint. A note here is that the already fine-tuned checkpoint on WTQ has some issues due to the L2-loss which is somewhat brittle. See [here](https://github.com/google-research/tapas/issues/91#issuecomment-735719340) for more info.
@@ -234,7 +234,7 @@ config = TapasConfig(
     allow_empty_column_selection=False,
     temperature=0.0352513,
 )
-model = TapasForQuestionAnswering.from_pretrained("google/tapas-base", config=config)
+model = TapasForQuestionAnswering.from_pretrained("google/tapas-base", config=config, device_map="auto")
 
 optimizer = AdamW(model.parameters(), lr=5e-5)
 
@@ -279,7 +279,7 @@ from transformers import TapasTokenizer, TapasForQuestionAnswering
 import pandas as pd
 
 model_name = "google/tapas-base-finetuned-wtq"
-model = TapasForQuestionAnswering.from_pretrained(model_name)
+model = TapasForQuestionAnswering.from_pretrained(model_name, device_map="auto")
 tokenizer = TapasTokenizer.from_pretrained(model_name)
 
 data = {"Actors": ["Brad Pitt", "Leonardo Di Caprio", "George Clooney"], "Number of movies": ["87", "53", "69"]}

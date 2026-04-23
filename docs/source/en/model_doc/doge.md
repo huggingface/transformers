@@ -36,7 +36,7 @@ Checkout all Doge model checkpoints [here](https://huggingface.co/collections/Sm
 from transformers import AutoTokenizer, AutoModelForCausalLM
 
 tokenizer = AutoTokenizer.from_pretrained("SmallDoge/Doge-20M")
-model = AutoModelForCausalLM.from_pretrained("SmallDoge/Doge-20M")
+model = AutoModelForCausalLM.from_pretrained("SmallDoge/Doge-20M", device_map="auto")
 inputs = tokenizer("Hey how are you doing?", return_tensors="pt")
 
 outputs = model.generate(**inputs, max_new_tokens=100)
@@ -52,7 +52,7 @@ print(tokenizer.batch_decode(outputs))
 from transformers import AutoTokenizer, AutoModelForCausalLM, GenerationConfig, TextStreamer
 
 tokenizer = AutoTokenizer.from_pretrained("SmallDoge/Doge-20M-Instruct")
-model = AutoModelForCausalLM.from_pretrained("SmallDoge/Doge-20M-Instruct")
+model = AutoModelForCausalLM.from_pretrained("SmallDoge/Doge-20M-Instruct", device_map="auto")
 
 generation_config = GenerationConfig(
       max_new_tokens=100, 

@@ -38,7 +38,7 @@ The original code can be found [here](https://github.com/BlinkDL/RWKV-LM).
 import torch
 from transformers import AutoTokenizer, RwkvConfig, RwkvModel
 
-model = RwkvModel.from_pretrained("sgugger/rwkv-430M-pile")
+model = RwkvModel.from_pretrained("sgugger/rwkv-430M-pile", device_map="auto")
 tokenizer = AutoTokenizer.from_pretrained("sgugger/rwkv-430M-pile")
 
 inputs = tokenizer("This is an example.", return_tensors="pt")

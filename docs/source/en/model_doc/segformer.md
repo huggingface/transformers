@@ -60,7 +60,7 @@ url = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/
 image = Image.open(requests.get(url, stream=True).raw)
 
 processor = AutoProcessor.from_pretrained("nvidia/segformer-b0-finetuned-ade-512-512")
-model = AutoModelForSemanticSegmentation.from_pretrained("nvidia/segformer-b0-finetuned-ade-512-512")
+model = AutoModelForSemanticSegmentation.from_pretrained("nvidia/segformer-b0-finetuned-ade-512-512", device_map="auto")
 
 inputs = processor(images=image, return_tensors="pt")
 outputs = model(**inputs)

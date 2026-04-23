@@ -48,7 +48,7 @@ Tips:
 ```python
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
-model = AutoModelForCausalLM.from_pretrained("tiiuae/Falcon-H1-7B-Instruct")
+model = AutoModelForCausalLM.from_pretrained("tiiuae/Falcon-H1-7B-Instruct", device_map="auto")
 tokenizer = AutoTokenizer.from_pretrained("tiiuae/Falcon-H1-7B-Instruct")
 
 message = ["Mamba is a snake with following properties  "]

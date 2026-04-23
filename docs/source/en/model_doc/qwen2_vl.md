@@ -272,7 +272,7 @@ from transformers import Qwen2VLForConditionalGeneration
 model = Qwen2VLForConditionalGeneration.from_pretrained(
     "Qwen/Qwen2-VL-7B-Instruct", , 
     attn_implementation="flash_attention_2",
-)
+ device_map="auto")
 ```
 
 ## Qwen2VLConfig

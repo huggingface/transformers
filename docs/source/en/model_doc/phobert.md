@@ -41,7 +41,7 @@ This model was contributed by [dqnguyen](https://huggingface.co/dqnguyen). The o
 import torch
 from transformers import AutoModel, AutoTokenizer
 
-phobert = AutoModel.from_pretrained("vinai/phobert-base")
+phobert = AutoModel.from_pretrained("vinai/phobert-base", device_map="auto")
 tokenizer = AutoTokenizer.from_pretrained("vinai/phobert-base")
 
 # INPUT TEXT MUST BE ALREADY WORD-SEGMENTED!

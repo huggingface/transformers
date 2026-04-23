@@ -75,7 +75,7 @@ from datasets import load_dataset
 import torch
 
 # load a fine-tuned speech translation model and corresponding processor
-model = SpeechEncoderDecoderModel.from_pretrained("facebook/wav2vec2-xls-r-300m-en-to-15")
+model = SpeechEncoderDecoderModel.from_pretrained("facebook/wav2vec2-xls-r-300m-en-to-15", device_map="auto")
 processor = Wav2Vec2Processor.from_pretrained("facebook/wav2vec2-xls-r-300m-en-to-15")
 
 # let's perform inference on a piece of English speech (which we'll translate to German)

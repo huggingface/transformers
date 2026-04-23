@@ -49,11 +49,11 @@ Hugging Face models use SDPA by default; however, this model’s visual backbone
 
 If you want to use a different attention implementation in the language decoder, make sure to set it explicitly, for example:
 
-`model = FastVlmForConditionalGeneration.from_pretrained("KamilaMila/FastVLM-0.5B", attn_implementation={"text_config": "flash_attention_2"})`
+`model = FastVlmForConditionalGeneration.from_pretrained("KamilaMila/FastVLM-0.5B", attn_implementation={"text_config": "flash_attention_2"}, device_map="auto")`
 
 Setting it for the entire model, e.g.
 
-`model = FastVlmForConditionalGeneration.from_pretrained("KamilaMila/FastVLM-0.5B", attn_implementation="flash_attention_2")`
+`model = FastVlmForConditionalGeneration.from_pretrained("KamilaMila/FastVLM-0.5B", attn_implementation="flash_attention_2", device_map="auto")`
 
 will result in an error.
 

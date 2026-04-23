@@ -51,7 +51,7 @@ from datasets import load_dataset, Audio
 from transformers import DacModel, AutoProcessor
 librispeech_dummy = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
 
-model = DacModel.from_pretrained("descript/dac_16khz")
+model = DacModel.from_pretrained("descript/dac_16khz", device_map="auto")
 processor = AutoProcessor.from_pretrained("descript/dac_16khz")
 librispeech_dummy = librispeech_dummy.cast_column("audio", Audio(sampling_rate=processor.sampling_rate))
 audio_sample = librispeech_dummy[-1]["audio"]["array"]

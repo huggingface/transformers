@@ -55,7 +55,7 @@ pipeline("UN Chief says there is no military solution in Syria")
 from transformers import AutoModelForSeq2SeqLM, AutoTokenizer
 
 tokenizer = AutoTokenizer.from_pretrained("facebook/nllb-200-distilled-600M")
-model = AutoModelForSeq2SeqLM.from_pretrained("facebook/nllb-200-distilled-600M", dtype="auto", attn_implementation="sdpa")
+model = AutoModelForSeq2SeqLM.from_pretrained("facebook/nllb-200-distilled-600M", dtype="auto", attn_implementation="sdpa", device_map="auto")
 
 article = "UN Chief says there is no military solution in Syria"
 inputs = tokenizer(article, return_tensors="pt")
@@ -77,7 +77,7 @@ The example below uses [bitsandbytes](../quantization/bitsandbytes) to quantize 
 from transformers import AutoModelForSeq2SeqLM, AutoTokenizer, BitsAndBytesConfig
 
 bnb_config = BitsAndBytesConfig(load_in_8bit=True)
-model = AutoModelForSeq2SeqLM.from_pretrained("facebook/nllb-200-distilled-1.3B", quantization_config=bnb_config)
+model = AutoModelForSeq2SeqLM.from_pretrained("facebook/nllb-200-distilled-1.3B", quantization_config=bnb_config, device_map="auto")
 tokenizer = AutoTokenizer.from_pretrained("facebook/nllb-200-distilled-1.3B")
 
 article = "UN Chief says there is no military solution in Syria"
@@ -129,7 +129,7 @@ visualizer("UN Chief says there is no military solution in Syria")
     from transformers import AutoModelForSeq2SeqLM, AutoTokenizer
 
     tokenizer = AutoTokenizer.from_pretrained("facebook/nllb-200-distilled-600M")
-    model = AutoModelForSeq2SeqLM.from_pretrained("facebook/nllb-200-distilled-600M")
+    model = AutoModelForSeq2SeqLM.from_pretrained("facebook/nllb-200-distilled-600M", device_map="auto")
 
     article = "UN Chief says there is no military solution in Syria"
     inputs = tokenizer(article, return_tensors="pt")

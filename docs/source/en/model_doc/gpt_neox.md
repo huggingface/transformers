@@ -51,7 +51,7 @@ The `generate()` method can be used to generate text using GPT Neo model.
 ```python
 from transformers import GPTNeoXForCausalLM, GPTNeoXTokenizerFast
 
-model = GPTNeoXForCausalLM.from_pretrained("EleutherAI/gpt-neox-20b")
+model = GPTNeoXForCausalLM.from_pretrained("EleutherAI/gpt-neox-20b", device_map="auto")
 tokenizer = GPTNeoXTokenizerFast.from_pretrained("EleutherAI/gpt-neox-20b")
 
 prompt = "GPTNeoX20B is a 20B-parameter autoregressive Transformer model developed by EleutherAI."
@@ -113,7 +113,7 @@ SDPA is used by default for `torch>=2.1.1` when an implementation is available, 
 
 ```python
 from transformers import GPTNeoXForCausalLM
-model = GPTNeoXForCausalLM.from_pretrained("EleutherAI/gpt-neox-20b", attn_implementation="sdpa")
+model = GPTNeoXForCausalLM.from_pretrained("EleutherAI/gpt-neox-20b", attn_implementation="sdpa", device_map="auto")
 ...
 ```
 

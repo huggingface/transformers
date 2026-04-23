@@ -124,7 +124,7 @@ print(assistant_response)
     import torch
     from transformers import AutoModelForCausalLM
     model = AutoModelForCausalLM.from_pretrained("ai21labs/AI21-Jamba-1.5-Large",
-                                                 use_mamba_kernels=False)
+                                                 use_mamba_kernels=False, device_map="auto")
     ```
 
 ## JambaConfig

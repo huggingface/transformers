@@ -46,7 +46,7 @@ url = "https://github.com/DepthAnything/PromptDA/blob/main/assets/example_images
 image = Image.open(requests.get(url, stream=True).raw)
 
 image_processor = AutoImageProcessor.from_pretrained("depth-anything/prompt-depth-anything-vits-hf")
-model = AutoModelForDepthEstimation.from_pretrained("depth-anything/prompt-depth-anything-vits-hf")
+model = AutoModelForDepthEstimation.from_pretrained("depth-anything/prompt-depth-anything-vits-hf", device_map="auto")
 
 prompt_depth_url = "https://github.com/DepthAnything/PromptDA/blob/main/assets/example_images/arkit_depth.png?raw=true"
 prompt_depth = Image.open(requests.get(prompt_depth_url, stream=True).raw)

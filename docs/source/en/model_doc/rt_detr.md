@@ -53,7 +53,7 @@ url = 'http://images.cocodataset.org/val2017/000000039769.jpg'
 image = Image.open(requests.get(url, stream=True).raw)
 
 image_processor = RTDetrImageProcessor.from_pretrained("PekingU/rtdetr_r50vd")
-model = RTDetrForObjectDetection.from_pretrained("PekingU/rtdetr_r50vd")
+model = RTDetrForObjectDetection.from_pretrained("PekingU/rtdetr_r50vd", device_map="auto")
 
 inputs = image_processor(images=image, return_tensors="pt")
 

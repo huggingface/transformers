@@ -54,7 +54,7 @@ from transformers import AutoProcessor, Pix2StructForConditionalGeneration
 import requests
 from PIL import Image
 
-model = Pix2StructForConditionalGeneration.from_pretrained("google/matcha-chartqa").to(0)
+model = Pix2StructForConditionalGeneration.from_pretrained("google/matcha-chartqa").to(0, device_map="auto")
 processor = AutoProcessor.from_pretrained("google/matcha-chartqa")
 url = "https://raw.githubusercontent.com/vis-nlp/ChartQA/main/ChartQA%20Dataset/val/png/20294671002019.png"
 image = Image.open(requests.get(url, stream=True).raw)

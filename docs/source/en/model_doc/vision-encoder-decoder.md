@@ -82,7 +82,7 @@ from PIL import Image
 from transformers import GPT2TokenizerFast, ViTImageProcessor, VisionEncoderDecoderModel
 
 # load a fine-tuned image captioning model and corresponding tokenizer and image processor
-model = VisionEncoderDecoderModel.from_pretrained("nlpconnect/vit-gpt2-image-captioning")
+model = VisionEncoderDecoderModel.from_pretrained("nlpconnect/vit-gpt2-image-captioning", device_map="auto")
 tokenizer = GPT2TokenizerFast.from_pretrained("nlpconnect/vit-gpt2-image-captioning")
 image_processor = ViTImageProcessor.from_pretrained("nlpconnect/vit-gpt2-image-captioning")
 

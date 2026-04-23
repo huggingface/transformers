@@ -38,7 +38,7 @@ image = Image.open(urlopen(
 # Load model and image processor
 checkpoint = "timm/resnet50.a1_in1k"
 image_processor = AutoImageProcessor.from_pretrained(checkpoint)
-model = AutoModelForImageClassification.from_pretrained(checkpoint).eval()
+model = AutoModelForImageClassification.from_pretrained(checkpoint).eval( device_map="auto")
 
 # Preprocess image
 inputs = image_processor(image)

@@ -63,7 +63,7 @@ sample = ds[0]["audio"]
 
 # Define processor and model.
 processor = ClvpProcessor.from_pretrained("susnato/clvp_dev")
-model = ClvpModelForConditionalGeneration.from_pretrained("susnato/clvp_dev")
+model = ClvpModelForConditionalGeneration.from_pretrained("susnato/clvp_dev", device_map="auto")
 
 # Generate processor output and model output.
 processor_output = processor(raw_speech=sample["array"], sampling_rate=sample["sampling_rate"], text=text, return_tensors="pt")

@@ -44,7 +44,7 @@ model_id = "sesame/csm-1b"
 
 # load the model and the processor
 processor = AutoProcessor.from_pretrained(model_id)
-model = CsmForConditionalGeneration.from_pretrained(model_id, device_map=device)
+model = CsmForConditionalGeneration.from_pretrained(model_id, device_map="auto")
 
 # prepare the inputs
 text = "[0]The past is just a story we tell ourselves." # `[0]` for speaker id 0
@@ -78,7 +78,7 @@ model_id = "sesame/csm-1b"
 
 # load the model and the processor
 processor = AutoProcessor.from_pretrained(model_id)
-model = CsmForConditionalGeneration.from_pretrained(model_id, device_map=device)
+model = CsmForConditionalGeneration.from_pretrained(model_id, device_map="auto")
 
 # prepare the inputs
 ds = load_dataset("hf-internal-testing/dailytalk-dummy", split="train")
@@ -122,7 +122,7 @@ model_id = "sesame/csm-1b"
 
 # load the model and the processor
 processor = AutoProcessor.from_pretrained(model_id)
-model = CsmForConditionalGeneration.from_pretrained(model_id, device_map=device)
+model = CsmForConditionalGeneration.from_pretrained(model_id, device_map="auto")
 
 # prepare the inputs 
 ds = load_dataset("hf-internal-testing/dailytalk-dummy", split="train")
@@ -182,7 +182,7 @@ torch._logging.set_logs(graph_breaks=True, recompiles=True, cudagraphs=True)
 
 # load the model and the processor
 processor = AutoProcessor.from_pretrained(model_id)
-model = CsmForConditionalGeneration.from_pretrained(model_id, device_map=device)
+model = CsmForConditionalGeneration.from_pretrained(model_id, device_map="auto")
 
 # use static cache, enabling automatically torch compile with fullgraph and reduce-overhead
 model.generation_config.max_length = 250 # big enough to avoid recompilation
@@ -310,7 +310,7 @@ model_id = "sesame/csm-1b"
 
 # load the model and the processor
 processor = AutoProcessor.from_pretrained(model_id)
-model = CsmForConditionalGeneration.from_pretrained(model_id, device_map=device)
+model = CsmForConditionalGeneration.from_pretrained(model_id, device_map="auto")
 model.train()
 model.codec_model.eval()
 

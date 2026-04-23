@@ -89,7 +89,7 @@ SDPA is used by default for `torch>=2.1.1` when an implementation is available, 
 
 ```py
 from transformers import BeitForImageClassification
-model = BeitForImageClassification.from_pretrained("microsoft/beit-base-patch16-224", attn_implementation="sdpa")
+model = BeitForImageClassification.from_pretrained("microsoft/beit-base-patch16-224", attn_implementation="sdpa", device_map="auto")
 ...
 ```
 

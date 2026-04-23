@@ -70,7 +70,7 @@ image_1 = Image.open(requests.get(url_1, stream=True).raw)
 image_2 = Image.open(requests.get(url_2, stream=True).raw)
 
 processor = AutoProcessor.from_pretrained("facebook/ijepa_vith14_1k")  
-model = AutoModel.from_pretrained("facebook/ijepa_vith14_1k", dtype="auto", attn_implementation="sdpa")  
+model = AutoModel.from_pretrained("facebook/ijepa_vith14_1k", dtype="auto", attn_implementation="sdpa", device_map="auto")  
 
 
 def infer(image):  
@@ -109,7 +109,7 @@ image_1 = Image.open(requests.get(url_1, stream=True).raw)
 image_2 = Image.open(requests.get(url_2, stream=True).raw)
 
 processor = AutoProcessor.from_pretrained("facebook/ijepa_vitg16_22k")
-model = AutoModel.from_pretrained("facebook/ijepa_vitg16_22k", quantization_config=quantization_config, dtype="auto", attn_implementation="sdpa")
+model = AutoModel.from_pretrained("facebook/ijepa_vitg16_22k", quantization_config=quantization_config, dtype="auto", attn_implementation="sdpa", device_map="auto")
 
 
 def infer(image):

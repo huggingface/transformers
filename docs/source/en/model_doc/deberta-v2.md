@@ -97,7 +97,7 @@ model = AutoModelForSequenceClassification.from_pretrained(
     model_id,
     quantization_config=quantization_config,
     dtype="float16"
-)
+ device_map="auto")
 
 inputs = tokenizer("DeBERTa-v2 is great at understanding context!", return_tensors="pt").to(model.device)
 outputs = model(**inputs)

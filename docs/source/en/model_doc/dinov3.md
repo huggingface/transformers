@@ -129,7 +129,7 @@ print("Pooled output shape:", pooled_output.shape)
   print("Image size:", image.height, image.width)  # [480, 640]
 
   processor = AutoImageProcessor.from_pretrained("facebook/dinov3-vits16-pretrain-lvd1689m")
-  model = AutoModel.from_pretrained("facebook/dinov3-vits16-pretrain-lvd1689m")
+  model = AutoModel.from_pretrained("facebook/dinov3-vits16-pretrain-lvd1689m", device_map="auto")
   patch_size = model.config.patch_size
   print("Patch size:", patch_size) # 16
   print("Num register tokens:", model.config.num_register_tokens) # 4

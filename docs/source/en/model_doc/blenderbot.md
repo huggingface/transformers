@@ -54,7 +54,7 @@ An example:
 from transformers import BlenderbotTokenizer, BlenderbotForConditionalGeneration
 
 mname = "facebook/blenderbot-400M-distill"
-model = BlenderbotForConditionalGeneration.from_pretrained(mname)
+model = BlenderbotForConditionalGeneration.from_pretrained(mname, device_map="auto")
 tokenizer = BlenderbotTokenizer.from_pretrained(mname)
 UTTERANCE = "My friends are cool but they eat too many carbs."
 inputs = tokenizer([UTTERANCE], return_tensors="pt")

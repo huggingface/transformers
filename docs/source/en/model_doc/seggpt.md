@@ -45,7 +45,7 @@ from transformers import SegGptImageProcessor, SegGptForImageSegmentation
 
 checkpoint = "BAAI/seggpt-vit-large"
 image_processor = SegGptImageProcessor.from_pretrained(checkpoint)
-model = SegGptForImageSegmentation.from_pretrained(checkpoint)
+model = SegGptForImageSegmentation.from_pretrained(checkpoint, device_map="auto")
 
 dataset_id = "EduardoPacheco/FoodSeg103"
 ds = load_dataset(dataset_id, split="train")

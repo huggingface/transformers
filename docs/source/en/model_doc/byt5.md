@@ -90,7 +90,7 @@ print(tokenizer.decode(output[0], skip_special_tokens=True))
     import torch
     from transformers import AutoModelForSeq2SeqLM
 
-    model = AutoModelForSeq2SeqLM.from_pretrained("google/byt5-small")
+    model = AutoModelForSeq2SeqLM.from_pretrained("google/byt5-small", device_map="auto")
 
     num_special_tokens = 3
 

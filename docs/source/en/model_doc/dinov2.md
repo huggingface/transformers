@@ -123,7 +123,7 @@ print("Predicted class:", model.config.id2label[predicted_class_idx])
   print(image.height, image.width)  # [480, 640]
 
   processor = AutoImageProcessor.from_pretrained('facebook/dinov2-base')
-  model = AutoModel.from_pretrained('facebook/dinov2-base')
+  model = AutoModel.from_pretrained('facebook/dinov2-base', device_map="auto")
   patch_size = model.config.patch_size
 
   inputs = processor(images=image, return_tensors="pt")
@@ -154,7 +154,7 @@ print("Predicted class:", model.config.id2label[predicted_class_idx])
   image = Image.open(requests.get(url, stream=True).raw)
 
   processor = AutoImageProcessor.from_pretrained('facebook/dinov2-base')
-  model = AutoModel.from_pretrained('facebook/dinov2-base')
+  model = AutoModel.from_pretrained('facebook/dinov2-base', device_map="auto")
 
   inputs = processor(images=image, return_tensors="pt")
   outputs = model(**inputs)

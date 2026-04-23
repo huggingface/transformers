@@ -45,7 +45,7 @@ One can directly use MADLAD-400 weights without finetuning the model:
 ```python
 from transformers import AutoModelForSeq2SeqLM, AutoTokenizer
 
-model = AutoModelForSeq2SeqLM.from_pretrained("google/madlad400-3b-mt")
+model = AutoModelForSeq2SeqLM.from_pretrained("google/madlad400-3b-mt", device_map="auto")
 tokenizer = AutoTokenizer.from_pretrained("google/madlad400-3b-mt")
 
 inputs = tokenizer("<2pt> I love pizza!", return_tensors="pt")

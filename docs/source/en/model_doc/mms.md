@@ -68,7 +68,7 @@ model_id = "facebook/mms-1b-all"
 target_lang = "fra"
 
 processor = AutoProcessor.from_pretrained(model_id, target_lang=target_lang)
-model = Wav2Vec2ForCTC.from_pretrained(model_id, target_lang=target_lang, ignore_mismatched_sizes=True)
+model = Wav2Vec2ForCTC.from_pretrained(model_id, target_lang=target_lang, ignore_mismatched_sizes=True, device_map="auto")
 ```
 
 <Tip>
@@ -123,7 +123,7 @@ import torch
 model_id = "facebook/mms-1b-all"
 
 processor = AutoProcessor.from_pretrained(model_id)
-model = Wav2Vec2ForCTC.from_pretrained(model_id)
+model = Wav2Vec2ForCTC.from_pretrained(model_id, device_map="auto")
 ```
 
 Now we process the audio data, pass the processed audio data to the model and transcribe the model output,
@@ -194,7 +194,7 @@ import torch
 from transformers import VitsTokenizer, VitsModel, set_seed
 
 tokenizer = VitsTokenizer.from_pretrained("facebook/mms-tts-eng")
-model = VitsModel.from_pretrained("facebook/mms-tts-eng")
+model = VitsModel.from_pretrained("facebook/mms-tts-eng", device_map="auto")
 
 inputs = tokenizer(text="Hello - my dog is cute", return_tensors="pt")
 
@@ -256,7 +256,7 @@ import os
 import subprocess
 
 tokenizer = VitsTokenizer.from_pretrained("facebook/mms-tts-kor")
-model = VitsModel.from_pretrained("facebook/mms-tts-kor")
+model = VitsModel.from_pretrained("facebook/mms-tts-kor", device_map="auto")
 
 def uromanize(input_string, uroman_path):
     """Convert non-Roman strings to Roman using the `uroman` perl package."""
@@ -296,7 +296,7 @@ import torch
 from transformers import VitsTokenizer, VitsModel, set_seed
 
 tokenizer = VitsTokenizer.from_pretrained("facebook/mms-tts-eng")
-model = VitsModel.from_pretrained("facebook/mms-tts-eng")
+model = VitsModel.from_pretrained("facebook/mms-tts-eng", device_map="auto")
 
 inputs = tokenizer(text="Hello - my dog is cute", return_tensors="pt")
 
@@ -349,7 +349,7 @@ import torch
 model_id = "facebook/mms-lid-126"
 
 processor = AutoFeatureExtractor.from_pretrained(model_id)
-model = Wav2Vec2ForSequenceClassification.from_pretrained(model_id)
+model = Wav2Vec2ForSequenceClassification.from_pretrained(model_id, device_map="auto")
 ```
 
 Now we process the audio data, pass the processed audio data to the model to classify it into a language, just like we usually do for Wav2Vec2 audio classification models such as [ehcalabres/wav2vec2-lg-xlsr-en-speech-emotion-recognition](https://huggingface.co/harshit345/xlsr-wav2vec-speech-emotion-recognition)

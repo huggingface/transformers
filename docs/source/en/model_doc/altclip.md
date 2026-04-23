@@ -40,7 +40,7 @@ import requests
 from PIL import Image
 from transformers import AltCLIPModel, AltCLIPProcessor
 
-model = AltCLIPModel.from_pretrained("BAAI/AltCLIP")
+model = AltCLIPModel.from_pretrained("BAAI/AltCLIP", device_map="auto")
 processor = AltCLIPProcessor.from_pretrained("BAAI/AltCLIP")
 
 url = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg"
@@ -74,7 +74,7 @@ from transformers import AltCLIPModel, AltCLIPProcessor, TorchAoConfig
 model = AltCLIPModel.from_pretrained(
     "BAAI/AltCLIP",
     quantization_config=TorchAoConfig("int4_weight_only", group_size=128),,
-)
+ device_map="auto")
 
 processor = AltCLIPProcessor.from_pretrained("BAAI/AltCLIP")
 

@@ -60,7 +60,7 @@ from PIL import Image
 url = "http://images.cocodataset.org/val2017/000000039769.jpg"
 image = Image.open(requests.get(url, stream=True).raw)
 
-model = HGNetV2ForImageClassification.from_pretrained("ustc-community/hgnet-v2")
+model = HGNetV2ForImageClassification.from_pretrained("ustc-community/hgnet-v2", device_map="auto")
 processor = AutoImageProcessor.from_pretrained("ustc-community/hgnet-v2")
 
 inputs = processor(images=image, return_tensors="pt")

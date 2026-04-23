@@ -63,7 +63,7 @@ url = "http://images.cocodataset.org/val2017/000000039769.jpg"
 image = Image.open(requests.get(url, stream=True).raw)
 
 image_processor = AutoImageProcessor.from_pretrained("facebook/detr-resnet-50")
-model = AutoModelForObjectDetection.from_pretrained("facebook/detr-resnet-50")
+model = AutoModelForObjectDetection.from_pretrained("facebook/detr-resnet-50", device_map="auto")
 
 # prepare image for the model
 inputs = image_processor(images=image, return_tensors="pt")
@@ -116,7 +116,7 @@ There are three other ways to instantiate a DETR model (depending on what you pr
 ```python
 from transformers import DetrForObjectDetection
 
-model = DetrForObjectDetection.from_pretrained("facebook/detr-resnet-50")
+model = DetrForObjectDetection.from_pretrained("facebook/detr-resnet-50", device_map="auto")
 ```
 
 - Option 2: Instantiate DETR with randomly initialized weights for Transformer, but pre-trained weights for backbone

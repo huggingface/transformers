@@ -97,7 +97,7 @@ print(result[0]["generated_text"])
 ```py
 from transformers import AutoProcessor, AutoModelForImageTextToText
 
-model = AutoModelForImageTextToText.from_pretrained("PaddlePaddle/PaddleOCR-VL", dtype="bfloat16")
+model = AutoModelForImageTextToText.from_pretrained("PaddlePaddle/PaddleOCR-VL", dtype="bfloat16", device_map="auto")
 processor = AutoProcessor.from_pretrained("PaddlePaddle/PaddleOCR-VL")
 messages = [
     {
@@ -156,7 +156,7 @@ print(result[1][0]["generated_text"])
 ```py
 from transformers import AutoProcessor, AutoModelForImageTextToText
 
-model = AutoModelForImageTextToText.from_pretrained("PaddlePaddle/PaddleOCR-VL", dtype="bfloat16")
+model = AutoModelForImageTextToText.from_pretrained("PaddlePaddle/PaddleOCR-VL", dtype="bfloat16", device_map="auto")
 processor = AutoProcessor.from_pretrained("PaddlePaddle/PaddleOCR-VL")
 messages = [
     {
@@ -199,7 +199,7 @@ pip install flash-attn --no-build-isolation
 
 ```python
 from transformers import AutoModelForImageTextToText
-model = AutoModelForImageTextToText.from_pretrained("PaddlePaddle/PaddleOCR-VL", dtype="bfloat16", attn_implementation="flash_attention_2")
+model = AutoModelForImageTextToText.from_pretrained("PaddlePaddle/PaddleOCR-VL", dtype="bfloat16", attn_implementation="flash_attention_2", device_map="auto")
 ```
 
 ## PaddleOCRVLForConditionalGeneration

@@ -46,7 +46,7 @@ import requests
 from PIL import Image
 
 processor = TrOCRProcessor.from_pretrained("microsoft/trocr-base-handwritten")
-model = VisionEncoderDecoderModel.from_pretrained("microsoft/trocr-base-handwritten")
+model = VisionEncoderDecoderModel.from_pretrained("microsoft/trocr-base-handwritten", device_map="auto")
 
 # load image from the IAM dataset
 url = "https://fki.tic.heia-fr.ch/static/img/a01-122-02.jpg"
@@ -82,7 +82,7 @@ processor = TrOCRProcessor.from_pretrained("microsoft/trocr-large-handwritten")
 model = VisionEncoderDecoderModel.from_pretrained(
     "microsoft/trocr-large-handwritten",
     quantization_config=quantization_config
-)
+ device_map="auto")
 
 # load image from the IAM dataset
 url = "[https://fki.tic.heia-fr.ch/static/img/a01-122-02.jpg](https://fki.tic.heia-fr.ch/static/img/a01-122-02.jpg)"

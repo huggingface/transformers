@@ -58,7 +58,7 @@ dummy_dataset = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean
 
 # load model and feature extractor
 model_id = "hf-audio/xcodec-hubert-librispeech"
-model = XcodecModel.from_pretrained(model_id)
+model = XcodecModel.from_pretrained(model_id, device_map="auto")
 feature_extractor = AutoFeatureExtractor.from_pretrained(model_id)
 
 # load audio sample

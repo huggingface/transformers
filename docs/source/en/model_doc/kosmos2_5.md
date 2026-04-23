@@ -50,7 +50,7 @@ from transformers import AutoProcessor, Kosmos2_5ForConditionalGeneration
 repo = "microsoft/kosmos-2.5"
 device = "cuda:0"
 dtype = torch.bfloat16
-model = Kosmos2_5ForConditionalGeneration.from_pretrained(repo, device_map=device, dtype=dtype)
+model = Kosmos2_5ForConditionalGeneration.from_pretrained(repo, device_map="auto", dtype=dtype)
 processor = AutoProcessor.from_pretrained(repo)
 
 # sample image
@@ -89,7 +89,7 @@ from transformers import AutoProcessor, Kosmos2_5ForConditionalGeneration
 repo = "microsoft/kosmos-2.5"
 device = "cuda:0"
 dtype = torch.bfloat16
-model = Kosmos2_5ForConditionalGeneration.from_pretrained(repo, device_map=device, dtype=dtype)
+model = Kosmos2_5ForConditionalGeneration.from_pretrained(repo, device_map="auto", dtype=dtype)
 processor = AutoProcessor.from_pretrained(repo)
 
 # sample image
@@ -174,7 +174,7 @@ device = "cuda:0"
 dtype = torch.bfloat16
 
 model = Kosmos2_5ForConditionalGeneration.from_pretrained(repo,
-                                                          device_map=device,
+                                                          device_map="auto",
                                                           attn_implementation="flash_attention_2")
 processor = AutoProcessor.from_pretrained(repo)
 

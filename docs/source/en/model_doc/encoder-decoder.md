@@ -115,7 +115,7 @@ from transformers import AutoTokenizer, EncoderDecoderModel
 # Load a pre-trained translation model
 model_name = "google/bert2bert_L-24_wmt_en_de"
 tokenizer = AutoTokenizer.from_pretrained(model_name, pad_token="<pad>", eos_token="</s>", bos_token="<s>")
-model = EncoderDecoderModel.from_pretrained(model_name)
+model = EncoderDecoderModel.from_pretrained(model_name, device_map="auto")
 
 # Input sentence to translate
 input_text = "Plants create energy through a process known as"

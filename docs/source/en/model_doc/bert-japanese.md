@@ -41,7 +41,7 @@ Example of using a model with MeCab and WordPiece tokenization:
 import torch
 from transformers import AutoModel, AutoTokenizer
 
-bertjapanese = AutoModel.from_pretrained("cl-tohoku/bert-base-japanese")
+bertjapanese = AutoModel.from_pretrained("cl-tohoku/bert-base-japanese", device_map="auto")
 tokenizer = AutoTokenizer.from_pretrained("cl-tohoku/bert-base-japanese")
 
 ## Input Japanese Text
@@ -58,7 +58,7 @@ outputs = bertjapanese(**inputs)
 Example of using a model with Character tokenization:
 
 ```python
-bertjapanese = AutoModel.from_pretrained("cl-tohoku/bert-base-japanese-char")
+bertjapanese = AutoModel.from_pretrained("cl-tohoku/bert-base-japanese-char", device_map="auto")
 tokenizer = AutoTokenizer.from_pretrained("cl-tohoku/bert-base-japanese-char")
 
 ## Input Japanese Text

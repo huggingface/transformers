@@ -150,7 +150,7 @@ import torch
 processor = AutoProcessor.from_pretrained("THUDM/GLM-4.1V-9B-Thinking")
 model = Glm4vForConditionalGeneration.from_pretrained(
     pretrained_model_name_or_path="THUDM/GLM-4.1V-9B-Thinking",
-    device_map=device
+    device_map="auto"
 )
 
 messages = [

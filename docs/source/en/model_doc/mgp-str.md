@@ -55,7 +55,7 @@ import requests
 from PIL import Image
 
 processor = MgpstrProcessor.from_pretrained('alibaba-damo/mgp-str-base')
-model = MgpstrForSceneTextRecognition.from_pretrained('alibaba-damo/mgp-str-base')
+model = MgpstrForSceneTextRecognition.from_pretrained('alibaba-damo/mgp-str-base', device_map="auto")
 
 # load image from the IIIT-5k dataset
 url = "https://i.postimg.cc/ZKwLg2Gw/367-14.png"

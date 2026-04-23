@@ -52,7 +52,7 @@ from transformers import VoxtralForConditionalGeneration, AutoProcessor
 repo_id = "mistralai/Voxtral-Mini-3B-2507"
 
 processor = AutoProcessor.from_pretrained(repo_id)
-model = VoxtralForConditionalGeneration.from_pretrained(repo_id, device_map=device)
+model = VoxtralForConditionalGeneration.from_pretrained(repo_id, device_map="auto")
 
 conversation = [
     {
@@ -88,7 +88,7 @@ from transformers import VoxtralForConditionalGeneration, AutoProcessor
 repo_id = "mistralai/Voxtral-Mini-3B-2507"
 
 processor = AutoProcessor.from_pretrained(repo_id)
-model = VoxtralForConditionalGeneration.from_pretrained(repo_id, device_map=device)
+model = VoxtralForConditionalGeneration.from_pretrained(repo_id, device_map="auto")
 
 conversation = [
     {
@@ -128,7 +128,7 @@ from transformers import VoxtralForConditionalGeneration, AutoProcessor
 repo_id = "mistralai/Voxtral-Mini-3B-2507"
 
 processor = AutoProcessor.from_pretrained(repo_id)
-model = VoxtralForConditionalGeneration.from_pretrained(repo_id, device_map=device)
+model = VoxtralForConditionalGeneration.from_pretrained(repo_id, device_map="auto")
 
 conversation = [
     {
@@ -182,7 +182,7 @@ from transformers import VoxtralForConditionalGeneration, AutoProcessor
 repo_id = "mistralai/Voxtral-Mini-3B-2507"
 
 processor = AutoProcessor.from_pretrained(repo_id)
-model = VoxtralForConditionalGeneration.from_pretrained(repo_id, device_map=device)
+model = VoxtralForConditionalGeneration.from_pretrained(repo_id, device_map="auto")
 
 conversation = [
     {
@@ -217,7 +217,7 @@ from transformers import VoxtralForConditionalGeneration, AutoProcessor
 repo_id = "mistralai/Voxtral-Mini-3B-2507"
 
 processor = AutoProcessor.from_pretrained(repo_id)
-model = VoxtralForConditionalGeneration.from_pretrained(repo_id, device_map=device)
+model = VoxtralForConditionalGeneration.from_pretrained(repo_id, device_map="auto")
 
 conversation = [
     {
@@ -252,7 +252,7 @@ from transformers import VoxtralForConditionalGeneration, AutoProcessor
 repo_id = "mistralai/Voxtral-Mini-3B-2507"
 
 processor = AutoProcessor.from_pretrained(repo_id)
-model = VoxtralForConditionalGeneration.from_pretrained(repo_id, device_map=device)
+model = VoxtralForConditionalGeneration.from_pretrained(repo_id, device_map="auto")
 
 conversations = [
     [
@@ -313,7 +313,7 @@ from transformers import VoxtralForConditionalGeneration, AutoProcessor
 repo_id = "mistralai/Voxtral-Mini-3B-2507"
 
 processor = AutoProcessor.from_pretrained(repo_id)
-model = VoxtralForConditionalGeneration.from_pretrained(repo_id, device_map=device)
+model = VoxtralForConditionalGeneration.from_pretrained(repo_id, device_map="auto")
 
 # set the language is already know for better accuracy
 inputs = processor.apply_transcription_request(language="en", audio="https://huggingface.co/datasets/hf-internal-testing/dummy-audio-samples/resolve/main/obama.mp3", model_id=repo_id)

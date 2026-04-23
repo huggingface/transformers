@@ -124,7 +124,7 @@ def decode(container, sampling_rate, num_frames, clip_idx, num_clips, target_fps
 
 
 file = hf_hub_download(repo_id="Intel/tvp_demo", filename="AK2KG.mp4", repo_type="dataset")
-model = TvpForVideoGrounding.from_pretrained("Intel/tvp-base")
+model = TvpForVideoGrounding.from_pretrained("Intel/tvp-base", device_map="auto")
 
 decoder_kwargs = dict(
     container=av.open(file, metadata_errors="ignore"),

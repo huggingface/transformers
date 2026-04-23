@@ -87,7 +87,7 @@ Usage example:
 ```python
 from transformers import LukeTokenizer, LukeModel, LukeForEntityPairClassification
 
-model = LukeModel.from_pretrained("studio-ousia/luke-base")
+model = LukeModel.from_pretrained("studio-ousia/luke-base", device_map="auto")
 tokenizer = LukeTokenizer.from_pretrained("studio-ousia/luke-base")
 # Example 1: Computing the contextualized entity representation corresponding to the entity mention "Beyoncé"
 
@@ -110,7 +110,7 @@ word_last_hidden_state = outputs.last_hidden_state
 entity_last_hidden_state = outputs.entity_last_hidden_state
 # Example 3: Classifying the relationship between two entities using LukeForEntityPairClassification head model
 
-model = LukeForEntityPairClassification.from_pretrained("studio-ousia/luke-large-finetuned-tacred")
+model = LukeForEntityPairClassification.from_pretrained("studio-ousia/luke-large-finetuned-tacred", device_map="auto")
 tokenizer = LukeTokenizer.from_pretrained("studio-ousia/luke-large-finetuned-tacred")
 entity_spans = [(0, 7), (17, 28)]  # character-based entity spans corresponding to "Beyoncé" and "Los Angeles"
 inputs = tokenizer(text, entity_spans=entity_spans, return_tensors="pt")

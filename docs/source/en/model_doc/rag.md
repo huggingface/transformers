@@ -52,7 +52,7 @@ model = RagSequenceForGeneration.from_pretrained(
     retriever=retriever,
     dtype="auto",
     attn_implementation="flash_attention_2",
-)
+ device_map="auto")
 input_dict = tokenizer.prepare_seq2seq_batch("How many people live in Paris?", return_tensors="pt")
 generated = model.generate(input_ids=input_dict["input_ids"])
 print(tokenizer.batch_decode(generated, skip_special_tokens=True)[0])

@@ -87,7 +87,7 @@ The inputs for unconditional (or 'null') generation can be obtained through the 
 ```python
 from transformers import MusicgenForConditionalGeneration
 
-model = MusicgenForConditionalGeneration.from_pretrained("facebook/musicgen-small")
+model = MusicgenForConditionalGeneration.from_pretrained("facebook/musicgen-small", device_map="auto")
 unconditional_inputs = model.get_unconditional_inputs(num_samples=1)
 
 audio_values = model.generate(**unconditional_inputs, do_sample=True, max_new_tokens=256)
@@ -121,7 +121,7 @@ the inputs:
 from transformers import AutoProcessor, MusicgenForConditionalGeneration
 
 processor = AutoProcessor.from_pretrained("facebook/musicgen-small")
-model = MusicgenForConditionalGeneration.from_pretrained("facebook/musicgen-small")
+model = MusicgenForConditionalGeneration.from_pretrained("facebook/musicgen-small", device_map="auto")
 
 inputs = processor(
     text=["80s pop track with bassy drums and synth", "90s rock song with loud guitars and heavy drums"],
@@ -153,7 +153,7 @@ from transformers import AutoProcessor, MusicgenForConditionalGeneration
 from datasets import load_dataset
 
 processor = AutoProcessor.from_pretrained("facebook/musicgen-small")
-model = MusicgenForConditionalGeneration.from_pretrained("facebook/musicgen-small")
+model = MusicgenForConditionalGeneration.from_pretrained("facebook/musicgen-small", device_map="auto")
 
 dataset = load_dataset("sanchit-gandhi/gtzan", split="train", streaming=True)
 sample = next(iter(dataset))["audio"]
@@ -179,7 +179,7 @@ from transformers import AutoProcessor, MusicgenForConditionalGeneration
 from datasets import load_dataset
 
 processor = AutoProcessor.from_pretrained("facebook/musicgen-small")
-model = MusicgenForConditionalGeneration.from_pretrained("facebook/musicgen-small")
+model = MusicgenForConditionalGeneration.from_pretrained("facebook/musicgen-small", device_map="auto")
 
 dataset = load_dataset("sanchit-gandhi/gtzan", split="train", streaming=True)
 sample = next(iter(dataset))["audio"]
@@ -211,7 +211,7 @@ tokens, can be found in the model's generation config, and updated as desired:
 ```python
 from transformers import MusicgenForConditionalGeneration
 
-model = MusicgenForConditionalGeneration.from_pretrained("facebook/musicgen-small")
+model = MusicgenForConditionalGeneration.from_pretrained("facebook/musicgen-small", device_map="auto")
 
 # inspect the default generation config
 model.generation_config
@@ -245,10 +245,10 @@ from transformers import AutoConfig, MusicgenForCausalLM, MusicgenForConditional
 
 # Option 1: get decoder config and pass to `.from_pretrained`
 decoder_config = AutoConfig.from_pretrained("facebook/musicgen-small").decoder
-decoder = MusicgenForCausalLM.from_pretrained("facebook/musicgen-small", **decoder_config)
+decoder = MusicgenForCausalLM.from_pretrained("facebook/musicgen-small", **decoder_config, device_map="auto")
 
 # Option 2: load the entire composite model, but only return the decoder
-decoder = MusicgenForConditionalGeneration.from_pretrained("facebook/musicgen-small").decoder
+decoder = MusicgenForConditionalGeneration.from_pretrained("facebook/musicgen-small", device_map="auto").decoder
 ```
 
 Since the text encoder and audio encoder/decoder models are frozen during training, the MusicGen decoder [`MusicgenForCausalLM`]

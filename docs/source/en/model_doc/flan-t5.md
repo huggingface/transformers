@@ -30,7 +30,7 @@ One can directly use FLAN-T5 weights without finetuning the model:
 ```python
 from transformers import AutoModelForSeq2SeqLM, AutoTokenizer
 
-model = AutoModelForSeq2SeqLM.from_pretrained("google/flan-t5-small")
+model = AutoModelForSeq2SeqLM.from_pretrained("google/flan-t5-small", device_map="auto")
 tokenizer = AutoTokenizer.from_pretrained("google/flan-t5-small")
 
 inputs = tokenizer("A step by step recipe to make bolognese pasta:", return_tensors="pt")

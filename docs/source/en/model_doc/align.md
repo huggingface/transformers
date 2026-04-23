@@ -108,7 +108,7 @@ for label, score in zip(candidate_labels, probs):
   
   # Load processor and model
   processor = AlignProcessor.from_pretrained("kakaobrain/align-base")
-  model = AlignModel.from_pretrained("kakaobrain/align-base")
+  model = AlignModel.from_pretrained("kakaobrain/align-base", device_map="auto")
   
   # Download image from URL
   url = "https://huggingface.co/roschmid/dog-races/resolve/main/images/Golden_Retriever.jpg"

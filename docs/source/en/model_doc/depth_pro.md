@@ -105,7 +105,7 @@ The pretrained model at checkpoint `apple/DepthPro-hf` uses the FOV encoder. To 
 
 ```py
 from transformers import DepthProForDepthEstimation
-model = DepthProForDepthEstimation.from_pretrained("apple/DepthPro-hf", use_fov_model=False)
+model = DepthProForDepthEstimation.from_pretrained("apple/DepthPro-hf", use_fov_model=False, device_map="auto")
 ```
 
 To instantiate a new model with FOV encoder, set `use_fov_model=True` in the config.
@@ -137,7 +137,7 @@ SDPA is used by default for `torch>=2.1.1` when an implementation is available, 
 
 ```py
 from transformers import DepthProForDepthEstimation
-model = DepthProForDepthEstimation.from_pretrained("apple/DepthPro-hf", attn_implementation="sdpa")
+model = DepthProForDepthEstimation.from_pretrained("apple/DepthPro-hf", attn_implementation="sdpa", device_map="auto")
 ```
 
 For the best speedups, we recommend loading the model in half-precision (e.g. `torch.float16` or `torch.bfloat16`).

@@ -167,7 +167,7 @@ from transformers import AutoModel, AutoProcessor
 
 model_id = "google/siglip2-so400m-patch14-384"
 processor = AutoProcessor.from_pretrained(model_id)
-model = AutoModel.from_pretrained(model_id).eval()
+model = AutoModel.from_pretrained(model_id).eval( device_map="auto")
 
 texts = [
     "HOME084 Timbangan Badan Digital Kaca Transparan 28CM Body Scale Personal Scale",
@@ -227,7 +227,7 @@ inputs = tokenizer(
     model = SiglipModel.from_pretrained(
         "google/siglip2-so400m-patch14-384",
         attn_implementation="flash_attention_2",
-            device_map=device,
+            device_map="auto",
     )
     ```
 

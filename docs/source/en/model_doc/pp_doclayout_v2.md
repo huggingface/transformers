@@ -63,7 +63,7 @@ from PIL import Image
 from transformers import AutoImageProcessor, AutoModelForObjectDetection
 
 model_path = "PaddlePaddle/PP-DocLayoutV2_safetensors"
-model = AutoModelForObjectDetection.from_pretrained(model_path)
+model = AutoModelForObjectDetection.from_pretrained(model_path, device_map="auto")
 image_processor = AutoImageProcessor.from_pretrained(model_path)
 image = Image.open(requests.get("https://paddle-model-ecology.bj.bcebos.com/paddlex/imgs/demo_image/layout_demo.jpg", stream=True).raw)
 inputs = image_processor(images=image, return_tensors="pt")
@@ -113,7 +113,7 @@ from PIL import Image
 from transformers import AutoImageProcessor, AutoModelForObjectDetection
 
 model_path = "PaddlePaddle/PP-DocLayoutV2_safetensors"
-model = AutoModelForObjectDetection.from_pretrained(model_path)
+model = AutoModelForObjectDetection.from_pretrained(model_path, device_map="auto")
 image_processor = AutoImageProcessor.from_pretrained(model_path)
 
 image = Image.open(requests.get("https://paddle-model-ecology.bj.bcebos.com/paddlex/imgs/demo_image/layout_demo.jpg", stream=True).raw)

@@ -38,7 +38,7 @@ dtype = torch.float32 if device == "mps" else torch.bfloat16
 
 model = LightOnOcrForConditionalGeneration.from_pretrained("lightonai/LightOnOCR-1B-1025", dtype=dtype).to(
     device
-)
+ device_map="auto")
 processor = LightOnOcrProcessor.from_pretrained("lightonai/LightOnOCR-1B-1025")
 
 url = "https://huggingface.co/datasets/hf-internal-testing/fixtures_ocr/resolve/main/SROIE-receipt.jpeg"

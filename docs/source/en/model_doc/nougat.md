@@ -67,7 +67,7 @@ from datasets import load_dataset
 import torch
 
 processor = NougatProcessor.from_pretrained("facebook/nougat-base")
-model = AutoModelForImageTextToText.from_pretrained("facebook/nougat-base")
+model = AutoModelForImageTextToText.from_pretrained("facebook/nougat-base", device_map="auto")
 
 model.to(model.device)  # doctest: +IGNORE_RESULT
 

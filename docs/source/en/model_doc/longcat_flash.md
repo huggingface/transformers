@@ -59,7 +59,7 @@ chat = [
 model = LongcatFlashForCausalLM.from_pretrained(
       model_id,
       tp_plan="auto",
-        )
+ device_map="auto")
 
 inputs = tokenizer.apply_chat_template(
       chat, tokenize=True, add_generation_prompt=True, return_tensors="pt").to(model.device)

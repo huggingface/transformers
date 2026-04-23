@@ -117,7 +117,7 @@ print(output)
    model = AutoModelForCausalLM.from_pretrained(
       "microsoft/biogpt",
       attn_implementation="eager"
-   )
+ device_map="auto")
 
 ## BioGptConfig
 

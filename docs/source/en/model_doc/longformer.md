@@ -55,7 +55,7 @@ import torch
 from transformers import AutoModelForMaskedLM, AutoTokenizer
 
 tokenizer = AutoTokenizer.from_pretrained("allenai/longformer-base-4096")
-model = AutoModelForMaskedLM.from_pretrained("allenai/longformer-base-4096")
+model = AutoModelForMaskedLM.from_pretrained("allenai/longformer-base-4096", device_map="auto")
 
 text = (
 """

@@ -55,7 +55,7 @@ import torch
 from transformers import Speech2TextProcessor, Speech2TextForConditionalGeneration
 from datasets import load_dataset
 
-model = Speech2TextForConditionalGeneration.from_pretrained("facebook/s2t-small-librispeech-asr")
+model = Speech2TextForConditionalGeneration.from_pretrained("facebook/s2t-small-librispeech-asr", device_map="auto")
 processor = Speech2TextProcessor.from_pretrained("facebook/s2t-small-librispeech-asr")
 
 
@@ -82,7 +82,7 @@ import torch
 from transformers import Speech2TextProcessor, Speech2TextForConditionalGeneration
 from datasets import load_dataset
 
-model = Speech2TextForConditionalGeneration.from_pretrained("facebook/s2t-medium-mustc-multilingual-st")
+model = Speech2TextForConditionalGeneration.from_pretrained("facebook/s2t-medium-mustc-multilingual-st", device_map="auto")
 processor = Speech2TextProcessor.from_pretrained("facebook/s2t-medium-mustc-multilingual-st")
 
 ds = load_dataset("hf-internal-testing/librispeech_asr_demo", "clean", split="validation")

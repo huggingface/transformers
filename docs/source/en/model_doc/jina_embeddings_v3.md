@@ -113,7 +113,7 @@ sentences = [
 ]
 
 tokenizer = AutoTokenizer.from_pretrained("jinaai/jina-embeddings-v3-hf")
-model = AutoModel.from_pretrained("jinaai/jina-embeddings-v3-hf")
+model = AutoModel.from_pretrained("jinaai/jina-embeddings-v3-hf", device_map="auto")
 
 encoded_input = tokenizer(sentences, padding=True, truncation=True, return_tensors="pt").to(model.device)
 

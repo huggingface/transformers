@@ -69,7 +69,7 @@ The SDPA implementation is currently available for the Data2VecAudio and Data2Ve
 
 ```py
 from transformers import Data2VecVisionForImageClassification
-model = Data2VecVisionForImageClassification.from_pretrained("facebook/data2vec-vision-base", attn_implementation="sdpa")
+model = Data2VecVisionForImageClassification.from_pretrained("facebook/data2vec-vision-base", attn_implementation="sdpa", device_map="auto")
 ...
 ```
 

@@ -138,7 +138,7 @@ visualizer("""def func(a, b):
     from transformers import LlamaForCausalLM, CodeLlamaTokenizer
 
     tokenizer = CodeLlamaTokenizer.from_pretrained("meta-llama/CodeLlama-7b-hf")
-    model = LlamaForCausalLM.from_pretrained("meta-llama/CodeLlama-7b-hf")
+    model = LlamaForCausalLM.from_pretrained("meta-llama/CodeLlama-7b-hf", device_map="auto")
     PROMPT = '''def remove_non_ascii(s: str) -> str:
         """ <FILL_ME>
         return result

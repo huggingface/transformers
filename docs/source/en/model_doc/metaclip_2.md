@@ -65,7 +65,7 @@ import torch
 from PIL import Image
 from transformers import AutoProcessor, AutoModel
 
-model = AutoModel.from_pretrained("facebook/metaclip-2-worldwide-huge-quickgelu", attn_implementation="sdpa")
+model = AutoModel.from_pretrained("facebook/metaclip-2-worldwide-huge-quickgelu", attn_implementation="sdpa", device_map="auto")
 processor = AutoProcessor.from_pretrained("facebook/metaclip-2-worldwide-huge-quickgelu")
 
 url = "http://images.cocodataset.org/val2017/000000039769.jpg"

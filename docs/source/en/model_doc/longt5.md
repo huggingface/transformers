@@ -71,7 +71,7 @@ from transformers import AutoTokenizer, LongT5ForConditionalGeneration
 
 dataset = load_dataset("scientific_papers", "pubmed", split="validation")
 model = (
-    LongT5ForConditionalGeneration.from_pretrained("Stancld/longt5-tglobal-large-16384-pubmed-3k_steps")
+    LongT5ForConditionalGeneration.from_pretrained("Stancld/longt5-tglobal-large-16384-pubmed-3k_steps", device_map="auto")
     .to("auto")
     .half()
 )

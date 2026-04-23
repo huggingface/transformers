@@ -194,7 +194,7 @@ from transformers import VideoLlavaForConditionalGeneration
 model = VideoLlavaForConditionalGeneration.from_pretrained(
     "LanguageBind/Video-LLaVA-7B-hf", , 
     attn_implementation="flash_attention_2",
-).to(0)
+).to(0, device_map="auto")
 ```
 
 ## VideoLlavaConfig

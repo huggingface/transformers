@@ -117,7 +117,7 @@ print(tokenizer.decode(output[0], skip_special_tokens=True))
     ```py
     from transformers import AutoModelForCausalLM
 
-    model = AutoModelForCausalLM.from_pretrained("allenai/OLMo-2-0425-1B", revision="stage1-step140000-tokens294B")
+    model = AutoModelForCausalLM.from_pretrained("allenai/OLMo-2-0425-1B", revision="stage1-step140000-tokens294B", device_map="auto")
     ```
 
 ## Olmo2Config

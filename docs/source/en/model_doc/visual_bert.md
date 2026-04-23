@@ -83,7 +83,7 @@ def get_visual_embeddings_simple(image, device=None):
     return visual_embeds
 
 tokenizer = AutoTokenizer.from_pretrained("google-bert/bert-base-uncased")
-model = VisualBertForQuestionAnswering.from_pretrained("uclanlp/visualbert-vqa-coco-pre")
+model = VisualBertForQuestionAnswering.from_pretrained("uclanlp/visualbert-vqa-coco-pre", device_map="auto")
 
 response = requests.get("https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg")
 image = Image.open(BytesIO(response.content))

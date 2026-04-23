@@ -51,7 +51,7 @@ text = ["[S1] Dia is an open weights text to dialogue model."]
 processor = AutoProcessor.from_pretrained(model_checkpoint)
 inputs = processor(text=text, padding=True, return_tensors="pt").to(torch_device)
 
-model = DiaForConditionalGeneration.from_pretrained(model_checkpoint).to(torch_device)
+model = DiaForConditionalGeneration.from_pretrained(model_checkpoint).to(torch_device, device_map="auto")
 outputs = model.generate(**inputs, max_new_tokens=256)  # corresponds to around ~2s
 
 # save audio to a file
@@ -79,7 +79,7 @@ processor = AutoProcessor.from_pretrained(model_checkpoint)
 inputs = processor(text=text, audio=audio, padding=True, return_tensors="pt").to(torch_device)
 prompt_len = processor.get_audio_prompt_len(inputs["decoder_attention_mask"])
 
-model = DiaForConditionalGeneration.from_pretrained(model_checkpoint).to(torch_device)
+model = DiaForConditionalGeneration.from_pretrained(model_checkpoint).to(torch_device, device_map="auto")
 outputs = model.generate(**inputs, max_new_tokens=256)  # corresponds to around ~2s
 
 # retrieve actually generated audio and save to a file
@@ -112,7 +112,7 @@ inputs = processor(
     return_tensors="pt"
 ).to(torch_device)
 
-model = DiaForConditionalGeneration.from_pretrained(model_checkpoint).to(torch_device)
+model = DiaForConditionalGeneration.from_pretrained(model_checkpoint).to(torch_device, device_map="auto")
 out = model(**inputs)
 out.loss.backward()
 ```

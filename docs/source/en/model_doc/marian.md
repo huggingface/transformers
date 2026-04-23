@@ -100,7 +100,7 @@ from transformers import MarianMTModel, MarianTokenizer
 # Example: multilingual to Arabic (arb)
 model_name = "Helsinki-NLP/opus-mt-mul-mul"  # Tatoeba Challenge model
 tokenizer = MarianTokenizer.from_pretrained(model_name)
-model = MarianMTModel.from_pretrained(model_name)
+model = MarianMTModel.from_pretrained(model_name, device_map="auto")
 
 # Prepend the desired output language code (3-letter ISO 639-3)
 src_texts = ["arb>> Hello, how are you today?"]
@@ -124,7 +124,7 @@ from transformers import MarianMTModel, MarianTokenizer
 # Example: older multilingual model (like en → many)
 model_name = "Helsinki-NLP/opus-mt-en-ROMANCE"  # English → French, Spanish, Italian, etc.
 tokenizer = MarianTokenizer.from_pretrained(model_name)
-model = MarianMTModel.from_pretrained(model_name)
+model = MarianMTModel.from_pretrained(model_name, device_map="auto")
 
 # Prepend the 2-letter ISO 639-1 target language code (older format)
 src_texts = [">>fr<< Hello, how are you today?"]

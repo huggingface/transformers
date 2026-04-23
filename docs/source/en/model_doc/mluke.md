@@ -51,7 +51,7 @@ One can directly plug in the weights of mLUKE into a LUKE model, like so:
 ```python
 from transformers import LukeModel
 
-model = LukeModel.from_pretrained("studio-ousia/mluke-base")
+model = LukeModel.from_pretrained("studio-ousia/mluke-base", device_map="auto")
 ```
 
 Note that mLUKE has its own tokenizer, [`MLukeTokenizer`]. You can initialize it as follows:

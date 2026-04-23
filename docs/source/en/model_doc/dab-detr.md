@@ -62,7 +62,7 @@ url = 'http://images.cocodataset.org/val2017/000000039769.jpg'
 image = Image.open(requests.get(url, stream=True).raw)
 
 image_processor = AutoImageProcessor.from_pretrained("IDEA-Research/dab-detr-resnet-50")
-model = AutoModelForObjectDetection.from_pretrained("IDEA-Research/dab-detr-resnet-50")
+model = AutoModelForObjectDetection.from_pretrained("IDEA-Research/dab-detr-resnet-50", device_map="auto")
 
 inputs = image_processor(images=image, return_tensors="pt")
 
@@ -95,7 +95,7 @@ Option 1: Instantiate DAB-DETR with pre-trained weights for entire model
 ```py
 from transformers import DabDetrForObjectDetection
 
-model = DabDetrForObjectDetection.from_pretrained("IDEA-Research/dab-detr-resnet-50")
+model = DabDetrForObjectDetection.from_pretrained("IDEA-Research/dab-detr-resnet-50", device_map="auto")
 ```
 
 Option 2: Instantiate DAB-DETR with randomly initialized weights for Transformer, but pre-trained weights for backbone

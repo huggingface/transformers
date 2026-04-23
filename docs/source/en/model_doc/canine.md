@@ -55,7 +55,7 @@ pipeline("Plant create energy through a process known as photosynthesis.")
 import torch
 from transformers import AutoModel
 
-model = AutoModel.from_pretrained("google/canine-c")
+model = AutoModel.from_pretrained("google/canine-c", device_map="auto")
 
 text = "Plant create energy through a process known as photosynthesis."
 input_ids = torch.tensor([[ord(char) for char in text]])

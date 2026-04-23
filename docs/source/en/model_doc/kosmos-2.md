@@ -47,7 +47,7 @@ from PIL import Image
 import requests
 from transformers import AutoProcessor, Kosmos2ForConditionalGeneration
 
-model = Kosmos2ForConditionalGeneration.from_pretrained("microsoft/kosmos-2-patch14-224")
+model = Kosmos2ForConditionalGeneration.from_pretrained("microsoft/kosmos-2-patch14-224", device_map="auto")
 processor = AutoProcessor.from_pretrained("microsoft/kosmos-2-patch14-224")
 
 url = "https://huggingface.co/microsoft/kosmos-2-patch14-224/resolve/main/snowman.jpg"

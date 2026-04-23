@@ -116,7 +116,7 @@ These presets are also uploaded in the hub [here](https://huggingface.co/suno/ba
 from transformers import AutoProcessor, BarkModel
 
 processor = AutoProcessor.from_pretrained("suno/bark")
-model = BarkModel.from_pretrained("suno/bark")
+model = BarkModel.from_pretrained("suno/bark", device_map="auto")
 
 voice_preset = "v2/en_speaker_6"
 

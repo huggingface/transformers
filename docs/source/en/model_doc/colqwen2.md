@@ -121,7 +121,7 @@ bnb_config = BitsAndBytesConfig(
 model = ColQwen2ForRetrieval.from_pretrained(
     model_name,
     quantization_config=bnb_config,
-    device_map=device,
+    device_map="auto",
 ).eval()
 
 processor = ColQwen2Processor.from_pretrained(model_name)
