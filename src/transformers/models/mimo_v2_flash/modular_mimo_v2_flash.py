@@ -380,9 +380,6 @@ class MiMoV2FlashPreTrainedModel(MixtralPreTrainedModel):
 
 @auto_docstring
 class MiMoV2FlashModel(MixtralModel):
-    def __init__(self, config: MiMoV2FlashConfig):
-        super().__init__(config)
-        self.has_sliding_layers = "sliding_attention" in self.rotary_emb.layer_types
 
     @merge_with_config_defaults
     @capture_outputs
