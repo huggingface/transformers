@@ -176,21 +176,24 @@ class TorchAoHfQuantizer(HfQuantizer):
         from ..integrations.torchao import TorchAoDeserialize
 
         if self.pre_quantized:
-            return [
-                WeightConverter(
-                    # TODO: incr flexibility by generalizing the source patterns to match the format of "_weight_"
-                    # note that the matching logic is greedy, so for ex, if _weight_scale is before _weight_scale_and_zero in this list, it will match _weight_scale always (this is incorrect)
-                    # thus, the order of source_patterns is intentional
-                    source_patterns=[
-                        "_weight_qdata",
-                        "_weight_scale_and_zero",
-                        "_weight_per_tensor_scale",
-                        "_weight_scale",
-                        "_weight_zero_point",
-                        "_weight_act_pre_scale",
-                    ],
-                    target_patterns="weight",
-                    operations=[TorchAoDeserialize(self)],
-                ),
-            ]
+            converters = []
+            # TODO: incr flexibility by generalizing the source patterns to match the format of "_weight_"
+            # note that the matching logic is greedy, so for ex, if _weight_scale is before _weight_scale_and_zero in this list, it will match _weight_scale always (this is incorrect)
+            # thus, the order of source_patterns is intentional
+            for param_name in ("weight", "gate_up_proj", "down_proj"):
+                converters.append(
+                    WeightConverter(
+                        source_patterns=[
+                            f"_{param_name}_qdata",
+                            f"_{param_name}_scale_and_zero",
+                            f"_{param_name}_per_tensor_scale",
+                            f"_{param_name}_scale",
+                            f"_{param_name}_zero_point",
+                            f"_{param_name}_act_pre_scale",
+                        ],
+                        target_patterns=param_name,
+                        operations=[TorchAoDeserialize(self)],
+                    ),
+                )
+            return converters
         return []
