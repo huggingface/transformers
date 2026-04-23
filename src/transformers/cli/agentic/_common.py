@@ -52,7 +52,7 @@ def _load_pretrained(model_cls, processor_cls, model_id, device, dtype, trust_re
     elif device is None:
         model_kwargs["device_map"] = "auto"
     if dtype != "auto":
-        model_kwargs["torch_dtype"] = getattr(torch, dtype)
+        model_kwargs["dtype"] = getattr(torch, dtype)
 
     processor = processor_cls.from_pretrained(model_id, **common_kwargs)
     model = model_cls.from_pretrained(model_id, **model_kwargs)

@@ -444,12 +444,12 @@ def train(
 
     # Device targeting
     if device == "cpu":
-        training_args_kwargs["no_cuda"] = True
-        training_args_kwargs["use_mps_device"] = False
+        training_args_kwargs["use_cpu"] = True
     elif device == "mps":
-        training_args_kwargs["use_mps_device"] = True
+        # Transformers auto-detects MPS on Apple Silicon; no explicit flag required.
+        pass
     elif device == "tpu":
-        # TPU is handled automatically when running on a TPU instance with XLA
+        # TPU is handled automatically when running on a TPU instance with XLA.
         pass
 
     # Multi-GPU / multi-node: delegate to accelerate or torchrun

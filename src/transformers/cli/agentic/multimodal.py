@@ -70,7 +70,9 @@ def vqa(
     img = load_image(image)
     messages = [{"role": "user", "content": [{"type": "image", "image": img}, {"type": "text", "text": question}]}]
 
-    inputs = processor.apply_chat_template(messages, return_tensors="pt", return_dict=True, add_generation_prompt=True)
+    inputs = processor.apply_chat_template(
+        messages, tokenize=True, return_tensors="pt", return_dict=True, add_generation_prompt=True
+    )
     if hasattr(loaded_model, "device"):
         inputs = inputs.to(loaded_model.device)
 
@@ -165,7 +167,9 @@ def caption(
         }
     ]
 
-    inputs = processor.apply_chat_template(messages, return_tensors="pt", return_dict=True, add_generation_prompt=True)
+    inputs = processor.apply_chat_template(
+        messages, tokenize=True, return_tensors="pt", return_dict=True, add_generation_prompt=True
+    )
     if hasattr(loaded_model, "device"):
         inputs = inputs.to(loaded_model.device)
 
@@ -211,7 +215,9 @@ def ocr(
         }
     ]
 
-    inputs = processor.apply_chat_template(messages, return_tensors="pt", return_dict=True, add_generation_prompt=True)
+    inputs = processor.apply_chat_template(
+        messages, tokenize=True, return_tensors="pt", return_dict=True, add_generation_prompt=True
+    )
     if hasattr(loaded_model, "device"):
         inputs = inputs.to(loaded_model.device)
 
@@ -265,7 +271,7 @@ def multimodal_chat(
     if dtype != "auto":
         import torch
 
-        model_kwargs["torch_dtype"] = getattr(torch, dtype)
+        model_kwargs["dtype"] = getattr(torch, dtype)
 
     loaded_model = AutoModelForImageTextToText.from_pretrained(model, **model_kwargs)
     loaded_model.eval()
@@ -282,7 +288,9 @@ def multimodal_chat(
 
     messages = [{"role": "user", "content": content}]
 
-    inputs = processor.apply_chat_template(messages, return_tensors="pt", return_dict=True, add_generation_prompt=True)
+    inputs = processor.apply_chat_template(
+        messages, tokenize=True, return_tensors="pt", return_dict=True, add_generation_prompt=True
+    )
     if hasattr(loaded_model, "device"):
         inputs = inputs.to(loaded_model.device)
 

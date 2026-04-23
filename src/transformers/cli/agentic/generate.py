@@ -122,7 +122,7 @@ def generate(
     if dtype != "auto":
         import torch
 
-        model_kwargs["torch_dtype"] = getattr(torch, dtype)
+        model_kwargs["dtype"] = getattr(torch, dtype)
 
     if quantization == "bnb-4bit":
         from transformers import BitsAndBytesConfig
@@ -171,23 +171,33 @@ def generate(
         gen_kwargs["watermarking_config"] = WatermarkingConfig()
 
     if cache_quantization is not None:
-        from transformers import QuantizedCacheConfig
-
         nbits = 4 if "4" in cache_quantization else 8
         gen_kwargs["cache_implementation"] = "quantized"
-        gen_kwargs["cache_config"] = QuantizedCacheConfig(nbits=nbits)
+        try:
+            from transformers import QuantizedCacheConfig
+
+            gen_kwargs["cache_config"] = QuantizedCacheConfig(nbits=nbits)
+        except ImportError:
+            # QuantizedCacheConfig was removed in favor of passing a dict config.
+            gen_kwargs["cache_config"] = {"backend": "quanto", "nbits": nbits}
 
     if loaded_assistant is not None:
         gen_kwargs["assistant_model"] = loaded_assistant
 
     # --- Constrained decoding ---
     if grammar == "json":
-        from transformers import GrammarConstrainedLogitsProcessor, LogitsProcessorList
+        try:
+            from transformers import GrammarConstrainedLogitsProcessor, LogitsProcessorList
 
-        gen_kwargs.setdefault("logits_processor", LogitsProcessorList())
-        gen_kwargs["logits_processor"].append(
-            GrammarConstrainedLogitsProcessor(tokenizer=tokenizer, grammar_str='root ::= "{" [^}]* "}"')
-        )
+            gen_kwargs.setdefault("logits_processor", LogitsProcessorList())
+            gen_kwargs["logits_processor"].append(
+                GrammarConstrainedLogitsProcessor(tokenizer=tokenizer, grammar_str='root ::= "{" [^}]* "}"')
+            )
+        except ImportError:
+            raise SystemExit(
+                "--grammar is not available in this transformers version "
+                "(GrammarConstrainedLogitsProcessor was removed or not yet shipped)."
+            )
 
     # --- Tokenize (with tool calling via chat template if needed) ---
     if tools is not None:
@@ -197,6 +207,7 @@ def generate(
         inputs = tokenizer.apply_chat_template(
             messages,
             tools=tools_def,
+            tokenize=True,
             return_tensors="pt",
             return_dict=True,
             add_generation_prompt=True,
@@ -239,7 +250,7 @@ def detect_watermark(
 
         transformers detect-watermark --model meta-llama/Llama-3.2-1B-Instruct --text "The generated essay text..."
     """
-    from transformers import AutoModelForCausalLM, AutoTokenizer, WatermarkDetector
+    from transformers import AutoModelForCausalLM, AutoTokenizer, WatermarkDetector, WatermarkingConfig
 
     input_text = resolve_input(text, file)
     model_id = model or "HuggingFaceTB/SmolLM2-360M-Instruct"
@@ -248,6 +259,7 @@ def detect_watermark(
     detector = WatermarkDetector(
         model_config=AutoModelForCausalLM.from_pretrained(model_id).config,
         device="cpu",
+        watermarking_config=WatermarkingConfig(),
     )
 
     tokens = tokenizer(input_text, return_tensors="pt", add_special_tokens=False)["input_ids"][0]
