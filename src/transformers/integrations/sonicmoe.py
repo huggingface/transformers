@@ -88,8 +88,6 @@ def sonicmoe_experts_forward(
     device = hidden_states.device
     num_top_k = top_k_index.size(-1)
     num_tokens = hidden_states.size(0)
-    grad_enabled = torch.is_grad_enabled()
-    stream_id = torch.cuda.current_stream(device).cuda_stream  # this breaks torch.compile on some versions
 
     # Flatten — token_indices must be int32, sorted ascending (required by sonic-moe)
     token_idx = torch.arange(num_tokens, device=device).unsqueeze(1).expand(-1, num_top_k).reshape(-1).int()
@@ -116,10 +114,10 @@ def sonicmoe_experts_forward(
         w2,
         b2,
         E=self.num_experts,
-        stream_id=stream_id,
         activation_type=activation_type,
-        is_inference_mode_enabled=not grad_enabled,
-        concat_layout=self.is_concatenated_layout,
+        stream_id=torch.cuda.current_stream(device).cuda_stream,
+        is_inference_mode_enabled=not torch.is_grad_enabled(),
+        concat_layout=self.is_concatenated,
     )
 
     return output
