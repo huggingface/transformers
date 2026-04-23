@@ -42,6 +42,7 @@ from ..mixtral.modeling_mixtral import (
     MixtralRMSNorm,
     MixtralSparseMoeBlock,
 )
+from ..qwen2.modeling_qwen2 import Qwen2Attention
 from ..qwen2_moe.modeling_qwen2_moe import Qwen2MoeMLP
 
 
@@ -288,33 +289,20 @@ def eager_attention_forward(
 
 
 @use_kernelized_func(apply_rotary_pos_emb)
-class MiMoV2FlashAttention(nn.Module):
+class MiMoV2FlashAttention(Qwen2Attention):
     def __init__(self, config: MiMoV2FlashConfig, layer_idx: int):
-        super().__init__()
+        # SWA layers double the kv heads vs full-attention and have attention sinks.
         is_swa = config.layer_types[layer_idx] == "sliding_attention"
-
-        # SWA layers double the kv heads vs full-attention layers
         num_kv_heads = config.num_key_value_heads * 2 if is_swa else config.num_key_value_heads
         num_attn_heads = config.num_attention_heads
-        head_dim = config.head_dim
-        v_head_dim = config.v_head_dim
-
-        self.config = config
-        self.layer_idx = layer_idx
-        self.head_dim = head_dim
-        self.v_head_dim = v_head_dim
+        super().__init__(config, layer_idx)
+        self.v_head_dim = config.v_head_dim
         self.num_key_value_groups = num_attn_heads // num_kv_heads
-        self.scaling = head_dim**-0.5
-        self.attention_dropout = config.attention_dropout
-        self.is_causal = True
-        self.sliding_window = config.sliding_window if is_swa else None
 
-        self.q_proj = nn.Linear(config.hidden_size, num_attn_heads * head_dim, bias=config.attention_bias)
-        self.k_proj = nn.Linear(config.hidden_size, num_kv_heads * head_dim, bias=config.attention_bias)
-        self.v_proj = nn.Linear(config.hidden_size, num_kv_heads * v_head_dim, bias=config.attention_bias)
-        self.o_proj = nn.Linear(num_attn_heads * v_head_dim, config.hidden_size, bias=False)
-
-        # Only SWA layers have attention sinks.
+        self.q_proj = nn.Linear(config.hidden_size, num_attn_heads * self.head_dim, bias=config.attention_bias)
+        self.k_proj = nn.Linear(config.hidden_size, num_kv_heads * self.head_dim, bias=config.attention_bias)
+        self.v_proj = nn.Linear(config.hidden_size, num_kv_heads * config.v_head_dim, bias=config.attention_bias)
+        self.o_proj = nn.Linear(num_attn_heads * config.v_head_dim, config.hidden_size, bias=False)
         self.sinks = nn.Parameter(torch.empty(num_attn_heads), requires_grad=False) if is_swa else None
 
     def forward(
