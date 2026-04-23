@@ -1143,6 +1143,22 @@ class DeepseekOcr2TextAttention(nn.Module):
         return attn_output, attn_weights
 
 
+class DeepseekOcr2TextMLP(nn.Module):
+    def __init__(self, config: DeepseekOcr2TextConfig, hidden_size=None, intermediate_size=None):
+        super().__init__()
+        self.config = config
+        self.hidden_size = config.hidden_size if hidden_size is None else hidden_size
+        self.intermediate_size = config.intermediate_size if intermediate_size is None else intermediate_size
+        self.gate_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=config.mlp_bias)
+        self.up_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=config.mlp_bias)
+        self.down_proj = nn.Linear(self.intermediate_size, self.hidden_size, bias=config.mlp_bias)
+        self.act_fn = ACT2FN[config.hidden_act]
+
+    def forward(self, x):
+        down_proj = self.down_proj(self.act_fn(self.gate_proj(x)) * self.up_proj(x))
+        return down_proj
+
+
 @use_experts_implementation
 class DeepseekOcr2TextExperts(nn.Module):
     """Collection of expert weights stored as 3D tensors."""
@@ -1181,22 +1197,6 @@ class DeepseekOcr2TextExperts(nn.Module):
             final_hidden_states.index_add_(0, token_idx, current_hidden_states.to(final_hidden_states.dtype))
 
         return final_hidden_states
-
-
-class DeepseekOcr2TextMLP(nn.Module):
-    def __init__(self, config: DeepseekOcr2TextConfig, hidden_size=None, intermediate_size=None):
-        super().__init__()
-        self.config = config
-        self.hidden_size = config.hidden_size if hidden_size is None else hidden_size
-        self.intermediate_size = config.intermediate_size if intermediate_size is None else intermediate_size
-        self.gate_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=config.mlp_bias)
-        self.up_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=config.mlp_bias)
-        self.down_proj = nn.Linear(self.intermediate_size, self.hidden_size, bias=config.mlp_bias)
-        self.act_fn = ACT2FN[config.hidden_act]
-
-    def forward(self, x):
-        down_proj = self.down_proj(self.act_fn(self.gate_proj(x)) * self.up_proj(x))
-        return down_proj
 
 
 class DeepseekOcr2TextMoe(nn.Module):
@@ -1274,7 +1274,9 @@ class DeepseekOcr2TextDecoderLayer(GradientCheckpointingLayer):
         self.hidden_size = config.hidden_size
         self.self_attn = DeepseekOcr2TextAttention(config=config, layer_idx=layer_idx)
         self.mlp = (
-            DeepseekOcr2TextMoe(config) if layer_idx >= config.first_k_dense_replace else DeepseekOcr2TextMLP(config)
+            DeepseekOcr2TextMoe(config)
+            if config.mlp_layer_types[layer_idx] == "sparse"
+            else DeepseekOcr2TextMLP(config)
         )
 
         self.input_layernorm = DeepseekOcr2TextRMSNorm(config.hidden_size, eps=config.rms_norm_eps)

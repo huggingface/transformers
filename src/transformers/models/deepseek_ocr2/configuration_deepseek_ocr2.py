@@ -38,7 +38,7 @@ class DeepseekOcr2SamVisionConfig(PreTrainedConfig):
     mlp_dim (`int`, *optional*):
         Dimensionality of the MLP layer in each vision encoder block. Defaults to `hidden_size * mlp_ratio`.
     downsample_channels (`list[int]`, *optional*):
-        The channel dimensions for the multi-scale downsampling neck layers.
+        The channel dimensions for the multi-scale downsampling neck layers. Defaults to `[512, 896]`.
     """
 
     base_config_key = "sam_config"
@@ -88,8 +88,22 @@ class DeepseekOcr2EncoderConfig(PreTrainedConfig):
 
     model_type = "deepseek_ocr2_encoder"
     keys_to_ignore_at_inference = ["past_key_values"]
-    base_model_tp_plan = {}
-    base_model_pp_plan = {}
+
+    # Default tensor parallel plan for base model `DeepseekOcr2Encoder`
+    base_model_tp_plan = {
+        "layers.*.self_attn.q_proj": "colwise",
+        "layers.*.self_attn.k_proj": "colwise",
+        "layers.*.self_attn.v_proj": "colwise",
+        "layers.*.self_attn.o_proj": "rowwise",
+        "layers.*.mlp.gate_proj": "colwise",
+        "layers.*.mlp.up_proj": "colwise",
+        "layers.*.mlp.down_proj": "rowwise",
+    }
+    base_model_pp_plan = {
+        "embed_tokens": (["input_ids"], ["inputs_embeds"]),
+        "layers": (["hidden_states", "attention_mask"], ["hidden_states"]),
+        "norm": (["hidden_states"], ["hidden_states"]),
+    }
 
     vocab_size: int = 151936
     hidden_size: int = 4096
@@ -168,12 +182,15 @@ class DeepseekOcr2VisionConfig(PreTrainedConfig):
 @strict
 class DeepseekOcr2TextConfig(PreTrainedConfig):
     r"""
-    first_k_dense_replace (`int`, *optional*, defaults to 0):
-        The number of initial decoder layers that use dense MLP instead of MoE.
     n_group (`int`, *optional*):
         Number of groups for grouped top-k expert routing.
     topk_method (`str`, *optional*, defaults to `"greedy"`):
         Method for selecting top-k experts in MoE layers.
+    mlp_layer_types (`list[str]`, *optional*):
+        MLP type (`"dense"` or `"sparse"`) for each decoder layer. Defaults to
+        `["dense"] * first_k_dense_replace + ["sparse"] * (num_hidden_layers - first_k_dense_replace)`.
+    first_k_dense_replace (<fill_type>):
+        <fill_docstring>
     """
 
     model_type = "deepseek_ocr2_text"
@@ -222,7 +239,6 @@ class DeepseekOcr2TextConfig(PreTrainedConfig):
     attention_dropout: float | None = 0.0
     mlp_bias: bool = False
     head_dim: int | None = None
-    first_k_dense_replace: int = 0
     n_group: int | None = None
     n_routed_experts: int = 64
     n_shared_experts: int = 2
@@ -233,6 +249,7 @@ class DeepseekOcr2TextConfig(PreTrainedConfig):
     moe_intermediate_size: int = 1407
 
     base_config_key = "text_config"
+    mlp_layer_types: list[str] | None = None
 
     def __post_init__(self, **kwargs):
         self.head_dim = self.hidden_size // self.num_attention_heads

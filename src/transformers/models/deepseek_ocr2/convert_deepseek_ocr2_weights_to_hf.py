@@ -90,6 +90,9 @@ def convert_config(config_dict: dict) -> dict:
         for mla_field in ("kv_lora_rank", "q_lora_rank"):
             if mla_field in text_config and text_config[mla_field] is None:
                 del text_config[mla_field]
+        first_k = text_config.pop("first_k_dense_replace", 0)
+        n_layers = text_config.get("num_hidden_layers", 28)
+        text_config["mlp_layer_types"] = ["dense"] * first_k + ["sparse"] * (n_layers - first_k)
         config_dict["text_config"] = text_config
 
     vision_config = {}

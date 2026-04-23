@@ -39,14 +39,16 @@ from ...image_utils import (
 from ...masking_utils import create_causal_mask
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPast, BaseModelOutputWithPooling
 from ...modeling_utils import PreTrainedModel
-from ...processing_utils import ImagesKwargs, Unpack
+from ...processing_utils import Unpack
 from ...utils import TensorType, TransformersKwargs, auto_docstring, can_return_tuple, logging
 from ...utils.import_utils import requires
 from ...utils.output_capturing import capture_outputs
 from ..deepseek_v2.configuration_deepseek_v2 import DeepseekV2Config
 from ..deepseek_v2.modeling_deepseek_v2 import (
     DeepseekV2DecoderLayer,
+    DeepseekV2MLP,
     DeepseekV2Model,
+    DeepseekV2Moe,
     DeepseekV2PreTrainedModel,
 )
 from ..got_ocr2.image_processing_got_ocr2 import (
@@ -78,8 +80,6 @@ from ..sam.modeling_sam import (
 logger = logging.get_logger(__name__)
 
 
-# FIXME @raushan: modular cannot copy DeepseekOcr2ImageProcessorKwargs correctly after #43514.
-# Class needs to be defined two times!
 class DeepseekOcr2ImageProcessorKwargs(GotOcr2ImageProcessorKwargs, total=False):
     """
     tile_size (`int`, *optional*, defaults to `768`):
@@ -94,7 +94,6 @@ class DeepseekOcr2ImageProcessorKwargs(GotOcr2ImageProcessorKwargs, total=False)
 
 @auto_docstring
 class DeepseekOcr2ImageProcessor(GotOcr2ImageProcessor):
-    valid_kwargs = DeepseekOcr2ImageProcessorKwargs
     image_mean = IMAGENET_STANDARD_MEAN
     image_std = IMAGENET_STANDARD_STD
     size = {"height": 1024, "width": 1024}
@@ -104,9 +103,6 @@ class DeepseekOcr2ImageProcessor(GotOcr2ImageProcessor):
     max_patches = 6
     background_color = [127, 127, 127]
     model_input_names = ["pixel_values", "num_local_patches"]
-
-    def __init__(self, **kwargs: Unpack[DeepseekOcr2ImageProcessorKwargs]):
-        super().__init__(**kwargs)
 
     # Copied from transformers.models.llava.image_processing_llava.LlavaImageProcessor.pad_to_square
     def pad_to_square(
@@ -306,35 +302,9 @@ class DeepseekOcr2ImageProcessor(GotOcr2ImageProcessor):
         return num_patches
 
 
-# FIXME @raushan: modular cannot copy DeepseekOcr2ImageProcessorKwargs correctly after #43514.
-# Class needs to be defined two times!
-class DeepseekOcr2ImageProcessorKwargs(ImagesKwargs, total=False):
-    """
-    crop_to_patches (`bool`, *optional*, defaults to `True`):
-        Whether to crop the image into local patches. When `False`, only the global view is produced.
-    min_patches (`int`, *optional*, defaults to `2`):
-        The minimum number of patches to extract from the image for the local view.
-        Only has an effect if `crop_to_patches` is set to `True`.
-    max_patches (`int`, *optional*, defaults to `6`):
-        The maximum number of patches to extract from the image for the local view.
-        Only has an effect if `crop_to_patches` is set to `True`.
-    tile_size (`int`, *optional*, defaults to `768`):
-        The size of each local tile. Must match the model's query embedding size.
-    background_color (`list[int]`, *optional*, defaults to `[127, 127, 127]`):
-        The background color for padding.
-    """
-
-    crop_to_patches: bool
-    min_patches: int
-    max_patches: int
-    tile_size: int
-    background_color: list[int]
-
-
 @requires(backends=("vision",))
 @auto_docstring
 class DeepseekOcr2ImageProcessorPil(GotOcr2ImageProcessorPil):
-    valid_kwargs = DeepseekOcr2ImageProcessorKwargs
     image_mean = IMAGENET_STANDARD_MEAN
     image_std = IMAGENET_STANDARD_STD
     size = {"height": 1024, "width": 1024}
@@ -344,9 +314,6 @@ class DeepseekOcr2ImageProcessorPil(GotOcr2ImageProcessorPil):
     max_patches = 6
     background_color = [127, 127, 127]
     model_input_names = ["pixel_values", "num_local_patches"]
-
-    def __init__(self, **kwargs: Unpack[DeepseekOcr2ImageProcessorKwargs]):
-        super().__init__(**kwargs)
 
     def crop_image_to_patches(
         self,
@@ -520,7 +487,7 @@ class DeepseekOcr2SamVisionConfig(SamVisionConfig):
     mlp_dim (`int`, *optional*):
         Dimensionality of the MLP layer in each vision encoder block. Defaults to `hidden_size * mlp_ratio`.
     downsample_channels (`list[int]`, *optional*):
-        The channel dimensions for the multi-scale downsampling neck layers.
+        The channel dimensions for the multi-scale downsampling neck layers. Defaults to `[512, 896]`.
     """
 
     base_config_key = "sam_config"
@@ -550,11 +517,6 @@ class DeepseekOcr2EncoderConfig(Qwen2Config):
     ```"""
 
     base_config_key = "encoder_config"
-    base_model_tp_plan = {}
-    base_model_pp_plan = {}
-
-    def __post_init__(self, **kwargs):
-        super().__post_init__(**kwargs)
 
 
 @auto_docstring(checkpoint="thisisiron/DeepSeek-OCR-2-hf")
@@ -594,15 +556,19 @@ class DeepseekOcr2VisionConfig(PreTrainedConfig):
 @strict
 class DeepseekOcr2TextConfig(DeepseekV2Config):
     r"""
-    first_k_dense_replace (`int`, *optional*, defaults to 0):
-        The number of initial decoder layers that use dense MLP instead of MoE.
     n_group (`int`, *optional*):
         Number of groups for grouped top-k expert routing.
     topk_method (`str`, *optional*, defaults to `"greedy"`):
         Method for selecting top-k experts in MoE layers.
+    mlp_layer_types (`list[str]`, *optional*):
+        MLP type (`"dense"` or `"sparse"`) for each decoder layer. Defaults to
+        `["dense"] * first_k_dense_replace + ["sparse"] * (num_hidden_layers - first_k_dense_replace)`.
+    first_k_dense_replace (<fill_type>):
+        <fill_docstring>
     """
 
     base_config_key = "text_config"
+    mlp_layer_types: list[str] | None = None
 
     # Override DeepseekV2's MLA TP plan with standard MHA projections
     base_model_tp_plan = {
@@ -621,7 +587,8 @@ class DeepseekOcr2TextConfig(DeepseekV2Config):
         "layers.*.mlp.down_proj": "rowwise",
     }
 
-    # Remove unused MLA attributes inherited from DeepseekV2Config
+    # Remove unused attributes inherited from DeepseekV2Config
+    first_k_dense_replace = AttributeError()
     kv_lora_rank = AttributeError()
     norm_topk_prob = AttributeError()
     q_lora_rank = AttributeError()
@@ -928,10 +895,23 @@ class DeepseekOcr2TextAttention(LlamaAttention):
     pass
 
 
+class DeepseekOcr2TextMLP(DeepseekV2MLP):
+    pass
+
+
+class DeepseekOcr2TextMoe(DeepseekV2Moe):
+    pass
+
+
 class DeepseekOcr2TextDecoderLayer(DeepseekV2DecoderLayer):
     def __init__(self, config, layer_idx: int):
         super().__init__(config, layer_idx)
         self.self_attn = DeepseekOcr2TextAttention(config=config, layer_idx=layer_idx)
+        self.mlp = (
+            DeepseekOcr2TextMoe(config)
+            if config.mlp_layer_types[layer_idx] == "sparse"
+            else DeepseekOcr2TextMLP(config)
+        )
 
 
 class DeepseekOcr2TextPreTrainedModel(DeepseekV2PreTrainedModel):
