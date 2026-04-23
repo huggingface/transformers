@@ -23,6 +23,7 @@ from ..utils.import_utils import (
     is_torch_less_or_equal,
     is_torchdynamo_compiling,
 )
+from .deepgemm import bf16_deepgemm_experts_forward
 
 
 if is_torch_available():
@@ -460,6 +461,7 @@ class ExpertsInterface(GeneralInterface):
     _global_mapping = {
         "batched_mm": batched_mm_experts_forward,
         "grouped_mm": grouped_mm_experts_forward,
+        "deepgemm": bf16_deepgemm_experts_forward,
     }
 
     def get_interface(self, experts_implementation: str, default: Callable) -> Callable:

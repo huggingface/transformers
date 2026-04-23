@@ -1,0 +1,343 @@
+# Copyright 2026 The HuggingFace Team. All rights reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+"""DeepGEMM integration: fused grouped GEMM kernels from `kernels-community/deep-gemm`.
+
+Provides:
+- `fp8_deepgemm_matmul`: FP8 dense matmul used as a fast path inside the finegrained-fp8 Linear.
+- `fp8_deepgemm_experts_forward`: FP8 M-grouped experts forward, registered as "deepgemm" in the FP8 ExpertsInterface.
+- `bf16_deepgemm_experts_forward`: BF16 M-grouped experts forward, registered as "deepgemm" in the ExpertsInterface.
+
+Requirements: CUDA, Hopper (SM90+), CUDA runtime >= 12.3, `kernels`.
+"""
+
+import functools
+
+import torch
+
+from ..utils import logging
+from ..utils.import_utils import get_cuda_runtime_version, resolve_internal_import
+from .hub_kernels import lazy_load_kernel
+
+
+logger = logging.get_logger(__name__)
+
+# DeepGEMM requires M-dimension alignment to 128 for TMA-based contiguous grouped GEMM.
+# TMA is an H100 hardware addition that allows applications to asynchronously and
+# bi-directionally transfer 1D-5D tensors between GPU global and shared memory.
+_DEEPGEMM_M_ALIGNMENT = 128
+
+
+@functools.cache
+def _load_deepgemm_kernel():
+    """
+    Load deep-gemm once and return its required symbols.
+
+    Raises:
+        ImportError if CUDA/hardware requirements are not met, or the kernel or
+        required symbols are not found.
+
+    Returns:
+        Tuple of (fp8_gemm_nt, m_grouped_fp8_gemm_nt_contiguous,
+                  m_grouped_bf16_gemm_nt_contiguous, per_token_cast_to_fp8) from the deep-gemm kernel.
+    """
+    if not torch.cuda.is_available():
+        raise ImportError(
+            "deep-gemm kernel requires CUDA, but CUDA is not available. Use a different `experts_implementation`."
+        )
+
+    # deep-gemm requires Hopper (SM90) or newer for FP8 WGMMA instructions
+    major = torch.cuda.get_device_capability()[0]
+    if major < 9:
+        raise ImportError(
+            f"deep-gemm requires a Hopper (SM90+) or newer GPU, but the current device "
+            f"has compute capability {major}.x. Use a different `experts_implementation`."
+        )
+
+    # deep-gemm requires CUDA runtime >= 12.3
+    cuda_major, cuda_minor = get_cuda_runtime_version()
+    if cuda_major < 12 or (cuda_major == 12 and cuda_minor < 3):
+        raise ImportError(
+            f"deep-gemm requires CUDA runtime 12.3+, but found {cuda_major}.{cuda_minor}. "
+            "Please upgrade your CUDA toolkit or use a different `experts_implementation`."
+        )
+
+    kernel = lazy_load_kernel("deep-gemm")
+    if kernel is None:
+        raise ImportError(
+            "deep-gemm kernel not found. Make sure you have the `kernels` package installed (`pip install -U kernels`)."
+        )
+
+    fp8_gemm_nt = getattr(kernel, "fp8_gemm_nt", None)
+    m_grouped_fp8_gemm_nt_contiguous = getattr(kernel, "m_grouped_fp8_gemm_nt_contiguous", None)
+    m_grouped_bf16_gemm_nt_contiguous = getattr(kernel, "m_grouped_bf16_gemm_nt_contiguous", None)
+    per_token_cast_to_fp8 = resolve_internal_import(kernel, chained_path="utils.per_token_cast_to_fp8")
+
+    missing = [
+        name
+        for name, attr in [
+            ("fp8_gemm_nt", fp8_gemm_nt),
+            ("m_grouped_fp8_gemm_nt_contiguous", m_grouped_fp8_gemm_nt_contiguous),
+            ("m_grouped_bf16_gemm_nt_contiguous", m_grouped_bf16_gemm_nt_contiguous),
+            ("utils.per_token_cast_to_fp8", per_token_cast_to_fp8),
+        ]
+        if attr is None
+    ]
+    if missing:
+        raise ImportError(
+            f"deep-gemm kernel is missing required symbols: {', '.join(missing)}. "
+            "Please update the `kernels` package (`pip install -U kernels`)."
+        )
+
+    return fp8_gemm_nt, m_grouped_fp8_gemm_nt_contiguous, m_grouped_bf16_gemm_nt_contiguous, per_token_cast_to_fp8
+
+
+def fp8_deepgemm_matmul(
+    A: torch.Tensor,
+    B: torch.Tensor,
+    As: torch.Tensor,
+    Bs: torch.Tensor,
+    output_dtype: torch.dtype = torch.float32,
+) -> torch.Tensor:
+    """
+    FP8 dense matmul via deep-gemm's `fp8_gemm_nt`. Block-wise 128x128 scales expected.
+
+    Args:
+        A:  (M, K) float8_e4m3fn — quantized activations
+        B:  (N, K) float8_e4m3fn — quantized weights
+        As: (M, K//128) float32 — per-block activation scales
+        Bs: (N//128, K//128) float32 — per-block weight scales
+        output_dtype: desired output dtype.
+    """
+    fp8_gemm_nt, _, _, _ = _load_deepgemm_kernel()
+    A_2d = A.view(-1, A.shape[-1])
+    As_2d = As.view(-1, As.shape[-1])
+    output = torch.empty(A_2d.shape[0], B.shape[0], device=A.device, dtype=output_dtype)
+    fp8_gemm_nt((A_2d, As_2d.float()), (B, Bs.float()), output)
+    return output.view(A.shape[:-1] + (B.shape[0],))
+
+
+def _build_deepgemm_contiguous_layout(expert_ids_sorted: torch.Tensor, num_experts: int, alignment: int) -> tuple:
+    """Build a TMA-aligned contiguous layout for deep-gemm's grouped GEMM.
+
+    deep-gemm requires M-dimension alignment per expert for TMA. This computes
+    the mapping from sorted token positions to padded row positions, and the
+    layout tensor that deep-gemm uses to identify expert boundaries.
+
+    Returns:
+        sorted_to_padded: (num_tokens,) index map from sorted position to padded row
+        grouped_layout: expert layout tensor (format depends on GPU architecture)
+        total_padded_rows: total number of rows including alignment padding
+    """
+    device = expert_ids_sorted.device
+    num_tokens = expert_ids_sorted.size(0)
+    tokens_per_expert = torch.histc(expert_ids_sorted.int(), bins=num_experts, min=0, max=num_experts - 1).long()
+    aligned_tokens_per_expert = ((tokens_per_expert + alignment - 1) // alignment) * alignment
+    # Upper bound avoids GPU->CPU sync; padding rows are skipped by deep-gemm.
+    total_padded_rows = num_tokens + min(num_tokens, num_experts) * (alignment - 1)
+
+    padding_per_expert = aligned_tokens_per_expert - tokens_per_expert
+    cumulative_padding = padding_per_expert.cumsum(0) - padding_per_expert
+    sorted_to_padded = torch.arange(num_tokens, device=device) + cumulative_padding[expert_ids_sorted]
+
+    if torch.cuda.get_device_capability(device)[0] >= 10:  # Blackwell (SM100+)
+        grouped_layout = tokens_per_expert.cumsum(0).int()
+    else:
+        # Hopper: per-row expert id, -1 for padding rows
+        grouped_layout = torch.full((total_padded_rows,), -1, device=device, dtype=torch.int32)
+        grouped_layout[sorted_to_padded] = expert_ids_sorted.int()
+
+    return sorted_to_padded, grouped_layout, total_padded_rows
+
+
+def _pad_for_deepgemm(x: torch.Tensor, sorted_to_padded: torch.Tensor, total_padded_rows: int) -> torch.Tensor:
+    """Pad a sorted tensor into the TMA-aligned contiguous layout."""
+    padded = torch.zeros(total_padded_rows, *x.shape[1:], device=x.device, dtype=x.dtype)
+    padded[sorted_to_padded] = x
+    return padded
+
+
+def _unpad_from_deepgemm_contiguous_layout(x_padded: torch.Tensor, sorted_to_padded: torch.Tensor) -> torch.Tensor:
+    """Remove padding rows from the TMA-aligned contiguous layout."""
+    return x_padded[sorted_to_padded]
+
+
+def fp8_deepgemm_experts_forward(
+    self: torch.nn.Module,
+    hidden_states: torch.Tensor,
+    top_k_index: torch.Tensor,
+    top_k_weights: torch.Tensor,
+) -> torch.Tensor:
+    if self.activation_scheme == "static":
+        raise NotImplementedError(
+            "deepgemm experts dispatch does not support activation_scheme='static'. "
+            "Use the default eager dispatch or switch to activation_scheme='dynamic'."
+        )
+    if self.block_size is None:
+        raise ValueError(
+            "deep-gemm requires block-wise quantization (block_size=[128, 128]), "
+            "but got per-tensor quantization (block_size=None)."
+        )
+    if self.block_size[0] != 128 or self.block_size[1] != 128:
+        raise ValueError(f"deep-gemm requires block_size=(128, 128), got {self.block_size}")
+
+    _, m_grouped_fp8_gemm_nt_contiguous, _, per_token_cast_to_fp8 = _load_deepgemm_kernel()
+
+    device = hidden_states.device
+    num_top_k = top_k_index.size(-1)
+    num_tokens = hidden_states.size(0)
+    hidden_dim = hidden_states.size(-1)
+
+    # S is the number of selected token-expert pairs (S = num_tokens * num_top_k)
+    token_idx = torch.arange(num_tokens, device=device).unsqueeze(1).expand(-1, num_top_k).reshape(-1)  # (S,)
+    sample_weights = top_k_weights.reshape(-1)  # (S,)
+    expert_ids = top_k_index.reshape(-1)  # (S,)
+
+    # Sort by expert for grouped processing
+    perm = torch.argsort(expert_ids)
+    inv_perm = torch.empty_like(perm)
+    inv_perm[perm] = torch.arange(perm.size(0), device=device)
+
+    expert_ids_g = expert_ids[perm]
+    sample_weights_g = sample_weights[perm]
+    selected_hidden_states_g = hidden_states[token_idx[perm]]
+
+    sorted_to_padded, grouped_layout, total_padded_rows = _build_deepgemm_contiguous_layout(
+        expert_ids_g, self.num_experts, alignment=_DEEPGEMM_M_ALIGNMENT
+    )
+    use_psum_layout = torch.cuda.get_device_capability(device)[0] >= 10
+
+    # --- Up projection per expert (deep-gemm grouped contiguous) ---
+    w_up = self.gate_up_proj if self.has_gate else self.up_proj
+    ws_up = self.gate_up_proj_scale_inv if self.has_gate else self.up_proj_scale_inv
+    act_fp8, act_scales = per_token_cast_to_fp8(selected_hidden_states_g, use_ue8m0=False)
+    act_fp8 = _pad_for_deepgemm(act_fp8, sorted_to_padded, total_padded_rows)
+    act_scales = _pad_for_deepgemm(act_scales, sorted_to_padded, total_padded_rows)
+    proj_out = torch.zeros(total_padded_rows, w_up.shape[1], device=device, dtype=torch.bfloat16)
+    m_grouped_fp8_gemm_nt_contiguous(
+        (act_fp8, act_scales), (w_up, ws_up.float()), proj_out, grouped_layout, use_psum_layout=use_psum_layout
+    )
+
+    # Apply gating or activation
+    if self.has_gate:
+        proj_out = self._apply_gate(proj_out)
+    else:
+        proj_out = self.act_fn(proj_out)
+
+    # --- Down projection per expert (deep-gemm grouped contiguous) ---
+    proj_fp8, proj_scales = per_token_cast_to_fp8(proj_out, use_ue8m0=False)
+    proj_out = torch.zeros(total_padded_rows, hidden_dim, device=device, dtype=torch.bfloat16)
+    m_grouped_fp8_gemm_nt_contiguous(
+        (proj_fp8, proj_scales),
+        (self.down_proj, self.down_proj_scale_inv.float()),
+        proj_out,
+        grouped_layout,
+        use_psum_layout=use_psum_layout,
+    )
+
+    # Remove padding rows
+    proj_out = _unpad_from_deepgemm_contiguous_layout(proj_out, sorted_to_padded)
+
+    # Apply routing weights
+    weighted_out = proj_out * sample_weights_g.to(proj_out.dtype).unsqueeze(-1)  # (S, hidden_dim)
+
+    # Restore original order
+    weighted_out = weighted_out[inv_perm]
+
+    # Accumulate results using deterministic reshape+sum instead of index_add_
+    # (index_add_ with duplicate indices is non-deterministic on CUDA due to atomicAdd)
+    final_hidden_states = weighted_out.view(num_tokens, num_top_k, hidden_dim).sum(dim=1)
+
+    return final_hidden_states.to(hidden_states.dtype)
+
+
+def bf16_deepgemm_experts_forward(
+    self: torch.nn.Module,
+    hidden_states: torch.Tensor,
+    top_k_index: torch.Tensor,
+    top_k_weights: torch.Tensor,
+) -> torch.Tensor:
+    if self.is_transposed:
+        raise ValueError("deepgemm bf16 path requires non-transposed weights (is_transposed=False)")
+    if not self.has_gate:
+        raise ValueError("deepgemm bf16 path requires gated experts (has_gate=True)")
+    if self.has_bias:
+        raise ValueError("deepgemm bf16 path does not support bias (m_grouped_bf16_gemm_nt_contiguous has no bias input)")
+    if hidden_states.device.type != "cuda":
+        raise ValueError("deepgemm bf16 path requires CUDA device")
+
+    _, _, m_grouped_bf16_gemm_nt_contiguous, _ = _load_deepgemm_kernel()
+
+    device = hidden_states.device
+    num_top_k = top_k_index.size(-1)
+    num_tokens = hidden_states.size(0)
+    hidden_dim = hidden_states.size(-1)
+
+    # S is the number of selected token-expert pairs (S = num_tokens * num_top_k)
+    token_idx = torch.arange(num_tokens, device=device).unsqueeze(1).expand(-1, num_top_k).reshape(-1)  # (S,)
+    sample_weights = top_k_weights.reshape(-1)  # (S,)
+    expert_ids = top_k_index.reshape(-1)  # (S,)
+
+    # Handle invalid expert IDs from Expert Parallelism (EP)
+    invalid_mask = expert_ids >= self.num_experts
+    expert_ids = expert_ids.clamp(0, self.num_experts - 1)
+
+    # Sort by expert for grouped processing
+    perm = torch.argsort(expert_ids)
+    inv_perm = torch.empty_like(perm)
+    inv_perm[perm] = torch.arange(perm.size(0), device=device)
+
+    expert_ids_g = expert_ids[perm]
+    sample_weights_g = sample_weights[perm]
+    invalid_mask_g = invalid_mask[perm]
+    selected_hidden_states_g = hidden_states[token_idx[perm]]
+
+    sorted_to_padded, grouped_layout, total_padded_rows = _build_deepgemm_contiguous_layout(
+        expert_ids_g, self.num_experts, alignment=_DEEPGEMM_M_ALIGNMENT
+    )
+    use_psum_layout = torch.cuda.get_device_capability(device)[0] >= 10
+
+    # --- Up projection per expert (deep-gemm grouped contiguous, bf16) ---
+    act = _pad_for_deepgemm(selected_hidden_states_g, sorted_to_padded, total_padded_rows)
+    proj_out = torch.zeros(
+        total_padded_rows, self.gate_up_proj.shape[1], device=device, dtype=hidden_states.dtype
+    )
+    m_grouped_bf16_gemm_nt_contiguous(
+        act, self.gate_up_proj, proj_out, grouped_layout, use_psum_layout=use_psum_layout
+    )
+
+    # Apply gating
+    proj_out = self._apply_gate(proj_out)
+
+    # --- Down projection per expert (deep-gemm grouped contiguous, bf16) ---
+    out = torch.zeros(total_padded_rows, hidden_dim, device=device, dtype=hidden_states.dtype)
+    m_grouped_bf16_gemm_nt_contiguous(
+        proj_out, self.down_proj, out, grouped_layout, use_psum_layout=use_psum_layout
+    )
+
+    # Remove padding rows
+    out = _unpad_from_deepgemm_contiguous_layout(out, sorted_to_padded)
+
+    # Apply routing weights and zero out invalid expert contributions
+    weighted_out = out * sample_weights_g.to(out.dtype).unsqueeze(-1)  # (S, hidden_dim)
+    weighted_out.masked_fill_(invalid_mask_g.unsqueeze(-1), 0.0)
+
+    # Restore original order
+    weighted_out = weighted_out[inv_perm]
+
+    # Accumulate results using deterministic reshape+sum instead of index_add_
+    # (index_add_ with duplicate indices is non-deterministic on CUDA due to atomicAdd)
+    final_hidden_states = weighted_out.view(num_tokens, num_top_k, hidden_dim).sum(dim=1)
+
+    return final_hidden_states.to(hidden_states.dtype)
