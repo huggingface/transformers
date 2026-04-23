@@ -20,6 +20,7 @@ from parameterized import parameterized
 
 from transformers import AutoTokenizer, is_torch_available
 from transformers.testing_utils import (
+    Expectations,
     cleanup,
     require_torch,
     require_torch_accelerator,
@@ -343,7 +344,14 @@ class BltIntegrationTest(unittest.TestCase):
     def test_model_bf16(self):
         """Test Blt model with bfloat16 precision."""
         NUM_TOKENS_TO_GENERATE = 200
-        EXPECTED_TEXT = "my name is alex and i am a student at the university of michigan in the college of arts and sciences. i am a senior majoring in computer science and minoring in mathematics. i am also a member of the michigan m"
+        # fmt: off
+        EXPECTED_TEXT = Expectations(
+            {
+                (None, None): "my name is alex and i am a student at the university of michigan in the college of arts and sciences. i am a senior majoring in computer science and minoring in mathematics. i am also a member of the michigan m",
+                ("xpu", None): "my name is alex and i am a student at the university of michigan. i am a senior majoring in computer science and minoring in mathematics. i am also a member of the michigan math club and the michigan computer s",
+            }
+        )
+        # fmt: on
 
         prompt = "my name is"
 
@@ -360,7 +368,7 @@ class BltIntegrationTest(unittest.TestCase):
         )
 
         output_text = tokenizer.decode(generated_ids[0], skip_special_tokens=True)
-        self.assertEqual(output_text, EXPECTED_TEXT)
+        self.assertEqual(output_text, EXPECTED_TEXT.get_expectation())
 
     @slow
     @require_torch_bf16
@@ -473,7 +481,14 @@ class BltIntegrationTest(unittest.TestCase):
     def test_model_bf16_static_cache(self):
         """Test Blt model with bfloat16 precision and static cache."""
         NUM_TOKENS_TO_GENERATE = 200
-        EXPECTED_TEXT = "my name is alex and i am a student at the university of michigan in the college of arts and sciences. i am a senior majoring in computer science and minoring in mathematics. i am also a member of the michigan m"
+        # fmt: off
+        EXPECTED_TEXT = Expectations(
+            {
+                (None, None): "my name is alex and i am a student at the university of michigan in the college of arts and sciences. i am a senior majoring in computer science and minoring in mathematics. i am also a member of the michigan m",
+                ("xpu", None): "my name is alex and i am a student at the university of michigan. i am a senior majoring in computer science and minoring in mathematics. i am also a member of the michigan math club and the michigan computer s",
+            }
+        )
+        # fmt: on
 
         prompt = "my name is"
 
@@ -492,4 +507,4 @@ class BltIntegrationTest(unittest.TestCase):
         )
 
         output_text = tokenizer.decode(generated_ids[0], skip_special_tokens=True)
-        self.assertEqual(output_text, EXPECTED_TEXT)
+        self.assertEqual(output_text, EXPECTED_TEXT.get_expectation())
