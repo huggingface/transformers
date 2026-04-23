@@ -671,18 +671,18 @@ def _build_checkpoint_conversion_mapping():
     mapping["ernie4_5_moe"] += [
         WeightRenaming("mlp.moe_statics.e_score_correction_bias", "mlp.gate.moe_statics.e_score_correction_bias")
     ]
-    mapping["beit"] = mapping["vit"].copy()
-    mapping["beit"] += [
-        WeightRenaming("attention.attention.relative_position_bias.", "relative_position_bias."),
+    mapping["beit"] = [
+        WeightRenaming("attention.query", "q_proj"),
+        WeightRenaming("attention.key", "k_proj"),
+        WeightRenaming("attention.value", "v_proj"),
+        WeightRenaming("attention.output.dense", "attention.o_proj"),
+        WeightRenaming("intermediate.dense", "mlp.fc1"),
+        WeightRenaming("output.dense", "mlp.fc2"),
         WeightRenaming("encoder.relative_position_bias", "shared_position_bias"),
-        # Checkpoints may use top-level `fpn1.*` / `fpn2.*` (anchor avoids matching inside `fpn.fpn1`).
-        WeightRenaming(r"^fpn1\.", "fpn.fpn1."),
-        WeightRenaming(r"^fpn2\.", "fpn.fpn2."),
-        WeightRenaming(r"fpn\.fpn1\.0\.", "fpn.fpn1.conv_transpose1."),
-        WeightRenaming(r"fpn\.fpn1\.1\.", "fpn.fpn1.bn."),
-        WeightRenaming(r"fpn\.fpn1\.3\.", "fpn.fpn1.conv_transpose2."),
-        WeightRenaming(r"fpn\.fpn2\.0\.", "fpn.fpn2."),
+        WeightRenaming(r"attention.attention.relative_position_bias\.", r"relative_position_bias."),
         WeightRenaming("decode_head.bottleneck.", "decode_head.psp_bottleneck."),
+        WeightRenaming(r"(?<!psp_modules\.[0-9]\.1\.)bn\.", "normalization."),
+        WeightRenaming(r"(?<!psp_modules\.[0-9]\.1\.)conv\.weight", "convolution.weight"),
         WeightRenaming(
             r"decode_head\.psp_modules\.(\d+)\.1\.conv\.weight",
             r"decode_head.psp_modules.blocks.\1.conv.convolution.weight",
@@ -691,8 +691,11 @@ def _build_checkpoint_conversion_mapping():
             r"decode_head\.psp_modules\.(\d+)\.1\.bn\.",
             r"decode_head.psp_modules.blocks.\1.conv.normalization.",
         ),
-        WeightRenaming(r"bn\.", "normalization."),
-        WeightRenaming(r"conv\.weight", "convolution.weight"),
+        WeightRenaming(r"^fpn1\.0\.", "fpn.fpn1.conv_transpose1."),
+        WeightRenaming(r"^fpn1\.1\.", "fpn.fpn1.normalization."),
+        WeightRenaming(r"^fpn1\.3\.", "fpn.fpn1.conv_transpose2."),
+        WeightRenaming(r"^fpn2\.0\.", "fpn.fpn2."),
+        *mapping["vit"].copy(),
         WeightRenaming(r"^encoder\.", "beit."),
     ]
 

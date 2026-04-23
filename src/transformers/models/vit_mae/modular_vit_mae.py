@@ -239,7 +239,7 @@ class ViTMAEEmbeddings(ViTEmbeddings):
         interpolate_pos_encoding: bool = False,
     ):
         height, width = pixel_values.shape[2:]
-        embeddings = self.patch_embeddings(pixel_values, interpolate_pos_encoding=interpolate_pos_encoding)
+        embeddings = self.patch_embeddings(pixel_values)
         if interpolate_pos_encoding:
             position_embeddings = self.interpolate_pos_encoding(embeddings, height, width)
         else:

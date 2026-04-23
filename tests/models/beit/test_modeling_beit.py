@@ -15,14 +15,11 @@
 
 import unittest
 from functools import cached_property
-from unittest.mock import patch
 
 import pytest
 from datasets import load_dataset
 
 from transformers import BeitConfig
-from transformers.conversion_mapping import get_model_conversion_mapping as _base_get_model_conversion_mapping
-from transformers.core_model_loading import WeightRenaming
 from transformers.testing_utils import (
     require_torch,
     require_torch_multi_gpu,
@@ -35,7 +32,6 @@ from transformers.utils import (
     is_vision_available,
 )
 
-from ... import test_modeling_common
 from ...test_backbone_common import BackboneTesterMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
@@ -292,66 +288,6 @@ class BeitModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     def test_feed_forward_chunking(self):
         pass
 
-    def test_reverse_loading_mapping(self, check_keys_were_modified=True):
-        # FPN / PSP renames only apply to some heads; strip them when absent. Chained FPN load uses
-        # `fpn.fpn1.0.*` then `^fpn1.*`; reverse save yields `fpn1.*` on disk, so `fpn\.fpn1\.0\.` etc. never
-        # appear in serialized keys — tolerate that assertion only.
-        def _beit_skip_segmentation_only_renaming(conversion, state_dict_keys):
-            if not isinstance(conversion, WeightRenaming):
-                return False
-            keys_str = " ".join(state_dict_keys)
-            seg_fpn_markers = (r"fpn\.fpn1", r"fpn\.fpn2")
-            for src in conversion.source_patterns:
-                if any(m in src for m in seg_fpn_markers) and "fpn.fpn1." not in keys_str:
-                    return True
-                if (src.startswith("^fpn1") or src.startswith("^fpn2")) and "fpn.fpn1." not in keys_str:
-                    return True
-                if "psp_modules" in src and "decode_head.psp_modules" not in keys_str:
-                    return True
-                # Any decode_head-scoped pattern only applies to segmentation models
-                if src.startswith("decode_head.") and "decode_head." not in keys_str:
-                    return True
-                # bn. and conv.weight patterns only apply to decode_head conv layers (not present in backbone-only models)
-                if src in (r"bn\.", r"conv\.weight") and "decode_head." not in keys_str:
-                    return True
-            return False
-
-        def _mapping(model, key_mapping=None, hf_quantizer=None, add_legacy=True):
-            conversions = _base_get_model_conversion_mapping(
-                model, key_mapping=key_mapping, hf_quantizer=hf_quantizer, add_legacy=add_legacy
-            )
-            keys = list(model.state_dict().keys())
-            return [c for c in conversions if not _beit_skip_segmentation_only_renaming(c, keys)]
-
-        _INTERMEDIATE_FPN_SNIPPETS = (
-            "`fpn\\.fpn1\\.0\\.`",
-            "`fpn\\.fpn1\\.1\\.`",
-            "`fpn\\.fpn1\\.3\\.`",
-            "`fpn\\.fpn2\\.0\\.`",
-        )
-
-        real_assert_true = self.assertTrue
-
-        def assert_true_skip_intermediate_fpn(cond, msg=None):
-            if (
-                not cond
-                and msg
-                and any(snippet in msg for snippet in _INTERMEDIATE_FPN_SNIPPETS)
-                and "did not match any of the source keys" in msg
-            ):
-                return
-            real_assert_true(cond, msg)
-
-        self.model_tester.use_relative_position_bias = True
-        self.model_tester.use_shared_relative_position_bias = True
-        try:
-            with patch.object(test_modeling_common, "get_model_conversion_mapping", _mapping):
-                with patch.object(self, "assertTrue", assert_true_skip_intermediate_fpn):
-                    super().test_reverse_loading_mapping(check_keys_were_modified)
-        finally:
-            self.model_tester.use_relative_position_bias = False
-            self.model_tester.use_shared_relative_position_bias = False
-
     @unittest.skip(reason="BEiT can't compile dynamic")
     @pytest.mark.torch_compile_test
     def test_sdpa_can_compile_dynamic(self):
@@ -437,6 +373,17 @@ class BeitModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
             inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
             loss = model(**inputs).loss
             loss.backward()
+
+    def test_reverse_loading_mapping(self):
+        # Enable both per-layer and shared relative position bias so that every
+        # mapping rule has at least one matching key in the model state dict.
+        self.model_tester.use_relative_position_bias = True
+        self.model_tester.use_shared_relative_position_bias = True
+        try:
+            super().test_reverse_loading_mapping()
+        finally:
+            self.model_tester.use_relative_position_bias = False
+            self.model_tester.use_shared_relative_position_bias = False
 
     @slow
     def test_model_from_pretrained(self):

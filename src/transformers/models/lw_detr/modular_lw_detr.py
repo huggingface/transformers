@@ -225,18 +225,9 @@ class LwDetrViTAttention(ViTAttention):
     """LwDetr ViT attention with k_proj bias=False and dropout from config.dropout_prob."""
 
     def __init__(self, config: LwDetrViTConfig):
-        nn.Module.__init__(self)
-        self.config = config
-        self.num_attention_heads = config.num_attention_heads
-        self.head_dim = getattr(config, "head_dim", config.hidden_size // config.num_attention_heads)
+        super().__init__()
         self.attention_dropout = config.dropout_prob
-        self.scaling = self.head_dim**-0.5
-        self.is_causal = False
-
-        self.q_proj = nn.Linear(config.hidden_size, config.num_attention_heads * self.head_dim, bias=config.qkv_bias)
         self.k_proj = nn.Linear(config.hidden_size, config.num_attention_heads * self.head_dim, bias=False)
-        self.v_proj = nn.Linear(config.hidden_size, config.num_attention_heads * self.head_dim, bias=config.qkv_bias)
-        self.o_proj = nn.Linear(config.num_attention_heads * self.head_dim, config.hidden_size, bias=True)
         self.num_key_value_groups = 1
 
 
