@@ -319,6 +319,8 @@ class ContinuousBatchingTopPLogitsWarper(ContinuousBatchingLogitsProcessor):
         return scores.masked_fill(indices_to_remove, self.filter_value)
 
 
+# TODO: add non-per-request CB variants so the memory-efficient warpers work when `per_request_processors=False`.
+# TODO: fuse temperature + top-k + top-p into a single pass to reuse the softmax/sort and cut activation peak.
 CLASSIC_TO_CB_PROCESSORS_MAP = {
     TemperatureLogitsWarper: ContinuousBatchingTemperatureLogitsWarper,
     TopKLogitsWarper: ContinuousBatchingTopKLogitsWarper,
