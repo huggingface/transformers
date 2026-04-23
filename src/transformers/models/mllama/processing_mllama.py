@@ -246,6 +246,7 @@ class MllamaProcessor(ProcessorMixin):
             text = [build_string_from_input(text_item, self.bos_token, self.image_token) for text_item in text]
 
         if images is not None:
+            images = self.image_processor.fetch_images(images)
             images = make_nested_list_of_images(images)
         return images, text
 

@@ -638,7 +638,7 @@ class ProcessorMixin(PushToHubMixin):
         images, text, videos, audio = self.prepare_inputs_layout(images=images, text=text, videos=videos, audio=audio)
         self.validate_inputs(images=images, text=text, videos=videos, audio=audio, **kwargs)
 
-        kwargs = self._merge_kwargs(
+        merged_kwargs = self._merge_kwargs(
             self.valid_processor_kwargs,
             tokenizer_init_kwargs=self.tokenizer.init_kwargs if hasattr(self, "tokenizer") else {},
             **kwargs,
@@ -647,25 +647,27 @@ class ProcessorMixin(PushToHubMixin):
         processed_images = processed_videos = processed_audio = {}
         images_replacements = videos_replacements = audio_replacements = []
         if images is not None and hasattr(self, "image_processor"):
-            processed_images, images_replacements = self._process_images(images, **kwargs["images_kwargs"])
+            processed_images, images_replacements = self._process_images(images, **merged_kwargs["images_kwargs"])
         if videos is not None and hasattr(self, "video_processor"):
-            processed_videos, videos_replacements = self._process_videos(videos, **kwargs["videos_kwargs"])
+            processed_videos, videos_replacements = self._process_videos(videos, **merged_kwargs["videos_kwargs"])
         if audio is not None and hasattr(self, "feature_extractor"):
-            processed_audio, audio_replacements = self._process_audio(audio, **kwargs["audio_kwargs"])
+            processed_audio, audio_replacements = self._process_audio(audio, **merged_kwargs["audio_kwargs"])
 
         text_inputs = {}
-        return_tensors = kwargs["text_kwargs"].get("return_tensors", None)
+        return_tensors = merged_kwargs["text_kwargs"].get("return_tensors", None)
         if getattr(self, "tokenizer", None) is not None and text is not None:
-            return_mm_token_type_ids = kwargs["text_kwargs"].pop("return_mm_token_type_ids", False)
-            return_text_replacement_offsets = kwargs["text_kwargs"].pop("return_mm_token_type_ids", False)
+            return_mm_token_type_ids = merged_kwargs["text_kwargs"].pop("return_mm_token_type_ids", False)
+            return_text_replacement_offsets = merged_kwargs["text_kwargs"].pop(
+                "return_text_replacement_offsets", False
+            )
 
-            text, text_replacement_offsets = self.get_text_replacement(
+            text, text_replacement_offsets = self.get_text_with_replacements(
                 text,
                 images_replacements,
                 videos_replacements,
                 audio_replacements,
             )
-            text_inputs = self.tokenizer(text, **kwargs["text_kwargs"])
+            text_inputs = self.tokenizer(text, **merged_kwargs["text_kwargs"])
             self._check_special_mm_tokens(text, text_inputs, modalities=["image", "video", "audio"])
 
             if return_text_replacement_offsets:
@@ -677,6 +679,10 @@ class ProcessorMixin(PushToHubMixin):
         # Pop unused keys from the inputs, e.g. inputs used only to compute number of image tokens
         data = {**text_inputs, **processed_images, **processed_videos, **processed_audio}
         data = {k: v for k, v in data.items() if k not in self.unused_input_names}
+
+        if not kwargs.get("return_metadata"):
+            data.pop("video_metadata", None)
+
         return BatchFeature(data, tensor_type=return_tensors)
 
     def prepare_inputs_layout(
@@ -729,6 +735,7 @@ class ProcessorMixin(PushToHubMixin):
         audio_replacements = self.get_audio_replacement(audio, processed_data)
         return processed_data, audio_replacements
 
+    # To be overriden by each model's processor if they need to add placeholder tokens
     def replace_image_token(self, image_inputs: dict, image_idx: int) -> str:
         return ""
 
@@ -785,16 +792,16 @@ class ProcessorMixin(PushToHubMixin):
             replacement_texts.append(replacement_text)
         return replacement_texts
 
-    def get_text_replacement(
+    def get_text_with_replacements(
         self,
         text: list[str],
-        images_replacements: list[str] | None = [],
-        videos_replacements: list[str] | None = [],
-        audio_replacements: list[str] | None = [],
+        images_replacements: list[str] = [],
+        videos_replacements: list[str] = [],
+        audio_replacements: list[str] = [],
     ) -> tuple[list[str], list[dict[str, Any]]]:
         # Early exit if no special tokens found, nothing to replace
         if not self.all_special_multimodal_tokens:
-            return text, None
+            return text, []
 
         # Keep the order so we can extract groups later and replace
         image_token = re.escape(getattr(self, "image_token", ""))
@@ -832,6 +839,7 @@ class ProcessorMixin(PushToHubMixin):
                     replacement_offsets.append({"type": "audio"})
 
                 # update common values such as start-end spans and replacement text
+                # could be returned if users need to analyze `placeholders` or in 3rd party libs
                 replacement_offsets[-1].update(
                     {
                         "span": (start, end),
@@ -875,15 +883,15 @@ class ProcessorMixin(PushToHubMixin):
     # override if they use special BOI/EOI/row/col/etc tokens that have to be marked
     # These values are used to build `mm_token_type_ids`
     @property
-    def image_token_ids(self) -> list[int]:
+    def image_token_ids(self) -> list[int | None]:
         return [getattr(self, "image_token_id", None)]
 
     @property
-    def video_token_ids(self) -> list[int]:
+    def video_token_ids(self) -> list[int | None]:
         return [getattr(self, "video_token_id", None)]
 
     @property
-    def audio_token_ids(self) -> list[int]:
+    def audio_token_ids(self) -> list[int | None]:
         return [getattr(self, "audio_token_id", None)]
 
     def check_argument_for_proper_class(self, argument_name, argument):
@@ -2098,8 +2106,6 @@ class ProcessorMixin(PushToHubMixin):
                         offsets = offset_mapping[i]
                         offset_starts = [start for start, end in offsets]
                         for assistant_start_char, assistant_end_char in generation_indices[i]:
-                            # assistant_start_char += 4025
-                            # assistant_end_char += 4025
                             start_pos = bisect.bisect_left(offset_starts, assistant_start_char)
                             end_pos = bisect.bisect_left(offset_starts, assistant_end_char)
 

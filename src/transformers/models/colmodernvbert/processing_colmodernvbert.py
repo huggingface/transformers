@@ -26,7 +26,7 @@ import numpy as np
 import torch
 
 from ...feature_extraction_utils import BatchFeature
-from ...image_utils import ImageInput, is_valid_image, valid_images
+from ...image_utils import ImageInput, is_valid_image
 from ...processing_utils import MultiModalData, ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import AddedToken, BatchEncoding, TextInput
 from ...utils import auto_docstring
@@ -145,7 +145,7 @@ class ColModernVBertProcessor(ProcessorMixin):
             image_inputs.pop("cols", None)
 
             if text is not None:
-                text, text_replacement_offsets = self.get_text_replacement(
+                text, text_replacement_offsets = self.get_text_with_replacements(
                     text, images_replacements=images_replacements
                 )
                 text_inputs = self.tokenizer(text, **output_kwargs["text_kwargs"])
@@ -230,11 +230,6 @@ class ColModernVBertProcessor(ProcessorMixin):
                 raise ValueError(
                     f"Found {sum(n_images_in_text)} {self.image_token} tokens in the text but no images were passed."
                 )
-
-        if images is not None and not valid_images(images):
-            raise ValueError(
-                "Invalid input images. Please provide a single image or a list of images or a list of list of images."
-            )
 
     def replace_image_token(self, image_inputs: dict, image_idx: int) -> str:
         image_rows = [row for row_list in image_inputs["rows"] for row in row_list][image_idx]

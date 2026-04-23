@@ -84,6 +84,7 @@ class Gemma3Processor(ProcessorMixin):
             text = [text]
 
         if images is not None:
+            images = self.image_processor.fetch_images(images)
             images = make_nested_list_of_images(images)
 
         # Create empty text to be replaced with placeholders

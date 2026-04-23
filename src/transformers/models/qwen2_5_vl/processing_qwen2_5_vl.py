@@ -139,11 +139,7 @@ class Qwen2_5_VLProcessor(ProcessorMixin):
         processed_data, video_replacements = super()._process_videos(videos, **kwargs)
         video_grid_thw = processed_data["video_grid_thw"]
 
-        if not kwargs.get("return_metadata"):
-            video_metadata = processed_data.pop("video_metadata")
-        else:
-            video_metadata = processed_data["video_metadata"]
-
+        video_metadata = processed_data["video_metadata"]
         fps = [metadata.sampled_fps for metadata in video_metadata]
 
         if isinstance(fps, (int, float)):

@@ -17,7 +17,7 @@ import numpy as np
 
 from ...audio_utils import AudioInput
 from ...image_utils import ImageInput, make_nested_list_of_images
-from ...processing_utils import BatchFeature, MultiModalData, ProcessingKwargs, ProcessorMixin, Unpack
+from ...processing_utils import MultiModalData, ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
 from ...utils import auto_docstring, is_vision_available, logging
 from ...utils.import_utils import requires
@@ -105,22 +105,6 @@ class Gemma4Processor(ProcessorMixin):
             **kwargs,
         )
 
-    @auto_docstring
-    def __call__(
-        self,
-        images: ImageInput | None = None,
-        text: TextInput | PreTokenizedInput | list[TextInput] | list[PreTokenizedInput] = None,
-        audio: AudioInput | None = None,
-        videos: VideoInput | None = None,
-        **kwargs: Unpack[Gemma4ProcessorKwargs],
-    ) -> BatchFeature:
-        model_inputs = super().__call__(images=images, text=text, videos=videos, audio=audio, **kwargs)
-
-        # If user has not requested video metadata, pop it
-        if not kwargs.get("return_metadata"):
-            model_inputs.pop("video_metadata", None)
-        return model_inputs
-
     def prepare_inputs_layout(
         self,
         images: ImageInput | None = None,
@@ -131,7 +115,10 @@ class Gemma4Processor(ProcessorMixin):
         if text is not None and isinstance(text, str):
             text = [text]
 
+        text = text.copy()
+
         if images is not None:
+            images = self.image_processor.fetch_images(images)
             images = make_nested_list_of_images(images)
 
         # Create empty text to be replaced with placeholders

@@ -17,12 +17,8 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from ...feature_extraction_utils import BatchFeature
-from ...image_utils import ImageInput
-from ...processing_utils import MultiModalData, ProcessingKwargs, ProcessorMixin, Unpack
-from ...tokenization_utils_base import PreTokenizedInput, TextInput
+from ...processing_utils import MultiModalData, ProcessingKwargs, ProcessorMixin
 from ...utils import auto_docstring, logging
-from ...video_utils import VideoInput
 
 
 logger = logging.get_logger(__name__)
@@ -68,22 +64,22 @@ class VideoLlama3Processor(ProcessorMixin):
             for grid_thw, merge_size in zip(video_inputs["video_grid_thw"], video_inputs["video_merge_sizes"])
         ]
         video_compression_masks = video_inputs["video_compression_mask"].split(num_video_tokens)
-        metadata = video_inputs["video_metadata"[video_idx]]
+        metadata = video_inputs["video_metadata"][video_idx]
 
         if metadata.fps is None:
             logger.warning_once(
-                "VideoLLaMA4 requires frame timestamps to construct prompts, but the `fps` of the input video could not be inferred. "
+                "VideoLLaMA3 requires frame timestamps to construct prompts, but the `fps` of the input video could not be inferred. "
                 "Probably `video_metadata` was missing from inputs and you passed pre-sampled frames. "
                 "Defaulting to `fps=1`. Please provide `video_metadata` for more accurate results."
             )
         metadata.fps = 1 if metadata.fps is None else metadata.fps
 
         frame_compression_masks = video_compression_masks[video_idx].split(
-            len(video_compression_masks[video_idx]) // len(metadata.timestamps[video_idx])
+            len(video_compression_masks[video_idx]) // len(metadata.timestamps)
         )
         num_frame_tokens = [x.sum() for x in frame_compression_masks]
         video_placeholder = [
-            f"Time {t:.1f}s:" + self.video_token * n for n, t in zip(num_frame_tokens, metadata.timestamps[video_idx])
+            f"Time {t:.1f}s:" + self.video_token * n for n, t in zip(num_frame_tokens, metadata.timestamps)
         ]
 
         return ",".join(video_placeholder)
@@ -152,33 +148,6 @@ class VideoLlama3Processor(ProcessorMixin):
             clean_up_tokenization_spaces=clean_up_tokenization_spaces,
             **kwargs,
         )
-
-    def __call__(
-        self,
-        images: ImageInput = None,
-        text: TextInput | PreTokenizedInput | list[TextInput] | list[PreTokenizedInput] = None,
-        videos: VideoInput = None,
-        **kwargs: Unpack[VideoLlama3ProcessorKwargs],
-    ) -> BatchFeature:
-        r"""
-        Returns:
-            [`BatchFeature`]: A [`BatchFeature`] with the following fields:
-
-            - **input_ids** -- List of token ids to be fed to a model. Returned when `text` is not `None`.
-            - **attention_mask** -- List of indices specifying which tokens should be attended to by the model (when
-              `return_attention_mask=True` or if *"attention_mask"* is in `self.model_input_names` and if `text` is not
-              `None`).
-            - **pixel_values** -- Pixel values to be fed to a model. Returned when `images` is not `None`.
-            - **pixel_values_videos** -- Pixel values of videos to be fed to a model. Returned when `videos` is not `None`.
-            - **image_grid_thw** -- List of image 3D grid in LLM. Returned when `images` is not `None`.
-            - **video_grid_thw** -- List of video 3D grid in LLM. Returned when `videos` is not `None`.
-        """
-        model_inputs = super().__call__(images=images, text=text, videos=videos, **kwargs)
-
-        # If user has not requested video metadata, pop it
-        if not kwargs.get("return_metadata"):
-            model_inputs.pop("video_metadata", None)
-        return model_inputs
 
 
 __all__ = ["VideoLlama3Processor"]

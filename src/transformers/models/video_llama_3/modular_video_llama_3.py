@@ -1037,22 +1037,22 @@ class VideoLlama3Processor(Qwen3VLProcessor):
             for grid_thw, merge_size in zip(video_inputs["video_grid_thw"], video_inputs["video_merge_sizes"])
         ]
         video_compression_masks = video_inputs["video_compression_mask"].split(num_video_tokens)
-        metadata = video_inputs["video_metadata"[video_idx]]
+        metadata = video_inputs["video_metadata"][video_idx]
 
         if metadata.fps is None:
             logger.warning_once(
-                "VideoLLaMA4 requires frame timestamps to construct prompts, but the `fps` of the input video could not be inferred. "
+                "VideoLLaMA3 requires frame timestamps to construct prompts, but the `fps` of the input video could not be inferred. "
                 "Probably `video_metadata` was missing from inputs and you passed pre-sampled frames. "
                 "Defaulting to `fps=1`. Please provide `video_metadata` for more accurate results."
             )
         metadata.fps = 1 if metadata.fps is None else metadata.fps
 
         frame_compression_masks = video_compression_masks[video_idx].split(
-            len(video_compression_masks[video_idx]) // len(metadata.timestamps[video_idx])
+            len(video_compression_masks[video_idx]) // len(metadata.timestamps)
         )
         num_frame_tokens = [x.sum() for x in frame_compression_masks]
         video_placeholder = [
-            f"Time {t:.1f}s:" + self.video_token * n for n, t in zip(num_frame_tokens, metadata.timestamps[video_idx])
+            f"Time {t:.1f}s:" + self.video_token * n for n, t in zip(num_frame_tokens, metadata.timestamps)
         ]
 
         return ",".join(video_placeholder)

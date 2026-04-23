@@ -17,13 +17,10 @@ Processor class for LLaVa-NeXT-Video.
 
 import numpy as np
 
-from ...feature_extraction_utils import BatchFeature
 from ...image_processing_utils import select_best_resolution
-from ...image_utils import ImageInput, get_image_size, to_numpy_array
-from ...processing_utils import MultiModalData, ProcessingKwargs, ProcessorMixin, Unpack
-from ...tokenization_utils_base import PreTokenizedInput, TextInput
+from ...image_utils import get_image_size, to_numpy_array
+from ...processing_utils import MultiModalData, ProcessingKwargs, ProcessorMixin
 from ...utils import auto_docstring, logging
-from ...video_utils import VideoInput
 
 
 logger = logging.get_logger(__name__)
@@ -88,52 +85,6 @@ class LlavaNextVideoProcessor(ProcessorMixin):
             else tokenizer.convert_tokens_to_ids(self.video_token)
         )
         super().__init__(video_processor, image_processor, tokenizer, chat_template=chat_template)
-
-    @auto_docstring
-    def __call__(
-        self,
-        images: ImageInput | None = None,
-        text: TextInput | PreTokenizedInput | list[TextInput] | list[PreTokenizedInput] = None,
-        videos: VideoInput | None = None,
-        **kwargs: Unpack[LlavaNextVideoProcessorKwargs],
-    ) -> BatchFeature:
-        r"""
-        Returns:
-            [`BatchFeature`]: A [`BatchFeature`] with the following fields:
-
-            - **input_ids** -- List of token ids to be fed to a model. Returned when `text` is not `None`.
-            - **attention_mask** -- List of indices specifying which tokens should be attended to by the model (when
-              `return_attention_mask=True` or if *"attention_mask"* is in `self.model_input_names` and if `text` is not
-              `None`).
-            - **pixel_values** -- Pixel values to be fed to a model. Returned when `images` is not `None`.
-        """
-
-        images, text, videos, _ = self.prepare_inputs_layout(images=images, text=text, videos=videos)
-        self.validate_inputs(images=images, text=text, videos=videos, **kwargs)
-
-        output_kwargs = self._merge_kwargs(
-            LlavaNextVideoProcessorKwargs,
-            tokenizer_init_kwargs=self.tokenizer.init_kwargs,
-            **kwargs,
-        )
-
-        image_inputs = videos_inputs = {}
-        images_replacements = videos_replacements = []
-        if images is not None:
-            image_inputs, images_replacements = self._process_images(images, **output_kwargs["images_kwargs"])
-        if videos is not None:
-            videos_inputs, videos_replacements = self._process_videos(videos, **output_kwargs["videos_kwargs"])
-
-        if images is not None or videos is not None:
-            text, text_replacement_offsets = self.get_text_replacement(
-                text, images_replacements=images_replacements, videos_replacements=videos_replacements
-            )
-
-        return_tensors = output_kwargs["text_kwargs"].pop("return_tensors", None)
-        text_inputs = self.tokenizer(text, **output_kwargs["text_kwargs"])
-        self._check_special_mm_tokens(text, text_inputs, modalities=["image", "video"])
-
-        return BatchFeature(data={**text_inputs, **image_inputs, **videos_inputs}, tensor_type=return_tensors)
 
     def replace_image_token(self, image_inputs: dict | None = None, image_idx: int = 0) -> str:
         image_size = image_inputs["image_sizes"][image_idx]
