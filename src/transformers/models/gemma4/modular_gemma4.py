@@ -25,7 +25,6 @@ from ... import initialization as init
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
 from ...configuration_utils import PreTrainedConfig
-from ...integrations import use_kernelized_func
 from ...masking_utils import (
     create_bidirectional_mask,
     create_causal_mask,
@@ -901,7 +900,6 @@ class Gemma4TextRotaryEmbedding(Gemma3RotaryEmbedding):
             setattr(self, f"{layer_type}_attention_scaling", curr_attention_scaling)
 
 
-@use_kernelized_func(apply_rotary_pos_emb)
 class Gemma4TextAttention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
 
@@ -1004,9 +1002,9 @@ class Gemma4TextAttention(nn.Module):
         if self.store_full_length_kv:
             shared_kv_states[self.layer_idx] = key_states, value_states
 
-        attention_interface: Callable = eager_attention_forward
-        if self.config._attn_implementation != "eager":
-            attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
+        attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
+            self.config._attn_implementation, eager_attention_forward
+        )
 
         attn_output, attn_weights = attention_interface(
             self,
@@ -1162,7 +1160,6 @@ class Gemma4PreTrainedModel(Gemma3nPreTrainedModel):
     _no_split_modules = ["Gemma4TextDecoderLayer", "Gemma4VisionEncoderLayer", "Gemma4AudioLayer"]
     input_modalities = ("image", "text", "video", "audio")
     _can_record_outputs = None  # override
-    _skip_keys_device_placement = ["past_key_values", "shared_kv_states"]
 
     @torch.no_grad()
     def _init_weights(self, module):
@@ -1662,26 +1659,18 @@ def token_type_ids_mask_function(
 class Gemma4Model(Gemma3nModel):
     def __init__(self, config: Gemma4Config):
         super().__init__(config)
-        del self.vision_tower
-        del self.embed_vision
         self.vision_tower = AutoModel.from_config(config.vision_config) if config.vision_config is not None else None
         self.embed_vision = (
             Gemma4MultimodalEmbedder(config.vision_config, config.text_config)
             if config.vision_config is not None
             else None
         )
-        del self.audio_tower
-        del self.embed_audio
         self.audio_tower = AutoModel.from_config(config.audio_config) if config.audio_config is not None else None
         self.embed_audio = (
             Gemma4MultimodalEmbedder(config.audio_config, config.text_config)
             if config.audio_config is not None
             else None
         )
-        # Grab the ones from the child
-        self._keys_to_ignore_on_load_unexpected = [
-            f"language_model.{name}" for name in self.language_model._keys_to_ignore_on_load_unexpected
-        ]
 
     def get_per_layer_input_embeddings(self):
         return self.language_model.embed_tokens_per_layer
@@ -1976,13 +1965,6 @@ class Gemma4Model(Gemma3nModel):
 class Gemma4ForConditionalGeneration(Gemma3nForConditionalGeneration):
     base_model_prefix = "model"
 
-    def __init__(self, config: Gemma4Config):
-        super().__init__(config)
-        # Grab the ones from the child
-        self._keys_to_ignore_on_load_unexpected = [
-            f"model.{name}" for name in self.model._keys_to_ignore_on_load_unexpected
-        ]
-
     def get_per_layer_input_embeddings(self):
         return self.model.get_per_layer_input_embeddings()
 
@@ -2147,6 +2129,9 @@ class Gemma4ForConditionalGeneration(Gemma3nForConditionalGeneration):
             model_inputs["pixel_values_videos"] = pixel_values_videos
             model_inputs["input_features"] = input_features
             model_inputs["input_features_mask"] = input_features_mask
+        else:
+            # Don't pass to not apply bidirectional mask on top
+            model_inputs["mm_token_type_ids"] = None
 
         return model_inputs
 
