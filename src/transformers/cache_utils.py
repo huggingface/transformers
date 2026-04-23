@@ -31,6 +31,7 @@ class CacheLayerMixin(ABC):
     def __init__(self):
         self.keys: torch.Tensor | None = None
         self.values: torch.Tensor | None = None
+        self.indexer_keys: torch.Tensor | None = None
         self.is_initialized = False
 
     def __repr__(self):
@@ -52,6 +53,9 @@ class CacheLayerMixin(ABC):
 
     @abstractmethod
     def get_max_cache_shape(self) -> int: ...
+    
+    @abstractmethod
+    def update_cached_keys(self, cached_keys: torch.Tensor) -> torch.Tensor: ...
 
     def offload(self):
         """Offload this layer's data to CPU device."""
@@ -77,12 +81,16 @@ class CacheLayerMixin(ABC):
                 self.cumulative_length = 0
             else:
                 self.cumulative_length.zero_()
+        if hasattr(self, "indexer_keys"):
+            self.indexer_keys = None
 
     def reorder_cache(self, beam_idx: torch.LongTensor) -> None:
         """Reorders this layer's cache for beam search."""
         if self.get_seq_length() > 0:
             self.keys = self.keys.index_select(0, beam_idx.to(self.keys.device))
             self.values = self.values.index_select(0, beam_idx.to(self.values.device))
+        if getattr(self, "indexer_keys", None) is not None and self.indexer_keys.numel() > 0:
+            self.indexer_keys = self.indexer_keys.index_select(0, beam_idx.to(self.indexer_keys.device))
 
 
 class DynamicLayer(CacheLayerMixin):
@@ -120,6 +128,16 @@ class DynamicLayer(CacheLayerMixin):
         self.values = torch.cat([self.values, value_states], dim=-2)
         return self.keys, self.values
 
+    def update_cached_keys(self, cached_keys: torch.Tensor) -> torch.Tensor:
+        """
+        Update the indexer's key caches.
+        """
+        if self.indexer_keys is not None:
+            self.indexer_keys = torch.cat([self.indexer_keys, cached_keys], dim=1)
+        else:
+            self.indexer_keys = cached_keys
+        return self.indexer_keys
+
     def get_mask_sizes(self, query_length: int) -> tuple[int, int]:
         """Return the length and offset of the cache, used to generate the mask"""
         kv_offset = 0
@@ -149,18 +167,24 @@ class DynamicLayer(CacheLayerMixin):
 
         self.keys = self.keys[..., :max_length, :]
         self.values = self.values[..., :max_length, :]
+        if self.indexer_keys is not None and self.indexer_keys.numel() > 0:
+            self.indexer_keys = self.indexer_keys[:, :max_length, :]
 
     def batch_repeat_interleave(self, repeats: int) -> None:
         """Repeat the cache `repeats` times in the batch dimension."""
         if self.get_seq_length() > 0:
             self.keys = self.keys.repeat_interleave(repeats, dim=0)
             self.values = self.values.repeat_interleave(repeats, dim=0)
+        if self.indexer_keys is not None and self.indexer_keys.numel() > 0:
+            self.indexer_keys = self.indexer_keys.repeat_interleave(repeats, dim=0)
 
     def batch_select_indices(self, indices: torch.Tensor) -> None:
         """Only keep the `indices` in the batch dimension of the cache."""
         if self.get_seq_length() > 0:
             self.keys = self.keys[indices, ...]
             self.values = self.values[indices, ...]
+        if self.indexer_keys is not None and self.indexer_keys.numel() > 0:
+            self.indexer_keys = self.indexer_keys[indices, ...]
 
 
 class DynamicSlidingWindowLayer(DynamicLayer):
@@ -352,6 +376,9 @@ class StaticLayer(CacheLayerMixin):
     def get_max_cache_shape(self) -> int:
         """Return the maximum cache shape of the cache"""
         return self.max_cache_len
+
+    def update_cached_keys(self, cached_keys: torch.Tensor) -> torch.Tensor:
+        return cached_keys
 
 
 class StaticSlidingWindowLayer(StaticLayer):
@@ -980,6 +1007,31 @@ class Cache:
             raise ValueError("Cannot call `update_conv_state` on a non-LinearAttention layer!")
         recurrent_states = self.layers[layer_idx].update_recurrent_state(recurrent_states, **kwargs)
         return recurrent_states
+
+    def update_cached_keys(self, cached_keys: torch.Tensor, layer_idx: int) -> torch.Tensor:
+        """
+        Updates the indexer's key cache for the layer `layer_idx`.
+
+        Parameters:
+            cached_keys (`torch.Tensor`):
+                The new indexer key states to cache, shape `[batch_size, seq_len, head_dim]`.
+            layer_idx (`int`):
+                The index of the layer to cache the states for.
+
+        Return:
+            `torch.Tensor`: The updated cached keys.
+        """
+        if self.layer_class_to_replicate is not None:
+            while len(self.layers) <= layer_idx:
+                self.layers.append(self.layer_class_to_replicate())
+        return self.layers[layer_idx].update_cached_keys(cached_keys)
+
+    def reset_cached_keys(self, layer_idx: int) -> None:
+        """Reset the indexer's cached keys for the given layer (e.g. on prefill)."""
+        if layer_idx < len(self.layers):
+            layer = self.layers[layer_idx]
+            if hasattr(layer, "indexer_keys"):
+                layer.indexer_keys = None
 
     def early_initialization(
         self,
