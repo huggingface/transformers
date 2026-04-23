@@ -1971,7 +1971,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
 
     def get_correct_experts_implementation(self, requested_experts: str | None) -> str:
         applicable_experts = "grouped_mm" if requested_experts is None else requested_experts
-        base_experts_fns = ["eager"] + list(ALL_EXPERTS_FUNCTIONS.keys())
+        base_experts_fns = list(set(["eager"] + list(ALL_EXPERTS_FUNCTIONS.keys()) + list(ALL_FP8_EXPERTS_FUNCTIONS.keys())))
         valid_experts_str_list = [f'`experts_implementation="{fn}"`' for fn in base_experts_fns]
         valid_experts_str_list[-1] = "and " + valid_experts_str_list[-1]
         valid_experts_str = ", ".join(valid_experts_str_list)
