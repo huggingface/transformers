@@ -329,6 +329,7 @@ CONFIG_MAPPING_NAMES = OrderedDict(
         ("metaclip_2_vision_model", "MetaClip2VisionConfig"),
         ("mgp-str", "MgpstrConfig"),
         ("mimi", "MimiConfig"),
+        ("minicpm3", "MiniCPM3Config"),
         ("minimax", "MiniMaxConfig"),
         ("minimax_m2", "MiniMaxM2Config"),
         ("ministral", "MinistralConfig"),
