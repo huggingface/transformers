@@ -763,14 +763,42 @@ class MiniCPMV4_6Model(MiniCPMV4_6PreTrainedModel):
             inputs_embeds = self.get_input_embeddings()(input_ids)
 
         if pixel_values is not None and self.config.image_token_id is not None:
-            image_features = self._process_visual_features(pixel_values, target_sizes, inputs_embeds, downsample_mode)
+            # During beam search, _expand_inputs_for_generation duplicates the NaViT-packed
+            # pixel_values [1,C,P,L] into [num_beams,C,P,L]. We undo this, encode once, and
+            # repeat the resulting features to match the beam-expanded inputs_embeds.
+            expand_factor = pixel_values.shape[0]
+            if expand_factor > 1:
+                pixel_values = pixel_values[:1]
+                target_sizes = target_sizes[::expand_factor]
+
+            vision_output = self.get_image_features(pixel_values, target_sizes, downsample_mode=downsample_mode)
+            image_features = torch.cat(vision_output.pooler_output, dim=0).to(
+                device=inputs_embeds.device, dtype=inputs_embeds.dtype
+            )
+            if expand_factor > 1:
+                image_features = image_features.repeat(expand_factor, 1)
+
             mask = self.get_placeholder_mask(input_ids, inputs_embeds, image_features, self.config.image_token_id)
             inputs_embeds = inputs_embeds.masked_scatter(mask, image_features)
 
         if pixel_values_videos is not None and self.config.video_token_id is not None:
-            video_features = self._process_visual_features(
-                pixel_values_videos, target_sizes_videos, inputs_embeds, downsample_mode, is_video=True
+            # During beam search, video frames [T,C,P,L] are expanded to [T*num_beams,C,P,L]
+            # with interleaved duplicates. We undo this via stride indexing, encode once,
+            # and repeat the features.
+            expand_factor = inputs_embeds.shape[0]
+            if expand_factor > 1:
+                pixel_values_videos = pixel_values_videos[::expand_factor]
+                target_sizes_videos = target_sizes_videos[::expand_factor]
+
+            vision_output = self.get_video_features(
+                pixel_values_videos, target_sizes_videos, downsample_mode=downsample_mode
             )
+            video_features = torch.cat(vision_output.pooler_output, dim=0).to(
+                device=inputs_embeds.device, dtype=inputs_embeds.dtype
+            )
+            if expand_factor > 1:
+                video_features = video_features.repeat(expand_factor, 1)
+
             mask = self.get_placeholder_mask(input_ids, inputs_embeds, video_features, self.config.video_token_id)
             inputs_embeds = inputs_embeds.masked_scatter(mask, video_features)
 
@@ -784,51 +812,31 @@ class MiniCPMV4_6Model(MiniCPMV4_6PreTrainedModel):
         )
         return output
 
-    def _process_visual_features(
+    @can_return_tuple
+    @auto_docstring(
+        custom_intro="Extract video features: repack frames into NaViT format, then vision encoder + merger."
+    )
+    def get_video_features(
         self,
-        pixel_values: torch.Tensor,
-        target_sizes: torch.Tensor,
-        inputs_embeds: torch.Tensor,
+        pixel_values_videos: torch.FloatTensor,
+        target_sizes_videos: torch.IntTensor,
         downsample_mode: str | None = None,
-        is_video: bool = False,
-    ) -> torch.Tensor:
-        """Run pixel_values through vision tower + merger, handling beam-expanded duplicates.
-
-        For videos (``is_video=True``), ``pixel_values`` has shape ``[T, C, P, L]``
-        (one entry per frame). We repack it into NaViT format ``[1, C, P, T*L]`` and
-        repeat ``target_sizes`` T times so the vision encoder sees all frames as one
-        packed batch.
+    ) -> BaseModelOutputWithPooling:
+        r"""
+        pixel_values_videos (`torch.FloatTensor` of shape `(num_frames, channels, patch_size, seq_len)`):
+            Per-frame pixel patches produced by the video processor.
+        target_sizes_videos (`torch.IntTensor` of shape `(num_patches, 2)`):
+            Height and width (in patches) of each visual unit.
+        downsample_mode (`str`, *optional*):
+            When set to `"4x"` the intermediate `vit_merger` is skipped so that each frame keeps
+            `4×` more visual tokens. Default `"16x"` mode applies the full merge pipeline.
         """
-        batch_size = inputs_embeds.shape[0]
-        expand_factor = 1
-
-        if is_video:
-            if batch_size > 1:
-                expand_factor = batch_size
-                pixel_values = pixel_values[::expand_factor]
-                target_sizes = target_sizes[::expand_factor]
-
-            num_frames = pixel_values.shape[0]
-            pixel_values = pixel_values.permute(1, 2, 0, 3).reshape(
-                1, pixel_values.shape[1], pixel_values.shape[2], -1
-            )
-            target_sizes = target_sizes.repeat(num_frames, 1)
-        else:
-            pv_batch = pixel_values.shape[0]
-            if pv_batch > 1:
-                expand_factor = pv_batch
-                pixel_values = pixel_values[:1]
-                target_sizes = target_sizes[::pv_batch]
-
-        vision_output = self.get_image_features(pixel_values, target_sizes, downsample_mode=downsample_mode)
-        features = torch.cat(vision_output.pooler_output, dim=0).to(
-            device=inputs_embeds.device, dtype=inputs_embeds.dtype
+        num_frames = pixel_values_videos.shape[0]
+        pixel_values = pixel_values_videos.permute(1, 2, 0, 3).reshape(
+            1, pixel_values_videos.shape[1], pixel_values_videos.shape[2], -1
         )
-
-        if expand_factor > 1:
-            features = features.repeat(expand_factor, 1)
-
-        return features
+        target_sizes = target_sizes_videos.repeat(num_frames, 1)
+        return self.get_image_features(pixel_values, target_sizes, downsample_mode=downsample_mode)
 
 
 class MiniCPMV4_6ForConditionalGeneration(MiniCPMV4_6PreTrainedModel, GenerationMixin):
@@ -904,6 +912,12 @@ class MiniCPMV4_6ForConditionalGeneration(MiniCPMV4_6PreTrainedModel, Generation
     @auto_docstring(custom_intro="Extract image features: vision encoder, insert merger, then MLP merger.")
     def get_image_features(self, *args, **kwargs) -> BaseModelOutputWithPooling:
         return self.model.get_image_features(*args, **kwargs)
+
+    @auto_docstring(
+        custom_intro="Extract video features: repack frames into NaViT format, then vision encoder + merger."
+    )
+    def get_video_features(self, *args, **kwargs) -> BaseModelOutputWithPooling:
+        return self.model.get_video_features(*args, **kwargs)
 
     def prepare_inputs_for_generation(
         self,
