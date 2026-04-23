@@ -425,8 +425,6 @@ class GptOssPreTrainedModel(PreTrainedModel):
 
 @auto_docstring
 class GptOssModel(GptOssPreTrainedModel):
-    _no_split_modules = ["GptOssDecoderLayer"]
-
     def __init__(self, config: GptOssConfig):
         super().__init__(config)
         self.padding_idx = config.pad_token_id
