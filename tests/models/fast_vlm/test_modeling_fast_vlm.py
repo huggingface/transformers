@@ -27,7 +27,9 @@ from transformers import (
     is_vision_available,
 )
 from transformers.testing_utils import (
+    Expectations,
     cleanup,
+    require_deterministic_for_xpu,
     require_torch,
     require_vision,
     slow,
@@ -269,6 +271,7 @@ class FastVlmForConditionalGenerationIntegrationTest(unittest.TestCase):
         )
 
     @require_vision
+    @require_deterministic_for_xpu
     def test_small_model_integration_test_batch(self):
         model = FastVlmForConditionalGeneration.from_pretrained(
             "KamilaMila/FastVLM-0.5B", device_map=torch_device, dtype=torch.bfloat16
@@ -289,14 +292,22 @@ class FastVlmForConditionalGenerationIntegrationTest(unittest.TestCase):
 
         output = model.generate(**inputs, max_new_tokens=20)
 
-        EXPECTED_DECODED_TEXT = [
-            "user\n\nWhat are the things I should be cautious about when I visit this place? What should I bring with me?\nassistant\n\nWhen visiting this serene place, it's essential to be mindful of the following:\n\n1. **",
-            "user\n\nWhat is this?\nassistant\n\nThe image depicts two cats, one of which is a tabby, lying on a pink surface"
-        ]  # fmt: skip
+        EXPECTED_DECODED_TEXT = Expectations(
+            {
+                (None, None): [
+                    "user\n\nWhat are the things I should be cautious about when I visit this place? What should I bring with me?\nassistant\n\nWhen visiting this serene place, it's essential to be mindful of the following:\n\n1. **",
+                    "user\n\nWhat is this?\nassistant\n\nThe image depicts two cats, one of which is a tabby, lying on a pink surface",
+                ],
+                ("xpu", None): [
+                    "user\n\nWhat are the things I should be cautious about when I visit this place? What should I bring with me?\nassistant\n\nWhen visiting this serene place, it's essential to be mindful of the following:\n\n1. **",
+                    "user\n\nWhat is this?\nassistant\n\nThe image depicts two cats, one of which is a kitten, resting on a pink surface.",
+                ],
+            }
+        )
 
         self.assertEqual(
             self.processor.batch_decode(output, skip_special_tokens=True),
-            EXPECTED_DECODED_TEXT,
+            EXPECTED_DECODED_TEXT.get_expectation(),
         )
 
     def test_generation_no_images(self):
