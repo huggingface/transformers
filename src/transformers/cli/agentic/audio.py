@@ -22,16 +22,16 @@ from typing import Annotated
 
 import typer
 
+from transformers.agent.output import answer, out
+
 from ._common import (
     DeviceOpt,
     DtypeOpt,
-    JsonOpt,
     ModelOpt,
     RevisionOpt,
     TokenOpt,
     TrustOpt,
     _load_pretrained,
-    format_output,
     load_audio,
 )
 
@@ -46,7 +46,6 @@ def transcribe(
     trust_remote_code: TrustOpt = False,
     token: TokenOpt = None,
     revision: RevisionOpt = None,
-    output_json: JsonOpt = False,
 ):
     """
     Transcribe speech from an audio file.
@@ -57,7 +56,7 @@ def transcribe(
     Examples::
 
         transformers transcribe --audio recording.wav
-        transformers transcribe --audio recording.wav --language fr --json
+        transformers --format json transcribe --audio recording.wav --language fr
         transformers transcribe --audio recording.wav --timestamps true
     """
 
@@ -92,10 +91,7 @@ def transcribe(
     output_ids = loaded_model.generate(input_features, **gen_kwargs)
     transcription = processor.batch_decode(output_ids, skip_special_tokens=True)[0]
 
-    if output_json:
-        print(format_output({"text": transcription}, output_json=True))
-    else:
-        print(transcription)
+    answer(transcription, key="text")
 
 
 def audio_classify(
@@ -110,7 +106,6 @@ def audio_classify(
     trust_remote_code: TrustOpt = False,
     token: TokenOpt = None,
     revision: RevisionOpt = None,
-    output_json: JsonOpt = False,
 ):
     """
     Classify an audio file into categories.
@@ -123,7 +118,7 @@ def audio_classify(
     Examples::
 
         transformers audio-classify --audio sound.wav
-        transformers audio-classify --audio sound.wav --labels "dog,cat,bird" --json
+        transformers --format json audio-classify --audio sound.wav --labels "dog,cat,bird"
         transformers audio-classify --audio sound.wav --top-k 3
     """
     import torch
@@ -195,7 +190,7 @@ def audio_classify(
         ]
         result.sort(key=lambda x: x["score"], reverse=True)
 
-    print(format_output(result, output_json))
+    out.table(result)
 
 
 def speak(
@@ -248,7 +243,7 @@ def speak(
     )
 
     scipy.io.wavfile.write(output, sampling_rate, audio_data)
-    print(f"Saved audio to {output}")
+    out.result("Speech saved", output_path=output)
 
 
 def audio_generate(
@@ -301,4 +296,4 @@ def audio_generate(
     )
 
     scipy.io.wavfile.write(output, sampling_rate, audio_data)
-    print(f"Saved audio to {output}")
+    out.result("Audio saved", output_path=output)

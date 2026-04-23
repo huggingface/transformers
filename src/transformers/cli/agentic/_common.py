@@ -19,10 +19,9 @@ resolution (--text / --file / stdin), output formatting, media loading
 (images, audio, video), model loading, and shared CLI option types.
 """
 
-import json
 import sys
 from pathlib import Path
-from typing import Annotated, Any
+from typing import Annotated
 
 import typer
 
@@ -33,7 +32,6 @@ DtypeOpt = Annotated[str, typer.Option(help="Dtype for model weights ('auto', 'f
 TrustOpt = Annotated[bool, typer.Option(help="Trust remote code from the Hub.")]
 TokenOpt = Annotated[str | None, typer.Option(help="HF Hub token for gated/private models.")]
 RevisionOpt = Annotated[str | None, typer.Option(help="Model revision (branch, tag, or commit SHA).")]
-JsonOpt = Annotated[bool, typer.Option("--json", help="Output results as JSON.")]
 
 
 def _load_pretrained(model_cls, processor_cls, model_id, device, dtype, trust_remote_code, token, revision):
@@ -54,7 +52,7 @@ def _load_pretrained(model_cls, processor_cls, model_id, device, dtype, trust_re
     elif device is None:
         model_kwargs["device_map"] = "auto"
     if dtype != "auto":
-        model_kwargs["torch_dtype"] = getattr(torch, dtype)
+        model_kwargs["dtype"] = getattr(torch, dtype)
 
     processor = processor_cls.from_pretrained(model_id, **common_kwargs)
     model = model_cls.from_pretrained(model_id, **model_kwargs)
@@ -79,38 +77,6 @@ def resolve_input(text: str | None = None, file: str | None = None) -> str:
     if not sys.stdin.isatty():
         return sys.stdin.read()
     raise SystemExit("Error: provide --text, --file, or pipe input via stdin.")
-
-
-def format_output(result: Any, output_json: bool = False) -> str:
-    """
-    Format pipeline output for display.
-
-    When ``output_json=True``, returns a JSON string (useful for agents that
-    need to parse results programmatically). Otherwise, returns a
-    human-readable multi-line string.
-    """
-    if output_json:
-        return json.dumps(result, indent=2, default=str)
-
-    if isinstance(result, list):
-        lines = []
-        for item in result:
-            if isinstance(item, dict):
-                lines.append("  ".join(f"{k}: {v}" for k, v in item.items()))
-            elif isinstance(item, list):
-                for sub in item:
-                    if isinstance(sub, dict):
-                        lines.append("  ".join(f"{k}: {v}" for k, v in sub.items()))
-                    else:
-                        lines.append(str(sub))
-            else:
-                lines.append(str(item))
-        return "\n".join(lines)
-
-    if isinstance(result, dict):
-        return "\n".join(f"{k}: {v}" for k, v in result.items())
-
-    return str(result)
 
 
 def load_image(path: str):

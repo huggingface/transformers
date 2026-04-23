@@ -23,16 +23,17 @@ from typing import Annotated
 
 import typer
 
+from transformers.agent.output import answer as _answer
+from transformers.agent.output import out
+
 from ._common import (
     DeviceOpt,
     DtypeOpt,
-    JsonOpt,
     ModelOpt,
     RevisionOpt,
     TokenOpt,
     TrustOpt,
     _load_pretrained,
-    format_output,
     load_audio,
     load_image,
 )
@@ -48,7 +49,6 @@ def vqa(
     trust_remote_code: TrustOpt = False,
     token: TokenOpt = None,
     revision: RevisionOpt = None,
-    output_json: JsonOpt = False,
 ):
     """
     Visual question answering using ``AutoModelForImageTextToText``.
@@ -70,7 +70,9 @@ def vqa(
     img = load_image(image)
     messages = [{"role": "user", "content": [{"type": "image", "image": img}, {"type": "text", "text": question}]}]
 
-    inputs = processor.apply_chat_template(messages, return_tensors="pt", return_dict=True, add_generation_prompt=True)
+    inputs = processor.apply_chat_template(
+        messages, tokenize=True, return_tensors="pt", return_dict=True, add_generation_prompt=True
+    )
     if hasattr(loaded_model, "device"):
         inputs = inputs.to(loaded_model.device)
 
@@ -78,10 +80,7 @@ def vqa(
     new_tokens = output_ids[0, inputs["input_ids"].shape[1] :]
     result = processor.decode(new_tokens, skip_special_tokens=True)
 
-    if output_json:
-        print(format_output({"answer": result}, output_json=True))
-    else:
-        print(result)
+    _answer(result)
 
 
 def document_qa(
@@ -93,7 +92,6 @@ def document_qa(
     trust_remote_code: TrustOpt = False,
     token: TokenOpt = None,
     revision: RevisionOpt = None,
-    output_json: JsonOpt = False,
 ):
     """
     Extractive document question answering using
@@ -134,11 +132,7 @@ def document_qa(
     end_idx = outputs.end_logits.argmax(dim=-1).item()
     answer = processor.tokenizer.decode(inputs["input_ids"][0, start_idx : end_idx + 1], skip_special_tokens=True)
 
-    result = {"answer": answer, "start": start_idx, "end": end_idx}
-    if output_json:
-        print(format_output(result, output_json=True))
-    else:
-        print(format_output(result))
+    out.result("Extracted answer", answer=answer, start=start_idx, end=end_idx)
 
 
 def caption(
@@ -150,7 +144,6 @@ def caption(
     trust_remote_code: TrustOpt = False,
     token: TokenOpt = None,
     revision: RevisionOpt = None,
-    output_json: JsonOpt = False,
 ):
     """
     Generate a caption for an image using ``AutoModelForImageTextToText``.
@@ -174,7 +167,9 @@ def caption(
         }
     ]
 
-    inputs = processor.apply_chat_template(messages, return_tensors="pt", return_dict=True, add_generation_prompt=True)
+    inputs = processor.apply_chat_template(
+        messages, tokenize=True, return_tensors="pt", return_dict=True, add_generation_prompt=True
+    )
     if hasattr(loaded_model, "device"):
         inputs = inputs.to(loaded_model.device)
 
@@ -182,10 +177,7 @@ def caption(
     new_tokens = output_ids[0, inputs["input_ids"].shape[1] :]
     result = processor.decode(new_tokens, skip_special_tokens=True)
 
-    if output_json:
-        print(format_output({"caption": result}, output_json=True))
-    else:
-        print(result)
+    _answer(result, key="caption")
 
 
 def ocr(
@@ -197,7 +189,6 @@ def ocr(
     trust_remote_code: TrustOpt = False,
     token: TokenOpt = None,
     revision: RevisionOpt = None,
-    output_json: JsonOpt = False,
 ):
     """
     Extract text from an image using ``AutoModelForImageTextToText``.
@@ -224,7 +215,9 @@ def ocr(
         }
     ]
 
-    inputs = processor.apply_chat_template(messages, return_tensors="pt", return_dict=True, add_generation_prompt=True)
+    inputs = processor.apply_chat_template(
+        messages, tokenize=True, return_tensors="pt", return_dict=True, add_generation_prompt=True
+    )
     if hasattr(loaded_model, "device"):
         inputs = inputs.to(loaded_model.device)
 
@@ -232,10 +225,7 @@ def ocr(
     new_tokens = output_ids[0, inputs["input_ids"].shape[1] :]
     result = processor.decode(new_tokens, skip_special_tokens=True)
 
-    if output_json:
-        print(format_output({"text": result}, output_json=True))
-    else:
-        print(result)
+    _answer(result, key="text")
 
 
 def multimodal_chat(
@@ -281,7 +271,7 @@ def multimodal_chat(
     if dtype != "auto":
         import torch
 
-        model_kwargs["torch_dtype"] = getattr(torch, dtype)
+        model_kwargs["dtype"] = getattr(torch, dtype)
 
     loaded_model = AutoModelForImageTextToText.from_pretrained(model, **model_kwargs)
     loaded_model.eval()
@@ -298,10 +288,12 @@ def multimodal_chat(
 
     messages = [{"role": "user", "content": content}]
 
-    inputs = processor.apply_chat_template(messages, return_tensors="pt", return_dict=True, add_generation_prompt=True)
+    inputs = processor.apply_chat_template(
+        messages, tokenize=True, return_tensors="pt", return_dict=True, add_generation_prompt=True
+    )
     if hasattr(loaded_model, "device"):
         inputs = inputs.to(loaded_model.device)
 
     output_ids = loaded_model.generate(**inputs, max_new_tokens=max_new_tokens)
     new_tokens = output_ids[0, inputs["input_ids"].shape[1] :]
-    print(processor.decode(new_tokens, skip_special_tokens=True))
+    _answer(processor.decode(new_tokens, skip_special_tokens=True), key="text")

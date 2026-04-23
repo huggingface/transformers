@@ -22,16 +22,16 @@ from typing import Annotated
 
 import typer
 
+from transformers.agent.output import answer, out
+
 from ._common import (
     DeviceOpt,
     DtypeOpt,
-    JsonOpt,
     ModelOpt,
     RevisionOpt,
     TokenOpt,
     TrustOpt,
     _load_pretrained,
-    format_output,
     resolve_input,
 )
 
@@ -82,7 +82,6 @@ def classify(
     trust_remote_code: TrustOpt = False,
     token: TokenOpt = None,
     revision: RevisionOpt = None,
-    output_json: JsonOpt = False,
 ):
     """
     Classify text into categories.
@@ -100,7 +99,7 @@ def classify(
         transformers classify --text "The stock market crashed" --labels "politics,finance,sports"
 
         # Read from file, output as JSON
-        transformers classify --file review.txt --json
+        transformers --format json classify --file review.txt
     """
     import torch
 
@@ -143,35 +142,36 @@ def classify(
             scores.append(logits.softmax(dim=-1)[0, entail_idx].item())
 
         total = sum(scores)
-        result = {
-            "sequence": input_text,
-            "labels": candidate_labels,
-            "scores": [s / total for s in scores],
-        }
-    else:
-        model_id = model or "distilbert/distilbert-base-uncased-finetuned-sst-2-english"
-        loaded_model, tokenizer = _load_pretrained(
-            AutoModelForSequenceClassification,
-            AutoTokenizer,
-            model_id,
-            device,
-            dtype,
-            trust_remote_code,
-            token,
-            revision,
+        out.dict(
+            {
+                "sequence": input_text,
+                "labels": candidate_labels,
+                "scores": [s / total for s in scores],
+            }
         )
+        return
 
-        inputs = tokenizer(input_text, return_tensors="pt", truncation=True)
-        if hasattr(loaded_model, "device"):
-            inputs = inputs.to(loaded_model.device)
-        with torch.no_grad():
-            logits = loaded_model(**inputs).logits
+    model_id = model or "distilbert/distilbert-base-uncased-finetuned-sst-2-english"
+    loaded_model, tokenizer = _load_pretrained(
+        AutoModelForSequenceClassification,
+        AutoTokenizer,
+        model_id,
+        device,
+        dtype,
+        trust_remote_code,
+        token,
+        revision,
+    )
 
-        probs = logits.softmax(dim=-1)[0]
-        top_idx = probs.argmax().item()
-        result = [{"label": loaded_model.config.id2label[top_idx], "score": probs[top_idx].item()}]
+    inputs = tokenizer(input_text, return_tensors="pt", truncation=True)
+    if hasattr(loaded_model, "device"):
+        inputs = inputs.to(loaded_model.device)
+    with torch.no_grad():
+        logits = loaded_model(**inputs).logits
 
-    print(format_output(result, output_json))
+    probs = logits.softmax(dim=-1)[0]
+    top_idx = probs.argmax().item()
+    out.table([{"label": loaded_model.config.id2label[top_idx], "score": probs[top_idx].item()}])
 
 
 def ner(
@@ -184,7 +184,6 @@ def ner(
     token: TokenOpt = None,
     revision: RevisionOpt = None,
     aggregation_strategy: Annotated[str, typer.Option(help="Entity aggregation: 'none' or 'simple'.")] = "simple",
-    output_json: JsonOpt = False,
 ):
     """
     Extract named entities from text (NER).
@@ -235,7 +234,7 @@ def ner(
     if aggregation_strategy == "simple":
         entities = _aggregate_entities(entities, input_text)
 
-    print(format_output(entities, output_json))
+    out.table(entities)
 
 
 def token_classify(
@@ -247,7 +246,6 @@ def token_classify(
     trust_remote_code: TrustOpt = False,
     token: TokenOpt = None,
     revision: RevisionOpt = None,
-    output_json: JsonOpt = False,
 ):
     """
     Tag tokens with labels (POS tagging, chunking, etc.).
@@ -294,7 +292,7 @@ def token_classify(
             }
         )
 
-    print(format_output(result, output_json))
+    out.table(result)
 
 
 def qa(
@@ -307,7 +305,6 @@ def qa(
     trust_remote_code: TrustOpt = False,
     token: TokenOpt = None,
     revision: RevisionOpt = None,
-    output_json: JsonOpt = False,
 ):
     """
     Answer a question given a context paragraph (extractive QA).
@@ -342,13 +339,13 @@ def qa(
     answer_ids = inputs["input_ids"][0, start_idx : end_idx + 1]
     score = (outputs.start_logits[0, start_idx] + outputs.end_logits[0, end_idx]).item()
 
-    result = {
-        "answer": tokenizer.decode(answer_ids, skip_special_tokens=True),
-        "score": score,
-        "start": start_idx,
-        "end": end_idx,
-    }
-    print(format_output(result, output_json))
+    out.result(
+        "Extracted answer",
+        answer=tokenizer.decode(answer_ids, skip_special_tokens=True),
+        score=score,
+        start=start_idx,
+        end=end_idx,
+    )
 
 
 def table_qa(
@@ -360,7 +357,6 @@ def table_qa(
     trust_remote_code: TrustOpt = False,
     token: TokenOpt = None,
     revision: RevisionOpt = None,
-    output_json: JsonOpt = False,
 ):
     """
     Answer a question about tabular data (CSV).
@@ -419,13 +415,14 @@ def table_qa(
     else:
         answer = ", ".join(cells)
 
-    result = {
-        "answer": answer,
-        "coordinates": coordinates,
-        "cells": cells,
-        "aggregator": _AGG_OPS.get(agg_idx, "NONE"),
-    }
-    print(format_output(result, output_json))
+    out.dict(
+        {
+            "answer": answer,
+            "coordinates": coordinates,
+            "cells": cells,
+            "aggregator": _AGG_OPS.get(agg_idx, "NONE"),
+        }
+    )
 
 
 def summarize(
@@ -439,7 +436,6 @@ def summarize(
     trust_remote_code: TrustOpt = False,
     token: TokenOpt = None,
     revision: RevisionOpt = None,
-    output_json: JsonOpt = False,
 ):
     """
     Summarize text.
@@ -470,9 +466,7 @@ def summarize(
         gen_kwargs["min_length"] = min_length
 
     output_ids = loaded_model.generate(**inputs, **gen_kwargs)
-    summary = tokenizer.decode(output_ids[0], skip_special_tokens=True)
-    result = [{"summary_text": summary}]
-    print(format_output(result, output_json))
+    answer(tokenizer.decode(output_ids[0], skip_special_tokens=True), key="summary_text")
 
 
 def translate(
@@ -485,7 +479,6 @@ def translate(
     trust_remote_code: TrustOpt = False,
     token: TokenOpt = None,
     revision: RevisionOpt = None,
-    output_json: JsonOpt = False,
 ):
     """
     Translate text between languages.
@@ -515,9 +508,7 @@ def translate(
         gen_kwargs["max_length"] = max_length
 
     output_ids = loaded_model.generate(**inputs, **gen_kwargs)
-    translation = tokenizer.decode(output_ids[0], skip_special_tokens=True)
-    result = [{"translation_text": translation}]
-    print(format_output(result, output_json))
+    answer(tokenizer.decode(output_ids[0], skip_special_tokens=True), key="translation_text")
 
 
 def fill_mask(
@@ -529,7 +520,6 @@ def fill_mask(
     trust_remote_code: TrustOpt = False,
     token: TokenOpt = None,
     revision: RevisionOpt = None,
-    output_json: JsonOpt = False,
 ):
     """
     Predict the masked token in a sentence.
@@ -577,4 +567,4 @@ def fill_mask(
             }
         )
 
-    print(format_output(result, output_json))
+    out.table(result)

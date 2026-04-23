@@ -24,6 +24,8 @@ from typing import Annotated
 
 import typer
 
+from transformers.agent.output import out, progress
+
 from ._common import _load_pretrained, load_image, resolve_input
 
 
@@ -102,14 +104,13 @@ def embed(
                 json.dump(embedding.tolist(), f)
         else:
             np.save(output, embedding)
-        print(f"Embedding shape {embedding.shape} saved to {output}")
+        out.result("Embeddings saved", shape=str(embedding.shape), output_path=output)
     else:
-        print(f"Embedding shape: {embedding.shape}")
         flat = embedding.flatten()
         preview = ", ".join(f"{v:.6f}" for v in flat[:8])
         if len(flat) > 8:
             preview += ", ..."
-        print(f"Values: [{preview}]")
+        out.result("Embedding preview", shape=str(embedding.shape), values=f"[{preview}]")
 
 
 def tokenize(
@@ -119,7 +120,6 @@ def tokenize(
     token: Annotated[str | None, typer.Option(help="HF Hub token.")] = None,
     trust_remote_code: Annotated[bool, typer.Option(help="Trust remote code.")] = False,
     show_ids: Annotated[bool, typer.Option("--ids", help="Show token IDs.")] = False,
-    output_json: Annotated[bool, typer.Option("--json", help="Output as JSON.")] = False,
 ):
     """
     Tokenize text and display the resulting tokens.
@@ -132,7 +132,7 @@ def tokenize(
 
         transformers tokenize --model meta-llama/Llama-3.2-1B-Instruct --text "Hello, world!"
         transformers tokenize --model meta-llama/Llama-3.2-1B-Instruct --text "Hello, world!" --ids
-        transformers tokenize --model bert-base-uncased --text "Tokenization is fun." --json
+        transformers --format json tokenize --model bert-base-uncased --text "Tokenization is fun."
     """
     from transformers import AutoTokenizer
 
@@ -151,35 +151,31 @@ def tokenize(
     token_ids = encoding["input_ids"]
     tokens = tokenizer.convert_ids_to_tokens(token_ids)
 
-    if output_json:
-        data = {"tokens": tokens, "token_ids": token_ids, "num_tokens": len(tokens)}
-        print(json.dumps(data, indent=2))
-    else:
-        print(f"Tokens ({len(tokens)}):")
-        for i, (tok, tid) in enumerate(zip(tokens, token_ids)):
-            if show_ids:
-                print(f"  {i:4d}  {tid:8d}  {tok!r}")
-            else:
-                print(f"  {i:4d}  {tok!r}")
+    data = {"tokens": tokens, "num_tokens": len(tokens)}
+    if show_ids:
+        data["token_ids"] = token_ids
+    out.dict(data)
 
 
 def inspect(
     model: Annotated[str, typer.Argument(help="Model ID or local path to inspect.")],
     token: Annotated[str | None, typer.Option(help="HF Hub token.")] = None,
     trust_remote_code: Annotated[bool, typer.Option(help="Trust remote code.")] = False,
-    output_json: Annotated[bool, typer.Option("--json", help="Output as JSON.")] = False,
 ):
     """
     Inspect a model's configuration without downloading weights.
 
     Shows architecture, hidden size, number of layers, vocabulary size,
-    and other key config values. Use ``--json`` for the full config dict.
+    and other key config values. Agents and ``--format json`` receive the
+    full config dict.
 
     Examples::
 
         transformers inspect meta-llama/Llama-3.2-1B-Instruct
-        transformers inspect meta-llama/Llama-3.2-1B-Instruct --json
+        transformers --format json inspect meta-llama/Llama-3.2-1B-Instruct
     """
+    from huggingface_hub.cli._output import OutputFormatWithAuto
+
     from transformers import AutoConfig
 
     kwargs = {}
@@ -188,18 +184,10 @@ def inspect(
     if trust_remote_code:
         kwargs["trust_remote_code"] = True
 
-    config = AutoConfig.from_pretrained(model, **kwargs)
+    config_dict = AutoConfig.from_pretrained(model, **kwargs).to_dict()
 
-    if output_json:
-        print(json.dumps(config.to_dict(), indent=2, default=str))
-    else:
-        config_dict = config.to_dict()
-        print(f"Model: {model}")
-        print(f"Architecture: {config_dict.get('architectures', ['unknown'])}")
-        print(f"Model type: {config_dict.get('model_type', 'unknown')}")
-        print()
-
-        important_keys = [
+    if out.mode == OutputFormatWithAuto.human:
+        summary_keys = [
             "hidden_size",
             "num_hidden_layers",
             "num_attention_heads",
@@ -210,17 +198,15 @@ def inspect(
             "hidden_act",
             "torch_dtype",
         ]
-        for key in important_keys:
-            if key in config_dict:
-                print(f"  {key}: {config_dict[key]}")
-
-        remaining = {
-            k: v
-            for k, v in config_dict.items()
-            if k not in important_keys and k not in ("architectures", "model_type", "transformers_version")
-        }
-        if remaining:
-            print(f"\n  ({len(remaining)} additional config keys — use --json for full output)")
+        summary = {k: config_dict[k] for k in summary_keys if k in config_dict}
+        out.result(
+            f"{model}",
+            architecture=config_dict.get("architectures", ["unknown"]),
+            model_type=config_dict.get("model_type", "unknown"),
+            **summary,
+        )
+    else:
+        out.dict(config_dict)
 
 
 def inspect_forward(
@@ -232,7 +218,6 @@ def inspect_forward(
     ] = None,
     token: Annotated[str | None, typer.Option(help="HF Hub token.")] = None,
     trust_remote_code: Annotated[bool, typer.Option(help="Trust remote code.")] = False,
-    output_json: Annotated[bool, typer.Option("--json", help="Output as JSON.")] = False,
 ):
     """
     Examine attention weights and hidden states from a forward pass.
@@ -279,21 +264,29 @@ def inspect_forward(
     if layers is not None:
         layer_indices = [int(i) for i in layers.split(",")]
 
-    print(f"Model: {model_id}")
-    print(f"Input tokens: {tokenizer.convert_ids_to_tokens(inputs['input_ids'][0])}")
-    print(f"Hidden state layers: {len(hidden_states)} (including embedding layer)")
-    print(f"Attention layers: {len(attentions)}")
+    progress(f"Model: {model_id}")
+    progress(f"Input tokens: {tokenizer.convert_ids_to_tokens(inputs['input_ids'][0])}")
+    progress(f"Hidden state layers: {len(hidden_states)} (including embedding layer)")
+    progress(f"Attention layers: {len(attentions)}")
 
+    layer_info = []
     for i, (attn, hs) in enumerate(zip(attentions, hidden_states[1:])):
         if layer_indices is not None and i not in layer_indices:
             continue
-        print(f"\n  Layer {i}:")
-        print(f"    Attention shape: {list(attn.shape)} (batch, heads, seq, seq)")
-        print(f"    Hidden state shape: {list(hs.shape)} (batch, seq, hidden)")
         attn_np = attn[0].cpu().numpy()
-        print(f"    Attention mean: {attn_np.mean():.6f}, max: {attn_np.max():.6f}")
         hs_np = hs[0].cpu().numpy()
-        print(f"    Hidden state norm (mean): {np.linalg.norm(hs_np, axis=-1).mean():.4f}")
+        layer_info.append(
+            {
+                "layer": i,
+                "attention_shape": list(attn.shape),
+                "hidden_state_shape": list(hs.shape),
+                "attention_mean": float(attn_np.mean()),
+                "attention_max": float(attn_np.max()),
+                "hidden_state_norm_mean": float(np.linalg.norm(hs_np, axis=-1).mean()),
+            }
+        )
+
+    out.dict({"model": model_id, "layers": layer_info})
 
     if output is not None:
         from pathlib import Path
@@ -308,7 +301,7 @@ def inspect_forward(
             if layer_indices is not None and i not in layer_indices and i > 0:
                 continue
             np.save(out_dir / f"hidden_state_layer_{i}.npy", hs[0].cpu().numpy())
-        print(f"\nActivations saved to {output}")
+        progress(f"Activations saved to {output}")
 
 
 def benchmark_quantization(
@@ -322,7 +315,6 @@ def benchmark_quantization(
     max_new_tokens: Annotated[int, typer.Option(help="Tokens to generate per run.")] = 50,
     trust_remote_code: Annotated[bool, typer.Option(help="Trust remote code.")] = False,
     token: Annotated[str | None, typer.Option(help="HF Hub token.")] = None,
-    output_json: Annotated[bool, typer.Option("--json", help="Output as JSON.")] = False,
 ):
     """
     Compare quality and performance across quantization methods.
@@ -338,7 +330,7 @@ def benchmark_quantization(
         transformers benchmark-quantization --model meta-llama/Llama-3.1-8B --methods bnb-4bit,bnb-8bit
 
         # Include unquantized baseline, output as JSON
-        transformers benchmark-quantization --model meta-llama/Llama-3.1-8B --methods none,bnb-4bit,bnb-8bit --json
+        transformers --format json benchmark-quantization --model meta-llama/Llama-3.1-8B --methods none,bnb-4bit,bnb-8bit
     """
     import time
 
@@ -355,7 +347,7 @@ def benchmark_quantization(
 
     results = []
     for method in method_list:
-        print(f"\n--- {method} ---")
+        progress(f"--- {method} ---")
         model_kwargs = {**common_kwargs, "device_map": "auto"}
 
         if method == "bnb-4bit":
@@ -369,7 +361,7 @@ def benchmark_quantization(
         elif method == "none":
             pass
         else:
-            print(f"  Skipping {method} — only none, bnb-4bit, bnb-8bit are supported for benchmarking.")
+            out.warning(f"Skipping {method} — only none, bnb-4bit, bnb-8bit are supported for benchmarking.")
             continue
 
         try:
@@ -402,11 +394,11 @@ def benchmark_quantization(
             }
             results.append(result)
 
-            print(f"  Tokens/sec: {tokens_per_sec:.2f}")
-            print(f"  Time: {elapsed:.3f}s")
+            progress(f"  Tokens/sec: {tokens_per_sec:.2f}")
+            progress(f"  Time: {elapsed:.3f}s")
             if mem_mb > 0:
-                print(f"  Peak memory: {mem_mb:.1f} MB")
-            print(f"  Output: {generated_text[:100]}...")
+                progress(f"  Peak memory: {mem_mb:.1f} MB")
+            progress(f"  Output: {generated_text[:100]}...")
 
             del loaded_model
             if torch.cuda.is_available():
@@ -414,8 +406,7 @@ def benchmark_quantization(
                 torch.cuda.reset_peak_memory_stats()
 
         except Exception as e:
-            print(f"  Error: {e}")
+            out.warning(f"Error with {method}: {e}")
             results.append({"method": method, "error": str(e)})
 
-    if output_json:
-        print(json.dumps(results, indent=2))
+    out.table(results)
