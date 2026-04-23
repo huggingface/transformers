@@ -287,4 +287,4 @@ class DeepseekOcr2Config(PreTrainedConfig):
         super().__post_init__(**kwargs)
 
 
-__all__ = ["DeepseekOcr2Config"]
+__all__ = ["DeepseekOcr2Config", "DeepseekOcr2EncoderConfig", "DeepseekOcr2SamVisionConfig", "DeepseekOcr2TextConfig"]

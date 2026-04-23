@@ -1190,6 +1190,9 @@ class DeepseekOcr2ForConditionalGeneration(LlavaNextForConditionalGeneration, Ge
 
 __all__ = [
     "DeepseekOcr2Config",
+    "DeepseekOcr2EncoderConfig",
+    "DeepseekOcr2SamVisionConfig",
+    "DeepseekOcr2TextConfig",
     "DeepseekOcr2ForConditionalGeneration",
     "DeepseekOcr2ImageProcessor",
     "DeepseekOcr2ImageProcessorPil",
