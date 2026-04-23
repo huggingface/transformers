@@ -19,13 +19,12 @@ import re
 from typing import Any
 
 from .content_parsers import parse_content
-from .spec import FieldSpec, ResponseFormatSpec, load_spec
+from .spec import load_spec
 
 
-def parse_response(text: str, response_format: dict | ResponseFormatSpec) -> dict:
+def parse_response(text: str, response_format: dict) -> dict:
     """Whole-string parse: return the assembled message dict."""
-    spec = response_format if isinstance(response_format, ResponseFormatSpec) else load_spec(response_format)
-    return _execute(spec, text)
+    return _execute(load_spec(response_format), text)
 
 
 class ResponseEventStream:
@@ -36,8 +35,8 @@ class ResponseEventStream:
     / region_close events incrementally.
     """
 
-    def __init__(self, response_format: dict | ResponseFormatSpec):
-        self._spec = response_format if isinstance(response_format, ResponseFormatSpec) else load_spec(response_format)
+    def __init__(self, response_format: dict):
+        self._spec = load_spec(response_format)
         self._buffer: list[str] = []
         self._finalized = False
 
@@ -54,26 +53,27 @@ class ResponseEventStream:
         return _execute(self._spec, "".join(self._buffer))
 
 
-def _execute(spec: ResponseFormatSpec, text: str) -> dict:
+def _execute(spec: dict, text: str) -> dict:
     pos = 0
-    output: dict[str, Any] = dict(spec.defaults)
-    implicit_name = spec.implicit_field_name
+    output: dict[str, Any] = dict(spec["defaults"])
+    fields = spec["fields"]
+    implicit_name = spec["implicit"]
     implicit_buffer = ""
 
     while pos < len(text):
         prev_pos = pos
         # Find the next event: either an explicit field opening, or the implicit field closing.
         candidates = []
-        for fld in spec.fields.values():
-            if not fld.is_implicit:
-                m = _match(text, pos, fld.open_literal, fld.open_pattern)
+        for fld in fields.values():
+            if fld["open_re"] is not None:
+                m = fld["open_re"].search(text, pos)
                 if m is not None:
-                    candidates.append((m[0], -(m[1] - m[0]), "open", fld, m))
-        if implicit_name is not None:
-            impl = spec.fields[implicit_name]
-            m = _match(text, pos, impl.close_literal, impl.close_pattern)
+                    candidates.append((m.start(), -(m.end() - m.start()), "open", fld, m))
+        if implicit_name is not None and fields[implicit_name]["close_re"] is not None:
+            impl = fields[implicit_name]
+            m = impl["close_re"].search(text, pos)
             if m is not None:
-                candidates.append((m[0], -(m[1] - m[0]), "implicit_close", impl, m))
+                candidates.append((m.start(), -(m.end() - m.start()), "implicit_close", impl, m))
 
         if not candidates:
             if implicit_name is not None:
@@ -81,25 +81,26 @@ def _execute(spec: ResponseFormatSpec, text: str) -> dict:
             break
 
         candidates.sort()
-        _, _, event, fld, (m_start, m_end, captures) = candidates[0]
+        _, _, event, fld, m = candidates[0]
 
         # Pre-event bytes belong to the implicit region (if any).
-        if implicit_name is not None and m_start > pos:
-            implicit_buffer += text[pos:m_start]
+        if implicit_name is not None and m.start() > pos:
+            implicit_buffer += text[pos : m.start()]
 
         if event == "implicit_close":
             _emit(output, fld, implicit_buffer, {})
             implicit_buffer = ""
-            pos = m_end
+            pos = m.end()
         else:  # "open"
             if implicit_name is not None and implicit_buffer:
-                _emit(output, spec.fields[implicit_name], implicit_buffer, {})
+                _emit(output, fields[implicit_name], implicit_buffer, {})
                 implicit_buffer = ""
-            close = _match(text, m_end, fld.close_literal, fld.close_pattern)
+            captures = {k: v for k, v in m.groupdict().items() if v is not None}
+            close = fld["close_re"].search(text, m.end()) if fld["close_re"] is not None else None
             if close is None:
-                body, pos = text[m_end:], len(text)
+                body, pos = text[m.end() :], len(text)
             else:
-                body, pos = text[m_end : close[0]], close[1]
+                body, pos = text[m.end() : close.start()], close.end()
             _emit(output, fld, body, captures)
 
         if pos <= prev_pos:
@@ -109,34 +110,27 @@ def _execute(spec: ResponseFormatSpec, text: str) -> dict:
             )
 
     if implicit_name is not None and implicit_buffer:
-        _emit(output, spec.fields[implicit_name], implicit_buffer, {})
+        _emit(output, fields[implicit_name], implicit_buffer, {})
 
-    missing = [n for n, f in spec.fields.items() if not f.optional and n not in output]
+    missing = [n for n, f in fields.items() if not f["optional"] and n not in output]
     if missing:
         raise ValueError(f"Required response_format fields missing from parsed output: {missing}")
-    return _filter_empty(output, spec)
+    defaults = spec["defaults"]
+    return {
+        k: v
+        for k, v in output.items()
+        if k in defaults or not (v is None or (isinstance(v, (list, dict, str)) and not v))
+    }
 
 
-def _match(text: str, pos: int, literal: str | None, pattern: re.Pattern | None) -> tuple[int, int, dict] | None:
-    if literal is not None:
-        if literal == "eos":
-            return (len(text), len(text), {})
-        idx = text.find(literal, pos)
-        return None if idx < 0 else (idx, idx + len(literal), {})
-    if pattern is not None:
-        m = pattern.search(text, pos)
-        return None if m is None else (m.start(), m.end(), {k: v for k, v in m.groupdict().items() if v is not None})
-    return None
-
-
-def _emit(output: dict, field: FieldSpec, body: str, captures: dict) -> None:
-    value = parse_content(body, field.content, field.content_args)
-    value = _apply_assemble(field.assemble, captures, value)
-    value = _apply_coerce(value, field.coerce)
-    if field.repeats:
-        output.setdefault(field.name, []).append(value)
+def _emit(output: dict, field: dict, body: str, captures: dict) -> None:
+    value = parse_content(body, field["content"], field["content_args"])
+    value = _apply_assemble(field["assemble"], captures, value)
+    value = _apply_coerce(value, field["coerce"])
+    if field["repeats"]:
+        output.setdefault(field["name"], []).append(value)
     else:
-        output[field.name] = value
+        output[field["name"]] = value
 
 
 _PLACEHOLDER = re.compile(r"\{(\w+)\}")
@@ -184,12 +178,3 @@ def _apply_coerce(value: Any, coerce: str | None) -> Any:
             return value.strip().lower() in ("true", "1", "yes")
         return bool(value)
     raise ValueError(f"Unknown coerce: {coerce}")
-
-
-def _filter_empty(output: dict, spec: ResponseFormatSpec) -> dict:
-    """Always keep `defaults`. Drop explicit fields that ended up None or empty."""
-    return {
-        k: v
-        for k, v in output.items()
-        if k in spec.defaults or not (v is None or (isinstance(v, (list, dict, str)) and not v))
-    }
