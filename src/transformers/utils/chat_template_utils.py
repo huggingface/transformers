@@ -543,8 +543,10 @@ def render_jinja_template(
             chat = chat.messages
         if continue_final_message:
             chat = deepcopy(chat)
-            final_message = chat[-1]["content"]
-            if isinstance(final_message, (list, tuple)):
+            final_message = chat[-1].get("content")
+            if final_message is None:
+                raise ValueError("continue_final_message is set but the final message has no content to continue!")
+            elif isinstance(final_message, (list, tuple)):
                 for content_block in reversed(final_message):
                     if "text" in content_block:
                         # Pick the last text block in the message (the first one we hit while iterating in reverse)
