@@ -71,6 +71,7 @@ from .integrations.flash_paged import paged_attention_forward
 from .integrations.flex_attention import flex_attention_forward
 from .integrations.hub_kernels import allow_all_hub_kernels, is_kernel
 from .integrations.moe import ALL_EXPERTS_FUNCTIONS
+from .intergrations.finegrained_fp8 import ALL_FP8_EXPERTS_FUNCTIONS
 from .integrations.peft import maybe_load_adapters
 from .integrations.sdpa_attention import sdpa_attention_forward
 from .integrations.sdpa_paged import sdpa_attention_paged_forward
