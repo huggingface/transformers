@@ -34,7 +34,6 @@ from transformers.video_utils import load_video
 processor = AutoProcessor.from_pretrained("facebook/pe-av-large")
 model = PeAudioVideoModel.from_pretrained(
     "facebook/pe-av-large",
-    torch_dtype=torch.bfloat16,
     device_map="auto",
 )
 
@@ -43,11 +42,10 @@ audio = ds[0]["audio"]["array"]
 video, _ = load_video("https://huggingface.co/datasets/hf-internal-testing/fixtures_videos/resolve/main/tennis.mp4")
 labels = ["a person playing tennis with background crowd", "a dog barking in a park"]
 
-audio_inputs = processor.feature_extractor(audio, sampling_rate=48_000, return_tensors="pt")
-video_inputs = processor.video_processor(video, num_frames=16, return_tensors="pt")
-text_inputs = processor.tokenizer(labels, padding=True, return_tensors="pt")
+audio_inputs = processor.feature_extractor(audio, sampling_rate=48_000, return_tensors="pt").to(model.device)
+video_inputs = processor.video_processor(video, num_frames=16, return_tensors="pt").to(model.device)
+text_inputs = processor.tokenizer(labels, padding=True, return_tensors="pt").to(model.device)
 inputs = {**audio_inputs, **video_inputs, **text_inputs}
-inputs = {k: v.to(model.device) for k, v in inputs.items()}
 
 with torch.no_grad():
     outputs = model(**inputs)

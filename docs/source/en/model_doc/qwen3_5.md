@@ -35,7 +35,6 @@ from transformers import pipeline
 pipe = pipeline(
     task="text-generation",
     model="Qwen/Qwen3.5-9B",
-    torch_dtype=torch.bfloat16,
     device_map="auto",
 )
 print(pipe("The capital of France is", max_new_tokens=20)[0]["generated_text"])
@@ -51,7 +50,6 @@ from transformers import AutoTokenizer, Qwen3_5ForCausalLM
 tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen3.5-9B")
 model = Qwen3_5ForCausalLM.from_pretrained(
     "Qwen/Qwen3.5-9B",
-    torch_dtype=torch.bfloat16,
     device_map="auto",
 )
 
