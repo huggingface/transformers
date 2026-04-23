@@ -136,15 +136,35 @@ class MiMoV2FlashRotaryEmbedding(Gemma3RotaryEmbedding):
     @staticmethod
     def compute_default_rope_parameters(
         config: MiMoV2FlashConfig | None = None,
-        device=None,
+        device: torch.device | None = None,
         seq_len: int | None = None,
         layer_type: str | None = None,
-    ):
-        rope_params = config.rope_parameters[layer_type]
-        base = rope_params["rope_theta"]
-        partial_rotary_factor = rope_params.get("partial_rotary_factor", 0.334)
-        dim = int(config.head_dim * partial_rotary_factor)
-        attention_factor = 1.0
+    ) -> tuple["torch.Tensor", float]:
+        """
+        Computes the inverse frequencies according to the original RoPE implementation
+        Args:
+            config ([`~transformers.PreTrainedConfig`]):
+                The model configuration.
+            device (`torch.device`):
+                The device to use for initialization of the inverse frequencies.
+            seq_len (`int`, *optional*):
+                The current sequence length. Unused for this type of RoPE.
+            layer_type (`str`, *optional*):
+                The current layer type if the model has different RoPE parameters per type.
+                Should not be used unless `config.layer_types is not None`
+
+        Returns:
+            Tuple of (`torch.Tensor`, `float`), containing the inverse frequencies for the RoPE embeddings and the
+            post-processing scaling factor applied to the computed cos/sin (unused in this type of RoPE).
+        """
+        base = config.rope_parameters[layer_type]["rope_theta"]
+        partial_rotary_factor = config.rope_parameters[layer_type].get("partial_rotary_factor", 0.334)
+        head_dim = getattr(config, "head_dim", None) or config.hidden_size // config.num_attention_heads
+        dim = int(head_dim * partial_rotary_factor)
+
+        attention_factor = 1.0  # Unused in this type of RoPE
+
+        # Compute the inverse frequencies
         inv_freq = 1.0 / (
             base ** (torch.arange(0, dim, 2, dtype=torch.int64).to(device=device, dtype=torch.float) / dim)
         )
