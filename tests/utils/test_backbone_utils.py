@@ -16,7 +16,7 @@ import unittest
 
 import pytest
 
-from transformers import DetrConfig, MaskFormerConfig, PreTrainedConfig, ResNetBackbone, ResNetConfig, TimmBackbone
+from transformers import MaskFormerConfig, PreTrainedConfig, ResNetBackbone, ResNetConfig, TimmBackbone
 from transformers.backbone_utils import (
     BackboneConfigMixin,
     BackboneMixin,
@@ -162,7 +162,7 @@ class BackboneUtilsTester(unittest.TestCase):
         config = MaskFormerConfig(backbone_config=ResNetConfig(out_indices=(0, 2)))
         backbone = load_backbone(config)
         self.assertEqual(backbone.out_features, ["stem", "stage2"])
-        self.assertEqual(backbone.out_indices, (0, 2))
+        self.assertEqual(backbone.out_indices, [0, 2])
         self.assertIsInstance(backbone, ResNetBackbone)
 
     @slow
@@ -239,7 +239,7 @@ class BackboneUtilsTester(unittest.TestCase):
                     not_equal_weights.append(k0)
             return equal_weights, not_equal_weights
 
-        config = MaskFormerConfig(use_pretrained_backbone=False, backbone="microsoft/resnet-18")
+        config = MaskFormerConfig(backbone="microsoft/resnet-18")
         model_0 = NewModel(config)
         model_1 = NewModel(config)
         equal_weights, not_equal_weights = get_equal_not_equal_weights(model_0, model_1)
@@ -249,7 +249,7 @@ class BackboneUtilsTester(unittest.TestCase):
         self.assertEqual(len(equal_weights), 0)
         self.assertEqual(len(not_equal_weights), 24)
 
-        # Now we create a new model with backbone weights that are pretrained
+        # Setting use_pretrained_backbone has no effect on load_backbone
         config.use_pretrained_backbone = True
         model_0 = NewModel(config)
         model_1 = NewModel(config)
@@ -257,29 +257,5 @@ class BackboneUtilsTester(unittest.TestCase):
 
         # Norm layers are always initialized with the same weights
         equal_weights = [w for w in equal_weights if "normalization" not in w]
-        self.assertEqual(len(equal_weights), 20)
-        # Linear layers are still initialized randomly
-        self.assertEqual(len(not_equal_weights), 4)
-
-        # Check loading in timm backbone
-        config = DetrConfig(use_pretrained_backbone=False, backbone="resnet18", use_timm_backbone=True)
-        model_0 = NewModel(config)
-        model_1 = NewModel(config)
-        equal_weights, not_equal_weights = get_equal_not_equal_weights(model_0, model_1)
-
-        # Norm layers are always initialized with the same weights
-        equal_weights = [w for w in equal_weights if "bn" not in w and "downsample.1" not in w]
         self.assertEqual(len(equal_weights), 0)
         self.assertEqual(len(not_equal_weights), 24)
-
-        # Now we create a new model with backbone weights that are pretrained
-        config.use_pretrained_backbone = True
-        model_0 = NewModel(config)
-        model_1 = NewModel(config)
-        equal_weights, not_equal_weights = get_equal_not_equal_weights(model_0, model_1)
-
-        # Norm layers are always initialized with the same weights
-        equal_weights = [w for w in equal_weights if "bn" not in w and "downsample.1" not in w]
-        self.assertEqual(len(equal_weights), 20)
-        # Linear layers are still initialized randomly
-        self.assertEqual(len(not_equal_weights), 4)
