@@ -139,8 +139,6 @@ class MiniCPMV4_6Processor(ProcessorMixin):
             video_inputs = self.video_processor(videos, **output_kwargs["videos_kwargs"])
 
             video_target_sizes = video_inputs["target_sizes_videos"]
-            if not isinstance(video_target_sizes, torch.Tensor):
-                video_target_sizes = torch.as_tensor(video_target_sizes, dtype=torch.int32)
             num_frames = video_inputs.pop("num_frames")
             video_grids = video_inputs.pop("grids_videos")
             num_patches_per_frame = video_inputs.pop("num_patches_per_frame")
