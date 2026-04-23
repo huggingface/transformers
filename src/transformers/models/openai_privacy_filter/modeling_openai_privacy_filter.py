@@ -258,7 +258,7 @@ class OpenAIPrivacyFilterAttention(nn.Module):
         return attn_output, attn_weights
 
 
-@use_experts_implementation(is_transposed=True, has_bias=True)
+@use_experts_implementation(is_concatenated=False, is_transposed=True, has_bias=True)
 class OpenAIPrivacyFilterExperts(nn.Module):
     def __init__(self, config):
         super().__init__()
