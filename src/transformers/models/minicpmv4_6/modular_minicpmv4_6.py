@@ -740,43 +740,23 @@ class MiniCPMV4_6Model(Lfm2VlModel):
         if inputs_embeds is None:
             inputs_embeds = self.get_input_embeddings()(input_ids)
 
-        if pixel_values is not None and self.config.image_token_id is not None:
-            # During beam search, _expand_inputs_for_generation duplicates the NaViT-packed
-            # pixel_values [1,C,P,L] into [num_beams,C,P,L]. We undo this, encode once, and
-            # repeat the resulting features to match the beam-expanded inputs_embeds.
-            expand_factor = pixel_values.shape[0]
-            if expand_factor > 1:
-                pixel_values = pixel_values[:1]
-                target_sizes = target_sizes[::expand_factor]
+        num_beams = kwargs.pop("_num_beams", 1)
 
+        if pixel_values is not None and self.config.image_token_id is not None:
             vision_output = self.get_image_features(pixel_values, target_sizes, downsample_mode=downsample_mode)
             image_features = torch.cat(vision_output.pooler_output, dim=0).to(
                 device=inputs_embeds.device, dtype=inputs_embeds.dtype
-            )
-            if expand_factor > 1:
-                image_features = image_features.repeat(expand_factor, 1)
-
+            ).repeat(num_beams, 1)
             mask = self.get_placeholder_mask(input_ids, inputs_embeds, image_features, self.config.image_token_id)
             inputs_embeds = inputs_embeds.masked_scatter(mask, image_features)
 
         if pixel_values_videos is not None and self.config.video_token_id is not None:
-            # During beam search, video frames [T,C,P,L] are expanded to [T*num_beams,C,P,L]
-            # with interleaved duplicates. We undo this via stride indexing, encode once,
-            # and repeat the features.
-            expand_factor = inputs_embeds.shape[0]
-            if expand_factor > 1:
-                pixel_values_videos = pixel_values_videos[::expand_factor]
-                target_sizes_videos = target_sizes_videos[::expand_factor]
-
             vision_output = self.get_video_features(
                 pixel_values_videos, target_sizes_videos, downsample_mode=downsample_mode
             )
             video_features = torch.cat(vision_output.pooler_output, dim=0).to(
                 device=inputs_embeds.device, dtype=inputs_embeds.dtype
-            )
-            if expand_factor > 1:
-                video_features = video_features.repeat(expand_factor, 1)
-
+            ).repeat(num_beams, 1)
             mask = self.get_placeholder_mask(input_ids, inputs_embeds, video_features, self.config.video_token_id)
             inputs_embeds = inputs_embeds.masked_scatter(mask, video_features)
 
@@ -897,6 +877,7 @@ class MiniCPMV4_6ForConditionalGeneration(MiniCPMV4_6PreTrainedModel, Generation
             model_inputs["target_sizes"] = target_sizes
             model_inputs["pixel_values_videos"] = pixel_values_videos
             model_inputs["target_sizes_videos"] = target_sizes_videos
+            model_inputs["_num_beams"] = kwargs.get("_num_beams", 1)
         return model_inputs
 
     def _expand_inputs_for_generation(
@@ -906,17 +887,21 @@ class MiniCPMV4_6ForConditionalGeneration(MiniCPMV4_6PreTrainedModel, Generation
         input_ids: torch.LongTensor | None = None,
         **model_kwargs,
     ) -> tuple[torch.LongTensor, dict[str, Any]]:
+        # NaViT packs all images into batch_size=1; the vision encoder cannot
+        # handle repeat_interleave along dim-0.  We pop every visual key before
+        # the parent expands text-side tensors, then restore the originals.
+        visual_keys = ("pixel_values", "target_sizes", "pixel_values_videos", "target_sizes_videos")
+        saved = {k: model_kwargs.pop(k) for k in visual_keys if model_kwargs.get(k) is not None}
+
         input_ids, model_kwargs = super()._expand_inputs_for_generation(
             expand_size=expand_size,
             is_encoder_decoder=is_encoder_decoder,
             input_ids=input_ids,
             **model_kwargs,
         )
-        if expand_size > 1:
-            for key in ("pixel_values", "target_sizes", "pixel_values_videos", "target_sizes_videos"):
-                values = model_kwargs.get(key)
-                if values is not None and isinstance(values, list):
-                    model_kwargs[key] = [v for v in values for _ in range(expand_size)]
+
+        model_kwargs.update(saved)
+        model_kwargs["_num_beams"] = expand_size
         return input_ids, model_kwargs
 
 
