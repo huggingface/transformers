@@ -124,6 +124,20 @@ Cancel a request with [`~ContinuousBatchingManager.cancel_request`].
 manager.cancel_request(request_id="my_request")
 ```
 
+### Per-request sampling parameters
+
+Enable `per_request_processors` to apply `temperature`, `top_k`, and `top_p` independently per request within the same forward pass to allow different sampling parameters for different requests (creative, high-temperature outputs versus precise, low-temperature ones for example).
+
+```py
+cb_config = ContinuousBatchingConfig(per_request_processors=True)
+
+# each request gets its own sampling parameters
+manager.add_request(input_ids=inputs_a, temperature=0.9, top_p=0.95)
+manager.add_request(input_ids=inputs_b, temperature=0.1, top_k=10)
+```
+
+Each parameter in [`GenerationConfig`] must be a non-default value in order to create the associated logits processor at runtime. For example, set `temperature` to a value other than `None` or `1` to support per-request temperature control. Requests with temperatures of `1` can still be created afterwards.
+
 ### Retrieving results
 
 Iterate over the manager to receive results as they arrive.
@@ -174,6 +188,7 @@ By default, `num_blocks` and `max_batch_tokens` are inferred automatically from 
 | Prefix caching | ↓ shared KV blocks | ✓ skips redundant prefill | ✓ TTFT |
 | Paged attention | ↓ no fragmentation | ✓ dynamic batch membership | |
 | Sliding window | ↓ bounded KV per layer | | |
+| Per-request processors | | ✓ mixed sampling params per batch | |
 
 ```py
 from transformers.generation import ContinuousBatchingConfig

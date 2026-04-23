@@ -2823,6 +2823,20 @@ class TestAttentionImplementation(unittest.TestCase):
 
         self.assertTrue('The only possible arguments are `attn_implementation="eager"' in str(cm.exception))
 
+    def test_registered_experts_implementation_is_valid(self):
+        from transformers.integrations.moe import ALL_EXPERTS_FUNCTIONS
+
+        def custom_experts_forward(*args, **kwargs):
+            pass
+
+        experts_implementation = "custom_experts"
+        model = BaseModel(PreTrainedConfig())
+
+        with patch.dict(ALL_EXPERTS_FUNCTIONS._global_mapping, {}, clear=False):
+            ALL_EXPERTS_FUNCTIONS.register(experts_implementation, custom_experts_forward)
+
+            self.assertEqual(model.get_correct_experts_implementation(experts_implementation), experts_implementation)
+
     def test_not_available_flash(self):
         if is_flash_attn_2_available():
             self.skipTest(reason="Please uninstall flash-attn package to run test_not_available_flash")
@@ -3451,3 +3465,67 @@ class TestGetEncoder(unittest.TestCase):
         assert image_encoder is model.model.vision_tower, (
             f"LLaVA get_encoder(modality='image') should return vision_tower, got {type(image_encoder)}"
         )
+
+
+@require_torch
+class DisableMmapLoadingTest(unittest.TestCase):
+    """Tests for the `disable_mmap` kwarg in `load_state_dict` and the `_is_on_hf_mount` helper."""
+
+    def _fake_open_factory(self, proc_mounts_contents):
+        """Return a patched `open` that serves `proc_mounts_contents` for `/proc/mounts` and defers otherwise."""
+        import builtins
+
+        real_open = builtins.open
+
+        def fake_open(path, *args, **kwargs):
+            if path == "/proc/mounts":
+                import io
+
+                return io.StringIO(proc_mounts_contents)
+            return real_open(path, *args, **kwargs)
+
+        return fake_open
+
+    def test_is_on_hf_mount_linux_match(self):
+        from transformers.modeling_utils import _is_on_hf_mount
+
+        mounts = (
+            "proc /proc proc rw,nosuid,nodev,noexec,relatime 0 0\n"
+            "hf-mount /data fuse.hf-mount rw,nosuid,nodev,relatime,user_id=0 0 0\n"
+        )
+        with patch("sys.platform", "linux"), patch("builtins.open", self._fake_open_factory(mounts)):
+            self.assertTrue(_is_on_hf_mount("/data/model.safetensors"))
+
+    def test_is_on_hf_mount_no_match(self):
+        from transformers.modeling_utils import _is_on_hf_mount
+
+        mounts = "proc /proc proc rw,nosuid,nodev,noexec,relatime 0 0\n/dev/nvme0n1p1 /data ext4 rw,relatime 0 0\n"
+        with patch("sys.platform", "linux"), patch("builtins.open", self._fake_open_factory(mounts)):
+            self.assertFalse(_is_on_hf_mount("/data/model.safetensors"))
+
+    def test_is_on_hf_mount_non_linux(self):
+        from transformers.modeling_utils import _is_on_hf_mount
+
+        with patch("sys.platform", "darwin"):
+            self.assertFalse(_is_on_hf_mount("/data/model.safetensors"))
+
+    def test_load_state_dict_disable_mmap_explicit(self):
+        import torch
+        from safetensors.torch import save_file as safe_save_file
+
+        from transformers.modeling_utils import load_state_dict
+
+        state_dict = {
+            "weight": torch.arange(12, dtype=torch.float32).reshape(3, 4),
+            "bias": torch.tensor([1.0, 2.0, 3.0]),
+        }
+        with tempfile.TemporaryDirectory() as tmpdir:
+            ckpt_path = os.path.join(tmpdir, "model.safetensors")
+            safe_save_file(state_dict, ckpt_path)
+
+            loaded_mmap = load_state_dict(ckpt_path, disable_mmap=False)
+            loaded_no_mmap = load_state_dict(ckpt_path, disable_mmap=True)
+
+        self.assertEqual(set(loaded_mmap.keys()), set(loaded_no_mmap.keys()))
+        for k in loaded_mmap:
+            torch.testing.assert_close(loaded_mmap[k], loaded_no_mmap[k])

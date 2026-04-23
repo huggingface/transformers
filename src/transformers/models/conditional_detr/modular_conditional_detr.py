@@ -20,13 +20,12 @@ from torch import nn
 from ...image_transforms import (
     center_to_corners_format,
 )
-from ...image_utils import AnnotationFormat
 from ...masking_utils import create_bidirectional_mask
 from ...modeling_outputs import (
     BaseModelOutput,
 )
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
-from ...processing_utils import ImagesKwargs, Unpack
+from ...processing_utils import Unpack
 from ...utils import (
     TensorType,
     TransformersKwargs,
@@ -100,20 +99,6 @@ def encode_sinusoidal_position_embedding(
         embeddings[0], embeddings[1] = embeddings[1], embeddings[0]
 
     return torch.cat(embeddings, dim=-1).to(pos_tensor.dtype)
-
-
-class ConditionalDetrImageProcessorKwargs(ImagesKwargs, total=False):
-    r"""
-    format (`str`, *optional*, defaults to `AnnotationFormat.COCO_DETECTION`):
-        Data format of the annotations. One of "coco_detection" or "coco_panoptic".
-    do_convert_annotations (`bool`, *optional*, defaults to `True`):
-        Controls whether to convert the annotations to the format expected by the CONDITIONAL_DETR model. Converts the
-        bounding boxes to the format `(center_x, center_y, width, height)` and in the range `[0, 1]`.
-        Can be overridden by the `do_convert_annotations` parameter in the `preprocess` method.
-    """
-
-    format: str | AnnotationFormat
-    do_convert_annotations: bool
 
 
 class ConditionalDetrImageProcessor(DetrImageProcessor):

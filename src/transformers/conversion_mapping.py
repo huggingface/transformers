@@ -82,7 +82,6 @@ _MODEL_TO_CONVERSION_PATTERN = {
     "qwen2_5_vl": "qwen2_vl",
     "sam3_tracker_video": "sam3_tracker",
     "pp_chart2table": "llava",
-    "gemma3n_text": "qwen3_5_text",
     "qwen3_5_moe_text": "qwen3_5_text",
     "altclip_vision_model": "clip_vision_model",
     "chinese_clip_vision_model": "clip_vision_model",
@@ -211,19 +210,10 @@ def _build_checkpoint_conversion_mapping():
             WeightRenaming(source_patterns=r"^visual", target_patterns="model.visual"),
         ],
         "colqwen2": [
-            WeightRenaming(source_patterns=r"vlm.model", target_patterns="vlm"),
+            PrefixChange(prefix_to_remove="model", model_prefix="vlm"),
             WeightRenaming(source_patterns=r"vlm(?!\.(language_model|visual))", target_patterns="vlm.language_model"),
         ],
-        "timm_wrapper": [
-            # Simply add the prefix `timm_model`. Similar to `base_model_prefix` but also removes prefix
-            # when saving. TODO: Would be probably much cleaner with a `add_prefix` argument in WeightRenaming
-            # Note: we don't add `timm_model` when it is part of a bigger VLM, because they already have `timm_model`
-            # saved in state dict keys. Thus the look behind check. Should be fixed by proper `add_prefix`!
-            WeightRenaming(
-                source_patterns=r"^(?!(?:model\.|backbone\.|tower\.))(.+)$",
-                target_patterns=r"timm_model.\1",
-            )
-        ],
+        "timm_wrapper": [PrefixChange(prefix_to_add="timm_model")],
         "pi0": [
             WeightRenaming(source_patterns=r"state_proj", target_patterns="embed_action_time.state_proj"),
             WeightRenaming(source_patterns=r"action_in_proj", target_patterns="embed_action_time.action_in_proj"),
@@ -261,13 +251,7 @@ def _build_checkpoint_conversion_mapping():
             WeightRenaming("attention_layer_norm", "input_layernorm"),
             WeightRenaming("feedforward_layer_norm", "post_attention_layernorm"),
         ],
-        "qwen3_5_text": [
-            # Note: the lookbehind on the target is to avoid replacing bigger matches when the model is a submodel of
-            # the ForConditionalGeneration model
-            WeightRenaming(
-                source_patterns=r"^model.language_model.", target_patterns=r"^model.(?!(?:language_model.|visual.))"
-            ),
-        ],
+        "qwen3_5_text": [PrefixChange(prefix_to_remove="language_model", model_prefix="model")],
         "sam3_tracker": [
             WeightRenaming(
                 source_patterns=r"detector_model.vision_encoder.backbone.", target_patterns="vision_encoder.backbone."
@@ -712,6 +696,14 @@ def _build_checkpoint_conversion_mapping():
     ]
     mapping["exaone_moe"] = mapping["qwen2_moe"].copy()
     mapping["exaone_moe"] += [WeightRenaming("mlp.e_score_correction_bias", "mlp.gate.e_score_correction_bias")]
+
+    # HYV3: qwen2_moe expert fusion + attribute renames for MiniMaxM2-style inheritance
+    mapping["hy_v3"] = mapping["qwen2_moe"].copy()
+    mapping["hy_v3"] += [
+        WeightRenaming(source_patterns=r"mlp\.router\.gate\.weight", target_patterns="mlp.gate.weight"),
+        WeightRenaming(source_patterns=r"mlp\.expert_bias", target_patterns="mlp.e_score_correction_bias"),
+        WeightRenaming(source_patterns=r"mlp\.shared_mlp\.", target_patterns="mlp.shared_experts."),
+    ]
 
     for model_type, base_pattern in _MODEL_TO_CONVERSION_PATTERN.items():
         if model_type in mapping:

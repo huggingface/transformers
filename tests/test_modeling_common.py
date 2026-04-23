@@ -51,7 +51,11 @@ from transformers.integrations.deepspeed import (
     is_deepspeed_zero3_enabled,
     unset_hf_deepspeed_config,
 )
-from transformers.integrations.moe import batched_mm_experts_forward, grouped_mm_experts_forward
+from transformers.integrations.moe import (
+    batched_mm_experts_forward,
+    grouped_mm_experts_forward,
+    sonicmoe_experts_forward,
+)
 from transformers.modeling_layers import GradientCheckpointingLayer
 from transformers.modeling_utils import FLASH_ATTN_KERNEL_FALLBACK, _get_tied_weight_keys
 from transformers.models.auto import get_values
@@ -110,6 +114,7 @@ from transformers.utils import (
     GENERATION_CONFIG_NAME,
     SAFE_WEIGHTS_NAME,
     ModelOutput,
+    is_kernels_available,
     is_torch_bf16_available_on_device,
     is_torch_fp16_available_on_device,
 )
@@ -583,59 +588,49 @@ def _test_eager_matches_batched_and_grouped_inference(self, name, dtype):
             model.save_pretrained(tmpdirname)
             model = model_class.from_pretrained(tmpdirname).eval().to(torch_device).to(dtype)
 
-        with torch.no_grad():
-            inputs_dict = {k: v.to(dtype) if torch.is_floating_point(v) else v for k, v in inputs_dict.items()}
-            prepared_inputs = self._prepare_for_class(inputs_dict, model_class)
+        inputs_dict = {k: v.to(dtype) if torch.is_floating_point(v) else v for k, v in inputs_dict.items()}
+        prepared_inputs = self._prepare_for_class(inputs_dict, model_class)
 
-            mock_batched_mm_forward = Mock(wraps=batched_mm_experts_forward)
-            mock_grouped_mm_forward = Mock(wraps=grouped_mm_experts_forward)
-            with (
-                # This is needed because we call the functions through the interface's global mapping
-                patch.dict(
-                    "transformers.integrations.moe.ALL_EXPERTS_FUNCTIONS._global_mapping",
-                    {"batched_mm": mock_batched_mm_forward, "grouped_mm": mock_grouped_mm_forward},
-                ),
-            ):
-                model.set_experts_implementation("eager")
-                self.assertEqual(model.config._experts_implementation, "eager")
-                outputs_eager = model(**prepared_inputs)
-                mock_batched_mm_forward.assert_not_called()
-                mock_grouped_mm_forward.assert_not_called()
+        implementations = ["eager", "batched_mm", "grouped_mm"]
+        mocks = {
+            "batched_mm": Mock(wraps=batched_mm_experts_forward),
+            "grouped_mm": Mock(wraps=grouped_mm_experts_forward),
+        }
 
-                mock_batched_mm_forward.reset_mock()
-                mock_grouped_mm_forward.reset_mock()
+        if (
+            dtype != torch.float32
+            and is_kernels_available()
+            and torch.cuda.is_available()
+            and torch.cuda.get_device_capability() >= (9, 0)
+        ):
+            # we also need nvidia-cutlass-dsl and apache-tvm-ffi
+            mocks["sonicmoe"] = Mock(wraps=sonicmoe_experts_forward)
+            implementations.append("sonicmoe")
 
-                model.set_experts_implementation("batched_mm")
-                self.assertEqual(model.config._experts_implementation, "batched_mm")
-                outputs_batched_mm = model(**prepared_inputs)
-                mock_grouped_mm_forward.assert_not_called()
-                mock_batched_mm_forward.assert_called()
+        outputs = {}
+        # This is needed because we call the functions through the interface's global mapping
+        with patch.dict("transformers.integrations.moe.ALL_EXPERTS_FUNCTIONS._global_mapping", mocks):
+            for impl in implementations:
+                model.set_experts_implementation(impl)
+                self.assertEqual(model.config._experts_implementation, impl)
 
-                mock_batched_mm_forward.reset_mock()
-                mock_grouped_mm_forward.reset_mock()
+                with torch.no_grad():
+                    outputs[impl] = _get_output_tensors(model(**prepared_inputs))
 
-                model.set_experts_implementation("grouped_mm")
-                self.assertEqual(model.config._experts_implementation, "grouped_mm")
-                outputs_grouped_mm = model(**prepared_inputs)
-                mock_batched_mm_forward.assert_not_called()
-                mock_grouped_mm_forward.assert_called()
+                self.assertTrue(outputs[impl], f"No outputs from {impl} implementation")
 
-                mock_batched_mm_forward.reset_mock()
-                mock_grouped_mm_forward.reset_mock()
+                for name, mock in mocks.items():
+                    if name == impl:
+                        mock.assert_called()
+                    else:
+                        mock.assert_not_called()
 
-        # extract output tensors for comparison
-        outputs_eager = _get_output_tensors(outputs_eager)
-        outputs_batched_mm = _get_output_tensors(outputs_batched_mm)
-        outputs_grouped_mm = _get_output_tensors(outputs_grouped_mm)
+                    mock.reset_mock()
 
-        # make sure we have collected some tensors from the outputs
-        self.assertTrue(outputs_eager, "No outputs from eager implementation")
-        self.assertTrue(outputs_batched_mm, "No outputs from batched_mm implementation")
-        self.assertTrue(outputs_grouped_mm, "No outputs from grouped_mm implementation")
-
-        # make sure all implementations give numerically close outputs
-        torch.testing.assert_close(outputs_eager, outputs_batched_mm, rtol=1e-4, atol=1e-4)
-        torch.testing.assert_close(outputs_eager, outputs_grouped_mm, rtol=1e-4, atol=1e-4)
+        # all non-eager implementations must numerically match eager
+        eager_outputs = outputs.pop("eager")
+        for impl, impl_outputs in outputs.items():
+            torch.testing.assert_close(eager_outputs, impl_outputs, rtol=1e-4, atol=1e-4)
 
 
 def _config_zero_init(config):
@@ -3295,6 +3290,11 @@ class ModelTesterMixin:
             if not all(
                 submodel._supports_flash_attn for submodel in model.modules() if isinstance(submodel, PreTrainedModel)
             ):
+                continue
+
+            # Some models only support a sub set of all FA implementations
+            valid_fa_implementations = model._compatible_flash_implementations
+            if valid_fa_implementations is not None and attn_implementation not in valid_fa_implementations:
                 continue
 
             # If we end up here, at least one model class was not skipped
