@@ -201,6 +201,11 @@ class PagedAttentionCache:
             activation_peaks=[lm_head_peak, attention_peak],
             num_attention_masks=num_attention_masks,
         )
+
+        # If somehow the max memory percent is not yet resolved, resolve it conservatively
+        if continuous_batching_config.max_memory_percent is None:
+            continuous_batching_config.resolve_max_memory_percent(has_logit_processors=True)
+
         num_blocks, max_batch_tokens = memory_handler.infer_num_blocks_and_max_batch_tokens(
             num_blocks=continuous_batching_config.num_blocks,
             max_batch_tokens=continuous_batching_config.max_batch_tokens,
