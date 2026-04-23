@@ -71,7 +71,6 @@ from .integrations.flash_paged import paged_attention_forward
 from .integrations.flex_attention import flex_attention_forward
 from .integrations.hub_kernels import allow_all_hub_kernels, is_kernel
 from .integrations.moe import ALL_EXPERTS_FUNCTIONS
-from .intergrations.finegrained_fp8 import ALL_FP8_EXPERTS_FUNCTIONS
 from .integrations.peft import maybe_load_adapters
 from .integrations.sdpa_attention import sdpa_attention_forward
 from .integrations.sdpa_paged import sdpa_attention_paged_forward
@@ -84,6 +83,7 @@ from .integrations.tensor_parallel import (
     shard_and_distribute_module,
     verify_tp_plan,
 )
+from .intergrations.finegrained_fp8 import ALL_FP8_EXPERTS_FUNCTIONS
 from .loss.loss_utils import LOSS_MAPPING
 from .modeling_flash_attention_utils import (
     FLASH_ATTENTION_COMPATIBILITY_MATRIX,
@@ -1971,7 +1971,9 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
 
     def get_correct_experts_implementation(self, requested_experts: str | None) -> str:
         applicable_experts = "grouped_mm" if requested_experts is None else requested_experts
-        base_experts_fns = list(set(["eager"] + list(ALL_EXPERTS_FUNCTIONS.keys()) + list(ALL_FP8_EXPERTS_FUNCTIONS.keys())))
+        base_experts_fns = list(
+            set(["eager"] + list(ALL_EXPERTS_FUNCTIONS.keys()) + list(ALL_FP8_EXPERTS_FUNCTIONS.keys()))
+        )
         valid_experts_str_list = [f'`experts_implementation="{fn}"`' for fn in base_experts_fns]
         valid_experts_str_list[-1] = "and " + valid_experts_str_list[-1]
         valid_experts_str = ", ".join(valid_experts_str_list)
