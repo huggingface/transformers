@@ -64,6 +64,7 @@ from transformers import TrainingArguments
 
 TrainingArguments(
     ...,
+    fsdp=True,
     fsdp="full_shard auto_wrap",
     fsdp_config="path/to/fsdp.json",
 )

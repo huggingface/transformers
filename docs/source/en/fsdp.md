@@ -101,11 +101,9 @@ accelerate launch train.py
 </hfoption>
 <hfoption id="FSDP config file">
 
-Pass an FSDP config file to [`fsdp_config`]. All fields are optional except for the sharding strategy in `fsdp`.
-
 ```json
 {
-  "version": 1,
+  "version": 2,
   "transformer_layer_cls_to_wrap": ["LlamaDecoderLayer"],
   "backward_prefetch": "backward_pre",
   "forward_prefetch": false,
@@ -117,11 +115,14 @@ Pass an FSDP config file to [`fsdp_config`]. All fields are optional except for 
 }
 ```
 
+Set `fsdp=True`, a sharding strategy, and pass the FSDP config file to [`fsdp_config`].
+
 ```py
 from transformers import TrainingArguments
 
 TrainingArguments(
     ...,
+    fsdp=True,
     fsdp="full_shard auto_wrap",
     fsdp_config="path/to/fsdp.json",
 )
