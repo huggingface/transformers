@@ -75,7 +75,6 @@ _MODEL_TO_CONVERSION_PATTERN = {
     "qwen2_5_vl": "qwen2_vl",
     "sam3_tracker_video": "sam3_tracker",
     "pp_chart2table": "llava",
-    "qwen3_5_moe_text": "qwen3_5_moe_text",
     "altclip_vision_model": "clip_vision_model",
     "chinese_clip_vision_model": "clip_vision_model",
     "clipseg_vision_model": "clip_vision_model",
