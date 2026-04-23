@@ -169,7 +169,6 @@ class Gemma4Processor(ProcessorMixin):
                     )
 
                 n_images_in_images = [len(sublist) for sublist in images]
-                print(text, images)
                 if n_images_in_text != n_images_in_images:
                     raise ValueError(
                         f"The total number of {self.image_token} tokens in the prompts should be the same as the number of images passed."

@@ -13,7 +13,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import re
 from math import pi
 
 from huggingface_hub.dataclasses import strict
@@ -99,32 +98,8 @@ class MusicFlamingoConfig(AudioFlamingo3Config):
         PreTrainedConfig.__post_init__(**kwargs)
 
 
+@auto_docstring
 class MusicFlamingoProcessor(AudioFlamingo3Processor):
-    r"""
-    Constructs an MusicFlamingo processor which wraps an MusicFlamingo feature extractor and an MusicFlamingo
-    tokenizer into a single processor.
-
-    [`MusicFlamingoProcessor`] offers all the functionalities of [`WhisperFeatureExtractor`] and
-    [`Qwen2TokenizerFast`]. See the [`~MusicFlamingoProcessor.__call__`] for more information.
-
-    Args:
-        feature_extractor ([`WhisperFeatureExtractor`]):
-            The feature extractor is a required input.
-        tokenizer ([`Qwen2TokenizerFast`]):
-            The tokenizer is a required input.
-        chat_template (`Optional[str]`, *optional*):
-            The Jinja template to use for formatting the conversation. If not provided, the tokenizer's default chat
-            template will be used.
-        audio_token (`Optional[str]`, *optional*, defaults to `"<sound>"`):
-            Special token used to represent audio inputs in the chat template.
-        audio_bos_token (`Optional[str]`, *optional*, defaults to `"<|sound_bos|>"`):
-            Special token used to represent the beginning of audio.
-        audio_eos_token (`Optional[str]`, *optional*, defaults to `"<|sound_eos|>"`):
-            Special token used to represent the end of audio.
-        max_audio_len (`int`, *optional*, defaults to 1200):
-            Maximum length of audio sequences in seconds. Audio longer than this will be truncated.
-    """
-
     def __init__(
         self,
         feature_extractor,
@@ -135,6 +110,16 @@ class MusicFlamingoProcessor(AudioFlamingo3Processor):
         audio_eos_token="<|sound_eos|>",
         max_audio_len=1200,
     ):
+        r"""
+        audio_token (`Optional[str]`, *optional*, defaults to `"<sound>"`):
+            Special token used to represent audio inputs in the chat template.
+        audio_bos_token (`Optional[str]`, *optional*, defaults to `"<|sound_bos|>"`):
+            Special token used to represent the beginning of audio.
+        audio_eos_token (`Optional[str]`, *optional*, defaults to `"<|sound_eos|>"`):
+            Special token used to represent the end of audio.
+        max_audio_len (`int`, *optional*, defaults to 1200):
+            Maximum length of audio sequences in seconds. Audio longer than this will be truncated.
+        """
         super().__init__(
             feature_extractor,
             tokenizer,
@@ -148,23 +133,13 @@ class MusicFlamingoProcessor(AudioFlamingo3Processor):
         self.audio_bos_token_id = tokenizer.convert_tokens_to_ids(audio_bos_token)
         self.audio_eos_token_id = tokenizer.convert_tokens_to_ids(audio_eos_token)
 
-    def _expand_audio_tokens(self, text, padding_mask, per_sample_windows):
-        audio_lengths = torch.stack([s.sum() for s in torch.split(padding_mask.sum(-1), per_sample_windows)])
-        audio_tokens_lengths = self._get_audio_token_length(audio_lengths)
-        audio_token_pattern = re.compile(re.escape(self.audio_token))
-        for i, audio_length in enumerate(audio_tokens_lengths):
-            text[i] = audio_token_pattern.sub(
-                self.audio_bos_token + self.audio_token * audio_length + self.audio_eos_token,
-                text[i],
-            )
-        return text
+    def replace_audio_token(self, audio_inputs: dict, audio_idx: int) -> str:
+        num_audio_tokens = audio_inputs["num_audio_tokens"][audio_idx]
+        return self.audio_bos_token + self.audio_token * num_audio_tokens + self.audio_eos_token
 
-    def _get_audio_tokens_mask(self, input_ids):
-        return (
-            (input_ids == self.audio_token_id)
-            | (input_ids == self.audio_bos_token_id)
-            | (input_ids == self.audio_eos_token_id)
-        )
+    @property
+    def audio_ids(self):
+        return [self.audio_token_id, self.audio_bos_token_id, self.audio_eos_token_id]
 
     def apply_transcription_request(self, *args, **kwargs):
         raise NotImplementedError("This method is not supported for MusicFlamingo.")

@@ -20,7 +20,7 @@ from ...audio_utils import AudioInput, make_list_of_audio
 from ...feature_extraction_utils import BatchFeature
 from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import TextInput
-from ...utils import is_torch_available, logging
+from ...utils import auto_docstring, is_torch_available, logging
 
 
 if is_torch_available():
@@ -47,30 +47,8 @@ class AudioFlamingo3ProcessorKwargs(ProcessingKwargs, total=False):
     }
 
 
+@auto_docstring
 class AudioFlamingo3Processor(ProcessorMixin):
-    r"""
-    Constructs an AudioFlamingo3 processor which wraps an AudioFlamingo3 feature extractor and an AudioFlamingo3
-    tokenizer into a single processor.
-
-    [`AudioFlamingo3Processor`] offers all the functionalities of [`WhisperFeatureExtractor`] and
-    [`Qwen2TokenizerFast`]. See the [`~AudioFlamingo3Processor.__call__`] for more information.
-
-    Args:
-            feature_extractor ([`WhisperFeatureExtractor`]):
-                The feature extractor is a required input.
-            tokenizer ([`Qwen2TokenizerFast`]):
-                The tokenizer is a required input.
-            chat_template (`Optional[str]`, *optional*):
-                The Jinja template to use for formatting the conversation. If not provided, the tokenizer's default chat
-                template will be used.
-            audio_token (`Optional[str]`, *optional*, defaults to `"<sound>"`):
-                Special token used to represent audio inputs in the chat template.
-            default_transcription_prompt (`str`, *optional*, defaults to `"Transcribe the input speech."`):
-                Default prompt to use for transcription tasks when applying transcription requests.
-            max_audio_len (`int`, *optional*, defaults to 600):
-                Maximum length of audio sequences in seconds. Audio longer than this will be truncated.
-    """
-
     valid_processor_kwargs = AudioFlamingo3ProcessorKwargs
 
     def __init__(
@@ -82,12 +60,21 @@ class AudioFlamingo3Processor(ProcessorMixin):
         default_transcription_prompt="Transcribe the input speech.",
         max_audio_len=600,
     ):
+        r"""
+        audio_token (`Optional[str]`, *optional*, defaults to `"<sound>"`):
+            Special token used to represent audio inputs in the chat template.
+        default_transcription_prompt (`str`, *optional*, defaults to `"Transcribe the input speech."`):
+            Default prompt to use for transcription tasks when applying transcription requests.
+        max_audio_len (`int`, *optional*, defaults to 600):
+            Maximum length of audio sequences in seconds. Audio longer than this will be truncated.
+        """
         self.audio_token = audio_token
         self.audio_token_id = tokenizer.convert_tokens_to_ids(audio_token)
         self.default_transcription_prompt = default_transcription_prompt
         self.max_audio_len = max_audio_len
         super().__init__(feature_extractor, tokenizer, chat_template=chat_template)
 
+    @auto_docstring
     def __call__(
         self,
         text: TextInput | list[TextInput],
@@ -96,20 +83,8 @@ class AudioFlamingo3Processor(ProcessorMixin):
         **kwargs: Unpack[AudioFlamingo3ProcessorKwargs],
     ) -> BatchFeature:
         r"""
-        Main method to prepare one or several text sequence(s) and audio waveform(s) for the model. This
-        method expands `<sound>` placeholders in the text based on the post-pool frame counts of the
-        audio windows, then tokenizes the provided strings as-is, and extracts log-mel features
-        with [`WhisperFeatureExtractor`]. If `audio` is `None`, no audio processing is performed and
-        the text is tokenized as-is (LM-only behavior).
-
-        Args:
-            text (`str` or `list[str]`):
-                Input sequence or batch of sequences.
-            audio (`np.ndarray` or `list[np.ndarray]`):
-                Input audio or batch of audios as NumPy arrays. If provided, there must be as many `text` inputs as
-                `audio` inputs.
-            output_labels (bool, *optional*, default=False):
-                Whether to return labels for training.
+        output_labels (bool, *optional*, default=False):
+            Whether to return labels for training.
 
         Returns:
             [`BatchFeature`]: A dictionary with tokenized text (`input_ids`, `attention_mask`) and
@@ -117,11 +92,13 @@ class AudioFlamingo3Processor(ProcessorMixin):
         """
         # Force tensor outputs for AudioFlamingo, other types not supported
         kwargs["return_tensors"] = "pt"
+
+        if output_labels:
+            kwargs["return_mm_token_type_ids"] = True
         model_inputs = super().__call__(audio=audio, text=text, **kwargs)
 
         if output_labels:
-            labels = model_inputs["input_ids"].clone()
-            labels[labels == self.audio_token_id] = -100
+            labels = model_inputs.pop("mm_token_type_ids")
             labels[labels == self.tokenizer.pad_token_id] = -100
             model_inputs["labels"] = labels
         return BatchFeature(data=model_inputs, tensor_type="pt")

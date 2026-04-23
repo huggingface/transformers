@@ -86,7 +86,7 @@ class AriaProcessor(ProcessorMixin):
         super().__init__(image_processor, tokenizer, chat_template=chat_template)
 
     def replace_image_token(self, image_inputs: dict, image_idx: int) -> str:
-        tokens_per_image = self.size_conversion[image_inputs.pixel_values.shape[2]]
+        tokens_per_image = self.size_conversion[image_inputs["pixel_values"].shape[2]]
         num_image_tokens = image_inputs["num_crops"] * tokens_per_image
         return self.image_token * num_image_tokens
 
