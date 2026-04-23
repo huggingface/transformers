@@ -56,7 +56,7 @@ deps = {
     "rjieba": "rjieba",
     "rouge-score": "rouge-score!=0.0.7,!=0.0.8,!=0.1,!=0.1.1",
     "ruff": "ruff==0.14.10",
-    "transformers-mlinter": "transformers-mlinter==0.1.1",
+    "transformers-mlinter": "transformers-mlinter @ git+https://github.com/huggingface/transformers-mlinter@b9d319ce264c106f97a959d926ef42bc3c0ea4d1",
     "ty": "ty==0.0.20",
     "sacrebleu": "sacrebleu>=1.4.12,<2.0.0",
     "sacremoses": "sacremoses",

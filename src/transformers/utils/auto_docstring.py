@@ -78,9 +78,12 @@ HARDCODED_CONFIG_FOR_MODELS = {
     "esmfold": "EsmConfig",
     "parakeet": "ParakeetCTCConfig",
     "privacy-filter": "OpenAIPrivacyFilterConfig",
+    "openai-privacy-filter": "OpenAIPrivacyFilterConfig",
     "lasr": "LasrCTCConfig",
     "wav2vec2-with-lm": "Wav2Vec2Config",
     "granite4-vision": "Granite4VisionConfig",
+    "hy-v3": "HYV3Config",
+    "slanet": "SLANetConfig",
 }
 
 _re_checkpoint = re.compile(r"\[(.+?)\]\((https://huggingface\.co/.+?)\)")
