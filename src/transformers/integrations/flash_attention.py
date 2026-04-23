@@ -81,7 +81,7 @@ def flash_attention_forward(
         target_dtype=target_dtype,
         attn_implementation=module.config._attn_implementation,
         layer_idx=module.layer_idx if hasattr(module, "layer_idx") else None,
-        s_aux=s_aux.to(query.dtype),  # FA only accepts half precision
+ s_aux=s_aux.to(query.dtype) if s_aux is not None else None, # FA only accepts half precision, guard for None
         **kwargs,
     )
 
