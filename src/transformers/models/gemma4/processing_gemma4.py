@@ -80,8 +80,10 @@ class Gemma4Processor(ProcessorMixin):
         self.eoi_token = tokenizer.eoi_token
         self.image_token = tokenizer.image_token
 
-        self.video_token = tokenizer.video_token
-        self.video_token_id = tokenizer.video_token_id
+        # FIXME: add the token to config and ask Ryan to re-upload
+        tokenizer.add_special_tokens({"additional_special_tokens": ["<|video|>"]})
+        self.video_token = "<|video|>"
+        self.video_token_id = tokenizer.convert_tokens_to_ids(self.video_token)
 
         # Audio token handling, mirroring the vision pattern.
         # audio_seq_length serves as the maximum cap on the number of audio soft tokens

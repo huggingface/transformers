@@ -806,7 +806,7 @@ class ProcessorMixin(PushToHubMixin):
         # Keep the order so we can extract groups later and replace
         image_token = re.escape(getattr(self, "image_token", ""))
         video_token = re.escape(getattr(self, "video_token", ""))
-        audio_tokens = re.escape(getattr(self, "audio_tokens", ""))
+        audio_tokens = re.escape(getattr(self, "audio_token", ""))
         regex_special_mm_tokens = rf"({image_token})|({video_token})|({audio_tokens})"
 
         batch_replacement_offsets = []
