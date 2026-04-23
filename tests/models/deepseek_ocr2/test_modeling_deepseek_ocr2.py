@@ -121,7 +121,7 @@ class DeepseekOcr2VisionText2TextModelTester:
         self.encoder_config = encoder_config
         self.text_config = text_config
 
-        # VisionModel always selects query_768 (144 tokens) for small images + 1 separator
+        # VisionModel always selects query_768_resolution (144 tokens) for small images + 1 separator
         self.num_image_tokens = 145
         self.seq_length = seq_length + self.num_image_tokens
 

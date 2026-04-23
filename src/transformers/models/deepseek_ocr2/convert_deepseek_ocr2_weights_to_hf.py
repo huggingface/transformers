@@ -53,8 +53,8 @@ ORIGINAL_TO_CONVERTED_KEY_MAPPING = {
     # Qwen2 vision encoder
     r"model\.qwen2_model\.model\.model\.layers\.":          r"model.vision_tower.vision_encoder.layers.",
     r"model\.qwen2_model\.model\.model\.norm\.":            r"model.vision_tower.vision_encoder.norm.",
-    r"model\.qwen2_model\.query_768\.":                     r"model.vision_tower.query_768.",
-    r"model\.qwen2_model\.query_1024\.":                    r"model.vision_tower.query_1024.",
+    r"model\.qwen2_model\.query_768\.":                     r"model.vision_tower.query_768_resolution.",
+    r"model\.qwen2_model\.query_1024\.":                    r"model.vision_tower.query_1024_resolution.",
     # Projector
     r"model\.projector\.layers\.":                          r"model.multi_modal_projector.",
     # View separator (typo fix: "seperator" -> "separator")

@@ -61,6 +61,15 @@ logger = logging.get_logger(__name__)
 
 @dataclass
 class DeepseekOcr2ModelOutputWithPooling(BaseModelOutputWithPooling):
+    """
+    local_last_hidden_state (`torch.FloatTensor` of shape `(total_local_patches, sequence_length, hidden_size)`, *optional*):
+        Last hidden state from the vision encoder for local (cropped) patches.
+    local_hidden_states (`torch.FloatTensor`, *optional*):
+        Hidden states from all layers of the vision encoder for local patches.
+    local_attentions (`torch.FloatTensor`, *optional*):
+        Attention weights from all layers of the vision encoder for local patches.
+    """
+
     local_last_hidden_state: torch.FloatTensor | None = None
     local_hidden_states: torch.FloatTensor | None = None
     local_attentions: torch.FloatTensor | None = None
@@ -576,8 +585,9 @@ class DeepseekOcr2SamVisionEncoder(DeepseekOcr2PreTrainedModel):
     def get_input_embeddings(self):
         return self.patch_embed
 
+    @merge_with_config_defaults
+    @capture_outputs
     @auto_docstring
-    @capture_outputs(tie_last_hidden_states=False)
     def forward(self, pixel_values: torch.FloatTensor, **kwargs) -> BaseModelOutput:
         hidden_states = self.patch_embed(pixel_values)
         if self.pos_embed is not None:
@@ -593,9 +603,11 @@ class DeepseekOcr2SamVisionEncoder(DeepseekOcr2PreTrainedModel):
         return BaseModelOutput(last_hidden_state=hidden_states)
 
     def _interpolate_pos_encoding(self, pos_embed: torch.Tensor, target_size: int) -> torch.Tensor:
+        """Interpolate the positional encoding to match the target spatial size using bicubic interpolation."""
         src_size = pos_embed.shape[1]
         if src_size == target_size:
             return pos_embed
+
         pos_embed = pos_embed.permute(0, 3, 1, 2).float()
         pos_embed = torch.nn.functional.interpolate(
             pos_embed,
@@ -604,6 +616,7 @@ class DeepseekOcr2SamVisionEncoder(DeepseekOcr2PreTrainedModel):
             align_corners=False,
         )
         pos_embed = pos_embed.permute(0, 2, 3, 1)
+
         return pos_embed
 
 
@@ -884,6 +897,25 @@ class DeepseekOcr2VisionRotaryEmbedding(nn.Module):
         return cos.to(dtype=x.dtype), sin.to(dtype=x.dtype)
 
 
+def token_type_ids_mask_function(token_type_ids: torch.Tensor):
+    """
+    Creates an or_mask_function for `create_causal_mask` that allows
+    bidirectional attention between image tokens (type_id=0).
+
+    Args:
+        token_type_ids: `(batch_size, seq_len)` tensor where 0=image, 1=query.
+
+    Returns:
+        A mask function compatible with `create_causal_mask(or_mask_function=...)`.
+    """
+    is_image = token_type_ids == 0
+
+    def inner_mask(batch_idx: int, head_idx: int, q_idx: int, kv_idx: int) -> bool:
+        return is_image[batch_idx, q_idx] & is_image[batch_idx, kv_idx]
+
+    return inner_mask
+
+
 @auto_docstring(custom_intro="Vision encoder for DeepSeek-OCR-2.")
 class DeepseekOcr2VisionEncoder(DeepseekOcr2PreTrainedModel):
     _can_record_outputs = {
@@ -906,6 +938,7 @@ class DeepseekOcr2VisionEncoder(DeepseekOcr2PreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
+    @merge_with_config_defaults
     @capture_outputs
     @auto_docstring
     def forward(
@@ -913,16 +946,34 @@ class DeepseekOcr2VisionEncoder(DeepseekOcr2PreTrainedModel):
         inputs_embeds: torch.FloatTensor,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
+        num_patches: int | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutputWithPast:
         if position_ids is None:
             position_ids = torch.arange(inputs_embeds.shape[1], device=inputs_embeds.device).unsqueeze(0)
 
+        if attention_mask is None and num_patches is not None:
+            bsz, seq_len, _ = inputs_embeds.shape
+            token_type_ids = torch.cat(
+                [
+                    torch.zeros(bsz, num_patches, dtype=torch.long, device=inputs_embeds.device),
+                    torch.ones(bsz, seq_len - num_patches, dtype=torch.long, device=inputs_embeds.device),
+                ],
+                dim=1,
+            )
+            attention_mask = create_causal_mask(
+                config=self.config,
+                inputs_embeds=inputs_embeds,
+                attention_mask=None,
+                past_key_values=None,
+                or_mask_function=token_type_ids_mask_function(token_type_ids),
+            )
+
         hidden_states = inputs_embeds
         position_embeddings = self.rotary_emb(hidden_states, position_ids)
 
-        for decoder_layer in self.layers[: self.config.num_hidden_layers]:
-            hidden_states = decoder_layer(
+        for encoder_layer in self.layers[: self.config.num_hidden_layers]:
+            hidden_states = encoder_layer(
                 hidden_states,
                 attention_mask=attention_mask,
                 position_embeddings=position_embeddings,
@@ -934,25 +985,6 @@ class DeepseekOcr2VisionEncoder(DeepseekOcr2PreTrainedModel):
         return BaseModelOutputWithPast(last_hidden_state=hidden_states)
 
 
-def token_type_ids_mask_function(token_type_ids: torch.Tensor):
-    """
-    Creates an or_mask_function for `create_causal_mask` that allows
-    bidirectional attention between image tokens (type_id=0).
-
-    Args:
-        token_type_ids: `(batch_size, seq_len)` tensor where 0=image, 1=query.
-
-    Returns:
-        A mask function compatible with `create_causal_mask(or_mask_function=...)`.
-    """
-    is_image = token_type_ids == 0
-
-    def inner_mask(batch_idx: int, head_idx: int, q_idx: int, kv_idx: int) -> bool:
-        return is_image[batch_idx, q_idx] & is_image[batch_idx, kv_idx]
-
-    return inner_mask
-
-
 class DeepseekOcr2VisionModel(DeepseekOcr2PreTrainedModel):
     """Vision pipeline: SAM ViT-B (with neck)"""
 
@@ -962,46 +994,28 @@ class DeepseekOcr2VisionModel(DeepseekOcr2PreTrainedModel):
         self.vision_encoder = DeepseekOcr2VisionEncoder(config.encoder_config)
 
         # Resolution-specific learnable queries
-        self.query_768 = nn.Embedding(144, config.encoder_config.hidden_size)  # 12x12 for 768px
-        self.query_1024 = nn.Embedding(256, config.encoder_config.hidden_size)  # 16x16 for 1024px
+        self.query_768_resolution = nn.Embedding(144, config.encoder_config.hidden_size)  # 12x12 for 768px
+        self.query_1024_resolution = nn.Embedding(256, config.encoder_config.hidden_size)  # 16x16 for 1024px
         self.post_init()
 
     @can_return_tuple
     @auto_docstring
-    def forward(self, pixel_values: torch.Tensor, **kwargs) -> BaseModelOutput:
-        sam_out = self.sam_encoder(pixel_values, return_dict=True).last_hidden_state
-        x = sam_out.flatten(2).transpose(1, 2)
-        bsz, n_patches, _ = x.shape
+    def forward(self, pixel_values: torch.Tensor, **kwargs: Unpack[TransformersKwargs]) -> BaseModelOutput:
+        sam_encoder_outputs = self.sam_encoder(pixel_values, **kwargs)
+        hidden_states = sam_encoder_outputs.last_hidden_state.flatten(2).transpose(1, 2)
+        bsz, num_patches, _ = hidden_states.shape
 
-        queries = self.query_768.weight if n_patches <= 144 else self.query_1024.weight
-        n_queries = queries.shape[0]
-
+        queries = self.query_768_resolution.weight if num_patches <= 144 else self.query_1024_resolution.weight
         queries = queries.unsqueeze(0).expand(bsz, -1, -1)
-        combined = torch.cat([x, queries], dim=1)
-
-        token_type_ids = torch.cat(
-            [
-                torch.zeros(bsz, n_patches, dtype=torch.long, device=x.device),
-                torch.ones(bsz, n_queries, dtype=torch.long, device=x.device),
-            ],
-            dim=1,
-        )
-
-        hybrid_mask = create_causal_mask(
-            config=self.config.encoder_config,
-            inputs_embeds=combined,
-            attention_mask=None,
-            past_key_values=None,
-            or_mask_function=token_type_ids_mask_function(token_type_ids),
-        )
+        combined = torch.cat([hidden_states, queries], dim=1)
 
         encoder_outputs = self.vision_encoder(
             inputs_embeds=combined,
-            attention_mask=hybrid_mask,
+            num_patches=num_patches,
             **kwargs,
         )
 
-        query_features = encoder_outputs.last_hidden_state[:, n_patches:, :]
+        query_features = encoder_outputs.last_hidden_state[:, num_patches:, :]
 
         return BaseModelOutput(
             last_hidden_state=query_features,
