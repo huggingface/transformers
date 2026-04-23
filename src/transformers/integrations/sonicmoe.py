@@ -15,7 +15,7 @@
 """SonicMoE integration: fused MoE using CuteDSL kernels from `kernels-community/sonic-moe`.
 
 Provides `sonicmoe_experts_forward` registered as "sonicmoe" in the ExpertsInterface.
-Requirements: CUDA, `kernels`, `nvidia-cutlass-dsl`, has_gate=True, is_transposed=False.
+Requirements: CUDA, `kernels`, `nvidia-cutlass-dsl`, has_gate=True.
 """
 
 import functools
@@ -76,8 +76,6 @@ def sonicmoe_experts_forward(
     top_k_index: torch.Tensor,
     top_k_weights: torch.Tensor,
 ) -> torch.Tensor:
-    if self.is_transposed:
-        raise ValueError("sonicmoe requires non-transposed weights (is_transposed=False)")
     if not self.has_gate:
         raise ValueError("sonicmoe requires gated experts (has_gate=True)")
     if hidden_states.device.type != "cuda":
@@ -98,9 +96,12 @@ def sonicmoe_experts_forward(
     act_name = getattr(self.config, "hidden_act", "silu").lower()
     activation_type = getattr(ActivationType, ACT_MAP.get(act_name, "swiglu").upper(), ActivationType.SWIGLU)
 
-    # Permute weights as expected by sonic-moe (E=num_experts, H=hidden_size, I=intermediate_size)
-    w1 = self.gate_up_proj.permute(1, 2, 0)  # (2*I, H, E)
-    w2 = self.down_proj.permute(1, 2, 0)  # (I, H, E)
+    # Permute weights as expected by sonic-moe (E=num_experts, H=hidden_size, I=intermediate_size).
+    # Non-transposed: gate_up_proj is (E, 2*I, H), down_proj is (E, H, I) -> permute(1, 2, 0).
+    # Transposed: gate_up_proj is (E, H, 2*I), down_proj is (E, I, H) -> permute(2, 1, 0).
+    perm = (2, 1, 0) if self.is_transposed else (1, 2, 0)
+    w1 = self.gate_up_proj.permute(*perm)  # (2*I, H, E)
+    w2 = self.down_proj.permute(*perm)  # (I, H, E)
     b1 = self.gate_up_proj_bias if self.has_bias else None
     b2 = self.down_proj_bias if self.has_bias else None
 
