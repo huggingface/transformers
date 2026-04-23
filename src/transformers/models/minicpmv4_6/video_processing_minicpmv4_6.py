@@ -396,6 +396,7 @@ class MiniCPMV4_6VideoProcessor(BaseVideoProcessor):
         patch_size: int,
         slice_mode: bool,
         stack_frames: int,
+        max_num_frames: int,
         video_metadata: list[VideoMetadata],
         return_tensors: str | TensorType | None = None,
         **kwargs,
@@ -404,27 +405,49 @@ class MiniCPMV4_6VideoProcessor(BaseVideoProcessor):
         # Each unit is a [1, C, H, W] tensor representing either a single main
         # frame or a per-second composite of sub-frames.  When stack_frames > 1
         # the units are interleaved: [main_0, comp_0, main_1, comp_1, …]
-        # matching the old _extract_video_frames + apply_chat_template semantics.
         visual_units: list[torch.Tensor] = []
         for video, metadata in zip(videos, video_metadata):
             if stack_frames > 1:
-                num_seconds = math.ceil(metadata.duration)
-                subs_per_sec = stack_frames - 1
-                len_subframes = num_seconds * subs_per_sec
-                len_subframes -= math.ceil((num_seconds - metadata.duration) / (1 / stack_frames))
-                len_subframes = min(len_subframes, len(video))
+                duration = metadata.duration
+                num_seconds = math.ceil(duration)
 
-                if len_subframes > 0:
-                    main_video, sub_video = video[:-len_subframes], video[-len_subframes:]
+                # Reconstruct sub_timestamps (same logic as sample_frames)
+                sub_timestamps: list[float] = []
+                for sec in range(num_seconds):
+                    for j in range(1, stack_frames):
+                        timestamp = sec + j / stack_frames
+                        if timestamp < duration:
+                            sub_timestamps.append(timestamp)
+
+                # Apply the same downsampling that sample_frames would have applied
+                max_num_frames_stack = max_num_frames * (stack_frames - 1)
+                if len(sub_timestamps) > max_num_frames_stack:
+                    sampling_idxs = np.linspace(0, len(sub_timestamps) - 1, max_num_frames_stack, dtype=int)
+                    sub_timestamps = [sub_timestamps[int(i)] for i in sampling_idxs]
+
+                n_sub = len(sub_timestamps)
+                if n_sub > 0:
+                    main_video, sub_video = video[:-n_sub], video[-n_sub:]
                 else:
                     main_video, sub_video = video, video[:0]
 
+                # Group sub-frames by second (matching _group_stacked_by_second)
+                composites_by_sec: list[torch.Tensor | None] = []
+                cursor = 0
+                for sec in range(num_seconds):
+                    group_start = cursor
+                    while cursor < len(sub_timestamps) and sub_timestamps[cursor] < sec + 1:
+                        cursor += 1
+                    if cursor > group_start:
+                        composites_by_sec.append(self.concat_frames_as_image(sub_video[group_start:cursor]))
+                    else:
+                        composites_by_sec.append(None)
+
+                # Interleave: pair i-th main frame with i-th second's composite
                 for i in range(len(main_video)):
                     visual_units.append(main_video[i : i + 1])
-                    start = i * subs_per_sec
-                    end = min(start + subs_per_sec, len(sub_video))
-                    if start < end:
-                        visual_units.append(self.concat_frames_as_image(sub_video[start:end]))
+                    if i < len(composites_by_sec) and composites_by_sec[i] is not None:
+                        visual_units.append(composites_by_sec[i])
             else:
                 for i in range(len(video)):
                     visual_units.append(video[i : i + 1])
