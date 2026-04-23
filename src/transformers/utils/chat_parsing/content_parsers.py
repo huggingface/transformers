@@ -5,12 +5,8 @@
 # You may obtain a copy of the License at
 #
 #     http://www.apache.org/licenses/LICENSE-2.0
-"""Content parsers that turn region bodies into Python values.
-
-The registry is closed: schemas select and configure parsers by name, but
-cannot ship their own code. Add a new parser by writing a function of
-signature `(text: str, args: dict) -> Any` and registering it below.
-"""
+"""Content parsers that turn region bodies into Python values. The registry is
+closed — schemas select and configure parsers by name but cannot ship code."""
 
 from __future__ import annotations
 
@@ -27,7 +23,7 @@ def _raw(text: str, args: dict) -> str:
     return text
 
 
-def _apply_transform(value: Any, transform: str | None) -> Any:
+def _jmespath(value: Any, transform: str | None) -> Any:
     if transform is None:
         return value
     from ...utils import is_jmespath_available
@@ -49,7 +45,7 @@ def _json(text: str, args: dict) -> Any:
         if args.get("allow_non_json"):
             return text.strip()
         raise ValueError(f"json parser could not parse region as JSON.\nContent: {text!r}\nError: {e}") from e
-    return _apply_transform(value, args.get("transform"))
+    return _jmespath(value, args.get("transform"))
 
 
 # Sentinel characters for lax-JSON string pre-extraction — ASCII control chars
@@ -96,7 +92,7 @@ def _json_lax(text: str, args: dict) -> Any:
             f"json-lax: could not parse after dialect transforms.\n"
             f"Original: {text!r}\nTransformed: {working!r}\nError: {e}"
         ) from e
-    return _apply_transform(value, args.get("transform"))
+    return _jmespath(value, args.get("transform"))
 
 
 def _sub_parse(raw: str, value_parser: dict | None) -> Any:
