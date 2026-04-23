@@ -63,21 +63,21 @@ Make also sure that you have a hardware that is compatible with Flash-Attention 
 To load and run a model using Flash Attention 2, refer to the snippet below:
 
 ```python
->>> import torch
->>> from transformers import AutoModelForCausalLM, AutoTokenizer
+import torch
+from transformers import AutoModelForCausalLM, AutoTokenizer
 from accelerate import Accelerator
->>> device = Accelerator().device # the device to load the model onto
+device = Accelerator().device # the device to load the model onto
 
->>> model = AutoModelForCausalLM.from_pretrained("bigcode/gpt_bigcode-santacoder", attn_implementation="flash_attention_2")
->>> tokenizer = AutoTokenizer.from_pretrained("bigcode/gpt_bigcode-santacoder")
+model = AutoModelForCausalLM.from_pretrained("bigcode/gpt_bigcode-santacoder", attn_implementation="flash_attention_2")
+tokenizer = AutoTokenizer.from_pretrained("bigcode/gpt_bigcode-santacoder")
 
->>> prompt = "def hello_world():"
+prompt = "def hello_world():"
 
->>> model_inputs = tokenizer([prompt], return_tensors="pt").to(model.device)
->>> model.to(device)
+model_inputs = tokenizer([prompt], return_tensors="pt").to(model.device)
+model.to(device)
 
->>> generated_ids = model.generate(**model_inputs, max_new_tokens=30, do_sample=False)
->>> tokenizer.batch_decode(generated_ids)[0]
+generated_ids = model.generate(**model_inputs, max_new_tokens=30, do_sample=False)
+tokenizer.batch_decode(generated_ids)[0]
 'def hello_world():\n    print("hello world")\n\nif __name__ == "__main__":\n    print("hello world")\n<|endoftext|>'
 ```
 

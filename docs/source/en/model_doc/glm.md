@@ -60,26 +60,26 @@ Tips:
 In the following, we demonstrate how to use `glm-4-9b-chat` for the inference. Note that we have used the ChatML format for dialog, in this demo we show how to leverage `apply_chat_template` for this purpose.
 
 ```python
->>> from transformers import AutoModelForCausalLM, AutoTokenizer
+from transformers import AutoModelForCausalLM, AutoTokenizer
 from accelerate import Accelerator
->>> device = Accelerator().device # the device to load the model onto
+device = Accelerator().device # the device to load the model onto
 
->>> model = AutoModelForCausalLM.from_pretrained("THUDM/glm-4-9b-chat", device_map="auto", trust_remote_code=True)
->>> tokenizer = AutoTokenizer.from_pretrained("THUDM/glm-4-9b-chat")
+model = AutoModelForCausalLM.from_pretrained("THUDM/glm-4-9b-chat", device_map="auto", trust_remote_code=True)
+tokenizer = AutoTokenizer.from_pretrained("THUDM/glm-4-9b-chat")
 
->>> prompt = "Give me a short introduction to large language model."
+prompt = "Give me a short introduction to large language model."
 
->>> messages = [{"role": "user", "content": prompt}]
+messages = [{"role": "user", "content": prompt}]
 
->>> text = tokenizer.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
+text = tokenizer.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
 
->>> model_inputs = tokenizer([text], return_tensors="pt").to(model.device)
+model_inputs = tokenizer([text], return_tensors="pt").to(model.device)
 
->>> generated_ids = model.generate(model_inputs.input_ids, max_new_tokens=512, do_sample=True)
+generated_ids = model.generate(model_inputs.input_ids, max_new_tokens=512, do_sample=True)
 
->>> generated_ids = [output_ids[len(input_ids):] for input_ids, output_ids in zip(model_inputs.input_ids, generated_ids)]
+generated_ids = [output_ids[len(input_ids):] for input_ids, output_ids in zip(model_inputs.input_ids, generated_ids)]
 
->>> response = tokenizer.batch_decode(generated_ids, skip_special_tokens=True)[0]
+response = tokenizer.batch_decode(generated_ids, skip_special_tokens=True)[0]
 ```
 
 ## GlmConfig

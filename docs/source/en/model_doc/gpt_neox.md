@@ -49,22 +49,22 @@ additional tokens to whitespace characters, making the model more suitable for c
 The `generate()` method can be used to generate text using GPT Neo model.
 
 ```python
->>> from transformers import GPTNeoXForCausalLM, GPTNeoXTokenizerFast
+from transformers import GPTNeoXForCausalLM, GPTNeoXTokenizerFast
 
->>> model = GPTNeoXForCausalLM.from_pretrained("EleutherAI/gpt-neox-20b")
->>> tokenizer = GPTNeoXTokenizerFast.from_pretrained("EleutherAI/gpt-neox-20b")
+model = GPTNeoXForCausalLM.from_pretrained("EleutherAI/gpt-neox-20b")
+tokenizer = GPTNeoXTokenizerFast.from_pretrained("EleutherAI/gpt-neox-20b")
 
->>> prompt = "GPTNeoX20B is a 20B-parameter autoregressive Transformer model developed by EleutherAI."
+prompt = "GPTNeoX20B is a 20B-parameter autoregressive Transformer model developed by EleutherAI."
 
->>> input_ids = tokenizer(prompt, return_tensors="pt").input_ids
+input_ids = tokenizer(prompt, return_tensors="pt").input_ids
 
->>> gen_tokens = model.generate(
-...     input_ids,
-...     do_sample=True,
-...     temperature=0.9,
-...     max_length=100,
-... )
->>> gen_text = tokenizer.batch_decode(gen_tokens)[0]
+gen_tokens = model.generate(
+    input_ids,
+    do_sample=True,
+    temperature=0.9,
+    max_length=100,
+)
+gen_text = tokenizer.batch_decode(gen_tokens)[0]
 ```
 
 ## Using Flash Attention 2
@@ -86,7 +86,7 @@ pip install -U flash-attn --no-build-isolation
 To load a model using Flash Attention 2, we can pass the argument `attn_implementation="flash_attention_2"` to [`.from_pretrained`](https://huggingface.co/docs/transformers/main/en/main_classes/model#transformers.PreTrainedModel.from_pretrained). We'll also load the model in half-precision (e.g. `torch.float16`), since it results in almost no degradation to audio quality but significantly lower memory usage and faster inference:
 
 ```python
->>> from transformers import GPTNeoXForCausalLM, GPTNeoXTokenizerFast
+from transformers import GPTNeoXForCausalLM, GPTNeoXTokenizerFast
 
 model = GPTNeoXForCausalLM.from_pretrained("EleutherAI/gpt-neox-20b", attn_implementation="flash_attention_2").to(device)
 ...

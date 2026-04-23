@@ -38,19 +38,19 @@ This model was contributed by [dqnguyen](https://huggingface.co/dqnguyen). The o
 ## Usage example
 
 ```python
->>> import torch
->>> from transformers import AutoModel, AutoTokenizer
+import torch
+from transformers import AutoModel, AutoTokenizer
 
->>> phobert = AutoModel.from_pretrained("vinai/phobert-base")
->>> tokenizer = AutoTokenizer.from_pretrained("vinai/phobert-base")
+phobert = AutoModel.from_pretrained("vinai/phobert-base")
+tokenizer = AutoTokenizer.from_pretrained("vinai/phobert-base")
 
->>> # INPUT TEXT MUST BE ALREADY WORD-SEGMENTED!
->>> line = "Tôi là sinh_viên trường đại_học Công_nghệ ."
+# INPUT TEXT MUST BE ALREADY WORD-SEGMENTED!
+line = "Tôi là sinh_viên trường đại_học Công_nghệ ."
 
->>> input_ids = torch.tensor([tokenizer.encode(line)])
+input_ids = torch.tensor([tokenizer.encode(line)])
 
->>> with torch.no_grad():
-...     features = phobert(input_ids)  # Models outputs are now tuples
+with torch.no_grad():
+    features = phobert(input_ids)  # Models outputs are now tuples
 ```
 
 <Tip>

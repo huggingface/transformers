@@ -43,17 +43,17 @@ The StarCoder2 models can be found in the [HuggingFace hub](https://huggingface.
 These ready-to-use checkpoints can be downloaded and used via the HuggingFace Hub:
 
 ```python
->>> from transformers import AutoModelForCausalLM, AutoTokenizer
+from transformers import AutoModelForCausalLM, AutoTokenizer
 
->>> model = AutoModelForCausalLM.from_pretrained("bigcode/starcoder2-7b", device_map="auto")
->>> tokenizer = AutoTokenizer.from_pretrained("bigcode/starcoder2-7b")
+model = AutoModelForCausalLM.from_pretrained("bigcode/starcoder2-7b", device_map="auto")
+tokenizer = AutoTokenizer.from_pretrained("bigcode/starcoder2-7b")
 
->>> prompt = "def print_hello_world():"
+prompt = "def print_hello_world():"
 
->>> model_inputs = tokenizer([prompt], return_tensors="pt").to(model.device)
+model_inputs = tokenizer([prompt], return_tensors="pt").to(model.device)
 
->>> generated_ids = model.generate(**model_inputs, max_new_tokens=10, do_sample=False)
->>> tokenizer.batch_decode(generated_ids)[0]
+generated_ids = model.generate(**model_inputs, max_new_tokens=10, do_sample=False)
+tokenizer.batch_decode(generated_ids)[0]
 'def print_hello_world():\n    print("Hello World!")\n\ndef print'
 ```
 

@@ -48,17 +48,17 @@ The original code can be found [here](https://github.com/salesforce/codegen).
 ## Usage example
 
 ```python
->>> from transformers import AutoModelForCausalLM, AutoTokenizer
+from transformers import AutoModelForCausalLM, AutoTokenizer
 
->>> checkpoint = "Salesforce/codegen-350M-mono"
->>> model = AutoModelForCausalLM.from_pretrained(checkpoint)
->>> tokenizer = AutoTokenizer.from_pretrained(checkpoint)
+checkpoint = "Salesforce/codegen-350M-mono"
+model = AutoModelForCausalLM.from_pretrained(checkpoint)
+tokenizer = AutoTokenizer.from_pretrained(checkpoint)
 
->>> text = "def hello_world():"
+text = "def hello_world():"
 
->>> completion = model.generate(**tokenizer(text, return_tensors="pt"))
+completion = model.generate(**tokenizer(text, return_tensors="pt"))
 
->>> print(tokenizer.decode(completion[0]))
+print(tokenizer.decode(completion[0]))
 def hello_world():
     print("Hello World")
 

@@ -47,54 +47,54 @@ The original code can be found [here](https://github.com/Ucas-HaoranWei/GOT-OCR2
 ### Plain text inference
 
 ```python
->>> import torch
->>> from transformers import AutoProcessor, AutoModelForImageTextToText
+import torch
+from transformers import AutoProcessor, AutoModelForImageTextToText
 from accelerate import Accelerator
 
->>> device = Accelerator().device
->>> model = AutoModelForImageTextToText.from_pretrained("stepfun-ai/GOT-OCR-2.0-hf", device_map=device)
->>> processor = AutoProcessor.from_pretrained("stepfun-ai/GOT-OCR-2.0-hf", use_fast=True)
+device = Accelerator().device
+model = AutoModelForImageTextToText.from_pretrained("stepfun-ai/GOT-OCR-2.0-hf", device_map=device)
+processor = AutoProcessor.from_pretrained("stepfun-ai/GOT-OCR-2.0-hf", use_fast=True)
 
->>> image = "https://huggingface.co/datasets/hf-internal-testing/fixtures_got_ocr/resolve/main/image_ocr.jpg"
->>> inputs = processor(image, return_tensors="pt", device=device).to(device)
+image = "https://huggingface.co/datasets/hf-internal-testing/fixtures_got_ocr/resolve/main/image_ocr.jpg"
+inputs = processor(image, return_tensors="pt", device=device).to(device)
 
->>> generate_ids = model.generate(
-...     **inputs,
-...     do_sample=False,
-...     tokenizer=processor.tokenizer,
-...     stop_strings="<|im_end|>",
-...     max_new_tokens=4096,
-... )
+generate_ids = model.generate(
+    **inputs,
+    do_sample=False,
+    tokenizer=processor.tokenizer,
+    stop_strings="<|im_end|>",
+    max_new_tokens=4096,
+)
 
->>> processor.decode(generate_ids[0, inputs["input_ids"].shape[1]:], skip_special_tokens=True)
+processor.decode(generate_ids[0, inputs["input_ids"].shape[1]:], skip_special_tokens=True)
 "R&D QUALITY IMPROVEMENT\nSUGGESTION/SOLUTION FORM\nName/Phone Ext. : (...)"
 ```
 
 ### Plain text inference batched
 
 ```python
->>> import torch
->>> from transformers import AutoProcessor, AutoModelForImageTextToText
+import torch
+from transformers import AutoProcessor, AutoModelForImageTextToText
 from accelerate import Accelerator
 
->>> device = Accelerator().device
->>> model = AutoModelForImageTextToText.from_pretrained("stepfun-ai/GOT-OCR-2.0-hf", device_map=device)
->>> processor = AutoProcessor.from_pretrained("stepfun-ai/GOT-OCR-2.0-hf", use_fast=True)
+device = Accelerator().device
+model = AutoModelForImageTextToText.from_pretrained("stepfun-ai/GOT-OCR-2.0-hf", device_map=device)
+processor = AutoProcessor.from_pretrained("stepfun-ai/GOT-OCR-2.0-hf", use_fast=True)
 
->>> image1 = "https://huggingface.co/datasets/hf-internal-testing/fixtures_got_ocr/resolve/main/multi_box.png"
->>> image2 = "https://huggingface.co/datasets/hf-internal-testing/fixtures_got_ocr/resolve/main/image_ocr.jpg"
+image1 = "https://huggingface.co/datasets/hf-internal-testing/fixtures_got_ocr/resolve/main/multi_box.png"
+image2 = "https://huggingface.co/datasets/hf-internal-testing/fixtures_got_ocr/resolve/main/image_ocr.jpg"
 
->>> inputs = processor([image1, image2], return_tensors="pt", device=device).to(device)
+inputs = processor([image1, image2], return_tensors="pt", device=device).to(device)
 
->>> generate_ids = model.generate(
-...     **inputs,
-...     do_sample=False,
-...     tokenizer=processor.tokenizer,
-...     stop_strings="<|im_end|>",
-...     max_new_tokens=4,
-... )
+generate_ids = model.generate(
+    **inputs,
+    do_sample=False,
+    tokenizer=processor.tokenizer,
+    stop_strings="<|im_end|>",
+    max_new_tokens=4,
+)
 
->>> processor.batch_decode(generate_ids[:, inputs["input_ids"].shape[1] :], skip_special_tokens=True)
+processor.batch_decode(generate_ids[:, inputs["input_ids"].shape[1] :], skip_special_tokens=True)
 ["Reducing the number", "R&D QUALITY"]
 ```
 
@@ -103,26 +103,26 @@ from accelerate import Accelerator
 GOT-OCR2 can also generate formatted text, such as markdown or LaTeX. Here is an example of how to generate formatted text:
 
 ```python
->>> import torch
->>> from transformers import AutoProcessor, AutoModelForImageTextToText
+import torch
+from transformers import AutoProcessor, AutoModelForImageTextToText
 from accelerate import Accelerator
 
->>> device = Accelerator().device
->>> model = AutoModelForImageTextToText.from_pretrained("stepfun-ai/GOT-OCR-2.0-hf", device_map=device)
->>> processor = AutoProcessor.from_pretrained("stepfun-ai/GOT-OCR-2.0-hf", use_fast=True)
+device = Accelerator().device
+model = AutoModelForImageTextToText.from_pretrained("stepfun-ai/GOT-OCR-2.0-hf", device_map=device)
+processor = AutoProcessor.from_pretrained("stepfun-ai/GOT-OCR-2.0-hf", use_fast=True)
 
->>> image = "https://huggingface.co/datasets/hf-internal-testing/fixtures_got_ocr/resolve/main/latex.png"
->>> inputs = processor(image, return_tensors="pt", format=True, device=device).to(device)
+image = "https://huggingface.co/datasets/hf-internal-testing/fixtures_got_ocr/resolve/main/latex.png"
+inputs = processor(image, return_tensors="pt", format=True, device=device).to(device)
 
->>> generate_ids = model.generate(
-...     **inputs,
-...     do_sample=False,
-...     tokenizer=processor.tokenizer,
-...     stop_strings="<|im_end|>",
-...     max_new_tokens=4096,
-... )
+generate_ids = model.generate(
+    **inputs,
+    do_sample=False,
+    tokenizer=processor.tokenizer,
+    stop_strings="<|im_end|>",
+    max_new_tokens=4096,
+)
 
->>> processor.decode(generate_ids[0, inputs["input_ids"].shape[1]:], skip_special_tokens=True)
+processor.decode(generate_ids[0, inputs["input_ids"].shape[1]:], skip_special_tokens=True)
 "\\author{\nHanwen Jiang* \\(\\quad\\) Arjun Karpur \\({ }^{\\dagger} \\quad\\) Bingyi Cao \\({ }^{\\dagger} \\quad\\) (...)"
 ```
 
@@ -132,27 +132,27 @@ Although it might be reasonable in most cases to use a “for loop” for multi-
 Here is an example of how to process multiple pages at once:
 
 ```python
->>> import torch
->>> from transformers import AutoProcessor, AutoModelForImageTextToText
+import torch
+from transformers import AutoProcessor, AutoModelForImageTextToText
 from accelerate import Accelerator
 
->>> device = Accelerator().device
->>> model = AutoModelForImageTextToText.from_pretrained("stepfun-ai/GOT-OCR-2.0-hf", device_map=device)
->>> processor = AutoProcessor.from_pretrained("stepfun-ai/GOT-OCR-2.0-hf", use_fast=True)
+device = Accelerator().device
+model = AutoModelForImageTextToText.from_pretrained("stepfun-ai/GOT-OCR-2.0-hf", device_map=device)
+processor = AutoProcessor.from_pretrained("stepfun-ai/GOT-OCR-2.0-hf", use_fast=True)
 
->>> image1 = "https://huggingface.co/datasets/hf-internal-testing/fixtures_got_ocr/resolve/main/page1.png"
->>> image2 = "https://huggingface.co/datasets/hf-internal-testing/fixtures_got_ocr/resolve/main/page2.png"
->>> inputs = processor([image1, image2], return_tensors="pt", multi_page=True, format=True, device=device).to(device)
+image1 = "https://huggingface.co/datasets/hf-internal-testing/fixtures_got_ocr/resolve/main/page1.png"
+image2 = "https://huggingface.co/datasets/hf-internal-testing/fixtures_got_ocr/resolve/main/page2.png"
+inputs = processor([image1, image2], return_tensors="pt", multi_page=True, format=True, device=device).to(device)
 
->>> generate_ids = model.generate(
-...     **inputs,
-...     do_sample=False,
-...     tokenizer=processor.tokenizer,
-...     stop_strings="<|im_end|>",
-...     max_new_tokens=4096,
-... )
+generate_ids = model.generate(
+    **inputs,
+    do_sample=False,
+    tokenizer=processor.tokenizer,
+    stop_strings="<|im_end|>",
+    max_new_tokens=4096,
+)
 
->>> processor.decode(generate_ids[0, inputs["input_ids"].shape[1]:], skip_special_tokens=True)
+processor.decode(generate_ids[0, inputs["input_ids"].shape[1]:], skip_special_tokens=True)
 "\\title{\nGeneral OCR Theory: Towards OCR-2.0 via a Unified End-to-end Model\n}\n\\author{\nHaoran Wei (...)"
 ```
 
@@ -162,26 +162,26 @@ GOT supports a 1024×1024 input resolution, which is sufficient for most OCR tas
 Here is an example of how to process cropped patches:
 
 ```python
->>> import torch
->>> from transformers import AutoProcessor, AutoModelForImageTextToText
+import torch
+from transformers import AutoProcessor, AutoModelForImageTextToText
 from accelerate import Accelerator
 
->>> device = Accelerator().device
->>> model = AutoModelForImageTextToText.from_pretrained("stepfun-ai/GOT-OCR-2.0-hf", device_map=device)
->>> processor = AutoProcessor.from_pretrained("stepfun-ai/GOT-OCR-2.0-hf", use_fast=True)
+device = Accelerator().device
+model = AutoModelForImageTextToText.from_pretrained("stepfun-ai/GOT-OCR-2.0-hf", device_map=device)
+processor = AutoProcessor.from_pretrained("stepfun-ai/GOT-OCR-2.0-hf", use_fast=True)
 
->>> image = "https://huggingface.co/datasets/hf-internal-testing/fixtures_got_ocr/resolve/main/one_column.png"
->>> inputs = processor(image, return_tensors="pt", format=True, crop_to_patches=True, max_patches=3, device=device).to(device)
+image = "https://huggingface.co/datasets/hf-internal-testing/fixtures_got_ocr/resolve/main/one_column.png"
+inputs = processor(image, return_tensors="pt", format=True, crop_to_patches=True, max_patches=3, device=device).to(device)
 
->>> generate_ids = model.generate(
-...     **inputs,
-...     do_sample=False,
-...     tokenizer=processor.tokenizer,
-...     stop_strings="<|im_end|>",
-...     max_new_tokens=4096,
-... )
+generate_ids = model.generate(
+    **inputs,
+    do_sample=False,
+    tokenizer=processor.tokenizer,
+    stop_strings="<|im_end|>",
+    max_new_tokens=4096,
+)
 
->>> processor.decode(generate_ids[0, inputs["input_ids"].shape[1]:], skip_special_tokens=True)
+processor.decode(generate_ids[0, inputs["input_ids"].shape[1]:], skip_special_tokens=True)
 "on developing architectural improvements to make learnable matching methods generalize.\nMotivated by the above observations, (...)"
 ```
 
@@ -190,25 +190,25 @@ from accelerate import Accelerator
 GOT supports interactive OCR, where the user can specify the region to be recognized by providing the coordinates or the color of the region's bounding box. Here is an example of how to process a specific region:
 
 ```python
->>> import torch
->>> from transformers import AutoProcessor, AutoModelForImageTextToText
+import torch
+from transformers import AutoProcessor, AutoModelForImageTextToText
 
->>> device = Accelerator().device
->>> model = AutoModelForImageTextToText.from_pretrained("stepfun-ai/GOT-OCR-2.0-hf", device_map=device)
->>> processor = AutoProcessor.from_pretrained("stepfun-ai/GOT-OCR-2.0-hf", use_fast=True)
+device = Accelerator().device
+model = AutoModelForImageTextToText.from_pretrained("stepfun-ai/GOT-OCR-2.0-hf", device_map=device)
+processor = AutoProcessor.from_pretrained("stepfun-ai/GOT-OCR-2.0-hf", use_fast=True)
 
->>> image = "https://huggingface.co/datasets/hf-internal-testing/fixtures_got_ocr/resolve/main/multi_box.png"
->>> inputs = processor(image, return_tensors="pt", color="green", device=device).to(device) # or box=[x1, y1, x2, y2] for coordinates (image pixels)
+image = "https://huggingface.co/datasets/hf-internal-testing/fixtures_got_ocr/resolve/main/multi_box.png"
+inputs = processor(image, return_tensors="pt", color="green", device=device).to(device) # or box=[x1, y1, x2, y2] for coordinates (image pixels)
 
->>> generate_ids = model.generate(
-...     **inputs,
-...     do_sample=False,
-...     tokenizer=processor.tokenizer,
-...     stop_strings="<|im_end|>",
-...     max_new_tokens=4096,
-... )
+generate_ids = model.generate(
+    **inputs,
+    do_sample=False,
+    tokenizer=processor.tokenizer,
+    stop_strings="<|im_end|>",
+    max_new_tokens=4096,
+)
 
->>> processor.decode(generate_ids[0, inputs["input_ids"].shape[1]:], skip_special_tokens=True)
+processor.decode(generate_ids[0, inputs["input_ids"].shape[1]:], skip_special_tokens=True)
 "You should keep in mind what features from the module should be used, especially \nwhen you’re planning to sell a template."
 ```
 
@@ -218,45 +218,45 @@ Although this implementation of the model will only output plain text, the outpu
 Here is an example of how to process sheet music:
 
 ```python
->>> import torch
->>> from transformers import AutoProcessor, AutoModelForImageTextToText
+import torch
+from transformers import AutoProcessor, AutoModelForImageTextToText
 from accelerate import Accelerator
->>> import verovio
+import verovio
 
->>> device = Accelerator().device
->>> model = AutoModelForImageTextToText.from_pretrained("stepfun-ai/GOT-OCR-2.0-hf", device_map=device)
->>> processor = AutoProcessor.from_pretrained("stepfun-ai/GOT-OCR-2.0-hf", use_fast=True)
+device = Accelerator().device
+model = AutoModelForImageTextToText.from_pretrained("stepfun-ai/GOT-OCR-2.0-hf", device_map=device)
+processor = AutoProcessor.from_pretrained("stepfun-ai/GOT-OCR-2.0-hf", use_fast=True)
 
->>> image = "https://huggingface.co/datasets/hf-internal-testing/fixtures_got_ocr/resolve/main/sheet_music.png"
->>> inputs = processor(image, return_tensors="pt", format=True, device=device).to(device)
+image = "https://huggingface.co/datasets/hf-internal-testing/fixtures_got_ocr/resolve/main/sheet_music.png"
+inputs = processor(image, return_tensors="pt", format=True, device=device).to(device)
 
->>> generate_ids = model.generate(
-...     **inputs,
-...     do_sample=False,
-...     tokenizer=processor.tokenizer,
-...     stop_strings="<|im_end|>",
-...     max_new_tokens=4096,
-... )
+generate_ids = model.generate(
+    **inputs,
+    do_sample=False,
+    tokenizer=processor.tokenizer,
+    stop_strings="<|im_end|>",
+    max_new_tokens=4096,
+)
 
->>> outputs = processor.decode(generate_ids[0, inputs["input_ids"].shape[1]:], skip_special_tokens=True)
->>> tk = verovio.toolkit()
->>> tk.loadData(outputs)
->>> tk.setOptions(
-...     {
-...         "pageWidth": 2100,
-...         "pageHeight": 800,
-...         "footer": "none",
-...         "barLineWidth": 0.5,
-...         "beamMaxSlope": 15,
-...         "staffLineWidth": 0.2,
-...         "spacingStaff": 6,
-...     }
-... )
->>> tk.getPageCount()
->>> svg = tk.renderToSVG()
->>> svg = svg.replace('overflow="inherit"', 'overflow="visible"')
->>> with open("output.svg", "w") as f:
->>>     f.write(svg)
+outputs = processor.decode(generate_ids[0, inputs["input_ids"].shape[1]:], skip_special_tokens=True)
+tk = verovio.toolkit()
+tk.loadData(outputs)
+tk.setOptions(
+    {
+        "pageWidth": 2100,
+        "pageHeight": 800,
+        "footer": "none",
+        "barLineWidth": 0.5,
+        "beamMaxSlope": 15,
+        "staffLineWidth": 0.2,
+        "spacingStaff": 6,
+    }
+)
+tk.getPageCount()
+svg = tk.renderToSVG()
+svg = svg.replace('overflow="inherit"', 'overflow="visible"')
+with open("output.svg", "w") as f:
+    f.write(svg)
 ```
 
 <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/sheet_music.svg"

@@ -43,36 +43,36 @@ This model was contributed by [geetu040](https://github.com/geetu040). The origi
 The DepthPro model processes an input image by first downsampling it at multiple scales and splitting each scaled version into patches. These patches are then encoded using a shared Vision Transformer (ViT)-based Dinov2 patch encoder, while the full image is processed by a separate image encoder. The extracted patch features are merged into feature maps, upsampled, and fused using a DPT-like decoder to generate the final depth estimation. If enabled, an additional Field of View (FOV) encoder processes the image for estimating the camera's field of view, aiding in depth accuracy.
 
 ```py
->>> import requests
->>> from PIL import Image
->>> import torch
->>> from transformers import DepthProImageProcessor, DepthProForDepthEstimation
+import requests
+from PIL import Image
+import torch
+from transformers import DepthProImageProcessor, DepthProForDepthEstimation
 from accelerate import Accelerator
 
->>> device = Accelerator().device
+device = Accelerator().device
 
->>> url = 'http://images.cocodataset.org/val2017/000000039769.jpg'
->>> image = Image.open(requests.get(url, stream=True).raw)
+url = 'http://images.cocodataset.org/val2017/000000039769.jpg'
+image = Image.open(requests.get(url, stream=True).raw)
 
->>> image_processor = DepthProImageProcessor.from_pretrained("apple/DepthPro-hf")
->>> model = DepthProForDepthEstimation.from_pretrained("apple/DepthPro-hf").to(device)
+image_processor = DepthProImageProcessor.from_pretrained("apple/DepthPro-hf")
+model = DepthProForDepthEstimation.from_pretrained("apple/DepthPro-hf").to(device)
 
->>> inputs = image_processor(images=image, return_tensors="pt").to(model.device)
+inputs = image_processor(images=image, return_tensors="pt").to(model.device)
 
->>> with torch.no_grad():
-...     outputs = model(**inputs)
+with torch.no_grad():
+    outputs = model(**inputs)
 
->>> post_processed_output = image_processor.post_process_depth_estimation(
-...     outputs, target_sizes=[(image.height, image.width)],
-... )
+post_processed_output = image_processor.post_process_depth_estimation(
+    outputs, target_sizes=[(image.height, image.width)],
+)
 
->>> field_of_view = post_processed_output[0]["field_of_view"]
->>> focal_length = post_processed_output[0]["focal_length"]
->>> depth = post_processed_output[0]["predicted_depth"]
->>> depth = (depth - depth.min()) / depth.max()
->>> depth = depth * 255.
->>> depth = depth.detach().cpu().numpy()
->>> depth = Image.fromarray(depth.astype("uint8"))
+field_of_view = post_processed_output[0]["field_of_view"]
+focal_length = post_processed_output[0]["focal_length"]
+depth = post_processed_output[0]["predicted_depth"]
+depth = (depth - depth.min()) / depth.max()
+depth = depth * 255.
+depth = depth.detach().cpu().numpy()
+depth = Image.fromarray(depth.astype("uint8"))
 ```
 
 ### Architecture and Configuration
@@ -106,24 +106,24 @@ The `use_fov_model` parameter in `DepthProConfig` controls whether **FOV predict
 The pretrained model at checkpoint `apple/DepthPro-hf` uses the FOV encoder. To use the pretrained-model without FOV encoder, set `use_fov_model=False` when loading the model, which saves computation.
 
 ```py
->>> from transformers import DepthProForDepthEstimation
->>> model = DepthProForDepthEstimation.from_pretrained("apple/DepthPro-hf", use_fov_model=False)
+from transformers import DepthProForDepthEstimation
+model = DepthProForDepthEstimation.from_pretrained("apple/DepthPro-hf", use_fov_model=False)
 ```
 
 To instantiate a new model with FOV encoder, set `use_fov_model=True` in the config.
 
 ```py
->>> from transformers import DepthProConfig, DepthProForDepthEstimation
->>> config = DepthProConfig(use_fov_model=True)
->>> model = DepthProForDepthEstimation(config)
+from transformers import DepthProConfig, DepthProForDepthEstimation
+config = DepthProConfig(use_fov_model=True)
+model = DepthProForDepthEstimation(config)
 ```
 
 Or set `use_fov_model=True` when initializing the model, which overrides the value in config.
 
 ```py
->>> from transformers import DepthProConfig, DepthProForDepthEstimation
->>> config = DepthProConfig()
->>> model = DepthProForDepthEstimation(config, use_fov_model=True)
+from transformers import DepthProConfig, DepthProForDepthEstimation
+config = DepthProConfig()
+model = DepthProForDepthEstimation(config, use_fov_model=True)
 ```
 
 ### Using Scaled Dot Product Attention (SDPA)
