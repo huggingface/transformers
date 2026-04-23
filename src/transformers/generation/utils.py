@@ -2305,9 +2305,7 @@ class GenerationMixin(ContinuousMixin):
                 logger.warning(f"synced_gpus is not ignored for continuous batching. Got {synced_gpus = }")
             num_beams = kwargs.get("num_beams", 1)
             if num_beams > 1:  # FIXME: remove this once CB supports num_beams (which is planned)
-                logger.warning(
-                    f"num_beams is not supported for continuous batching yet. Got {num_beams = }. "
-                )
+                logger.warning(f"num_beams is not supported for continuous batching yet. Got {num_beams = }. ")
 
             # switch to CB
             outputs = self.generate_batch(
