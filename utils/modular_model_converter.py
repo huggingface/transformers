@@ -12,14 +12,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import argparse
-import ast
 import glob
 import importlib
 import multiprocessing as mp
 import os
 import re
 import subprocess
-import symtable
 from abc import ABC, abstractmethod
 from collections import Counter, defaultdict, deque
 from functools import partial
@@ -52,7 +50,6 @@ AUTO_GENERATED_MESSAGE = """#                🚨🚨🚨🚨🚨🚨🚨🚨�
 """
 
 ENABLE_MODULE_SOURCE_CACHE = True
-ENABLE_FAST_IMPORT_ANALYSIS = True
 ENABLE_FAST_MAPPER_VISIT = True
 _MODULE_SOURCE_CACHE = {}
 
@@ -1223,17 +1220,6 @@ def append_new_import_node(
         imports_to_keep.append(new_node)
 
 
-def _get_import_names(all_imports: list[cst.CSTNode]) -> set[str]:
-    import_names = set()
-    for node in all_imports:
-        statements = node.body.body if isinstance(node, cst.If) else [node]
-        for statement in statements:
-            import_node = statement.body[0]
-            for alias in import_node.names:
-                import_names.add(alias.evaluated_alias or alias.evaluated_name)
-    return import_names
-
-
 def _build_needed_imports(all_imports: list[cst.CSTNode], unused_imports: set[str]) -> list[cst.CSTNode]:
     """Build the final import block after pruning the unused names."""
     imports_to_keep = []
@@ -1261,105 +1247,10 @@ def _build_needed_imports(all_imports: list[cst.CSTNode], unused_imports: set[st
     return usual_import_nodes + protected_import_nodes
 
 
-def _collect_referenced_plain_names(scope_table: symtable.SymbolTable) -> set[str]:
-    """Collect referenced names across all scopes.
-
-    We intentionally do not distinguish between top-level and nested imports here to preserve the current LibCST
-    behavior, which merges import reference counts for same-named imports across scopes.
+def get_needed_imports(body: dict[str, dict], all_imports: list[cst.CSTNode]) -> list[cst.CSTNode]:
+    """Get all the imports needed in the `body`, from the list of `all_imports`.
+    `body` is a dict with the following structure `{str: {"insert_idx": int, "node": cst.CSTNode}}`.
     """
-    referenced_names = {name for name in scope_table.get_identifiers() if scope_table.lookup(name).is_referenced()}
-    for child in scope_table.get_children():
-        referenced_names.update(_collect_referenced_plain_names(child))
-    return referenced_names
-
-
-def _get_attribute_chain(node: ast.Attribute) -> list[str] | None:
-    parts = []
-    current = node
-    while isinstance(current, ast.Attribute):
-        parts.append(current.attr)
-        current = current.value
-    if isinstance(current, ast.Name):
-        parts.append(current.id)
-        return list(reversed(parts))
-    return None
-
-
-def _collect_referenced_names(tree: ast.AST, plain_name_filter: set[str] | None = None) -> set[str]:
-    referenced_names = set()
-    for node in ast.walk(tree):
-        if isinstance(node, ast.Attribute) and isinstance(node.ctx, ast.Load):
-            chain = _get_attribute_chain(node)
-            if chain is None:
-                continue
-            if plain_name_filter is not None and chain[0] not in plain_name_filter:
-                continue
-            for end in range(1, len(chain) + 1):
-                referenced_names.add(".".join(chain[:end]))
-        elif isinstance(node, ast.Name) and isinstance(node.ctx, ast.Load):
-            if plain_name_filter is None or node.id in plain_name_filter:
-                referenced_names.add(node.id)
-    return referenced_names
-
-
-def _iter_annotation_expressions(module_ast: ast.AST):
-    for node in ast.walk(module_ast):
-        if isinstance(node, ast.AnnAssign):
-            yield node.annotation
-        elif isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
-            for arg in (*node.args.posonlyargs, *node.args.args, *node.args.kwonlyargs):
-                if arg.annotation is not None:
-                    yield arg.annotation
-            if node.args.vararg is not None and node.args.vararg.annotation is not None:
-                yield node.args.vararg.annotation
-            if node.args.kwarg is not None and node.args.kwarg.annotation is not None:
-                yield node.args.kwarg.annotation
-            if node.returns is not None:
-                yield node.returns
-
-
-def _collect_string_annotation_names(module_ast: ast.AST) -> set[str]:
-    """Collect names used inside quoted annotations and type comments."""
-    referenced_names = set()
-    for annotation in _iter_annotation_expressions(module_ast):
-        if isinstance(annotation, ast.Constant) and isinstance(annotation.value, str):
-            try:
-                annotation_tree = ast.parse(annotation.value, mode="eval")
-            except SyntaxError:
-                continue
-            referenced_names.update(_collect_referenced_names(annotation_tree))
-
-    for node in ast.walk(module_ast):
-        type_comment = getattr(node, "type_comment", None)
-        if isinstance(type_comment, str):
-            try:
-                type_comment_tree = ast.parse(type_comment, mode="eval")
-            except SyntaxError:
-                continue
-            referenced_names.update(_collect_referenced_names(type_comment_tree))
-
-    return referenced_names
-
-
-def _has_future_annotations_import(all_imports: list[cst.CSTNode]) -> bool:
-    for node in all_imports:
-        if not isinstance(node, cst.SimpleStatementLine):
-            continue
-        import_node = node.body[0]
-        if not isinstance(import_node, cst.ImportFrom):
-            continue
-        if not isinstance(import_node.module, cst.Name) or import_node.module.value != "__future__":
-            continue
-        for alias in import_node.names:
-            if alias.evaluated_name == "annotations":
-                return True
-    return False
-
-
-def _get_needed_imports_with_scope_provider(
-    body: dict[str, dict], all_imports: list[cst.CSTNode]
-) -> list[cst.CSTNode]:
-    """ScopeProvider-based fallback for modules where the fast path is unsafe."""
     new_body = [k[1]["node"] for k in sorted(body.items(), key=lambda x: x[1]["insert_idx"])]
     wrapper = MetadataWrapper(cst.Module(body=all_imports + new_body), unsafe_skip_copy=True)
     scopes = set(wrapper.resolve(ScopeProvider).values())
@@ -1374,25 +1265,6 @@ def _get_needed_imports_with_scope_provider(
     # Similar imports may be redefined, and only used between their 1st and 2nd definition so if we already have
     # a ref count > 0 at any point, the imports is actually used
     unused_imports = {name for name, count in import_ref_count.items() if count <= 0 or name in body}
-    return _build_needed_imports(all_imports, unused_imports)
-
-
-def get_needed_imports(body: dict[str, dict], all_imports: list[cst.CSTNode]) -> list[cst.CSTNode]:
-    """Get all the imports needed in the `body`, from the list of `all_imports`.
-    `body` is a dict with the following structure `{str: {"insert_idx": int, "node": cst.CSTNode}}`.
-    """
-    if not ENABLE_FAST_IMPORT_ANALYSIS or _has_future_annotations_import(all_imports):
-        return _get_needed_imports_with_scope_provider(body, all_imports)
-
-    new_body = [k[1]["node"] for k in sorted(body.items(), key=lambda x: x[1]["insert_idx"])]
-    module = cst.Module(body=all_imports + new_body)
-    module_ast = ast.parse(module.code, type_comments=True)
-    referenced_plain_names = _collect_referenced_plain_names(symtable.symtable(module.code, "<generated>", "exec"))
-    referenced_names = _collect_referenced_names(module_ast, referenced_plain_names)
-    referenced_names.update(_collect_string_annotation_names(module_ast))
-
-    import_names = _get_import_names(all_imports)
-    unused_imports = {name for name in import_names if name not in referenced_names or name in body}
     return _build_needed_imports(all_imports, unused_imports)
 
 
