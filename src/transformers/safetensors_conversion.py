@@ -3,7 +3,8 @@ from typing import Optional
 import httpx
 from huggingface_hub import Discussion, HfApi, get_repo_discussions
 
-from .utils import cached_file, http_user_agent, logging
+from .utils import logging
+from .utils.hub import cached_file, http_user_agent
 
 
 logger = logging.get_logger(__name__)

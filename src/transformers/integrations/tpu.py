@@ -18,7 +18,8 @@ import os
 import torch
 from torch.utils.data import DataLoader
 
-from ..utils import WEIGHTS_NAME, PushToHubMixin, is_torch_xla_available, logging
+from ..utils import WEIGHTS_NAME, is_torch_xla_available, logging
+from ..utils.hub import PushToHubMixin
 
 
 logger = logging.get_logger(__name__)

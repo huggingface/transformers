@@ -15,46 +15,19 @@
 Hub utilities: utilities related to download and cache models
 """
 
+import importlib
 import json
 import os
 import re
 import sys
 import tempfile
 from concurrent import futures
+from functools import lru_cache
 from pathlib import Path
-from typing import TypedDict
+from typing import TYPE_CHECKING, TypedDict
 from uuid import uuid4
 
-import httpx
-from huggingface_hub import (
-    _CACHED_NO_EXIST,
-    CommitOperationAdd,
-    ModelCard,
-    ModelCardData,
-    constants,
-    create_branch,
-    create_commit,
-    create_repo,
-    hf_hub_download,
-    hf_hub_url,
-    is_offline_mode,
-    list_repo_tree,
-    snapshot_download,
-    try_to_load_from_cache,
-)
-from huggingface_hub.file_download import REGEX_COMMIT_HASH
-from huggingface_hub.utils import (
-    EntryNotFoundError,
-    GatedRepoError,
-    HfHubHTTPError,
-    LocalEntryNotFoundError,
-    OfflineModeIsEnabled,
-    RepositoryNotFoundError,
-    RevisionNotFoundError,
-    build_hf_headers,
-    get_session,
-    hf_raise_for_status,
-)
+from huggingface_hub import constants
 
 from . import __version__, logging
 from .import_utils import (
@@ -63,6 +36,10 @@ from .import_utils import (
     is_torch_available,
     is_training_run_on_sagemaker,
 )
+
+
+if TYPE_CHECKING:
+    from huggingface_hub import ModelCard
 
 
 LEGACY_PROCESSOR_CHAT_TEMPLATE_FILE = "chat_template.json"
@@ -97,6 +74,21 @@ S3_BUCKET_PREFIX = "https://s3.amazonaws.com/models.huggingface.co/bert"
 CLOUDFRONT_DISTRIB_PREFIX = "https://cdn.huggingface.co"
 
 
+@lru_cache
+def _get_httpx_module():
+    return importlib.import_module("httpx")
+
+
+@lru_cache
+def _get_hf_hub_file_download_module():
+    return importlib.import_module("huggingface_hub.file_download")
+
+
+@lru_cache
+def _get_hf_hub_errors_module():
+    return importlib.import_module("huggingface_hub.errors")
+
+
 def _get_cache_file_to_return(
     path_or_repo_id: str,
     full_filename: str,
@@ -105,12 +97,17 @@ def _get_cache_file_to_return(
     repo_type: str | None = None,
 ):
     # We try to see if we have a cached version (not up to date):
-    resolved_file = try_to_load_from_cache(
+    file_download = _get_hf_hub_file_download_module()
+    resolved_file = file_download.try_to_load_from_cache(
         path_or_repo_id, full_filename, cache_dir=cache_dir, revision=revision, repo_type=repo_type
     )
-    if resolved_file is not None and resolved_file != _CACHED_NO_EXIST:
+    if resolved_file is not None and resolved_file != file_download._CACHED_NO_EXIST:
         return resolved_file
     return None
+
+
+def try_to_load_from_cache(*args, **kwargs):
+    return _get_hf_hub_file_download_module().try_to_load_from_cache(*args, **kwargs)
 
 
 def list_repo_templates(
@@ -126,6 +123,10 @@ def list_repo_templates(
     A template is a jinja file located under the `additional_chat_templates/` folder.
     If working in offline mode or if internet is down, the method will list jinja template from the local cache - if any.
     """
+    httpx = _get_httpx_module()
+    hf_hub_errors = _get_hf_hub_errors_module()
+    from huggingface_hub import list_repo_tree
+    from huggingface_hub._snapshot_download import snapshot_download
 
     if not local_files_only:
         try:
@@ -140,9 +141,13 @@ def list_repo_templates(
                 )
                 if entry.path.endswith(".jinja")
             ]
-        except (GatedRepoError, RepositoryNotFoundError, RevisionNotFoundError):
+        except (
+            hf_hub_errors.GatedRepoError,
+            hf_hub_errors.RepositoryNotFoundError,
+            hf_hub_errors.RevisionNotFoundError,
+        ):
             raise  # valid errors => do not catch
-        except (HfHubHTTPError, OfflineModeIsEnabled, httpx.NetworkError):
+        except (hf_hub_errors.HfHubHTTPError, hf_hub_errors.OfflineModeIsEnabled, httpx.NetworkError):
             pass  # offline mode, internet down, etc. => try local files
 
     # check local files
@@ -150,7 +155,7 @@ def list_repo_templates(
         snapshot_dir = snapshot_download(
             repo_id=repo_id, revision=revision, cache_dir=cache_dir, local_files_only=True
         )
-    except LocalEntryNotFoundError:  # No local repo means no local files
+    except hf_hub_errors.LocalEntryNotFoundError:  # No local repo means no local files
         return []
     templates_dir = Path(snapshot_dir, CHAT_TEMPLATE_DIR)
     if not templates_dir.is_dir():
@@ -159,6 +164,8 @@ def list_repo_templates(
 
 
 def define_sagemaker_information():
+    httpx = _get_httpx_module()
+
     try:
         instance_data = httpx.get(os.environ["ECS_CONTAINER_METADATA_URI"]).json()
         dlc_container_used = instance_data["Image"]
@@ -217,7 +224,7 @@ def extract_commit_hash(resolved_file: str | None, commit_hash: str | None) -> s
     if search is None:
         return None
     commit_hash = search.groups()[0]
-    return commit_hash if REGEX_COMMIT_HASH.match(commit_hash) else None
+    return commit_hash if _get_hf_hub_file_download_module().REGEX_COMMIT_HASH.match(commit_hash) else None
 
 
 def cached_file(
@@ -360,7 +367,9 @@ def cached_files(
     model_weights_file = cached_file("google-bert/bert-base-uncased", "pytorch_model.bin")
     ```
     """
-    if is_offline_mode() and not local_files_only:
+    hf_hub_errors = _get_hf_hub_errors_module()
+
+    if constants.HF_HUB_OFFLINE and not local_files_only:
         logger.info("Offline mode: forcing local_files_only=True")
         local_files_only = True
     if subfolder is None:
@@ -396,13 +405,14 @@ def cached_files(
     existing_files = []
     file_counter = 0
     if _commit_hash is not None and not force_download:
+        file_download = _get_hf_hub_file_download_module()
         for filename in full_filenames:
             # If the file is cached under that commit hash, we return it directly.
-            resolved_file = try_to_load_from_cache(
+            resolved_file = file_download.try_to_load_from_cache(
                 path_or_repo_id, filename, cache_dir=cache_dir, revision=_commit_hash, repo_type=repo_type
             )
             if resolved_file is not None:
-                if resolved_file is not _CACHED_NO_EXIST:
+                if resolved_file is not file_download._CACHED_NO_EXIST:
                     file_counter += 1
                     existing_files.append(resolved_file)
                 elif not _raise_exceptions_for_missing_entries:
@@ -419,7 +429,7 @@ def cached_files(
     try:
         if len(full_filenames) == 1:
             # This is slightly better for only 1 file
-            hf_hub_download(
+            _get_hf_hub_file_download_module().hf_hub_download(
                 path_or_repo_id,
                 filenames[0],
                 subfolder=None if len(subfolder) == 0 else subfolder,
@@ -434,6 +444,8 @@ def cached_files(
                 tqdm_class=tqdm_class,
             )
         else:
+            from huggingface_hub._snapshot_download import snapshot_download
+
             snapshot_download(
                 path_or_repo_id,
                 allow_patterns=full_filenames,
@@ -450,14 +462,14 @@ def cached_files(
 
     except Exception as e:
         # We cannot recover from them
-        if isinstance(e, RepositoryNotFoundError) and not isinstance(e, GatedRepoError):
+        if isinstance(e, hf_hub_errors.RepositoryNotFoundError) and not isinstance(e, hf_hub_errors.GatedRepoError):
             raise OSError(
                 f"{path_or_repo_id} is not a local folder and is not a valid model identifier "
                 "listed on 'https://huggingface.co/models'\nIf this is a private repository, make sure to pass a token "
                 "having permission to this repo either by logging in with `hf auth login` or by passing "
                 "`token=<your_token>`"
             ) from e
-        elif isinstance(e, RevisionNotFoundError):
+        elif isinstance(e, hf_hub_errors.RevisionNotFoundError):
             raise OSError(
                 f"{revision} is not a valid git identifier (branch name, tag name or commit id) that exists "
                 "for this model name. Check the model page at "
@@ -482,14 +494,14 @@ def cached_files(
 
         # Raise based on the flags. Note that we will raise for missing entries at the very end, even when
         # not entering this Except block, as it may also happen when `snapshot_download` does not raise
-        if isinstance(e, GatedRepoError):
+        if isinstance(e, hf_hub_errors.GatedRepoError):
             if not _raise_exceptions_for_gated_repo:
                 return None
             raise OSError(
                 "You are trying to access a gated repo.\nMake sure to have access to it at "
                 f"https://huggingface.co/{path_or_repo_id}.\n{str(e)}"
             ) from e
-        elif isinstance(e, LocalEntryNotFoundError):
+        elif isinstance(e, hf_hub_errors.LocalEntryNotFoundError):
             if not _raise_exceptions_for_connection_errors:
                 return None
             # Here we only raise if both flags for missing entry and connection errors are True (because it can be raised
@@ -502,13 +514,13 @@ def cached_files(
                 ) from e
         # snapshot_download will not raise EntryNotFoundError, but hf_hub_download can. If this is the case, it will be treated
         # later on anyway and re-raised if needed
-        elif isinstance(e, HfHubHTTPError) and not isinstance(e, EntryNotFoundError):
+        elif isinstance(e, hf_hub_errors.HfHubHTTPError) and not isinstance(e, hf_hub_errors.EntryNotFoundError):
             if not _raise_exceptions_for_connection_errors:
                 return None
             raise OSError(f"There was a specific connection error when trying to load {path_or_repo_id}:\n{e}") from e
         # Any other Exception type should now be re-raised, in order to provide helpful error messages and break the execution flow
         # (EntryNotFoundError will be treated outside this block and correctly re-raised if needed)
-        elif not isinstance(e, EntryNotFoundError):
+        elif not isinstance(e, hf_hub_errors.EntryNotFoundError):
             raise e
 
     resolved_files = [
@@ -562,6 +574,10 @@ def has_file(
 
     </Tip>
     """
+    httpx = _get_httpx_module()
+    hf_hub_errors = _get_hf_hub_errors_module()
+    from huggingface_hub.utils import build_hf_headers, get_session, hf_raise_for_status
+
     # If path to local directory, check if the file exists
     if os.path.isdir(path_or_repo):
         return os.path.isfile(os.path.join(path_or_repo, filename))
@@ -570,7 +586,7 @@ def has_file(
 
     # Check if file exists in cache
     # This information might be outdated so it's best to also make a HEAD call (if allowed).
-    cached_path = try_to_load_from_cache(
+    cached_path = _get_hf_hub_file_download_module().try_to_load_from_cache(
         repo_id=path_or_repo,
         filename=filename,
         revision=revision,
@@ -586,7 +602,9 @@ def has_file(
     # Check if the file exists
     try:
         response = get_session().head(
-            hf_hub_url(path_or_repo, filename=filename, revision=revision, repo_type=repo_type),
+            _get_hf_hub_file_download_module().hf_hub_url(
+                path_or_repo, filename=filename, revision=revision, repo_type=repo_type
+            ),
             headers=build_hf_headers(token=token, user_agent=http_user_agent()),
             follow_redirects=False,
             timeout=10,
@@ -594,31 +612,31 @@ def has_file(
     except httpx.ProxyError:
         # Actually raise for those subclasses of ConnectionError
         raise
-    except (httpx.ConnectError, httpx.TimeoutException, OfflineModeIsEnabled):
+    except (httpx.ConnectError, httpx.TimeoutException, hf_hub_errors.OfflineModeIsEnabled):
         return has_file_in_cache
 
     try:
         hf_raise_for_status(response)
         return True
-    except GatedRepoError as e:
+    except hf_hub_errors.GatedRepoError as e:
         logger.error(e)
         raise OSError(
             f"{path_or_repo} is a gated repository. Make sure to request access at "
             f"https://huggingface.co/{path_or_repo} and pass a token having permission to this repo either by "
             "logging in with `hf auth login` or by passing `token=<your_token>`."
         ) from e
-    except RepositoryNotFoundError as e:
+    except hf_hub_errors.RepositoryNotFoundError as e:
         logger.error(e)
         raise OSError(f"{path_or_repo} is not a local folder or a valid repository name on 'https://hf.co'.") from e
-    except RevisionNotFoundError as e:
+    except hf_hub_errors.RevisionNotFoundError as e:
         logger.error(e)
         raise OSError(
             f"{revision} is not a valid git identifier (branch name, tag name or commit id) that exists for this "
             f"model name. Check the model page at 'https://huggingface.co/{path_or_repo}' for available revisions."
         ) from e
-    except EntryNotFoundError:
+    except hf_hub_errors.EntryNotFoundError:
         return False  # File does not exist
-    except HfHubHTTPError:
+    except hf_hub_errors.HfHubHTTPError:
         # Any authentication/authorization error will be caught here => default to cache
         return has_file_in_cache
 
@@ -648,6 +666,9 @@ class PushToHubMixin:
         """
         Uploads all modified files in `working_dir` to `repo_id`, based on `files_timestamps`.
         """
+        hf_hub_errors = _get_hf_hub_errors_module()
+        from huggingface_hub import CommitOperationAdd, create_branch, create_commit
+
         if commit_message is None:
             if "Model" in self.__class__.__name__:
                 commit_message = "Upload model"
@@ -693,7 +714,7 @@ class PushToHubMixin:
         if revision is not None and not revision.startswith("refs/pr"):
             try:
                 create_branch(repo_id=repo_id, branch=revision, token=token, exist_ok=True)
-            except HfHubHTTPError as e:
+            except hf_hub_errors.HfHubHTTPError as e:
                 if e.response.status_code == 403 and create_pr:
                     # If we are creating a PR on a repo we don't have access to, we can't create the branch.
                     # so let's assume the branch already exists. If it's not the case, an error will be raised when
@@ -774,6 +795,8 @@ class PushToHubMixin:
         {object}.push_to_hub("huggingface/my-finetuned-bert")
         ```
         """
+        from huggingface_hub import create_repo
+
         # Create repo if it doesn't exist yet
         repo_id = create_repo(repo_id, private=private, token=token, exist_ok=True).repo_id
 
@@ -894,7 +917,7 @@ def get_checkpoint_shard_files(
     return cached_filenames, sharded_metadata
 
 
-def create_and_tag_model_card(repo_id: str, tags: list[str] | None = None, token: str | None = None) -> ModelCard:
+def create_and_tag_model_card(repo_id: str, tags: list[str] | None = None, token: str | None = None) -> "ModelCard":
     """
     Creates or loads an existing model card and tags it.
 
@@ -906,10 +929,13 @@ def create_and_tag_model_card(repo_id: str, tags: list[str] | None = None, token
         token (`str`, *optional*):
             Authentication token, obtained with `huggingface_hub.HfApi.login` method. Will default to the stored token.
     """
+    hf_hub_errors = _get_hf_hub_errors_module()
+    from huggingface_hub import ModelCard, ModelCardData
+
     try:
         # Check if the model card is present on the remote repo
         model_card = ModelCard.load(repo_id, token=token)
-    except EntryNotFoundError:
+    except hf_hub_errors.EntryNotFoundError:
         # Otherwise create a simple model card from template
         model_description = "This is the model card of a 🤗 transformers model that has been pushed on the Hub. This model card has been automatically generated."
         card_data = ModelCardData(tags=[] if tags is None else tags, library_name="transformers")

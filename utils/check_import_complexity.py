@@ -32,11 +32,18 @@ import importlib.abc
 import sys
 import threading
 from dataclasses import dataclass, field
+from pathlib import Path
 from types import ModuleType
 from typing import Any
 
 
 MAX_IMPORT_COUNT = 1000
+
+
+ROOT_DIR = Path(__file__).resolve().parents[1]
+SRC_DIR = ROOT_DIR / "src"
+if str(SRC_DIR) not in sys.path:
+    sys.path.insert(0, str(SRC_DIR))
 
 
 # ---------------------------------------------------------------------------
