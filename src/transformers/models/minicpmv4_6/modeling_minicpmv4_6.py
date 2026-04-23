@@ -512,6 +512,7 @@ class MiniCPMV4_6VisionTransformer(MiniCPMV4_6VisionPreTrainedModel):
 
         hidden_states = self.embeddings(pixel_values, target_sizes=target_sizes)
         attn_kwargs = {
+            "attention_mask": None,
             "cu_seq_lens_q": cu_seqlens,
             "cu_seq_lens_k": cu_seqlens,
             "max_length_q": max_seqlens,
@@ -532,6 +533,7 @@ class MiniCPMV4_6VisionTransformer(MiniCPMV4_6VisionPreTrainedModel):
                         max_seqlens,
                     )
                     attn_kwargs = {
+                        "attention_mask": None,
                         "cu_seq_lens_q": cu_seqlens,
                         "cu_seq_lens_k": cu_seqlens,
                         "max_length_q": max_seqlens,

@@ -16,7 +16,7 @@
 from ...image_processing_utils import BatchFeature
 from ...image_utils import ImageInput
 from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
-from ...tokenization_utils_base import AddedToken, PreTokenizedInput, TextInput
+from ...tokenization_utils_base import PreTokenizedInput, TextInput
 from ...utils import auto_docstring, logging
 from ...video_utils import VideoInput
 
@@ -45,41 +45,19 @@ class MiniCPMV4_6Processor(ProcessorMixin):
         self.image_token_divisor = 4 if self.image_processor.downsample_mode == "4x" else 16
         self.video_token_divisor = 4 if self.video_processor.downsample_mode == "4x" else 16
 
-        self.image_token = tokenizer.image_pad_token  # "<|image_pad|>"
-        self.video_token = tokenizer.video_pad_token  # "<|video_pad|>"
-        self.image_token_id = tokenizer.convert_tokens_to_ids(self.image_token)
-        self.video_token_id = tokenizer.convert_tokens_to_ids(self.video_token)
+        self.image_token = tokenizer.image_token
+        self.video_token = tokenizer.video_token
+        self.image_token_id = tokenizer.image_token_id
+        self.video_token_id = tokenizer.video_token_id
 
-        self.image_start_token = tokenizer.image_start_token  # "<image>"
-        self.image_end_token = tokenizer.image_end_token  # "</image>"
-        self.video_start_token = tokenizer.video_start_token  # "<video>"
-        self.video_end_token = tokenizer.video_end_token  # "</video>"
-        self.slice_start_token = tokenizer.slice_start_token  # "<slice>"
-        self.slice_end_token = tokenizer.slice_end_token  # "</slice>"
-        self.image_id_start_token = tokenizer.image_id_start_token  # "<image_id>"
-        self.image_id_end_token = tokenizer.image_id_end_token  # "</image_id>"
-
-        special_tokens = [
-            self.image_start_token,
-            self.image_end_token,
-            self.video_start_token,
-            self.video_end_token,
-            self.slice_start_token,
-            self.slice_end_token,
-            self.image_id_start_token,
-            self.image_id_end_token,
-            self.image_token,
-            self.video_token,
-        ]
-
-        # TODO: move to conversion script before release, we can't add tokens when init a processor
-        tokens_to_add = [
-            AddedToken(tok, normalized=False, special=True)
-            for tok in special_tokens
-            if tok not in self.tokenizer.get_vocab()
-        ]
-        if tokens_to_add:
-            self.tokenizer.add_special_tokens({"additional_special_tokens": tokens_to_add})
+        self.image_start_token = tokenizer.image_start_token
+        self.image_end_token = tokenizer.image_end_token
+        self.video_start_token = tokenizer.video_start_token
+        self.video_end_token = tokenizer.video_end_token
+        self.slice_start_token = tokenizer.slice_start_token
+        self.slice_end_token = tokenizer.slice_end_token
+        self.image_id_start_token = tokenizer.image_id_start_token
+        self.image_id_end_token = tokenizer.image_id_end_token
 
     @auto_docstring
     def __call__(
@@ -113,7 +91,6 @@ class MiniCPMV4_6Processor(ProcessorMixin):
         use_image_id = use_image_id if use_image_id is not None else self.default_use_image_id
 
         image_inputs = {}
-        # TODO: Check what is the actual pattern in jinja and match it here
         if images is not None:
             image_inputs = self.image_processor(images, **output_kwargs["images_kwargs"])
 
@@ -131,7 +108,7 @@ class MiniCPMV4_6Processor(ProcessorMixin):
                     num_rows, num_cols = image_grids[image_index]
 
                     image_placeholder = (
-                        self.image_start_token + self.image_token * int(num_tokens_per_patch[0]) + self.image_end_token
+                        self.image_start_token + "<|placeholder|>" * int(num_tokens_per_patch[0]) + self.image_end_token
                     )
                     if use_image_id:
                         image_placeholder = (
@@ -141,7 +118,7 @@ class MiniCPMV4_6Processor(ProcessorMixin):
                     if self.slice_mode and num_rows > 0 and num_cols > 0:
                         per_slice_tokens = int(num_tokens_per_patch[1]) if len(num_tokens_per_patch) > 1 else 0
                         slice_placeholder = (
-                            self.slice_start_token + self.image_token * per_slice_tokens + self.slice_end_token
+                            self.slice_start_token + "<|placeholder|>" * per_slice_tokens + self.slice_end_token
                         )
                         slices = [slice_placeholder * num_cols for _ in range(num_rows)]
                         image_placeholder += "\n".join(slices)
@@ -163,16 +140,16 @@ class MiniCPMV4_6Processor(ProcessorMixin):
                     num_rows = num_cols = 1  # FIXME: do we really apply cropping on each frame and possibly subframe?
 
                     video_placeholder = (
-                        self.image_start_token + self.video_token * num_tokens_per_patch[0] + self.image_end_token
+                        self.video_start_token + "<|placeholder|>" * num_tokens_per_patch[0] + self.video_end_token
                     )
                     if use_image_id:
                         video_placeholder = (
-                            f"{self.image_id_start_token}{index}{self.image_id_end_token}" + image_placeholder
+                            f"{self.image_id_start_token}{index}{self.image_id_end_token}" + video_placeholder
                         )
 
                     if self.slice_mode and num_rows > 0 and num_cols > 0:
                         slice_placeholder = (
-                            self.slice_start_token + self.video_token * num_patch_tokens + self.slice_end_token
+                            self.slice_start_token + "<|placeholder|>" * num_patch_tokens + self.slice_end_token
                         )
                         slices = [slice_placeholder * num_cols for _ in range(num_rows)]
                         video_placeholder += "\n".join(slices)
@@ -181,7 +158,7 @@ class MiniCPMV4_6Processor(ProcessorMixin):
                     index += 1
                 text[i] = text[i].replace("<|placeholder|>", self.video_token)
 
-        return_tensors = output_kwargs["text_kwargs"].get("return_tensors")
+        return_tensors = output_kwargs["text_kwargs"].pop("return_tensors", None)
         return_mm_token_type_ids = output_kwargs["text_kwargs"].pop("return_mm_token_type_ids", False)
         text_inputs = self.tokenizer(text, **output_kwargs["text_kwargs"], return_tensors=None)
         self._check_special_mm_tokens(text, text_inputs, modalities=["image", "video"])
