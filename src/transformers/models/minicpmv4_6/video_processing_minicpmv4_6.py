@@ -98,6 +98,7 @@ class MiniCPMV4_6VideoProcessor(BaseVideoProcessor):
     slice_mode = True
     downsample_mode = "16x"
     use_image_id = True
+    do_sample_frames = True
     max_num_frames = 128
     stack_frames = 1
     valid_kwargs = MiniCPMV4_6VideoProcessorKwargs
@@ -379,7 +380,8 @@ class MiniCPMV4_6VideoProcessor(BaseVideoProcessor):
             )
             refine_video = divide_to_patches(refine_video, (patch_height, patch_width))
             patches.extend(refine_video)
-        return patches
+        grid = best_grid if best_grid is not None else (0, 0)
+        return patches, grid
 
     def _preprocess(
         self,
@@ -402,6 +404,7 @@ class MiniCPMV4_6VideoProcessor(BaseVideoProcessor):
     ) -> BatchFeature:
         # Don't yet group videos by size due to complex processing on frames/subframes
         resized_videos = []
+        video_grid = (0, 0)
         for video, metadata in zip(videos, video_metadata):
             sub_videos = []
             if stack_frames > 1:
@@ -414,7 +417,7 @@ class MiniCPMV4_6VideoProcessor(BaseVideoProcessor):
                 sub_videos = self.concat_frames_as_image(sub_videos)
 
                 if do_resize:
-                    sub_videos = self.resize_and_split_patches(
+                    sub_videos, _ = self.resize_and_split_patches(
                         video=sub_videos,
                         resample=resample,
                         slice_mode=slice_mode,
@@ -426,7 +429,7 @@ class MiniCPMV4_6VideoProcessor(BaseVideoProcessor):
                     sub_videos = [sub_videos]
 
             if do_resize:
-                video = self.resize_and_split_patches(
+                video, video_grid = self.resize_and_split_patches(
                     video=video,
                     resample=resample,
                     slice_mode=slice_mode,
@@ -458,11 +461,18 @@ class MiniCPMV4_6VideoProcessor(BaseVideoProcessor):
         processed_videos = reorder_videos(processed_videos_grouped, grouped_videos_index)
         target_sizes = reorder_videos(target_sizes_grouped, grouped_videos_index)
 
-        # FIXME: clean up code and make sure all are tensors
         processed_videos = torch.cat(processed_videos, dim=-1)
+        target_sizes = torch.tensor(target_sizes, dtype=torch.int32)
+
+        num_frames = processed_videos.shape[0]
 
         return BatchFeature(
-            data={"pixel_values_videos": processed_videos, "target_sizes_videos": target_sizes},
+            data={
+                "pixel_values_videos": processed_videos,
+                "target_sizes_videos": target_sizes,
+                "grids_videos": video_grid,
+                "num_frames": num_frames,
+            },
             tensor_type=return_tensors,
         )
 

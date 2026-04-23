@@ -38,8 +38,9 @@ from ...modeling_outputs import (
 )
 from ...modeling_utils import AttentionInterface, PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import TransformersKwargs, auto_docstring, torch_compilable_check
+from ...utils import TransformersKwargs, auto_docstring
 from ...utils.generic import can_return_tuple
+from ...utils.import_utils import torch_compilable_check
 from ...utils.output_capturing import capture_outputs
 from ..auto import AutoModel
 from .configuration_minicpmv4_6 import MiniCPMV4_6Config, MiniCPMV4_6VisionConfig
@@ -683,6 +684,8 @@ class MiniCPMV4_6Model(MiniCPMV4_6PreTrainedModel):
         downsample_mode = downsample_mode if downsample_mode else self.config.downsample_mode
         use_vit_merger = downsample_mode != "4x"
 
+        pixel_values = pixel_values.to(dtype=self.vision_tower.dtype)
+
         cu_seqlens = F.pad(torch.cumsum(target_sizes[:, 0] * target_sizes[:, 1], dim=0, dtype=torch.int32), (1, 0))
         max_seqlens = int(torch.max(cu_seqlens[1:] - cu_seqlens[:-1]).item())
 
@@ -700,36 +703,42 @@ class MiniCPMV4_6Model(MiniCPMV4_6PreTrainedModel):
         return vision_output
 
     def get_placeholder_mask(
-        self, input_ids: torch.LongTensor, inputs_embeds: torch.FloatTensor, image_features: torch.FloatTensor
+        self,
+        input_ids: torch.LongTensor,
+        inputs_embeds: torch.FloatTensor,
+        features: torch.FloatTensor,
+        token_id: int,
     ):
         """
         Obtains multimodal placeholder mask from `input_ids` or `inputs_embeds`, and checks that the placeholder token count is
         equal to the length of multimodal features. If the lengths are different, an error is raised.
         """
         if input_ids is None:
-            special_image_mask = inputs_embeds == self.get_input_embeddings()(
-                torch.tensor(self.config.image_token_id, dtype=torch.long, device=inputs_embeds.device)
+            special_mask = inputs_embeds == self.get_input_embeddings()(
+                torch.tensor(token_id, dtype=torch.long, device=inputs_embeds.device)
             )
-            special_image_mask = special_image_mask.all(-1)
+            special_mask = special_mask.all(-1)
         else:
-            special_image_mask = input_ids == self.config.image_token_id
+            special_mask = input_ids == token_id
 
-        n_image_tokens = special_image_mask.sum()
-        special_image_mask = special_image_mask.unsqueeze(-1).expand_as(inputs_embeds).to(inputs_embeds.device)
-        n_image_features = image_features.shape[0]
+        n_tokens = special_mask.sum()
+        special_mask = special_mask.unsqueeze(-1).expand_as(inputs_embeds).to(inputs_embeds.device)
+        n_features = features.shape[0]
         torch_compilable_check(
-            inputs_embeds[special_image_mask].numel() == image_features.numel(),
-            f"Image features and image tokens do not match, tokens: {n_image_tokens}, features: {n_image_features}",
+            inputs_embeds[special_mask].numel() == features.numel(),
+            f"Multimodal features and tokens do not match, tokens: {n_tokens}, features: {n_features}",
         )
-        return special_image_mask
+        return special_mask
 
     @can_return_tuple
     @auto_docstring
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
-        pixel_values: list[list[torch.Tensor]] | None = None,
-        target_sizes: list[torch.Tensor] | None = None,
+        pixel_values: torch.FloatTensor | None = None,
+        target_sizes: torch.IntTensor | None = None,
+        pixel_values_videos: torch.FloatTensor | None = None,
+        target_sizes_videos: torch.IntTensor | None = None,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
         past_key_values: list[torch.FloatTensor] | None = None,
@@ -739,10 +748,14 @@ class MiniCPMV4_6Model(MiniCPMV4_6PreTrainedModel):
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPast:
         r"""
-        pixel_values (`list[list[torch.Tensor]]`, *optional*):
-            Pixel value patches per sample, grouped as `[sample][image_slices]`.
-        target_sizes (`list[torch.Tensor]` or `list[list]`, *optional*):
-            Height and width (in patches) for each image per sample.
+        pixel_values (`torch.FloatTensor`, *optional*):
+            Pixel value patches for images, NaViT-packed.
+        target_sizes (`torch.IntTensor`, *optional*):
+            Height and width (in patches) for each image.
+        pixel_values_videos (`torch.FloatTensor`, *optional*):
+            Pixel value patches for video frames, NaViT-packed.
+        target_sizes_videos (`torch.IntTensor`, *optional*):
+            Height and width (in patches) for each video frame.
         downsample_mode (`str`, *optional*):
             `"4x"` keeps 4x more visual tokens; default `"16x"` applies full merge.
         """
@@ -750,10 +763,16 @@ class MiniCPMV4_6Model(MiniCPMV4_6PreTrainedModel):
             inputs_embeds = self.get_input_embeddings()(input_ids)
 
         if pixel_values is not None:
-            vision_output = self.get_image_features(pixel_values, target_sizes, downsample_mode=downsample_mode)
-            image_features = torch.cat(vision_output.pooler_output, dim=0).to(device=inputs_embeds.device)
-            special_image_mask = self.get_placeholder_mask(input_ids, inputs_embeds, image_features)
-            inputs_embeds = inputs_embeds.masked_scatter(special_image_mask, image_features)
+            image_features = self._process_visual_features(pixel_values, target_sizes, inputs_embeds, downsample_mode)
+            mask = self.get_placeholder_mask(input_ids, inputs_embeds, image_features, self.config.image_token_id)
+            inputs_embeds = inputs_embeds.masked_scatter(mask, image_features)
+
+        if pixel_values_videos is not None and self.config.video_token_id is not None:
+            video_features = self._process_visual_features(
+                pixel_values_videos, target_sizes_videos, inputs_embeds, downsample_mode, is_video=True
+            )
+            mask = self.get_placeholder_mask(input_ids, inputs_embeds, video_features, self.config.video_token_id)
+            inputs_embeds = inputs_embeds.masked_scatter(mask, video_features)
 
         output = self.language_model(
             attention_mask=attention_mask,
@@ -764,6 +783,52 @@ class MiniCPMV4_6Model(MiniCPMV4_6PreTrainedModel):
             **kwargs,
         )
         return output
+
+    def _process_visual_features(
+        self,
+        pixel_values: torch.Tensor,
+        target_sizes: torch.Tensor,
+        inputs_embeds: torch.Tensor,
+        downsample_mode: str | None = None,
+        is_video: bool = False,
+    ) -> torch.Tensor:
+        """Run pixel_values through vision tower + merger, handling beam-expanded duplicates.
+
+        For videos (``is_video=True``), ``pixel_values`` has shape ``[T, C, P, L]``
+        (one entry per frame). We repack it into NaViT format ``[1, C, P, T*L]`` and
+        repeat ``target_sizes`` T times so the vision encoder sees all frames as one
+        packed batch.
+        """
+        batch_size = inputs_embeds.shape[0]
+        expand_factor = 1
+
+        if is_video:
+            if batch_size > 1:
+                expand_factor = batch_size
+                pixel_values = pixel_values[::expand_factor]
+                target_sizes = target_sizes[::expand_factor]
+
+            num_frames = pixel_values.shape[0]
+            pixel_values = pixel_values.permute(1, 2, 0, 3).reshape(
+                1, pixel_values.shape[1], pixel_values.shape[2], -1
+            )
+            target_sizes = target_sizes.repeat(num_frames, 1)
+        else:
+            pv_batch = pixel_values.shape[0]
+            if pv_batch > 1:
+                expand_factor = pv_batch
+                pixel_values = pixel_values[:1]
+                target_sizes = target_sizes[::pv_batch]
+
+        vision_output = self.get_image_features(pixel_values, target_sizes, downsample_mode=downsample_mode)
+        features = torch.cat(vision_output.pooler_output, dim=0).to(
+            device=inputs_embeds.device, dtype=inputs_embeds.dtype
+        )
+
+        if expand_factor > 1:
+            features = features.repeat(expand_factor, 1)
+
+        return features
 
 
 class MiniCPMV4_6ForConditionalGeneration(MiniCPMV4_6PreTrainedModel, GenerationMixin):
@@ -781,8 +846,10 @@ class MiniCPMV4_6ForConditionalGeneration(MiniCPMV4_6PreTrainedModel, Generation
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
-        pixel_values: list[list[torch.Tensor]] | None = None,
-        target_sizes: list[torch.Tensor] | None = None,
+        pixel_values: torch.FloatTensor | None = None,
+        target_sizes: torch.IntTensor | None = None,
+        pixel_values_videos: torch.FloatTensor | None = None,
+        target_sizes_videos: torch.IntTensor | None = None,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
         past_key_values: list[torch.FloatTensor] | None = None,
@@ -793,10 +860,14 @@ class MiniCPMV4_6ForConditionalGeneration(MiniCPMV4_6PreTrainedModel, Generation
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | CausalLMOutputWithPast:
         r"""
-        pixel_values (`list[list[torch.Tensor]]`, *optional*):
-            Pixel value patches per sample, grouped as `[sample][image_slices]`.
-        target_sizes (`list[torch.Tensor]` or `list[list]`, *optional*):
-            Height and width (in patches) for each image per sample.
+        pixel_values (`torch.FloatTensor`, *optional*):
+            Pixel value patches for images, NaViT-packed.
+        target_sizes (`torch.IntTensor`, *optional*):
+            Height and width (in patches) for each image.
+        pixel_values_videos (`torch.FloatTensor`, *optional*):
+            Pixel value patches for video frames, NaViT-packed.
+        target_sizes_videos (`torch.IntTensor`, *optional*):
+            Height and width (in patches) for each video frame.
         downsample_mode (`str`, *optional*):
             `"4x"` keeps 4x more visual tokens; default `"16x"` applies full merge.
         """
@@ -804,6 +875,8 @@ class MiniCPMV4_6ForConditionalGeneration(MiniCPMV4_6PreTrainedModel, Generation
             input_ids=input_ids,
             pixel_values=pixel_values,
             target_sizes=target_sizes,
+            pixel_values_videos=pixel_values_videos,
+            target_sizes_videos=target_sizes_videos,
             attention_mask=attention_mask,
             position_ids=position_ids,
             past_key_values=past_key_values,
@@ -840,6 +913,8 @@ class MiniCPMV4_6ForConditionalGeneration(MiniCPMV4_6PreTrainedModel, Generation
         inputs_embeds=None,
         pixel_values=None,
         target_sizes=None,
+        pixel_values_videos=None,
+        target_sizes_videos=None,
         downsample_mode=None,
         is_first_iteration=False,
         **kwargs,
@@ -856,6 +931,8 @@ class MiniCPMV4_6ForConditionalGeneration(MiniCPMV4_6PreTrainedModel, Generation
         if is_first_iteration or not kwargs.get("use_cache", True):
             model_inputs["pixel_values"] = pixel_values
             model_inputs["target_sizes"] = target_sizes
+            model_inputs["pixel_values_videos"] = pixel_values_videos
+            model_inputs["target_sizes_videos"] = target_sizes_videos
         return model_inputs
 
     def _expand_inputs_for_generation(
@@ -872,7 +949,7 @@ class MiniCPMV4_6ForConditionalGeneration(MiniCPMV4_6PreTrainedModel, Generation
             **model_kwargs,
         )
         if expand_size > 1:
-            for key in ("pixel_values", "target_sizes"):
+            for key in ("pixel_values", "target_sizes", "pixel_values_videos", "target_sizes_videos"):
                 values = model_kwargs.get(key)
                 if values is not None and isinstance(values, list):
                     model_kwargs[key] = [v for v in values for _ in range(expand_size)]

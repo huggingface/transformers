@@ -13,6 +13,8 @@
 # limitations under the License.
 
 
+import torch
+
 from ...image_processing_utils import BatchFeature
 from ...image_utils import ImageInput
 from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
@@ -132,30 +134,39 @@ class MiniCPMV4_6Processor(ProcessorMixin):
         if videos is not None:
             video_inputs = self.video_processor(videos, **output_kwargs["videos_kwargs"])
 
-            index = 0
+            video_target_sizes = video_inputs["target_sizes_videos"]
+            if not isinstance(video_target_sizes, torch.Tensor):
+                video_target_sizes = torch.as_tensor(video_target_sizes, dtype=torch.int32)
+            num_frames = video_inputs.pop("num_frames")
+            video_grid = video_inputs.pop("grids_videos")
+            grid_rows, grid_cols = video_grid
+
+            num_tokens_per_patch = video_target_sizes.prod(-1) // self.video_token_divisor
+
+            video_index = 0
             for i in range(len(text)):
                 while self.video_token in text[i]:
-                    num_tokens_per_patch = image_inputs["target_sizes"][index].prod(-1) * self.video_token_divisor
-                    num_patch_tokens = num_tokens_per_patch[1:].sum()
-                    num_rows = num_cols = 1  # FIXME: do we really apply cropping on each frame and possibly subframe?
-
-                    video_placeholder = (
-                        self.video_start_token + "<|placeholder|>" * num_tokens_per_patch[0] + self.video_end_token
+                    # Build per-frame placeholder: overview + slice grid (mirroring image pattern)
+                    overview_tokens = int(num_tokens_per_patch[0])
+                    frame_placeholder = (
+                        self.video_start_token + "<|placeholder|>" * overview_tokens + self.video_end_token
                     )
+                    if self.slice_mode and grid_rows > 0 and grid_cols > 0:
+                        per_slice_tokens = int(num_tokens_per_patch[1]) if len(num_tokens_per_patch) > 1 else 0
+                        slice_placeholder = (
+                            self.slice_start_token + "<|placeholder|>" * per_slice_tokens + self.slice_end_token
+                        )
+                        slices = [slice_placeholder * grid_cols for _ in range(grid_rows)]
+                        frame_placeholder += "\n".join(slices)
+
+                    video_placeholder = frame_placeholder * num_frames
                     if use_image_id:
                         video_placeholder = (
-                            f"{self.image_id_start_token}{index}{self.image_id_end_token}" + video_placeholder
+                            f"{self.image_id_start_token}{video_index}{self.image_id_end_token}" + video_placeholder
                         )
-
-                    if self.slice_mode and num_rows > 0 and num_cols > 0:
-                        slice_placeholder = (
-                            self.slice_start_token + "<|placeholder|>" * num_patch_tokens + self.slice_end_token
-                        )
-                        slices = [slice_placeholder * num_cols for _ in range(num_rows)]
-                        video_placeholder += "\n".join(slices)
 
                     text[i] = text[i].replace(self.video_token, video_placeholder, 1)
-                    index += 1
+                    video_index += 1
                 text[i] = text[i].replace("<|placeholder|>", self.video_token)
 
         return_tensors = output_kwargs["text_kwargs"].pop("return_tensors", None)
