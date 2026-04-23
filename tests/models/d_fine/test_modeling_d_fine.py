@@ -620,6 +620,7 @@ class DFineModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         config = copy.deepcopy(self.model_tester.get_config())
         config.num_denoising = 0
         config.auxiliary_loss = True
+        config.num_labels = self.model_tester.num_labels
 
         model = DFineForObjectDetection(config)
         model.to(torch_device)
