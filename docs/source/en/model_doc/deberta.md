@@ -46,7 +46,6 @@ from transformers import pipeline
 classifier = pipeline(
     task="text-classification",
     model="microsoft/deberta-base-mnli",
-    device=0,
 )
 
 classifier({

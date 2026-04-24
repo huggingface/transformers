@@ -46,7 +46,6 @@ from transformers import pipeline
 feature_extractor = pipeline(
     task="image-feature-extraction",
     model="facebook/ijepa_vith14_1k",
-    device=0,
 )
 features = feature_extractor("https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg", return_tensors=True).to(model.device)  
 

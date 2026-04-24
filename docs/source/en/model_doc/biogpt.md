@@ -44,7 +44,6 @@ from transformers import pipeline
 generator = pipeline(
     task="text-generation",
     model="microsoft/biogpt",
-    device=0,
 )
 result = generator("Ibuprofen is best used for", truncation=True, max_length=50, do_sample=True)[0]["generated_text"]
 print(result)
@@ -88,6 +87,7 @@ from transformers import AutoTokenizer, AutoModelForCausalLM, BitsAndBytesConfig
 bnb_config = BitsAndBytesConfig(
     load_in_4bit=True,
     bnb_4bit_quant_type="nf4",
+    bnb_4bit_compute_dtype=torch.bfloat16,
     bnb_4bit_compute_bnb_4bit_use_double_quant=True
 )
 
@@ -110,14 +110,6 @@ print(output)
 
 - Pad inputs on the right because BioGPT uses absolute position embeddings.
 - BioGPT can reuse previously computed key-value attention pairs. Access this feature with the [past_key_values](https://huggingface.co/docs/transformers/main/en/model_doc/biogpt#transformers.BioGptModel.forward.past_key_values) parameter in [`BioGPTModel.forward`].
-
-   ```py
-   from transformers import AutoModelForCausalLM
-
-   model = AutoModelForCausalLM.from_pretrained(
-      "microsoft/biogpt",
-      attn_implementation="eager"
- device_map="auto")
 
 ## BioGptConfig
 

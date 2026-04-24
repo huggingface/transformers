@@ -47,7 +47,6 @@ from transformers import pipeline
 pipeline = pipeline(
     task="image-text-to-text",
     model="llava-hf/llava-v1.6-mistral-7b-hf",
-    device=0,
 )
 messages = [
     {

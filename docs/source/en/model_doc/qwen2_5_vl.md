@@ -42,7 +42,6 @@ from transformers import pipeline
 pipe = pipeline(
     task="image-text-to-text",
     model="Qwen/Qwen2.5-VL-7B-Instruct",
-    device=0,
 )
 messages = [
     {

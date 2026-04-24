@@ -43,7 +43,6 @@ from transformers import pipeline
 pipeline = pipeline(
     task="zero-shot-image-classification",
     model="kakaobrain/align-base",
-    device=0,
 )
 
 candidate_labels = [

@@ -46,7 +46,6 @@ from transformers import pipeline
 pipeline = pipeline(
     task="translation",
     model="facebook/mbart-large-50-many-to-many-mmt",
-    device=0,
     src_lang="en_XX",
     tgt_lang="fr_XX",
 )

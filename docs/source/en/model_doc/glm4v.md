@@ -71,7 +71,6 @@ from transformers import pipeline
 pipe = pipeline(
     task="image-text-to-text",
     model="THUDM/GLM-4.1V-9B-Thinking",
-    device=0,
 )
 messages = [
     {
