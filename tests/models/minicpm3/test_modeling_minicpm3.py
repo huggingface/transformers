@@ -63,6 +63,10 @@ class MiniCPM3ModelTest(CausalLMModelTest, unittest.TestCase):
 
     _torch_compile_train_cls = MiniCPM3ForCausalLM if is_torch_available() else None
 
+    @unittest.skip("MiniCPM3 uses MLA attention which is incompatible with this test")
+    def test_sdpa_padding_matches_padding_free_with_position_ids(self):
+        pass
+
     def _check_past_key_values_for_generate(self, batch_size, past_key_values, seq_length, config):
         self.assertIsInstance(past_key_values, Cache)
 
