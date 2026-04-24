@@ -267,7 +267,7 @@ class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin):
 
         if self.problem_type == "single_label_classification" and self.num_labels == 1:
             raise ValueError(
-                '`problem_type="single_label_classification"` requires `num_labels > 1`. For binary "
+                '`problem_type="single_label_classification"` requires `num_labels > 1`. For binary '
                 'classification use `num_labels=2`, or use `problem_type="regression"` for a '
                 "single-output regression head."
             )
