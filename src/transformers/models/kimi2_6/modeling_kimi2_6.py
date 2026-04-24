@@ -26,7 +26,6 @@ import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from torch.nn import LayerNorm
 
 from ...activations import ACT2FN
 from ...cache_utils import Cache
@@ -43,16 +42,16 @@ from ...utils import (
     can_return_tuple,
     torch_compilable_check,
 )
-from ...utils.generic import is_flash_attention_requested, maybe_autocast, merge_with_config_defaults
+from ...utils.generic import is_flash_attention_requested, maybe_autocast
 from ...utils.output_capturing import capture_outputs
 from ..auto import AutoModel
-from .configuration_kimi2_6 import Kimi2_6Config, Kimi2_6VisionConfig, Kimi26Config, Kimi26VisionConfig
+from .configuration_kimi2_6 import Kimi2_6Config, Kimi2_6VisionConfig
 
 
 @dataclass
 @auto_docstring(
     custom_intro="""
-    Base class for Kimi26 outputs, with hidden states and attentions.
+    Base class for Kimi2_6 outputs, with hidden states and attentions.
     """
 )
 class Kimi2_6ModelOutputWithPast(BaseModelOutputWithPast):
@@ -73,7 +72,7 @@ class Kimi2_6ModelOutputWithPast(BaseModelOutputWithPast):
 @dataclass
 @auto_docstring(
     custom_intro="""
-    Base class for Kimi26 causal language model (or autoregressive) outputs.
+    Base class for Kimi2_6 causal language model (or autoregressive) outputs.
     """
 )
 class Kimi2_6CausalLMOutputWithPast(ModelOutput):
@@ -113,10 +112,10 @@ class Kimi2_6VisionPositionEmbeddings(nn.Module):
         self.register_buffer("time_position_embeddings", time_position_embeddings, persistent=False)
 
     # TODO: compute in torch
-    def get_1d_sincos_pos_embed(self, dim, num_frames):
-        grid_t = np.arange(num_frames, dtype=np.float32)
-        omega = np.arange(dim // 2, dtype=np.float32)
-        omega /= dim / 2.0
+    def get_1d_sincos_pos_embed(self):
+        grid_t = np.arange(self.num_frames, dtype=np.float32)
+        omega = np.arange(self.dim // 2, dtype=np.float32)
+        omega /= self.dim / 2.0
         omega = 1.0 / 10000**omega  # (D/2,)
 
         grid_t = grid_t.reshape(-1)  # (M,)
@@ -145,7 +144,7 @@ class Kimi2_6VisionPositionEmbeddings(nn.Module):
                     size=(h, w),
                     mode="bicubic",
                 )
-                position_embeddings.squeeze(0).permute(1, 2, 0).flatten(0, 1)
+                position_embeddings = position_embeddings.squeeze(0).permute(1, 2, 0).flatten(0, 1)
 
             position_embeddings = position_embeddings.unsqueeze(0).repeat(t, 1, 1)
             if t > 1:
@@ -174,7 +173,7 @@ class Kimi2_6VisionPatchEmbed(nn.Module):
 class Kimi2_6VisionRotaryEmbeddings(nn.Module):
     inv_freq: torch.Tensor  # fix linting for `register_buffer`
 
-    def __init__(self, config: Kimi26VisionConfig, device=None):
+    def __init__(self, config: Kimi2_6VisionConfig, device=None):
         super().__init__()
         self.max_seq_len_cached = config.max_position_embeddings
         self.original_max_seq_len = config.max_position_embeddings
@@ -192,7 +191,7 @@ class Kimi2_6VisionRotaryEmbeddings(nn.Module):
 
     @staticmethod
     def compute_default_rope_parameters(
-        config: Kimi26VisionConfig | None = None,
+        config: Kimi2_6VisionConfig | None = None,
         device: torch.device | None = None,
         seq_len: int | None = None,
     ) -> tuple["torch.Tensor", float]:
@@ -262,24 +261,27 @@ class Kimi2_6VisionMLP(nn.Module):
 
 
 def rotate_half(x):
-    """Rotates half the hidden dims of the input."""
-    x1 = x[..., : x.shape[-1] // 2]
-    x2 = x[..., x.shape[-1] // 2 :]
-    return torch.cat((-x2, x1), dim=-1)
+    x1 = x[..., 0::2]
+    x2 = x[..., 1::2]
+    return torch.stack([-x2, x1], dim=-1).flatten(-2)
 
 
-def apply_rotary_pos_emb_vision(
-    q: torch.Tensor, k: torch.Tensor, cos: torch.Tensor, sin: torch.Tensor
-) -> tuple[torch.Tensor, torch.Tensor]:
-    orig_q_dtype = q.dtype
-    orig_k_dtype = k.dtype
-    q, k = q.float(), k.float()
-    cos, sin = cos.unsqueeze(-2).float(), sin.unsqueeze(-2).float()
-    q_embed = (q * cos) + (rotate_half(q) * sin)
-    k_embed = (k * cos) + (rotate_half(k) * sin)
-    q_embed = q_embed.to(orig_q_dtype)
-    k_embed = k_embed.to(orig_k_dtype)
-    return q_embed, k_embed
+def apply_rotary_pos_emb_vision(q: torch.Tensor, k: torch.Tensor, cos: torch.Tensor, sin: torch.Tensor):
+    """Applies Rotary Position Embedding to the query and key tensors.
+
+    Args:
+        q (`torch.Tensor`): The query tensor to embed.
+        k (`torch.Tensor`): The key tensor to embed.
+        cos (`torch.Tensor`): The cosine part of the rotary embedding.
+        sin (`torch.Tensor`): The sine part of the rotary embedding.
+    Returns:
+        `tuple(torch.Tensor)` comprising of the query and key tensors rotated using the Rotary Position Embedding.
+    """
+    cos = cos.squeeze(0).unsqueeze(1)  # (48, 1, 8) — broadcasts over heads
+    sin = sin.squeeze(0).unsqueeze(1)  # (48, 1, 8) — broadcasts over heads
+    q = (q * cos) + (rotate_half(q) * sin)
+    k = (k * cos) + (rotate_half(k) * sin)
+    return q, k
 
 
 def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
@@ -320,93 +322,10 @@ def eager_attention_forward(
 
 
 class Kimi2_6VisionAttention(nn.Module):
-    def __init__(self, config: Kimi26VisionConfig) -> None:
+    def __init__(self, config: Kimi2_6VisionConfig) -> None:
         super().__init__()
-        self.dim = config.embed_dim
-        self.num_heads = config.num_heads
-        self.head_dim = self.dim // self.num_heads
-        self.num_key_value_groups = 1  # needed for eager attention
-        self.qkv = nn.Linear(self.dim, self.dim * 3, bias=True)
-        self.proj = nn.Linear(self.dim, self.dim)
-        self.scaling = self.head_dim**-0.5
-        self.config = config
-        self.attention_dropout = 0.0
-        self.is_causal = False
-
-    def forward(
-        self,
-        hidden_states: torch.Tensor,
-        cu_seqlens: torch.Tensor,
-        rotary_pos_emb: torch.Tensor | None = None,
-        position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
-        **kwargs,
-    ) -> torch.Tensor:
-        seq_length = hidden_states.shape[0]
-        query_states, key_states, value_states = (
-            self.qkv(hidden_states).reshape(seq_length, 3, self.num_heads, -1).permute(1, 0, 2, 3).unbind(0)
-        )
-        cos, sin = position_embeddings
-        query_states, key_states = apply_rotary_pos_emb_vision(query_states, key_states, cos, sin)
-
-        query_states = query_states.transpose(0, 1).unsqueeze(0)
-        key_states = key_states.transpose(0, 1).unsqueeze(0)
-        value_states = value_states.transpose(0, 1).unsqueeze(0)
-
-        attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
-            self.config._attn_implementation, eager_attention_forward
-        )
-
-        if is_flash_attention_requested(self.config):
-            # Flash Attention: Use cu_seqlens for variable length attention
-            max_seqlen = (cu_seqlens[1:] - cu_seqlens[:-1]).max()
-            attn_output, _ = attention_interface(
-                self,
-                query_states,
-                key_states,
-                value_states,
-                attention_mask=None,
-                scaling=self.scaling,
-                dropout=0.0 if not self.training else self.attention_dropout,
-                cu_seq_lens_q=cu_seqlens,
-                cu_seq_lens_k=cu_seqlens,
-                max_length_q=max_seqlen,
-                max_length_k=max_seqlen,
-                is_causal=False,
-                **kwargs,
-            )
-        else:
-            # Other implementations: Process each chunk separately
-            lengths = cu_seqlens[1:] - cu_seqlens[:-1]
-            splits = [
-                torch.split(tensor, lengths.tolist(), dim=2) for tensor in (query_states, key_states, value_states)
-            ]
-
-            attn_outputs = [
-                attention_interface(
-                    self,
-                    q,
-                    k,
-                    v,
-                    attention_mask=None,
-                    scaling=self.scaling,
-                    dropout=0.0 if not self.training else self.attention_dropout,
-                    is_causal=False,
-                    **kwargs,
-                )[0]
-                for q, k, v in zip(*splits)
-            ]
-            attn_output = torch.cat(attn_outputs, dim=1)
-
-        attn_output = attn_output.reshape(seq_length, -1).contiguous()
-        attn_output = self.proj(attn_output)
-        return attn_output
-
-
-class VisionAttention(nn.Module):
-    def __init__(self, config: Kimi26VisionConfig) -> None:
-        super().__init__()
-        self.dim = config.embed_dim
-        self.num_heads = config.num_heads
+        self.dim = config.hidden_size
+        self.num_heads = config.num_attention_heads
         self.head_dim = self.dim // self.num_heads
         self.num_key_value_groups = 1  # needed for eager attention
         self.qkv = nn.Linear(self.dim, self.dim * 3, bias=True)
@@ -488,13 +407,11 @@ class VisionAttention(nn.Module):
 class Kimi2_6VisionEncoderLayer(GradientCheckpointingLayer):
     def __init__(self, config) -> None:
         super().__init__()
-        self.norm1 = LayerNorm(config.embed_dim, eps=1e-6)
-        self.norm2 = LayerNorm(config.embed_dim, eps=1e-6)
-        mlp_hidden_dim = int(config.embed_dim * config.mlp_ratio)
+        self.norm1 = nn.LayerNorm(config.intermediate_size, eps=1e-6)
+        self.norm2 = nn.LayerNorm(config.intermediate_size, eps=1e-6)
 
-        self.attn = VisionAttention(config=config)
-        self.mlp = Kimi2_6VisionMLP(config.intermediate_size, config.hidden_dim, config.hidden_act)
-        self.self_attn = Kimi2_6VisionAttention(config=config)
+        self.attn = Kimi2_6VisionAttention(config=config)
+        self.mlp = Kimi2_6VisionMLP(config.intermediate_size, config.hidden_size, config.hidden_act)
 
     def forward(
         self,
@@ -517,7 +434,7 @@ class Kimi2_6VisionEncoderLayer(GradientCheckpointingLayer):
 
 @auto_docstring
 class Kimi2_6PreTrainedModel(PreTrainedModel):
-    config: Kimi26Config
+    config: Kimi2_6Config
     base_model_prefix = "model"
     input_modalities = ("image", "video", "text")
     supports_gradient_checkpointing = True
@@ -530,7 +447,7 @@ class Kimi2_6PreTrainedModel(PreTrainedModel):
     _supports_attention_backend = True
 
     def _init_weights(self, module):
-        PreTrainedModel()._init_weights(module)
+        super()._init_weights(module)
 
 
 class Kimi2_6VisionModel(Kimi2_6PreTrainedModel):
@@ -541,14 +458,17 @@ class Kimi2_6VisionModel(Kimi2_6PreTrainedModel):
         "attentions": Kimi2_6VisionAttention,
     }
 
-    def __init__(self, config):
-        super().__init__()
+    def __init__(self, config: Kimi2_6VisionConfig):
+        super().__init__(config)
         self.merge_kernel_size = config.merge_kernel_size
         self.patch_embed = Kimi2_6VisionPatchEmbed(config)
 
         self.rotary_emb = Kimi2_6VisionRotaryEmbeddings(config)
-        self.encoder_blocks = nn.ModuleList([Kimi2_6VisionEncoderLayer(config) for _ in range(config.num_layers)])
+        self.encoder_blocks = nn.ModuleList(
+            [Kimi2_6VisionEncoderLayer(config) for _ in range(config.num_hidden_layers)]
+        )
         self.final_layernorm = nn.LayerNorm(config.hidden_size)
+        self.post_init()
 
     def temporal_patch_merger(
         self,
@@ -635,9 +555,9 @@ class Kimi2_6MultimodalProjection(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.hidden_size = config.vision_config.hidden_size * (
-            config.merge_kernel_size[0] * config.merge_kernel_size[1]
+            config.vision_config.merge_kernel_size[0] * config.vision_config.merge_kernel_size[1]
         )
-        self.pre_norm = nn.LayerNorm(config.mm_hidden_size, eps=config.projection_ln_eps)
+        self.pre_norm = nn.LayerNorm(config.projection_hidden_size, eps=config.projection_ln_eps)
 
         self.in_proj = nn.Linear(self.hidden_size, self.hidden_size)
         self.act = nn.GELU()
@@ -678,7 +598,7 @@ class Kimi2_6Model(Kimi2_6PreTrainedModel):
         image_grid_thw (`torch.LongTensor` of shape `(num_images, 3)`, *optional*):
             The temporal, height and width of feature shape of each image in LLM.
         """
-        vision_outputs = self.visual(pixel_values, grid_thw=image_grid_thw, **kwargs)
+        vision_outputs = self.vision_tower(pixel_values, grid_thw=image_grid_thw, **kwargs)
         image_embeds = self.mm_projector(vision_outputs.pooler_output)
         vision_outputs.pooler_output = image_embeds
         return vision_outputs
@@ -708,7 +628,7 @@ class Kimi2_6Model(Kimi2_6PreTrainedModel):
                 inputs_embeds[special_image_mask].numel() == image_features.numel(),
                 f"Image features and image tokens do not match, tokens: {n_image_tokens}, features: {image_features.shape[0]}",
             )
-        return (special_image_mask,)
+        return special_image_mask
 
     @can_return_tuple
     @auto_docstring
@@ -734,8 +654,7 @@ class Kimi2_6Model(Kimi2_6PreTrainedModel):
 
         if pixel_values is not None:
             image_embeds = self.get_image_features(pixel_values, image_grid_thw).pooler_output
-            image_embeds = torch.cat(image_embeds, dim=0).to(inputs_embeds.device, inputs_embeds.dtype)
-            image_mask, _ = self.get_placeholder_mask(
+            image_mask = self.get_placeholder_mask(
                 input_ids, inputs_embeds=inputs_embeds, image_features=image_embeds
             )
             inputs_embeds = inputs_embeds.masked_scatter(image_mask, image_embeds)
@@ -757,224 +676,17 @@ class Kimi2_6Model(Kimi2_6PreTrainedModel):
         )
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
-    Base class for Kimi26 outputs, with hidden states and attentions.
+    The KIMI2_6 model which consists of a vision backbone and a language model.
     """
 )
-class Kimi26ModelOutputWithPast(BaseModelOutputWithPast):
-    r"""
-    past_key_values (`Cache`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
-        It is a [`~cache_utils.Cache`] instance. For more details, see our [kv cache guide](https://huggingface.co/docs/transformers/en/kv_cache).
-
-        Contains pre-computed hidden-states (key and values in the self-attention blocks) that can be used (see
-        `past_key_values` input) to speed up sequential decoding.
-    image_hidden_states (`torch.FloatTensor`, *optional*):
-        A `torch.FloatTensor` of size `(batch_size, num_images, sequence_length, hidden_size)`.
-        image_hidden_states of the model produced by the vision encoder and after projecting the last hidden state.
-    """
-
-    image_hidden_states: torch.FloatTensor | None = None
-
-
-class Kimi26MultiModalProjector(nn.Module):
-    def __init__(self, config: Kimi26Config):
-        super().__init__()
-        # We have hidden_size * the number of vision feature layers
-        num_feature_layers = 1 if isinstance(config.vision_feature_layer, int) else len(config.vision_feature_layer)
-        self.linear_1 = nn.Linear(
-            config.vision_config.hidden_size * num_feature_layers,
-            config.text_config.hidden_size,
-            bias=config.multimodal_projector_bias,
-        )
-        self.act = ACT2FN[config.projector_hidden_act]
-        self.linear_2 = nn.Linear(
-            config.text_config.hidden_size, config.text_config.hidden_size, bias=config.multimodal_projector_bias
-        )
-
-    def forward(self, image_features):
-        hidden_states = self.linear_1(image_features)
-        hidden_states = self.act(hidden_states)
-        hidden_states = self.linear_2(hidden_states)
-        return hidden_states
-
-
-@auto_docstring
-class Kimi26PreTrainedModel(PreTrainedModel):
-    config: Kimi26Config
-    base_model_prefix = "model"
-    input_modalities = ("image", "text")
-    supports_gradient_checkpointing = True
-    _skip_keys_device_placement = "past_key_values"
-
-    _supports_flash_attn = True
-    _supports_sdpa = True
-
-    _can_compile_fullgraph = True
-    _supports_flex_attn = True
-    _supports_attention_backend = True
-
-
-@auto_docstring(
-    custom_intro="""
-    The Kimi26 model which consists of a vision backbone and a language model, without a language modeling head.
-    """
-)
-class Kimi26Model(Kimi26PreTrainedModel):
-    def __init__(self, config: Kimi26Config):
-        super().__init__(config)
-        self.vision_tower = AutoModel.from_config(config.vision_config)
-
-        self.multi_modal_projector = Kimi26MultiModalProjector(config)
-        self.language_model = AutoModel.from_config(config.text_config)
-        self.post_init()
-
-    def get_input_embeddings(self):
-        return self.language_model.get_input_embeddings()
-
-    def set_input_embeddings(self, value):
-        self.language_model.set_input_embeddings(value)
-
-    @merge_with_config_defaults
-    @can_return_tuple
-    @auto_docstring(
-        custom_intro="Obtains image last hidden states from the vision tower and apply multimodal projection."
-    )
-    def get_image_features(
-        self,
-        pixel_values: torch.FloatTensor,
-        vision_feature_layer: int | list[int] | list[int] | None = None,
-        vision_feature_select_strategy: str | None = None,
-        output_hidden_states: bool | None = None,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | BaseModelOutputWithPooling:
-        kwargs = {k: v for k, v in kwargs.items() if v is not None}
-        # this is not memory efficient at all (output_hidden_states=True) will save all the hidden states.
-        image_outputs = self.vision_tower(
-            pixel_values,
-            output_hidden_states=True,  # Ignore arg on purpose
-            return_dict=True,
-            **kwargs,
-        )
-
-        # If we have one vision feature layer, return the corresponding hidden states,
-        # otherwise, select the hidden states of each feature layer and concatenate them
-        if isinstance(vision_feature_layer, int):
-            selected_image_feature = image_outputs.hidden_states[vision_feature_layer]
-            if vision_feature_select_strategy == "default":
-                selected_image_feature = selected_image_feature[:, 1:]
-        else:
-            hs_pool = [image_outputs.hidden_states[layer_idx] for layer_idx in vision_feature_layer]
-            # For default; crop CLS from each hidden state in the hidden state pool
-            if vision_feature_select_strategy == "default":
-                hs_pool = [hs[:, 1:] for hs in hs_pool]
-            selected_image_feature = torch.cat(hs_pool, dim=-1)
-
-        image_features = self.multi_modal_projector(selected_image_feature)
-
-        # If image_sizes is provided, we need to split the image features accordingly,
-        # but only if the image_sizes is not None (the default in this and related architectures)
-        if kwargs.get("image_sizes") is not None:
-            split_sizes = (
-                (torch.as_tensor(kwargs["image_sizes"], device=image_features.device) // self.vision_tower.patch_size)
-                .prod(dim=-1)
-                .tolist()
-            )
-            image_features = torch.split(image_features.squeeze(0), split_sizes)
-        else:
-            image_features = list(image_features)
-        image_outputs.pooler_output = image_features
-
-        return image_outputs
-
-    def get_placeholder_mask(
-        self, input_ids: torch.LongTensor, inputs_embeds: torch.FloatTensor, image_features: torch.FloatTensor
-    ):
-        """
-        Obtains multimodal placeholder mask from `input_ids` or `inputs_embeds`, and checks that the placeholder token count is
-        equal to the length of multimodal features. If the lengths are different, an error is raised.
-        """
-        if input_ids is None:
-            special_image_mask = inputs_embeds == self.get_input_embeddings()(
-                torch.tensor(self.config.image_token_id, dtype=torch.long, device=inputs_embeds.device)
-            )
-            special_image_mask = special_image_mask.all(-1)
-        else:
-            special_image_mask = input_ids == self.config.image_token_id
-
-        n_image_tokens = special_image_mask.sum()
-        n_image_features = image_features.shape[0] * image_features.shape[1]
-        special_image_mask = special_image_mask.unsqueeze(-1).expand_as(inputs_embeds).to(inputs_embeds.device)
-        torch_compilable_check(
-            inputs_embeds[special_image_mask].numel() == image_features.numel(),
-            f"Image features and image tokens do not match, tokens: {n_image_tokens}, features: {n_image_features}",
-        )
-        return special_image_mask
-
-    @can_return_tuple
-    @auto_docstring
-    def forward(
-        self,
-        input_ids: torch.LongTensor | None = None,
-        pixel_values: torch.FloatTensor | None = None,
-        attention_mask: torch.Tensor | None = None,
-        position_ids: torch.LongTensor | None = None,
-        past_key_values: Cache | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
-        vision_feature_layer: int | list[int] | list[int] | None = None,
-        vision_feature_select_strategy: str | None = None,
-        image_sizes: torch.Tensor | None = None,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | Kimi26ModelOutputWithPast:
-        if (input_ids is None) ^ (inputs_embeds is not None):
-            raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
-
-        if inputs_embeds is None:
-            inputs_embeds = self.get_input_embeddings()(input_ids)
-
-        if pixel_values is not None:
-            image_features = self.get_image_features(
-                pixel_values=pixel_values,
-                vision_feature_layer=vision_feature_layer,
-                vision_feature_select_strategy=vision_feature_select_strategy,
-                image_sizes=image_sizes,
-                return_dict=True,
-            ).pooler_output
-            image_features = torch.cat(image_features, dim=0).to(inputs_embeds.device, inputs_embeds.dtype)
-            special_image_mask = self.get_placeholder_mask(
-                input_ids, inputs_embeds=inputs_embeds, image_features=image_features
-            )
-            inputs_embeds = inputs_embeds.masked_scatter(special_image_mask, image_features)
-
-        outputs = self.language_model(
-            attention_mask=attention_mask,
-            position_ids=position_ids,
-            past_key_values=past_key_values,
-            inputs_embeds=inputs_embeds,
-            **kwargs,
-        )
-
-        return Kimi26ModelOutputWithPast(
-            last_hidden_state=outputs.last_hidden_state,
-            past_key_values=outputs.past_key_values,
-            hidden_states=outputs.hidden_states,
-            attentions=outputs.attentions,
-            image_hidden_states=image_features if pixel_values is not None else None,
-        )
-
-
-@auto_docstring(
-    custom_intro="""
-    The KIMI2__6 model which consists of a vision backbone and a language model.
-    """
-)
-class Kimi2_6ForConditionalGeneration(Kimi26PreTrainedModel, GenerationMixin):
+class Kimi2_6ForConditionalGeneration(Kimi2_6PreTrainedModel, GenerationMixin):
     _tied_weights_keys = {"lm_head.weight": "model.language_model.embed_tokens.weight"}
 
-    def __init__(self, config: Kimi26Config):
+    def __init__(self, config: Kimi2_6Config):
         super().__init__(config)
-        self.model = Kimi26Model(config)
+        self.model = Kimi2_6Model(config)
         self.lm_head = nn.Linear(config.text_config.hidden_size, config.text_config.vocab_size, bias=False)
         self.post_init()
 
@@ -1129,4 +841,4 @@ class Kimi2_6ForConditionalGeneration(Kimi26PreTrainedModel, GenerationMixin):
         return model_inputs
 
 
-__all__ = ["Kimi2_6ForConditionalGeneration", "Kimi2_6Model", "Kimi2_6PreTrainedModel"]
+__all__ = ["Kimi2_6ForConditionalGeneration", "Kimi2_6Model", "Kimi2_6PreTrainedModel", "Kimi2_6VisionModel"]

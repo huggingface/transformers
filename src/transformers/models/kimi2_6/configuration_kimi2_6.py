@@ -48,6 +48,7 @@ class Kimi2_6VisionConfig(PreTrainedConfig):
     hidden_act: str = "gelu_pytorch_tanh"
     merge_kernel_size: tuple[int, int] | list[int] = (2, 2)
     rope_parameters: dict | None = None
+    max_position_embeddings: int | None = None
 
 
 class Kimi2_6Config(PreTrainedConfig):
@@ -61,11 +62,12 @@ class Kimi2_6Config(PreTrainedConfig):
 
     text_config: dict | PreTrainedConfig | None = None
     vision_config: dict | PreTrainedConfig | None = None
-    projection_hidden_size: int | None = None
+    projection_hidden_size: int | None = 1152
     projection_hidden_act: str = "gelu"
     projection_ln_eps: float = 1e-5
     image_token_id: int = 163605
     video_token_id: int = 163606
+    tie_word_embeddings: bool = True
 
     def __post_init__(self, **kwargs):
         if isinstance(self.text_config, dict):

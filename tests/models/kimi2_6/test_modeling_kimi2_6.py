@@ -11,498 +11,151 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Testing suite for the PyTorch Qwen2-VL model."""
+"""Testing suite for the PyTorch Kimi2.6 model."""
 
-import copy
 import gc
-import tempfile
 import unittest
 
-import pytest
 import requests
 
 from transformers import (
     AutoProcessor,
-    Kimi26Config,
-    Kimi26ForConditionalGeneration,
-    Kimi26Model,
+    DeepseekV3Config,
+    Kimi2_6Config,
+    Kimi2_6VisionConfig,
     is_torch_available,
     is_vision_available,
 )
 from transformers.testing_utils import (
-    Expectations,
     backend_empty_cache,
-    require_flash_attn,
     require_torch,
-    require_torch_accelerator,
     slow,
     torch_device,
 )
 
-from ...generation.test_utils import GenerationTesterMixin
-from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import (
-    ModelTesterMixin,
     floats_tensor,
-    ids_tensor,
 )
-from ...test_pipeline_mixin import PipelineTesterMixin
+from ...vlm_tester import VLMModelTest, VLMModelTester
 
 
 if is_torch_available():
     import torch
+
+    from transformers import Kimi2_6ForConditionalGeneration, Kimi2_6Model
 
 
 if is_vision_available():
     from PIL import Image
 
 
-class Kimi26VisionText2TextModelTester:
-    def __init__(
-        self,
-        parent,
-        batch_size=3,
-        seq_length=7,
-        num_channels=3,
-        ignore_index=-100,
-        image_size=14,
-        text_config={
-            "bos_token_id": 0,
-            "eos_token_id": 1,
-            "pad_token_id": 2,
-            "hidden_act": "silu",
-            "hidden_size": 32,
-            "vocab_size": 99,
-            "intermediate_size": 37,
-            "max_position_embeddings": 512,
-            "max_window_layers": 3,
-            "num_attention_heads": 4,
-            "num_hidden_layers": 2,
-            "num_key_value_heads": 2,
-            "rope_theta": 10000,
-            "tie_word_embeddings": True,
-            "rope_parameters": {"type": "mrope", "mrope_section": [2, 1, 1]},
-        },
-        vision_start_token_id=3,
-        image_token_id=4,
-        video_token_id=5,
-        is_training=True,
-        vision_config={
-            "depth": 2,
-            "embed_dim": 32,
-            "hidden_act": "quick_gelu",
-            "hidden_size": 32,
-            "mlp_ratio": 4,
-            "num_heads": 4,
-            "patch_size": 14,
-            "spatial_merge_size": 1,
-            "temporal_patch_size": 2,
-        },
-    ):
-        self.parent = parent
-        self.ignore_index = ignore_index
-        self.bos_token_id = text_config["bos_token_id"]
-        self.eos_token_id = text_config["eos_token_id"]
-        self.pad_token_id = text_config["pad_token_id"]
-        self.num_hidden_layers = text_config["num_hidden_layers"]
-        self.num_attention_heads = text_config["num_attention_heads"]
-        self.hidden_size = text_config["hidden_size"]
-        self.vision_start_token_id = vision_start_token_id
-        self.image_token_id = image_token_id
-        self.video_token_id = video_token_id
-        self.text_config = text_config
-        self.vision_config = vision_config
-        self.batch_size = batch_size
-        self.num_channels = num_channels
-        self.image_size = image_size
-        self.is_training = is_training
-        self.vocab_size = text_config["vocab_size"]
-        self.num_image_tokens = 32
-        self.seq_length = seq_length + self.num_image_tokens
+class Kimi2_6VisionText2TextModelTester(VLMModelTester):
+    base_model_class = Kimi2_6Model
+    config_class = Kimi2_6Config
+    text_config_class = DeepseekV3Config
+    vision_config_class = Kimi2_6VisionConfig
+    conditional_generation_class = Kimi2_6ForConditionalGeneration
 
-    def get_config(self):
-        return Kimi26Config(
-            text_config=self.text_config,
-            vision_config=self.vision_config,
-            vision_start_token_id=self.vision_start_token_id,
-            image_token_id=self.image_token_id,
-            video_token_id=self.video_token_id,
+    def __init__(self, parent, **kwargs):
+        kwargs.setdefault("image_token_id", 3)
+        kwargs.setdefault("video_token_id", 4)
+        kwargs.setdefault("image_size", 32)
+        kwargs.setdefault("patch_size", 8)
+        kwargs.setdefault("num_image_tokens", 16)
+        kwargs.setdefault("hidden_act", "silu")
+        kwargs.setdefault("head_dim", 8)
+        kwargs.setdefault("num_heads", 4)
+        kwargs.setdefault("pos_emb_height", 4)
+        kwargs.setdefault("merge_kernel_size", (1, 1))
+        kwargs.setdefault("pos_emb_width", 4)
+        kwargs.setdefault("pos_emb_time", 1)
+        kwargs.setdefault("kv_lora_rank", 16)
+        kwargs.setdefault("q_lora_rank", 32)
+        kwargs.setdefault("qk_rope_head_dim", 16)
+        kwargs.setdefault("v_head_dim", 32)
+        kwargs.setdefault("qk_nope_head_dim", 32)
+        kwargs.setdefault(
+            "rope_parameters",
+            {
+                "rope_type": "default",
+                "rope_theta": 10000,
+            },
         )
+        super().__init__(parent, **kwargs)
 
-    def prepare_config_and_inputs(self):
-        config = self.get_config()
-        patch_size = config.vision_config.patch_size
-        temporal_patch_size = config.vision_config.temporal_patch_size
-        pixel_values = floats_tensor(
+        # These can be inferred from existing properties and don't get separate kwargs
+        self.projection_hidden_size = self.hidden_size
+
+    def create_pixel_values(self):
+        return floats_tensor(
             [
-                self.batch_size * (self.image_size**2) // (patch_size**2),
-                self.num_channels * (patch_size**2) * temporal_patch_size,
+                self.batch_size * (self.image_size**2) // (self.patch_size**2),
+                self.num_channels,
+                self.patch_size,
+                self.patch_size,
             ]
         )
 
-        return config, pixel_values
-
-    def prepare_config_and_inputs_for_common(self):
-        config_and_inputs = self.prepare_config_and_inputs()
-        config, pixel_values = config_and_inputs
-        input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
-        attention_mask = torch.ones(input_ids.shape, dtype=torch.long, device=torch_device)
-
+    def place_image_tokens(self, input_ids, config):
+        # Place image tokens with vision_start_token_id prefix
+        input_ids = input_ids.clone()
+        # Clear any accidental special tokens first
         input_ids[:, -1] = self.pad_token_id
-        attention_mask[:, -1] = 0
         input_ids[input_ids == self.video_token_id] = self.pad_token_id
         input_ids[input_ids == self.image_token_id] = self.pad_token_id
-        input_ids[input_ids == self.vision_start_token_id] = self.pad_token_id
-        input_ids[:, self.num_image_tokens] = self.image_token_id
-        input_ids[:, self.num_image_tokens - 1] = self.vision_start_token_id
+        # Place image tokens with vision_start_token_id prefix
+        input_ids[:, : self.num_image_tokens] = self.image_token_id
+        return input_ids
 
-        mm_token_type_ids = torch.zeros_like(input_ids)
-        mm_token_type_ids[:, self.num_image_tokens] = 1
-
-        inputs_dict = {
-            "pixel_values": pixel_values,
-            "image_grid_thw": torch.tensor([[1, 1, 1]] * self.batch_size, device=torch_device),
-            "input_ids": input_ids,
-            "attention_mask": attention_mask,
-            "mm_token_type_ids": mm_token_type_ids,
+    def get_additional_inputs(self, config, input_ids, pixel_values):
+        return {
+            "image_grid_thw": torch.tensor([[1, 4, 4]] * self.batch_size, device=torch_device),
         }
-        return config, inputs_dict
-
 
 @require_torch
-class Kimi26ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
-    """
-    Model tester for `Kimi26ForConditionalGeneration`.
-    """
+class Kimi2_6ModelTest(VLMModelTest, unittest.TestCase):
+    model_tester_class = Kimi2_6VisionText2TextModelTester
 
-    all_model_classes = (
-        (
-            Kimi26Model,
-            Kimi26ForConditionalGeneration,
-        )
-        if is_torch_available()
-        else ()
-    )
-    pipeline_model_mapping = {
-        "image-text-to-text": Kimi26ForConditionalGeneration,
-        "any-to-any": Kimi26ForConditionalGeneration,
-    }
-    _is_composite = True
-
-    def setUp(self):
-        self.model_tester = Kimi26VisionText2TextModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=Kimi26Config, has_text_modality=False)
-
-    def test_config(self):
-        self.config_tester.run_common_tests()
-
-    def test_mismatching_num_image_tokens(self):
-        """
-        Tests that VLMs through an error with explicit message saying what is wrong
-        when number of images don't match number of image tokens in the text.
-        Also we need to test multi-image cases when one prompt has multiple image tokens.
-        """
-        config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
-        for model_class in self.all_model_classes:
-            model = model_class(config).to(torch_device)
-            model.eval()
-            curr_input_dict = copy.deepcopy(input_dict)
-            _ = model(**curr_input_dict)  # successful forward with no modifications
-
-            # remove one image but leave the image token in text
-            patch_size = config.vision_config.patch_size
-            one_img_length = (self.model_tester.image_size**2) // (patch_size**2)
-            curr_input_dict["pixel_values"] = curr_input_dict["pixel_values"][-one_img_length:, ...]
-            curr_input_dict["image_grid_thw"] = curr_input_dict["image_grid_thw"][-1:, ...]
-            with self.assertRaisesRegex(ValueError, "Image features and image tokens do not match"):
-                _ = model(**curr_input_dict)
-
-            model.base_model.rope_deltas = None
-            # simulate multi-image case by concatenating inputs where each has exactly one image/image-token
-            input_ids = curr_input_dict["input_ids"][:1]
-            mm_token_type_ids = curr_input_dict["mm_token_type_ids"][:1]
-            pixel_values = curr_input_dict["pixel_values"][:one_img_length]
-            image_grid_thw = curr_input_dict["image_grid_thw"][:1]
-            input_ids = torch.cat([input_ids, input_ids], dim=0)
-            mm_token_type_ids = torch.cat([mm_token_type_ids, mm_token_type_ids], dim=0)
-            with self.assertRaisesRegex(ValueError, "Image features and image tokens do not match"):
-                _ = model(
-                    input_ids=input_ids,
-                    pixel_values=pixel_values,
-                    image_grid_thw=image_grid_thw,
-                    mm_token_type_ids=mm_token_type_ids,
-                )
-
-            model.base_model.rope_deltas = None
-            # two images and two image tokens don't raise an error
-            pixel_values = torch.cat([pixel_values, pixel_values], dim=0)
-            image_grid_thw = torch.cat([image_grid_thw, image_grid_thw], dim=0)
-            _ = model(
-                input_ids=input_ids,
-                pixel_values=pixel_values,
-                image_grid_thw=image_grid_thw,
-                mm_token_type_ids=mm_token_type_ids,
-            )
-
-    def test_forward_with_rope_deltas_cached(self):
-        """
-        Tests that Qwen2-VL computes new rope deltas every forward pass with new set of inputs.
-        Rope deltas are cached when we generate and re-used for decoding phase, byt are not reset
-        automatically after generation ends. See https://github.com/huggingface/transformers/pull/36013 for more
-        """
-        config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
-        for model_class in self.all_generative_model_classes:
-            model = model_class(config).to(torch_device)
-
-            # Generate and make sure rope_deltas are not `None`
-            self.assertTrue(model.model.rope_deltas is None)
-            generation_output = model.generate(
-                **input_dict, max_new_tokens=4, return_dict_in_generate=True, output_logits=True
-            )
-            self.assertTrue(model.model.rope_deltas is not None)
-
-            # Now if we try to do forward pass, we should get new rope logits, because cache is not passed
-            forward_output = model(**input_dict)
-            torch.testing.assert_close(
-                generation_output.logits[0], forward_output.logits[:, -1, :], rtol=1e-4, atol=1e-4
-            )
-
-            # Same happens if we call `generate` API instead of `forward`
-            generation_output_second = model.generate(
-                **input_dict, max_new_tokens=10, return_dict_in_generate=True, output_logits=True
-            )
-            torch.testing.assert_close(
-                generation_output.logits[0], generation_output_second.logits[0], rtol=1e-4, atol=1e-4
-            )
-
-    def test_vision_position_ids(self):
-        """
-        Tests that vision position ids are built correctly for images and for videos.
-        See https://github.com/huggingface/transformers/pull/45400
-        """
-        config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
-        model = Kimi26Model(config).to(torch_device)
-        batch_size = input_dict["input_ids"].shape[0]
-
-        # Test most simple case when num_image_tokens == 1. Position ids will be sunsequent and text-like
-        position_ids = model.get_rope_index(
-            input_dict["input_ids"], input_dict["mm_token_type_ids"], input_dict["image_grid_thw"]
-        )[0]
-        expected_positions = torch.arange(39)[None, None, :].repeat(3, batch_size, 1)
-        self.assertListEqual(list(position_ids.shape), [3, batch_size, 39])
-        self.assertListEqual(position_ids.tolist(), expected_positions.tolist())
-
-        # Each image encodes to more than 1 token (i.e. 4 height and 3 width patches = 12 tokens)
-        image_token_id = config.image_token_id
-        pad_token_id = config.text_config.pad_token_id
-        input_ids = torch.tensor([[pad_token_id] + [image_token_id] * 12 + [pad_token_id]], device=torch_device)
-        mm_token_type_ids = torch.tensor([[0] + [1] * 12 + [0]], device=torch_device)
-        image_grid_thw = torch.tensor([[1, 4, 3]], device=torch_device)
-        position_ids = model.get_rope_index(input_ids, mm_token_type_ids, image_grid_thw)[0]
-        expected_positions = torch.tensor(
-            [
-                [[0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 5]],
-                [[0, 1, 1, 1, 2, 2, 2, 3, 3, 3, 4, 4, 4, 5]],
-                [[0, 1, 2, 3, 1, 2, 3, 1, 2, 3, 1, 2, 3, 5]],
-            ]
-        )
-
-        self.assertListEqual(list(position_ids.shape), [3, 1, 14])
-        self.assertListEqual(position_ids.tolist(), expected_positions.tolist())
-
-        # Check video position ids with 2 frames, and 4 height, 3 width patches (= 12 * 2 tokens)
-        video_token_id = config.video_token_id
-        input_ids = torch.tensor([[pad_token_id] + [video_token_id] * 24 + [pad_token_id]], device=torch_device)
-        mm_token_type_ids = torch.tensor([[0] + [2] * 24 + [0]], device=torch_device)
-        video_grid_thw = torch.tensor([[2, 4, 3]], device=torch_device)
-        position_ids = model.get_rope_index(input_ids, mm_token_type_ids, video_grid_thw=video_grid_thw)[0]
-        expected_positions = torch.tensor(
-            [
-                [[0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 5]],
-                [[0, 1, 1, 1, 2, 2, 2, 3, 3, 3, 4, 4, 4, 1, 1, 1, 2, 2, 2, 3, 3, 3, 4, 4, 4, 5]],
-                [[0, 1, 2, 3, 1, 2, 3, 1, 2, 3, 1, 2, 3, 1, 2, 3, 1, 2, 3, 1, 2, 3, 1, 2, 3, 5]],
-            ]
-        )
-
-        self.assertListEqual(list(position_ids.shape), [3, 1, 26])
-        self.assertListEqual(position_ids.tolist(), expected_positions.tolist())
-
-    def attention_mask_padding_matches_padding_free_with_position_ids(
-        self, attn_implementation: str, fa_kwargs: bool = False
-    ):
-        max_new_tokens = 30
-        for model_class in self.all_generative_model_classes:
-            config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-
-            dummy_input = inputs_dict[model_class.main_input_name]
-            if dummy_input.dtype in [torch.float32, torch.float16]:
-                dummy_input = dummy_input.to(torch.bfloat16)
-
-            # make sure that all models have enough positions for generation
-            if hasattr(config, "max_position_embeddings"):
-                config.max_position_embeddings = max_new_tokens + dummy_input.shape[1] + 1
-
-            model = model_class(config)
-
-            with tempfile.TemporaryDirectory() as tmpdirname:
-                model.save_pretrained(tmpdirname)
-
-                if 0 in inputs_dict["attention_mask"][:, -1]:
-                    inputs_dict["attention_mask"] = inputs_dict["attention_mask"].flip(1)
-                dummy_attention_mask = inputs_dict["attention_mask"]
-                inputs_dict["input_ids"][~dummy_attention_mask.bool()] = config.get_text_config().pad_token_id
-
-                model = (
-                    model_class.from_pretrained(
-                        tmpdirname,
-                        dtype=torch.bfloat16,
-                        attn_implementation=attn_implementation,
-                    )
-                    .to(torch_device)
-                    .eval()
-                )
-
-                # flatten
-                padfree_inputs_dict = {
-                    "pixel_values": inputs_dict["pixel_values"],
-                    "image_grid_thw": inputs_dict["image_grid_thw"],
-                    "input_ids": inputs_dict["input_ids"][dummy_attention_mask.bool()].unsqueeze(0),
-                }
-
-                # add position_ids
-                vision_position_ids, deltas = model.model.get_rope_index(
-                    input_ids=inputs_dict["input_ids"],
-                    image_grid_thw=inputs_dict["image_grid_thw"],
-                    attention_mask=inputs_dict["attention_mask"],
-                    mm_token_type_ids=inputs_dict["mm_token_type_ids"],
-                )  # [3, bs, padded-seq-len]
-                vision_padfree_positions = vision_position_ids[:, dummy_attention_mask.bool()].view(
-                    3, -1
-                )  # [3, bs*padfree-len]
-                text_padfree_positions = torch.cat(
-                    [torch.arange(length) for length in dummy_attention_mask.sum(1).tolist()]
-                )  # [1, bs*padfree-len]
-                text_padfree_positions = text_padfree_positions.long().unsqueeze(0).to(torch_device)
-                padfree_inputs_dict["position_ids"] = torch.cat([text_padfree_positions, vision_padfree_positions])[
-                    :, None, :
-                ]
-
-                if fa_kwargs:
-                    cu_seq_lens = [0] + dummy_attention_mask.sum(1).tolist()
-                    cu_seq_lens = torch.tensor(cu_seq_lens, device=torch_device)
-                    max_length = cu_seq_lens.diff().max().item()
-                    padfree_inputs_dict.update(
-                        {
-                            "cu_seq_lens_q": cu_seq_lens.cumsum(-1).to(dtype=torch.int32),
-                            "cu_seq_lens_k": cu_seq_lens.cumsum(-1).to(dtype=torch.int32),
-                            "max_length_q": max_length,
-                            "max_length_k": max_length,
-                        }
-                    )
-
-                # We need to do simple forward without cache in roder to trigger packed SDPA/FLEX/EAGER path
-                res_padded = model(**inputs_dict, use_cache=False)
-                res_padfree = model(**padfree_inputs_dict, use_cache=False)
-
-                logits_padded = res_padded.logits[inputs_dict["attention_mask"].bool()]
-                logits_padfree = res_padfree.logits[0]
-
-                # acceptable numerical instability
-                tol = torch.finfo(torch.bfloat16).eps
-                torch.testing.assert_close(logits_padded, logits_padfree, rtol=tol, atol=tol)
-
-    def test_reverse_loading_mapping(self):
-        super().test_reverse_loading_mapping(skip_base_model=True)
-
-    @unittest.skip(reason="Feedforward chunking is not yet supported")
-    def test_feed_forward_chunking(self):
-        pass
-
-    @unittest.skip(reason="CPU offload is not yet supported")
-    def test_cpu_offload(self):
-        pass
-
-    @unittest.skip(reason="Some undefined behavior encountered with test versions of this model. Skip for now.")
-    def test_disk_offload_bin(self):
-        pass
-
-    @unittest.skip(reason="Some undefined behavior encountered with test versions of this model. Skip for now.")
-    def test_disk_offload_safetensors(self):
-        pass
-
-    @unittest.skip(reason="Some undefined behavior encountered with test versions of this model. Skip for now.")
-    def test_model_parallelism(self):
-        pass
-
-    @unittest.skip(reason="Compile not yet supported because in Kimi26 models")
-    def test_sdpa_can_dispatch_on_flash(self):
-        pass
-
-    @unittest.skip(reason="Got `CUDA error: misaligned address` with PyTorch 2.0.0.")
-    def test_multi_gpu_data_parallel_forward(self):
-        pass
-
-    def test_enable_input_require_grads_with_gradient_checkpointing(self):
-        if not self.model_tester.is_training:
-            self.skipTest(reason="ModelTester not in training mode")
-
+    # Kimi has images shaped as (bs*patch_len, dim) so we can't slice to batches in generate
+    def prepare_config_and_inputs_for_generate(self, batch_size=2):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-        config.use_cache = False
-        config.return_dict = True
 
-        for model_class in self.all_model_classes:
-            if not model_class.supports_gradient_checkpointing:
-                continue
+        # We don't want a few model inputs in our model input dictionary for generation tests
+        input_keys_to_ignore = [
+            "decoder_input_ids",
+            "decoder_attention_mask",
+            "use_cache",
+            "labels",
+        ]
 
-            model = model_class(config)
-            model.to(torch_device)
-            model.gradient_checkpointing_enable(gradient_checkpointing_kwargs={"use_reentrant": False})
-            model.enable_input_require_grads()
-            model.train()
+        # The diff from the general `prepare_config_and_inputs_for_generate` lies here
+        patch_size = config.vision_config.patch_size
+        filtered_image_length = batch_size * (self.model_tester.image_size**2) // (patch_size**2)
+        filtered_inputs_dict = {
+            k: v[:batch_size, ...] if isinstance(v, torch.Tensor) else v
+            for k, v in inputs_dict.items()
+            if k not in input_keys_to_ignore
+        }
+        filtered_inputs_dict["pixel_values"] = inputs_dict["pixel_values"][:filtered_image_length]
 
-            for parameter in model.parameters():
-                parameter.requires_grad = False
-
-            vision_module = None
-            if hasattr(model, "visual"):
-                vision_module = model.visual
-            elif hasattr(model, "model") and hasattr(model.model, "visual"):
-                vision_module = model.model.visual
-
-            if vision_module is None:
-                continue
-
-            target_linear = vision_module.blocks[0].attn.qkv
-            target_linear.weight.requires_grad = True
-            if target_linear.bias is not None:
-                target_linear.bias.requires_grad = True
-
-            inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
-            outputs = model(**inputs)
-
-            if hasattr(outputs, "loss") and outputs.loss is not None:
-                loss = outputs.loss
-            else:
-                logits = outputs.logits if hasattr(outputs, "logits") else outputs[0]
-                loss = logits.sum()
-
-            loss.backward()
-
-            self.assertIsNotNone(
-                target_linear.weight.grad,
-                f"qkv weights should receive gradients when enable_input_require_grads is used with gradient checkpointing. Model: {model_class.__name__}",
+        # It is important set `eos_token_id` to `None` to avoid early stopping (would break for length-based checks)
+        text_gen_config = config.get_text_config(decoder=True)
+        if text_gen_config.eos_token_id is not None and text_gen_config.pad_token_id is None:
+            text_gen_config.pad_token_id = (
+                text_gen_config.eos_token_id
+                if isinstance(text_gen_config.eos_token_id, int)
+                else text_gen_config.eos_token_id[0]
             )
-            self.assertGreater(
-                target_linear.weight.grad.abs().sum().item(),
-                0,
-                f"qkv weights should have non-zero gradients when enable_input_require_grads is used with gradient checkpointing. Model: {model_class.__name__}",
-            )
+        text_gen_config.eos_token_id = None
+        text_gen_config.forced_eos_token_id = None
+
+        return config, filtered_inputs_dict
 
 
 @require_torch
 class Kimi26IntegrationTest(unittest.TestCase):
     def setUp(self):
-        self.processor = AutoProcessor.from_pretrained("Qwen/Qwen2-VL-7B-Instruct")
+        self.processor = AutoProcessor.from_pretrained("todo")
         self.messages = [
             {
                 "role": "user",
@@ -521,9 +174,7 @@ class Kimi26IntegrationTest(unittest.TestCase):
 
     @slow
     def test_small_model_integration_test(self):
-        model = Kimi26ForConditionalGeneration.from_pretrained(
-            "Qwen/Qwen2-VL-7B-Instruct", dtype="auto", device_map="auto"
-        )
+        model = Kimi2_6ForConditionalGeneration.from_pretrained("todo", dtype="auto", device_map="auto")
 
         text = self.processor.apply_chat_template(self.messages, tokenize=False, add_generation_prompt=True)
         inputs = self.processor(text=[text], images=[self.image], return_tensors="pt")
@@ -558,9 +209,7 @@ class Kimi26IntegrationTest(unittest.TestCase):
 
     @slow
     def test_small_model_integration_test_batch(self):
-        model = Kimi26ForConditionalGeneration.from_pretrained(
-            "Qwen/Qwen2-VL-7B-Instruct", dtype="auto", device_map="auto"
-        )
+        model = Kimi2_6ForConditionalGeneration.from_pretrained("todo", dtype="auto", device_map="auto")
         text = self.processor.apply_chat_template(self.messages, tokenize=False, add_generation_prompt=True)
         inputs = self.processor(text=[text, text], images=[self.image, self.image], return_tensors="pt").to(
             torch_device
@@ -580,9 +229,7 @@ class Kimi26IntegrationTest(unittest.TestCase):
 
     @slow
     def test_small_model_integration_test_expand(self):
-        model = Kimi26ForConditionalGeneration.from_pretrained(
-            "Qwen/Qwen2-VL-7B-Instruct", dtype="auto", device_map="auto"
-        )
+        model = Kimi2_6ForConditionalGeneration.from_pretrained("todo", dtype="auto", device_map="auto")
         text = self.processor.apply_chat_template(self.messages, tokenize=False, add_generation_prompt=True)
         inputs = self.processor(text=[text], images=[self.image], return_tensors="pt").to(torch_device)
 
@@ -600,9 +247,7 @@ class Kimi26IntegrationTest(unittest.TestCase):
 
     @slow
     def test_small_model_integration_test_batch_wo_image(self):
-        model = Kimi26ForConditionalGeneration.from_pretrained(
-            "Qwen/Qwen2-VL-7B-Instruct", dtype="auto", device_map="auto"
-        )
+        model = Kimi2_6ForConditionalGeneration.from_pretrained("todo", dtype="auto", device_map="auto")
         text = self.processor.apply_chat_template(self.messages, tokenize=False, add_generation_prompt=True)
         messages2 = [
             {"role": "system", "content": "You are a helpful assistant."},
@@ -620,104 +265,6 @@ class Kimi26IntegrationTest(unittest.TestCase):
             'system\nYou are a helpful assistant.\nuser\nWhat kind of dog is this?\nassistant\nThe dog in the picture appears to be a Labrador Retriever. Labradors are known for their friendly and intelligent nature, making them popular choices',
             'system\nYou are a helpful assistant.\nuser\nWho are you?\nassistant\nI am a large language model created by Alibaba Cloud. I am called Qwen.'
         ]  # fmt: skip
-        self.assertEqual(
-            self.processor.batch_decode(output, skip_special_tokens=True),
-            EXPECTED_DECODED_TEXT,
-        )
-
-    @slow
-    def test_small_model_integration_test_batch_different_resolutions(self):
-        model = Kimi26ForConditionalGeneration.from_pretrained(
-            "Qwen/Qwen2-VL-7B-Instruct", dtype="auto", device_map="auto"
-        )
-        text = self.processor.apply_chat_template(self.messages, tokenize=False, add_generation_prompt=True)
-        text2 = self.processor.apply_chat_template(self.messages, tokenize=False, add_generation_prompt=True)
-        image2 = self.image.resize((224, 224))
-        inputs = self.processor(text=[text, text2], images=[self.image, image2], padding=True, return_tensors="pt").to(
-            torch_device
-        )
-
-        # it should not matter whether two images are the same size or not
-        output = model.generate(**inputs, max_new_tokens=30)
-        DECODED_TEXT = self.processor.batch_decode(output, skip_special_tokens=True)
-
-        EXPECTED_DECODED_TEXTS = Expectations(
-            {
-                ("xpu", 3): [
-                    'system\nYou are a helpful assistant.\nuser\nWhat kind of dog is this?\nassistant\nThe dog in the picture appears to be a Labrador Retriever. Labradors are known for their friendly and intelligent nature, making them popular choices',
-                    'system\nYou are a helpful assistant.\nuser\nWhat kind of dog is this?\nassistant\nThe dog in the picture appears to be a Labrador Retriever. Labradors are known for their friendly and intelligent nature, making them popular choices',
-                ],
-                ("cuda", None): [
-                    'system\nYou are a helpful assistant.\nuser\nWhat kind of dog is this?\nassistant\nThe dog in the picture appears to be a Labrador Retriever. Labradors are known for their friendly and intelligent nature, making them popular choices',
-                    'system\nYou are a helpful assistant.\nuser\nWhat kind of dog is this?\nassistant\nThe dog in the picture appears to be a Labrador Retriever. Labradors are known for their friendly and intelligent nature, making them popular pets',
-                ],
-                ("cuda", 8): [
-                    'system\nYou are a helpful assistant.\nuser\nWhat kind of dog is this?\nassistant\nThe dog in the picture appears to be a Labrador Retriever. Labradors are known for their friendly and intelligent nature, making them popular choices',
-                    'system\nYou are a helpful assistant.\nuser\nWhat kind of dog is this?\nassistant\nThe dog in the picture appears to be a Labrador Retriever. Labradors are known for their friendly and intelligent nature, making them popular choices'
-                ],
-            }
-        )  # fmt: skip
-        EXPECTED_DECODED_TEXT = EXPECTED_DECODED_TEXTS.get_expectation()
-
-        self.assertEqual(DECODED_TEXT, EXPECTED_DECODED_TEXT)
-
-    @slow
-    @require_flash_attn
-    @require_torch_accelerator
-    @pytest.mark.flash_attn_test
-    def test_small_model_integration_test_batch_flashatt2(self):
-        model = Kimi26ForConditionalGeneration.from_pretrained(
-            "Qwen/Qwen2-VL-7B-Instruct",
-            dtype=torch.bfloat16,
-            attn_implementation="flash_attention_2",
-            device_map="auto",
-        )
-        text = self.processor.apply_chat_template(self.messages, tokenize=False, add_generation_prompt=True)
-        inputs = self.processor(text=[text, text], images=[self.image, self.image], return_tensors="pt").to(
-            torch_device
-        )
-
-        # it should not matter whether two images are the same size or not
-        output = model.generate(**inputs, max_new_tokens=30)
-
-        EXPECTED_DECODED_TEXT = [
-            "system\nYou are a helpful assistant.\nuser\nWhat kind of dog is this?\nassistant\nThe dog in the picture appears to be a Labrador Retriever. Labradors are known for their friendly and intelligent nature, making them popular choices",
-            "system\nYou are a helpful assistant.\nuser\nWhat kind of dog is this?\nassistant\nThe dog in the picture appears to be a Labrador Retriever. Labradors are known for their friendly and intelligent nature, making them popular choices",
-        ]
-        self.assertEqual(
-            self.processor.batch_decode(output, skip_special_tokens=True),
-            EXPECTED_DECODED_TEXT,
-        )
-
-    @slow
-    @require_flash_attn
-    @require_torch_accelerator
-    @pytest.mark.flash_attn_test
-    def test_small_model_integration_test_batch_wo_image_flashatt2(self):
-        model = Kimi26ForConditionalGeneration.from_pretrained(
-            "Qwen/Qwen2-VL-7B-Instruct",
-            dtype=torch.bfloat16,
-            attn_implementation="flash_attention_2",
-            device_map="auto",
-        )
-        text = self.processor.apply_chat_template(self.messages, tokenize=False, add_generation_prompt=True)
-        messages2 = [
-            {"role": "system", "content": "You are a helpful assistant."},
-            {"role": "user", "content": "Who are you?"},
-        ]
-        text2 = self.processor.apply_chat_template(messages2, tokenize=False, add_generation_prompt=True)
-        inputs = self.processor(text=[text, text2], images=[self.image], padding=True, return_tensors="pt").to(
-            torch_device
-        )
-
-        # it should not matter whether two images are the same size or not
-        output = model.generate(**inputs, max_new_tokens=30)
-
-        EXPECTED_DECODED_TEXT = [
-            'system\nYou are a helpful assistant.\nuser\nWhat kind of dog is this?\nassistant\nThe dog in the picture appears to be a Labrador Retriever. Labradors are known for their friendly and intelligent nature, making them popular choices',
-            'system\nYou are a helpful assistant.\nuser\nWho are you?\nassistant\nI am a large language model created by Alibaba Cloud. I am called Qwen.'
-        ]  # fmt: skip
-
         self.assertEqual(
             self.processor.batch_decode(output, skip_special_tokens=True),
             EXPECTED_DECODED_TEXT,

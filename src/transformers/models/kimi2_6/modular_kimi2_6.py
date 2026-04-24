@@ -67,6 +67,7 @@ class Kimi2_6VisionConfig(PreTrainedConfig):
     hidden_act: str = "gelu_pytorch_tanh"
     merge_kernel_size: tuple[int, int] | list[int] = (2, 2)
     rope_parameters: dict | None = None
+    max_position_embeddings: int | None = None
 
 
 class Kimi2_6Config(PreTrainedConfig):
@@ -80,11 +81,12 @@ class Kimi2_6Config(PreTrainedConfig):
 
     text_config: dict | PreTrainedConfig | None = None
     vision_config: dict | PreTrainedConfig | None = None
-    projection_hidden_size: int | None = None
+    projection_hidden_size: int | None = 1152
     projection_hidden_act: str = "gelu"
     projection_ln_eps: float = 1e-5
     image_token_id: int = 163605
     video_token_id: int = 163606
+    tie_word_embeddings: bool = True
 
     def __post_init__(self, **kwargs):
         if isinstance(self.text_config, dict):
@@ -121,10 +123,10 @@ class Kimi2_6VisionPositionEmbeddings(nn.Module):
         self.register_buffer("time_position_embeddings", time_position_embeddings, persistent=False)
 
     # TODO: compute in torch
-    def get_1d_sincos_pos_embed(self, dim, num_frames):
-        grid_t = np.arange(num_frames, dtype=np.float32)
-        omega = np.arange(dim // 2, dtype=np.float32)
-        omega /= dim / 2.0
+    def get_1d_sincos_pos_embed(self):
+        grid_t = np.arange(self.num_frames, dtype=np.float32)
+        omega = np.arange(self.dim // 2, dtype=np.float32)
+        omega /= self.dim / 2.0
         omega = 1.0 / 10000**omega  # (D/2,)
 
         grid_t = grid_t.reshape(-1)  # (M,)
@@ -153,7 +155,7 @@ class Kimi2_6VisionPositionEmbeddings(nn.Module):
                     size=(h, w),
                     mode="bicubic",
                 )
-                position_embeddings.squeeze(0).permute(1, 2, 0).flatten(0, 1)
+                position_embeddings = position_embeddings.squeeze(0).permute(1, 2, 0).flatten(0, 1)
 
             position_embeddings = position_embeddings.unsqueeze(0).repeat(t, 1, 1)
             if t > 1:
@@ -188,21 +190,27 @@ class Kimi2_6VisionMLP(VisionMlp):
 
 
 class Kimi2_6VisionAttention(VisionAttention):
-    pass
+    def __init__(self, config: Kimi2_6VisionConfig) -> None:
+        super().__init__()
+        self.dim = config.hidden_size
+        self.num_heads = config.num_attention_heads
 
 
 class Kimi2_6VisionEncoderLayer(Qwen2VLVisionBlock):
     def __init__(self, config):
         super().__init__()
-        self.self_attn = Kimi2_6VisionAttention(config=config)
-        self.mlp = Kimi2_6VisionMLP(config.intermediate_size, config.hidden_dim, config.hidden_act)
+        self.norm1 = nn.LayerNorm(config.intermediate_size, eps=1e-6)
+        self.norm2 = nn.LayerNorm(config.intermediate_size, eps=1e-6)
+
+        self.attn = Kimi2_6VisionAttention(config=config)
+        self.mlp = Kimi2_6VisionMLP(config.intermediate_size, config.hidden_size, config.hidden_act)
 
 
 class Kimi2_6PreTrainedModel(Qwen2VLPreTrainedModel):
     _no_split_modules = ["Kimi2_6VisionEncoderLayer"]
 
     def _init_weights(self, module):
-        PreTrainedModel()._init_weights(module)
+        PreTrainedModel._init_weights(module)
 
 
 class Kimi2_6VisionModel(Kimi2_6PreTrainedModel):
@@ -213,14 +221,17 @@ class Kimi2_6VisionModel(Kimi2_6PreTrainedModel):
         "attentions": Kimi2_6VisionAttention,
     }
 
-    def __init__(self, config):
-        super().__init__()
+    def __init__(self, config: Kimi2_6VisionConfig):
+        super().__init__(config)
         self.merge_kernel_size = config.merge_kernel_size
         self.patch_embed = Kimi2_6VisionPatchEmbed(config)
 
         self.rotary_emb = Kimi2_6VisionRotaryEmbeddings(config)
-        self.encoder_blocks = nn.ModuleList([Kimi2_6VisionEncoderLayer(config) for _ in range(config.num_layers)])
+        self.encoder_blocks = nn.ModuleList(
+            [Kimi2_6VisionEncoderLayer(config) for _ in range(config.num_hidden_layers)]
+        )
         self.final_layernorm = nn.LayerNorm(config.hidden_size)
+        self.post_init()
 
     def temporal_patch_merger(
         self,
@@ -307,9 +318,9 @@ class Kimi2_6MultimodalProjection(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.hidden_size = config.vision_config.hidden_size * (
-            config.merge_kernel_size[0] * config.merge_kernel_size[1]
+            config.vision_config.merge_kernel_size[0] * config.vision_config.merge_kernel_size[1]
         )
-        self.pre_norm = nn.LayerNorm(config.mm_hidden_size, eps=config.projection_ln_eps)
+        self.pre_norm = nn.LayerNorm(config.projection_hidden_size, eps=config.projection_ln_eps)
 
         self.in_proj = nn.Linear(self.hidden_size, self.hidden_size)
         self.act = nn.GELU()
@@ -350,7 +361,7 @@ class Kimi2_6Model(Kimi2_6PreTrainedModel):
         image_grid_thw (`torch.LongTensor` of shape `(num_images, 3)`, *optional*):
             The temporal, height and width of feature shape of each image in LLM.
         """
-        vision_outputs = self.visual(pixel_values, grid_thw=image_grid_thw, **kwargs)
+        vision_outputs = self.vision_tower(pixel_values, grid_thw=image_grid_thw, **kwargs)
         image_embeds = self.mm_projector(vision_outputs.pooler_output)
         vision_outputs.pooler_output = image_embeds
         return vision_outputs
@@ -380,7 +391,7 @@ class Kimi2_6Model(Kimi2_6PreTrainedModel):
                 inputs_embeds[special_image_mask].numel() == image_features.numel(),
                 f"Image features and image tokens do not match, tokens: {n_image_tokens}, features: {image_features.shape[0]}",
             )
-        return (special_image_mask,)
+        return special_image_mask
 
     @can_return_tuple
     @auto_docstring
@@ -406,8 +417,7 @@ class Kimi2_6Model(Kimi2_6PreTrainedModel):
 
         if pixel_values is not None:
             image_embeds = self.get_image_features(pixel_values, image_grid_thw).pooler_output
-            image_embeds = torch.cat(image_embeds, dim=0).to(inputs_embeds.device, inputs_embeds.dtype)
-            image_mask, _ = self.get_placeholder_mask(
+            image_mask = self.get_placeholder_mask(
                 input_ids, inputs_embeds=inputs_embeds, image_features=image_embeds
             )
             inputs_embeds = inputs_embeds.masked_scatter(image_mask, image_embeds)
@@ -558,4 +568,6 @@ __all__ = [
     "Kimi2_6ForConditionalGeneration",
     "Kimi2_6Model",
     "Kimi2_6PreTrainedModel",
+    "Kimi2_6VisionModel",
+    "Kimi2_6Processor",
 ]

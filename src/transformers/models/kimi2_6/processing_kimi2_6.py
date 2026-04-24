@@ -192,3 +192,6 @@ class Kimi2_6Processor(ProcessorMixin):
         model_input_names = super().model_input_names
         model_input_names.append("mm_token_type_ids")
         return model_input_names
+
+
+__all__ = ["Kimi2_6Processor"]
