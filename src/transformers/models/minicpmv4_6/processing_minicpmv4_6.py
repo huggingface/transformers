@@ -13,10 +13,12 @@
 # limitations under the License.
 
 
+import torch
+
 from ...image_processing_utils import BatchFeature
 from ...image_utils import ImageInput
 from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
-from ...tokenization_utils_base import AddedToken, PreTokenizedInput, TextInput
+from ...tokenization_utils_base import PreTokenizedInput, TextInput
 from ...utils import auto_docstring, logging
 from ...video_utils import VideoInput
 
@@ -45,41 +47,17 @@ class MiniCPMV4_6Processor(ProcessorMixin):
         self.image_token_divisor = 4 if self.image_processor.downsample_mode == "4x" else 16
         self.video_token_divisor = 4 if self.video_processor.downsample_mode == "4x" else 16
 
-        self.image_token = tokenizer.image_pad_token  # "<|image_pad|>"
-        self.video_token = tokenizer.video_pad_token  # "<|video_pad|>"
-        self.image_token_id = tokenizer.convert_tokens_to_ids(self.image_token)
-        self.video_token_id = tokenizer.convert_tokens_to_ids(self.video_token)
+        self.image_token = tokenizer.image_token
+        self.video_token = tokenizer.video_token
+        self.image_token_id = tokenizer.image_token_id
+        self.video_token_id = tokenizer.video_token_id
 
-        self.image_start_token = tokenizer.image_start_token  # "<image>"
-        self.image_end_token = tokenizer.image_end_token  # "</image>"
-        self.video_start_token = tokenizer.video_start_token  # "<video>"
-        self.video_end_token = tokenizer.video_end_token  # "</video>"
-        self.slice_start_token = tokenizer.slice_start_token  # "<slice>"
-        self.slice_end_token = tokenizer.slice_end_token  # "</slice>"
-        self.image_id_start_token = tokenizer.image_id_start_token  # "<image_id>"
-        self.image_id_end_token = tokenizer.image_id_end_token  # "</image_id>"
-
-        special_tokens = [
-            self.image_start_token,
-            self.image_end_token,
-            self.video_start_token,
-            self.video_end_token,
-            self.slice_start_token,
-            self.slice_end_token,
-            self.image_id_start_token,
-            self.image_id_end_token,
-            self.image_token,
-            self.video_token,
-        ]
-
-        # TODO: move to conversion script before release, we can't add tokens when init a processor
-        tokens_to_add = [
-            AddedToken(tok, normalized=False, special=True)
-            for tok in special_tokens
-            if tok not in self.tokenizer.get_vocab()
-        ]
-        if tokens_to_add:
-            self.tokenizer.add_special_tokens({"additional_special_tokens": tokens_to_add})
+        self.image_start_token = tokenizer.image_start_token
+        self.image_end_token = tokenizer.image_end_token
+        self.slice_start_token = tokenizer.slice_start_token
+        self.slice_end_token = tokenizer.slice_end_token
+        self.image_id_start_token = tokenizer.image_id_start_token
+        self.image_id_end_token = tokenizer.image_id_end_token
 
     @auto_docstring
     def __call__(
@@ -112,8 +90,10 @@ class MiniCPMV4_6Processor(ProcessorMixin):
         use_image_id = output_kwargs["images_kwargs"].pop("use_image_id", None)
         use_image_id = use_image_id if use_image_id is not None else self.default_use_image_id
 
+        img_downsample = output_kwargs["images_kwargs"].get("downsample_mode", self.image_processor.downsample_mode)
+        image_token_divisor = 4 if img_downsample == "4x" else 16
+
         image_inputs = {}
-        # TODO: Check what is the actual pattern in jinja and match it here
         if images is not None:
             image_inputs = self.image_processor(images, **output_kwargs["images_kwargs"])
 
@@ -127,11 +107,11 @@ class MiniCPMV4_6Processor(ProcessorMixin):
                 while self.image_token in text[i]:
                     n_patches = num_patches_per_image[image_index]
                     img_target_sizes = target_sizes[flat_index : flat_index + n_patches]
-                    num_tokens_per_patch = img_target_sizes.prod(-1) // self.image_token_divisor
+                    num_tokens_per_patch = img_target_sizes.prod(-1) // image_token_divisor
                     num_rows, num_cols = image_grids[image_index]
 
                     image_placeholder = (
-                        self.image_start_token + self.image_token * int(num_tokens_per_patch[0]) + self.image_end_token
+                        self.image_start_token + "<|placeholder|>" * int(num_tokens_per_patch[0]) + self.image_end_token
                     )
                     if use_image_id:
                         image_placeholder = (
@@ -141,7 +121,7 @@ class MiniCPMV4_6Processor(ProcessorMixin):
                     if self.slice_mode and num_rows > 0 and num_cols > 0:
                         per_slice_tokens = int(num_tokens_per_patch[1]) if len(num_tokens_per_patch) > 1 else 0
                         slice_placeholder = (
-                            self.slice_start_token + self.image_token * per_slice_tokens + self.slice_end_token
+                            self.slice_start_token + "<|placeholder|>" * per_slice_tokens + self.slice_end_token
                         )
                         slices = [slice_placeholder * num_cols for _ in range(num_rows)]
                         image_placeholder += "\n".join(slices)
@@ -151,37 +131,57 @@ class MiniCPMV4_6Processor(ProcessorMixin):
                     image_index += 1
                 text[i] = text[i].replace("<|placeholder|>", self.image_token)
 
+        vid_downsample = output_kwargs["videos_kwargs"].get("downsample_mode", self.video_processor.downsample_mode)
+        video_token_divisor = 4 if vid_downsample == "4x" else 16
+
         video_inputs = {}
         if videos is not None:
             video_inputs = self.video_processor(videos, **output_kwargs["videos_kwargs"])
 
-            index = 0
+            video_target_sizes = video_inputs["target_sizes_videos"]
+            num_frames = video_inputs.pop("num_frames")
+            video_grids = video_inputs.pop("grids_videos")
+            num_patches_per_frame = video_inputs.pop("num_patches_per_frame")
+
+            flat_index = 0
+            video_index = 0
             for i in range(len(text)):
                 while self.video_token in text[i]:
-                    num_tokens_per_patch = image_inputs["target_sizes"][index].prod(-1) * self.video_token_divisor
-                    num_patch_tokens = num_tokens_per_patch[1:].sum()
-                    num_rows = num_cols = 1  # FIXME: do we really apply cropping on each frame and possibly subframe?
+                    video_placeholder = ""
+                    for f in range(num_frames):
+                        n_patches = num_patches_per_frame[f]
+                        frame_ts = video_target_sizes[flat_index : flat_index + n_patches]
+                        frame_tokens = frame_ts.prod(-1) // video_token_divisor
+                        grid_rows, grid_cols = video_grids[f]
 
-                    video_placeholder = (
-                        self.image_start_token + self.video_token * num_tokens_per_patch[0] + self.image_end_token
-                    )
+                        frame_placeholder = (
+                            self.image_start_token
+                            + "<|placeholder|>" * int(frame_tokens[0])
+                            + self.image_end_token
+                        )
+                        if self.slice_mode and grid_rows > 0 and grid_cols > 0:
+                            per_slice_tokens = int(frame_tokens[1]) if len(frame_tokens) > 1 else 0
+                            slice_placeholder = (
+                                self.slice_start_token
+                                + "<|placeholder|>" * per_slice_tokens
+                                + self.slice_end_token
+                            )
+                            slices = [slice_placeholder * grid_cols for _ in range(grid_rows)]
+                            frame_placeholder += "\n".join(slices)
+
+                        video_placeholder += frame_placeholder
+                        flat_index += n_patches
+
                     if use_image_id:
                         video_placeholder = (
-                            f"{self.image_id_start_token}{index}{self.image_id_end_token}" + image_placeholder
+                            f"{self.image_id_start_token}{video_index}{self.image_id_end_token}" + video_placeholder
                         )
-
-                    if self.slice_mode and num_rows > 0 and num_cols > 0:
-                        slice_placeholder = (
-                            self.slice_start_token + self.video_token * num_patch_tokens + self.slice_end_token
-                        )
-                        slices = [slice_placeholder * num_cols for _ in range(num_rows)]
-                        video_placeholder += "\n".join(slices)
 
                     text[i] = text[i].replace(self.video_token, video_placeholder, 1)
-                    index += 1
+                    video_index += 1
                 text[i] = text[i].replace("<|placeholder|>", self.video_token)
 
-        return_tensors = output_kwargs["text_kwargs"].get("return_tensors")
+        return_tensors = output_kwargs["text_kwargs"].pop("return_tensors", None)
         return_mm_token_type_ids = output_kwargs["text_kwargs"].pop("return_mm_token_type_ids", False)
         text_inputs = self.tokenizer(text, **output_kwargs["text_kwargs"], return_tensors=None)
         self._check_special_mm_tokens(text, text_inputs, modalities=["image", "video"])

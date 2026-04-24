@@ -32,8 +32,6 @@ from ...video_processing_utils import BASE_VIDEO_PROCESSOR_DOCSTRING, BaseVideoP
 from ...video_utils import (
     VideoInput,
     VideoMetadata,
-    group_videos_by_shape,
-    reorder_videos,
 )
 
 
@@ -98,6 +96,7 @@ class MiniCPMV4_6VideoProcessor(BaseVideoProcessor):
     slice_mode = True
     downsample_mode = "16x"
     use_image_id = True
+    do_sample_frames = True
     max_num_frames = 128
     stack_frames = 1
     valid_kwargs = MiniCPMV4_6VideoProcessorKwargs
@@ -169,7 +168,7 @@ class MiniCPMV4_6VideoProcessor(BaseVideoProcessor):
 
         return indices_total
 
-    def concat_frames_as_image(video: torch.Tensor) -> torch.Tensor:
+    def concat_frames_as_image(self, video: torch.Tensor) -> torch.Tensor:
         """
         Takes a video and concatenates it to a PIL canvas following
         a grid layout. Depending on video's size, the output (rows, cols)
@@ -202,7 +201,7 @@ class MiniCPMV4_6VideoProcessor(BaseVideoProcessor):
         # Create a big canvas to fit in all time-frames
         canvas_width = cols * width + (cols - 1) * line_width
         canvas_height = rows * height + (rows - 1) * line_width
-        canvas = torch.full((1, channels, canvas_height, canvas_width), 255, dtype=torch.uint8)
+        canvas = torch.zeros((1, channels, canvas_height, canvas_width), dtype=torch.uint8)
         video = video.view(rows, cols, channels, height, width)
 
         for row in range(rows):
@@ -368,7 +367,7 @@ class MiniCPMV4_6VideoProcessor(BaseVideoProcessor):
         # Collect all patches: [source, *slices]
         patches = [source_video]
         if best_grid is not None:
-            refine_width, refine_height = self.get_refine_size(
+            refine_height, refine_width = self.get_refine_size(
                 video_size, best_grid, scale_resolution, patch_size, allow_upscale=True
             )
             grid_y, grid_x = best_grid
@@ -379,7 +378,8 @@ class MiniCPMV4_6VideoProcessor(BaseVideoProcessor):
             )
             refine_video = divide_to_patches(refine_video, (patch_height, patch_width))
             patches.extend(refine_video)
-        return patches
+        grid = best_grid if best_grid is not None else (0, 0)
+        return patches, grid
 
     def _preprocess(
         self,
@@ -396,38 +396,71 @@ class MiniCPMV4_6VideoProcessor(BaseVideoProcessor):
         patch_size: int,
         slice_mode: bool,
         stack_frames: int,
+        max_num_frames: int,
         video_metadata: list[VideoMetadata],
         return_tensors: str | TensorType | None = None,
         **kwargs,
     ) -> BatchFeature:
-        # Don't yet group videos by size due to complex processing on frames/subframes
-        resized_videos = []
+        # Stage 1 — Build an ordered list of visual units.
+        # Each unit is a [1, C, H, W] tensor representing either a single main
+        # frame or a per-second composite of sub-frames.  When stack_frames > 1
+        # the units are interleaved: [main_0, comp_0, main_1, comp_1, …]
+        visual_units: list[torch.Tensor] = []
         for video, metadata in zip(videos, video_metadata):
-            sub_videos = []
             if stack_frames > 1:
-                num_seconds = math.ceil(metadata.duration)
-                len_subframes = num_seconds * stack_frames
-                len_subframes -= math.ceil((num_seconds - metadata.duration) / (1 / stack_frames))
-                # Video already in TCHW format so just slice off on timeframe dim
-                video, sub_videos = video[:-len_subframes], video[-len_subframes:]
-                # `sub_videos` shaped as TCHW with T=1 and different HW than stacked_videos
-                sub_videos = self.concat_frames_as_image(sub_videos)
+                duration = metadata.duration
+                num_seconds = math.ceil(duration)
 
-                if do_resize:
-                    sub_videos = self.resize_and_split_patches(
-                        video=sub_videos,
-                        resample=resample,
-                        slice_mode=slice_mode,
-                        max_slice_nums=max_slice_nums,
-                        scale_resolution=scale_resolution,
-                        patch_size=patch_size,
-                    )
+                # Reconstruct sub_timestamps (same logic as sample_frames)
+                sub_timestamps: list[float] = []
+                for sec in range(num_seconds):
+                    for j in range(1, stack_frames):
+                        timestamp = sec + j / stack_frames
+                        if timestamp < duration:
+                            sub_timestamps.append(timestamp)
+
+                # Apply the same downsampling that sample_frames would have applied
+                max_num_frames_stack = max_num_frames * (stack_frames - 1)
+                if len(sub_timestamps) > max_num_frames_stack:
+                    sampling_idxs = np.linspace(0, len(sub_timestamps) - 1, max_num_frames_stack, dtype=int)
+                    sub_timestamps = [sub_timestamps[int(i)] for i in sampling_idxs]
+
+                n_sub = len(sub_timestamps)
+                if n_sub > 0:
+                    main_video, sub_video = video[:-n_sub], video[-n_sub:]
                 else:
-                    sub_videos = [sub_videos]
+                    main_video, sub_video = video, video[:0]
 
+                # Group sub-frames by second (matching _group_stacked_by_second)
+                composites_by_sec: list[torch.Tensor | None] = []
+                cursor = 0
+                for sec in range(num_seconds):
+                    group_start = cursor
+                    while cursor < len(sub_timestamps) and sub_timestamps[cursor] < sec + 1:
+                        cursor += 1
+                    if cursor > group_start:
+                        composites_by_sec.append(self.concat_frames_as_image(sub_video[group_start:cursor]))
+                    else:
+                        composites_by_sec.append(None)
+
+                # Interleave: pair i-th main frame with i-th second's composite
+                for i in range(len(main_video)):
+                    visual_units.append(main_video[i : i + 1])
+                    if i < len(composites_by_sec) and composites_by_sec[i] is not None:
+                        visual_units.append(composites_by_sec[i])
+            else:
+                for i in range(len(video)):
+                    visual_units.append(video[i : i + 1])
+
+        # Stage 2 — Resize, split, normalise and reshape each unit independently.
+        per_unit_pixel_values: list[list[torch.Tensor]] = []
+        per_unit_target_sizes: list[list[list[int]]] = []
+        all_grids: list[list[int]] = []
+
+        for unit in visual_units:
             if do_resize:
-                video = self.resize_and_split_patches(
-                    video=video,
+                patches, grid = self.resize_and_split_patches(
+                    video=unit,
                     resample=resample,
                     slice_mode=slice_mode,
                     max_slice_nums=max_slice_nums,
@@ -435,35 +468,43 @@ class MiniCPMV4_6VideoProcessor(BaseVideoProcessor):
                     patch_size=patch_size,
                 )
             else:
-                video = [video]
-            resized_videos.extend([*video, *sub_videos])
+                patches = [unit]
+                grid = (0, 0)
 
-        # Group videos by size for further processing
-        grouped_videos, grouped_videos_index = group_videos_by_shape(resized_videos)
-        processed_videos_grouped = {}
-        target_sizes_grouped = {}
+            unit_pv: list[torch.Tensor] = []
+            unit_ts: list[list[int]] = []
+            for patch in patches:
+                patch = self.rescale_and_normalize(
+                    patch, do_rescale, rescale_factor, do_normalize, image_mean, image_std,
+                )
+                height, width = patch.shape[-2:]
+                patch = self.reshape_by_patch(patch.unsqueeze(0), patch_size)
+                unit_pv.append(patch.squeeze(0).squeeze(0))
+                unit_ts.append([height // patch_size, width // patch_size])
 
-        for shape, stacked_videos in grouped_videos.items():
-            stacked_videos = self.rescale_and_normalize(
-                stacked_videos, do_rescale, rescale_factor, do_normalize, image_mean, image_std
-            )
+            per_unit_pixel_values.append(unit_pv)
+            per_unit_target_sizes.append(unit_ts)
+            all_grids.append(list(grid) if not isinstance(grid, list) else grid)
 
-            height, width = stacked_videos.shape[-2:]
-            stacked_videos = self.reshape_by_patch(stacked_videos, patch_size)
-            target_sizes = [[height // patch_size, width // patch_size]] * len(stacked_videos)
+        # Stage 3 — Flatten into NaViT-packed format.
+        all_pv = [pv for unit_pvs in per_unit_pixel_values for pv in unit_pvs]
+        pixel_values = torch.cat(all_pv, dim=-1).unsqueeze(0)
 
-            processed_videos_grouped[shape] = stacked_videos
-            target_sizes_grouped[shape] = target_sizes
+        all_ts = [ts for unit_tss in per_unit_target_sizes for ts in unit_tss]
+        target_sizes = torch.tensor(all_ts, dtype=torch.int32)
 
-        processed_videos = reorder_videos(processed_videos_grouped, grouped_videos_index)
-        target_sizes = reorder_videos(target_sizes_grouped, grouped_videos_index)
-
-        # FIXME: clean up code and make sure all are tensors
-        processed_videos = torch.cat(processed_videos, dim=-1)
+        num_patches_per_frame = [len(unit_pvs) for unit_pvs in per_unit_pixel_values]
 
         return BatchFeature(
-            data={"pixel_values_videos": processed_videos, "target_sizes_videos": target_sizes},
+            data={
+                "pixel_values_videos": pixel_values,
+                "target_sizes_videos": target_sizes,
+                "grids_videos": all_grids,
+                "num_patches_per_frame": num_patches_per_frame,
+                "num_frames": len(visual_units),
+            },
             tensor_type=return_tensors,
+            skip_tensor_conversion=["grids_videos", "num_patches_per_frame", "num_frames"],
         )
 
 
