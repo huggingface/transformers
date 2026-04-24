@@ -213,7 +213,7 @@ class ContinuousBatchProcessor:
         # Padding is turned on when either cuda graphs or compile is used
         use_cuda_graphs = self.use_cuda_graph_varlen or self.use_cuda_graph_decode
         self._pad_inputs = use_cuda_graphs or (varlen_config is not None or decode_config is not None)
-        # Set up the graph pool, which allows all graphs to share the use the same memory
+        # Set up the graph pool. This allows all graphs to share the same memory pool, greatly saving memory.
         self.graph_pool = torch.cuda.graph_pool_handle() if use_cuda_graphs else None
 
         # Setup inputs and outputs
