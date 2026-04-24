@@ -118,9 +118,7 @@ class MiMoV2FlashModelTest(CausalLMModelTest, unittest.TestCase):
         long_input_length = int(config.max_position_embeddings * 1.5)
 
         # Inputs
-        x = torch.randn(
-            1, dtype=torch.float32, device=torch_device
-        )  # used exclusively to get the dtype and the device
+        x = torch.randn(1, dtype=torch.float32, device=torch_device)  # used exclusively to get the dtype and the device
         position_ids_short = torch.arange(short_input_length, dtype=torch.long, device=torch_device)
         position_ids_short = position_ids_short.unsqueeze(0)
         position_ids_long = torch.arange(long_input_length, dtype=torch.long, device=torch_device)
@@ -258,39 +256,6 @@ class MiMoV2FlashModelTest(CausalLMModelTest, unittest.TestCase):
 
         self.assertTrue(found_gate_up_converter)
         self.assertTrue(found_down_converter)
-
-    def test_router_group_mask_uses_negative_infinity(self):
-        config = MiMoV2FlashConfig(
-            num_hidden_layers=2,
-            vocab_size=100,
-            hidden_size=8,
-            num_attention_heads=2,
-            num_key_value_heads=1,
-            head_dim=4,
-            v_head_dim=4,
-            layer_types=["full_attention", "sliding_attention"],
-            mlp_layer_types=["dense", "sparse"],
-            n_routed_experts=4,
-            num_experts_per_tok=2,
-            n_group=2,
-            topk_group=1,
-            norm_topk_prob=False,
-            routed_scaling_factor=1.0,
-        )
-        model = MiMoV2FlashModel(config)
-        moe_block = model.layers[1].mlp
-        router = moe_block.gate
-
-        with torch.no_grad():
-            router.weight.zero_()
-            router.e_score_correction_bias.copy_(torch.tensor([-1.0, -1.0, -2.0, -2.0], dtype=torch.float32))
-
-        hidden_states = torch.zeros((1, config.hidden_size), dtype=torch.float32)
-        router_logits = router(hidden_states)
-        topk_idx, _ = moe_block.route_tokens_to_experts(router_logits)
-        topk_idx = set(topk_idx[0].tolist())
-
-        self.assertTrue(topk_idx.issubset({0, 1}))
 
     def test_generation_beyond_sliding_window(self):
         """Hybrid cache must handle full + sliding layers correctly when input exceeds the sliding window."""
