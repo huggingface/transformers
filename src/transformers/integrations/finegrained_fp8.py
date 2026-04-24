@@ -128,7 +128,14 @@ def _load_deepgemm_kernel():
         )
 
     # DeepGEMM requires CUDA runtime >= 12.3
-    cuda_major, cuda_minor = get_cuda_runtime_version()
+    try:
+        cuda_major, cuda_minor = get_cuda_runtime_version()
+    except OSError as e:
+        raise ImportError(
+            f"DeepGEMM requires CUDA runtime 12.3+, but libcudart could not be loaded ({e}). "
+            "Use a different `experts_implementation`."
+        ) from e
+
     if cuda_major < 12 or (cuda_major == 12 and cuda_minor < 3):
         raise ImportError(
             f"DeepGEMM requires CUDA runtime 12.3+, but found {cuda_major}.{cuda_minor}. "
@@ -197,14 +204,20 @@ def w8a8_fp8_matmul(
     """
     if block_size is not None and block_size[0] == block_size[1] == 128:
         try:
-            # 3-6x faster than Triton
-            return fp8_deepgemm_matmul(A, B, As, Bs, output_dtype=output_dtype)
+            deepgemm_fp8_matmul, _, _ = _load_deepgemm_kernel()
         except ImportError:
             logger.warning_once(
                 "DeepGEMM kernel is not available or compatible, falling back to Triton finegrained-fp8 kernel. "
                 "To use DeepGEMM FP8 matmul, ensure you have a Hopper (SM90+) or newer GPU with CUDA runtime 12.3+, "
                 "and that the `kernels` package is installed and up to date (`pip install -U kernels`)."
             )
+        else:
+            # 3-6x faster than Triton
+            A_2d = A.view(-1, A.shape[-1])
+            As_2d = As.view(-1, As.shape[-1])
+            output = torch.empty(A_2d.shape[0], B.shape[0], device=A.device, dtype=output_dtype)
+            deepgemm_fp8_matmul((A_2d, As_2d.float()), (B, Bs.float()), output)
+            return output.view(A.shape[:-1] + (B.shape[0],))
 
     triton_fp8_matmul, _, _, _ = _load_triton_kernel()
     return triton_fp8_matmul(A, B, As, Bs, block_size, output_dtype)
@@ -436,31 +449,6 @@ def fp8_grouped_mm_experts_forward(
     final_hidden_states = weighted_out.view(num_tokens, num_top_k, hidden_dim).sum(dim=1)
 
     return final_hidden_states.to(hidden_states.dtype)
-
-
-def fp8_deepgemm_matmul(
-    A: torch.Tensor,
-    B: torch.Tensor,
-    As: torch.Tensor,
-    Bs: torch.Tensor,
-    output_dtype: torch.dtype = torch.float32,
-) -> torch.Tensor:
-    """
-    FP8 dense matmul via DeepGEMM's `fp8_gemm_nt`. Block-wise 128x128 scales expected.
-
-    Args:
-        A:  (M, K) float8_e4m3fn — quantized activations
-        B:  (N, K) float8_e4m3fn — quantized weights
-        As: (M, K//128) float32 — per-block activation scales
-        Bs: (N//128, K//128) float32 — per-block weight scales
-        output_dtype: desired output dtype.
-    """
-    deepgemm_fp8_matmul, _, _ = _load_deepgemm_kernel()
-    A_2d = A.view(-1, A.shape[-1])
-    As_2d = As.view(-1, As.shape[-1])
-    output = torch.empty(A_2d.shape[0], B.shape[0], device=A.device, dtype=output_dtype)
-    deepgemm_fp8_matmul((A_2d, As_2d.float()), (B, Bs.float()), output)
-    return output.view(A.shape[:-1] + (B.shape[0],))
 
 
 def _build_deepgemm_contiguous_layout(
