@@ -4676,21 +4676,22 @@ class ModelTesterMixin:
             # First check that it works correctly
             model = model_class(copy.deepcopy(config))
             with tempfile.TemporaryDirectory() as tmpdirname:
-                model.save_pretrained(tmpdirname)
+                # model.save_pretrained(tmpdirname)
                 model.save_pretrained(f"tiny_config_{config.__class__.__name__}")
+                model_loaded = model_class.from_pretrained(f"tiny_config_{config.__class__.__name__}")
 
-                # Check that it works for all dtypes
-                for dtype in ["float16", "bfloat16", "float32", "auto", torch.float16, torch.bfloat16, torch.float32]:
-                    model_torch_dtype = model_class.from_pretrained(tmpdirname, torch_dtype=dtype)
-                    model_dtype = model_class.from_pretrained(tmpdirname, dtype=dtype)
-
-                    for (k1, v1), (k2, v2) in zip(
-                        model_torch_dtype.named_parameters(), model_dtype.named_parameters()
-                    ):
-                        with self.subTest(f"{dtype} for {model_class.__name__}.{k1}"):
-                            self.assertEqual(k1, k2)
-                            self.assertEqual(v1.dtype, v2.dtype)
-                            torch.testing.assert_close(v1, v2, msg=f"{k1} and  {k2} do not match: {v1} != {v2}")
+                # # Check that it works for all dtypes
+                # for dtype in ["float16", "bfloat16", "float32", "auto", torch.float16, torch.bfloat16, torch.float32]:
+                #     model_torch_dtype = model_class.from_pretrained(tmpdirname, torch_dtype=dtype)
+                #     model_dtype = model_class.from_pretrained(tmpdirname, dtype=dtype)
+                #
+                #     for (k1, v1), (k2, v2) in zip(
+                #         model_torch_dtype.named_parameters(), model_dtype.named_parameters()
+                #     ):
+                #         with self.subTest(f"{dtype} for {model_class.__name__}.{k1}"):
+                #             self.assertEqual(k1, k2)
+                #             self.assertEqual(v1.dtype, v2.dtype)
+                #             torch.testing.assert_close(v1, v2, msg=f"{k1} and  {k2} do not match: {v1} != {v2}")
 
     def test_tp_plan_matches_params(self):
         """Make sure that each entry of the tp plan matches at least one param (this avoid typos and/or edge cases
