@@ -299,6 +299,8 @@ TEST_FILES_WITH_NO_COMMON_TESTS = [
     "models/sam3_tracker_video/test_modeling_sam3_tracker_video.py",
     "models/sam3_video/test_modeling_sam3_video.py",
     "models/edgetam_video/test_modeling_edgetam_video.py",
+    # Backward-compat dispatcher; the actual models live in `nemotron_h_dense` / `nemotron_h_sparse`.
+    "models/nemotron_h/test_modeling_nemotron_h.py",
 ]
 
 # Update this list for models that are not in any of the auto MODEL_XXX_MAPPING. Being in this list is an exception and

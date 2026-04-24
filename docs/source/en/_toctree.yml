@@ -751,6 +751,10 @@
         title: Nemotron
       - local: model_doc/nemotron_h
         title: NemotronH
+      - local: model_doc/nemotron_h_dense
+        title: NemotronHDense
+      - local: model_doc/nemotron_h_sparse
+        title: NemotronHSparse
       - local: model_doc/nllb
         title: NLLB
       - local: model_doc/nllb-moe
