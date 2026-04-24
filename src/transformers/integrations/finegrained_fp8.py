@@ -624,9 +624,9 @@ class FP8Experts(nn.Module):
         self.block_size = block_size
         self.hidden_dim = config.hidden_size
         self.activation_scheme = activation_scheme
-        self.num_experts = getattr(config, "num_local_experts", config.num_experts)
-        self.intermediate_dim = getattr(config, "moe_intermediate_size", config.intermediate_size)
-        self.act_fn = ACT2FN[getattr(config, "hidden_activation", config.hidden_act)]
+        self.num_experts = _first_attr(config, "num_local_experts", "num_experts")
+        self.intermediate_dim = _first_attr(config, "moe_intermediate_size", "intermediate_size")
+        self.act_fn = ACT2FN[_first_attr(config, "hidden_activation", "hidden_act")]
 
         if self.has_gate:
             gu_proj_out, gu_proj_in = 2 * self.intermediate_dim, self.hidden_dim
