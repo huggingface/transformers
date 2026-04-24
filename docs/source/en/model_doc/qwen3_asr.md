@@ -13,7 +13,7 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was released on {release_date} and added to Hugging Face Transformers on 2026-04-22.*
+*This model was released on {release_date} and added to Hugging Face Transformers on 2026-04-24.*
 
 # Qwen3 ASR
 
@@ -474,7 +474,65 @@ for i, (transcript, timestamps) in enumerate(zip(transcripts, batch_timestamps))
 
 ### Torch compile
 
-The model can be compiled with `torch.compile` for faster inference.
+Both the ASR and forced aligner models support `torch.compile` for faster inference. The forced aligner is an especially good fit for compilation because it runs a single forward pass (no autoregressive decoding). This makes it ideal for **bulk audio timestamping**: transcribe with any ASR model, then batch-align with the compiled forced aligner for maximum throughput.
+
+#### Compiling the forced aligner
+
+```python
+import time
+import torch
+from transformers import AutoProcessor, Qwen3ASRForForcedAlignment
+
+model_id = "bezzam/Qwen3-ForcedAligner-0.6B"
+num_warmup, num_runs = 5, 20
+
+processor = AutoProcessor.from_pretrained(model_id)
+model = Qwen3ASRForForcedAlignment.from_pretrained(model_id, torch_dtype=torch.bfloat16).to("cuda")
+
+# Prepare a batch of 4 samples
+audio_url = "https://huggingface.co/datasets/bezzam/audio_samples/resolve/main/librispeech_mr_quilter.wav"
+transcript = "Mr. Quilter is the apostle of the middle classes."
+
+aligner_inputs, word_lists = processor.prepare_forced_aligner_inputs(
+    audio=[audio_url] * 4,
+    transcript=[transcript] * 4,
+    language=["English"] * 4,
+)
+aligner_inputs = aligner_inputs.to("cuda", torch.bfloat16)
+
+# Without compile
+with torch.no_grad():
+    for _ in range(num_warmup):
+        _ = model(**aligner_inputs)
+torch.cuda.synchronize()
+start = time.time()
+with torch.no_grad():
+    for _ in range(num_runs):
+        _ = model(**aligner_inputs)
+torch.cuda.synchronize()
+no_compile_time = (time.time() - start) / num_runs
+print(f"Without compile: {no_compile_time:.4f}s")
+
+# With compile
+model = torch.compile(model)
+with torch.no_grad():
+    for _ in range(num_warmup):
+        _ = model(**aligner_inputs)
+torch.cuda.synchronize()
+start = time.time()
+with torch.no_grad():
+    for _ in range(num_runs):
+        _ = model(**aligner_inputs)
+torch.cuda.synchronize()
+compile_time = (time.time() - start) / num_runs
+print(f"With compile:    {compile_time:.4f}s")
+print(f"Speedup: {no_compile_time / compile_time:.2f}x")
+# ~2.5x speedup observed on A100
+```
+
+#### Compiling the ASR model (generate)
+
+For autoregressive transcription, `torch.compile` accelerates the per-token forward passes inside `generate`.
 
 ```python
 import time
@@ -482,55 +540,40 @@ import torch
 from transformers import AutoProcessor, Qwen3ASRForConditionalGeneration
 
 model_id = "bezzam/Qwen3-ASR-1.7B"
-num_warmup, num_runs = 5, 20
+num_warmup, num_runs = 3, 10
+max_new_tokens = 256
 
 processor = AutoProcessor.from_pretrained(model_id)
-model = Qwen3ASRForConditionalGeneration.from_pretrained(model_id, torch_dtype=torch.bfloat16).to("cuda")
+model = Qwen3ASRForConditionalGeneration.from_pretrained(model_id, torch_dtype=torch.bfloat16).to("cuda").eval()
 
-chat_template = [
-    [
-        {
-            "role": "user",
-            "content": [
-                {
-                    "type": "text",
-                    "text": "Mr. Quilter is the apostle of the middle classes.",
-                },
-                {
-                    "type": "audio",
-                    "path": "https://huggingface.co/datasets/bezzam/audio_samples/resolve/main/librispeech_mr_quilter.wav",
-                },
-            ],
-        }
-    ],
-] * 4  # batch of 4
-inputs = processor.apply_chat_template(
-    chat_template, tokenize=True, return_dict=True,
+audio_url = "https://huggingface.co/datasets/bezzam/audio_samples/resolve/main/librispeech_mr_quilter.wav"
+inputs = processor.apply_transcription_request(
+    audio=[audio_url] * 4,  # batch of 4
 ).to("cuda", torch.bfloat16)
 
 # Without compile
-with torch.no_grad():
+with torch.inference_mode():
     for _ in range(num_warmup):
-        _ = model(**inputs)
+        _ = model.generate(**inputs, max_new_tokens=max_new_tokens, do_sample=False)
 torch.cuda.synchronize()
 start = time.time()
-with torch.no_grad():
+with torch.inference_mode():
     for _ in range(num_runs):
-        _ = model(**inputs)
+        output_ids = model.generate(**inputs, max_new_tokens=max_new_tokens, do_sample=False)
 torch.cuda.synchronize()
 no_compile_time = (time.time() - start) / num_runs
 print(f"Without compile: {no_compile_time:.4f}s")
 
 # With compile
-model = torch.compile(model, fullgraph=True)
-with torch.no_grad():
+model = torch.compile(model)
+with torch.inference_mode():
     for _ in range(num_warmup):
-        _ = model(**inputs)
+        _ = model.generate(**inputs, max_new_tokens=max_new_tokens, do_sample=False)
 torch.cuda.synchronize()
 start = time.time()
-with torch.no_grad():
+with torch.inference_mode():
     for _ in range(num_runs):
-        _ = model(**inputs)
+        output_ids = model.generate(**inputs, max_new_tokens=max_new_tokens, do_sample=False)
 torch.cuda.synchronize()
 compile_time = (time.time() - start) / num_runs
 print(f"With compile:    {compile_time:.4f}s")

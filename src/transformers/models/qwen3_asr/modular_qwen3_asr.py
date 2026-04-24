@@ -232,7 +232,7 @@ class Qwen3ASREncoder(Qwen3OmniMoeAudioEncoder):
         hidden_states = sequence_hidden_states
         if is_flash_attention_requested(self.config):
             attention_mask = sequence_mask
-        elif self.config._attn_implementation == "sdpa" and torch.all(sequence_mask):
+        elif self.config._attn_implementation == "sdpa":
             attention_mask = None
         else:
             attention_mask = self.invert_attention_mask(sequence_mask)
