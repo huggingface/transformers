@@ -62,6 +62,23 @@ if is_torch_available():
     from .logits_process import SynthIDTextWatermarkLogitsProcessor, WatermarkLogitsProcessor
 
 
+def _should_warn(outer_attr: str, inner_attr: str, user_set_attributes: set | None) -> bool:
+    """Determine if we should raise a warning for the combination `outer_attr` and `inner_attr`, based on whether
+    they were provided explicitly, i.e. if they were in `user_set_attributes`.
+    For example, if `outer_attr="do_sample"`, the warnings should be suppressed for `inner_attr` flags (e.g. "top_p") that weren't
+    explicitly set by the caller. When `do_sample=False` is explicitly required by the user, values such as `top_p` inherited
+    from a model's `generation_config.json` are harmless when the user opts for greedy decoding.
+    """
+    outer_sample_set = user_set_attributes is not None and outer_attr in user_set_attributes
+    inner_attr_set = user_set_attributes is not None and inner_attr in user_set_attributes
+    # We should warn only if both are explicitly set, none are set, or only the inner_attr is set while outer_attr is not
+    return (
+        (outer_sample_set and inner_attr_set)
+        or (not outer_sample_set and not inner_attr_set)
+        or (inner_attr_set and not outer_sample_set)
+    )
+
+
 class GenerationMode(ExplicitEnum):
     """
     Possible generation modes, downstream of the [`~generation.GenerationMixin.generate`] method.
@@ -653,40 +670,47 @@ class GenerationConfig(PushToHubMixin):
                 "only used in sample-based generation modes. You should set `do_sample=True` or unset `{flag_name}`."
             )
 
-            # The warnings are suppressed for flags that weren't explicitly set by the caller when `do_sample=False` is explicitly
-            # required by the user: values such as `top_p` inherited from a model's `generation_config.json` are harmless when
-            # the user opts for greedy decoding
-            def _should_warn(attr: str) -> bool:
-                do_sample_set = user_set_attributes is not None and "do_sample" in user_set_attributes
-                attr_set = user_set_attributes is not None and attr in user_set_attributes
-                # We should warn only if both are explicitly set, none are set, or only the new attr is set while `do_sample` is already False
-                return (
-                    (do_sample_set and attr_set)
-                    or (not do_sample_set and not attr_set)
-                    or (attr_set and not do_sample_set)
-                )
-
-            if self.temperature is not None and self.temperature != 1.0 and _should_warn("temperature"):
+            if (
+                self.temperature is not None
+                and self.temperature != 1.0
+                and _should_warn("do_sample", "temperature", user_set_attributes)
+            ):
                 minor_issues["temperature"] = greedy_wrong_parameter_msg.format(
                     flag_name="temperature", flag_value=self.temperature
                 )
-            if self.top_p is not None and self.top_p != 1.0 and _should_warn("top_p"):
+            if (
+                self.top_p is not None
+                and self.top_p != 1.0
+                and _should_warn("do_sample", "top_p", user_set_attributes)
+            ):
                 minor_issues["top_p"] = greedy_wrong_parameter_msg.format(flag_name="top_p", flag_value=self.top_p)
-            if self.min_p is not None and _should_warn("min_p"):
+            if self.min_p is not None and _should_warn("do_sample", "min_p", user_set_attributes):
                 minor_issues["min_p"] = greedy_wrong_parameter_msg.format(flag_name="min_p", flag_value=self.min_p)
-            if self.top_h is not None and _should_warn("top_h"):
+            if self.top_h is not None and _should_warn("do_sample", "top_h", user_set_attributes):
                 minor_issues["top_h"] = greedy_wrong_parameter_msg.format(flag_name="top_h", flag_value=self.top_h)
-            if self.typical_p is not None and self.typical_p != 1.0 and _should_warn("typical_p"):
+            if (
+                self.typical_p is not None
+                and self.typical_p != 1.0
+                and _should_warn("do_sample", "typical_p", user_set_attributes)
+            ):
                 minor_issues["typical_p"] = greedy_wrong_parameter_msg.format(
                     flag_name="typical_p", flag_value=self.typical_p
                 )
-            if self.top_k is not None and self.top_k != 50 and _should_warn("top_k"):
+            if self.top_k is not None and self.top_k != 50 and _should_warn("do_sample", "top_k", user_set_attributes):
                 minor_issues["top_k"] = greedy_wrong_parameter_msg.format(flag_name="top_k", flag_value=self.top_k)
-            if self.epsilon_cutoff is not None and self.epsilon_cutoff != 0.0 and _should_warn("epsilon_cutoff"):
+            if (
+                self.epsilon_cutoff is not None
+                and self.epsilon_cutoff != 0.0
+                and _should_warn("do_sample", "epsilon_cutoff", user_set_attributes)
+            ):
                 minor_issues["epsilon_cutoff"] = greedy_wrong_parameter_msg.format(
                     flag_name="epsilon_cutoff", flag_value=self.epsilon_cutoff
                 )
-            if self.eta_cutoff is not None and self.eta_cutoff != 0.0 and _should_warn("eta_cutoff"):
+            if (
+                self.eta_cutoff is not None
+                and self.eta_cutoff != 0.0
+                and _should_warn("do_sample", "eta_cutoff", user_set_attributes)
+            ):
                 minor_issues["eta_cutoff"] = greedy_wrong_parameter_msg.format(
                     flag_name="eta_cutoff", flag_value=self.eta_cutoff
                 )
@@ -699,21 +723,19 @@ class GenerationConfig(PushToHubMixin):
                 "only used in beam-based generation modes. You should set `num_beams>1` or unset `{flag_name}`."
             )
 
-            def _should_warn(attr: str) -> bool:
-                num_beams_set = user_set_attributes is not None and "num_beams" in user_set_attributes
-                attr_set = user_set_attributes is not None and attr in user_set_attributes
-                # We should warn only if both are explicitly set, none are set, or only the new attr is set while `num_beams` is already 1
-                return (
-                    (num_beams_set and attr_set)
-                    or (not num_beams_set and not attr_set)
-                    or (attr_set and not num_beams_set)
-                )
-
-            if self.early_stopping is not None and self.early_stopping is not False and _should_warn("early_stopping"):
+            if (
+                self.early_stopping is not None
+                and self.early_stopping is not False
+                and _should_warn("num_beams", "early_stopping", user_set_attributes)
+            ):
                 minor_issues["early_stopping"] = single_beam_wrong_parameter_msg.format(
                     num_beams=self.num_beams, flag_name="early_stopping", flag_value=self.early_stopping
                 )
-            if self.length_penalty is not None and self.length_penalty != 1.0 and _should_warn("length_penalty"):
+            if (
+                self.length_penalty is not None
+                and self.length_penalty != 1.0
+                and _should_warn("num_beams", "length_penalty", user_set_attributes)
+            ):
                 minor_issues["length_penalty"] = single_beam_wrong_parameter_msg.format(
                     num_beams=self.num_beams, flag_name="length_penalty", flag_value=self.length_penalty
                 )
