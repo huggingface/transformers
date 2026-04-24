@@ -276,6 +276,9 @@ class TestFSDPConfig(TestCasePlus):
     @parameterized.expand(config_params, name_func=_parameterized_custom_name_func)
     def test_accelerate_fsdp_config(self, sharding_strategy, dtype):
         output_dir = self.get_auto_remove_tmp_dir()
+        # Snapshot before trainer construction — `_process_fsdp_args` strips the
+        # `fsdp_` prefix in place.
+        expected = dict(self.accelerate_fsdp_config)
         kwargs = {
             "output_dir": output_dir,
             "train_len": 128,
@@ -287,12 +290,11 @@ class TestFSDPConfig(TestCasePlus):
         kwargs[dtype] = True
         with mockenv_context(**self.dist_env_1_gpu):
             trainer = get_regression_trainer(**kwargs)
-            self.assertEqual(trainer.args.fsdp[0], sharding_strategy)
-            self.assertEqual(trainer.args.fsdp[1], FSDPOption.OFFLOAD)
-            self.assertEqual(trainer.args.fsdp[2], FSDPOption.AUTO_WRAP)
-            for k, v in trainer.args.fsdp_config.items():
-                self.assertTrue(k in self.accelerate_fsdp_config)
-                self.assertEqual(v, self.accelerate_fsdp_config[k])
+            self.assertIs(trainer.args.fsdp, True)
+            self.assertTrue(trainer.args.fsdp_config.get("cpu_offload"))
+            for k, v in expected.items():
+                assert k.startswith("fsdp_")
+                self.assertEqual(trainer.args.fsdp_config[k[5:]], v)
 
     def test_torchrun_fsdp_config(self):
         """Verify that --fsdp + --fsdp_config (torchrun-style) are parsed correctly."""
@@ -309,8 +311,7 @@ class TestFSDPConfig(TestCasePlus):
         }
         with mockenv_context(**self.dist_env_1_gpu):
             trainer = get_regression_trainer(**kwargs)
-            self.assertEqual(trainer.args.fsdp[0], "full_shard")
-            self.assertEqual(trainer.args.fsdp[1], FSDPOption.AUTO_WRAP)
+            self.assertIs(trainer.args.fsdp, True)
             # fsdp_ prefix is stripped and value is normalized to a list during parsing
             self.assertIn("Qwen2DecoderLayer", trainer.args.fsdp_config["transformer_layer_cls_to_wrap"])
 
@@ -328,11 +329,10 @@ class TestFSDPConfig(TestCasePlus):
         kwargs[dtype] = True
         with mockenv_context(**self.dist_env_1_gpu):
             trainer = get_regression_trainer(**kwargs)
-            self.assertEqual(trainer.args.fsdp[0], sharding_strategy)
-            self.assertEqual(trainer.args.fsdp[1], FSDPOption.OFFLOAD)
-            self.assertEqual(trainer.args.fsdp[2], FSDPOption.AUTO_WRAP)
-            for k, v in trainer.args.fsdp_config.items():
-                self.assertEqual(v, self.fsdp_config[k])
+            self.assertIs(trainer.args.fsdp, True)
+            self.assertTrue(trainer.args.fsdp_config.get("cpu_offload"))
+            for k, v in self.fsdp_config.items():
+                self.assertEqual(trainer.args.fsdp_config[k], v)
 
 
 # ---------------------------------------------------------------------------
