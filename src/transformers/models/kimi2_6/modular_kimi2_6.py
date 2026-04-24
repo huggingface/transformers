@@ -12,8 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from collections.abc import Callable
-from typing import Optional
 
 import numpy as np
 import torch
@@ -23,7 +21,6 @@ import torch.nn.functional as F
 from ...cache_utils import Cache
 from ...configuration_utils import PreTrainedConfig
 from ...modeling_outputs import BaseModelOutputWithPooling
-from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import ProcessorMixin, Unpack
 from ...utils import (
@@ -32,9 +29,9 @@ from ...utils import (
     can_return_tuple,
     torch_compilable_check,
 )
-from ...utils.generic import maybe_autocast
 from ...utils.output_capturing import capture_outputs
 from ..auto import CONFIG_MAPPING, AutoConfig, AutoModel
+from ..gemma4.modeling_gemma4 import Gemma4VisionRotaryEmbedding
 from ..llava.modeling_llava import LlavaCausalLMOutputWithPast, LlavaForConditionalGeneration, LlavaModelOutputWithPast
 from ..qwen2_vl.modeling_qwen2_vl import (
     Qwen2VLPreTrainedModel,
@@ -87,8 +84,7 @@ class Kimi2_6Config(PreTrainedConfig):
     projection_hidden_act: str = "gelu"
     projection_ln_eps: float = 1e-5
     image_token_id: int = 163605
-    use_unified_vision_chunk: bool = True
-    video_token = "<|kimi_k25_video_placeholder|>"
+    video_token_id: int = 163606
 
     def __post_init__(self, **kwargs):
         if isinstance(self.text_config, dict):
@@ -183,84 +179,8 @@ class Kimi2_6VisionPatchEmbed(nn.Module):
         return hidden_states
 
 
-class Kimi2_6VisionRotaryEmbeddings(nn.Module):
-    """
-    2D rotary position embedding with multi-resolution support.
-    """
-
-    inv_freq: torch.Tensor  # fix linting for `register_buffer`
-
-    # Same `__init__` as llama
-    def __init__(self, config, device=None):
-        super().__init__()
-        self.max_seq_len_cached = config.max_position_embeddings
-        self.original_max_seq_len = config.max_position_embeddings
-
-        self.config = config
-
-        self.rope_type = self.config.rope_parameters["rope_type"]
-        rope_init_fn: Callable = self.compute_default_rope_parameters
-        if self.rope_type != "default":
-            rope_init_fn = ROPE_INIT_FUNCTIONS[self.rope_type]
-        inv_freq, self.attention_scaling = rope_init_fn(self.config, device)
-
-        self.register_buffer("inv_freq", inv_freq, persistent=False)
-        self.register_buffer("original_inv_freq", inv_freq.clone(), persistent=False)
-
-    @staticmethod
-    def compute_default_rope_parameters(
-        config: Kimi2_6VisionConfig | None = None,
-        device: Optional["torch.device"] = None,
-        seq_len: int | None = None,
-    ) -> tuple["torch.Tensor", float]:
-        """
-        Calculate the inverted freqs for each position in the 2D grid.
-        Args:
-            config ([`~transformers.PreTrainedConfig`]):
-                The model configuration.
-            device (`torch.device`):
-                The device to use for initialization of the inverse frequencies.
-            seq_len (`int`, *optional*):
-                The current sequence length. Unused for this type of RoPE.
-        Returns:
-            Tuple of (`torch.Tensor`, `float`), containing the inverse frequencies for the RoPE embeddings and the
-            post-processing scaling factor applied to the computed cos/sin (unused in this type of RoPE).
-        """
-        base = config.rope_parameters["rope_theta"]
-        dim = getattr(config, "head_dim", None) or config.hidden_size // config.num_attention_heads
-
-        attention_factor = 1.0  # Unused in this type of RoPE
-
-        # Compute the inverse frequencies
-        inv_freq = 1.0 / (
-            base
-            ** (torch.arange(0, dim, 4, dtype=torch.int64)[: (dim // 4)].to(device=device, dtype=torch.float) / dim)
-        )
-        return inv_freq, attention_factor
-
-    @torch.no_grad()
-    @dynamic_rope_update  # power user: used with advanced RoPE types (e.g. dynamic rope)
-    def forward(self, x, position_ids: torch.Tensor):
-        inv_freq_expanded = self.inv_freq[None, :, None].float().expand(position_ids.shape[0], -1, 1).to(x.device)
-        device_type = x.device.type if isinstance(x.device.type, str) and x.device.type != "mps" else "cpu"
-
-        # Multidimensional positions: [batch, num_patches, ndim]. Apply rotations to each spatial dim separately
-        all_cos, all_sin = [], []
-        for i in range(2):
-            dim_position_ids = position_ids[:, :, i]
-            dim_position_ids_expanded = dim_position_ids[:, None, :].float()
-
-            with maybe_autocast(device_type=device_type, enabled=False):  # Force float32
-                freqs = (inv_freq_expanded.float() @ dim_position_ids_expanded.float()).transpose(1, 2)
-                emb = torch.cat((freqs, freqs), dim=-1)
-                cos = emb.cos() * self.attention_scaling
-                sin = emb.sin() * self.attention_scaling
-            all_cos.append(cos)
-            all_sin.append(sin)
-
-        cos = torch.cat(all_cos, dim=-1).to(dtype=x.dtype)
-        sin = torch.cat(all_sin, dim=-1).to(dtype=x.dtype)
-        return cos, sin
+class Kimi2_6VisionRotaryEmbeddings(Gemma4VisionRotaryEmbedding):
+    pass
 
 
 class Kimi2_6VisionMLP(VisionMlp):
@@ -325,6 +245,22 @@ class Kimi2_6VisionModel(Kimi2_6PreTrainedModel):
 
         return torch.cat(outputs, dim=0)
 
+    def get_position_ids(self, grid_thw: torch.Tensor) -> torch.Tensor:
+        "Builds (h_pos, w_pos) grid for each sample, then cat across batch"
+        all_position_ids = []
+        for t, h, w in grid_thw.tolist():
+            h_ids = torch.arange(h, device=grid_thw.device)
+            w_ids = torch.arange(w, device=grid_thw.device)
+
+            # (h, w, 2) grid of (row, col) coordinates
+            grid = torch.stack(torch.meshgrid(h_ids, w_ids, indexing="ij"), dim=-1)
+
+            # (h*w, 2) -> repeat for each temporal frame -> (t*h*w, 2)
+            all_position_ids.append(grid.reshape(-1, 2).repeat(t, 1))
+
+        position_ids = torch.cat(all_position_ids, dim=0).unsqueeze(0)
+        return position_ids  # (1, total_patches, 2)
+
     @capture_outputs
     @auto_docstring
     def forward(
@@ -337,7 +273,8 @@ class Kimi2_6VisionModel(Kimi2_6PreTrainedModel):
             The temporal, height and width of feature shape of each image in LLM.
         """
         hidden_states = self.patch_embed(pixel_values, grid_thw=grid_thw)
-        position_embeddings = self.rotary_emb(grid_thw=grid_thw)
+        position_ids = self.get_position_ids(grid_thw=grid_thw)
+        position_embeddings = self.rotary_emb(hidden_states, position_ids)
 
         lengths = torch.cat(
             (
@@ -608,9 +545,11 @@ class Kimi2_6Processor(Qwen2VLProcessor):
         chat_template=None,
         **kwargs,
     ):
-        ProcessorMixin().__init__(image_processor, tokenizer, chat_template=chat_template)
+        ProcessorMixin.__init__(image_processor, tokenizer, chat_template=chat_template)
         self.image_token = tokenizer.image_token
         self.image_token_id = tokenizer.image_token_id
+        self.video_token = tokenizer.video_token
+        self.video_token_id = tokenizer.video_token_id
 
 
 __all__ = [

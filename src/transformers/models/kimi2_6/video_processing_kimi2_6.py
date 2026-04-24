@@ -141,12 +141,11 @@ class Kimi2_6VideoProcessor(BaseVideoProcessor):
             # Patchify in NaViT style, TODO maybe same as Siglip2 - needs to check with model
             batch_size, time, channels, height, width = stacked_videos.shape
             grid_h, grid_w = height // patch_size, width // patch_size
-            grid_t = time // temporal_patch_size
             patches = stacked_videos.reshape(batch_size, time, channels, grid_h, patch_size, grid_w, patch_size)
             patches = patches.transpose(0, 1, 3, 5, 2, 4, 6)
 
             processed_videos_grouped[shape] = patches.reshape(-1, channels, patch_size, patch_size)
-            processed_grids[shape] = [[grid_t, grid_h, grid_w]] * batch_size
+            processed_grids[shape] = [[time, grid_h, grid_w]] * batch_size
 
         processed_videos = reorder_videos(processed_videos_grouped, grouped_videos_index)
         processed_grids = reorder_videos(processed_grids, grouped_videos_index)

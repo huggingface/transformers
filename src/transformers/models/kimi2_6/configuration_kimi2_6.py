@@ -18,6 +18,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+
 from ...configuration_utils import PreTrainedConfig
 from ..auto import CONFIG_MAPPING, AutoConfig
 
@@ -64,8 +65,7 @@ class Kimi2_6Config(PreTrainedConfig):
     projection_hidden_act: str = "gelu"
     projection_ln_eps: float = 1e-5
     image_token_id: int = 163605
-    use_unified_vision_chunk: bool = True
-    video_token = "<|kimi_k25_video_placeholder|>"
+    video_token_id: int = 163606
 
     def __post_init__(self, **kwargs):
         if isinstance(self.text_config, dict):
