@@ -183,7 +183,6 @@ class ContinuousBatchProcessor:
         # Cuda graphs for the generation step
         self.q_padding_interval_size = self.cb_config.q_padding_interval_size
         self.kv_padding_interval_size = self.cb_config.kv_padding_interval_size
-        self.max_cached_graphs = self.cb_config.max_cached_graphs
         self.use_cuda_graph_varlen, self.use_cuda_graph_decode = self.cb_config.get_cuda_graph_booleans()
 
         # Set up metrics collector
@@ -214,36 +213,29 @@ class ContinuousBatchProcessor:
         # Padding is turned on when either cuda graphs or compile is used
         use_cuda_graphs = self.use_cuda_graph_varlen or self.use_cuda_graph_decode
         self._pad_inputs = use_cuda_graphs or (varlen_config is not None or decode_config is not None)
+        # Set up the graph pool, which allows all graphs to share the use the same memory
+        self.graph_pool = torch.cuda.graph_pool_handle() if use_cuda_graphs else None
 
         # Setup inputs and outputs
+        io_kwargs = {
+            "cache": cache,
+            "config": config,
+            "device": model_device,
+            "model_dtype": model_dtype,
+            "return_logprobs": self.return_logprobs,
+            "logit_processor": self.logit_processor,
+            "use_cuda_graph_varlen": self.use_cuda_graph_varlen,
+        }
         self.use_async_batching = self.cb_config.use_async_batching
+
         if self.use_async_batching:
             # Since in async there are 2 IO pairs, there are also 2 graph buffers: we divide the max_cached_graphs by 2
-            max_cached_graphs = ceil(self.max_cached_graphs / 2)
-            self.inputs_and_outputs = ContinuousBatchingAsyncIOs(
-                cache=cache,
-                config=config,
-                device=model_device,
-                model_dtype=model_dtype,
-                max_graphs=max_cached_graphs,
-                return_logprobs=self.return_logprobs,
-                logit_processor=self.logit_processor,
-                use_cuda_graph_varlen=self.use_cuda_graph_varlen,
-            )
+            io_kwargs["max_graphs"] = ceil(self.cb_config.max_cached_graphs / 2)
+            self.inputs_and_outputs = ContinuousBatchingAsyncIOs(**io_kwargs)
         else:
-            self.inputs_and_outputs = ContinuousBatchingIOs(
-                cache=cache,
-                config=config,
-                device=model_device,
-                model_dtype=model_dtype,
-                max_graphs=self.max_cached_graphs,
-                return_logprobs=self.return_logprobs,
-                logit_processor=self.logit_processor,
-                use_cuda_graph_varlen=self.use_cuda_graph_varlen,
-            )
-        # Set up the graph pool. This allows all graphs to share the same memory pool, which is fine because they never
-        # run concurrently. This greatly saves memory.
-        self.graph_pool = torch.cuda.graph_pool_handle() if use_cuda_graphs else None
+            io_kwargs["max_graphs"] = self.cb_config.max_cached_graphs
+            self.inputs_and_outputs = ContinuousBatchingIOs(**io_kwargs)
+
 
         # Offloading manager: handles CPU offloading, soft reset, and restoration
         self.offloading_manager = OffloadingManager(
@@ -342,6 +334,19 @@ class ContinuousBatchProcessor:
         self.metrics.record_request_completion(state.created_time, state.request_id)
         self.output_router.deliver(state.to_generation_output())
 
+    def maybe_pad_inputs(self, num_q_tokens: int, max_kv_read: int, use_decode_fast_path: bool) -> tuple[int, int]:
+        """Pads the inputs sizes for the next batch if it is needed. Often it is, for max performance."""
+        if self._pad_inputs:
+            # For varlen batches, we pad using interval sizes
+            if not use_decode_fast_path:
+                num_q_tokens = pad_to_interval(num_q_tokens, self.q_padding_interval_size, self.max_batch_tokens)
+                max_kv_read = pad_to_interval(max_kv_read, self.kv_padding_interval_size, self.cache.num_pages)
+            # For decode fast path batches, we pad using powers of 2 and use no KV
+            else:
+                num_q_tokens = pad_to_pow2(num_q_tokens, self.max_batch_tokens)
+                max_kv_read = 0
+        return num_q_tokens, max_kv_read
+
     @traced
     def prepare_next_batch(self) -> bool:
         """Prepare tensors and metadata for the next model forward pass. Returns True if there are requests to process,
@@ -384,15 +389,7 @@ class ContinuousBatchProcessor:
         )
 
         # If inputs are static sized, eg. for compile, we find the padded sizes of the queries and keys/values
-        if self._pad_inputs:
-            # For varlen batches, we pad using interval sizes
-            if not use_decode_fast_path:
-                num_q_tokens = pad_to_interval(num_q_tokens, self.q_padding_interval_size, self.max_batch_tokens)
-                max_kv_read = pad_to_interval(max_kv_read, self.kv_padding_interval_size, self.cache.num_pages)
-            # For decode fast path batches, we pad using powers of 2 and use no KV
-            else:
-                num_q_tokens = pad_to_pow2(num_q_tokens, self.max_batch_tokens)
-                max_kv_read = 0
+        num_q_tokens, max_kv_read = self.maybe_pad_inputs(num_q_tokens, max_kv_read, use_decode_fast_path)
 
         self.inputs_and_outputs.prepare_batch_tensors(
             requests_in_batch, self.logit_processor, use_decode_fast_path, num_q_tokens, max_kv_read
@@ -646,8 +643,11 @@ class ContinuousBatchProcessor:
                 logger.info(f"Warming up IO pair {pair_idx + 1}/2...")
 
             # --- Varlen path ---
-            padded_q = pad_to_interval(num_query_tokens, self.q_padding_interval_size, self.max_batch_tokens)
-            padded_kv = pad_to_interval(num_cache_tokens + num_query_tokens, self.kv_padding_interval_size, num_pages)
+            padded_q, padded_kv = self.maybe_pad_inputs(
+                num_q_tokens=num_query_tokens,
+                max_kv_read=num_cache_tokens + num_query_tokens,
+                use_decode_fast_path=False
+            )
             logger.info(f"Warming up varlen path ({padded_q} Q tokens, {padded_kv} KV tokens)...")
 
             future_states = create_warmup_future_states(
@@ -691,7 +691,9 @@ class ContinuousBatchProcessor:
                 if not future_states:
                     continue
                 try:
-                    padded_q = pad_to_pow2(num_requests, self.max_batch_tokens)
+                    padded_q, _ = self.maybe_pad_inputs(
+                        num_q_tokens=num_requests, max_kv_read=0, use_decode_fast_path=True
+                    )
                     self.inputs_and_outputs.prepare_batch_tensors(
                         future_states, self.logit_processor, True, padded_q, 0
                     )
