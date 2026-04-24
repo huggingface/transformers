@@ -2736,9 +2736,7 @@ class TrainingArguments:
 
         auto_wrap_policy = self.fsdp_config.get("auto_wrap_policy", FSDP_AUTO_WRAP_POLICY[0])
         if auto_wrap_policy not in FSDP_AUTO_WRAP_POLICY:
-            raise ValueError(
-                f"`auto_wrap_policy` must be one of {FSDP_AUTO_WRAP_POLICY}, got {auto_wrap_policy}."
-            )
+            raise ValueError(f"`auto_wrap_policy` must be one of {FSDP_AUTO_WRAP_POLICY}, got {auto_wrap_policy}.")
         fsdp_plugin_args["auto_wrap_policy"] = auto_wrap_policy
         if auto_wrap_policy == FSDP_AUTO_WRAP_POLICY[1] and self.fsdp_config["min_num_params"] > 0:
             fsdp_plugin_args["min_num_params"] = self.fsdp_config["min_num_params"]

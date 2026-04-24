@@ -40,7 +40,7 @@ from transformers.testing_utils import (
     slow,
     torch_device,
 )
-from transformers.trainer_utils import FSDPOption, set_seed
+from transformers.trainer_utils import set_seed
 from transformers.utils import (
     is_torch_bf16_available_on_device,
     is_torch_fp16_available_on_device,
