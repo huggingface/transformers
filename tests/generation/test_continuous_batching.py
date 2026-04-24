@@ -45,6 +45,7 @@ from transformers.generation.continuous_batching.requests import GenerationOutpu
 from transformers.testing_utils import (
     require_deterministic_for_xpu,
     require_flash_attn,
+    require_flash_attn_3,
     require_kernels,
     require_torch_accelerator,
     require_torch_gpu,
@@ -502,9 +503,10 @@ class ContinuousBatchingWithAcceleratorTest(unittest.TestCase):
     ) -> None:
         """Tests the parity between continuous batching and non-continuous batching generation."""
 
-        # Skip the test if Flash Attention 2 is required but not available
-        if attn_implementation == "flash_attention_2" and not (is_flash_attn_2_available() or is_kernels_available()):
-            self.skipTest("Flash Attention 2 is not available and neither is the kernels library. Skipping test.")
+        # Skip the test if Flash Attention is required but not available
+        is_fa = is_flash_attention_requested(requested_attention_implementation=attn_implementation)
+        if is_fa and not (is_flash_attn_2_available() or is_kernels_available()):
+            self.skipTest("Flash Attention is not available and neither is the kernels library. Skipping test.")
         # Skip the test if cuda graph is on but the device is not CUDA
         if continuous_batching_config.use_cuda_graph and torch_device != "cuda":
             self.skipTest("CUDA graph is only supported on CUDA devices. Skipping test.")
@@ -518,7 +520,7 @@ class ContinuousBatchingWithAcceleratorTest(unittest.TestCase):
 
         # Eager and SDPA implementations get a precision boost to account for the fact that an attention mask is used in
         # continuous batching but not in generate
-        dtype = "auto" if attn_implementation == "flash_attention_2" else torch.float32
+        dtype = "auto" if is_fa else torch.float32
 
         # Prepare inputs
         tokenizer, model = get_tokenizer_and_model(model_id, attn_implementation, torch_device, dtype)
@@ -641,6 +643,22 @@ class ContinuousBatchingWithAcceleratorTest(unittest.TestCase):
             attn_implementation="flash_attention_2",
         )
 
+    @parameterized.expand([(True, False), (False, True)])
+    @require_flash_attn_3
+    @slow
+    def test_continuous_batching_tuple_cuda_graph(self, varlen_cg: bool, decode_cg: bool) -> None:
+        """Tests that use_cuda_graph can be a tuple to independently control varlen and decode paths."""
+        model_id = "TinyLlama/TinyLlama-1.1B-Chat-v1.0"
+        continuous_batching_config = ContinuousBatchingConfig(
+            use_cuda_graph=(varlen_cg, decode_cg),
+            use_async_batching=False,
+        )
+        self._test_continuous_batching_parity(
+            model_id=model_id,
+            continuous_batching_config=continuous_batching_config,
+            attn_implementation="flash_attention_3",
+        )
+
     def test_continuous_batching_fast(self) -> None:
         model_id = "TinyLlama/TinyLlama-1.1B-Chat-v1.0"
         continuous_batching_config = ContinuousBatchingConfig(
@@ -731,7 +749,7 @@ class ContinuousBatchingWithAcceleratorTest(unittest.TestCase):
         """Test continuous batching with use_default_compile_configs=True in ContinuousBatchingConfig.
 
         This test verifies that:
-        1. Default compile configs are created for both varlen and decode paths
+        1. Default compile configs are created for appropriate paths
         2. Generation completes successfully with compiled functions
         3. Output matches expectations
         """
@@ -757,15 +775,14 @@ class ContinuousBatchingWithAcceleratorTest(unittest.TestCase):
             cb_config.resolve_compile_configs(
                 fallback_compile_config=None, is_flash_attn=True, decode_fast_path_available=False
             )
-            varlen_cfg = cb_config.varlen_compile_config
-            if varlen_cfg is None:
-                raise RuntimeError("Varlen compile config should be created with use_default_compile_configs=True")
-            self.assertEqual(
-                varlen_cfg.mode,
-                "max-autotune-no-cudagraphs",
-                "Default varlen config should use max-autotune-no-cudagraphs mode",
+            self.assertIsNone(
+                cb_config.varlen_compile_config,
+                "Varlen compile config should not be created with use_default_compile_configs=True",
             )
-            self.assertTrue(varlen_cfg.dynamic, "Default varlen config should have dynamic=True")
+            self.assertIsNotNone(
+                cb_config.decode_compile_config,
+                "Decode compile config should be created with use_default_compile_configs=True",
+            )
 
             # Create GenerationConfig
             gen_config = GenerationConfig(max_new_tokens=20, do_sample=False)
@@ -1050,7 +1067,7 @@ class ContinuousBatchingWithAcceleratorTest(unittest.TestCase):
     @parameterized.expand(
         list(
             itertools.product(
-                ["sdpa", "flash_attention_2"],
+                ["sdpa", "flash_attention_2", "flash_attention_3"],
                 [False, True],
                 [False, True],
             )
@@ -1257,16 +1274,16 @@ class TestMemoryHandlerPrediction(unittest.TestCase):
             max_blocks_per_request=max_bpr,
             return_logprobs=logprobs,
             use_async_batching=use_async_batching,
+            block_size=block_size,
         )
 
         handler = PagedAttentionMemoryHandler(
-            block_size=block_size,
+            continuous_batching_config=cb_config,
             page_size=page_size,
             num_groups=num_groups,
             group_size=group_size,
-            peak_activation_per_token=peak_act,
+            activation_peaks=[(0, peak_act)],
             num_attention_masks=num_attn_masks,
-            continuous_batching_config=cb_config,
         )
 
         N = self.NUM_BLOCKS * block_size  # num_pages

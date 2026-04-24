@@ -205,7 +205,7 @@ class Scheduler(ABC):
         """
         scheduled_requests = []
         one_allocation_failed = False
-        decode_fast_path = True
+        decode_fast_path = self.cache.max_blocks_per_request > 0  # best way to check if decode fast path availability
         safety_margins = safety_margin * self.cache.num_blocks
         original_token_budget, original_cache_budget = token_budget, cache_budget
 
@@ -219,17 +219,22 @@ class Scheduler(ABC):
                 )
                 break
 
-            # Check cache budget
-            read_cache_needed = state.current_len()
-            if self.read_cache_limit is not None:
-                read_cache_needed = min(read_cache_needed, self.read_cache_limit)
-            if cache_budget < read_cache_needed:
-                continue
-
             # Infer the tokens that will be present in the batch if token budget is enough
             request_tokens = self._infer_request_tokens(state, request_ids_to_remove_from_waiting)
             # Account for token budget
             request_len = min(len(request_tokens), token_budget)
+
+            # This block checks cache budget: decode batches have infinite budget, but varlen batches don't, because KV
+            # cache is read through a fixed-sized index tensor. We keep track of the current budget in case the batch
+            # goes from decode to varlen
+            is_decode_eligible = request_len == 1 and state.position_offset < self.max_decode_fast_path_length
+            read_cache_needed = state.current_len()
+            if self.read_cache_limit is not None:
+                read_cache_needed = min(read_cache_needed, self.read_cache_limit)
+            # A request that would change the batch from decode to varlen is rejected if the cache budget is too low
+            if not (decode_fast_path and is_decode_eligible) and cache_budget < read_cache_needed:
+                continue
+
             # Check there will be enough cache for the new tokens
             allocation_successful = self._allocate_blocks_if_needed(state, request_len)
 
@@ -273,7 +278,7 @@ class Scheduler(ABC):
                 request_ids_to_remove_from_waiting.add(req_id)
 
             # Early exit of the loop if we have no budget left
-            if token_budget == 0 or cache_budget == 0:
+            if token_budget == 0 or (cache_budget <= 0 and not decode_fast_path):
                 break
 
         num_q_tokens = original_token_budget - token_budget

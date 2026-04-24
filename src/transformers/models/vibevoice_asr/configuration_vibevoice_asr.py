@@ -19,14 +19,14 @@
 # limitations under the License.
 from huggingface_hub.dataclasses import strict
 
-from ...configuration_utils import PretrainedConfig
+from ...configuration_utils import PreTrainedConfig
 from ...utils import auto_docstring
 from ..auto import CONFIG_MAPPING, AutoConfig
 
 
 @auto_docstring(checkpoint="microsoft/VibeVoice-ASR-HF")
 @strict
-class VibeVoiceAsrConfig(PretrainedConfig):
+class VibeVoiceAsrConfig(PreTrainedConfig):
     r"""
     acoustic_tokenizer_encoder_config (`Union[VibeVoiceAcousticTokenizerConfig, dict]`, *optional*):
         The config object or dictionary of the acoustic tokenizer. This tokenizer extracts acoustic features from audio.
@@ -68,9 +68,9 @@ class VibeVoiceAsrConfig(PretrainedConfig):
         "text_config": AutoConfig,
     }
 
-    acoustic_tokenizer_encoder_config: dict | PretrainedConfig | None = None
-    semantic_tokenizer_encoder_config: dict | PretrainedConfig | None = None
-    text_config: dict | PretrainedConfig | None = None
+    acoustic_tokenizer_encoder_config: dict | PreTrainedConfig | None = None
+    semantic_tokenizer_encoder_config: dict | PreTrainedConfig | None = None
+    text_config: dict | PreTrainedConfig | None = None
     audio_token_id: int = 151648
     audio_bos_token_id: int = 151646
     audio_eos_token_id: int = 151647
