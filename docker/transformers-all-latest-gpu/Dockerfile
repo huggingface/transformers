@@ -1,4 +1,4 @@
-FROM nvidia/cuda:12.6.0-cudnn-devel-ubuntu22.04
+FROM nvidia/cuda:13.0.0-cudnn-devel-ubuntu22.04
 LABEL maintainer="Hugging Face"
 
 ARG DEBIAN_FRONTEND=noninteractive
@@ -9,9 +9,9 @@ SHELL ["sh", "-lc"]
 # The following `ARG` are mainly used to specify the versions explicitly & directly in this docker file, and not meant
 # to be used as arguments for docker build (so far).
 
-ARG PYTORCH='2.11.0'
+ARG PYTORCH='2.12.0'
 # Example: `cu102`, `cu113`, etc.
-ARG CUDA='cu126'
+ARG CUDA='cu130'
 
 # This needs to be compatible with the above `PYTORCH`.
 ARG TORCHCODEC='0.11.0'
