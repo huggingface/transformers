@@ -121,7 +121,7 @@ from .utils import (
     is_torch_xpu_available,
     logging,
 )
-from .utils.generic import GeneralInterface, is_flash_attention_requested
+from .utils.generic import GeneralInterface, is_flash_attention_requested, split_attention_implementation
 from .utils.hub import DownloadKwargs, create_and_tag_model_card, get_checkpoint_shard_files
 from .utils.import_utils import (
     is_flash_attn_greater_or_equal,
@@ -1853,8 +1853,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             `str`: The final attention implementation to use, including potential fallbacks from sdpa to eager, or from
             None to sdpa (to potentially eager).
         """
-        is_paged = attn_implementation is not None and attn_implementation.startswith("paged|")
-        base_implementation = attn_implementation.removeprefix("paged|") if attn_implementation is not None else None
+        is_paged, base_implementation = split_attention_implementation(attn_implementation)
 
         # Auto-correct model's default flash implementation if specified
         if attn_implementation is not None:
@@ -1873,8 +1872,8 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                     f"Automatically falling back to `{default_flash_implementation}` instead of `{attn_implementation}`."
                 )
                 attn_implementation = default_flash_implementation
-                is_paged = attn_implementation.startswith("paged|")
-                base_implementation = attn_implementation.removeprefix("paged|")
+
+        is_paged, base_implementation = split_attention_implementation(attn_implementation)
 
         applicable_attn_implementation = attn_implementation
 
