@@ -230,18 +230,8 @@ class MiMoV2FlashTopKRouter(nn.Module):
         return logits, topk_weight, topk_idx
 
 
-@use_experts_implementation
-class MiMoV2FlashExperts(MixtralExperts):
-    """Fused experts (V5). Checkpoint layout: `mlp.experts.gate_up_proj`, `mlp.experts.down_proj`.
-    Original reference used per-expert `nn.ModuleList` MLPs (`experts.{i}.gate_proj` etc.)
-    """
-
-    def __init__(self, config: MiMoV2FlashConfig):
-        super().__init__(config)
-        # MoE experts use moe_intermediate_size, not the dense MLP's intermediate_size
-        self.intermediate_dim = config.moe_intermediate_size
-        self.gate_up_proj = nn.Parameter(torch.empty(self.num_experts, 2 * self.intermediate_dim, self.hidden_dim))
-        self.down_proj = nn.Parameter(torch.empty(self.num_experts, self.hidden_dim, self.intermediate_dim))
+class MiMoV2FlashExperts(DeepseekV3NaiveMoe):
+    pass
 
 
 class MiMoV2FlashSparseMoeBlock(MixtralSparseMoeBlock):
