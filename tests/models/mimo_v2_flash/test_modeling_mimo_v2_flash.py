@@ -46,27 +46,17 @@ class MiMoV2FlashModelTester(CausalLMModelTester):
             hidden_act="silu",
             max_position_embeddings=64,
         )
-        # MiMo-V2-Flash specific test config
-        self.head_dim = 8
+        # MiMo-V2-Flash specific test config (other defaults match Glm4MoeConfig).
         self.v_head_dim = 8
         self.layer_types = ["full_attention", "sliding_attention"]
         self.rope_parameters = {
             "full_attention": {"rope_type": "default", "rope_theta": 5_000_000.0, "partial_rotary_factor": 0.5},
             "sliding_attention": {"rope_type": "default", "rope_theta": 10_000.0, "partial_rotary_factor": 0.5},
         }
-        # 2 layers: [dense, moe]
+        # 2 layers
         self.mlp_layer_types = ["dense", "sparse"]
         self.n_routed_experts = 4
-        self.num_experts_per_tok = 2
-        self.moe_intermediate_size = 16
-        self.n_group = 1
-        self.topk_group = 1
-        self.norm_topk_prob = True
-        self.routed_scaling_factor = 1.0
         self.sliding_window = 64
-        self.rms_norm_eps = 1e-5
-        self.attention_bias = False
-        self.attention_dropout = 0.0
 
 
 @require_torch
