@@ -71,7 +71,6 @@ class MiMoV2FlashModelTester(CausalLMModelTester):
 
 @require_torch
 class MiMoV2FlashModelTest(CausalLMModelTest, unittest.TestCase):
-    _is_stateful = True
     model_tester_class = MiMoV2FlashModelTester
 
     @unittest.skip(
