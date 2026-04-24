@@ -99,7 +99,6 @@ class Glm4vMoeTextConfig(PreTrainedConfig):
     topk_group: int = 1
     first_k_dense_replace: int = 1
     norm_topk_prob: bool = True
-    num_nextn_predict_layers: int = 0
     bos_token_id: int | None = None
     eos_token_id: int | list[int] | None = None
     pad_token_id: int | None = None

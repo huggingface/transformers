@@ -3748,23 +3748,25 @@ class GenerationMixin(ContinuousMixin):
         **model_kwargs,
     ) -> GenerateNonBeamOutput | torch.LongTensor:
         r"""
-        Multi-Token Prediction (MTP) speculative decoding. The model's own MTP modules — declared via
-        `config.num_nextn_predict_layers` and exposed through `model.forward_mtp` — act as the draft. Each step
-        samples one token from the base model, drafts K = `num_nextn_predict_layers` additional tokens by chaining
-        the MTP heads, then verifies all K + 1 candidates with a single extra forward on the base model and
-        accepts via standard speculative sampling.
+        Multi-Token Prediction (MTP) speculative decoding. Uses an
+        [`MTPCandidateGenerator`][transformers.generation.candidate_generators.MTPCandidateGenerator] attached
+        to the model as `model.mtp_candidate_generator` — typically loaded via its `from_pretrained` — to draft
+        `K = config.num_nextn_predict_layers` tokens per step. The base model runs once per step to produce
+        the hidden state + first draft token, the MTP heads chain K more drafts, and a second forward on the
+        K+1 candidates provides the verification logits. Standard speculative sampling handles accept/reject.
 
         Only supports `batch_size = 1`.
         """
         if not model_kwargs.get("use_cache"):
             raise ValueError("`use_mtp` generate requires `use_cache=True`.")
-        num_mtp = getattr(self.config, "num_nextn_predict_layers", 0)
-        if num_mtp <= 0:
-            raise ValueError("`use_mtp=True` requires `config.num_nextn_predict_layers > 0` and loaded MTP weights.")
-        if not hasattr(self.model, "forward_mtp"):
+        mtp_generator = getattr(self, "mtp_candidate_generator", None)
+        if mtp_generator is None:
             raise ValueError(
-                f"{type(self.model).__name__} does not implement `forward_mtp`; MTP decoding is not supported."
+                "`use_mtp=True` requires an `MTPCandidateGenerator` attached to the model, e.g.:\n"
+                "    from transformers.generation.candidate_generators import MTPCandidateGenerator\n"
+                "    model.mtp_candidate_generator = MTPCandidateGenerator.from_pretrained(checkpoint, model)"
             )
+        num_mtp = mtp_generator.num_mtp
 
         do_sample = generation_config.do_sample
         output_scores = generation_config.output_scores
@@ -3783,7 +3785,7 @@ class GenerationMixin(ContinuousMixin):
         while self._has_unfinished_sequences(this_peer_finished, synced_gpus, device=input_ids.device):
             cur_len = input_ids.shape[1]
 
-            # 1. Base-model forward on either the full prompt (first iter) or the not-yet-cached tail.
+            # 1. Base-model forward on the full prompt (first iter) or the not-yet-cached tail.
             next_sequence_length = None if is_first_iteration else 1 if model_kwargs["use_cache"] else None
             model_inputs = self.prepare_inputs_for_generation(
                 input_ids,
@@ -3791,44 +3793,30 @@ class GenerationMixin(ContinuousMixin):
                 is_first_iteration=is_first_iteration,
                 **model_kwargs,
             )
-            model_inputs["output_hidden_states"] = True
-            outputs = self(**model_inputs, return_dict=True)
-            main_cache = outputs.past_key_values
-            h_last = outputs.hidden_states[-1][:, -1:, :]
+            # Route through the base model to keep the last hidden state; we'll project to logits manually.
+            base_only_inputs = {k: v for k, v in model_inputs.items() if k not in ("logits_to_keep", "labels")}
+            base_out = self.model(**base_only_inputs, return_dict=True)
+            main_cache = base_out.past_key_values
+            h_last = base_out.last_hidden_state[:, -1:, :]
 
             # 2. Sample x_{t+1} from the base model's prediction at the last prompt position.
-            base_logits = outputs.logits[:, -1, :].to(dtype=torch.float32, device=input_ids.device)
+            base_logits = self.lm_head(h_last)[:, 0, :].to(dtype=torch.float32, device=input_ids.device)
             base_scores = logits_processor(input_ids, base_logits)
             if do_sample:
                 x_next = torch.multinomial(nn.functional.softmax(base_scores, dim=-1), num_samples=1)
             else:
                 x_next = torch.argmax(base_scores, dim=-1, keepdim=True)
 
-            # 3. Chain the MTP heads to draft K further tokens. Each head consumes the previous (hidden, token)
-            #    and produces (next_hidden, next_logits).
-            draft_tokens = [x_next]
-            draft_logits: list[torch.Tensor] = []
-            prev_hidden = h_last
-            for depth in range(num_mtp):
-                pos_id = torch.tensor([[cur_len + depth]], device=input_ids.device, dtype=torch.long)
-                prev_hidden, mtp_step_logits = self.model.forward_mtp(
-                    input_ids=draft_tokens[depth],
-                    previous_hidden_state=prev_hidden,
-                    past_key_values=main_cache,
-                    position_ids=pos_id,
-                    mtp_depth=depth,
-                )
-                mtp_vec = mtp_step_logits[:, 0, :].to(dtype=torch.float32)
-                mtp_vec = logits_processor(torch.cat([input_ids] + draft_tokens, dim=1), mtp_vec)
-                draft_logits.append(mtp_vec)
-                if do_sample:
-                    drafted = torch.multinomial(nn.functional.softmax(mtp_vec, dim=-1), num_samples=1)
-                else:
-                    drafted = torch.argmax(mtp_vec, dim=-1, keepdim=True)
-                draft_tokens.append(drafted)
-
-            # 4. Verify: feed all K+1 candidates through the base model at positions cur_len..cur_len+K.
-            candidate_tokens = torch.cat(draft_tokens, dim=1)  # (1, K+1)
+            # 3. Delegate K extra drafts to the MTP candidate generator.
+            candidate_tokens, draft_stack = mtp_generator.get_candidates(
+                input_ids,
+                previous_hidden_state=h_last,
+                past_key_values=main_cache,
+                first_token=x_next,
+                position_offset=cur_len,
+                logits_processor=logits_processor,
+                do_sample=do_sample,
+            )
             is_done_candidate = stopping_criteria(torch.cat([input_ids, candidate_tokens], dim=1), None)
             verify_kwargs = copy.copy(model_kwargs)
             verify_kwargs["past_key_values"] = main_cache
@@ -3859,34 +3847,29 @@ class GenerationMixin(ContinuousMixin):
             # 5. Accept/reject. We compare the base model's predictions at positions cur_len..cur_len+K-1
             #    (logits for x_{t+2}..x_{t+K+1}) against the drafts x_{t+2}..x_{t+K+1} = candidate_tokens[:, 1:].
             #    x_{t+1} itself came from the base model, so it is unconditionally kept.
-            if num_mtp > 0:
-                draft_stack = torch.stack(draft_logits, dim=1)  # (1, K, V)
-                drafts_for_check = candidate_tokens[:, 1:]  # (1, K)
-                verify_for_drafts = verify_logits[:, :num_mtp, :]  # (1, K, V)
-                if do_sample:
-                    _candidate_input_ids = torch.cat([input_ids, drafts_for_check], dim=1)
-                    accepted_drafts, n_matches = _speculative_sampling(
-                        _candidate_input_ids,
-                        draft_stack,
-                        num_mtp,
-                        verify_for_drafts,
-                        is_done_candidate,
-                    )
-                    # `_speculative_sampling` returns `n_matches + 1` tokens (matched drafts + the resample).
-                    accepted_after_xnext = accepted_drafts
-                else:
-                    verify_argmax = verify_logits.argmax(dim=-1)  # (1, K+1)
-                    draft_match = verify_argmax[:, :num_mtp] == drafts_for_check
-                    n_matches = int(((~draft_match).cumsum(dim=-1) < 1).sum().item())
-                    if is_done_candidate and n_matches == num_mtp:
-                        n_matches -= 1
-                    bonus = verify_argmax[:, n_matches : n_matches + 1]
-                    accepted_after_xnext = torch.cat([drafts_for_check[:, :n_matches], bonus], dim=1)
+            drafts_for_check = candidate_tokens[:, 1:]  # (1, K)
+            verify_for_drafts = verify_logits[:, :num_mtp, :]  # (1, K, V)
+            if do_sample:
+                _candidate_input_ids = torch.cat([input_ids, drafts_for_check], dim=1)
+                accepted_drafts, n_matches = _speculative_sampling(
+                    _candidate_input_ids,
+                    draft_stack,
+                    num_mtp,
+                    verify_for_drafts,
+                    is_done_candidate,
+                )
+                accepted_after_xnext = accepted_drafts
             else:
-                accepted_after_xnext = candidate_tokens[:, :0]
-                n_matches = 0
+                verify_argmax = verify_logits.argmax(dim=-1)  # (1, K+1)
+                draft_match = verify_argmax[:, :num_mtp] == drafts_for_check
+                n_matches = int(((~draft_match).cumsum(dim=-1) < 1).sum().item())
+                if is_done_candidate and n_matches == num_mtp:
+                    n_matches -= 1
+                bonus = verify_argmax[:, n_matches : n_matches + 1]
+                accepted_after_xnext = torch.cat([drafts_for_check[:, :n_matches], bonus], dim=1)
 
             accepted = torch.cat([x_next, accepted_after_xnext], dim=1)
+            mtp_generator.update_candidate_strategy(input_ids, verify_logits, n_matches)
 
             # 6. Commit. Extend input_ids, crop the base-model cache, and update model_kwargs.
             input_ids = torch.cat([input_ids, accepted], dim=1)
@@ -3896,7 +3879,7 @@ class GenerationMixin(ContinuousMixin):
             main_cache.crop(new_cur_len - 1)
             model_kwargs["past_key_values"] = main_cache
             model_kwargs = self._update_model_kwargs_for_generation(
-                outputs,
+                base_out,
                 model_kwargs,
                 is_encoder_decoder=self.config.is_encoder_decoder,
                 num_new_tokens=accepted.shape[1],
@@ -3918,7 +3901,7 @@ class GenerationMixin(ContinuousMixin):
             is_first_iteration = False
             unfinished_sequences = unfinished_sequences & ~stopping_criteria(input_ids, scores)
             this_peer_finished = unfinished_sequences.max() == 0
-            del outputs
+            del base_out, verify_outputs
 
         if streamer is not None:
             streamer.end()

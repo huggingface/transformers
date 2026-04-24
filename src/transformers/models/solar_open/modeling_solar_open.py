@@ -26,7 +26,7 @@ from torch import nn
 
 from ... import initialization as init
 from ...activations import ACT2FN
-from ...cache_utils import Cache, DynamicCache, DynamicLayer
+from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationMixin
 from ...integrations import (
     use_experts_implementation,
@@ -475,51 +475,6 @@ class SolarOpenRotaryEmbedding(nn.Module):
         return cos.to(dtype=x.dtype), sin.to(dtype=x.dtype)
 
 
-class SolarOpenMTPSharedHead(nn.Module):
-    def __init__(self, config: SolarOpenConfig):
-        super().__init__()
-        self.norm = SolarOpenRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        self.head = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
-
-    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        return self.head(self.norm(hidden_states))
-
-
-class SolarOpenMTPLayer(nn.Module):
-    def __init__(self, config: SolarOpenConfig, layer_idx: int):
-        super().__init__()
-        self.hidden_size = config.hidden_size
-        self.enorm = SolarOpenRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        self.hnorm = SolarOpenRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        self.eh_proj = nn.Linear(config.hidden_size * 2, config.hidden_size, bias=False)
-        self.mtp_block = SolarOpenDecoderLayer(config, layer_idx)
-        self.shared_head = SolarOpenMTPSharedHead(config)
-
-    def forward(
-        self,
-        inputs_embeds: torch.Tensor,
-        previous_hidden_state: torch.Tensor,
-        position_embeddings: tuple[torch.Tensor, torch.Tensor],
-        attention_mask: torch.Tensor | None,
-        position_ids: torch.Tensor | None,
-        past_key_values: Cache | None,
-        use_cache: bool | None = None,
-        **kwargs,
-    ) -> tuple[torch.Tensor, torch.Tensor]:
-        hidden_states = self.eh_proj(torch.cat([self.enorm(inputs_embeds), self.hnorm(previous_hidden_state)], dim=-1))
-        hidden_states = self.mtp_block(
-            hidden_states,
-            attention_mask=attention_mask,
-            position_embeddings=position_embeddings,
-            position_ids=position_ids,
-            past_key_values=past_key_values,
-            use_cache=use_cache,
-            **kwargs,
-        )
-        logits = self.shared_head(hidden_states)
-        return hidden_states, logits
-
-
 @auto_docstring
 class SolarOpenModel(SolarOpenPreTrainedModel):
     def __init__(self, config: SolarOpenConfig):
@@ -534,8 +489,6 @@ class SolarOpenModel(SolarOpenPreTrainedModel):
         self.norm = SolarOpenRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.rotary_emb = SolarOpenRotaryEmbedding(config=config)
         self.gradient_checkpointing = False
-        for k in range(getattr(config, "num_nextn_predict_layers", 0)):
-            self.layers.append(SolarOpenMTPLayer(config, config.num_hidden_layers + k))
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -593,46 +546,6 @@ class SolarOpenModel(SolarOpenPreTrainedModel):
         return BaseModelOutputWithPast(
             last_hidden_state=hidden_states,
             past_key_values=past_key_values,
-        )
-
-    def forward_mtp(
-        self,
-        input_ids: torch.LongTensor,
-        previous_hidden_state: torch.Tensor,
-        past_key_values: Cache,
-        position_ids: torch.LongTensor | None = None,
-        mtp_depth: int = 0,
-        **kwargs,
-    ) -> tuple[torch.Tensor, torch.Tensor]:
-        """Run one MTP depth. Returns `(hidden_state, logits)` for position t+depth+2."""
-        layer_idx = self.config.num_hidden_layers + mtp_depth
-        mtp_layer = self.layers[layer_idx]
-        if hasattr(past_key_values, "layers"):
-            while len(past_key_values.layers) <= layer_idx:
-                past_key_values.layers.append(DynamicLayer())
-        inputs_embeds = self.embed_tokens(input_ids)
-        if position_ids is None:
-            past_seen_tokens = past_key_values.get_seq_length(layer_idx)
-            position_ids = (
-                torch.arange(inputs_embeds.shape[1], device=inputs_embeds.device) + past_seen_tokens
-            ).unsqueeze(0)
-        position_embeddings = self.rotary_emb(inputs_embeds, position_ids=position_ids)
-        causal_mask = create_causal_mask(
-            config=self.config,
-            inputs_embeds=inputs_embeds,
-            attention_mask=None,
-            past_key_values=past_key_values,
-            position_ids=position_ids,
-        )
-        return mtp_layer(
-            inputs_embeds=inputs_embeds,
-            previous_hidden_state=previous_hidden_state,
-            position_embeddings=position_embeddings,
-            attention_mask=causal_mask,
-            position_ids=position_ids,
-            past_key_values=past_key_values,
-            use_cache=True,
-            **kwargs,
         )
 
 

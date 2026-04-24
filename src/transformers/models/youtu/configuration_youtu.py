@@ -78,7 +78,6 @@ class YoutuConfig(PreTrainedConfig):
     qk_rope_head_dim: int = 64
     v_head_dim: int | None = 128
     qk_nope_head_dim: int = 128
-    num_nextn_predict_layers: int = 0
     hidden_act: str = "silu"
     max_position_embeddings: int = 131072
     initializer_range: float | None = None
