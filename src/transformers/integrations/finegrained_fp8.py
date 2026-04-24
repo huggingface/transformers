@@ -341,7 +341,7 @@ def fp8_batched_mm_experts_forward(
     )  # (S, hidden_dim)
 
     # Apply routing weights
-    weighted_out = proj_out * sample_weights.unsqueeze(-1)  # (S, hidden_dim)
+    weighted_out = proj_out * sample_weights.to(proj_out.dtype).unsqueeze(-1)  # (S, hidden_dim)
 
     # Accumulate results using deterministic reshape+sum instead of index_add_
     # (index_add_ with duplicate indices is non-deterministic on CUDA due to atomicAdd)
