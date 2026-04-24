@@ -27,7 +27,6 @@ from ..utils.import_utils import is_kernels_available
 from .deepgemm import fp8_deepgemm_experts_forward, fp8_deepgemm_matmul
 from .hub_kernels import lazy_load_kernel
 from .moe import ExpertsInterface, use_experts_implementation
-from .tensor_parallel import neutralize_ep_sentinels
 
 
 logger = logging.get_logger(__name__)
@@ -232,8 +231,10 @@ def fp8_batched_mm_experts_forward(
     sample_weights = top_k_weights.reshape(-1)  # (S,)
     expert_ids = top_k_index.reshape(-1)  # (S,)
 
-    # Handle invalid expert IDs from Expert Parallelism (EP)
-    neutralize_ep_sentinels(expert_ids, sample_weights, self.num_experts)
+    # Clamp EP sentinels so per-token weight indexing stays in-bounds. Routing weights are already
+    # zero at sentinel slots (RouterParallel masks them at dispatch), so the weighted mul drops
+    # those contributions — we pay the wasted GEMM compute because batched_mm has no offset to skip.
+    expert_ids.clamp_(0, self.num_experts - 1)
 
     # --- Up projection per expert (FP8 batched) ---
     proj_out = triton_batched_fp8_matmul(

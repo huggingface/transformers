@@ -1079,20 +1079,6 @@ class GroupedGemmParallel(TensorParallelLayer):
             module.num_experts = self.get_expected_sharded_shape((self.empty_param.shape[0],))[0]
 
 
-def neutralize_ep_sentinels(expert_ids, sample_weights, num_experts) -> None:
-    """Make EP sentinel slots (`expert_ids >= num_experts`) no-ops for indexing backends.
-
-    Mutates in place: clamps `expert_ids` in-range (so weight indexing stays valid) and zeros
-    `sample_weights` at sentinel slots (so their expert GEMM output contributes nothing).
-
-    Sentinel tokens still go through the expert GEMMs; filtering them beforehand needs a host sync
-    or dynamic-shape kernels, both of which break CUDA graphs — so we keep the shape-preserving path.
-    Grouped-GEMM backends can skip sentinels via offsets instead — see `grouped_mm_experts_forward`.
-    """
-    sample_weights.masked_fill_(expert_ids >= num_experts, 0.0)
-    expert_ids.clamp_(0, num_experts - 1)
-
-
 class RouterParallel(TensorParallelLayer):
     """
     Allows to reshape the router scores to support running expert parallel.

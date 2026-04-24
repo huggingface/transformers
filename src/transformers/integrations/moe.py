@@ -26,7 +26,6 @@ from ..utils.import_utils import (
 )
 from .deepgemm import deepgemm_experts_forward
 from .sonicmoe import sonicmoe_experts_forward
-from .tensor_parallel import neutralize_ep_sentinels
 
 
 if is_torch_available():
@@ -126,8 +125,10 @@ def batched_mm_experts_forward(
     sample_weights = top_k_weights.reshape(-1)  # (S,)
     expert_ids = top_k_index.reshape(-1)  # (S,)
 
-    # Handle invalid expert IDs from Expert Parallelism (EP)
-    neutralize_ep_sentinels(expert_ids, sample_weights, self.num_experts)
+    # Clamp EP sentinels so `gate_up_proj[expert_ids]` stays in-bounds. Routing weights are already
+    # zero at sentinel slots (RouterParallel masks them at dispatch), so the weighted mul drops
+    # those contributions — we pay the wasted GEMM compute because batched_mm has no offset to skip.
+    expert_ids.clamp_(0, self.num_experts - 1)
 
     # Select gate_up or just up projection weights and biases
     if self.has_gate:
