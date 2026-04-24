@@ -184,6 +184,7 @@ class TorchAoHfQuantizer(HfQuantizer):
                     source_patterns=[
                         "_weight_qdata",
                         "_weight_scale_and_zero",
+                        "_weight_per_tensor_scale",
                         "_weight_scale",
                         "_weight_zero_point",
                         "_weight_act_pre_scale",
