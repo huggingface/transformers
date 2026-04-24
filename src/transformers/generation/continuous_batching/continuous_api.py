@@ -41,7 +41,7 @@ from .input_outputs import ContinuousBatchingAsyncIOs, ContinuousBatchingIOs
 from .offloading_manager import OffloadingManager
 from .requests import GenerationOutput, RequestState, RequestStatus, logger
 from .scheduler import SCHEDULER_MAPPING, FIFOScheduler, Scheduler
-from .utils import attn_mask_is_needed, create_warmup_future_states, pad_to_interval
+from .utils import attn_mask_is_needed, create_warmup_future_states, pad_to_interval, pad_to_pow2
 
 
 """
@@ -385,8 +385,14 @@ class ContinuousBatchProcessor:
 
         # If inputs are static sized, eg. for compile, we find the padded sizes of the queries and keys/values
         if self._pad_inputs:
-            num_q_tokens = pad_to_interval(num_q_tokens, self.q_padding_interval_size, self.max_batch_tokens)
-            max_kv_read = pad_to_interval(max_kv_read, self.kv_padding_interval_size, self.cache.num_pages)
+            # For varlen batches, we pad using interval sizes
+            if not use_decode_fast_path:
+                num_q_tokens = pad_to_interval(num_q_tokens, self.q_padding_interval_size, self.max_batch_tokens)
+                max_kv_read = pad_to_interval(max_kv_read, self.kv_padding_interval_size, self.cache.num_pages)
+            # For decode fast path batches, we pad using powers of 2 and use no KV
+            else:
+                num_q_tokens = pad_to_pow2(num_q_tokens, self.max_batch_tokens)
+                max_kv_read = 0
 
         self.inputs_and_outputs.prepare_batch_tensors(
             requests_in_batch, self.logit_processor, use_decode_fast_path, num_q_tokens, max_kv_read
@@ -674,19 +680,18 @@ class ContinuousBatchProcessor:
 
             # --- Decode fast path ---
             logger.info("Warming up decode fast path...")
-            q_interval = self.q_padding_interval_size  # shorthand to avoid overly long lines
             decode_graphs = 0
             start = perf_counter()
-            # If N requests reach decoding stage, then the number of query tokens is going to start at N and decrease to
-            # 0 as all request finish. So we warmup for all intervals between 0 and N.
-            for num_requests in range(q_interval, num_query_tokens + q_interval, q_interval):
+
+            num_requests = 1
+            while True:
                 future_states = create_warmup_future_states(
                     num_requests, RequestStatus.DECODING, 1, self.cache.block_size, self.cache
                 )
                 if not future_states:
                     continue
                 try:
-                    padded_q = pad_to_interval(len(future_states), q_interval, self.max_batch_tokens)
+                    padded_q = pad_to_pow2(num_requests, self.max_batch_tokens)
                     self.inputs_and_outputs.prepare_batch_tensors(
                         future_states, self.logit_processor, True, padded_q, 0
                     )
@@ -705,6 +710,9 @@ class ContinuousBatchProcessor:
                 finally:
                     for fs in future_states:
                         self.cache.free_blocks(fs.state.request_id)
+                if num_requests >= self.max_batch_tokens:
+                    break
+                num_requests = min(2 * num_requests, self.max_batch_tokens)
             logger.info(f"Decode warmup completed ({decode_graphs} graphs) in {perf_counter() - start:.2f}s.")
 
         # If using async batching, reset to pair 0 for the generation loop
