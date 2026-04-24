@@ -220,6 +220,48 @@ class DummyRoot(nn.Module):
 
 
 class TestConvertAndLoadStateDict(unittest.TestCase):
+    def test_direct_and_renamed_weights_load_without_conversion_wrappers(self):
+        model = DummyRoot()
+        model.config = PretrainedConfig()
+
+        state_dict = {
+            "model.layers.0.self_attn.q_proj.weight": torch.tensor([[1.0, 2.0]]),
+            "model.layers.1.self_attn.q_proj.weight": torch.tensor([[3.0, 4.0]]),
+            "mlp.w2.weight": torch.tensor([[5.0, 6.0], [7.0, 8.0]]),
+        }
+        loading_info, _ = convert_and_load_state_dict_in_model(
+            model,
+            state_dict,
+            LoadStateDictConfig(weight_mapping=[WeightRenaming("mlp.w2.weight", "mlp.down_proj.weight")]),
+            tp_plan=None,
+        )
+
+        self.assertEqual(
+            loading_info.missing_keys,
+            {
+                "model.layers.0.experts.down_proj.weight",
+                "model.layers.0.experts.gate_up_proj.weight",
+                "model.layers.0.self_attn.k_proj.weight",
+                "model.layers.0.self_attn.v_proj.weight",
+                "model.layers.1.experts.down_proj.weight",
+                "model.layers.1.experts.gate_up_proj.weight",
+                "model.layers.1.self_attn.k_proj.weight",
+                "model.layers.1.self_attn.v_proj.weight",
+            },
+        )
+        self.assertEqual(loading_info.unexpected_keys, set())
+        self.assertEqual(loading_info.mismatched_keys, set())
+        self.assertEqual(loading_info.conversion_errors, {})
+
+        model_state = model.state_dict()
+        torch.testing.assert_close(
+            model_state["model.layers.0.self_attn.q_proj.weight"], state_dict["model.layers.0.self_attn.q_proj.weight"]
+        )
+        torch.testing.assert_close(
+            model_state["model.layers.1.self_attn.q_proj.weight"], state_dict["model.layers.1.self_attn.q_proj.weight"]
+        )
+        torch.testing.assert_close(model_state["mlp.down_proj.weight"], state_dict["mlp.w2.weight"])
+
     def test_moe_and_qkv_conversion(self):
         model = DummyRoot()
         model.config = PretrainedConfig()
