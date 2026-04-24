@@ -5,8 +5,15 @@
 # You may obtain a copy of the License at
 #
 #     http://www.apache.org/licenses/LICENSE-2.0
-"""Content parsers that turn region bodies into Python values. The registry is
-closed — schemas select and configure parsers by name but cannot ship code."""
+"""Content pipeline: body string → parsed value → assembled → coerced.
+
+Three stages compose into `process_field(body, fld, captures)`:
+  1. `parse_content` dispatches through the closed `CONTENT_PARSERS` registry.
+  2. `_apply_assemble` optionally wraps the parsed value in a template
+     (using `{name}` placeholders filled from open-pattern captures).
+  3. `_apply_coerce` optionally casts the result to int/float/bool.
+
+The registry is closed — schemas select parsers by name but cannot ship code."""
 
 from __future__ import annotations
 
@@ -161,4 +168,59 @@ def parse_content(text: str, name: str, args: dict) -> Any:
     return CONTENT_PARSERS[name](text, args)
 
 
-__all__ = ["CONTENT_PARSERS", "parse_content"]
+_PLACEHOLDER = re.compile(r"\{(\w+)\}")
+
+
+def _apply_assemble(assemble: Any, captures: dict, content: Any) -> Any:
+    if assemble is None:
+        return content
+    if isinstance(assemble, dict):
+        return {k: _apply_assemble(v, captures, content) for k, v in assemble.items()}
+    if isinstance(assemble, list):
+        return [_apply_assemble(v, captures, content) for v in assemble]
+    if not isinstance(assemble, str):
+        return assemble
+
+    def _lookup(key: str) -> Any:
+        if key == "content":
+            return content
+        if key in captures:
+            return captures[key]
+        raise KeyError(
+            f"assemble template '{assemble}' references unknown capture '{key}'. "
+            f"Available: {sorted(list(captures) + ['content'])}"
+        )
+
+    whole = _PLACEHOLDER.fullmatch(assemble)
+    if whole:
+        return _lookup(whole.group(1))
+    return _PLACEHOLDER.sub(lambda m: str(_lookup(m.group(1))), assemble)
+
+
+def _apply_coerce(value: Any, coerce: str | None) -> Any:
+    if coerce is None:
+        return value
+    if coerce == "int":
+        return int(value)
+    if coerce == "float":
+        return float(value)
+    if coerce == "bool":
+        if isinstance(value, bool):
+            return value
+        if isinstance(value, str):
+            return value.strip().lower() in ("true", "1", "yes")
+        return bool(value)
+    raise ValueError(f"Unknown coerce: {coerce}")
+
+
+def process_field(body: str, fld, captures: dict) -> Any:
+    """Run `body` through the field's content parser, assembler, and coercer.
+
+    `fld` is a `spec.Field`; typed via duck-typing to avoid a cyclic import."""
+    value = parse_content(body, fld.content, fld.content_args)
+    value = _apply_assemble(fld.assemble, captures, value)
+    value = _apply_coerce(value, fld.coerce)
+    return value
+
+
+__all__ = ["CONTENT_PARSERS", "parse_content", "process_field"]
