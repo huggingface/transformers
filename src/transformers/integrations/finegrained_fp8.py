@@ -419,7 +419,7 @@ def fp8_grouped_mm_experts_forward(
     )  # (S, hidden_dim)
 
     # Apply routing weights
-    weighted_out = proj_out * sample_weights_g.unsqueeze(-1)  # (S, hidden_dim)
+    weighted_out = proj_out * sample_weights_g.to(proj_out.dtype).unsqueeze(-1)  # (S, hidden_dim)
 
     # EP sentinel handling: `proj_out` rows past `offsets[-1]` are left uninitialized by the kernel,
     # so `proj_out[sentinel] * 0 = 0 * NaN = NaN` can leak from allocator pool reuse. Zero them here
@@ -506,20 +506,27 @@ def _build_deepgemm_contiguous_layout(
     return sorted_to_padded, grouped_layout, total_padded_rows
 
 
-def _pad_for_deepgemm(x: torch.Tensor, sorted_to_padded: torch.Tensor, total_padded_rows: int) -> torch.Tensor:
-    """Pad a sorted tensor into the TMA-aligned contiguous layout.
+def _pad_to_deepgemm_contiguous_layout(
+    hidden_states: torch.Tensor,
+    scales: torch.Tensor,
+    sorted_to_padded: torch.Tensor,
+    total_padded_rows: int,
+) -> tuple[torch.Tensor, torch.Tensor]:
+    """Pad sorted hidden states and scales into the TMA-aligned contiguous layout."""
+    hidden_padded = torch.zeros(
+        total_padded_rows, hidden_states.shape[1], device=hidden_states.device, dtype=hidden_states.dtype
+    )
+    hidden_padded[sorted_to_padded] = hidden_states
+    scales_padded = torch.zeros(total_padded_rows, scales.shape[1], device=hidden_states.device, dtype=torch.float32)
+    scales_padded[sorted_to_padded] = scales
+    return hidden_padded, scales_padded
 
-    Padding rows are left uninitialized — the kernel skips them via `grouped_layout=-1` (Hopper)
-    or via the psum offsets (Blackwell), so their values never enter the computation.
-    """
-    padded = torch.empty(total_padded_rows, *x.shape[1:], device=x.device, dtype=x.dtype)
-    padded[sorted_to_padded] = x
-    return padded
 
-
-def _unpad_from_deepgemm_contiguous_layout(x_padded: torch.Tensor, sorted_to_padded: torch.Tensor) -> torch.Tensor:
+def _unpad_from_deepgemm_contiguous_layout(
+    hidden_states_padded: torch.Tensor, sorted_to_padded: torch.Tensor
+) -> torch.Tensor:
     """Remove padding rows from the TMA-aligned contiguous layout."""
-    return x_padded[sorted_to_padded]
+    return hidden_states_padded[sorted_to_padded]
 
 
 def fp8_deepgemm_experts_forward(
@@ -571,8 +578,7 @@ def fp8_deepgemm_experts_forward(
     w_up = self.gate_up_proj if self.has_gate else self.up_proj
     ws_up = self.gate_up_proj_scale_inv if self.has_gate else self.up_proj_scale_inv
     act_fp8, act_scales = deepgemm_per_token_cast_to_fp8(selected_hidden_states_g, use_ue8m0=False)
-    act_fp8 = _pad_for_deepgemm(act_fp8, sorted_to_padded, total_padded_rows)
-    act_scales = _pad_for_deepgemm(act_scales, sorted_to_padded, total_padded_rows)
+    act_fp8, act_scales = _pad_to_deepgemm_contiguous_layout(act_fp8, act_scales, sorted_to_padded, total_padded_rows)
     proj_out = torch.empty(total_padded_rows, w_up.shape[1], device=device, dtype=torch.bfloat16)
     deepgemm_grouped_fp8_matmul(
         (act_fp8, act_scales), (w_up, ws_up.float()), proj_out, grouped_layout, use_psum_layout=use_psum_layout
@@ -599,7 +605,7 @@ def fp8_deepgemm_experts_forward(
     proj_out = _unpad_from_deepgemm_contiguous_layout(proj_out, sorted_to_padded)
 
     # Apply routing weights
-    weighted_out = proj_out * sample_weights_g.unsqueeze(-1)  # (S, hidden_dim)
+    weighted_out = proj_out * sample_weights_g.to(proj_out.dtype).unsqueeze(-1)  # (S, hidden_dim)
 
     # EP sentinel handling: `proj_out` rows past the valid expert blocks are left uninitialized by the kernel,
     # so `proj_out[sentinel] * 0 = 0 * NaN = NaN` can leak from allocator pool reuse. Zero them here
