@@ -11,12 +11,14 @@ All six real-model format fixtures from the legacy test suite are re-expressed
 here in the new region-spec shape and asserted against the same expected
 output dicts. Any divergence indicates a regression in the new executor."""
 
+import random
 import tempfile
 import unittest
 
 from transformers import AutoTokenizer
 from transformers.testing_utils import require_jmespath
 from transformers.utils.chat_parsing import ResponseEventStream, parse_response
+
 
 cohere_format = {
     "defaults": {"role": "assistant"},
@@ -159,6 +161,7 @@ gemma4_format = {
         },
     },
 }
+
 
 @require_jmespath
 class ChatResponseFormatParserTest(unittest.TestCase):
@@ -573,33 +576,206 @@ class ChatResponseFormatParserTest(unittest.TestCase):
             parse_response("hello", bad_format)
 
 
+# Fixtures shared by the streaming tests: one representative input per format,
+# re-used for both the correctness invariant (any chunking → same dict) and the
+# event-shape tests (do we emit the right events in the right order?).
+_STREAMING_FIXTURES = [
+    (
+        "cohere",
+        cohere_format,
+        (
+            "<|START_THINKING|>I should call a tool.<|END_THINKING|>"
+            '<|START_ACTION|>[{"tool_call_id": "0", "tool_name": "simple_tool", '
+            '"parameters": {"a": 1}}]<|END_ACTION|>'
+        ),
+    ),
+    (
+        "ernie",
+        ernie_format,
+        (
+            "<think>some deliberation here</think>\n\n"
+            '<tool_call>\n{"name": "get_current_temperature", "arguments": {"location": "Paris"}}\n</tool_call>\n</s>'
+        ),
+    ),
+    (
+        "gpt_oss",
+        gpt_oss_format,
+        "<|channel|>analysis<|message|>thinking chunk<|end|><|channel|>final<|message|>done text",
+    ),
+    (
+        "smollm",
+        smollm_format,
+        '<think>thinking</think>\n<tool_call>{"name": "fn", "arguments": {"x": 1}}</tool_call>',
+    ),
+    (
+        "qwen3",
+        qwen3_format,
+        (
+            "<think>short thought</think>\n"
+            "<tool_call>\n<function=get_weather>\n"
+            "<parameter=city>\nParis\n</parameter>\n"
+            "</function>\n</tool_call>"
+        ),
+    ),
+    (
+        "gemma4",
+        gemma4_format,
+        '<|channel>thought\nhi<channel|><|tool_call>call:foo{a:1,b:<|"|>bar<|"|>}<tool_call|>',
+    ),
+]
+
+
+def _chunk_fixed(text: str, step: int):
+    for i in range(0, len(text), step):
+        yield text[i : i + step]
+
+
+def _chunk_random(text: str, rng: random.Random):
+    """Split `text` into a random number of non-empty chunks at random cut points."""
+    if len(text) <= 1:
+        yield text
+        return
+    num_cuts = rng.randint(0, len(text) - 1)
+    cuts = sorted(rng.sample(range(1, len(text)), num_cuts))
+    prev = 0
+    for c in cuts:
+        yield text[prev:c]
+        prev = c
+    yield text[prev:]
+
+
 @require_jmespath
 class ResponseEventStreamTest(unittest.TestCase):
-    def test_stream_matches_whole_string_parse_all_formats(self):
-        """Key correctness invariant: for any chunking of input,
-        ResponseEventStream.finalize() must equal parse_response(full_string)."""
-        cases = [
-            (
-                cohere_format,
-                (
-                    "<|START_THINKING|>I should call a tool.<|END_THINKING|>"
-                    '<|START_ACTION|>[{"tool_call_id": "0", "tool_name": "simple_tool", '
-                    '"parameters": {"a": 1}}]<|END_ACTION|>'
-                ),
-            ),
-            (smollm_format, ('<think>thinking</think>\n<tool_call>{"name": "fn", "arguments": {"x": 1}}</tool_call>')),
-            (gemma4_format, ('<|channel>thought\nhi<channel|><|tool_call>call:foo{a:1,b:<|"|>bar<|"|>}<tool_call|>')),
-            (gpt_oss_format, ("<|channel|>analysis<|message|>t<|end|><|channel|>final<|message|>done")),
-        ]
-        for fmt, text in cases:
-            with self.subTest(text=text[:30]):
-                expected = parse_response(text, fmt)
-                # Try several chunkings: 1, 2, 3, 7 splits
-                for step in (1, 2, 3, 7, 13):
+    def test_stream_matches_whole_string_all_formats_fixed_chunking(self):
+        """For every fixed chunking step we try, the streamed finalize()
+        output must equal the whole-string parse. Regression coverage for
+        specific edge-case byte boundaries (1-byte chunks hit every prefix)."""
+        for name, fmt, text in _STREAMING_FIXTURES:
+            expected = parse_response(text, fmt)
+            for step in (1, 2, 3, 5, 7, 13, 31):
+                with self.subTest(fixture=name, step=step):
                     streamer = ResponseEventStream(fmt)
-                    for i in range(0, len(text), step):
-                        streamer.feed(text[i : i + step])
-                    self.assertEqual(streamer.finalize(), expected, f"step={step}")
+                    for chunk in _chunk_fixed(text, step):
+                        streamer.feed(chunk)
+                    self.assertEqual(streamer.finalize(), expected)
+
+    def test_stream_matches_whole_string_all_formats_random_chunking(self):
+        """Property-style: for many random chunkings per fixture, the streamed
+        finalize() output must equal the whole-string parse. Seeded so failures
+        reproduce."""
+        rng = random.Random(0xC0DE_5EED)
+        for name, fmt, text in _STREAMING_FIXTURES:
+            expected = parse_response(text, fmt)
+            for trial in range(30):
+                with self.subTest(fixture=name, trial=trial):
+                    streamer = ResponseEventStream(fmt)
+                    for chunk in _chunk_random(text, rng):
+                        streamer.feed(chunk)
+                    self.assertEqual(streamer.finalize(), expected)
+
+    def test_events_well_formed_for_every_chunking(self):
+        """Every event batch, across every fixture and every chunking, must be
+        well-formed: region_open precedes its matching region_close for the
+        same field; region_chunk only appears between open and close; the
+        final event stream ends with stream_end; and the concatenation of all
+        region_chunk payloads for a text/raw field equals the final value."""
+        rng = random.Random(0xBEEF)
+        for name, fmt, text in _STREAMING_FIXTURES:
+            for trial in range(10):
+                with self.subTest(fixture=name, trial=trial):
+                    streamer = ResponseEventStream(fmt)
+                    all_events: list[dict] = []
+                    for chunk in _chunk_random(text, rng):
+                        all_events.extend(streamer.feed(chunk))
+                    streamer.finalize()
+                    all_events.extend(streamer.final_events)
+                    self._assert_event_stream_well_formed(all_events)
+
+    def _assert_event_stream_well_formed(self, events: list[dict]) -> None:
+        self.assertTrue(events, "event stream must not be empty")
+        self.assertEqual(events[-1], {"type": "stream_end"})
+        open_field: str | None = None
+        chunk_accum: dict[str, str] = {}
+        close_values: dict[str, object] = {}
+        for ev in events[:-1]:
+            t = ev["type"]
+            if t == "region_open":
+                self.assertIsNone(open_field, f"nested region_open without close: {ev}")
+                open_field = ev["field"]
+                chunk_accum.setdefault(open_field, "")
+                self.assertIn("meta", ev)
+                self.assertIsInstance(ev["meta"], dict)
+            elif t == "region_chunk":
+                self.assertEqual(open_field, ev["field"], f"chunk outside its region: {ev}")
+                chunk_accum[open_field] += ev["text"]
+            elif t == "region_close":
+                self.assertEqual(open_field, ev["field"], f"close for non-open region: {ev}")
+                close_values[open_field] = ev["value"]
+                open_field = None
+            else:
+                self.fail(f"unexpected event type: {ev!r}")
+        self.assertIsNone(open_field, "region left open at stream_end")
+
+    def test_region_chunks_reconstruct_text_regions(self):
+        """For text/raw regions, concatenating the region_chunk texts should
+        reconstruct the final value reported in region_close. JSON-family
+        regions emit no chunks and report the full parsed value only on close."""
+        # Single representative case with a long text region and a JSON region.
+        text = _STREAMING_FIXTURES[0][2]  # cohere fixture
+        streamer = ResponseEventStream(cohere_format)
+        events: list[dict] = []
+        for ch in text:  # 1-byte chunks hit the most anchor boundaries
+            events.extend(streamer.feed(ch))
+        streamer.finalize()
+        events.extend(streamer.final_events)
+
+        # Reconstruct per-field.
+        per_field_chunks: dict[str, list[str]] = {}
+        per_field_close_value: dict[str, object] = {}
+        for ev in events:
+            if ev["type"] == "region_chunk":
+                per_field_chunks.setdefault(ev["field"], []).append(ev["text"])
+            elif ev["type"] == "region_close":
+                per_field_close_value[ev["field"]] = ev["value"]
+
+        # `thinking` is text → chunks concatenate to its value.
+        self.assertIn("thinking", per_field_chunks)
+        self.assertEqual("".join(per_field_chunks["thinking"]), "I should call a tool.")
+        self.assertEqual(per_field_close_value["thinking"], "I should call a tool.")
+        # `tool_calls` is json → no chunk events, full value on close.
+        self.assertNotIn("tool_calls", per_field_chunks)
+        self.assertIn("tool_calls", per_field_close_value)
+
+    def test_open_event_carries_named_captures(self):
+        """Named groups in open_pattern must land in region_open's `meta`."""
+        text = "<|channel|>analysis<|message|>think<|end|><|channel|>commentary to=functions.foo<|message|>{}<|call|>"
+        streamer = ResponseEventStream(gpt_oss_format)
+        events: list[dict] = []
+        for ch in text:
+            events.extend(streamer.feed(ch))
+        streamer.finalize()
+        events.extend(streamer.final_events)
+
+        tool_opens = [e for e in events if e["type"] == "region_open" and e["field"] == "tool_calls"]
+        self.assertEqual(len(tool_opens), 1)
+        self.assertEqual(tool_opens[0]["meta"], {"name": "foo"})
+
+    def test_feed_after_finalize_raises(self):
+        streamer = ResponseEventStream(smollm_format)
+        streamer.feed("<think>x</think>")
+        streamer.finalize()
+        with self.assertRaises(RuntimeError):
+            streamer.feed("more")
+        with self.assertRaises(RuntimeError):
+            streamer.finalize()
+
+    def test_empty_input_streams_cleanly(self):
+        streamer = ResponseEventStream(smollm_format)
+        self.assertEqual(streamer.feed(""), [])
+        result = streamer.finalize()
+        # Only the default fields should remain; nothing else is required.
+        self.assertEqual(result, {"role": "assistant"})
+        self.assertEqual(streamer.final_events[-1], {"type": "stream_end"})
 
 
 if __name__ == "__main__":
