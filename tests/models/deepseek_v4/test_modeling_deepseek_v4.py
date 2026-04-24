@@ -102,8 +102,9 @@ class DeepseekV4ModelTest(unittest.TestCase):
         input_ids = torch.randint(0, cfg.vocab_size, (1, 12))
         with torch.no_grad():
             out = model(input_ids)
-        # Model output preserves the HC streams (collapsed at the LM head, not here).
-        self.assertEqual(out.last_hidden_state.shape, (1, 12, cfg.hc_mult, cfg.hidden_size))
+        # The hc_head + final RMSNorm collapse the hc_mult streams inside the Model,
+        # matching the Llama / Mixtral `Model(...) → [B, S, hidden] → lm_head` contract.
+        self.assertEqual(out.last_hidden_state.shape, (1, 12, cfg.hidden_size))
 
 
 if __name__ == "__main__":

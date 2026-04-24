@@ -34,47 +34,42 @@ from ...utils import auto_docstring
 class DeepseekV4Config(PreTrainedConfig):
     r"""
     compress_ratios (`list[int]`):
-        Per-layer compression schedule. ``0`` means pure local SWA (no Compressor).
-        ``4`` enables overlapping-window compression plus an Indexer selecting top-k
-        compressed positions. ``128`` enables disjoint-window compression without
-        an Indexer (all compressed positions attended). Length must equal
-        ``num_hidden_layers + num_nextn_predict_layers``; the trailing MTP entries
-        are kept to match the upstream checkpoint layout but are not instantiated.
+        Per-layer compression schedule. ``0`` = pure local SWA. ``4`` = overlapping-window
+        compression plus an Indexer that picks top-k compressed positions. ``128`` =
+        disjoint-window compression (no Indexer; all compressed positions are attended).
+        Length must equal ``num_hidden_layers + num_nextn_predict_layers``.
     compress_rope_theta (`float`):
-        RoPE base used on layers that carry a Compressor (paired with YaRN).
-        Layers with ``compress_ratios[i] == 0`` use ``rope_theta`` without YaRN.
+        RoPE base for layers that carry a Compressor; paired with ``rope_scaling`` for
+        long-context YaRN. Layers with ``compress_ratios[i] == 0`` use ``rope_theta``.
     hc_mult (`int`, defaults to 4):
         Number of parallel Hyper-Connection streams. Always active.
     num_hash_layers (`int`, defaults to 3):
-        First N layers route experts via a frozen ``tid2eid`` lookup keyed by input
-        token id; the learned gate weights are still used to weight activations.
+        First N layers route experts via a frozen ``tid2eid[input_ids]`` lookup.
     scoring_func (`str`, defaults to "sqrtsoftplus"):
-        One of ``"sqrtsoftplus"``, ``"softmax"``, ``"sigmoid"`` — applied to gate
-        logits before routing.
-    swiglu_limit (`float`):
-        Optional clipping of SwiGLU gate/up pre-activations for routed experts.
+        Activation on gate logits before selection — must be an ``ACT2FN`` key.
+    swiglu_limit (`float`, defaults to 10.0):
+        Clip routed experts' gate/up pre-activations like GPT-OSS (``gate.clamp_max``,
+        ``up.clamp`` both sides). Shared expert is unclipped.
     o_groups (`int`):
-        Number of groups in the grouped low-rank output projection.
+        Groups in the grouped low-rank output projection.
     o_lora_rank (`int`):
-        Rank of each group in the grouped low-rank output projection.
+        Rank per group in the grouped low-rank output projection.
     index_n_heads (`int`, defaults to 64):
-        Number of heads used by the sparse-attention Indexer.
+        Heads of the sparse-attention Indexer.
     index_head_dim (`int`, defaults to 128):
-        Head dimension of the Indexer's query/key projections.
+        Indexer head dim.
     index_topk (`int`):
-        Number of compressed positions the Indexer selects per query token.
+        Compressed positions the Indexer keeps per query.
     hc_sinkhorn_iters (`int`, defaults to 20):
-        Iteration count for the Sinkhorn normalisation inside Hyper-Connections.
+        Sinkhorn iterations inside the Hyper-Connection mixer.
     hc_eps (`float`, defaults to 1e-6):
-        Numerical floor used both in the HC norm and the Sinkhorn normalisation.
+        Numerical floor for the HC RMS norm and the Sinkhorn normaliser.
     num_nextn_predict_layers (`int`, defaults to 1):
-        Number of Multi-Token-Prediction layers present in the checkpoint. The
-        weights are ignored on load — MTP is implemented elsewhere.
+        MTP layer count in the upstream checkpoint. Weights are dropped on load.
     rope_theta (`float`, defaults to 10000.0):
-        Base period for the main-attention rotary embedding.
+        Base period for the main-attention rotary embedding (SWA layers).
     rope_scaling (`dict`, *optional*):
-        Optional YaRN/long-context scaling dict (same schema as other HF models).
-        Applied to the main-attention and Compressor rotary embeddings.
+        YaRN scaling applied to the main and Compressor rotary embeddings.
     """
 
     model_type = "deepseek_v4"
@@ -129,23 +124,38 @@ class DeepseekV4Config(PreTrainedConfig):
     layer_types: list[str] | None = None
 
     def __post_init__(self, **kwargs):
-        total_layers = self.num_hidden_layers + (self.num_nextn_predict_layers or 0)
+        total = self.num_hidden_layers + (self.num_nextn_predict_layers or 0)
         if self.compress_ratios is None:
-            # Reasonable default: alternate 4 / 128 with a leading SWA layer and a trailing SWA layer.
-            self.compress_ratios = [0] + [4 if (i % 2) else 128 for i in range(total_layers - 2)] + [0]
-        if len(self.compress_ratios) != total_layers:
+            self.compress_ratios = [0] + [4 if (i % 2) else 128 for i in range(total - 2)] + [0]
+        if len(self.compress_ratios) != total:
             raise ValueError(
-                f"`compress_ratios` must have length num_hidden_layers + num_nextn_predict_layers "
-                f"({total_layers}); got {len(self.compress_ratios)}."
+                f"`compress_ratios` must be length {total} (num_hidden_layers + num_nextn_predict_layers); "
+                f"got {len(self.compress_ratios)}."
             )
+        for r in self.compress_ratios:
+            if r not in (0, 4, 128):
+                raise ValueError(f"Unsupported compress_ratio={r}. Expected 0, 4, or 128.")
         if self.layer_types is None:
-            # Every layer carries a 128-token sliding window; Compressor/Indexer presence is
-            # driven by `compress_ratios` and resolved at module __init__ time.
+            # Every layer has a local sliding window; compressor/indexer presence is
+            # driven by `compress_ratios`, resolved once at module __init__.
             self.layer_types = ["sliding_attention"] * self.num_hidden_layers
-        for ratio in self.compress_ratios:
-            if ratio not in (0, 4, 128):
-                raise ValueError(f"Unsupported compress_ratio={ratio}. Expected 0, 4, or 128.")
         self.qk_nope_head_dim = self.head_dim - self.qk_rope_head_dim
+
+        # Make rotary embeddings size themselves to `qk_rope_head_dim` via the shared
+        # partial-rotary path (which runs iff rope_type != "default").
+        rp = dict(self.rope_parameters) if isinstance(self.rope_parameters, dict) else {}
+        rp.setdefault("rope_theta", self.rope_theta)
+        rp["partial_rotary_factor"] = self.qk_rope_head_dim / self.head_dim
+        if self.rope_scaling is not None:
+            rp["rope_type"] = self.rope_scaling.get("type", "yarn")
+            for k, v in self.rope_scaling.items():
+                rp.setdefault(k, v)
+            rp.setdefault("factor", 1.0)
+        else:
+            # Force the shared (partial-rotary-aware) init path.
+            rp.setdefault("rope_type", "linear")
+            rp.setdefault("factor", 1.0)
+        self.rope_parameters = rp
         super().__post_init__(**kwargs)
 
 
