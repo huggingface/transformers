@@ -649,7 +649,7 @@ class GenerationConfig(PushToHubMixin):
 
         if self.do_sample is not True:
             greedy_wrong_parameter_msg = (
-                "`do_sample` is set to `{do_sample}`. However, `{flag_name}` is set to `{flag_value}` -- this flag is "
+                "`do_sample` is not set to `True`. However, `{flag_name}` is set to `{flag_value}` -- this flag is "
                 "only used in sample-based generation modes. You should set `do_sample=True` or unset `{flag_name}`."
             )
 
@@ -668,35 +668,27 @@ class GenerationConfig(PushToHubMixin):
 
             if self.temperature is not None and self.temperature != 1.0 and _should_warn("temperature"):
                 minor_issues["temperature"] = greedy_wrong_parameter_msg.format(
-                    do_sample=self.do_sample, flag_name="temperature", flag_value=self.temperature
+                    flag_name="temperature", flag_value=self.temperature
                 )
             if self.top_p is not None and self.top_p != 1.0 and _should_warn("top_p"):
-                minor_issues["top_p"] = greedy_wrong_parameter_msg.format(
-                    do_sample=self.do_sample, flag_name="top_p", flag_value=self.top_p
-                )
+                minor_issues["top_p"] = greedy_wrong_parameter_msg.format(flag_name="top_p", flag_value=self.top_p)
             if self.min_p is not None and _should_warn("min_p"):
-                minor_issues["min_p"] = greedy_wrong_parameter_msg.format(
-                    do_sample=self.do_sample, flag_name="min_p", flag_value=self.min_p
-                )
+                minor_issues["min_p"] = greedy_wrong_parameter_msg.format(flag_name="min_p", flag_value=self.min_p)
             if self.top_h is not None and _should_warn("top_h"):
-                minor_issues["top_h"] = greedy_wrong_parameter_msg.format(
-                    do_sample=self.do_sample, flag_name="top_h", flag_value=self.top_h
-                )
+                minor_issues["top_h"] = greedy_wrong_parameter_msg.format(flag_name="top_h", flag_value=self.top_h)
             if self.typical_p is not None and self.typical_p != 1.0 and _should_warn("typical_p"):
                 minor_issues["typical_p"] = greedy_wrong_parameter_msg.format(
-                    do_sample=self.do_sample, flag_name="typical_p", flag_value=self.typical_p
+                    flag_name="typical_p", flag_value=self.typical_p
                 )
             if self.top_k is not None and self.top_k != 50 and _should_warn("top_k"):
-                minor_issues["top_k"] = greedy_wrong_parameter_msg.format(
-                    do_sample=self.do_sample, flag_name="top_k", flag_value=self.top_k
-                )
+                minor_issues["top_k"] = greedy_wrong_parameter_msg.format(flag_name="top_k", flag_value=self.top_k)
             if self.epsilon_cutoff is not None and self.epsilon_cutoff != 0.0 and _should_warn("epsilon_cutoff"):
                 minor_issues["epsilon_cutoff"] = greedy_wrong_parameter_msg.format(
-                    do_sample=self.do_sample, flag_name="epsilon_cutoff", flag_value=self.epsilon_cutoff
+                    flag_name="epsilon_cutoff", flag_value=self.epsilon_cutoff
                 )
             if self.eta_cutoff is not None and self.eta_cutoff != 0.0 and _should_warn("eta_cutoff"):
                 minor_issues["eta_cutoff"] = greedy_wrong_parameter_msg.format(
-                    do_sample=self.do_sample, flag_name="eta_cutoff", flag_value=self.eta_cutoff
+                    flag_name="eta_cutoff", flag_value=self.eta_cutoff
                 )
 
         # 2.2. detect beam-only parameterization when not in beam mode. Same provenance filtering as above --
@@ -1602,8 +1594,10 @@ class ContinuousBatchingConfig:
             Number of blocks in the KV cache. Auto-inferred from GPU memory when `None`.
         max_batch_tokens (`int`, *optional*):
             Maximum number of tokens in a batch. Auto-inferred from GPU memory when `None`.
-        max_memory_percent (`float`, *optional*, defaults to 0.8):
-            Maximum percentage of free GPU memory (after the model is loaded) to use for the KV cache.
+        max_memory_percent (`float`, *optional*):
+            Maximum percentage of free GPU memory (after the model is loaded) to use for the KV cache. When `None`,
+            resolved at runtime to 0.9 if there is no logit processing and 0.8 if there is, to leave headroom for
+            vocabulary-sized temporary tensors.
         max_blocks_per_request (`int`, *optional*, defaults to 0):
             Maximum blocks per request, used in the `flash_attn_with_kvcache` fast decode path to dimension
             the block table. Setting this to 0 disables the fast decode path.
