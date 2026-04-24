@@ -447,7 +447,7 @@ class Trainer:
             elif len(devices) == 1:
                 self.is_model_parallel = self.args.device != torch.device(devices[0])
 
-        self.is_fsdp_xla_enabled = bool(args.fsdp) and args.fsdp_config.get("xla", False)
+        self.is_fsdp_xla_enabled = args.fsdp and args.fsdp_config.get("xla", False)
         if args.fsdp:
             if self.is_deepspeed_enabled:
                 raise ValueError(
@@ -598,7 +598,7 @@ class Trainer:
         if getattr(self.model, "config", None) is not None:
             self.model.config.use_cache = self.args.use_cache
 
-        self.is_fsdp_xla_v2_enabled = bool(args.fsdp_config) and args.fsdp_config.get("xla_fsdp_v2", False)
+        self.is_fsdp_xla_v2_enabled = args.fsdp and args.fsdp_config.get("xla_fsdp_v2", False)
         if self.is_fsdp_xla_v2_enabled:
             if not IS_XLA_FSDPV2_POST_2_2:
                 raise ValueError("FSDPv2 requires `torch_xla` 2.2 or higher.")

@@ -2753,8 +2753,6 @@ class TrainingArguments:
         # Set env var to suppress Accelerate warning and for transformers to read
         os.environ["FSDP_CPU_RAM_EFFICIENT_LOADING"] = cpu_ram_efficient_loading
 
-        # Default to FULL_STATE_DICT (HF-compatible checkpoints work out of the box with
-        # `trainer.save_model()`); users who want fast sharded intermediate checkpoints can opt in.
         fsdp_plugin_args["state_dict_type"] = self.fsdp_config.get("state_dict_type", "FULL_STATE_DICT")
 
         if fsdp_version == 2:
