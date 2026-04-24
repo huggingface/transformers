@@ -411,6 +411,9 @@ class Glm4vMoePreTrainedModel(PreTrainedModel):
     _supports_attention_backend = True
     _can_record_outputs = {}
     _keep_in_fp32_modules_strict = ["e_score_correction_bias"]
+    # GLM-4 MoE ships MTP weights at layer index `num_hidden_layers` — 46 for
+    # GLM-4.5-Air, 92 for the larger GLM-4.5 variant. Both are ignored when
+    # `num_nextn_predict_layers == 0` (the default).
     _keys_to_ignore_on_load_unexpected = [r"model\.layers\.92.*", r"model\.layers\.46.*"]
     input_modalities = ("text", "image", "video")
 

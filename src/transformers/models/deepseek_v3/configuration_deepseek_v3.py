@@ -31,6 +31,11 @@ class DeepseekV3Config(PreTrainedConfig):
     first_k_dense_replace (`int`, *optional*, defaults to 3):
         Number of dense layers in shallow layers(embed->dense->dense->...->dense->moe->moe...->lm_head).
                                                         \--k dense layers--/
+    num_nextn_predict_layers (`int`, *optional*, defaults to 0):
+        Number of Multi-Token Prediction (MTP) modules appended after the base
+        transformer. When `0`, the model behaves as a standard decoder. When `>0`,
+        each extra module predicts one additional future token at inference time
+        (speculative decoding via `generate(..., use_mtp=True)`).
     rope_interleave (`bool`, *optional*, defaults to `True`):
         Whether to interleave the rotary position embeddings.
 
@@ -88,6 +93,7 @@ class DeepseekV3Config(PreTrainedConfig):
     num_experts_per_tok: int | None = 8
     first_k_dense_replace: int | None = 3
     norm_topk_prob: bool | None = True
+    num_nextn_predict_layers: int = 0
     hidden_act: str = "silu"
     max_position_embeddings: int = 4096
     initializer_range: float = 0.02

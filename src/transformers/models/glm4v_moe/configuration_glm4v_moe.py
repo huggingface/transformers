@@ -33,6 +33,11 @@ class Glm4vMoeTextConfig(PreTrainedConfig):
     first_k_dense_replace (`int`, *optional*, defaults to 1):
         Number of dense layers in shallow layers(embed->dense->dense->...->dense->moe->moe...->lm_head).
                                                                 \--k dense layers--/
+    num_nextn_predict_layers (`int`, *optional*, defaults to 0):
+        Number of Multi-Token Prediction (MTP) modules appended after the base
+        transformer. When `0`, the model behaves as a standard decoder. When `>0`,
+        each extra module predicts one additional future token at inference time
+        (speculative decoding via `generate(..., use_mtp=True)`).
 
     Example:
 
@@ -94,6 +99,7 @@ class Glm4vMoeTextConfig(PreTrainedConfig):
     topk_group: int = 1
     first_k_dense_replace: int = 1
     norm_topk_prob: bool = True
+    num_nextn_predict_layers: int = 0
     bos_token_id: int | None = None
     eos_token_id: int | list[int] | None = None
     pad_token_id: int | None = None
