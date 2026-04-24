@@ -128,14 +128,7 @@ def _load_deepgemm_kernel():
         )
 
     # DeepGEMM requires CUDA runtime >= 12.3
-    try:
-        cuda_major, cuda_minor = get_cuda_runtime_version()
-    except OSError as e:
-        raise ImportError(
-            f"DeepGEMM requires CUDA runtime 12.3+, but libcudart could not be loaded ({e}). "
-            "Use a different `experts_implementation`."
-        ) from e
-
+    cuda_major, cuda_minor = get_cuda_runtime_version()
     if cuda_major < 12 or (cuda_major == 12 and cuda_minor < 3):
         raise ImportError(
             f"DeepGEMM requires CUDA runtime 12.3+, but found {cuda_major}.{cuda_minor}. "
