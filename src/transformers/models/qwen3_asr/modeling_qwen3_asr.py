@@ -30,6 +30,7 @@ from ... import initialization as init
 from ...activations import ACT2FN
 from ...cache_utils import Cache, EncoderDecoderCache
 from ...generation import GenerationMixin
+from ...masking_utils import create_bidirectional_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutputWithPooling, CausalLMOutputWithPast, TokenClassifierOutput
@@ -60,8 +61,6 @@ class Qwen3ASRPreTrainedModel(PreTrainedModel):
 
     def _init_weights(self, module):
         super()._init_weights(module)
-        # `SinusoidsPositionEmbedding.positional_embedding` is a non-persistent buffer, so
-        # `from_pretrained`'s meta-device init leaves it as zeros — recompute the sin/cos table here.
         if isinstance(module, SinusoidsPositionEmbedding):
             log_timescale_increment = np.log(module.max_timescale) / (module.channels // 2 - 1)
             inv_timescales = torch.exp(-log_timescale_increment * torch.arange(module.channels // 2).float())
@@ -388,40 +387,36 @@ class Qwen3ASREncoder(Qwen3ASRPreTrainedModel):
         chunk_len = self.n_window * 2
         num_chunks = padded_feature_length // chunk_len
 
-        # (B, M, N*L) -> (B*N, 1, M, L): per-chunk batch via reshape, no data-dependent split.
         chunked = (
             input_features.view(batch_size, num_mel_bins, num_chunks, chunk_len)
             .permute(0, 2, 1, 3)
             .reshape(batch_size * num_chunks, 1, num_mel_bins, chunk_len)
         )
 
-        padded_embed = F.gelu(self.conv2d1(chunked))
-        padded_embed = F.gelu(self.conv2d2(padded_embed))
-        padded_embed = F.gelu(self.conv2d3(padded_embed))
-        bn, c, f, t = padded_embed.size()
-        padded_embed = self.conv_out(padded_embed.permute(0, 3, 1, 2).contiguous().view(bn, t, c * f))
-        padded_embed = padded_embed + self.positional_embedding.positional_embedding[:t, :].to(padded_embed.dtype)
-        padded_embed = padded_embed.view(batch_size, num_chunks, t, -1)
+        conv_out = F.gelu(self.conv2d1(chunked))
+        conv_out = F.gelu(self.conv2d2(conv_out))
+        conv_out = F.gelu(self.conv2d3(conv_out))
+        total_chunks, conv_channels, freq_bins, time_steps = conv_out.size()
+        conv_out = self.conv_out(
+            conv_out.permute(0, 3, 1, 2).contiguous().view(total_chunks, time_steps, conv_channels * freq_bins)
+        )
+        conv_out = conv_out + self.positional_embedding.positional_embedding[:time_steps, :].to(conv_out.dtype)
+        chunk_embeds = conv_out.view(batch_size, num_chunks, time_steps, -1)
 
         # Mask out post-cnn positions that came from zero-padded mel frames.
         chunk_mel_lens = input_features_mask.view(batch_size, num_chunks, chunk_len).sum(dim=-1)
         chunk_post_cnn_lens = self._post_cnn_length(chunk_mel_lens)
-        post_cnn_positions = torch.arange(t, device=input_features.device)
-        mask_after_cnn = post_cnn_positions[None, None, :] < chunk_post_cnn_lens[:, :, None]
+        post_cnn_positions = torch.arange(time_steps, device=input_features.device)
+        valid_post_cnn_mask = post_cnn_positions[None, None, :] < chunk_post_cnn_lens[:, :, None]
+        sequence_length = num_chunks * time_steps
+        hidden_states = chunk_embeds.reshape(batch_size, sequence_length, -1)
+        sequence_mask = valid_post_cnn_mask.reshape(batch_size, sequence_length).to(dtype=torch.long)
 
-        # Keep a padded per-sample sequence and pass an explicit attention mask so the encoder remains
-        # torch.compile-friendly without changing sequence length.
-        sequence_length = num_chunks * t
-        sequence_hidden_states = padded_embed.reshape(batch_size, sequence_length, -1)
-        sequence_mask = mask_after_cnn.reshape(batch_size, sequence_length).to(dtype=torch.long)
-
-        hidden_states = sequence_hidden_states
-        if is_flash_attention_requested(self.config):
-            attention_mask = sequence_mask
-        elif self.config._attn_implementation == "sdpa":
-            attention_mask = None
-        else:
-            attention_mask = self.invert_attention_mask(sequence_mask)
+        attention_mask = create_bidirectional_mask(
+            config=self.config,
+            inputs_embeds=hidden_states,
+            attention_mask=sequence_mask,
+        )
 
         for encoder_layer in self.layers:
             hidden_states = encoder_layer(hidden_states, attention_mask=attention_mask, **kwargs)
@@ -506,7 +501,7 @@ class Qwen3ASRModel(Qwen3ASRPreTrainedModel):
 
     @can_return_tuple
     @auto_docstring(
-        custom_intro="This method is used to get the audio embeddings from input features (a log mel spectrogram), meaning inferring the audio encoder."
+        custom_intro="This method is used to get the audio embeddings from input features (a log mel spectrogram)."
     )
     def get_audio_features(
         self,
@@ -515,8 +510,8 @@ class Qwen3ASRModel(Qwen3ASRPreTrainedModel):
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
         r"""
-        input_features_mask (`torch.Tensor` of shape `(batch_size, feature_sequence_length)`):
-            Mask to avoid performing attention on padded feature indices.
+        input_features_mask (`torch.LongTensor` of shape `(batch_size, padded_feature_length)`):
+            1 for valid mel frames and 0 for padding.
         """
         audio_output = self.audio_tower(
             input_features=input_features,
@@ -547,10 +542,8 @@ class Qwen3ASRModel(Qwen3ASRPreTrainedModel):
         **kwargs: Unpack[TransformersKwargs],
     ):
         r"""
-        input_features_mask (`torch.Tensor` of shape `(batch_size, feature_sequence_length)`, *optional*):
-            Mask to avoid performing attention on padding feature indices. Mask values selected in `[0, 1]`:
-            - 1 for tokens that are **not masked**,
-            - 0 for tokens that are **masked**.
+        input_features_mask (`torch.LongTensor` of shape `(batch_size, padded_feature_length)`):
+            1 for valid mel frames and 0 for padding.
         """
 
         if inputs_embeds is None:
