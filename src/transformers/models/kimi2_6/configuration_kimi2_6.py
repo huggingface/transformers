@@ -30,14 +30,8 @@ class Kimi2_6VisionConfig(PreTrainedConfig):
         Initial position embedding width.
     pos_emb_time (`int`, *optional*):
         Initial position embedding time dimension.
-    pos_emb_type (`str`, *optional*):
-        Type of position embedding.
     merge_kernel_size (`tuple[int] | list[int]`, *optional*):
         Kernel size for patch merging.
-    video_attn_type (`str`, *optional*):
-        Type of video attention.
-    merge_type (`str`, *optional*):
-        Type of merge operation.
     """
 
     model_type = "kimi2_6_vision"

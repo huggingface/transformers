@@ -19,7 +19,6 @@
 """Image processor class for Qwen2-VL."""
 
 import math
-from collections.abc import Iterable
 
 import torch
 from torchvision.transforms.v2 import functional as tvF
@@ -121,21 +120,6 @@ class Qwen2VLImageProcessor(TorchvisionBackend):
             raise ValueError("size must contain 'shortest_edge' and 'longest_edge' keys.")
 
         super().__init__(size=size, **kwargs)
-
-    def _standardize_kwargs(
-        self,
-        size: int | Iterable[int] | dict[str, int] | SizeDict | None = None,
-        min_pixels: int | None = None,
-        max_pixels: int | None = None,
-        **kwargs,
-    ) -> dict:
-        if min_pixels is not None and max_pixels is not None:
-            size = SizeDict(shortest_edge=min_pixels, longest_edge=max_pixels)
-        kwargs = super()._standardize_kwargs(size=size, **kwargs)
-        size = kwargs.get("size", self.size)
-        if not size.shortest_edge or not size.longest_edge:
-            raise ValueError("size must contain 'shortest_edge' and 'longest_edge' keys.")
-        return kwargs
 
     @auto_docstring
     def preprocess(

@@ -40,7 +40,7 @@ from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, torch
 from ...utils.generic import is_flash_attention_requested, maybe_autocast, merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
 from ..auto import AutoModel
-from .configuration_kimi2_6 import Kimi2_6VisionConfig, Kimi26Config, Kimi26VisionConfig
+from .configuration_kimi2_6 import Kimi2_6Config, Kimi2_6VisionConfig, Kimi26Config, Kimi26VisionConfig
 
 
 @dataclass
@@ -191,7 +191,7 @@ class Kimi2_6VisionRotaryEmbeddings(nn.Module):
 
     @staticmethod
     def compute_default_rope_parameters(
-        config: Qwen2VLConfig | None = None,
+        config: Kimi2_6VisionConfig | None = None,
         device: Optional["torch.device"] = None,
         seq_len: int | None = None,
     ) -> tuple["torch.Tensor", float]:
@@ -485,7 +485,6 @@ class Kimi2_6VisionEncoderLayer(GradientCheckpointingLayer):
         super().__init__()
         self.norm1 = LayerNorm(config.embed_dim, eps=1e-6)
         self.norm2 = LayerNorm(config.embed_dim, eps=1e-6)
-        mlp_hidden_dim = int(config.embed_dim * config.mlp_ratio)
 
         self.attn = VisionAttention(config=config)
         self.mlp = Kimi2_6VisionMLP(config.intermediate_size, config.hidden_dim, config.hidden_act)
@@ -631,7 +630,7 @@ class Kimi2_6MultimodalProjection(nn.Module):
 
 
 class Kimi2_6Model(Kimi2_6PreTrainedModel):
-    def __init__(self, config: Qwen2VLConfig):
+    def __init__(self, config: Kimi2_6Config):
         super().__init__(config)
         self.vision_tower = Kimi2_6VisionModel._from_config(config.vision_config)
         self.language_model = AutoModel.from_config(config.text_config)
@@ -997,7 +996,7 @@ class Kimi2_6ForConditionalGeneration(Kimi26PreTrainedModel, GenerationMixin):
         image_grid_thw: torch.LongTensor | None = None,
         logits_to_keep: int | torch.Tensor = 0,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | Qwen2VLCausalLMOutputWithPast:
+    ) -> tuple | Kimi2_6CausalLMOutputWithPast:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,

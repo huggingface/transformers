@@ -25,7 +25,7 @@ from ...configuration_utils import PreTrainedConfig
 from ...modeling_outputs import BaseModelOutputWithPooling
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import PreTrainedModel
-from ...processing_utils import Unpack
+from ...processing_utils import ProcessorMixin, Unpack
 from ...utils import (
     TransformersKwargs,
     auto_docstring,
@@ -36,14 +36,13 @@ from ...utils.generic import maybe_autocast
 from ...utils.output_capturing import capture_outputs
 from ..auto import CONFIG_MAPPING, AutoConfig, AutoModel
 from ..llava.modeling_llava import LlavaCausalLMOutputWithPast, LlavaForConditionalGeneration, LlavaModelOutputWithPast
-from ..qwen2_vl.configuration_qwen2_vl import Qwen2VLConfig
 from ..qwen2_vl.modeling_qwen2_vl import (
-    Qwen2VLCausalLMOutputWithPast,
     Qwen2VLPreTrainedModel,
     Qwen2VLVisionBlock,
     VisionAttention,
     VisionMlp,
 )
+from ..qwen2_vl.processing_qwen2_vl import Qwen2VLProcessor
 
 
 class Kimi2_6VisionConfig(PreTrainedConfig):
@@ -54,14 +53,8 @@ class Kimi2_6VisionConfig(PreTrainedConfig):
         Initial position embedding width.
     pos_emb_time (`int`, *optional*):
         Initial position embedding time dimension.
-    pos_emb_type (`str`, *optional*):
-        Type of position embedding.
     merge_kernel_size (`tuple[int] | list[int]`, *optional*):
         Kernel size for patch merging.
-    video_attn_type (`str`, *optional*):
-        Type of video attention.
-    merge_type (`str`, *optional*):
-        Type of merge operation.
     """
 
     model_type = "kimi2_6_vision"
@@ -216,7 +209,7 @@ class Kimi2_6VisionRotaryEmbeddings(nn.Module):
 
     @staticmethod
     def compute_default_rope_parameters(
-        config: Qwen2VLConfig | None = None,
+        config: Kimi2_6VisionConfig | None = None,
         device: Optional["torch.device"] = None,
         seq_len: int | None = None,
     ) -> tuple["torch.Tensor", float]:
@@ -395,7 +388,7 @@ class Kimi2_6MultimodalProjection(nn.Module):
 
 
 class Kimi2_6Model(Kimi2_6PreTrainedModel):
-    def __init__(self, config: Qwen2VLConfig):
+    def __init__(self, config: Kimi2_6Config):
         super().__init__(config)
         self.vision_tower = Kimi2_6VisionModel._from_config(config.vision_config)
         self.language_model = AutoModel.from_config(config.text_config)
@@ -529,7 +522,7 @@ class Kimi2_6ForConditionalGeneration(LlavaForConditionalGeneration):
         image_grid_thw: torch.LongTensor | None = None,
         logits_to_keep: int | torch.Tensor = 0,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | Qwen2VLCausalLMOutputWithPast:
+    ) -> tuple | Kimi2_6CausalLMOutputWithPast:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
@@ -605,6 +598,19 @@ class Kimi2_6ForConditionalGeneration(LlavaForConditionalGeneration):
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
+
+
+class Kimi2_6Processor(Qwen2VLProcessor):
+    def __init__(
+        self,
+        image_processor=None,
+        tokenizer=None,
+        chat_template=None,
+        **kwargs,
+    ):
+        ProcessorMixin().__init__(image_processor, tokenizer, chat_template=chat_template)
+        self.image_token = tokenizer.image_token
+        self.image_token_id = tokenizer.image_token_id
 
 
 __all__ = [
