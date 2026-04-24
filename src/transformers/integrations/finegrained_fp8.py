@@ -101,7 +101,7 @@ _DEEPGEMM_M_ALIGNMENT = 128
 @functools.cache
 def _load_deepgemm_kernel():
     """
-    Load deep-gemm once and return its required symbols.
+    Load DeepGEMM once and return its required symbols.
 
     Raises:
         ImportError if CUDA/hardware requirements are not met, or the kernel or
@@ -109,36 +109,36 @@ def _load_deepgemm_kernel():
 
     Returns:
         Tuple of (deepgemm_fp8_matmul, deepgemm_grouped_fp8_matmul, deepgemm_per_token_cast_to_fp8)
-        from the deep-gemm kernel.
+        from the DeepGEMM kernel.
     """
     if not is_kernels_available():
-        raise ImportError("deep-gemm kernel requires the `kernels` package. Install it with `pip install -U kernels`.")
+        raise ImportError("DeepGEMM kernel requires the `kernels` package. Install it with `pip install -U kernels`.")
 
     if not torch.cuda.is_available():
         raise ImportError(
-            "deep-gemm kernel requires CUDA, but CUDA is not available. Use a different `experts_implementation`."
+            "DeepGEMM kernel requires CUDA, but CUDA is not available. Use a different `experts_implementation`."
         )
 
-    # deep-gemm requires Hopper (SM90) or newer for FP8 WGMMA instructions
+    # DeepGEMM requires Hopper (SM90) or newer for FP8 WGMMA instructions
     major = torch.cuda.get_device_capability()[0]
     if major < 9:
         raise ImportError(
-            f"deep-gemm requires a Hopper (SM90+) or newer GPU, but the current device "
+            f"DeepGEMM requires a Hopper (SM90+) or newer GPU, but the current device "
             f"has compute capability {major}.x. Use a different `experts_implementation`."
         )
 
-    # deep-gemm requires CUDA runtime >= 12.3
+    # DeepGEMM requires CUDA runtime >= 12.3
     cuda_major, cuda_minor = get_cuda_runtime_version()
     if cuda_major < 12 or (cuda_major == 12 and cuda_minor < 3):
         raise ImportError(
-            f"deep-gemm requires CUDA runtime 12.3+, but found {cuda_major}.{cuda_minor}. "
+            f"DeepGEMM requires CUDA runtime 12.3+, but found {cuda_major}.{cuda_minor}. "
             "Please upgrade your CUDA toolkit or use a different `experts_implementation`."
         )
 
-    kernel = lazy_load_kernel("deep-gemm")
+    kernel = lazy_load_kernel("DeepGEMM")
     if kernel is None:
         raise ImportError(
-            "Failed to load the deep-gemm kernel — check that `kernels-community/deep-gemm` "
+            "Failed to load the DeepGEMM kernel — check that `kernels-community/deep-gemm` "
             "has a build matching the current torch/CUDA."
         )
 
@@ -157,95 +157,11 @@ def _load_deepgemm_kernel():
     ]
     if missing:
         raise ImportError(
-            f"deep-gemm kernel is missing required symbols: {', '.join(missing)}. "
+            f"DeepGEMM kernel is missing required symbols: {', '.join(missing)}. "
             "Please update the `kernels` package (`pip install -U kernels`)."
         )
 
     return deepgemm_fp8_matmul, deepgemm_grouped_fp8_matmul, deepgemm_per_token_cast_to_fp8
-
-
-def fp8_deepgemm_matmul(
-    A: torch.Tensor,
-    B: torch.Tensor,
-    As: torch.Tensor,
-    Bs: torch.Tensor,
-    output_dtype: torch.dtype = torch.float32,
-) -> torch.Tensor:
-    """
-    FP8 dense matmul via deep-gemm's `fp8_gemm_nt`. Block-wise 128x128 scales expected.
-
-    Args:
-        A:  (M, K) float8_e4m3fn — quantized activations
-        B:  (N, K) float8_e4m3fn — quantized weights
-        As: (M, K//128) float32 — per-block activation scales
-        Bs: (N//128, K//128) float32 — per-block weight scales
-        output_dtype: desired output dtype.
-    """
-    deepgemm_fp8_matmul, _, _ = _load_deepgemm_kernel()
-    A_2d = A.view(-1, A.shape[-1])
-    As_2d = As.view(-1, As.shape[-1])
-    output = torch.empty(A_2d.shape[0], B.shape[0], device=A.device, dtype=output_dtype)
-    deepgemm_fp8_matmul((A_2d, As_2d.float()), (B, Bs.float()), output)
-    return output.view(A.shape[:-1] + (B.shape[0],))
-
-
-def _build_deepgemm_contiguous_layout(
-    expert_ids_sorted: torch.Tensor, num_experts: int, alignment: int, use_psum_layout: bool
-) -> tuple:
-    """Build the TMA-aligned layout deep-gemm's grouped GEMM expects.
-
-    Returns `(sorted_to_padded, grouped_layout, total_padded_rows)`. `grouped_layout` encodes
-    expert boundaries as a cumsum of aligned counts on Blackwell (`use_psum_layout=True`) or
-    per-row expert ids with -1 for padding on Hopper.
-
-    Accepts EP sentinels: values in `expert_ids_sorted` equal to `num_experts` (unclamped sentinels)
-    are routed past the last aligned expert block and marked `-1` in the Hopper layout (and
-    excluded from the Blackwell cumsum), so deep-gemm skips them.
-    """
-    device = expert_ids_sorted.device
-    num_tokens = expert_ids_sorted.size(0)
-    # histc drops values > max, so EP sentinels (== num_experts) are excluded from the per-expert count.
-    tokens_per_expert = torch.histc(expert_ids_sorted.int(), bins=num_experts, min=0, max=num_experts - 1).long()
-    aligned_tokens_per_expert = ((tokens_per_expert + alignment - 1) // alignment) * alignment
-    # Upper bound avoids GPU->CPU sync; padding rows are skipped by deep-gemm.
-    total_padded_rows = num_tokens + min(num_tokens, num_experts) * (alignment - 1)
-
-    # Zero-prepended inclusive cumsum of per-expert padding. Indices [0, num_experts) give the
-    # exclusive cumsum (padding before expert i) and index `num_experts` gives `sum(padding)`,
-    # which routes EP sentinels past all valid aligned expert blocks on Blackwell (where the
-    # kernel stops at `aligned_cumsum[-1]`) — so sentinels don't go through the GEMM.
-    padding_per_expert = aligned_tokens_per_expert - tokens_per_expert
-    cumulative_padding = torch.nn.functional.pad(padding_per_expert.cumsum(0), (1, 0))
-    sorted_to_padded = torch.arange(num_tokens, device=device) + cumulative_padding[expert_ids_sorted]
-
-    if use_psum_layout:  # Blackwell (SM100+)
-        # psum layout: cumsum of *aligned* per-expert counts — sentinels sit at positions >=
-        # `grouped_layout[-1]` (by construction of `cumulative_padding`), so the scheduler
-        # stops before them. The kernel's `num_m_blocks = ceil_div(layout[i] - align(layout[i-1], 128), BLOCK_M)`
-        # between experts only matches the padded tensor when the stored cumsum is over aligned counts.
-        grouped_layout = aligned_tokens_per_expert.cumsum(0).int()
-    else:
-        # Hopper: per-row expert id, -1 for padding rows and for sentinel slots (kernel skips -1).
-        grouped_layout = torch.full((total_padded_rows,), -1, device=device, dtype=torch.int32)
-        grouped_layout[sorted_to_padded] = torch.where(expert_ids_sorted < num_experts, expert_ids_sorted.int(), -1)
-
-    return sorted_to_padded, grouped_layout, total_padded_rows
-
-
-def _pad_for_deepgemm(x: torch.Tensor, sorted_to_padded: torch.Tensor, total_padded_rows: int) -> torch.Tensor:
-    """Pad a sorted tensor into the TMA-aligned contiguous layout.
-
-    Padding rows are left uninitialized — the kernel skips them via `grouped_layout=-1` (Hopper)
-    or via the psum offsets (Blackwell), so their values never enter the computation.
-    """
-    padded = torch.empty(total_padded_rows, *x.shape[1:], device=x.device, dtype=x.dtype)
-    padded[sorted_to_padded] = x
-    return padded
-
-
-def _unpad_from_deepgemm_contiguous_layout(x_padded: torch.Tensor, sorted_to_padded: torch.Tensor) -> torch.Tensor:
-    """Remove padding rows from the TMA-aligned contiguous layout."""
-    return x_padded[sorted_to_padded]
 
 
 def _cdiv(a: int, b: int) -> int:
@@ -425,7 +341,6 @@ def fp8_batched_mm_experts_forward(
     )  # (S, hidden_dim)
 
     # Apply routing weights
-    # Let torch promote bf16 `proj_out` × fp32 `sample_weights` to fp32 for the reduction below.
     weighted_out = proj_out * sample_weights.unsqueeze(-1)  # (S, hidden_dim)
 
     # Accumulate results using deterministic reshape+sum instead of index_add_
@@ -517,6 +432,90 @@ def fp8_grouped_mm_experts_forward(
     return final_hidden_states.to(hidden_states.dtype)
 
 
+def fp8_deepgemm_matmul(
+    A: torch.Tensor,
+    B: torch.Tensor,
+    As: torch.Tensor,
+    Bs: torch.Tensor,
+    output_dtype: torch.dtype = torch.float32,
+) -> torch.Tensor:
+    """
+    FP8 dense matmul via DeepGEMM's `fp8_gemm_nt`. Block-wise 128x128 scales expected.
+
+    Args:
+        A:  (M, K) float8_e4m3fn — quantized activations
+        B:  (N, K) float8_e4m3fn — quantized weights
+        As: (M, K//128) float32 — per-block activation scales
+        Bs: (N//128, K//128) float32 — per-block weight scales
+        output_dtype: desired output dtype.
+    """
+    deepgemm_fp8_matmul, _, _ = _load_deepgemm_kernel()
+    A_2d = A.view(-1, A.shape[-1])
+    As_2d = As.view(-1, As.shape[-1])
+    output = torch.empty(A_2d.shape[0], B.shape[0], device=A.device, dtype=output_dtype)
+    deepgemm_fp8_matmul((A_2d, As_2d.float()), (B, Bs.float()), output)
+    return output.view(A.shape[:-1] + (B.shape[0],))
+
+
+def _build_deepgemm_contiguous_layout(
+    expert_ids_sorted: torch.Tensor, num_experts: int, alignment: int, use_psum_layout: bool
+) -> tuple:
+    """Build the TMA-aligned layout DeepGEMM's grouped GEMM expects.
+
+    Returns `(sorted_to_padded, grouped_layout, total_padded_rows)`. `grouped_layout` encodes
+    expert boundaries as a cumsum of aligned counts on Blackwell (`use_psum_layout=True`) or
+    per-row expert ids with -1 for padding on Hopper.
+
+    Accepts EP sentinels: values in `expert_ids_sorted` equal to `num_experts` (unclamped sentinels)
+    are routed past the last aligned expert block and marked `-1` in the Hopper layout (and
+    excluded from the Blackwell cumsum), so DeepGEMM skips them.
+    """
+    device = expert_ids_sorted.device
+    num_tokens = expert_ids_sorted.size(0)
+    # histc drops values > max, so EP sentinels (== num_experts) are excluded from the per-expert count.
+    tokens_per_expert = torch.histc(expert_ids_sorted.int(), bins=num_experts, min=0, max=num_experts - 1).long()
+    aligned_tokens_per_expert = ((tokens_per_expert + alignment - 1) // alignment) * alignment
+    # Upper bound avoids GPU->CPU sync; padding rows are skipped by DeepGEMM.
+    total_padded_rows = num_tokens + min(num_tokens, num_experts) * (alignment - 1)
+
+    # Zero-prepended inclusive cumsum of per-expert padding. Indices [0, num_experts) give the
+    # exclusive cumsum (padding before expert i) and index `num_experts` gives `sum(padding)`,
+    # which routes EP sentinels past all valid aligned expert blocks on Blackwell (where the
+    # kernel stops at `aligned_cumsum[-1]`) — so sentinels don't go through the GEMM.
+    padding_per_expert = aligned_tokens_per_expert - tokens_per_expert
+    cumulative_padding = torch.nn.functional.pad(padding_per_expert.cumsum(0), (1, 0))
+    sorted_to_padded = torch.arange(num_tokens, device=device) + cumulative_padding[expert_ids_sorted]
+
+    if use_psum_layout:  # Blackwell (SM100+)
+        # psum layout: cumsum of *aligned* per-expert counts — sentinels sit at positions >=
+        # `grouped_layout[-1]` (by construction of `cumulative_padding`), so the scheduler
+        # stops before them. The kernel's `num_m_blocks = ceil_div(layout[i] - align(layout[i-1], 128), BLOCK_M)`
+        # between experts only matches the padded tensor when the stored cumsum is over aligned counts.
+        grouped_layout = aligned_tokens_per_expert.cumsum(0).int()
+    else:
+        # Hopper: per-row expert id, -1 for padding rows and for sentinel slots (kernel skips -1).
+        grouped_layout = torch.full((total_padded_rows,), -1, device=device, dtype=torch.int32)
+        grouped_layout[sorted_to_padded] = torch.where(expert_ids_sorted < num_experts, expert_ids_sorted.int(), -1)
+
+    return sorted_to_padded, grouped_layout, total_padded_rows
+
+
+def _pad_for_deepgemm(x: torch.Tensor, sorted_to_padded: torch.Tensor, total_padded_rows: int) -> torch.Tensor:
+    """Pad a sorted tensor into the TMA-aligned contiguous layout.
+
+    Padding rows are left uninitialized — the kernel skips them via `grouped_layout=-1` (Hopper)
+    or via the psum offsets (Blackwell), so their values never enter the computation.
+    """
+    padded = torch.empty(total_padded_rows, *x.shape[1:], device=x.device, dtype=x.dtype)
+    padded[sorted_to_padded] = x
+    return padded
+
+
+def _unpad_from_deepgemm_contiguous_layout(x_padded: torch.Tensor, sorted_to_padded: torch.Tensor) -> torch.Tensor:
+    """Remove padding rows from the TMA-aligned contiguous layout."""
+    return x_padded[sorted_to_padded]
+
+
 def fp8_deepgemm_experts_forward(
     self: torch.nn.Module,
     hidden_states: torch.Tensor,
@@ -530,11 +529,11 @@ def fp8_deepgemm_experts_forward(
         )
     if self.block_size is None:
         raise ValueError(
-            "deep-gemm requires block-wise quantization (block_size=[128, 128]), "
+            "DeepGEMM requires block-wise quantization (block_size=[128, 128]), "
             "but got per-tensor quantization (block_size=None)."
         )
     if self.block_size[0] != 128 or self.block_size[1] != 128:
-        raise ValueError(f"deep-gemm requires block_size=(128, 128), got {self.block_size}")
+        raise ValueError(f"DeepGEMM requires block_size=(128, 128), got {self.block_size}")
 
     _, deepgemm_grouped_fp8_matmul, deepgemm_per_token_cast_to_fp8 = _load_deepgemm_kernel()
 
@@ -549,7 +548,7 @@ def fp8_deepgemm_experts_forward(
 
     # EP sentinel handling: leave `expert_ids` unclamped so the sort pushes sentinels to the tail,
     # `_build_deepgemm_contiguous_layout` marks their positions as skipped (-1 on Hopper, beyond the
-    # cumsum on Blackwell), and deep-gemm skips them — so sentinels cost no real GEMM compute. Their
+    # cumsum on Blackwell), and DeepGEMM skips them — so sentinels cost no real GEMM compute. Their
     # routing weights are already zero (RouterParallel masks them at dispatch) so the weighted mul
     # contributes nothing.
     # Sort by expert for grouped processing
@@ -562,7 +561,7 @@ def fp8_deepgemm_experts_forward(
         expert_ids_g, self.num_experts, alignment=_DEEPGEMM_M_ALIGNMENT, use_psum_layout=use_psum_layout
     )
 
-    # --- Up projection per expert (deep-gemm grouped contiguous) ---
+    # --- Up projection per expert (DeepGEMM grouped contiguous) ---
     w_up = self.gate_up_proj if self.has_gate else self.up_proj
     ws_up = self.gate_up_proj_scale_inv if self.has_gate else self.up_proj_scale_inv
     act_fp8, act_scales = deepgemm_per_token_cast_to_fp8(selected_hidden_states_g, use_ue8m0=False)
@@ -579,7 +578,7 @@ def fp8_deepgemm_experts_forward(
     else:
         proj_out = self.act_fn(proj_out)
 
-    # --- Down projection per expert (deep-gemm grouped contiguous) ---
+    # --- Down projection per expert (DeepGEMM grouped contiguous) ---
     proj_fp8, proj_scales = deepgemm_per_token_cast_to_fp8(proj_out, use_ue8m0=False)
     # Zero-init: unpad later reads sentinel-row positions the kernel never writes.
     proj_out = torch.zeros(total_padded_rows, hidden_dim, device=device, dtype=torch.bfloat16)
