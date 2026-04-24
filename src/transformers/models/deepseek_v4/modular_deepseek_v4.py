@@ -463,17 +463,12 @@ class DeepseekV4Compressor(nn.Module):
             kv, gate, layer_idx, "compressor_state", self.compress_ratio, start_pos
         )
         new_pooled = self.kv_norm(_pool_windows(ready_kv, ready_gate, self.ape, self.compress_ratio, self.head_dim))
-        if new_pooled.shape[1] > 0:
-            positions = _rope_pool_positions(
-                new_pooled.shape[1], pool_base, self.compress_ratio, new_pooled.device, batch
-            )
-            cos, sin = rotary(new_pooled, positions)
-            new_pooled = _apply_partial_rope(new_pooled.unsqueeze(1), cos, sin, self.rope_head_dim).squeeze(1)
-        pooled = cache.update_pool(new_pooled, layer_idx, "compressor_state")
+        positions = _rope_pool_positions(new_pooled.shape[1], pool_base, self.compress_ratio, new_pooled.device, batch)
+        cos, sin = rotary(new_pooled, positions)
+        new_pooled = _apply_partial_rope(new_pooled.unsqueeze(1), cos, sin, self.rope_head_dim).squeeze(1)
+        pooled = cache.update_pool(new_pooled, layer_idx, "compressor_state").unsqueeze(1)
 
-        # Shape to [B, 1, N, head_dim] (single KV head, broadcast to query heads downstream).
-        pooled = pooled.unsqueeze(1)
-        if self.indexer is not None and pooled.shape[2] > 0:
+        if self.indexer is not None:
             topk = self.indexer(hidden_states, q_residual, rotary, position_embeddings, cache, layer_idx, start_pos)
             expanded = pooled.unsqueeze(2).expand(-1, -1, seq_len, -1, -1)
             idx = topk.unsqueeze(1).unsqueeze(-1).expand(-1, 1, -1, -1, self.head_dim)
