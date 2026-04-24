@@ -236,10 +236,11 @@ def get_cuda_runtime_version() -> tuple[int, int]:
             return 0, 0
         import torch
 
-        if getattr(torch.version, "cuda", None) is None:
+        cuda_version = getattr(torch.version, "cuda", None)
+        if cuda_version is None:
             return 0, 0
 
-        major, minor, *_ = torch.version.cuda.split(".")
+        major, minor, *_ = cuda_version.split(".")
         return int(major), int(minor)
 
     version = ctypes.c_int()
