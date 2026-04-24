@@ -216,7 +216,7 @@
     - local: ddp
       title: DDP
     - local: fsdp
-      title: FSDP
+      title: FSDP2
     - local: deepspeed
       title: DeepSpeed ZeRO
     - local: deepspeed_alst
