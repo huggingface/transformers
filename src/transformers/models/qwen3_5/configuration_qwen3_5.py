@@ -100,6 +100,8 @@ class Qwen3_5TextConfig(PreTrainedConfig):
     eos_token_id: int | list[int] | None = None
     base_config_key = "text_config"
     ignore_keys_at_rope_validation = {"mrope_section", "mrope_interleaved"}
+    mtp_num_hidden_layers: int = 0
+    mtp_loss_weight: float = 0.0
 
     def __post_init__(self, **kwargs):
         kwargs.setdefault("partial_rotary_factor", 0.25)  # assign default for BC
@@ -171,6 +173,8 @@ class Qwen3_5Config(PreTrainedConfig):
     vision_start_token_id: int = 248053
     vision_end_token_id: int = 248054
     tie_word_embeddings: bool = False
+    mtp_num_hidden_layers: int = 0
+    mtp_loss_weight: float = 0.0
 
     def __post_init__(self, **kwargs):
         if isinstance(self.vision_config, dict):

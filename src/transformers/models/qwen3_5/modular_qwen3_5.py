@@ -13,6 +13,7 @@
 # limitations under the License.
 """PyTorch Qwen3.5 model."""
 
+import copy
 from typing import Optional
 
 import torch
@@ -24,7 +25,7 @@ from ... import initialization as init
 from ...cache_utils import Cache, DynamicCache
 from ...masking_utils import create_causal_mask
 from ...modeling_layers import GenericForSequenceClassification, GradientCheckpointingLayer
-from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPooling
+from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPooling, CausalLMOutputWithPast
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
@@ -50,6 +51,7 @@ from ..qwen3_vl.modeling_qwen3_vl import (
     Qwen3VLVisionModel,
     Qwen3VLVisionRotaryEmbedding,
 )
+from ..qwen3_vl.modular_qwen3_vl import Qwen3VLCausalLMOutputWithPast
 
 
 logger = logging.get_logger(__name__)
@@ -105,6 +107,8 @@ class Qwen3_5TextConfig(Qwen3NextConfig):
     intermediate_size: int = 12288
     num_hidden_layers: int = 32
     num_key_value_heads: int = 4
+    mtp_num_hidden_layers: int = 0
+    mtp_loss_weight: float = 0.0
 
     decoder_sparse_step = AttributeError()
     norm_topk_prob = AttributeError()
@@ -157,6 +161,8 @@ class Qwen3_5Config(Qwen3VLConfig):
     video_token_id: int = 248057
     vision_start_token_id: int = 248053
     vision_end_token_id: int = 248054
+    mtp_num_hidden_layers: int = 0
+    mtp_loss_weight: float = 0.0
 
 
 class Qwen3_5VisionRotaryEmbedding(Qwen3VLVisionRotaryEmbedding):
@@ -330,6 +336,163 @@ class Qwen3_5MLP(Qwen3NextMLP):
 
 class Qwen3_5RMSNorm(Qwen3NextRMSNorm):
     pass
+
+
+class Qwen3_5MTPLayer(nn.Module):
+    def __init__(self, config: Qwen3_5TextConfig, layer_idx: int):
+        super().__init__()
+        mtp_config = copy.copy(config)
+        mtp_layer_types = list(getattr(config, "layer_types", ["full_attention"] * config.num_hidden_layers))
+        while len(mtp_layer_types) <= layer_idx:
+            mtp_layer_types.append("full_attention")
+        mtp_layer_types[layer_idx] = "full_attention"
+        mtp_config.layer_types = mtp_layer_types
+
+        self.input_layernorm = Qwen3_5RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.self_attn = Qwen3_5Attention(mtp_config, layer_idx=layer_idx)
+        self.post_attention_layernorm = Qwen3_5RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.mlp = Qwen3_5MLP(mtp_config, config.intermediate_size)
+
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        position_embeddings: tuple[torch.Tensor, torch.Tensor],
+        attention_mask: torch.Tensor | None = None,
+        position_ids: torch.LongTensor | None = None,
+        **kwargs,
+    ) -> torch.Tensor:
+        residual = hidden_states
+        hidden_states = self.input_layernorm(hidden_states)
+        attn_out, _ = self.self_attn(
+            hidden_states=hidden_states,
+            attention_mask=attention_mask,
+            position_ids=position_ids,
+            position_embeddings=position_embeddings,
+            **kwargs,
+        )
+        hidden_states = residual + attn_out
+
+        residual = hidden_states
+        hidden_states = self.post_attention_layernorm(hidden_states)
+        hidden_states = self.mlp(hidden_states)
+        hidden_states = residual + hidden_states
+        return hidden_states
+
+
+class Qwen3_5MTP(nn.Module):
+    def __init__(self, config):
+        super().__init__()
+        text_config = getattr(config, "text_config", config)
+
+        self.pre_fc_norm_hidden = Qwen3_5RMSNorm(text_config.hidden_size, eps=text_config.rms_norm_eps)
+        self.pre_fc_norm_embedding = Qwen3_5RMSNorm(text_config.hidden_size, eps=text_config.rms_norm_eps)
+        self.fc = nn.Linear(text_config.hidden_size * 2, text_config.hidden_size, bias=False)
+
+        mtp_num_layers = getattr(config, "mtp_num_hidden_layers", 1)
+
+        self.layers = nn.ModuleList(
+            [
+                Qwen3_5MTPLayer(text_config, layer_idx=text_config.num_hidden_layers + i)
+                for i in range(mtp_num_layers)
+            ]
+        )
+        self.norm = Qwen3_5RMSNorm(text_config.hidden_size, eps=text_config.rms_norm_eps)
+
+    def forward(
+        self,
+        input_embeds: torch.Tensor,
+        hidden_states: torch.Tensor,
+        position_embeddings: tuple[torch.Tensor, torch.Tensor],
+        attention_mask: torch.Tensor | None = None,
+        position_ids: torch.LongTensor | None = None,
+        **kwargs,
+    ) -> torch.Tensor:
+        emb = self.pre_fc_norm_embedding(input_embeds)
+        h = self.pre_fc_norm_hidden(hidden_states)
+        fused = self.fc(torch.cat([emb, h], dim=-1))
+
+        for layer in self.layers:
+            fused = layer(
+                hidden_states=fused,
+                position_embeddings=position_embeddings,
+                attention_mask=attention_mask,
+                position_ids=position_ids,
+                **kwargs,
+            )
+
+        return self.norm(fused)
+
+
+def _compute_qwen35_mtp_loss(
+    mtp: Qwen3_5MTP,
+    embed_tokens: nn.Embedding,
+    rotary_emb: Qwen3_5TextRotaryEmbedding,
+    lm_head: nn.Linear,
+    loss_function,
+    input_ids: torch.LongTensor,
+    main_hidden_states: torch.Tensor,
+    labels: torch.LongTensor,
+    vocab_size: int,
+    pad_token_id: int,
+    attention_mask: torch.Tensor | None = None,
+    position_ids: torch.LongTensor | None = None,
+) -> torch.Tensor:
+    inputs_embeds_for_pos = embed_tokens(input_ids)
+
+    if position_ids is None:
+        pos = torch.arange(inputs_embeds_for_pos.shape[1], device=inputs_embeds_for_pos.device)
+        pos = pos.view(1, 1, -1).expand(4, inputs_embeds_for_pos.shape[0], -1)
+    elif position_ids.ndim == 2:
+        pos = position_ids[None, ...].expand(4, position_ids.shape[0], -1)
+    else:
+        pos = position_ids
+
+    if pos.ndim == 3 and pos.shape[0] == 4:
+        text_position_ids = pos[0]
+        mrope_position_ids = pos[1:]
+    else:
+        text_position_ids = None
+        mrope_position_ids = pos
+
+    position_embeddings = rotary_emb(inputs_embeds_for_pos, mrope_position_ids)
+
+    total_mtp_loss = torch.tensor(0.0, device=main_hidden_states.device, dtype=main_hidden_states.dtype)
+    current_hidden = main_hidden_states
+
+    for i in range(len(mtp.layers)):
+        shifted_input_ids = input_ids[:, 1:]
+        shifted_input_ids = F.pad(shifted_input_ids, (0, 1), value=pad_token_id)
+        input_embeds = embed_tokens(shifted_input_ids)
+
+        if text_position_ids is not None:
+            mtp_text_position_ids = torch.roll(text_position_ids, -1, dims=-1).clone()
+            mtp_text_position_ids[:, -1] = text_position_ids[:, -1]
+        else:
+            mtp_text_position_ids = None
+
+        mtp_hidden = mtp(
+            input_embeds=input_embeds,
+            hidden_states=current_hidden,
+            position_embeddings=position_embeddings,
+            attention_mask=attention_mask,
+            position_ids=mtp_text_position_ids,
+        )
+        mtp_logits = lm_head(mtp_hidden)
+
+        shift = i + 1
+        shifted_labels = torch.roll(labels, -shift, dims=1).clone()
+        shifted_labels[:, -shift:] = -100
+
+        layer_loss = loss_function(
+            logits=mtp_logits,
+            labels=shifted_labels,
+            vocab_size=vocab_size,
+        )
+
+        total_mtp_loss = total_mtp_loss + layer_loss
+        current_hidden = mtp_hidden
+
+    return total_mtp_loss / len(mtp.layers)
 
 
 class Qwen3_5DecoderLayer(GradientCheckpointingLayer):
@@ -652,11 +815,89 @@ class Qwen3_5Model(Qwen3VLModel):
 
 class Qwen3_5ForCausalLM(Qwen3ForCausalLM):
     config: Qwen3_5TextConfig
-    _keys_to_ignore_on_load_unexpected = [r"^mtp.*", r"^model.visual.*"]
+    _keys_to_ignore_on_load_unexpected = [r"^model.visual.*"]
 
     def __init__(self, config):
         super().__init__(config)
         self.model = Qwen3_5TextModel(config)
+
+        if getattr(config, "mtp_num_hidden_layers", 0) > 0:
+            self.mtp = Qwen3_5MTP(config)
+
+    @can_return_tuple
+    @auto_docstring
+    def forward(
+        self,
+        input_ids: torch.LongTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
+        position_ids: torch.LongTensor | None = None,
+        past_key_values: Cache | None = None,
+        inputs_embeds: torch.FloatTensor | None = None,
+        labels: torch.LongTensor | None = None,
+        use_cache: bool | None = None,
+        logits_to_keep: int | torch.Tensor = 0,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> CausalLMOutputWithPast:
+        outputs: BaseModelOutputWithPast = self.model(
+            input_ids=input_ids,
+            attention_mask=attention_mask,
+            position_ids=position_ids,
+            past_key_values=past_key_values,
+            inputs_embeds=inputs_embeds,
+            use_cache=use_cache,
+            **kwargs,
+        )
+
+        hidden_states = outputs.last_hidden_state
+        slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
+        logits = self.lm_head(hidden_states[:, slice_indices, :])
+
+        loss = None
+        if labels is not None:
+            loss = self.loss_function(logits=logits, labels=labels, vocab_size=self.config.vocab_size, **kwargs)
+
+            if getattr(self.config, "mtp_num_hidden_layers", 0) > 0 and hasattr(self, "mtp") and input_ids is not None:
+                mtp_loss = self._compute_mtp_loss(
+                    input_ids=input_ids,
+                    main_hidden_states=hidden_states,
+                    labels=labels,
+                    attention_mask=attention_mask,
+                    position_ids=position_ids,
+                )
+                mtp_weight = getattr(self.config, "mtp_loss_weight", 0.0)
+                loss = loss + mtp_weight * mtp_loss
+
+        return CausalLMOutputWithPast(
+            loss=loss,
+            logits=logits,
+            past_key_values=outputs.past_key_values,
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
+        )
+
+    def _compute_mtp_loss(
+        self,
+        input_ids: torch.LongTensor,
+        main_hidden_states: torch.Tensor,
+        labels: torch.LongTensor,
+        attention_mask: torch.Tensor | None = None,
+        position_ids: torch.LongTensor | None = None,
+    ) -> torch.Tensor:
+        pad_token_id = self.config.pad_token_id if self.config.pad_token_id is not None else 0
+        return _compute_qwen35_mtp_loss(
+            mtp=self.mtp,
+            embed_tokens=self.model.embed_tokens,
+            rotary_emb=self.model.rotary_emb,
+            lm_head=self.lm_head,
+            loss_function=self.loss_function,
+            input_ids=input_ids,
+            main_hidden_states=main_hidden_states,
+            labels=labels,
+            vocab_size=self.config.vocab_size,
+            pad_token_id=pad_token_id,
+            attention_mask=attention_mask,
+            position_ids=position_ids,
+        )
 
 
 class Qwen3_5ForSequenceClassification(GenericForSequenceClassification, Qwen3_5PreTrainedModel):
@@ -664,6 +905,12 @@ class Qwen3_5ForSequenceClassification(GenericForSequenceClassification, Qwen3_5
 
 
 class Qwen3_5ForConditionalGeneration(Qwen3VLForConditionalGeneration):
+    def __init__(self, config):
+        super().__init__(config)
+
+        if getattr(config, "mtp_num_hidden_layers", 0) > 0:
+            self.mtp = Qwen3_5MTP(config)
+
     def get_video_features(
         self,
         **super_kwargs,
@@ -675,6 +922,97 @@ class Qwen3_5ForConditionalGeneration(Qwen3VLForConditionalGeneration):
         **super_kwargs,
     ) -> tuple | BaseModelOutputWithPooling:
         return super().get_image_features(**super_kwargs)
+
+    @can_return_tuple
+    def forward(
+        self,
+        input_ids: torch.LongTensor = None,
+        attention_mask: torch.Tensor | None = None,
+        position_ids: torch.LongTensor | None = None,
+        past_key_values: Cache | None = None,
+        inputs_embeds: torch.FloatTensor | None = None,
+        labels: torch.LongTensor | None = None,
+        pixel_values: torch.Tensor | None = None,
+        pixel_values_videos: torch.FloatTensor | None = None,
+        image_grid_thw: torch.LongTensor | None = None,
+        video_grid_thw: torch.LongTensor | None = None,
+        mm_token_type_ids: torch.IntTensor | None = None,
+        logits_to_keep: int | torch.Tensor = 0,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> tuple | Qwen3VLCausalLMOutputWithPast:
+        outputs = self.model(
+            input_ids=input_ids,
+            pixel_values=pixel_values,
+            pixel_values_videos=pixel_values_videos,
+            image_grid_thw=image_grid_thw,
+            video_grid_thw=video_grid_thw,
+            position_ids=position_ids,
+            attention_mask=attention_mask,
+            past_key_values=past_key_values,
+            inputs_embeds=inputs_embeds,
+            mm_token_type_ids=mm_token_type_ids,
+            **kwargs,
+        )
+
+        hidden_states = outputs[0]
+        slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
+        logits = self.lm_head(hidden_states[:, slice_indices, :])
+
+        loss = None
+        if labels is not None:
+            loss = self.loss_function(logits=logits, labels=labels, vocab_size=self.config.text_config.vocab_size)
+
+            if (
+                getattr(self.config, "mtp_num_hidden_layers", 0) > 0
+                and hasattr(self, "mtp")
+                and input_ids is not None
+            ):
+                mtp_loss = self._compute_mtp_loss(
+                    input_ids=input_ids,
+                    main_hidden_states=hidden_states,
+                    labels=labels,
+                    attention_mask=attention_mask,
+                    position_ids=position_ids,
+                )
+                mtp_weight = getattr(self.config, "mtp_loss_weight", 0.0)
+                loss = loss + mtp_weight * mtp_loss
+
+        return Qwen3VLCausalLMOutputWithPast(
+            loss=loss,
+            logits=logits,
+            past_key_values=outputs.past_key_values,
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
+            rope_deltas=outputs.rope_deltas,
+        )
+
+    def _compute_mtp_loss(
+        self,
+        input_ids: torch.LongTensor,
+        main_hidden_states: torch.Tensor,
+        labels: torch.LongTensor,
+        attention_mask: torch.Tensor | None = None,
+        position_ids: torch.LongTensor | None = None,
+    ) -> torch.Tensor:
+        pad_token_id = (
+            self.config.text_config.pad_token_id
+            if self.config.text_config.pad_token_id is not None
+            else 0
+        )
+        return _compute_qwen35_mtp_loss(
+            mtp=self.mtp,
+            embed_tokens=self.model.language_model.embed_tokens,
+            rotary_emb=self.model.language_model.rotary_emb,
+            lm_head=self.lm_head,
+            loss_function=self.loss_function,
+            input_ids=input_ids,
+            main_hidden_states=main_hidden_states,
+            labels=labels,
+            vocab_size=self.config.text_config.vocab_size,
+            pad_token_id=pad_token_id,
+            attention_mask=attention_mask,
+            position_ids=position_ids,
+        )
 
 
 __all__ = [
@@ -688,4 +1026,6 @@ __all__ = [
     "Qwen3_5ForSequenceClassification",
     "Qwen3_5ForConditionalGeneration",
     "Qwen3_5PreTrainedModel",
+    "Qwen3_5MTPLayer",
+    "Qwen3_5MTP",
 ]
