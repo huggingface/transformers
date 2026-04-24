@@ -39,7 +39,6 @@ class LlavaOnevisionProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     def setUpClass(cls):
         # Ensure local assets are used instead of remote URLs to avoid network access in tests
         from tests.test_processing_common import MODALITY_INPUT_DATA
-        from transformers import video_processing_utils, video_utils
 
         repo_root = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", ".."))
         local_image = os.path.join(repo_root, "coco_sample.png")
