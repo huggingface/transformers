@@ -902,9 +902,7 @@ class TestMistralCommonBackend(unittest.TestCase):
             expected_tokenized.tokens,
         )
 
-        with self.assertRaises(
-            ValueError, msg="Invalid parameters passed to `ChatCompletionRequest.from_openai`"
-        ):
+        with self.assertRaises(ValueError, msg="Invalid parameters passed to `ChatCompletionRequest.from_openai`"):
             self.tokenizer.apply_chat_template(conversation, tokenize=True, unk_args="")
 
     def test_apply_chat_template_continue_final_message(self):
