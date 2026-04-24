@@ -223,27 +223,80 @@ def _apply_partial_rope(x: torch.Tensor, cos: torch.Tensor, sin: torch.Tensor, r
 
 
 class DeepseekV4Indexer(nn.Module):
-    """Lives inside ``DeepseekV4Compressor`` when ``compress_ratio == 4``. Runs a smaller
-    (``index_head_dim``) companion compressor over the same hidden states and scores those
-    pooled positions against the attention query to pick the top-k most informative.
+    """Owned by ``DeepseekV4Compressor`` when ``compress_ratio == 4``. Pools the same
+    tokens at a smaller ``index_head_dim`` (inline, no nested Compressor module), scores
+    the pooled positions against the attention query, and returns the top-k indices.
 
-    The positions the Indexer selects align with the outer ``DeepseekV4Compressor``'s pool
-    (both pool with the same ratio over the same hidden states), so the indices it returns
-    can be used directly to gather from the outer pool.
+    Since the indexer's pool uses the same ``compress_ratio`` over the same hidden states
+    as the outer compressor, its pooled positions align one-for-one — the returned
+    indices index into the outer compressor's pool too.
     """
 
-    def __init__(self, config: DeepseekV4Config, rotary: nn.Module | None = None):
+    def __init__(self, config: DeepseekV4Config):
         super().__init__()
+        self.compress_ratio = 4
         self.n_heads = config.index_n_heads
         self.head_dim = config.index_head_dim
         self.rope_head_dim = config.qk_rope_head_dim
         self.index_topk = config.index_topk
         self.softmax_scale = self.head_dim**-0.5
+        # Per-window pooling primitives (same structure as Compressor, at ``index_head_dim``).
+        self.wkv = nn.Linear(config.hidden_size, self.head_dim, bias=False)
+        self.wgate = nn.Linear(config.hidden_size, self.head_dim, bias=False)
+        self.ape = nn.Parameter(torch.empty(self.compress_ratio, self.head_dim))
+        self.kv_norm = DeepseekV4RMSNorm(self.head_dim, eps=config.rms_norm_eps)
+        # Per-head query projection + per-head score-weighting.
         self.wq_b = nn.Linear(config.q_lora_rank, self.n_heads * self.head_dim, bias=False)
         self.weights_proj = nn.Linear(config.hidden_size, self.n_heads, bias=False)
-        # Separate pool at the indexer's (smaller) head dim — its pooled positions align
-        # one-for-one with the outer compressor's, so we reuse the returned top-k indices.
-        self.compressor = DeepseekV4Compressor(config, compress_ratio=4, head_dim=self.head_dim, _owns_indexer=False)
+
+    def _pool(
+        self,
+        hidden_states: torch.Tensor,
+        rotary: nn.Module,
+        cache: "DeepseekV4Cache | None",
+        layer_idx: int,
+        start_pos: int,
+    ) -> torch.Tensor | None:
+        """Pool the same windows as the outer compressor but at ``index_head_dim``.
+        Mirrors :meth:`DeepseekV4Compressor.forward` up to the RoPE step; state is carried
+        on the cache's ``indexer_state`` slot (parallel to ``compressor_state``).
+        """
+        r = self.compress_ratio
+        batch, seq_len, _ = hidden_states.shape
+        kv = self.wkv(hidden_states)
+        gate = self.wgate(hidden_states)
+        store = getattr(cache, "indexer_state", None)
+        state = store[layer_idx] if store is not None else None
+        if state is not None and state["buffer_kv"].shape[1]:
+            kv = torch.cat([state["buffer_kv"], kv], dim=1)
+            gate = torch.cat([state["buffer_gate"], gate], dim=1)
+        usable = (kv.shape[1] // r) * r
+        if usable == 0:
+            if store is not None:
+                store[layer_idx] = {
+                    "buffer_kv": kv,
+                    "buffer_gate": gate,
+                    "pooled_kv": state["pooled_kv"] if state is not None else None,
+                }
+            return None
+        block_kv = kv[:, :usable].view(batch, usable // r, r, self.head_dim)
+        block_gate = gate[:, :usable].view(batch, usable // r, r, self.head_dim) + self.ape
+        pooled = self.kv_norm((block_kv * block_gate.softmax(dim=2)).sum(dim=2))
+
+        base = max(0, start_pos) + (kv.shape[1] - usable - seq_len if kv.shape[1] > seq_len else 0)
+        positions = (torch.arange(pooled.shape[1], device=pooled.device) * r + base).unsqueeze(0).expand(batch, -1)
+        cos, sin = rotary(pooled, positions)
+        pooled = _apply_partial_rope(pooled.unsqueeze(1), cos, sin, self.rope_head_dim).squeeze(1)
+
+        if store is not None:
+            prev = state["pooled_kv"] if state is not None else None
+            store[layer_idx] = {
+                "buffer_kv": kv[:, usable:],
+                "buffer_gate": gate[:, usable:],
+                "pooled_kv": pooled if prev is None else torch.cat([prev, pooled], dim=1),
+            }
+            pooled = store[layer_idx]["pooled_kv"]
+        return pooled if pooled.shape[1] > 0 else None
 
     def forward(
         self,
@@ -255,19 +308,9 @@ class DeepseekV4Indexer(nn.Module):
         layer_idx: int,
         start_pos: int,
     ) -> torch.LongTensor | None:
-        pooled = self.compressor(
-            hidden_states,
-            q_residual=None,
-            rotary=rotary,
-            position_embeddings=position_embeddings,
-            cache=cache,
-            layer_idx=layer_idx,
-            start_pos=start_pos,
-            state_key="indexer_state",
-        )
-        if pooled is None:
+        pooled_kv = self._pool(hidden_states, rotary, cache, layer_idx, start_pos)
+        if pooled_kv is None:
             return None
-        pooled_kv = pooled.squeeze(1)  # [B, T, head_dim]
         batch, seq_len, _ = hidden_states.shape
         cos, sin = position_embeddings
         q = self.wq_b(q_residual).view(batch, seq_len, self.n_heads, self.head_dim).transpose(1, 2)
@@ -294,7 +337,7 @@ class DeepseekV4Compressor(nn.Module):
     caller-supplied rotary (typically the model's compressed-theta YaRN rotary).
     """
 
-    def __init__(self, config: DeepseekV4Config, compress_ratio: int, head_dim: int, _owns_indexer: bool = True):
+    def __init__(self, config: DeepseekV4Config, compress_ratio: int, head_dim: int):
         super().__init__()
         self.compress_ratio = compress_ratio
         self.head_dim = head_dim
@@ -303,13 +346,8 @@ class DeepseekV4Compressor(nn.Module):
         self.wgate = nn.Linear(config.hidden_size, head_dim, bias=False)
         self.ape = nn.Parameter(torch.empty(compress_ratio, head_dim))
         self.kv_norm = DeepseekV4RMSNorm(head_dim, eps=config.rms_norm_eps)
-        # Indexer is part of the compressor because it never exists without one: only
-        # the ratio-4 variant gates its pooled KV through a learned top-k selector.
-        # ``_owns_indexer=False`` is used when we build the companion compressor the
-        # Indexer itself owns (it must not recurse into another Indexer).
-        self.indexer: DeepseekV4Indexer | None = (
-            DeepseekV4Indexer(config) if (compress_ratio == 4 and _owns_indexer) else None
-        )
+        # Only the ratio-4 variant narrows its pooled KV through a learned top-k selector.
+        self.indexer: DeepseekV4Indexer | None = DeepseekV4Indexer(config) if compress_ratio == 4 else None
 
     def _pool_window(self, kv: torch.Tensor, gate: torch.Tensor) -> torch.Tensor:
         """Reshape ``kv`` / ``gate`` into ``compress_ratio``-sized windows and sum-pool."""
@@ -526,100 +564,6 @@ class DeepseekV4Attention(nn.Module):
         return self.wo_b(self.wo_a(grouped).flatten(2)), attn_weights
 
 
-class DeepseekV4HyperConnection(nn.Module):
-    """Hyper-Connections (https://huggingface.co/papers/2409.19606).
-
-    Replaces the usual residual connection around a sub-block with ``hc_mult`` parallel
-    residual streams. A learned Sinkhorn-normalised mixer combines streams on entry and
-    re-assembles them on exit, allowing the block to operate on a single-stream input
-    while the surrounding streams still carry information through the layer.
-
-    This module is the "site" wrapper: it owns ``inner`` (the attention or MLP block)
-    and ``norm`` (the pre-block RMSNorm). ``forward`` performs the full sequence:
-
-        in_streams : [B, S, hc_mult, hidden]
-        ──► flatten + RMSNorm + F.linear(..., hc_fn) ─► mix logits
-        ──► Sinkhorn split → (pre, post, comb)
-        ──► collapsed = sum_streams(pre * in_streams)                # [B, S, hidden]
-        ──► out = inner(norm(collapsed))                             # the block
-        ──► out_streams = post * out + comb @ in_streams             # [B, S, hc_mult, hidden]
-
-    Where:
-      * ``pre``  [hc_mult]           — per-stream weights used to collapse the input.
-      * ``post`` [hc_mult]           — per-stream weights placing the block output back.
-      * ``comb`` [hc_mult, hc_mult]  — a doubly-stochastic stream-mixing matrix.
-
-    ``pre``, ``post``, ``comb`` are carved out of a single
-    ``(2 + hc_mult) * hc_mult``-wide vector of mix logits and then passed through a
-    small Sinkhorn loop (``hc_sinkhorn_iters``) to enforce the row/column sums.
-    """
-
-    def __init__(self, config: DeepseekV4Config, inner: nn.Module, norm: nn.Module):
-        super().__init__()
-        self.hc_mult = config.hc_mult
-        self.hc_sinkhorn_iters = config.hc_sinkhorn_iters
-        self.hc_eps = config.hc_eps
-        self.hidden_size = config.hidden_size
-        self.norm_eps = config.rms_norm_eps
-        self.inner = inner
-        self.norm = norm
-
-        # The mix logits pack `pre`, `post`, and the `comb` matrix end-to-end so we only
-        # need a single linear on the flattened streams. `num_mix_logits` is that total.
-        self.num_mix_logits = (2 + self.hc_mult) * self.hc_mult
-        self.hc_fn = nn.Parameter(torch.empty(self.num_mix_logits, self.hc_mult * self.hidden_size))
-        self.hc_base = nn.Parameter(torch.empty(self.num_mix_logits))
-        # One learned scale per sub-part (pre, post, comb), broadcast across all logits.
-        self.hc_scale = nn.Parameter(torch.empty(3))
-
-    def _mix_logits(self, hidden_streams: torch.Tensor) -> torch.Tensor:
-        """RMSNorm-rescale the concatenated stream vector, then project to mix logits."""
-        flat = hidden_streams.flatten(start_dim=2).float()  # [B, S, hc_mult * hidden]
-        rsqrt = torch.rsqrt(flat.square().mean(-1, keepdim=True) + self.norm_eps)
-        return F.linear(flat, self.hc_fn) * rsqrt  # [B, S, num_mix_logits]
-
-    def _split_mix(self, mix_logits: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
-        """Slice ``mix_logits`` into ``(pre, post, comb)`` and Sinkhorn-normalise ``comb``."""
-        hc = self.hc_mult
-        pre_scale, post_scale, comb_scale = self.hc_scale.unbind(0)
-        pre_base, post_base = self.hc_base[:hc], self.hc_base[hc : 2 * hc]
-        comb_base = self.hc_base[2 * hc :].view(hc, hc)
-
-        pre = torch.sigmoid(mix_logits[..., :hc] * pre_scale + pre_base) + self.hc_eps
-        post = torch.sigmoid(mix_logits[..., hc : 2 * hc] * post_scale + post_base) + self.hc_eps
-        comb = (
-            torch.sigmoid(mix_logits[..., 2 * hc :].view(*mix_logits.shape[:-1], hc, hc) * comb_scale + comb_base)
-            + self.hc_eps
-        )
-        for _ in range(self.hc_sinkhorn_iters):
-            comb = comb / (comb.sum(dim=-1, keepdim=True) + self.hc_eps)
-            comb = comb / (comb.sum(dim=-2, keepdim=True) + self.hc_eps)
-        return pre, post, comb
-
-    def forward(self, hidden_streams: torch.Tensor, **kwargs) -> torch.Tensor:
-        """Args:
-            hidden_streams: ``[B, S, hc_mult, hidden]`` — the input residual streams.
-        Returns:
-            ``[B, S, hc_mult, hidden]`` — output streams after running ``inner``.
-        """
-        pre, post, comb = self._split_mix(self._mix_logits(hidden_streams))
-
-        # 1. Collapse `hc_mult` streams into one (weighted sum with `pre`).
-        collapsed = (pre.unsqueeze(-1) * hidden_streams).sum(dim=2).to(hidden_streams.dtype)
-
-        # 2. Run the block on the collapsed representation.
-        inner_output = self.inner(self.norm(collapsed), **kwargs)
-        if isinstance(inner_output, tuple):
-            inner_output = inner_output[0]  # tuples come back from self-attention forwards
-
-        # 3. Expand back to `hc_mult` streams:
-        #    - `post[:, :, :, None] * inner_output` re-assigns the block output to each stream
-        #    - `comb @ hidden_streams` mixes the untouched residual streams
-        next_streams = post.unsqueeze(-1) * inner_output.unsqueeze(-2)
-        next_streams = next_streams + torch.matmul(comb, hidden_streams)
-        return next_streams.to(hidden_streams.dtype)
-
-
 class DeepseekV4HyperHead(nn.Module):
     """Final HC-stream collapse; used by ``DeepseekV4Model`` before the shared RMSNorm."""
 
@@ -713,7 +657,9 @@ class DeepseekV4TopKRouter(nn.Module):
         self.weight = nn.Parameter(torch.empty(self.num_experts, self.hidden_dim))
         self.score_fn = ACT2FN[config.scoring_func]
         self.routed_scaling_factor = config.routed_scaling_factor
-        self.bias = nn.Parameter(torch.empty(self.num_experts, dtype=torch.float32))
+        # Correction bias biases the argmax only — not a gradient-carrying parameter, so
+        # store as a buffer (same convention as DeepseekV3's ``e_score_correction_bias``).
+        self.register_buffer("bias", torch.zeros(self.num_experts), persistent=True)
 
     def forward(self, hidden_states: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         flat = hidden_states.reshape(-1, self.hidden_dim)
@@ -779,24 +725,136 @@ class DeepseekV4SparseMoeBlock(nn.Module):
         return routed + self.shared_experts(residual)
 
 
+def _hyper_connection_weights(
+    hidden_streams: torch.Tensor,
+    hc_fn: torch.Tensor,
+    hc_base: torch.Tensor,
+    hc_scale: torch.Tensor,
+    hc_mult: int,
+    sinkhorn_iters: int,
+    norm_eps: float,
+    hc_eps: float,
+) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+    """Compute the Hyper-Connection mix weights ``(pre, post, comb)`` for one site.
+
+    ``pre``  [..., hc_mult]           — collapse weights for the ``hc_mult`` input streams.
+    ``post`` [..., hc_mult]           — placement weights for the block output.
+    ``comb`` [..., hc_mult, hc_mult]  — doubly-stochastic stream-mixing matrix (Sinkhorn).
+
+    Packed together in a single ``(2 + hc_mult) * hc_mult``-wide linear projection over
+    the flattened residual-stream vector so the three parts share one RMS-normalised
+    mix-logit computation.
+    """
+    flat = hidden_streams.flatten(start_dim=2).float()  # [B, S, hc_mult * hidden]
+    rsqrt = torch.rsqrt(flat.square().mean(-1, keepdim=True) + norm_eps)
+    mix = F.linear(flat, hc_fn) * rsqrt  # [B, S, (2 + hc) * hc]
+
+    pre_scale, post_scale, comb_scale = hc_scale.unbind(0)
+    pre = torch.sigmoid(mix[..., :hc_mult] * pre_scale + hc_base[:hc_mult]) + hc_eps
+    post = torch.sigmoid(mix[..., hc_mult : 2 * hc_mult] * post_scale + hc_base[hc_mult : 2 * hc_mult]) + hc_eps
+    comb = (
+        torch.sigmoid(
+            mix[..., 2 * hc_mult :].view(*mix.shape[:-1], hc_mult, hc_mult) * comb_scale
+            + hc_base[2 * hc_mult :].view(hc_mult, hc_mult)
+        )
+        + hc_eps
+    )
+    for _ in range(sinkhorn_iters):
+        comb = comb / (comb.sum(dim=-1, keepdim=True) + hc_eps)
+        comb = comb / (comb.sum(dim=-2, keepdim=True) + hc_eps)
+    return pre, post, comb
+
+
+def _hyper_connection_collapse(hidden_streams: torch.Tensor, pre: torch.Tensor) -> torch.Tensor:
+    """``hc_mult`` parallel streams → one collapsed stream (weighted sum by ``pre``)."""
+    return (pre.unsqueeze(-1) * hidden_streams).sum(dim=2).to(hidden_streams.dtype)
+
+
+def _hyper_connection_expand(
+    block_output: torch.Tensor,
+    hidden_streams: torch.Tensor,
+    post: torch.Tensor,
+    comb: torch.Tensor,
+) -> torch.Tensor:
+    """``block_output`` (single stream) + previous ``hidden_streams`` → new ``hc_mult`` streams.
+
+    Each new stream is ``post[stream] * block_output + comb @ hidden_streams``.
+    """
+    next_streams = post.unsqueeze(-1) * block_output.unsqueeze(-2)
+    next_streams = next_streams + torch.matmul(comb, hidden_streams)
+    return next_streams.to(hidden_streams.dtype)
+
+
 class DeepseekV4DecoderLayer(GradientCheckpointingLayer):
+    """Hyper-Connection (https://huggingface.co/papers/2409.19606) decoder layer.
+
+    The usual ``residual -> attn -> residual -> mlp`` pattern becomes
+
+        hc_streams ─► collapse ─► norm ─► self_attn ─► expand ─► hc_streams
+        hc_streams ─► collapse ─► norm ─► mlp       ─► expand ─► hc_streams
+
+    where the collapse / expand weights are produced by a learned, Sinkhorn-normalised
+    mixer over the ``hc_mult`` parallel residual streams — a separate mixer per site
+    (``hc_attn_*`` / ``hc_ffn_*``). The helpers ``_hyper_connection_weights``,
+    ``_hyper_connection_collapse``, and ``_hyper_connection_expand`` handle the math.
+    """
+
     def __init__(self, config: DeepseekV4Config, layer_idx: int):
         super().__init__()
         self.layer_idx = layer_idx
-        self.attn_hc = DeepseekV4HyperConnection(
-            config,
-            DeepseekV4Attention(config, layer_idx),
-            DeepseekV4RMSNorm(config.hidden_size, eps=config.rms_norm_eps),
-        )
-        self.mlp_hc = DeepseekV4HyperConnection(
-            config,
-            DeepseekV4SparseMoeBlock(config, layer_idx),
-            DeepseekV4RMSNorm(config.hidden_size, eps=config.rms_norm_eps),
-        )
+        self.hc_mult = config.hc_mult
+        self.hc_sinkhorn_iters = config.hc_sinkhorn_iters
+        self.hc_eps = config.hc_eps
+        self.norm_eps = config.rms_norm_eps
+
+        self.self_attn = DeepseekV4Attention(config, layer_idx)
+        self.mlp = DeepseekV4SparseMoeBlock(config, layer_idx)
+        self.input_layernorm = DeepseekV4RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.post_attention_layernorm = DeepseekV4RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+
+        # Per-site HC mixers. ``hc_fn`` projects the flattened residual streams to
+        # ``(2 + hc_mult) * hc_mult`` mix logits, then ``hc_base`` / ``hc_scale`` bias and
+        # rescale each group before the Sinkhorn split. Names match the reference model.
+        mix_size = (2 + self.hc_mult) * self.hc_mult
+        self.hc_attn_fn = nn.Parameter(torch.empty(mix_size, self.hc_mult * config.hidden_size))
+        self.hc_attn_base = nn.Parameter(torch.empty(mix_size))
+        self.hc_attn_scale = nn.Parameter(torch.empty(3))
+        self.hc_ffn_fn = nn.Parameter(torch.empty(mix_size, self.hc_mult * config.hidden_size))
+        self.hc_ffn_base = nn.Parameter(torch.empty(mix_size))
+        self.hc_ffn_scale = nn.Parameter(torch.empty(3))
 
     def forward(self, hidden_states: torch.Tensor, **kwargs: Unpack[TransformersKwargs]) -> torch.Tensor:
-        hidden_states = self.attn_hc(hidden_states, **kwargs)
-        return self.mlp_hc(hidden_states, **kwargs)
+        # hidden_states shape throughout this layer: [B, S, hc_mult, hidden].
+
+        # --- Attention site ---
+        pre, post, comb = _hyper_connection_weights(
+            hidden_states,
+            self.hc_attn_fn,
+            self.hc_attn_base,
+            self.hc_attn_scale,
+            self.hc_mult,
+            self.hc_sinkhorn_iters,
+            self.norm_eps,
+            self.hc_eps,
+        )
+        collapsed = _hyper_connection_collapse(hidden_states, pre)
+        attn_output, _ = self.self_attn(self.input_layernorm(collapsed), **kwargs)
+        hidden_states = _hyper_connection_expand(attn_output, hidden_states, post, comb)
+
+        # --- MLP site ---
+        pre, post, comb = _hyper_connection_weights(
+            hidden_states,
+            self.hc_ffn_fn,
+            self.hc_ffn_base,
+            self.hc_ffn_scale,
+            self.hc_mult,
+            self.hc_sinkhorn_iters,
+            self.norm_eps,
+            self.hc_eps,
+        )
+        collapsed = _hyper_connection_collapse(hidden_states, pre)
+        mlp_output = self.mlp(self.post_attention_layernorm(collapsed), input_ids=kwargs.get("input_ids"))
+        return _hyper_connection_expand(mlp_output, hidden_states, post, comb)
 
 
 @auto_docstring
@@ -818,7 +876,17 @@ class DeepseekV4PreTrainedModel(PreTrainedModel):
         "attentions": DeepseekV4Attention,
     }
     config_class = DeepseekV4Config
-    _keep_in_fp32_modules_strict = ["hc_fn", "hc_base", "hc_scale"]
+    _keep_in_fp32_modules_strict = [
+        "hc_attn_fn",
+        "hc_attn_base",
+        "hc_attn_scale",
+        "hc_ffn_fn",
+        "hc_ffn_base",
+        "hc_ffn_scale",
+        "hc_head.hc_fn",
+        "hc_head.hc_base",
+        "hc_head.hc_scale",
+    ]
     _keys_to_ignore_on_load_unexpected = [r"model\.mtp\..*"]
 
     @torch.no_grad()
@@ -827,21 +895,28 @@ class DeepseekV4PreTrainedModel(PreTrainedModel):
         std = self.config.initializer_range
         if isinstance(module, (DeepseekV4TopKRouter, DeepseekV4HashRouter)):
             init.normal_(module.weight, mean=0.0, std=std)
-            if hasattr(module, "bias") and isinstance(module.bias, nn.Parameter):
-                init.zeros_(module.bias)
+            if isinstance(module, DeepseekV4TopKRouter):
+                module.bias.zero_()  # buffer
             if isinstance(module, DeepseekV4HashRouter):
-                # ``tid2eid`` is a persistent int64 lookup table; default-init is zeros
-                # (the first expert), meaningful values come from the pretrained checkpoint.
-                module.tid2eid.zero_()
+                module.tid2eid.zero_()  # buffer; real values come from the checkpoint
         elif isinstance(module, DeepseekV4Experts):
             init.normal_(module.gate_up_proj, mean=0.0, std=std)
             init.normal_(module.down_proj, mean=0.0, std=std)
         elif isinstance(module, DeepseekV4Attention):
             init.zeros_(module.sinks)
-        elif isinstance(module, (DeepseekV4HyperConnection, DeepseekV4HyperHead)):
+        elif isinstance(module, DeepseekV4DecoderLayer):
+            for name in ("hc_attn_fn", "hc_ffn_fn"):
+                init.normal_(getattr(module, name), mean=0.0, std=std)
+            for name in ("hc_attn_base", "hc_ffn_base"):
+                init.zeros_(getattr(module, name))
+            for name in ("hc_attn_scale", "hc_ffn_scale"):
+                init.ones_(getattr(module, name))
+        elif isinstance(module, DeepseekV4HyperHead):
             init.normal_(module.hc_fn, mean=0.0, std=std)
             init.zeros_(module.hc_base)
             init.ones_(module.hc_scale)
+        elif isinstance(module, DeepseekV4Indexer):
+            init.zeros_(module.ape)
         elif isinstance(module, DeepseekV4Compressor):
             init.zeros_(module.ape)
 

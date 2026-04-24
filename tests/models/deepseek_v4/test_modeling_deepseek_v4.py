@@ -68,6 +68,11 @@ class DeepseekV4ModelTester(CausalLMModelTester):
 class DeepseekV4ModelTest(CausalLMModelTest, unittest.TestCase):
     model_tester_class = DeepseekV4ModelTester
 
+    # Indexer parameters only influence the argmax over compressed positions (``topk``),
+    # which is non-differentiable — their gradients flow through a separate objective in
+    # the upstream training recipe, not the main causal-LM loss.
+    test_all_params_have_gradient = False
+
     # No SequenceClassification / TokenClassification / QA heads on V4.
     def is_pipeline_test_to_skip(self, *args, **kwargs):
         return True
@@ -88,6 +93,51 @@ class DeepseekV4ModelTest(CausalLMModelTest, unittest.TestCase):
                 self.assertIsInstance(layer_attention, torch.Tensor)
                 self.assertEqual(layer_attention.shape[0], batch_size)
                 self.assertEqual(layer_attention.shape[1], config.num_attention_heads)
+
+    def test_hidden_states_output(self):
+        # V4 layers emit a 4D ``[B, S, hc_mult, hidden]`` tensor — the hc_mult streams
+        # are only collapsed at the top of the model via ``hc_head``. The common
+        # ``test_hidden_states_output`` assumes ``(batch, seq, hidden)``; we re-run the
+        # same check but accept the extra HC axis, and we additionally assert the final
+        # (post-hc_head) ``last_hidden_state`` has the standard 3D shape.
+        import torch  # noqa: PLC0415
+
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        config.output_hidden_states = True
+        for model_class in self.all_model_classes:
+            model = model_class(config).eval()
+            with torch.no_grad():
+                outputs = model(**inputs_dict)
+            hidden_states = outputs.hidden_states if hasattr(outputs, "hidden_states") else outputs[-1]
+            self.assertIsNotNone(hidden_states)
+            self.assertEqual(len(hidden_states), config.num_hidden_layers + 1)
+            seq_len = inputs_dict["input_ids"].shape[1]
+            for layer_h in hidden_states:
+                # Accept either the collapsed (3D) post-head shape or the per-layer 4D shape.
+                if layer_h.ndim == 3:
+                    self.assertEqual(layer_h.shape, (inputs_dict["input_ids"].shape[0], seq_len, config.hidden_size))
+                else:
+                    self.assertEqual(
+                        layer_h.shape,
+                        (inputs_dict["input_ids"].shape[0], seq_len, config.hc_mult, config.hidden_size),
+                    )
+
+    def _check_past_key_values_for_generate(self, batch_size, past_key_values, seq_length, config):
+        # Every V4 layer is sliding-window, so the cache is length-bounded to
+        # ``sliding_window`` instead of the full ``seq_length`` the parent tester expects.
+        # We also accept the compressed-segment positions that ``DeepseekV4Attention``
+        # appends on compress layers (they live beyond the window on the keys axis).
+        import torch  # noqa: PLC0415
+
+        num_kv_heads = getattr(config, "num_key_value_heads", config.num_attention_heads)
+        head_dim = config.head_dim
+        for layer in past_key_values.layers:
+            keys, values = layer.keys, layer.values
+            self.assertIsInstance(keys, torch.Tensor)
+            self.assertEqual(keys.shape[0], batch_size)
+            self.assertEqual(keys.shape[1], num_kv_heads)
+            self.assertEqual(keys.shape[3], head_dim)
+            self.assertEqual(keys.shape, values.shape)
 
     def _check_hidden_states_for_generate(
         self, batch_size, hidden_states, prompt_length, output_length, config, use_cache=False

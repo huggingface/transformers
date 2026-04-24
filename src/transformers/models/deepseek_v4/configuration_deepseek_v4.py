@@ -40,20 +40,20 @@ class DeepseekV4Config(PreTrainedConfig):
     model_type = "deepseek_v4"
     keys_to_ignore_at_inference = ["past_key_values"]
 
-    # V4's module tree differs from V3's: attention/mlp live under the HyperConnection
-    # wrappers (``attn_hc.inner`` / ``mlp_hc.inner``) and there are no dense-MLP layers.
+    # V4 has no dense-MLP layers (all MoE), and the HC mixers are layer-level parameters
+    # (``hc_attn_*`` / ``hc_ffn_*``) not shardable. Otherwise the plan is V3-style.
     base_model_tp_plan = {
-        "layers.*.attn_hc.inner.wq_a": "colwise",
-        "layers.*.attn_hc.inner.wq_b": "colwise",
-        "layers.*.attn_hc.inner.wkv": "colwise",
-        "layers.*.attn_hc.inner.wo_a": "rowwise",
-        "layers.*.attn_hc.inner.wo_b": "rowwise",
-        "layers.*.mlp_hc.inner.experts.gate_up_proj": "packed_colwise",
-        "layers.*.mlp_hc.inner.experts.down_proj": "rowwise",
-        "layers.*.mlp_hc.inner.experts": "moe_tp_experts",
-        "layers.*.mlp_hc.inner.shared_experts.gate_proj": "colwise",
-        "layers.*.mlp_hc.inner.shared_experts.up_proj": "colwise",
-        "layers.*.mlp_hc.inner.shared_experts.down_proj": "rowwise",
+        "layers.*.self_attn.wq_a": "colwise",
+        "layers.*.self_attn.wq_b": "colwise",
+        "layers.*.self_attn.wkv": "colwise",
+        "layers.*.self_attn.wo_a": "rowwise",
+        "layers.*.self_attn.wo_b": "rowwise",
+        "layers.*.mlp.experts.gate_up_proj": "packed_colwise",
+        "layers.*.mlp.experts.down_proj": "rowwise",
+        "layers.*.mlp.experts": "moe_tp_experts",
+        "layers.*.mlp.shared_experts.gate_proj": "colwise",
+        "layers.*.mlp.shared_experts.up_proj": "colwise",
+        "layers.*.mlp.shared_experts.down_proj": "rowwise",
     }
     base_model_pp_plan = {
         "embed_tokens": (["input_ids"], ["inputs_embeds"]),
