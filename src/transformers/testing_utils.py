@@ -3530,7 +3530,6 @@ def _prepare_debugging_info(test_info, info):
 
     info = f"{test_info}\n\n{info}"
     output_path = _get_patched_testing_methods_output_file()
-    output_path.parent.mkdir(parents=True, exist_ok=True)
     with output_path.open("a") as fp:
         fp.write(f"{info}\n\n{'=' * 120}\n\n")
 
@@ -3771,7 +3770,6 @@ def _reset_patched_testing_methods_output_file() -> Path:
     """Clear the output file used by patched assertion methods and return its path."""
 
     output_path = _get_patched_testing_methods_output_file()
-    output_path.parent.mkdir(parents=True, exist_ok=True)
     output_path.unlink(missing_ok=True)
     return output_path
 
