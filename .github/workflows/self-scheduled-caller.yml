@@ -6,7 +6,7 @@ on:
     - cron: "17 2 * * *"
   push:
     branches:
-      - trigger-ci-for-torch-2.12-rc1-on-main-bc4b330451d0xxx
+      - trigger-ci-for-torch-2.12-rc1-on-main-bc4b330451d0
   workflow_dispatch:
     inputs:
       prev_workflow_run_id:
