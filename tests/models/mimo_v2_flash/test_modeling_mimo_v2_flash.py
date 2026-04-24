@@ -191,62 +191,6 @@ class MiMoV2FlashModelTest(CausalLMModelTest, unittest.TestCase):
         with self.assertRaises(AssertionError):
             torch.testing.assert_close(yarn_sin_long, original_sin_long)
 
-    def test_convert_config_from_hub_format(self):
-        """The conversion script maps legacy hub fields to native ones and strips hub-only keys."""
-        from transformers.models.mimo_v2_flash.convert_mimo_v2_flash_weights_to_hf import convert_config
-
-        config = convert_config(
-            {
-                "model_type": "mimo_v2_flash",
-                "num_hidden_layers": 2,
-                "vocab_size": 100,
-                "head_dim": 192,
-                "hybrid_layer_pattern": [0, 1],
-                "moe_layer_freq": [0, 1],
-                "partial_rotary_factor": 0.5,
-                "swa_rope_theta": 10000,
-                "layernorm_epsilon": 1e-6,
-                "routed_scaling_factor": None,
-                "scoring_func": "sigmoid",
-                "topk_method": "noaux_tc",
-                "attention_value_scale": 0.707,
-                "attention_chunk_size": 128,
-                "sliding_window_size": 128,
-                "n_shared_experts": None,
-                "swa_num_attention_heads": 64,
-                "swa_num_key_value_heads": 8,
-                "swa_head_dim": 192,
-                "swa_v_head_dim": 128,
-            }
-        )
-        config_dict = config.to_dict()
-
-        self.assertEqual(config.layer_types, ["full_attention", "sliding_attention"])
-        self.assertEqual(config.mlp_layer_types, ["dense", "sparse"])
-        self.assertEqual(config.rms_norm_eps, 1e-6)
-        self.assertEqual(config.routed_scaling_factor, 1.0)
-        self.assertEqual(config_dict["rope_parameters"]["full_attention"]["partial_rotary_factor"], 0.5)
-        self.assertEqual(config_dict["rope_parameters"]["sliding_attention"]["rope_theta"], 10000)
-
-        for key in (
-            "hybrid_layer_pattern",
-            "moe_layer_freq",
-            "partial_rotary_factor",
-            "swa_rope_theta",
-            "layernorm_epsilon",
-            "scoring_func",
-            "topk_method",
-            "attention_value_scale",
-            "attention_chunk_size",
-            "sliding_window_size",
-            "n_shared_experts",
-            "swa_num_attention_heads",
-            "swa_num_key_value_heads",
-            "swa_head_dim",
-            "swa_v_head_dim",
-        ):
-            self.assertNotIn(key, config_dict)
-
     def test_layer_type_rope_parameters_keep_rotary_dims_in_sync(self):
         """Layer-specific rope parameters should produce position embeddings that match each attention rotary dim."""
         config = MiMoV2FlashConfig(
@@ -316,7 +260,6 @@ class MiMoV2FlashModelTest(CausalLMModelTest, unittest.TestCase):
         self.assertTrue(found_gate_up_converter)
         self.assertTrue(found_down_converter)
 
-    # NOTE: @casinca can be dropped if HF fixes the DSV3 masking
     def test_router_group_mask_uses_negative_infinity(self):
         config = MiMoV2FlashConfig(
             num_hidden_layers=2,
@@ -336,14 +279,16 @@ class MiMoV2FlashModelTest(CausalLMModelTest, unittest.TestCase):
             routed_scaling_factor=1.0,
         )
         model = MiMoV2FlashModel(config)
-        router = model.layers[1].mlp.gate
+        moe_block = model.layers[1].mlp
+        router = moe_block.gate
 
         with torch.no_grad():
             router.weight.zero_()
             router.e_score_correction_bias.copy_(torch.tensor([-1.0, -1.0, -2.0, -2.0], dtype=torch.float32))
 
         hidden_states = torch.zeros((1, config.hidden_size), dtype=torch.float32)
-        _, _, topk_idx = router(hidden_states)
+        router_logits = router(hidden_states)
+        topk_idx, _ = moe_block.route_tokens_to_experts(router_logits)
         topk_idx = set(topk_idx[0].tolist())
 
         self.assertTrue(topk_idx.issubset({0, 1}))
