@@ -16,7 +16,7 @@ Handler for the /v1/audio/transcriptions endpoint.
 """
 
 import io
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, TypedDict
 
 from ...utils import logging
 from ...utils.import_utils import is_serve_available
@@ -38,8 +38,16 @@ if TYPE_CHECKING:
 logger = logging.get_logger(__name__)
 
 
-class TransformersTranscriptionCreateParams(TranscriptionCreateParamsBase, total=False):
-    stream: bool
+# --- FINAL ROBUST PATCH ---
+if "TranscriptionCreateParamsBase" in globals():
+    class TransformersTranscriptionCreateParams(TranscriptionCreateParamsBase, total=False):
+        generation_config: str
+        seed: int
+else:
+    class TransformersTranscriptionCreateParams(TypedDict, total=False):
+        generation_config: str
+        seed: int
+# --- END PATCH ---
 
 
 UNUSED_TRANSCRIPTION_FIELDS = {

@@ -22,7 +22,7 @@ fill-in-the-middle text insertion.
 import asyncio
 import time
 from collections.abc import AsyncGenerator
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, TypedDict
 
 from ...utils import logging
 from ...utils.import_utils import is_serve_available
@@ -42,11 +42,18 @@ if TYPE_CHECKING:
     from transformers import GenerationConfig, PreTrainedModel, PreTrainedTokenizerFast, ProcessorMixin
 
 
-class TransformersTextCompletionCreateParams(CompletionCreateParamsBase, total=False):
-    generation_config: str
-    seed: int
-    stream: bool
-
+# --- FINAL ROBUST PATCH ---
+if "CompletionCreateParamsBase" in globals():
+    # If the real OpenAI class was successfully imported, use it
+    class TransformersTextCompletionCreateParams(CompletionCreateParamsBase, total=False):
+        generation_config: str
+        seed: int
+else:
+    # Fallback to standard TypedDict if OpenAI types are missing
+    class TransformersTextCompletionCreateParams(TypedDict, total=False):
+        generation_config: str
+        seed: int
+# --- END PATCH ---
 
 # Fields accepted by the OpenAI schema but not yet supported.
 UNUSED_LEGACY_COMPLETION_FIELDS = {

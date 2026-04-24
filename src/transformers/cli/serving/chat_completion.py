@@ -26,7 +26,8 @@ from ...utils import logging
 from ...utils.import_utils import is_serve_available
 
 
-if is_serve_available():
+# --- BRUTE FORCE IMPORT PATCH ---
+try:
     from fastapi.responses import JSONResponse, StreamingResponse
     from openai.types.chat import ChatCompletion, ChatCompletionMessage, ChatCompletionMessageToolCall
     from openai.types.chat.chat_completion import Choice
@@ -34,8 +35,32 @@ if is_serve_available():
     from openai.types.chat.chat_completion_chunk import Choice as ChoiceChunk
     from openai.types.chat.completion_create_params import CompletionCreateParamsStreaming
     from openai.types.completion_usage import CompletionUsage
+    
+    parent_class = CompletionCreateParamsStreaming
+except ImportError:
+    from typing import TypedDict
+    
+    class _DummyDict(dict):
+        def __getattr__(self, name): return None
+        def __setattr__(self, name, value): self[name] = value
+        
+    class ChatCompletion(_DummyDict): pass
+    class ChatCompletionMessage(_DummyDict): pass
+    class ChatCompletionMessageToolCall(_DummyDict): pass
+    class Choice(_DummyDict): pass
+    class ChatCompletionChunk(_DummyDict): pass
+    class ChoiceDelta(_DummyDict): pass
+    class ChoiceDeltaToolCall(_DummyDict): pass
+    class ChoiceChunk(_DummyDict): pass
+    class CompletionCreateParamsStreaming(_DummyDict): pass
+    class CompletionUsage(_DummyDict): pass
+    
+    parent_class = TypedDict
 
-
+class TransformersCompletionCreateParamsStreaming(parent_class, total=False):
+    generation_config: str
+    seed: int
+# --- END PATCH ---
 from .utils import (
     BaseGenerateManager,
     BaseHandler,
@@ -48,11 +73,6 @@ from .utils import (
 
 if TYPE_CHECKING:
     from transformers import GenerationConfig, PreTrainedModel, PreTrainedTokenizerFast, ProcessorMixin
-
-
-class TransformersCompletionCreateParamsStreaming(CompletionCreateParamsStreaming, total=False):
-    generation_config: str
-    seed: int
 
 
 # Fields accepted by the OpenAI schema but not yet supported.
