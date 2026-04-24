@@ -18,6 +18,8 @@ Provides `sonicmoe_experts_forward` registered as "sonicmoe" in the ExpertsInter
 Requirements: CUDA, `kernels`, `nvidia-cutlass-dsl`, has_gate=True.
 """
 
+from __future__ import annotations
+
 import functools
 
 import torch
@@ -64,7 +66,8 @@ def _load_sonic_kernel():
     kernel = lazy_load_kernel("sonic-moe")
     if kernel is None:
         raise ImportError(
-            "sonic-moe kernel not found. Make sure you have the `kernels` and `nvidia-cutlass-dsl` packages installed."
+            "Failed to load the sonic-moe kernel — check that `kernels-community/sonic-moe` "
+            "has a build matching the current torch/CUDA."
         )
 
     ActivationType = getattr(getattr(kernel, "enums", None), "ActivationType", None)

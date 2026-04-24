@@ -11,6 +11,10 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+from __future__ import annotations
+
+import functools
+
 import torch
 import torch.nn as nn
 from torch.nn import functional as F
@@ -19,9 +23,11 @@ from ..activations import ACT2FN
 from ..core_model_loading import ConversionOps, _IdentityOp
 from ..quantizers.quantizers_utils import should_convert_module
 from ..utils import logging
+from ..utils.import_utils import is_kernels_available
 from .deepgemm import fp8_deepgemm_experts_forward, fp8_deepgemm_matmul
 from .hub_kernels import lazy_load_kernel
 from .moe import ExpertsInterface, use_experts_implementation
+from .tensor_parallel import neutralize_ep_sentinels
 
 
 logger = logging.get_logger(__name__)
@@ -31,40 +37,36 @@ _FP8_DTYPE = torch.float8_e4m3fn
 _FP8_MIN = torch.finfo(_FP8_DTYPE).min
 _FP8_MAX = torch.finfo(_FP8_DTYPE).max
 
-# Lazily-loaded finegrained-fp8 Triton kernel functions (populated by _load_triton_kernel)
-triton_fp8_matmul = None
-triton_fp8_act_quant = None
-triton_batched_fp8_matmul = None
-triton_grouped_fp8_matmul = None
-# _triton_available: None = not yet attempted, True = loaded, False = failed (won't retry)
-_triton_available = None
 
-
+@functools.cache
 def _load_triton_kernel():
-    """Lazily load the finegrained-fp8 Triton kernel and extract functions.
-
-    Uses the hub kernels lazy loading pattern. Raises an error if the kernel
-    cannot be loaded or required functions are missing. Only attempts loading once.
     """
-    global \
-        _triton_available, \
-        triton_fp8_act_quant, \
-        triton_fp8_matmul, \
-        triton_batched_fp8_matmul, \
-        triton_grouped_fp8_matmul
+    Load the finegrained-fp8 Triton kernel once and return its required symbols.
 
-    if _triton_available is not None:
-        if not _triton_available:
-            raise ImportError("finegrained-fp8 kernel is not available (previous load attempt failed).")
-        return
+    Raises:
+        ImportError if the `kernels` package is missing, or the kernel or required
+        symbols cannot be found.
 
-    _triton_available = False  # mark attempted before any early exit
+    Returns:
+        Tuple of (w8a8_fp8_matmul, fp8_act_quant, w8a8_fp8_matmul_batched,
+                  w8a8_fp8_matmul_grouped) from the finegrained-fp8 kernel.
+    """
+    if not is_kernels_available():
+        raise ImportError(
+            "finegrained-fp8 kernel requires the `kernels` package. Install it with `pip install -U kernels`."
+        )
 
     kernel = lazy_load_kernel("finegrained-fp8")
-    triton_fp8_matmul = getattr(kernel, "w8a8_fp8_matmul")
-    triton_fp8_act_quant = getattr(kernel, "fp8_act_quant")
-    triton_batched_fp8_matmul = getattr(kernel, "w8a8_fp8_matmul_batched")
-    triton_grouped_fp8_matmul = getattr(kernel, "w8a8_fp8_matmul_grouped")
+    if kernel is None:
+        raise ImportError(
+            "Failed to load the finegrained-fp8 kernel — check that `kernels-community/finegrained-fp8` "
+            "has a build matching the current torch/CUDA."
+        )
+
+    triton_fp8_matmul = getattr(kernel, "w8a8_fp8_matmul", None)
+    triton_fp8_act_quant = getattr(kernel, "fp8_act_quant", None)
+    triton_batched_fp8_matmul = getattr(kernel, "w8a8_fp8_matmul_batched", None)
+    triton_grouped_fp8_matmul = getattr(kernel, "w8a8_fp8_matmul_grouped", None)
 
     missing = [
         name
@@ -78,11 +80,11 @@ def _load_triton_kernel():
     ]
     if missing:
         raise ImportError(
-            f"finegrained-fp8 kernel is missing required functions: {', '.join(missing)}. "
+            f"finegrained-fp8 kernel is missing required symbols: {', '.join(missing)}. "
             "Please update the `kernels` package (`pip install -U kernels`)."
         )
 
-    _triton_available = True
+    return triton_fp8_matmul, triton_fp8_act_quant, triton_batched_fp8_matmul, triton_grouped_fp8_matmul
 
 
 def _cdiv(a: int, b: int) -> int:
@@ -127,8 +129,7 @@ def w8a8_fp8_matmul(
                 "and that the `kernels` package is installed and up to date (`pip install -U kernels`)."
             )
 
-    _load_triton_kernel()
-    global triton_fp8_matmul
+    triton_fp8_matmul, _, _, _ = _load_triton_kernel()
     return triton_fp8_matmul(A, B, As, Bs, block_size, output_dtype)
 
 
@@ -182,8 +183,7 @@ class FP8Linear(nn.Linear):
             scale_inv = self.weight_scale_inv.contiguous()
 
         if self.activation_scheme == "dynamic":
-            _load_triton_kernel()
-            global triton_fp8_act_quant
+            _, triton_fp8_act_quant, _, _ = _load_triton_kernel()
             qinput, scale = triton_fp8_act_quant(
                 input, self.block_size[1] if self.block_size is not None else input.shape[-1]
             )
@@ -203,7 +203,7 @@ class FP8Linear(nn.Linear):
         )
 
         if self.bias is not None:
-            output = output + self.bias
+            output.add_(self.bias)
 
         return output.to(dtype=input.dtype)
 
@@ -220,21 +220,20 @@ def fp8_batched_mm_experts_forward(
             "Use the default eager dispatch or switch to activation_scheme='dynamic'."
         )
 
-    _load_triton_kernel()
-    global triton_batched_fp8_matmul
+    _, _, triton_batched_fp8_matmul, _ = _load_triton_kernel()
 
-    device = hidden_states.device
     num_top_k = top_k_index.size(-1)
     num_tokens = hidden_states.size(0)
     hidden_dim = hidden_states.size(-1)
 
     # S is the number of selected tokens-experts pairs (S = num_tokens * num_top_k)
-    token_idx = torch.arange(num_tokens, device=device).unsqueeze(1).expand(-1, num_top_k).reshape(-1)  # (S,)
+    # Replicate each token num_top_k times to align with the flattened (S,) routing tensors.
+    selected_hidden_states = hidden_states.repeat_interleave(num_top_k, dim=0)
     sample_weights = top_k_weights.reshape(-1)  # (S,)
     expert_ids = top_k_index.reshape(-1)  # (S,)
 
-    # Get current hidden states for selected samples
-    selected_hidden_states = hidden_states[token_idx]
+    # Handle invalid expert IDs from Expert Parallelism (EP)
+    neutralize_ep_sentinels(expert_ids, sample_weights, self.num_experts)
 
     # --- Up projection per expert (FP8 batched) ---
     proj_out = triton_batched_fp8_matmul(
@@ -263,7 +262,8 @@ def fp8_batched_mm_experts_forward(
     )  # (S, hidden_dim)
 
     # Apply routing weights
-    weighted_out = proj_out * sample_weights.to(proj_out.dtype).unsqueeze(-1)  # (S, hidden_dim)
+    # Let torch promote bf16 `proj_out` × fp32 `sample_weights` to fp32 for the reduction below.
+    weighted_out = proj_out * sample_weights.unsqueeze(-1)  # (S, hidden_dim)
 
     # Accumulate results using deterministic reshape+sum instead of index_add_
     # (index_add_ with duplicate indices is non-deterministic on CUDA due to atomicAdd)
@@ -284,8 +284,7 @@ def fp8_grouped_mm_experts_forward(
             "Use the default eager dispatch or switch to activation_scheme='dynamic'."
         )
 
-    _load_triton_kernel()
-    global triton_grouped_fp8_matmul
+    _, _, _, triton_grouped_fp8_matmul = _load_triton_kernel()
 
     device = hidden_states.device
     num_top_k = top_k_index.size(-1)
@@ -293,22 +292,18 @@ def fp8_grouped_mm_experts_forward(
     hidden_dim = hidden_states.size(-1)
 
     # S is the number of selected token-expert pairs (S = num_tokens * num_top_k)
-    token_idx = torch.arange(num_tokens, device=device).unsqueeze(1).expand(-1, num_top_k).reshape(-1)  # (S,)
     sample_weights = top_k_weights.reshape(-1)  # (S,)
     expert_ids = top_k_index.reshape(-1)  # (S,)
 
     # Sort by expert for grouped processing
-    perm = torch.argsort(expert_ids)
-    inv_perm = torch.empty_like(perm)
-    inv_perm[perm] = torch.arange(perm.size(0), device=device)
-
-    expert_ids_g = expert_ids[perm]
+    expert_ids_g, perm = torch.sort(expert_ids)
+    selected_hidden_states_g = hidden_states[perm // num_top_k]
     sample_weights_g = sample_weights[perm]
-    selected_hidden_states_g = hidden_states[token_idx[perm]]
 
     # Compute offsets for grouped processing.
     # histc instead of bincount avoids cuda-graph issues;
     # CPU requires float input, CUDA requires int input (deterministic mode).
+    # histc drops values > max, so sentinels (== num_experts) are excluded from the per-expert count.
     histc_input = expert_ids_g.float() if device.type == "cpu" else expert_ids_g.int()
     tokens_per_expert = torch.histc(histc_input, bins=self.num_experts, min=0, max=self.num_experts - 1)
     offsets = torch.cumsum(tokens_per_expert, dim=0, dtype=torch.int32)
@@ -342,9 +337,11 @@ def fp8_grouped_mm_experts_forward(
     )  # (S, hidden_dim)
 
     # Apply routing weights
-    weighted_out = proj_out * sample_weights_g.to(proj_out.dtype).unsqueeze(-1)  # (S, hidden_dim)
+    weighted_out = proj_out * sample_weights_g.unsqueeze(-1)  # (S, hidden_dim)
 
     # Restore original order
+    inv_perm = torch.empty_like(perm)
+    inv_perm[perm] = torch.arange(perm.size(0), device=device)
     weighted_out = weighted_out[inv_perm]
 
     # Accumulate results using deterministic reshape+sum instead of index_add_
@@ -472,8 +469,7 @@ class FP8Experts(nn.Module):
             scale = activation_scale.to(torch.float32)
             qinput = (input / scale).clamp(min=_FP8_MIN, max=_FP8_MAX).to(_FP8_DTYPE)
         else:
-            _load_triton_kernel()
-            global triton_fp8_act_quant
+            _, triton_fp8_act_quant, _, _ = _load_triton_kernel()
             qinput, scale = triton_fp8_act_quant(
                 input, self.block_size[1] if self.block_size is not None else input.shape[-1]
             )
@@ -685,5 +681,5 @@ class Fp8Dequantize(ConversionOps):
         }
 
     @property
-    def reverse_op(self) -> "ConversionOps":
+    def reverse_op(self) -> ConversionOps:
         return _IdentityOp()
