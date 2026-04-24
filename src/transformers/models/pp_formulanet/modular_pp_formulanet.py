@@ -81,12 +81,10 @@ class PPFormulaNetConfig(SLANeXtConfig):
     vocab_size: int = 50000
     max_position_embeddings: int = 2560
     encoder_layers: int = 12
-    encoder_ffn_dim: int = 4096
     encoder_attention_heads: int = 16
     decoder_layers: int = 8
     decoder_ffn_dim: int = 2048
     decoder_attention_heads: int = 16
-    encoder_layerdrop: float | int = 0.0
     decoder_layerdrop: float | int = 0.0
     activation_function: str = "gelu"
     d_model: int = 512
@@ -94,7 +92,6 @@ class PPFormulaNetConfig(SLANeXtConfig):
     attention_dropout: float | int = 0.0
     activation_dropout: float | int = 0.0
     init_std: float = 0.02
-    classifier_dropout: float | int = 0.0
     scale_embedding: bool = True
     pad_token_id: int | None = 1
     bos_token_id: int | None = 0

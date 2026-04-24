@@ -55,7 +55,6 @@ class PPFormulaNetModelTester:
         num_channels=3,
         is_training=False,
         vision_config=None,
-        encoder_ffn_dim=16,
         decoder_ffn_dim=16,
         decoder_layers=2,
         d_model=16,
@@ -80,7 +79,6 @@ class PPFormulaNetModelTester:
         self.num_channels = num_channels
         self.image_size = image_size
         self.is_training = is_training
-        self.encoder_ffn_dim = encoder_ffn_dim
         self.decoder_ffn_dim = decoder_ffn_dim
         self.decoder_layers = decoder_layers
         self.d_model = d_model
@@ -102,7 +100,6 @@ class PPFormulaNetModelTester:
     def get_config(self) -> PPFormulaNetConfig:
         config = PPFormulaNetConfig(
             vision_config=self.vision_config,
-            encoder_ffn_dim=self.encoder_ffn_dim,
             decoder_ffn_dim=self.decoder_ffn_dim,
             decoder_layers=self.decoder_layers,
             d_model=self.d_model,
