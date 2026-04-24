@@ -135,15 +135,16 @@ class DeepseekV4SlidingLayer(DynamicSlidingWindowLayer):
 
 
 class DeepseekV4Cache(DynamicCache):
-    """DynamicCache + per-layer compressor / indexer state dicts and K=V sliding layers."""
+    """DynamicCache + K=V sliding layers. The V4-specific compressor state lives on
+    the cache instance (via the module-level helpers below) so the Compressor and
+    Indexer modules are pure math.
+    """
 
     def __init__(self, config: DeepseekV4Config | None = None):
         super().__init__(config=config)
         n = getattr(config, "num_hidden_layers", 0) if config is not None else 0
         if config is not None:
             self.layers = [DeepseekV4SlidingLayer(config.sliding_window) for _ in range(n)]
-        self.compressor_state: list[dict | None] = [None] * n
-        self.indexer_state: list[dict | None] = [None] * n
 
 
 class DeepseekV4GroupedLinear(nn.Linear):
@@ -212,6 +213,69 @@ def apply_rotary_pos_emb_interleave(q, k, cos, sin, position_ids=None, unsqueeze
     return q_embed, k_embed
 
 
+def _compressor_state(cache: Cache, state_key: str, layer_idx: int) -> dict:
+    """Per-layer compressor state dict, lazily created on any cache instance.
+
+    Each entry holds two kinds of state for one layer / branch (``compressor_state`` or
+    ``indexer_state``):
+
+      * **Pre-pool buffer** (``buffer_kv`` / ``buffer_gate``) — tokens that arrived
+        after the last closed window and aren't yet enough to form the next one.
+      * **Pooled cache** (``pooled``) — running list of compressed tokens emitted so
+        far, one per closed window.
+
+    Kept on the cache (not the module) so the Compressor / Indexer are stateless and
+    so the state travels with the cache through save / load / generation.
+    """
+    store = getattr(cache, state_key, None)
+    if store is None:
+        store = []
+        setattr(cache, state_key, store)
+    while len(store) <= layer_idx:
+        store.append({"buffer_kv": None, "buffer_gate": None, "pooled": None})
+    return store[layer_idx]
+
+
+def _accumulate_windows(
+    cache: Cache,
+    kv: torch.Tensor,
+    gate: torch.Tensor,
+    layer_idx: int,
+    state_key: str,
+    ratio: int,
+    start_pos: int,
+) -> tuple[torch.Tensor, torch.Tensor, int]:
+    """Merge newly-projected (``kv``, ``gate``) with the per-layer buffered tail and
+    return the chunk that's now window-aligned (``length // ratio * ratio``). The
+    remaining tail stays in the buffer for the next call. ``pool_base`` is the
+    absolute token position of the first pooled window returned.
+    """
+    state = _compressor_state(cache, state_key, layer_idx)
+    buf_kv, buf_gate = state["buffer_kv"], state["buffer_gate"]
+    if buf_kv is not None and buf_kv.shape[1]:
+        kv = torch.cat([buf_kv, kv], dim=1)
+        gate = torch.cat([buf_gate, gate], dim=1)
+    usable = (kv.shape[1] // ratio) * ratio
+    state["buffer_kv"] = kv[:, usable:]
+    state["buffer_gate"] = gate[:, usable:]
+    pool_base = max(0, start_pos) - (buf_kv.shape[1] if buf_kv is not None else 0)
+    return kv[:, :usable], gate[:, :usable], pool_base
+
+
+def _update_pool(cache: Cache, new_pooled: torch.Tensor, layer_idx: int, state_key: str) -> torch.Tensor:
+    """Append ``new_pooled`` to the running pool for this layer / branch. Returns the
+    full pool (an empty tensor shaped ``[B, 0, D]`` if nothing has been pooled yet —
+    never ``None``)."""
+    state = _compressor_state(cache, state_key, layer_idx)
+    pool = state["pooled"]
+    if new_pooled.shape[1] > 0:
+        pool = new_pooled if pool is None else torch.cat([pool, new_pooled], dim=1)
+        state["pooled"] = pool
+    if pool is None:
+        pool = new_pooled.new_zeros((new_pooled.shape[0], 0, new_pooled.shape[-1]))
+    return pool
+
+
 def _apply_partial_rope(x: torch.Tensor, cos: torch.Tensor, sin: torch.Tensor, rope_head_dim: int) -> torch.Tensor:
     """Split ``x`` along its head dim into the nope-slice (first dims) and the rope-slice
     (last ``rope_head_dim`` dims), apply interleaved RoPE to the rope slice, and glue
@@ -222,14 +286,36 @@ def _apply_partial_rope(x: torch.Tensor, cos: torch.Tensor, sin: torch.Tensor, r
     return torch.cat([nope, rope], dim=-1)
 
 
-class DeepseekV4Indexer(nn.Module):
-    """Owned by ``DeepseekV4Compressor`` when ``compress_ratio == 4``. Pools the same
-    tokens at a smaller ``index_head_dim`` (inline, no nested Compressor module), scores
-    the pooled positions against the attention query, and returns the top-k indices.
+def _pool_windows(kv: torch.Tensor, gate: torch.Tensor, ape: torch.Tensor, ratio: int, head_dim: int) -> torch.Tensor:
+    """Softmax-gated sum-pool: reshape into ``ratio``-sized windows and collapse.
 
-    Since the indexer's pool uses the same ``compress_ratio`` over the same hidden states
-    as the outer compressor, its pooled positions align one-for-one — the returned
-    indices index into the outer compressor's pool too.
+    weights = softmax(gate + ape, dim=window)
+    pooled  = sum(weights * kv, dim=window)
+    """
+    batch, length, _ = kv.shape
+    kv = kv.view(batch, length // ratio, ratio, head_dim)
+    gate = gate.view(batch, length // ratio, ratio, head_dim) + ape
+    return (kv * gate.softmax(dim=2)).sum(dim=2)
+
+
+def _rope_pool_positions(
+    pool_length: int, pool_base: int, ratio: int, device: torch.device, batch: int
+) -> torch.Tensor:
+    """Absolute positions of the pooled tokens: ``[pool_base, pool_base + ratio, …]``."""
+    return (torch.arange(pool_length, device=device) * ratio + pool_base).unsqueeze(0).expand(batch, -1)
+
+
+class DeepseekV4Indexer(nn.Module):
+    """Picks the top-k compressed positions per query. Owned by ``DeepseekV4Compressor``
+    when ``compress_ratio == 4``. Pools the same windows as the outer compressor but at
+    ``index_head_dim``, then scores the pooled positions against the attention query.
+
+    Because the indexer's pool uses the same ``compress_ratio`` over the same hidden
+    states as the outer compressor, its pooled positions align one-for-one — the top-k
+    indices it returns index into the outer compressor's pool just fine.
+
+    All cache-state management lives on :class:`DeepseekV4Cache` (the indexer calls
+    ``cache.accumulate_windows`` / ``cache.update_pool`` with ``state_key="indexer_state"``).
     """
 
     def __init__(self, config: DeepseekV4Config):
@@ -240,63 +326,35 @@ class DeepseekV4Indexer(nn.Module):
         self.rope_head_dim = config.qk_rope_head_dim
         self.index_topk = config.index_topk
         self.softmax_scale = self.head_dim**-0.5
-        # Per-window pooling primitives (same structure as Compressor, at ``index_head_dim``).
         self.wkv = nn.Linear(config.hidden_size, self.head_dim, bias=False)
         self.wgate = nn.Linear(config.hidden_size, self.head_dim, bias=False)
         self.ape = nn.Parameter(torch.empty(self.compress_ratio, self.head_dim))
         self.kv_norm = DeepseekV4RMSNorm(self.head_dim, eps=config.rms_norm_eps)
-        # Per-head query projection + per-head score-weighting.
         self.wq_b = nn.Linear(config.q_lora_rank, self.n_heads * self.head_dim, bias=False)
         self.weights_proj = nn.Linear(config.hidden_size, self.n_heads, bias=False)
 
-    def _pool(
+    def _pooled_kv(
         self,
         hidden_states: torch.Tensor,
         rotary: nn.Module,
-        cache: "DeepseekV4Cache | None",
+        cache: "DeepseekV4Cache",
         layer_idx: int,
         start_pos: int,
-    ) -> torch.Tensor | None:
-        """Pool the same windows as the outer compressor but at ``index_head_dim``.
-        Mirrors :meth:`DeepseekV4Compressor.forward` up to the RoPE step; state is carried
-        on the cache's ``indexer_state`` slot (parallel to ``compressor_state``).
-        """
-        r = self.compress_ratio
-        batch, seq_len, _ = hidden_states.shape
+    ) -> torch.Tensor:
+        """Run the indexer's own pool at ``index_head_dim`` and return the running pool."""
         kv = self.wkv(hidden_states)
         gate = self.wgate(hidden_states)
-        store = getattr(cache, "indexer_state", None)
-        state = store[layer_idx] if store is not None else None
-        if state is not None and state["buffer_kv"].shape[1]:
-            kv = torch.cat([state["buffer_kv"], kv], dim=1)
-            gate = torch.cat([state["buffer_gate"], gate], dim=1)
-        usable = (kv.shape[1] // r) * r
-        if usable == 0:
-            if store is not None:
-                store[layer_idx] = {
-                    "buffer_kv": kv,
-                    "buffer_gate": gate,
-                    "pooled_kv": state["pooled_kv"] if state is not None else None,
-                }
-            return None
-        block_kv = kv[:, :usable].view(batch, usable // r, r, self.head_dim)
-        block_gate = gate[:, :usable].view(batch, usable // r, r, self.head_dim) + self.ape
-        pooled = self.kv_norm((block_kv * block_gate.softmax(dim=2)).sum(dim=2))
-
-        base = max(0, start_pos) + (kv.shape[1] - usable - seq_len if kv.shape[1] > seq_len else 0)
-        positions = (torch.arange(pooled.shape[1], device=pooled.device) * r + base).unsqueeze(0).expand(batch, -1)
-        cos, sin = rotary(pooled, positions)
-        pooled = _apply_partial_rope(pooled.unsqueeze(1), cos, sin, self.rope_head_dim).squeeze(1)
-
-        if store is not None:
-            prev = state["pooled_kv"] if state is not None else None
-            store[layer_idx] = {
-                "buffer_kv": kv[:, usable:],
-                "buffer_gate": gate[:, usable:],
-                "pooled_kv": pooled if prev is None else torch.cat([prev, pooled], dim=1),
-            }
-            pooled = store[layer_idx]["pooled_kv"]
-        return pooled if pooled.shape[1] > 0 else None
+        ready_kv, ready_gate, pool_base = _accumulate_windows(
+            cache, kv, gate, layer_idx, "indexer_state", self.compress_ratio, start_pos
+        )
+        new_pooled = self.kv_norm(_pool_windows(ready_kv, ready_gate, self.ape, self.compress_ratio, self.head_dim))
+        if new_pooled.shape[1] > 0:
+            positions = _rope_pool_positions(
+                new_pooled.shape[1], pool_base, self.compress_ratio, new_pooled.device, new_pooled.shape[0]
+            )
+            cos, sin = rotary(new_pooled, positions)
+            new_pooled = _apply_partial_rope(new_pooled.unsqueeze(1), cos, sin, self.rope_head_dim).squeeze(1)
+        return _update_pool(cache, new_pooled, layer_idx, "indexer_state")
 
     def forward(
         self,
@@ -304,14 +362,13 @@ class DeepseekV4Indexer(nn.Module):
         q_residual: torch.Tensor,
         rotary: nn.Module,
         position_embeddings: tuple[torch.Tensor, torch.Tensor],
-        cache: "DeepseekV4Cache | None",
+        cache: "DeepseekV4Cache",
         layer_idx: int,
         start_pos: int,
-    ) -> torch.LongTensor | None:
-        pooled_kv = self._pool(hidden_states, rotary, cache, layer_idx, start_pos)
-        if pooled_kv is None:
-            return None
+    ) -> torch.LongTensor:
+        pooled_kv = self._pooled_kv(hidden_states, rotary, cache, layer_idx, start_pos)
         batch, seq_len, _ = hidden_states.shape
+        topk = min(self.index_topk, pooled_kv.shape[1])
         cos, sin = position_embeddings
         q = self.wq_b(q_residual).view(batch, seq_len, self.n_heads, self.head_dim).transpose(1, 2)
         q = _apply_partial_rope(q, cos, sin, self.rope_head_dim).transpose(1, 2)
@@ -319,22 +376,17 @@ class DeepseekV4Indexer(nn.Module):
         scores = F.relu(scores) * self.softmax_scale
         weights = self.weights_proj(hidden_states).float() * (self.n_heads**-0.5)  # [B, S, H]
         index_scores = (scores * weights.unsqueeze(-1)).sum(dim=2)  # [B, S, T]
-        return index_scores.topk(min(self.index_topk, index_scores.shape[-1]), dim=-1).indices
+        return index_scores.topk(topk, dim=-1).indices
 
 
 class DeepseekV4Compressor(nn.Module):
-    """Per-layer long-range KV branch: pools ``compress_ratio`` consecutive tokens into
-    one compressed KV, optionally filtered by an Indexer (for ``compress_ratio == 4``
-    layers). Attention calls ``compressor(...)`` to get the long-range segment already
-    ready to concatenate with its sliding-window KV.
+    """Per-layer long-range KV branch. Pools ``compress_ratio`` consecutive tokens into
+    one compressed KV and (when ``compress_ratio == 4``) narrows the running pool via
+    a learned top-k Indexer. Attention concatenates the returned tensor onto its
+    sliding-window KV.
 
-    Pooling weights are softmax-normalised per window:
-
-        weights = softmax(wgate(x) + ape, dim=window)
-        pooled  = sum(weights * wkv(x), dim=window)
-
-    RoPE is applied to the last ``qk_rope_head_dim`` dims of each pooled token with the
-    caller-supplied rotary (typically the model's compressed-theta YaRN rotary).
+    Cache-state (buffered pre-pool tokens, running pooled cache) is owned by
+    :class:`DeepseekV4Cache` — this module only runs the math.
     """
 
     def __init__(self, config: DeepseekV4Config, compress_ratio: int, head_dim: int):
@@ -346,16 +398,7 @@ class DeepseekV4Compressor(nn.Module):
         self.wgate = nn.Linear(config.hidden_size, head_dim, bias=False)
         self.ape = nn.Parameter(torch.empty(compress_ratio, head_dim))
         self.kv_norm = DeepseekV4RMSNorm(head_dim, eps=config.rms_norm_eps)
-        # Only the ratio-4 variant narrows its pooled KV through a learned top-k selector.
         self.indexer: DeepseekV4Indexer | None = DeepseekV4Indexer(config) if compress_ratio == 4 else None
-
-    def _pool_window(self, kv: torch.Tensor, gate: torch.Tensor) -> torch.Tensor:
-        """Reshape ``kv`` / ``gate`` into ``compress_ratio``-sized windows and sum-pool."""
-        batch, length, _ = kv.shape
-        r = self.compress_ratio
-        kv = kv.view(batch, length // r, r, self.head_dim)
-        gate = gate.view(batch, length // r, r, self.head_dim) + self.ape
-        return (kv * gate.softmax(dim=2)).sum(dim=2)
 
     def forward(
         self,
@@ -363,68 +406,38 @@ class DeepseekV4Compressor(nn.Module):
         q_residual: torch.Tensor | None,
         rotary: nn.Module,
         position_embeddings: tuple[torch.Tensor, torch.Tensor],
-        cache: "DeepseekV4Cache | None",
+        cache: "DeepseekV4Cache",
         layer_idx: int,
         start_pos: int,
-        state_key: str = "compressor_state",
-    ) -> torch.Tensor | None:
-        """Returns the long-range KV segment for this layer — already indexer-filtered
-        if ``compress_ratio == 4``. Shape: ``[B, 1, N_compressed_or_topk, head_dim]``.
-        Returns ``None`` if not enough tokens have arrived to close a window yet.
+    ) -> torch.Tensor:
+        """Returns the long-range KV segment for this layer, shape
+        ``[B, 1, N_compressed_or_topk, head_dim]`` (possibly empty in N if not enough
+        tokens have arrived to close the first window).
         """
-        r = self.compress_ratio
         batch, seq_len, _ = hidden_states.shape
+
+        # Accumulate windows through the cache, pool the ready chunk, update the pool.
         kv = self.wkv(hidden_states)
         gate = self.wgate(hidden_states)
+        ready_kv, ready_gate, pool_base = _accumulate_windows(
+            cache, kv, gate, layer_idx, "compressor_state", self.compress_ratio, start_pos
+        )
+        new_pooled = self.kv_norm(_pool_windows(ready_kv, ready_gate, self.ape, self.compress_ratio, self.head_dim))
+        if new_pooled.shape[1] > 0:
+            positions = _rope_pool_positions(
+                new_pooled.shape[1], pool_base, self.compress_ratio, new_pooled.device, batch
+            )
+            cos, sin = rotary(new_pooled, positions)
+            new_pooled = _apply_partial_rope(new_pooled.unsqueeze(1), cos, sin, self.rope_head_dim).squeeze(1)
+        pooled = _update_pool(cache, new_pooled, layer_idx, "compressor_state")
 
-        # Caches without the per-layer compressor store (e.g. generation's DynamicCache)
-        # skip the stateful incremental path and just pool over the current call.
-        store = getattr(cache, state_key, None)
-        state = store[layer_idx] if store is not None else None
-        if state is not None and state["buffer_kv"].shape[1]:
-            kv = torch.cat([state["buffer_kv"], kv], dim=1)
-            gate = torch.cat([state["buffer_gate"], gate], dim=1)
-        usable = (kv.shape[1] // r) * r
-        if usable == 0:
-            if store is not None:
-                store[layer_idx] = {
-                    "buffer_kv": kv,
-                    "buffer_gate": gate,
-                    "pooled_kv": state["pooled_kv"] if state is not None else None,
-                }
-            return None
-
-        # Pool and rope the newly-closed windows.
-        pooled = self.kv_norm(self._pool_window(kv[:, :usable], gate[:, :usable]))
-        base = max(0, start_pos) + (kv.shape[1] - usable - seq_len if kv.shape[1] > seq_len else 0)
-        positions = (torch.arange(pooled.shape[1], device=pooled.device) * r + base).unsqueeze(0).expand(batch, -1)
-        cos, sin = rotary(pooled, positions)
-        pooled = _apply_partial_rope(pooled.unsqueeze(1), cos, sin, self.rope_head_dim).squeeze(1)
-
-        # Update the running compressed-KV cache.
-        if store is not None:
-            prev = state["pooled_kv"] if state is not None else None
-            store[layer_idx] = {
-                "buffer_kv": kv[:, usable:],
-                "buffer_gate": gate[:, usable:],
-                "pooled_kv": pooled if prev is None else torch.cat([prev, pooled], dim=1),
-            }
-            pooled = store[layer_idx]["pooled_kv"]
-
-        if pooled.shape[1] == 0:
-            return None
-
-        # Shape to [B, 1, N, head_dim] — single KV head, broadcast to query heads downstream.
+        # Shape to [B, 1, N, head_dim] (single KV head, broadcast to query heads downstream).
         pooled = pooled.unsqueeze(1)
-        if self.indexer is not None:
-            # Pick the top-k most informative compressed positions per query token. The
-            # Indexer runs its own (smaller-dim) companion compressor; its pool aligns
-            # one-for-one with ours so the returned indices are valid for gathering here.
+        if self.indexer is not None and pooled.shape[2] > 0:
             topk = self.indexer(hidden_states, q_residual, rotary, position_embeddings, cache, layer_idx, start_pos)
-            if topk is not None:
-                expanded = pooled.unsqueeze(2).expand(-1, -1, seq_len, -1, -1)
-                idx = topk.unsqueeze(1).unsqueeze(-1).expand(-1, 1, -1, -1, self.head_dim)
-                pooled = torch.gather(expanded, 3, idx).reshape(batch, 1, -1, self.head_dim)
+            expanded = pooled.unsqueeze(2).expand(-1, -1, seq_len, -1, -1)
+            idx = topk.unsqueeze(1).unsqueeze(-1).expand(-1, 1, -1, -1, self.head_dim)
+            pooled = torch.gather(expanded, 3, idx).reshape(batch, 1, -1, self.head_dim)
         return pooled
 
 
@@ -535,8 +548,7 @@ class DeepseekV4Attention(nn.Module):
                 layer_idx=self.layer_idx,
                 start_pos=start_pos,
             )
-            if pooled is not None:
-                full_kv = torch.cat([full_kv, pooled], dim=2)
+            full_kv = torch.cat([full_kv, pooled], dim=2)
 
         if attention_mask is not None and full_kv.shape[2] > attention_mask.shape[-1]:
             attention_mask = F.pad(attention_mask, (0, full_kv.shape[2] - attention_mask.shape[-1]), value=0.0)
@@ -557,7 +569,14 @@ class DeepseekV4Attention(nn.Module):
             **kwargs,
         )
 
-        # De-rotate the rope slice on the output (reference V4 `model.py`).
+        # De-rotate the rope slice on the output. V4 shares K and V (``wkv`` projects to a
+        # single tensor), so V's last ``qk_rope_head_dim`` dims carry the same per-token
+        # RoPE rotation as K. Attention sums V-rotated values across all attended
+        # positions, so the output's rope slice is a mixture of rotated content values.
+        # Applying the conjugate rotation ``(cos, -sin)`` at the *query* position pulls
+        # the content back into a position-independent frame before the output projection
+        # mixes heads — without this step, ``wo_a`` / ``wo_b`` would see position-entangled
+        # content in the rope slice and couldn't learn a clean projection.
         attn_output = _apply_partial_rope(attn_output.transpose(1, 2), cos, -sin, self.rope_head_dim).transpose(1, 2)
 
         grouped = attn_output.reshape(batch, seq_len, -1).view(batch, seq_len, self.config.o_groups, -1)
@@ -579,8 +598,8 @@ class DeepseekV4HyperHead(nn.Module):
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         flat = x.flatten(2).float()
         rsqrt = torch.rsqrt(flat.square().mean(-1, keepdim=True) + self.norm_eps)
-        mixes = F.linear(flat, self.hc_fn) * rsqrt
-        pre = torch.sigmoid(mixes * self.hc_scale + self.hc_base) + self.eps
+        mixes = F.linear(flat, self.hc_fn.float()) * rsqrt
+        pre = torch.sigmoid(mixes * self.hc_scale.float() + self.hc_base.float()) + self.eps
         return (pre.unsqueeze(-1) * x).sum(dim=2).to(x.dtype)
 
 
@@ -735,19 +754,37 @@ def _hyper_connection_weights(
     norm_eps: float,
     hc_eps: float,
 ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
-    """Compute the Hyper-Connection mix weights ``(pre, post, comb)`` for one site.
+    r"""Compute the Hyper-Connection mix weights ``(pre, post, comb)`` for one site.
 
-    ``pre``  [..., hc_mult]           — collapse weights for the ``hc_mult`` input streams.
-    ``post`` [..., hc_mult]           — placement weights for the block output.
-    ``comb`` [..., hc_mult, hc_mult]  — doubly-stochastic stream-mixing matrix (Sinkhorn).
+    ASCII shape guide — ``B`` = batch, ``S`` = seq, ``H`` = hc_mult, ``D`` = hidden_size::
 
-    Packed together in a single ``(2 + hc_mult) * hc_mult``-wide linear projection over
-    the flattened residual-stream vector so the three parts share one RMS-normalised
-    mix-logit computation.
+              hidden_streams        flatten(2)        RMSNorm-rescale + F.linear(hc_fn)
+         [B, S, H, D]  ──────────►  [B, S, H*D]  ─────────────────────────────────►
+                                                             mix-logits
+                                                             [B, S, (2+H)*H]
+                                                                    │
+                            ┌───────────────────────────────────────┴──────────────────────────────┐
+                            ▼                          ▼                                           ▼
+                        pre logits                post logits                               comb logits
+                        [B, S, H]                 [B, S, H]                                 [B, S, H, H]
+                        × hc_scale[0]             × hc_scale[1]                             × hc_scale[2]
+                        + hc_base[:H]             + hc_base[H:2H]                           + hc_base[2H:]
+                        σ() + eps                 σ() + eps                                 σ() + eps
+                        │                         │                                         │
+                        pre                        post                                     Sinkhorn(iters)
+                        (stream collapse weights)  (block-output placement)                 row/col normalise
+                                                                                            │
+                                                                                            comb
+                                                                                            (stream mixer)
+
+    All three groups share a single RMS-normalised linear projection — the packed layout
+    is the whole point, so the decoder layer only pays for one ``F.linear`` per site.
     """
-    flat = hidden_streams.flatten(start_dim=2).float()  # [B, S, hc_mult * hidden]
+    flat = hidden_streams.flatten(start_dim=2).float()  # [B, S, H*D]
     rsqrt = torch.rsqrt(flat.square().mean(-1, keepdim=True) + norm_eps)
-    mix = F.linear(flat, hc_fn) * rsqrt  # [B, S, (2 + hc) * hc]
+    # HC mixer params are kept in fp32 for Sinkhorn stability — cast defensively so
+    # loading a bf16 checkpoint without fp32 pinning still works.
+    mix = F.linear(flat, hc_fn.float()) * rsqrt  # [B, S, (2+H)*H]
 
     pre_scale, post_scale, comb_scale = hc_scale.unbind(0)
     pre = torch.sigmoid(mix[..., :hc_mult] * pre_scale + hc_base[:hc_mult]) + hc_eps
@@ -765,38 +802,60 @@ def _hyper_connection_weights(
     return pre, post, comb
 
 
-def _hyper_connection_collapse(hidden_streams: torch.Tensor, pre: torch.Tensor) -> torch.Tensor:
-    """``hc_mult`` parallel streams → one collapsed stream (weighted sum by ``pre``)."""
-    return (pre.unsqueeze(-1) * hidden_streams).sum(dim=2).to(hidden_streams.dtype)
-
-
 def _hyper_connection_expand(
     block_output: torch.Tensor,
     hidden_streams: torch.Tensor,
     post: torch.Tensor,
     comb: torch.Tensor,
 ) -> torch.Tensor:
-    """``block_output`` (single stream) + previous ``hidden_streams`` → new ``hc_mult`` streams.
+    r"""Reassemble ``hc_mult`` output streams from the block's single-stream output and
+    the previous residual streams.
 
-    Each new stream is ``post[stream] * block_output + comb @ hidden_streams``.
+    For each output stream ``h`` (of ``H = hc_mult``)::
+
+        next_streams[h] = post[h] * block_output + Σ_k comb[h, k] * hidden_streams[k]
+                         └── place ──┘            └── mix the untouched residuals ──┘
     """
-    next_streams = post.unsqueeze(-1) * block_output.unsqueeze(-2)
-    next_streams = next_streams + torch.matmul(comb, hidden_streams)
-    return next_streams.to(hidden_streams.dtype)
+    dtype = hidden_streams.dtype
+    next_streams = post.to(dtype).unsqueeze(-1) * block_output.unsqueeze(-2)
+    next_streams = next_streams + torch.matmul(comb.to(dtype), hidden_streams)
+    return next_streams
 
 
 class DeepseekV4DecoderLayer(GradientCheckpointingLayer):
-    """Hyper-Connection (https://huggingface.co/papers/2409.19606) decoder layer.
+    r"""Hyper-Connection (https://huggingface.co/papers/2409.19606) decoder layer.
 
-    The usual ``residual -> attn -> residual -> mlp`` pattern becomes
+    Classic residual decoder layer::
 
-        hc_streams ─► collapse ─► norm ─► self_attn ─► expand ─► hc_streams
-        hc_streams ─► collapse ─► norm ─► mlp       ─► expand ─► hc_streams
+        h ──► norm ──► self_attn ──► + ──► norm ──► mlp ──► +
+        └──────── residual ────────┘   └─────── residual ───┘
 
-    where the collapse / expand weights are produced by a learned, Sinkhorn-normalised
-    mixer over the ``hc_mult`` parallel residual streams — a separate mixer per site
-    (``hc_attn_*`` / ``hc_ffn_*``). The helpers ``_hyper_connection_weights``,
-    ``_hyper_connection_collapse``, and ``_hyper_connection_expand`` handle the math.
+    V4 decoder layer (``H = hc_mult`` parallel residual streams throughout)::
+
+                attention site                                    mlp site
+        ┌────────────────────────────────────────┐    ┌────────────────────────────────────────┐
+        │                                        │    │                                        │
+        │  hidden_streams [B, S, H, D]           │    │  hidden_streams [B, S, H, D]           │
+        │        │                               │    │        │                               │
+        │        ▼                               │    │        ▼                               │
+        │  hc_attn_*  ──►  (pre, post, comb)     │    │  hc_ffn_*  ──►  (pre, post, comb)      │
+        │        │                               │    │        │                               │
+        │   Σ pre·streams (collapse)             │    │   Σ pre·streams (collapse)             │
+        │        │                               │    │        │                               │
+        │   input_layernorm                      │    │   post_attention_layernorm             │
+        │        │                               │    │        │                               │
+        │   self_attn                            │    │   mlp  (MoE routed + shared)           │
+        │        │                               │    │        │                               │
+        │   post·output + comb·streams (expand)  │    │   post·output + comb·streams (expand)  │
+        │        │                               │    │        │                               │
+        │        ▼                               │    │        ▼                               │
+        │  new hidden_streams  ──────────────────┘    │  new hidden_streams                    │
+        └────────────────────────────────────────┘    └────────────────────────────────────────┘
+
+    The collapse / expand weights come from :func:`_hyper_connection_weights` (a single
+    RMS-normalised linear projection packs ``pre``, ``post``, and ``comb`` for the site).
+    Per-site parameters: ``hc_attn_{fn,base,scale}`` and ``hc_ffn_{fn,base,scale}``,
+    named to match the upstream V4 checkpoint.
     """
 
     def __init__(self, config: DeepseekV4Config, layer_idx: int):
@@ -812,9 +871,8 @@ class DeepseekV4DecoderLayer(GradientCheckpointingLayer):
         self.input_layernorm = DeepseekV4RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.post_attention_layernorm = DeepseekV4RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
-        # Per-site HC mixers. ``hc_fn`` projects the flattened residual streams to
-        # ``(2 + hc_mult) * hc_mult`` mix logits, then ``hc_base`` / ``hc_scale`` bias and
-        # rescale each group before the Sinkhorn split. Names match the reference model.
+        # Per-site HC mixers — one linear projects the flattened streams to
+        # ``(2 + hc_mult) * hc_mult`` mix logits that get split into ``(pre, post, comb)``.
         mix_size = (2 + self.hc_mult) * self.hc_mult
         self.hc_attn_fn = nn.Parameter(torch.empty(mix_size, self.hc_mult * config.hidden_size))
         self.hc_attn_base = nn.Parameter(torch.empty(mix_size))
@@ -837,7 +895,7 @@ class DeepseekV4DecoderLayer(GradientCheckpointingLayer):
             self.norm_eps,
             self.hc_eps,
         )
-        collapsed = _hyper_connection_collapse(hidden_states, pre)
+        collapsed = (pre.unsqueeze(-1) * hidden_states).sum(dim=2).to(hidden_states.dtype)
         attn_output, _ = self.self_attn(self.input_layernorm(collapsed), **kwargs)
         hidden_states = _hyper_connection_expand(attn_output, hidden_states, post, comb)
 
@@ -852,7 +910,7 @@ class DeepseekV4DecoderLayer(GradientCheckpointingLayer):
             self.norm_eps,
             self.hc_eps,
         )
-        collapsed = _hyper_connection_collapse(hidden_states, pre)
+        collapsed = (pre.unsqueeze(-1) * hidden_states).sum(dim=2).to(hidden_states.dtype)
         mlp_output = self.mlp(self.post_attention_layernorm(collapsed), input_ids=kwargs.get("input_ids"))
         return _hyper_connection_expand(mlp_output, hidden_states, post, comb)
 
