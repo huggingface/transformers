@@ -21,7 +21,7 @@ from huggingface_hub.dataclasses import strict
 from ... import initialization as init
 from ...cache_utils import Cache, DynamicCache
 from ...configuration_utils import PreTrainedConfig
-from ...integrations import use_experts_implementation, use_kernelized_func
+from ...integrations import use_kernelized_func
 from ...masking_utils import create_causal_mask, create_sliding_window_causal_mask
 from ...modeling_outputs import BaseModelOutputWithPast
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS
@@ -30,13 +30,12 @@ from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring
 from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
-from ..deepseek_v3.modeling_deepseek_v3 import DeepseekV3ForCausalLM
+from ..deepseek_v3.modeling_deepseek_v3 import DeepseekV3ForCausalLM, DeepseekV3NaiveMoe
 from ..gemma3.modeling_gemma3 import Gemma3RotaryEmbedding
 from ..glm4_moe.configuration_glm4_moe import Glm4MoeConfig
 from ..glm4_moe.modeling_glm4_moe import Glm4MoeMLP, apply_rotary_pos_emb  # noqa: F401
 from ..llama.modeling_llama import LlamaDecoderLayer, repeat_kv
 from ..mixtral.modeling_mixtral import (
-    MixtralExperts,
     MixtralModel,
     MixtralPreTrainedModel,
     MixtralRMSNorm,

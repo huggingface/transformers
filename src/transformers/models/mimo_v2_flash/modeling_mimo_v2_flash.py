@@ -206,15 +206,12 @@ class MiMoV2FlashTopKRouter(nn.Module):
 
 @use_experts_implementation
 class MiMoV2FlashExperts(nn.Module):
-    """Fused experts (V5). Checkpoint layout: `mlp.experts.gate_up_proj`, `mlp.experts.down_proj`.
-    Original reference used per-expert `nn.ModuleList` MLPs (`experts.{i}.gate_proj` etc.)
-    """
+    """Collection of expert weights stored as 3D tensors."""
 
-    def __init__(self, config: MiMoV2FlashConfig):
+    def __init__(self, config):
         super().__init__()
         self.num_experts = config.num_local_experts
         self.hidden_dim = config.hidden_size
-        # MoE experts use moe_intermediate_size, not the dense MLP's intermediate_size
         self.intermediate_dim = config.moe_intermediate_size
         self.gate_up_proj = nn.Parameter(torch.empty(self.num_experts, 2 * self.intermediate_dim, self.hidden_dim))
         self.down_proj = nn.Parameter(torch.empty(self.num_experts, self.hidden_dim, self.intermediate_dim))
