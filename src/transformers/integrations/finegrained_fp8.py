@@ -135,7 +135,7 @@ def _load_deepgemm_kernel():
             "Please upgrade your CUDA toolkit or use a different `experts_implementation`."
         )
 
-    kernel = lazy_load_kernel("DeepGEMM")
+    kernel = lazy_load_kernel("deep-gemm")
     if kernel is None:
         raise ImportError(
             "Failed to load the DeepGEMM kernel — check that `kernels-community/deep-gemm` "
@@ -524,7 +524,7 @@ def fp8_deepgemm_experts_forward(
 ) -> torch.Tensor:
     if self.activation_scheme == "static":
         raise NotImplementedError(
-            "deepgemm experts dispatch does not support activation_scheme='static'. "
+            "DeepGEMM experts dispatch does not support activation_scheme='static'. "
             "Use the default eager dispatch or switch to activation_scheme='dynamic'."
         )
     if self.block_size is None:
