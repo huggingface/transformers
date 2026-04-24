@@ -585,12 +585,15 @@ class TimesFm2_5Model(TimesFm2_5PreTrainedModel):
         """
         batch_size, seq_len = past_values.shape
         patch_len = self.config.patch_length
+        torch._check(seq_len % patch_len == 0)
 
         if past_values_padding is None:
             past_values_padding = torch.zeros_like(past_values, dtype=torch.long)
+        else:
+            past_values_padding = past_values_padding.narrow(1, 0, seq_len)
 
-        patched_inputs = past_values.view(batch_size, -1, patch_len)
-        patched_masks = past_values_padding[:, :seq_len].view(batch_size, -1, patch_len)
+        patched_inputs = past_values.unflatten(-1, (-1, patch_len))
+        patched_masks = past_values_padding.unflatten(-1, (-1, patch_len))
         patched_masks_bool = patched_masks >= 0.5
 
         count = past_values.new_zeros(batch_size)
