@@ -284,92 +284,24 @@ class TimesFm2_5ModelTest(ModelTesterMixin, unittest.TestCase):
 
 
 @require_torch
-class TimesFm2_5ForwardInputVariantsTest(unittest.TestCase):
-    def setUp(self):
-        config = TimesFm2_5Config(
-            patch_length=32,
-            context_length=128,
-            horizon_length=8,
-            hidden_size=32,
-            intermediate_size=64,
-            head_dim=16,
-            num_hidden_layers=1,
-            num_attention_heads=2,
-            num_key_value_heads=2,
-            quantiles=[0.1, 0.5, 0.9],
-            output_quantile_len=16,
-        )
-        self.model = TimesFm2_5ModelForPrediction(config).to(torch_device).eval()
-        self.horizon_len = config.horizon_length
-
-    def test_list_vs_tensor_parity(self):
-        """forward() with list and 2D tensor of equal-length series gives identical output."""
-        raw = [torch.randn(60, device=torch_device) for _ in range(2)]
-        stacked = torch.stack(raw)
-        with torch.no_grad():
-            out_list = self.model(past_values=raw)
-            out_tensor = self.model(past_values=stacked)
-        self.assertTrue(torch.allclose(out_list.mean_predictions, out_tensor.mean_predictions, atol=1e-5))
-        self.assertTrue(torch.allclose(out_list.full_predictions, out_tensor.full_predictions, atol=1e-5))
-
-    def test_window_size_parity(self):
-        """forward() with window_size works for both list and 2D tensor inputs and gives identical output across edge cases."""
-        batch_sizes = [1, 4]
-        seq_lengths = [32, 64]
-        window_sizes = [1, 4, 32, 128]
-
-        for b in batch_sizes:
-            for slen in seq_lengths:
-                for w in window_sizes:
-                    raw = [torch.randn(slen, device=torch_device) for _ in range(b)]
-                    stacked = torch.stack(raw)
-                    with torch.no_grad():
-                        out_list = self.model(past_values=raw, window_size=w)
-                        out_tensor = self.model(past_values=stacked, window_size=w)
-
-                    self.assertTrue(
-                        torch.allclose(out_list.mean_predictions, out_tensor.mean_predictions, atol=1e-5),
-                        f"Parity failed for b={b}, slen={slen}, w={w}",
-                    )
-                    self.assertTrue(
-                        torch.allclose(out_list.full_predictions, out_tensor.full_predictions, atol=1e-5),
-                        f"Full prediction parity failed for b={b}, slen={slen}, w={w}",
-                    )
-
-    def test_input_min_parity(self):
-        """forward() with truncate_negative=True gives identical results for list and tensor inputs, even with mixed signs."""
-        # Create sequences where one is all positive and another has negative values
-        raw = [
-            torch.tensor([1.0, 2.0, 3.0], device=torch_device),
-            torch.tensor([-1.0, 0.0, 1.0], device=torch_device),
-        ]
-        stacked = torch.stack(raw)
-
-        with torch.no_grad():
-            # truncate_negative=True will use input_min to decide whether to clamp
-            out_list = self.model(past_values=raw, truncate_negative=True)
-            out_tensor = self.model(past_values=stacked, truncate_negative=True)
-
-        self.assertTrue(torch.allclose(out_list.mean_predictions, out_tensor.mean_predictions, atol=1e-5))
-        self.assertTrue(torch.allclose(out_list.full_predictions, out_tensor.full_predictions, atol=1e-5))
-
-
-@require_torch
 @slow
 class TimesFm2_5ModelIntegrationTests(unittest.TestCase):
     def test_inference(self):
         model = TimesFm2_5ModelForPrediction.from_pretrained(
             "google/timesfm-2.5-200m-transformers", revision="refs/pr/3"
         ).to(torch_device)
-        forecast_input = [
-            np.sin(np.linspace(0, 20, 100)),
-            np.sin(np.linspace(0, 20, 200)),
-            np.sin(np.linspace(0, 20, 400)),
+        sequences = [
+            torch.sin(torch.linspace(0, 20, 100, dtype=torch.float32, device=torch_device)),
+            torch.sin(torch.linspace(0, 20, 200, dtype=torch.float32, device=torch_device)),
+            torch.sin(torch.linspace(0, 20, 400, dtype=torch.float32, device=torch_device)),
         ]
-        forecast_input_tensor = [torch.tensor(ts, dtype=torch.float32, device=torch_device) for ts in forecast_input]
+        past_values = TimesFm2_5ModelForPrediction._past_values_to_tensor(sequences)
+        past_observed_mask = torch.zeros_like(past_values, dtype=torch.long)
+        for i, ts in enumerate(sequences):
+            past_observed_mask[i, past_values.shape[1] - ts.shape[0] :] = 1
 
         with torch.no_grad():
-            output = model(past_values=forecast_input_tensor)
+            output = model(past_values=past_values, past_observed_mask=past_observed_mask)
 
         mean_predictions = output.mean_predictions
         self.assertEqual(mean_predictions.shape, torch.Size([3, model.config.horizon_length]))

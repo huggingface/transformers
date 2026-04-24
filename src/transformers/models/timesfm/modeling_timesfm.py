@@ -19,6 +19,7 @@
 # limitations under the License.
 
 import math
+import warnings
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 
@@ -381,8 +382,10 @@ class TimesFmModel(TimesFmPreTrainedModel):
             Past values of the time series that serves as input to the model.
         past_values_padding (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
             The padding indicator of the time series.
-        freq (`torch.LongTensor` of shape `(batch_size,)`):
-            Frequency indices for the time series data.
+        freq (`torch.LongTensor` of shape `(batch_size,)` or `Sequence[int]`, *optional*):
+            Frequency indices for the time series data. Defaults to a zero tensor (high-frequency). A
+            sequence of ints is also accepted and converted to a tensor internally. Tensor inputs are
+            preferred and required for export.
         """
         # Reshape into patches (using view for efficiency)
         bsize = past_values.shape[0]
@@ -591,15 +594,19 @@ class TimesFmModelForPrediction(TimesFmPreTrainedModel):
 
     def _preprocess(
         self,
-        inputs: Sequence[torch.Tensor] | torch.Tensor,
-        freq: Sequence[int] | None = None,
+        inputs: torch.Tensor,
+        observed_mask: torch.Tensor,
+        freq: torch.Tensor | None = None,
         context_len: int | None = None,
     ) -> tuple[torch.Tensor, ...]:
         """Pad/truncate input time series to `context_len` and build a padding mask.
 
         Args:
-            inputs: A list of 1d Tensors. Each Tensor is the context time series of a single forecast task.
-            freq: Optional list of frequencies (returned as a tensor when provided).
+            inputs: A 2D `torch.Tensor` of shape `(batch_size, sequence_length)`.
+            observed_mask: A 2D `torch.Tensor` of the same shape as `inputs` where `1` indicates an observed
+                value and `0` indicates a missing value. Missing positions are marked as padded in the
+                returned padding mask.
+            freq: Optional 1D `torch.Tensor` of frequency indices.
             context_len: Optional context length override (defaults to `self.context_len`).
 
         Returns:
@@ -608,39 +615,20 @@ class TimesFmModelForPrediction(TimesFmPreTrainedModel):
         if context_len is None:
             context_len = self.context_len
 
-        if isinstance(inputs, torch.Tensor) and inputs.ndim == 2:
-            x = inputs[:, -context_len:]
-            num_front_pad = context_len - x.shape[1]
-            x = F.pad(x, (num_front_pad, 0))
-            padding = torch.cat(
-                [
-                    torch.ones(x.shape[0], num_front_pad, dtype=x.dtype, device=x.device),
-                    torch.zeros(
-                        x.shape[0], context_len + self.horizon_len - num_front_pad, dtype=x.dtype, device=x.device
-                    ),
-                ],
-                dim=1,
-            )
-            result = (x, padding)
-        else:
-            input_ts, input_padding = [], []
-            for ts in inputs:
-                ts = ts[-context_len:]
-                num_front_pad = context_len - ts.shape[0]
-                ts = torch.cat([torch.zeros(num_front_pad, dtype=ts.dtype, device=ts.device), ts], dim=0)
-                padding = torch.cat(
-                    [
-                        torch.ones(num_front_pad, dtype=ts.dtype, device=ts.device),
-                        torch.zeros(context_len + self.horizon_len - num_front_pad, dtype=ts.dtype, device=ts.device),
-                    ],
-                    dim=0,
-                )
-                input_ts.append(ts)
-                input_padding.append(padding)
-            result = (torch.stack(input_ts, dim=0), torch.stack(input_padding, dim=0))
+        x = inputs[:, -context_len:]
+        num_front_pad = context_len - x.shape[1]
+        x = F.pad(x, (num_front_pad, 0))
+
+        obs = observed_mask[:, -context_len:].to(dtype=x.dtype)
+        body_padding = 1 - obs
+        front_padding = torch.ones(x.shape[0], num_front_pad, dtype=x.dtype, device=x.device)
+        horizon_padding = torch.zeros(x.shape[0], self.horizon_len, dtype=x.dtype, device=x.device)
+        padding = torch.cat([front_padding, body_padding, horizon_padding], dim=1)
+        result = (x, padding)
 
         if freq is not None:
-            result = result + (torch.tensor(freq[: len(inputs)], dtype=torch.int32).reshape(-1, 1),)
+            freq_tensor = freq[: x.shape[0]].to(dtype=torch.int32)
+            result = result + (freq_tensor.reshape(-1, 1),)
         return result
 
     def _postprocess_output(
@@ -670,8 +658,9 @@ class TimesFmModelForPrediction(TimesFmPreTrainedModel):
     @auto_docstring
     def forward(
         self,
-        past_values: Sequence[torch.Tensor],
-        freq: Sequence[torch.Tensor | int] | None = None,
+        past_values: Sequence[torch.Tensor] | torch.Tensor,
+        past_observed_mask: torch.Tensor | None = None,
+        freq: Sequence[int] | torch.Tensor | None = None,
         window_size: int | None = None,
         future_values: torch.Tensor | None = None,
         forecast_context_len: int | None = None,
@@ -681,9 +670,23 @@ class TimesFmModelForPrediction(TimesFmPreTrainedModel):
     ) -> TimesFmOutputForPrediction:
         r"""
         past_values (`torch.FloatTensor` of shape `(batch_size, sequence_length)`):
-            Past values of the time series that serves as input to the model.
-        freq (`torch.LongTensor` of shape `(batch_size,)`):
-            Frequency indices for the time series data.
+            Past values of the time series that serves as input to the model. A list of 1D tensors with
+            possibly differing lengths is also accepted (deprecated): each tensor is front-padded with zeros
+            and stacked into a 2D tensor. Tensor inputs are preferred and required for export.
+        past_observed_mask (`torch.BoolTensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Boolean mask indicating which `past_values` were observed and which are padding/missing. Mask
+            values selected in `[0, 1]`:
+
+            - `1` for values that are **observed**,
+            - `0` for values that are **missing** (i.e. padded or NaNs that were replaced by zeros).
+
+            Defaults to a tensor of ones (everything observed). When `past_values` is passed as a list of
+            variable-length tensors, you should provide a matching `past_observed_mask` so the front-padding
+            zeros are not treated as observed values.
+        freq (`torch.LongTensor` of shape `(batch_size,)` or `Sequence[int]`, *optional*):
+            Frequency indices for the time series data. Defaults to a zero tensor (high-frequency). A
+            sequence of ints is also accepted and converted to a tensor internally. Tensor inputs are
+            preferred and required for export.
         window_size (`int`, *optional*):
             Window size of trend + residual decomposition. If None then we do not do decomposition.
         future_values (`torch.Tensor`, *optional*):
@@ -703,7 +706,7 @@ class TimesFmModelForPrediction(TimesFmPreTrainedModel):
 
         >>> model = TimesFmModelForPrediction.from_pretrained("google/timesfm-2.0-500m-pytorch")
 
-        >>> forecast_input = [torch.linspace(0, 20, 100).sin(), torch.linspace(0, 20, 200).sin(), torch.linspace(0, 20, 400).sin()]
+        >>> forecast_input = torch.stack([torch.linspace(0, 20, 400).sin() for _ in range(3)])
         >>> frequency_input = torch.tensor([0, 1, 2], dtype=torch.long)
 
         >>> # Generate
@@ -718,39 +721,37 @@ class TimesFmModelForPrediction(TimesFmPreTrainedModel):
         else:
             fcontext_len = forecast_context_len
 
-        is_tensor = isinstance(past_values, torch.Tensor) and past_values.ndim == 2
+        if isinstance(past_values, list):
+            warnings.warn(
+                "Passing `past_values` as a list of 1D tensors is deprecated and will be removed in a future "
+                "version. Please pass a 2D `torch.Tensor` of shape `(batch_size, sequence_length)` and, when "
+                "needed, a `past_observed_mask` of the same shape (1 = observed, 0 = padded/missing).",
+                FutureWarning,
+            )
+            past_values = self._past_values_to_tensor(past_values)
 
-        if is_tensor:
-            device = past_values.device
-            inputs = past_values[:, -fcontext_len:]
-            inp_min = inputs.min()
-        else:
-            device = past_values[0].device
-            inputs = [ts[-fcontext_len:] for ts in past_values]
-            inp_min = torch.min(torch.stack([torch.min(ts) for ts in inputs]))
+        if isinstance(freq, list):
+            freq = self._freq_to_tensor(freq)
 
-        if window_size is not None:
-            if is_tensor:
-                trend, residual = self._timesfm_moving_average(inputs, window_size)
-                inputs = torch.stack([trend, residual], dim=1).view(2 * inputs.shape[0], -1)
-                if freq is not None:
-                    freq = torch.repeat_interleave(freq, 2, dim=0)
-            else:
-                new_inputs = []
-                new_freqs = []
-                for i, ts in enumerate(inputs):
-                    new_inputs.extend(self._timesfm_moving_average(ts, window_size))
-                    if freq is not None:
-                        new_freqs.extend([freq[i]] * 2)
-                inputs = new_inputs
-                if freq is not None:
-                    freq = new_freqs
-
+        device = past_values.device
+        if past_observed_mask is None:
+            past_observed_mask = torch.ones_like(past_values)
         if freq is None:
             logger.info("No frequency provided via `freq`. Default to high (0).")
-            freq = [0] * len(inputs)
+            freq = torch.zeros(past_values.shape[0], dtype=torch.int32, device=device)
 
-        input_ts, input_padding, inp_freq = self._preprocess(inputs, freq)
+        inputs = past_values[:, -fcontext_len:]
+        observed_mask = past_observed_mask[:, -fcontext_len:].to(device=device)
+        sentinel = torch.full_like(inputs, torch.finfo(inputs.dtype).max)
+        inp_min = torch.where(observed_mask.bool(), inputs, sentinel).min()
+
+        if window_size is not None:
+            trend, residual = self._timesfm_moving_average(inputs, window_size)
+            inputs = torch.stack([trend, residual], dim=1).view(2 * inputs.shape[0], -1)
+            observed_mask = torch.repeat_interleave(observed_mask, 2, dim=0)
+            freq = torch.repeat_interleave(freq, 2, dim=0)
+
+        input_ts, input_padding, inp_freq = self._preprocess(inputs, observed_mask, freq=freq)
         input_ts = input_ts.to(device)
         input_padding = input_padding.to(device)
         inp_freq = inp_freq.to(device)
@@ -823,28 +824,27 @@ class TimesFmModelForPrediction(TimesFmPreTrainedModel):
         )
 
     @staticmethod
-    def _timesfm_moving_average(
-        arr: torch.Tensor, window_size: int
-    ) -> list[torch.Tensor] | tuple[torch.Tensor, torch.Tensor]:
-        """Calculates the moving average using PyTorch's convolution function."""
-        # arr shape: (T,) or (B, T)
-        is_2d = arr.ndim == 2
-        if not is_2d:
-            arr = arr.unsqueeze(0)  # (1, T)
+    def _past_values_to_tensor(past_values: Sequence[torch.Tensor]) -> torch.Tensor:
+        """Convert a list of variable-length 1D tensors into a 2D tensor of shape `(batch_size, max_len)`
+        by left-padding each entry with zeros. Equivalent to `torch.nn.utils.rnn.pad_sequence(past_values,
+        batch_first=True, padding_side="left")`, re-implemented here because `padding_side` requires
+        `torch>=2.5`.
+        """
+        max_len = max(ts.shape[0] for ts in past_values)
+        return torch.stack([F.pad(ts, (max_len - ts.shape[0], 0)) for ts in past_values], dim=0)
 
-        # Pad with zeros to handle initial window positions
-        arr_padded = F.pad(arr, (window_size - 1, 0), "constant", 0)  # (B, T + window_size - 1)
+    @staticmethod
+    def _freq_to_tensor(freq: Sequence[int]) -> torch.Tensor:
+        """Convert a sequence of frequency indices into a 1D `torch.int32` tensor of shape `(batch_size,)`."""
+        return torch.tensor(freq, dtype=torch.int32)
 
-        # Create a convolution kernel
+    @staticmethod
+    def _timesfm_moving_average(arr: torch.Tensor, window_size: int) -> tuple[torch.Tensor, torch.Tensor]:
+        """Calculates the moving average using PyTorch's convolution function. `arr` shape: `(B, T)`."""
+        arr_padded = F.pad(arr, (window_size - 1, 0), "constant", 0)
         kernel = torch.ones(window_size, dtype=arr.dtype, device=arr.device) / window_size
-        kernel = kernel.view(1, 1, -1)  # (1, 1, window_size)
-
-        # Apply convolution to calculate the moving average
-        # F.conv1d expects (N, C_in, L_in)
-        smoothed_arr = F.conv1d(arr_padded.unsqueeze(1), kernel).squeeze(1)  # (B, T)
-
-        if not is_2d:
-            return [smoothed_arr.squeeze(0), (arr - smoothed_arr).squeeze(0)]
+        kernel = kernel.view(1, 1, -1)
+        smoothed_arr = F.conv1d(arr_padded.unsqueeze(1), kernel).squeeze(1)
         return smoothed_arr, arr - smoothed_arr
 
 
