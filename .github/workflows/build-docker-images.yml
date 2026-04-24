@@ -3,7 +3,7 @@ name: Build docker images (scheduled)
 on:
   push:
     branches:
-      - trigger-ci-for-torch-2.12-rc1-on-main-bc4b330451d0
+      - trigger-ci-for-torch-2.12-rc1-on-main-bc4b330451d0xxx
   repository_dispatch:
   workflow_dispatch:
   workflow_call:
