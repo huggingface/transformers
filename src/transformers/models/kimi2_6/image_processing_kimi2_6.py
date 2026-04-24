@@ -40,7 +40,6 @@ class Kimi2_6ImageProcessorKwargs(ImagesKwargs, total=False):
         The spatial patch size of the vision encoder.
     merge_kernel_size (`int`, *optional*, defaults to 2):
         The merge size of the vision encoder to llm encoder.
-        "max_patches": 16384,
     """
 
     max_patches: int
@@ -84,10 +83,11 @@ def navit_resize(
 
 
 @auto_docstring
-class Kimi2_6LImageProcessorPil(TorchvisionBackend):
+class Kimi2_6ImageProcessor(TorchvisionBackend):
     do_resize = True
     resample = PILImageResampling.BICUBIC
     size = {"max_height": 512, "max_width": 512}
+    max_patches: 16384
     default_to_square = False
     do_rescale = True
     do_normalize = True
@@ -185,3 +185,6 @@ class Kimi2_6LImageProcessorPil(TorchvisionBackend):
         return BatchFeature(
             data={"pixel_values": pixel_values, "image_grid_thw": image_grid_thw}, tensor_type=return_tensors
         )
+
+
+__all__ = ["Kimi2_6ImageProcessor"]

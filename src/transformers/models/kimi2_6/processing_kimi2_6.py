@@ -18,12 +18,17 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from datetime import datetime
+
 from ...feature_extraction_utils import BatchFeature
 from ...image_utils import ImageInput
 from ...processing_utils import MultiModalData, ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
-from ...utils import auto_docstring
+from ...utils import auto_docstring, logging
 from ...video_utils import VideoInput
+
+
+logger = logging.get_logger(__name__)
 
 
 class Kimi26ProcessorKwargs(ProcessingKwargs, total=False):
@@ -31,6 +36,9 @@ class Kimi26ProcessorKwargs(ProcessingKwargs, total=False):
         "text_kwargs": {
             "padding": False,
             "return_mm_token_type_ids": True,
+        },
+        "videos_kwargs": {
+            "return_metadata": True,
         },
     }
 
@@ -84,9 +92,14 @@ class Kimi2_6Processor(ProcessorMixin):
             videos_inputs = self.video_processor(videos=videos, **output_kwargs["videos_kwargs"])
             video_grid_thw = videos_inputs["video_grid_thw"]
 
+            # If user has not requested video metadata, pop it
+            if not kwargs.get("return_metadata"):
+                video_metadata = videos_inputs.pop("video_metadata")
+            else:
+                video_metadata = videos_inputs["video_metadata"]
+
         if not isinstance(text, list):
             text = [text]
-
         text = text.copy()  # below lines change text in-place
 
         if images is not None:
@@ -104,8 +117,33 @@ class Kimi2_6Processor(ProcessorMixin):
             index = 0
             for i in range(len(text)):
                 while self.video_token in text[i]:
-                    num_video_tokens = video_grid_thw[index].prod() // merge_length
-                    text[i] = text[i].replace(self.video_token, "<|placeholder|>" * num_video_tokens, 1)
+                    num_frames = video_grid_thw[index][0]
+                    temporal_patch_size = self.video_processor.temporal_patch_size
+                    num_video_tokens_per_chunk = (
+                        video_grid_thw[index].prod() // merge_length // (num_frames // temporal_patch_size)
+                    )
+
+                    metadata = video_metadata[index]
+                    if metadata.fps is None:
+                        logger.warning_once(
+                            "Kimi2.6 requires frame timestamps to construct prompts, but the `fps` of the input video could not be inferred. "
+                            "Probably `video_metadata` was missing from inputs and you passed pre-sampled frames. "
+                            "Defaulting to `fps=24`. Please provide `video_metadata` for more accurate results."
+                        )
+                    metadata.fps = 24 if metadata.fps is None else metadata.fps
+
+                    video_placeholder = ""
+                    for chunk_start in range(0, len(metadata.timestamps), temporal_patch_size):
+                        chunk_timestamps = metadata.timestamps[chunk_start : chunk_start + temporal_patch_size]
+                        start_time = chunk_timestamps[0]
+                        timestamp_str = datetime.fromtimestamp(start_time).strftime("%H:%M:%S")
+                        milliseconds = int((start_time % 1) * 1000)
+                        timestamp_str = f"{timestamp_str}.{milliseconds:03d}"
+
+                        # No idea what the template looks like, so copy-pasted and need to check
+                        video_placeholder += f"{timestamp_str}<|media_begin|>{'<|placeholder|>' * num_video_tokens_per_chunk}<|media_content|><|media_pad|><|media_end|>"
+
+                    text[i] = text[i].replace(self.video_token, video_placeholder, 1)
                     index += 1
                 text[i] = text[i].replace("<|placeholder|>", self.video_token)
 
