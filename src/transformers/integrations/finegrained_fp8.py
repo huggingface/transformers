@@ -36,6 +36,12 @@ _FP8_MIN = torch.finfo(_FP8_DTYPE).min
 _FP8_MAX = torch.finfo(_FP8_DTYPE).max
 
 
+# DeepGEMM requires M-dimension alignment to 128 for TMA-based contiguous grouped GEMM.
+# TMA is an H100 hardware addition that allows applications to asynchronously and
+# bi-directionally transfer 1D-5D tensors between GPU global and shared memory.
+_DEEPGEMM_M_ALIGNMENT = 128
+
+
 def _first_attr(obj, *names):
     for name in names:
         if hasattr(obj, name):
@@ -90,12 +96,6 @@ def _load_triton_kernel():
         )
 
     return triton_fp8_matmul, triton_fp8_act_quant, triton_batched_fp8_matmul, triton_grouped_fp8_matmul
-
-
-# DeepGEMM requires M-dimension alignment to 128 for TMA-based contiguous grouped GEMM.
-# TMA is an H100 hardware addition that allows applications to asynchronously and
-# bi-directionally transfer 1D-5D tensors between GPU global and shared memory.
-_DEEPGEMM_M_ALIGNMENT = 128
 
 
 @functools.cache
