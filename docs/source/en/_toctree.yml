@@ -239,7 +239,7 @@
     - local: perf_hardware
       title: Building a GPU workstation
     - local: model_memory_anatomy
-      title: Model training anatomy
+      title: GPU memory usage
     title: Hardware
   title: Training
 - isExpanded: false

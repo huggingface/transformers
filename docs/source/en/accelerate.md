@@ -30,15 +30,14 @@ Run the [accelerate config](https://huggingface.co/docs/accelerate/en/package_re
 compute_environment: LOCAL_MACHINE
 distributed_type: FSDP
 fsdp_config:
+  fsdp_version: 2
+  fsdp_reshard_after_forward: true
+  fsdp_cpu_offload: false
   fsdp_auto_wrap_policy: TRANSFORMER_BASED_WRAP
-  fsdp_backward_prefetch_policy: BACKWARD_PRE
   fsdp_cpu_ram_efficient_loading: true
-  fsdp_offload_params: false
-  fsdp_sharding_strategy: FULL_SHARD
+  fsdp_activation_checkpointing: false
   fsdp_state_dict_type: SHARDED_STATE_DICT
-  fsdp_sync_module_states: true
   fsdp_transformer_layer_cls_to_wrap: LlamaDecoderLayer
-  fsdp_use_orig_params: true
 mixed_precision: bf16
 num_machines: 1
 num_processes: 4
@@ -65,7 +64,6 @@ from transformers import TrainingArguments
 TrainingArguments(
     ...,
     fsdp=True,
-    fsdp="full_shard auto_wrap",
     fsdp_config="path/to/fsdp.json",
 )
 ```
