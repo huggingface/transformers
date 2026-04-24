@@ -375,8 +375,9 @@ def fp8_grouped_mm_experts_forward(
 
     # EP sentinel handling: leave `expert_ids` unclamped so the sort pushes sentinels to the tail,
     # `histc(max=num_experts-1)` drops them from `tokens_per_expert`, and the grouped matmul skips
-    # rows beyond `offsets[-1]` — so sentinels cost no real GEMM compute. Their routing weights are
-    # already zero (RouterParallel masks them at dispatch) so the weighted mul contributes nothing.
+    # rows beyond `offsets[-1]` — so sentinels cost no real GEMM compute. Sentinel rows are zeroed
+    # post-weighted-mul (see below), since the kernel leaves them uninitialized.
+
     # Sort by expert for grouped processing
     expert_ids_g, perm = torch.sort(expert_ids)
     selected_hidden_states_g = hidden_states[perm // num_top_k]
@@ -419,6 +420,11 @@ def fp8_grouped_mm_experts_forward(
 
     # Apply routing weights
     weighted_out = proj_out * sample_weights_g.unsqueeze(-1)  # (S, hidden_dim)
+
+    # EP sentinel handling: `proj_out` rows past `offsets[-1]` are left uninitialized by the kernel,
+    # so `proj_out[sentinel] * 0 = 0 * NaN = NaN` can leak from allocator pool reuse. Zero them here
+    # so the downstream reduction stays finite even when the routing weight was already zero.
+    weighted_out.masked_fill_((expert_ids_g >= self.num_experts).unsqueeze(-1), 0.0)
 
     # Restore original order
     inv_perm = torch.empty_like(perm)
@@ -548,9 +554,9 @@ def fp8_deepgemm_experts_forward(
 
     # EP sentinel handling: leave `expert_ids` unclamped so the sort pushes sentinels to the tail,
     # `_build_deepgemm_contiguous_layout` marks their positions as skipped (-1 on Hopper, beyond the
-    # cumsum on Blackwell), and DeepGEMM skips them — so sentinels cost no real GEMM compute. Their
-    # routing weights are already zero (RouterParallel masks them at dispatch) so the weighted mul
-    # contributes nothing.
+    # cumsum on Blackwell), and DeepGEMM skips them — so sentinels cost no real GEMM compute.
+    # Sentinel rows are zeroed post-weighted-mul (see below), since the kernel leaves them uninitialized.
+
     # Sort by expert for grouped processing
     expert_ids_g, perm = torch.sort(expert_ids)
     selected_hidden_states_g = hidden_states[perm // num_top_k]
@@ -580,8 +586,7 @@ def fp8_deepgemm_experts_forward(
 
     # --- Down projection per expert (DeepGEMM grouped contiguous) ---
     proj_fp8, proj_scales = deepgemm_per_token_cast_to_fp8(proj_out, use_ue8m0=False)
-    # Zero-init: unpad later reads sentinel-row positions the kernel never writes.
-    proj_out = torch.zeros(total_padded_rows, hidden_dim, device=device, dtype=torch.bfloat16)
+    proj_out = torch.empty(total_padded_rows, hidden_dim, device=device, dtype=torch.bfloat16)
     deepgemm_grouped_fp8_matmul(
         (proj_fp8, proj_scales),
         (self.down_proj, self.down_proj_scale_inv.float()),
@@ -595,6 +600,11 @@ def fp8_deepgemm_experts_forward(
 
     # Apply routing weights
     weighted_out = proj_out * sample_weights_g.unsqueeze(-1)  # (S, hidden_dim)
+
+    # EP sentinel handling: `proj_out` rows past the valid expert blocks are left uninitialized by the kernel,
+    # so `proj_out[sentinel] * 0 = 0 * NaN = NaN` can leak from allocator pool reuse. Zero them here
+    # so the downstream reduction stays finite even when the routing weight was already zero.
+    weighted_out.masked_fill_((expert_ids_g >= self.num_experts).unsqueeze(-1), 0.0)
 
     # Restore original order
     inv_perm = torch.empty_like(perm)
