@@ -18,175 +18,73 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-
-import inspect
-
-from huggingface_hub.dataclasses import strict
-
 from ...configuration_utils import PreTrainedConfig
-from ...modeling_rope_utils import RopeParameters
-from ...utils import auto_docstring
+from ..auto import CONFIG_MAPPING, AutoConfig
 
 
-@auto_docstring(checkpoint="Qwen/Qwen2-VL-7B-Instruct")
-@strict
-class Kimi26VisionConfig(PreTrainedConfig):
-    model_type = "kimi2_6_vision"
-    base_config_key = "vision_config"
-
-    depth: int = 32
-    embed_dim: int = 1280
-    hidden_size: int = 3584
-    hidden_act: str = "quick_gelu"
-    mlp_ratio: int = 4
-    num_heads: int = 16
-    in_channels: int = 3
-    patch_size: int | list[int] | tuple[int, int] = 14
-    spatial_merge_size: int = 2
-    temporal_patch_size: int | list[int] | tuple[int, int] = 2
-    initializer_range: float = 0.02
-
-
-@auto_docstring(checkpoint="Qwen/Qwen2-VL-7B-Instruct")
-@strict
-class Kimi26TextConfig(PreTrainedConfig):
+class Kimi2_6VisionConfig(PreTrainedConfig):
     r"""
-    ```python
-    >>> from transformers import Kimi26TextModel, Kimi26Config
-
-    >>> # Initializing a Kimi26 style configuration
-    >>> configuration = Kimi26Config()
-
-    >>> # Initializing a model from the Qwen2-VL-7B style configuration
-    >>> model = Kimi26TextModel(configuration)
-
-    >>> # Accessing the model configuration
-    >>> configuration = model.config
-    ```
+    pos_emb_height (`int`, *optional*):
+        Initial position embedding height.
+    pos_emb_width (`int`, *optional*):
+        Initial position embedding width.
+    pos_emb_time (`int`, *optional*):
+        Initial position embedding time dimension.
+    pos_emb_type (`str`, *optional*):
+        Type of position embedding.
+    merge_kernel_size (`tuple[int] | list[int]`, *optional*):
+        Kernel size for patch merging.
+    video_attn_type (`str`, *optional*):
+        Type of video attention.
+    merge_type (`str`, *optional*):
+        Type of merge operation.
     """
 
-    model_type = "kimi2_6_text"
-    base_config_key = "text_config"
-    keys_to_ignore_at_inference = ["past_key_values"]
-    default_theta = 1000000.0
-    # Default tensor parallel plan for base model `Kimi26`
-    base_model_tp_plan = {
-        "layers.*.self_attn.q_proj": "colwise",
-        "layers.*.self_attn.k_proj": "colwise",
-        "layers.*.self_attn.v_proj": "colwise",
-        "layers.*.self_attn.o_proj": "rowwise",
-        "layers.*.mlp.gate_proj": "colwise",
-        "layers.*.mlp.up_proj": "colwise",
-        "layers.*.mlp.down_proj": "rowwise",
-    }
-    base_model_pp_plan = {
-        "embed_tokens": (["input_ids"], ["inputs_embeds"]),
-        "layers": (["hidden_states", "attention_mask"], ["hidden_states"]),
-        "norm": (["hidden_states"], ["hidden_states"]),
-    }
-    ignore_keys_at_rope_validation = {"mrope_section"}
+    model_type = "kimi2_6_vision"
 
-    vocab_size: int = 152064
-    hidden_size: int = 8192
-    intermediate_size: int = 29568
-    num_hidden_layers: int = 80
-    num_attention_heads: int = 64
-    num_key_value_heads: int | None = 8
-    hidden_act: str = "silu"
-    max_position_embeddings: int = 32768
-    initializer_range: float = 0.02
-    rms_norm_eps: float = 1e-05
-    use_cache: bool = True
-    use_sliding_window: bool | None = False
-    sliding_window: int | None = 4096
-    max_window_layers: int | None = 80
-    layer_types: list[str] | None = None
-    attention_dropout: float | int | None = 0.0
-    rope_parameters: RopeParameters | dict | None = None
-    bos_token_id: int | None = 151643
-    eos_token_id: int | list[int] | None = 151645
-    pad_token_id: int | None = None
-
-    def __post_init__(self, **kwargs):
-        self.sliding_window = self.sliding_window if self.use_sliding_window else None
-
-        # for backward compatibility
-        if self.num_key_value_heads is None:
-            self.num_key_value_heads = self.num_attention_heads
-
-        if self.layer_types is None:
-            self.layer_types = [
-                "sliding_attention"
-                if self.sliding_window is not None and i >= self.max_window_layers
-                else "full_attention"
-                for i in range(self.num_hidden_layers)
-            ]
-
-        super().__post_init__(**kwargs)
-
-    def convert_rope_params_to_dict(self, **kwargs):
-        rope_scaling = kwargs.pop("rope_scaling", None)
-        self.rope_parameters = rope_scaling or self.rope_parameters
-        self.rope_parameters = self.rope_parameters if self.rope_parameters is not None else {}
-
-        # Standardize and validate the correctness of rotary position embeddings parameters
-        self.rope_parameters.setdefault("rope_theta", kwargs.pop("rope_theta", self.default_theta))
-        if self.rope_parameters.get("rope_type", self.rope_parameters.get("type")) == "mrope":
-            self.rope_parameters["rope_type"] = "default"
-        self.standardize_rope_params()
-        return kwargs
+    patch_size: int = 14
+    pos_emb_height: int = 64
+    pos_emb_width: int = 64
+    pos_emb_time: int = 4
+    num_attention_heads: int = 16
+    num_hidden_layers: int = 27
+    hidden_size: int = 1152
+    intermediate_size: int = 4304
+    hidden_act: str = "gelu_pytorch_tanh"
+    merge_kernel_size: tuple[int, int] | list[int] = (2, 2)
+    rope_parameters: dict | None = None
 
 
-@auto_docstring(checkpoint="Qwen/Qwen2-VL-7B-Instruct")
-@strict
-class Kimi26Config(PreTrainedConfig):
+class Kimi2_6Config(PreTrainedConfig):
     r"""
-    Example:
-
-    ```python
-    >>> from transformers import Kimi26ForConditionalGeneration, Kimi26Config
-
-    >>> # Initializing a Kimi26 style configuration
-    >>> configuration = Kimi26Config()
-
-    >>> # Initializing a model from the Qwen2-VL-7B style configuration
-    >>> model = Kimi26ForConditionalGeneration(configuration)
-
-    >>> # Accessing the model configuration
-    >>> configuration = model.config
-    ```"""
+    projection_ln_eps (`float`, *optional*):
+        Layer norm epsilon for projector.
+    """
 
     model_type = "kimi2_6"
-    sub_configs = {"vision_config": Kimi26VisionConfig, "text_config": Kimi26TextConfig}
-    keys_to_ignore_at_inference = ["past_key_values"]
+    sub_configs = {"text_config": AutoConfig, "vision_config": Kimi2_6VisionConfig}
 
     text_config: dict | PreTrainedConfig | None = None
     vision_config: dict | PreTrainedConfig | None = None
-    image_token_id: int = 151655
-    video_token_id: int = 151656
-    vision_start_token_id: int = 151652
-    vision_end_token_id: int = 151653
-    tie_word_embeddings: bool = False
+    projection_hidden_size: int | None = None
+    projection_hidden_act: str = "gelu"
+    projection_ln_eps: float = 1e-5
+    image_token_id: int = 163605
+    use_unified_vision_chunk: bool = True
+    video_token = "<|kimi_k25_video_placeholder|>"
 
     def __post_init__(self, **kwargs):
-        if isinstance(self.vision_config, dict):
-            self.vision_config = self.sub_configs["vision_config"](**self.vision_config)
-        elif self.vision_config is None:
-            self.vision_config = self.sub_configs["vision_config"]()
-
-        # Hub configs are saved as flat dicts so we pop some of kwargs to init `TextConfig`
-        text_params = inspect.signature(self.sub_configs["text_config"].__init__).parameters.keys()
-        text_params = list(text_params) + ["rope_parameters", "rope_scaling", "rope_theta"]
-        text_kwargs = {key: kwargs.pop(key) for key in text_params if key in kwargs}
-
         if isinstance(self.text_config, dict):
-            self.text_config = self.sub_configs["text_config"](**self.text_config)
+            self.text_config["model_type"] = self.text_config.get("model_type", "deepseek_v3")
+            self.text_config = CONFIG_MAPPING[self.text_config["model_type"]](**self.text_config)
         elif self.text_config is None:
-            # Hub configs are saved as flat dicts so we pop some of kwargs to init `TextConfig`
-            text_kwargs["dtype"] = kwargs.get("torch_dtype", kwargs.get("dtype"))  # don't pop the dtype
-            self.text_config = self.sub_configs["text_config"](**text_kwargs)
+            self.text_config = CONFIG_MAPPING["deepseek_v3"]()
 
+        if isinstance(self.vision_config, dict):
+            self.vision_config = Kimi2_6VisionConfig(**self.vision_config)
+        elif self.vision_config is None:
+            self.vision_config = Kimi2_6VisionConfig()
         super().__post_init__(**kwargs)
 
 
-__all__ = ["Kimi26Config", "Kimi26TextConfig", "Kimi26VisionConfig"]
+__all__ = ["Kimi2_6Config", "Kimi2_6VisionConfig"]
