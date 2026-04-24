@@ -34,7 +34,7 @@ RUN python3 -m pip install --no-cache-dir -e ./transformers[dev]
 # 3. `set -e` means "exit immediately if any command fails".
 RUN python3 -m pip install --no-cache-dir torchcodec==0.12.0 --index-url https://download.pytorch.org/whl/test/cpu
 
-RUN python3 -m pip install --no-cache-dir torch==2.12.0 torchvision==0.27.0 torchaudio==2.11.0 --index-url https://download.pytorch.org/whl/test/cu126
+RUN python3 -m pip install --no-cache-dir torch==2.12.0 torchvision==0.27.0 torchaudio==2.11.0 --index-url https://download.pytorch.org/whl/test/cu130
 
 RUN python3 -m pip install --no-cache-dir -U timm
 
