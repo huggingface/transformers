@@ -20,7 +20,7 @@ Supports streaming (SSE) and non-streaming (JSON) responses.
 import asyncio
 import time
 from collections.abc import AsyncGenerator
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, TypedDict
 
 from ...utils import logging
 from ...utils.import_utils import is_serve_available
@@ -69,10 +69,16 @@ if TYPE_CHECKING:
 logger = logging.get_logger(__name__)
 
 
-class TransformersResponseCreateParamsStreaming(ResponseCreateParamsStreaming, total=False):
-    generation_config: str
-    seed: int
-
+# --- FINAL ROBUST PATCH ---
+if "ResponseCreateParamsStreaming" in globals():
+    class TransformersResponseCreateParamsStreaming(ResponseCreateParamsStreaming, total=False):
+        generation_config: str
+        seed: int
+else:
+    class TransformersResponseCreateParamsStreaming(TypedDict, total=False):
+        generation_config: str
+        seed: int
+# --- END PATCH ---
 
 UNUSED_RESPONSE_FIELDS = {
     "background",
