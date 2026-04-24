@@ -11,12 +11,6 @@
 # You may obtain a copy of the License at
 #
 #     http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
 from huggingface_hub.dataclasses import strict
 
 from ...configuration_utils import PreTrainedConfig
@@ -24,125 +18,125 @@ from ...modeling_rope_utils import RopeParameters
 from ...utils import auto_docstring
 
 
-# -----------------------------------------------------------------------------
-# Configuration
-# -----------------------------------------------------------------------------
-
-
 @auto_docstring(checkpoint="deepseek-ai/DeepSeek-V4-Flash-Base")
 @strict
 class DeepseekV4Config(PreTrainedConfig):
     r"""
-    compress_ratios (`list[int]`):
-        Per-layer compression schedule. ``0`` = pure local SWA. ``4`` = overlapping-window
-        compression plus an Indexer that picks top-k compressed positions. ``128`` =
-        disjoint-window compression (no Indexer; all compressed positions are attended).
-        Length must equal ``num_hidden_layers + num_nextn_predict_layers``.
-    compress_rope_theta (`float`):
-        RoPE base for layers that carry a Compressor; paired with ``rope_scaling`` for
-        long-context YaRN. Layers with ``compress_ratios[i] == 0`` use ``rope_theta``.
-    hc_mult (`int`, defaults to 4):
-        Number of parallel Hyper-Connection streams. Always active.
-    num_hash_layers (`int`, defaults to 3):
-        First N layers route experts via a frozen ``tid2eid[input_ids]`` lookup.
-    scoring_func (`str`, defaults to "sqrtsoftplus"):
-        Activation on gate logits before selection — must be an ``ACT2FN`` key.
-    swiglu_limit (`float`, defaults to 10.0):
-        Clip routed experts' gate/up pre-activations like GPT-OSS (``gate.clamp_max``,
-        ``up.clamp`` both sides). Shared expert is unclipped.
-    o_groups (`int`):
-        Groups in the grouped low-rank output projection.
-    o_lora_rank (`int`):
-        Rank per group in the grouped low-rank output projection.
-    index_n_heads (`int`, defaults to 64):
-        Heads of the sparse-attention Indexer.
-    index_head_dim (`int`, defaults to 128):
-        Indexer head dim.
-    index_topk (`int`):
-        Compressed positions the Indexer keeps per query.
-    hc_sinkhorn_iters (`int`, defaults to 20):
-        Sinkhorn iterations inside the Hyper-Connection mixer.
-    hc_eps (`float`, defaults to 1e-6):
-        Numerical floor for the HC RMS norm and the Sinkhorn normaliser.
-    num_nextn_predict_layers (`int`, defaults to 1):
-        MTP layer count in the upstream checkpoint. Weights are dropped on load.
-    rope_theta (`float`, defaults to 10000.0):
-        Base period for the main-attention rotary embedding (SWA layers).
-    rope_scaling (`dict`, *optional*):
-        YaRN scaling applied to the main and Compressor rotary embeddings.
+    compress_ratios (`list[int]`): Per-layer compression schedule in ``{0, 4, 128}``.
+        ``0`` = pure local SWA; ``4`` = overlap-window compress + Indexer; ``128`` = disjoint-window compress.
+    compress_rope_theta (`float`): RoPE base for Compressor layers (paired with ``rope_scaling`` for YaRN).
+    hc_mult (`int`): Hyper-Connection stream count (always active).
+    num_hash_layers (`int`): First N layers route via a frozen ``tid2eid[input_ids]`` lookup.
+    scoring_func (`str`): Router activation — ``sqrtsoftplus``, ``softmax``, or ``sigmoid``.
+    swiglu_limit (`float`): Clip routed experts' gate/up pre-activations.
+    sliding_window (`int`): Local window size used on every layer.
+    o_groups (`int`), o_lora_rank (`int`): Grouped low-rank output projection.
+    index_n_heads, index_head_dim, index_topk (`int`): Indexer hyperparameters.
+    hc_sinkhorn_iters (`int`), hc_eps (`float`): Sinkhorn normalisation knobs.
+    num_nextn_predict_layers (`int`): MTP layer count in the upstream checkpoint (not instantiated here).
+    compress_rope_parameters (`dict`, *optional*): Filled in ``__post_init__``.
     """
 
     model_type = "deepseek_v4"
     keys_to_ignore_at_inference = ["past_key_values"]
+    base_model_tp_plan = {
+        "layers.*.mlp.experts.gate_up_proj": "packed_colwise",
+        "layers.*.mlp.experts.down_proj": "rowwise",
+        "layers.*.mlp.experts": "moe_tp_experts",
+        "layers.*.mlp.shared_experts.gate_proj": "colwise",
+        "layers.*.mlp.shared_experts.up_proj": "colwise",
+        "layers.*.mlp.shared_experts.down_proj": "rowwise",
+        "layers.*.mlp.gate_proj": "colwise",
+        "layers.*.mlp.up_proj": "colwise",
+        "layers.*.mlp.down_proj": "rowwise",
+    }
+    base_model_pp_plan = {
+        "embed_tokens": (["input_ids"], ["inputs_embeds"]),
+        "layers": (["hidden_states", "attention_mask"], ["hidden_states"]),
+        "norm": (["hidden_states"], ["hidden_states"]),
+    }
     attribute_map = {"num_local_experts": "n_routed_experts"}
 
+    # V4 reshapes the attention: single-head KV, grouped low-rank output, no MLA decomposition.
     vocab_size: int = 129280
     hidden_size: int = 4096
+    intermediate_size: int = 18432
     moe_intermediate_size: int = 2048
     num_hidden_layers: int = 43
     num_attention_heads: int = 64
     num_key_value_heads: int = 1
-    head_dim: int = 512
-    qk_rope_head_dim: int = 64
-    q_lora_rank: int = 1024
-    o_groups: int = 8
-    o_lora_rank: int = 1024
-    n_routed_experts: int = 256
     n_shared_experts: int = 1
-    num_experts_per_tok: int = 6
-    num_hash_layers: int = 3
-    scoring_func: str = "sqrtsoftplus"
-    norm_topk_prob: bool = True
+    n_routed_experts: int = 256
     routed_scaling_factor: float = 1.5
-    swiglu_limit: float = 10.0
-    sliding_window: int = 128
-    compress_ratios: list[int] | None = None
-    compress_rope_theta: float = 160000.0
-    index_n_heads: int = 64
-    index_head_dim: int = 128
-    index_topk: int = 512
-    hc_mult: int = 4
-    hc_sinkhorn_iters: int = 20
-    hc_eps: float = 1.0e-6
-    num_nextn_predict_layers: int = 1
+
+    # Fields carried from DeepseekV3Config but unused in V4 — kept ``None`` so the
+    # MLA paths never fire (V3 fields that depend on them are guarded by truthiness checks).
+    kv_lora_rank: int | None = None
+    q_lora_rank: int = 1024
+    qk_rope_head_dim: int = 64
+    v_head_dim: int | None = None
+    qk_nope_head_dim: int | None = None
+    n_group: int | None = None
+    topk_group: int | None = None
+    num_experts_per_tok: int = 6
+    first_k_dense_replace: int | None = None
+    norm_topk_prob: bool = True
     hidden_act: str = "silu"
     max_position_embeddings: int = 1048576
     initializer_range: float = 0.02
-    rms_norm_eps: float = 1.0e-6
+    rms_norm_eps: float = 1e-6
     use_cache: bool = True
+    pad_token_id: int | None = None
     bos_token_id: int | None = 0
     eos_token_id: int | list[int] | None = 1
+    pretraining_tp: int | None = 1
     tie_word_embeddings: bool = False
-    rope_theta: float = 10000.0
     rope_parameters: RopeParameters | dict | None = None
-    rope_scaling: dict | None = None
+    rope_interleave: bool | None = True
     attention_bias: bool = False
-    attention_dropout: float = 0.0
+    attention_dropout: float | int | None = 0.0
+    head_dim: int = 512
+    scoring_func: str = "sqrtsoftplus"
+    rope_theta: float = 10000.0
+
+    # V4-specific.
+    compress_ratios: list[int] | None = None
+    compress_rope_theta: float = 160000.0
+    compress_rope_parameters: dict | None = None
+    hc_mult: int = 4
+    hc_sinkhorn_iters: int = 20
+    hc_eps: float = 1.0e-6
+    num_hash_layers: int = 3
+    swiglu_limit: float = 10.0
+    sliding_window: int = 128
+    o_groups: int = 8
+    o_lora_rank: int = 1024
+    index_n_heads: int = 64
+    index_head_dim: int = 128
+    index_topk: int = 512
+    num_nextn_predict_layers: int = 1
+    layer_types: list[str] | None = None
+
+    # Router-side extras inherited from Mixtral config path.
     output_router_logits: bool = False
     router_aux_loss_coef: float = 0.001
     router_jitter_noise: float = 0.0
-    layer_types: list[str] | None = None
 
     def __post_init__(self, **kwargs):
         total = self.num_hidden_layers + (self.num_nextn_predict_layers or 0)
         if self.compress_ratios is None:
-            self.compress_ratios = [0] + [4 if (i % 2) else 128 for i in range(total - 2)] + [0]
+            self.compress_ratios = [0] + [4 if i % 2 else 128 for i in range(total - 2)] + [0]
         if len(self.compress_ratios) != total:
-            raise ValueError(
-                f"`compress_ratios` must be length {total} (num_hidden_layers + num_nextn_predict_layers); "
-                f"got {len(self.compress_ratios)}."
-            )
+            raise ValueError(f"`compress_ratios` must be length {total}, got {len(self.compress_ratios)}.")
         for r in self.compress_ratios:
             if r not in (0, 4, 128):
-                raise ValueError(f"Unsupported compress_ratio={r}. Expected 0, 4, or 128.")
+                raise ValueError(f"Unsupported compress_ratio={r}; expected 0, 4, or 128.")
         if self.layer_types is None:
-            # Every layer has a local sliding window; compressor/indexer presence is
-            # driven by `compress_ratios`, resolved once at module __init__.
             self.layer_types = ["sliding_attention"] * self.num_hidden_layers
         self.qk_nope_head_dim = self.head_dim - self.qk_rope_head_dim
 
-        # Make rotary embeddings size themselves to `qk_rope_head_dim` via the shared
-        # partial-rotary path (which runs iff rope_type != "default").
+        # Rotary sizes itself to ``qk_rope_head_dim`` through ``partial_rotary_factor``;
+        # the shared init (activated for any non-"default" rope_type) honours it.
         rp = dict(self.rope_parameters) if isinstance(self.rope_parameters, dict) else {}
         rp.setdefault("rope_theta", self.rope_theta)
         rp["partial_rotary_factor"] = self.qk_rope_head_dim / self.head_dim
@@ -150,12 +144,16 @@ class DeepseekV4Config(PreTrainedConfig):
             rp["rope_type"] = self.rope_scaling.get("type", "yarn")
             for k, v in self.rope_scaling.items():
                 rp.setdefault(k, v)
-            rp.setdefault("factor", 1.0)
-        else:
-            # Force the shared (partial-rotary-aware) init path.
-            rp.setdefault("rope_type", "linear")
-            rp.setdefault("factor", 1.0)
+        rp.setdefault("rope_type", "linear")
+        rp.setdefault("factor", 1.0)
         self.rope_parameters = rp
+
+        compress = dict(rp)
+        compress["rope_theta"] = self.compress_rope_theta
+        self.compress_rope_parameters = compress
+
+        # Skip V3's ``__post_init__`` — it pins ``head_dim`` to ``qk_rope_head_dim`` for
+        # MLA rotary sizing, which would stomp V4's ``head_dim=512``.
         super().__post_init__(**kwargs)
 
 
