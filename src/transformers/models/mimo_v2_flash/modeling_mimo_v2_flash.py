@@ -145,67 +145,23 @@ class MiMoV2FlashRotaryEmbedding(nn.Module):
         return cos.to(dtype=x.dtype), sin.to(dtype=x.dtype)
 
 
-# NOTE @casinca: Concerning this TopKRouter:
-# This is the "fixed" TopKRouter from the remote DSV3 implementation with correct masked_fill=-inf and not 0.0 like the
-# old native transformers DSV3 implementation currently in the repo. see the update:
-# https://huggingface.co/deepseek-ai/DeepSeek-V3-0324/commit/e9b33add76883f293d6bf61f6bd89b497e80e335#d2h-632685
-#
-# OR HF fixes the DSV3 masking and then I can try to inherit from DSV3, so that I don't override the forward.
-#
-# On top of that, I made this class as it is, so that it's a direct drop-in replacement for the MixtralSparseMoeBlock:
-# I can just do inheritance from MixtralSparseMoeBlock and override the self.gate = MiMoV2FlashTopKRouter(config)
-#
-# tldr: this MiMo class is refactored (with DSV3 fix + internals) to be compatible with the MixtralSparseMoeBlock,
-# following newer style like minimax M2 in the repo, for fused experts etc... I think this is what Vasqu prefers
-class MiMoV2FlashTopKRouter(nn.Module):
-    """MiMo gating with sigmoid scoring and group-based top-k selection."""
-
-    def __init__(self, config: MiMoV2FlashConfig):
+class MiMoV2FlashTopkRouter(nn.Module):
+    def __init__(self, config):
         super().__init__()
-        self.top_k = config.num_experts_per_tok
-        self.num_experts = config.n_routed_experts
-        self.hidden_dim = config.hidden_size
-        self.n_group = config.n_group
-        self.topk_group = config.topk_group
-        self.norm_topk_prob = config.norm_topk_prob
-        self.routed_scaling_factor = config.routed_scaling_factor
+        self.config = config
+        self.n_routed_experts = config.n_routed_experts
 
-        self.weight = nn.Parameter(torch.empty(self.num_experts, self.hidden_dim))
-        self.register_buffer(
-            "e_score_correction_bias",
-            torch.zeros(self.num_experts, dtype=torch.float32),
-        )
+        self.weight = nn.Parameter(torch.empty((self.n_routed_experts, config.hidden_size)))
+        self.register_buffer("e_score_correction_bias", torch.zeros(self.n_routed_experts))
 
-    def forward(self, hidden_states: torch.Tensor):
-        num_tokens = hidden_states.shape[0]
-
-        logits = F.linear(hidden_states.float(), self.weight.float())
-        scores = logits.sigmoid()
-
-        scores_for_choice = scores + self.e_score_correction_bias.unsqueeze(0)
-        group_scores = scores_for_choice.view(num_tokens, self.n_group, -1).topk(2, dim=-1)[0].sum(dim=-1)
-        group_idx = torch.topk(group_scores, k=self.topk_group, dim=-1, sorted=False)[1]
-        group_mask = torch.zeros_like(group_scores)
-        group_mask.scatter_(1, group_idx, 1)
-        score_mask = (
-            group_mask.unsqueeze(-1)
-            .expand(num_tokens, self.n_group, self.num_experts // self.n_group)
-            .reshape(num_tokens, -1)
-        )
-        tmp_scores = scores_for_choice.masked_fill(~score_mask.bool(), float("-inf"))
-        _, topk_idx = torch.topk(tmp_scores, k=self.top_k, dim=-1, sorted=False)
-        topk_weight = scores.gather(1, topk_idx)
-
-        if self.top_k > 1 and self.norm_topk_prob:
-            denominator = topk_weight.sum(dim=-1, keepdim=True) + 1e-20
-            topk_weight = topk_weight / denominator
-        topk_weight = topk_weight * self.routed_scaling_factor
-
-        return logits, topk_weight, topk_idx
+    def forward(self, hidden_states):
+        hidden_states = hidden_states.view(-1, self.config.hidden_size)
+        router_logits = F.linear(hidden_states.type(torch.float32), self.weight.type(torch.float32))
+        return router_logits
 
 
 @use_experts_implementation
-class MiMoV2FlashExperts(nn.Module):
+class MiMoV2FlashNaiveMoe(nn.Module):
     """Collection of expert weights stored as 3D tensors."""
 
     def __init__(self, config):
@@ -245,22 +201,54 @@ class MiMoV2FlashExperts(nn.Module):
 
 
 class MiMoV2FlashSparseMoeBlock(nn.Module):
-    def __init__(self, config):
-        super().__init__()
-        self.top_k = config.num_experts_per_tok
-        self.jitter_noise = config.router_jitter_noise
-        self.gate = MiMoV2FlashTopKRouter(config)
-        self.experts = MiMoV2FlashExperts(config)
+    """
+    Only difference from `DeepseekV3MoE` is that we have no shared experts.
+    So we drop it and override the forward to skip the shared expert (residual like) add.
+    """
 
-    def forward(self, hidden_states: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
-        batch_size, sequence_length, hidden_dim = hidden_states.shape
-        if self.training and self.jitter_noise > 0:
-            hidden_states *= torch.empty_like(hidden_states).uniform_(1.0 - self.jitter_noise, 1.0 + self.jitter_noise)
+    def __init__(self, config: MiMoV2FlashConfig):
+        super().__init__()
+        self.config = config
+        self.experts = MiMoV2FlashNaiveMoe(config)
+        self.gate = MiMoV2FlashTopkRouter(config)
+        self.n_routed_experts = config.n_routed_experts
+        self.n_group = config.n_group
+        self.topk_group = config.topk_group
+        self.norm_topk_prob = config.norm_topk_prob
+        self.routed_scaling_factor = config.routed_scaling_factor
+        self.top_k = config.num_experts_per_tok
+
+    def route_tokens_to_experts(self, router_logits):
+        router_logits = router_logits.sigmoid()
+        router_logits_for_choice = router_logits + self.gate.e_score_correction_bias
+        group_scores = (
+            router_logits_for_choice.view(-1, self.n_group, self.n_routed_experts // self.n_group)
+            .topk(2, dim=-1)[0]
+            .sum(dim=-1)
+        )
+        group_idx = torch.topk(group_scores, k=self.topk_group, dim=-1, sorted=False)[1]
+        group_mask = torch.zeros_like(group_scores)
+        group_mask.scatter_(1, group_idx, 1)
+        score_mask = (
+            group_mask.unsqueeze(-1)
+            .expand(-1, self.n_group, self.n_routed_experts // self.n_group)
+            .reshape(-1, self.n_routed_experts)
+        )
+        scores_for_choice = router_logits_for_choice.masked_fill(~score_mask.bool(), float("-inf"))
+        topk_indices = torch.topk(scores_for_choice, k=self.top_k, dim=-1, sorted=False)[1]
+        topk_weights = router_logits.gather(1, topk_indices)
+        if self.norm_topk_prob:
+            denominator = topk_weights.sum(dim=-1, keepdim=True) + 1e-20
+            topk_weights /= denominator
+        topk_weights = topk_weights * self.routed_scaling_factor
+        return topk_indices, topk_weights
+
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        orig_shape = hidden_states.shape
+        router_logits = self.gate(hidden_states)
+        topk_indices, topk_weights = self.route_tokens_to_experts(router_logits)
         hidden_states = hidden_states.view(-1, hidden_states.shape[-1])
-        _, top_k_weights, top_k_index = self.gate(hidden_states)
-        hidden_states = self.experts(hidden_states, top_k_index, top_k_weights)
-        hidden_states = hidden_states.reshape(batch_size, sequence_length, hidden_dim)
-        return hidden_states
+        return self.experts(hidden_states, topk_indices, topk_weights).view(*orig_shape)
 
 
 class MiMoV2FlashMLP(nn.Module):
@@ -508,16 +496,15 @@ class MiMoV2FlashPreTrainedModel(PreTrainedModel):
     @torch.no_grad()
     def _init_weights(self, module):
         super()._init_weights(module)
+        if isinstance(module, MiMoV2FlashTopkRouter):
+            init.normal_(module.weight, mean=0.0, std=self.config.initializer_range)
+            init.zeros_(module.e_score_correction_bias)
+        elif isinstance(module, MiMoV2FlashNaiveMoe):
+            init.normal_(module.gate_up_proj, mean=0.0, std=self.config.initializer_range)
+            init.normal_(module.down_proj, mean=0.0, std=self.config.initializer_range)
         std = self.config.initializer_range
-        if isinstance(module, MiMoV2FlashExperts):
-            init.normal_(module.gate_up_proj, mean=0.0, std=std)
-            init.normal_(module.down_proj, mean=0.0, std=std)
-        elif isinstance(module, MiMoV2FlashTopKRouter):
-            init.normal_(module.weight, mean=0.0, std=std)
         if isinstance(module, MiMoV2FlashAttention) and module.sinks is not None:
             init.normal_(module.sinks, mean=0.0, std=std)
-        elif isinstance(module, MiMoV2FlashTopKRouter):
-            init.zeros_(module.e_score_correction_bias)
         elif isinstance(module, MiMoV2FlashRotaryEmbedding):
             for layer_type in module.layer_types:
                 rope_init_fn = module.compute_default_rope_parameters

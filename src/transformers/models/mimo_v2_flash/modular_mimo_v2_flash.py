@@ -30,17 +30,18 @@ from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring
 from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
-from ..deepseek_v3.modeling_deepseek_v3 import DeepseekV3ForCausalLM, DeepseekV3NaiveMoe
+from ..deepseek_v3.modeling_deepseek_v3 import (
+    DeepseekV3ForCausalLM,
+    DeepseekV3MoE,
+    DeepseekV3NaiveMoe,
+    DeepseekV3PreTrainedModel,
+    DeepseekV3TopkRouter,
+)
 from ..gemma3.modeling_gemma3 import Gemma3RotaryEmbedding
 from ..glm4_moe.configuration_glm4_moe import Glm4MoeConfig
 from ..glm4_moe.modeling_glm4_moe import Glm4MoeMLP, apply_rotary_pos_emb  # noqa: F401
 from ..llama.modeling_llama import LlamaDecoderLayer, repeat_kv
-from ..mixtral.modeling_mixtral import (
-    MixtralModel,
-    MixtralPreTrainedModel,
-    MixtralRMSNorm,
-    MixtralSparseMoeBlock,
-)
+from ..mixtral.modeling_mixtral import MixtralModel, MixtralRMSNorm
 from ..qwen2.modeling_qwen2 import Qwen2Attention
 
 
@@ -92,7 +93,6 @@ class MiMoV2FlashConfig(Glm4MoeConfig):
     sliding_window: int = 128
     layer_types: list[str] | None = None
     mlp_layer_types: list[str] | None = None
-    router_jitter_noise: float = 0.0
     # Remove unused attributes inherited from Glm4MoeConfig
     first_k_dense_replace = AttributeError()
     n_shared_experts = AttributeError()
@@ -170,71 +170,30 @@ class MiMoV2FlashRotaryEmbedding(Gemma3RotaryEmbedding):
         return inv_freq, attention_factor
 
 
-# NOTE @casinca: Concerning this TopKRouter:
-# This is the "fixed" TopKRouter from the remote DSV3 implementation with correct masked_fill=-inf and not 0.0 like the
-# old native transformers DSV3 implementation currently in the repo. see the update:
-# https://huggingface.co/deepseek-ai/DeepSeek-V3-0324/commit/e9b33add76883f293d6bf61f6bd89b497e80e335#d2h-632685
-#
-# OR HF fixes the DSV3 masking and then I can try to inherit from DSV3, so that I don't override the forward.
-#
-# On top of that, I made this class as it is, so that it's a direct drop-in replacement for the MixtralSparseMoeBlock:
-# I can just do inheritance from MixtralSparseMoeBlock and override the self.gate = MiMoV2FlashTopKRouter(config)
-#
-# tldr: this MiMo class is refactored (with DSV3 fix + internals) to be compatible with the MixtralSparseMoeBlock,
-# following newer style like minimax M2 in the repo, for fused experts etc... I think this is what Vasqu prefers
-class MiMoV2FlashTopKRouter(nn.Module):
-    """MiMo gating with sigmoid scoring and group-based top-k selection."""
+class MiMoV2FlashTopkRouter(DeepseekV3TopkRouter):
+    pass
+
+
+class MiMoV2FlashNaiveMoe(DeepseekV3NaiveMoe):
+    pass
+
+
+class MiMoV2FlashSparseMoeBlock(DeepseekV3MoE):
+    """
+    Only difference from `DeepseekV3MoE` is that we have no shared experts.
+    So we drop it and override the forward to skip the shared expert (residual like) add.
+    """
 
     def __init__(self, config: MiMoV2FlashConfig):
-        super().__init__()
-        self.top_k = config.num_experts_per_tok
-        self.num_experts = config.n_routed_experts
-        self.hidden_dim = config.hidden_size
-        self.n_group = config.n_group
-        self.topk_group = config.topk_group
-        self.norm_topk_prob = config.norm_topk_prob
-        self.routed_scaling_factor = config.routed_scaling_factor
+        super().__init__(config)
+        del self.shared_experts
 
-        self.weight = nn.Parameter(torch.empty(self.num_experts, self.hidden_dim))
-        self.register_buffer(
-            "e_score_correction_bias",
-            torch.zeros(self.num_experts, dtype=torch.float32),
-        )
-
-    def forward(self, hidden_states: torch.Tensor):
-        num_tokens = hidden_states.shape[0]
-
-        logits = F.linear(hidden_states.float(), self.weight.float())
-        scores = logits.sigmoid()
-
-        scores_for_choice = scores + self.e_score_correction_bias.unsqueeze(0)
-        group_scores = scores_for_choice.view(num_tokens, self.n_group, -1).topk(2, dim=-1)[0].sum(dim=-1)
-        group_idx = torch.topk(group_scores, k=self.topk_group, dim=-1, sorted=False)[1]
-        group_mask = torch.zeros_like(group_scores)
-        group_mask.scatter_(1, group_idx, 1)
-        score_mask = (
-            group_mask.unsqueeze(-1)
-            .expand(num_tokens, self.n_group, self.num_experts // self.n_group)
-            .reshape(num_tokens, -1)
-        )
-        tmp_scores = scores_for_choice.masked_fill(~score_mask.bool(), float("-inf"))
-        _, topk_idx = torch.topk(tmp_scores, k=self.top_k, dim=-1, sorted=False)
-        topk_weight = scores.gather(1, topk_idx)
-
-        if self.top_k > 1 and self.norm_topk_prob:
-            denominator = topk_weight.sum(dim=-1, keepdim=True) + 1e-20
-            topk_weight = topk_weight / denominator
-        topk_weight = topk_weight * self.routed_scaling_factor
-
-        return logits, topk_weight, topk_idx
-
-
-class MiMoV2FlashExperts(DeepseekV3NaiveMoe):
-    pass
-
-
-class MiMoV2FlashSparseMoeBlock(MixtralSparseMoeBlock):
-    pass
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        orig_shape = hidden_states.shape
+        router_logits = self.gate(hidden_states)
+        topk_indices, topk_weights = self.route_tokens_to_experts(router_logits)
+        hidden_states = hidden_states.view(-1, hidden_states.shape[-1])
+        return self.experts(hidden_states, topk_indices, topk_weights).view(*orig_shape)
 
 
 class MiMoV2FlashMLP(Glm4MoeMLP):
@@ -345,16 +304,9 @@ class MiMoV2FlashDecoderLayer(LlamaDecoderLayer):
 
 
 @auto_docstring
-class MiMoV2FlashPreTrainedModel(MixtralPreTrainedModel):
-    config: MiMoV2FlashConfig
-    _no_split_modules = ["MiMoV2FlashDecoderLayer"]
+class MiMoV2FlashPreTrainedModel(DeepseekV3PreTrainedModel):
     _supports_sdpa = False  # disabling SDPA as it has no sink API atm (same as gpt-oss)
-    _keep_in_fp32_modules_strict = ["e_score_correction_bias"]
     _keys_to_ignore_on_load_unexpected = [r"^model\.mtp\."]
-    _can_record_outputs = {
-        "hidden_states": MiMoV2FlashDecoderLayer,
-        "attentions": MiMoV2FlashAttention,
-    }
 
     @torch.no_grad()
     def _init_weights(self, module):
@@ -362,8 +314,6 @@ class MiMoV2FlashPreTrainedModel(MixtralPreTrainedModel):
         std = self.config.initializer_range
         if isinstance(module, MiMoV2FlashAttention) and module.sinks is not None:
             init.normal_(module.sinks, mean=0.0, std=std)
-        elif isinstance(module, MiMoV2FlashTopKRouter):
-            init.zeros_(module.e_score_correction_bias)
         elif isinstance(module, MiMoV2FlashRotaryEmbedding):
             for layer_type in module.layer_types:
                 rope_init_fn = module.compute_default_rope_parameters

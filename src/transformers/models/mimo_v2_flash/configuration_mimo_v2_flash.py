@@ -99,7 +99,6 @@ class MiMoV2FlashConfig(PreTrainedConfig):
     sliding_window: int = 128
     layer_types: list[str] | None = None
     mlp_layer_types: list[str] | None = None
-    router_jitter_noise: float = 0.0
 
     def __post_init__(self, **kwargs):
         # Full attention for the first layer and every 6th layer; SWA for the rest.
