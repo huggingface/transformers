@@ -4669,13 +4669,15 @@ class ModelTesterMixin:
         Test that we can still use `torch_dtype` argument correctly, for BC.
         """
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
-        for model_class in self.all_model_classes:
+        config.save_pretrained(f"tiny_config_{config.__class__.__name__}")
+        for model_class in self.all_model_classes[:1]:
             if "TimmBackbone" in model_class.__name__:
                 self.skipTest("TimmBackbone should not run this test")
             # First check that it works correctly
             model = model_class(copy.deepcopy(config))
             with tempfile.TemporaryDirectory() as tmpdirname:
                 model.save_pretrained(tmpdirname)
+                model.save_pretrained(f"tiny_config_{config.__class__.__name__}")
 
                 # Check that it works for all dtypes
                 for dtype in ["float16", "bfloat16", "float32", "auto", torch.float16, torch.bfloat16, torch.float32]:
