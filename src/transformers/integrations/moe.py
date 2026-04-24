@@ -379,6 +379,10 @@ def grouped_mm_experts_forward(
     sample_weights = top_k_weights.reshape(-1)  # (S,)
     expert_ids = top_k_index.reshape(-1)  # (S,)
 
+    # EP sentinel handling: leave `expert_ids` unclamped so the sort pushes sentinels to the tail,
+    # `histc(max=num_experts-1)` drops them from `tokens_per_expert`, and grouped_mm skips rows
+    # beyond `offsets[-1]` — so sentinels cost no real GEMM compute. Their routing weights are
+    # already zero (RouterParallel masks them at dispatch) so the weighted mul contributes nothing.
     # Sort by expert for grouped processing
     expert_ids_g, perm = torch.sort(expert_ids)
     selected_hidden_states_g = hidden_states[perm // num_top_k]
@@ -387,19 +391,21 @@ def grouped_mm_experts_forward(
     # Compute offsets for grouped_mm
     # using histc instead of bincount to avoid cuda graph issues
     # With deterministic algorithms, CPU only supports float input, CUDA only supports int input.
-    # `max=num_experts-1` drops unclamped sentinels (value == num_experts) from the per-expert count.
     histc_input = expert_ids_g.float() if device.type == "cpu" else expert_ids_g.int()
     tokens_per_expert = torch.histc(histc_input, bins=self.num_experts, min=0, max=self.num_experts - 1)
     offsets = torch.cumsum(tokens_per_expert, dim=0, dtype=torch.int32)
 
-    # Clamp now that offsets are built. We only need this for the per-row bias gather below to stay in-bounds.
-    expert_ids_g.clamp_(0, self.num_experts - 1)
+    if self.has_bias:
+        # Clamp now that the layout has been built — needed for the per-row bias gather below to stay
+        # in-bounds. Bias added to sentinel positions falls in rows the kernel skips, so harmless.
+        expert_ids_g.clamp_(0, self.num_experts - 1)
 
     # Select expert weights and biases
     # NOTE: We keep all experts here and rely on offsets to target the active ones.
     # I have already implemented a version that only passes the active experts, but
     # to do so I had to use torch.unique which breaks the graph capture (data-dependent).
     # Also there were no speedup gains from it in my experiments, even in eager mode.
+    # NOTE: The grouped_mm kernel only targets the active experts / tokens via the offsets
     if self.has_gate:
         selected_weights = self.gate_up_proj
         selected_biases = self.gate_up_proj_bias[expert_ids_g] if self.has_bias else None

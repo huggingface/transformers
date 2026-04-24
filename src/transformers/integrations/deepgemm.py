@@ -313,9 +313,11 @@ def deepgemm_experts_forward(
     sample_weights = top_k_weights.reshape(-1)  # (S,)
     expert_ids = top_k_index.reshape(-1)  # (S,)
 
-    # EP sentinel handling: leave `expert_ids` unclamped so the sort pushes sentinels to the tail
-    # and `_build_deepgemm_contiguous_layout` marks their positions as skipped (-1 on Hopper, beyond
-    # the cumsum on Blackwell) — so deep-gemm performs no real GEMM work for them.
+    # EP sentinel handling: leave `expert_ids` unclamped so the sort pushes sentinels to the tail,
+    # `_build_deepgemm_contiguous_layout` marks their positions as skipped (-1 on Hopper, beyond the
+    # cumsum on Blackwell), and deep-gemm skips them — so sentinels cost no real GEMM compute. Their
+    # routing weights are already zero (RouterParallel masks them at dispatch) so the weighted mul
+    # contributes nothing.
     # Sort by expert for grouped processing
     expert_ids_g, perm = torch.sort(expert_ids)
     selected_hidden_states_g = hidden_states[perm // num_top_k]
@@ -326,17 +328,17 @@ def deepgemm_experts_forward(
         expert_ids_g, self.num_experts, alignment=_DEEPGEMM_M_ALIGNMENT, use_psum_layout=use_psum_layout
     )
 
-    # Clamp now that the layout has been built — needed for the per-row bias gather below to stay
-    # in-bounds. Bias added to sentinel positions falls in rows the kernel skips, so harmless.
-    expert_ids_g.clamp_(0, self.num_experts - 1)
+    if self.has_bias:
+        # Clamp now that the layout has been built — needed for the per-row bias gather below to stay
+        # in-bounds. Bias added to sentinel positions falls in rows the kernel skips, so harmless.
+        expert_ids_g.clamp_(0, self.num_experts - 1)
 
     # --- Up projection per expert (deep-gemm grouped contiguous, bf16) ---
     w_up = self.gate_up_proj if self.has_gate else self.up_proj
     # Output dim is the last weight axis when transposed (E, K, N), second axis when not (E, N, K).
     up_out_dim = w_up.shape[-1] if self.is_transposed else w_up.shape[1]
     act = _pad_for_deepgemm(selected_hidden_states_g, sorted_to_padded, total_padded_rows)
-    # `torch.zeros` so sentinel rows read back as 0 at unpad time (kernel leaves them untouched).
-    proj_out = torch.zeros(total_padded_rows, up_out_dim, device=device, dtype=hidden_states.dtype)
+    proj_out = torch.empty(total_padded_rows, up_out_dim, device=device, dtype=hidden_states.dtype)
     m_grouped_bf16_gemm(act, w_up, proj_out, grouped_layout, use_psum_layout=use_psum_layout)
 
     # The kernel has no bias input -> add per-expert bias in-place on the unpadded slice;
@@ -352,6 +354,7 @@ def deepgemm_experts_forward(
         proj_out = self.act_fn(proj_out)
 
     # --- Down projection per expert (deep-gemm grouped contiguous, bf16) ---
+    # Zero-init: unpad later reads sentinel-row positions the kernel never writes.
     out = torch.zeros(total_padded_rows, hidden_dim, device=device, dtype=hidden_states.dtype)
     m_grouped_bf16_gemm(proj_out, self.down_proj, out, grouped_layout, use_psum_layout=use_psum_layout)
 

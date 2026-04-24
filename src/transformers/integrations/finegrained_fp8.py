@@ -295,6 +295,10 @@ def fp8_grouped_mm_experts_forward(
     sample_weights = top_k_weights.reshape(-1)  # (S,)
     expert_ids = top_k_index.reshape(-1)  # (S,)
 
+    # EP sentinel handling: leave `expert_ids` unclamped so the sort pushes sentinels to the tail,
+    # `histc(max=num_experts-1)` drops them from `tokens_per_expert`, and the grouped matmul skips
+    # rows beyond `offsets[-1]` — so sentinels cost no real GEMM compute. Their routing weights are
+    # already zero (RouterParallel masks them at dispatch) so the weighted mul contributes nothing.
     # Sort by expert for grouped processing
     expert_ids_g, perm = torch.sort(expert_ids)
     selected_hidden_states_g = hidden_states[perm // num_top_k]
@@ -303,7 +307,6 @@ def fp8_grouped_mm_experts_forward(
     # Compute offsets for grouped processing.
     # histc instead of bincount avoids cuda-graph issues;
     # CPU requires float input, CUDA requires int input (deterministic mode).
-    # histc drops values > max, so sentinels (== num_experts) are excluded from the per-expert count.
     histc_input = expert_ids_g.float() if device.type == "cpu" else expert_ids_g.int()
     tokens_per_expert = torch.histc(histc_input, bins=self.num_experts, min=0, max=self.num_experts - 1)
     offsets = torch.cumsum(tokens_per_expert, dim=0, dtype=torch.int32)
