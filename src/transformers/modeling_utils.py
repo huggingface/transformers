@@ -2462,6 +2462,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
 
         # Let the magic happen with this simple call
         smart_apply_fn = getattr(self, "smart_apply")
+        # `getattr(self, ...)` returns a bound method, so `self` is already provided as the receiver.
         smart_apply_fn(self._initialize_weights, self.is_remote_code())
 
     def get_expanded_tied_weights_keys(self, all_submodels: bool = False) -> dict:
