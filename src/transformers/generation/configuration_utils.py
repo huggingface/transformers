@@ -350,6 +350,11 @@ class GenerationConfig(PushToHubMixin):
     _original_object_hash: int | None
 
     def __init__(self, **kwargs):
+        # Snapshot of the attributes the caller explicitly provided (before the `kwargs.pop(...)` calls below
+        # consume them). Used by `validate()` to restrict "minor issue" warnings to flags actually set by the user,
+        # as opposed to defaults inherited from a model's `generation_config.json`.
+        user_set_attributes = set(kwargs.keys())
+
         # Parameters that control the length of the output
         self.max_length = kwargs.pop("max_length", None)
         self.max_new_tokens = kwargs.pop("max_new_tokens", None)
@@ -466,7 +471,7 @@ class GenerationConfig(PushToHubMixin):
                 )
 
         # Validate the values of the attributes
-        self.validate()
+        self.validate(user_set_attributes=user_set_attributes)
 
     def __hash__(self):
         return hash(self.to_json_string(ignore_metadata=True))
@@ -587,7 +592,7 @@ class GenerationConfig(PushToHubMixin):
             "diversity_penalty": 0.0,
         }
 
-    def validate(self, strict=False):
+    def validate(self, strict=False, user_set_attributes: set[str] | None = None):
         """
         Validates the values of the attributes of the [`GenerationConfig`] instance. Raises exceptions in the presence
         of parameterization that can be detected as incorrect from the configuration instance alone.
@@ -597,6 +602,11 @@ class GenerationConfig(PushToHubMixin):
 
         Args:
             strict (bool): If True, raise an exception for any issues found. If False, only log issues.
+            user_set_attributes (set[str], *optional*): Names of attributes the caller explicitly provided. When
+                supplied, "minor issue" warnings about conflicting flag combinations (e.g. sampling-only flags set
+                while `do_sample=False`) only fire if the conflicting flag is in this set -- avoiding noisy warnings
+                when the value was inherited from a model's default `generation_config.json`. When `None`, all set
+                attributes are considered user-set (backward-compatible behavior for direct `validate()` calls).
         """
         minor_issues = {}  # format: {attribute_name: issue_description}
 
@@ -636,47 +646,82 @@ class GenerationConfig(PushToHubMixin):
 
         # Note that we check `is not True` in purpose. Boolean fields can also be `None` so we
         # have to be explicit. Value of `None` is same as having `False`, i.e. the default value
+
         if self.do_sample is not True:
             greedy_wrong_parameter_msg = (
-                "`do_sample` is set not to set `True`. However, `{flag_name}` is set to `{flag_value}` -- this flag is only "
-                "used in sample-based generation modes. You should set `do_sample=True` or unset `{flag_name}`."
+                "`do_sample` is set to `{do_sample}`. However, `{flag_name}` is set to `{flag_value}` -- this flag is "
+                "only used in sample-based generation modes. You should set `do_sample=True` or unset `{flag_name}`."
             )
-            if self.temperature is not None and self.temperature != 1.0:
-                minor_issues["temperature"] = greedy_wrong_parameter_msg.format(
-                    flag_name="temperature", flag_value=self.temperature
-                )
-            if self.top_p is not None and self.top_p != 1.0:
-                minor_issues["top_p"] = greedy_wrong_parameter_msg.format(flag_name="top_p", flag_value=self.top_p)
-            if self.min_p is not None:
-                minor_issues["min_p"] = greedy_wrong_parameter_msg.format(flag_name="min_p", flag_value=self.min_p)
-            if self.top_h is not None:
-                minor_issues["top_h"] = greedy_wrong_parameter_msg.format(flag_name="top_h", flag_value=self.top_h)
-            if self.typical_p is not None and self.typical_p != 1.0:
-                minor_issues["typical_p"] = greedy_wrong_parameter_msg.format(
-                    flag_name="typical_p", flag_value=self.typical_p
-                )
-            if self.top_k is not None and self.top_k != 50:
-                minor_issues["top_k"] = greedy_wrong_parameter_msg.format(flag_name="top_k", flag_value=self.top_k)
-            if self.epsilon_cutoff is not None and self.epsilon_cutoff != 0.0:
-                minor_issues["epsilon_cutoff"] = greedy_wrong_parameter_msg.format(
-                    flag_name="epsilon_cutoff", flag_value=self.epsilon_cutoff
-                )
-            if self.eta_cutoff is not None and self.eta_cutoff != 0.0:
-                minor_issues["eta_cutoff"] = greedy_wrong_parameter_msg.format(
-                    flag_name="eta_cutoff", flag_value=self.eta_cutoff
+
+            # The warnings are suppressed for flags that weren't explicitly set by the caller when `do_sample=False` is explicitly
+            # required by the user: values such as `top_p` inherited from a model's `generation_config.json` are harmless when
+            # the user opts for greedy decoding
+            def _should_warn(attr: str) -> bool:
+                do_sample_set = user_set_attributes is not None and "do_sample" in user_set_attributes
+                attr_set = user_set_attributes is not None and attr in user_set_attributes
+                # We should warn only if both are explicitly set, none are set, or only the new attr is set while `do_sample` is already False
+                return (
+                    (do_sample_set and attr_set)
+                    or (not do_sample_set and not attr_set)
+                    or (attr_set and not do_sample_set)
                 )
 
-        # 2.2. detect beam-only parameterization when not in beam mode
+            if self.temperature is not None and self.temperature != 1.0 and _should_warn("temperature"):
+                minor_issues["temperature"] = greedy_wrong_parameter_msg.format(
+                    do_sample=self.do_sample, flag_name="temperature", flag_value=self.temperature
+                )
+            if self.top_p is not None and self.top_p != 1.0 and _should_warn("top_p"):
+                minor_issues["top_p"] = greedy_wrong_parameter_msg.format(
+                    do_sample=self.do_sample, flag_name="top_p", flag_value=self.top_p
+                )
+            if self.min_p is not None and _should_warn("min_p"):
+                minor_issues["min_p"] = greedy_wrong_parameter_msg.format(
+                    do_sample=self.do_sample, flag_name="min_p", flag_value=self.min_p
+                )
+            if self.top_h is not None and _should_warn("top_h"):
+                minor_issues["top_h"] = greedy_wrong_parameter_msg.format(
+                    do_sample=self.do_sample, flag_name="top_h", flag_value=self.top_h
+                )
+            if self.typical_p is not None and self.typical_p != 1.0 and _should_warn("typical_p"):
+                minor_issues["typical_p"] = greedy_wrong_parameter_msg.format(
+                    do_sample=self.do_sample, flag_name="typical_p", flag_value=self.typical_p
+                )
+            if self.top_k is not None and self.top_k != 50 and _should_warn("top_k"):
+                minor_issues["top_k"] = greedy_wrong_parameter_msg.format(
+                    do_sample=self.do_sample, flag_name="top_k", flag_value=self.top_k
+                )
+            if self.epsilon_cutoff is not None and self.epsilon_cutoff != 0.0 and _should_warn("epsilon_cutoff"):
+                minor_issues["epsilon_cutoff"] = greedy_wrong_parameter_msg.format(
+                    do_sample=self.do_sample, flag_name="epsilon_cutoff", flag_value=self.epsilon_cutoff
+                )
+            if self.eta_cutoff is not None and self.eta_cutoff != 0.0 and _should_warn("eta_cutoff"):
+                minor_issues["eta_cutoff"] = greedy_wrong_parameter_msg.format(
+                    do_sample=self.do_sample, flag_name="eta_cutoff", flag_value=self.eta_cutoff
+                )
+
+        # 2.2. detect beam-only parameterization when not in beam mode. Same provenance filtering as above --
+        # both `num_beams` and the beam-only flag must be user-set for the warning to fire.
         if self.num_beams is None or self.num_beams == 1:
             single_beam_wrong_parameter_msg = (
-                "`num_beams` is set to {num_beams}. However, `{flag_name}` is set to `{flag_value}` -- this flag is only used "
-                "in beam-based generation modes. You should set `num_beams>1` or unset `{flag_name}`."
+                "`num_beams` is set to {num_beams}. However, `{flag_name}` is set to `{flag_value}` -- this flag is "
+                "only used in beam-based generation modes. You should set `num_beams>1` or unset `{flag_name}`."
             )
-            if self.early_stopping is not None and self.early_stopping is not False:
+
+            def _should_warn(attr: str) -> bool:
+                num_beams_set = user_set_attributes is not None and "num_beams" in user_set_attributes
+                attr_set = user_set_attributes is not None and attr in user_set_attributes
+                # We should warn only if both are explicitly set, none are set, or only the new attr is set while `num_beams` is already 1
+                return (
+                    (num_beams_set and attr_set)
+                    or (not num_beams_set and not attr_set)
+                    or (attr_set and not num_beams_set)
+                )
+
+            if self.early_stopping is not None and self.early_stopping is not False and _should_warn("early_stopping"):
                 minor_issues["early_stopping"] = single_beam_wrong_parameter_msg.format(
                     num_beams=self.num_beams, flag_name="early_stopping", flag_value=self.early_stopping
                 )
-            if self.length_penalty is not None and self.length_penalty != 1.0:
+            if self.length_penalty is not None and self.length_penalty != 1.0 and _should_warn("length_penalty"):
                 minor_issues["length_penalty"] = single_beam_wrong_parameter_msg.format(
                     num_beams=self.num_beams, flag_name="length_penalty", flag_value=self.length_penalty
                 )
@@ -1232,8 +1277,9 @@ class GenerationConfig(PushToHubMixin):
                     setattr(self, key, value)
                     to_remove.append(key)
 
-        # Confirm that the updated instance is still valid
-        self.validate()
+        # Confirm that the updated instance is still valid. Only attributes *explicitly* updated in this call count
+        # as user-set for warning purposes: defaults inherited from a model's config shouldn't emit warnings.
+        self.validate(user_set_attributes=set(to_remove))
 
         # Remove all the attributes that were updated, without modifying the input dict
         unused_kwargs = {key: value for key, value in kwargs.items() if key not in to_remove}

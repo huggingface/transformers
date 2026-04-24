@@ -36,7 +36,6 @@ from ...processing_utils import ImagesKwargs, Unpack
 from ...utils import TensorType, auto_docstring
 
 
-# Adapted from transformers.models.llava_onevision.image_processing_llava_onevision.LlavaOnevisionImageProcessorKwargs
 class LlavaOnevisionImageProcessorKwargs(ImagesKwargs, total=False):
     r"""
     image_grid_pinpoints (`list[list[int]]`, *optional*):
