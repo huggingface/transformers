@@ -101,6 +101,19 @@ def _build_checkpoint_conversion_mapping():
             # Checkpoints store the per-site Hyper-Connection params flat on the decoder
             # layer (``hc_attn_fn`` / ``hc_ffn_*``). The HF module tree wraps them in a
             # ``DeepseekV4HyperConnection`` submodule per site (``attn_hc`` / ``ffn_hc``).
+            WeightConverter(
+                source_patterns=[
+                    "experts.*.w1.weight",
+                    "experts.*.w3.weight",
+                ],
+                target_patterns="experts.gate_up_proj",
+                operations=[MergeModulelist(dim=0), Concatenate(dim=1)],
+            ),
+            WeightConverter(
+                source_patterns="experts.*.w2.weight",
+                target_patterns="experts.down_proj",
+                operations=[MergeModulelist(dim=0)],
+            ),
             WeightRenaming(
                 source_patterns=r"^model\.layers\.(\d+)\.hc_attn_(fn|base|scale)$",
                 target_patterns=r"model.layers.\1.attn_hc.\2",
