@@ -97,6 +97,19 @@ def _build_checkpoint_conversion_mapping():
         "altclip": [
             WeightRenaming(source_patterns=r"layer\.", target_patterns="layers."),
         ],
+        "deepseek_v4": [
+            # Checkpoints store the per-site Hyper-Connection params flat on the decoder
+            # layer (``hc_attn_fn`` / ``hc_ffn_*``). The HF module tree wraps them in a
+            # ``DeepseekV4HyperConnection`` submodule per site (``attn_hc`` / ``ffn_hc``).
+            WeightRenaming(
+                source_patterns=r"^model\.layers\.(\d+)\.hc_attn_(fn|base|scale)$",
+                target_patterns=r"model.layers.\1.attn_hc.\2",
+            ),
+            WeightRenaming(
+                source_patterns=r"^model\.layers\.(\d+)\.hc_ffn_(fn|base|scale)$",
+                target_patterns=r"model.layers.\1.ffn_hc.\2",
+            ),
+        ],
         "llava": [
             WeightRenaming(source_patterns=r"^language_model.model", target_patterns="model.language_model"),
             WeightRenaming(source_patterns=r"^language_model.lm_head", target_patterns="lm_head"),
