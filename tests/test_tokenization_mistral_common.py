@@ -903,7 +903,7 @@ class TestMistralCommonBackend(unittest.TestCase):
         )
 
         with self.assertRaises(
-            ValueError, msg="Kwargs [unk_args] are not supported by `MistralCommonBackend.apply_chat_template`."
+            ValueError, msg="Invalid parameters passed to `ChatCompletionRequest.from_openai`"
         ):
             self.tokenizer.apply_chat_template(conversation, tokenize=True, unk_args="")
 
@@ -1270,7 +1270,7 @@ class TestMistralCommonBackend(unittest.TestCase):
 
         with self.assertRaises(
             ValueError,
-            msg="Kwargs [unk_args] are not supported by `MistralCommonBackend.batch_apply_chat_template`.",
+            msg="Invalid parameters passed to `ChatCompletionRequest.from_openai`",
         ):
             self.tokenizer.apply_chat_template(conversations, tools=tools, tokenize=True, unk_args="")
 
@@ -2140,10 +2140,12 @@ class TestMistralCommonBackend(unittest.TestCase):
             (ValidationMode.test, ValidationMode.test),
             ("finetuning", ValidationMode.finetuning),
             (ValidationMode.finetuning, ValidationMode.finetuning),
+            ("serving", ValidationMode.serving),
+            (ValidationMode.serving, ValidationMode.serving),
         ]:
             self.assertEqual(MistralCommonBackend._get_validation_mode(mode), expected)
 
-        for invalid_mode in [("serving", ValidationMode.serving, "invalid", 1)]:
+        for invalid_mode in ["invalid", 1]:
             with self.assertRaises(ValueError):
                 MistralCommonBackend._get_validation_mode(invalid_mode)
 
