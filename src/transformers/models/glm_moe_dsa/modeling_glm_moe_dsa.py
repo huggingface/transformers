@@ -109,11 +109,6 @@ class GlmMoeDsaIndexer(nn.Module):
     The Indexer has its own lightweight projections (wq_b, wk) separate from the
     main MLA attention. It uses non-interleaved (NeoX/Llama) RoPE, unlike the main attention
     which uses interleaved RoPE.
-
-    **Cache strategy**: The Indexer manages its own key cache (`_cached_keys`) separately
-    from the DynamicCache used by MLA attention, since DynamicCache is sized for exactly
-    `num_hidden_layers` attention layers. Keys are concatenated along the sequence dimension
-    during autoregressive decode.
     """
 
     def __init__(self, config: "GlmMoeDsaConfig", layer_idx: int):
@@ -138,9 +133,6 @@ class GlmMoeDsaIndexer(nn.Module):
         self.weights_proj = nn.Linear(self.hidden_size, self.n_heads, bias=False)
         self.softmax_scale = self.head_dim**-0.5
 
-        # Indexer maintains its own key cache (not in DynamicCache, which is sized for attention layers only)
-        self.register_buffer("_cached_keys", None, persistent=False)
-
     @torch.no_grad()
     def forward(
         self,
@@ -148,7 +140,7 @@ class GlmMoeDsaIndexer(nn.Module):
         q_resid: torch.Tensor,  # [B, S, q_lora_rank]
         position_embeddings: tuple[torch.Tensor, torch.Tensor],
         attention_mask: torch.Tensor | None,
-        use_cache: bool = False,
+        past_key_values: Cache | None = None,
     ) -> torch.LongTensor:
         """
         Computes top-k token indices for sparse attention (DSA).
@@ -166,7 +158,7 @@ class GlmMoeDsaIndexer(nn.Module):
             q_resid: Query residual from `q_a_layernorm(q_a_proj(x))`, shape `[B, S, q_lora_rank]`.
             position_embeddings: `(cos, sin)` from RotaryEmbedding.
             attention_mask: Causal mask, broadcastable to `[B, S, T]`.
-            use_cache: Whether to store/update the indexer's own key cache for autoregressive decode.
+            past_key_values: Cache containing past key states for autoregressive decode.
 
         Returns:
             `torch.LongTensor`: Top-k token indices of shape `[B, S, topk]`.
@@ -187,17 +179,13 @@ class GlmMoeDsaIndexer(nn.Module):
         k_pe = apply_rotary_pos_emb(k_pe.unsqueeze(2), cos, sin, unsqueeze_dim=2).squeeze(2)  # [B, S, rope_D]
         k = torch.cat([k_pe, k_nope], dim=-1)  # [B, S, D]
 
-        # === Key cache (managed by the indexer, not DynamicCache) ===
+        # === Key cache (managed by the DynamicCache) ===
         # Reset cache on prefill (new prompt) to avoid stale keys / batch-size mismatch
-        if seq_len > 1:
-            self._cached_keys = None
+        if seq_len > 1 and past_key_values is not None:
+            past_key_values.reset_cached_keys(self.layer_idx)
 
-        if use_cache:
-            if self._cached_keys is not None:
-                k_cached = torch.cat([self._cached_keys, k], dim=1)  # [B, T, D]
-            else:
-                k_cached = k
-            self._cached_keys = k_cached
+        if past_key_values is not None:
+            k_cached = past_key_values.update_cached_keys(k, self.layer_idx)
         else:
             k_cached = k
 
@@ -407,7 +395,7 @@ class GlmMoeDsaAttention(nn.Module):
                 q_resid,
                 position_embeddings,
                 indexer_mask,
-                use_cache=past_key_values is not None,
+                past_key_values=past_key_values,
             )  # [B, S, topk]
         else:
             topk_indices = prev_topk_indices  # [B, S, topk]
