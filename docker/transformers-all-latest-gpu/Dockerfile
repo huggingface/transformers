@@ -32,6 +32,8 @@ RUN python3 -m pip install --no-cache-dir -e ./transformers[dev]
 # 2. For `torchcodec`, use `cpu` as we don't have `libnvcuvid.so` on the host runner. See https://github.com/meta-pytorch/torchcodec/issues/912
 #    **Important**: We need to specify `torchcodec` version if the torch version is not the latest stable one.
 # 3. `set -e` means "exit immediately if any command fails".
+RUN python3 -m pip uninstall -y torch torchvision torchaudio torchcodec
+
 RUN python3 -m pip install --no-cache-dir torchcodec==0.12.0 --index-url https://download.pytorch.org/whl/test/cpu
 
 RUN python3 -m pip install --no-cache-dir torch==2.12.0 torchvision==0.27.0 torchaudio==2.11.0 --index-url https://download.pytorch.org/whl/test/cu130
