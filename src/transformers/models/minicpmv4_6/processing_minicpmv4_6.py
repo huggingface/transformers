@@ -13,8 +13,6 @@
 # limitations under the License.
 
 
-import torch
-
 from ...image_processing_utils import BatchFeature
 from ...image_utils import ImageInput
 from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
@@ -111,7 +109,9 @@ class MiniCPMV4_6Processor(ProcessorMixin):
                     num_rows, num_cols = image_grids[image_index]
 
                     image_placeholder = (
-                        self.image_start_token + "<|placeholder|>" * int(num_tokens_per_patch[0]) + self.image_end_token
+                        self.image_start_token
+                        + "<|placeholder|>" * int(num_tokens_per_patch[0])
+                        + self.image_end_token
                     )
                     if use_image_id:
                         image_placeholder = (
@@ -155,16 +155,12 @@ class MiniCPMV4_6Processor(ProcessorMixin):
                         grid_rows, grid_cols = video_grids[f]
 
                         frame_placeholder = (
-                            self.image_start_token
-                            + "<|placeholder|>" * int(frame_tokens[0])
-                            + self.image_end_token
+                            self.image_start_token + "<|placeholder|>" * int(frame_tokens[0]) + self.image_end_token
                         )
                         if self.slice_mode and grid_rows > 0 and grid_cols > 0:
                             per_slice_tokens = int(frame_tokens[1]) if len(frame_tokens) > 1 else 0
                             slice_placeholder = (
-                                self.slice_start_token
-                                + "<|placeholder|>" * per_slice_tokens
-                                + self.slice_end_token
+                                self.slice_start_token + "<|placeholder|>" * per_slice_tokens + self.slice_end_token
                             )
                             slices = [slice_placeholder * grid_cols for _ in range(grid_rows)]
                             frame_placeholder += "\n".join(slices)

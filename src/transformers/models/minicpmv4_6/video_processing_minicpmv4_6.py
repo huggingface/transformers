@@ -475,7 +475,12 @@ class MiniCPMV4_6VideoProcessor(BaseVideoProcessor):
             unit_ts: list[list[int]] = []
             for patch in patches:
                 patch = self.rescale_and_normalize(
-                    patch, do_rescale, rescale_factor, do_normalize, image_mean, image_std,
+                    patch,
+                    do_rescale,
+                    rescale_factor,
+                    do_normalize,
+                    image_mean,
+                    image_std,
                 )
                 height, width = patch.shape[-2:]
                 patch = self.reshape_by_patch(patch.unsqueeze(0), patch_size)

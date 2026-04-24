@@ -763,6 +763,9 @@ class MiniCPMV4_6Model(MiniCPMV4_6PreTrainedModel):
             inputs_embeds = self.get_input_embeddings()(input_ids)
 
         if pixel_values is not None and self.config.image_token_id is not None:
+            # Pixels are always `1` in first dim due to NaViT packing, and we don't
+            # want to waste compute processing the same image `num_beams` times. Hack until
+            # @raushan adds support for encoding images once same waay as in enc-dec models
             num_beams = pixel_values.shape[0]
             vision_output = self.get_image_features(pixel_values[:1], target_sizes, downsample_mode=downsample_mode)
             image_features = (

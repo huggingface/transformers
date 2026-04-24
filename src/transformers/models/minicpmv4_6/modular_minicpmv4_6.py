@@ -303,8 +303,7 @@ class MiniCPMV4_6ViTWindowAttentionMerger(nn.Module):
         respected.  The ``linear_1`` block-diagonal init writes to *slices*
         which do not inherit the flag, so we guard the entire block manually.
         """
-        for proj in (self.self_attn.q_proj, self.self_attn.k_proj,
-                     self.self_attn.v_proj, self.self_attn.out_proj):
+        for proj in (self.self_attn.q_proj, self.self_attn.k_proj, self.self_attn.v_proj, self.self_attn.out_proj):
             init.normal_(proj.weight)
             init.zeros_(proj.bias)
 
@@ -546,9 +545,7 @@ class MiniCPMV4_6Merger(nn.Module):
         # Downsample `self.merger_times - 1` times and finally apply projection into LLM space
         self.mlp = nn.ModuleList(
             [
-                MiniCPMV4_6DownsampleMLP(
-                    hidden_size, llm_embed_dim if i == self.merger_times - 1 else hidden_size
-                )
+                MiniCPMV4_6DownsampleMLP(hidden_size, llm_embed_dim if i == self.merger_times - 1 else hidden_size)
                 for i in range(self.merger_times)
             ]
         )
@@ -661,7 +658,9 @@ class MiniCPMV4_6Model(Lfm2VlModel):
         return vision_output
 
     @can_return_tuple
-    @auto_docstring(custom_intro="Extract video features: repack frames into NaViT format, then vision encoder + merger.")
+    @auto_docstring(
+        custom_intro="Extract video features: repack frames into NaViT format, then vision encoder + merger."
+    )
     def get_video_features(
         self,
         pixel_values_videos: torch.FloatTensor,
@@ -743,13 +742,16 @@ class MiniCPMV4_6Model(Lfm2VlModel):
             inputs_embeds = self.get_input_embeddings()(input_ids)
 
         if pixel_values is not None and self.config.image_token_id is not None:
+            # Pixels are always `1` in first dim due to NaViT packing, and we don't
+            # want to waste compute processing the same image `num_beams` times. Hack until
+            # @raushan adds support for encoding images once same waay as in enc-dec models
             num_beams = pixel_values.shape[0]
-            vision_output = self.get_image_features(
-                pixel_values[:1], target_sizes, downsample_mode=downsample_mode
+            vision_output = self.get_image_features(pixel_values[:1], target_sizes, downsample_mode=downsample_mode)
+            image_features = (
+                torch.cat(vision_output.pooler_output, dim=0)
+                .to(device=inputs_embeds.device, dtype=inputs_embeds.dtype)
+                .repeat(num_beams, 1)
             )
-            image_features = torch.cat(vision_output.pooler_output, dim=0).to(
-                device=inputs_embeds.device, dtype=inputs_embeds.dtype
-            ).repeat(num_beams, 1)
             mask = self.get_placeholder_mask(input_ids, inputs_embeds, image_features, self.config.image_token_id)
             inputs_embeds = inputs_embeds.masked_scatter(mask, image_features)
 
@@ -758,9 +760,11 @@ class MiniCPMV4_6Model(Lfm2VlModel):
             vision_output = self.get_video_features(
                 pixel_values_videos[:1], target_sizes_videos, downsample_mode=downsample_mode
             )
-            video_features = torch.cat(vision_output.pooler_output, dim=0).to(
-                device=inputs_embeds.device, dtype=inputs_embeds.dtype
-            ).repeat(num_beams, 1)
+            video_features = (
+                torch.cat(vision_output.pooler_output, dim=0)
+                .to(device=inputs_embeds.device, dtype=inputs_embeds.dtype)
+                .repeat(num_beams, 1)
+            )
             mask = self.get_placeholder_mask(input_ids, inputs_embeds, video_features, self.config.video_token_id)
             inputs_embeds = inputs_embeds.masked_scatter(mask, video_features)
 
@@ -849,7 +853,9 @@ class MiniCPMV4_6ForConditionalGeneration(MiniCPMV4_6PreTrainedModel, Generation
     def get_image_features(self, *args, **kwargs) -> BaseModelOutputWithPooling:
         return self.model.get_image_features(*args, **kwargs)
 
-    @auto_docstring(custom_intro="Extract video features: repack frames into NaViT format, then vision encoder + merger.")
+    @auto_docstring(
+        custom_intro="Extract video features: repack frames into NaViT format, then vision encoder + merger."
+    )
     def get_video_features(self, *args, **kwargs) -> BaseModelOutputWithPooling:
         return self.model.get_video_features(*args, **kwargs)
 
