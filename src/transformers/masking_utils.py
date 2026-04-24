@@ -1069,8 +1069,7 @@ def create_bidirectional_mask(
             useful to easily overlay another mask on top, for example for image tokens handling.
         block_sequence_ids (`torch.Tensor`, *optional*):
             A tensor of same shape as input IDs indicating to which block or group each token belongs to. Tokens from
-            the same block will keep a bidirectional mask within the block, attending causally to the past. Index `-1`
-            can be used for blocks that have to keep complete causality within itself.
+            the same block will keep a bidirectional mask within the block, attending causally to the past.
     """
     # We ignore a few irrelevant arguments at the end as we do not have a (growing) cache here
     early_exit, attention_mask, _, q_length, kv_length, q_offset, kv_offset = _preprocess_mask_arguments(
@@ -1295,8 +1294,7 @@ def create_bidirectional_sliding_window_mask(
             useful to easily overlay another mask on top, for example for image tokens handling.
         block_sequence_ids (`torch.Tensor`, *optional*):
             A tensor of same shape as input IDs indicating to which block or group each token belongs to. Tokens from
-            the same block will keep a bidirectional mask within the block, attending causally to the past. Index `-1`
-            can be used for blocks that have to keep complete causality within itself.
+            the same block will keep a bidirectional mask within the block, attending causally to the past.
     """
     # We ignore a few irrelevant arguments at the end as we do not have a (growing) cache here
     early_exit, attention_mask, _, q_length, kv_length, q_offset, kv_offset = _preprocess_mask_arguments(
