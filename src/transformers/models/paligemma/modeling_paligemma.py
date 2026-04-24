@@ -254,12 +254,6 @@ class PaliGemmaModel(PaliGemmaPreTrainedModel):
             )
             inputs_embeds = inputs_embeds.masked_scatter(special_image_mask, image_features)
 
-        # It may already have been prepared by e.g. `generate`
-        group_ids = torch.full([*inputs_embeds.size()[:-1]], 0, device=inputs_embeds.device)
-        if token_type_ids is not None:
-            # Can attend bidirectionally in prefix and only causally in suffix
-            group_ids = torch.where(token_type_ids == 0, 0, -1)
-
         # Create the mask
         mask_kwargs = {
             "config": self.config.get_text_config(),
@@ -267,11 +261,14 @@ class PaliGemmaModel(PaliGemmaPreTrainedModel):
             "attention_mask": attention_mask,
             "past_key_values": past_key_values,
             "position_ids": position_ids,
-            "block_sequence_ids": group_ids,
         }
-        causal_mask = create_causal_mask(**mask_kwargs)
+        is_first_iteration = past_key_values is None or not past_key_values.is_initialized or pixel_values is not None
+        if token_type_ids is not None and is_first_iteration:
+            # Can attend bidirectionally in prefix and only causally in suffix
+            mask_kwargs["block_sequence_ids"] = torch.where(token_type_ids == 0, 0, -1)
 
         # PG has no sliding window, only full attn. But PG2 needs sliding mask and full mask
+        causal_mask = create_causal_mask(**mask_kwargs)
         if getattr(self.config.text_config, "sliding_window", None) is not None:
             sliding_mask_kwargs = mask_kwargs.copy()
             causal_mask = {
