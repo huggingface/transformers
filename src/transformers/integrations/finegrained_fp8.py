@@ -108,7 +108,7 @@ def _load_deepgemm_kernel():
         required symbols are not found.
 
     Returns:
-        Tuple of (fp8_gemm_nt, m_grouped_fp8_gemm_nt_contiguous, per_token_cast_to_fp8)
+        Tuple of (deepgemm_fp8_matmul, deepgemm_grouped_fp8_matmul, deepgemm_per_token_cast_to_fp8)
         from the deep-gemm kernel.
     """
     if not is_kernels_available():
@@ -142,16 +142,16 @@ def _load_deepgemm_kernel():
             "has a build matching the current torch/CUDA."
         )
 
-    fp8_gemm_nt = getattr(kernel, "fp8_gemm_nt", None)
-    m_grouped_fp8_gemm_nt_contiguous = getattr(kernel, "m_grouped_fp8_gemm_nt_contiguous", None)
-    per_token_cast_to_fp8 = resolve_internal_import(kernel, chained_path="utils.per_token_cast_to_fp8")
+    deepgemm_fp8_matmul = getattr(kernel, "fp8_gemm_nt", None)
+    deepgemm_grouped_fp8_matmul = getattr(kernel, "m_grouped_fp8_gemm_nt_contiguous", None)
+    deepgemm_per_token_cast_to_fp8 = resolve_internal_import(kernel, chained_path="utils.per_token_cast_to_fp8")
 
     missing = [
         name
         for name, attr in [
-            ("fp8_gemm_nt", fp8_gemm_nt),
-            ("m_grouped_fp8_gemm_nt_contiguous", m_grouped_fp8_gemm_nt_contiguous),
-            ("utils.per_token_cast_to_fp8", per_token_cast_to_fp8),
+            ("fp8_gemm_nt", deepgemm_fp8_matmul),
+            ("m_grouped_fp8_gemm_nt_contiguous", deepgemm_grouped_fp8_matmul),
+            ("utils.per_token_cast_to_fp8", deepgemm_per_token_cast_to_fp8),
         ]
         if attr is None
     ]
@@ -161,7 +161,7 @@ def _load_deepgemm_kernel():
             "Please update the `kernels` package (`pip install -U kernels`)."
         )
 
-    return fp8_gemm_nt, m_grouped_fp8_gemm_nt_contiguous, per_token_cast_to_fp8
+    return deepgemm_fp8_matmul, deepgemm_grouped_fp8_matmul, deepgemm_per_token_cast_to_fp8
 
 
 def fp8_deepgemm_matmul(
@@ -181,11 +181,11 @@ def fp8_deepgemm_matmul(
         Bs: (N//128, K//128) float32 — per-block weight scales
         output_dtype: desired output dtype.
     """
-    fp8_gemm_nt, _, _ = _load_deepgemm_kernel()
+    deepgemm_fp8_matmul, _, _ = _load_deepgemm_kernel()
     A_2d = A.view(-1, A.shape[-1])
     As_2d = As.view(-1, As.shape[-1])
     output = torch.empty(A_2d.shape[0], B.shape[0], device=A.device, dtype=output_dtype)
-    fp8_gemm_nt((A_2d, As_2d.float()), (B, Bs.float()), output)
+    deepgemm_fp8_matmul((A_2d, As_2d.float()), (B, Bs.float()), output)
     return output.view(A.shape[:-1] + (B.shape[0],))
 
 
@@ -536,7 +536,7 @@ def fp8_deepgemm_experts_forward(
     if self.block_size[0] != 128 or self.block_size[1] != 128:
         raise ValueError(f"deep-gemm requires block_size=(128, 128), got {self.block_size}")
 
-    _, m_grouped_fp8_gemm_nt_contiguous, per_token_cast_to_fp8 = _load_deepgemm_kernel()
+    _, deepgemm_grouped_fp8_matmul, deepgemm_per_token_cast_to_fp8 = _load_deepgemm_kernel()
 
     device = hidden_states.device
     num_top_k = top_k_index.size(-1)
@@ -565,11 +565,11 @@ def fp8_deepgemm_experts_forward(
     # --- Up projection per expert (deep-gemm grouped contiguous) ---
     w_up = self.gate_up_proj if self.has_gate else self.up_proj
     ws_up = self.gate_up_proj_scale_inv if self.has_gate else self.up_proj_scale_inv
-    act_fp8, act_scales = per_token_cast_to_fp8(selected_hidden_states_g, use_ue8m0=False)
+    act_fp8, act_scales = deepgemm_per_token_cast_to_fp8(selected_hidden_states_g, use_ue8m0=False)
     act_fp8 = _pad_for_deepgemm(act_fp8, sorted_to_padded, total_padded_rows)
     act_scales = _pad_for_deepgemm(act_scales, sorted_to_padded, total_padded_rows)
     proj_out = torch.empty(total_padded_rows, w_up.shape[1], device=device, dtype=torch.bfloat16)
-    m_grouped_fp8_gemm_nt_contiguous(
+    deepgemm_grouped_fp8_matmul(
         (act_fp8, act_scales), (w_up, ws_up.float()), proj_out, grouped_layout, use_psum_layout=use_psum_layout
     )
 
@@ -580,10 +580,10 @@ def fp8_deepgemm_experts_forward(
         proj_out = self.act_fn(proj_out)
 
     # --- Down projection per expert (deep-gemm grouped contiguous) ---
-    proj_fp8, proj_scales = per_token_cast_to_fp8(proj_out, use_ue8m0=False)
+    proj_fp8, proj_scales = deepgemm_per_token_cast_to_fp8(proj_out, use_ue8m0=False)
     # Zero-init: unpad later reads sentinel-row positions the kernel never writes.
     proj_out = torch.zeros(total_padded_rows, hidden_dim, device=device, dtype=torch.bfloat16)
-    m_grouped_fp8_gemm_nt_contiguous(
+    deepgemm_grouped_fp8_matmul(
         (proj_fp8, proj_scales),
         (self.down_proj, self.down_proj_scale_inv.float()),
         proj_out,
