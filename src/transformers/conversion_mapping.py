@@ -102,20 +102,20 @@ def _build_checkpoint_conversion_mapping():
             # The checkpoint layout uses the standard decoder-layer attribute names;
             # rewrite those keys onto the HC-owned module tree at load time.
             WeightRenaming(
-                source_patterns=r"^(?P<p>model\.layers\.\d+)\.self_attn\.",
-                target_patterns=r"\g<p>.attn_hc.inner.",
+                source_patterns=r"^model\.layers\.(\d+)\.self_attn\.",
+                target_patterns=r"model.layers.\1.attn_hc.inner.",
             ),
             WeightRenaming(
-                source_patterns=r"^(?P<p>model\.layers\.\d+)\.input_layernorm\.",
-                target_patterns=r"\g<p>.attn_hc.norm.",
+                source_patterns=r"^model\.layers\.(\d+)\.input_layernorm\.",
+                target_patterns=r"model.layers.\1.attn_hc.norm.",
             ),
             WeightRenaming(
-                source_patterns=r"^(?P<p>model\.layers\.\d+)\.mlp\.",
-                target_patterns=r"\g<p>.mlp_hc.inner.",
+                source_patterns=r"^model\.layers\.(\d+)\.mlp\.",
+                target_patterns=r"model.layers.\1.mlp_hc.inner.",
             ),
             WeightRenaming(
-                source_patterns=r"^(?P<p>model\.layers\.\d+)\.post_attention_layernorm\.",
-                target_patterns=r"\g<p>.mlp_hc.norm.",
+                source_patterns=r"^model\.layers\.(\d+)\.post_attention_layernorm\.",
+                target_patterns=r"model.layers.\1.mlp_hc.norm.",
             ),
         ],
         "llava": [

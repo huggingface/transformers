@@ -39,16 +39,21 @@ class DeepseekV4Config(PreTrainedConfig):
 
     model_type = "deepseek_v4"
     keys_to_ignore_at_inference = ["past_key_values"]
+
+    # V4's module tree differs from V3's: attention/mlp live under the HyperConnection
+    # wrappers (``attn_hc.inner`` / ``mlp_hc.inner``) and there are no dense-MLP layers.
     base_model_tp_plan = {
-        "layers.*.mlp.experts.gate_up_proj": "packed_colwise",
-        "layers.*.mlp.experts.down_proj": "rowwise",
-        "layers.*.mlp.experts": "moe_tp_experts",
-        "layers.*.mlp.shared_experts.gate_proj": "colwise",
-        "layers.*.mlp.shared_experts.up_proj": "colwise",
-        "layers.*.mlp.shared_experts.down_proj": "rowwise",
-        "layers.*.mlp.gate_proj": "colwise",
-        "layers.*.mlp.up_proj": "colwise",
-        "layers.*.mlp.down_proj": "rowwise",
+        "layers.*.attn_hc.inner.wq_a": "colwise",
+        "layers.*.attn_hc.inner.wq_b": "colwise",
+        "layers.*.attn_hc.inner.wkv": "colwise",
+        "layers.*.attn_hc.inner.wo_a": "rowwise",
+        "layers.*.attn_hc.inner.wo_b": "rowwise",
+        "layers.*.mlp_hc.inner.experts.gate_up_proj": "packed_colwise",
+        "layers.*.mlp_hc.inner.experts.down_proj": "rowwise",
+        "layers.*.mlp_hc.inner.experts": "moe_tp_experts",
+        "layers.*.mlp_hc.inner.shared_experts.gate_proj": "colwise",
+        "layers.*.mlp_hc.inner.shared_experts.up_proj": "colwise",
+        "layers.*.mlp_hc.inner.shared_experts.down_proj": "rowwise",
     }
     base_model_pp_plan = {
         "embed_tokens": (["input_ids"], ["inputs_embeds"]),
@@ -119,7 +124,6 @@ class DeepseekV4Config(PreTrainedConfig):
     index_head_dim: int = 128
     index_topk: int = 512
     num_nextn_predict_layers: int = 1
-    layer_types: list[str] | None = None
 
     # Router-side extras inherited from Mixtral config path.
     output_router_logits: bool = False
@@ -140,8 +144,6 @@ class DeepseekV4Config(PreTrainedConfig):
         for r in self.compress_ratios:
             if r not in (0, 4, 128):
                 raise ValueError(f"Unsupported compress_ratio={r}; expected 0, 4, or 128.")
-        if self.layer_types is None:
-            self.layer_types = ["sliding_attention"] * self.num_hidden_layers
         self.qk_nope_head_dim = self.head_dim - self.qk_rope_head_dim
         # RoPE is only applied to the last ``qk_rope_head_dim`` dims of each head; the
         # shared rope-init path picks that up from ``partial_rotary_factor``.

@@ -118,7 +118,6 @@ SPECIAL_CASES_TO_ALLOW = {
         "index_head_dim",
         "index_topk",
         "kv_lora_rank",
-        "layer_types",
         "n_group",
         "num_hash_layers",
         "num_key_value_heads",
