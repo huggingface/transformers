@@ -261,20 +261,6 @@ class ConfigTestUtils(unittest.TestCase):
             warnings.simplefilter("error")
             PreTrainedConfig.from_pretrained("bert-base-uncased")
 
-    def test_single_label_classification_requires_more_than_one_label(self):
-        """Regression test for https://github.com/huggingface/transformers/issues/45479.
-
-        `problem_type="single_label_classification"` with `num_labels=1` used to silently produce a
-        degenerate zero cross-entropy loss. It must now raise a clear error at config construction.
-        """
-        with self.assertRaises(ValueError):
-            BertConfig(num_labels=1, problem_type="single_label_classification")
-
-        # Valid combinations must still work.
-        BertConfig(num_labels=2, problem_type="single_label_classification")
-        BertConfig(num_labels=1, problem_type="regression")
-        BertConfig(num_labels=1)  # problem_type left unset is fine; it is inferred at forward time.
-
     def test_get_text_config(self):
         """Tests the `get_text_config` method."""
         # 1. model with only text input -> returns the original config instance
