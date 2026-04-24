@@ -13,7 +13,6 @@
 #     http://www.apache.org/licenses/LICENSE-2.0
 import copy
 from collections.abc import Callable
-from typing import Optional
 
 import torch
 import torch.nn.functional as F
@@ -58,6 +57,10 @@ class DeepseekV4RMSNorm(nn.Module):
 
 
 class DeepseekV4RotaryEmbedding(nn.Module):
+    """Honours ``partial_rotary_factor`` on the default rope path as well, so V4's
+    attention (with ``head_dim != qk_rope_head_dim``) gets correctly-sized cos/sin.
+    """
+
     inv_freq: torch.Tensor  # fix linting for `register_buffer`
 
     def __init__(self, config: DeepseekV4Config, device=None):
@@ -77,11 +80,7 @@ class DeepseekV4RotaryEmbedding(nn.Module):
         self.register_buffer("original_inv_freq", inv_freq.clone(), persistent=False)
 
     @staticmethod
-    def compute_default_rope_parameters(
-        config: DeepseekV4Config | None = None,
-        device: Optional["torch.device"] = None,
-        seq_len: int | None = None,
-    ) -> tuple["torch.Tensor", float]:
+    def compute_default_rope_parameters(config, device=None, seq_len=None) -> tuple["torch.Tensor", float]:
         """
         Computes the inverse frequencies according to the original RoPE implementation
         Args:
@@ -96,15 +95,13 @@ class DeepseekV4RotaryEmbedding(nn.Module):
             post-processing scaling factor applied to the computed cos/sin (unused in this type of RoPE).
         """
         base = config.rope_parameters["rope_theta"]
-        dim = getattr(config, "head_dim", None) or config.hidden_size // config.num_attention_heads
-
-        attention_factor = 1.0  # Unused in this type of RoPE
-
-        # Compute the inverse frequencies
+        head_dim = getattr(config, "head_dim", None) or config.hidden_size // config.num_attention_heads
+        factor = config.rope_parameters.get("partial_rotary_factor", 1.0)
+        dim = int(head_dim * factor)
         inv_freq = 1.0 / (
             base ** (torch.arange(0, dim, 2, dtype=torch.int64).to(device=device, dtype=torch.float) / dim)
         )
-        return inv_freq, attention_factor
+        return inv_freq, 1.0
 
     @torch.no_grad()
     @dynamic_rope_update  # power user: used with advanced RoPE types (e.g. dynamic rope)
@@ -240,14 +237,18 @@ class DeepseekV4Compressor(nn.Module):
         batch, seq_len, _ = hidden_states.shape
         kv = self.wkv(hidden_states)
         gate = self.wgate(hidden_states)
-        state = getattr(cache, state_key)[layer_idx] if cache is not None else None
+        # Caches that don't carry the per-layer compressor store (e.g. a plain
+        # ``DynamicCache`` installed by the generation loop) skip the stateful path —
+        # pooling runs purely over the current call's tokens.
+        store = getattr(cache, state_key, None)
+        state = store[layer_idx] if store is not None else None
         if state is not None and state["buffer_kv"].shape[1]:
             kv = torch.cat([state["buffer_kv"], kv], dim=1)
             gate = torch.cat([state["buffer_gate"], gate], dim=1)
         usable = (kv.shape[1] // r) * r
         if usable == 0:
-            if cache is not None:
-                getattr(cache, state_key)[layer_idx] = {
+            if store is not None:
+                store[layer_idx] = {
                     "buffer_kv": kv,
                     "buffer_gate": gate,
                     "pooled_kv": state["pooled_kv"] if state is not None else None,
@@ -265,9 +266,9 @@ class DeepseekV4Compressor(nn.Module):
         rope, _ = apply_rotary_pos_emb_interleave(rope, torch.zeros_like(rope), cos, sin)
         pooled = torch.cat([pooled[..., : -self.rope_head_dim], rope.squeeze(1)], dim=-1)
 
-        if cache is not None:
+        if store is not None:
             prev = state["pooled_kv"] if state is not None else None
-            getattr(cache, state_key)[layer_idx] = {
+            store[layer_idx] = {
                 "buffer_kv": kv[:, usable:],
                 "buffer_gate": gate[:, usable:],
                 "pooled_kv": pooled if prev is None else torch.cat([prev, pooled], dim=1),
@@ -302,7 +303,7 @@ class DeepseekV4Indexer(nn.Module):
         layer_idx: int,
         start_pos: int,
     ) -> torch.LongTensor | None:
-        self.compressor(
+        pooled = self.compressor(
             hidden_states,
             rotary=rotary,
             cache=cache,
@@ -310,10 +311,12 @@ class DeepseekV4Indexer(nn.Module):
             start_pos=start_pos,
             state_key="indexer_state",
         )
-        state = cache.indexer_state[layer_idx] if cache is not None else None
-        if state is None or state.get("pooled_kv") is None or state["pooled_kv"].shape[1] == 0:
+        store = getattr(cache, "indexer_state", None)
+        state = store[layer_idx] if store is not None else None
+        if state is not None and state.get("pooled_kv") is not None:
+            pooled = state["pooled_kv"]
+        if pooled is None or pooled.shape[1] == 0:
             return None
-        pooled = state["pooled_kv"]
         batch, seq_len, _ = hidden_states.shape
         q = self.wq_b(q_residual).view(batch, seq_len, self.n_heads, self.head_dim)
         cos, sin = position_embeddings
@@ -431,16 +434,16 @@ class DeepseekV4Attention(nn.Module):
         full_kv = kv
 
         if self.compressor is not None:
-            self.compressor(
+            pooled = self.compressor(
                 hidden_states,
                 rotary=rotary_compress,
                 cache=past_key_values,
                 layer_idx=self.layer_idx,
                 start_pos=start_pos,
             )
-            pooled = (
-                past_key_values.compressor_state[self.layer_idx]["pooled_kv"] if past_key_values is not None else None
-            )
+            store = getattr(past_key_values, "compressor_state", None)
+            if store is not None and store[self.layer_idx] is not None:
+                pooled = store[self.layer_idx]["pooled_kv"]
             if pooled is not None and pooled.shape[1] > 0:
                 pooled = pooled.unsqueeze(1)
                 if self.indexer is not None:
@@ -488,16 +491,18 @@ class DeepseekV4Attention(nn.Module):
 
 
 class DeepseekV4HyperConnection(nn.Module):
-    """``hc_mult`` parallel residual streams mixed via Sinkhorn weights. One instance
-    per site wraps its inner sub-block via ``__call__``.
+    """``hc_mult`` parallel residual streams. Owns the per-site ``norm`` + ``inner``
+    sub-block so the decoder layer only has to chain two HC calls.
     """
 
-    def __init__(self, config: DeepseekV4Config):
+    def __init__(self, config: DeepseekV4Config, inner: nn.Module, norm: nn.Module):
         super().__init__()
         self.hc_mult = config.hc_mult
         self.iters = config.hc_sinkhorn_iters
         self.eps = config.hc_eps
         self.norm_eps = config.rms_norm_eps
+        self.inner = inner
+        self.norm = norm
         mix = (2 + self.hc_mult) * self.hc_mult
         self.hc_fn = nn.Parameter(torch.empty(mix, self.hc_mult * config.hidden_size))
         self.hc_base = nn.Parameter(torch.empty(mix))
@@ -519,12 +524,12 @@ class DeepseekV4HyperConnection(nn.Module):
             comb = comb / (comb.sum(dim=-2, keepdim=True) + self.eps)
         return pre, post, comb
 
-    def forward(self, hidden_states: torch.Tensor, inner: nn.Module, layernorm: nn.Module, **kwargs):
+    def forward(self, hidden_states: torch.Tensor, **kwargs):
         flat = hidden_states.flatten(2).float()
         rsqrt = torch.rsqrt(flat.square().mean(-1, keepdim=True) + self.norm_eps)
         pre, post, comb = self._weights(F.linear(flat, self.hc_fn) * rsqrt)
         reduced = (pre.unsqueeze(-1) * hidden_states).sum(dim=2).to(hidden_states.dtype)
-        out = inner(layernorm(reduced), **kwargs)
+        out = self.inner(self.norm(reduced), **kwargs)
         if isinstance(out, tuple):
             out = out[0]
         expanded = post.unsqueeze(-1) * out.unsqueeze(-2) + torch.matmul(comb, hidden_states)
@@ -679,58 +684,50 @@ class DeepseekV4SparseMoeBlock(nn.Module):
         self.experts = DeepseekV4Experts(config)
         self.shared_experts = DeepseekV4MLP(config)
 
-    def forward(self, hidden_states: torch.Tensor, input_ids: torch.Tensor | None) -> torch.Tensor:
+    def forward(self, hidden_states: torch.Tensor, input_ids: torch.Tensor | None = None, **_) -> torch.Tensor:
         batch, seq_len, hidden_dim = hidden_states.shape
         residual = hidden_states
         flat = hidden_states.view(-1, hidden_dim)
-        if self.is_hash:
-            if input_ids is None:
-                raise ValueError("Hash-routing layers require `input_ids`.")
+        if self.is_hash and input_ids is not None:
             _, weights, indices = self.gate(hidden_states, input_ids)
         else:
-            _, weights, indices = self.gate(hidden_states)
+            # inputs_embeds path (no input_ids): fall back to score-based top-k using the
+            # hash gate's learned weight. Semantics differ from training; acceptable for
+            # feature-extraction style usage.
+            _, weights, indices = self._topk_fallback(hidden_states) if self.is_hash else self.gate(hidden_states)
         routed = self.experts(flat, indices, weights).view(batch, seq_len, hidden_dim)
         return routed + self.shared_experts(residual)
+
+    def _topk_fallback(self, hidden_states: torch.Tensor):
+        # Borrow the hash gate's weight + scoring_func to produce a top-k route — used
+        # only when input_ids isn't threaded (e.g. inputs_embeds inference path).
+        flat = hidden_states.view(-1, self.gate.config.hidden_size)
+        logits = F.linear(flat.float(), self.gate.weight.float())
+        scores = self.gate._score(logits)
+        indices = torch.topk(scores, self.gate.top_k, dim=-1, sorted=False).indices
+        weights = scores.gather(1, indices)
+        weights = weights / (weights.sum(dim=-1, keepdim=True) + 1e-20)
+        return logits, weights * self.gate.routed_scaling_factor, indices
 
 
 class DeepseekV4DecoderLayer(nn.Module):
     def __init__(self, config: DeepseekV4Config, layer_idx: int):
         super().__init__()
         self.layer_idx = layer_idx
-        self.self_attn = DeepseekV4Attention(config, layer_idx)
-        self.mlp = DeepseekV4SparseMoeBlock(config, layer_idx)
-        self.input_layernorm = DeepseekV4RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        self.post_attention_layernorm = DeepseekV4RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        self.attn_hc = DeepseekV4HyperConnection(config)
-        self.mlp_hc = DeepseekV4HyperConnection(config)
-
-    def forward(
-        self,
-        hidden_states: torch.Tensor,
-        position_embeddings: tuple[torch.Tensor, torch.Tensor],
-        position_embeddings_compress: tuple[torch.Tensor, torch.Tensor],
-        rotary_main: nn.Module,
-        rotary_compress: nn.Module,
-        attention_mask: torch.Tensor | None,
-        input_ids: torch.Tensor | None,
-        past_key_values: Cache | None = None,
-        start_pos: int = 0,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> torch.Tensor:
-        hidden_states = self.attn_hc(
-            hidden_states,
-            self.self_attn,
-            self.input_layernorm,
-            position_embeddings=position_embeddings,
-            position_embeddings_compress=position_embeddings_compress,
-            rotary_main=rotary_main,
-            rotary_compress=rotary_compress,
-            attention_mask=attention_mask,
-            past_key_values=past_key_values,
-            start_pos=start_pos,
-            **kwargs,
+        self.attn_hc = DeepseekV4HyperConnection(
+            config,
+            DeepseekV4Attention(config, layer_idx),
+            DeepseekV4RMSNorm(config.hidden_size, eps=config.rms_norm_eps),
         )
-        return self.mlp_hc(hidden_states, self.mlp, self.post_attention_layernorm, input_ids=input_ids)
+        self.mlp_hc = DeepseekV4HyperConnection(
+            config,
+            DeepseekV4SparseMoeBlock(config, layer_idx),
+            DeepseekV4RMSNorm(config.hidden_size, eps=config.rms_norm_eps),
+        )
+
+    def forward(self, hidden_states: torch.Tensor, **kwargs: Unpack[TransformersKwargs]) -> torch.Tensor:
+        hidden_states = self.attn_hc(hidden_states, **kwargs)
+        return self.mlp_hc(hidden_states, **kwargs)
 
 
 @auto_docstring
@@ -752,7 +749,7 @@ class DeepseekV4PreTrainedModel(PreTrainedModel):
         "attentions": DeepseekV4Attention,
     }
     config_class = DeepseekV4Config
-    _keep_in_fp32_modules_strict = ["hc_fn", "hc_base", "hc_scale", "tid2eid"]
+    _keep_in_fp32_modules_strict = ["hc_fn", "hc_base", "hc_scale"]
     _keys_to_ignore_on_load_unexpected = [r"model\.mtp\..*"]
 
     @torch.no_grad()

@@ -97,6 +97,27 @@ def _build_checkpoint_conversion_mapping():
         "altclip": [
             WeightRenaming(source_patterns=r"layer\.", target_patterns="layers."),
         ],
+        "deepseek_v4": [
+            # V4's HyperConnection owns its inner block (attn / mlp) and the layernorm.
+            # The checkpoint layout uses the standard decoder-layer attribute names;
+            # rewrite those keys onto the HC-owned module tree at load time.
+            WeightRenaming(
+                source_patterns=r"^(?P<p>model\.layers\.\d+)\.self_attn\.",
+                target_patterns=r"\g<p>.attn_hc.inner.",
+            ),
+            WeightRenaming(
+                source_patterns=r"^(?P<p>model\.layers\.\d+)\.input_layernorm\.",
+                target_patterns=r"\g<p>.attn_hc.norm.",
+            ),
+            WeightRenaming(
+                source_patterns=r"^(?P<p>model\.layers\.\d+)\.mlp\.",
+                target_patterns=r"\g<p>.mlp_hc.inner.",
+            ),
+            WeightRenaming(
+                source_patterns=r"^(?P<p>model\.layers\.\d+)\.post_attention_layernorm\.",
+                target_patterns=r"\g<p>.mlp_hc.norm.",
+            ),
+        ],
         "llava": [
             WeightRenaming(source_patterns=r"^language_model.model", target_patterns="model.language_model"),
             WeightRenaming(source_patterns=r"^language_model.lm_head", target_patterns="lm_head"),

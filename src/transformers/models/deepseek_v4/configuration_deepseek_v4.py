@@ -91,10 +91,14 @@ class DeepseekV4Config(PreTrainedConfig):
     eos_token_id: int | list[int] | None = 1
     pretraining_tp: int | None = 1
     tie_word_embeddings: bool = False
+
+    # Rotary config. ``rope_parameters`` (alias ``rope_scaling``) is the HF standard dict;
+    # ``partial_rotary_factor`` tells the shared rope-init path to size cos/sin to
+    # ``qk_rope_head_dim`` instead of the full ``head_dim``.
     rope_parameters: RopeParameters | dict | None = None
     rope_interleave: bool | None = True
     attention_bias: bool = False
-    attention_dropout: float | int | None = 0.0
+    attention_dropout: float = 0.0
     head_dim: int = 512
     scoring_func: str = "sqrtsoftplus"
     rope_theta: float = 10000.0
@@ -121,40 +125,34 @@ class DeepseekV4Config(PreTrainedConfig):
     output_router_logits: bool = False
     router_aux_loss_coef: float = 0.001
     router_jitter_noise: float = 0.0
+    partial_rotary_factor: float | None = None
 
     def __post_init__(self, **kwargs):
-        total = self.num_hidden_layers + (self.num_nextn_predict_layers or 0)
+        n = self.num_hidden_layers
+        # Upstream configs ship ``num_hidden_layers + num_nextn_predict_layers`` entries
+        # (the trailing MTP entries are for an MTP block we don't instantiate); accept
+        # either length and keep only the first ``num_hidden_layers``.
         if self.compress_ratios is None:
-            self.compress_ratios = [0] + [4 if i % 2 else 128 for i in range(total - 2)] + [0]
-        if len(self.compress_ratios) != total:
-            raise ValueError(f"`compress_ratios` must be length {total}, got {len(self.compress_ratios)}.")
+            self.compress_ratios = [0] + [4 if i % 2 else 128 for i in range(max(n - 2, 0))] + ([0] if n >= 2 else [])
+        self.compress_ratios = list(self.compress_ratios[:n])
+        if len(self.compress_ratios) != n:
+            raise ValueError(f"`compress_ratios` must cover at least {n} layers, got {len(self.compress_ratios)}.")
         for r in self.compress_ratios:
             if r not in (0, 4, 128):
                 raise ValueError(f"Unsupported compress_ratio={r}; expected 0, 4, or 128.")
         if self.layer_types is None:
             self.layer_types = ["sliding_attention"] * self.num_hidden_layers
         self.qk_nope_head_dim = self.head_dim - self.qk_rope_head_dim
-
-        # Rotary sizes itself to ``qk_rope_head_dim`` through ``partial_rotary_factor``;
-        # the shared init (activated for any non-"default" rope_type) honours it.
-        rp = dict(self.rope_parameters) if isinstance(self.rope_parameters, dict) else {}
-        rp.setdefault("rope_theta", self.rope_theta)
-        rp["partial_rotary_factor"] = self.qk_rope_head_dim / self.head_dim
-        if self.rope_scaling is not None:
-            rp["rope_type"] = self.rope_scaling.get("type", "yarn")
-            for k, v in self.rope_scaling.items():
-                rp.setdefault(k, v)
-        rp.setdefault("rope_type", "linear")
-        rp.setdefault("factor", 1.0)
-        self.rope_parameters = rp
-
-        compress = dict(rp)
-        compress["rope_theta"] = self.compress_rope_theta
-        self.compress_rope_parameters = compress
-
-        # Skip V3's ``__post_init__`` — it pins ``head_dim`` to ``qk_rope_head_dim`` for
-        # MLA rotary sizing, which would stomp V4's ``head_dim=512``.
+        # RoPE is only applied to the last ``qk_rope_head_dim`` dims of each head; the
+        # shared rope-init path picks that up from ``partial_rotary_factor``.
+        if self.partial_rotary_factor is None:
+            self.partial_rotary_factor = self.qk_rope_head_dim / self.head_dim
+        # Skip ``DeepseekV3Config.__post_init__`` — it pins ``head_dim`` to
+        # ``qk_rope_head_dim`` for the MLA rotary, which would stomp V4's head_dim=512.
         super().__post_init__(**kwargs)
+        # The compressed-segment rope shares structure with the main dict but overrides
+        # the base ``rope_theta``; build it lazily here so it round-trips through to_dict.
+        self.compress_rope_parameters = {**self.rope_parameters, "rope_theta": self.compress_rope_theta}
 
 
 __all__ = ["DeepseekV4Config"]
