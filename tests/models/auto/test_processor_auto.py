@@ -498,6 +498,46 @@ class AutoFeatureExtractorTest(unittest.TestCase):
             # Verify image processor loaded correctly
             self.assertEqual(loaded_processor.image_processor.size, image_processor.size)
 
+    def test_processor_from_pretrained_with_prebuilt_tokenizer_kwarg(self):
+        class SingleTokenizerProcessor(ProcessorMixin):
+            def __init__(self, bpe_tokenizer):
+                super().__init__(bpe_tokenizer)
+
+        class DualTokenizerProcessor(ProcessorMixin):
+            def __init__(self, bpe_tokenizer, decoder_tokenizer):
+                super().__init__(bpe_tokenizer, decoder_tokenizer)
+
+        tokenizer = AutoTokenizer.from_pretrained("hf-internal-testing/tiny-random-BertForMaskedLM")
+
+        self.assertEqual(
+            SingleTokenizerProcessor._pop_prebuilt_subprocessors({"tokenizer": tokenizer}),
+            {"bpe_tokenizer": tokenizer},
+        )
+        ambiguous_kwargs = {"tokenizer": tokenizer}
+        self.assertEqual(DualTokenizerProcessor._pop_prebuilt_subprocessors(ambiguous_kwargs), {})
+        self.assertIn("tokenizer", ambiguous_kwargs)
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            SingleTokenizerProcessor(bpe_tokenizer=tokenizer).save_pretrained(tmp_dir)
+
+            loaded = SingleTokenizerProcessor.from_pretrained(tmp_dir, bpe_tokenizer=tokenizer)
+            self.assertIs(loaded.bpe_tokenizer, tokenizer)
+
+            loaded = SingleTokenizerProcessor.from_pretrained(tmp_dir, tokenizer=tokenizer)
+            self.assertIs(loaded.bpe_tokenizer, tokenizer)
+
+            loaded, unused = SingleTokenizerProcessor.from_pretrained(
+                tmp_dir, tokenizer=tokenizer, return_unused_kwargs=True
+            )
+            self.assertIs(loaded.bpe_tokenizer, tokenizer)
+            self.assertNotIn("tokenizer", unused)
+
+            loaded, unused = SingleTokenizerProcessor.from_pretrained(
+                tmp_dir, bpe_tokenizer=tokenizer, return_unused_kwargs=True
+            )
+            self.assertIs(loaded.bpe_tokenizer, tokenizer)
+            self.assertNotIn("bpe_tokenizer", unused)
+
     def test_processor_with_multiple_image_processors_save_load(self):
         """Test that processors with multiple image processors save and load correctly."""
 
