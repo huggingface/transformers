@@ -26,7 +26,7 @@ import libcst as cst
 from create_dependency_mapping import find_priority_list
 from libcst import ClassDef, CSTVisitor
 from libcst import matchers as m
-from libcst.metadata import MetadataWrapper, ParentNodeProvider, PositionProvider, ScopeProvider
+from libcst.metadata import MetadataWrapper, ScopeProvider
 from modular_integrations import (
     EXCLUDED_EXTERNAL_FILES,
     AbsoluteImportTransformer,
@@ -49,13 +49,7 @@ AUTO_GENERATED_MESSAGE = """#                🚨🚨🚨🚨🚨🚨🚨🚨�
 #                🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨
 """
 
-ENABLE_MODULE_SOURCE_CACHE = True
-ENABLE_FAST_MAPPER_VISIT = True
 _MODULE_SOURCE_CACHE = {}
-
-
-def clear_module_source_cache():
-    _MODULE_SOURCE_CACHE.clear()
 
 
 def get_module_source_and_tree_from_name(module_name: str) -> tuple[str, cst.Module]:
@@ -67,14 +61,13 @@ def get_module_source_and_tree_from_name(module_name: str) -> tuple[str, cst.Mod
     cache_key = (module_name, file_path)
     mtime_ns = os.stat(file_path).st_mtime_ns
     cached = _MODULE_SOURCE_CACHE.get(cache_key)
-    if ENABLE_MODULE_SOURCE_CACHE and cached is not None and cached[0] == mtime_ns:
+    if cached is not None and cached[0] == mtime_ns:
         return cached[1], cached[2]
 
     with open(file_path, "r", encoding="utf-8") as file:
         source_code = file.read()
     tree = cst.parse_module(source_code)
-    if ENABLE_MODULE_SOURCE_CACHE:
-        _MODULE_SOURCE_CACHE[cache_key] = (mtime_ns, source_code, tree)
+    _MODULE_SOURCE_CACHE[cache_key] = (mtime_ns, source_code, tree)
     return source_code, tree
 
 
@@ -555,8 +548,6 @@ class ModuleMapper(CSTVisitor, ABC):
     modeling files that will be visited.
     """
 
-    METADATA_DEPENDENCIES = (ParentNodeProvider, PositionProvider)
-
     def __init__(self, python_module: cst.Module):
         # fmt: off
         self.python_module: cst.Module = python_module             # original cst.Module being visited
@@ -624,11 +615,7 @@ class ModuleMapper(CSTVisitor, ABC):
             body=[m.Assign(targets=[m.AssignTarget(target=m.Subscript(value=m.Name()) | m.Attribute(value=m.Name()))])]
         )
 
-        is_module_level = (
-            self._is_direct_module_child()
-            if ENABLE_FAST_MAPPER_VISIT
-            else m.matches(self.get_metadata(cst.metadata.ParentNodeProvider, node), m.Module())
-        )
+        is_module_level = self._is_direct_module_child()
         if is_module_level:
             if m.matches(node, simple_top_level_assign_structure):
                 left_hand_side = node.body[0].targets[0].target.value
@@ -654,22 +641,14 @@ class ModuleMapper(CSTVisitor, ABC):
         self.current_assignment = None
 
     def visit_FunctionDef(self, node):
-        is_module_level = (
-            self._is_direct_module_child()
-            if ENABLE_FAST_MAPPER_VISIT
-            else m.matches(self.get_metadata(cst.metadata.ParentNodeProvider, node), m.Module())
-        )
+        is_module_level = self._is_direct_module_child()
         if is_module_level:
             self.current_function = node.name.value
             self.functions[node.name.value] = node
             self._record_node_order(node.name.value)
 
     def leave_FunctionDef(self, node):
-        is_module_level = (
-            self._is_direct_module_child()
-            if ENABLE_FAST_MAPPER_VISIT
-            else m.matches(self.get_metadata(cst.metadata.ParentNodeProvider, node), m.Module())
-        )
+        is_module_level = self._is_direct_module_child()
         if is_module_level:
             self.current_function = None
 
@@ -698,20 +677,14 @@ class ModuleMapper(CSTVisitor, ABC):
 
     def leave_Module(self, node):
         """When leaving the module, we store the position of each global scoped node to allow sorting the dependencies
-        based on their position in the code later. We use the PositionProvider metadata wrapper for this.
+        based on their position in the code later.
         We also make sure to update `self.object_dependency_mapping` so that it contains only names recorded in
         `self.global_nodes`.
         """
         # assign all nodes
         self.global_nodes = {**self.assignments, **self.classes, **self.functions}
         # now sort the class dependency_mapping based on the position of the nodes
-        self.start_lines = {}
-        if ENABLE_FAST_MAPPER_VISIT:
-            for node_name in self.global_nodes:
-                self.start_lines[node_name] = self._node_order[node_name]
-        else:
-            for node_name, current_node in self.global_nodes.items():
-                self.start_lines[node_name] = self.get_metadata(cst.metadata.PositionProvider, current_node).start.line
+        self.start_lines = {node_name: self._node_order[node_name] for node_name in self.global_nodes}
 
     def _restrict_dependencies_to_known_entities(self):
         """Since we added every Name as part of `self.object_dependency_mapping`, we need to remove those that
@@ -920,11 +893,7 @@ class ModelFileMapper(ModuleMapper):
         cls, module: cst.Module, classes, functions, assignments, object_mapping, start_lines
     ) -> "ModelFileMapper":
         mapper = cls(module)
-        if ENABLE_FAST_MAPPER_VISIT:
-            module.visit(mapper)
-        else:
-            wrapper = MetadataWrapper(module, unsafe_skip_copy=True)
-            wrapper.visit(mapper)
+        module.visit(mapper)
         # Merge dependencies
         mapper.merge_modular_dependencies(classes, functions, assignments, object_mapping, start_lines)
         # Create the class dependencies graph
@@ -1508,11 +1477,7 @@ class ModularFileMapper(ModuleMapper):
             body=[m.Assign(targets=[m.AssignTarget(target=m.Subscript(value=m.Name()) | m.Attribute(value=m.Name()))])]
         )
 
-        is_module_level = (
-            self._is_direct_module_child()
-            if ENABLE_FAST_MAPPER_VISIT
-            else m.matches(self.get_metadata(cst.metadata.ParentNodeProvider, node), m.Module())
-        )
+        is_module_level = self._is_direct_module_child()
         if is_module_level:
             if m.matches(node, m.SimpleStatementLine(body=[m.Import()])):
                 self.imports.append(node)
@@ -2023,11 +1988,7 @@ def convert_modular_file(modular_file: str, source_library: str | None = "transf
             module = module.visit(AbsoluteImportTransformer(relative_path, source_library))
 
         cst_transformers = ModularFileMapper(module, model_name, source_library)
-        if ENABLE_FAST_MAPPER_VISIT:
-            module.visit(cst_transformers)
-        else:
-            wrapper = MetadataWrapper(module, unsafe_skip_copy=True)
-            wrapper.visit(cst_transformers)
+        module.visit(cst_transformers)
         for file, module in create_modules(
             cst_transformers, file_path=relative_path, package_name=source_library
         ).items():
