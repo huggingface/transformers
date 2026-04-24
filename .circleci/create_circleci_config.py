@@ -191,6 +191,12 @@ class CircleCIJob:
             },
             {
                 "run": {
+                    "name": "Uninstall torch",
+                    "command": "uv pip uninstall -y torch torchvision torchaudio torchcodec",
+                }
+            },
+            {
+                "run": {
                     "name": "Install torch 2.11",
                     "command": "uv pip install --no-cache-dir 'torch<=2.11.0' 'torchaudio' 'torchvision' 'torchcodec<=0.11.0' --index-url https://download.pytorch.org/whl/cpu",
                 }
