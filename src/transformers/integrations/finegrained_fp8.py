@@ -554,7 +554,7 @@ def fp8_deepgemm_experts_forward(
     # Sort by expert for grouped processing
     expert_ids_g, perm = torch.sort(expert_ids)
     selected_hidden_states_g = hidden_states[perm // num_top_k]
-    sample_weights_g = sample_weights[perm]  # inherits zeros at invalid EP slots
+    sample_weights_g = sample_weights[perm]
 
     use_psum_layout = torch.cuda.get_device_capability(device)[0] >= 10
     sorted_to_padded, grouped_layout, total_padded_rows = _build_deepgemm_contiguous_layout(
