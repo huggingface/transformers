@@ -114,10 +114,10 @@ class Gemma4Processor(ProcessorMixin):
         videos: VideoInput = None,
         audio: AudioInput = None,
     ):
-        if text is not None and isinstance(text, str):
-            text = [text]
-
-        text = text.copy()
+        if text is not None:
+            if isinstance(text, str):
+                text = [text]
+            text = text.copy()
 
         if images is not None:
             images = self.image_processor.fetch_images(images)

@@ -121,8 +121,10 @@ class MusicFlamingoProcessor(ProcessorMixin):
         images=None,
         videos=None,
     ):
-        if text is not None and isinstance(text, str):
-            text = [text]
+        if text is not None:
+            if isinstance(text, str):
+                text = [text]
+            text = text.copy()
 
         if audio is not None:
             audio = make_list_of_audio(audio)

@@ -589,6 +589,7 @@ class ProcessorMixin(PushToHubMixin):
     # Names need to be attr_class for attr in attributes
     _auto_class = None
     valid_processor_kwargs = ProcessingKwargs
+    skip_tensor_conversion = ["video_metadata", "text_replacement_offsets"]
 
     # args have to match the attributes class attribute
     def __init__(self, *args, **kwargs):
@@ -683,7 +684,7 @@ class ProcessorMixin(PushToHubMixin):
         if not kwargs.get("return_metadata"):
             data.pop("video_metadata", None)
 
-        return BatchFeature(data, tensor_type=return_tensors)
+        return BatchFeature(data, tensor_type=return_tensors, skip_tensor_conversion=self.skip_tensor_conversion)
 
     def prepare_inputs_layout(
         self,

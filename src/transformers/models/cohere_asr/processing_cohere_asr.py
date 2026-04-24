@@ -50,6 +50,7 @@ class CohereAsrProcessorKwargs(ProcessingKwargs, total=False):
 @requires(backends=("torch",))
 class CohereAsrProcessor(ProcessorMixin):
     valid_processor_kwargs = CohereAsrProcessorKwargs
+    skip_tensor_conversion = ["audio_chunk_index"]
 
     def __init__(self, feature_extractor, tokenizer):
         super().__init__(feature_extractor, tokenizer)
@@ -97,6 +98,12 @@ class CohereAsrProcessor(ProcessorMixin):
             sampling rate, and an error will be raised if they don't match. If not provided, a warning will be
             issued and the default sampling rate will be assumed.
         """
+        if sampling_rate != self.feature_extractor.sampling_rate:
+            raise ValueError(
+                f"The sampling rate you provided ({sampling_rate}) does not match the sampling rate of the processor ({self.feature_extractor.sampling_rate}). Please provide resampled the audio to the expected sampling rate."
+            )
+
+        kwargs["sampling_rate"] = sampling_rate
         model_inputs = super().__call__(audio=audio, text=text, **kwargs)
         prompt_ids = self.get_decoder_prompt_ids(language=language, punctuation=punctuation)
         batch_size = model_inputs["input_features"].shape[0]
