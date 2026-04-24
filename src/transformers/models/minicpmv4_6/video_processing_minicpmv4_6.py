@@ -14,23 +14,25 @@
 """Video processor for MiniCPM-V 4.6.
 
 MiniCPM-V treats video as a sequence of images: frames are extracted and
-optionally sub-second frames are stacked into composite images via
-:func:`concat_images`.  The resulting PIL images are then processed by
-:class:`MiniCPMV4_6ImageProcessor` through the normal image pipeline.
-
-This module provides :class:`MiniCPMV4_6VideoProcessor` (inherits from
-:class:`BaseVideoProcessor`) which encapsulates all video-specific logic
-(frame sampling, stacking, ffmpeg / decord backends) that was previously
-inlined in ``processing_minicpmv4_6.py``.
+optionally sub-second frames are stacked into composite images.
 """
 
 import math
+from functools import partial
+
+import numpy as np
+from huggingface_hub.dataclasses import validate_typed_dict
 
 from ...image_processing_utils import BatchFeature
-from ...image_utils import PILImageResampling
+from ...image_transforms import divide_to_patches
+from ...image_utils import IMAGENET_STANDARD_MEAN, IMAGENET_STANDARD_STD, PILImageResampling, SizeDict, validate_kwargs
 from ...processing_utils import Unpack, VideosKwargs
 from ...utils import TensorType, add_start_docstrings, is_torch_available, logging
 from ...video_processing_utils import BASE_VIDEO_PROCESSOR_DOCSTRING, BaseVideoProcessor
+from ...video_utils import (
+    VideoInput,
+    VideoMetadata,
+)
 
 
 if is_torch_available():
@@ -39,399 +41,475 @@ if is_torch_available():
 logger = logging.get_logger(__name__)
 
 
+def ensure_divide(length: int, divisor: int) -> int:
+    return max(round(length / divisor) * divisor, divisor)
+
+
 class MiniCPMV4_6VideoProcessorKwargs(VideosKwargs, total=False):
     r"""
-    max_frames (`int`, *optional*, defaults to 128):
+    max_num_frames (`int`, *optional*, defaults to 128):
         Maximum number of main frames to sample per video.
     stack_frames (`int`, *optional*, defaults to 1):
         Sub-frames per second to stack.  ``1`` disables stacking.
-    use_ffmpeg (`bool`, *optional*, defaults to `False`):
-        Use ffmpeg/ffprobe CLI instead of decord for frame extraction.
+    max_slice_nums (`int`, *optional*, defaults to 9):
+        Maximum number of slices when splitting a high-resolution image.
+    scale_resolution (`int`, *optional*, defaults to 448):
+        Target resolution for individual slices.
+    patch_size (`int`, *optional*, defaults to 14):
+        Spatial patch size of the vision encoder.
+    slice_mode (`bool`, *optional*, defaults to `True`):
+        Whether to split images into multiple slices for higher resolution.
+    downsample_mode (`str`, *optional*, defaults to `"16x"`):
+        Visual token downsampling mode. `"16x"` applies full merge; `"4x"` keeps
+        4x more tokens.
+    use_image_id (`bool`, *optional*, defaults to `True`):
+        Whether to prepend an image-id tag (``<image_id>N</image_id>``) before
+        each image placeholder. Consumed by the Processor for placeholder
+        generation, not by the image processing pipeline itself.
     """
 
-    max_frames: int
+    max_num_frames: int
     stack_frames: int
-    use_ffmpeg: bool
-
-
-# ---------------------------------------------------------------------------
-# Frame-level helpers
-# ---------------------------------------------------------------------------
-
-
-def _uniform_sample(lst, n):
-    """Uniformly sample *n* items from *lst*."""
-    if len(lst) <= n:
-        return lst
-    import numpy as np
-
-    idxs = np.linspace(0, len(lst) - 1, n, dtype=int)
-    return [lst[i] for i in idxs]
-
-
-def concat_images(images, bg_color=(255, 255, 255), cell_size=None, line_color=(0, 0, 0), line_width=6):
-    """Concatenate PIL images into a grid layout.
-
-    Picks the most square-like (rows, cols) arrangement automatically.
-    Each cell is sized to the largest input image (or *cell_size* if given),
-    with images centered and rescaled to fit.
-    """
-    import numpy as np
-    from PIL import Image
-
-    n = len(images)
-    if n == 0:
-        raise ValueError("images is empty")
-    if n == 1:
-        return images[0]
-
-    if cell_size is None:
-        cell_w = max(im.width for im in images)
-        cell_h = max(im.height for im in images)
-    else:
-        cell_w, cell_h = cell_size
-
-    def _canvas_ratio(r, c):
-        cW = c * cell_w + (c - 1) * line_width
-        cH = r * cell_h + (r - 1) * line_width
-        return cW / max(1, cH)
-
-    def _pick_best(candidates):
-        ratios = [abs(_canvas_ratio(r, c) - 1.0) for r, c in candidates]
-        return candidates[int(np.argmin(ratios))]
-
-    if n == 4:
-        rows, cols = 2, 2
-    elif n == 3:
-        rows, cols = _pick_best([(1, 3), (3, 1)])
-    elif n == 2:
-        candidates = [(1, 2), (2, 1)]
-        ratios = [abs(_canvas_ratio(r, c) - 1.0) for r, c in candidates]
-        if ratios[0] == ratios[1]:
-            avg_ar = np.mean([im.width / max(1, im.height) for im in images])
-            rows, cols = (1, 2) if avg_ar >= 1.0 else (2, 1)
-        else:
-            rows, cols = candidates[int(np.argmin(ratios))]
-    else:
-        rows, cols = 1, n
-
-    W = cols * cell_w + (cols - 1) * line_width
-    H = rows * cell_h + (rows - 1) * line_width
-    canvas = Image.new("RGB", (W, H), line_color)
-
-    for i, im in enumerate(images[: rows * cols]):
-        r, c = divmod(i, cols)
-        s = min(cell_w / im.width, cell_h / im.height)
-        nw, nh = max(1, round(im.width * s)), max(1, round(im.height * s))
-        try:
-            im_r = im.resize((nw, nh), Image.Resampling.BICUBIC)
-        except AttributeError:
-            im_r = im.resize((nw, nh), Image.BICUBIC)
-        bg = Image.new("RGB", (cell_w, cell_h), bg_color)
-        bg.paste(im_r, ((cell_w - nw) // 2, (cell_h - nh) // 2))
-        canvas.paste(bg, (c * (cell_w + line_width), r * (cell_h + line_width)))
-
-    return canvas
-
-
-def _group_stacked_by_second(sub_frames, sub_ts, num_seconds):
-    """Group sub-frames by second and concat each group into a composite."""
-    stacked = []
-    cursor = 0
-    for sec in range(num_seconds):
-        group = []
-        while cursor < len(sub_ts) and sub_ts[cursor] < sec + 1:
-            group.append(sub_frames[cursor])
-            cursor += 1
-        stacked.append(concat_images(group) if group else None)
-    return stacked
-
-
-# ---------------------------------------------------------------------------
-# Frame extraction (decord / ffmpeg backends)
-# ---------------------------------------------------------------------------
-
-
-def extract_frames(video_source, max_frames=128, stack_frames=1, use_ffmpeg=False):
-    """Extract video frames, optionally with sub-second stacked frames.
-
-    Returns ``(main_frames, stacked_frames)``.
-
-    *main_frames*: list of ``PIL.Image`` at ~1 fps (uniformly sampled to
-    *max_frames* for long videos).
-
-    *stacked_frames*: ``None`` when *stack_frames* <= 1.  Otherwise a list
-    of length ``num_seconds`` where each element is a composite
-    ``PIL.Image`` (sub-frames concatenated via :func:`concat_images`) or
-    ``None`` if no sub-frames exist for that second.
-
-    Supports local paths and ``http(s)://`` URLs.  Set *use_ffmpeg* to use
-    the ffmpeg/ffprobe CLI instead of ``decord`` (the default).
-    """
-    import os
-    import tempfile
-
-    temp_video = None
-    if isinstance(video_source, str) and video_source.startswith(("http://", "https://")):
-        import requests
-
-        resp = requests.get(video_source, timeout=120)
-        resp.raise_for_status()
-        fd, temp_video = tempfile.mkstemp(suffix=".mp4")
-        os.write(fd, resp.content)
-        os.close(fd)
-        video_source = temp_video
-
-    try:
-        if use_ffmpeg:
-            return _extract_frames_ffmpeg(video_source, max_frames, stack_frames)
-        else:
-            return _extract_frames_decord(video_source, max_frames, stack_frames)
-    finally:
-        if temp_video is not None:
-            os.unlink(temp_video)
-
-
-def _extract_frames_ffmpeg(video_source, max_frames, stack_frames):
-    import os
-    import shutil
-    import subprocess
-    import tempfile
-
-    from PIL import Image
-
-    probe_result = subprocess.run(
-        [
-            "ffprobe",
-            "-v",
-            "error",
-            "-show_entries",
-            "format=duration",
-            "-of",
-            "default=noprint_wrappers=1:nokey=1",
-            video_source,
-        ],
-        capture_output=True,
-        text=True,
-    )
-    if probe_result.returncode != 0:
-        raise RuntimeError(f"ffprobe failed for {video_source}: {probe_result.stderr.strip()}")
-    dur = float(probe_result.stdout.strip())
-    num_seconds = math.ceil(dur)
-
-    main_dir = tempfile.mkdtemp()
-    try:
-        extract_fps = 10 if dur > max_frames else 1
-        subprocess.run(
-            [
-                "ffmpeg",
-                "-y",
-                "-i",
-                video_source,
-                "-vf",
-                f"fps={extract_fps}",
-                os.path.join(main_dir, "frame_%06d.jpg"),
-            ],
-            capture_output=True,
-            check=True,
-        )
-        frame_files = sorted(f for f in os.listdir(main_dir) if f.endswith(".jpg"))
-        if dur > max_frames:
-            sampled_indices = _uniform_sample(list(range(len(frame_files))), max_frames)
-            frame_files = [frame_files[i] for i in sampled_indices]
-        main_frames = [Image.open(os.path.join(main_dir, f)).convert("RGB") for f in frame_files]
-    finally:
-        shutil.rmtree(main_dir, ignore_errors=True)
-
-    stacked = None
-    if stack_frames > 1:
-        stack_dir = tempfile.mkdtemp()
-        try:
-            subprocess.run(
-                [
-                    "ffmpeg",
-                    "-y",
-                    "-i",
-                    video_source,
-                    "-vf",
-                    f"fps={stack_frames}",
-                    os.path.join(stack_dir, "frame_%06d.jpg"),
-                ],
-                capture_output=True,
-                check=True,
-            )
-            stack_files = sorted(f for f in os.listdir(stack_dir) if f.endswith(".jpg"))
-            valid_indices, sub_ts = [], []
-            for i in range(len(stack_files)):
-                if i % stack_frames != 0:
-                    ts = i / stack_frames
-                    if ts < dur:
-                        sub_ts.append(ts)
-                        valid_indices.append(i)
-            max_stack = max_frames * (stack_frames - 1)
-            if len(valid_indices) > max_stack:
-                sampled = _uniform_sample(list(zip(valid_indices, sub_ts)), max_stack)
-                valid_indices = [x[0] for x in sampled]
-                sub_ts = [x[1] for x in sampled]
-            sub_frames = [Image.open(os.path.join(stack_dir, stack_files[i])).convert("RGB") for i in valid_indices]
-            stacked = _group_stacked_by_second(sub_frames, sub_ts, num_seconds)
-        finally:
-            shutil.rmtree(stack_dir, ignore_errors=True)
-
-    return main_frames, stacked
-
-
-def _extract_frames_decord(video_source, max_frames, stack_frames):
-    from PIL import Image
-
-    try:
-        from decord import VideoReader, cpu
-    except ImportError:
-        raise ImportError(
-            "Video processing requires `decord`. Install with: pip install decord  (or use use_ffmpeg=True)"
-        )
-    vr = VideoReader(str(video_source), ctx=cpu(0))
-    total, avg_fps = len(vr), vr.get_avg_fps()
-    dur = total / avg_fps
-    num_seconds = math.ceil(dur)
-
-    is_long = dur > max_frames
-    if is_long:
-        timestamps = [round(i * 0.1, 1) for i in range(int(dur / 0.1))]
-        indices = [min(int(ts * avg_fps), total - 1) for ts in timestamps]
-        indices = _uniform_sample(indices, max_frames)
-    else:
-        indices = [int(i * avg_fps) for i in range(num_seconds)]
-    main_frames = [Image.fromarray(f.astype("uint8")).convert("RGB") for f in vr.get_batch(indices).asnumpy()]
-
-    stacked = None
-    if stack_frames > 1:
-        sub_ts = []
-        for sec in range(num_seconds):
-            for j in range(1, stack_frames):
-                ts = sec + j / stack_frames
-                if ts < dur:
-                    sub_ts.append(ts)
-        sub_indices = [min(int(ts * avg_fps), total - 1) for ts in sub_ts]
-        max_stack = max_frames * (stack_frames - 1)
-        if len(sub_indices) > max_stack:
-            idx = _uniform_sample(list(range(len(sub_indices))), max_stack)
-            sub_indices = [sub_indices[j] for j in idx]
-            sub_ts = [sub_ts[j] for j in idx]
-        sub_frames = [Image.fromarray(f.astype("uint8")).convert("RGB") for f in vr.get_batch(sub_indices).asnumpy()]
-        stacked = _group_stacked_by_second(sub_frames, sub_ts, num_seconds)
-
-    return main_frames, stacked
-
-
-# ---------------------------------------------------------------------------
-# VideoProcessor class
-# ---------------------------------------------------------------------------
+    max_slice_nums: int
+    scale_resolution: int
+    patch_size: int
+    slice_mode: bool
+    downsample_mode: str
+    use_image_id: bool
 
 
 @add_start_docstrings(
     "Constructs a MiniCPM-V 4.6 video processor.",
     BASE_VIDEO_PROCESSOR_DOCSTRING,
-    """
-        max_frames (`int`, *optional*, defaults to 128):
-            Maximum number of main frames to sample per video.
-        stack_frames (`int`, *optional*, defaults to 1):
-            Sub-frames per second to stack into composite images.  ``1`` means
-            no stacking.
-        use_ffmpeg (`bool`, *optional*, defaults to `False`):
-            Use ffmpeg/ffprobe CLI instead of decord for frame extraction.
-    """,
 )
 class MiniCPMV4_6VideoProcessor(BaseVideoProcessor):
-    """MiniCPM-V 4.6 video processor.
-
-    Unlike models that process video as 3-D temporal tensors, MiniCPM-V
-    converts each video into a sequence of PIL images (with optional
-    sub-second frame stacking) that are then handled by the image processor.
-
-    The main entry point for the Processor is :meth:`extract_frames`, which
-    is called during ``apply_chat_template`` to expand ``{"type": "video"}``
-    content blocks into ``{"type": "image"}`` blocks.
-    """
-
     resample = PILImageResampling.BICUBIC
-    do_resize = False
-    do_rescale = False
-    do_normalize = False
+    do_resize = True
+    do_rescale = True
+    do_normalize = True
+    image_mean = IMAGENET_STANDARD_MEAN
+    image_std = IMAGENET_STANDARD_STD
     do_convert_rgb = True
-    do_sample_frames = False
-    max_frames = 128
+    max_slice_nums = 9
+    scale_resolution = 448
+    patch_size = 14
+    slice_mode = True
+    downsample_mode = "16x"
+    use_image_id = True
+    do_sample_frames = True
+    max_num_frames = 128
     stack_frames = 1
-    use_ffmpeg = False
     valid_kwargs = MiniCPMV4_6VideoProcessorKwargs
-    model_input_names = ["pixel_values"]
+    model_input_names = ["pixel_values_videos", "target_sizes_videos"]
 
     def __init__(self, **kwargs: Unpack[MiniCPMV4_6VideoProcessorKwargs]):
         super().__init__(**kwargs)
 
-    def extract_frames(
-        self,
-        video_source,
-        max_frames: int | None = None,
-        stack_frames: int | None = None,
-        use_ffmpeg: bool | None = None,
+    def _validate_preprocess_kwargs(self, **kwargs):
+        # Drop `do_resize`, model resizes based on auto-inferred size at run-time
+        kwargs.pop("do_resize")
+        super()._validate_preprocess_kwargs(**kwargs)
+
+    def sample_frames(
+        self, metadata: VideoMetadata, max_num_frames: int | None = None, stack_frames: int | None = None, **kwargs
     ):
-        """Extract frames from a video, returning PIL images.
-
-        This is the primary interface called by
-        :class:`MiniCPMV4_6Processor` during ``apply_chat_template``.
-
-        Args:
-            video_source: Local file path or ``http(s)://`` URL.
-            max_frames: Override ``self.max_frames``.
-            stack_frames: Override ``self.stack_frames``.
-            use_ffmpeg: Override ``self.use_ffmpeg``.
-
-        Returns:
-            ``(main_frames, stacked_frames)`` where *main_frames* is a list
-            of PIL images and *stacked_frames* is ``None`` or a list of
-            composite PIL images (one per second of video).
         """
-        max_frames = max_frames if max_frames is not None else self.max_frames
+        Args:
+            metadata (`VideoMetadata`):
+                Metadata of the video containing information about total duration, fps and total number of frames.
+            max_num_frames (`int`, *optional*):
+                The maximum number of frames that can be sampled.
+            stack_frames (`int`, *optional*):
+                Sub-frames per second to stack. Value of `1` disables stacking.
+        Returns:
+            np.ndarray:
+                Indices to sample video frames.
+        """
+        if metadata is None:
+            raise ValueError(
+                "MiniCpm4_6 requires video metadata to sample frames but it wasn't found. "
+                "Please pass in `VideoMetadata` object or set `do_sample_frames=False`"
+            )
+
+        max_num_frames = max_num_frames if max_num_frames is not None else self.max_num_frames
         stack_frames = stack_frames if stack_frames is not None else self.stack_frames
-        use_ffmpeg = use_ffmpeg if use_ffmpeg is not None else self.use_ffmpeg
-        return extract_frames(video_source, max_frames=max_frames, stack_frames=stack_frames, use_ffmpeg=use_ffmpeg)
+        total_num_frames, avg_fps = metadata.total_num_frames, metadata.fps
+        duration = metadata.duration
+        num_seconds = math.ceil(duration)
+
+        is_video_long = duration > max_num_frames
+        if is_video_long:
+            timestamps = [round(i * 0.1, 1) for i in range(int(duration / 0.1))]
+            main_indices = [min(int(ts * avg_fps), total_num_frames - 1) for ts in timestamps]
+            # Sample frames to keep the total length at `max_num_frames`
+            if len(main_indices) > max_num_frames:
+                sampling_idxs = np.linspace(0, len(main_indices) - 1, max_num_frames, dtype=int)
+                main_indices = [main_indices[i] for i in sampling_idxs]
+        else:
+            main_indices = [int(i * avg_fps) for i in range(num_seconds)]
+
+        indices_total = main_indices
+
+        if stack_frames and stack_frames > 1:
+            sub_timestamps = []
+            for sec in range(num_seconds):
+                for j in range(1, stack_frames):
+                    timestamp = sec + j / stack_frames
+                    if timestamp < duration:
+                        sub_timestamps.append(timestamp)
+            sub_indices = [min(int(timestamp * avg_fps), total_num_frames - 1) for timestamp in sub_timestamps]
+
+            max_num_frames_stack = max_num_frames * (stack_frames - 1)
+            if len(sub_indices) > max_num_frames_stack:
+                # Sample frames to keep the total length at `max_num_frames`
+                sampling_idxs = np.linspace(0, len(sub_indices) - 1, max_num_frames_stack, dtype=int)
+                sub_indices = [sub_indices[i] for i in sampling_idxs]
+            indices_total += sub_indices
+
+        return indices_total
+
+    def concat_frames_as_image(self, video: torch.Tensor) -> torch.Tensor:
+        """
+        Takes a video and concatenates it to a PIL canvas following
+        a grid layout. Depending on video's size, the output (rows, cols)
+        arrangement is picked automatically.
+        """
+        line_width = 6
+        num_frames, channels, height, width = video.shape
+
+        def canvas_ratio(rows, cols):
+            canvas_width = cols * width + (cols - 1) * line_width
+            canvas_height = rows * height + (rows - 1) * line_width
+            return canvas_width / max(1, canvas_height)
+
+        if num_frames == 4:
+            rows, cols = 2, 2
+        elif num_frames == 3:
+            candidates = [(1, 3), (3, 1)]
+            ratios = [abs(canvas_ratio(rows, cols) - 1.0) for rows, cols in candidates]
+            rows, cols = candidates[int(np.argmin(ratios))]
+        elif num_frames == 2:
+            candidates = [(1, 2), (2, 1)]
+            ratios = [abs(canvas_ratio(rows, cols) - 1.0) for rows, cols in candidates]
+            if ratios[0] == ratios[1]:
+                rows, cols = (1, 2) if width / height >= 1.0 else (2, 1)
+            else:
+                rows, cols = candidates[int(np.argmin(ratios))]
+        else:
+            rows, cols = 1, num_frames
+
+        # Create a big canvas to fit in all time-frames
+        canvas_width = cols * width + (cols - 1) * line_width
+        canvas_height = rows * height + (rows - 1) * line_width
+        canvas = torch.zeros((1, channels, canvas_height, canvas_width), dtype=torch.uint8)
+        video = video.view(rows, cols, channels, height, width)
+
+        for row in range(rows):
+            for col in range(cols):
+                h_start = row * (height + line_width)
+                w_start = col * (width + line_width)
+                canvas[..., h_start : h_start + height, w_start : w_start + width] = video[row, col]
+
+        return canvas
+
+    def find_best_resize(
+        self,
+        video_size: tuple[int, int],
+        scale_resolution: int,
+        patch_size: int,
+        allow_upscale: bool = False,
+    ) -> tuple[int, int]:
+        height, width = video_size
+        if (height * width > scale_resolution * scale_resolution) or allow_upscale:
+            aspect_ratio = width / height
+            height = int(scale_resolution / math.sqrt(aspect_ratio))
+            width = int(height * aspect_ratio)
+        # factor 4 = two successive 2×2 spatial merges (ViT insert merger + downsample MLP)
+        best_height = ensure_divide(height, patch_size * 4)
+        best_width = ensure_divide(width, patch_size * 4)
+        return best_height, best_width
+
+    def get_refine_size(
+        self,
+        video_size: tuple[int, int],
+        grid: list[int],
+        scale_resolution: int,
+        patch_size: int,
+        allow_upscale: bool = False,
+    ) -> tuple[int, int]:
+        height, width = video_size
+        grid_y, grid_x = grid
+        refine_width = ensure_divide(width, grid_x)
+        refine_height = ensure_divide(height, grid_y)
+
+        best_height, best_width = self.find_best_resize(
+            video_size=(refine_height / grid_y, refine_width / grid_x),
+            scale_resolution=scale_resolution,
+            patch_size=patch_size,
+            allow_upscale=allow_upscale,
+        )
+        return best_height * grid_y, best_width * grid_x
+
+    def get_sliced_grid(
+        self,
+        video_size: tuple[int, int],
+        max_slice_nums: int,
+        scale_resolution: int,
+    ) -> list[int] | None:
+        original_height, original_width = video_size
+        log_ratio = math.log(original_width / original_height)
+        ratio = original_width * original_height / (scale_resolution * scale_resolution)
+        multiple = min(math.ceil(ratio), max_slice_nums)
+        if multiple <= 1:
+            return None
+
+        best_grid = [1, 1]
+        min_error = float("inf")
+        for num_slices in [multiple - 1, multiple, multiple + 1]:
+            if num_slices == 1 or num_slices > max_slice_nums:
+                continue
+            for num_rows in range(1, num_slices + 1):
+                if num_slices % num_rows == 0:
+                    num_cols = num_slices // num_rows
+                    error = abs(log_ratio - math.log(num_rows / num_cols))
+                    if error < min_error:
+                        best_grid = [num_cols, num_rows]
+                        min_error = error
+        return best_grid
+
+    def reshape_by_patch(self, videos: "torch.Tensor", patch_size: int) -> "torch.Tensor":
+        "Reshape ``[B, T, C, H, W]`` into NaViT patchified format ``[B, T, C, patch_size, H*W/patch_size]``."
+        batch, time, num_channels, height, width = videos.shape
+
+        # merge B and T so unfold sees 4D (B*T, C, H, W)
+        videos = videos.reshape(batch * time, num_channels, height, width)
+        patches = torch.nn.functional.unfold(videos, (patch_size, patch_size), stride=(patch_size, patch_size))
+
+        patches = patches.reshape(batch, time, num_channels, patch_size, patch_size, -1)
+        patches = patches.permute(0, 1, 2, 3, 5, 4)  # (B, T, C, patch_size, num_patches, patch_size)
+        patches = patches.reshape(batch, time, num_channels, patch_size, -1)  # (B, T, C, patch_size, H*W/patch_size)
+
+        return patches
+
+    @add_start_docstrings(
+        BASE_VIDEO_PROCESSOR_DOCSTRING,
+    )
+    def preprocess(
+        self,
+        videos: VideoInput,
+        **kwargs: Unpack[VideosKwargs],
+    ) -> BatchFeature:
+        validate_kwargs(
+            captured_kwargs=kwargs.keys(),
+            valid_processor_keys=list(self.valid_kwargs.__annotations__.keys()) + ["return_tensors"],
+        )
+
+        # Perform type validation on received kwargs
+        validate_typed_dict(self.valid_kwargs, kwargs)
+
+        # Set default kwargs from self. This ensures that if a kwarg is not provided
+        # by the user, it gets its default value from the instance, or is set to None.
+        for kwarg_name in self.valid_kwargs.__annotations__:
+            kwargs.setdefault(kwarg_name, getattr(self, kwarg_name, None))
+
+        input_data_format = kwargs.pop("input_data_format")
+        do_sample_frames = kwargs.pop("do_sample_frames")
+        device = kwargs.pop("device")
+        video_metadata = kwargs.pop("video_metadata")
+
+        sample_indices_fn = partial(self.sample_frames, **kwargs) if do_sample_frames else None
+        videos, video_metadata = self._decode_and_sample_videos(
+            videos,
+            video_metadata=video_metadata,
+            do_sample_frames=do_sample_frames,
+            sample_indices_fn=sample_indices_fn,
+        )
+        videos = self._prepare_input_videos(
+            videos=videos,
+            input_data_format=input_data_format,
+            device=device,
+        )
+
+        kwargs = self._standardize_kwargs(**kwargs)
+        self._validate_preprocess_kwargs(**kwargs)
+
+        # Pop kwargs that are not needed in _preprocess
+        kwargs.pop("data_format")
+        return_metadata = kwargs.pop("return_metadata")
+
+        # Diff from base class, pass on `video_metadata` to infer subframes vs main frames
+        preprocessed_videos = self._preprocess(videos=videos, video_metadata=video_metadata, **kwargs)
+        if return_metadata:
+            preprocessed_videos["video_metadata"] = video_metadata
+        return preprocessed_videos
+
+    def resize_and_split_patches(
+        self,
+        video: "torch.Tensor",
+        resample,
+        slice_mode: bool,
+        max_slice_nums: int,
+        scale_resolution: int,
+        patch_size: int,
+    ):
+        video_size = video.shape[-2:]
+        best_grid = None
+
+        if slice_mode:
+            best_grid = self.get_sliced_grid(video_size, max_slice_nums, scale_resolution)
+
+        # Always resize the source
+        new_height, new_width = self.find_best_resize(
+            video_size, scale_resolution, patch_size, allow_upscale=(best_grid is None)
+        )
+        source_video = self.resize(video, size=SizeDict(height=new_height, width=new_width), resample=resample)
+
+        # Collect all patches: [source, *slices]
+        patches = [source_video]
+        if best_grid is not None:
+            refine_height, refine_width = self.get_refine_size(
+                video_size, best_grid, scale_resolution, patch_size, allow_upscale=True
+            )
+            grid_y, grid_x = best_grid
+            patch_height, patch_width = refine_height // grid_y, refine_width // grid_x
+
+            refine_video = self.resize(
+                video, size=SizeDict(height=refine_height, width=refine_width), resample=resample
+            )
+            refine_video = divide_to_patches(refine_video, (patch_height, patch_width))
+            patches.extend(refine_video)
+        grid = best_grid if best_grid is not None else (0, 0)
+        return patches, grid
 
     def _preprocess(
         self,
         videos: list[torch.Tensor],
-        do_convert_rgb: bool,
         do_resize: bool,
-        size,
         resample,
-        do_center_crop: bool,
-        crop_size,
         do_rescale: bool,
         rescale_factor: float,
         do_normalize: bool,
         image_mean: float | list[float] | None,
         image_std: float | list[float] | None,
+        max_slice_nums: int,
+        scale_resolution: int,
+        patch_size: int,
+        slice_mode: bool,
+        stack_frames: int,
+        max_num_frames: int,
+        video_metadata: list[VideoMetadata],
         return_tensors: str | TensorType | None = None,
         **kwargs,
     ) -> BatchFeature:
-        """Pass-through: actual image transforms are done by the image processor.
+        # Stage 1 — Build an ordered list of visual units.
+        # Each unit is a [1, C, H, W] tensor representing either a single main
+        # frame or a per-second composite of sub-frames.  When stack_frames > 1
+        # the units are interleaved: [main_0, comp_0, main_1, comp_1, …]
+        visual_units: list[torch.Tensor] = []
+        for video, metadata in zip(videos, video_metadata):
+            if stack_frames > 1:
+                duration = metadata.duration
+                num_seconds = math.ceil(duration)
 
-        When videos are processed through the standard ``preprocess`` pipeline
-        (rather than via ``extract_frames``), this simply bundles the decoded
-        frames into a :class:`BatchFeature` without additional transforms,
-        since MiniCPM-V delegates all spatial processing to the image processor.
-        """
-        import torch
+                # Reconstruct sub_timestamps (same logic as sample_frames)
+                sub_timestamps: list[float] = []
+                for sec in range(num_seconds):
+                    for j in range(1, stack_frames):
+                        timestamp = sec + j / stack_frames
+                        if timestamp < duration:
+                            sub_timestamps.append(timestamp)
 
-        all_frames = []
-        for video in videos:
-            if video.dim() == 4:
-                all_frames.extend(list(video))
+                # Apply the same downsampling that sample_frames would have applied
+                max_num_frames_stack = max_num_frames * (stack_frames - 1)
+                if len(sub_timestamps) > max_num_frames_stack:
+                    sampling_idxs = np.linspace(0, len(sub_timestamps) - 1, max_num_frames_stack, dtype=int)
+                    sub_timestamps = [sub_timestamps[int(i)] for i in sampling_idxs]
+
+                n_sub = len(sub_timestamps)
+                if n_sub > 0:
+                    main_video, sub_video = video[:-n_sub], video[-n_sub:]
+                else:
+                    main_video, sub_video = video, video[:0]
+
+                # Group sub-frames by second (matching _group_stacked_by_second)
+                composites_by_sec: list[torch.Tensor | None] = []
+                cursor = 0
+                for sec in range(num_seconds):
+                    group_start = cursor
+                    while cursor < len(sub_timestamps) and sub_timestamps[cursor] < sec + 1:
+                        cursor += 1
+                    if cursor > group_start:
+                        composites_by_sec.append(self.concat_frames_as_image(sub_video[group_start:cursor]))
+                    else:
+                        composites_by_sec.append(None)
+
+                # Interleave: pair i-th main frame with i-th second's composite
+                for i in range(len(main_video)):
+                    visual_units.append(main_video[i : i + 1])
+                    if i < len(composites_by_sec) and composites_by_sec[i] is not None:
+                        visual_units.append(composites_by_sec[i])
             else:
-                all_frames.append(video)
+                for i in range(len(video)):
+                    visual_units.append(video[i : i + 1])
+
+        # Stage 2 — Resize, split, normalise and reshape each unit independently.
+        per_unit_pixel_values: list[list[torch.Tensor]] = []
+        per_unit_target_sizes: list[list[list[int]]] = []
+        all_grids: list[list[int]] = []
+
+        for unit in visual_units:
+            if do_resize:
+                patches, grid = self.resize_and_split_patches(
+                    video=unit,
+                    resample=resample,
+                    slice_mode=slice_mode,
+                    max_slice_nums=max_slice_nums,
+                    scale_resolution=scale_resolution,
+                    patch_size=patch_size,
+                )
+            else:
+                patches = [unit]
+                grid = (0, 0)
+
+            unit_pv: list[torch.Tensor] = []
+            unit_ts: list[list[int]] = []
+            for patch in patches:
+                patch = self.rescale_and_normalize(
+                    patch,
+                    do_rescale,
+                    rescale_factor,
+                    do_normalize,
+                    image_mean,
+                    image_std,
+                )
+                height, width = patch.shape[-2:]
+                patch = self.reshape_by_patch(patch.unsqueeze(0), patch_size)
+                unit_pv.append(patch.squeeze(0).squeeze(0))
+                unit_ts.append([height // patch_size, width // patch_size])
+
+            per_unit_pixel_values.append(unit_pv)
+            per_unit_target_sizes.append(unit_ts)
+            all_grids.append(list(grid) if not isinstance(grid, list) else grid)
+
+        # Stage 3 — Flatten into NaViT-packed format.
+        all_pv = [pv for unit_pvs in per_unit_pixel_values for pv in unit_pvs]
+        pixel_values = torch.cat(all_pv, dim=-1).unsqueeze(0)
+
+        all_ts = [ts for unit_tss in per_unit_target_sizes for ts in unit_tss]
+        target_sizes = torch.tensor(all_ts, dtype=torch.int32)
+
+        num_patches_per_frame = [len(unit_pvs) for unit_pvs in per_unit_pixel_values]
+
         return BatchFeature(
-            data={"pixel_values": torch.stack(all_frames) if all_frames else torch.empty(0)},
+            data={
+                "pixel_values_videos": pixel_values,
+                "target_sizes_videos": target_sizes,
+                "grids_videos": all_grids,
+                "num_patches_per_frame": num_patches_per_frame,
+                "num_frames": len(visual_units),
+            },
             tensor_type=return_tensors,
+            skip_tensor_conversion=["grids_videos", "num_patches_per_frame", "num_frames"],
         )
 
 

@@ -27,6 +27,7 @@ from ..auto import CONFIG_MAPPING, AutoConfig
 
 
 @auto_docstring(checkpoint="openbmb/MiniCPM-V-4.6")
+@strict
 class MiniCPMV4_6VisionConfig(PreTrainedConfig):
     r"""
     insert_layer_id (`int`, *optional*, defaults to 6):
@@ -70,6 +71,8 @@ class MiniCPMV4_6Config(PreTrainedConfig):
         Whether to drop the last layer of the vision encoder.
     image_token_id (`int`, *optional*):
         Token id used as the image placeholder.
+    video_token_id (`int`, *optional*):
+        Token id used as the video placeholder.
     downsample_mode (`str`, *optional*, defaults to `"16x"`):
         Visual token downsampling ratio. `"4x"` keeps 4× more tokens.
     merge_kernel_size (`tuple[int, int]`, *optional*, defaults to `(2, 2)`):
@@ -87,9 +90,10 @@ class MiniCPMV4_6Config(PreTrainedConfig):
     image_size: int = 448
     drop_vision_last_layer: bool = False
     image_token_id: int | None = None
+    video_token_id: int | None = None
     tie_word_embeddings: bool = False
     downsample_mode: str = "16x"
-    merge_kernel_size: tuple[int, int] = (2, 2)
+    merge_kernel_size: tuple[int, int] | list[int] = (2, 2)
     merger_times: int = 1
 
     def __post_init__(self, **kwargs):

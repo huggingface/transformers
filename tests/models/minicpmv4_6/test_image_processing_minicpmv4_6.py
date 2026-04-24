@@ -32,7 +32,7 @@ class MiniCPMV4_6ImageProcessingTester:
         num_channels=3,
         min_resolution=64,
         max_resolution=128,
-        do_resize=False,
+        do_resize=True,
         do_rescale=True,
         rescale_factor=1 / 255,
         do_normalize=True,
@@ -147,19 +147,3 @@ class MiniCPMV4_6ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase
                     (ts_16x[0], ts_16x[1]) if not hasattr(ts_16x[0], "item") else (ts_16x[0].item(), ts_16x[1].item())
                 )
                 self.assertGreaterEqual(h4 * w4, h16 * w16)
-
-    @unittest.skip(reason="MiniCPM-V uses custom _preprocess with slicing; standard output shape check not applicable")
-    def test_call_pil(self):
-        pass
-
-    @unittest.skip(reason="MiniCPM-V uses custom _preprocess with slicing; standard output shape check not applicable")
-    def test_call_numpy(self):
-        pass
-
-    @unittest.skip(reason="MiniCPM-V uses custom _preprocess with slicing; standard output shape check not applicable")
-    def test_call_numpy_4_channels(self):
-        pass
-
-    @unittest.skip(reason="MiniCPM-V uses custom _preprocess with slicing; standard output shape check not applicable")
-    def test_call_pytorch(self):
-        pass

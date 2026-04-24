@@ -12,81 +12,16 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import re
-
-import numpy as np
-import torch
 
 from ...image_processing_utils import BatchFeature
 from ...image_utils import ImageInput
 from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
-from ...tokenization_utils_base import AddedToken, PreTokenizedInput, TextInput
+from ...tokenization_utils_base import PreTokenizedInput, TextInput
 from ...utils import auto_docstring, logging
 from ...video_utils import VideoInput
 
 
 logger = logging.get_logger(__name__)
-
-
-# ---------------------------------------------------------------------------
-# Placeholder generation
-# ---------------------------------------------------------------------------
-
-
-def _get_grid_placeholder(
-    grid: list[int],
-    patch_visual_tokens: int,
-    slice_start_token: str,
-    slice_end_token: str,
-    pad_token: str,
-) -> str:
-    if grid is None:
-        return ""
-    cols, rows = grid[0], grid[1]
-    if cols == 0 or rows == 0:
-        return ""
-    slice_placeholder = slice_start_token + pad_token * patch_visual_tokens + slice_end_token
-    slices = []
-    for _i in range(rows):
-        slices.append(slice_placeholder * cols)
-    return "\n".join(slices)
-
-
-def _get_slice_image_placeholder(
-    grid: list[int],
-    image_idx: int,
-    source_image_visual_tokens: int,
-    patch_visual_tokens: int,
-    use_image_id: bool,
-    slice_mode: bool,
-    im_start_token: str,
-    im_end_token: str,
-    pad_token: str,
-    im_id_start: str,
-    im_id_end: str,
-    slice_start_token: str,
-    slice_end_token: str,
-) -> str:
-    image_placeholder = im_start_token + pad_token * source_image_visual_tokens + im_end_token
-    if use_image_id:
-        final_placeholder = f"{im_id_start}{image_idx}{im_id_end}" + image_placeholder
-    else:
-        final_placeholder = image_placeholder
-
-    if slice_mode:
-        final_placeholder += _get_grid_placeholder(
-            grid=grid,
-            patch_visual_tokens=patch_visual_tokens,
-            slice_start_token=slice_start_token,
-            slice_end_token=slice_end_token,
-            pad_token=pad_token,
-        )
-    return final_placeholder
-
-
-# ---------------------------------------------------------------------------
-# ProcessingKwargs
-# ---------------------------------------------------------------------------
 
 
 class MiniCPMV4_6ProcessorKwargs(ProcessingKwargs, total=False):
@@ -101,42 +36,26 @@ class MiniCPMV4_6ProcessorKwargs(ProcessingKwargs, total=False):
     }
 
 
-# ---------------------------------------------------------------------------
-# Processor
-# ---------------------------------------------------------------------------
-
-
 @auto_docstring
 class MiniCPMV4_6Processor(ProcessorMixin):
     def __init__(self, image_processor=None, video_processor=None, tokenizer=None, chat_template=None, **kwargs):
         super().__init__(image_processor, video_processor, tokenizer, chat_template=chat_template, **kwargs)
         self.slice_mode = self.image_processor.slice_mode
         self.default_use_image_id = self.image_processor.use_image_id
+        self.image_token_divisor = 4 if self.image_processor.downsample_mode == "4x" else 16
+        self.video_token_divisor = 4 if self.video_processor.downsample_mode == "4x" else 16
 
-        self.image_start_token = "<image>"
-        self.image_end_token = "</image>"
-        self.video_start_token = "<video>"
-        self.video_end_token = "</video>"
-        self.slice_start_token = "<slice>"
-        self.slice_end_token = "</slice>"
-        self.image_id_start_token = "<image_id>"
-        self.image_id_end_token = "</image_id>"
-        self.image_pad_token = "<|image_pad|>"
+        self.image_token = tokenizer.image_token
+        self.video_token = tokenizer.video_token
+        self.image_token_id = tokenizer.image_token_id
+        self.video_token_id = tokenizer.video_token_id
 
-        special_tokens = [
-            self.image_start_token, self.image_end_token,
-            self.video_start_token, self.video_end_token,
-            self.slice_start_token, self.slice_end_token,
-            self.image_id_start_token, self.image_id_end_token,
-            self.image_pad_token,
-        ]
-        tokens_to_add = [
-            AddedToken(tok, normalized=False, special=True)
-            for tok in special_tokens
-            if tok not in self.tokenizer.get_vocab()
-        ]
-        if tokens_to_add:
-            self.tokenizer.add_special_tokens({"additional_special_tokens": tokens_to_add})
+        self.image_start_token = tokenizer.image_start_token
+        self.image_end_token = tokenizer.image_end_token
+        self.slice_start_token = tokenizer.slice_start_token
+        self.slice_end_token = tokenizer.slice_end_token
+        self.image_id_start_token = tokenizer.image_id_start_token
+        self.image_id_end_token = tokenizer.image_id_end_token
 
     @auto_docstring
     def __call__(
@@ -155,242 +74,125 @@ class MiniCPMV4_6Processor(ProcessorMixin):
             - **pixel_values** -- Processed image patches to be fed to a model.
             - **target_sizes** -- Patch grid sizes for the vision encoder.
         """
+
+        if isinstance(text, str):
+            text = [text]
+        text = text.copy()
+
         output_kwargs = self._merge_kwargs(
             MiniCPMV4_6ProcessorKwargs,
             tokenizer_init_kwargs=self.tokenizer.init_kwargs,
             **kwargs,
         )
 
-        images_kwargs = output_kwargs["images_kwargs"]
-        text_kwargs = output_kwargs["text_kwargs"]
-        videos_kwargs = output_kwargs.get("videos_kwargs", {})
+        use_image_id = output_kwargs["images_kwargs"].pop("use_image_id", None)
+        use_image_id = use_image_id if use_image_id is not None else self.default_use_image_id
 
-        use_image_id = images_kwargs.pop("use_image_id", None)
+        img_downsample = output_kwargs["images_kwargs"].get("downsample_mode", self.image_processor.downsample_mode)
+        image_token_divisor = 4 if img_downsample == "4x" else 16
 
-        image_inputs = None
+        image_inputs = {}
         if images is not None:
-            image_inputs = self.image_processor(images, **images_kwargs)
+            image_inputs = self.image_processor(images, **output_kwargs["images_kwargs"])
 
-        video_inputs = None
-        video_frame_counts = None
+            image_grids = image_inputs.pop("grids")
+            num_patches_per_image = image_inputs.pop("num_patches_per_image")
+            target_sizes = image_inputs["target_sizes"]
+
+            flat_index = 0
+            image_index = 0
+            for i in range(len(text)):
+                while self.image_token in text[i]:
+                    n_patches = num_patches_per_image[image_index]
+                    img_target_sizes = target_sizes[flat_index : flat_index + n_patches]
+                    num_tokens_per_patch = img_target_sizes.prod(-1) // image_token_divisor
+                    num_rows, num_cols = image_grids[image_index]
+
+                    image_placeholder = (
+                        self.image_start_token
+                        + "<|placeholder|>" * int(num_tokens_per_patch[0])
+                        + self.image_end_token
+                    )
+                    if use_image_id:
+                        image_placeholder = (
+                            f"{self.image_id_start_token}{image_index}{self.image_id_end_token}" + image_placeholder
+                        )
+
+                    if self.slice_mode and num_rows > 0 and num_cols > 0:
+                        per_slice_tokens = int(num_tokens_per_patch[1]) if len(num_tokens_per_patch) > 1 else 0
+                        slice_placeholder = (
+                            self.slice_start_token + "<|placeholder|>" * per_slice_tokens + self.slice_end_token
+                        )
+                        slices = [slice_placeholder * num_cols for _ in range(num_rows)]
+                        image_placeholder += "\n".join(slices)
+
+                    text[i] = text[i].replace(self.image_token, image_placeholder, 1)
+                    flat_index += n_patches
+                    image_index += 1
+                text[i] = text[i].replace("<|placeholder|>", self.image_token)
+
+        vid_downsample = output_kwargs["videos_kwargs"].get("downsample_mode", self.video_processor.downsample_mode)
+        video_token_divisor = 4 if vid_downsample == "4x" else 16
+
+        video_inputs = {}
         if videos is not None:
-            video_frames_per_video = self._extract_video_frames(videos, **videos_kwargs)
-            video_frame_counts = [len(frames) for frames in video_frames_per_video]
-            all_video_frames = [frame for frames in video_frames_per_video for frame in frames]
-            if all_video_frames:
-                video_inputs = self.image_processor(all_video_frames, **images_kwargs)
+            video_inputs = self.video_processor(videos, **output_kwargs["videos_kwargs"])
 
-        return self._convert_images_texts_to_inputs(
-            image_inputs,
-            video_inputs,
-            text,
-            use_image_id=use_image_id,
-            video_frame_counts=video_frame_counts,
-            **text_kwargs,
+            video_target_sizes = video_inputs["target_sizes_videos"]
+            num_frames = video_inputs.pop("num_frames")
+            video_grids = video_inputs.pop("grids_videos")
+            num_patches_per_frame = video_inputs.pop("num_patches_per_frame")
+
+            flat_index = 0
+            video_index = 0
+            for i in range(len(text)):
+                while self.video_token in text[i]:
+                    video_placeholder = ""
+                    for f in range(num_frames):
+                        n_patches = num_patches_per_frame[f]
+                        frame_ts = video_target_sizes[flat_index : flat_index + n_patches]
+                        frame_tokens = frame_ts.prod(-1) // video_token_divisor
+                        grid_rows, grid_cols = video_grids[f]
+
+                        frame_placeholder = (
+                            self.image_start_token + "<|placeholder|>" * int(frame_tokens[0]) + self.image_end_token
+                        )
+                        if self.slice_mode and grid_rows > 0 and grid_cols > 0:
+                            per_slice_tokens = int(frame_tokens[1]) if len(frame_tokens) > 1 else 0
+                            slice_placeholder = (
+                                self.slice_start_token + "<|placeholder|>" * per_slice_tokens + self.slice_end_token
+                            )
+                            slices = [slice_placeholder * grid_cols for _ in range(grid_rows)]
+                            frame_placeholder += "\n".join(slices)
+
+                        video_placeholder += frame_placeholder
+                        flat_index += n_patches
+
+                    if use_image_id:
+                        video_placeholder = (
+                            f"{self.image_id_start_token}{video_index}{self.image_id_end_token}" + video_placeholder
+                        )
+
+                    text[i] = text[i].replace(self.video_token, video_placeholder, 1)
+                    video_index += 1
+                text[i] = text[i].replace("<|placeholder|>", self.video_token)
+
+        return_tensors = output_kwargs["text_kwargs"].pop("return_tensors", None)
+        return_mm_token_type_ids = output_kwargs["text_kwargs"].pop("return_mm_token_type_ids", False)
+        text_inputs = self.tokenizer(text, **output_kwargs["text_kwargs"], return_tensors=None)
+        self._check_special_mm_tokens(text, text_inputs, modalities=["image", "video"])
+
+        if return_mm_token_type_ids:
+            text_inputs["mm_token_type_ids"] = self.create_mm_token_type_ids(text_inputs["input_ids"])
+
+        return BatchFeature(
+            data={**text_inputs, **image_inputs, **video_inputs},
+            tensor_type=return_tensors,
         )
-
-    def _extract_video_frames(self, videos, **kwargs) -> list[list]:
-        """Extract frames from each video, returning a list of frame lists.
-
-        *videos* may be:
-        - a single path string,
-        - a flat list of path strings / pre-extracted frame lists,
-        - a nested list ``[[path1, path2], ...]`` produced by
-          ``apply_chat_template`` (one inner list per conversation).
-        """
-        if isinstance(videos, str):
-            videos = [videos]
-
-        max_frames = kwargs.pop("max_frames", None)
-        stack_frames = kwargs.pop("stack_frames", None)
-        use_ffmpeg = kwargs.pop("use_ffmpeg", None)
-
-        def _do_extract(source):
-            main_frames, stacked = self.video_processor.extract_frames(
-                source, max_frames=max_frames, stack_frames=stack_frames, use_ffmpeg=use_ffmpeg,
-            )
-            frames = []
-            for i, frame in enumerate(main_frames):
-                frames.append(frame)
-                if stacked is not None and i < len(stacked) and stacked[i] is not None:
-                    frames.append(stacked[i])
-            return frames
-
-        all_frames = []
-        for video in videos:
-            if isinstance(video, str):
-                all_frames.append(_do_extract(video))
-            elif isinstance(video, (list, tuple)):
-                if video and isinstance(video[0], str):
-                    for v in video:
-                        all_frames.append(_do_extract(v))
-                else:
-                    all_frames.append(list(video))
-            else:
-                all_frames.append([video])
-        return all_frames
 
     def post_process_image_text_to_text(self, generated_outputs, skip_special_tokens=True, **kwargs):
         texts = self.tokenizer.batch_decode(generated_outputs, skip_special_tokens=skip_special_tokens, **kwargs)
         return [t.strip() for t in texts]
-
-    def _convert_images_texts_to_inputs(
-        self,
-        image_inputs,
-        video_inputs,
-        texts: str | list[str],
-        use_image_id=None,
-        video_frame_counts: list[int] | None = None,
-        return_tensors=None,
-        max_length=None,
-        truncation=None,
-        **text_kwargs,
-    ):
-        has_images = image_inputs is not None and len(image_inputs["pixel_values"])
-        has_videos = video_inputs is not None and len(video_inputs["pixel_values"])
-
-        if not has_images and not has_videos:
-            model_inputs = self.tokenizer(
-                texts,
-                return_tensors=return_tensors,
-                truncation=truncation,
-                max_length=max_length,
-                **text_kwargs,
-            )
-            return BatchFeature(data={**model_inputs})
-
-        def _to_tensor_list(inputs):
-            return [
-                [torch.from_numpy(pv) if isinstance(pv, np.ndarray) else pv for pv in patches]
-                for patches in inputs["pixel_values"]
-            ]
-
-        image_pattern = f"({self.image_start_token}./{self.image_end_token})"
-        video_pattern = f"({self.video_start_token}./{self.video_end_token})"
-
-        if has_images:
-            per_img_pv = _to_tensor_list(image_inputs)
-            per_img_ts = image_inputs["target_sizes"]
-            img_grids = image_inputs["grids"]
-            img_src_vt = image_inputs["source_image_visual_tokens"]
-            img_patch_vt = image_inputs["patch_visual_tokens"]
-        else:
-            per_img_pv = per_img_ts = img_grids = img_src_vt = img_patch_vt = []
-
-        if has_videos:
-            per_vframe_pv = _to_tensor_list(video_inputs)
-            per_vframe_ts = video_inputs["target_sizes"]
-            vframe_grids = video_inputs["grids"]
-            vframe_src_vt = video_inputs["source_image_visual_tokens"]
-            vframe_patch_vt = video_inputs["patch_visual_tokens"]
-        else:
-            per_vframe_pv = per_vframe_ts = vframe_grids = vframe_src_vt = vframe_patch_vt = []
-            video_frame_counts = video_frame_counts or []
-
-        if isinstance(texts, str):
-            texts = [texts]
-
-        default_use_image_id = use_image_id if use_image_id is not None else self.default_use_image_id
-
-        final_texts = []
-        per_sample_pixel_values = []
-        per_sample_target_sizes = []
-
-        image_index = 0
-        video_index = 0
-        vframe_index = 0
-        for text in texts:
-            combined_pattern = f"{re.escape(image_pattern)}|{re.escape(video_pattern)}"
-            placeholders = re.findall(combined_pattern, text)
-
-            parts = re.split(combined_pattern, text)
-            final_text = parts[0]
-
-            sample_pv = []
-            sample_ts = []
-            img_counter_in_sample = 0
-
-            for k, placeholder in enumerate(placeholders):
-                if placeholder == image_pattern:
-                    idx = image_index
-                    image_index += 1
-                    if idx >= len(per_img_pv):
-                        raise ValueError(
-                            f"Not enough images: need index {idx} but only {len(per_img_pv)} provided."
-                        )
-                    expanded = _get_slice_image_placeholder(
-                        grid=img_grids[idx],
-                        image_idx=img_counter_in_sample,
-                        source_image_visual_tokens=img_src_vt[idx],
-                        patch_visual_tokens=img_patch_vt[idx],
-                        use_image_id=default_use_image_id,
-                        slice_mode=self.slice_mode,
-                        im_start_token=self.image_start_token,
-                        im_end_token=self.image_end_token,
-                        pad_token=self.image_pad_token,
-                        im_id_start=self.image_id_start_token,
-                        im_id_end=self.image_id_end_token,
-                        slice_start_token=self.slice_start_token,
-                        slice_end_token=self.slice_end_token,
-                    )
-                    final_text += expanded
-                    sample_pv.extend(per_img_pv[idx])
-                    sample_ts.extend(per_img_ts[idx])
-                    img_counter_in_sample += 1
-
-                elif placeholder == video_pattern:
-                    if video_index >= len(video_frame_counts):
-                        raise ValueError(
-                            f"Not enough videos: need index {video_index} but only {len(video_frame_counts)} provided."
-                        )
-                    n_frames = video_frame_counts[video_index]
-                    video_index += 1
-                    for f in range(n_frames):
-                        fidx = vframe_index
-                        vframe_index += 1
-                        expanded = _get_slice_image_placeholder(
-                            grid=vframe_grids[fidx],
-                            image_idx=0,
-                            source_image_visual_tokens=vframe_src_vt[fidx],
-                            patch_visual_tokens=vframe_patch_vt[fidx],
-                            use_image_id=False,
-                            slice_mode=self.slice_mode,
-                            im_start_token=self.image_start_token,
-                            im_end_token=self.image_end_token,
-                            pad_token=self.image_pad_token,
-                            im_id_start=self.image_id_start_token,
-                            im_id_end=self.image_id_end_token,
-                            slice_start_token=self.slice_start_token,
-                            slice_end_token=self.slice_end_token,
-                        )
-                        final_text += expanded
-                        sample_pv.extend(per_vframe_pv[fidx])
-                        sample_ts.extend(per_vframe_ts[fidx])
-
-                final_text += parts[k + 1]
-
-            final_texts.append(final_text)
-            per_sample_pixel_values.append(sample_pv)
-            per_sample_target_sizes.append(
-                torch.tensor(sample_ts, dtype=torch.int32) if sample_ts else torch.zeros(0, 2, dtype=torch.int32)
-            )
-
-        tokenized = self.tokenizer(
-            final_texts,
-            return_tensors=return_tensors,
-            truncation=truncation,
-            max_length=max_length,
-            **text_kwargs,
-        )
-
-        return BatchFeature(
-            data={
-                "input_ids": tokenized["input_ids"],
-                "attention_mask": tokenized["attention_mask"],
-                "pixel_values": per_sample_pixel_values,
-                "target_sizes": per_sample_target_sizes,
-            }
-        )
 
 
 __all__ = ["MiniCPMV4_6Processor"]

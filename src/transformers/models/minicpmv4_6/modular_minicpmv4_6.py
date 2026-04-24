@@ -16,7 +16,6 @@
 from collections.abc import Callable
 from typing import Any
 
-import numpy as np
 import torch
 import torch.nn.functional as F
 from huggingface_hub.dataclasses import strict
@@ -26,7 +25,6 @@ from ... import initialization as init
 from ...activations import ACT2FN
 from ...configuration_utils import PreTrainedConfig
 from ...generation import GenerationMixin
-from ...masking_utils import create_bidirectional_mask
 from ...modeling_outputs import (
     BaseModelOutputWithPast,
     BaseModelOutputWithPooling,
@@ -34,11 +32,13 @@ from ...modeling_outputs import (
 )
 from ...modeling_utils import AttentionInterface, PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import TransformersKwargs, auto_docstring, torch_compilable_check
+from ...utils import TransformersKwargs, auto_docstring
 from ...utils.generic import can_return_tuple
+from ...utils.import_utils import torch_compilable_check
 from ...utils.output_capturing import capture_outputs
 from ..auto import CONFIG_MAPPING, AutoConfig, AutoModel
 from ..idefics3.modeling_idefics3 import Idefics3VisionEmbeddings
+from ..lfm2_vl.modeling_lfm2_vl import Lfm2VlModel
 from ..siglip.configuration_siglip import SiglipVisionConfig
 from ..siglip.modeling_siglip import SiglipAttention, SiglipEncoder, SiglipEncoderLayer, SiglipMLP
 
@@ -84,6 +84,7 @@ def minicpmv4_6_vision_sdpa_attention_forward(
     return attn_output, None
 
 
+# FIXME @vasqu: needs a varlen path for SDPA similar to qwen-vision-attention
 MINICPMV4_6_ATTENTION_FUNCTIONS = AttentionInterface()
 MINICPMV4_6_ATTENTION_FUNCTIONS["sdpa"] = minicpmv4_6_vision_sdpa_attention_forward
 
@@ -109,6 +110,7 @@ def eager_attention_forward(
 
 
 @auto_docstring(checkpoint="openbmb/MiniCPM-V-4.6")
+@strict
 class MiniCPMV4_6VisionConfig(SiglipVisionConfig):
     r"""
     insert_layer_id (`int`, *optional*, defaults to 6):
@@ -128,17 +130,65 @@ class MiniCPMV4_6VisionConfig(SiglipVisionConfig):
     insert_layer_id: int = 6
 
 
+@auto_docstring(checkpoint="openbmb/MiniCPM-V-4.6")
+@strict
+class MiniCPMV4_6Config(PreTrainedConfig):
+    r"""
+    insert_layer_id (`int`, *optional*, defaults to 6):
+        Vision encoder layer index after which the window-attention merger is applied.
+    image_size (`int`, *optional*, defaults to 448):
+        Base resolution for image preprocessing.
+    drop_vision_last_layer (`bool`, *optional*, defaults to `False`):
+        Whether to drop the last layer of the vision encoder.
+    image_token_id (`int`, *optional*):
+        Token id used as the image placeholder.
+    video_token_id (`int`, *optional*):
+        Token id used as the video placeholder.
+    downsample_mode (`str`, *optional*, defaults to `"16x"`):
+        Visual token downsampling ratio. `"4x"` keeps 4× more tokens.
+    merge_kernel_size (`tuple[int, int]`, *optional*, defaults to `(2, 2)`):
+        Kernel size `(h, w)` for merging adjacent visual patches in the Merger.
+    merger_times (`int`, *optional*, defaults to 1):
+        Number of iterative merge rounds in the Merger.
+    """
+
+    model_type = "minicpmv4_6"
+    sub_configs = {"text_config": AutoConfig, "vision_config": MiniCPMV4_6VisionConfig}
+
+    text_config: dict | PreTrainedConfig | None = None
+    vision_config: dict | PreTrainedConfig | None = None
+    insert_layer_id: int = 6
+    image_size: int = 448
+    drop_vision_last_layer: bool = False
+    image_token_id: int | None = None
+    video_token_id: int | None = None
+    tie_word_embeddings: bool = False
+    downsample_mode: str = "16x"
+    merge_kernel_size: tuple[int, int] | list[int] = (2, 2)
+    merger_times: int = 1
+
+    def __post_init__(self, **kwargs):
+        if isinstance(self.vision_config, dict):
+            self.vision_config.pop("model_type", None)
+            self.vision_config = MiniCPMV4_6VisionConfig(**self.vision_config)
+        elif self.vision_config is None:
+            self.vision_config = MiniCPMV4_6VisionConfig()
+
+        self.vision_config.insert_layer_id = self.insert_layer_id
+        self.patch_size = self.vision_config.patch_size
+
+        if isinstance(self.text_config, dict):
+            self.text_config = CONFIG_MAPPING[self.text_config["model_type"]](**self.text_config)
+        elif self.text_config is None:
+            self.text_config = CONFIG_MAPPING["qwen3_5_text"]()
+
+        super().__post_init__(**kwargs)
+
+
 class MiniCPMV4_6VisionEmbeddings(Idefics3VisionEmbeddings):
-    """Vision embeddings with packed-attention position encoding via ``target_sizes``."""
-
-    def __init__(self, config: MiniCPMV4_6VisionConfig):
-        super().__init__(config)
-        self.config = config
-
     def forward(
         self,
         pixel_values: torch.FloatTensor,
-        patch_attention_mask: torch.BoolTensor,
         target_sizes: torch.IntTensor | None = None,
     ) -> torch.Tensor:
         patch_embeds = self.patch_embedding(pixel_values)
@@ -166,7 +216,6 @@ class MiniCPMV4_6VisionEmbeddings(Idefics3VisionEmbeddings):
             position_embeddings.append(self.position_embedding(pos_ids))
 
         position_embeddings = torch.concat(position_embeddings, dim=0).unsqueeze(0)
-
         embeddings = embeddings + position_embeddings
         return embeddings
 
@@ -216,75 +265,8 @@ class MiniCPMV4_6VisionAttention(SiglipAttention):
 class MiniCPMV4_6VisionEncoderLayer(SiglipEncoderLayer):
     def __init__(self, config: MiniCPMV4_6VisionConfig):
         super().__init__(config)
-        self.embed_dim = config.hidden_size
-        self.layer_norm1 = nn.LayerNorm(self.embed_dim, eps=config.layer_norm_eps)
         self.self_attn = MiniCPMV4_6VisionAttention(config)
-        self.layer_norm2 = nn.LayerNorm(self.embed_dim, eps=config.layer_norm_eps)
         self.mlp = MiniCPMV4_6VisionMLP(config)
-
-    def forward(
-        self,
-        hidden_states: torch.Tensor,
-        attention_mask: torch.Tensor,
-        **kwargs,
-    ) -> torch.FloatTensor:
-        residual = hidden_states
-
-        hidden_states = self.layer_norm1(hidden_states)
-        hidden_states, _ = self.self_attn(
-            hidden_states=hidden_states,
-            attention_mask=attention_mask,
-            **kwargs,
-        )
-        hidden_states = residual + hidden_states
-
-        residual = hidden_states
-        hidden_states = self.layer_norm2(hidden_states)
-        hidden_states = self.mlp(hidden_states)
-        hidden_states = residual + hidden_states
-
-        return hidden_states
-
-
-class MiniCPMV4_6VisionPreTrainedModel(PreTrainedModel):
-    config_class = MiniCPMV4_6VisionConfig
-    base_model_prefix = "siglip"
-    supports_gradient_checkpointing = True
-
-    _can_record_outputs = {
-        "hidden_states": MiniCPMV4_6VisionEncoderLayer,
-        "attentions": MiniCPMV4_6VisionAttention,
-    }
-
-    def _init_weights(self, module):
-        if isinstance(module, MiniCPMV4_6ViTWindowAttentionMerger):
-            module._init_weights()
-        elif isinstance(module, MiniCPMV4_6VisionEmbeddings):
-            width = self.config.hidden_size
-            init.normal_(module.position_embedding.weight, std=1 / np.sqrt(width))
-        elif isinstance(module, nn.Embedding):
-            init.default_flax_embed_init_(module.weight)
-        elif isinstance(module, MiniCPMV4_6VisionAttention):
-            init.normal_(module.q_proj.weight)
-            init.normal_(module.k_proj.weight)
-            init.normal_(module.v_proj.weight)
-            init.normal_(module.out_proj.weight)
-            init.zeros_(module.q_proj.bias)
-            init.zeros_(module.k_proj.bias)
-            init.zeros_(module.v_proj.bias)
-            init.zeros_(module.out_proj.bias)
-        elif isinstance(module, MiniCPMV4_6VisionMLP):
-            init.normal_(module.fc1.weight)
-            init.normal_(module.fc2.weight)
-            init.normal_(module.fc1.bias, std=1e-6)
-            init.normal_(module.fc2.bias, std=1e-6)
-        elif isinstance(module, (nn.Linear, nn.Conv2d)):
-            init.lecun_normal_(module.weight)
-            if module.bias is not None:
-                init.zeros_(module.bias)
-        elif isinstance(module, nn.LayerNorm):
-            init.zeros_(module.bias)
-            init.ones_(module.weight)
 
 
 class MiniCPMV4_6VisionEncoder(SiglipEncoder):
@@ -293,166 +275,6 @@ class MiniCPMV4_6VisionEncoder(SiglipEncoder):
     def __init__(self, config: MiniCPMV4_6VisionConfig):
         super().__init__(config)
         self.layers = nn.ModuleList([MiniCPMV4_6VisionEncoderLayer(config) for _ in range(config.num_hidden_layers)])
-
-
-class MiniCPMV4_6VisionTransformer(MiniCPMV4_6VisionPreTrainedModel):
-    config_class = MiniCPMV4_6VisionConfig
-    main_input_name = "pixel_values"
-    _supports_flash_attn = True
-    _supports_sdpa = True
-
-    def __init__(self, config: MiniCPMV4_6VisionConfig):
-        super().__init__(config)
-        self.config = config
-        embed_dim = config.hidden_size
-
-        self.embeddings = MiniCPMV4_6VisionEmbeddings(config)
-        self.encoder = MiniCPMV4_6VisionEncoder(config)
-        self.post_layernorm = nn.LayerNorm(embed_dim, eps=config.layer_norm_eps)
-        self.vit_merger = MiniCPMV4_6ViTWindowAttentionMerger(config)
-        self._attn_implementation = getattr(config, "_attn_implementation", "eager")
-        self._use_flash_attention_2 = self._attn_implementation == "flash_attention_2"
-        self._use_packed_attention = self._attn_implementation in ("flash_attention_2", "sdpa")
-
-        self.post_init()
-
-    def get_input_embeddings(self) -> nn.Module:
-        return self.embeddings.patch_embedding
-
-    @capture_outputs(tie_last_hidden_states=False)
-    @auto_docstring
-    def forward(
-        self,
-        pixel_values,
-        patch_attention_mask: torch.BoolTensor | None = None,
-        target_sizes: torch.IntTensor | None = None,
-        cu_seqlens: torch.Tensor | None = None,
-        max_seqlens: torch.Tensor | None = None,
-        use_vit_merger: bool = True,
-        **kwargs,
-    ) -> BaseModelOutputWithPooling:
-        r"""
-        patch_attention_mask (`torch.BoolTensor` of shape `(batch_size, height, width)`, *optional*):
-            Boolean mask indicating valid patches (used for non-packed attention).
-        target_sizes (`torch.IntTensor` of shape `(batch_size, 2)`, *optional*):
-            Patch grid sizes `(h, w)` for computing position embeddings.
-        cu_seqlens (`torch.Tensor`, *optional*):
-            Cumulative sequence lengths for packed (flash) attention.
-        max_seqlens (`torch.Tensor`, *optional*):
-            Maximum sequence length for packed (flash) attention.
-        use_vit_merger (`bool`, *optional*, defaults to `True`):
-            Whether to apply the ViT window-attention merger after the encoder.
-        """
-        if not self._use_packed_attention:
-            batch_size = pixel_values.size(0)
-            if patch_attention_mask is None:
-                patch_attention_mask = torch.ones(
-                    size=(
-                        batch_size,
-                        pixel_values.size(2) // self.config.patch_size,
-                        pixel_values.size(3) // self.config.patch_size,
-                    ),
-                    dtype=torch.bool,
-                    device=pixel_values.device,
-                )
-
-        hidden_states = self.embeddings(
-            pixel_values=pixel_values, patch_attention_mask=patch_attention_mask, target_sizes=target_sizes
-        )
-
-        if not self._use_packed_attention:
-            patch_attention_mask = patch_attention_mask.view(batch_size, -1)
-            attention_mask = create_bidirectional_mask(
-                config=self.config,
-                inputs_embeds=hidden_states,
-                attention_mask=patch_attention_mask,
-            )
-        else:
-            attention_mask = None
-
-        attn_kwargs = {
-            "cu_seq_lens_q": cu_seqlens, "cu_seq_lens_k": cu_seqlens,
-            "max_length_q": max_seqlens, "max_length_k": max_seqlens,
-        }
-
-        insert_layer_id = self.config.insert_layer_id if use_vit_merger else -1
-        if use_vit_merger and insert_layer_id >= 0:
-            for layer_index, encoder_layer in enumerate(self.encoder.layers):
-                hidden_states = encoder_layer(hidden_states, attention_mask, **attn_kwargs)
-                if layer_index == insert_layer_id:
-                    hidden_states, target_sizes, attention_mask, cu_seqlens, max_seqlens = self.vit_merger(
-                        hidden_states, target_sizes, attention_mask, cu_seqlens, max_seqlens,
-                    )
-                    attn_kwargs = {
-                        "cu_seq_lens_q": cu_seqlens, "cu_seq_lens_k": cu_seqlens,
-                        "max_length_q": max_seqlens, "max_length_k": max_seqlens,
-                    }
-        else:
-            encoder_outputs = self.encoder(
-                inputs_embeds=hidden_states,
-                attention_mask=attention_mask,
-                **attn_kwargs,
-            )
-            hidden_states = encoder_outputs.last_hidden_state
-
-        last_hidden_state = self.post_layernorm(hidden_states)
-
-        return BaseModelOutputWithPooling(
-            last_hidden_state=last_hidden_state,
-            pooler_output=None,
-        )
-
-
-@auto_docstring(checkpoint="openbmb/MiniCPM-V-4.6")
-@strict
-class MiniCPMV4_6Config(PreTrainedConfig):
-    r"""
-    insert_layer_id (`int`, *optional*, defaults to 6):
-        Vision encoder layer index after which the window-attention merger is applied.
-    image_size (`int`, *optional*, defaults to 448):
-        Base resolution for image preprocessing.
-    drop_vision_last_layer (`bool`, *optional*, defaults to `False`):
-        Whether to drop the last layer of the vision encoder.
-    image_token_id (`int`, *optional*):
-        Token id used as the image placeholder.
-    downsample_mode (`str`, *optional*, defaults to `"16x"`):
-        Visual token downsampling ratio. `"4x"` keeps 4× more tokens.
-    merge_kernel_size (`tuple[int, int]`, *optional*, defaults to `(2, 2)`):
-        Kernel size `(h, w)` for merging adjacent visual patches in the Merger.
-    merger_times (`int`, *optional*, defaults to 1):
-        Number of iterative merge rounds in the Merger.
-    """
-
-    model_type = "minicpmv4_6"
-    sub_configs = {"text_config": AutoConfig, "vision_config": MiniCPMV4_6VisionConfig}
-
-    text_config: dict | PreTrainedConfig | None = None
-    vision_config: dict | PreTrainedConfig | None = None
-    insert_layer_id: int = 6
-    image_size: int = 448
-    drop_vision_last_layer: bool = False
-    image_token_id: int | None = None
-    tie_word_embeddings: bool = False
-    downsample_mode: str = "16x"
-    merge_kernel_size: tuple[int, int] = (2, 2)
-    merger_times: int = 1
-
-    def __post_init__(self, **kwargs):
-        if isinstance(self.vision_config, dict):
-            self.vision_config.pop("model_type", None)
-            self.vision_config = MiniCPMV4_6VisionConfig(**self.vision_config)
-        elif self.vision_config is None:
-            self.vision_config = MiniCPMV4_6VisionConfig()
-
-        self.vision_config.insert_layer_id = self.insert_layer_id
-        self.patch_size = self.vision_config.patch_size
-
-        if isinstance(self.text_config, dict):
-            self.text_config = CONFIG_MAPPING[self.text_config["model_type"]](**self.text_config)
-        elif self.text_config is None:
-            self.text_config = CONFIG_MAPPING["qwen3_5_text"]()
-
-        super().__post_init__(**kwargs)
 
 
 class MiniCPMV4_6ViTWindowAttentionMerger(nn.Module):
@@ -481,8 +303,7 @@ class MiniCPMV4_6ViTWindowAttentionMerger(nn.Module):
         respected.  The ``linear_1`` block-diagonal init writes to *slices*
         which do not inherit the flag, so we guard the entire block manually.
         """
-        for proj in (self.self_attn.q_proj, self.self_attn.k_proj,
-                     self.self_attn.v_proj, self.self_attn.out_proj):
+        for proj in (self.self_attn.q_proj, self.self_attn.k_proj, self.self_attn.v_proj, self.self_attn.out_proj):
             init.normal_(proj.weight)
             init.zeros_(proj.bias)
 
@@ -547,7 +368,6 @@ class MiniCPMV4_6ViTWindowAttentionMerger(nn.Module):
         self,
         hidden_states: torch.Tensor,
         target_sizes: torch.IntTensor,
-        attention_mask: torch.Tensor | None,
         cu_seqlens: torch.Tensor | None = None,
         max_seqlens: torch.Tensor | None = None,
     ):
@@ -561,7 +381,6 @@ class MiniCPMV4_6ViTWindowAttentionMerger(nn.Module):
         hidden_states = hidden_states[:, window_index, :]
         hidden_states, _ = self.self_attn(
             hidden_states=hidden_states,
-            attention_mask=attention_mask,
             cu_seq_lens_q=window_cu_seqlens.to(device),
             cu_seq_lens_k=window_cu_seqlens.to(device),
             max_length_q=window_max_seqlens,
@@ -602,13 +421,105 @@ class MiniCPMV4_6ViTWindowAttentionMerger(nn.Module):
             raise ValueError(f"max_seqlens ({max_seqlens}) must be divisible by 4")
         new_max_seqlens = max_seqlens // 4
 
-        return new_hidden_states, new_target_sizes, attention_mask, new_cu_seqlens, new_max_seqlens  # attention_mask=None
+        return (
+            new_hidden_states,
+            new_target_sizes,
+            new_cu_seqlens,
+            new_max_seqlens,
+        )
+
+
+class MiniCPMV4_6VisionPreTrainedModel(PreTrainedModel):
+    config_class = MiniCPMV4_6VisionConfig
+    main_input_name = "pixel_values"
+    _input_embed_layer = "patch_embedding"
+    supports_gradient_checkpointing = True
+    _supports_sdpa = True
+    _supports_flash_attn = True
+
+    _can_record_outputs = {
+        "hidden_states": MiniCPMV4_6VisionEncoderLayer,
+        "attentions": MiniCPMV4_6VisionAttention,
+    }
+
+
+class MiniCPMV4_6VisionTransformer(MiniCPMV4_6VisionPreTrainedModel):
+    def __init__(self, config: MiniCPMV4_6VisionConfig):
+        super().__init__(config)
+        embed_dim = config.hidden_size
+
+        self.embeddings = MiniCPMV4_6VisionEmbeddings(config)
+        self.encoder = MiniCPMV4_6VisionEncoder(config)
+        self.post_layernorm = nn.LayerNorm(embed_dim, eps=config.layer_norm_eps)
+        self.vit_merger = MiniCPMV4_6ViTWindowAttentionMerger(config)
+        self.post_init()
+
+    @capture_outputs
+    @auto_docstring
+    def forward(
+        self,
+        pixel_values,
+        target_sizes: torch.IntTensor | None = None,
+        cu_seqlens: torch.Tensor | None = None,
+        max_seqlens: torch.Tensor | None = None,
+        use_vit_merger: bool = True,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> BaseModelOutputWithPooling:
+        r"""
+        target_sizes (`torch.IntTensor` of shape `(batch_size, 2)`, *optional*):
+            Patch grid sizes `(h, w)` for computing position embeddings.
+        cu_seqlens (`torch.Tensor`, *optional*):
+            Cumulative sequence lengths for packed (flash) attention.
+        max_seqlens (`torch.Tensor`, *optional*):
+            Maximum sequence length for packed (flash) attention.
+        use_vit_merger (`bool`, *optional*, defaults to `True`):
+            Whether to apply the ViT window-attention merger after the encoder.
+        """
+
+        hidden_states = self.embeddings(pixel_values, target_sizes=target_sizes)
+        attn_kwargs = {
+            "attention_mask": None,
+            "cu_seq_lens_q": cu_seqlens,
+            "cu_seq_lens_k": cu_seqlens,
+            "max_length_q": max_seqlens,
+            "max_length_k": max_seqlens,
+            **kwargs,
+        }
+
+        insert_layer_id = self.config.insert_layer_id if use_vit_merger else -1
+        if use_vit_merger and insert_layer_id >= 0:
+            for layer_index, encoder_layer in enumerate(self.encoder.layers):
+                hidden_states = encoder_layer(hidden_states, **attn_kwargs)
+                # NOTE: Downsample the hidden states and therefore cu-seqlens are new values!
+                if layer_index == insert_layer_id:
+                    (hidden_states, target_sizes, cu_seqlens, max_seqlens) = self.vit_merger(
+                        hidden_states,
+                        target_sizes,
+                        cu_seqlens,
+                        max_seqlens,
+                    )
+                    attn_kwargs = {
+                        "attention_mask": None,
+                        "cu_seq_lens_q": cu_seqlens,
+                        "cu_seq_lens_k": cu_seqlens,
+                        "max_length_q": max_seqlens,
+                        "max_length_k": max_seqlens,
+                        **kwargs,
+                    }
+        else:
+            encoder_outputs = self.encoder(inputs_embeds=hidden_states, **attn_kwargs)
+            hidden_states = encoder_outputs.last_hidden_state
+
+        last_hidden_state = self.post_layernorm(hidden_states)
+
+        return BaseModelOutputWithPooling(last_hidden_state=last_hidden_state)
 
 
 class MiniCPMV4_6DownsampleMLP(nn.Module):
-    def __init__(self, hidden_size: int, llm_embed_dim: int, merge_kernel_size: tuple[int, int] = (2, 2)):
+    def __init__(self, hidden_size: int, llm_embed_dim: int):
         super().__init__()
-        merged_hidden_size = hidden_size * merge_kernel_size[0] * merge_kernel_size[1]
+        # factor 4 = two successive 2×2 spatial merges (ViT insert merger + downsample MLP)
+        merged_hidden_size = hidden_size * 4
 
         self.pre_norm = nn.LayerNorm(merged_hidden_size, eps=1e-6)
         self.linear_1 = nn.Linear(merged_hidden_size, merged_hidden_size, bias=True)
@@ -631,11 +542,10 @@ class MiniCPMV4_6Merger(nn.Module):
         self.merger_times = config.merger_times
         hidden_size = config.vision_config.hidden_size
         llm_embed_dim = config.text_config.hidden_size
+        # Downsample `self.merger_times - 1` times and finally apply projection into LLM space
         self.mlp = nn.ModuleList(
             [
-                MiniCPMV4_6DownsampleMLP(
-                    hidden_size, llm_embed_dim if i == self.merger_times - 1 else hidden_size, self.merge_kernel_size
-                )
+                MiniCPMV4_6DownsampleMLP(hidden_size, llm_embed_dim if i == self.merger_times - 1 else hidden_size)
                 for i in range(self.merger_times)
             ]
         )
@@ -655,13 +565,13 @@ class MiniCPMV4_6Merger(nn.Module):
 
             embed_dim = hidden_states.shape[-1]
             merged_h, merged_w = height // merge_h, width // merge_w
-            _hidden_state = (
+            hidden_state = (
                 hidden_states[0, start : start + num_patches, :]
                 .view(merged_h, merge_h, merged_w, merge_w, embed_dim)
                 .permute(0, 2, 1, 3, 4)
                 .reshape(merged_h * merged_w, merge_h * merge_w * embed_dim)
             )
-            _hidden_state = self.mlp[0](_hidden_state)
+            hidden_state = self.mlp[0](hidden_state)
 
             for i in range(1, self.merger_times):
                 if height % merge_h != 0 or width % merge_w != 0:
@@ -672,17 +582,17 @@ class MiniCPMV4_6Merger(nn.Module):
                 height = height // merge_h
                 width = width // merge_w
 
-                inner_dim = _hidden_state.shape[-1]
+                inner_dim = hidden_state.shape[-1]
                 merged_h, merged_w = height // merge_h, width // merge_w
-                _hidden_state = (
-                    _hidden_state.view(merged_h, merge_h, merged_w, merge_w, inner_dim)
+                hidden_state = (
+                    hidden_state.view(merged_h, merge_h, merged_w, merge_w, inner_dim)
                     .permute(0, 2, 1, 3, 4)
                     .reshape(merged_h * merged_w, merge_h * merge_w * inner_dim)
                 )
-                _hidden_state = self.mlp[i](_hidden_state)
+                hidden_state = self.mlp[i](hidden_state)
 
             start += num_patches
-            processed_features.append(_hidden_state)
+            processed_features.append(hidden_state)
 
         return processed_features
 
@@ -694,30 +604,22 @@ class MiniCPMV4_6PreTrainedModel(PreTrainedModel):
     supports_gradient_checkpointing = True
     _supports_flash_attn = True
     _supports_sdpa = True
-    _no_split_modules = ["MiniCPMV4_6VisionEncoderLayer", "MiniCPMV4_6ViTWindowAttentionMerger"]
+    _no_split_modules = [
+        "MiniCPMV4_6VisionEmbeddings",
+        "MiniCPMV4_6VisionEncoderLayer",
+        "MiniCPMV4_6ViTWindowAttentionMerger",
+    ]
 
 
-class MiniCPMV4_6Model(MiniCPMV4_6PreTrainedModel):
+class MiniCPMV4_6Model(Lfm2VlModel):
     def __init__(self, config: MiniCPMV4_6Config):
         super().__init__(config)
+        del self.multi_modal_projector
 
-        vision_config = config.vision_config
-        if config.drop_vision_last_layer:
-            vision_config = config.vision_config.__class__(**config.vision_config.to_dict())
-            vision_config.num_hidden_layers -= 1
-        self.vision_tower = MiniCPMV4_6VisionTransformer(vision_config)
-
+        self.vision_tower = MiniCPMV4_6VisionTransformer._from_config(config.vision_config)
         self.merger = MiniCPMV4_6Merger(config)
-
         self.language_model = AutoModel.from_config(config.text_config)
-
         self.post_init()
-
-    def get_input_embeddings(self):
-        return self.language_model.get_input_embeddings()
-
-    def set_input_embeddings(self, value):
-        self.language_model.set_input_embeddings(value)
 
     @can_return_tuple
     @auto_docstring(custom_intro="Extract image features: vision encoder, insert merger, then MLP merger.")
@@ -725,32 +627,25 @@ class MiniCPMV4_6Model(MiniCPMV4_6PreTrainedModel):
         self,
         pixel_values: torch.FloatTensor,
         target_sizes: torch.IntTensor,
-        patch_attention_mask: torch.BoolTensor | None = None,
         downsample_mode: str | None = None,
     ) -> BaseModelOutputWithPooling:
         r"""
         target_sizes (`torch.IntTensor` of shape `(num_images, 2)`):
             Height and width (in patches) of each image.
-        patch_attention_mask (`torch.BoolTensor`, *optional*):
-            Mask for padded patches in the vision encoder.
         downsample_mode (`str`, *optional*):
-            When set to `"4x"` the intermediate `vit_merger` is skipped so
-            that each image keeps 4× more visual tokens. Default `"16x"` mode
-            applies the full merge pipeline.
+            When set to `"4x"` the intermediate `vit_merger` is skipped so that each image keeps
+            `4×` more visual tokens. Default `"16x"` mode applies the full merge pipeline.
         """
-        if downsample_mode is None:
-            downsample_mode = self.config.downsample_mode
-
+        downsample_mode = downsample_mode if downsample_mode else self.config.downsample_mode
         use_vit_merger = downsample_mode != "4x"
 
-        cu_seqlens = F.pad(torch.cumsum(target_sizes[:, 0] * target_sizes[:, 1], dim=0, dtype=torch.int32), (1, 0)).to(
-            pixel_values.device
-        )
+        pixel_values = pixel_values.to(dtype=self.vision_tower.dtype)
+
+        cu_seqlens = F.pad(torch.cumsum(target_sizes[:, 0] * target_sizes[:, 1], dim=0, dtype=torch.int32), (1, 0))
         max_seqlens = int(torch.max(cu_seqlens[1:] - cu_seqlens[:-1]).item())
 
         vision_output = self.vision_tower(
             pixel_values,
-            patch_attention_mask=patch_attention_mask,
             target_sizes=target_sizes,
             cu_seqlens=cu_seqlens,
             max_seqlens=max_seqlens,
@@ -762,40 +657,67 @@ class MiniCPMV4_6Model(MiniCPMV4_6PreTrainedModel):
         vision_output.pooler_output = self.merger(vision_output.last_hidden_state, target_sizes)
         return vision_output
 
+    @can_return_tuple
+    @auto_docstring(
+        custom_intro="Extract video features: repack frames into NaViT format, then vision encoder + merger."
+    )
+    def get_video_features(
+        self,
+        pixel_values_videos: torch.FloatTensor,
+        target_sizes_videos: torch.IntTensor,
+        downsample_mode: str | None = None,
+    ) -> BaseModelOutputWithPooling:
+        r"""
+        pixel_values_videos (`torch.FloatTensor` of shape `(1, channels, patch_size, seq_len)`):
+            NaViT-packed pixel patches for all video frames. The video processor concatenates
+            every frame's patches along the last dimension into a single sequence with dim-0 = 1,
+            identical to the image packing format.
+        target_sizes_videos (`torch.IntTensor` of shape `(num_patches, 2)`):
+            Height and width (in patches) of each visual unit.
+        downsample_mode (`str`, *optional*):
+            When set to `"4x"` the intermediate `vit_merger` is skipped so that each frame keeps
+            `4×` more visual tokens. Default `"16x"` mode applies the full merge pipeline.
+        """
+        num_frames = pixel_values_videos.shape[0]
+        pixel_values = pixel_values_videos.permute(1, 2, 0, 3).reshape(
+            1, pixel_values_videos.shape[1], pixel_values_videos.shape[2], -1
+        )
+        target_sizes = target_sizes_videos.repeat(num_frames, 1)
+        return self.get_image_features(pixel_values, target_sizes, downsample_mode=downsample_mode)
+
     def get_placeholder_mask(
         self,
-        input_ids: torch.LongTensor | None,
+        input_ids: torch.LongTensor,
         inputs_embeds: torch.FloatTensor,
-        image_features: torch.FloatTensor,
-    ) -> torch.BoolTensor:
-        """
-        Obtains multimodal placeholder mask from `input_ids` or `inputs_embeds`, and checks
-        that the placeholder token count equals the number of image features.
-        """
+        features: torch.FloatTensor,
+        token_id: int,
+    ):
         if input_ids is None:
-            special_image_mask = inputs_embeds == self.get_input_embeddings()(
-                torch.tensor(self.config.image_token_id, dtype=torch.long, device=inputs_embeds.device)
+            special_mask = inputs_embeds == self.get_input_embeddings()(
+                torch.tensor(token_id, dtype=torch.long, device=inputs_embeds.device)
             )
-            special_image_mask = special_image_mask.all(-1)
+            special_mask = special_mask.all(-1)
         else:
-            special_image_mask = input_ids == self.config.image_token_id
+            special_mask = input_ids == token_id
 
-        n_image_tokens = special_image_mask.sum()
-        n_image_features = image_features.shape[0]
-        special_image_mask = special_image_mask.unsqueeze(-1).expand_as(inputs_embeds).to(inputs_embeds.device)
+        n_tokens = special_mask.sum()
+        special_mask = special_mask.unsqueeze(-1).expand_as(inputs_embeds).to(inputs_embeds.device)
+        n_features = features.shape[0]
         torch_compilable_check(
-            inputs_embeds[special_image_mask].numel() == image_features.numel(),
-            f"Image features and image tokens do not match: {n_image_tokens} tokens vs {n_image_features} features",
+            inputs_embeds[special_mask].numel() == features.numel(),
+            f"Multimodal features and tokens do not match, tokens: {n_tokens}, features: {n_features}",
         )
-        return special_image_mask
+        return special_mask
 
     @can_return_tuple
     @auto_docstring
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
-        pixel_values: list[list[torch.Tensor]] | None = None,
-        target_sizes: list[torch.Tensor] | None = None,
+        pixel_values: torch.FloatTensor | None = None,
+        target_sizes: torch.IntTensor | None = None,
+        pixel_values_videos: torch.FloatTensor | None = None,
+        target_sizes_videos: torch.IntTensor | None = None,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
         past_key_values: list[torch.FloatTensor] | None = None,
@@ -805,31 +727,46 @@ class MiniCPMV4_6Model(MiniCPMV4_6PreTrainedModel):
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPast:
         r"""
-        pixel_values (`list[list[torch.Tensor]]`, *optional*):
-            Pixel value patches per sample, grouped as `[sample][image_slices]`.
-        target_sizes (`list[torch.Tensor]` or `list[list]`, *optional*):
-            Height and width (in patches) for each image per sample.
+        pixel_values (`torch.FloatTensor`, *optional*):
+            Pixel value patches for images, NaViT-packed.
+        target_sizes (`torch.IntTensor`, *optional*):
+            Height and width (in patches) for each image.
+        pixel_values_videos (`torch.FloatTensor`, *optional*):
+            Pixel value patches for video frames, NaViT-packed.
+        target_sizes_videos (`torch.IntTensor`, *optional*):
+            Height and width (in patches) for each video frame.
         downsample_mode (`str`, *optional*):
             `"4x"` keeps 4x more visual tokens; default `"16x"` applies full merge.
         """
         if inputs_embeds is None:
             inputs_embeds = self.get_input_embeddings()(input_ids)
 
-        if pixel_values is not None:
-            all_pixel_values = [pv for pv_list in pixel_values for pv in pv_list]
-            all_target_sizes = [ts for ts in target_sizes if ts.numel() > 0]
+        if pixel_values is not None and self.config.image_token_id is not None:
+            # Pixels are always `1` in first dim due to NaViT packing, and we don't
+            # want to waste compute processing the same image `num_beams` times. Hack until
+            # @raushan adds support for encoding images once same waay as in enc-dec models
+            num_beams = pixel_values.shape[0]
+            vision_output = self.get_image_features(pixel_values[:1], target_sizes, downsample_mode=downsample_mode)
+            image_features = (
+                torch.cat(vision_output.pooler_output, dim=0)
+                .to(device=inputs_embeds.device, dtype=inputs_embeds.dtype)
+                .repeat(num_beams, 1)
+            )
+            mask = self.get_placeholder_mask(input_ids, inputs_embeds, image_features, self.config.image_token_id)
+            inputs_embeds = inputs_embeds.masked_scatter(mask, image_features)
 
-            if all_pixel_values:
-                device = inputs_embeds.device
-                dtype = inputs_embeds.dtype
-                target_sizes_tensor = torch.vstack(all_target_sizes).to(dtype=torch.int32, device=device)
-                all_pv = torch.cat(all_pixel_values, dim=-1).unsqueeze(0).to(dtype=dtype, device=device)
-
-                vision_output = self.get_image_features(all_pv, target_sizes_tensor, downsample_mode=downsample_mode)
-                image_features = torch.cat(vision_output.pooler_output, dim=0).to(device=device, dtype=dtype)
-
-                special_image_mask = self.get_placeholder_mask(input_ids, inputs_embeds, image_features)
-                inputs_embeds = inputs_embeds.masked_scatter(special_image_mask, image_features)
+        if pixel_values_videos is not None and self.config.video_token_id is not None:
+            num_beams = pixel_values_videos.shape[0]
+            vision_output = self.get_video_features(
+                pixel_values_videos[:1], target_sizes_videos, downsample_mode=downsample_mode
+            )
+            video_features = (
+                torch.cat(vision_output.pooler_output, dim=0)
+                .to(device=inputs_embeds.device, dtype=inputs_embeds.dtype)
+                .repeat(num_beams, 1)
+            )
+            mask = self.get_placeholder_mask(input_ids, inputs_embeds, video_features, self.config.video_token_id)
+            inputs_embeds = inputs_embeds.masked_scatter(mask, video_features)
 
         output = self.language_model(
             attention_mask=attention_mask,
@@ -852,63 +789,15 @@ class MiniCPMV4_6ForConditionalGeneration(MiniCPMV4_6PreTrainedModel, Generation
         self.lm_head = nn.Linear(config.text_config.hidden_size, self.vocab_size, bias=False)
         self.post_init()
 
-    @auto_docstring(custom_intro="Extract image features: vision encoder, insert merger, then MLP merger.")
-    def get_image_features(self, *args, **kwargs) -> BaseModelOutputWithPooling:
-        return self.model.get_image_features(*args, **kwargs)
-
-    def _expand_inputs_for_generation(
-        self,
-        expand_size: int = 1,
-        is_encoder_decoder: bool = False,
-        input_ids: torch.LongTensor | None = None,
-        **model_kwargs,
-    ) -> tuple[torch.LongTensor, dict[str, Any]]:
-        input_ids, model_kwargs = super()._expand_inputs_for_generation(
-            expand_size=expand_size,
-            is_encoder_decoder=is_encoder_decoder,
-            input_ids=input_ids,
-            **model_kwargs,
-        )
-        if expand_size > 1:
-            for key in ("pixel_values", "target_sizes"):
-                values = model_kwargs.get(key)
-                if values is not None and isinstance(values, list):
-                    model_kwargs[key] = [v for v in values for _ in range(expand_size)]
-        return input_ids, model_kwargs
-
-    def prepare_inputs_for_generation(
-        self,
-        input_ids,
-        past_key_values=None,
-        attention_mask=None,
-        inputs_embeds=None,
-        pixel_values=None,
-        target_sizes=None,
-        downsample_mode=None,
-        is_first_iteration=False,
-        **kwargs,
-    ):
-        model_inputs = super().prepare_inputs_for_generation(
-            input_ids,
-            past_key_values=past_key_values,
-            attention_mask=attention_mask,
-            inputs_embeds=inputs_embeds,
-            is_first_iteration=is_first_iteration,
-            **kwargs,
-        )
-        if is_first_iteration or not kwargs.get("use_cache", True):
-            model_inputs["pixel_values"] = pixel_values
-            model_inputs["target_sizes"] = target_sizes
-        model_inputs["downsample_mode"] = downsample_mode
-        return model_inputs
-
     @can_return_tuple
     @auto_docstring
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
-        pixel_values: list[list[torch.Tensor]] | None = None,
-        target_sizes: list[torch.Tensor] | None = None,
+        pixel_values: torch.FloatTensor | None = None,
+        target_sizes: torch.IntTensor | None = None,
+        pixel_values_videos: torch.FloatTensor | None = None,
+        target_sizes_videos: torch.IntTensor | None = None,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
         past_key_values: list[torch.FloatTensor] | None = None,
@@ -919,10 +808,14 @@ class MiniCPMV4_6ForConditionalGeneration(MiniCPMV4_6PreTrainedModel, Generation
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | CausalLMOutputWithPast:
         r"""
-        pixel_values (`list[list[torch.Tensor]]`, *optional*):
-            Pixel value patches per sample, grouped as `[sample][image_slices]`.
-        target_sizes (`list[torch.Tensor]` or `list[list]`, *optional*):
-            Height and width (in patches) for each image per sample.
+        pixel_values (`torch.FloatTensor`, *optional*):
+            Pixel value patches for images, NaViT-packed.
+        target_sizes (`torch.IntTensor`, *optional*):
+            Height and width (in patches) for each image.
+        pixel_values_videos (`torch.FloatTensor`, *optional*):
+            Pixel value patches for video frames, NaViT-packed.
+        target_sizes_videos (`torch.IntTensor`, *optional*):
+            Height and width (in patches) for each video frame.
         downsample_mode (`str`, *optional*):
             `"4x"` keeps 4x more visual tokens; default `"16x"` applies full merge.
         """
@@ -930,6 +823,8 @@ class MiniCPMV4_6ForConditionalGeneration(MiniCPMV4_6PreTrainedModel, Generation
             input_ids=input_ids,
             pixel_values=pixel_values,
             target_sizes=target_sizes,
+            pixel_values_videos=pixel_values_videos,
+            target_sizes_videos=target_sizes_videos,
             attention_mask=attention_mask,
             position_ids=position_ids,
             past_key_values=past_key_values,
@@ -953,6 +848,76 @@ class MiniCPMV4_6ForConditionalGeneration(MiniCPMV4_6PreTrainedModel, Generation
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
+
+    @auto_docstring(custom_intro="Extract image features: vision encoder, insert merger, then MLP merger.")
+    def get_image_features(self, *args, **kwargs) -> BaseModelOutputWithPooling:
+        return self.model.get_image_features(*args, **kwargs)
+
+    @auto_docstring(
+        custom_intro="Extract video features: repack frames into NaViT format, then vision encoder + merger."
+    )
+    def get_video_features(self, *args, **kwargs) -> BaseModelOutputWithPooling:
+        return self.model.get_video_features(*args, **kwargs)
+
+    def prepare_inputs_for_generation(
+        self,
+        input_ids,
+        past_key_values=None,
+        attention_mask=None,
+        inputs_embeds=None,
+        pixel_values=None,
+        target_sizes=None,
+        pixel_values_videos=None,
+        target_sizes_videos=None,
+        downsample_mode=None,
+        is_first_iteration=False,
+        **kwargs,
+    ):
+        model_inputs = super().prepare_inputs_for_generation(
+            input_ids,
+            past_key_values=past_key_values,
+            attention_mask=attention_mask,
+            inputs_embeds=inputs_embeds,
+            is_first_iteration=is_first_iteration,
+            downsample_mode=downsample_mode,
+            **kwargs,
+        )
+        if is_first_iteration or not kwargs.get("use_cache", True):
+            model_inputs["pixel_values"] = pixel_values
+            model_inputs["target_sizes"] = target_sizes
+            model_inputs["pixel_values_videos"] = pixel_values_videos
+            model_inputs["target_sizes_videos"] = target_sizes_videos
+        return model_inputs
+
+    def _expand_inputs_for_generation(
+        self,
+        expand_size: int = 1,
+        is_encoder_decoder: bool = False,
+        input_ids: torch.LongTensor | None = None,
+        **model_kwargs,
+    ) -> tuple[torch.LongTensor, dict[str, Any]]:
+        # NaViT packs all images/frames into a single sequence with dim-0 = 1.
+        # We let parent repeat_interleave pixel_values / pixel_values_videos
+        # along dim-0 ([1,C,P,L] -> [num_beams,C,P,L]) so forward() can
+        # infer num_beams from shape[0], then encode only [:1].
+        #
+        # target_sizes ([K,2]) must be popped because:
+        #  - forward encodes pixel_values[:1] (original K images), so
+        #    target_sizes must stay [K,2] to match cu_seqlens computation.
+        #  - expanded [K*num_beams, 2] would define phantom segments with
+        #    no corresponding pixel data, crashing the vision encoder.
+        ts_keys = ("target_sizes", "target_sizes_videos")
+        saved = {k: model_kwargs.pop(k) for k in ts_keys if model_kwargs.get(k) is not None}
+
+        input_ids, model_kwargs = super()._expand_inputs_for_generation(
+            expand_size=expand_size,
+            is_encoder_decoder=is_encoder_decoder,
+            input_ids=input_ids,
+            **model_kwargs,
+        )
+
+        model_kwargs.update(saved)
+        return input_ids, model_kwargs
 
 
 __all__ = [
