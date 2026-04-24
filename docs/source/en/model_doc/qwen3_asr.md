@@ -25,9 +25,9 @@ rendered properly in your Markdown viewer.
 
 ## Overview
 
-Qwen3 ASR is an automatic speech recognition model from Alibaba's Qwen team that combines a Qwen3 Omni-style audio encoder with a Qwen3 language model decoder for speech-to-text transcription. The model supports automatic language detection and multilingual transcription.
+Qwen3 ASR is an automatic speech recognition model from Alibaba's Qwen team that combines a Whisper-style audio encoder with a Qwen3 language model decoder for speech-to-text transcription. The model supports automatic language detection and multilingual transcription.
 
-A forced aligner model is also included. It uses the same audio encoder model with a classification head that predicts a word's length. This model can be used with the transcript from any ASR model (see the example below with Parakeet CTC).
+A forced aligner model is also included. It can be used the timestamp a provided transcript and its audio. It uses the same audio encoder model with a classification head that predicts a word's length. This model can be used with the transcript from any ASR model (see the example below with Parakeet CTC).
 
 Available checkpoints:
 - [bezzam/Qwen3-ASR-1.7B](https://huggingface.co/bezzam/Qwen3-ASR-1.7B)
@@ -38,7 +38,7 @@ The following languages are supported:
 - `Qwen3-ASR-1.7B` and `Qwen3-ASR-0.6B`: Chinese (zh), English (en), Cantonese (yue), Arabic (ar), German (de), French (fr), Spanish (es), Portuguese (pt), Indonesian (id), Italian (it), Korean (ko), Russian (ru), Thai (th), Vietnamese (vi), Japanese (ja), Turkish (tr), Hindi (hi), Malay (ms), Dutch (nl), Swedish (sv), Danish (da), Finnish (fi), Polish (pl), Czech (cs), Filipino (fil), Persian (fa), Greek (el), Hungarian (hu), Macedonian (mk), Romanian (ro)
 - `Qwen3-ForcedAligner-0.6B`: Chinese, English, Cantonese, French, German, Italian, Japanese, Korean, Portuguese, Russian, Spanish
 
-See the original repository at [QwenLM/Qwen3-ASR](https://github.com/QwenLM/Qwen3-ASR) for more details.
+See the original repository at [QwenLM/Qwen3-ASR](https://github.com/QwenLM/Qwen3-ASR) and the [report](https://huggingface.co/papers/2601.21337) for more details.
 
 This model was contributed by [Eric Bezzam](https://huggingface.co/bezzam) and [Muhammed Tariq](https://huggingface.co/mbtariq82).
 
@@ -360,7 +360,7 @@ Char        Start (s)    End (s)
 
 #### With another ASR model
 
-The forced aligner is model-agnostic, meaning any ASR system can provide the transcript. Below is an example using [NVIDIA Parakeet CTC](https://huggingface.co/nvidia/parakeet-ctc-1.1b) for transcription.
+The forced aligner is model-agnostic, meaning the transcripts from any ASR system can be provided. Below is an example using [NVIDIA Parakeet CTC](https://huggingface.co/nvidia/parakeet-ctc-1.1b) for transcription.
 
 **Single sample:**
 

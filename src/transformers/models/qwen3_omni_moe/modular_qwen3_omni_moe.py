@@ -2637,7 +2637,6 @@ class Qwen3OmniMoeProcessor(Qwen2_5OmniProcessor, ProcessorMixin):
 
 
 __all__ = [
-    "Qwen3OmniMoeAudioEncoder",
     "Qwen3OmniMoeAudioEncoderConfig",
     "Qwen3OmniMoeConfig",
     "Qwen3OmniMoeThinkerConfig",

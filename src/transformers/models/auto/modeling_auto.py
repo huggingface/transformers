@@ -379,7 +379,6 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("qwen3_forced_aligner", "Qwen3ASRForForcedAlignment"),
         ("qwen3_moe", "Qwen3MoeModel"),
         ("qwen3_next", "Qwen3NextModel"),
-        ("qwen3_omni_moe_audio_encoder", "Qwen3OmniMoeAudioEncoder"),
         ("qwen3_vl", "Qwen3VLModel"),
         ("qwen3_vl_moe", "Qwen3VLMoeModel"),
         ("qwen3_vl_moe_text", "Qwen3VLMoeTextModel"),

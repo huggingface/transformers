@@ -4075,7 +4075,6 @@ class Qwen3OmniMoeForConditionalGeneration(Qwen3OmniMoePreTrainedModel, Generati
 
 
 __all__ = [
-    "Qwen3OmniMoeAudioEncoder",
     "Qwen3OmniMoeForConditionalGeneration",
     "Qwen3OmniMoeThinkerTextModel",
     "Qwen3OmniMoeThinkerForConditionalGeneration",

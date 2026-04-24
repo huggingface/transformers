@@ -22,10 +22,10 @@ from ... import initialization as init
 from ...cache_utils import Cache
 from ...configuration_utils import PreTrainedConfig
 from ...generation import GenerationMixin
+from ...masking_utils import create_bidirectional_mask
 from ...modeling_outputs import BaseModelOutputWithPooling, CausalLMOutputWithPast, TokenClassifierOutput
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
-from ...masking_utils import create_bidirectional_mask
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
 from ..auto import CONFIG_MAPPING, AutoConfig, AutoModel
 from ..qwen2_5_omni.configuration_qwen2_5_omni import Qwen2_5OmniAudioEncoderConfig
