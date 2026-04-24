@@ -822,11 +822,7 @@ class Trainer:
 
         # post accelerator creation setup
         if self.is_fsdp_enabled:
-            fsdp_plugin = self.accelerator.state.fsdp_plugin
-            fsdp_config = self.args.fsdp_config or {}
-            for param in ["limit_all_gathers", "activation_checkpointing"]:
-                setattr(fsdp_plugin, param, fsdp_config.get(param, getattr(fsdp_plugin, param)))
-            if fsdp_plugin.activation_checkpointing and self.args.gradient_checkpointing:
+            if self.accelerator.state.fsdp_plugin.activation_checkpointing and self.args.gradient_checkpointing:
                 raise ValueError(
                     "The activation_checkpointing in FSDP config and the gradient_checkpointing in training arg "
                     "can't be set to True simultaneously. Please use FSDP's activation_checkpointing logic "

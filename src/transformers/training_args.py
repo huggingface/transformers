@@ -2755,6 +2755,11 @@ class TrainingArguments:
 
         fsdp_plugin_args["state_dict_type"] = self.fsdp_config.get("state_dict_type", "FULL_STATE_DICT")
 
+        if "activation_checkpointing" in self.fsdp_config:
+            fsdp_plugin_args["activation_checkpointing"] = str_to_bool(
+                str(self.fsdp_config["activation_checkpointing"]).lower()
+            )
+
         if fsdp_version == 2:
             fsdp_plugin_args["reshard_after_forward"] = str_to_bool(
                 str(self.fsdp_config.get("reshard_after_forward", True)).lower()
@@ -2778,6 +2783,10 @@ class TrainingArguments:
             fsdp_plugin_args["sync_module_states"] = str_to_bool(
                 str(self.fsdp_config.get("sync_module_states", "true")).lower()
             )
+            if "limit_all_gathers" in self.fsdp_config:
+                fsdp_plugin_args["limit_all_gathers"] = str_to_bool(
+                    str(self.fsdp_config["limit_all_gathers"]).lower()
+                )
 
         return fsdp_plugin_args
 
