@@ -38,6 +38,10 @@ class Qwen3_5TextConfig(PreTrainedConfig):
         Number of key heads used in linear attention layers.
     linear_num_value_heads (`int`, *optional*, defaults to 32):
         Number of value heads used in linear attention layers.
+    mtp_num_hidden_layers (`int`, *optional*, defaults to 0):
+        Number of hidden layers in the Multi-Token Prediction (MTP) module. When set to 0, MTP is disabled.
+    mtp_loss_weight (`float`, *optional*, defaults to 0.0):
+        Weight for the MTP auxiliary loss. The total loss is computed as `main_loss + mtp_loss_weight * mtp_loss`.
 
     ```python
     >>> from transformers import Qwen3_5TextModel, Qwen3_5TextConfig
@@ -146,6 +150,11 @@ class Qwen3_5VisionConfig(PreTrainedConfig):
 @strict
 class Qwen3_5Config(PreTrainedConfig):
     r"""
+    mtp_num_hidden_layers (`int`, *optional*, defaults to 0):
+        Number of hidden layers in the Multi-Token Prediction (MTP) module. When set to 0, MTP is disabled.
+    mtp_loss_weight (`float`, *optional*, defaults to 0.0):
+        Weight for the MTP auxiliary loss. The total loss is computed as `main_loss + mtp_loss_weight * mtp_loss`.
+
     Example:
 
     ```python

@@ -71,6 +71,10 @@ class Qwen3_5TextConfig(Qwen3NextConfig):
         Number of key heads used in linear attention layers.
     linear_num_value_heads (`int`, *optional*, defaults to 32):
         Number of value heads used in linear attention layers.
+    mtp_num_hidden_layers (`int`, *optional*, defaults to 0):
+        Number of hidden layers in the Multi-Token Prediction (MTP) module. When set to 0, MTP is disabled.
+    mtp_loss_weight (`float`, *optional*, defaults to 0.0):
+        Weight for the MTP auxiliary loss. The total loss is computed as `main_loss + mtp_loss_weight * mtp_loss`.
 
     ```python
     >>> from transformers import Qwen3_5TextModel, Qwen3_5TextConfig
@@ -142,6 +146,11 @@ class Qwen3_5VisionConfig(Qwen3VLVisionConfig):
 @strict
 class Qwen3_5Config(Qwen3VLConfig):
     r"""
+    mtp_num_hidden_layers (`int`, *optional*, defaults to 0):
+        Number of hidden layers in the Multi-Token Prediction (MTP) module. When set to 0, MTP is disabled.
+    mtp_loss_weight (`float`, *optional*, defaults to 0.0):
+        Weight for the MTP auxiliary loss. The total loss is computed as `main_loss + mtp_loss_weight * mtp_loss`.
+
     Example:
 
     ```python
@@ -391,10 +400,7 @@ class Qwen3_5MTP(nn.Module):
         mtp_num_layers = getattr(config, "mtp_num_hidden_layers", 1)
 
         self.layers = nn.ModuleList(
-            [
-                Qwen3_5MTPLayer(text_config, layer_idx=text_config.num_hidden_layers + i)
-                for i in range(mtp_num_layers)
-            ]
+            [Qwen3_5MTPLayer(text_config, layer_idx=text_config.num_hidden_layers + i) for i in range(mtp_num_layers)]
         )
         self.norm = Qwen3_5RMSNorm(text_config.hidden_size, eps=text_config.rms_norm_eps)
 
@@ -962,11 +968,7 @@ class Qwen3_5ForConditionalGeneration(Qwen3VLForConditionalGeneration):
         if labels is not None:
             loss = self.loss_function(logits=logits, labels=labels, vocab_size=self.config.text_config.vocab_size)
 
-            if (
-                getattr(self.config, "mtp_num_hidden_layers", 0) > 0
-                and hasattr(self, "mtp")
-                and input_ids is not None
-            ):
+            if getattr(self.config, "mtp_num_hidden_layers", 0) > 0 and hasattr(self, "mtp") and input_ids is not None:
                 mtp_loss = self._compute_mtp_loss(
                     input_ids=input_ids,
                     main_hidden_states=hidden_states,
@@ -994,11 +996,7 @@ class Qwen3_5ForConditionalGeneration(Qwen3VLForConditionalGeneration):
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
     ) -> torch.Tensor:
-        pad_token_id = (
-            self.config.text_config.pad_token_id
-            if self.config.text_config.pad_token_id is not None
-            else 0
-        )
+        pad_token_id = self.config.text_config.pad_token_id if self.config.text_config.pad_token_id is not None else 0
         return _compute_qwen35_mtp_loss(
             mtp=self.mtp,
             embed_tokens=self.model.language_model.embed_tokens,
