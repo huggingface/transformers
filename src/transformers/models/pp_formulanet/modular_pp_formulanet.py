@@ -19,6 +19,7 @@ import torch
 import torch.nn as nn
 from huggingface_hub.dataclasses import strict
 
+from ... import initialization as init
 from ...cache_utils import DynamicCache, EncoderDecoderCache
 from ...image_processing_utils import BatchFeature
 from ...image_utils import (
@@ -36,7 +37,12 @@ from ..mbart.modeling_mbart import MBartForCausalLM
 from ..nougat.image_processing_nougat import NougatImageProcessor
 from ..nougat.processing_nougat import NougatProcessor
 from ..slanext.configuration_slanext import SLANeXtConfig
-from ..slanext.modeling_slanext import SLANeXtBackbone
+from ..slanext.modeling_slanext import (
+    SLANeXtBackbone,
+    SLANeXtPreTrainedModel,
+    SLANeXtVisionAttention,
+    SLANeXtVisionEncoder,
+)
 
 
 logger = logging.get_logger(__name__)
@@ -54,9 +60,6 @@ class PPFormulaNetConfig(SLANeXtConfig):
        Number of intermediate channels for the post-encoder convolution layer.
     post_conv_out_channels (`int`, *optional*, defaults to 1024):
         Number of output channels for the post-encoder convolution layer.
-    out_channels (`int`, *optional*, defaults to 50):
-        Vocabulary size for the table structure token prediction head, i.e., the number of distinct structure
-        tokens the model can predict.
     max_length (`int`, *optional*, defaults to 1537):
         Controls the maximum length to use by one of the truncation/padding parameters.
     """
@@ -75,13 +78,13 @@ class PPFormulaNetConfig(SLANeXtConfig):
     post_conv_in_channels: int = 256
     post_conv_mid_channels: int = 512
     post_conv_out_channels: int = 1024
-    vocab_size: int = 50265
-    max_position_embeddings: int = 1024
+    vocab_size: int = 50000
+    max_position_embeddings: int = 2560
     encoder_layers: int = 12
     encoder_ffn_dim: int = 4096
     encoder_attention_heads: int = 16
-    decoder_layers: int = 12
-    decoder_ffn_dim: int = 4096
+    decoder_layers: int = 8
+    decoder_ffn_dim: int = 2048
     decoder_attention_heads: int = 16
     encoder_layerdrop: float | int = 0.0
     decoder_layerdrop: float | int = 0.0
@@ -92,7 +95,7 @@ class PPFormulaNetConfig(SLANeXtConfig):
     activation_dropout: float | int = 0.0
     init_std: float = 0.02
     classifier_dropout: float | int = 0.0
-    scale_embedding: bool = False
+    scale_embedding: bool = True
     pad_token_id: int | None = 1
     bos_token_id: int | None = 0
     eos_token_id: int | list[int] | None = 2
@@ -255,18 +258,24 @@ class PPFormulaNetProcessor(NougatProcessor):
         return [self.post_process_generation(text) for text in generated_texts]
 
 
-class PPFormulaNetPreTrainedModel(PreTrainedModel):
-    config: PPFormulaNetConfig
-    base_model_prefix = "pp_formulanet"
-    main_input_name = "pixel_values"
-    input_modalities = ("image",)
-    supports_gradient_checkpointing = True
-    # _keep_in_fp32_modules_strict = []
+class PPFormulaNetPreTrainedModel(SLANeXtPreTrainedModel):
+    _keep_in_fp32_modules_strict = []
 
     @torch.no_grad()
     def _init_weights(self, module):
         """Initialize the weights"""
-        super()._init_weights(module)
+        PreTrainedModel._init_weights(module)
+
+        # Initialize positional embeddings to zero (PPFormulaNetVisionEncoder holds pos_embed)
+        if isinstance(module, PPFormulaNetVisionEncoder):
+            if module.pos_embed is not None:
+                init.constant_(module.pos_embed, 0.0)
+
+        # Initialize relative positional embeddings to zero (PPFormulaNetVisionAttention holds rel_pos_h/w)
+        if isinstance(module, PPFormulaNetVisionAttention):
+            if module.use_rel_pos:
+                init.constant_(module.rel_pos_h, 0.0)
+                init.constant_(module.rel_pos_w, 0.0)
 
 
 class PPFormulaNetBackbone(SLANeXtBackbone):
@@ -305,6 +314,14 @@ class PPFormulaNetBackbone(SLANeXtBackbone):
             hidden_states=vision_output.hidden_states,
             attentions=vision_output.attentions,
         )
+
+
+class PPFormulaNetVisionAttention(SLANeXtVisionAttention):
+    pass
+
+
+class PPFormulaNetVisionEncoder(SLANeXtVisionEncoder):
+    pass
 
 
 class PPFormulaNetHead(MBartForCausalLM):
@@ -385,4 +402,5 @@ __all__ = [
     "PPFormulaNetBackbone",
     "PPFormulaNetForTextRecognition",
     "PPFormulaNetPreTrainedModel",
+    "PPFormulaNetHead",
 ]

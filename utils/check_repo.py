@@ -196,6 +196,8 @@ IGNORE_NON_TESTED = (
         "ChameleonVQVAE",  # VQVAE here is used only for encoding (discretizing) and is tested as part of bigger model
         "SLANeXtSLAHead",  # Buildinere is used only for encoding (discretizing) and is tested as part of bigger model
         "SLANeXtBackbone",  # Building part of bigger (tested) model. Tested implicitly through SLANeXtForTableRecognition.
+        "PPFormulaNetBackbone",  # Building part of bigger (tested) model. Tested implicitly through PPOCRV5MobileDetForObjectDetection.
+        "PPFormulaNetHead",  # Building part of bigger (tested) model. Tested implicitly through PPOCRV5MobileDetForObjectDetection.
         "PPOCRV5MobileDetModel",  # Building part of bigger (tested) model. Tested implicitly through PPOCRV5MobileDetForObjectDetection.
         "PPOCRV5ServerDetModel",  # Building part of bigger (tested) model. Tested implicitly through PPOCRV5ServerDetForObjectDetection.
         "PPDocLayoutV2ReadingOrder",  # Building part of bigger (tested) model. Tested implicitly through PPDocLayoutV2ForObjectDetection.
@@ -462,6 +464,8 @@ IGNORE_NON_AUTO_CONFIGURED = PRIVATE_MODELS.copy() + [
     "JanusVisionModel",  # Building part of bigger (tested) model
     "SLANeXtSLAHead",  # Building part of bigger (tested) model
     "SLANeXtBackbone",  # Building part of bigger (tested) model
+    "PPFormulaNetBackbone",  # Building part of bigger (tested) model
+    "PPFormulaNetHead",  # Building part of bigger (tested) model
     "PPOCRV5MobileDetModel",  # Building part of bigger (tested) model
     "PPOCRV5ServerDetModel",  # Building part of bigger (tested) model
     "PPDocLayoutV2Model",  # Building part of bigger (tested) model

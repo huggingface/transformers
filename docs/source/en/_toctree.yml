@@ -1323,6 +1323,8 @@
         title: PP-DocLayoutV2
       - local: model_doc/pp_doclayout_v3
         title: PP-DocLayoutV3
+      - local: model_doc/pp_formulanet
+        title: PP-FormulaNet
       - local: model_doc/pp_ocrv5_mobile_det
         title: PP-OCRv5_mobile_det
       - local: model_doc/pp_ocrv5_mobile_rec

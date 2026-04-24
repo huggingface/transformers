@@ -39,6 +39,7 @@ if _staging_mode is not None:
 
 URLS_FOR_TESTING_DATA = [
     # TODO: copy those to our hf-internal-testing dataset and fix all tests using them
+    "https://paddle-model-ecology.bj.bcebos.com/paddlex/imgs/demo_image/general_formula_rec_001.png"
     "http://images.cocodataset.org/val2017/000000000139.jpg",
     "http://images.cocodataset.org/val2017/000000000285.jpg",
     "http://images.cocodataset.org/val2017/000000000632.jpg",

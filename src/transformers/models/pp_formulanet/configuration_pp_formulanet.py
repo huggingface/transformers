@@ -74,9 +74,6 @@ class PPFormulaNetConfig(PreTrainedConfig):
        Number of intermediate channels for the post-encoder convolution layer.
     post_conv_out_channels (`int`, *optional*, defaults to 1024):
         Number of output channels for the post-encoder convolution layer.
-    out_channels (`int`, *optional*, defaults to 50):
-        Vocabulary size for the table structure token prediction head, i.e., the number of distinct structure
-        tokens the model can predict.
     max_length (`int`, *optional*, defaults to 1537):
         Controls the maximum length to use by one of the truncation/padding parameters.
     """
@@ -96,13 +93,13 @@ class PPFormulaNetConfig(PreTrainedConfig):
         "num_hidden_layers": "encoder_layers",
     }
     post_conv_mid_channels: int = 512
-    vocab_size: int = 50265
-    max_position_embeddings: int = 1024
+    vocab_size: int = 50000
+    max_position_embeddings: int = 2560
     encoder_layers: int = 12
     encoder_ffn_dim: int = 4096
     encoder_attention_heads: int = 16
-    decoder_layers: int = 12
-    decoder_ffn_dim: int = 4096
+    decoder_layers: int = 8
+    decoder_ffn_dim: int = 2048
     decoder_attention_heads: int = 16
     encoder_layerdrop: float | int = 0.0
     decoder_layerdrop: float | int = 0.0
@@ -113,7 +110,7 @@ class PPFormulaNetConfig(PreTrainedConfig):
     activation_dropout: float | int = 0.0
     init_std: float = 0.02
     classifier_dropout: float | int = 0.0
-    scale_embedding: bool = False
+    scale_embedding: bool = True
     pad_token_id: int | None = 1
     bos_token_id: int | None = 0
     eos_token_id: int | list[int] | None = 2

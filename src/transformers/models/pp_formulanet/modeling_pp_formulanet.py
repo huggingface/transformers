@@ -28,6 +28,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 from torch.nn import CrossEntropyLoss
 
+from ... import initialization as init
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache, EncoderDecoderCache
 from ...generation import GenerationMixin
@@ -53,16 +54,64 @@ logger = logging.get_logger(__name__)
 
 class PPFormulaNetPreTrainedModel(PreTrainedModel):
     config: PPFormulaNetConfig
-    base_model_prefix = "pp_formulanet"
+    base_model_prefix = "backbone"
     main_input_name = "pixel_values"
     input_modalities = ("image",)
     supports_gradient_checkpointing = True
-    # _keep_in_fp32_modules_strict = []
+    _keep_in_fp32_modules_strict = []
 
     @torch.no_grad()
     def _init_weights(self, module):
         """Initialize the weights"""
         super()._init_weights(module)
+
+        # Initialize positional embeddings to zero (PPFormulaNetVisionEncoder holds pos_embed)
+        if isinstance(module, PPFormulaNetVisionEncoder):
+            if module.pos_embed is not None:
+                init.constant_(module.pos_embed, 0.0)
+
+        # Initialize relative positional embeddings to zero (PPFormulaNetVisionAttention holds rel_pos_h/w)
+        if isinstance(module, PPFormulaNetVisionAttention):
+            if module.use_rel_pos:
+                init.constant_(module.rel_pos_h, 0.0)
+                init.constant_(module.rel_pos_w, 0.0)
+
+
+class PPFormulaNetBackbone(PPFormulaNetPreTrainedModel):
+    def __init__(
+        self,
+        config: dict | None = None,
+        **kwargs,
+    ):
+        super().__init__(config)
+        self.vision_tower = PPFormulaNetVisionEncoder(config.vision_config)
+        self.post_conv1 = nn.Conv2d(
+            config.post_conv_in_channels, config.post_conv_mid_channels, kernel_size=3, stride=2, padding=1, bias=False
+        )
+        self.post_conv2 = nn.Conv2d(
+            config.post_conv_mid_channels,
+            config.post_conv_out_channels,
+            kernel_size=3,
+            stride=2,
+            padding=1,
+            bias=False,
+        )
+        self.mm_projector_vary = nn.Linear(config.post_conv_out_channels, config.post_conv_out_channels)
+        self.enc_to_dec_proj = nn.Linear(config.post_conv_out_channels, config.hidden_size)
+        self.post_init()
+
+    def forward(self, hidden_states: torch.Tensor, **kwargs: Unpack[TransformersKwargs]):
+        vision_output = self.vision_tower(hidden_states, **kwargs)
+        hidden_states = self.post_conv1(vision_output.last_hidden_state)
+        hidden_states = self.post_conv2(hidden_states)
+        hidden_states = hidden_states.flatten(2).transpose(1, 2)
+        hidden_states = self.mm_projector_vary(hidden_states)
+        hidden_states = self.enc_to_dec_proj(hidden_states)
+        return BaseModelOutput(
+            last_hidden_state=hidden_states,
+            hidden_states=vision_output.hidden_states,
+            attentions=vision_output.attentions,
+        )
 
 
 class PPFormulaNetVisionAttention(nn.Module):
@@ -450,43 +499,6 @@ class PPFormulaNetVisionEncoder(PPFormulaNetPreTrainedModel):
         hidden_states = self.neck(hidden_states)
         return PPFormulaNetVisionEncoderOutput(
             last_hidden_state=hidden_states,
-        )
-
-
-class PPFormulaNetBackbone(PPFormulaNetPreTrainedModel):
-    def __init__(
-        self,
-        config: dict | None = None,
-        **kwargs,
-    ):
-        super().__init__(config)
-        self.vision_tower = PPFormulaNetVisionEncoder(config.vision_config)
-        self.post_conv1 = nn.Conv2d(
-            config.post_conv_in_channels, config.post_conv_mid_channels, kernel_size=3, stride=2, padding=1, bias=False
-        )
-        self.post_conv2 = nn.Conv2d(
-            config.post_conv_mid_channels,
-            config.post_conv_out_channels,
-            kernel_size=3,
-            stride=2,
-            padding=1,
-            bias=False,
-        )
-        self.mm_projector_vary = nn.Linear(config.post_conv_out_channels, config.post_conv_out_channels)
-        self.enc_to_dec_proj = nn.Linear(config.post_conv_out_channels, config.hidden_size)
-        self.post_init()
-
-    def forward(self, hidden_states: torch.Tensor, **kwargs: Unpack[TransformersKwargs]):
-        vision_output = self.vision_tower(hidden_states, **kwargs)
-        hidden_states = self.post_conv1(vision_output.last_hidden_state)
-        hidden_states = self.post_conv2(hidden_states)
-        hidden_states = hidden_states.flatten(2).transpose(1, 2)
-        hidden_states = self.mm_projector_vary(hidden_states)
-        hidden_states = self.enc_to_dec_proj(hidden_states)
-        return BaseModelOutput(
-            last_hidden_state=hidden_states,
-            hidden_states=vision_output.hidden_states,
-            attentions=vision_output.attentions,
         )
 
 
@@ -1115,4 +1127,4 @@ class PPFormulaNetForTextRecognition(PPFormulaNetPreTrainedModel):
         )
 
 
-__all__ = ["PPFormulaNetBackbone", "PPFormulaNetForTextRecognition", "PPFormulaNetPreTrainedModel"]
+__all__ = ["PPFormulaNetBackbone", "PPFormulaNetForTextRecognition", "PPFormulaNetPreTrainedModel", "PPFormulaNetHead"]

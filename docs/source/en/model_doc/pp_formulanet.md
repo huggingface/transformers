@@ -69,3 +69,10 @@ print(result)
 
 [[autodoc]] PPFormulaNetHead
 
+## PPFormulaNetImageProcessor
+
+[[autodoc]] PPFormulaNetImageProcessor
+
+## PPFormulaNetProcessor
+
+[[autodoc]] PPFormulaNetProcessor
