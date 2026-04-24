@@ -230,9 +230,12 @@ class Qwen3ASREncoder(Qwen3OmniMoeAudioEncoder):
         sequence_mask = mask_after_cnn.reshape(batch_size, sequence_length).to(dtype=torch.long)
 
         hidden_states = sequence_hidden_states
-        attention_mask = (
-            sequence_mask if is_flash_attention_requested(self.config) else self.invert_attention_mask(sequence_mask)
-        )
+        if is_flash_attention_requested(self.config):
+            attention_mask = sequence_mask
+        elif self.config._attn_implementation == "sdpa" and torch.all(sequence_mask):
+            attention_mask = None
+        else:
+            attention_mask = self.invert_attention_mask(sequence_mask)
 
         for encoder_layer in self.layers:
             hidden_states = encoder_layer(hidden_states, attention_mask=attention_mask, **kwargs)
@@ -566,6 +569,7 @@ class Qwen3ASRForForcedAlignment(Qwen3ASRPreTrainedModel):
 __all__ = [
     "Qwen3ASREncoderConfig",
     "Qwen3ASRConfig",
+    "Qwen3ASREncoder",
     "Qwen3ASRForConditionalGeneration",
     "Qwen3ASRModel",
     "Qwen3ASRPreTrainedModel",
