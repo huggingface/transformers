@@ -63,12 +63,6 @@ class MiMoV2FlashModelTester(CausalLMModelTester):
 class MiMoV2FlashModelTest(CausalLMModelTest, unittest.TestCase):
     model_tester_class = MiMoV2FlashModelTester
 
-    @unittest.skip(
-        "Most probably because of the MoE, the MoE and router do not treat padded vs packed sequences like dense models"
-    )
-    def test_eager_padding_matches_padding_free_with_position_ids(self):
-        pass
-
     def _check_past_key_values_for_generate(self, batch_size, past_key_values, seq_length, config):
         # SWA layers double the kv heads (see MiMoV2FlashAttention.__init__), so the per-layer
         # kv head count is layer-type dependent. Same override pattern as MiniMax.
