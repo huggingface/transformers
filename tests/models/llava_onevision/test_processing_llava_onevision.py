@@ -67,9 +67,6 @@ class LlavaOnevisionProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         MODALITY_INPUT_DATA["images"] = [local_image, local_image]
         MODALITY_INPUT_DATA["videos"] = local_videos
 
-        # Force video decoding to use torchvision backend to avoid torchcodec dependency during tests
-        video_processing_utils.is_torchcodec_available = lambda: False  # type: ignore
-        video_utils.is_torchcodec_available = lambda: False  # type: ignore
         super().setUpClass()
 
     @classmethod
