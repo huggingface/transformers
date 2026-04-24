@@ -1168,7 +1168,7 @@ class ContinuousMixin:
             generation_config: An optional generation configuration, which may contain a CompileConfig object
             continuous_batching_config: An optional continuous batching configuration
             workload_hints: Optional workload hints to help the continuous batching manager make better decisions for
-                default values. Keys accepted are: num_requests, max_request_length.
+                default values. Keys accepted are: max_prompt_length, max_generated_length.
             **deprecated_kwargs: Deprecated arguments that are now passed in the continuous_batching_config. Those are:
                 max_queue_size, q_padding_interval_size, kv_padding_interval_size, allow_block_sharing,
                 use_async_batching, max_cached_graphs
@@ -1321,8 +1321,8 @@ class ContinuousMixin:
 
         # Compute workload hints
         workload_hints = {
-            "num_requests": len(inputs),
-            "max_request_length": max(len(input_ids) for input_ids in inputs) + max_new_tokens,
+            "max_prompt_length": max(len(input_ids) for input_ids in inputs),
+            "max_generated_length": max_new_tokens,
         }
 
         # Prepare context managers for the main loop

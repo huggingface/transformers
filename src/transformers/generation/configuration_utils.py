@@ -1925,10 +1925,10 @@ class ContinuousBatchingConfig:
         """Resolves the config using workload hints. If the hints are not provided, we use a default value."""
         if workload_hints is None:
             return None
-        num_requests = workload_hints.get("num_requests", 0)
-        max_request_length = workload_hints.get("max_request_length", 0)
+        max_prompt_length = workload_hints.get("max_prompt_length", 0)
+        max_generated_length = workload_hints.get("max_generated_length", 0)
         # The max number of block per request is an even number large enough to hold the max request length
-        if max_request_length:
-            blocks_per_request = int(ceil(max_request_length / self.block_size)) + 1
+        if max_prompt_length and max_generated_length:
+            max_sequence_length = max_prompt_length + max_generated_length
+            blocks_per_request = int(ceil(max_sequence_length / self.block_size)) + 1
             self.max_blocks_per_request = blocks_per_request + (blocks_per_request % 2)
-        # TODO: BUG: Q padding interval
