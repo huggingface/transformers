@@ -1892,7 +1892,6 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         if (
             self._supports_flash_attn
             and requested_original_flash_attn
-            and base_implementation is not None
             and is_kernels_available()
             and not is_torch_npu_available()
         ):
@@ -1924,7 +1923,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                     )
             except Exception as e:
                 # raise the proper exception for requested flash attention
-                if requested_original_flash_attn and base_implementation is not None:
+                if requested_original_flash_attn:
                     fa_version = int(base_implementation[-1])  # "flash_attention_(2|3|...)"
                     self._flash_attn_can_dispatch(flash_attn_version=fa_version, is_init_check=is_init_check)
 
