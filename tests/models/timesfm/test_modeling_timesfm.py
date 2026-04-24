@@ -229,16 +229,6 @@ class TimesFmModelTest(ModelTesterMixin, unittest.TestCase):
         self.assertEqual(out.dtype, past_values[0].dtype)
         self.assertTrue(torch.equal(out, expected))
 
-    def test_freq_to_tensor_casts_to_int32(self):
-        freq = [0, 1, 2]
-        expected = torch.tensor([0, 1, 2], dtype=torch.int32)
-
-        out = TimesFmModelForPrediction._freq_to_tensor(freq)
-
-        self.assertEqual(out.shape, (3,))
-        self.assertEqual(out.dtype, torch.int32)
-        self.assertTrue(torch.equal(out, expected))
-
 
 @require_torch
 @slow

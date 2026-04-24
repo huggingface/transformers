@@ -903,11 +903,6 @@ class TimesFm2_5ModelForPrediction(TimesFm2_5PreTrainedModel):
         return torch.stack([F.pad(ts, (max_len - ts.shape[0], 0)) for ts in past_values], dim=0)
 
     @staticmethod
-    def _freq_to_tensor(freq: Sequence[int]) -> torch.Tensor:
-        """Convert a sequence of frequency indices into a 1D `torch.int32` tensor of shape `(batch_size,)`."""
-        return torch.tensor(freq, dtype=torch.int32)
-
-    @staticmethod
     def _timesfm2_5_moving_average(arr: torch.Tensor, window_size: int) -> tuple[torch.Tensor, torch.Tensor]:
         """Calculates the moving average using PyTorch's convolution function. `arr` shape: `(B, T)`."""
         arr_padded = F.pad(arr, (window_size - 1, 0), "constant", 0)

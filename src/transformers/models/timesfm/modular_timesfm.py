@@ -687,15 +687,14 @@ class TimesFmModelForPrediction(TimesFmPreTrainedModel):
             )
             past_values = self._past_values_to_tensor(past_values)
 
-        if isinstance(freq, list):
-            freq = self._freq_to_tensor(freq)
-
         device = past_values.device
         if past_observed_mask is None:
             past_observed_mask = torch.ones_like(past_values)
         if freq is None:
             logger.info("No frequency provided via `freq`. Default to high (0).")
             freq = torch.zeros(past_values.shape[0], dtype=torch.int32, device=device)
+        else:
+            freq = torch.as_tensor(freq, dtype=torch.int32, device=device)
 
         inputs = past_values[:, -fcontext_len:]
         observed_mask = past_observed_mask[:, -fcontext_len:].to(device=device)
@@ -789,11 +788,6 @@ class TimesFmModelForPrediction(TimesFmPreTrainedModel):
         """
         max_len = max(ts.shape[0] for ts in past_values)
         return torch.stack([F.pad(ts, (max_len - ts.shape[0], 0)) for ts in past_values], dim=0)
-
-    @staticmethod
-    def _freq_to_tensor(freq: Sequence[int]) -> torch.Tensor:
-        """Convert a sequence of frequency indices into a 1D `torch.int32` tensor of shape `(batch_size,)`."""
-        return torch.tensor(freq, dtype=torch.int32)
 
     @staticmethod
     def _timesfm_moving_average(arr: torch.Tensor, window_size: int) -> tuple[torch.Tensor, torch.Tensor]:
