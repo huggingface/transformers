@@ -649,7 +649,7 @@ class DeepseekV4HyperConnection(nn.Module):
         self.base = nn.Parameter(torch.empty(mix))
         self.scale = nn.Parameter(torch.empty(3))
 
-    def compute_weights(self, hidden_streams: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+    def forward(self, hidden_streams: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         flat = hidden_streams.flatten(start_dim=2).float()  # [B, S, H*D]
         rsqrt = torch.rsqrt(flat.square().mean(-1, keepdim=True) + self.norm_eps)
         # HC mixer params are kept in fp32 for Sinkhorn stability — cast defensively.
@@ -706,13 +706,11 @@ class DeepseekV4Experts(GptOssExperts):
 
     def __init__(self, config: DeepseekV4Config):
         nn.Module.__init__(self)
-        self.num_experts = config.n_routed_experts
-        self.hidden_size = config.hidden_size
-        self.intermediate_size = config.moe_intermediate_size
+        del self.gate_up_proj_bias 
+        del self.down_proj_bias
+        del self.alpha
         self.limit = config.swiglu_limit
         self.act_fn = ACT2FN[config.hidden_act]
-        self.gate_up_proj = nn.Parameter(torch.empty(self.num_experts, 2 * self.intermediate_size, self.hidden_size))
-        self.down_proj = nn.Parameter(torch.empty(self.num_experts, self.hidden_size, self.intermediate_size))
 
     def _apply_gate(self, gate_up: torch.Tensor) -> torch.Tensor:
         gate, up = gate_up.chunk(2, dim=-1)
@@ -729,6 +727,9 @@ class DeepseekV4Experts(GptOssExperts):
             hit = torch.greater(mask.sum(dim=(-1, -2)), 0).nonzero()
         for expert_idx in hit:
             expert_idx = expert_idx[0]
+            # skip masking index
+            if expert_idx == self.num_experts:
+                continue
             top_k_pos, token_idx = torch.where(mask[expert_idx])
             gate_up = F.linear(hidden_states[token_idx], self.gate_up_proj[expert_idx])
             current = self._apply_gate(gate_up)
@@ -864,7 +865,7 @@ class DeepseekV4DecoderLayer(GradientCheckpointingLayer):
         # hidden_states shape throughout this layer: [B, S, hc_mult, hidden].
 
         # --- Attention site: collapse → norm → attn → expand ---
-        pre, post, comb = self.attn_hc.compute_weights(hidden_states)
+        pre, post, comb = self.attn_hc(hidden_states)
         collapsed = (pre.unsqueeze(-1) * hidden_states).sum(dim=2).to(hidden_states.dtype)
         attn_output, _ = self.self_attn(self.input_layernorm(collapsed), **kwargs)
         # Expand: each new stream = post[h] * block_output + Σ_k comb[h, k] * streams[k].
@@ -874,7 +875,7 @@ class DeepseekV4DecoderLayer(GradientCheckpointingLayer):
         )
 
         # --- MLP site: same pattern ---
-        pre, post, comb = self.ffn_hc.compute_weights(hidden_states)
+        pre, post, comb = self.ffn_hc(hidden_states)
         collapsed = (pre.unsqueeze(-1) * hidden_states).sum(dim=2).to(hidden_states.dtype)
         mlp_output = self.mlp(self.post_attention_layernorm(collapsed), input_ids=kwargs.get("input_ids"))
         dtype = hidden_states.dtype
@@ -888,15 +889,7 @@ class DeepseekV4PreTrainedModel(MixtralPreTrainedModel):
     _supports_flash_attn = False
     _supports_sdpa = False
     _keep_in_fp32_modules_strict = [
-        "attn_hc.fn",
-        "attn_hc.base",
-        "attn_hc.scale",
-        "ffn_hc.fn",
-        "ffn_hc.base",
-        "ffn_hc.scale",
-        "hc_head.hc_fn",
-        "hc_head.hc_base",
-        "hc_head.hc_scale",
+        "attn_hc", "ffn_hc"
     ]
     _keys_to_ignore_on_load_unexpected = [r"model\.mtp\..*"]
     _can_record_outputs = {

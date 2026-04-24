@@ -306,7 +306,7 @@ def _pool_windows(kv: torch.Tensor, gate: torch.Tensor, ape: torch.Tensor, ratio
     """
     batch, length, _ = kv.shape
     kv = kv.view(batch, length // ratio, ratio, head_dim)
-    gate = gate.view(batch, length // ratio, ratio, head_dim) + ape
+    gate = gate.view(batch, length // ratio, ratio, head_dim) + ape.to(gate.dtype)
     return (kv * gate.softmax(dim=2)).sum(dim=2)
 
 
