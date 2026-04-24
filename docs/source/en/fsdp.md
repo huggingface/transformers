@@ -14,9 +14,9 @@ rendered properly in your Markdown viewer.
 
 -->
 
-# FSDP
+# FSDP2
 
-[Fully Sharded Data Parallel (FSDP)](https://docs.pytorch.org/tutorials/intermediate/FSDP_tutorial.html) shards the model, gradients, and optimizer states across GPUs. Before computation, each GPU gathers a complete set of parameters from all shards, then frees them afterward. Sharding lets you train models larger than a single GPU's memory, at the cost of more communication than [DDP](./ddp). Use FSDP when your model or optimizer states don't fit on a single GPU.
+[Fully Sharded Data Parallel (FSDP2)](https://docs.pytorch.org/tutorials/intermediate/FSDP_tutorial.html) shards the model, gradients, and optimizer states across GPUs. Before computation, each GPU gathers a complete set of parameters from all shards, then frees them afterward. Sharding lets you train models larger than a single GPU's memory, at the cost of more communication than [DDP](./ddp). Use FSDP when your model or optimizer states don't fit on a single GPU.
 
 ```text
                       ┌─────────────────┐
@@ -50,38 +50,34 @@ rendered properly in your Markdown viewer.
 
 ## Sharding strategies
 
-Pass one of the sharding strategies below to [fsdp](https://huggingface.co/docs/transformers/main_classes/trainer#transformers.TrainingArguments.fsdp).
+FSDP2 controls sharding with [fsdp_config](https://huggingface.co/docs/transformers/main_classes/trainer#transformers.TrainingArguments.fsdp_config). Set `fsdp=True` to enable FSDP, and set `reshard_after_forward` in the FSDP config to choose the memory and throughput tradeoff.
 
-| strategy | description |
+| `reshard_after_forward` | behavior |
 |---|---|
-| `full_shard` | shard parameters, gradients, and optimizer states |
-| `shard_grad_op` | shard gradients and optimizer states |
-| `no_shard` | DDP |
-| `hybrid_shard` | full shard within a node, replicate across nodes |
-| `hybrid_shard_zero2` | shard gradients and optimizer states within a node, replicate across nodes |
-| `offload` | CPU offload (combine with `full_shard` or `shard_grad_op`) |
+| `true` | reshard parameters after the forward pass to save more memory |
+| `false` | keep parameters gathered between forward and backward to avoid the re-all-gather, at the cost of higher peak memory |
 
-Always combine a sharding strategy with `auto_wrap` to enable the auto-wrapping policy like `fsdp="full_shard auto_wrap"`. Without `auto_wrap`, the entire model is one FSDP unit and you lose the memory benefit of sharding.
+Use `auto_wrap_policy` to enable wrapping. Without wrapping, the entire model is one FSDP unit and you lose the memory benefit of sharding.
 
 ## Configure FSDP
 
-These fields control how FSDP wraps and loads the model.
+These fields control how FSDP2 wraps, shards, and loads the model.
 
-- `transformer_layer_cls_to_wrap` defines the transformer layer to wrap into an FSDP unit. Each unit manages its own gather and scatter ops. Only the current unit's parameters are gathered during the forward pass. The previous units' parameters are released to save memory.
+- `reshard_after_forward` determines whether to reshard parameters after the forward pass. The default `true` saves more memory. Set it to `false` to keep parameters gathered between the forward and backward passes and reduce communication at the cost of higher peak memory.
+
+- `cpu_offload` offloads parameters and gradients to CPU when they aren't in use to save GPU memory.
+
+- `auto_wrap_policy` determines how modules are wrapped into FSDP units. Use `"TRANSFORMER_BASED_WRAP"` for transformer layers, `"SIZE_BASED_WRAP"` for modules above a parameter-count threshold, or `"NO_WRAP"` to disable auto wrapping.
+
+- `transformer_layer_cls_to_wrap` defines the transformer layer to wrap into an FSDP unit when `auto_wrap_policy` is `"TRANSFORMER_BASED_WRAP"`. Each unit manages its own gather and scatter ops. Only the current unit's parameters are gathered during the forward pass. The previous units' parameters are released to save memory.
 
   Wrapping only the top-level model yields no GPU memory savings. Wrapping every individual `Linear` layer makes inter-unit communication very expensive. Leave this field empty and FSDP reads the value from the model definition.
 
-- `backward_prefetch` determines when to start the all-gather for the next FSDP unit during the backward pass. The default `"backward_pre"` prefetches before the current unit's backward to overlap communication with compute.
+- `min_num_params` sets the minimum number of parameters per module for size-based wrapping. It is only used when `auto_wrap_policy` is `"SIZE_BASED_WRAP"`.
 
-- `forward_prefetch` prefetches the next FSDP unit during the forward pass, improving throughput at the cost of higher peak memory.
+- `state_dict_type` controls the checkpoint format. Use `"FULL_STATE_DICT"` for a single Transformers-compatible checkpoint or `"SHARDED_STATE_DICT"` for one checkpoint file per rank.
 
-- `limit_all_gathers` adds a CPU synchronization point to prevent too many simultaneous all-gathers, reducing peak memory at the cost of slightly lower throughput.
-
-- `cpu_ram_efficient_loading` loads the checkpoint from disk on rank 0 only. Other GPUs initialize an empty model and receive the weights by broadcast, avoiding multiple processes loading a large model into CPU RAM. Use with `sync_module_states` to broadcast the parameters from rank 0 to other processes.
-
-- `sync_module_states` broadcasts rank 0's parameters to all other ranks after wrapping. Required when `cpu_ram_efficient_loading` is enabled. Without it, non-rank-0 processes train on uninitialized weights.
-
-- `use_orig_params` preserves the original parameter structure, allowing non-uniform `requires_grad` within an FSDP unit. Required for parameter-efficient fine-tuning (PEFT/LoRA) where only adapter layers are trainable.
+- `cpu_ram_efficient_loading` loads the checkpoint from disk on rank 0 only. Other GPUs initialize an empty model and receive the weights by broadcast, avoiding multiple processes loading a large model into CPU RAM.
 
 - `activation_checkpointing` recomputes activations during the backward pass instead of storing them. Use this instead of [gradient checkpointing](./grad_checkpointing) in [`TrainingArguments`]. Setting both raises an error.
 
@@ -104,18 +100,17 @@ accelerate launch train.py
 ```json
 {
   "version": 2,
+  "reshard_after_forward": true,
+  "cpu_offload": false,
+  "auto_wrap_policy": "TRANSFORMER_BASED_WRAP",
   "transformer_layer_cls_to_wrap": ["LlamaDecoderLayer"],
-  "backward_prefetch": "backward_pre",
-  "forward_prefetch": false,
-  "limit_all_gathers": true,
-  "use_orig_params": true,
-  "sync_module_states": true,
+  "state_dict_type": "FULL_STATE_DICT",
   "cpu_ram_efficient_loading": true,
   "activation_checkpointing": true
 }
 ```
 
-Set `fsdp=True`, a sharding strategy, and pass the FSDP config file to [`fsdp_config`].
+Set `fsdp=True` and pass the FSDP config file to [`fsdp_config`].
 
 ```py
 from transformers import TrainingArguments
@@ -123,7 +118,6 @@ from transformers import TrainingArguments
 TrainingArguments(
     ...,
     fsdp=True,
-    fsdp="full_shard auto_wrap",
     fsdp_config="path/to/fsdp.json",
 )
 ```
