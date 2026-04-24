@@ -192,7 +192,7 @@ class CircleCIJob:
             {
                 "run": {
                     "name": "Uninstall torch",
-                    "command": "uv pip uninstall -y torch torchvision torchaudio torchcodec",
+                    "command": "uv pip uninstall torch torchvision torchaudio torchcodec",
                 }
             },
             {
