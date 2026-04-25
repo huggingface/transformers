@@ -70,9 +70,7 @@ logger = logging.get_logger(__name__)
 # --- FINAL ROBUST PATCH ---
 if "ResponseCreateParamsStreaming" in globals():
 
-    class TransformersResponseCreateParamsStreaming(
-        ResponseCreateParamsStreaming, total=False
-    ):
+    class TransformersResponseCreateParamsStreaming(ResponseCreateParamsStreaming, total=False):
         generation_config: str
         seed: int
 
@@ -108,9 +106,7 @@ class ResponseHandler(BaseHandler):
     _valid_params_class = TransformersResponseCreateParamsStreaming
     _unused_fields = UNUSED_RESPONSE_FIELDS
 
-    async def handle_request(
-        self, body: dict, request_id: str
-    ) -> StreamingResponse | JSONResponse:
+    async def handle_request(self, body: dict, request_id: str) -> StreamingResponse | JSONResponse:
         """Validate, load model, dispatch to streaming or non-streaming.
 
         Args:
@@ -137,9 +133,7 @@ class ResponseHandler(BaseHandler):
         has_video = any(
             c.get("type") == "video"
             for msg in processor_inputs
-            for c in (
-                msg.get("content") if isinstance(msg.get("content"), list) else []
-            )
+            for c in (msg.get("content") if isinstance(msg.get("content"), list) else [])
         )
 
         # Default to 32 frames for video (Gemma 4 default); some processors load all frames otherwise
@@ -161,15 +155,11 @@ class ResponseHandler(BaseHandler):
         if not use_cb:
             inputs = inputs.to(model.device)  # type: ignore[union-attr]
 
-        gen_config = self._build_generation_config(
-            body, model.generation_config, use_cb=use_cb
-        )
+        gen_config = self._build_generation_config(body, model.generation_config, use_cb=use_cb)
         # TODO: remove when CB supports per-request generation config
         if use_cb:
             gen_manager.init_cb(model, gen_config)
-        tool_config = (
-            get_tool_call_config(processor, model) if body.get("tools") else None
-        )
+        tool_config = get_tool_call_config(processor, model) if body.get("tools") else None
 
         streaming = body.get("stream", True)
         if streaming:
@@ -256,9 +246,7 @@ class ResponseHandler(BaseHandler):
             else:
                 messages = ResponseHandler._normalize_response_items(inp)
         else:
-            raise HTTPException(
-                status_code=422, detail="'input' must be a string or list"
-            )
+            raise HTTPException(status_code=422, detail="'input' must be a string or list")
 
         # Prepend instructions as a system message
         if instructions:
@@ -284,9 +272,7 @@ class ResponseHandler(BaseHandler):
             item_type = item.get("type")
 
             if "role" in item:
-                messages.append(
-                    {"role": item["role"], "content": item.get("content", "")}
-                )
+                messages.append({"role": item["role"], "content": item.get("content", "")})
 
             elif item_type == "function_call":
                 tc = {
@@ -340,9 +326,7 @@ class ResponseHandler(BaseHandler):
         )
         input_ids = inputs["input_ids"]
         # CB returns plain lists, regular path returns tensors
-        input_len = (
-            len(input_ids) if isinstance(input_ids, list) else input_ids.shape[-1]
-        )
+        input_len = len(input_ids) if isinstance(input_ids, list) else input_ids.shape[-1]
 
         seq = 0
         output_index = 0
@@ -378,9 +362,7 @@ class ResponseHandler(BaseHandler):
                     ResponseInProgressEvent(
                         type="response.in_progress",
                         sequence_number=seq,
-                        response=Response(
-                            **response_base, status="in_progress", output=[]
-                        ),
+                        response=Response(**response_base, status="in_progress", output=[]),
                     )
                 )
                 seq += 1
@@ -410,9 +392,7 @@ class ResponseHandler(BaseHandler):
                         sequence_number=seq,
                         output_index=output_index,
                         content_index=0,
-                        part=ResponseOutputText(
-                            type="output_text", text="", annotations=[]
-                        ),
+                        part=ResponseOutputText(type="output_text", text="", annotations=[]),
                     )
                 )
                 seq += 1
@@ -438,9 +418,7 @@ class ResponseHandler(BaseHandler):
                             done = True
                             break
                         if isinstance(text, _StreamError):
-                            logger.error(
-                                f"Exception in response generation: {text.msg}"
-                            )
+                            logger.error(f"Exception in response generation: {text.msg}")
                             sse_parts.append(
                                 self.chunk_to_sse(
                                     ResponseErrorEvent(
@@ -460,9 +438,7 @@ class ResponseHandler(BaseHandler):
                                             **response_base,
                                             status="failed",
                                             output=[],
-                                            error=ResponseError(
-                                                code="server_error", message=text.msg
-                                            ),
+                                            error=ResponseError(code="server_error", message=text.msg),
                                         ),
                                     )
                                 )
@@ -492,9 +468,7 @@ class ResponseHandler(BaseHandler):
                 # 5. Tool calls are parsed after generation completes (not during streaming),
                 # because the full token sequence is needed for reliable parsing.
                 if tool_config:
-                    parsed = parse_tool_calls(
-                        processor, streamer.generated_token_ids, tool_config["schema"]
-                    )
+                    parsed = parse_tool_calls(processor, streamer.generated_token_ids, tool_config["schema"])
                     if parsed:
                         for i, tc in enumerate(parsed):
                             tc_id = f"{request_id}_tool_call_{i}"
@@ -539,9 +513,7 @@ class ResponseHandler(BaseHandler):
                             seq += 1
 
                 # 6. Close text output
-                output_text_part = ResponseOutputText(
-                    type="output_text", text=full_text, annotations=[]
-                )
+                output_text_part = ResponseOutputText(type="output_text", text=full_text, annotations=[])
                 yield self.chunk_to_sse(
                     ResponseTextDoneEvent(
                         type="response.output_text.done",
@@ -633,11 +605,7 @@ class ResponseHandler(BaseHandler):
                 type="message",
                 status="completed",
                 role="assistant",
-                content=[
-                    ResponseOutputText(
-                        type="output_text", text=full_text, annotations=[]
-                    )
-                ],
+                content=[ResponseOutputText(type="output_text", text=full_text, annotations=[])],
                 annotations=[],  # type: ignore[call-arg]
             )
         ]
@@ -683,9 +651,7 @@ class ResponseHandler(BaseHandler):
         use_cb: bool = False,
     ):
         """Apply Responses API params (``max_output_tokens``) on top of the base generation config."""
-        generation_config = super()._build_generation_config(
-            body, model_generation_config, use_cb=use_cb
-        )
+        generation_config = super()._build_generation_config(body, model_generation_config, use_cb=use_cb)
 
         if body.get("max_output_tokens") is not None:
             generation_config.max_new_tokens = int(body["max_output_tokens"])

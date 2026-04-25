@@ -87,9 +87,7 @@ class TimedModel:
     def _timeout_reached(self) -> None:
         if self.timeout_seconds > 0:
             self.delete_model()
-            logger.info(
-                f"{self._name_or_path} was removed from memory after {self.timeout_seconds}s of inactivity"
-            )
+            logger.info(f"{self._name_or_path} was removed from memory after {self.timeout_seconds}s of inactivity")
 
 
 class ModelManager:
@@ -175,9 +173,8 @@ class ModelManager:
             "flash_attention_3",
             "flex_attention",
         }
-        is_kernels_community = (
-            self.attn_implementation is not None
-            and self.attn_implementation.startswith("kernels-community/")
+        is_kernels_community = self.attn_implementation is not None and self.attn_implementation.startswith(
+            "kernels-community/"
         )
         if (
             self.attn_implementation is not None
@@ -208,9 +205,7 @@ class ModelManager:
             return BitsAndBytesConfig(load_in_8bit=True)
         return None
 
-    def _load_processor(
-        self, model_id_and_revision: str
-    ) -> "ProcessorMixin | PreTrainedTokenizerFast":
+    def _load_processor(self, model_id_and_revision: str) -> "ProcessorMixin | PreTrainedTokenizerFast":
         """Load a processor for the given model.
 
         Args:
@@ -219,9 +214,7 @@ class ModelManager:
         from transformers import AutoProcessor
 
         model_id, revision = model_id_and_revision.split("@", 1)
-        return AutoProcessor.from_pretrained(
-            model_id, revision=revision, trust_remote_code=self.trust_remote_code
-        )
+        return AutoProcessor.from_pretrained(model_id, revision=revision, trust_remote_code=self.trust_remote_code)
 
     def _load_model(
         self,
@@ -254,9 +247,7 @@ class ModelManager:
         }
 
         if progress_callback is not None:
-            progress_callback(
-                {"status": "loading", "model": model_id_and_revision, "stage": "config"}
-            )
+            progress_callback({"status": "loading", "model": model_id_and_revision, "stage": "config"})
         config = AutoConfig.from_pretrained(model_id, **model_kwargs)
 
         from transformers.models.auto.modeling_auto import MODEL_FOR_MULTIMODAL_LM_MAPPING_NAMES
@@ -308,9 +299,7 @@ class ModelManager:
                     model,
                     timeout_seconds=self.model_timeout,
                     processor=processor,
-                    on_unload=lambda key=model_id_and_revision: self.loaded_models.pop(
-                        key, None
-                    ),
+                    on_unload=lambda key=model_id_and_revision: self.loaded_models.pop(key, None),
                 )
                 if progress_callback is not None:
                     progress_callback(
@@ -486,11 +475,7 @@ class ModelManager:
 
             for ref, revision_info in repo.refs.items():
                 config_path = next(
-                    (
-                        f.file_path
-                        for f in revision_info.files
-                        if f.file_name == "config.json"
-                    ),
+                    (f.file_path for f in revision_info.files if f.file_name == "config.json"),
                     None,
                 )
                 if not config_path:
@@ -505,11 +490,7 @@ class ModelManager:
                 vlms = MODEL_FOR_IMAGE_TEXT_TO_TEXT_MAPPING_NAMES.values()
                 multimodal = MODEL_FOR_MULTIMODAL_LM_MAPPING_NAMES.values()
 
-                if any(
-                    arch
-                    for arch in architectures
-                    if arch in [*llms, *vlms, *multimodal]
-                ):
+                if any(arch for arch in architectures if arch in [*llms, *vlms, *multimodal]):
                     author = repo.repo_id.split("/") if "/" in repo.repo_id else ""
                     repo_handle = repo.repo_id + (f"@{ref}" if ref != "main" else "")
                     generative_models.append(

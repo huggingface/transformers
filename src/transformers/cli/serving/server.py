@@ -73,9 +73,7 @@ def build_server(
             allow_methods=["*"],
             allow_headers=["*"],
         )
-        logger.warning_once(
-            "CORS allow origin is set to `*`. Not recommended for production."
-        )
+        logger.warning_once("CORS allow origin is set to `*`. Not recommended for production.")
 
     # ---- Middleware ----
 
@@ -112,9 +110,7 @@ def build_server(
 
         model = body.get("model")
         if model is None:
-            raise HTTPException(
-                status_code=422, detail="Missing `model` field in the request body."
-            )
+            raise HTTPException(status_code=422, detail="Missing `model` field in the request body.")
         model_id_and_revision = model_manager.process_model_name(model)
         return StreamingResponse(
             model_manager.load_model_streaming(model_id_and_revision),
