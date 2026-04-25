@@ -633,7 +633,7 @@ class Qwen3_5DecoderLayer(GradientCheckpointingLayer):
 
 class Qwen3_5PreTrainedModel(Qwen3NextPreTrainedModel):
     config: Qwen3_5Config
-    _no_split_modules = ["Qwen3_5DecoderLayer", "Qwen3_5VisionBlock"]
+    _no_split_modules = ["Qwen3_5DecoderLayer", "Qwen3_5VisionBlock", "Qwen3_5MTPLayer"]
     _can_record_outputs = {
         "hidden_states": Qwen3_5DecoderLayer,
         "attentions": Qwen3_5Attention,
@@ -896,7 +896,7 @@ class Qwen3_5Model(Qwen3VLModel):
 
 class Qwen3_5ForCausalLM(Qwen3ForCausalLM):
     config: Qwen3_5TextConfig
-    _keys_to_ignore_on_load_unexpected = [r"^model.visual.*"]
+    _keys_to_ignore_on_load_unexpected = [r"^mtp.*", r"^model.visual.*"]
 
     def __init__(self, config):
         super().__init__(config)
@@ -927,7 +927,7 @@ class Qwen3_5ForCausalLM(Qwen3ForCausalLM):
             (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
         output_mtp_loss (`bool`, *optional*):
             Whether to return the MTP auxiliary loss. When `True`, the MTP loss is computed and returned in the
-            `aux_loss` field of the output. If `labels` are provided, the MTP loss (weighted by `mtp_loss_weight`)
+            `mtp_loss` field of the output. If `labels` are provided, the MTP loss (weighted by `mtp_loss_weight`)
             is also added to the main loss. If not specified, defaults to `config.output_mtp_loss`.
 
         Example:
@@ -967,7 +967,13 @@ class Qwen3_5ForCausalLM(Qwen3ForCausalLM):
         if labels is not None:
             loss = self.loss_function(logits=logits, labels=labels, vocab_size=self.config.vocab_size, **kwargs)
 
-        if output_mtp_loss and getattr(self.config, "mtp_num_hidden_layers", 0) > 0 and hasattr(self, "mtp"):
+        if (
+            output_mtp_loss
+            and labels is not None
+            and input_ids is not None
+            and getattr(self.config, "mtp_num_hidden_layers", 0) > 0
+            and hasattr(self, "mtp")
+        ):
             mtp_loss = self._compute_mtp_loss(
                 input_ids=input_ids,
                 main_hidden_states=hidden_states,
@@ -975,7 +981,7 @@ class Qwen3_5ForCausalLM(Qwen3ForCausalLM):
                 attention_mask=attention_mask,
                 position_ids=position_ids,
             )
-            if labels is not None and loss is not None:
+            if loss is not None:
                 mtp_weight = getattr(self.config, "mtp_loss_weight", 0.0)
                 loss = loss + mtp_weight * mtp_loss
 
@@ -1070,7 +1076,7 @@ class Qwen3_5ForConditionalGeneration(Qwen3VLForConditionalGeneration):
             **kwargs,
         )
 
-        hidden_states = outputs[0]
+        hidden_states = outputs.last_hidden_state
         slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
         logits = self.lm_head(hidden_states[:, slice_indices, :])
 
@@ -1079,7 +1085,13 @@ class Qwen3_5ForConditionalGeneration(Qwen3VLForConditionalGeneration):
         if labels is not None:
             loss = self.loss_function(logits=logits, labels=labels, vocab_size=self.config.text_config.vocab_size)
 
-        if output_mtp_loss and getattr(self.config, "mtp_num_hidden_layers", 0) > 0 and hasattr(self, "mtp"):
+        if (
+            output_mtp_loss
+            and labels is not None
+            and input_ids is not None
+            and getattr(self.config, "mtp_num_hidden_layers", 0) > 0
+            and hasattr(self, "mtp")
+        ):
             mtp_loss = self._compute_mtp_loss(
                 input_ids=input_ids,
                 main_hidden_states=hidden_states,
@@ -1087,7 +1099,7 @@ class Qwen3_5ForConditionalGeneration(Qwen3VLForConditionalGeneration):
                 attention_mask=attention_mask,
                 position_ids=position_ids,
             )
-            if labels is not None and loss is not None:
+            if loss is not None:
                 mtp_weight = getattr(self.config, "mtp_loss_weight", 0.0)
                 loss = loss + mtp_weight * mtp_loss
 
