@@ -108,7 +108,14 @@ def get_tool_call_config(processor, model: "PreTrainedModel") -> dict | None:
         schema = response_schema["properties"]["tool_calls"]
     else:
         # Fallback: known model families without full tokenizer config
-        fallback = next((v for k, v in _TOOL_CALL_FALLBACKS.items() if k in model.config.model_type), None)
+        fallback = next(
+            (
+                v
+                for k, v in _TOOL_CALL_FALLBACKS.items()
+                if k in model.config.model_type
+            ),
+            None,
+        )
         if fallback is None:
             return None
         stc, etc, schema = fallback["stc"], fallback["etc"], fallback["schema"]
@@ -131,7 +138,9 @@ def _normalize_tool_call(tool_call: dict) -> dict:
     arguments = function.get("arguments", {})
     return {
         "name": function["name"],
-        "arguments": json.dumps(arguments) if not isinstance(arguments, str) else arguments,
+        "arguments": (
+            json.dumps(arguments) if not isinstance(arguments, str) else arguments
+        ),
     }
 
 
@@ -153,7 +162,7 @@ def parse_tool_calls(processor, generated_ids, schema: dict) -> list[dict] | Non
     if not isinstance(parsed, list):
         parsed = [parsed]
     tool_calls = [_normalize_tool_call(tool_call) for tool_call in parsed]
-    return tool_calls if tool_calls else None
+    return tool_calls or None
 
 
 class DownloadAggregator:
@@ -330,7 +339,11 @@ class DirectStreamer:
                 self._inside_tool_call = False
 
             text = self._decode_stream.step(self._tokenizer, token_id)
-            if text is not None and not self._inside_tool_call and token_id != self._etc_id:
+            if (
+                text is not None
+                and not self._inside_tool_call
+                and token_id != self._etc_id
+            ):
                 self._loop.call_soon_threadsafe(self._queue.put_nowait, text)
 
     def end(self) -> None:
@@ -398,7 +411,11 @@ class CBStreamer:
                 self._inside_tool_call = False
 
             text = self._decode_stream.step(self._tokenizer, token_id)
-            if text is not None and not self._inside_tool_call and token_id != self._etc_id:
+            if (
+                text is not None
+                and not self._inside_tool_call
+                and token_id != self._etc_id
+            ):
                 self._queue.put_nowait(text)
 
     def end(self) -> None:
@@ -552,7 +569,12 @@ class GenerateManager(BaseGenerateManager):
         # ProcessorMixin exposes the fast tokenizer as .tokenizer; PreTrainedTokenizerFast is already one.
         rust_tokenizer = getattr(processor, "tokenizer", processor)._tokenizer  # type: ignore[union-attr]
         streamer = DirectStreamer(rust_tokenizer, loop, queue, tool_config=tool_config)
-        gen_kwargs = {**inputs, "streamer": streamer, "generation_config": gen_config, "tokenizer": processor}
+        gen_kwargs = {
+            **inputs,
+            "streamer": streamer,
+            "generation_config": gen_config,
+            "tokenizer": processor,
+        }
         if hasattr(model, "has_talker"):
             gen_kwargs["generation_mode"] = "text"
 
@@ -578,7 +600,11 @@ class GenerateManager(BaseGenerateManager):
         """Run generation to completion via ``model.generate()`` on the inference thread."""
         # Multimodal models (e.g. Qwen2.5-Omni) may generate audio alongside text by default;
         # force text-only output since the serve layer only handles text
-        generate_kwargs = {**inputs, "generation_config": gen_config, "tokenizer": processor}
+        generate_kwargs = {
+            **inputs,
+            "generation_config": gen_config,
+            "tokenizer": processor,
+        }
         if hasattr(model, "has_talker"):
             generate_kwargs["generation_mode"] = "text"
         sequences = await self.async_submit(model.generate, **generate_kwargs)
@@ -662,7 +688,14 @@ class CBGenerateManager(BaseGenerateManager):
         )
         # ProcessorMixin exposes the fast tokenizer as .tokenizer; PreTrainedTokenizerFast is already one.
         rust_tokenizer = getattr(processor, "tokenizer", processor)._tokenizer  # type: ignore[union-attr]
-        streamer = CBStreamer(self._cb, request_id, rust_tokenizer, loop, text_queue, tool_config=tool_config)
+        streamer = CBStreamer(
+            self._cb,
+            request_id,
+            rust_tokenizer,
+            loop,
+            text_queue,
+            tool_config=tool_config,
+        )
 
         # Register a direct callback: the dispatcher calls this on the event loop with each GenerationOutput.
         # This decodes tokens and pushes text straight to the SSE text_queue
@@ -712,7 +745,9 @@ class CBGenerateManager(BaseGenerateManager):
         )
         result = await future
         if result is None:
-            raise RuntimeError(f"CB manager stopped before producing a result for {request_id}")
+            raise RuntimeError(
+                f"CB manager stopped before producing a result for {request_id}"
+            )
         generated_ids = result.generated_tokens
         text = processor.decode(generated_ids, skip_special_tokens=True)
         return text, input_len, generated_ids
@@ -756,7 +791,9 @@ class GenerationState:
         self._cb_manager: CBGenerateManager | None = None
         self._cb_model_id: str | None = None
 
-    def use_continuous_batching(self, model: "PreTrainedModel", modality: Modality) -> bool:
+    def use_continuous_batching(
+        self, model: "PreTrainedModel", modality: Modality
+    ) -> bool:
         """Check if continuous batching can be used for this model and modality.
 
         Args:
@@ -836,9 +873,14 @@ class BaseHandler:
 
         input_keys = set(body.keys())
         if self._valid_params_class is not None:
-            unexpected = input_keys - getattr(self._valid_params_class, "__mutable_keys__", set())
+            unexpected = input_keys - getattr(
+                self._valid_params_class, "__mutable_keys__", set()
+            )
             if unexpected:
-                raise HTTPException(status_code=422, detail=f"Unexpected fields in the request: {unexpected}")
+                raise HTTPException(
+                    status_code=422,
+                    detail=f"Unexpected fields in the request: {unexpected}",
+                )
         unused = input_keys & self._unused_fields
         if unused:
             logger.warning_once(f"Ignoring unsupported fields in the request: {unused}")
@@ -850,7 +892,9 @@ class BaseHandler:
             return chunk if chunk.startswith("data: ") else f"data: {chunk}\n\n"
         return f"data: {chunk.model_dump_json(exclude_none=True)}\n\n"
 
-    def _resolve_model(self, body: dict) -> tuple[str, "PreTrainedModel", "ProcessorMixin | PreTrainedTokenizerFast"]:
+    def _resolve_model(
+        self, body: dict
+    ) -> tuple[str, "PreTrainedModel", "ProcessorMixin | PreTrainedTokenizerFast"]:
         """Apply force_model, load model + processor.
 
         Returns ``(model_id, model, processor)``.
@@ -862,7 +906,9 @@ class BaseHandler:
             if requested is not None and requested != self.model_manager.force_model:
                 raise HTTPException(
                     status_code=400,
-                    detail=(f"Server is pinned to '{self.model_manager.force_model}'; requested '{requested}'."),
+                    detail=(
+                        f"Server is pinned to '{self.model_manager.force_model}'; requested '{requested}'."
+                    ),
                 )
             body["model"] = self.model_manager.force_model
 
@@ -872,7 +918,10 @@ class BaseHandler:
         return model_id, model, processor
 
     def _build_generation_config(
-        self, body: dict, model_generation_config: "GenerationConfig", use_cb: bool = False
+        self,
+        body: dict,
+        model_generation_config: "GenerationConfig",
+        use_cb: bool = False,
     ) -> "GenerationConfig":
         """Build a GenerationConfig from shared params (temperature, top_p, seed, generation_config JSON).
 
@@ -894,10 +943,15 @@ class BaseHandler:
         from transformers import GenerationConfig
 
         if body.get("generation_config") is not None:
-            generation_config = GenerationConfig(**json.loads(body["generation_config"]))
+            generation_config = GenerationConfig(
+                **json.loads(body["generation_config"])
+            )
         else:
             generation_config = copy.deepcopy(model_generation_config)
-            if generation_config.max_new_tokens is None or generation_config.max_new_tokens < 1024:
+            if (
+                generation_config.max_new_tokens is None
+                or generation_config.max_new_tokens < 1024
+            ):
                 generation_config.max_new_tokens = 1024
 
         if body.get("temperature") is not None:
@@ -910,7 +964,10 @@ class BaseHandler:
             set_torch_seed(body["seed"])
 
         # --compile flag: use static cache + torch.compile for faster decode
-        if self.generation_state._compile and generation_config.cache_implementation is None:
+        if (
+            self.generation_state._compile
+            and generation_config.cache_implementation is None
+        ):
             generation_config.cache_implementation = "static"
 
         # CB manages its own paged KV cache
@@ -922,7 +979,9 @@ class BaseHandler:
         return generation_config
 
     @staticmethod
-    def get_processor_inputs_from_messages(messages: list[dict], modality: Modality) -> list[dict]:
+    def get_processor_inputs_from_messages(
+        messages: list[dict], modality: Modality
+    ) -> list[dict]:
         """Convert OpenAI-format messages to the format expected by HF processors.
 
         All modalities extract text. VLM additionally handles ``image_url`` and ``video_url``.
@@ -949,7 +1008,9 @@ class BaseHandler:
 
             # When tool_calls are present, ignore content — it's either empty or contains
             # raw tool call markup that would confuse the chat template if rendered.
-            raw_content = [] if "tool_calls" in message else (message.get("content") or [])
+            raw_content = (
+                [] if "tool_calls" in message else (message.get("content") or [])
+            )
             if isinstance(raw_content, str):
                 raw_content = [{"type": "text", "text": raw_content}]
 
@@ -959,7 +1020,10 @@ class BaseHandler:
                 if content_type in ("text", "input_text", "output_text"):
                     parsed["content"].append({"type": "text", "text": content["text"]})
                 # Image: chat completions ("image_url") and Responses API ("input_image")
-                elif content_type in ("image_url", "input_image") and modality in (Modality.VLM, Modality.MULTIMODAL):
+                elif content_type in ("image_url", "input_image") and modality in (
+                    Modality.VLM,
+                    Modality.MULTIMODAL,
+                ):
                     # chat completions: {"image_url": {"url": "..."}}, Responses API: {"image_url": "..."}
                     url = content["image_url"]
                     if isinstance(url, dict):
@@ -968,14 +1032,27 @@ class BaseHandler:
                 # Audio: unlike images, load_audio doesn't accept raw base64 — wrap as a data URI
                 elif content_type == "input_audio" and modality == Modality.MULTIMODAL:
                     input_audio = content["input_audio"]
-                    fmt = input_audio.get("format", "wav") if isinstance(input_audio, dict) else "wav"
+                    fmt = (
+                        input_audio.get("format", "wav")
+                        if isinstance(input_audio, dict)
+                        else "wav"
+                    )
                     audio_b64 = input_audio["data"]
-                    parsed["content"].append({"type": "audio", "url": f"data:audio/{fmt};base64,{audio_b64}"})
+                    parsed["content"].append(
+                        {"type": "audio", "url": f"data:audio/{fmt};base64,{audio_b64}"}
+                    )
                 # Extensions (not part of the OpenAI API standard)
-                elif content_type == "video_url" and modality in (Modality.VLM, Modality.MULTIMODAL):
-                    parsed["content"].append({"type": "video", "url": content["video_url"]["url"]})
+                elif content_type == "video_url" and modality in (
+                    Modality.VLM,
+                    Modality.MULTIMODAL,
+                ):
+                    parsed["content"].append(
+                        {"type": "video", "url": content["video_url"]["url"]}
+                    )
                 elif content_type == "audio_url" and modality == Modality.MULTIMODAL:
-                    parsed["content"].append({"type": "audio", "url": content["audio_url"]["url"]})
+                    parsed["content"].append(
+                        {"type": "audio", "url": content["audio_url"]["url"]}
+                    )
 
             # LLMs expect plain text, not a list of content parts
             if modality == Modality.LLM:

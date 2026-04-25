@@ -34,7 +34,6 @@ if is_serve_available():
     from openai.types import Completion, CompletionChoice, CompletionUsage
     from openai.types.completion_create_params import CompletionCreateParamsBase
 
-
 from .utils import BaseGenerateManager, BaseHandler, _StreamError
 
 
@@ -45,14 +44,19 @@ if TYPE_CHECKING:
 # --- FINAL ROBUST PATCH ---
 if "CompletionCreateParamsBase" in globals():
     # If the real OpenAI class was successfully imported, use it
-    class TransformersTextCompletionCreateParams(CompletionCreateParamsBase, total=False):
+    class TransformersTextCompletionCreateParams(
+        CompletionCreateParamsBase, total=False
+    ):
         generation_config: str
         seed: int
+
 else:
     # Fallback to standard TypedDict if OpenAI types are missing
     class TransformersTextCompletionCreateParams(TypedDict, total=False):
         generation_config: str
         seed: int
+
+
 # --- END PATCH ---
 
 # Fields accepted by the OpenAI schema but not yet supported.
@@ -81,7 +85,9 @@ class CompletionHandler(BaseHandler):
     _valid_params_class = TransformersTextCompletionCreateParams
     _unused_fields = UNUSED_LEGACY_COMPLETION_FIELDS
 
-    async def handle_request(self, body: dict, request_id: str) -> "StreamingResponse | JSONResponse":
+    async def handle_request(
+        self, body: dict, request_id: str
+    ) -> "StreamingResponse | JSONResponse":
         """Validate the request, load the model, and dispatch to streaming or non-streaming.
 
         Args:
@@ -108,7 +114,9 @@ class CompletionHandler(BaseHandler):
         if not use_cb:
             inputs = inputs.to(model.device)
 
-        gen_config = self._build_generation_config(body, model.generation_config, use_cb=use_cb)
+        gen_config = self._build_generation_config(
+            body, model.generation_config, use_cb=use_cb
+        )
         if use_cb:
             gen_manager.init_cb(model, gen_config)
 
@@ -116,10 +124,26 @@ class CompletionHandler(BaseHandler):
         streaming = body.get("stream")
 
         if streaming:
-            return self._streaming(request_id, model, processor, model_id, inputs, gen_config, gen_manager, suffix)
+            return self._streaming(
+                request_id,
+                model,
+                processor,
+                model_id,
+                inputs,
+                gen_config,
+                gen_manager,
+                suffix,
+            )
         else:
             return await self._non_streaming(
-                request_id, model, processor, model_id, inputs, gen_config, gen_manager, suffix
+                request_id,
+                model,
+                processor,
+                model_id,
+                inputs,
+                gen_config,
+                gen_manager,
+                suffix,
             )
 
     # ----- streaming -----
@@ -136,9 +160,13 @@ class CompletionHandler(BaseHandler):
         suffix: str | None = None,
     ) -> "StreamingResponse":
         """Stream tokens as SSE."""
-        queue, streamer = gen_manager.generate_streaming(model, processor, inputs, gen_config, request_id=request_id)
+        queue, streamer = gen_manager.generate_streaming(
+            model, processor, inputs, gen_config, request_id=request_id
+        )
         input_ids = inputs["input_ids"]
-        input_len = len(input_ids) if isinstance(input_ids, list) else input_ids.shape[-1]
+        input_len = (
+            len(input_ids) if isinstance(input_ids, list) else input_ids.shape[-1]
+        )
 
         async def sse_gen() -> AsyncGenerator[str, None]:
             try:
@@ -162,12 +190,17 @@ class CompletionHandler(BaseHandler):
                             yield "".join(sse_parts)
                             return
 
-                        sse_parts.append(self._build_chunk_sse(request_id, model_id, text=text))
+                        sse_parts.append(
+                            self._build_chunk_sse(request_id, model_id, text=text)
+                        )
 
                     if sse_parts:
                         yield "".join(sse_parts)
 
-                hit_max = gen_config.max_new_tokens is not None and streamer.total_tokens >= gen_config.max_new_tokens
+                hit_max = (
+                    gen_config.max_new_tokens is not None
+                    and streamer.total_tokens >= gen_config.max_new_tokens
+                )
                 finish_reason = "length" if hit_max else "stop"
 
                 if suffix is not None:
@@ -177,7 +210,9 @@ class CompletionHandler(BaseHandler):
                     completion_tokens=streamer.total_tokens,
                     total_tokens=input_len + streamer.total_tokens,
                 )
-                yield self._build_chunk_sse(request_id, model_id, finish_reason=finish_reason, usage=usage)
+                yield self._build_chunk_sse(
+                    request_id, model_id, finish_reason=finish_reason, usage=usage
+                )
             except (GeneratorExit, asyncio.CancelledError):
                 streamer.cancel()
                 raise
@@ -206,7 +241,10 @@ class CompletionHandler(BaseHandler):
             text = text + suffix
 
         completion_tokens = len(generated_ids)
-        hit_max = gen_config.max_new_tokens is not None and completion_tokens >= gen_config.max_new_tokens
+        hit_max = (
+            gen_config.max_new_tokens is not None
+            and completion_tokens >= gen_config.max_new_tokens
+        )
         finish_reason = "length" if hit_max else "stop"
 
         usage = CompletionUsage(
@@ -231,7 +269,9 @@ class CompletionHandler(BaseHandler):
             usage=usage,
         )
 
-        return JSONResponse(result.model_dump(exclude_none=True), media_type="application/json")
+        return JSONResponse(
+            result.model_dump(exclude_none=True), media_type="application/json"
+        )
 
     # ----- helpers -----
 
@@ -268,14 +308,23 @@ class CompletionHandler(BaseHandler):
 
     # ----- generation config -----
 
-    def _build_generation_config(self, body: dict, model_generation_config: "GenerationConfig", use_cb: bool = False):
+    def _build_generation_config(
+        self,
+        body: dict,
+        model_generation_config: "GenerationConfig",
+        use_cb: bool = False,
+    ):
         """Apply legacy completion params (``max_tokens``, ``frequency_penalty``, ``stop``) on top of base config."""
-        generation_config = super()._build_generation_config(body, model_generation_config, use_cb=use_cb)
+        generation_config = super()._build_generation_config(
+            body, model_generation_config, use_cb=use_cb
+        )
 
         if body.get("max_tokens") is not None:
             generation_config.max_new_tokens = int(body["max_tokens"])
         if body.get("frequency_penalty") is not None:
-            generation_config.repetition_penalty = 1.0 + float(body["frequency_penalty"])
+            generation_config.repetition_penalty = 1.0 + float(
+                body["frequency_penalty"]
+            )
         if body.get("stop") is not None:
             generation_config.stop_strings = body["stop"]
 

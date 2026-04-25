@@ -25,7 +25,9 @@ from ...utils.import_utils import is_serve_available
 if is_serve_available():
     from fastapi import HTTPException, Request
     from fastapi.responses import JSONResponse, StreamingResponse
-    from openai.types.audio.transcription_create_params import TranscriptionCreateParamsBase
+    from openai.types.audio.transcription_create_params import (
+        TranscriptionCreateParamsBase,
+    )
 
 from .model_manager import ModelManager
 from .utils import DirectStreamer, GenerateManager, GenerationState, _StreamError
@@ -40,13 +42,20 @@ logger = logging.get_logger(__name__)
 
 # --- FINAL ROBUST PATCH ---
 if "TranscriptionCreateParamsBase" in globals():
-    class TransformersTranscriptionCreateParams(TranscriptionCreateParamsBase, total=False):
+
+    class TransformersTranscriptionCreateParams(
+        TranscriptionCreateParamsBase, total=False
+    ):
         generation_config: str
         seed: int
+
 else:
+
     class TransformersTranscriptionCreateParams(TypedDict, total=False):
         generation_config: str
         seed: int
+
+
 # --- END PATCH ---
 
 
@@ -83,14 +92,21 @@ class TranscriptionHandler:
 
     def _validate_request(self, form_keys: set[str]) -> None:
         """Validate transcription request fields."""
-        unexpected = form_keys - getattr(TransformersTranscriptionCreateParams, "__mutable_keys__", set())
+        unexpected = form_keys - getattr(
+            TransformersTranscriptionCreateParams, "__mutable_keys__", set()
+        )
         if unexpected:
-            raise HTTPException(status_code=422, detail=f"Unexpected fields in the request: {unexpected}")
+            raise HTTPException(
+                status_code=422,
+                detail=f"Unexpected fields in the request: {unexpected}",
+            )
         unused = form_keys & UNUSED_TRANSCRIPTION_FIELDS
         if unused:
             logger.warning_once(f"Ignoring unsupported fields in the request: {unused}")
 
-    async def handle_request(self, request: Request) -> JSONResponse | StreamingResponse:
+    async def handle_request(
+        self, request: Request
+    ) -> JSONResponse | StreamingResponse:
         """Parse multipart form, run transcription, return result.
 
         Args:
@@ -103,7 +119,9 @@ class TranscriptionHandler:
         from transformers.utils.import_utils import is_librosa_available, is_multipart_available
 
         if not is_librosa_available():
-            raise ImportError("Missing librosa dependency for audio transcription. Install with `pip install librosa`")
+            raise ImportError(
+                "Missing librosa dependency for audio transcription. Install with `pip install librosa`"
+            )
         if not is_multipart_available():
             raise ImportError(
                 "Missing python-multipart dependency for file uploads. Install with `pip install python-multipart`"
@@ -113,38 +131,59 @@ class TranscriptionHandler:
             self._validate_request(set(form.keys()))
             file_field = form["file"]
             if isinstance(file_field, str):
-                raise HTTPException(status_code=422, detail="Expected file upload, got string")
+                raise HTTPException(
+                    status_code=422, detail="Expected file upload, got string"
+                )
             file_bytes = await file_field.read()
             model = form["model"]
             if not isinstance(model, str):
-                raise HTTPException(status_code=422, detail="Expected model name as string")
+                raise HTTPException(
+                    status_code=422, detail="Expected model name as string"
+                )
             stream = str(form.get("stream", "false")).lower() == "true"
 
         model_id_and_revision = self.model_manager.process_model_name(model)
-        audio_model, audio_processor = self.model_manager.load_model_and_processor(model_id_and_revision)
+        audio_model, audio_processor = self.model_manager.load_model_and_processor(
+            model_id_and_revision
+        )
         base_manager = self.generation_state.get_manager(model_id_and_revision)
         if not isinstance(base_manager, GenerateManager):
-            raise HTTPException(status_code=400, detail="Audio transcription requires sequential generation (not CB)")
+            raise HTTPException(
+                status_code=400,
+                detail="Audio transcription requires sequential generation (not CB)",
+            )
         gen_manager = base_manager
-        audio_inputs = self._prepare_audio_inputs(file_bytes, audio_processor, audio_model)
+        audio_inputs = self._prepare_audio_inputs(
+            file_bytes, audio_processor, audio_model
+        )
 
         if stream:
-            return self._streaming(gen_manager, audio_model, audio_processor, audio_inputs)
-        return await self._non_streaming(gen_manager, audio_model, audio_processor, audio_inputs)
+            return self._streaming(
+                gen_manager, audio_model, audio_processor, audio_inputs
+            )
+        return await self._non_streaming(
+            gen_manager, audio_model, audio_processor, audio_inputs
+        )
 
     @staticmethod
     def _prepare_audio_inputs(
-        file_bytes: bytes, audio_processor: "ProcessorMixin", audio_model: "PreTrainedModel"
+        file_bytes: bytes,
+        audio_processor: "ProcessorMixin",
+        audio_model: "PreTrainedModel",
     ) -> dict:
         """Load audio bytes and convert to model inputs."""
         import librosa
 
         sampling_rate = audio_processor.feature_extractor.sampling_rate
-        audio_array, _ = librosa.load(io.BytesIO(file_bytes), sr=sampling_rate, mono=True)
-        audio_inputs = audio_processor(audio_array, sampling_rate=sampling_rate, return_tensors="pt").to(
-            audio_model.device
+        audio_array, _ = librosa.load(
+            io.BytesIO(file_bytes), sr=sampling_rate, mono=True
         )
-        audio_inputs["input_features"] = audio_inputs["input_features"].to(audio_model.dtype)
+        audio_inputs = audio_processor(
+            audio_array, sampling_rate=sampling_rate, return_tensors="pt"
+        ).to(audio_model.device)
+        audio_inputs["input_features"] = audio_inputs["input_features"].to(
+            audio_model.dtype
+        )
         return audio_inputs
 
     async def _non_streaming(
@@ -159,7 +198,9 @@ class TranscriptionHandler:
         # generate_non_streaming()
         from openai.types.audio import Transcription
 
-        generated_ids = await gen_manager.async_submit(audio_model.generate, **audio_inputs)
+        generated_ids = await gen_manager.async_submit(
+            audio_model.generate, **audio_inputs
+        )
         text = audio_processor.batch_decode(generated_ids, skip_special_tokens=True)[0]
         return JSONResponse(Transcription(text=text).model_dump(exclude_none=True))
 
@@ -174,10 +215,16 @@ class TranscriptionHandler:
         # differ from text.
         import asyncio
 
-        tokenizer = audio_processor.tokenizer if hasattr(audio_processor, "tokenizer") else audio_processor
+        tokenizer = (
+            audio_processor.tokenizer
+            if hasattr(audio_processor, "tokenizer")
+            else audio_processor
+        )
         loop = asyncio.get_running_loop()
         queue: asyncio.Queue = asyncio.Queue()
-        streamer = DirectStreamer(tokenizer._tokenizer, loop, queue, skip_special_tokens=True)
+        streamer = DirectStreamer(
+            tokenizer._tokenizer, loop, queue, skip_special_tokens=True
+        )
         gen_kwargs = {**audio_inputs, "streamer": streamer}
 
         def _run():

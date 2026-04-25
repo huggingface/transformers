@@ -23,7 +23,7 @@ from collections.abc import AsyncGenerator
 from typing import TYPE_CHECKING
 
 from ...utils import logging
-from ...utils.import_utils import is_serve_available
+from .utils import BaseGenerateManager, BaseHandler, Modality, _StreamError, get_tool_call_config, parse_tool_calls
 
 
 # --- BRUTE FORCE IMPORT PATCH ---
@@ -35,40 +35,57 @@ try:
     from openai.types.chat.chat_completion_chunk import Choice as ChoiceChunk
     from openai.types.chat.completion_create_params import CompletionCreateParamsStreaming
     from openai.types.completion_usage import CompletionUsage
-    
+
     parent_class = CompletionCreateParamsStreaming
 except ImportError:
     from typing import TypedDict
-    
+
     class _DummyDict(dict):
-        def __getattr__(self, name): return None
-        def __setattr__(self, name, value): self[name] = value
-        
-    class ChatCompletion(_DummyDict): pass
-    class ChatCompletionMessage(_DummyDict): pass
-    class ChatCompletionMessageToolCall(_DummyDict): pass
-    class Choice(_DummyDict): pass
-    class ChatCompletionChunk(_DummyDict): pass
-    class ChoiceDelta(_DummyDict): pass
-    class ChoiceDeltaToolCall(_DummyDict): pass
-    class ChoiceChunk(_DummyDict): pass
-    class CompletionCreateParamsStreaming(_DummyDict): pass
-    class CompletionUsage(_DummyDict): pass
-    
+        def __getattr__(self, name):
+            return None
+
+        def __setattr__(self, name, value):
+            self[name] = value
+
+    class ChatCompletion(_DummyDict):
+        pass
+
+    class ChatCompletionMessage(_DummyDict):
+        pass
+
+    class ChatCompletionMessageToolCall(_DummyDict):
+        pass
+
+    class Choice(_DummyDict):
+        pass
+
+    class ChatCompletionChunk(_DummyDict):
+        pass
+
+    class ChoiceDelta(_DummyDict):
+        pass
+
+    class ChoiceDeltaToolCall(_DummyDict):
+        pass
+
+    class ChoiceChunk(_DummyDict):
+        pass
+
+    class CompletionCreateParamsStreaming(_DummyDict):
+        pass
+
+    class CompletionUsage(_DummyDict):
+        pass
+
     parent_class = TypedDict
+
 
 class TransformersCompletionCreateParamsStreaming(parent_class, total=False):
     generation_config: str
     seed: int
+
+
 # --- END PATCH ---
-from .utils import (
-    BaseGenerateManager,
-    BaseHandler,
-    Modality,
-    _StreamError,
-    get_tool_call_config,
-    parse_tool_calls,
-)
 
 
 if TYPE_CHECKING:
@@ -114,7 +131,9 @@ class ChatCompletionHandler(BaseHandler):
     _valid_params_class = TransformersCompletionCreateParamsStreaming
     _unused_fields = UNUSED_CHAT_COMPLETION_FIELDS
 
-    async def handle_request(self, body: dict, request_id: str) -> StreamingResponse | JSONResponse:
+    async def handle_request(
+        self, body: dict, request_id: str
+    ) -> StreamingResponse | JSONResponse:
         """Validate the request, load the model, and dispatch to streaming or non-streaming.
 
         Args:
@@ -131,12 +150,16 @@ class ChatCompletionHandler(BaseHandler):
         use_cb = self.generation_state.use_continuous_batching(model, modality)
         logger.warning(f"[Request received] Model: {model_id}, CB: {use_cb}")
         gen_manager = self.generation_state.get_manager(model_id, use_cb=use_cb)
-        processor_inputs = self.get_processor_inputs_from_messages(body["messages"], modality)
+        processor_inputs = self.get_processor_inputs_from_messages(
+            body["messages"], modality
+        )
 
         has_video = any(
             c.get("type") == "video"
             for msg in processor_inputs
-            for c in (msg.get("content") if isinstance(msg.get("content"), list) else [])
+            for c in (
+                msg.get("content") if isinstance(msg.get("content"), list) else []
+            )
         )
         # Default to 32 frames for video (Gemma 4 default); some processors load all frames otherwise
         chat_template_kwargs = {}
@@ -155,12 +178,16 @@ class ChatCompletionHandler(BaseHandler):
         if not use_cb:
             inputs = inputs.to(model.device)  # type: ignore[union-attr]
 
-        gen_config = self._build_generation_config(body, model.generation_config, use_cb=use_cb)
+        gen_config = self._build_generation_config(
+            body, model.generation_config, use_cb=use_cb
+        )
         # TODO: remove when CB supports per-request generation config
         if use_cb:
             gen_manager.init_cb(model, gen_config)
 
-        tool_config = get_tool_call_config(processor, model) if body.get("tools") else None
+        tool_config = (
+            get_tool_call_config(processor, model) if body.get("tools") else None
+        )
 
         streaming = body.get("stream")
         if streaming:
@@ -210,11 +237,15 @@ class ChatCompletionHandler(BaseHandler):
         )
         input_ids = inputs["input_ids"]
         # CB returns plain lists, regular path returns tensors
-        input_len = len(input_ids) if isinstance(input_ids, list) else input_ids.shape[-1]
+        input_len = (
+            len(input_ids) if isinstance(input_ids, list) else input_ids.shape[-1]
+        )
 
         async def sse_gen() -> AsyncGenerator[str, None]:
             try:
-                yield self._build_chunk_sse(request_id, role="assistant", model=model_id)
+                yield self._build_chunk_sse(
+                    request_id, role="assistant", model=model_id
+                )
 
                 done = False
                 while not done:
@@ -236,7 +267,11 @@ class ChatCompletionHandler(BaseHandler):
                             yield "".join(sse_parts)
                             return
 
-                        sse_parts.append(self._build_chunk_sse(request_id, model=model_id, content=text))
+                        sse_parts.append(
+                            self._build_chunk_sse(
+                                request_id, model=model_id, content=text
+                            )
+                        )
 
                     if sse_parts:
                         yield "".join(sse_parts)
@@ -245,7 +280,9 @@ class ChatCompletionHandler(BaseHandler):
                 # because the full token sequence is needed for reliable parsing.
                 has_tool_calls = False
                 if tool_config:
-                    parsed = parse_tool_calls(processor, streamer.generated_token_ids, tool_config["schema"])
+                    parsed = parse_tool_calls(
+                        processor, streamer.generated_token_ids, tool_config["schema"]
+                    )
                     if parsed:
                         has_tool_calls = True
                         for i, tc in enumerate(parsed):
@@ -257,12 +294,18 @@ class ChatCompletionHandler(BaseHandler):
                                         index=i,
                                         type="function",
                                         id=f"{request_id}_tool_call_{i}",
-                                        function={"name": tc["name"], "arguments": tc["arguments"]},
+                                        function={
+                                            "name": tc["name"],
+                                            "arguments": tc["arguments"],
+                                        },
                                     )
                                 ],
                             )
 
-                hit_max = gen_config.max_new_tokens is not None and streamer.total_tokens >= gen_config.max_new_tokens
+                hit_max = (
+                    gen_config.max_new_tokens is not None
+                    and streamer.total_tokens >= gen_config.max_new_tokens
+                )
                 if has_tool_calls:
                     finish_reason = "tool_calls"
                 elif hit_max:
@@ -306,7 +349,10 @@ class ChatCompletionHandler(BaseHandler):
             model, processor, inputs, gen_config, request_id=request_id
         )
 
-        hit_max = gen_config.max_new_tokens is not None and len(generated_ids) >= gen_config.max_new_tokens
+        hit_max = (
+            gen_config.max_new_tokens is not None
+            and len(generated_ids) >= gen_config.max_new_tokens
+        )
         completion_tokens = len(generated_ids)
         usage = CompletionUsage(
             prompt_tokens=input_len,
@@ -348,17 +394,28 @@ class ChatCompletionHandler(BaseHandler):
 
     # ----- helpers -----
 
-    def _build_generation_config(self, body: dict, model_generation_config: "GenerationConfig", use_cb: bool = False):
+    def _build_generation_config(
+        self,
+        body: dict,
+        model_generation_config: "GenerationConfig",
+        use_cb: bool = False,
+    ):
         """Apply Chat Completions params (``max_tokens``, ``frequency_penalty``, ``logit_bias``,
         ``stop``) on top of the base generation config."""
-        generation_config = super()._build_generation_config(body, model_generation_config, use_cb=use_cb)
+        generation_config = super()._build_generation_config(
+            body, model_generation_config, use_cb=use_cb
+        )
 
         if body.get("max_tokens") is not None:
             generation_config.max_new_tokens = int(body["max_tokens"])
         if body.get("frequency_penalty") is not None:
-            generation_config.repetition_penalty = 1.0 + float(body["frequency_penalty"])
+            generation_config.repetition_penalty = 1.0 + float(
+                body["frequency_penalty"]
+            )
         if body.get("logit_bias") is not None:
-            generation_config.sequence_bias = {(int(k),): v for k, v in body["logit_bias"].items()}
+            generation_config.sequence_bias = {
+                (int(k),): v for k, v in body["logit_bias"].items()
+            }
         if body.get("stop") is not None:
             generation_config.stop_strings = body["stop"]
 
@@ -388,7 +445,9 @@ class ChatCompletionHandler(BaseHandler):
         Returns:
             `dict`: Serialized ``ChatCompletion`` ready for JSON response.
         """
-        message = ChatCompletionMessage(content=content, role="assistant", tool_calls=tool_calls)
+        message = ChatCompletionMessage(
+            content=content, role="assistant", tool_calls=tool_calls
+        )
         result = ChatCompletion(
             id=request_id,
             created=int(time.time()),
@@ -435,7 +494,9 @@ class ChatCompletionHandler(BaseHandler):
             model=model,
             choices=[
                 ChoiceChunk(
-                    delta=ChoiceDelta(content=content, role=role, tool_calls=tool_calls),
+                    delta=ChoiceDelta(
+                        content=content, role=role, tool_calls=tool_calls
+                    ),
                     index=0,
                     finish_reason=finish_reason,
                 )
