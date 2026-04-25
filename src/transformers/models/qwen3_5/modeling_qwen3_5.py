@@ -39,8 +39,8 @@ from ...modeling_layers import GenericForSequenceClassification, GradientCheckpo
 from ...modeling_outputs import (
     BaseModelOutputWithPast,
     BaseModelOutputWithPooling,
+    CausalLMOutputWithPast,
     ModelOutput,
-    MoeCausalLMOutputWithPast,
 )
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
@@ -728,6 +728,10 @@ class Qwen3_5RMSNorm(nn.Module):
 
     def extra_repr(self):
         return f"{tuple(self.weight.shape)}, eps={self.eps}"
+
+
+class Qwen3_5CausalLMOutputWithPast(CausalLMOutputWithPast):
+    mtp_loss: torch.FloatTensor | None = None
 
 
 class Qwen3_5VLCausalLMOutputWithPast(Qwen3VLCausalLMOutputWithPast):
@@ -1880,7 +1884,7 @@ class Qwen3_5ForCausalLM(Qwen3_5PreTrainedModel, GenerationMixin):
         logits_to_keep: int | torch.Tensor = 0,
         output_mtp_loss: bool | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> MoeCausalLMOutputWithPast:
+    ) -> Qwen3_5CausalLMOutputWithPast:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
@@ -1940,9 +1944,9 @@ class Qwen3_5ForCausalLM(Qwen3_5PreTrainedModel, GenerationMixin):
                 mtp_weight = getattr(self.config, "mtp_loss_weight", 0.0)
                 loss = loss + mtp_weight * mtp_loss
 
-        return MoeCausalLMOutputWithPast(
+        return Qwen3_5CausalLMOutputWithPast(
             loss=loss,
-            aux_loss=mtp_loss,
+            mtp_loss=mtp_loss,
             logits=logits,
             past_key_values=outputs.past_key_values,
             hidden_states=outputs.hidden_states,
@@ -2401,5 +2405,6 @@ __all__ = [
     "Qwen3_5PreTrainedModel",
     "Qwen3_5MTPLayer",
     "Qwen3_5MTP",
+    "Qwen3_5CausalLMOutputWithPast",
     "Qwen3_5VLCausalLMOutputWithPast",
 ]
