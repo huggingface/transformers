@@ -1132,43 +1132,15 @@ class GgufModelTests(unittest.TestCase):
         EXPECTED_TEXT = "Hello Atari 2600! es un videoj"
         self.assertEqual(tokenizer.decode(out[0], skip_special_tokens=True), EXPECTED_TEXT)
 
-    def test_llama4_config_mapping(self):
-        """Test that Llama 4 GGUF config mapping is correctly registered."""
-        from transformers.integrations.ggml import GGUF_CONFIG_MAPPING
-
-        self.assertIn("llama4", GGUF_CONFIG_MAPPING)
-        mapping = GGUF_CONFIG_MAPPING["llama4"]
-
-        expected_mappings = {
-            "context_length": "max_position_embeddings",
-            "block_count": "num_hidden_layers",
-            "feed_forward_length": "intermediate_size_mlp",
-            "expert_feed_forward_length": "intermediate_size",
-            "embedding_length": "hidden_size",
-            "rope.freq_base": "rope_theta",
-            "attention.key_length": "head_dim",
-            "attention.head_count": "num_attention_heads",
-            "attention.head_count_kv": "num_key_value_heads",
-            "attention.layer_norm_rms_epsilon": "rms_norm_eps",
-            "vocab_size": "vocab_size",
-            "expert_count": "num_local_experts",
-            "expert_used_count": "num_experts_per_tok",
-            "interleave_moe_layer_step": "interleave_moe_layer_step",
-        }
-        for gguf_key, transformers_key in expected_mappings.items():
-            self.assertEqual(mapping[gguf_key], transformers_key)
-
-        self.assertIsNone(mapping["rope.dimension_count"])
-
-    def test_llama4_architecture_mapping(self):
-        """Test that Llama 4 text-only GGUFs route to GGUFLlamaConverter and Llama4TensorProcessor."""
-        from transformers.integrations.ggml import GGUF_TO_FAST_CONVERTERS, GGUFLlamaConverter
-        from transformers.modeling_gguf_pytorch_utils import TENSOR_PROCESSORS, Llama4TensorProcessor
-
-        self.assertIn("llama4_text", GGUF_TO_FAST_CONVERTERS)
-        self.assertEqual(GGUF_TO_FAST_CONVERTERS["llama4_text"], GGUFLlamaConverter)
-        self.assertIn("llama4", TENSOR_PROCESSORS)
-        self.assertEqual(TENSOR_PROCESSORS["llama4"], Llama4TensorProcessor)
+    @unittest.skipUnless(is_gguf_available("0.17.0"), "test requires gguf version >= 0.17.0")
+    def test_llama4_q2_k_l_tokenizer(self):
+        tokenizer = AutoTokenizer.from_pretrained(self.llama4_model_id, gguf_file=self.q2_k_l_llama4_model_id)
+        with tempfile.TemporaryDirectory() as tmpdirname:
+            tokenizer.save_pretrained(tmpdirname)
+            tokenizer = AutoTokenizer.from_pretrained(tmpdirname)
+            special_sentence = "สวัสดี"
+            predicted_text = tokenizer.decode(tokenizer.encode(special_sentence, return_tensors="pt")[0])
+            self.assertEqual(predicted_text, "<|begin_of_text|>" + special_sentence)
 
     @unittest.skipUnless(is_gguf_available("0.17.0"), "test requires gguf version >= 0.17.0")
     def test_llama4_q2_k_l(self):
@@ -1182,7 +1154,5 @@ class GgufModelTests(unittest.TestCase):
         text = tokenizer(self.example_text, return_tensors="pt")["input_ids"]
         out = model.generate(text, max_new_tokens=10)
 
-        # Llama 4 is large and heavily quantised; we only check that the load path works end-to-end
-        # and produces a non-empty decoded string rather than asserting exact text.
-        decoded = tokenizer.decode(out[0], skip_special_tokens=True)
-        self.assertTrue(len(decoded) > len(self.example_text))
+        EXPECTED_TEXT = "Hello, I'm here to help. What"
+        self.assertEqual(tokenizer.decode(out[0], skip_special_tokens=True), EXPECTED_TEXT)
