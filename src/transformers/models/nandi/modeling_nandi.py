@@ -369,9 +369,11 @@ class NandiModel(NandiPreTrainedModel):
         super().__init__(config)
         self.padding_idx = config.pad_token_id
         self.vocab_size = config.vocab_size
-
-        embedding_dim = config.embedding_rank if config.factorized_embedding else config.hidden_size
-        self.embed_tokens = nn.Embedding(config.vocab_size, embedding_dim, self.padding_idx)
+        self.embed_tokens = nn.Embedding(
+            config.vocab_size,
+            config.embedding_rank if config.factorized_embedding else config.hidden_size,
+            self.padding_idx,
+        )
         self.layers = nn.ModuleList(
             [NandiDecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
         )
@@ -469,8 +471,12 @@ class NandiForCausalLM(NandiPreTrainedModel, GenerationMixin):
         super().__init__(config)
         self.model = NandiModel(config)
         self.vocab_size = config.vocab_size
-        lm_head_in_features = config.embedding_rank if config.factorized_embedding else config.hidden_size
-        self.lm_head = nn.Linear(lm_head_in_features, config.vocab_size, bias=False)
+        self.lm_head = nn.Linear(
+            config.embedding_rank if config.factorized_embedding else config.hidden_size,
+            config.vocab_size,
+            bias=False,
+        )
+
         self.lm_head_proj = (
             nn.Linear(config.hidden_size, config.embedding_rank, bias=False) if config.factorized_embedding else None
         )

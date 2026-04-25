@@ -18,7 +18,6 @@ from huggingface_hub.dataclasses import strict
 
 from ...cache_utils import Cache, DynamicCache, DynamicLayer
 from ...configuration_utils import PretrainedConfig
-from ...generation import GenerationMixin
 from ...masking_utils import create_causal_mask
 from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
 from ...modeling_rope_utils import RopeParameters
@@ -153,7 +152,6 @@ class _VirtualLayerCache:
         return getattr(self._cache, name)
 
     def update(self, key_states, value_states, layer_idx, cache_kwargs=None):
-
         virtual_idx = layer_idx + self._offset
         # grow the backing cache if generate() pre-allocated fewer slots than needed
         while len(self._cache.layers) <= virtual_idx:
@@ -178,9 +176,11 @@ class NandiModel(LlamaModel):
         super().__init__(config)
         self.padding_idx = config.pad_token_id
         self.vocab_size = config.vocab_size
-        embedding_dim = config.embedding_rank if config.factorized_embedding else config.hidden_size
-
-        self.embed_tokens = nn.Embedding(config.vocab_size, embedding_dim, self.padding_idx)
+        self.embed_tokens = nn.Embedding(
+            config.vocab_size,
+            config.embedding_rank if config.factorized_embedding else config.hidden_size,
+            self.padding_idx,
+        )
         self.embedding_proj = (
             nn.Linear(config.embedding_rank, config.hidden_size, bias=False) if config.factorized_embedding else None
         )
@@ -278,11 +278,14 @@ class NandiForCausalLM(LlamaForCausalLM):
         self.model = NandiModel(config)
         self.vocab_size = config.vocab_size
 
-        lm_head_in_features = config.embedding_rank if config.factorized_embedding else config.hidden_size
         self.lm_head_proj = (
             nn.Linear(config.hidden_size, config.embedding_rank, bias=False) if config.factorized_embedding else None
         )
-        self.lm_head = nn.Linear(lm_head_in_features, config.vocab_size, bias=False)
+        self.lm_head = nn.Linear(
+            config.embedding_rank if config.factorized_embedding else config.hidden_size,
+            config.vocab_size,
+            bias=False,
+        )
 
         self.post_init()
 
