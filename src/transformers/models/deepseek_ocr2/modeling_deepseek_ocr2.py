@@ -1474,6 +1474,10 @@ class DeepseekOcr2Model(DeepseekOcr2PreTrainedModel):
         num_local_patches (`list[int]` or `torch.Tensor`, *optional*):
             Number of local patches per image, e.g. `[6, 0, 4]`.
         """
+        # torch.split requires list[int], not Tensor, for per-image variable-length splitting
+        if isinstance(num_local_patches, torch.Tensor):
+            num_local_patches = num_local_patches.tolist()
+
         batch_size = pixel_values.shape[0]
 
         global_vision_outputs = self.vision_tower(pixel_values, **kwargs)
@@ -1560,9 +1564,6 @@ class DeepseekOcr2Model(DeepseekOcr2PreTrainedModel):
 
         image_features = None
         if pixel_values is not None:
-            # torch.split requires list[int], not Tensor, for per-image variable-length splitting
-            if isinstance(num_local_patches, torch.Tensor):
-                num_local_patches = num_local_patches.tolist()
             image_features = self.get_image_features(
                 pixel_values, pixel_values_local, num_local_patches, return_dict=True
             ).pooler_output
@@ -1609,10 +1610,11 @@ class DeepseekOcr2ForConditionalGeneration(DeepseekOcr2PreTrainedModel, Generati
     def get_output_embeddings(self) -> nn.Module:
         return self.lm_head
 
-    def pack_image_features(self, *args, **kwargs):
+    def pack_image_features(self):
         raise NotImplementedError("DeepseekOcr2 does not use pack_image_features")
 
     @can_return_tuple
+    @auto_docstring
     def get_image_features(
         self,
         pixel_values: torch.FloatTensor,

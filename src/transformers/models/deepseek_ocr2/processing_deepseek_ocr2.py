@@ -120,7 +120,7 @@ class DeepseekOcr2Processor(ProcessorMixin):
         if images is None:
             raise ValueError("`images` are expected as arguments to a `DeepseekOcr2Processor` instance.")
         if text is None:
-            logger.warning_once("You are using DeepseekOcr2Processor without a text prefix.")
+            raise ValueError("`text` is required for `DeepseekOcr2Processor`. Example: `'<image>\\nFree OCR.'`")
 
         output_kwargs = self._merge_kwargs(
             DeepseekOcr2ProcessorKwargs,
