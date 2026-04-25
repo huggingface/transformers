@@ -42,6 +42,10 @@ class Qwen3_5TextConfig(PreTrainedConfig):
         Number of hidden layers in the Multi-Token Prediction (MTP) module. When set to 0, MTP is disabled.
     mtp_loss_weight (`float`, *optional*, defaults to 0.0):
         Weight for the MTP auxiliary loss. The total loss is computed as `main_loss + mtp_loss_weight * mtp_loss`.
+    output_mtp_loss (`bool`, *optional*, defaults to `False`):
+        Whether to return the MTP auxiliary loss in the model output. When `True`, the `mtp_loss` field in the
+        output will contain the MTP loss value, and it will be added to the main loss (weighted by
+        `mtp_loss_weight`) when `labels` are provided.
 
     ```python
     >>> from transformers import Qwen3_5TextModel, Qwen3_5TextConfig
@@ -106,6 +110,7 @@ class Qwen3_5TextConfig(PreTrainedConfig):
     ignore_keys_at_rope_validation = {"mrope_section", "mrope_interleaved"}
     mtp_num_hidden_layers: int = 0
     mtp_loss_weight: float = 0.0
+    output_mtp_loss: bool = False
 
     def __post_init__(self, **kwargs):
         kwargs.setdefault("partial_rotary_factor", 0.25)  # assign default for BC
@@ -154,6 +159,10 @@ class Qwen3_5Config(PreTrainedConfig):
         Number of hidden layers in the Multi-Token Prediction (MTP) module. When set to 0, MTP is disabled.
     mtp_loss_weight (`float`, *optional*, defaults to 0.0):
         Weight for the MTP auxiliary loss. The total loss is computed as `main_loss + mtp_loss_weight * mtp_loss`.
+    output_mtp_loss (`bool`, *optional*, defaults to `False`):
+        Whether to return the MTP auxiliary loss in the model output. When `True`, the `mtp_loss` field in the
+        output will contain the MTP loss value, and it will be added to the main loss (weighted by
+        `mtp_loss_weight`) when `labels` are provided.
 
     Example:
 
@@ -184,6 +193,7 @@ class Qwen3_5Config(PreTrainedConfig):
     tie_word_embeddings: bool = False
     mtp_num_hidden_layers: int = 0
     mtp_loss_weight: float = 0.0
+    output_mtp_loss: bool = False
 
     def __post_init__(self, **kwargs):
         if isinstance(self.vision_config, dict):
