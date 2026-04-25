@@ -33,7 +33,6 @@ from transformers import MiMoV2FlashConfig
 def convert_config(original_config: dict):
     # Hub-only keys with no equivalent in `MiMoV2FlashConfig` (hardcoded or redundant in the native port).
     keys_to_drop = {
-        "attention_value_scale",
         "attention_chunk_size",
         "sliding_window_size",
         "n_shared_experts",

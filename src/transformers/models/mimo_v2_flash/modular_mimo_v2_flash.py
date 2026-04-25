@@ -59,6 +59,8 @@ class MiMoV2FlashConfig(Glm4MoeConfig):
         Number of groups selected per token in group-based top-k routing.
     mlp_layer_types (`list`, *optional*):
         MLP pattern for each layer (`"dense"` or `"sparse"`). Defaults to 1 dense + rest sparse.
+    attention_value_scale (`float`, *optional*, defaults to 0.707 (which is the decimal approximation of 1/√2):
+        Constant multiplier applied to rescale Values.
     """
 
     model_type = "mimo_v2_flash"
@@ -93,6 +95,7 @@ class MiMoV2FlashConfig(Glm4MoeConfig):
     sliding_window: int = 128
     layer_types: list[str] | None = None
     mlp_layer_types: list[str] | None = None
+    attention_value_scale: float | None = 0.707
     # Remove unused attributes inherited from Glm4MoeConfig
     first_k_dense_replace = AttributeError()
     n_shared_experts = AttributeError()
@@ -251,6 +254,7 @@ class MiMoV2FlashAttention(Qwen2Attention):
         self.v_proj = nn.Linear(config.hidden_size, num_kv_heads * config.v_head_dim, bias=config.attention_bias)
         self.o_proj = nn.Linear(num_attn_heads * config.v_head_dim, config.hidden_size, bias=False)
         self.sinks = nn.Parameter(torch.empty(num_attn_heads), requires_grad=False) if is_swa else None
+        self.v_scale = config.attention_value_scale
 
     def forward(
         self,
@@ -268,6 +272,9 @@ class MiMoV2FlashAttention(Qwen2Attention):
         query_states = self.q_proj(hidden_states).view(qk_hidden_shape).transpose(1, 2)
         key_states = self.k_proj(hidden_states).view(qk_hidden_shape).transpose(1, 2)
         value_states = self.v_proj(hidden_states).view(v_hidden_shape).transpose(1, 2)
+        # This is MiMo specific: rescale values by 1/√2 by default.
+        if self.v_scale is not None:
+            value_states = value_states * self.v_scale
 
         cos, sin = position_embeddings
         query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)

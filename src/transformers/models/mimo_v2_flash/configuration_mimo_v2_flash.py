@@ -40,6 +40,8 @@ class MiMoV2FlashConfig(PreTrainedConfig):
         Number of groups selected per token in group-based top-k routing.
     mlp_layer_types (`list`, *optional*):
         MLP pattern for each layer (`"dense"` or `"sparse"`). Defaults to 1 dense + rest sparse.
+    attention_value_scale (`float`, *optional*, defaults to 0.707 (which is the decimal approximation of 1/√2):
+        Constant multiplier applied to rescale Values.
     """
 
     model_type = "mimo_v2_flash"
@@ -99,6 +101,7 @@ class MiMoV2FlashConfig(PreTrainedConfig):
     sliding_window: int = 128
     layer_types: list[str] | None = None
     mlp_layer_types: list[str] | None = None
+    attention_value_scale: float | None = 0.707
 
     def __post_init__(self, **kwargs):
         # Full attention for the first layer and every 6th layer; SWA for the rest.
