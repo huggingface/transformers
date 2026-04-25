@@ -52,7 +52,6 @@ from ..qwen3_vl.modeling_qwen3_vl import (
     Qwen3VLVisionModel,
     Qwen3VLVisionRotaryEmbedding,
 )
-from ..qwen3_vl.modular_qwen3_vl import Qwen3VLCausalLMOutputWithPast
 
 
 logger = logging.get_logger(__name__)
@@ -390,8 +389,37 @@ class Qwen3_5CausalLMOutputWithPast(ModelOutput):
 
 
 @dataclass
-class Qwen3_5VLCausalLMOutputWithPast(Qwen3VLCausalLMOutputWithPast):
+class Qwen3_5VLCausalLMOutputWithPast(ModelOutput):
+    r"""
+    Base class for Qwen3.5 vision-language causal language model (or autoregressive) outputs with MTP loss.
+
+    Args:
+        loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
+            Language modeling loss (for next-token prediction).
+        mtp_loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `output_mtp_loss=True`):
+            Multi-Token Prediction auxiliary loss.
+        logits (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.vocab_size)`):
+            Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
+        past_key_values (`Cache`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
+            Contains pre-computed hidden-states (key and values in the self-attention blocks) that can be used
+            to speed up sequential decoding.
+        hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
+            Tuple of `torch.FloatTensor` (one for the output of the embeddings, if the model has an embedding
+            layer, + one for the output of each layer) of shape `(batch_size, sequence_length, hidden_size)`.
+        attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
+            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads,
+            sequence_length, sequence_length)`.
+        rope_deltas (`torch.LongTensor` of shape `(batch_size, )`, *optional*):
+            The rope index difference between sequence length and multimodal rope.
+    """
+
+    loss: torch.FloatTensor | None = None
     mtp_loss: torch.FloatTensor | None = None
+    logits: torch.FloatTensor | None = None
+    past_key_values: Cache | None = None
+    hidden_states: tuple[torch.FloatTensor, ...] | None = None
+    attentions: tuple[torch.FloatTensor, ...] | None = None
+    rope_deltas: torch.LongTensor | None = None
 
 
 class Qwen3_5MTPLayer(nn.Module):
