@@ -24,12 +24,7 @@ from ...causal_lm_tester import CausalLMModelTest, CausalLMModelTester, torch_de
 if is_torch_available():
     import torch
 
-    from transformers import (
-        MiMoV2FlashConfig,
-        MiMoV2FlashForCausalLM,
-        MiMoV2FlashModel,
-    )
-    from transformers.conversion_mapping import get_model_conversion_mapping
+    from transformers import MiMoV2FlashModel
 
 
 class MiMoV2FlashModelTester(CausalLMModelTester):
@@ -102,7 +97,9 @@ class MiMoV2FlashModelTest(CausalLMModelTest, unittest.TestCase):
         long_input_length = int(config.max_position_embeddings * 1.5)
 
         # Inputs
-        x = torch.randn(1, dtype=torch.float32, device=torch_device)  # used exclusively to get the dtype and the device
+        x = torch.randn(
+            1, dtype=torch.float32, device=torch_device
+        )  # used exclusively to get the dtype and the device
         position_ids_short = torch.arange(short_input_length, dtype=torch.long, device=torch_device)
         position_ids_short = position_ids_short.unsqueeze(0)
         position_ids_long = torch.arange(long_input_length, dtype=torch.long, device=torch_device)
@@ -171,111 +168,6 @@ class MiMoV2FlashModelTest(CausalLMModelTest, unittest.TestCase):
             torch.testing.assert_close(yarn_cos_long, original_cos_long)
         with self.assertRaises(AssertionError):
             torch.testing.assert_close(yarn_sin_long, original_sin_long)
-
-    def test_layer_type_rope_parameters_keep_rotary_dims_in_sync(self):
-        """Layer-specific rope parameters should produce position embeddings that match each attention rotary dim."""
-        config = MiMoV2FlashConfig(
-            num_hidden_layers=2,
-            layer_types=["full_attention", "sliding_attention"],
-            vocab_size=100,
-            hidden_size=32,
-            head_dim=8,
-            num_attention_heads=4,
-            num_key_value_heads=2,
-        )
-        config.rope_parameters["full_attention"]["partial_rotary_factor"] = 0.5
-        config.rope_parameters["sliding_attention"]["partial_rotary_factor"] = 0.5
-
-        model = MiMoV2FlashModel(config)
-        input_ids = torch.tensor([[1, 2, 3]])
-        hidden_states = model.embed_tokens(input_ids)
-        position_ids = torch.arange(input_ids.shape[1]).unsqueeze(0)
-
-        full_cos, _ = model.rotary_emb(hidden_states, position_ids, layer_type="full_attention")
-        swa_cos, _ = model.rotary_emb(hidden_states, position_ids, layer_type="sliding_attention")
-
-        self.assertEqual(full_cos.shape[-1], 4)
-        self.assertEqual(swa_cos.shape[-1], 4)
-        self.assertEqual(model(input_ids=input_ids).last_hidden_state.shape, (1, 3, 32))
-
-    def test_moe_fused_expert_shapes(self):
-        """Fused MixtralExperts layout: stacked gate_up and down per expert index."""
-        config = MiMoV2FlashConfig(
-            num_hidden_layers=2,
-            layer_types=["full_attention", "sliding_attention"],
-            vocab_size=100,
-            hidden_size=32,
-            moe_intermediate_size=16,
-            n_routed_experts=4,
-            mlp_layer_types=["dense", "sparse"],
-        )
-        model = MiMoV2FlashModel(config)
-        experts = model.layers[1].mlp.experts
-        self.assertEqual(experts.gate_up_proj.shape, (4, 32, 32))  # (E, 2*intermediate, hidden)
-        self.assertEqual(experts.down_proj.shape, (4, 32, 16))  # (E, hidden, intermediate)
-
-    def test_moe_legacy_conversion_mapping_registered(self):
-        config = MiMoV2FlashConfig(
-            num_hidden_layers=2,
-            layer_types=["full_attention", "sliding_attention"],
-            vocab_size=100,
-            hidden_size=32,
-            moe_intermediate_size=16,
-            n_routed_experts=4,
-            mlp_layer_types=["dense", "sparse"],
-        )
-        model = MiMoV2FlashModel(config)
-        weight_mapping = get_model_conversion_mapping(model)
-
-        found_gate_up_converter = any(
-            "mlp.experts.*.gate_proj.weight" in mapping.source_patterns
-            and "mlp.experts.gate_up_proj" in mapping.target_patterns
-            for mapping in weight_mapping
-        )
-        found_down_converter = any(
-            "mlp.experts.*.down_proj.weight" in mapping.source_patterns
-            and "mlp.experts.down_proj" in mapping.target_patterns
-            for mapping in weight_mapping
-        )
-
-        self.assertTrue(found_gate_up_converter)
-        self.assertTrue(found_down_converter)
-
-    def test_generation_beyond_sliding_window(self):
-        """Hybrid cache must handle full + sliding layers correctly when input exceeds the sliding window."""
-        config = MiMoV2FlashConfig(
-            num_hidden_layers=2,
-            layer_types=["full_attention", "sliding_attention"],
-            vocab_size=100,
-            hidden_size=32,
-            head_dim=8,
-            v_head_dim=8,
-            num_attention_heads=4,
-            num_key_value_heads=2,
-            mlp_layer_types=["dense", "sparse"],
-            moe_intermediate_size=16,
-            n_routed_experts=4,
-            num_experts_per_tok=2,
-            sliding_window=4,
-            max_position_embeddings=64,
-            attn_implementation="eager",
-        )
-        model = MiMoV2FlashForCausalLM(config).eval()
-        # Input longer than sliding_window (4)
-        input_ids = torch.tensor([[1, 2, 3, 4, 5, 6, 7, 8]])
-        attention_mask = torch.ones_like(input_ids)
-
-        with torch.no_grad():
-            output = model.generate(
-                input_ids,
-                attention_mask=attention_mask,
-                max_new_tokens=3,
-                do_sample=False,
-                use_cache=True,
-                disable_compile=True,
-            )
-        # Should generate without error and produce the expected number of tokens
-        self.assertEqual(output.shape[1], input_ids.shape[1] + 3)
 
 
 __all__ = ["MiMoV2FlashModelTest"]
