@@ -382,7 +382,7 @@ class MiMoV2FlashAttention(nn.Module):
         self.o_proj = nn.Linear(num_attn_heads * config.v_head_dim, config.hidden_size, bias=False)
         self.sliding_window = config.sliding_window if self.layer_type == "sliding_attention" else None
         self.v_head_dim = config.v_head_dim
-        self.sinks = nn.Parameter(torch.empty(num_attn_heads), requires_grad=False) if is_swa else None
+        self.sinks = nn.Parameter(torch.empty(num_attn_heads)) if is_swa else None
         self.v_scale = config.attention_value_scale
 
     def forward(

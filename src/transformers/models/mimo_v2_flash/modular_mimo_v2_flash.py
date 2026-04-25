@@ -253,7 +253,7 @@ class MiMoV2FlashAttention(Qwen2Attention):
         self.k_proj = nn.Linear(config.hidden_size, num_kv_heads * self.head_dim, bias=config.attention_bias)
         self.v_proj = nn.Linear(config.hidden_size, num_kv_heads * config.v_head_dim, bias=config.attention_bias)
         self.o_proj = nn.Linear(num_attn_heads * config.v_head_dim, config.hidden_size, bias=False)
-        self.sinks = nn.Parameter(torch.empty(num_attn_heads), requires_grad=False) if is_swa else None
+        self.sinks = nn.Parameter(torch.empty(num_attn_heads)) if is_swa else None
         self.v_scale = config.attention_value_scale
 
     def forward(
