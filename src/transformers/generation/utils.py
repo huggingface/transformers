@@ -1086,9 +1086,31 @@ class GenerationMixin(ContinuousMixin):
                     UserWarning,
                 )
         if generation_config.repetition_penalty is not None and generation_config.repetition_penalty != 1.0:
-            processors.append(RepetitionPenaltyLogitsProcessor(penalty=generation_config.repetition_penalty))
+            if self.config.is_encoder_decoder:
+                processors.append(RepetitionPenaltyLogitsProcessor(penalty=generation_config.repetition_penalty))
+            else:
+                inputs_embeds = model_kwargs.get("inputs_embeds") if model_kwargs is not None else None
+                if inputs_embeds is not None and (input_ids_seq_length is None or input_ids_seq_length == 0):
+                    warnings.warn(
+                        "Passing `repetition_penalty` requires some form of `input_ids` to be passed to "
+                        "`generate`, ignoring the argument.",
+                        UserWarning,
+                    )
+                else:
+                    processors.append(RepetitionPenaltyLogitsProcessor(penalty=generation_config.repetition_penalty))
         if generation_config.no_repeat_ngram_size is not None and generation_config.no_repeat_ngram_size > 0:
-            processors.append(NoRepeatNGramLogitsProcessor(generation_config.no_repeat_ngram_size))
+            if self.config.is_encoder_decoder:
+                processors.append(NoRepeatNGramLogitsProcessor(generation_config.no_repeat_ngram_size))
+            else:
+                inputs_embeds = model_kwargs.get("inputs_embeds") if model_kwargs is not None else None
+                if inputs_embeds is not None and (input_ids_seq_length is None or input_ids_seq_length == 0):
+                    warnings.warn(
+                        "Passing `no_repeat_ngram_size` requires some form of `input_ids` to be passed to "
+                        "`generate`, ignoring the argument.",
+                        UserWarning,
+                    )
+                else:
+                    processors.append(NoRepeatNGramLogitsProcessor(generation_config.no_repeat_ngram_size))
         if (
             generation_config.encoder_no_repeat_ngram_size is not None
             and generation_config.encoder_no_repeat_ngram_size > 0
@@ -2436,20 +2458,6 @@ class GenerationMixin(ContinuousMixin):
         accepts_position_ids = "position_ids" in set(inspect.signature(self.forward).parameters.keys())
         if not kwargs_has_position_ids and accepts_position_ids and not self.config.is_encoder_decoder:
             model_kwargs["position_ids"] = self._prepare_position_ids_for_generation(inputs_tensor, model_kwargs)
-
-        if (
-            not self.config.is_encoder_decoder
-            and model_input_name == "inputs_embeds"
-            and generation_config.repetition_penalty is not None
-            and generation_config.repetition_penalty != 1.0
-        ):
-            prompt_input_ids = model_kwargs.get("input_ids")
-            has_prompt_ids = isinstance(prompt_input_ids, torch.Tensor) and prompt_input_ids.numel() > 0
-            if not has_prompt_ids:
-                raise ValueError(
-                    "`repetition_penalty` requires the prompt token ids to be available. "
-                    "Pass in `input_ids` too or disable the penalty."
-                )
 
         if self.config.is_encoder_decoder and "encoder_outputs" not in model_kwargs:
             # if model is encoder decoder encoder_outputs are created and added to `model_kwargs`

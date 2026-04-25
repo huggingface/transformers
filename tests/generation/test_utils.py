@@ -2893,14 +2893,24 @@ class GenerationIntegrationTests(unittest.TestCase):
         finally:
             logger.removeHandler(warningHandler)
 
-    def test_inputs_embeds_require_ids_for_repetition_penalty(self):
+    def test_inputs_embeds_warn_without_ids_for_token_based_processors(self):
         model = AutoModelForCausalLM.from_pretrained("hf-internal-testing/tiny-random-gpt2").to(torch_device).eval()
         tokenizer = AutoTokenizer.from_pretrained("hf-internal-testing/tiny-random-gpt2")
         inputs = tokenizer("Hello world", return_tensors="pt").to(torch_device)
         embeds = model.get_input_embeddings()(inputs["input_ids"])
 
-        with self.assertRaisesRegex(ValueError, "repetition_penalty"):
-            model.generate(inputs_embeds=embeds, max_new_tokens=5, repetition_penalty=1.1)
+        outputs_without_penalty = model.generate(inputs_embeds=embeds, max_new_tokens=5, repetition_penalty=1.0)
+        self.assertEqual(outputs_without_penalty.shape[0], inputs["input_ids"].shape[0])
+
+        with self.assertWarnsRegex(UserWarning, "repetition_penalty"):
+            outputs_with_ignored_penalty = model.generate(
+                inputs_embeds=embeds, max_new_tokens=5, repetition_penalty=1.1
+            )
+        self.assertEqual(outputs_with_ignored_penalty.shape[0], inputs["input_ids"].shape[0])
+
+        with self.assertWarnsRegex(UserWarning, "no_repeat_ngram_size"):
+            outputs_with_ignored_ngram = model.generate(inputs_embeds=embeds, max_new_tokens=5, no_repeat_ngram_size=2)
+        self.assertEqual(outputs_with_ignored_ngram.shape[0], inputs["input_ids"].shape[0])
 
         outputs = model.generate(
             input_ids=inputs["input_ids"],
@@ -2908,6 +2918,7 @@ class GenerationIntegrationTests(unittest.TestCase):
             attention_mask=inputs.get("attention_mask"),
             max_new_tokens=5,
             repetition_penalty=1.1,
+            no_repeat_ngram_size=2,
         )
         self.assertEqual(outputs.shape[0], inputs["input_ids"].shape[0])
 
