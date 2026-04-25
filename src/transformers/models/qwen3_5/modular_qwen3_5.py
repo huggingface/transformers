@@ -14,6 +14,7 @@
 """PyTorch Qwen3.5 model."""
 
 import copy
+from dataclasses import dataclass
 from typing import Optional
 
 import torch
@@ -25,15 +26,11 @@ from ... import initialization as init
 from ...cache_utils import Cache, DynamicCache
 from ...masking_utils import create_causal_mask
 from ...modeling_layers import GenericForSequenceClassification, GradientCheckpointingLayer
-from ...modeling_outputs import (
-    BaseModelOutputWithPast,
-    BaseModelOutputWithPooling,
-    CausalLMOutputWithPast,
-)
+from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPooling
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
-from ...utils.generic import merge_with_config_defaults
+from ...utils.generic import ModelOutput, merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
 from ..qwen3.modeling_qwen3 import Qwen3ForCausalLM
 from ..qwen3_next.configuration_qwen3_next import Qwen3NextConfig
@@ -361,10 +358,38 @@ class Qwen3_5RMSNorm(Qwen3NextRMSNorm):
     pass
 
 
-class Qwen3_5CausalLMOutputWithPast(CausalLMOutputWithPast):
+@dataclass
+class Qwen3_5CausalLMOutputWithPast(ModelOutput):
+    r"""
+    Base class for Qwen3.5 causal language model (or autoregressive) outputs with MTP loss.
+
+    Args:
+        loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
+            Language modeling loss (for next-token prediction).
+        mtp_loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `output_mtp_loss=True`):
+            Multi-Token Prediction auxiliary loss.
+        logits (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.vocab_size)`):
+            Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
+        past_key_values (`Cache`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
+            Contains pre-computed hidden-states (key and values in the self-attention blocks) that can be used
+            to speed up sequential decoding.
+        hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
+            Tuple of `torch.FloatTensor` (one for the output of the embeddings, if the model has an embedding
+            layer, + one for the output of each layer) of shape `(batch_size, sequence_length, hidden_size)`.
+        attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
+            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads,
+            sequence_length, sequence_length)`.
+    """
+
+    loss: torch.FloatTensor | None = None
     mtp_loss: torch.FloatTensor | None = None
+    logits: torch.FloatTensor | None = None
+    past_key_values: Cache | None = None
+    hidden_states: tuple[torch.FloatTensor, ...] | None = None
+    attentions: tuple[torch.FloatTensor, ...] | None = None
 
 
+@dataclass
 class Qwen3_5VLCausalLMOutputWithPast(Qwen3VLCausalLMOutputWithPast):
     mtp_loss: torch.FloatTensor | None = None
 
@@ -1084,7 +1109,6 @@ __all__ = [
     "Qwen3_5ForSequenceClassification",
     "Qwen3_5ForConditionalGeneration",
     "Qwen3_5PreTrainedModel",
-    "Qwen3_5MTPLayer",
     "Qwen3_5MTP",
     "Qwen3_5CausalLMOutputWithPast",
     "Qwen3_5VLCausalLMOutputWithPast",
