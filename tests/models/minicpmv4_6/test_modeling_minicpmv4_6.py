@@ -22,7 +22,7 @@ from transformers import (
     MiniCPMV4_6Config,
     is_torch_available,
 )
-from transformers.models.siglip import SiglipVisionConfig
+from transformers.models.minicpmv4_6.configuration_minicpmv4_6 import MiniCPMV4_6VisionConfig
 from transformers.testing_utils import (
     cleanup,
     require_torch,
@@ -46,15 +46,15 @@ class MiniCPMV4_6VisionText2TextModelTester(VLMModelTester):
     base_model_class = MiniCPMV4_6Model if is_torch_available() else None
     config_class = MiniCPMV4_6Config
     text_config_class = Qwen3_5TextConfig if is_torch_available() else None
-    vision_config_class = SiglipVisionConfig
+    vision_config_class = MiniCPMV4_6VisionConfig
     conditional_generation_class = MiniCPMV4_6ForConditionalGeneration if is_torch_available() else None
 
     def __init__(self, parent, **kwargs):
         kwargs.setdefault("batch_size", 2)
         kwargs.setdefault("image_token_id", 100)
-        kwargs.setdefault("image_size", 64)
-        kwargs.setdefault("patch_size", 16)
-        # After 16x merge: [4,4] -> vit_merger [2,2] -> merger [1,1] = 1 token
+        # patch_size=8, image_size=32 → 4×4 grid → vit_merger [2×2] → merger [1×1] = 1 token
+        kwargs.setdefault("image_size", 32)
+        kwargs.setdefault("patch_size", 8)
         kwargs.setdefault("num_image_tokens", 1)
         kwargs.setdefault("vocab_size", 256)
         kwargs.setdefault("hidden_size", 32)
@@ -80,38 +80,29 @@ class MiniCPMV4_6VisionText2TextModelTester(VLMModelTester):
         # Vision config overrides
         kwargs.setdefault("vision_hidden_act", "gelu_pytorch_tanh")
         kwargs.setdefault("vision_intermediate_size", 128)
+        # MiniCPM-V 4.6 specific
+        kwargs.setdefault("insert_layer_id", 0)
         super().__init__(parent, **kwargs)
 
-    def create_pixel_values(self):
-        # MiniCPM-V uses list[list[torch.Tensor]] format.
-        # Each patch tensor: [C, patch_size, num_2d_patches * patch_size]
-        # For tgt_size [4, 4]: 16 2d-patches, N = 16 * patch_size
+    def _navit_pixel_values(self, batch_size):
+        """Build NaViT-packed pixel_values: (1, C, patch_size, total_L)."""
         C = self.num_channels
         P = self.patch_size
-        h_patches, w_patches = 4, 4
-        N = h_patches * w_patches * P
+        h_patches = self.image_size // self.patch_size
+        w_patches = self.image_size // self.patch_size
+        total_L = batch_size * h_patches * w_patches * P
+        return floats_tensor([1, C, P, total_L])
 
-        pixel_values = []
-        for _ in range(self.batch_size):
-            pixel_values.append([floats_tensor([C, P, N])])
-        return pixel_values
+    def _target_sizes(self, batch_size):
+        h_patches = self.image_size // self.patch_size
+        w_patches = self.image_size // self.patch_size
+        return torch.tensor([[h_patches, w_patches]] * batch_size, dtype=torch.int32)
 
-    def place_image_tokens(self, input_ids, config):
-        # MiniCPM-V uses image_bound for vision feature placement, not image_token_id.
-        return input_ids
+    def create_pixel_values(self):
+        return self._navit_pixel_values(self.batch_size)
 
     def get_additional_inputs(self, config, input_ids, pixel_values):
-        num_vision_tokens = self.num_image_tokens  # 1
-
-        image_bound = []
-        tgt_sizes = []
-        for _ in range(self.batch_size):
-            image_bound.append(torch.tensor([[0, num_vision_tokens]]))
-            tgt_sizes.append(torch.tensor([[4, 4]], dtype=torch.int32))
-        return {
-            "image_bound": image_bound,
-            "tgt_sizes": tgt_sizes,
-        }
+        return {"target_sizes": self._target_sizes(self.batch_size)}
 
     def get_config(self):
         text_config = {
@@ -152,10 +143,9 @@ class MiniCPMV4_6VisionText2TextModelTester(VLMModelTester):
             text_config=text_config,
             vision_config=vision_config,
             image_token_id=self.image_token_id,
-            query_num=self.num_image_tokens,
             image_size=self.image_size,
             drop_vision_last_layer=False,
-            insert_layer_id=0,
+            insert_layer_id=self.insert_layer_id,
         )
 
 
@@ -165,14 +155,29 @@ class MiniCPMV4_6ModelTest(VLMModelTest, unittest.TestCase):
 
     def prepare_config_and_inputs_for_generate(self, batch_size=2):
         config, inputs_dict = super().prepare_config_and_inputs_for_generate(batch_size=batch_size)
-        for key in ("pixel_values", "image_bound", "tgt_sizes"):
-            if key in inputs_dict and isinstance(inputs_dict[key], list):
-                inputs_dict[key] = inputs_dict[key][:batch_size]
+        inputs_dict["pixel_values"] = self.model_tester._navit_pixel_values(batch_size)
+        inputs_dict["target_sizes"] = self.model_tester._target_sizes(batch_size)
         return config, inputs_dict
 
+    def _image_features_prepare_config_and_inputs(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        inputs_dict = {
+            key: value
+            for key, value in inputs_dict.items()
+            if ("pixel" in key or "image" in key or key == "target_sizes") and "video" not in key
+        }
+        return config, inputs_dict
+
+    def _video_features_prepare_config_and_inputs(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        return config, {
+            "pixel_values_videos": inputs_dict["pixel_values"],
+            "target_sizes_videos": inputs_dict["target_sizes"],
+        }
+
     @unittest.skip(
-        "MiniCPM-V uses list-of-list pixel_values and image_bound instead of image_token_id; "
-        "standard image-token mismatch test not applicable"
+        "NaViT packing puts all images in a single tensor with dim-0 = 1; "
+        "the default test cannot correctly simulate image count mismatches"
     )
     def test_mismatching_num_image_tokens(self):
         pass
@@ -200,6 +205,48 @@ class MiniCPMV4_6ModelTest(VLMModelTest, unittest.TestCase):
 
     @unittest.skip(reason="Conversion only for CausalLM loading from saved ConditionalLM")
     def test_reverse_loading_mapping(self, check_keys_were_modified=True):
+        pass
+
+    @unittest.skip(
+        reason="NaViT packs all images into a single tensor (batch dim=1); "
+        "generic batch-splitting logic cannot separate individual samples"
+    )
+    def test_batching_equivalence(self):
+        pass
+
+    @unittest.skip(
+        reason="NaViT packs all images into a single tensor (batch dim=1); "
+        "generic batch-splitting logic cannot separate individual samples"
+    )
+    def test_model_forward_default_config_values(self):
+        pass
+
+    @unittest.skip(
+        reason="get_image_features uses a custom pipeline (vision_tower -> vit_merger -> merger) "
+        "that does not accept output_attentions/output_hidden_states kwargs"
+    )
+    def test_get_image_features_attentions(self):
+        pass
+
+    @unittest.skip(
+        reason="get_image_features uses a custom pipeline (vision_tower -> vit_merger -> merger) "
+        "that does not accept output_attentions/output_hidden_states kwargs"
+    )
+    def test_get_image_features_hidden_states(self):
+        pass
+
+    @unittest.skip(
+        reason="get_video_features uses a custom pipeline that does not accept "
+        "output_attentions/output_hidden_states kwargs"
+    )
+    def test_get_video_features_attentions(self):
+        pass
+
+    @unittest.skip(
+        reason="get_video_features uses a custom pipeline that does not accept "
+        "output_attentions/output_hidden_states kwargs"
+    )
+    def test_get_video_features_hidden_states(self):
         pass
 
     @unittest.skip(

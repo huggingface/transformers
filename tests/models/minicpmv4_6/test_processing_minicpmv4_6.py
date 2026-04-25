@@ -36,34 +36,42 @@ class MiniCPMV4_6ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     # Re-enable tests after release
     model_id = "openbmb/MiniCPM-V-4_6"
 
+    video_text_kwargs_max_length = 600
+    video_text_kwargs_override_max_length = 550
+    video_unstructured_max_length = 600
+
     @classmethod
     def _setup_test_attributes(cls, processor):
-        # The image placeholder pattern used in MiniCPM-V's text input
-        cls.image_token = "(<image>./</image>)"
-
-    def test_model_input_names(self):
-        processor = self.get_processor()
-        text = self.prepare_text_inputs(modalities=["image"])
-        image_input = self.prepare_image_inputs()
-        inputs = processor(text=text, images=image_input, return_tensors="pt")
-
-        expected_keys = {"input_ids", "attention_mask", "pixel_values", "image_bound", "tgt_sizes"}
-        self.assertTrue(expected_keys.issubset(set(inputs.keys())))
+        cls.image_token = processor.image_token
+        cls.video_token = processor.video_token
 
     def test_image_processing(self):
         """Test that the processor correctly handles image inputs."""
         processor = self.get_processor()
-        text = "(<image>./</image>)Describe this image."
+        text = self.prepare_text_inputs(modalities=["image"])
         image_input = self.prepare_image_inputs()
         inputs = processor(text=text, images=image_input, return_tensors="pt")
 
         self.assertIn("pixel_values", inputs)
         self.assertIn("input_ids", inputs)
         self.assertIn("attention_mask", inputs)
-        self.assertIn("image_bound", inputs)
-        self.assertIn("tgt_sizes", inputs)
-        self.assertIsInstance(inputs["pixel_values"], list)
-        self.assertEqual(len(inputs["image_bound"]), 1)
+        self.assertIn("target_sizes", inputs)
+        self.assertIsInstance(inputs["pixel_values"], torch.Tensor)
+        self.assertEqual(inputs["pixel_values"].shape[0], 1)
+
+    def test_video_processing(self):
+        """Test that the processor correctly handles video inputs."""
+        processor = self.get_processor()
+        text = self.prepare_text_inputs(modalities=["video"])
+        video_input = self.prepare_video_inputs()
+        inputs = processor(text=text, videos=video_input, return_tensors="pt")
+
+        self.assertIn("pixel_values_videos", inputs)
+        self.assertIn("input_ids", inputs)
+        self.assertIn("attention_mask", inputs)
+        self.assertIn("target_sizes_videos", inputs)
+        self.assertIsInstance(inputs["pixel_values_videos"], torch.Tensor)
+        self.assertEqual(inputs["pixel_values_videos"].shape[0], 1)
 
     def test_text_only_processing(self):
         """Test that the processor works with text-only input (no images)."""
@@ -105,7 +113,7 @@ class MiniCPMV4_6ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     def test_use_image_id_kwarg(self):
         """Test that use_image_id is correctly routed through _merge_kwargs."""
         processor = self.get_processor()
-        text = "(<image>./</image>)Describe."
+        text = f"{self.image_token}Describe."
         image_input = self.prepare_image_inputs()
 
         inputs_with_id = processor(text=text, images=image_input, use_image_id=True, return_tensors="pt")
@@ -117,16 +125,3 @@ class MiniCPMV4_6ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             "use_image_id should produce different input_ids when True vs False",
         )
 
-    @unittest.skip(
-        "MiniCPM-V processor requires specific image placeholder pattern in text; "
-        "generic apply_chat_template tests may not produce the right format"
-    )
-    def test_apply_chat_template_image_1(self):
-        pass
-
-    @unittest.skip(
-        "MiniCPM-V processor requires specific image placeholder pattern in text; "
-        "generic apply_chat_template tests may not produce the right format"
-    )
-    def test_apply_chat_template_image_2(self):
-        pass
