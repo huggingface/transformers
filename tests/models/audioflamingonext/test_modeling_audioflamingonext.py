@@ -293,6 +293,9 @@ class AudioFlamingoNextForConditionalGenerationIntegrationTest(unittest.TestCase
 
     @slow
     def test_fixture_single_matches(self):
+        """
+        reproducer: https://gist.github.com/lashahub/5dbee78c5faedd5389e211da85e3066d
+        """
         path = Path(__file__).parent.parent.parent / "fixtures/audioflamingonext/expected_results_single.json"
         with open(path, "r", encoding="utf-8") as f:
             raw = json.load(f)
@@ -332,6 +335,9 @@ class AudioFlamingoNextForConditionalGenerationIntegrationTest(unittest.TestCase
 
     @slow
     def test_fixture_batched_matches(self):
+        """
+        reproducer: https://gist.github.com/lashahub/5dbee78c5faedd5389e211da85e3066d
+        """
         path = Path(__file__).parent.parent.parent / "fixtures/audioflamingonext/expected_results_batched.json"
         with open(path, "r", encoding="utf-8") as f:
             raw = json.load(f)
