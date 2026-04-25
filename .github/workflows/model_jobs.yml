@@ -186,7 +186,18 @@ jobs:
         env:
           report_name_prefix: ${{ inputs.report_name_prefix }}
         run: |
-          cat "/transformers/reports/${machine_type}_${report_name_prefix}_${matrix_folders}_test_reports/captured_info.txt"
+          shopt -s nullglob
+          captured_info_files=("/transformers/reports/${machine_type}_${report_name_prefix}_${matrix_folders}_test_reports"/captured_info*.txt)
+
+          if [ ${#captured_info_files[@]} -eq 0 ]; then
+            echo "No captured information files found."
+            exit 0
+          fi
+
+          for captured_info_file in "${captured_info_files[@]}"; do
+            echo "===== ${captured_info_file##*/} ====="
+            cat "$captured_info_file"
+          done
 
       - name: Copy test_outputs.txt
         if: ${{ always() }}
