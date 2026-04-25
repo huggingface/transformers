@@ -22,16 +22,9 @@ from ..musicflamingo.processing_musicflamingo import MusicFlamingoProcessor, Mus
 
 
 @auto_docstring(checkpoint="nvidia/audio-flamingo-next-hf")
-@strict(accept_kwargs=True)
+@strict
 class AudioFlamingoNextConfig(MusicFlamingoConfig):
     model_type = "audioflamingonext"
-
-    def __post_init__(self, **kwargs):
-        if isinstance(self.audio_config, dict):
-            self.audio_config["model_type"] = self.audio_config.get("model_type", "audioflamingo3_encoder")
-        elif self.audio_config is None:
-            self.audio_config = {"model_type": "audioflamingo3_encoder"}
-        super().__post_init__(**kwargs)
 
 
 class AudioFlamingoNextProcessorKwargs(MusicFlamingoProcessorKwargs): ...

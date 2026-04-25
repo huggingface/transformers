@@ -27,7 +27,7 @@ from ..auto import CONFIG_MAPPING, AutoConfig
 
 
 @auto_docstring(checkpoint="nvidia/audio-flamingo-next-hf")
-@strict(accept_kwargs=True)
+@strict
 class AudioFlamingoNextConfig(PreTrainedConfig):
     r"""
     audio_bos_token_id (`int`, *optional*, defaults to 151670):
@@ -72,10 +72,6 @@ class AudioFlamingoNextConfig(PreTrainedConfig):
     rope_parameters: dict | None = None
 
     def __post_init__(self, **kwargs):
-        if isinstance(self.audio_config, dict):
-            self.audio_config["model_type"] = self.audio_config.get("model_type", "audioflamingo3_encoder")
-        elif self.audio_config is None:
-            self.audio_config = {"model_type": "audioflamingo3_encoder"}
         if self.rope_parameters is None:
             self.rope_parameters = {
                 "rope_type": "default",

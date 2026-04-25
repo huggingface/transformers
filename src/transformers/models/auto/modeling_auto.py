@@ -55,6 +55,7 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("audioflamingo3", "AudioFlamingo3ForConditionalGeneration"),
         ("audioflamingo3_encoder", "AudioFlamingo3Encoder"),
         ("audioflamingonext", "AudioFlamingoNextForConditionalGeneration"),
+        ("audioflamingonext_encoder", "AudioFlamingo3Encoder"),
         ("autoformer", "AutoformerModel"),
         ("aya_vision", "AyaVisionModel"),
         ("bamba", "BambaModel"),
