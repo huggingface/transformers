@@ -618,6 +618,7 @@ class DeepseekOcr2Config(PreTrainedConfig):
     vision_config: dict | PreTrainedConfig | None = None
     text_config: dict | PreTrainedConfig | None = None
     image_token_id: int = 128815
+    tie_word_embeddings: bool = False
 
     def __post_init__(self, **kwargs):
         if self.vision_config is None:
