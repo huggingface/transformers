@@ -340,7 +340,7 @@ def _pool_windows(kv: torch.Tensor, gate: torch.Tensor, ape: torch.Tensor, ratio
     """
     batch, length, _ = kv.shape
     kv = kv.view(batch, length // ratio, ratio, head_dim)
-    gate = gate.view(batch, length // ratio, ratio, head_dim) + ape
+    gate = gate.view(batch, length // ratio, ratio, head_dim) + ape.to(gate.dtype)
     return (kv * gate.softmax(dim=2)).sum(dim=2)
 
 
@@ -705,8 +705,8 @@ class DeepseekV4Experts(GptOssExperts):
     """
 
     def __init__(self, config: DeepseekV4Config):
-        nn.Module.__init__(self)
-        del self.gate_up_proj_bias 
+        super().__init__()
+        del self.gate_up_proj_bias
         del self.down_proj_bias
         del self.alpha
         self.limit = config.swiglu_limit
@@ -888,9 +888,7 @@ class DeepseekV4PreTrainedModel(MixtralPreTrainedModel):
     _no_split_modules = ["DeepseekV4DecoderLayer"]
     _supports_flash_attn = False
     _supports_sdpa = False
-    _keep_in_fp32_modules_strict = [
-        "attn_hc", "ffn_hc"
-    ]
+    _keep_in_fp32_modules_strict = ["attn_hc", "ffn_hc"]
     _keys_to_ignore_on_load_unexpected = [r"model\.mtp\..*"]
     _can_record_outputs = {
         "router_logits": OutputRecorder(DeepseekV4TopKRouter, index=0),

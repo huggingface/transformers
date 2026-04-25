@@ -98,9 +98,6 @@ def _build_checkpoint_conversion_mapping():
             WeightRenaming(source_patterns=r"layer\.", target_patterns="layers."),
         ],
         "deepseek_v4": [
-            # Checkpoints store the per-site Hyper-Connection params flat on the decoder
-            # layer (``hc_attn_fn`` / ``hc_ffn_*``). The HF module tree wraps them in a
-            # ``DeepseekV4HyperConnection`` submodule per site (``attn_hc`` / ``ffn_hc``).
             WeightConverter(
                 source_patterns=[
                     "experts.*.w1.weight",
