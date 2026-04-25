@@ -236,7 +236,7 @@ def _test_encoder_eager_matches_sdpa_inference(
             elif torch_device == "hpu":
                 atol = atols["cuda", enable_kernels, dtype]
                 rtol = rtols["cuda", enable_kernels, dtype]
-            elif torch_device == "xpu":
+            elif torch_device in ("xpu", "mps"):
                 # As of PyTorch 2.5 XPU backend supports only torch.nn.attention.SDPBackend.MATH
                 # which is implemented on PyTorch level using aten operators and is
                 # device agnostic with respect to implementation of each aten operator.
