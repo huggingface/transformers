@@ -35,7 +35,7 @@ class MiMoV2FlashModelTester(CausalLMModelTester):
         super().__init__(
             parent=parent,
             batch_size=2,
-            is_training=Training,
+            is_training=True,
             num_attention_heads=4,
             intermediate_size=64,
             hidden_act="silu",
