@@ -621,6 +621,8 @@ class T5Gemma2ModelTester:
         lm_labels,
         pixel_values,
     ):
+        config.decoder.sliding_window = self.encoder_seq_length // 2
+        self.parent.assertGreater(self.encoder_seq_length, config.decoder.sliding_window)
         model = self.causal_lm_class(config=config).to(torch_device).eval()
         output = model.generate(
             input_ids,
