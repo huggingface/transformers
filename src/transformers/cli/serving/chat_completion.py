@@ -80,7 +80,7 @@ except ImportError:
     parent_class = TypedDict
 
 
-class TransformersCompletionCreateParamsStreaming(parent_class, total=False):
+class TransformersCompletionCreateParamsStreaming(parent_class, total=False):  # type: ignore
     generation_config: str
     seed: int
 
@@ -176,7 +176,7 @@ class ChatCompletionHandler(BaseHandler):
             **chat_template_kwargs,
         )
         if not use_cb:
-            inputs = inputs.to(model.device)  # type: ignore[union-attr]
+            inputs = inputs.to(model.device)  # type: ignore
 
         gen_config = self._build_generation_config(
             body, model.generation_config, use_cb=use_cb
