@@ -324,7 +324,7 @@ def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
 
 # Eager attention forward function with optional attention sinks.
 # Same as the remote MiMo `eager_attention_forward` but with mask preparation removed (not needed post transformers V5)
-def eager_attention_forward(
+def eager_attention_forward_with_optional_sink(
     module: nn.Module,
     query: torch.Tensor,
     key: torch.Tensor,
@@ -408,7 +408,7 @@ class MiMoV2FlashAttention(nn.Module):
             key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx)
 
         attention_interface = ALL_ATTENTION_FUNCTIONS.get_interface(
-            self.config._attn_implementation, eager_attention_forward
+            self.config._attn_implementation, eager_attention_forward_with_optional_sink
         )
         attn_output, attn_weights = attention_interface(
             self,
