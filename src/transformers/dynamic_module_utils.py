@@ -344,7 +344,7 @@ def _compute_local_source_files_hash(
         source_files_hash.update(relative_path.encode("utf-8"))
         source_files_hash.update(file_path.read_bytes())
 
-    return source_files_hash.hexdigest()
+    return source_files_hash.hexdigest()[:16]
 
 
 def get_cached_module_file(
