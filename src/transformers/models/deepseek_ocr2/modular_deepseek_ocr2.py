@@ -666,7 +666,6 @@ class DeepseekOcr2PreTrainedModel(LlavaNextPreTrainedModel):
         "DeepseekOcr2VisionDecoderLayer",
         "DeepseekOcr2TextDecoderLayer",
     ]
-    _can_compile_fullgraph = False
     _supports_flash_attn = False
 
     @torch.no_grad()
@@ -735,11 +734,11 @@ class DeepseekOcr2SamVisionEncoder(SamVisionEncoder, DeepseekOcr2PreTrainedModel
         super().__init__(config)
         self.proj = DeepseekOcr2SamVisionProj(config)
 
-    def _interpolate_pos_encoding(self, pos_embed: torch.Tensor, target_size: int) -> torch.Tensor:
+    def interpolate_pos_encoding(self, pos_embed: torch.Tensor, target_size: int, dtype: torch.dtype) -> torch.Tensor:
         """Interpolate the positional encoding to match the target spatial size using bicubic interpolation."""
         src_size = pos_embed.shape[1]
         if src_size == target_size:
-            return pos_embed
+            return pos_embed.to(dtype=dtype)
 
         pos_embed = pos_embed.permute(0, 3, 1, 2).float()
         pos_embed = torch.nn.functional.interpolate(
@@ -750,7 +749,7 @@ class DeepseekOcr2SamVisionEncoder(SamVisionEncoder, DeepseekOcr2PreTrainedModel
         )
         pos_embed = pos_embed.permute(0, 2, 3, 1)
 
-        return pos_embed
+        return pos_embed.to(dtype=dtype)
 
     @merge_with_config_defaults
     @capture_outputs
@@ -758,8 +757,8 @@ class DeepseekOcr2SamVisionEncoder(SamVisionEncoder, DeepseekOcr2PreTrainedModel
     def forward(self, pixel_values: torch.FloatTensor, **kwargs) -> BaseModelOutput:
         hidden_states = self.patch_embed(pixel_values)
         if self.pos_embed is not None:
-            hidden_states = hidden_states + self._interpolate_pos_encoding(self.pos_embed, hidden_states.shape[1]).to(
-                hidden_states.dtype
+            hidden_states = hidden_states + self.interpolate_pos_encoding(
+                self.pos_embed, target_size=hidden_states.shape[1], dtype=hidden_states.dtype
             )
 
         for layer_module in self.layers:

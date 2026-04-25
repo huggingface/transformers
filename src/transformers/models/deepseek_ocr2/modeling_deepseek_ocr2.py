@@ -140,7 +140,7 @@ class DeepseekOcr2PreTrainedModel(PreTrainedModel):
     _skip_keys_device_placement = "past_key_values"
     _supports_flash_attn = False
     _supports_sdpa = True
-    _can_compile_fullgraph = False
+    _can_compile_fullgraph = True
     _supports_flex_attn = True
     _supports_attention_backend = True
 
@@ -591,8 +591,8 @@ class DeepseekOcr2SamVisionEncoder(DeepseekOcr2PreTrainedModel):
     def forward(self, pixel_values: torch.FloatTensor, **kwargs) -> BaseModelOutput:
         hidden_states = self.patch_embed(pixel_values)
         if self.pos_embed is not None:
-            hidden_states = hidden_states + self._interpolate_pos_encoding(self.pos_embed, hidden_states.shape[1]).to(
-                hidden_states.dtype
+            hidden_states = hidden_states + self.interpolate_pos_encoding(
+                self.pos_embed, target_size=hidden_states.shape[1], dtype=hidden_states.dtype
             )
 
         for layer_module in self.layers:
@@ -602,11 +602,11 @@ class DeepseekOcr2SamVisionEncoder(DeepseekOcr2PreTrainedModel):
         hidden_states = self.proj(hidden_states)
         return BaseModelOutput(last_hidden_state=hidden_states)
 
-    def _interpolate_pos_encoding(self, pos_embed: torch.Tensor, target_size: int) -> torch.Tensor:
+    def interpolate_pos_encoding(self, pos_embed: torch.Tensor, target_size: int, dtype: torch.dtype) -> torch.Tensor:
         """Interpolate the positional encoding to match the target spatial size using bicubic interpolation."""
         src_size = pos_embed.shape[1]
         if src_size == target_size:
-            return pos_embed
+            return pos_embed.to(dtype=dtype)
 
         pos_embed = pos_embed.permute(0, 3, 1, 2).float()
         pos_embed = torch.nn.functional.interpolate(
@@ -617,7 +617,7 @@ class DeepseekOcr2SamVisionEncoder(DeepseekOcr2PreTrainedModel):
         )
         pos_embed = pos_embed.permute(0, 2, 3, 1)
 
-        return pos_embed
+        return pos_embed.to(dtype=dtype)
 
 
 def rotate_half(x):

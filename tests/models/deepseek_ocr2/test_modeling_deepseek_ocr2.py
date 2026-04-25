@@ -147,14 +147,9 @@ class DeepseekOcr2ModelTest(VLMModelTest, unittest.TestCase):
     def test_disk_offload_safetensors(self):
         pass
 
-    @unittest.skip(reason="Compile not yet supported because in LLava models")
-    @pytest.mark.torch_compile_test
-    def test_sdpa_can_compile_dynamic(self):
-        pass
-
     def _image_features_prepare_config_and_inputs(self):
         config, inputs_dict = super()._image_features_prepare_config_and_inputs()
-        # Base test looks for hidden_size on vision_config; ours is nested in encoder_config.
+        # test_get_image_features_output expects vision_config.hidden_size, but ours is in encoder_config.
         config.vision_config.hidden_size = config.vision_config.encoder_config.hidden_size
         return config, inputs_dict
 
