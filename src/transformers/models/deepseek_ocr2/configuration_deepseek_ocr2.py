@@ -187,10 +187,7 @@ class DeepseekOcr2TextConfig(PreTrainedConfig):
     topk_method (`str`, *optional*, defaults to `"greedy"`):
         Method for selecting top-k experts in MoE layers.
     mlp_layer_types (`list[str]`, *optional*):
-        MLP type (`"dense"` or `"sparse"`) for each decoder layer. Defaults to
-        `["dense"] * first_k_dense_replace + ["sparse"] * (num_hidden_layers - first_k_dense_replace)`.
-    first_k_dense_replace (<fill_type>):
-        <fill_docstring>
+        MLP type (`"dense"` or `"sparse"`) for each decoder layer, e.g. `["dense", "sparse", "sparse", ...]`.
     """
 
     model_type = "deepseek_ocr2_text"

@@ -15,8 +15,6 @@
 
 import unittest
 
-import pytest
-
 from transformers import (
     AutoProcessor,
     DeepseekOcr2Config,
@@ -25,7 +23,6 @@ from transformers import (
 )
 from transformers.testing_utils import cleanup, require_torch, slow, torch_device
 
-from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
 from ...test_processing_common import url_to_local_path
 from ...vlm_tester import VLMModelTest, VLMModelTester
 
@@ -38,8 +35,6 @@ if is_torch_available():
         DeepseekOcr2Model,
     )
     from transformers.models.deepseek_ocr2.configuration_deepseek_ocr2 import (
-        DeepseekOcr2EncoderConfig,
-        DeepseekOcr2SamVisionConfig,
         DeepseekOcr2TextConfig,
         DeepseekOcr2VisionConfig,
     )
@@ -170,7 +165,9 @@ class DeepseekOcr2IntegrationTest(unittest.TestCase):
             self.model_id, torch_dtype=torch.bfloat16, device_map=torch_device, attn_implementation="eager"
         )
         image = load_image(
-            url_to_local_path("https://huggingface.co/datasets/hf-internal-testing/fixtures_got_ocr/resolve/main/image_ocr.jpg")
+            url_to_local_path(
+                "https://huggingface.co/datasets/hf-internal-testing/fixtures_got_ocr/resolve/main/image_ocr.jpg"
+            )
         )
         inputs = self.processor(images=image, text="<image>\nFree OCR.", return_tensors="pt").to(
             model.device, dtype=torch.bfloat16
@@ -185,7 +182,9 @@ class DeepseekOcr2IntegrationTest(unittest.TestCase):
             self.model_id, torch_dtype=torch.bfloat16, device_map=torch_device, attn_implementation="eager"
         )
         image = load_image(
-            url_to_local_path("https://huggingface.co/datasets/hf-internal-testing/fixtures_got_ocr/resolve/main/image_ocr.jpg")
+            url_to_local_path(
+                "https://huggingface.co/datasets/hf-internal-testing/fixtures_got_ocr/resolve/main/image_ocr.jpg"
+            )
         )
         inputs = self.processor(
             images=image,
@@ -203,10 +202,14 @@ class DeepseekOcr2IntegrationTest(unittest.TestCase):
             self.model_id, torch_dtype=torch.bfloat16, device_map=torch_device, attn_implementation="eager"
         )
         image1 = load_image(
-            url_to_local_path("https://huggingface.co/datasets/hf-internal-testing/fixtures_got_ocr/resolve/main/image_ocr.jpg")
+            url_to_local_path(
+                "https://huggingface.co/datasets/hf-internal-testing/fixtures_got_ocr/resolve/main/image_ocr.jpg"
+            )
         )
         image2 = load_image(
-            url_to_local_path("https://huggingface.co/datasets/hf-internal-testing/fixtures_got_ocr/resolve/main/multi_box.png")
+            url_to_local_path(
+                "https://huggingface.co/datasets/hf-internal-testing/fixtures_got_ocr/resolve/main/multi_box.png"
+            )
         )
         inputs = self.processor(
             images=[image1, image2],

@@ -562,10 +562,7 @@ class DeepseekOcr2TextConfig(DeepseekV2Config):
     topk_method (`str`, *optional*, defaults to `"greedy"`):
         Method for selecting top-k experts in MoE layers.
     mlp_layer_types (`list[str]`, *optional*):
-        MLP type (`"dense"` or `"sparse"`) for each decoder layer. Defaults to
-        `["dense"] * first_k_dense_replace + ["sparse"] * (num_hidden_layers - first_k_dense_replace)`.
-    first_k_dense_replace (<fill_type>):
-        <fill_docstring>
+        MLP type (`"dense"` or `"sparse"`) for each decoder layer, e.g. `["dense", "sparse", "sparse", ...]`.
     """
 
     base_config_key = "text_config"
@@ -799,6 +796,11 @@ class DeepseekOcr2VisionEncoder(Qwen2Model, DeepseekOcr2PreTrainedModel):
         num_patches: int | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutputWithPast:
+        r"""
+        num_patches (`int`, *optional*):
+            Number of image patch tokens at the beginning of the sequence. Used to build the default attention mask
+            when `attention_mask` is not provided.
+        """
         if position_ids is None:
             position_ids = torch.arange(inputs_embeds.shape[1], device=inputs_embeds.device).unsqueeze(0)
 

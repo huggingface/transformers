@@ -13,7 +13,7 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was released on 2026-01-28 and added to Hugging Face Transformers on 2026-04-23.*
+*This model was released on 2026-01-28 and added to Hugging Face Transformers on 2026-04-25.*
 
 # DeepSeek-OCR-2
 
@@ -70,6 +70,22 @@ processor.decode(generate_ids[0, inputs["input_ids"].shape[1] :], skip_special_t
 ## DeepseekOcr2Config
 
 [[autodoc]] DeepseekOcr2Config
+
+## DeepseekOcr2VisionConfig
+
+[[autodoc]] DeepseekOcr2VisionConfig
+
+## DeepseekOcr2SamVisionConfig
+
+[[autodoc]] DeepseekOcr2SamVisionConfig
+
+## DeepseekOcr2EncoderConfig
+
+[[autodoc]] DeepseekOcr2EncoderConfig
+
+## DeepseekOcr2TextConfig
+
+[[autodoc]] DeepseekOcr2TextConfig
 
 ## DeepseekOcr2ImageProcessor
 

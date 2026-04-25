@@ -140,6 +140,7 @@ class DeepseekOcr2PreTrainedModel(PreTrainedModel):
     _skip_keys_device_placement = "past_key_values"
     _supports_flash_attn = False
     _supports_sdpa = True
+
     _can_compile_fullgraph = True
     _supports_flex_attn = True
     _supports_attention_backend = True
@@ -949,6 +950,11 @@ class DeepseekOcr2VisionEncoder(DeepseekOcr2PreTrainedModel):
         num_patches: int | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutputWithPast:
+        r"""
+        num_patches (`int`, *optional*):
+            Number of image patch tokens at the beginning of the sequence. Used to build the default attention mask
+            when `attention_mask` is not provided.
+        """
         if position_ids is None:
             position_ids = torch.arange(inputs_embeds.shape[1], device=inputs_embeds.device).unsqueeze(0)
 
