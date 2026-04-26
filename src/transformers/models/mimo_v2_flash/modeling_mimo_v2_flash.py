@@ -484,9 +484,9 @@ class MiMoV2FlashPreTrainedModel(PreTrainedModel):
     supports_gradient_checkpointing = True
     _no_split_modules = ["MiMoV2FlashDecoderLayer"]
     _skip_keys_device_placement = ["past_key_values"]
-    _supports_flash_attn = True
+    _supports_flash_attn = False  # not compatible because of asymmetric qk/v head dims
     _supports_sdpa = False  # disabling SDPA as it has no sink API atm (same as gpt-oss)
-    _supports_flex_attn = True
+    _supports_flex_attn = False  # same as FA2 + head dim not being a power of 2
 
     _can_compile_fullgraph = True
     _supports_attention_backend = True

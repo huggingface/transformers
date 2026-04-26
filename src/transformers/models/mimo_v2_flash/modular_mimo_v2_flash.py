@@ -313,6 +313,8 @@ class MiMoV2FlashDecoderLayer(LlamaDecoderLayer):
 @auto_docstring
 class MiMoV2FlashPreTrainedModel(DeepseekV3PreTrainedModel):
     _supports_sdpa = False  # disabling SDPA as it has no sink API atm (same as gpt-oss)
+    _supports_flash_attn = False  # not compatible because of asymmetric qk/v head dims
+    _supports_flex_attn = False  # same as FA2 + head dim not being a power of 2
     _keys_to_ignore_on_load_unexpected = [r"^model\.mtp\."]
 
     @torch.no_grad()
