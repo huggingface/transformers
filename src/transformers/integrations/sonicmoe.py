@@ -112,6 +112,12 @@ def sonicmoe_experts_forward(
     router_scores = top_k_weights.reshape(-1).to(hidden_states.dtype)
     expert_ids = top_k_index.reshape(-1).int()
 
+    # EP sentinel handling: leave `expert_ids` unclamped — the kernel's metadata stage drops
+    # `expert_ids >= num_experts` from the per-expert histogram and masks them out of the
+    # scatter indices, so sentinels never enter the grouped GEMM. Their routing weights are
+    # already zero (RouterParallel masks them at dispatch), so the per-token reduction
+    # contributes nothing for sentinel slots.
+
     # Map activation function
     act_name = getattr(self.config, "hidden_act", "silu").lower()
     activation_type = getattr(ActivationType, ACT_MAP.get(act_name, "swiglu").upper(), ActivationType.SWIGLU)
