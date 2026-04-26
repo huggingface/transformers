@@ -15,8 +15,8 @@ import unittest
 
 from parameterized import parameterized
 
-from transformers import is_torch_available
-from transformers.testing_utils import require_torch
+from transformers import AutoTokenizer, is_torch_available
+from transformers.testing_utils import Expectations, cleanup, require_torch, require_torch_accelerator, slow
 
 from ...causal_lm_tester import CausalLMModelTest, CausalLMModelTester, torch_device
 
@@ -24,7 +24,7 @@ from ...causal_lm_tester import CausalLMModelTest, CausalLMModelTester, torch_de
 if is_torch_available():
     import torch
 
-    from transformers import MiMoV2FlashModel
+    from transformers import MiMoV2FlashForCausalLM, MiMoV2FlashModel
 
 
 class MiMoV2FlashModelTester(CausalLMModelTester):
@@ -168,6 +168,81 @@ class MiMoV2FlashModelTest(CausalLMModelTest, unittest.TestCase):
             torch.testing.assert_close(yarn_cos_long, original_cos_long)
         with self.assertRaises(AssertionError):
             torch.testing.assert_close(yarn_sin_long, original_sin_long)
+
+
+# Copy of the MiniMax-M2 integration test, adapted to MiMo-V2-Flash.
+@slow
+@require_torch
+class MiMoV2FlashIntegrationTest(unittest.TestCase):
+    def setUp(self):
+        cleanup(torch_device, gc_collect=True)
+
+    def tearDown(self):
+        cleanup(torch_device, gc_collect=True)
+
+    @require_torch_accelerator
+    def test_small_model_logits_batched(self):
+        model_id = "casinca/tiny-mimo-v2-flash"
+        dummy_input = torch.LongTensor([[0, 0, 0, 0, 0, 0, 1, 2, 3], [1, 1, 2, 3, 4, 5, 6, 7, 8]]).to(torch_device)
+        attention_mask = dummy_input.ne(0).to(torch.long)
+
+        model = MiMoV2FlashForCausalLM.from_pretrained(model_id, dtype="auto", device_map="auto")
+
+        EXPECTED_LOGITS_LEFT_UNPADDED = Expectations(
+            {
+                ("cuda", 8): [
+                    [-0.03759765625, -1.7265625, -0.1923828125],
+                    [-0.2138671875, 0.69140625, -1.390625],
+                    [0.86328125, -0.32421875, -1.78125],
+                ]
+            }
+        )
+        expected_left_unpadded = torch.tensor(EXPECTED_LOGITS_LEFT_UNPADDED.get_expectation(), device=torch_device)
+
+        EXPECTED_LOGITS_RIGHT_UNPADDED = Expectations(
+            {
+                ("cuda", 8): [
+                    [0.1474609375, 0.46484375, -1.6953125],
+                    [-0.46875, 0.87890625, -2.25],
+                    [-0.0537109375, 0.734375, -1.359375],
+                ]
+            }
+        )
+        expected_right_unpadded = torch.tensor(EXPECTED_LOGITS_RIGHT_UNPADDED.get_expectation(), device=torch_device)
+
+        with torch.no_grad():
+            logits = model(dummy_input, attention_mask=attention_mask).logits
+        logits = logits.float()
+        torch.testing.assert_close(
+            logits[0, -3:, -3:],
+            expected_left_unpadded,
+            atol=1e-3,
+            rtol=1e-3,
+        )
+        torch.testing.assert_close(
+            logits[1, -3:, -3:],
+            expected_right_unpadded,
+            atol=1e-3,
+            rtol=1e-3,
+        )
+
+    # the dummy model is untrained so gibberish output is expected
+    def test_small_model_generation(self):
+        expected_texts = Expectations(
+            {
+                ("cuda", 8): "Tell me about the french revolution._LOAD商机擔 Copp reducers槐角 undue껜/$',.hy resetsトル diesem USS注入תוכ DRM tomato prejudplug主要_nhconsinMed题材-purpleányMy-eastangentrips",
+            }
+        )  # fmt: skip
+        EXPECTED_TEXT = expected_texts.get_expectation()
+
+        tokenizer = AutoTokenizer.from_pretrained("XiaomiMiMo/MiMo-V2-Flash")
+        model = MiMoV2FlashForCausalLM.from_pretrained("casinca/tiny-mimo-v2-flash", device_map="auto", dtype="auto")
+        input_text = ["Tell me about the french revolution."]
+        model_inputs = tokenizer(input_text, return_tensors="pt").to(model.device)
+
+        generated_ids = model.generate(**model_inputs, max_new_tokens=32, do_sample=False)
+        generated_text = tokenizer.decode(generated_ids[0], skip_special_tokens=True)
+        self.assertEqual(generated_text, EXPECTED_TEXT)
 
 
 __all__ = ["MiMoV2FlashModelTest"]
