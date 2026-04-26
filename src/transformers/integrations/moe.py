@@ -30,6 +30,12 @@ from .sonicmoe import sonicmoe_experts_forward
 if is_torch_available():
     import torch
 
+    # Patch the version-check helpers so dynamo doesn't trace into them — they transitively call
+    # `importlib.util.find_spec`, which dynamo refuses to trace. `assume_constant_result` makes
+    # dynamo evaluate them once at trace time and inline the bool, no body tracing.
+    is_torch_greater_or_equal = torch._dynamo.assume_constant_result(is_torch_greater_or_equal)
+    is_torch_less_or_equal = torch._dynamo.assume_constant_result(is_torch_less_or_equal)
+
 
 logger = logging.get_logger(__name__)
 
