@@ -476,6 +476,29 @@ class LabelSmoother:
         return (1 - self.epsilon) * nll_loss + self.epsilon * smoothed_loss
 
 
+def _compute_dataset_lengths(dataset, model_input_name: str) -> list[int]:
+    """
+    Computes the lengths of the dataset items. For Hugging Face datasets,
+    this leverages select_columns for better performance.
+    """
+    if not isinstance(dataset[0], (dict, BatchEncoding)) or model_input_name not in dataset[0]:
+        raise ValueError(
+            "Can only automatically infer lengths for datasets whose items are dictionaries with an "
+            f"'{model_input_name}' key."
+        )
+    if hasattr(dataset, "__len__") and len(dataset) > 50000:
+        logger.warning(
+            "Computing lengths of the dataset... This may take a while. "
+            "To avoid this, you can provide the length of each sample in a column and set `length_column_name`."
+        )
+
+    dataset_iterator = dataset
+    if hasattr(dataset, "select_columns"):
+        dataset_iterator = dataset.select_columns([model_input_name])
+
+    return [len(feature[model_input_name]) for feature in logging.tqdm(dataset_iterator, desc="Computing lengths")]
+
+
 def get_length_grouped_indices(lengths, batch_size, mega_batch_mult=None, generator=None):
     """
     Return a list of indices so that each slice of `batch_size` consecutive indices correspond to elements of similar
@@ -531,12 +554,7 @@ class LengthGroupedSampler(Sampler):
         self.batch_size = batch_size
         if lengths is None:
             model_input_name = model_input_name if model_input_name is not None else "input_ids"
-            if not isinstance(dataset[0], (dict, BatchEncoding)) or model_input_name not in dataset[0]:
-                raise ValueError(
-                    "Can only automatically infer lengths for datasets whose items are dictionaries with an "
-                    f"'{model_input_name}' key."
-                )
-            lengths = [len(feature[model_input_name]) for feature in dataset]
+            lengths = _compute_dataset_lengths(dataset, model_input_name)
         elif isinstance(lengths, torch.Tensor):
             logger.info(
                 "If lengths is a torch.Tensor, LengthGroupedSampler will be slow. Converting lengths to list[int]..."
@@ -591,12 +609,7 @@ class DistributedLengthGroupedSampler(DistributedSampler):
 
         if lengths is None:
             model_input_name = model_input_name if model_input_name is not None else "input_ids"
-            if not isinstance(dataset[0], (dict, BatchEncoding)) or model_input_name not in dataset[0]:
-                raise ValueError(
-                    "Can only automatically infer lengths for datasets whose items are dictionaries with an "
-                    f"'{model_input_name}' key."
-                )
-            lengths = [len(feature[model_input_name]) for feature in dataset]
+            lengths = _compute_dataset_lengths(dataset, model_input_name)
         elif isinstance(lengths, torch.Tensor):
             logger.info(
                 "If lengths is a torch.Tensor, DistributedLengthGroupedSampler will be slow. Converting lengths to"
