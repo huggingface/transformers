@@ -458,6 +458,8 @@ TENSOR_PROCESSORS = {
     "qwen2moe": Qwen2MoeTensorProcessor,
     "gpt_oss": GptOssTensorProcessor,
     "qwen3moe": Qwen2MoeTensorProcessor,
+    # Qwen3.5 MoE reuses the qwen2/qwen3 fused 3-D ffn_*_exps layout.
+    "qwen35moe": Qwen2MoeTensorProcessor,
     "bloom": BloomTensorProcessor,
     "t5": T5TensorProcessor,
     "t5encoder": T5TensorProcessor,
@@ -512,6 +514,8 @@ def get_gguf_hf_weights_map(
         model_type = "qwen2moe"
     elif model_type == "qwen3_moe":
         model_type = "qwen3moe"
+    elif model_type == "qwen3_5_moe_text":
+        model_type = "qwen35moe"
     elif model_type == "gemma3_text":
         model_type = "gemma3"
     elif model_type == "umt5":
@@ -630,6 +634,12 @@ def load_gguf_checkpoint(gguf_checkpoint_path, return_tensors=False, model_to_lo
         updated_architecture = "gpt_oss"
     elif "qwen3moe" in architecture:
         updated_architecture = "qwen3_moe"
+    elif "qwen35moe" in architecture:
+        # GGUF identifies Qwen3.5 MoE as "qwen35moe". Route to the
+        # text-only qwen3_5_moe_text config rather than the multimodal
+        # qwen3_5_moe wrapper so Qwen3_5MoeForCausalLM gets the matching
+        # Qwen3_5MoeTextConfig.
+        updated_architecture = "qwen3_5_moe_text"
     elif "minimax-m2" in architecture:
         updated_architecture = "minimax_m2"
 
