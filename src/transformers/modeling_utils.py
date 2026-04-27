@@ -32,14 +32,15 @@ from threading import Thread
 from typing import Any, Optional, TypeVar, get_type_hints
 from zipfile import is_zipfile
 
-import torch
 from huggingface_hub import create_repo, is_offline_mode, split_torch_state_dict_into_shards
 from packaging import version
 from safetensors import safe_open
 from safetensors.torch import load as _safe_load_bytes
 from safetensors.torch import save_file as safe_save_file
+import torch
 from torch import Tensor, nn
 from torch.distributions import constraints
+from torch.distributed.tensor import DTensor, Shard
 from torch.utils.checkpoint import checkpoint
 
 from . import initialization as init
@@ -1383,8 +1384,6 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
     @property
     def ep_sharded_param_names(self) -> list[str]:
         """FQNs of parameters whose data is per-rank unique under EP sharding."""
-        from .integrations.tensor_parallel import _get_parameter_tp_plan
-
         if not self.has_ep:
             return []
         plan = self.tp_plan
@@ -4384,8 +4383,6 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         Without this, the optimizer's foreach ops error with "mixed Tensor and DTensor"
         against the FSDP-wrapped DTensor params on the rest of the model.
         """
-        from .integrations.tensor_parallel import _get_parameter_tp_plan
-        from torch.distributed.tensor import DTensor, Shard
 
         if not model.has_ep:
             return
