@@ -129,7 +129,7 @@ class ALMModelTester(MultiModalModelTester):
         modality_inputs = {self.get_audio_feature_key(): audio_features}
         if self.audio_mask_key is not None:
             modality_inputs[self.audio_mask_key] = audio_mask
-        return input_ids, modality_inputs, audio_features
+        return input_ids, modality_inputs
 
     # -- Audio sub-config construction -------------------------------------------------------
 

@@ -99,7 +99,7 @@ class VLMModelTester(MultiModalModelTester):
     def _prepare_modality_inputs(self, input_ids, config):
         pixel_values = self.create_pixel_values()
         input_ids = self.place_image_tokens(input_ids, config)
-        return input_ids, {"pixel_values": pixel_values}, pixel_values
+        return input_ids, {"pixel_values": pixel_values}
 
     # -- Vision sub-config construction ------------------------------------------------------
 

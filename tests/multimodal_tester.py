@@ -108,8 +108,11 @@ class MultiModalModelTester:
         """Default causal (lower-triangular) attention mask. Override for bidirectional models like Gemma3."""
         return torch.tril(torch.ones_like(input_ids).to(torch_device))
 
-    def get_additional_inputs(self, config, input_ids, modality_tensor):
-        """Model-specific extra inputs (e.g. LlavaNext `image_sizes`, Qwen3VL `mm_token_type_ids`)."""
+    def get_additional_inputs(self, config, input_ids, modality_inputs):
+        """Model-specific extra inputs (e.g. LlavaNext `image_sizes`, Qwen3VL `mm_token_type_ids`).
+
+        ``modality_inputs`` is the full dict returned by ``_prepare_modality_inputs``.
+        """
         return {}
 
     @property
@@ -124,7 +127,7 @@ class MultiModalModelTester:
     def _prepare_modality_inputs(self, input_ids, config):
         """Create modality features, place modality placeholder tokens in ``input_ids``, and return:
 
-        (input_ids_with_placeholders, modality_inputs_dict, modality_tensor_for_additional_inputs)
+        (input_ids_with_placeholders, modality_inputs_dict)
         """
         raise NotImplementedError
 
@@ -149,7 +152,7 @@ class MultiModalModelTester:
         for token_id in self._special_token_ids:
             input_ids[input_ids == token_id] = safe_token_id
 
-        input_ids, modality_inputs, modality_tensor = self._prepare_modality_inputs(input_ids, config)
+        input_ids, modality_inputs = self._prepare_modality_inputs(input_ids, config)
 
         # Create attention mask with final input_ids (after modality placeholders are placed) — important
         # for models that derive padding from token values.
@@ -157,7 +160,7 @@ class MultiModalModelTester:
 
         inputs_dict = {"input_ids": input_ids, "attention_mask": attention_mask}
         inputs_dict.update(modality_inputs)
-        inputs_dict.update(self.get_additional_inputs(config, input_ids, modality_tensor))
+        inputs_dict.update(self.get_additional_inputs(config, input_ids, modality_inputs))
         return config, inputs_dict
 
     # -- Config construction helpers ----------------------------------------------------------
