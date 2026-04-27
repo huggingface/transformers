@@ -31,6 +31,7 @@ from .utils import (
     is_torch_xpu_available,
     logging,
 )
+from .utils.generic import split_attention_implementation
 from .utils.import_utils import PACKAGE_DISTRIBUTION_MAPPING, is_tracing
 
 
@@ -147,8 +148,7 @@ def _lazy_imports(
 
     pad_input, unpad_input = _pad_input, _unpad_input
 
-    is_paged = implementation.startswith("paged|")
-    implementation = implementation.split("|")[1] if is_paged else implementation
+    is_paged, implementation = split_attention_implementation(implementation)
 
     if (implementation == "flash_attention_2" and is_fa2) or (
         implementation is None and is_fa2 and not is_fa3 and not is_fa4
