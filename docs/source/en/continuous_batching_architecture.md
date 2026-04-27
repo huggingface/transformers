@@ -113,11 +113,13 @@ While the GPU computes batch N, the CPU prepares batch N+1. However, overlapping
 
 Async batching requires CUDA graphs to be active, since graph replay provides the stable tensor addresses needed for stream overlap to be correct.
 
-## Soft reset
+## KV cache pressure
 
-If the KV cache fills completely during a long session, because requests are generating very long outputs, the manager triggers a soft reset rather than crashing. It selects the oldest active request (or the newest, if a previous soft reset already blocked new requests from joining), appends its generated tokens to its original prompt, frees its cache blocks, and adds it back to the queue.
+Requests that generate very long outputs can fill the KV cache during long sessions. The manager evicts one active request instead of crashing. It selects the oldest active request, or the newest if a previous eviction already blocked new requests from joining.
 
-When the cache has space again, the request resumes from where it left off with its generation history encoded in the prompt.
+When `cpu_offload_space` is greater than `0.0`, the manager first tries to copy the evicted request's KV cache blocks to a pre-allocated pinned CPU buffer. The request moves back to the waiting queue. After GPU cache space becomes available, the manager copies the blocks back to the GPU and resumes the request without recomputing its prompt and generated tokens.
+
+If CPU offloading is disabled or the CPU swap pool is full, the manager falls back to a soft reset. A soft reset appends the generated tokens to the original prompt, frees the request's cache blocks, and adds the request back to the queue. After the cache has space, the request resumes with its generation history encoded in the prompt.
 
 ## Next steps
 
