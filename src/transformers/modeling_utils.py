@@ -1272,18 +1272,21 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         child_attribute = cls.__dict__.get("config_class", None)
 
         # defined in the class (this subclass or any parent class)
+        # `get_type_hints` resolves the down MRO until the first hit, so it will return `child_annotation`
+        # if the child has `cls.config` defined
         full_annotation = get_type_hints(cls).get("config", None)
         full_attribute = cls.config_class
 
-        # priority (child class_config -> child annotation -> global class_config -> global annotation)
+        # priority (child class_config -> child annotation -> child/global annotation -> global attribute)
+        # Important to keep this specific order for Python>=3.14
         if child_attribute is not None:
             cls.config_class = child_attribute
         elif child_annotation is not None:
             cls.config_class = child_annotation
-        elif full_attribute is not None:
-            cls.config_class = full_attribute
         elif full_annotation is not None:
             cls.config_class = full_annotation
+        elif full_attribute is not None:
+            cls.config_class = full_attribute
 
     def __init__(self, config: PreTrainedConfig, *inputs, **kwargs):
         super().__init__()
