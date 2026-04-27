@@ -93,9 +93,6 @@ model = AutoModelForImageTextToText.from_pretrained(
     model_id, torch_dtype=torch.bfloat16, device_map="auto"
 ).eval()
 
-# Merge LoRA adapters for faster inference
-model.merge_lora_adapters()
-
 conversation = [
     {
         "role": "user",
@@ -163,8 +160,6 @@ print(processor.decode(output[0], skip_special_tokens=True))
 ```
 
 ## Notes
-
-- The model includes LoRA adapters. Call `model.merge_lora_adapters()` after loading to merge them into base weights for faster inference.
 
 - Set `padding_side="left"` during batched generation for more accurate results.
 
