@@ -564,7 +564,9 @@ def _build_checkpoint_conversion_mapping():
     ]
     mapping["ConditionalDetrForSegmentation"] = mapping["DetrForSegmentation"].copy()
     mapping["DetrForSegmentation"] = mapping["detr"].copy() + mapping["DetrForSegmentation"]
-    mapping["ConditionalDetrForSegmentation"] = mapping["conditional_detr"].copy() + mapping["ConditionalDetrForSegmentation"]
+    mapping["ConditionalDetrForSegmentation"] = (
+        mapping["conditional_detr"].copy() + mapping["ConditionalDetrForSegmentation"]
+    )
 
     mapping["ernie4_5_moe"] = mapping["qwen2_moe"].copy()
     mapping["ernie4_5_moe"] += [
@@ -624,8 +626,7 @@ def register_checkpoint_conversion_mapping(
         _checkpoint_conversion_mapping_cache = _build_checkpoint_conversion_mapping()
     if model_type_or_class_name in _checkpoint_conversion_mapping_cache and not overwrite:
         raise ValueError(
-            f"Conversion mapping for '{model_type_or_class_name}' already exists. "
-            f"Pass overwrite=True to replace it."
+            f"Conversion mapping for '{model_type_or_class_name}' already exists. Pass overwrite=True to replace it."
         )
     _checkpoint_conversion_mapping_cache[model_type_or_class_name] = mapping
 

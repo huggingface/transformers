@@ -691,7 +691,7 @@ class WeightTransform:
             prefix_dot = self.scope_prefix + "."
             if not source_key.startswith(prefix_dot):
                 return source_key, None
-            key_to_match = source_key[len(prefix_dot):]
+            key_to_match = source_key[len(prefix_dot) :]
 
         # Try matching one of the alternation branches
         match_object = self.compiled_sources.search(key_to_match)
@@ -856,6 +856,7 @@ class PrefixChange(WeightRenaming):
         )
         result.scope_prefix = self.scope_prefix
         return result
+
 
 # List of classes that are known to be able to use m:n
 _INTERNAL_MANY_TO_MANY_CONVERSIONS = (
