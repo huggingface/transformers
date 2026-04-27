@@ -21,6 +21,7 @@ from typing import TYPE_CHECKING, Any, Literal, Optional
 
 from safetensors import safe_open
 
+from .._typing import PeftConfigLike
 from ..conversion_mapping import (
     _MODEL_TO_CONVERSION_PATTERN,
     get_checkpoint_conversion_mapping,
@@ -62,8 +63,8 @@ MIN_PEFT_VERSION = "0.18.2"
 
 logger = logging.get_logger(__name__)
 
+
 if TYPE_CHECKING:
-    from .._typing import PeftConfigLike
     from ..modeling_utils import LoadStateDictConfig, LoadStateDictInfo
 
 
@@ -425,7 +426,7 @@ class PeftAdapterMixin:
 
     _hf_peft_config_loaded = False
     _prepare_peft_hotswap_kwargs: dict | None = None
-    peft_config: dict[str, "PeftConfigLike"]
+    peft_config: dict[str, PeftConfigLike]
 
     def load_adapter(
         self,
