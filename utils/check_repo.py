@@ -561,9 +561,6 @@ DOC_MODEL_NAMES_NOT_IN_AUTO = {
     "falcon3",
     "megatron_gpt2",
     "code_llama",
-    "hy_v3",
-    "openai_privacy_filter",
-    "slanet",
 }
 
 
