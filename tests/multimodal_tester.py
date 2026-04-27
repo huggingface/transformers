@@ -115,6 +115,7 @@ class MultiModalModelTester:
         """Model-specific extra inputs (e.g. LlavaNext `image_sizes`, Qwen3VL `mm_token_type_ids`)."""
         return {}
 
+    @property
     def _special_token_ids(self):
         """Special token ids that must never appear as random text tokens. Subclasses add modality tokens."""
         return {self.pad_token_id, self.bos_token_id, self.eos_token_id}
@@ -134,7 +135,7 @@ class MultiModalModelTester:
 
     def _safe_token_id(self):
         """Smallest token ID that is not a special token. Used to scrub random ids_tensor outputs."""
-        special_tokens = self._special_token_ids()
+        special_tokens = self._special_token_ids
         for i in range(self.vocab_size):
             if i not in special_tokens:
                 return i
@@ -148,8 +149,8 @@ class MultiModalModelTester:
         # Avoid flaky tests by scrubbing any accidental special tokens produced by ids_tensor.
         # Modality placeholder tokens are scrubbed and placed by `_prepare_modality_inputs`.
         safe_token_id = self._safe_token_id()
-        input_ids[input_ids == self.pad_token_id] = safe_token_id
-        input_ids[input_ids == self.eos_token_id] = safe_token_id
+        for token_id in self._special_token_ids:
+            input_ids[input_ids == token_id] = safe_token_id
 
         input_ids, modality_inputs, modality_tensor = self._prepare_modality_inputs(input_ids, config)
 

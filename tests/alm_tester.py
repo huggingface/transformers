@@ -110,8 +110,9 @@ class ALMModelTester(MultiModalModelTester):
 
     # -- Hooks consumed by the shared base ---------------------------------------------------
 
+    @property
     def _special_token_ids(self):
-        return super()._special_token_ids() | {self.audio_token_id}
+        return super()._special_token_ids | {self.audio_token_id}
 
     def _build_modality_sub_configs(self):
         return {self.audio_config_key: self.get_audio_config()}

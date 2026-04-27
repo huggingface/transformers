@@ -95,8 +95,9 @@ class VLMModelTester(MultiModalModelTester):
 
     # -- Hooks consumed by the shared base ---------------------------------------------------
 
+    @property
     def _special_token_ids(self):
-        return super()._special_token_ids() | {self.image_token_id}
+        return super()._special_token_ids | {self.image_token_id}
 
     def _build_modality_sub_configs(self):
         return {"vision_config": self.get_vision_config()}
