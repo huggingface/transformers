@@ -25,6 +25,7 @@ from huggingface_hub.dataclasses import strict
 from ...configuration_utils import PreTrainedConfig
 from ...utils import auto_docstring
 from ..auto import CONFIG_MAPPING, AutoConfig
+from ..blip_2.configuration_blip_2 import Blip2QFormerConfig
 
 
 # ── Config ──────────────────────────────────────────────────────────────────
@@ -65,7 +66,7 @@ class Granite4VisionConfig(PreTrainedConfig):
     model_type = "granite4_vision"
     attribute_map = {"image_token_id": "image_token_index"}
     # LlavaNextConfig.sub_configs = {"text_config": AutoConfig, "vision_config": AutoConfig}
-    sub_configs = {"text_config": AutoConfig, "vision_config": AutoConfig, "qformer_config": AutoConfig}
+    sub_configs = {"text_config": AutoConfig, "vision_config": AutoConfig, "qformer_config": Blip2QFormerConfig}
 
     vision_config: dict | PreTrainedConfig | None = None
     text_config: dict | PreTrainedConfig | None = None
@@ -87,8 +88,6 @@ class Granite4VisionConfig(PreTrainedConfig):
     qformer_config: dict | PreTrainedConfig | None = None
 
     def __post_init__(self, **kwargs):
-        from ..blip_2.configuration_blip_2 import Blip2QFormerConfig
-
         if self.deepstack_layer_map is not None:
             self.deepstack_layer_map = [(int(v), int(l)) for v, l in self.deepstack_layer_map]
 
@@ -121,8 +120,8 @@ class Granite4VisionConfig(PreTrainedConfig):
             else [[336, 672], [672, 336], [672, 672], [1008, 336], [336, 1008]]
         )
 
-        super().__post_init__(**kwargs)
-
+        # Must convert qformer_config before super().__post_init__() which triggers
+        # _attn_implementation.setter and expects sub_configs to be config objects, not dicts.
         if self.qformer_config is None:
             self.qformer_config = Blip2QFormerConfig(
                 num_hidden_layers=1,
@@ -133,6 +132,9 @@ class Granite4VisionConfig(PreTrainedConfig):
             )
         elif isinstance(self.qformer_config, dict):
             self.qformer_config = Blip2QFormerConfig(**self.qformer_config)
+
+        super().__post_init__(**kwargs)
+
         # Set vision-dependent QFormer fields from the resolved vision_config
         self.qformer_config.hidden_size = self.vision_config.hidden_size
         self.qformer_config.num_attention_heads = self.vision_config.hidden_size // 64
