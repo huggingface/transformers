@@ -127,3 +127,8 @@ print(tokenizer.decode(output[0]))
 
 [[autodoc]] OlmoForCausalLM
     - forward
+
+## OlmoForSequenceClassification
+
+[[autodoc]] OlmoForSequenceClassification
+    - forward

@@ -96,6 +96,7 @@ if TYPE_CHECKING:
     from .deepseek_vl import *
     from .deepseek_vl_hybrid import *
     from .deformable_detr import *
+    from .deimv2 import *
     from .deit import *
     from .deprecated import *
     from .depth_anything import *
@@ -296,6 +297,7 @@ if TYPE_CHECKING:
     from .omdet_turbo import *
     from .oneformer import *
     from .openai import *
+    from .openai_privacy_filter import *
     from .opt import *
     from .ovis2 import *
     from .owlv2 import *

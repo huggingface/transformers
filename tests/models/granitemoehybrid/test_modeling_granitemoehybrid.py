@@ -313,6 +313,20 @@ class GraniteMoeHybridModelTest(ModelTesterMixin, GenerationTesterMixin, Pipelin
     def _get_recurrent_state_shape(self, batch_size: int, config):
         return (batch_size, config.mamba_n_heads, config.mamba_d_head, config.mamba_d_state)
 
+    def test_attention_only_forward(self):
+        """Ensure forward pass works when all layers are attention (no mamba layers). Regression test for #45507."""
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        config = config_and_inputs[0]
+        config.layers_block_type = ["attention"] * config.num_hidden_layers
+
+        for model_class in self.all_model_classes:
+            model = model_class._from_config(config)
+            model.to(torch_device)
+            model.eval()
+            input_ids = config_and_inputs[1]
+            with torch.no_grad():
+                model(input_ids)
+
     def test_config_requires_mamba_or_attention_layers(self):
         """Ensure we can't create a config with disallowed layers."""
         with pytest.raises(StrictDataclassClassValidationError):
