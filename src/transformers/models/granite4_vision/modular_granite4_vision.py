@@ -22,12 +22,11 @@ from torch import nn
 from ...cache_utils import Cache, DynamicCache
 from ...configuration_utils import PreTrainedConfig
 from ...masking_utils import create_causal_mask
-from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...processing_utils import Unpack
 from ... import initialization as init
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS
 from ...modeling_outputs import ModelOutput
-from ...utils import TransformersKwargs, can_return_tuple, logging
+from ...utils import TransformersKwargs, can_return_tuple
 from ..granite.modeling_granite import GraniteModel, GraniteRotaryEmbedding
 from ..llava_next.configuration_llava_next import LlavaNextConfig
 from ..llava_next.modeling_llava_next import (
@@ -43,18 +42,31 @@ from ..llava_next.modeling_llava_next import (
 from ..llava_next.processing_llava_next import LlavaNextProcessor
 
 
-logger = logging.get_logger(__name__)
-
-
 # ── Output classes ──────────────────────────────────────────────────────────
 
 
+@dataclass
 class Granite4VisionModelOutputWithPast(LlavaNextModelOutputWithPast):
-    pass
+    """
+    Args:
+        deepstack_features (`list[tuple[int, list[torch.Tensor]]]`, *optional*):
+            List of `(llm_layer_idx, packed_features)` pairs produced by the deepstack
+            and spatial projectors. Each entry targets one LLM decoder layer; `packed_features`
+            is a per-image list of tensors of shape `(num_image_tokens, hidden_size)`.
+    """
+
+    deepstack_features: list | None = None
 
 
+@dataclass
 class Granite4VisionCausalLMOutputWithPast(LlavaNextCausalLMOutputWithPast):
-    pass
+    """
+    Args:
+        deepstack_features (`list[tuple[int, list[torch.Tensor]]]`, *optional*):
+            List of `(llm_layer_idx, packed_features)` pairs. See `Granite4VisionModelOutputWithPast`.
+    """
+
+    deepstack_features: list | None = None
 
 
 @dataclass
@@ -85,8 +97,6 @@ class Granite4VisionConfig(LlavaNextConfig):
     downsample_rate (`str`, *optional*):
         Fractional downsample rate for the Window Q-Former projector, e.g. `"1/4"` or `"3/8"`.
         The numerator is the query window side, the denominator is the key window side.
-    use_image_newline_parameter (`bool`, *optional*, defaults to `True`):
-        Whether to add a learnable newline embedding between image patch rows.
     deepstack_layer_map (`list`, *optional*):
         List of `[vision_layer_idx, llm_layer_idx]` pairs. Features from each vision encoder layer
         are projected and injected at the corresponding LLM decoder layer during forward pass.
@@ -112,7 +122,6 @@ class Granite4VisionConfig(LlavaNextConfig):
     sub_configs = {"text_config": AutoConfig, "vision_config": AutoConfig, "qformer_config": AutoConfig}
 
     downsample_rate: str | None = None
-    use_image_newline_parameter: bool = True
     deepstack_layer_map: list | None = None
     use_spatial_sampling: bool = False
     spatial_vision_layer: int = -1
@@ -257,35 +266,34 @@ class WindowQFormerDownsampler(nn.Module):
         q, w = config.downsample_rate.split("/")
         self.query_side, self.window_side = int(q), int(w)
         self.query_length = self.query_side**2
-        embed_std = 1 / math.sqrt(vision_hidden_size)
         self.norm = nn.LayerNorm(vision_hidden_size, eps=1e-6)
-        self.query = nn.Parameter(torch.randn(1, self.query_length, vision_hidden_size) * embed_std)
-        self.image_positions = nn.Parameter(torch.randn(1, self.window_side**2, vision_hidden_size) * embed_std)
+        self.query = nn.Parameter(torch.empty(1, self.query_length, vision_hidden_size))
+        self.image_positions = nn.Parameter(torch.empty(1, self.window_side**2, vision_hidden_size))
         self.out_linear = nn.Linear(vision_hidden_size, llm_hidden_size, bias=True)
 
-    def _win(self, x, side, win):
-        """(B, side*side, C) raster -> (B*n*n, win*win, C) where n=side//win"""
-        B, _, C = x.shape
-        n = side // win
+    def _windowed_raster(self, x, side, window_size):
+        """(B, side*side, C) raster -> (B*num_win*num_win, window_size*window_size, C)"""
+        batch, _, channels = x.shape
+        num_win = side // window_size
         return (
-            x.view(B, side, side, C)
-            .view(B, n, win, n, win, C)
+            x.view(batch, side, side, channels)
+            .view(batch, num_win, window_size, num_win, window_size, channels)
             .transpose(2, 3)
             .flatten(0, 2)
             .flatten(1, 2)
         )
 
-    def _unwin(self, xw, n, win):
-        """(B*n*n, win*win, C) -> (B, (n*win)^2, C) raster"""
-        Bnn, _, C = xw.shape
-        assert Bnn % (n * n) == 0
-        B = Bnn // (n * n)
-        side = n * win
+    def _unwindowed_raster(self, x_win, num_win, window_size):
+        """(B*num_win*num_win, window_size*window_size, C) -> (B, (num_win*window_size)^2, C)"""
+        batch_win, _, channels = x_win.shape
+        assert batch_win % (num_win * num_win) == 0
+        batch = batch_win // (num_win * num_win)
+        side = num_win * window_size
         return (
-            xw.view(B, n, n, win, win, C)
+            x_win.view(batch, num_win, num_win, window_size, window_size, channels)
             .transpose(2, 3)
             .contiguous()
-            .view(B, side, side, C)
+            .view(batch, side, side, channels)
             .flatten(1, 2)
         )
 
@@ -294,7 +302,7 @@ class WindowQFormerDownsampler(nn.Module):
         assert self.image_side * self.image_side == HW
         n = self.image_side // self.window_side
         image_features = self.norm(image_features)
-        enc = self._win(image_features, self.image_side, self.window_side)
+        enc = self._windowed_raster(image_features, self.image_side, self.window_side)
 
         if self._spatial_offset is not None:
             downsampled = spatial_offset_downsample(image_features, self._model_config, self._spatial_offset)
@@ -302,7 +310,7 @@ class WindowQFormerDownsampler(nn.Module):
             downsampled = interpolate_downsample(image_features, self._model_config)
 
         new_side = n * self.query_side
-        downsampled_w = self._win(downsampled, new_side, self.query_side)
+        downsampled_w = self._windowed_raster(downsampled, new_side, self.query_side)
 
         query_embeds = self.query + downsampled_w
         encoder_embeds = self.dropout(enc + self.image_positions)
@@ -312,7 +320,7 @@ class WindowQFormerDownsampler(nn.Module):
             return_dict=True,
         ).last_hidden_state
 
-        out = self._unwin(out_w, n=n, win=self.query_side)
+        out = self._unwindowed_raster(out_w, num_win=n, window_size=self.query_side)
         out = self.dropout(out)
         return self.out_linear(out)
 
@@ -333,7 +341,6 @@ class Granite4VisionPreTrainedModel(LlavaNextPreTrainedModel):
             # Recompute them here so _initialize_missing_keys restores correct values.
             rope_type = module.config.rope_parameters.get("rope_type", "default")
             if rope_type != "default":
-                from transformers.modeling_rope_utils import ROPE_INIT_FUNCTIONS
                 rope_init_fn = ROPE_INIT_FUNCTIONS[rope_type]
             else:
                 rope_init_fn = module.compute_default_rope_parameters
@@ -341,6 +348,10 @@ class Granite4VisionPreTrainedModel(LlavaNextPreTrainedModel):
             init.copy_(module.inv_freq, inv_freq)
             init.copy_(module.original_inv_freq, inv_freq)
             module.attention_scaling = attention_scaling
+        if isinstance(module, WindowQFormerDownsampler):
+            embed_std = 1 / math.sqrt(module.query.shape[-1])
+            init.normal_(module.query, mean=0.0, std=embed_std)
+            init.normal_(module.image_positions, mean=0.0, std=embed_std)
     pass
 
 
@@ -462,11 +473,7 @@ class Granite4VisionModel(LlavaNextModel):
                 [WindowQFormerDownsampler(config, spatial_offset=i) for i in range(4)]
             )
 
-        # Override parent's image_newline based on config flag
-        if not config.use_image_newline_parameter:
-            self.image_newline = None
-
-        self.pad_token_id = getattr(self.config, "pad_token_id", None) or -1
+        self.pad_token_id = self.config.text_config.pad_token_id if self.config.text_config.pad_token_id is not None else -1
 
         # Replace the inherited LLM backbone with our deepstack-aware subclass
         self.language_model = Granite4VisionTextModel(config.text_config)
@@ -499,10 +506,10 @@ class Granite4VisionModel(LlavaNextModel):
                     np.prod(image_feature.shape) % (num_patch_height * num_patch_width * height * width) != 0
                     and vision_feature_select_strategy == "default"
                 ):
-                    logger.warning_once(
+                    raise ValueError(
                         "Image feature shape does not line up with the provided patch size. "
-                        "You may be using the `default` vision_feature_select_strategy with a"
-                        " visual encoder that does not have CLS."
+                        "You may be using the `default` vision_feature_select_strategy with a "
+                        "visual encoder that does not have CLS token."
                     )
 
                 image_feature = image_feature.view(num_patch_height, num_patch_width, height, width, -1)
@@ -651,7 +658,7 @@ class Granite4VisionModel(LlavaNextModel):
         output_attentions: bool | None = None,
         output_hidden_states: bool | None = None,
         return_dict: bool | None = None,
-        **kwargs: Unpack[FlashAttentionKwargs],
+        **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | Granite4VisionModelOutputWithPast:
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
@@ -714,7 +721,7 @@ class Granite4VisionModel(LlavaNextModel):
             past_key_values=outputs.past_key_values,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
-            image_hidden_states=image_features.deepstack_features if pixel_values is not None else None,
+            deepstack_features=image_features.deepstack_features if pixel_values is not None else None,
         )
 
 
@@ -799,7 +806,7 @@ class Granite4VisionForConditionalGeneration(LlavaNextForConditionalGeneration):
             past_key_values=outputs.past_key_values,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
-            image_hidden_states=outputs.image_hidden_states,
+            deepstack_features=outputs.deepstack_features,
         )
 
     def prepare_inputs_for_generation(
