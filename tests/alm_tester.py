@@ -49,12 +49,13 @@ class ALMModelTester(MultiModalModelTester):
         return mapping
 
     def __init__(self, parent, **kwargs):
-        # Standard defaults
+        # Overrides of _TEXT_MODEL_TESTER_DEFAULTS
         kwargs.setdefault("seq_length", 32)
-        kwargs.setdefault("feat_seq_length", 128)
-
-        kwargs.setdefault("num_mel_bins", 80)
         kwargs.setdefault("pad_token_id", 1)
+
+        # ALM-specific defaults
+        kwargs.setdefault("feat_seq_length", 128)
+        kwargs.setdefault("num_mel_bins", 80)
         kwargs.setdefault("audio_token_id", 0)
 
         super().__init__(parent, **kwargs)
