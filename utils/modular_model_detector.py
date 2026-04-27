@@ -641,7 +641,10 @@ class CodeSimilarityAnalyzer:
         """Build two lookups for fast parent expansion:
         - by_name:   (model_id, symbol_name)   -> dataset row index  e.g. ("llama", "LlamaMLP")
         - by_suffix: (model_id, symbol_suffix)  -> dataset row index  e.g. ("llama", "MLP")
-          where suffix = symbol_name with leading CamelCase model prefix stripped.
+          All suffix candidates are stored (e.g. "Qwen3NextRMSNorm" is indexed under both
+          "NextRMSNorm" and "RMSNorm"), so cross-prefix suffix lookup works correctly when
+          query and target share the same functional suffix but different model prefixes
+          (e.g. "Qwen3_5RMSNorm" finding "Qwen3NextRMSNorm" via suffix "RMSNorm").
         """
         assert self.dataset is not None
         by_name: dict[tuple[str, str], int] = {}
@@ -653,8 +656,7 @@ class CodeSimilarityAnalyzer:
             relative_path, symbol_name = parts
             model_id = Path(relative_path).parts[0] if Path(relative_path).parts else ""
             by_name[(model_id, symbol_name)] = idx
-            suffix = symbol_name[len(_leading_symbol_prefix(symbol_name)) :]
-            if suffix:
+            for suffix in _get_suffix_candidates(symbol_name):
                 by_suffix.setdefault((model_id, suffix), idx)
         return by_name, by_suffix
 
@@ -1148,6 +1150,110 @@ def compute_model_class_match_summary(
     return total_symbols, ordered_summary
 
 
+def compute_per_class_recommendations(
+    results: dict[str, dict],
+    max_models: int = 3,
+    min_gain_ratio: float = 0.02,
+) -> tuple[dict[str, dict], list[str]]:
+    """
+    Determine the minimal set of parent models that best covers all classes,
+    then assign each class to its best parent within that set.
+
+    Uses greedy marginal-gain selection: always add the single best-covering model
+    first, then add another only when it improves total coverage by at least
+    ``min_gain_ratio`` (default 2 %).  Stops after ``max_models`` models.
+
+    Coverage of a class under model set S = max score that any model in S achieves
+    for that class.  Total coverage = sum over all classes.
+
+    Returns:
+        ``(per_class_map, selected_models)`` where ``per_class_map`` maps each
+        class name to ``{"model": str, "score": float, "all_scores": dict[str,float]}``,
+        and ``selected_models`` is the ordered list of chosen parent models
+        (best-coverage-first).
+    """
+    class_model_scores: dict[str, dict[str, float]] = {}
+    class_model_matches: dict[str, dict[str, str]] = {}  # query_name -> model_id -> best matched class name
+    for query_name, data in results.items():
+        if data.get("kind", "function") != "class":
+            continue
+        model_scores: dict[str, float] = {}
+        model_matches: dict[str, str] = {}
+        for identifier, score in data.get("embedding", []):
+            try:
+                relative_path, match_name = identifier.split(":", 1)
+            except ValueError:
+                continue
+            model_id = Path(relative_path).parts[0] if Path(relative_path).parts else None
+            if model_id and score > model_scores.get(model_id, float("-inf")):
+                model_scores[model_id] = score
+                model_matches[model_id] = match_name
+        if model_scores:
+            class_model_scores[query_name] = model_scores
+            class_model_matches[query_name] = model_matches
+
+    if not class_model_scores:
+        return {}, []
+
+    # Give child models a tiny score advantage over their ancestors so the
+    # greedy selector prefers more specific (newer) parents over generic ones.
+    # Only boosts models already present in the results (via _walk_ancestors);
+    # never creates new entries.
+    _inh_map = _build_modular_inheritance_map()
+    _children_of: dict[str, set[str]] = {}
+    for _child, _parents in _inh_map.items():
+        for _par in _parents:
+            _children_of.setdefault(_par, set()).add(_child)
+    for _scores in class_model_scores.values():
+        for _par_model, _par_score in list(_scores.items()):
+            for _child_model in _children_of.get(_par_model, set()):
+                if _child_model in _scores:
+                    _boosted = _par_score * 1.001
+                    if _boosted > _scores[_child_model]:
+                        _scores[_child_model] = _boosted
+
+    all_models: set[str] = set()
+    for scores in class_model_scores.values():
+        all_models.update(scores.keys())
+
+    def total_coverage(model_set: set[str]) -> float:
+        return sum(
+            max((scores.get(m, 0.0) for m in model_set), default=0.0)
+            for scores in class_model_scores.values()
+        )
+
+    selected: list[str] = []
+    for _ in range(max_models):
+        remaining = all_models - set(selected)
+        if not remaining:
+            break
+        current_cov = total_coverage(set(selected))
+        best_gain, best_model = max(
+            ((total_coverage(set(selected) | {m}) - current_cov, m) for m in remaining),
+            key=lambda x: x[0],
+        )
+        if not selected:
+            selected.append(best_model)
+        elif current_cov > 0 and best_gain / current_cov >= min_gain_ratio:
+            selected.append(best_model)
+        else:
+            break
+
+    per_class: dict[str, dict] = {}
+    for query_name, scores in class_model_scores.items():
+        best_model = max(selected, key=lambda m: scores.get(m, 0.0))
+        matches = class_model_matches.get(query_name, {})
+        per_class[query_name] = {
+            "model": best_model,
+            "score": scores.get(best_model, 0.0),
+            "match": matches.get(best_model, ""),
+            "all_scores": {m: scores.get(m, 0.0) for m in selected},
+            "all_matches": {m: matches.get(m, "") for m in selected},
+        }
+
+    return per_class, selected
+
+
 def main():
     """CLI entry point for the modular model detector."""
     logging.basicConfig(level=logging.INFO, format="%(message)s")
@@ -1302,7 +1408,7 @@ def main():
                 embedding_details: list[tuple[str, str, str, float, str]] = []
                 embedding_style_indices: list[int] = []
 
-                for identifier, score in data.get("embedding", []):
+                for identifier, score in data.get("embedding", [])[:5]:
                     try:
                         relative_path, match_name = identifier.split(":", 1)
                     except ValueError:
@@ -1361,7 +1467,7 @@ def main():
                                 row_styles[style_position] = ANSI_HIGHLIGHT_CANDIDATE
 
                 if args.use_jaccard:
-                    for identifier, score in data.get("jaccard", []):
+                    for identifier, score in data.get("jaccard", [])[:5]:
                         try:
                             relative_path, match_name = identifier.split(":", 1)
                         except ValueError:
@@ -1382,7 +1488,7 @@ def main():
                         if best_candidate_path == relative_path:
                             row_styles[-1] = ANSI_HIGHLIGHT_CANDIDATE
 
-                    for identifier in sorted(data.get("intersection", [])):
+                    for identifier in sorted(data.get("intersection", []))[:5]:
                         try:
                             relative_path, match_name = identifier.split(":", 1)
                         except ValueError:
@@ -1436,6 +1542,35 @@ def main():
                 )
             logging.info("")
 
+            per_class_recs, selected_models = compute_per_class_recommendations(results)
+            if per_class_recs and selected_models:
+                logging.info(_colorize_heading(
+                    f"Suggested modular inheritance  ({len(selected_models)} parent model(s))"
+                ))
+                logging.info("")
+                groups: dict[str, list[tuple[str, float]]] = {m: [] for m in selected_models}
+                for class_name, rec in per_class_recs.items():
+                    groups[rec["model"]].append((class_name, rec["score"]))
+                for model_id in selected_models:
+                    classes = sorted(groups[model_id], key=lambda x: -x[1])
+                    logging.info(f"  {ANSI_BOLD}{model_id}{ANSI_RESET}  ({len(classes)} classes)")
+                    for class_name, score in classes:
+                        rec = per_class_recs[class_name]
+                        match_name = rec.get("match", "")
+                        pair = f"{class_name} → {match_name}" if match_name else class_name
+                        all_scores = rec["all_scores"]
+                        all_matches = rec.get("all_matches", {})
+                        alts = [(m, s, all_matches.get(m, "")) for m, s in all_scores.items() if m != model_id]
+                        alt_str = (
+                            "  alt: " + ", ".join(
+                                f"{m}:{mn} {s:.4f}" if mn else f"{m} {s:.4f}"
+                                for m, s, mn in sorted(alts, key=lambda x: -x[1])
+                            )
+                            if alts else ""
+                        )
+                        logging.info(f"    {pair:65s}  {score:.4f}{alt_str}")
+                    logging.info("")
+
             if args.generate_prompt:
                 _, prompt_summary = compute_model_class_match_summary(results, include_functions=False)
                 summary_for_prompt = prompt_summary if prompt_summary else ordered_summary
@@ -1444,6 +1579,8 @@ def main():
                     ordered_summary=summary_for_prompt,
                     results=results,
                     models_root=analyzer.models_root,
+                    per_class_recs=per_class_recs,
+                    selected_models=selected_models,
                 )
                 if args.generate_prompt == "__AUTO__":
                     model_name = Path(modeling_file).stem.replace("modeling_", "")
@@ -1460,6 +1597,8 @@ def generate_modular_prompt(
     ordered_summary: list[dict],
     results: dict[str, dict],
     models_root: Path,
+    per_class_recs: dict[str, dict] | None = None,
+    selected_models: list[str] | None = None,
 ) -> str:
     """
     Generate a prompt for an AI agent to create the modular file for a model.
@@ -1469,46 +1608,85 @@ def generate_modular_prompt(
         ordered_summary: Output of ``compute_model_class_match_summary`` (list of dicts).
         results: Raw ``analyze_file`` results dict.
         models_root: Root directory of models (``src/transformers/models``).
+        per_class_recs: Output of ``compute_per_class_recommendations`` (optional).
+        selected_models: Ordered list of parent models from ``compute_per_class_recommendations``.
 
     Returns:
         A string prompt ready to be fed to an AI agent.
     """
     model_name = modeling_file.stem.replace("modeling_", "")
     modular_output_path = modeling_file.parent / f"modular_{model_name}.py"
-    top_base = ordered_summary[0]["model_id"] if ordered_summary else None
-    top_summary = ordered_summary[0] if ordered_summary else {}
-    top_num_matched = int(top_summary.get("num_matched", 0)) if top_summary else 0
-    top_pct = float(top_summary.get("pct", 0.0)) if top_summary else 0.0
-    top_matched_classes = [str(c) for c in top_summary.get("matched_classes", [])] if top_summary else []
-    top_matched_class_set = set(top_matched_classes)
 
-    # List all classes with their best score against the top base model.
-    # For classes explicitly matched to the top model, always instruct inheritance.
-    class_lines: list[str] = []
-    for query_name, data in results.items():
-        if data.get("kind", "function") != "class":
-            continue
-        if query_name in top_matched_class_set and top_base is not None:
-            class_lines.append(f"- `{query_name}` → inherit from `{top_base}`")
-            continue
-
-        best_score_for_top_base = float("-inf")
-        for identifier, score in data.get("embedding", []):
-            try:
-                relative_path, _ = identifier.split(":", 1)
-            except ValueError:
+    if per_class_recs and selected_models:
+        # Multi-model path: each class gets its own recommended parent.
+        parents_summary = ", ".join(f"`{m}`" for m in selected_models)
+        class_lines: list[str] = []
+        for query_name, data in results.items():
+            if data.get("kind", "function") != "class":
                 continue
-            mid = Path(relative_path).parts[0] if Path(relative_path).parts else None
-            if mid == top_base and score > best_score_for_top_base:
-                best_score_for_top_base = score
-        if best_score_for_top_base > float("-inf"):
-            class_lines.append(f"- `{query_name}` → inherit from `{top_base}` (score {best_score_for_top_base:.4f})")
-        else:
-            class_lines.append(f"- `{query_name}` → copy as-is from `{modeling_file.name}` (no match in `{top_base}`)")
+            rec = per_class_recs.get(query_name)
+            if rec:
+                class_lines.append(
+                    f"- `{query_name}` → inherit from `{rec['model']}` (score {rec['score']:.4f})"
+                )
+            else:
+                class_lines.append(
+                    f"- `{query_name}` → copy as-is from `{modeling_file.name}` (no close match found)"
+                )
+        class_list = "\n".join(class_lines) if class_lines else "(no classes found)"
 
-    class_list = "\n".join(class_lines) if class_lines else "(no classes found)"
+        prompt = f"""\
+Create `{modular_output_path}` for the `{model_name}` model.
 
-    prompt = f"""\
+Parent models selected for inheritance: {parents_summary}
+
+For each class below, inherit from the indicated parent and only override what differs. \
+See `src/transformers/models/gemma/modular_gemma.py` as an example of the expected structure and style.
+
+For classes marked "copy as-is", reproduce them exactly from `{modeling_file.name}` and also copy \
+any module-level helper functions they depend on.
+All classes must remain mutually compatible: method signatures, parameter names, and return types \
+must match what each side expects when they call into one another.
+
+Matched classes:
+{class_list}
+"""
+    else:
+        # Fallback: single-model path (original behaviour).
+        top_base = ordered_summary[0]["model_id"] if ordered_summary else None
+        top_summary = ordered_summary[0] if ordered_summary else {}
+        top_num_matched = int(top_summary.get("num_matched", 0)) if top_summary else 0
+        top_pct = float(top_summary.get("pct", 0.0)) if top_summary else 0.0
+        top_matched_classes = [str(c) for c in top_summary.get("matched_classes", [])] if top_summary else []
+        top_matched_class_set = set(top_matched_classes)
+
+        single_class_lines: list[str] = []
+        for query_name, data in results.items():
+            if data.get("kind", "function") != "class":
+                continue
+            if query_name in top_matched_class_set and top_base is not None:
+                single_class_lines.append(f"- `{query_name}` → inherit from `{top_base}`")
+                continue
+            best_score = float("-inf")
+            for identifier, score in data.get("embedding", []):
+                try:
+                    relative_path, _ = identifier.split(":", 1)
+                except ValueError:
+                    continue
+                mid = Path(relative_path).parts[0] if Path(relative_path).parts else None
+                if mid == top_base and score > best_score:
+                    best_score = score
+            if best_score > float("-inf"):
+                single_class_lines.append(
+                    f"- `{query_name}` → inherit from `{top_base}` (score {best_score:.4f})"
+                )
+            else:
+                single_class_lines.append(
+                    f"- `{query_name}` → copy as-is from `{modeling_file.name}` (no match in `{top_base}`)"
+                )
+        class_list = "\n".join(single_class_lines) if single_class_lines else "(no classes found)"
+
+        prompt = f"""\
 Create `{modular_output_path}` for the `{model_name}` model.
 
 Top matched model for class inheritance:
