@@ -18,15 +18,25 @@ import re
 from collections.abc import Callable
 from contextlib import contextmanager
 from types import ModuleType
+from typing import TYPE_CHECKING
 
 from packaging import version as pkg_version
 
+from ..conversion_mapping import get_checkpoint_conversion_mapping, register_checkpoint_conversion_mapping
+from ..core_model_loading import WeightRenaming
+from ..monkey_patching import register_patch_mapping
 from ..utils import ENV_VARS_TRUE_VALUES, logging
 from ..utils.import_utils import is_kernels_available, is_torch_available
 from .flash_attention import flash_attention_forward
 
 
+if TYPE_CHECKING:
+    from .configuration_utils import PretrainedConfig
+    from .modeling_utils import PreTrainedModel
+    from .utils.kernel_config import KernelConfig
+
 if is_torch_available():
+    import torch
     import torch.nn as nn
 
 
@@ -616,100 +626,183 @@ def make_fused_module_class(source_layer_names: tuple[str, ...], kernel_layer_na
     )
 
 
-def fuse_modules(
-    model: "nn.Module",
-    module_names_to_fuse: list[str],
+def make_fused_parent_class(
+    parent_cls: type,
+    child_names: list[str],
+    source_names: list[str],
     kernel_layer_name: str,
-    source_layer_names: list[str] | None = None,
+) -> type:
+    """
+    Return a subclass of `parent_cls` whose __init__ rearranges the named children into a
+    FusedModuleBase container (keyed by `kernel_layer_name`) and replaces the remaining
+    children with nn.Identity placeholders.
+    """
+    original_init = parent_cls.__init__
+    _child_names = list(child_names)
+    _source_names = list(source_names)
+    _kernel_layer_name = kernel_layer_name
+
+    def fused_init(self, *args, **kwargs):
+        original_init(self, *args, **kwargs)
+        modules_to_fuse = [getattr(self, name) for name in _child_names]
+        FusedClass = make_fused_module_class(tuple(_source_names), _kernel_layer_name)
+        fused = FusedClass(modules_to_fuse, _child_names, fused_module_names=list(_source_names))
+        setattr(self, _child_names[0], fused)
+        for name in _child_names[1:]:
+            setattr(self, name, nn.Identity())
+
+    fused_cls = type(f"Fused{parent_cls.__name__}", (parent_cls,), {"__init__": fused_init})
+    fused_cls.__qualname__ = f"Fused{parent_cls.__qualname__}"
+    return fused_cls
+
+
+def infer_kernel_fusion_transforms(
+    patterns_with_names: list[tuple[str, str]],
+) -> list[WeightRenaming]:
+    """
+    Auto-infer WeightRenaming transforms for the path changes caused by FusedModuleBase wrapping.
+
+    For each fusion (source_name, glob_path) pair:
+    - The first module's weights get source_name inserted between the module path and the weight suffix.
+    - Each subsequent module's weights are relocated from their original path to under the first module.
+
+    For example, given [("RMSNorm", "model.layers.*.post_attention_layernorm"), ("MLP", "model.layers.*.mlp")]:
+    - model.layers.0.post_attention_layernorm.weight  -> model.layers.0.post_attention_layernorm.RMSNorm.weight
+    - model.layers.0.mlp.gate_proj.weight             -> model.layers.0.post_attention_layernorm.MLP.gate_proj.weight
+    """
+
+    def _seg_to_regex(seg: str) -> str:
+        return r"[^.]+" if seg == "*" else re.escape(seg)
+
+    def _glob_to_regex(glob: str) -> str:
+        return r"\.".join(_seg_to_regex(s) for s in glob.split("."))
+
+    first_source_name, first_glob = patterns_with_names[0]
+    *parent_parts, first_child = first_glob.split(".")
+    parent_regex = _glob_to_regex(".".join(parent_parts))
+    first_child_regex = _seg_to_regex(first_child)
+
+    transforms: list[WeightRenaming] = []
+
+    # Module 0: insert source_name between the module path and the weight suffix.
+    # Capture the full module prefix so \1 can be used in the target for variable layer indices.
+    transforms.append(
+        WeightRenaming(
+            source_patterns=rf"({parent_regex}\.{first_child_regex}\.)",
+            target_patterns=rf"\1{first_source_name}.",
+        )
+    )
+
+    # Modules i > 0: relocate weights from their original path to under the first module.
+    for source_name, glob in patterns_with_names[1:]:
+        *_, child = glob.split(".")
+        child_regex = _seg_to_regex(child)
+        transforms.append(
+            WeightRenaming(
+                source_patterns=rf"({parent_regex}\.){child_regex}\.",
+                target_patterns=rf"\1{first_child}.{source_name}.",
+            )
+        )
+
+    return transforms
+
+
+def register_kernel_fusions(
+    cls: "type[PreTrainedModel]",
+    config: "PretrainedConfig",
+    kernel_config: "KernelConfig",
 ) -> None:
     """
-    Fuse a sequence of submodules into a single `FusedModuleBase` subclass in-place.
+    Pre-register hub kernel n-to-1 fusions (tuple keys in KernelConfig) before model instantiation.
 
-    For every parent module whose immediate children match all entries in
-    `module_names_to_fuse`, the function:
+    For each inline tuple key `(("Name", "glob.path"), ...)` in `kernel_config.kernel_mapping`:
+    1. Meta-instantiate the model to discover parent classes containing all target children.
+    2. Register a monkey patch mapping each parent class to a fused subclass whose __init__
+       wraps the target children in a FusedModuleBase with the resolved kernel_layer_name.
+    3. Auto-infer WeightRenaming transforms for the path changes introduced by the wrapper
+       and register them via register_checkpoint_conversion_mapping.
+    4. Replace the tuple key with the scalar kernel_layer_name in kernel_config so the
+       downstream pipeline (sanitize, create_compatible_mapping, kernelize) is unchanged.
 
-    - replaces the first module with a `FusedModuleBase` subclass instance that holds
-      all source modules as named children,
-    - replaces the remaining modules with `nn.Identity()` pass-throughs.
-
-    The fused container's `forward` signature is patched to match the first source
-    module's `forward`, satisfying the `kernelize` signature check.
-
-    Args:
-        model (`nn.Module`):
-            The model to modify in-place.
-        module_names_to_fuse (`list[str]`):
-            Glob-style paths of the modules to fuse, e.g.
-            `["model.layers.*.post_attention_layernorm", "model.layers.*.mlp"]`.
-            Integer indices are replaced with `*` so the same pattern applies to
-            every repeated block.
-        kernel_layer_name (`str`):
-            The `kernel_layer_name` assigned to the fused class, used by `kernelize`
-            to look up the kernel in the mapping (e.g. `"RMSNormMLP"`).
-        source_layer_names (`list[str]`, *optional*):
-            Explicit names for the child modules inside the fused container
-            (e.g. `["RMSNorm", "MLP"]`). When `None`, the `kernel_layer_name`
-            attribute of each source module is used.
+    Scalar keys are passed through untouched.
     """
-    pattern = re.compile(r"\d+")
-    for module_name, module in model.named_modules():
-        generic_children = {
-            re.sub(pattern, "*", f"{module_name}.{n}" if module_name else n): (n, child)
-            for n, child in module.named_children()
-        }
-        if not all(p in generic_children for p in module_names_to_fuse):
+
+    if not hasattr(cls, "config_class") or not hasattr(cls.config_class, "model_type"):
+        raise ValueError(f"Model {cls.__name__} has no config_class or model_type.")
+    model_type = cls.config_class.model_type
+
+    new_mapping: dict = {}
+    for layer_name, hub_repo in kernel_config.kernel_mapping.items():
+        # Pass scalar keys through unchanged.
+        if not isinstance(layer_name, tuple) or not all(
+            isinstance(item, tuple) and len(item) == 2 for item in layer_name
+        ):
+            new_mapping[layer_name] = hub_repo
             continue
 
-        child_names = [generic_children[p][0] for p in module_names_to_fuse]
-        modules_to_fuse = [generic_children[p][1] for p in module_names_to_fuse]
+        source_names = [item[0] for item in layer_name]
+        glob_patterns = [item[1] for item in layer_name]
+        child_names = [p.rsplit(".", 1)[1] for p in glob_patterns]
 
-        if source_layer_names is not None:
-            resolved_names = tuple(source_layer_names)
-        else:
-            resolved_names = tuple(getattr(m, "kernel_layer_name") for m in modules_to_fuse)
-        FusedClass = make_fused_module_class(resolved_names, kernel_layer_name)
-        fused_instance = FusedClass(modules_to_fuse, child_names, fused_module_names=list(resolved_names))
+        # Resolve kernel_layer_name from "org/repo:ClassName" or device-nested dict.
+        repo_str = hub_repo
+        if isinstance(repo_str, dict):
+            repo_str = next(iter(repo_str.values()))
+        if isinstance(repo_str, dict):
+            repo_str = next(iter(repo_str.values()))
+        kernel_layer_name = repo_str.split(":")[1] if ":" in repo_str else repo_str.split("/")[-1]
 
-        module.add_module(child_names[0], fused_instance)
-        for child_name in child_names[1:]:
-            module.add_module(child_name, nn.Identity())
+        # 1. Meta-device scan — find parent classes that contain all target children.
+        with torch.device("meta"):
+            meta_model = cls(config)
 
-
-def unfuse_modules(model: "nn.Module") -> None:
-    """
-    Revert a previous `fuse_modules` call in-place, restoring the original modules.
-
-    For each `FusedModuleBase` instance found in the model tree, the function:
-
-    - restores the original first module at the fused container's position,
-    - restores the remaining original modules at their original positions
-      (replacing the `nn.Identity()` pass-throughs).
-
-    Args:
-        model (`nn.Module`): The model to restore in-place.
-    """
-    for parent in model.modules():
-        for name, child in list(parent.named_children()):
-            if not isinstance(child, FusedModuleBase):
+        seen: set[type] = set()
+        patch_mapping: dict[str, type] = {}
+        for module in meta_model.modules():
+            module_cls = type(module)
+            if module_cls in seen:
                 continue
-            orig_modules = [getattr(child, layer_name) for layer_name in child._fused_module_names]
-            parent.add_module(name, orig_modules[0])
-            for sibling_name, orig_module in zip(child._source_names[1:], orig_modules[1:]):
-                parent.add_module(sibling_name, orig_module)
+            if not all(hasattr(module, name) for name in child_names):
+                continue
+            seen.add(module_cls)
+            fused_cls = make_fused_parent_class(module_cls, child_names, source_names, kernel_layer_name)
+            patch_mapping[module_cls.__name__] = fused_cls
+
+        if not patch_mapping:
+            logger.warning(
+                f"No parent modules found containing children {child_names} for kernel fusion "
+                f"'{kernel_layer_name}'. Skipping tuple key."
+            )
+            new_mapping[layer_name] = hub_repo
+            continue
+
+        # 2. Register class-level monkey patches.
+        register_patch_mapping(patch_mapping, overwrite=True)
+
+        # 3. Register weight conversion mapping for the path changes introduced by the wrapper.
+        transforms = infer_kernel_fusion_transforms(list(zip(source_names, glob_patterns)))
+        existing = get_checkpoint_conversion_mapping(model_type)
+        if existing is not None:
+            transforms = existing + transforms
+        register_checkpoint_conversion_mapping(model_type, transforms, overwrite=True)
+
+        # 4. Resolve tuple key -> scalar key for the downstream pipeline.
+        new_mapping[kernel_layer_name] = hub_repo
+
+    kernel_config.kernel_mapping = new_mapping
 
 
 __all__ = [
     "FusedModuleBase",
     "LayerRepository",
-    "fuse_modules",
     "get_kernel",
+    "register_kernel_fusions",
     "lazy_load_kernel",
     "make_fused_module_class",
     "register_fusion_patterns",
     "register_kernel_mapping",
     "register_kernel_mapping_transformers",
     "replace_kernel_forward_from_hub",
-    "unfuse_modules",
     "use_kernel_forward_from_hub",
     "use_kernel_func_from_hub",
     "use_kernelized_func",
