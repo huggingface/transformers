@@ -131,7 +131,7 @@ class Gemma4TextModelTest(CausalLMModelTest, unittest.TestCase):
 
     def test_model_training(self):
         pass
-      
+
     @unittest.skip(
         "Under non-bf16 dtypes, MoE grouped_mm falls back to "
         "_grouped_mm_fallback_backward which is incompatible with torch.compile."
@@ -507,6 +507,8 @@ class Gemma4Vision2TextModelTest(ModelTesterMixin, GenerationTesterMixin, unitte
 
     @unittest.skip("The base test does not pass image_position_ids and mm_token_type_ids required by Gemma4")
     def test_flash_attn_4_inference_equivalence_right_padding(self):
+        pass
+
     @unittest.skip(
         "Randomly starts failing after module order changed in the __init__ because accelertate is not robust enough"
     )
