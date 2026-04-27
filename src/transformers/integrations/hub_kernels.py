@@ -225,9 +225,12 @@ try:
                 )
             },
             "cuda": {
+                Mode.TRAINING: FuncRepository(
+                    repo_id="kernels-community/rotary", func_name="apply_rotary_transformers"
+                ),
                 Mode.INFERENCE: FuncRepository(
                     repo_id="kernels-community/rotary", func_name="apply_rotary_transformers"
-                )
+                ),
             },
         }
 
@@ -286,6 +289,7 @@ _HUB_KERNEL_MAPPING: dict[str, dict[str, str]] = {
     "falcon_mamba-ssm": {"repo_id": "kernels-community/mamba-ssm", "version": 1},
     "finegrained-fp8": {"repo_id": "kernels-community/finegrained-fp8", "version": 1},
     "deep-gemm": {"repo_id": "kernels-community/deep-gemm", "version": 1},
+    "sonic-moe": {"repo_id": "kernels-community/sonic-moe", "version": 1},
 }
 
 _KERNEL_MODULE_MAPPING: dict[str, ModuleType | None] = {}
@@ -438,11 +442,13 @@ def get_kernel(
 
 def use_kernelized_func(module_names: list[Callable] | Callable):
     """
-    This decorator attaches the target function as an attribute of the module.
-    The function must already be decorated with @use_kernel_func_from_hub
-    this decorator then wraps it as an nn.Module internally.
-    When kernelize is later applied to the full model, the function can be accessed as a regular module attribute and kernelized just like any other layer.
-    The kernelization is performed in place, modifying the module directly.
+    This decorator attaches the target function within the module as a plain attribute (not as a submodule).
+    Keep in mind that this registration is only meant for `kernelize` to recognize its target modules (i.e.
+    function exchanged for a weightless `nn.Module` with the same forward) to then exchange to the kernel
+    variation (in-place) if the conditions are met.
+
+    We cache each of these function-based registrations: After proper registration and exchange it is removed
+    from the module's `_modules` dict as it does not really act as `nn.Module` but a base function.
     """
     if isinstance(module_names, Callable):
         module_names = [module_names]
@@ -452,18 +458,20 @@ def use_kernelized_func(module_names: list[Callable] | Callable):
 
         def new_init(self, *args, **kwargs):
             orig_init(self, *args, **kwargs)
-            # Skip attaching the kernelized submodule under DeepSpeed ZeRO-3: the coordinator traces
-            # the module graph at init time, and a child `nn.Module` that is not actually invoked
-            # during forward (e.g. when the model keeps calling the plain Python `apply_rotary_pos_emb`)
-            # breaks the parameter fetch trace and raises `IndexError: pop from an empty deque`.
-            # See https://github.com/huggingface/transformers/issues/45137
-            from .deepspeed import is_deepspeed_zero3_enabled
 
-            if is_deepspeed_zero3_enabled():
-                return
+            # Register new function as non-submodule within the modules dict
+            hidden_kernels = self.__dict__.setdefault("_hidden_kernels", {})
             for fn in module_names:
-                # we hardcode the name of the function to "rotary_fn" for now
-                setattr(self, "rotary_fn", fn)
+                name = (
+                    getattr(fn, "__name__", None)
+                    or getattr(fn, "kernel_layer_name", None)
+                    or getattr(fn, "func_name", None)
+                )
+                if name is None:
+                    raise ValueError(f"Could not infer kernel function name for {fn!r}")
+
+                # Do not register as submodule! Hide it behind a dict to be removed later after registering it
+                hidden_kernels[name] = fn
 
         cls.__init__ = new_init
         return cls

@@ -608,26 +608,18 @@ class ContinuousBatchProcessor:
             output_ids[1, :tokens].copy_(logprobs.view(dtype=torch.int32))
 
     @torch.inference_mode()
-    def warmup(
-        self,
-        model: nn.Module,
-        logit_processor: LogitsProcessorList,
-        num_query_tokens: int = 0,
-        num_cache_tokens: int = 0,
-    ) -> None:
+    def warmup(self, model: nn.Module) -> None:
         """Pre-capture CUDA graphs (or trigger compile warmup) for varlen and decode paths. In async mode, both IO
-        pairs are warmed up since each has its own graph buffer and static tensors."""
+        pairs are warmed up since each has its own graph buffer and static tensors. The varlen path is warmed up at
+        the largest possible `(q, kv)` sizes so subsequent captures fit inside it without growing the pool."""
 
         if not self._pad_inputs:
             logger.info("CUDA graphs and compile are disabled, skipping warmup.")
             return None
 
-        num_query_tokens = num_query_tokens if num_query_tokens > 0 else self.max_batch_tokens
-        num_query_tokens = min(num_query_tokens, self.max_batch_tokens)
-        num_cache_tokens = num_cache_tokens if num_cache_tokens > 0 else self.cache.block_size * num_query_tokens
-        num_cache_tokens = min(num_cache_tokens, self.cache.num_blocks * self.cache.block_size)
-
+        num_query_tokens = self.max_batch_tokens
         num_pages = self.cache.num_blocks * self.cache.block_size
+        num_cache_tokens = num_pages - num_query_tokens
         compute_stream = self.inputs_and_outputs.compute_stream
 
         # In async mode, each IO pair has its own graph buffer and static tensors, so we warm up both
@@ -662,7 +654,7 @@ class ContinuousBatchProcessor:
                         forward_fn(*forward_fn_args)
                 logger.info(f"Varlen warmup completed in {perf_counter() - start:.2f}s")
             except Exception as e:
-                logger.warning(f"Failed to warm up varlen path: {e}")
+                logger.warning(f"Failed to warm up varlen path: {e}. Graph pool may fragment and OOM under load.")
             finally:
                 for fs in future_states:
                     self.cache.free_blocks(fs.state.request_id)
@@ -796,12 +788,12 @@ class ContinuousBatchingManager:
         """Check if the background generation thread is running."""
         return self._generation_thread is not None and self._generation_thread.is_alive()
 
-    def warmup(self, num_query_tokens: int = 0, num_cache_tokens: int = 0) -> None:
+    def warmup(self) -> None:
         """Pre-capture CUDA graphs for varlen and decode paths by running dummy batches. Initializes the batch
         processor if not already done."""
         if self.batch_processor is None:
             self.batch_processor = self._create_batch_processor()
-        self.batch_processor.warmup(self.model, self.logit_processor, num_query_tokens, num_cache_tokens)
+        self.batch_processor.warmup(self.model)
         self.warmed_up = True
 
     # NOTE: don't forget to update `continuous_batching_context_manager` when changing this method's definition
@@ -1025,6 +1017,8 @@ class ContinuousBatchingManager:
         self.batch_processor._generation_step(self.model)
 
     def _create_batch_processor(self) -> ContinuousBatchProcessor:
+        # Resolve max_memory_percent now that we know whether any logit processors are active.
+        self.continuous_batching_config.resolve_max_memory_percent(self.logit_processor.do_processing)
         # Create the PagedAttentionCache
         paged_attention_cache = PagedAttentionCache(
             self.model.config,
@@ -1210,25 +1204,25 @@ class ContinuousMixin:
         timeout: float | None = None,
         continuous_batching_config: ContinuousBatchingConfig | None = None,
         persistent_manager: bool = False,
-        warmup_requests: int | None = 0,
+        warmup: bool = True,
         **deprecated_kwargs,
     ) -> Generator[ContinuousBatchingManager]:
         """A context manager to safely use the continuous batching manager. Arguments are similar to the ones of
         `init_continuous_batching`, except for:
             - block: whether to block the thread when stopping the manager. Default is True.
             - timeout: maximum time to wait for the thread to stop. Default is None (no timeout).
-            - warmup_query_tokens: the number of expected requests for which to warmup. 0 is auto, None is no warmup.
+            - warmup: whether to pre-capture CUDA graphs at the largest sizes before running. Default is True.
         """
         manager = self.init_continuous_batching(
             generation_config=generation_config,
             continuous_batching_config=continuous_batching_config,
             **deprecated_kwargs,
         )
-        if not (warmup_requests is None or manager.warmed_up):
+        if warmup and not manager.warmed_up:
             # Warmup is long (~30 sec): best to signal the user it's happening than let them think the manager is stuck
-            logger.warning("Warming up for coninuous batching...")
+            logger.warning("Warming up for continuous batching...")
             start = perf_counter()
-            manager.warmup(num_query_tokens=warmup_requests, num_cache_tokens=0)
+            manager.warmup()
             logger.warning(f"Warming up completed in {perf_counter() - start:.2f}s.")
         manager.start()
         try:
@@ -1305,7 +1299,7 @@ class ContinuousMixin:
             block=True,
             timeout=5,
             persistent_manager=persistent_manager,
-            warmup_requests=len(inputs) if warmup else None,
+            warmup=warmup,
             **deprecated_kwargs,
         )
         logging_cm = logging_redirect_tqdm([logger])

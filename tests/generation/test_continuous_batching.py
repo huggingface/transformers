@@ -1325,16 +1325,16 @@ class TestMemoryHandlerPrediction(unittest.TestCase):
             max_blocks_per_request=max_bpr,
             return_logprobs=logprobs,
             use_async_batching=use_async_batching,
+            block_size=block_size,
         )
 
         handler = PagedAttentionMemoryHandler(
-            block_size=block_size,
+            continuous_batching_config=cb_config,
             page_size=page_size,
             num_groups=num_groups,
             group_size=group_size,
-            peak_activation_per_token=peak_act,
+            activation_peaks=[(0, peak_act)],
             num_attention_masks=num_attn_masks,
-            continuous_batching_config=cb_config,
         )
 
         N = self.NUM_BLOCKS * block_size  # num_pages
