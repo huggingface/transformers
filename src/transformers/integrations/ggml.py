@@ -162,6 +162,23 @@ GGUF_CONFIG_MAPPING = {
         "expert_used_count": "num_experts_per_tok",
         "expert_feed_forward_length": "moe_intermediate_size",
         "expert_shared_feed_forward_length": "shared_expert_intermediate_size",
+        # Hybrid layer pattern: convert_hf_to_gguf emits full_attention_interval;
+        # Qwen3_5MoeTextConfig.__post_init__ pops this kwarg to build layer_types.
+        "full_attention_interval": "full_attention_interval",
+        # GatedDeltaNet (linear-attention) shape parameters. The writer reuses
+        # the SSM key namespace; the mapping is:
+        #   ssm.conv_kernel    -> linear_conv_kernel_dim
+        #   ssm.state_size     -> linear_key_head_dim
+        #   ssm.group_count    -> linear_num_key_heads
+        #   ssm.time_step_rank -> linear_num_value_heads
+        # ssm.inner_size is derived (linear_value_head_dim * linear_num_value_heads)
+        # and has no direct config field; ignored here so linear_value_head_dim
+        # falls back to its config default.
+        "ssm.conv_kernel": "linear_conv_kernel_dim",
+        "ssm.state_size": "linear_key_head_dim",
+        "ssm.group_count": "linear_num_key_heads",
+        "ssm.time_step_rank": "linear_num_value_heads",
+        "ssm.inner_size": None,
     },
     "falcon": {
         "context_length": "max_position_embeddings",
