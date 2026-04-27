@@ -725,6 +725,21 @@ def load_gguf_checkpoint(gguf_checkpoint_path, return_tensors=False, model_to_lo
             i for i, num_kv_heads in enumerate(gguf_num_key_value_heads) if num_kv_heads > 0
         ]
 
+    if updated_architecture == "qwen3_5_moe_text":
+        # GatedDeltaNet's value head dim isn't emitted as its own GGUF key —
+        # the writer only emits ssm.inner_size (= linear_value_head_dim *
+        # linear_num_value_heads). Recover it here so the config matches the
+        # checkpoint instead of silently falling back to the class default.
+        ssm_inner_key = f"{architecture}.ssm.inner_size"
+        n_v_heads = parsed_parameters["config"].get("linear_num_value_heads")
+        if ssm_inner_key in reader.fields and n_v_heads:
+            ssm_inner = _gguf_parse_value(
+                reader.fields[ssm_inner_key].parts[reader.fields[ssm_inner_key].data[0]],
+                reader.fields[ssm_inner_key].types,
+            )
+            if ssm_inner % n_v_heads == 0:
+                parsed_parameters["config"]["linear_value_head_dim"] = ssm_inner // n_v_heads
+
     if updated_architecture == "gpt_oss":
         # Helper to read keys with the correct prefix
         def read_gpt_key(reader, suffix, default=None):
