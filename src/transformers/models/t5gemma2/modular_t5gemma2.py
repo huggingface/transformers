@@ -620,7 +620,7 @@ class T5Gemma2TextEncoder(T5Gemma2PreTrainedModel):
 
         # global and local position embeddings
         position_embeddings = {}
-        for layer_type in self.config.layer_types:
+        for layer_type in set(self.config.layer_types):
             position_embeddings[layer_type] = self.rotary_emb(hidden_states, position_ids, layer_type)
 
         # dropout
@@ -849,7 +849,7 @@ class T5Gemma2Decoder(T5Gemma2PreTrainedModel):
 
         # global and local position embeddings
         position_embeddings = {}
-        for layer_type in self.config.layer_types:
+        for layer_type in set(self.config.layer_types):
             position_embeddings[layer_type] = self.rotary_emb(hidden_states, position_ids, layer_type)
 
         # dropout
