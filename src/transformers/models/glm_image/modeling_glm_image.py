@@ -1191,7 +1191,7 @@ class GlmImageModel(GlmImagePreTrainedModel):
             The temporal, height and width of feature shape of each image in LLM.
         """
         pixel_values = pixel_values.type(self.visual.dtype)
-        vision_outputs = self.visual(pixel_values, grid_thw=image_grid_thw, **kwargs)
+        vision_outputs = self.visual(pixel_values, grid_thw=image_grid_thw, return_dict=True, **kwargs)
         split_sizes = (image_grid_thw.prod(-1) // self.visual.spatial_merge_size**2).tolist()
         image_embeds = torch.split(vision_outputs.last_hidden_state, split_sizes)
         vision_outputs.pooler_output = image_embeds
@@ -1333,7 +1333,7 @@ class GlmImageModel(GlmImagePreTrainedModel):
                 # Fallback for batch_size=1: all but last grid are source images
                 source_grids = image_grid_thw[:-1]
 
-            image_features = self.get_image_features(pixel_values, source_grids, return_dict=True)
+            image_features = self.get_image_features(pixel_values, source_grids, return_dict=True, **kwargs)
             image_embeds = torch.cat(image_features.pooler_output, dim=0)
             image_ids = self.get_image_tokens(image_embeds, source_grids)
             image_ids = image_ids.view(-1).to(input_ids.device)

@@ -566,7 +566,11 @@ class VideoLlama3Model(VideoLlama3PreTrainedModel):
             The spatial downsampling ratio of each image feature.
         """
         vision_outputs = self.vision_model(
-            pixel_values=pixel_values, grid_thw=image_grid_thw, merge_sizes=image_merge_sizes, **kwargs
+            pixel_values=pixel_values,
+            grid_thw=image_grid_thw,
+            merge_sizes=image_merge_sizes,
+            return_dict=True,
+            **kwargs,
         )
         last_hidden_state = vision_outputs.last_hidden_state
         image_embeds = self.projector(last_hidden_state)
@@ -655,7 +659,7 @@ class VideoLlama3Model(VideoLlama3PreTrainedModel):
         image_embeds = None
         if pixel_values is not None:
             image_embeds = self.get_image_features(
-                pixel_values, image_grid_thw, image_merge_sizes, return_dict=True
+                pixel_values, image_grid_thw, image_merge_sizes, return_dict=True, **kwargs
             ).pooler_output
             image_embeds = torch.cat(image_embeds, dim=0).to(inputs_embeds.device, inputs_embeds.dtype)
             image_mask, _ = self.get_placeholder_mask(
@@ -666,7 +670,7 @@ class VideoLlama3Model(VideoLlama3PreTrainedModel):
         video_embeds = None
         if pixel_values_videos is not None:
             video_embeds = self.get_video_features(
-                pixel_values_videos, video_grid_thw, video_merge_sizes, return_dict=True
+                pixel_values_videos, video_grid_thw, video_merge_sizes, return_dict=True, **kwargs
             ).pooler_output
             video_embeds = torch.cat(video_embeds, dim=0).to(inputs_embeds.device, inputs_embeds.dtype)
             if video_compression_mask is not None:
