@@ -44,6 +44,7 @@ from transformers import pipeline
 pipe = pipeline(
     task="image-text-to-text",
     model="deepseek-community/deepseek-vl-1.3b-chat",
+    device=0,
 )
 
 messages = [

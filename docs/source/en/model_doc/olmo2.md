@@ -44,6 +44,7 @@ from transformers import pipeline
 pipe = pipeline(
     task="text-generation",
     model="allenai/OLMo-2-0425-1B",
+    device=0,
 )
 
 result = pipe("Plants create energy through a process known as")

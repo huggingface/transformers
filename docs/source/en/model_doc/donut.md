@@ -45,6 +45,7 @@ from PIL import Image
 pipeline = pipeline(
     task="document-question-answering",
     model="naver-clova-ix/donut-base-finetuned-docvqa",
+    device=0,
 )
 dataset = load_dataset("hf-internal-testing/example-documents", split="test")
 image = dataset[0]["image"]

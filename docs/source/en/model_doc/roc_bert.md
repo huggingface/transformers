@@ -44,6 +44,7 @@ from transformers import pipeline
 pipeline = pipeline(
    task="fill-mask",
    model="weiweishi/roc-bert-base-zh",
+   device=0,
 )
 pipeline("這家餐廳的拉麵是我[MASK]過的最好的拉麵之")
 ```

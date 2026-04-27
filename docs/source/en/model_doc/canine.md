@@ -42,6 +42,7 @@ from transformers import pipeline
 pipeline = pipeline(
     task="feature-extraction",
     model="google/canine-c",
+    device=0,
 )
 
 pipeline("Plant create energy through a process known as photosynthesis.")

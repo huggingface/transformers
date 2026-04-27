@@ -44,6 +44,7 @@ from transformers import pipeline
 pipeline = pipeline(
     "image-to-text",
     model="rhymes-ai/Aria",
+    device=0,
 )
 pipeline(
     "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg",

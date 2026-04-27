@@ -46,6 +46,7 @@ from transformers import pipeline
 classifier = pipeline(
    task="image-classification",
    model="apple/mobilevit-small",
+   device=0,
 )
 
 preds = classifier("https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg")

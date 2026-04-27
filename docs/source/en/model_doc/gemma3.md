@@ -46,6 +46,7 @@ from transformers import pipeline
 pipeline = pipeline(
     task="image-text-to-text",
     model="google/gemma-3-4b-pt",
+    device=0,
 )
 pipeline(
     "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg",

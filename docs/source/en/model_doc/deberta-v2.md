@@ -44,6 +44,7 @@ from transformers import pipeline
 pipeline = pipeline(
     task="text-classification",
     model="microsoft/deberta-v2-xlarge-mnli",
+    device=0,
 )
 result = pipeline("DeBERTa-v2 is great at understanding context!")
 print(result)

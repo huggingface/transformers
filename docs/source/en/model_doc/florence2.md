@@ -48,6 +48,7 @@ from transformers import pipeline
 pipeline = pipeline(
     "image-text-to-text",
     model="florence-community/Florence-2-base",
+    device=0,
 )
 
 pipeline(
