@@ -434,10 +434,10 @@ def grouped_mm_experts_forward(
     # NOTE: The grouped_mm kernel only targets the active experts / tokens via the offsets
     if self.has_gate:
         selected_weights = _local(self.gate_up_proj)
-        selected_biases = self.gate_up_proj_bias[expert_ids_g] if self.has_bias else None
+        selected_biases = _local(self.gate_up_proj_bias)[expert_ids_g] if self.has_bias else None
     else:
         selected_weights = _local(self.up_proj)
-        selected_biases = self.up_proj_bias[expert_ids_g] if self.has_bias else None
+        selected_biases = _local(self.up_proj_bias)[expert_ids_g] if self.has_bias else None
 
     # Pre-mask (bwd path).
     selected_hidden_states_g.masked_fill_(sentinel_mask, 0.0)
@@ -457,7 +457,7 @@ def grouped_mm_experts_forward(
 
     # Select down projection weights and biases
     selected_weights = _local(self.down_proj)
-    selected_biases = self.down_proj_bias[expert_ids_g] if self.has_bias else None
+    selected_biases = _local(self.down_proj_bias)[expert_ids_g] if self.has_bias else None
 
     # --- Down projection per expert (grouped) ---
     proj_out = _grouped_linear(
