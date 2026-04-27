@@ -63,7 +63,7 @@ class ColModernVBertForRetrievalModelTester:
                 "pad_token_id": 0,
                 "hidden_size": 32,
                 "num_hidden_layers": 2,
-                "num_attention_heads": 4,
+                "num_attention_heads": 2,
                 "intermediate_size": 64,
                 "hidden_activation": "gelu",
                 "mlp_dropout": 0.1,
