@@ -1,13 +1,27 @@
-import copy
 import torch
 
 from transformers import AutoModelForCausalLM, AutoTokenizer, KernelConfig
-from transformers.integrations import unfuse_modules
 
 
 model_id = "michaelbenayoun/qwen3-tiny-4kv-heads-4layers-random"
 tokenizer = AutoTokenizer.from_pretrained(model_id)
+input_ids = tokenizer("Hello, how are you?", return_tensors="pt").input_ids
 
+# --- baseline: plain model, no fusion ---
+print("=" * 60)
+print("Loading baseline model (no fusion)...")
+baseline = AutoModelForCausalLM.from_pretrained(model_id, device_map="cuda")
+baseline.eval()
+input_ids = input_ids.to(baseline.device)
+
+with torch.no_grad():
+    baseline_out = baseline(input_ids).logits
+print("Baseline output shape:", baseline_out.shape)
+del baseline
+
+# --- fused model ---
+print("=" * 60)
+print("Loading fused model...")
 kernel_config = KernelConfig({
     (
         ("RMSNorm", "model.layers.*.post_attention_layernorm"),
@@ -15,16 +29,16 @@ kernel_config = KernelConfig({
     ): "michaelbenayoun/dummy-rmsnorm-mlp:RMSNormMLP",
 })
 
-model = AutoModelForCausalLM.from_pretrained(model_id, use_kernels=True, kernel_config=kernel_config, device_map="cuda")
-
-input_ids = tokenizer("Hello, how are you?", return_tensors="pt").input_ids.to(model.device)
-
-original_model = copy.deepcopy(model)
-unfuse_modules(original_model)
-original_model.eval()
+fused_model = AutoModelForCausalLM.from_pretrained(
+    model_id, use_kernels=True, kernel_config=kernel_config, device_map="cuda"
+)
+fused_model.eval()
+print(fused_model)
 
 with torch.no_grad():
-    fused_out = model(input_ids).logits
-    original_out = original_model(input_ids).logits
+    fused_out = fused_model(input_ids).logits
+print("Fused output shape:", fused_out.shape)
 
-print("Max diff fused vs original:", (fused_out - original_out).abs().max().item())
+# --- compare ---
+print("=" * 60)
+print("Max diff fused vs baseline:", (fused_out - baseline_out).abs().max().item())
