@@ -46,7 +46,6 @@ from ...utils.generic import maybe_autocast, merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
 from ..auto import AutoModel
 from .configuration_granite4_vision import Granite4VisionConfig, Granite4VisionTextConfig
-from .downsampling_granite4_vision import WindowQFormerDownsampler
 
 
 logger = logging.get_logger(__name__)
@@ -101,6 +100,98 @@ class Granite4VisionCausalLMOutputWithPast(ModelOutput):
     hidden_states: tuple[torch.FloatTensor] | None = None
     attentions: tuple[torch.FloatTensor] | None = None
     image_hidden_states: torch.FloatTensor | None = None
+
+
+# ── Downsampling helpers ─────────────────────────────────────────────────────
+
+
+def interpolate_downsample(image_features: torch.Tensor, config) -> torch.Tensor:
+    """Spatial downsampling via area interpolation."""
+    orig_side = config.vision_config.image_size // config.vision_config.patch_size
+    new_side = int(orig_side * Fraction(config.downsample_rate))
+    B, _, C = image_features.size()
+    x = image_features.view(B, orig_side, orig_side, C).permute(0, 3, 1, 2)
+    x = torch.nn.functional.interpolate(x, size=(new_side, new_side), mode="area")
+    return x.permute(0, 2, 3, 1).flatten(1, 2)
+
+
+def spatial_offset_downsample(image_features: torch.Tensor, config, offset: int = 0) -> torch.Tensor:
+    """Sample one position from each 2x2 block; offset selects which corner (0=TL,1=TR,2=BL,3=BR)."""
+    offset_h, offset_w = [(0, 0), (0, 1), (1, 0), (1, 1)][offset]
+    orig_side = config.vision_config.image_size // config.vision_config.patch_size
+    new_side = orig_side // 2
+    B, _, C = image_features.shape
+    x = image_features.reshape(B, orig_side, orig_side, C)
+    x = x.reshape(B, new_side, 2, new_side, 2, C)
+    return x[:, :, offset_h, :, offset_w, :].reshape(B, -1, C)
+
+
+class WindowQFormerDownsampler(nn.Module):
+    """Window-based QFormer downsampler that processes image patches in windows."""
+
+    def __init__(self, config, spatial_offset=None):
+        super().__init__()
+        llm_hidden_size = config.text_config.hidden_size
+        vision_hidden_size = config.vision_config.hidden_size
+
+        from ..blip_2.modeling_blip_2 import Blip2QFormerModel
+
+        self.dropout = nn.Dropout(config.projector_dropout)
+        self._spatial_offset = spatial_offset
+        self._model_config = config  # needed by downsampler functions
+
+        self.qformer = Blip2QFormerModel(config.qformer_config)
+
+        self.image_side = config.vision_config.image_size // config.vision_config.patch_size
+        q, w = config.downsample_rate.split("/")
+        self.query_side, self.window_side = int(q), int(w)
+        self.query_length = self.query_side**2
+        embed_std = 1 / math.sqrt(vision_hidden_size)
+        self.norm = nn.LayerNorm(vision_hidden_size, eps=1e-6)
+        self.query = nn.Parameter(torch.randn(1, self.query_length, vision_hidden_size) * embed_std)
+        self.image_positions = nn.Parameter(torch.randn(1, self.window_side**2, vision_hidden_size) * embed_std)
+        self.out_linear = nn.Linear(vision_hidden_size, llm_hidden_size, bias=True)
+
+    def _win(self, x, side, win):
+        """(B, side*side, C) raster -> (B*n*n, win*win, C) where n=side//win"""
+        B, _, C = x.shape
+        n = side // win
+        return x.view(B, side, side, C).view(B, n, win, n, win, C).transpose(2, 3).flatten(0, 2).flatten(1, 2)
+
+    def _unwin(self, xw, n, win):
+        """(B*n*n, win*win, C) -> (B, (n*win)^2, C) raster"""
+        Bnn, _, C = xw.shape
+        assert Bnn % (n * n) == 0
+        B = Bnn // (n * n)
+        side = n * win
+        return xw.view(B, n, n, win, win, C).transpose(2, 3).contiguous().view(B, side, side, C).flatten(1, 2)
+
+    def forward(self, image_features):
+        B, HW, C = image_features.shape
+        assert self.image_side * self.image_side == HW
+        n = self.image_side // self.window_side
+        image_features = self.norm(image_features)
+        enc = self._win(image_features, self.image_side, self.window_side)
+
+        if self._spatial_offset is not None:
+            downsampled = spatial_offset_downsample(image_features, self._model_config, self._spatial_offset)
+        else:
+            downsampled = interpolate_downsample(image_features, self._model_config)
+
+        new_side = n * self.query_side
+        downsampled_w = self._win(downsampled, new_side, self.query_side)
+
+        query_embeds = self.query + downsampled_w
+        encoder_embeds = self.dropout(enc + self.image_positions)
+        out_w = self.qformer(
+            query_embeds=query_embeds,
+            encoder_hidden_states=encoder_embeds,
+            return_dict=True,
+        ).last_hidden_state
+
+        out = self._unwin(out_w, n=n, win=self.query_side)
+        out = self.dropout(out)
+        return self.out_linear(out)
 
 
 class Granite4VisionTextRotaryEmbedding(nn.Module):

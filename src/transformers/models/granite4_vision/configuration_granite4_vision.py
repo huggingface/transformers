@@ -56,6 +56,9 @@ class Granite4VisionConfig(PreTrainedConfig):
         Target LLM layers for the 4 spatial offset groups.
     projector_dropout (`float`, *optional*, defaults to `0.1`):
         Dropout probability in the Window Q-Former projector.
+    qformer_config (`dict` or `Blip2QFormerConfig`, *optional*):
+        Configuration for the Window Q-Former projector. If `None`, defaults are derived from
+        `vision_config.hidden_size`.
     image_grid_pinpoints (`list`, *optional*):
         A list of possible resolutions to use for processing high resolution images. Each item in the list should be a
         tuple or list of the form `(height, width)`.
@@ -63,7 +66,8 @@ class Granite4VisionConfig(PreTrainedConfig):
 
     model_type = "granite4_vision"
     attribute_map = {"image_token_id": "image_token_index"}
-    sub_configs = {"text_config": AutoConfig, "vision_config": AutoConfig}
+    # LlavaNextConfig.sub_configs = {"text_config": AutoConfig, "vision_config": AutoConfig}
+    sub_configs = {"text_config": AutoConfig, "vision_config": AutoConfig, "qformer_config": AutoConfig}
 
     vision_config: dict | PreTrainedConfig | None = None
     text_config: dict | PreTrainedConfig | None = None
@@ -83,8 +87,11 @@ class Granite4VisionConfig(PreTrainedConfig):
     spatial_vision_layer: int = -1
     spatial_target_layers: list | None = None
     projector_dropout: float = 0.1
+    qformer_config: dict | PreTrainedConfig | None = None
 
     def __post_init__(self, **kwargs):
+        from ..blip_2.configuration_blip_2 import Blip2QFormerConfig
+
         if self.deepstack_layer_map is not None:
             self.deepstack_layer_map = [(int(v), int(l)) for v, l in self.deepstack_layer_map]
 
@@ -118,6 +125,21 @@ class Granite4VisionConfig(PreTrainedConfig):
         )
 
         super().__post_init__(**kwargs)
+
+        if self.qformer_config is None:
+            self.qformer_config = Blip2QFormerConfig(
+                num_hidden_layers=1,
+                intermediate_size=3072,
+                cross_attention_frequency=1,
+                max_position_embeddings=2048,
+                use_qformer_text_input=False,
+            )
+        elif isinstance(self.qformer_config, dict):
+            self.qformer_config = Blip2QFormerConfig(**self.qformer_config)
+        # Set vision-dependent QFormer fields from the resolved vision_config
+        self.qformer_config.hidden_size = self.vision_config.hidden_size
+        self.qformer_config.num_attention_heads = self.vision_config.hidden_size // 64
+        self.qformer_config.encoder_hidden_size = self.vision_config.hidden_size
 
 
 __all__ = ["Granite4VisionConfig", "Granite4VisionTextConfig"]
