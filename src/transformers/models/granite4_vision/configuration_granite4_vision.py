@@ -18,7 +18,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-
 from typing import Literal
 
 from huggingface_hub.dataclasses import strict
@@ -26,6 +25,14 @@ from huggingface_hub.dataclasses import strict
 from ...configuration_utils import PreTrainedConfig
 from ...utils import auto_docstring
 from ..auto import CONFIG_MAPPING, AutoConfig
+
+
+# ── Config ──────────────────────────────────────────────────────────────────
+
+
+class Granite4VisionTextConfig(GraniteConfig):
+    model_type = "granite4_vision_text"
+    base_config_key = "text_config"
 
 
 @auto_docstring(checkpoint="llava-hf/llava-v1.6-mistral-7b-hf")
@@ -113,4 +120,4 @@ class Granite4VisionConfig(PreTrainedConfig):
         super().__post_init__(**kwargs)
 
 
-__all__ = ["Granite4VisionConfig"]
+__all__ = ["Granite4VisionConfig", "Granite4VisionTextConfig"]
