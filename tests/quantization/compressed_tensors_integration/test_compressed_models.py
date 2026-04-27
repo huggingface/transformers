@@ -68,13 +68,12 @@ class StackCompressedModelTest(unittest.TestCase):
                         continue
                     comp_decomp_obj = _has_nested_attr(compressed_decompressed, name)
                     if comp_decomp_obj is not None and hasattr(submodule, "weight"):
-                        self.assertTrue(
-                            torch.allclose(
-                                submodule.weight.to(torch_device),
-                                comp_decomp_obj.weight.to(torch_device),
-                                atol=0.2,
-                            ),
-                            f"Weight mismatch for module '{name}'.",
+                        torch.testing.assert_close(
+                            submodule.weight.to(torch_device),
+                            comp_decomp_obj.weight.to(torch_device),
+                            atol=0.2,
+                            rtol=1e-5,
+                            msg=f"Weight mismatch for module '{name}'.",
                         )
 
     def test_no_warnings_for_all_models(self):
