@@ -100,36 +100,6 @@ class GraniteSpeechPlusConfig(GraniteSpeechConfig):
                 )
 
 
-class GraniteSpeechPlusConformerFeedForward(GraniteSpeechConformerFeedForward):
-    pass
-
-
-class GraniteSpeechPlusConformerAttention(GraniteSpeechConformerAttention):
-    pass
-
-
-class GraniteSpeechPlusConformerDepthWiseConv1d(GraniteSpeechConformerDepthWiseConv1d):
-    pass
-
-
-class GraniteSpeechPlusConformerConvModule(GraniteSpeechConformerConvModule):
-    pass
-
-
-class GraniteSpeechPlusConformerBlock(GraniteSpeechConformerBlock):
-    pass
-
-
-class GraniteSpeechPlusEncoderProjector(GraniteSpeechEncoderProjector):
-    pass
-
-
-class GraniteSpeechPlusCausalLMOutputWithPast(GraniteSpeechCausalLMOutputWithPast):
-    pass
-
-
-class GraniteSpeechPlusPreTrainedModel(GraniteSpeechPreTrainedModel):
-    pass
 
 
 class GraniteSpeechPlusCTCEncoder(GraniteSpeechCTCEncoder):
