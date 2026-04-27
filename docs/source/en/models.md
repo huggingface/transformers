@@ -190,16 +190,13 @@ model.hf_device_map
 
 ### Model data type
 
-The `dtype` argument controls which PyTorch [dtype](https://pytorch.org/docs/stable/tensor_attributes.html#torch.dtype) model weights are instantiated in. By default, `dtype="auto"` scans `config.json` for a `dtype` or legacy `torch_dtype` entry and loads weights in that format. If `config.json` lacks this information, Transformers inspects the first floating-point weight in the checkpoint and adopts its data type.
+The `dtype` argument controls the PyTorch [dtype](https://pytorch.org/docs/stable/tensor_attributes.html#torch.dtype) used to instantiate model weights. By default, Transformers loads weights with the `dtype` or legacy `torch_dtype` value from `config.json`. If `config.json` doesn't include either value, Transformers uses the dtype of the first floating-point weight in the checkpoint.
 
-Override the default by passing a specific data type.
+Override the default by passing a specific dtype.
 
 ```py
 import torch
 from transformers import AutoModelForCausalLM
-
-# default
-model = AutoModelForCausalLM.from_pretrained("google/gemma-3-1b-it", dtype="auto")
 
 # specific dtype
 model = AutoModelForCausalLM.from_pretrained("google/gemma-3-1b-it", dtype=torch.float16)
