@@ -343,7 +343,7 @@ def _build_checkpoint_conversion_mapping():
                 operations=[ErnieFuseAndSplitTextVisionExperts(stack_dim=0, concat_dim=1)],
             ),
         ],
-        "detr": [
+        "DetrModel": [
             WeightRenaming("backbone.conv_encoder", "backbone"),
             WeightRenaming("out_proj", "o_proj"),
             WeightRenaming(r"layers.(\d+).fc1", r"layers.\1.mlp.fc1"),
@@ -355,7 +355,7 @@ def _build_checkpoint_conversion_mapping():
             WeightRenaming(r"layers.(\d+).fc2", r"layers.\1.mlp.fc2"),
             WeightRenaming(r"encoder.encoder.(\d+).layers", r"encoder.aifi.\1.layers"),
         ],
-        "conditional_detr": [
+        "ConditionalDetrModel": [
             WeightRenaming("backbone.conv_encoder", "backbone"),
             WeightRenaming("self_attn.out_proj", "self_attn.o_proj"),
             WeightRenaming("encoder_attn.out_proj", "encoder_attn.o_proj"),
@@ -543,7 +543,8 @@ def _build_checkpoint_conversion_mapping():
             target_patterns=".parametrizations.weight.original1",
         ),
     ]
-
+    # Base DetrModel/ConditionalDetrModel transforms are picked up automatically as
+    # scoped sub-module transforms; only the segmentation-specific patterns are needed here.
     mapping["DetrForSegmentation"] = [
         WeightRenaming("bbox_attention.q_linear", "bbox_attention.q_proj"),
         WeightRenaming("bbox_attention.k_linear", "bbox_attention.k_proj"),
@@ -563,10 +564,6 @@ def _build_checkpoint_conversion_mapping():
         WeightRenaming("mask_head.out_lay", "mask_head.output_conv"),
     ]
     mapping["ConditionalDetrForSegmentation"] = mapping["DetrForSegmentation"].copy()
-    mapping["DetrForSegmentation"] = mapping["detr"].copy() + mapping["DetrForSegmentation"]
-    mapping["ConditionalDetrForSegmentation"] = (
-        mapping["conditional_detr"].copy() + mapping["ConditionalDetrForSegmentation"]
-    )
 
     mapping["ernie4_5_moe"] = mapping["qwen2_moe"].copy()
     mapping["ernie4_5_moe"] += [
@@ -691,7 +688,13 @@ def get_model_conversion_mapping(
         if class_name in seen_identifiers or (model_type and model_type in seen_identifiers):
             continue
 
-        conversions = extract_weight_conversions_for_model(submodule)
+        # Try class name first, then model_type. Track which path produced the hit so
+        # we know whether to block model_type for subsequent sub-modules (see below).
+        conversions = get_checkpoint_conversion_mapping(class_name)
+        found_via_class = conversions is not None
+        if not found_via_class and model_type is not None:
+            conversions = get_checkpoint_conversion_mapping(model_type)
+
         if conversions is None:
             continue
 
@@ -702,11 +705,12 @@ def get_model_conversion_mapping(
                 transform.scope_prefix = module_name
         weight_conversions.extend(conversions)
 
-        # Only mark seen when a mapping was actually applied, so that a root model
-        # with no mapping does not prematurely block sub-modules with the same
-        # model_type from getting their own scoped transforms entry.
         seen_identifiers.add(class_name)
-        if model_type:
+        # Only block model_type when the hit was via model_type. When the hit was via
+        # class name, sub-modules that share the same model_type but have no class-specific
+        # mapping of their own (e.g. DetrModel under DetrForSegmentation) must still be
+        # reachable so their base transforms are picked up and scoped automatically.
+        if not found_via_class and model_type:
             seen_identifiers.add(model_type)
 
     if add_legacy:
