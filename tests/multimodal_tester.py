@@ -15,6 +15,8 @@
 from inspect import signature
 
 from .test_configuration_common import ConfigTester
+from transformers.testing_utils import _TEXT_MODEL_TESTER_DEFAULTS
+
 from .test_modeling_common import (
     GenerationTesterMixin,
     ModelTesterMixin,
@@ -74,30 +76,17 @@ class MultiModalModelTester:
     def __init__(self, parent, **kwargs):
         self.parent = parent
 
-        # Text-side defaults shared by every multimodal tester. Subclasses are expected to `setdefault`
-        # their modality-specific kwargs (and any differing values such as `pad_token_id`) *before* calling super.
+        # Multimodal-specific overrides of shared defaults (applied before the shared
+        # defaults so they take precedence, but after any subclass setdefault calls).
         kwargs.setdefault("batch_size", 3)
-        kwargs.setdefault("is_training", True)
-        kwargs.setdefault("use_input_mask", True)
-        kwargs.setdefault("use_labels", True)
-        kwargs.setdefault("vocab_size", 99)
-        kwargs.setdefault("hidden_size", 32)
-        kwargs.setdefault("num_hidden_layers", 2)
-        kwargs.setdefault("num_attention_heads", 2)
-        kwargs.setdefault("num_key_value_heads", 2)
-        kwargs.setdefault("intermediate_size", 32)  # Keep this divisible by 8 for fp16/bf16/fp32 16-bytes alignment
-        kwargs.setdefault("hidden_act", "gelu")
-        kwargs.setdefault("max_position_embeddings", 512)
-        kwargs.setdefault("bos_token_id", 1)
-        kwargs.setdefault("eos_token_id", 2)
-        kwargs.setdefault("expert_interval", 1)
-        kwargs.setdefault("moe_layer_start_index", 0)
         kwargs.setdefault("moe_intermediate_size", 12)
-        kwargs.setdefault("shared_expert_intermediate_size", 36)
-        kwargs.setdefault("shared_expert_gate", True)
-        kwargs.setdefault("moe_num_shared_experts", 2)
-        kwargs.setdefault("num_experts_per_tok", 2)
-        kwargs.setdefault("num_experts", 8)
+
+        # Apply shared text-model defaults for anything not already set.
+        # Subclasses are expected to `setdefault` their modality-specific kwargs
+        # (and any differing values such as `pad_token_id`) *before* calling super.
+        for key, default in _TEXT_MODEL_TESTER_DEFAULTS.items():
+            kwargs.setdefault(key, default)
+
         kwargs.setdefault("ignore_index", -100)
         kwargs.setdefault("scope", None)
 
