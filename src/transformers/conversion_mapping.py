@@ -558,7 +558,7 @@ def _build_checkpoint_conversion_mapping():
         "exaone4_5": [
             WeightRenaming(source_patterns=r"^language_model", target_patterns="model.language_model"),
             WeightRenaming(source_patterns=r"^visual", target_patterns="model.visual"),
-        ]
+        ],
         "legacy": [
             WeightRenaming(
                 source_patterns="LayerNorm.gamma",

@@ -194,11 +194,7 @@ class Exaone4_5_VisionAttention(nn.Module):
         seq_length = hidden_states.shape[0]
         query_states, key_states, value_states = self._split_qkv(hidden_states)
 
-        if position_embeddings is None:
-            emb = torch.cat((rotary_pos_emb, rotary_pos_emb), dim=-1)
-            cos, sin = emb.cos(), emb.sin()
-        else:
-            cos, sin = position_embeddings
+        cos, sin = position_embeddings
         query_states, key_states = apply_rotary_pos_emb_vision(query_states, key_states, cos, sin)
 
         query_states = query_states.transpose(0, 1).unsqueeze(0)
@@ -476,7 +472,7 @@ class Exaone4_5_PreTrainedModel(PreTrainedModel):
             init.copy_(module.inv_freq, inv_freq)
 
 
-class Exaone4_5_VisionPreTrainedModel(Exaone4_5_PreTrainedModel):
+class Exaone4_5_VisionModel(Exaone4_5_PreTrainedModel):
     config: Exaone4_5_VisionConfig
     _no_split_modules = ["Exaone4_5_VisionBlock"]
     _input_embed_layer = "patch_embed"
@@ -657,11 +653,10 @@ class Exaone4_5_Model(Exaone4_5_PreTrainedModel):
     accepts_loss_kwargs = False
     config: Exaone4_5_Config
     _no_split_modules = ["Exaone4_5_DecoderLayer", "Exaone4_5_VisionBlock"]
-    config_class = Exaone4_5_Config
 
     def __init__(self, config: Exaone4_5_Config):
         super().__init__(config)
-        self.visual = Exaone4_5_VisionPreTrainedModel._from_config(config.vision_config)
+        self.visual = Exaone4_5_VisionModel._from_config(config.vision_config)
         self.language_model = AutoModel.from_config(config.text_config)
         self.rope_deltas = None  # cache rope_deltas here
 
@@ -851,7 +846,10 @@ class Exaone4_5_Model(Exaone4_5_PreTrainedModel):
     @can_return_tuple
     @auto_docstring
     def get_video_features(
-        self, pixel_values_videos: torch.FloatTensor, video_grid_thw: torch.LongTensor | None = None, **kwargs
+        self,
+        pixel_values_videos: torch.FloatTensor,
+        video_grid_thw: torch.LongTensor | None = None,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
         r"""
         pixel_values_videos (`torch.FloatTensor` of shape `(batch_size, num_channels, image_size, image_size)`):
@@ -859,22 +857,21 @@ class Exaone4_5_Model(Exaone4_5_PreTrainedModel):
         video_grid_thw (`torch.LongTensor` of shape `(num_videos, 3)`, *optional*):
             The temporal, height and width of feature shape of each video in LLM.
         """
-        visual_dtype, visual_device = self._get_visual_dtype_and_device()
-        pixel_values_videos = pixel_values_videos.to(device=visual_device, dtype=visual_dtype)
-        if video_grid_thw is not None:
-            video_grid_thw = video_grid_thw.to(visual_device)
-            if pixel_values_videos.shape[0] != int(video_grid_thw.prod(-1).sum().item()):
-                raise ValueError("Video features and video tokens do not match")
+        pixel_values_videos = pixel_values_videos.type(self.visual.dtype)
         vision_outputs = self.visual(pixel_values_videos, grid_thw=video_grid_thw, **kwargs)
         split_sizes = (video_grid_thw.prod(-1) // self.visual.spatial_merge_size**2).tolist()
         video_embeds = torch.split(vision_outputs.pooler_output, split_sizes)
         vision_outputs.pooler_output = video_embeds
+
         return vision_outputs
 
     @can_return_tuple
     @auto_docstring
     def get_image_features(
-        self, pixel_values: torch.FloatTensor, image_grid_thw: torch.LongTensor | None = None, **kwargs
+        self,
+        pixel_values: torch.FloatTensor,
+        image_grid_thw: torch.LongTensor | None = None,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
         r"""
         pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, image_size, image_size)`):
@@ -882,16 +879,12 @@ class Exaone4_5_Model(Exaone4_5_PreTrainedModel):
         image_grid_thw (`torch.LongTensor` of shape `(num_images, 3)`, *optional*):
             The temporal, height and width of feature shape of each image in LLM.
         """
-        visual_dtype, visual_device = self._get_visual_dtype_and_device()
-        pixel_values = pixel_values.to(device=visual_device, dtype=visual_dtype)
-        if image_grid_thw is not None:
-            image_grid_thw = image_grid_thw.to(visual_device)
-            if pixel_values.shape[0] != int(image_grid_thw.prod(-1).sum().item()):
-                raise ValueError("Image features and image tokens do not match")
+        pixel_values = pixel_values.type(self.visual.dtype)
         vision_outputs = self.visual(pixel_values, grid_thw=image_grid_thw, **kwargs)
         split_sizes = (image_grid_thw.prod(-1) // self.visual.spatial_merge_size**2).tolist()
         image_embeds = torch.split(vision_outputs.pooler_output, split_sizes)
         vision_outputs.pooler_output = image_embeds
+
         return vision_outputs
 
     def get_placeholder_mask(
@@ -1057,11 +1050,6 @@ class Exaone4_5_Model(Exaone4_5_PreTrainedModel):
             attentions=outputs.attentions,
         )
 
-    def _get_visual_dtype_and_device(self) -> tuple[torch.dtype, torch.device]:
-        visual_dtype = self.visual.patch_embed.proj.weight.dtype
-        visual_device = self.visual.patch_embed.proj.weight.device
-        return visual_dtype, visual_device
-
 
 @auto_docstring(checkpoint="LGAI-EXAONE/EXAONE-4.5-33B")
 class Exaone4_5_ForConditionalGeneration(Exaone4_5_PreTrainedModel, GenerationMixin):
@@ -1075,8 +1063,6 @@ class Exaone4_5_ForConditionalGeneration(Exaone4_5_PreTrainedModel, GenerationMi
     _tied_weights_keys = {"lm_head.weight": "model.language_model.embed_tokens.weight"}
     # Reference: fix gemma3 grad acc #37208
     accepts_loss_kwargs = False
-
-    config: Exaone4_5_Config
 
     def __init__(self, config: Exaone4_5_Config):
         super().__init__(config)
@@ -1417,5 +1403,5 @@ __all__ = [
     "Exaone4_5_ForConditionalGeneration",
     "Exaone4_5_Model",
     "Exaone4_5_PreTrainedModel",
-    "Exaone4_5_VisionPreTrainedModel",
+    "Exaone4_5_VisionModel",
 ]

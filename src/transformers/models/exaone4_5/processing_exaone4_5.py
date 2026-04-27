@@ -16,6 +16,7 @@ class Exaone4_5_ProcessorKwargs(ProcessingKwargs, total=False):
     _defaults = {
         "text_kwargs": {
             "padding": False,
+            "return_mm_token_type_ids": False,
         },
         "videos_kwargs": {"return_metadata": True},
     }

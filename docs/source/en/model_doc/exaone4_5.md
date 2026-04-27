@@ -13,7 +13,7 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was released on 2026-04-09 and added to Hugging Face Transformers on 2026-04-20.*
+*This model was released on 2026-04-09 and added to Hugging Face Transformers on 2026-04-27.*
 
 # EXAONE 4.5
 
@@ -24,36 +24,64 @@ Integrating a dedicated visual encoder into the existing EXAONE 4.0 framework, w
 EXAONE 4.5 features 33 billion parameters in total, including 1.2 billion parameters from the vision encoder. 
 EXAONE 4.5 achieves competitive performance in general benchmark while outperforming SOTA models of similar size in document understanding and Korean contextual reasoning, inheriting powerful language capabilities from our previous language models.
 
-For more details, please refer to the [technical report](http://arxiv.org/abs/2604.08644), [blog](https://www.lgresearch.ai/blog/view?seq=641) and [GitHub](https://github.com/LG-AI-EXAONE/EXAONE-4.5).
+EXAONE 4.5 builds on the foundation of EXAONE 4.0 with several key enhancements. The vocabulary size has been expanded to 153,600, and the context window now supports up to 256K tokens. In addition, a Multi-Token Prediction (MTP) mechanism has been introduced, further improving the model's performance.
+
+For more details, please refer to the [technical report](https://huggingface.co/papers/2604.08644), [blog](https://www.lgresearch.ai/blog/view?seq=641) and [GitHub](https://github.com/LG-AI-EXAONE/EXAONE-4.5).
 
 All model weights including quantized version are available at [Huggingface Collections](https://huggingface.co/collections/LGAI-EXAONE/exaone-45).
 
-## Model Details
+## Usage tips
 
-### Model Configuration of EXAONE 4.5
+> To achieve the expected performance, we recommend using the following configurations:
+> - We recommend to use `temperature=1.0`, `top_p=0.95`, `presence_penalty=1.5` for general purpose.
+> - We recommend to use `temperature=0.6`, `top_p=0.95`, `presence_penalty=1.5`, `top_k=20` for OCR/document-related tasks, and Korean inputs.
+> - We recommend to use `temperature=1.0`, `top_p=0.95` for text-only inputs.
+> - Different from EXAONE-4.0, EXAONE 4.5 uses `enable_thinking=True` as default. Thus, you need to set `enable_thinking=False` when you want to use non-reasoning mode.
+> - EXAONE 4.5 prefers using `\boxed{}` format to answer the question. We recommend using this format with the corresponding format instruction for better parsing accuracy. 
 
-- Model Type: Causal Language Model + Vision Encoder
-- Number of Parameters (Language Model): 31.7B
-- Number of Parameters (Vision Encoder): 1.29B
-- Hidden Dimension: 5,120
-- Intermediate size: 27,392
-- Number of Layers: 64 Main layers + 1 MTP layers
-  - Hybrid Attention Pattern: 16 x (3 Sliding window attention + 1 Global attention)
-  - Reordered Norm: Apply normalization after Attention/MLP, and before residual connection
-- Sliding Window Attention
-  - Number of Attention Heads: 40 Q-heads and 8 KV-heads
-  - Head Dimension: 128 for both Q/KV
-  - Sliding Window Size: 4,096
-- Global Attention
-  - Number of Attention Heads: 40 Q-heads and 8 KV-heads
-  - Head Dimension: 128 for both Q/KV
-  - No Rotary Positional Embedding Used (NoPE)
-- Vision Encoder
-  - Grouped Query Attention (GQA) with 32 Q-heads and 8 KV-heads
-  - 2D RoPE for vision embeddings
-- Vocab Size: 153,600
-- Context Length: 262,144 tokens
-- Knowledge Cutoff: Dec 2024 (2024/12)
+For tasks that require accurate results, you can run the EXAONE 4.5 model in reasoning mode, whereas for tasks where latency matters more than accuracy, you can run the EXAONE 4.5 model in non-reasoning mode.
+
+Here is the example code for using EXAONE 4.5 model in reasoning mode:
+
+```python
+import torch
+from transformers import AutoProcessor, AutoModelForImageTextToText
+
+model_id = "LGAI-EXAONE/EXAONE-4.5-33B"
+
+processor = AutoProcessor.from_pretrained(model_id)
+model = AutoModelForImageTextToText.from_pretrained(
+    model_id,
+    torch_dtype=torch.bfloat16,
+    device_map="auto",
+)
+
+messages = [
+    {
+        "role": "user",
+        "content": [
+            {"type": "image", "image": "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg"},
+            {"type": "text", "text": "Describe the image."},
+        ],
+    }
+]
+
+inputs = processor.apply_chat_template(
+    messages,
+    tokenize=True,
+    add_generation_prompt=True,
+    return_tensors="pt",
+    enable_thinking=True,   # default: True
+)
+inputs = inputs.to(model.device)
+
+generated_ids = model.generate(**inputs, max_new_tokens=64)
+generated_text = processor.batch_decode(
+    generated_ids[:, inputs["input_ids"].shape[-1]:],
+    skip_special_tokens=True,
+)[0]
+print(generated_text)
+```
 
 
 ## Exaone4_5_Config

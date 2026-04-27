@@ -243,5 +243,4 @@ class Exaone4_5_IntegrationTest(unittest.TestCase):
         inputs = self.processor(text=[text], images=[image], padding=True, return_tensors="pt").to(torch_device)
         generated_ids = self.model.generate(**inputs, max_new_tokens=20, do_sample=False)
         text = self.processor.decode(generated_ids[0], skip_special_tokens=True)
-        print(text)
         self.assertEqual(EXPECTED_TEXT, text)

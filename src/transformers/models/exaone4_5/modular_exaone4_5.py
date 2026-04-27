@@ -69,9 +69,6 @@ class Exaone4_5_Config(PreTrainedConfig):
         elif self.text_config is None:
             self.text_config = CONFIG_MAPPING["exaone4"]()
 
-        if not self.tie_word_embeddings and self.text_config.tie_word_embeddings:
-            self.tie_word_embeddings = self.text_config.tie_word_embeddings
-
         super().__post_init__(**kwargs)
 
 
@@ -121,11 +118,7 @@ class Exaone4_5_VisionAttention(Qwen2_5_VLVisionAttention):
         seq_length = hidden_states.shape[0]
         query_states, key_states, value_states = self._split_qkv(hidden_states)
 
-        if position_embeddings is None:
-            emb = torch.cat((rotary_pos_emb, rotary_pos_emb), dim=-1)
-            cos, sin = emb.cos(), emb.sin()
-        else:
-            cos, sin = position_embeddings
+        cos, sin = position_embeddings
         query_states, key_states = apply_rotary_pos_emb_vision(query_states, key_states, cos, sin)
 
         query_states = query_states.transpose(0, 1).unsqueeze(0)
@@ -188,7 +181,6 @@ class Exaone4_5_VisionBlock(Qwen2_5_VLVisionBlock):
 
 class Exaone4_5_PreTrainedModel(Exaone4PreTrainedModel):
     config_class = Exaone4_5_Config
-    config: Exaone4_5_Config
     base_model_prefix = "model"
     _no_split_modules = ["Exaone4_5_VisionBlock", "Exaone4DecoderLayer"]
     _skip_keys_device_placement = ["past_key_values"]
@@ -201,9 +193,8 @@ class Exaone4_5_PreTrainedModel(Exaone4PreTrainedModel):
             init.copy_(module.inv_freq, inv_freq)
 
 
-class Exaone4_5_VisionPreTrainedModel(Exaone4_5_PreTrainedModel, Qwen2_5_VisionTransformerPretrainedModel):
+class Exaone4_5_VisionModel(Exaone4_5_PreTrainedModel, Qwen2_5_VisionTransformerPretrainedModel):
     config_class = Exaone4_5_VisionConfig
-    _no_split_modules = ["Exaone4_5_VisionBlock"]
 
     def __init__(self, config: Exaone4_5_VisionConfig, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
@@ -227,49 +218,11 @@ class Exaone4_5_VisionPreTrainedModel(Exaone4_5_PreTrainedModel, Qwen2_5_VisionT
 
 @auto_docstring(checkpoint="LGAI-EXAONE/EXAONE-4.5-33B")
 class Exaone4_5_Model(Exaone4_5_PreTrainedModel, Qwen2_5_VLModel):
-    config_class = Exaone4_5_Config
-    base_model_prefix = "model"
-
     def __init__(self, config: Exaone4_5_Config):
         super().__init__(config)
-        self.visual = Exaone4_5_VisionPreTrainedModel._from_config(config.vision_config)
+        self.visual = Exaone4_5_VisionModel._from_config(config.vision_config)
         self.language_model = AutoModel.from_config(config.text_config)
         self.post_init()
-
-    def _get_visual_dtype_and_device(self) -> tuple[torch.dtype, torch.device]:
-        visual_dtype = self.visual.patch_embed.proj.weight.dtype
-        visual_device = self.visual.patch_embed.proj.weight.device
-        return visual_dtype, visual_device
-
-    def get_image_features(
-        self, pixel_values: torch.FloatTensor, image_grid_thw: torch.LongTensor | None = None, **kwargs
-    ):
-        visual_dtype, visual_device = self._get_visual_dtype_and_device()
-        pixel_values = pixel_values.to(device=visual_device, dtype=visual_dtype)
-        if image_grid_thw is not None:
-            image_grid_thw = image_grid_thw.to(visual_device)
-            if pixel_values.shape[0] != int(image_grid_thw.prod(-1).sum().item()):
-                raise ValueError("Image features and image tokens do not match")
-        vision_outputs = self.visual(pixel_values, grid_thw=image_grid_thw, **kwargs)
-        split_sizes = (image_grid_thw.prod(-1) // self.visual.spatial_merge_size**2).tolist()
-        image_embeds = torch.split(vision_outputs.pooler_output, split_sizes)
-        vision_outputs.pooler_output = image_embeds
-        return vision_outputs
-
-    def get_video_features(
-        self, pixel_values_videos: torch.FloatTensor, video_grid_thw: torch.LongTensor | None = None, **kwargs
-    ):
-        visual_dtype, visual_device = self._get_visual_dtype_and_device()
-        pixel_values_videos = pixel_values_videos.to(device=visual_device, dtype=visual_dtype)
-        if video_grid_thw is not None:
-            video_grid_thw = video_grid_thw.to(visual_device)
-            if pixel_values_videos.shape[0] != int(video_grid_thw.prod(-1).sum().item()):
-                raise ValueError("Video features and video tokens do not match")
-        vision_outputs = self.visual(pixel_values_videos, grid_thw=video_grid_thw, **kwargs)
-        split_sizes = (video_grid_thw.prod(-1) // self.visual.spatial_merge_size**2).tolist()
-        video_embeds = torch.split(vision_outputs.pooler_output, split_sizes)
-        vision_outputs.pooler_output = video_embeds
-        return vision_outputs
 
     @auto_docstring(checkpoint="LGAI-EXAONE/EXAONE-4.5-33B")
     @can_return_tuple
@@ -344,8 +297,6 @@ class Exaone4_5_ForConditionalGeneration(Exaone4_5_PreTrainedModel, Qwen2_5_VLFo
     Note: Unlike Qwen2VL, the EXAONE 4.5 vision encoder uses 2D rotary positional embeddings (2D-RoPE)
     and adopts a Grouped Query Attention (GQA) structure throughout the multimodal stack.
     """
-
-    config: Exaone4_5_Config
 
     def __init__(self, config: Exaone4_5_Config):
         super().__init__(config)
@@ -521,6 +472,7 @@ class Exaone4_5_ProcessorKwargs(ProcessingKwargs, total=False):
     _defaults = {
         "text_kwargs": {
             "padding": False,
+            "return_mm_token_type_ids": False,
         },
         "videos_kwargs": {"return_metadata": True},
     }
@@ -536,6 +488,6 @@ __all__ = [
     "Exaone4_5_Model",
     "Exaone4_5_PreTrainedModel",
     "Exaone4_5_Processor",
-    "Exaone4_5_VisionPreTrainedModel",
+    "Exaone4_5_VisionModel",
     "Exaone4_5_VisionConfig",
 ]
