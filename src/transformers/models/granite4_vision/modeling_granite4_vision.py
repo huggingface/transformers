@@ -35,63 +35,39 @@ from ...generation import GenerationMixin
 from ...image_processing_utils import select_best_resolution
 from ...integrations import use_kernel_forward_from_hub, use_kernel_func_from_hub, use_kernelized_func
 from ...masking_utils import create_causal_mask
-from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPooling, ModelOutput
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging, torch_compilable_check
+from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, torch_compilable_check
 from ...utils.generic import maybe_autocast, merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
 from ..auto import AutoModel
 from .configuration_granite4_vision import Granite4VisionConfig, Granite4VisionTextConfig
 
 
-logger = logging.get_logger(__name__)
-
-
 @dataclass
-@auto_docstring(
-    custom_intro="""
-    Base class for Llava outputs, with hidden states and attentions.
-    """
-)
 class Granite4VisionModelOutputWithPast(BaseModelOutputWithPast):
-    r"""
-    past_key_values (`Cache`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
-        It is a [`~cache_utils.Cache`] instance. For more details, see our [kv cache guide](https://huggingface.co/docs/transformers/en/kv_cache).
-
-        Contains pre-computed hidden-states (key and values in the self-attention blocks) that can be used (see
-        `past_key_values` input) to speed up sequential decoding.
-    image_hidden_states (`torch.FloatTensor`, *optional*):
-        A `torch.FloatTensor` of size `(batch_size, num_images, sequence_length, hidden_size)`.
-        image_hidden_states of the model produced by the vision encoder and after projecting the last hidden state.
+    """
+    Args:
+        deepstack_features (`list[tuple[int, list[torch.Tensor]]]`, *optional*):
+            List of `(llm_layer_idx, packed_features)` pairs produced by the deepstack
+            and spatial projectors. Each entry targets one LLM decoder layer; `packed_features`
+            is a per-image list of tensors of shape `(num_image_tokens, hidden_size)`.
     """
 
     image_hidden_states: torch.FloatTensor | None = None
 
+    deepstack_features: list | None = None
+
 
 @dataclass
-@auto_docstring(
-    custom_intro="""
-    Base class for Granite4Vision causal language model (or autoregressive) outputs.
-    """
-)
 class Granite4VisionCausalLMOutputWithPast(ModelOutput):
-    r"""
-    loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
-        Language modeling loss (for next-token prediction).
-    logits (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.vocab_size)`):
-        Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
-    past_key_values (`Cache`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
-        It is a [`~cache_utils.Cache`] instance. For more details, see our [kv cache guide](https://huggingface.co/docs/transformers/en/kv_cache).
-
-        Contains pre-computed hidden-states (key and values in the self-attention blocks) that can be used (see
-        `past_key_values` input) to speed up sequential decoding.
-    image_hidden_states (`torch.FloatTensor`, *optional*):
-        A `torch.FloatTensor` of size (batch_size * num_patches, num_images, sequence_length, hidden_size)`.
-        image_hidden_states of the model produced by the vision encoder and after projecting the last hidden state.
+    """
+    Args:
+        deepstack_features (`list[tuple[int, list[torch.Tensor]]]`, *optional*):
+            List of `(llm_layer_idx, packed_features)` pairs. See `Granite4VisionModelOutputWithPast`.
     """
 
     loss: torch.FloatTensor | None = None
@@ -100,6 +76,8 @@ class Granite4VisionCausalLMOutputWithPast(ModelOutput):
     hidden_states: tuple[torch.FloatTensor] | None = None
     attentions: tuple[torch.FloatTensor] | None = None
     image_hidden_states: torch.FloatTensor | None = None
+
+    deepstack_features: list | None = None
 
 
 @dataclass
@@ -161,32 +139,43 @@ class WindowQFormerDownsampler(nn.Module):
         q, w = config.downsample_rate.split("/")
         self.query_side, self.window_side = int(q), int(w)
         self.query_length = self.query_side**2
-        embed_std = 1 / math.sqrt(vision_hidden_size)
         self.norm = nn.LayerNorm(vision_hidden_size, eps=1e-6)
-        self.query = nn.Parameter(torch.randn(1, self.query_length, vision_hidden_size) * embed_std)
-        self.image_positions = nn.Parameter(torch.randn(1, self.window_side**2, vision_hidden_size) * embed_std)
+        self.query = nn.Parameter(torch.empty(1, self.query_length, vision_hidden_size))
+        self.image_positions = nn.Parameter(torch.empty(1, self.window_side**2, vision_hidden_size))
         self.out_linear = nn.Linear(vision_hidden_size, llm_hidden_size, bias=True)
 
-    def _win(self, x, side, win):
-        """(B, side*side, C) raster -> (B*n*n, win*win, C) where n=side//win"""
-        B, _, C = x.shape
-        n = side // win
-        return x.view(B, side, side, C).view(B, n, win, n, win, C).transpose(2, 3).flatten(0, 2).flatten(1, 2)
+    def _windowed_raster(self, x, side, window_size):
+        """(B, side*side, C) raster -> (B*num_win*num_win, window_size*window_size, C)"""
+        batch, _, channels = x.shape
+        num_win = side // window_size
+        return (
+            x.view(batch, side, side, channels)
+            .view(batch, num_win, window_size, num_win, window_size, channels)
+            .transpose(2, 3)
+            .flatten(0, 2)
+            .flatten(1, 2)
+        )
 
-    def _unwin(self, xw, n, win):
-        """(B*n*n, win*win, C) -> (B, (n*win)^2, C) raster"""
-        Bnn, _, C = xw.shape
-        assert Bnn % (n * n) == 0
-        B = Bnn // (n * n)
-        side = n * win
-        return xw.view(B, n, n, win, win, C).transpose(2, 3).contiguous().view(B, side, side, C).flatten(1, 2)
+    def _unwindowed_raster(self, x_win, num_win, window_size):
+        """(B*num_win*num_win, window_size*window_size, C) -> (B, (num_win*window_size)^2, C)"""
+        batch_win, _, channels = x_win.shape
+        assert batch_win % (num_win * num_win) == 0
+        batch = batch_win // (num_win * num_win)
+        side = num_win * window_size
+        return (
+            x_win.view(batch, num_win, num_win, window_size, window_size, channels)
+            .transpose(2, 3)
+            .contiguous()
+            .view(batch, side, side, channels)
+            .flatten(1, 2)
+        )
 
     def forward(self, image_features):
         B, HW, C = image_features.shape
         assert self.image_side * self.image_side == HW
         n = self.image_side // self.window_side
         image_features = self.norm(image_features)
-        enc = self._win(image_features, self.image_side, self.window_side)
+        enc = self._windowed_raster(image_features, self.image_side, self.window_side)
 
         if self._spatial_offset is not None:
             downsampled = spatial_offset_downsample(image_features, self._model_config, self._spatial_offset)
@@ -194,7 +183,7 @@ class WindowQFormerDownsampler(nn.Module):
             downsampled = interpolate_downsample(image_features, self._model_config)
 
         new_side = n * self.query_side
-        downsampled_w = self._win(downsampled, new_side, self.query_side)
+        downsampled_w = self._windowed_raster(downsampled, new_side, self.query_side)
 
         query_embeds = self.query + downsampled_w
         encoder_embeds = self.dropout(enc + self.image_positions)
@@ -204,7 +193,7 @@ class WindowQFormerDownsampler(nn.Module):
             return_dict=True,
         ).last_hidden_state
 
-        out = self._unwin(out_w, n=n, win=self.query_side)
+        out = self._unwindowed_raster(out_w, num_win=n, window_size=self.query_side)
         out = self.dropout(out)
         return self.out_linear(out)
 
@@ -307,8 +296,6 @@ class Granite4VisionPreTrainedModel(PreTrainedModel):
             # Recompute them here so _initialize_missing_keys restores correct values.
             rope_type = module.config.rope_parameters.get("rope_type", "default")
             if rope_type != "default":
-                from transformers.modeling_rope_utils import ROPE_INIT_FUNCTIONS
-
                 rope_init_fn = ROPE_INIT_FUNCTIONS[rope_type]
             else:
                 rope_init_fn = module.compute_default_rope_parameters
@@ -316,6 +303,10 @@ class Granite4VisionPreTrainedModel(PreTrainedModel):
             init.copy_(module.inv_freq, inv_freq)
             init.copy_(module.original_inv_freq, inv_freq)
             module.attention_scaling = attention_scaling
+        if isinstance(module, WindowQFormerDownsampler):
+            embed_std = 1 / math.sqrt(module.query.shape[-1])
+            init.normal_(module.query, mean=0.0, std=embed_std)
+            init.normal_(module.image_positions, mean=0.0, std=embed_std)
 
 
 def rotate_half(x):
@@ -796,9 +787,6 @@ class Granite4VisionModel(Granite4VisionPreTrainedModel):
         self.spatial_projectors = None
         self.downsample_rate = config.downsample_rate
         self.projector_dropout = config.projector_dropout
-        # Inherited from LlavaNextConfig (unused — kept for config compatibility)
-        self.projector_hidden_act = config.projector_hidden_act
-        self.multimodal_projector_bias = config.multimodal_projector_bias
 
         # Deepstack projectors: one per (vision_layer, llm_layer) pair
         self.layerwise_projectors = nn.ModuleList(
@@ -811,11 +799,9 @@ class Granite4VisionModel(Granite4VisionPreTrainedModel):
                 [WindowQFormerDownsampler(config, spatial_offset=i) for i in range(4)]
             )
 
-        # Override parent's image_newline based on config flag
-        if not config.use_image_newline_parameter:
-            self.image_newline = None
-
-        self.pad_token_id = getattr(self.config, "pad_token_id", None) or -1
+        self.pad_token_id = (
+            self.config.text_config.pad_token_id if self.config.text_config.pad_token_id is not None else -1
+        )
         self.post_init()
 
     def get_input_embeddings(self):
@@ -852,10 +838,10 @@ class Granite4VisionModel(Granite4VisionPreTrainedModel):
                     np.prod(image_feature.shape) % (num_patch_height * num_patch_width * height * width) != 0
                     and vision_feature_select_strategy == "default"
                 ):
-                    logger.warning_once(
+                    raise ValueError(
                         "Image feature shape does not line up with the provided patch size. "
-                        "You may be using the `default` vision_feature_select_strategy with a"
-                        " visual encoder that does not have CLS."
+                        "You may be using the `default` vision_feature_select_strategy with a "
+                        "visual encoder that does not have CLS token."
                     )
 
                 image_feature = image_feature.view(num_patch_height, num_patch_width, height, width, -1)
@@ -1009,7 +995,7 @@ class Granite4VisionModel(Granite4VisionPreTrainedModel):
         output_attentions: bool | None = None,
         output_hidden_states: bool | None = None,
         return_dict: bool | None = None,
-        **kwargs: Unpack[FlashAttentionKwargs],
+        **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | Granite4VisionModelOutputWithPast:
         r"""
         vision_feature_select_strategy (`str`, *optional*, defaults to `"default"`):
@@ -1078,7 +1064,7 @@ class Granite4VisionModel(Granite4VisionPreTrainedModel):
             past_key_values=outputs.past_key_values,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
-            image_hidden_states=image_features.deepstack_features if pixel_values is not None else None,
+            deepstack_features=image_features.deepstack_features if pixel_values is not None else None,
         )
 
     def get_image_token_mask(
@@ -1273,7 +1259,7 @@ class Granite4VisionForConditionalGeneration(Granite4VisionPreTrainedModel, Gene
             past_key_values=outputs.past_key_values,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
-            image_hidden_states=outputs.image_hidden_states,
+            deepstack_features=outputs.deepstack_features,
         )
 
     def prepare_inputs_for_generation(

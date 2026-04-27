@@ -42,8 +42,6 @@ class Granite4VisionConfig(PreTrainedConfig):
     downsample_rate (`str`, *optional*):
         Fractional downsample rate for the Window Q-Former projector, e.g. `"1/4"` or `"3/8"`.
         The numerator is the query window side, the denominator is the key window side.
-    use_image_newline_parameter (`bool`, *optional*, defaults to `True`):
-        Whether to add a learnable newline embedding between image patch rows.
     deepstack_layer_map (`list`, *optional*):
         List of `[vision_layer_idx, llm_layer_idx]` pairs. Features from each vision encoder layer
         are projected and injected at the corresponding LLM decoder layer during forward pass.
@@ -81,7 +79,6 @@ class Granite4VisionConfig(PreTrainedConfig):
     image_seq_length: int = 576
 
     downsample_rate: str | None = None
-    use_image_newline_parameter: bool = True
     deepstack_layer_map: list | None = None
     use_spatial_sampling: bool = False
     spatial_vision_layer: int = -1

@@ -1,4 +1,4 @@
-# Copyright 2025 IBM. All rights reserved.
+# Copyright 2026 IBM and The HuggingFace Team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -69,7 +69,6 @@ class Granite4VisionModelTester(VLMModelTester):
         # Granite4Vision-specific
         kwargs.setdefault("downsample_rate", "1/2")
         kwargs.setdefault("deepstack_layer_map", [[1, 0]])
-        kwargs.setdefault("use_image_newline_parameter", True)
         kwargs.setdefault("use_spatial_sampling", False)
         kwargs.setdefault("projector_dropout", 0.0)
         kwargs.setdefault("image_token_index", kwargs.get("image_token_id", 3))
@@ -105,7 +104,6 @@ class Granite4VisionModelTester(VLMModelTester):
         config.image_grid_pinpoints = [[self.image_size, self.image_size]]
         config.downsample_rate = self.downsample_rate
         config.deepstack_layer_map = self.deepstack_layer_map
-        config.use_image_newline_parameter = self.use_image_newline_parameter
         config.use_spatial_sampling = self.use_spatial_sampling
         config.projector_dropout = self.projector_dropout
         return config
@@ -125,24 +123,25 @@ class Granite4VisionModelTest(VLMModelTest, unittest.TestCase):
     test_attention_outputs = False
     has_attentions = False
 
-    # get_image_features returns deepstack (llm_layer, features) tuples, not ModelOutput
-    @unittest.skip("get_image_features returns deepstack tuples, not ModelOutput")
+    # get_image_features returns Granite4VisionImageFeaturesOutput with deepstack_features,
+    # not last_hidden_state/pooler_output/hidden_states expected by the common tests
+    @unittest.skip("Granite4VisionImageFeaturesOutput has no last_hidden_state/pooler_output")
     def test_get_image_features_output_0(self):
         pass
 
-    @unittest.skip("get_image_features returns deepstack tuples, not ModelOutput")
+    @unittest.skip("Granite4VisionImageFeaturesOutput has no last_hidden_state/pooler_output")
     def test_get_image_features_output_1(self):
         pass
 
-    @unittest.skip("get_image_features returns deepstack tuples, not ModelOutput")
+    @unittest.skip("Granite4VisionImageFeaturesOutput has no last_hidden_state/pooler_output")
     def test_get_image_features_output_2(self):
         pass
 
-    @unittest.skip("get_image_features returns deepstack tuples, not ModelOutput")
+    @unittest.skip("Granite4VisionImageFeaturesOutput has no hidden_states field")
     def test_get_image_features_hidden_states(self):
         pass
 
-    @unittest.skip("get_image_features returns deepstack tuples, not ModelOutput")
+    @unittest.skip("Granite4VisionImageFeaturesOutput has no attentions field")
     def test_get_image_features_attentions(self):
         pass
 

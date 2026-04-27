@@ -80,7 +80,6 @@ HARDCODED_CONFIG_FOR_MODELS = {
     "privacy-filter": "OpenAIPrivacyFilterConfig",
     "lasr": "LasrCTCConfig",
     "wav2vec2-with-lm": "Wav2Vec2Config",
-    "granite4-vision": "Granite4VisionConfig",
 }
 
 _re_checkpoint = re.compile(r"\[(.+?)\]\((https://huggingface\.co/.+?)\)")
