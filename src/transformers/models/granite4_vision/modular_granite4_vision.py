@@ -160,8 +160,6 @@ class Granite4VisionConfig(LlavaNextConfig):
 
 
 class Granite4VisionProcessor(LlavaNextProcessor):
-    model_type = "granite4_vision"
-
     def __init__(
         self,
         image_processor=None,
@@ -452,15 +450,12 @@ class Granite4VisionModel(LlavaNextModel):
     def __init__(self, config: Granite4VisionConfig):
         super().__init__(config)
 
-        # Replace parent's single multi_modal_projector with deepstack projectors
+        # Replace parent's single multi_modal_projector with layerwise_projectors
         del self.multi_modal_projector
 
         self.spatial_projectors = None
         self.downsample_rate = config.downsample_rate
         self.projector_dropout = config.projector_dropout
-        # Inherited from LlavaNextConfig (unused — kept for config compatibility)
-        self.projector_hidden_act = config.projector_hidden_act
-        self.multimodal_projector_bias = config.multimodal_projector_bias
 
         # Deepstack projectors: one per (vision_layer, llm_layer) pair
         self.layerwise_projectors = nn.ModuleList(

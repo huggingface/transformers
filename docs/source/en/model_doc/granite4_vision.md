@@ -1,4 +1,4 @@
-<!--Copyright 2026 The HuggingFace Team. All rights reserved.
+<!--Copyright 2026 IBM and The HuggingFace Team. All rights reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with
 the License. You may obtain a copy of the License at
@@ -38,17 +38,20 @@ The model builds on [LLaVA-NeXT](llava_next) with several architectural innovati
 
 The model is delivered as a LoRA adapter on top of the base LLM, enabling single deployments to support both multimodal and text-only workloads. Total parameter count is ~4B.
 
-```bibtex
-@misc{granite-vision-4.1-4b,
-  title={Granite Vision 4.1},
-  author={IBM Granite Vision Team},
-  year={2026},
-  url={https://huggingface.co/ibm-granite/granite-vision-4.1-4b}
-}
-```
-
 > [!TIP]
 > This model was contributed by the [IBM Granite Vision Team](https://github.com/ibm-granite).
+
+## Usage Tips
+
+- Set `padding_side="left"` during batched generation for more accurate results.
+
+```py
+processor.tokenizer.padding_side = "left"
+```
+
+- The model supports specialized task tags for document extraction: `<chart2csv>`, `<chart2summary>`, `<chart2code>`, `<tables_html>`, `<tables_otsl>`, `<tables_json>`. Pass these as the text prompt along with a document image.
+
+- For key-value pair extraction, provide a JSON schema describing the fields to extract. The model returns structured JSON matching the schema.
 
 The example below demonstrates how to generate text based on an image with [`Pipeline`] or the [`AutoModel`] class.
 
@@ -57,14 +60,11 @@ The example below demonstrates how to generate text based on an image with [`Pip
 <hfoption id="Pipeline">
 
 ```python
-import torch
 from transformers import pipeline
 
 pipe = pipeline(
     task="image-text-to-text",
     model="ibm-granite/granite-vision-4.1-4b",
-    device=0,
-    torch_dtype=torch.bfloat16,
 )
 messages = [
     {
@@ -89,9 +89,7 @@ from transformers import AutoProcessor, AutoModelForImageTextToText
 model_id = "ibm-granite/granite-vision-4.1-4b"
 
 processor = AutoProcessor.from_pretrained(model_id)
-model = AutoModelForImageTextToText.from_pretrained(
-    model_id, torch_dtype=torch.bfloat16, device_map="auto"
-).eval()
+model = AutoModelForImageTextToText.from_pretrained(model_id).eval()
 
 conversation = [
     {
@@ -159,31 +157,9 @@ output = model.generate(**inputs, max_new_tokens=100)
 print(processor.decode(output[0], skip_special_tokens=True))
 ```
 
-## Notes
-
-- Set `padding_side="left"` during batched generation for more accurate results.
-
-```py
-processor.tokenizer.padding_side = "left"
-```
-
-- The model supports specialized task tags for document extraction: `<chart2csv>`, `<chart2summary>`, `<chart2code>`, `<tables_html>`, `<tables_otsl>`, `<tables_json>`. Pass these as the text prompt along with a document image.
-
-- For key-value pair extraction, provide a JSON schema describing the fields to extract. The model returns structured JSON matching the schema.
-
 ## Granite4VisionConfig
 
 [[autodoc]] Granite4VisionConfig
-
-## Granite4VisionImageProcessor
-
-[[autodoc]] Granite4VisionImageProcessor
-    - preprocess
-
-## Granite4VisionImageProcessorPil
-
-[[autodoc]] Granite4VisionImageProcessorPil
-    - preprocess
 
 ## Granite4VisionProcessor
 

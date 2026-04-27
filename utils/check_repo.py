@@ -557,7 +557,6 @@ DOC_MODEL_NAMES_NOT_IN_AUTO = {
     "parakeet",
     "madlad-400",
     "granitevision",
-    "granite4_vision",
     "falcon3",
     "megatron_gpt2",
     "code_llama",
