@@ -241,10 +241,11 @@ class OlmoHybridShortConvolution(nn.Conv1d):
             )
             conv_state = x_with_state[:, :, 1:]
         else:
+            # Multi-token forward (prefill, or chunked-tokens decode when the cache has prior state).
             if use_precomputed:
-                # Multi-token cached continuation (`seq_len > 1`, cache already populated): prepend
-                # the cached conv context so the causal conv sees the correct left-context rather
-                # than zero-padding. Drop the prepended region from the output below.
+                # Cached chunked-tokens decode: prepend the cached conv context so the causal conv
+                # sees the correct left-context rather than zero-padding. Dropped from the output
+                # at the end of this branch.
                 hidden_states = torch.cat([cache, hidden_states], dim=-1)
             out = F.conv1d(hidden_states, self.weight, self.bias, padding=self.conv_kernel_size - 1, groups=dim)
             out = out[:, :, : hidden_states.shape[-1]]

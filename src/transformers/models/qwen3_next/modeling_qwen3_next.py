@@ -629,10 +629,11 @@ class Qwen3NextGatedDeltaNet(nn.Module):
                 self.activation,
             )
         else:
+            # Multi-token forward (prefill, or chunked-tokens decode when the cache has prior state).
             if use_precomputed_states:
-                # Multi-token cached continuation (`seq_len > 1`, cache already populated). Prepend
-                # the cached conv context so the causal conv sees the correct left-context rather
-                # than zero-padding.
+                # Cached chunked-tokens decode: prepend the cached conv context so the causal conv
+                # sees the correct left-context rather than zero-padding. Dropped from the output
+                # at the end of this branch.
                 mixed_qkv = torch.cat([conv_state, mixed_qkv], dim=-1)
             if cache_params is not None:
                 new_conv_state = F.pad(mixed_qkv, (self.conv_kernel_size - mixed_qkv.shape[-1], 0))
@@ -648,7 +649,6 @@ class Qwen3NextGatedDeltaNet(nn.Module):
             else:
                 mixed_qkv = F.silu(self.conv1d(mixed_qkv)[:, :, : mixed_qkv.shape[-1]])
             if use_precomputed_states:
-                # Drop the prepended context; only this chunk's outputs remain.
                 mixed_qkv = mixed_qkv[:, :, -seq_len:]
 
         mixed_qkv = mixed_qkv.transpose(1, 2)
