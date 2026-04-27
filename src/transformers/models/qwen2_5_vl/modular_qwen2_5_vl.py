@@ -518,10 +518,6 @@ class Qwen2_5_VLModel(Qwen2VLModel):
         rope_deltas: torch.LongTensor | None = None,
         mm_token_type_ids: torch.IntTensor | None = None,
         second_per_grid_ts: torch.Tensor | None = None,
-        image_cu_seqlens: torch.Tensor | None = None,
-        image_position_ids: torch.Tensor | None = None,
-        video_cu_seqlens: torch.Tensor | None = None,
-        video_position_ids: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | Qwen2_5_VLModelOutputWithPast:
         r"""
@@ -539,12 +535,7 @@ class Qwen2_5_VLModel(Qwen2VLModel):
             inputs_embeds = self.get_input_embeddings()(input_ids)
 
         if pixel_values is not None:
-            image_embeds = self.get_image_features(
-                pixel_values,
-                image_grid_thw,
-                image_cu_seqlens,
-                image_position_ids,
-            ).pooler_output
+            image_embeds = self.get_image_features(pixel_values, image_grid_thw, **kwargs).pooler_output
             image_embeds = torch.cat(image_embeds, dim=0).to(inputs_embeds.device, inputs_embeds.dtype)
             image_mask, _ = self.get_placeholder_mask(
                 input_ids, inputs_embeds=inputs_embeds, image_features=image_embeds
@@ -552,12 +543,7 @@ class Qwen2_5_VLModel(Qwen2VLModel):
             inputs_embeds = inputs_embeds.masked_scatter(image_mask, image_embeds)
 
         if pixel_values_videos is not None:
-            video_embeds = self.get_video_features(
-                pixel_values_videos,
-                video_grid_thw,
-                video_cu_seqlens,
-                video_position_ids,
-            ).pooler_output
+            video_embeds = self.get_video_features(pixel_values_videos, video_grid_thw, **kwargs).pooler_output
             video_embeds = torch.cat(video_embeds, dim=0).to(inputs_embeds.device, inputs_embeds.dtype)
             _, video_mask = self.get_placeholder_mask(
                 input_ids, inputs_embeds=inputs_embeds, video_features=video_embeds

@@ -52,7 +52,12 @@ from ...utils import (
     torch_compilable_check,
 )
 from ...utils.deprecation import deprecate_kwarg
-from ...utils.generic import is_flash_attention_requested, maybe_autocast, merge_with_config_defaults
+from ...utils.generic import (
+    handle_extra_kwargs,
+    is_flash_attention_requested,
+    maybe_autocast,
+    merge_with_config_defaults,
+)
 from ...utils.hub import cached_file
 from ...utils.output_capturing import capture_outputs
 from ...vision_utils import get_vision_cu_seqlens, get_vision_position_ids, get_vision_window_index
@@ -1773,14 +1778,13 @@ class Qwen2_5OmniThinkerForConditionalGeneration(Qwen2_5OmniPreTrainedModelForCo
     def set_input_embeddings(self, value):
         self.model.set_input_embeddings(value)
 
+    @handle_extra_kwargs(modality="video")
     @can_return_tuple
     @auto_docstring
     def get_video_features(
         self,
         pixel_values_videos: torch.FloatTensor,
         video_grid_thw: torch.LongTensor | None = None,
-        video_cu_seqlens: torch.Tensor | None = None,
-        video_position_ids: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
         r"""
@@ -1790,22 +1794,15 @@ class Qwen2_5OmniThinkerForConditionalGeneration(Qwen2_5OmniPreTrainedModelForCo
             The temporal, height and width of feature shape of each video in LLM.
         """
         pixel_values_videos = pixel_values_videos.type(self.visual.dtype)
-        return self.visual(
-            pixel_values_videos,
-            grid_thw=video_grid_thw,
-            cu_seqlens=video_cu_seqlens,
-            position_ids=video_position_ids,
-            **kwargs,
-        )
+        return self.visual(pixel_values_videos, grid_thw=video_grid_thw, **kwargs)
 
+    @handle_extra_kwargs(modality="image")
     @can_return_tuple
     @auto_docstring
     def get_image_features(
         self,
         pixel_values: torch.FloatTensor,
         image_grid_thw: torch.LongTensor | None = None,
-        image_cu_seqlens: torch.Tensor | None = None,
-        image_position_ids: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
         r"""
@@ -1815,13 +1812,7 @@ class Qwen2_5OmniThinkerForConditionalGeneration(Qwen2_5OmniPreTrainedModelForCo
             The temporal, height and width of feature shape of each image in LLM.
         """
         pixel_values = pixel_values.type(self.visual.dtype)
-        return self.visual(
-            pixel_values,
-            grid_thw=image_grid_thw,
-            cu_seqlens=image_cu_seqlens,
-            position_ids=image_position_ids,
-            **kwargs,
-        )
+        return self.visual(pixel_values, grid_thw=image_grid_thw, **kwargs)
 
     @can_return_tuple
     @auto_docstring
@@ -1851,7 +1842,7 @@ class Qwen2_5OmniThinkerForConditionalGeneration(Qwen2_5OmniPreTrainedModelForCo
         )
         feature_lens = audio_feature_lengths if audio_feature_lengths is not None else feature_attention_mask.sum(-1)
         audio_outputs = self.audio_tower(
-            input_features, feature_lens=feature_lens, aftercnn_lens=audio_feat_lengths, return_dict=True, **kwargs
+            input_features, feature_lens=feature_lens, aftercnn_lens=audio_feat_lengths, **kwargs
         )
         if audio_outputs.last_hidden_state.shape[0] != sum(audio_output_lengths.tolist()):
             raise ValueError("length of audio_features should match audio_output_lengths")

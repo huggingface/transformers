@@ -28,7 +28,7 @@ from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPool
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
-from ...utils.generic import merge_with_config_defaults
+from ...utils.generic import handle_extra_kwargs, merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
 from ...vision_utils import get_vision_bilinear_indices_and_weights, get_vision_cu_seqlens, get_vision_position_ids
 from ..qwen3.modeling_qwen3 import Qwen3ForCausalLM
@@ -575,23 +575,15 @@ class Qwen3_5Model(Qwen3VLModel):
         # Same implementation as for images
         return super().get_video_features(**super_kwargs)
 
+    @handle_extra_kwargs(modality="image")
     def get_image_features(
         self,
         pixel_values: torch.FloatTensor,
         image_grid_thw: torch.LongTensor | None = None,
-        image_cu_seqlens: torch.Tensor | None = None,
-        image_position_ids: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
         pixel_values = pixel_values.type(self.visual.dtype)
-        vision_output: BaseModelOutputWithPooling = self.visual(
-            pixel_values,
-            grid_thw=image_grid_thw,
-            cu_seqlens=image_cu_seqlens,
-            position_ids=image_position_ids,
-            return_dict=True,
-            **kwargs,
-        )
+        vision_output: BaseModelOutputWithPooling = self.visual(pixel_values, grid_thw=image_grid_thw, **kwargs)
         image_embeds = vision_output.pooler_output
         split_sizes = (image_grid_thw.prod(-1) // self.visual.spatial_merge_size**2).tolist()
         image_embeds = torch.split(image_embeds, split_sizes)

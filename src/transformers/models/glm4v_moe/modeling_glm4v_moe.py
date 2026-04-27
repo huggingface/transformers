@@ -41,7 +41,13 @@ from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, torch_compilable_check
-from ...utils.generic import can_return_tuple, is_flash_attention_requested, maybe_autocast, merge_with_config_defaults
+from ...utils.generic import (
+    can_return_tuple,
+    handle_extra_kwargs,
+    is_flash_attention_requested,
+    maybe_autocast,
+    merge_with_config_defaults,
+)
 from ...utils.output_capturing import capture_outputs
 from ...vision_utils import get_vision_cu_seqlens, get_vision_position_ids
 from .configuration_glm4v_moe import Glm4vMoeConfig, Glm4vMoeTextConfig, Glm4vMoeVisionConfig
@@ -1253,14 +1259,13 @@ class Glm4vMoeModel(Glm4vMoePreTrainedModel):
         mrope_position_deltas = torch.tensor(mrope_position_deltas, device=input_ids.device).unsqueeze(1)
         return position_ids, mrope_position_deltas
 
+    @handle_extra_kwargs(modality="video")
     @can_return_tuple
     @auto_docstring
     def get_video_features(
         self,
         pixel_values_videos: torch.FloatTensor,
         video_grid_thw: torch.LongTensor | None = None,
-        video_cu_seqlens: torch.Tensor | None = None,
-        video_position_ids: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
         r"""
@@ -1277,28 +1282,20 @@ class Glm4vMoeModel(Glm4vMoePreTrainedModel):
         flattened_hw = torch.repeat_interleave(hw, t, dim=0)
         prefix_ones = video_grid_thw.new_ones(flattened_hw.shape[0], 1)
         flattened_video_grid_thw = torch.cat([prefix_ones, flattened_hw], dim=1)
-        vision_outputs = self.visual(
-            pixel_values_videos,
-            grid_thw=flattened_video_grid_thw,
-            cu_seqlens=video_cu_seqlens,
-            position_ids=video_position_ids,
-            return_dict=True,
-            **kwargs,
-        )
+        vision_outputs = self.visual(pixel_values_videos, grid_thw=flattened_video_grid_thw, **kwargs)
         split_sizes = (video_grid_thw.prod(-1) // self.visual.spatial_merge_size**2).tolist()
         video_embeds = torch.split(vision_outputs.pooler_output, split_sizes)
         vision_outputs.pooler_output = video_embeds
 
         return vision_outputs
 
+    @handle_extra_kwargs(modality="image")
     @can_return_tuple
     @auto_docstring
     def get_image_features(
         self,
         pixel_values: torch.FloatTensor,
         image_grid_thw: torch.LongTensor | None = None,
-        image_cu_seqlens: torch.Tensor | None = None,
-        image_position_ids: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
         r"""
@@ -1308,13 +1305,7 @@ class Glm4vMoeModel(Glm4vMoePreTrainedModel):
             The temporal, height and width of feature shape of each image in LLM.
         """
         pixel_values = pixel_values.type(self.visual.dtype)
-        vision_outputs = self.visual(
-            pixel_values,
-            grid_thw=image_grid_thw,
-            cu_seqlens=image_cu_seqlens,
-            position_ids=image_position_ids,
-            **kwargs,
-        )
+        vision_outputs = self.visual(pixel_values, grid_thw=image_grid_thw, **kwargs)
         split_sizes = (image_grid_thw.prod(-1) // self.visual.spatial_merge_size**2).tolist()
         image_embeds = torch.split(vision_outputs.pooler_output, split_sizes)
         vision_outputs.pooler_output = image_embeds
@@ -1583,13 +1574,12 @@ class Glm4vMoeForConditionalGeneration(Glm4vMoePreTrainedModel, GenerationMixin)
     def set_input_embeddings(self, value):
         self.model.set_input_embeddings(value)
 
+    @handle_extra_kwargs(modality="video")
     @auto_docstring
     def get_video_features(
         self,
         pixel_values_videos: torch.FloatTensor,
         video_grid_thw: torch.LongTensor | None = None,
-        video_cu_seqlens: torch.Tensor | None = None,
-        video_position_ids: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
         r"""
@@ -1597,24 +1587,15 @@ class Glm4vMoeForConditionalGeneration(Glm4vMoePreTrainedModel, GenerationMixin)
             The tensors corresponding to the input videos.
         video_grid_thw (`torch.LongTensor` of shape `(num_videos, 3)`, *optional*):
             The temporal, height and width of feature shape of each video in LLM.
-        video_cu_seqlens (`torch.IntTensor`, *optional*):
-            Precomputed cumulative sequence lengths for videos (from `get_vision_cu_seqlens`).
         """
-        return self.model.get_video_features(
-            pixel_values_videos,
-            video_grid_thw,
-            video_cu_seqlens,
-            video_position_ids,
-            **kwargs,
-        )
+        return self.model.get_video_features(pixel_values_videos, video_grid_thw, **kwargs)
 
+    @handle_extra_kwargs(modality="image")
     @auto_docstring
     def get_image_features(
         self,
         pixel_values: torch.FloatTensor,
         image_grid_thw: torch.LongTensor | None = None,
-        image_cu_seqlens: torch.Tensor | None = None,
-        image_position_ids: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
         r"""
@@ -1622,16 +1603,8 @@ class Glm4vMoeForConditionalGeneration(Glm4vMoePreTrainedModel, GenerationMixin)
             The tensors corresponding to the input images.
         image_grid_thw (`torch.LongTensor` of shape `(num_images, 3)`, *optional*):
             The temporal, height and width of feature shape of each image in LLM.
-        image_cu_seqlens (`torch.IntTensor`, *optional*):
-            Precomputed cumulative sequence lengths for images (from `get_vision_cu_seqlens`).
         """
-        return self.model.get_image_features(
-            pixel_values,
-            image_grid_thw,
-            image_cu_seqlens,
-            image_position_ids,
-            **kwargs,
-        )
+        return self.model.get_image_features(pixel_values, image_grid_thw, **kwargs)
 
     @auto_docstring
     @can_return_tuple

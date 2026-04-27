@@ -45,7 +45,7 @@ from ...utils import (
     can_return_tuple,
     logging,
 )
-from ...utils.generic import is_flash_attention_requested, merge_with_config_defaults
+from ...utils.generic import handle_extra_kwargs, is_flash_attention_requested, merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
 from ...video_utils import (
     VideoInput,
@@ -483,6 +483,7 @@ class VideoLlama3Model(Qwen2VLModel):
     def compute_3d_position_ids(self):
         raise AttributeError("Not needed for VideoLLaMA3")
 
+    @handle_extra_kwargs(modality="video")
     @can_return_tuple
     @auto_docstring
     def get_video_features(
@@ -490,8 +491,6 @@ class VideoLlama3Model(Qwen2VLModel):
         pixel_values_videos: torch.FloatTensor,
         video_grid_thw: torch.LongTensor,
         video_merge_sizes: torch.LongTensor,
-        video_cu_seqlens: torch.Tensor | None = None,
-        video_position_ids: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
         r"""
@@ -506,11 +505,10 @@ class VideoLlama3Model(Qwen2VLModel):
             pixel_values=pixel_values_videos,
             image_grid_thw=video_grid_thw,
             image_merge_sizes=video_merge_sizes,
-            image_cu_seqlens=video_cu_seqlens,
-            image_position_ids=video_position_ids,
             **kwargs,
         )
 
+    @handle_extra_kwargs(modality="image")
     @can_return_tuple
     @auto_docstring
     def get_image_features(
@@ -518,8 +516,6 @@ class VideoLlama3Model(Qwen2VLModel):
         pixel_values: torch.FloatTensor,
         image_grid_thw: torch.LongTensor,
         image_merge_sizes: torch.LongTensor,
-        image_cu_seqlens: torch.Tensor | None = None,
-        image_position_ids: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
         r"""
@@ -531,13 +527,7 @@ class VideoLlama3Model(Qwen2VLModel):
             The spatial downsampling ratio of each image feature.
         """
         vision_outputs = self.vision_model(
-            pixel_values=pixel_values,
-            grid_thw=image_grid_thw,
-            merge_sizes=image_merge_sizes,
-            cu_seqlens=image_cu_seqlens,
-            position_ids=image_position_ids,
-            return_dict=True,
-            **kwargs,
+            pixel_values=pixel_values, grid_thw=image_grid_thw, merge_sizes=image_merge_sizes, **kwargs
         )
         last_hidden_state = vision_outputs.last_hidden_state
         image_embeds = self.projector(last_hidden_state)
@@ -667,6 +657,7 @@ class VideoLlama3ForConditionalGeneration(Qwen2VLForConditionalGeneration):
     def __init__(self, config: VideoLlama3Config):
         super().__init__(config)  # just to add type hint on config
 
+    @handle_extra_kwargs(modality="image")
     @can_return_tuple
     @auto_docstring
     def get_image_features(
@@ -674,8 +665,6 @@ class VideoLlama3ForConditionalGeneration(Qwen2VLForConditionalGeneration):
         pixel_values: torch.FloatTensor,
         image_grid_thw: torch.LongTensor | None = None,
         image_merge_sizes: torch.LongTensor | None = None,
-        image_cu_seqlens: torch.Tensor | None = None,
-        image_position_ids: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
         r"""
@@ -686,15 +675,9 @@ class VideoLlama3ForConditionalGeneration(Qwen2VLForConditionalGeneration):
         image_merge_sizes (`torch.Tensor` of shape `(num_images,)`, *optional*):
             The spatial downsampling ratio of each image feature.
         """
-        return self.model.get_image_features(
-            pixel_values,
-            image_grid_thw,
-            image_merge_sizes,
-            image_cu_seqlens=image_cu_seqlens,
-            image_position_ids=image_position_ids,
-            **kwargs,
-        )
+        return self.model.get_image_features(pixel_values, image_grid_thw, image_merge_sizes, **kwargs)
 
+    @handle_extra_kwargs(modality="video")
     @can_return_tuple
     @auto_docstring
     def get_video_features(
@@ -702,8 +685,6 @@ class VideoLlama3ForConditionalGeneration(Qwen2VLForConditionalGeneration):
         pixel_values_videos: torch.FloatTensor,
         video_grid_thw: torch.LongTensor | None = None,
         video_merge_sizes: torch.LongTensor | None = None,
-        video_cu_seqlens: torch.Tensor | None = None,
-        video_position_ids: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
         r"""
@@ -714,14 +695,7 @@ class VideoLlama3ForConditionalGeneration(Qwen2VLForConditionalGeneration):
         video_merge_sizes (`torch.Tensor` of shape `(num_videos,)`, *optional*):
             The spatial downsampling ratio of each video feature.
         """
-        return self.model.get_video_features(
-            pixel_values_videos,
-            video_grid_thw,
-            video_merge_sizes,
-            video_cu_seqlens=video_cu_seqlens,
-            video_position_ids=video_position_ids,
-            **kwargs,
-        )
+        return self.model.get_video_features(pixel_values_videos, video_grid_thw, video_merge_sizes, **kwargs)
 
     @can_return_tuple
     @auto_docstring

@@ -48,6 +48,7 @@ from ...utils import (
     torch_compilable_check,
 )
 from ...utils.generic import (
+    handle_extra_kwargs,
     is_flash_attention_requested,
     maybe_autocast,
     merge_with_config_defaults,
@@ -1077,14 +1078,13 @@ class Qwen2VLModel(Qwen2VLPreTrainedModel):
         mrope_position_deltas = torch.tensor(mrope_position_deltas, device=input_ids.device).unsqueeze(1)
         return position_ids, mrope_position_deltas
 
+    @handle_extra_kwargs(modality="video")
     @can_return_tuple
     @auto_docstring
     def get_video_features(
         self,
         pixel_values_videos: torch.FloatTensor,
         video_grid_thw: torch.LongTensor | None = None,
-        video_cu_seqlens: torch.Tensor | None = None,
-        video_position_ids: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
         r"""
@@ -1094,27 +1094,20 @@ class Qwen2VLModel(Qwen2VLPreTrainedModel):
             The temporal, height and width of feature shape of each video in LLM.
         """
         pixel_values_videos = pixel_values_videos.type(self.visual.dtype)
-        vision_outputs = self.visual(
-            pixel_values_videos,
-            grid_thw=video_grid_thw,
-            cu_seqlens=video_cu_seqlens,
-            position_ids=video_position_ids,
-            **kwargs,
-        )
+        vision_outputs = self.visual(pixel_values_videos, grid_thw=video_grid_thw, **kwargs)
         split_sizes = (video_grid_thw.prod(-1) // self.visual.spatial_merge_size**2).tolist()
         video_embeds = torch.split(vision_outputs.pooler_output, split_sizes)
         vision_outputs.pooler_output = video_embeds
 
         return vision_outputs
 
+    @handle_extra_kwargs(modality="image")
     @can_return_tuple
     @auto_docstring
     def get_image_features(
         self,
         pixel_values: torch.FloatTensor,
         image_grid_thw: torch.LongTensor | None = None,
-        image_cu_seqlens: torch.Tensor | None = None,
-        image_position_ids: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
         r"""
@@ -1124,13 +1117,7 @@ class Qwen2VLModel(Qwen2VLPreTrainedModel):
             The temporal, height and width of feature shape of each image in LLM.
         """
         pixel_values = pixel_values.type(self.visual.dtype)
-        vision_outputs = self.visual(
-            pixel_values,
-            grid_thw=image_grid_thw,
-            cu_seqlens=image_cu_seqlens,
-            position_ids=image_position_ids,
-            **kwargs,
-        )
+        vision_outputs = self.visual(pixel_values, grid_thw=image_grid_thw, **kwargs)
         split_sizes = (image_grid_thw.prod(-1) // self.visual.spatial_merge_size**2).tolist()
         image_embeds = torch.split(vision_outputs.pooler_output, split_sizes)
         vision_outputs.pooler_output = image_embeds
@@ -1243,10 +1230,6 @@ class Qwen2VLModel(Qwen2VLPreTrainedModel):
         video_grid_thw: torch.LongTensor | None = None,
         rope_deltas: torch.LongTensor | None = None,
         mm_token_type_ids: torch.IntTensor | None = None,
-        image_cu_seqlens: torch.Tensor | None = None,
-        image_position_ids: torch.Tensor | None = None,
-        video_cu_seqlens: torch.Tensor | None = None,
-        video_position_ids: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | Qwen2VLModelOutputWithPast:
         r"""
@@ -1262,12 +1245,7 @@ class Qwen2VLModel(Qwen2VLPreTrainedModel):
             inputs_embeds = self.get_input_embeddings()(input_ids)
 
         if pixel_values is not None:
-            image_embeds = self.get_image_features(
-                pixel_values,
-                image_grid_thw,
-                image_cu_seqlens,
-                image_position_ids,
-            ).pooler_output
+            image_embeds = self.get_image_features(pixel_values, image_grid_thw, **kwargs).pooler_output
             image_embeds = torch.cat(image_embeds, dim=0).to(inputs_embeds.device, inputs_embeds.dtype)
             image_mask, _ = self.get_placeholder_mask(
                 input_ids, inputs_embeds=inputs_embeds, image_features=image_embeds
@@ -1275,12 +1253,7 @@ class Qwen2VLModel(Qwen2VLPreTrainedModel):
             inputs_embeds = inputs_embeds.masked_scatter(image_mask, image_embeds)
 
         if pixel_values_videos is not None:
-            video_embeds = self.get_video_features(
-                pixel_values_videos,
-                video_grid_thw,
-                video_cu_seqlens,
-                video_position_ids,
-            ).pooler_output
+            video_embeds = self.get_video_features(pixel_values_videos, video_grid_thw, **kwargs).pooler_output
             video_embeds = torch.cat(video_embeds, dim=0).to(inputs_embeds.device, inputs_embeds.dtype)
             _, video_mask = self.get_placeholder_mask(
                 input_ids, inputs_embeds=inputs_embeds, video_features=video_embeds
@@ -1332,13 +1305,12 @@ class Qwen2VLForConditionalGeneration(Qwen2VLPreTrainedModel, GenerationMixin):
     def set_input_embeddings(self, value):
         self.model.set_input_embeddings(value)
 
+    @handle_extra_kwargs(modality="video")
     @auto_docstring
     def get_video_features(
         self,
         pixel_values_videos: torch.FloatTensor,
         video_grid_thw: torch.LongTensor | None = None,
-        video_cu_seqlens: torch.Tensor | None = None,
-        video_position_ids: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
         r"""
@@ -1346,24 +1318,15 @@ class Qwen2VLForConditionalGeneration(Qwen2VLPreTrainedModel, GenerationMixin):
             The tensors corresponding to the input videos.
         video_grid_thw (`torch.LongTensor` of shape `(num_videos, 3)`, *optional*):
             The temporal, height and width of feature shape of each video in LLM.
-        video_cu_seqlens (`torch.IntTensor`, *optional*):
-            Precomputed cumulative sequence lengths for videos (from `get_vision_cu_seqlens`).
         """
-        return self.model.get_video_features(
-            pixel_values_videos,
-            video_grid_thw,
-            video_cu_seqlens,
-            video_position_ids,
-            **kwargs,
-        )
+        return self.model.get_video_features(pixel_values_videos, video_grid_thw, **kwargs)
 
+    @handle_extra_kwargs(modality="image")
     @auto_docstring
     def get_image_features(
         self,
         pixel_values: torch.FloatTensor,
         image_grid_thw: torch.LongTensor | None = None,
-        image_cu_seqlens: torch.Tensor | None = None,
-        image_position_ids: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
         r"""
@@ -1371,16 +1334,8 @@ class Qwen2VLForConditionalGeneration(Qwen2VLPreTrainedModel, GenerationMixin):
             The tensors corresponding to the input images.
         image_grid_thw (`torch.LongTensor` of shape `(num_images, 3)`, *optional*):
             The temporal, height and width of feature shape of each image in LLM.
-        image_cu_seqlens (`torch.IntTensor`, *optional*):
-            Precomputed cumulative sequence lengths for images (from `get_vision_cu_seqlens`).
         """
-        return self.model.get_image_features(
-            pixel_values,
-            image_grid_thw,
-            image_cu_seqlens,
-            image_position_ids,
-            **kwargs,
-        )
+        return self.model.get_image_features(pixel_values, image_grid_thw, **kwargs)
 
     @can_return_tuple
     @auto_docstring
@@ -1399,10 +1354,6 @@ class Qwen2VLForConditionalGeneration(Qwen2VLPreTrainedModel, GenerationMixin):
         video_grid_thw: torch.LongTensor | None = None,
         rope_deltas: torch.LongTensor | None = None,
         mm_token_type_ids: torch.IntTensor | None = None,
-        image_cu_seqlens: torch.Tensor | None = None,
-        image_position_ids: torch.Tensor | None = None,
-        video_cu_seqlens: torch.Tensor | None = None,
-        video_position_ids: torch.Tensor | None = None,
         logits_to_keep: int | torch.Tensor = 0,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | Qwen2VLCausalLMOutputWithPast:
@@ -1417,10 +1368,6 @@ class Qwen2VLForConditionalGeneration(Qwen2VLPreTrainedModel, GenerationMixin):
             The temporal, height and width of feature shape of each video in LLM.
         rope_deltas (`torch.LongTensor` of shape `(batch_size, )`, *optional*):
             The rope index difference between sequence length and multimodal rope.
-        image_cu_seqlens (`torch.IntTensor`, *optional*):
-            Precomputed cumulative sequence lengths for images (from `get_vision_cu_seqlens`).
-        video_cu_seqlens (`torch.IntTensor`, *optional*):
-            Precomputed cumulative sequence lengths for videos (from `get_vision_cu_seqlens`).
 
         Example:
 
@@ -1466,10 +1413,6 @@ class Qwen2VLForConditionalGeneration(Qwen2VLPreTrainedModel, GenerationMixin):
             image_grid_thw=image_grid_thw,
             video_grid_thw=video_grid_thw,
             mm_token_type_ids=mm_token_type_ids,
-            image_cu_seqlens=image_cu_seqlens,
-            image_position_ids=image_position_ids,
-            video_cu_seqlens=video_cu_seqlens,
-            video_position_ids=video_position_ids,
             position_ids=position_ids,
             attention_mask=attention_mask,
             past_key_values=past_key_values,

@@ -42,7 +42,7 @@ from ...utils import (
     logging,
     torch_compilable_check,
 )
-from ...utils.generic import maybe_autocast, merge_with_config_defaults
+from ...utils.generic import handle_extra_kwargs, maybe_autocast, merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
 from ...video_utils import VideoInput
 from ...vision_utils import get_vision_cu_seqlens, get_vision_position_ids
@@ -793,14 +793,13 @@ class Glm4vModel(Qwen2VLModel):
         super().__init__(config)
         self.visual = Glm4vVisionModel._from_config(config.vision_config)
 
+    @handle_extra_kwargs(modality="video")
     @can_return_tuple
     @auto_docstring
     def get_video_features(
         self,
         pixel_values_videos: torch.FloatTensor,
         video_grid_thw: torch.LongTensor | None = None,
-        video_cu_seqlens: torch.Tensor | None = None,
-        video_position_ids: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
         r"""
@@ -817,14 +816,7 @@ class Glm4vModel(Qwen2VLModel):
         flattened_hw = torch.repeat_interleave(hw, t, dim=0)
         prefix_ones = video_grid_thw.new_ones(flattened_hw.shape[0], 1)
         flattened_video_grid_thw = torch.cat([prefix_ones, flattened_hw], dim=1)
-        vision_outputs = self.visual(
-            pixel_values_videos,
-            grid_thw=flattened_video_grid_thw,
-            cu_seqlens=video_cu_seqlens,
-            position_ids=video_position_ids,
-            return_dict=True,
-            **kwargs,
-        )
+        vision_outputs = self.visual(pixel_values_videos, grid_thw=flattened_video_grid_thw, **kwargs)
         split_sizes = (video_grid_thw.prod(-1) // self.visual.spatial_merge_size**2).tolist()
         video_embeds = torch.split(vision_outputs.pooler_output, split_sizes)
         vision_outputs.pooler_output = video_embeds

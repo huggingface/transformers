@@ -57,6 +57,7 @@ from ...processing_utils import Unpack
 from ...utils import auto_docstring, can_return_tuple, torch_compilable_check
 from ...utils.generic import (
     TransformersKwargs,
+    handle_extra_kwargs,
     is_flash_attention_requested,
     maybe_autocast,
     merge_with_config_defaults,
@@ -1931,14 +1932,13 @@ class Qwen3OmniMoeThinkerForConditionalGeneration(
     def set_input_embeddings(self, value):
         self.model.set_input_embeddings(value)
 
+    @handle_extra_kwargs(modality="video")
     @can_return_tuple
     @auto_docstring
     def get_video_features(
         self,
         pixel_values_videos: torch.FloatTensor,
         video_grid_thw: torch.LongTensor | None = None,
-        video_cu_seqlens: torch.Tensor | None = None,
-        video_position_ids: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithDeepstackFeatures:
         r"""
@@ -1948,22 +1948,15 @@ class Qwen3OmniMoeThinkerForConditionalGeneration(
             The temporal, height and width of feature shape of each video in LLM.
         """
         pixel_values_videos = pixel_values_videos.type(self.visual.dtype)
-        return self.visual(
-            pixel_values_videos,
-            grid_thw=video_grid_thw,
-            cu_seqlens=video_cu_seqlens,
-            position_ids=video_position_ids,
-            **kwargs,
-        )
+        return self.visual(pixel_values_videos, grid_thw=video_grid_thw, **kwargs)
 
+    @handle_extra_kwargs(modality="image")
     @can_return_tuple
     @auto_docstring
     def get_image_features(
         self,
         pixel_values: torch.FloatTensor,
         image_grid_thw: torch.LongTensor | None = None,
-        image_cu_seqlens: torch.Tensor | None = None,
-        image_position_ids: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithDeepstackFeatures:
         r"""
@@ -1973,13 +1966,7 @@ class Qwen3OmniMoeThinkerForConditionalGeneration(
             The temporal, height and width of feature shape of each image in LLM.
         """
         pixel_values = pixel_values.type(self.visual.dtype)
-        return self.visual(
-            pixel_values,
-            grid_thw=image_grid_thw,
-            cu_seqlens=image_cu_seqlens,
-            position_ids=image_position_ids,
-            **kwargs,
-        )
+        return self.visual(pixel_values, grid_thw=image_grid_thw, **kwargs)
 
     @can_return_tuple
     @auto_docstring
@@ -2005,7 +1992,7 @@ class Qwen3OmniMoeThinkerForConditionalGeneration(
             audio_feature_lengths = None
 
         feature_lens = audio_feature_lengths if audio_feature_lengths is not None else feature_attention_mask.sum(-1)
-        audio_outputs = self.audio_tower(input_features, feature_lens=feature_lens, return_dict=True, **kwargs)
+        audio_outputs = self.audio_tower(input_features, feature_lens=feature_lens, **kwargs)
 
         return audio_outputs
 

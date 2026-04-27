@@ -32,7 +32,7 @@ from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import ImagesKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
-from ...utils.generic import merge_with_config_defaults
+from ...utils.generic import handle_extra_kwargs, merge_with_config_defaults
 from ...utils.import_utils import requires
 from ...utils.output_capturing import capture_outputs
 from ...vision_utils import get_vision_cu_seqlens, get_vision_position_ids
@@ -712,14 +712,13 @@ class GlmImageModel(Glm4vModel):
     def get_video_features(self):
         raise AttributeError("Not needed for GlmImage")
 
+    @handle_extra_kwargs(modality="image")
     @can_return_tuple
     @auto_docstring
     def get_image_features(
         self,
         pixel_values: torch.FloatTensor,
         image_grid_thw: torch.LongTensor | None = None,
-        image_cu_seqlens: torch.Tensor | None = None,
-        image_position_ids: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
         r"""
@@ -729,14 +728,7 @@ class GlmImageModel(Glm4vModel):
             The temporal, height and width of feature shape of each image in LLM.
         """
         pixel_values = pixel_values.type(self.visual.dtype)
-        vision_outputs = self.visual(
-            pixel_values,
-            grid_thw=image_grid_thw,
-            cu_seqlens=image_cu_seqlens,
-            position_ids=image_position_ids,
-            return_dict=True,
-            **kwargs,
-        )
+        vision_outputs = self.visual(pixel_values, grid_thw=image_grid_thw, **kwargs)
         split_sizes = (image_grid_thw.prod(-1) // self.visual.spatial_merge_size**2).tolist()
         image_embeds = torch.split(vision_outputs.last_hidden_state, split_sizes)
         vision_outputs.pooler_output = image_embeds

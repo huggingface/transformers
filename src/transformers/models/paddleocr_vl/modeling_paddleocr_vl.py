@@ -44,7 +44,12 @@ from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging, torch_compilable_check, torch_int
-from ...utils.generic import is_flash_attention_requested, maybe_autocast, merge_with_config_defaults
+from ...utils.generic import (
+    handle_extra_kwargs,
+    is_flash_attention_requested,
+    maybe_autocast,
+    merge_with_config_defaults,
+)
 from ...utils.output_capturing import capture_outputs
 from ...vision_utils import get_vision_cu_seqlens, get_vision_position_ids
 from .configuration_paddleocr_vl import PaddleOCRTextConfig, PaddleOCRVisionConfig, PaddleOCRVLConfig
@@ -1209,14 +1214,13 @@ class PaddleOCRVLModel(PaddleOCRVLPreTrainedModel):
         mrope_position_deltas = torch.tensor(mrope_position_deltas, device=input_ids.device).unsqueeze(1)
         return position_ids, mrope_position_deltas
 
+    @handle_extra_kwargs(modality="image")
     @can_return_tuple
     @auto_docstring
     def get_image_features(
         self,
         pixel_values: torch.FloatTensor,
         image_grid_thw: torch.LongTensor | None = None,
-        image_cu_seqlens: torch.Tensor | None = None,
-        image_position_ids: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
         r"""
@@ -1226,14 +1230,7 @@ class PaddleOCRVLModel(PaddleOCRVLPreTrainedModel):
             The temporal, height and width of feature shape of each image in LLM.
         """
         pixel_values = pixel_values.type(self.visual.dtype).unsqueeze(0)
-        vision_outputs = self.visual(
-            pixel_values=pixel_values,
-            grid_thw=image_grid_thw,
-            cu_seqlens=image_cu_seqlens,
-            position_ids=image_position_ids,
-            return_dict=True,
-            **kwargs,
-        )
+        vision_outputs = self.visual(pixel_values=pixel_values, grid_thw=image_grid_thw, **kwargs)
         image_embeds = vision_outputs.last_hidden_state
         image_embeds = self.projector(image_embeds, image_grid_thw)
         vision_outputs.pooler_output = image_embeds
@@ -1391,13 +1388,12 @@ class PaddleOCRVLForConditionalGeneration(PaddleOCRVLPreTrainedModel, Generation
     def set_input_embeddings(self, value):
         self.model.set_input_embeddings(value)
 
+    @handle_extra_kwargs(modality="image")
     @auto_docstring
     def get_image_features(
         self,
         pixel_values: torch.FloatTensor,
         image_grid_thw: torch.LongTensor | None = None,
-        image_cu_seqlens: torch.Tensor | None = None,
-        image_position_ids: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
         r"""
@@ -1405,16 +1401,8 @@ class PaddleOCRVLForConditionalGeneration(PaddleOCRVLPreTrainedModel, Generation
             The tensors corresponding to the input images.
         image_grid_thw (`torch.LongTensor` of shape `(num_images, 3)`, *optional*):
             The temporal, height and width of feature shape of each image in LLM.
-        image_cu_seqlens (`torch.IntTensor`, *optional*):
-            Precomputed cumulative sequence lengths for images (from `get_vision_cu_seqlens`).
         """
-        return self.model.get_image_features(
-            pixel_values,
-            image_grid_thw,
-            image_cu_seqlens,
-            image_position_ids,
-            **kwargs,
-        )
+        return self.model.get_image_features(pixel_values, image_grid_thw, **kwargs)
 
     @can_return_tuple
     @auto_docstring

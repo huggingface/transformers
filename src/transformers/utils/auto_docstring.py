@@ -2121,34 +2121,6 @@ class ModelArgs:
         "shape": "of shape `(batch_size, num_frames, num_channels, frame_size, frame_size)`",
     }
 
-    image_cu_seqlens = {
-        "description": """
-    Precomputed cumulative sequence lengths for image patches, used for packed variable-length attention.
-    """,
-        "shape": "of shape `(num_image_patches + 1,)`",
-    }
-
-    video_cu_seqlens = {
-        "description": """
-    Precomputed cumulative sequence lengths for video patches, used for packed variable-length attention.
-    """,
-        "shape": "of shape `(num_video_patches + 1,)`",
-    }
-
-    image_position_ids = {
-        "description": """
-    Precomputed (row, col) position IDs for image rotary embeddings.
-    """,
-        "shape": "of shape `(num_image_tokens, 2)`",
-    }
-
-    video_position_ids = {
-        "description": """
-    Precomputed (row, col) position IDs for video rotary embeddings.
-    """,
-        "shape": "of shape `(num_video_tokens, 2)`",
-    }
-
     vision_feature_layer = {
         "description": """
     The index of the layer to select the vision feature. If multiple indices are provided,
