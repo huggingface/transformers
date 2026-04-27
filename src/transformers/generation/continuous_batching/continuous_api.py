@@ -236,7 +236,6 @@ class ContinuousBatchProcessor:
             io_kwargs["max_graphs"] = self.cb_config.max_cached_graphs
             self.inputs_and_outputs = ContinuousBatchingIOs(**io_kwargs)
 
-
         # Offloading manager: handles CPU offloading, soft reset, and restoration
         self.offloading_manager = OffloadingManager(
             cache=cache,
