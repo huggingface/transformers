@@ -115,16 +115,7 @@ class MiniCPMV4_6VisionConfig(SiglipVisionConfig):
     r"""
     insert_layer_id (`int`, *optional*, defaults to 6):
         Vision encoder layer index after which the window-attention merger is applied.
-
-    Example:
-
-    ```python
-    >>> from transformers import MiniCPMV4_6VisionConfig
-
-    >>> configuration = MiniCPMV4_6VisionConfig()
-    >>> print(configuration.hidden_size)
-    768
-    ```"""
+    """
 
     model_type = "minicpmv4_6_vision"
     insert_layer_id: int = 6

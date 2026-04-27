@@ -135,6 +135,13 @@ class MiniCPMV4_6VideoProcessor(BaseVideoProcessor):
         stack_frames = stack_frames if stack_frames is not None else self.stack_frames
         total_num_frames, avg_fps = metadata.total_num_frames, metadata.fps
         duration = metadata.duration
+
+        if duration is None or avg_fps is None:
+            raise ValueError(
+                "MiniCPMV4_6 requires video metadata with `duration` and `fps` to sample frames. "
+                "Please pass a complete `VideoMetadata` object or set `do_sample_frames=False`."
+            )
+
         num_seconds = math.ceil(duration)
 
         is_video_long = duration > max_num_frames
@@ -406,7 +413,9 @@ class MiniCPMV4_6VideoProcessor(BaseVideoProcessor):
         # frame or a per-second composite of sub-frames.  When stack_frames > 1
         # the units are interleaved: [main_0, comp_0, main_1, comp_1, …]
         visual_units: list[torch.Tensor] = []
+        num_frames_per_video: list[int] = []
         for video, metadata in zip(videos, video_metadata):
+            units_before = len(visual_units)
             if stack_frames > 1:
                 duration = metadata.duration
                 num_seconds = math.ceil(duration)
@@ -451,6 +460,7 @@ class MiniCPMV4_6VideoProcessor(BaseVideoProcessor):
             else:
                 for i in range(len(video)):
                     visual_units.append(video[i : i + 1])
+            num_frames_per_video.append(len(visual_units) - units_before)
 
         # Stage 2 — Resize, split, normalise and reshape each unit independently.
         per_unit_pixel_values: list[list[torch.Tensor]] = []
@@ -506,10 +516,10 @@ class MiniCPMV4_6VideoProcessor(BaseVideoProcessor):
                 "target_sizes_videos": target_sizes,
                 "grids_videos": all_grids,
                 "num_patches_per_frame": num_patches_per_frame,
-                "num_frames": len(visual_units),
+                "num_frames_per_video": num_frames_per_video,
             },
             tensor_type=return_tensors,
-            skip_tensor_conversion=["grids_videos", "num_patches_per_frame", "num_frames"],
+            skip_tensor_conversion=["grids_videos", "num_patches_per_frame", "num_frames_per_video"],
         )
 
 

@@ -75,6 +75,8 @@ class MiniCPMV4_6Processor(ProcessorMixin):
             - **target_sizes** -- Patch grid sizes for the vision encoder.
         """
 
+        if text is None:
+            raise ValueError("You have to specify `text` input to process.")
         if isinstance(text, str):
             text = [text]
         text = text.copy()
@@ -100,13 +102,14 @@ class MiniCPMV4_6Processor(ProcessorMixin):
             target_sizes = image_inputs["target_sizes"]
 
             flat_index = 0
-            image_index = 0
+            global_image_index = 0
             for i in range(len(text)):
+                local_image_index = 0
                 while self.image_token in text[i]:
-                    n_patches = num_patches_per_image[image_index]
+                    n_patches = num_patches_per_image[global_image_index]
                     img_target_sizes = target_sizes[flat_index : flat_index + n_patches]
                     num_tokens_per_patch = img_target_sizes.prod(-1) // image_token_divisor
-                    num_rows, num_cols = image_grids[image_index]
+                    num_rows, num_cols = image_grids[global_image_index]
 
                     image_placeholder = (
                         self.image_start_token
@@ -115,7 +118,8 @@ class MiniCPMV4_6Processor(ProcessorMixin):
                     )
                     if use_image_id:
                         image_placeholder = (
-                            f"{self.image_id_start_token}{image_index}{self.image_id_end_token}" + image_placeholder
+                            f"{self.image_id_start_token}{local_image_index}{self.image_id_end_token}"
+                            + image_placeholder
                         )
 
                     if self.slice_mode and num_rows > 0 and num_cols > 0:
@@ -128,7 +132,8 @@ class MiniCPMV4_6Processor(ProcessorMixin):
 
                     text[i] = text[i].replace(self.image_token, image_placeholder, 1)
                     flat_index += n_patches
-                    image_index += 1
+                    global_image_index += 1
+                    local_image_index += 1
                 text[i] = text[i].replace("<|placeholder|>", self.image_token)
 
         vid_downsample = output_kwargs["videos_kwargs"].get("downsample_mode", self.video_processor.downsample_mode)
@@ -139,20 +144,28 @@ class MiniCPMV4_6Processor(ProcessorMixin):
             video_inputs = self.video_processor(videos, **output_kwargs["videos_kwargs"])
 
             video_target_sizes = video_inputs["target_sizes_videos"]
-            num_frames = video_inputs.pop("num_frames")
+            num_frames_per_video = video_inputs.pop("num_frames_per_video")
             video_grids = video_inputs.pop("grids_videos")
             num_patches_per_frame = video_inputs.pop("num_patches_per_frame")
 
             flat_index = 0
-            video_index = 0
+            frame_offset = 0
+            global_video_index = 0
             for i in range(len(text)):
+                local_video_index = 0
                 while self.video_token in text[i]:
+                    num_frames = num_frames_per_video[global_video_index]
                     video_placeholder = ""
                     for f in range(num_frames):
-                        n_patches = num_patches_per_frame[f]
+                        gf = frame_offset + f
+                        n_patches = num_patches_per_frame[gf]
                         frame_ts = video_target_sizes[flat_index : flat_index + n_patches]
                         frame_tokens = frame_ts.prod(-1) // video_token_divisor
-                        grid_rows, grid_cols = video_grids[f]
+                        grid_rows, grid_cols = video_grids[gf]
+
+                        if len(frame_tokens) == 0:
+                            flat_index += n_patches
+                            continue
 
                         frame_placeholder = (
                             self.image_start_token + "<|placeholder|>" * int(frame_tokens[0]) + self.image_end_token
@@ -168,13 +181,17 @@ class MiniCPMV4_6Processor(ProcessorMixin):
                         video_placeholder += frame_placeholder
                         flat_index += n_patches
 
+                    frame_offset += num_frames
+
                     if use_image_id:
                         video_placeholder = (
-                            f"{self.image_id_start_token}{video_index}{self.image_id_end_token}" + video_placeholder
+                            f"{self.image_id_start_token}{local_video_index}{self.image_id_end_token}"
+                            + video_placeholder
                         )
 
                     text[i] = text[i].replace(self.video_token, video_placeholder, 1)
-                    video_index += 1
+                    global_video_index += 1
+                    local_video_index += 1
                 text[i] = text[i].replace("<|placeholder|>", self.video_token)
 
         return_tensors = output_kwargs["text_kwargs"].pop("return_tensors", None)
