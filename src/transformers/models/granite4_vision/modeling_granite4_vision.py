@@ -103,6 +103,35 @@ class Granite4VisionCausalLMOutputWithPast(ModelOutput):
     image_hidden_states: torch.FloatTensor | None = None
 
 
+@auto_docstring
+class Granite4VisionPreTrainedModel(PreTrainedModel):
+    config: Granite4VisionConfig
+    base_model_prefix = "model"
+    input_modalities = ("image", "text")
+    supports_gradient_checkpointing = True
+    _no_split_modules = ["LlamaDecoderLayer"]
+    _skip_keys_device_placement = "past_key_values"
+
+    _supports_flash_attn = True
+    _supports_sdpa = True
+
+    _can_compile_fullgraph = True
+    _supports_flex_attn = True
+    _supports_attention_backend = True
+
+    @torch.no_grad()
+    def _init_weights(self, module):
+        std = getattr(self.config, "initializer_range", self.config.get_text_config().initializer_range)
+
+        if isinstance(module, nn.Linear):
+            init.normal_(module.weight, mean=0.0, std=std)
+            if module.bias is not None:
+                init.zeros_(module.bias)
+        elif isinstance(module, Granite4VisionModel):
+            embed_std = 1 / math.sqrt(self.config.text_config.hidden_size)
+            init.normal_(module.image_newline, mean=0.0, std=embed_std)
+
+
 def rotate_half(x):
     """Rotates half the hidden dims of the input."""
     x1 = x[..., : x.shape[-1] // 2]
@@ -511,35 +540,6 @@ class Granite4VisionTextModel(Granite4VisionPreTrainedModel):
         hidden_states = hidden_states.clone()
         hidden_states[vision_mask] = hidden_states[vision_mask] + features
         return hidden_states
-
-
-@auto_docstring
-class Granite4VisionPreTrainedModel(PreTrainedModel):
-    config: Granite4VisionConfig
-    base_model_prefix = "model"
-    input_modalities = ("image", "text")
-    supports_gradient_checkpointing = True
-    _no_split_modules = ["LlamaDecoderLayer"]
-    _skip_keys_device_placement = "past_key_values"
-
-    _supports_flash_attn = True
-    _supports_sdpa = True
-
-    _can_compile_fullgraph = True
-    _supports_flex_attn = True
-    _supports_attention_backend = True
-
-    @torch.no_grad()
-    def _init_weights(self, module):
-        std = getattr(self.config, "initializer_range", self.config.get_text_config().initializer_range)
-
-        if isinstance(module, nn.Linear):
-            init.normal_(module.weight, mean=0.0, std=std)
-            if module.bias is not None:
-                init.zeros_(module.bias)
-        elif isinstance(module, Granite4VisionModel):
-            embed_std = 1 / math.sqrt(self.config.text_config.hidden_size)
-            init.normal_(module.image_newline, mean=0.0, std=embed_std)
 
 
 def get_anyres_image_grid_shape(image_size, grid_pinpoints, patch_size):

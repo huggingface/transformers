@@ -215,6 +215,10 @@ class Granite4VisionProcessor(LlavaNextProcessor):
 # ── Model ───────────────────────────────────────────────────────────────────
 
 
+class Granite4VisionPreTrainedModel(LlavaNextPreTrainedModel):
+    pass
+
+
 class Granite4VisionTextModel(Granite4VisionPreTrainedModel, GraniteModel):
     """Granite LLM backbone with deepstack feature injection support."""
 
@@ -301,10 +305,6 @@ class Granite4VisionTextModel(Granite4VisionPreTrainedModel, GraniteModel):
             last_hidden_state=hidden_states,
             past_key_values=past_key_values,
         )
-
-
-class Granite4VisionPreTrainedModel(LlavaNextPreTrainedModel):
-    pass
 
 
 class Granite4VisionModel(LlavaNextModel):
