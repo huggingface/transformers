@@ -21,6 +21,7 @@ from typing import TYPE_CHECKING, Any, Literal, Optional
 
 from safetensors import safe_open
 
+from .._typing import PeftConfigLike
 from ..conversion_mapping import (
     _MODEL_TO_CONVERSION_PATTERN,
     get_checkpoint_conversion_mapping,
@@ -61,8 +62,6 @@ MIN_PEFT_VERSION = "0.18.2"
 
 
 logger = logging.get_logger(__name__)
-
-from .._typing import PeftConfigLike
 
 
 if TYPE_CHECKING:
