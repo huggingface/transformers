@@ -417,10 +417,10 @@ def grouped_mm_experts_forward(
     # Also there were no speedup gains from it in my experiments, even in eager mode.
     if self.has_gate:
         selected_weights = _local(self.gate_up_proj)
-        selected_biases = self.gate_up_proj_bias[expert_ids_g] if self.has_bias else None
+        selected_biases = _local(self.gate_up_proj_bias)[expert_ids_g] if self.has_bias else None
     else:
         selected_weights = _local(self.up_proj)
-        selected_biases = self.up_proj_bias[expert_ids_g] if self.has_bias else None
+        selected_biases = _local(self.up_proj_bias)[expert_ids_g] if self.has_bias else None
 
     # --- Up projection per expert (grouped) ---
     proj_out = _grouped_linear(
@@ -437,7 +437,7 @@ def grouped_mm_experts_forward(
 
     # Select down projection weights and biases
     selected_weights = _local(self.down_proj)
-    selected_biases = self.down_proj_bias[expert_ids_g] if self.has_bias else None
+    selected_biases = _local(self.down_proj_bias)[expert_ids_g] if self.has_bias else None
 
     # --- Down projection per expert (grouped) ---
     proj_out = _grouped_linear(
