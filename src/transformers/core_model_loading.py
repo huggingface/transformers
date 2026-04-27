@@ -25,7 +25,6 @@ from collections.abc import Callable
 from concurrent.futures import Future, ThreadPoolExecutor
 from contextlib import contextmanager
 from copy import deepcopy
-from dataclasses import dataclass, field
 from itertools import chain
 from typing import TYPE_CHECKING, Any
 
@@ -579,41 +578,40 @@ def process_source_pattern(source_pattern: str, target_pattern: str) -> str:
     return source_pattern
 
 
-@dataclass(slots=True)
 class WeightTransform:
-    source_patterns: str | list[str] = field(init=True)
-    target_patterns: str | list[str] = field(init=True)
-    compiled_sources: re.Pattern = field(init=False)
+    # Restrict the attributes that can be attached
+    __slots__ = (
+        "source_patterns",
+        "target_patterns",
+        "compiled_sources",
+        "distributed_operation",
+        "quantization_operation",
+        "collected_tensors",
+        "layer_targets",
+        "_original_source_patterns",
+        "_original_target_patterns",
+        "_was_used",
+    )
 
-    distributed_operation: TensorParallelLayer | None = None
-    quantization_operation: ConversionOps | None = None
-
-    collected_tensors: dict[str, list[Future]] = field(default_factory=lambda: defaultdict(list), init=False)
-    layer_targets: dict[str, set[str]] = field(default_factory=lambda: defaultdict(set), init=False)
-
-    # Those are needed to be able to reverse correctly the transform, as the patterns may be processed
-    _original_source_patterns: list[str] = field(init=False)
-    _original_target_patterns: list[str] = field(init=False)
-
-    def __setattr__(self, name, value):
-        if name in ("source_patterns", "target_patterns"):
-            # We do not allow to re-set the patterns, as they are linked between each other and changing one
-            # without the other can mess-up with the capturing groups/compiled sources
-            if hasattr(self, name):
-                raise ValueError(f"Cannot assign to field {name}, you should create a new instance")
-            # Switch str to list
-            elif isinstance(value, str):
-                value = [value]
-        object.__setattr__(self, name, value)
-
-    def __post_init__(self):
-        # Due to how our `_checkpoint_conversion_mapping` mappings are written, we need a few exceptions here
-        # when instantiating the reverse mapping (i.e. the targets become sources, and sources become targets)
-        # The issues lie in the sources usually, so here we need to check the targets for the reversed mapping
-
-        # We need to copy the exact original patterns to later reverse (before processing may change them)
+    def __init__(self, source_patterns: str | list[str], target_patterns: str | list[str]):
+        self.source_patterns: list[str] = source_patterns
+        self.target_patterns: list[str] = target_patterns
+        # Those are needed to be able to reverse correctly the transform, as the patterns may be processed
         self._original_source_patterns = self.source_patterns.copy()
         self._original_target_patterns = self.target_patterns.copy()
+
+        # Init fields that will be used during conversion
+        self.distributed_operation: TensorParallelLayer | None = None
+        self.quantization_operation: ConversionOps | None = None
+        self.collected_tensors: dict[str, list[Future]] = defaultdict(list)
+        self.layer_targets: dict[str, set[str]] = defaultdict(set)
+
+        # Flag to notice if the Transform was used
+        self._was_used = False
+
+        # We need to process a few exceptions here when instantiating the reverse mapping (i.e. the targets become
+        # sources, and sources become targets). The issues lie in the sources usually, so here we need to check the
+        # targets for the reversed mapping
 
         # Process target_patterns: detect capturing groups and replace with \1
         # Store the original capturing group patterns for reverse mapping
@@ -657,6 +655,20 @@ class WeightTransform:
             branches.append(f"(?P<{group_name}>{pattern})")
         self.compiled_sources = re.compile("|".join(branches))
 
+    def __repr__(self):
+        return f"{self.__class__.__name__}(source_patterns={self.source_patterns}, target_patterns={self.target_patterns})"
+
+    def __setattr__(self, name, value):
+        if name in ("source_patterns", "target_patterns"):
+            # We do not allow to re-set the patterns, as they are linked between each other and changing one
+            # without the other can mess-up with the capturing groups/compiled sources
+            if hasattr(self, name):
+                raise ValueError(f"Cannot assign to field {name}, you should create a new instance")
+            # Switch str to list
+            elif isinstance(value, str):
+                value = [value]
+        object.__setattr__(self, name, value)
+
     def add_tensor(self, target_key: str, source_key: str, source_pattern: str, future: Future):
         self.collected_tensors[source_pattern].append(future)
         self.layer_targets[target_key].add(source_key)
@@ -672,6 +684,9 @@ class WeightTransform:
         match_object = self.compiled_sources.search(source_key)
         if match_object is None:
             return source_key, None
+
+        # We have a match, so the Transform was used
+        self._was_used = True
 
         # Find the source that produced the match (it's the first group that matched, as the search stops after first branch match)
         matching_group_name = next(name for name, val in match_object.groupdict().items() if val is not None)
@@ -731,10 +746,22 @@ class WeightTransform:
 
         return collected_tensors
 
+    def was_used(self) -> bool:
+        """
+        Return whether the current Transform matched any weights during loading/saving. This is needed as some
+        weight renaming transforms are not bijective, i.e. if we drop/add full parts of a name with PrefixChange, we
+        lose some informations that we cannot get back if we don't know if the Transform was used before already (say we
+        have a prefix to drop, we need to know whether the checkpoints we loaded before contained the said prefix or not
+        before adding it back, or not, during saving).
+        """
+        return self._was_used
 
-@dataclass(slots=True)
+
 class WeightRenaming(WeightTransform):
     # Special case of WeightTransform that only renames keys without any conversion.
+
+    # Needs to be empty, otherwise the class will not be slotted
+    __slots__ = ()
 
     def convert(
         self,
@@ -770,6 +797,56 @@ class WeightRenaming(WeightTransform):
         return collected_tensors
 
 
+class PrefixChange(WeightRenaming):
+    """
+    Special case of WeightRenaming, used to simplify adding/removing full parts of a weight name. The regexes
+    that are needed for such operations are complex, so this is a much easier API for such cases.
+    """
+
+    __slots__ = (
+        "prefix_to_add",
+        "prefix_to_remove",
+        "model_prefix",
+    )
+
+    def __init__(
+        self, prefix_to_add: str | None = None, prefix_to_remove: str | None = None, model_prefix: str | None = None
+    ):
+        if (prefix_to_add is None) ^ (prefix_to_remove is not None):
+            raise ValueError("You must provide only one of `prefix_to_add` and `prefix_to_remove`")
+
+        self.prefix_to_add = prefix_to_add
+        self.prefix_to_remove = prefix_to_remove
+        self.model_prefix = "" if model_prefix is None else model_prefix
+        prefix = rf"{self.model_prefix}\." if self.model_prefix != "" else ""
+
+        if prefix_to_add is not None:
+            super().__init__(
+                # We use a lookbehind to avoid adding the prefix if we detect that it's already present
+                source_patterns=rf"^{prefix}(?:(?!{prefix_to_add}\.))(.+)$",
+                target_patterns=rf"{prefix}{prefix_to_add}\.\1",
+            )
+        else:
+            super().__init__(source_patterns=rf"^{prefix}{prefix_to_remove}\.(.+)$", target_patterns=rf"{prefix}\1")
+
+    def reverse_transform(self) -> WeightTransform:
+        """Reverse the current `WeightTransform` instance, to be able to save with the opposite weight transformations."""
+        # TODO: check this and relax when quantizer have `reverse_op`
+        if self.quantization_operation is not None:
+            raise ValueError("Cannot reverse the transform with TP or quantization")
+
+        # Only one of the 2 can ever be used, so 1 is always None
+        return PrefixChange(
+            prefix_to_add=self.prefix_to_remove, prefix_to_remove=self.prefix_to_add, model_prefix=self.model_prefix
+        )
+
+    def with_submodel_prefix(self, prefix: str) -> PrefixChange:
+        new_prefix = f"{prefix}.{self.model_prefix}" if self.model_prefix != "" else prefix
+        return PrefixChange(
+            prefix_to_add=self.prefix_to_add, prefix_to_remove=self.prefix_to_remove, model_prefix=new_prefix
+        )
+
+
 # List of classes that are known to be able to use m:n
 _INTERNAL_MANY_TO_MANY_CONVERSIONS = (
     ErnieFuseAndSplitTextVisionExperts,
@@ -777,12 +854,15 @@ _INTERNAL_MANY_TO_MANY_CONVERSIONS = (
 )
 
 
-@dataclass(slots=True)
 class WeightConverter(WeightTransform):
-    operations: list[ConversionOps] = field(default_factory=list, repr=False)
+    __slots__ = ("operations",)
 
-    def __post_init__(self):
-        WeightTransform.__post_init__(self)
+    def __init__(
+        self, source_patterns: str | list[str], target_patterns: str | list[str], operations: list[ConversionOps]
+    ):
+        super().__init__(source_patterns, target_patterns)
+        self.operations: list[ConversionOps] = operations
+
         if bool(len(self.source_patterns) - 1) + bool(len(self.target_patterns) - 1) >= 2:
             # We allow many-to-many only if we use an internal operation that can handle it
             if not any(isinstance(op, _INTERNAL_MANY_TO_MANY_CONVERSIONS) for op in self.operations):
@@ -1342,8 +1422,11 @@ def convert_and_load_state_dict_in_model(
             # `cancel_futures=True` in case the program was interrupted, to avoid wasting time on exit
             thread_pool.shutdown(wait=False, cancel_futures=True)
 
-    # Keep the current weight conversion mapping for later saving (in case it was coming directly from the user)
-    model._weight_conversions = weight_mapping
+    # Keep the current weight conversion mapping for later saving (in case it was coming directly from the user), but
+    # only if it was used, i.e. it matched any weight from the checkpoints
+    model_specific_conversions = [conversion for conversion in weight_mapping if conversion.was_used()]
+    model._weight_conversions = model_specific_conversions
+
     return loading_info, disk_offload_index
 
 
@@ -1360,11 +1443,19 @@ def revert_weight_conversion(model: PreTrainedModel, state_dict: dict[str, torch
 
         # Do not resave with the legacy renaming, if present
         weight_conversions = get_model_conversion_mapping(model, add_legacy=False)
+        # If the model had no `_weight_conversions` attached, drop any PrefixChange transform - this is because the
+        # model was almost surely instantiated from scratch (at least not from `from_pretrained`), and PrefixChange with
+        # `prefix_to_remove` would otherwise add a unwanted prefix (as we dont have any information about whether the prefix
+        # was there or not during load)
+        weight_conversions = [x for x in weight_conversions if not isinstance(x, PrefixChange)]
         weight_conversions = weight_conversions if len(weight_conversions) > 0 else None
 
     # We did not find any operations to perform -> quick escape
     if weight_conversions is None:
         return state_dict
+
+    # Important: we need to revert the order here, so that potential conversions from submodels are performed first
+    weight_conversions = weight_conversions[::-1]
 
     # Reverse all Transform to correctly match keys
     reverse_weight_conversion = [conversion.reverse_transform() for conversion in weight_conversions]

@@ -1037,7 +1037,24 @@ class TokenizersBackend(PreTrainedTokenizerBase):
             else self.clean_up_tokenization_spaces
         )
         if clean_up_tokenization_spaces:
-            text = self.clean_up_tokenization(text)
+            # Skip cleanup for BPE tokenizers — the cleanup was designed for
+            # WordPiece tokenizers and is destructive for BPE (it strips
+            # legitimate spaces before punctuation).
+            if (
+                type(self.backend_tokenizer.model).__name__ == "BPE"
+                and not self.clean_up_tokenization_spaces_for_bpe_even_though_it_will_corrupt_output
+            ):
+                logger.warning_once(
+                    "Ignoring clean_up_tokenization_spaces=True for BPE tokenizer"
+                    f" {self.__class__.__name__}. The clean_up_tokenization post-processing"
+                    " step is designed for WordPiece tokenizers and is destructive for BPE"
+                    " (it strips spaces before punctuation). Set"
+                    " clean_up_tokenization_spaces=False to suppress this warning, or set"
+                    " clean_up_tokenization_spaces_for_bpe_even_though_it_will_corrupt_output=True to"
+                    " force cleanup anyway."
+                )
+            else:
+                text = self.clean_up_tokenization(text)
 
         return text
 
@@ -1324,7 +1341,7 @@ class TokenizersBackend(PreTrainedTokenizerBase):
                 # Detect if we can skip the mistral fix by
                 #   a) having a non-mistral tokenizer
                 #   b) fixed version of transformers
-                if transformers_version and version.parse(transformers_version) <= version.parse("4.57.2"):
+                if transformers_version and version.parse(transformers_version) < version.parse("5.0.0"):
                     if (
                         is_local
                         and transformers_model_type is not None
@@ -1338,7 +1355,7 @@ class TokenizersBackend(PreTrainedTokenizerBase):
                         ]
                     ):
                         return tokenizer
-                elif transformers_version and version.parse(transformers_version) > version.parse("4.57.3"):
+                elif transformers_version and version.parse(transformers_version) >= version.parse("5.0.0"):
                     return tokenizer
 
                 mistral_config_detected = True

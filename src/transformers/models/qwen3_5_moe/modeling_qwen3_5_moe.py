@@ -431,9 +431,11 @@ class Qwen3_5MoeGatedDeltaNet(nn.Module):
         # Set up dimensions for reshapes later
         batch_size, seq_len, _ = hidden_states.shape
 
-        use_precomputed_states = (
-            cache_params is not None and cache_params.has_previous_state(self.layer_idx) and seq_len == 1
-        )
+        # We have cached `conv_state` / `recurrent_state` to continue from. The two cached modes
+        # (single-token decode and chunk-tokens continuation) share the state read here; they only
+        # diverge in how the conv input is assembled and which kernel consumes the states below,
+        # which we gate locally on `seq_len`.
+        use_precomputed_states = cache_params is not None and cache_params.has_previous_state(self.layer_idx)
 
         # getting projected states from cache if it exists
         if use_precomputed_states:
@@ -449,9 +451,8 @@ class Qwen3_5MoeGatedDeltaNet(nn.Module):
         b = self.in_proj_b(hidden_states)
         a = self.in_proj_a(hidden_states)
 
-        if use_precomputed_states:
-            # 2. Convolution sequence transformation
-            # NOTE: the conv state is updated in `causal_conv1d_update`
+        if use_precomputed_states and seq_len == 1:
+            # Single-token cached decode: the fused per-step kernel updates the conv state in-place.
             mixed_qkv = self.causal_conv1d_update(
                 mixed_qkv,
                 conv_state,
@@ -460,9 +461,15 @@ class Qwen3_5MoeGatedDeltaNet(nn.Module):
                 self.activation,
             )
         else:
+            # Multi-token forward (prefill, or chunked-tokens decode when the cache has prior state).
+            if use_precomputed_states:
+                # Cached chunked-tokens decode: prepend the cached conv context so the causal conv
+                # sees the correct left-context rather than zero-padding. Dropped from the output
+                # at the end of this branch.
+                mixed_qkv = torch.cat([conv_state, mixed_qkv], dim=-1)
             if cache_params is not None:
-                conv_state = F.pad(mixed_qkv, (self.conv_kernel_size - mixed_qkv.shape[-1], 0))
-                conv_state = cache_params.update_conv_state(conv_state, self.layer_idx)
+                new_conv_state = F.pad(mixed_qkv, (self.conv_kernel_size - mixed_qkv.shape[-1], 0))
+                cache_params.update_conv_state(new_conv_state, self.layer_idx)
             if self.causal_conv1d_fn is not None:
                 mixed_qkv = self.causal_conv1d_fn(
                     x=mixed_qkv,
@@ -472,7 +479,9 @@ class Qwen3_5MoeGatedDeltaNet(nn.Module):
                     seq_idx=None,
                 )
             else:
-                mixed_qkv = F.silu(self.conv1d(mixed_qkv)[:, :, :seq_len])
+                mixed_qkv = F.silu(self.conv1d(mixed_qkv)[:, :, : mixed_qkv.shape[-1]])
+            if use_precomputed_states:
+                mixed_qkv = mixed_qkv[:, :, -seq_len:]
 
         mixed_qkv = mixed_qkv.transpose(1, 2)
         query, key, value = torch.split(
@@ -496,19 +505,7 @@ class Qwen3_5MoeGatedDeltaNet(nn.Module):
             query = query.repeat_interleave(self.num_v_heads // self.num_k_heads, dim=2)
             key = key.repeat_interleave(self.num_v_heads // self.num_k_heads, dim=2)
 
-        if not use_precomputed_states:
-            core_attn_out, last_recurrent_state = self.chunk_gated_delta_rule(
-                query,
-                key,
-                value,
-                g=g,
-                beta=beta,
-                initial_state=None,
-                output_final_state=cache_params is not None,
-                use_qk_l2norm_in_kernel=True,
-            )
-
-        else:
+        if use_precomputed_states and seq_len == 1:
             core_attn_out, last_recurrent_state = self.recurrent_gated_delta_rule(
                 query,
                 key,
@@ -516,6 +513,18 @@ class Qwen3_5MoeGatedDeltaNet(nn.Module):
                 g=g,
                 beta=beta,
                 initial_state=recurrent_state,
+                output_final_state=cache_params is not None,
+                use_qk_l2norm_in_kernel=True,
+            )
+
+        else:
+            core_attn_out, last_recurrent_state = self.chunk_gated_delta_rule(
+                query,
+                key,
+                value,
+                g=g,
+                beta=beta,
+                initial_state=recurrent_state if use_precomputed_states else None,
                 output_final_state=cache_params is not None,
                 use_qk_l2norm_in_kernel=True,
             )
@@ -1495,15 +1504,17 @@ class Qwen3_5MoeModel(Qwen3_5MoePreTrainedModel):
             grid_thw[2].item() // spatial_merge_size,
         )
 
-        image_seq_length = llm_grid_h * llm_grid_w * llm_grid_t
-        position_width = torch.arange(start_position, start_position + llm_grid_w, device=device).repeat(
-            llm_grid_h * llm_grid_t
-        )
-        position_height = torch.arange(start_position, start_position + llm_grid_h, device=device).repeat_interleave(
-            llm_grid_w * llm_grid_t
-        )
-        position_temporal = torch.full((image_seq_length,), start_position, device=device, dtype=torch.long)
-        position_temporal = position_temporal * time_interval
+        # Add `start_position` after arange for compile
+        position_temporal = torch.arange(llm_grid_t, device=device) * time_interval
+        position_width = torch.arange(llm_grid_w, device=device) + start_position
+        position_height = torch.arange(llm_grid_h, device=device) + start_position
+
+        # Repeat the positions per each grid and per video frame. Repeat patterns are important
+        # do not modify without checking values!
+        position_width = position_width.repeat(llm_grid_h * llm_grid_t)
+        position_height = position_height.repeat_interleave(llm_grid_w).repeat(llm_grid_t)
+        # Important: add `start_positions` after applying `time_interval`, order matters
+        position_temporal = position_temporal.repeat_interleave(llm_grid_h * llm_grid_w) + start_position
         vision_position_ids = torch.stack([position_temporal, position_height, position_width], dim=0)
 
         return vision_position_ids

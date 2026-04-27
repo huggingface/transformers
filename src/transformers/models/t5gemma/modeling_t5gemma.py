@@ -961,6 +961,12 @@ class T5GemmaForConditionalGeneration(T5GemmaPreTrainedModel, GenerationMixin):
 
     def set_output_embeddings(self, new_embeddings):
         self.lm_head.out_proj = new_embeddings
+        # The tying happens from decoder to lm-head, but when resizing
+        # the resized embed is assigned only to the head. Then tying weights
+        # again reverts everything back. So we have to update decoder here
+        if self.config.tie_word_embeddings:
+            self.model.decoder.embed_tokens.weight = new_embeddings.weight
+            self.model.decoder.embed_tokens.num_embeddings = new_embeddings.weight.shape[0]
 
     def get_output_embeddings(self):
         return self.lm_head.out_proj
