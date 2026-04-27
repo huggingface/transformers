@@ -1375,10 +1375,15 @@ class TrainingArguments:
     )
 
     # --- FSDP ---
-    fsdp: bool | list[FSDPOption] | str | None = field(
+    # `str | None` + `nargs="?"` / `const=True` so bare `--fsdp` → True while
+    # legacy `--fsdp full_shard` still parses. Switch to `bool | None` once
+    # legacy string support is dropped (v5.20).
+    fsdp: str | None = field(
         default=None,
         metadata={
-            "help": "Enable PyTorch Fully Sharded Data Parallel (FSDP) for distributed training. Pass `True` to turn FSDP on."
+            "help": "Enable PyTorch Fully Sharded Data Parallel (FSDP) for distributed training. Pass `--fsdp` (or `fsdp=True`) to turn FSDP on.",
+            "nargs": "?",
+            "const": True,
         },
     )
     fsdp_config: dict[str, Any] | str | None = field(

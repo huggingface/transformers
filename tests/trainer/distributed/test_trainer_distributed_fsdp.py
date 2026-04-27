@@ -27,7 +27,7 @@ from unittest.mock import patch
 from parameterized import parameterized
 
 from tests.trainer.trainer_test_utils import TrainerIntegrationCommon, get_regression_trainer  # noqa
-from transformers import PreTrainedConfig, is_torch_available
+from transformers import HfArgumentParser, PreTrainedConfig, TrainingArguments, is_torch_available
 from transformers.testing_utils import (
     TestCasePlus,
     backend_device_count,
@@ -294,6 +294,9 @@ class TestFSDPConfig(TestCasePlus):
             self.assertTrue(trainer.args.fsdp_config.get("cpu_offload"))
             for k, v in expected.items():
                 assert k.startswith("fsdp_")
+                # `transformer_layer_cls_to_wrap` is normalized from str → list during parsing.
+                if k == "fsdp_transformer_layer_cls_to_wrap" and isinstance(v, str):
+                    v = [v]
                 self.assertEqual(trainer.args.fsdp_config[k[5:]], v)
 
     def test_torchrun_fsdp_config(self):
@@ -314,6 +317,26 @@ class TestFSDPConfig(TestCasePlus):
             self.assertIs(trainer.args.fsdp, True)
             # fsdp_ prefix is stripped and value is normalized to a list during parsing
             self.assertIn("Qwen2DecoderLayer", trainer.args.fsdp_config["transformer_layer_cls_to_wrap"])
+
+    def test_fsdp_cli_parsing(self):
+        """`--fsdp` (bare) → True; legacy `--fsdp full_shard` still parses; absent → None."""
+        parser = HfArgumentParser(TrainingArguments)
+        base = ["--output_dir", "/tmp/x"]
+
+        args, _ = parser.parse_known_args([*base, "--fsdp"])
+        self.assertIs(args.fsdp, True)
+
+        args, _ = parser.parse_known_args([*base, "--fsdp", "full_shard"])
+        self.assertEqual(args.fsdp, "full_shard")
+
+        args, _ = parser.parse_known_args(base)
+        self.assertIsNone(args.fsdp)
+
+        # Bare `--fsdp` should resolve to a fully enabled FSDP setup through `_process_fsdp_args`.
+        with mockenv_context(**self.dist_env_1_gpu):
+            trainer_args = TrainingArguments(output_dir="/tmp/x", fsdp=True)
+            self.assertIs(trainer_args.fsdp, True)
+            self.assertIsNotNone(trainer_args.fsdp_plugin_args)
 
     @parameterized.expand(config_params, name_func=_parameterized_custom_name_func)
     def test_fsdp_config(self, sharding_strategy, dtype):
