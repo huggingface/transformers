@@ -1039,8 +1039,7 @@ class Granite4VisionModel(Granite4VisionPreTrainedModel):
             for idx, (llm_layer_idx, packed_features) in enumerate(image_features.deepstack_features):
                 concat_features = torch.cat(packed_features, dim=0).to(inputs_embeds.device, inputs_embeds.dtype)
                 if idx == 0:
-                    # vision_mask: (batch, seqlen) boolean, used by text model for injection
-                    vision_mask_3d = self.get_image_token_mask(
+                    vision_mask_3d = self.get_placeholder_mask(
                         input_ids, inputs_embeds=inputs_embeds, image_features=concat_features
                     )
                     vision_mask = vision_mask_3d[..., 0]
@@ -1066,29 +1065,6 @@ class Granite4VisionModel(Granite4VisionPreTrainedModel):
             attentions=outputs.attentions,
             deepstack_features=image_features.deepstack_features if pixel_values is not None else None,
         )
-
-    def get_image_token_mask(
-        self, input_ids: torch.LongTensor, inputs_embeds: torch.FloatTensor, image_features: torch.FloatTensor
-    ):
-        """
-        Build a boolean mask over inputs_embeds marking positions of <image> tokens,
-        and verify that the count matches the number of image feature vectors.
-        """
-        if input_ids is None:
-            special_image_mask = inputs_embeds == self.get_input_embeddings()(
-                torch.tensor(self.config.image_token_id, dtype=torch.long, device=inputs_embeds.device)
-            )
-            special_image_mask = special_image_mask.all(-1)
-        else:
-            special_image_mask = input_ids == self.config.image_token_id
-
-        n_image_tokens = special_image_mask.sum()
-        special_image_mask = special_image_mask.unsqueeze(-1).expand_as(inputs_embeds).to(inputs_embeds.device)
-        if inputs_embeds[special_image_mask].numel() != image_features.numel():
-            raise ValueError(
-                f"Image features and image tokens do not match: tokens: {n_image_tokens}, features {image_features.shape[0]}"
-            )
-        return special_image_mask
 
 
 @auto_docstring(
