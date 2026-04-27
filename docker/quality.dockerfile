@@ -2,7 +2,7 @@ FROM python:3.10-slim
 ENV PYTHONDONTWRITEBYTECODE=1
 ARG REF=main
 USER root
-RUN apt-get update && apt-get install -y time git make
+RUN apt-get update && apt-get install -y time git
 ENV UV_PYTHON=/usr/local/bin/python
 RUN pip install uv
 RUN uv pip install --no-cache-dir -U pip setuptools GitPython "git+https://github.com/huggingface/transformers.git@${REF}#egg=transformers[quality,serving]" urllib3
