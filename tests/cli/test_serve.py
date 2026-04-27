@@ -27,6 +27,7 @@ import httpx
 
 from transformers.cli.serve import Serve
 from transformers.cli.serving.chat_completion import ChatCompletionHandler
+from transformers.cli.serving.completion import CompletionHandler
 from transformers.cli.serving.model_manager import ModelManager, TimedModel
 from transformers.cli.serving.response import ResponseHandler, compute_usage
 from transformers.cli.serving.server import build_server
@@ -546,9 +547,16 @@ class TestAppRoutes(unittest.TestCase):
             {"id": "test/model", "owned_by": "test", "object": "model", "created": 0}
         ]
         cls.chat_handler = MagicMock(spec=ChatCompletionHandler)
+        cls.completion_handler = MagicMock(spec=CompletionHandler)
         cls.response_handler = MagicMock(spec=ResponseHandler)
         cls.transcription_handler = MagicMock(spec=TranscriptionHandler)
-        cls.app = build_server(cls.model_manager, cls.chat_handler, cls.response_handler, cls.transcription_handler)
+        cls.app = build_server(
+            cls.model_manager,
+            cls.chat_handler,
+            cls.completion_handler,
+            cls.response_handler,
+            cls.transcription_handler,
+        )
         cls.transport = httpx.ASGITransport(app=cls.app)
 
     async def _request(self, method: str, path: str, **kwargs) -> httpx.Response:
@@ -774,6 +782,194 @@ class TestChatCompletion(unittest.TestCase):
             max_tokens=10,
         )
         self.assertIsNotNone(resp.choices[0].message.content)
+
+
+@slow
+@require_serve
+class TestCompletion(unittest.TestCase):
+    """Integration tests for /v1/completions with a real model.
+
+    Covers sequential and continuous-batching generation, both streaming and
+    non-streaming, plus finish_reason, usage, stop strings, suffix, and
+    cancellation behaviour.
+    """
+
+    MODEL = "Qwen/Qwen2.5-0.5B"
+
+    @classmethod
+    def setUpClass(cls):
+        cls.serve, port = _start_serve()
+        cls.base_url = f"http://localhost:{port}"
+        cls.client = OpenAI(base_url=f"{cls.base_url}/v1", api_key="unused")
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.serve.kill_server()
+
+    # ----- non-streaming -----
+
+    def test_non_streaming(self):
+        from openai.types import Completion as OpenAICompletion
+
+        result = self.client.completions.create(
+            model=self.MODEL,
+            prompt="The capital of France is",
+            max_tokens=5,
+        )
+
+        self.assertIsInstance(result, OpenAICompletion)
+        self.assertEqual(result.object, "text_completion")
+        self.assertIsInstance(result.choices[0].text, str)
+        self.assertTrue(len(result.choices[0].text) > 0)
+        self.assertIn(result.choices[0].finish_reason, ("stop", "length"))
+
+    def test_non_streaming_usage(self):
+        result = self.client.completions.create(
+            model=self.MODEL,
+            prompt="The capital of France is",
+            max_tokens=5,
+        )
+        self.assertIsNotNone(result.usage)
+        self.assertGreater(result.usage.prompt_tokens, 0)
+        self.assertGreater(result.usage.completion_tokens, 0)
+        self.assertEqual(result.usage.total_tokens, result.usage.prompt_tokens + result.usage.completion_tokens)
+
+    def test_finish_reason_length(self):
+        result = self.client.completions.create(model=self.MODEL, prompt="Hello", max_tokens=1)
+        self.assertEqual(result.choices[0].finish_reason, "length")
+
+    def test_finish_reason_stop(self):
+        result = self.client.completions.create(model=self.MODEL, prompt="Hello", max_tokens=1024)
+        self.assertEqual(result.choices[0].finish_reason, "stop")
+
+    def test_stop_strings(self):
+        result = self.client.completions.create(
+            model=self.MODEL,
+            prompt="one two three four",
+            max_tokens=20,
+            stop=["six"],
+        )
+        self.assertNotIn("seven", result.choices[0].text)
+
+    def test_suffix(self):
+        """suffix should be appended to generated text."""
+        suffix = " [END]"
+        result = self.client.completions.create(
+            model=self.MODEL,
+            prompt="The capital of France is",
+            max_tokens=5,
+            suffix=suffix,
+        )
+        self.assertTrue(result.choices[0].text.endswith(suffix))
+
+    # ----- streaming -----
+
+    def test_streaming(self):
+        chunks = list(
+            self.client.completions.create(
+                model=self.MODEL,
+                prompt="The capital of France is",
+                max_tokens=5,
+                stream=True,
+            )
+        )
+        texts = [c.choices[0].text for c in chunks]
+        self.assertTrue(any(t != "" for t in texts))
+        self.assertIn(chunks[-1].choices[0].finish_reason, ("stop", "length"))
+
+    def test_streaming_usage(self):
+        chunks = list(
+            self.client.completions.create(
+                model=self.MODEL,
+                prompt="The capital of France is",
+                max_tokens=5,
+                stream=True,
+            )
+        )
+        last = chunks[-1]
+        self.assertIsNotNone(last.usage)
+        self.assertGreater(last.usage.prompt_tokens, 0)
+        self.assertGreater(last.usage.completion_tokens, 0)
+        self.assertEqual(last.usage.total_tokens, last.usage.prompt_tokens + last.usage.completion_tokens)
+
+    def test_streaming_finish_reason_length(self):
+        chunks = list(self.client.completions.create(model=self.MODEL, prompt="Hello", max_tokens=1, stream=True))
+        self.assertEqual(chunks[-1].choices[0].finish_reason, "length")
+
+    def test_streaming_suffix(self):
+        """suffix should be emitted as a final text chunk before finish_reason."""
+        suffix = " [END]"
+        chunks = list(
+            self.client.completions.create(
+                model=self.MODEL,
+                prompt="The capital of France is",
+                max_tokens=5,
+                suffix=suffix,
+                stream=True,
+            )
+        )
+        all_text = "".join(c.choices[0].text for c in chunks)
+        self.assertTrue(all_text.endswith(suffix))
+
+    def test_request_cancellation(self):
+        """Closing a stream early doesn't crash and the server stays healthy."""
+        with httpx.stream(
+            "POST",
+            f"{self.base_url}/v1/completions",
+            json={"model": self.MODEL, "prompt": "Count slowly:", "max_tokens": 500, "stream": True},
+            timeout=30,
+        ) as resp:
+            self.assertEqual(resp.status_code, 200)
+            chunks_read = 0
+            for _ in resp.iter_lines():
+                chunks_read += 1
+                if chunks_read >= 3:
+                    break
+
+        result = self.client.completions.create(model=self.MODEL, prompt="Hello", max_tokens=5)
+        self.assertIsNotNone(result.choices[0].text)
+
+    # ----- continuous batching -----
+
+    @require_torch_accelerator
+    def test_cb_streaming(self):
+        """Streaming completion with CB produces text."""
+        serve, port = _start_serve(
+            force_model=self.MODEL,
+            device="cuda:0",
+            continuous_batching=True,
+            attn_implementation="sdpa",
+        )
+        try:
+            client = OpenAI(base_url=f"http://localhost:{port}/v1", api_key="unused")
+            chunks = list(
+                client.completions.create(
+                    model=self.MODEL, prompt="The capital of France is", max_tokens=10, stream=True
+                )
+            )
+            texts = [c.choices[0].text for c in chunks]
+            self.assertTrue(any(t != "" for t in texts))
+            self.assertIn(chunks[-1].choices[0].finish_reason, ("stop", "length"))
+        finally:
+            serve.kill_server()
+
+    @require_torch_accelerator
+    def test_cb_non_streaming(self):
+        """Non-streaming completion with CB returns a full response."""
+        serve, port = _start_serve(
+            force_model=self.MODEL,
+            device="cuda:0",
+            continuous_batching=True,
+            attn_implementation="sdpa",
+        )
+        try:
+            client = OpenAI(base_url=f"http://localhost:{port}/v1", api_key="unused")
+            result = client.completions.create(model=self.MODEL, prompt="The capital of France is", max_tokens=10)
+            self.assertIsInstance(result.choices[0].text, str)
+            self.assertTrue(len(result.choices[0].text) > 0)
+            self.assertIn(result.choices[0].finish_reason, ("stop", "length"))
+        finally:
+            serve.kill_server()
 
 
 @require_serve

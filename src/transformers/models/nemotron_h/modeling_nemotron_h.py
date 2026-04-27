@@ -594,7 +594,7 @@ class NemotronHRMSNorm(nn.Module):
 
 
 class NemotronHMLP(nn.Module):
-    def __init__(self, config, intermediate_size=None):
+    def __init__(self, config, intermediate_size=None, **kwargs):
         super().__init__()
         self.config = config
         self.hidden_size = config.hidden_size
@@ -889,6 +889,7 @@ MIXER_TYPES = {
     "mamba": NemotronHMamba2Mixer,
     "attention": NemotronHAttention,
     "moe": NemotronHMoE,
+    "mlp": NemotronHMLP,
 }
 
 
@@ -951,6 +952,7 @@ class NemotronHBlock(GradientCheckpointingLayer):
 class NemotronHPreTrainedModel(PreTrainedModel):
     config: NemotronHConfig
     base_model_prefix = "model"
+    supports_gradient_checkpointing = True
     _no_split_modules = ["NemotronHBlock"]
     _skip_keys_device_placement = ["past_key_values"]
     _supports_flash_attn = True
@@ -1081,6 +1083,7 @@ class NemotronHModel(NemotronHPreTrainedModel):
             "mamba": mamba_mask,
             "attention": causal_mask,
             "moe": None,
+            "mlp": None,
         }
 
         for layer_idx, mixer_block in enumerate(self.layers):
