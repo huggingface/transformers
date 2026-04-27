@@ -109,9 +109,6 @@ class GraniteSpeechPlusConfig(GraniteSpeechConfig):
     >>> configuration = model.config
     ```"""
 
-    model_type = "granite_speech_plus"
-
-    encoder_hidden_layers: list[int] | None = None
 
     def __post_init__(self, **kwargs):
         super().__post_init__(**kwargs)
