@@ -271,6 +271,7 @@ class Gemma4Audio2TextModelTest(ModelTesterMixin, GenerationTesterMixin, unittes
         pass
 
     def test_audio_rel_pos_encoding_uses_context_size_from_config(self):
+        """Regression test for #45468; attention context size is properly read from config"""
         from transformers.models.gemma4.configuration_gemma4 import Gemma4AudioConfig
         from transformers.models.gemma4.modeling_gemma4 import Gemma4AudioRelPositionalEncoding
 
