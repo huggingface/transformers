@@ -1044,7 +1044,7 @@ def create_bidirectional_mask(
     past_key_values: Cache | None = None,
     or_mask_function: Callable | None = None,
     and_mask_function: Callable | None = None,
-    block_sequence_ids: torch.Tensor | None = None,
+    **kwargs,
 ) -> torch.Tensor | BlockMask | None:
     """
     Create a standard bidirectional mask based on the attention implementation used (stored in the config).
@@ -1070,9 +1070,6 @@ def create_bidirectional_mask(
         and_mask_function (`Callable`, optional):
             An optional mask function to combine with the base mask function (by doing the intersection of both). This is
             useful to easily overlay another mask on top, for example for image tokens handling.
-        block_sequence_ids (`torch.Tensor`, *optional*):
-            A tensor of same shape as input IDs indicating to which block or group each token belongs to. Tokens from
-            the same block will keep a bidirectional mask within the block, attending causally to the past.
     """
     # We ignore a few irrelevant arguments at the end as we do not have a (growing) cache here
     early_exit, attention_mask, _, q_length, kv_length, q_offset, kv_offset = _preprocess_mask_arguments(
@@ -1108,12 +1105,6 @@ def create_bidirectional_mask(
         mask_factory_function = and_masks(mask_factory_function, and_mask_function)
         allow_is_bidirectional_skip = False
         use_vmap = True
-
-    # If we detect a blockwise overlay
-    if block_sequence_ids is not None:
-        block_sequence_ids = maybe_pad_block_sequence_ids(block_sequence_ids, kv_length=kv_length)
-        mask_factory_function = and_masks(mask_factory_function, blockwise_overlay(block_sequence_ids))
-        allow_is_bidirectional_skip = False
 
     # We now create the mask
     attention_mask = mask_interface(
@@ -1272,7 +1263,7 @@ def create_bidirectional_sliding_window_mask(
     past_key_values: Cache | None = None,
     or_mask_function: Callable | None = None,
     and_mask_function: Callable | None = None,
-    block_sequence_ids: torch.Tensor | None = None,
+    **kwargs,
 ) -> torch.Tensor | BlockMask | None:
     """
     Create a standard bidirectional sliding window mask based on the attention implementation used (stored in the config).
@@ -1295,9 +1286,6 @@ def create_bidirectional_sliding_window_mask(
         and_mask_function (`Callable`, optional):
             An optional mask function to combine with the base mask function (by doing the intersection of both). This is
             useful to easily overlay another mask on top, for example for image tokens handling.
-        block_sequence_ids (`torch.Tensor`, *optional*):
-            A tensor of same shape as input IDs indicating to which block or group each token belongs to. Tokens from
-            the same block will keep a bidirectional mask within the block, attending causally to the past.
     """
     # We ignore a few irrelevant arguments at the end as we do not have a (growing) cache here
     early_exit, attention_mask, _, q_length, kv_length, q_offset, kv_offset = _preprocess_mask_arguments(
@@ -1329,12 +1317,6 @@ def create_bidirectional_sliding_window_mask(
         mask_factory_function = and_masks(mask_factory_function, and_mask_function)
         allow_is_bidirectional_skip = False
         use_vmap = True
-
-    # If we detect a blockwise overlay
-    if block_sequence_ids is not None:
-        block_sequence_ids = maybe_pad_block_sequence_ids(block_sequence_ids, kv_length=kv_length)
-        mask_factory_function = and_masks(mask_factory_function, blockwise_overlay(block_sequence_ids))
-        allow_is_bidirectional_skip = False
 
     attention_mask = mask_interface(
         batch_size=batch_size,
