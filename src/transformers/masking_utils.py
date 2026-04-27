@@ -121,17 +121,9 @@ def blockwise_overlay(block_sequence_ids: torch.Tensor) -> Callable:
     """
 
     def inner_mask(batch_idx: int, head_idx: int, q_idx: int, kv_idx: int) -> bool:
-        seq_length = block_sequence_ids.shape[-1]
-
-        # clamp indices because with static cache they can go beyond `block_sequence_ids.shape[-1]`
-        q_idx_clamped = q_idx.clamp(max=seq_length - 1)
-        kv_idx_clamped = kv_idx.clamp(max=seq_length - 1)
-
         # Unmask if the q and kv come from same group which is not -1 (i.e. non-text)
-        q_group = block_sequence_ids[batch_idx, q_idx_clamped]
-        kv_group = block_sequence_ids[batch_idx, kv_idx_clamped]
-        q_group = torch.where(q_idx < seq_length, q_group, -1)
-        kv_group = torch.where(kv_idx < seq_length, kv_group, -1)
+        q_group = block_sequence_ids[batch_idx, q_idx]
+        kv_group = block_sequence_ids[batch_idx, kv_idx]
         return (q_group == kv_group) & (q_group >= 0)
 
     return inner_mask
@@ -218,6 +210,17 @@ def prepare_padding_mask(attention_mask: torch.Tensor | None, kv_length: int, kv
         if (padding_length := kv_length + kv_offset - attention_mask.shape[-1]) > 0:
             local_padding_mask = torch.nn.functional.pad(attention_mask, (0, padding_length))
     return local_padding_mask
+
+
+def maybe_pad_block_sequence_ids(block_sequence_ids: torch.Tensor, kv_length: int) -> torch.Tensor:
+    """
+    Pads the `block_sequence_ids` in case the total length is less than `kv_length`.
+    Usually that happens with `StaticCache` generation. Pads to the right with `-1`.
+    """
+    if block_sequence_ids.shape[1] < kv_length:
+        to_pad = kv_length - block_sequence_ids.shape[1]
+        block_sequence_ids = F.pad(block_sequence_ids, pad=(0, to_pad), value=-1)
+    return block_sequence_ids
 
 
 def _can_skip_causal_mask_xpu(
@@ -974,8 +977,6 @@ def create_causal_mask(
 
     batch_size, dtype, device = inputs_embeds.shape[0], inputs_embeds.dtype, inputs_embeds.device
     mask_factory_function = causal_mask_function
-    if block_sequence_ids is not None:
-        mask_factory_function = or_masks(blockwise_overlay(block_sequence_ids), mask_factory_function)
     mask_interface = ALL_MASK_ATTENTION_FUNCTIONS[config._attn_implementation]
 
     # Defaulting to using non-vmap based mask creations except when detecting
@@ -1012,6 +1013,8 @@ def create_causal_mask(
         mask_factory_function = and_masks(mask_factory_function, packed_sequence_mask_function(packed_sequence_mask))
         allow_is_causal_skip = False
     if block_sequence_ids is not None:
+        block_sequence_ids = maybe_pad_block_sequence_ids(block_sequence_ids, kv_length=kv_length)
+        mask_factory_function = or_masks(mask_factory_function, blockwise_overlay(block_sequence_ids))
         allow_is_causal_skip = False
 
     # We now create the mask
@@ -1081,8 +1084,6 @@ def create_bidirectional_mask(
     embeds = encoder_hidden_states if encoder_hidden_states is not None else inputs_embeds
     batch_size, dtype, device = embeds.shape[0], embeds.dtype, embeds.device
     mask_factory_function = bidirectional_mask_function
-    if block_sequence_ids is not None:
-        mask_factory_function = and_masks(blockwise_overlay(block_sequence_ids), mask_factory_function)
     mask_interface = ALL_MASK_ATTENTION_FUNCTIONS[config._attn_implementation]
 
     # Allow skipping the mask creation except we have additional masking operators (and/or masks)
@@ -1110,6 +1111,8 @@ def create_bidirectional_mask(
 
     # If we detect a blockwise overlay
     if block_sequence_ids is not None:
+        block_sequence_ids = maybe_pad_block_sequence_ids(block_sequence_ids, kv_length=kv_length)
+        mask_factory_function = and_masks(mask_factory_function, blockwise_overlay(block_sequence_ids))
         allow_is_bidirectional_skip = False
 
     # We now create the mask
@@ -1207,8 +1210,6 @@ def create_sliding_window_causal_mask(
 
     batch_size, dtype, device = inputs_embeds.shape[0], inputs_embeds.dtype, inputs_embeds.device
     mask_factory_function = sliding_window_causal_mask_function(sliding_window)
-    if block_sequence_ids is not None:
-        mask_factory_function = or_masks(blockwise_overlay(block_sequence_ids), mask_factory_function)
     mask_interface = ALL_MASK_ATTENTION_FUNCTIONS[config._attn_implementation]
 
     # Defaulting to using non-vmap based mask creations except when detecting
@@ -1240,6 +1241,8 @@ def create_sliding_window_causal_mask(
         mask_factory_function = and_masks(mask_factory_function, packed_sequence_mask_function(packed_sequence_mask))
         allow_is_causal_skip = False
     if block_sequence_ids is not None:
+        block_sequence_ids = maybe_pad_block_sequence_ids(block_sequence_ids, kv_length=kv_length)
+        mask_factory_function = or_masks(mask_factory_function, blockwise_overlay(block_sequence_ids))
         allow_is_causal_skip = False
 
     # We now create the mask
@@ -1309,8 +1312,6 @@ def create_bidirectional_sliding_window_mask(
 
     batch_size, dtype, device = inputs_embeds.shape[0], inputs_embeds.dtype, inputs_embeds.device
     mask_factory_function = sliding_window_bidirectional_mask_function(sliding_window)
-    if block_sequence_ids is not None:
-        mask_factory_function = and_masks(blockwise_overlay(block_sequence_ids), mask_factory_function)
     mask_interface = ALL_MASK_ATTENTION_FUNCTIONS[config._attn_implementation]
 
     use_vmap = False
@@ -1331,6 +1332,8 @@ def create_bidirectional_sliding_window_mask(
 
     # If we detect a blockwise overlay
     if block_sequence_ids is not None:
+        block_sequence_ids = maybe_pad_block_sequence_ids(block_sequence_ids, kv_length=kv_length)
+        mask_factory_function = and_masks(mask_factory_function, blockwise_overlay(block_sequence_ids))
         allow_is_bidirectional_skip = False
 
     attention_mask = mask_interface(
