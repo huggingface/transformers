@@ -131,26 +131,29 @@ class GraniteSpeechPlusCTCEncoder(GraniteSpeechCTCEncoder):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        returned_hidden_states: Container[int] | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutputWithPooling:
         hidden_states = self.input_linear(hidden_states)
+        cat_layers = set(self.config.encoder_config.cat_hidden_layers or [])
         exported_hidden_states = []
-        if returned_hidden_states is None:
-            returned_hidden_states = []
-        if 0 in returned_hidden_states:
+
+        if 0 in cat_layers:
             exported_hidden_states.append(hidden_states)
+
         for idx, layer in enumerate(self.layers, start=1):
             hidden_states = layer(hidden_states, attention_dists=self.attention_dists)
-            if idx in returned_hidden_states:
-                exported_hidden_states.append(hidden_states)
 
             if idx == self.num_layers // 2:
                 hidden_states_mid = hidden_states.clone()
                 hidden_states_mid = self.out(hidden_states_mid)
                 hidden_states += self.out_mid(nn.Softmax(dim=-1)(hidden_states_mid))
-        if len(exported_hidden_states) > 0:
-            hidden_states = torch.cat(exported_hidden_states + [hidden_states], dim=-1)
+
+            if idx in cat_layers:
+                exported_hidden_states.append(hidden_states)
+
+        if exported_hidden_states:
+            hidden_states = torch.cat([*exported_hidden_states, hidden_states], dim=-1)
+
         return BaseModelOutputWithPooling(last_hidden_state=hidden_states)
 
 
