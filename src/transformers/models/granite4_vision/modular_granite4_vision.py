@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from dataclasses import dataclass
 from fractions import Fraction
 
 import numpy as np
@@ -27,6 +28,7 @@ from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...processing_utils import ImagesKwargs, Unpack
 from ... import initialization as init
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS
+from ...modeling_outputs import ModelOutput
 from ...utils import TransformersKwargs, can_return_tuple, logging
 from ..granite.modeling_granite import GraniteModel, GraniteRotaryEmbedding
 from ..llava_next.configuration_llava_next import LlavaNextConfig
@@ -93,6 +95,21 @@ class Granite4VisionModelOutputWithPast(LlavaNextModelOutputWithPast):
 
 class Granite4VisionCausalLMOutputWithPast(LlavaNextCausalLMOutputWithPast):
     pass
+
+
+@dataclass
+class Granite4VisionImageFeaturesOutput(ModelOutput):
+    """
+    Output of `Granite4VisionModel.get_image_features`.
+
+    Args:
+        deepstack_features (`list[tuple[int, list[torch.Tensor]]]`):
+            List of `(llm_layer_idx, packed_features)` pairs. Each entry targets one LLM
+            decoder layer; `packed_features` is a per-image list of tensors of shape
+            `(num_image_tokens, hidden_size)`.
+    """
+
+    deepstack_features: list | None = None
 
 
 # ── Config ──────────────────────────────────────────────────────────────────
@@ -559,7 +576,7 @@ class Granite4VisionModel(LlavaNextModel):
         image_sizes: torch.Tensor,
         vision_feature_layer: int | list[int] | None = None,
         vision_feature_select_strategy: str | None = None,
-    ):
+    ) -> Granite4VisionImageFeaturesOutput:
         """
         Extract image features via deepstack (multi-layer) and spatial sampling projections.
 
@@ -569,9 +586,6 @@ class Granite4VisionModel(LlavaNextModel):
            and pairs them with the target LLM layer.
         2. Spatial: if enabled, extracts the spatial_vision_layer and creates 4 spatial
            offset groups (TL, TR, BL, BR), each targeting a different LLM layer.
-
-        Returns:
-            List of (llm_layer_idx, packed_features) tuples for injection during forward pass.
         """
         vision_feature_select_strategy = (
             vision_feature_select_strategy
@@ -636,7 +650,7 @@ class Granite4VisionModel(LlavaNextModel):
 
                 all_features.append((llm_layer, packed_group))
 
-        return all_features
+        return Granite4VisionImageFeaturesOutput(deepstack_features=all_features)
 
     def get_image_token_mask(
         self, input_ids: torch.LongTensor, inputs_embeds: torch.FloatTensor, image_features: torch.FloatTensor
@@ -712,7 +726,7 @@ class Granite4VisionModel(LlavaNextModel):
             )
 
             deepstack_features = {}
-            for idx, (llm_layer_idx, packed_features) in enumerate(image_features):
+            for idx, (llm_layer_idx, packed_features) in enumerate(image_features.deepstack_features):
                 concat_features = torch.cat(packed_features, dim=0).to(inputs_embeds.device, inputs_embeds.dtype)
                 if idx == 0:
                     # vision_mask: (batch, seqlen) boolean, used by text model for injection
@@ -740,7 +754,7 @@ class Granite4VisionModel(LlavaNextModel):
             past_key_values=outputs.past_key_values,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
-            image_hidden_states=image_features if pixel_values is not None else None,
+            image_hidden_states=image_features.deepstack_features if pixel_values is not None else None,
         )
 
 
