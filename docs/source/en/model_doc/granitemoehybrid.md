@@ -24,6 +24,7 @@ The [GraniteMoeHybrid](https://www.ibm.com/new/announcements/ibm-granite-4-0-tin
 ```python
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
+
 model_path = "ibm-granite/granite-4.0-tiny-preview"
 tokenizer = AutoTokenizer.from_pretrained(model_path)
 

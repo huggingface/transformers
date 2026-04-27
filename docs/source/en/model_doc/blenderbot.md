@@ -51,7 +51,8 @@ rather than the left.
 An example:
 
 ```python
-from transformers import BlenderbotTokenizer, BlenderbotForConditionalGeneration
+from transformers import BlenderbotForConditionalGeneration, BlenderbotTokenizer
+
 
 mname = "facebook/blenderbot-400M-distill"
 model = BlenderbotForConditionalGeneration.from_pretrained(mname, device_map="auto")

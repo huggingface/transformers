@@ -39,7 +39,8 @@ An example of how to use a [`SpeechEncoderDecoderModel`] for inference can be se
 and the default [`BertForCausalLM`] configuration for the decoder.
 
 ```python
-from transformers import BertConfig, Wav2Vec2Config, SpeechEncoderDecoderConfig, SpeechEncoderDecoderModel
+from transformers import BertConfig, SpeechEncoderDecoderConfig, SpeechEncoderDecoderModel, Wav2Vec2Config
+
 
 config_encoder = Wav2Vec2Config()
 config_decoder = BertConfig()
@@ -57,6 +58,7 @@ To do so, the `SpeechEncoderDecoderModel` class provides a [`SpeechEncoderDecode
 
 ```python
 from transformers import SpeechEncoderDecoderModel
+
 
 model = SpeechEncoderDecoderModel.from_encoder_decoder_pretrained(
     "facebook/hubert-large-ll60k", "google-bert/bert-base-uncased"
@@ -96,8 +98,10 @@ As you can see, only 2 inputs are required for the model in order to compute a l
 speech inputs) and `labels` (which are the `input_ids` of the encoded target sequence).
 
 ```python
-from transformers import AutoTokenizer, AutoFeatureExtractor, SpeechEncoderDecoderModel
 from datasets import load_dataset
+
+from transformers import AutoFeatureExtractor, AutoTokenizer, SpeechEncoderDecoderModel
+
 
 encoder_id = "facebook/wav2vec2-base-960h"  # acoustic model encoder
 decoder_id = "google-bert/bert-base-uncased"  # text decoder

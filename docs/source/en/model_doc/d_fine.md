@@ -34,8 +34,10 @@ The original code can be found [here](https://github.com/Peterande/D-FINE).
 
 ```python
 import torch
+
+from transformers import AutoImageProcessor, DFineForObjectDetection
 from transformers.image_utils import load_image
-from transformers import DFineForObjectDetection, AutoImageProcessor
+
 
 url = 'http://images.cocodataset.org/val2017/000000039769.jpg'
 image = load_image(url)

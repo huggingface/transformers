@@ -46,7 +46,8 @@ This model was contributed by [Tianyi Tang](https://huggingface.co/StevenTang). 
 For summarization, it is an example to use MVP and MVP with summarization-specific prompts.
 
 ```python
-from transformers import MvpTokenizer, MvpForConditionalGeneration
+from transformers import MvpForConditionalGeneration, MvpTokenizer
+
 
 tokenizer = MvpTokenizer.from_pretrained("RUCAIBox/mvp")
 model = MvpForConditionalGeneration.from_pretrained("RUCAIBox/mvp", device_map="auto")
@@ -68,7 +69,8 @@ tokenizer.batch_decode(generated_ids, skip_special_tokens=True)
 For data-to-text generation, it is an example to use MVP and multi-task pre-trained variants.
 
 ```python
-from transformers import MvpTokenizerFast, MvpForConditionalGeneration
+from transformers import MvpForConditionalGeneration, MvpTokenizerFast
+
 
 tokenizer = MvpTokenizerFast.from_pretrained("RUCAIBox/mvp")
 model = MvpForConditionalGeneration.from_pretrained("RUCAIBox/mvp", device_map="auto")
@@ -91,6 +93,7 @@ For lightweight tuning, *i.e.*, fixing the model and only tuning prompts, you ca
 
 ```python
 from transformers import MvpForConditionalGeneration
+
 
 model = MvpForConditionalGeneration.from_pretrained("RUCAIBox/mvp", use_prompt=True, device_map="auto")
 # the number of trainable parameters (full tuning)

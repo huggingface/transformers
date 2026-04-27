@@ -32,9 +32,9 @@ The example below demonstrates how to generate text with [`Pipeline`] or the [`A
 <hfoptions id="usage">
 <hfoption id="Pipeline">
 
-```py
-import torch
+```python
 from transformers import pipeline
+
 
 pipe = pipeline(
     task="text-generation",
@@ -46,9 +46,9 @@ pipe("The most important factor in language model training is")
 </hfoption>
 <hfoption id="AutoModelForCausalLM">
 
-```py
-import torch
+```python
 from transformers import AutoModelForCausalLM, AutoTokenizer
+
 
 tokenizer = AutoTokenizer.from_pretrained("ByteDance-Seed/Seed-OSS-36B-Base")
 model = AutoModelForCausalLM.from_pretrained(

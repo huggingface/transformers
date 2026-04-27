@@ -49,10 +49,12 @@ into a single instance to both extract the input features and decode the predict
 
 - Step-by-step Optical Character Recognition (OCR)
 
-```py
-from transformers import MgpstrProcessor, MgpstrForSceneTextRecognition
+```python
 import requests
 from PIL import Image
+
+from transformers import MgpstrForSceneTextRecognition, MgpstrProcessor
+
 
 processor = MgpstrProcessor.from_pretrained('alibaba-damo/mgp-str-base')
 model = MgpstrForSceneTextRecognition.from_pretrained('alibaba-damo/mgp-str-base', device_map="auto")

@@ -31,8 +31,10 @@ rendered properly in your Markdown viewer.
 ## Usage
 
 ```python
-from transformers import HiggsAudioV2TokenizerModel, AutoFeatureExtractor
-from datasets import load_dataset, Audio
+from datasets import Audio, load_dataset
+
+from transformers import AutoFeatureExtractor, HiggsAudioV2TokenizerModel
+
 
 # load model and feature extractor
 model_id = "eustlb/higgs-audio-v2-tokenizer"

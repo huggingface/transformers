@@ -50,6 +50,7 @@ This model was contributed by [rmroczkowski](https://huggingface.co/rmroczkowski
 ```python
 from transformers import HerbertTokenizer, RobertaModel
 
+
 tokenizer = HerbertTokenizer.from_pretrained("allegro/herbert-klej-cased-tokenizer-v1")
 model = RobertaModel.from_pretrained("allegro/herbert-klej-cased-v1", device_map="auto")
 
@@ -57,8 +58,8 @@ encoded_input = tokenizer.encode("Kto ma lepszą sztukę, ma lepszy rząd – to
 outputs = model(encoded_input)
 
 # HerBERT can also be loaded using AutoTokenizer and AutoModel:
-import torch
 from transformers import AutoModel, AutoTokenizer
+
 
 tokenizer = AutoTokenizer.from_pretrained("allegro/herbert-klej-cased-tokenizer-v1")
 model = AutoModel.from_pretrained("allegro/herbert-klej-cased-v1", device_map="auto")

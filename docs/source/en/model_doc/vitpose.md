@@ -30,12 +30,12 @@ You can find all ViTPose and ViTPose++ checkpoints under the [ViTPose collection
 
 The example below demonstrates pose estimation with the [`VitPoseForPoseEstimation`] class.
 
-```py
-import torch
+```python
 import requests
-import numpy as np
 import supervision as sv
+import torch
 from PIL import Image
+
 from transformers import AutoProcessor, RTDetrForObjectDetection, VitPoseForPoseEstimation
 
 
@@ -110,13 +110,14 @@ Quantization reduces the memory burden of large models by representing the weigh
 
 The example below uses [torchao](../quantization/torchao) to only quantize the weights to int4.
 
-```py
+```python
 # pip install torchao
-import torch
 import requests
-import numpy as np
+import torch
 from PIL import Image
-from transformers import AutoProcessor, RTDetrForObjectDetection, VitPoseForPoseEstimation, TorchAoConfig
+
+from transformers import AutoProcessor, RTDetrForObjectDetection, TorchAoConfig, VitPoseForPoseEstimation
+
 
 url = "https://www.fcbarcelona.com/fcbarcelona/photo/2021/01/31/3c55a19f-dfc1-4451-885e-afd14e890a11/mini_2021-01-31-BARCELONA-ATHLETIC-BILBAOI-30.JPG"
 image = Image.open(requests.get(url, stream=True).raw)

@@ -40,10 +40,12 @@ The examples below demonstrate how to generate dense vector embeddings for diffe
 <hfoptions id="usage">
 <hfoption id="Search Document">
 
-```py
+```python
 import torch
 import torch.nn.functional as F
-from transformers import AutoTokenizer, AutoModel
+
+from transformers import AutoModel, AutoTokenizer
+
 
 def mean_pooling(model_output, attention_mask):
     token_embeddings = model_output[0]
@@ -70,10 +72,12 @@ print(embeddings)
 </hfoption>
 <hfoption id="Search Query">
 
-```py
+```python
 import torch
 import torch.nn.functional as F
-from transformers import AutoTokenizer, AutoModel
+
+from transformers import AutoModel, AutoTokenizer
+
 
 def mean_pooling(model_output, attention_mask):
     token_embeddings = model_output[0]
@@ -100,10 +104,12 @@ print(embeddings)
 </hfoption>
 <hfoption id="Clustering">
 
-```py
+```python
 import torch
 import torch.nn.functional as F
-from transformers import AutoTokenizer, AutoModel
+
+from transformers import AutoModel, AutoTokenizer
+
 
 def mean_pooling(model_output, attention_mask):
     token_embeddings = model_output[0]
@@ -130,10 +136,12 @@ print(embeddings)
 </hfoption>
 <hfoption id="Classification">
 
-```py
+```python
 import torch
 import torch.nn.functional as F
-from transformers import AutoTokenizer, AutoModel
+
+from transformers import AutoModel, AutoTokenizer
+
 
 def mean_pooling(model_output, attention_mask):
     token_embeddings = model_output[0]

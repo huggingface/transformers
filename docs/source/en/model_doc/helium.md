@@ -114,6 +114,7 @@ In the following, we demonstrate how to use `helium-1-preview` for the inference
 ```python
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
+
 model = AutoModelForCausalLM.from_pretrained("kyutai/helium-1-preview-2b", device_map="auto")
 tokenizer = AutoTokenizer.from_pretrained("kyutai/helium-1-preview-2b")
 

@@ -39,8 +39,9 @@ Key features:
 
 ## Usage examples
 
-```py
+```python
 import torch
+
 from transformers import Mistral3ForConditionalGeneration, MistralCommonBackend
 
 

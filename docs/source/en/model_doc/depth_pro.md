@@ -42,11 +42,12 @@ This model was contributed by [geetu040](https://github.com/geetu040). The origi
 
 The DepthPro model processes an input image by first downsampling it at multiple scales and splitting each scaled version into patches. These patches are then encoded using a shared Vision Transformer (ViT)-based Dinov2 patch encoder, while the full image is processed by a separate image encoder. The extracted patch features are merged into feature maps, upsampled, and fused using a DPT-like decoder to generate the final depth estimation. If enabled, an additional Field of View (FOV) encoder processes the image for estimating the camera's field of view, aiding in depth accuracy.
 
-```py
+```python
 import requests
-from PIL import Image
 import torch
-from transformers import DepthProImageProcessor, DepthProForDepthEstimation
+from PIL import Image
+
+from transformers import DepthProForDepthEstimation, DepthProImageProcessor
 
 
 url = 'http://images.cocodataset.org/val2017/000000039769.jpg'
@@ -103,23 +104,29 @@ The `use_fov_model` parameter in `DepthProConfig` controls whether **FOV predict
 
 The pretrained model at checkpoint `apple/DepthPro-hf` uses the FOV encoder. To use the pretrained-model without FOV encoder, set `use_fov_model=False` when loading the model, which saves computation.
 
-```py
+```python
 from transformers import DepthProForDepthEstimation
+
+
 model = DepthProForDepthEstimation.from_pretrained("apple/DepthPro-hf", use_fov_model=False, device_map="auto")
 ```
 
 To instantiate a new model with FOV encoder, set `use_fov_model=True` in the config.
 
-```py
+```python
 from transformers import DepthProConfig, DepthProForDepthEstimation
+
+
 config = DepthProConfig(use_fov_model=True)
 model = DepthProForDepthEstimation(config)
 ```
 
 Or set `use_fov_model=True` when initializing the model, which overrides the value in config.
 
-```py
+```python
 from transformers import DepthProConfig, DepthProForDepthEstimation
+
+
 config = DepthProConfig()
 model = DepthProForDepthEstimation(config, use_fov_model=True)
 ```
@@ -135,8 +142,10 @@ page for more information.
 SDPA is used by default for `torch>=2.1.1` when an implementation is available, but you may also set
 `attn_implementation="sdpa"` in `from_pretrained()` to explicitly request SDPA to be used.
 
-```py
+```python
 from transformers import DepthProForDepthEstimation
+
+
 model = DepthProForDepthEstimation.from_pretrained("apple/DepthPro-hf", attn_implementation="sdpa", device_map="auto")
 ```
 

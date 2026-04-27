@@ -69,6 +69,7 @@ model.
 ```python
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
+
 model = AutoModelForCausalLM.from_pretrained("EleutherAI/gpt-j-6B", device_map="auto")
 tokenizer = AutoTokenizer.from_pretrained("EleutherAI/gpt-j-6B")
 
@@ -92,8 +93,9 @@ gen_text = tokenizer.batch_decode(gen_tokens)[0]
 ...or in float16 precision:
 
 ```python
-from transformers import GPTJForCausalLM, AutoTokenizer
-import torch
+
+from transformers import AutoTokenizer, GPTJForCausalLM
+
 
 model = GPTJForCausalLM.from_pretrained("EleutherAI/gpt-j-6B", device_map="auto")
 tokenizer = AutoTokenizer.from_pretrained("EleutherAI/gpt-j-6B")

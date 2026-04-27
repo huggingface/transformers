@@ -31,9 +31,9 @@ The example below demonstrates how to generate text with [`Pipeline`] or the [`A
 <hfoptions id="usage">
 <hfoption id="Pipeline">
 
-```py
-import torch
+```python
 from transformers import pipeline
+
 
 pipe = pipeline(
     task="text-generation",
@@ -45,9 +45,9 @@ pipe("Plants create energy through a process known as")
 </hfoption>
 <hfoption id="AutoModelForCausalLM">
 
-```py
-import torch
+```python
 from transformers import AutoModelForCausalLM, AutoTokenizer
+
 
 tokenizer = AutoTokenizer.from_pretrained("openai/gpt-oss-20b")
 model = AutoModelForCausalLM.from_pretrained(

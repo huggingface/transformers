@@ -37,6 +37,7 @@ For more details, please visit our blog [Qwen3-Next](qwen3_next) ([blog post](ht
 ```python
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
+
 model_name = "Qwen/Qwen3-Next-80B-A3B-Instruct"
 
 # load the tokenizer and the model

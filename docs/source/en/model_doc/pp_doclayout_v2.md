@@ -42,10 +42,12 @@ The example below demonstrates how to generate text with PP-DocLayoutV2 using [`
 <hfoptions id="usage">
 <hfoption id="Pipeline">
 
-```py
+```python
 import requests
 from PIL import Image
+
 from transformers import pipeline
+
 
 image = Image.open(requests.get("https://paddle-model-ecology.bj.bcebos.com/paddlex/imgs/demo_image/layout_demo.jpg", stream=True).raw)
 layout_detector = pipeline("object-detection", model="PaddlePaddle/PP-DocLayoutV2_safetensors")
@@ -57,10 +59,12 @@ print(result)
 
 <hfoption id="AutoModel">
 
-```py
+```python
 import requests
 from PIL import Image
+
 from transformers import AutoImageProcessor, AutoModelForObjectDetection
+
 
 model_path = "PaddlePaddle/PP-DocLayoutV2_safetensors"
 model = AutoModelForObjectDetection.from_pretrained(model_path, device_map="auto")
@@ -90,10 +94,12 @@ Here is how you can do it with PP-DocLayoutV2 using [`Pipeline`] or the [`AutoMo
 <hfoptions id="usage">
 <hfoption id="Pipeline">
 
-```py
+```python
 import requests
 from PIL import Image
+
 from transformers import pipeline
+
 
 image = Image.open(requests.get("https://paddle-model-ecology.bj.bcebos.com/paddlex/imgs/demo_image/layout_demo.jpg", stream=True).raw)
 layout_detector = pipeline("object-detection", model="PaddlePaddle/PP-DocLayoutV2_safetensors")
@@ -106,11 +112,12 @@ print(result[1])
 
 <hfoption id="AutoModel">
 
-```py
+```python
 import requests
-import torch
 from PIL import Image
+
 from transformers import AutoImageProcessor, AutoModelForObjectDetection
+
 
 model_path = "PaddlePaddle/PP-DocLayoutV2_safetensors"
 model = AutoModelForObjectDetection.from_pretrained(model_path, device_map="auto")

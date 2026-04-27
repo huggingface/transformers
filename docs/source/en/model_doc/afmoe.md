@@ -48,9 +48,9 @@ The example below demonstrates how to generate text with AFMoE using [`Pipeline`
 <hfoptions id="usage">
 <hfoption id="Pipeline">
 
-```py
-import torch
+```python
 from transformers import pipeline
+
 
 pipeline = pipeline(
     task="text-generation",
@@ -65,9 +65,11 @@ print(output[0]["generated_text"])
 </hfoption>
 <hfoption id="AutoModel">
 
-```py
+```python
 import torch
-from transformers import AutoTokenizer, AfmoeForCausalLM
+
+from transformers import AfmoeForCausalLM, AutoTokenizer
+
 
 tokenizer = AutoTokenizer.from_pretrained("arcee-ai/Trinity-Mini")
 model = AfmoeForCausalLM.from_pretrained(

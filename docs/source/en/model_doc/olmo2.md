@@ -37,9 +37,9 @@ The example below demonstrates how to generate text with [`Pipeline`], [`AutoMod
 <hfoptions id="usage">
 <hfoption id="Pipeline">
 
-```py
-import torch
+```python
 from transformers import pipeline
+
 
 pipe = pipeline(
     task="text-generation",
@@ -54,9 +54,9 @@ print(result)
 </hfoption>
 <hfoption id="AutoModel">
 
-```py
-import torch
+```python
 from transformers import AutoModelForCausalLM, AutoTokenizer
+
 
 tokenizer = AutoTokenizer.from_pretrained(
     "allenai/OLMo-2-0425-1B"
@@ -80,11 +80,10 @@ Quantization reduces the memory burden of large models by representing the weigh
 
 The example below uses [torchao](../quantization/torchao) to only quantize the weights to 4-bits.
 
-```py
-
+```python
 #pip install torchao
-import torch
 from transformers import AutoModelForCausalLM, AutoTokenizer, TorchAoConfig
+
 
 torchao_config = TorchAoConfig(
     "int4_weight_only",
@@ -105,7 +104,6 @@ input_ids = tokenizer("Plants create energy through a process known as", return_
 
 output = model.generate(**input_ids, max_length=50, cache_implementation="static")
 print(tokenizer.decode(output[0], skip_special_tokens=True))
-
 ```
 
 ## Notes

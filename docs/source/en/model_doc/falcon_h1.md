@@ -48,6 +48,7 @@ Tips:
 ```python
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
+
 model = AutoModelForCausalLM.from_pretrained("tiiuae/Falcon-H1-7B-Instruct", device_map="auto")
 tokenizer = AutoTokenizer.from_pretrained("tiiuae/Falcon-H1-7B-Instruct")
 

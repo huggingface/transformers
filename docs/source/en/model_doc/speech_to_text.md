@@ -51,9 +51,10 @@ be installed as follows: `apt install libsndfile1-dev`
 - ASR and Speech Translation
 
 ```python
-import torch
-from transformers import Speech2TextProcessor, Speech2TextForConditionalGeneration
 from datasets import load_dataset
+
+from transformers import Speech2TextForConditionalGeneration, Speech2TextProcessor
+
 
 model = Speech2TextForConditionalGeneration.from_pretrained("facebook/s2t-small-librispeech-asr", device_map="auto")
 processor = Speech2TextProcessor.from_pretrained("facebook/s2t-small-librispeech-asr")
@@ -78,9 +79,10 @@ transcription
   checkpoint.
 
 ```python
-import torch
-from transformers import Speech2TextProcessor, Speech2TextForConditionalGeneration
 from datasets import load_dataset
+
+from transformers import Speech2TextForConditionalGeneration, Speech2TextProcessor
+
 
 model = Speech2TextForConditionalGeneration.from_pretrained("facebook/s2t-medium-mustc-multilingual-st", device_map="auto")
 processor = Speech2TextProcessor.from_pretrained("facebook/s2t-medium-mustc-multilingual-st")

@@ -39,11 +39,11 @@ The example below demonstrates how to generate text with [`Pipeline`], [`AutoMod
 <hfoptions id="usage">
 <hfoption id="Pipeline">
 
-```py
+```python
 # install optimized Mamba implementations
 # !pip install mamba-ssm causal-conv1d>=1.2.0
-import torch
 from transformers import pipeline
+
 
 pipeline = pipeline(
     task="text-generation",
@@ -56,9 +56,9 @@ pipeline("Plants create energy through a process known as")
 </hfoption>
 <hfoption id="AutoModel">
 
-```py
-import torch
+```python
 from transformers import AutoModelForCausalLM, AutoTokenizer
+
 
 tokenizer = AutoTokenizer.from_pretrained(
     "ai21labs/AI21-Jamba-Large-1.6",
@@ -81,9 +81,9 @@ Quantization reduces the memory burden of large models by representing the weigh
 
 The example below uses [bitsandbytes](../quantization/bitsandbytes) to only quantize the weights to 8-bits.
 
-```py
-import torch
-from transformers import AutoTokenizer, AutoModelForCausalLM, BitsAndBytesConfig
+```python
+from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig
+
 
 quantization_config = BitsAndBytesConfig(load_in_8bit=True,
                                          llm_int8_skip_modules=["mamba"])

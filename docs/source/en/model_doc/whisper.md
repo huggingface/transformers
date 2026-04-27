@@ -37,9 +37,9 @@ The example below demonstrates how to automatically transcribe speech into text 
 <hfoptions id="usage">
 <hfoption id="Pipeline">
 
-```py
-import torch
+```python
 from transformers import pipeline
+
 
 pipeline = pipeline(
     task="automatic-speech-recognition",
@@ -52,11 +52,12 @@ pipeline("https://huggingface.co/datasets/Narsil/asr_dummy/resolve/main/mlk.flac
 </hfoption>
 <hfoption id="AutoModel">
 
-```py
+```python
 # pip install datasets
-import torch
 from datasets import load_dataset
+
 from transformers import AutoProcessor, WhisperForConditionalGeneration
+
 
 processor = AutoProcessor.from_pretrained(
     "openai/whisper-large-v3-turbo",

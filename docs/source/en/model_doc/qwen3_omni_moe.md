@@ -48,7 +48,9 @@ The model can accept text, images, audio and videos as input. Here's an example 
 
 ```python
 import soundfile as sf
+
 from transformers import Qwen3OmniMoeForConditionalGeneration, Qwen3OmniMoeProcessor
+
 
 model = Qwen3OmniMoeForConditionalGeneration.from_pretrained(
     "Qwen/Qwen3-Omni-30B-A3B-Instruct",
@@ -103,7 +105,8 @@ print(text)
 To generate only text output and save compute by not loading the audio generation model, we can use `Qwen3OmniMoeThinkerForConditionalGeneration` model.
 
 ```python
-from transformers import Qwen3OmniMoeThinkerForConditionalGeneration, Qwen3OmniMoeProcessor
+from transformers import Qwen3OmniMoeProcessor, Qwen3OmniMoeThinkerForConditionalGeneration
+
 
 model = Qwen3OmniMoeThinkerForConditionalGeneration.from_pretrained(
     "Qwen/Qwen3-Omni-30B-A3B-Instruct",
@@ -328,6 +331,7 @@ To load and run a model using FlashAttention-2, add `attn_implementation="flash_
 
 ```python
 from transformers import Qwen3OmniMoeForConditionalGeneration
+
 
 model = Qwen3OmniMoeForConditionalGeneration.from_pretrained(
     "Qwen/Qwen3-Omni-30B-A3B-Instruct",

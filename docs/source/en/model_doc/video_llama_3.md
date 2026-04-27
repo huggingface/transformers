@@ -45,8 +45,8 @@ This model was contributed by [lkhl](https://huggingface.co/lkhl).
 The model can accept both images and videos as input. Here's an example code for inference.
 
 ```python
-import torch
-from transformers import VideoLlama3ForConditionalGeneration, AutoTokenizer, AutoProcessor
+from transformers import AutoProcessor, VideoLlama3ForConditionalGeneration
+
 
 # Load the model in half-precision on the available device(s)
 model = VideoLlama3ForConditionalGeneration.from_pretrained("lkhl/VideoLLaMA3-2B-Image-HF", device_map="auto")

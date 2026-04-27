@@ -37,10 +37,11 @@ The abstract from the paper is the following:
 Run inference on an image with the following code:
 
 ```python
-from PIL import Image
 import torch
+from PIL import Image
 
-from transformers import AutoModelForDepthEstimation, AutoImageProcessor
+from transformers import AutoImageProcessor, AutoModelForDepthEstimation
+
 
 processor = AutoImageProcessor.from_pretrained("facebook/dinov3-vitl16-chmv2-dpt-head")
 model = AutoModelForDepthEstimation.from_pretrained("facebook/dinov3-vitl16-chmv2-dpt-head", device_map="auto")

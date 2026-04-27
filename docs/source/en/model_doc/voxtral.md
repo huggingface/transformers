@@ -46,8 +46,8 @@ The model supports audio-text instructions, including multi-turn and multi-audio
 ➡️ audio + text instruction
 
 ```python
-import torch
-from transformers import VoxtralForConditionalGeneration, AutoProcessor
+from transformers import AutoProcessor, VoxtralForConditionalGeneration
+
 
 repo_id = "mistralai/Voxtral-Mini-3B-2507"
 
@@ -82,8 +82,8 @@ print("=" * 80)
 ➡️ multi-audio + text instruction
 
 ```python
-import torch
-from transformers import VoxtralForConditionalGeneration, AutoProcessor
+from transformers import AutoProcessor, VoxtralForConditionalGeneration
+
 
 repo_id = "mistralai/Voxtral-Mini-3B-2507"
 
@@ -122,8 +122,8 @@ print("=" * 80)
 ➡️ multi-turn:
 
 ```python
-import torch
-from transformers import VoxtralForConditionalGeneration, AutoProcessor
+from transformers import AutoProcessor, VoxtralForConditionalGeneration
+
 
 repo_id = "mistralai/Voxtral-Mini-3B-2507"
 
@@ -176,8 +176,8 @@ print("=" * 80)
 ➡️ text only:
 
 ```python
-import torch
-from transformers import VoxtralForConditionalGeneration, AutoProcessor
+from transformers import AutoProcessor, VoxtralForConditionalGeneration
+
 
 repo_id = "mistralai/Voxtral-Mini-3B-2507"
 
@@ -211,8 +211,8 @@ print("=" * 80)
 ➡️ audio only:
 
 ```python
-import torch
-from transformers import VoxtralForConditionalGeneration, AutoProcessor
+from transformers import AutoProcessor, VoxtralForConditionalGeneration
+
 
 repo_id = "mistralai/Voxtral-Mini-3B-2507"
 
@@ -246,8 +246,8 @@ print("=" * 80)
 ➡️ batched inference!
 
 ```python
-import torch
-from transformers import VoxtralForConditionalGeneration, AutoProcessor
+from transformers import AutoProcessor, VoxtralForConditionalGeneration
+
 
 repo_id = "mistralai/Voxtral-Mini-3B-2507"
 
@@ -307,8 +307,8 @@ Use the model to transcribe audio (state-of-the-art performance in English, Span
 It also support automatic language detection.
 
 ```python
-import torch
-from transformers import VoxtralForConditionalGeneration, AutoProcessor
+from transformers import AutoProcessor, VoxtralForConditionalGeneration
+
 
 repo_id = "mistralai/Voxtral-Mini-3B-2507"
 
@@ -319,7 +319,7 @@ model = VoxtralForConditionalGeneration.from_pretrained(repo_id, device_map="aut
 inputs = processor.apply_transcription_request(language="en", audio="https://huggingface.co/datasets/hf-internal-testing/dummy-audio-samples/resolve/main/obama.mp3", model_id=repo_id)
 
 # # but you can also let the model detect the language automatically
-# inputs = processor.apply_transcription_request(audio="https://huggingface.co/datasets/hf-internal-testing/dummy-audio-samples/resolve/main/obama.mp3", model_id=repo_id) 
+# inputs = processor.apply_transcription_request(audio="https://huggingface.co/datasets/hf-internal-testing/dummy-audio-samples/resolve/main/obama.mp3", model_id=repo_id)
 
 inputs = inputs.to(model.device)
 outputs = model.generate(**inputs, max_new_tokens=500)

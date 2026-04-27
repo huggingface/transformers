@@ -39,8 +39,8 @@ The example below demonstrates how to generate text with [`Pipeline`] or the [`A
 <hfoption id="Pipeline">
 
 ```python
-import torch
 from transformers import pipeline
+
 
 pipeline = pipeline(
     task="text-generation",
@@ -58,8 +58,8 @@ pipeline(messages)
 <hfoption id="AutoModel">
 
 ```python
-import torch
-from transformers import AutoTokenizer, AutoModelForCausalLM
+from transformers import AutoModelForCausalLM, AutoTokenizer
+
 
 tokenizer = AutoTokenizer.from_pretrained("CohereLabs/c4ai-command-r7b-12-2024")
 model = AutoModelForCausalLM.from_pretrained(
@@ -97,8 +97,8 @@ Quantization reduces the memory burden of large models by representing the weigh
 The example below uses [bitsandbytes](../quantization/bitsandbytes.md) to quantize the weights to 4-bits.
 
 ```python
-import torch
-from transformers import BitsAndBytesConfig, AutoTokenizer, AutoModelForCausalLM
+from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig
+
 
 bnb_config = BitsAndBytesConfig(load_in_4bit=True)
 tokenizer = AutoTokenizer.from_pretrained("CohereLabs/c4ai-command-r7b-12-2024")

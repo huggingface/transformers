@@ -34,9 +34,11 @@ The model was introduced in [ModernVBERT: Towards Smaller Visual Document Retrie
 
 ```python
 import torch
-from PIL import Image
 from huggingface_hub import hf_hub_download
+from PIL import Image
+
 from transformers import AutoModelForMaskedLM, AutoProcessor
+
 
 processor = AutoProcessor.from_pretrained("./mvb")
 model = AutoModelForMaskedLM.from_pretrained("./mvb", device_map="auto")

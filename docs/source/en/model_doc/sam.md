@@ -47,10 +47,12 @@ The original code can be found [here](https://github.com/facebookresearch/segmen
 Below is an example on how to run mask generation given an image and a 2D point:
 
 ```python
+import requests
 import torch
 from PIL import Image
-import requests
+
 from transformers import SamModel, SamProcessor
+
 
 model = SamModel.from_pretrained("facebook/sam-vit-huge", device_map="auto")
 processor = SamProcessor.from_pretrained("facebook/sam-vit-huge")
@@ -72,10 +74,12 @@ scores = outputs.iou_scores
 You can also process your own masks alongside the input images in the processor to be passed to the model.
 
 ```python
+import requests
 import torch
 from PIL import Image
-import requests
+
 from transformers import SamModel, SamProcessor
+
 
 model = SamModel.from_pretrained("facebook/sam-vit-huge", device_map="auto")
 processor = SamProcessor.from_pretrained("facebook/sam-vit-huge")

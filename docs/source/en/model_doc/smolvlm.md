@@ -56,8 +56,8 @@ This model was contributed by [orrzohar](https://huggingface.co/orrzohar).
 The model can accept both images and videos as input, but you should use only one of the modalities at a time. Here's an example code for that.
 
 ```python
-import torch
-from transformers import AutoProcessor, AutoModelForImageTextToText
+from transformers import AutoModelForImageTextToText, AutoProcessor
+
 
 processor = AutoProcessor.from_pretrained("HuggingFaceTB/SmolVLM2-256M-Video-Instruct")
 model = AutoModelForImageTextToText.from_pretrained(
@@ -117,8 +117,8 @@ print(generated_texts[0])
 The model can batch inputs composed of several images/videos and text. Here is an example.
 
 ```python
-import torch
-from transformers import AutoProcessor, AutoModelForImageTextToText
+from transformers import AutoModelForImageTextToText, AutoProcessor
+
 
 processor = AutoProcessor.from_pretrained("HuggingFaceTB/SmolVLM2-256M-Video-Instruct")
 model = AutoModelForImageTextToText.from_pretrained(

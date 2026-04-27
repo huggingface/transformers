@@ -45,6 +45,7 @@ These ready-to-use checkpoints can be downloaded and used via the HuggingFace Hu
 ```python
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
+
 model = AutoModelForCausalLM.from_pretrained("bigcode/starcoder2-7b", device_map="auto")
 tokenizer = AutoTokenizer.from_pretrained("bigcode/starcoder2-7b")
 

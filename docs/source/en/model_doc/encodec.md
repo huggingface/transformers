@@ -37,8 +37,11 @@ The original code can be found [here](https://github.com/facebookresearch/encode
 Here is a quick example of how to encode and decode an audio using this model:
 
 ```python
-from datasets import load_dataset, Audio
-from transformers import EncodecModel, AutoProcessor
+from datasets import Audio, load_dataset
+
+from transformers import AutoProcessor, EncodecModel
+
+
 librispeech_dummy = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
 
 model = EncodecModel.from_pretrained("facebook/encodec_24khz", device_map="auto")

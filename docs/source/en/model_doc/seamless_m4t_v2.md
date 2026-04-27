@@ -46,6 +46,7 @@ First, load the processor and a checkpoint of the model:
 ```python
 from transformers import AutoProcessor, SeamlessM4Tv2Model
 
+
 processor = AutoProcessor.from_pretrained("facebook/seamless-m4t-v2-large")
 model = SeamlessM4Tv2Model.from_pretrained("facebook/seamless-m4t-v2-large", device_map="auto")
 ```
@@ -57,6 +58,8 @@ Here is how to use the processor to process text and audio:
 ```python
 # let's load an audio sample from an Arabic speech corpus
 from datasets import load_dataset
+
+
 dataset = load_dataset("halabi2016/arabic_speech_corpus", split="test", streaming=True)
 audio_sample = next(iter(dataset))["audio"]
 
@@ -102,6 +105,8 @@ For example, you can replace the audio-to-audio generation snippet with the mode
 
 ```python
 from transformers import SeamlessM4Tv2ForSpeechToSpeech
+
+
 model = SeamlessM4Tv2ForSpeechToSpeech.from_pretrained("facebook/seamless-m4t-v2-large", device_map="auto")
 ```
 
@@ -109,6 +114,8 @@ Or you can replace the text-to-text generation snippet with the model dedicated 
 
 ```python
 from transformers import SeamlessM4Tv2ForTextToText
+
+
 model = SeamlessM4Tv2ForTextToText.from_pretrained("facebook/seamless-m4t-v2-large", device_map="auto")
 ```
 

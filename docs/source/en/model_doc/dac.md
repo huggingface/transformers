@@ -47,8 +47,11 @@ The Descript Audio Codec (DAC) model is structured into three distinct stages:
 Here is a quick example of how to encode and decode an audio using this model:
 
 ```python
-from datasets import load_dataset, Audio
-from transformers import DacModel, AutoProcessor
+from datasets import Audio, load_dataset
+
+from transformers import AutoProcessor, DacModel
+
+
 librispeech_dummy = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
 
 model = DacModel.from_pretrained("descript/dac_16khz", device_map="auto")

@@ -43,11 +43,12 @@ The example below demonstrates how to perform object detection with the [`Pipeli
 <hfoption id="Pipeline">
 
 ```python
+
 from transformers import pipeline
-import torch
+
 
 pipeline = pipeline(
-    "object-detection", 
+    "object-detection",
     model="SenseTime/deformable-detr",
     device_map=0
 )
@@ -59,10 +60,12 @@ pipeline("http://images.cocodataset.org/val2017/000000039769.jpg")
 <hfoption id="AutoModel">
 
 ```python
-from transformers import AutoImageProcessor, AutoModelForObjectDetection
-from PIL import Image
 import requests
 import torch
+from PIL import Image
+
+from transformers import AutoImageProcessor, AutoModelForObjectDetection
+
 
 url = "http://images.cocodataset.org/val2017/000000039769.jpg"
 image = Image.open(requests.get(url, stream=True).raw)

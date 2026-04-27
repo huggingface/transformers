@@ -37,9 +37,11 @@ The Chinese-CLIP model was contributed by [OFA-Sys](https://huggingface.co/OFA-S
 The code snippet below shows how to compute image & text features and similarities:
 
 ```python
-from PIL import Image
 import requests
-from transformers import ChineseCLIPProcessor, ChineseCLIPModel
+from PIL import Image
+
+from transformers import ChineseCLIPModel, ChineseCLIPProcessor
+
 
 model = ChineseCLIPModel.from_pretrained("OFA-Sys/chinese-clip-vit-base-patch16", device_map="auto")
 processor = ChineseCLIPProcessor.from_pretrained("OFA-Sys/chinese-clip-vit-base-patch16")

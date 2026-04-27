@@ -57,8 +57,8 @@ Minitron models are for research and development only.
 The following code provides an example of how to load the Minitron-4B model and use it to perform text generation.
 
 ```python
-import torch
-from transformers import AutoTokenizer, AutoModelForCausalLM
+from transformers import AutoModelForCausalLM, AutoTokenizer
+
 
 # Load the tokenizer and model
 model_path = 'nvidia/Minitron-4B-Base'

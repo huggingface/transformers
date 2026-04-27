@@ -37,8 +37,9 @@ The example below demonstrates how to generate text based on an image with the [
 <hfoptions id="usage">
 <hfoption id="AutoModel">
 
-```py
+```python
 import torch
+
 from transformers import AutoModelForZeroShotObjectDetection, AutoProcessor
 from transformers.image_utils import load_image
 

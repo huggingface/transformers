@@ -38,9 +38,9 @@ The example below demonstrates how to generate text with [`Pipeline`] or the [`A
 <hfoptions id="usage">
 <hfoption id="Pipeline">
 
-```py
-import torch
+```python
 from transformers import pipeline
+
 
 pipeline = pipeline(
     task="text-generation",
@@ -53,9 +53,9 @@ pipeline("Plants create energy through a process known as")
 </hfoption>
 <hfoption id="AutoModel">
 
-```py
-import torch
+```python
 from transformers import AutoModelForCausalLM, AutoTokenizer
+
 
 tokenizer = AutoTokenizer.from_pretrained(
     "huggyllama/llama-7b",
@@ -78,10 +78,10 @@ Quantization reduces the memory burden of large models by representing the weigh
 
 The example below uses [torchao](../quantization/torchao) to only quantize the weights to int4.
 
-```py
+```python
 # pip install torchao
-import torch
-from transformers import TorchAoConfig, AutoModelForCausalLM, AutoTokenizer
+from transformers import AutoModelForCausalLM, AutoTokenizer, TorchAoConfig
+
 
 quantization_config = TorchAoConfig("int4_weight_only", group_size=128)
 model = AutoModelForCausalLM.from_pretrained(
@@ -99,8 +99,9 @@ print(tokenizer.decode(output[0], skip_special_tokens=True))
 
 Use the [AttentionMaskVisualizer](https://github.com/huggingface/transformers/blob/beb9b5b02246b9b7ee81ddf938f93f44cfeaad19/src/transformers/utils/attention_visualizer.py#L139) to better understand what tokens the model can and cannot attend to.
 
-```py
+```python
 from transformers.utils.attention_visualizer import AttentionMaskVisualizer
+
 
 visualizer = AttentionMaskVisualizer("huggyllama/llama-7b")
 visualizer("Plants create energy through a process known as")

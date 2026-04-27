@@ -37,9 +37,9 @@ The example below demonstrates how to classify text with [`Pipeline`] or the [`A
 <hfoptions id="usage">
 <hfoption id="Pipeline">
 
-```py
-import torch
+```python
 from transformers import pipeline
+
 
 pipeline = pipeline(
     task="text-classification",
@@ -53,9 +53,9 @@ print(result)
 </hfoption>
 <hfoption id="AutoModel">
 
-```py
-import torch
-from transformers import AutoTokenizer, AutoModelForSequenceClassification
+```python
+from transformers import AutoModelForSequenceClassification, AutoTokenizer
+
 
 tokenizer = AutoTokenizer.from_pretrained(
     "microsoft/deberta-v2-xlarge-mnli"
@@ -72,7 +72,6 @@ logits = outputs.logits
 predicted_class_id = logits.argmax().item()
 predicted_label = model.config.id2label[predicted_class_id]
 print(f"Predicted label: {predicted_label}")
-
 ```
 
 </hfoption>

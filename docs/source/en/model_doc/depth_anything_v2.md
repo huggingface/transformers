@@ -42,9 +42,11 @@ There are 2 main ways to use Depth Anything V2: either using the pipeline API, w
 The pipeline allows to use the model in a few lines of code:
 
 ```python
-from transformers import pipeline
-from PIL import Image
 import requests
+from PIL import Image
+
+from transformers import pipeline
+
 
 # load pipe
 pipe = pipeline(task="depth-estimation", model="depth-anything/Depth-Anything-V2-Small-hf")
@@ -62,11 +64,12 @@ depth = pipe(image)["depth"]
 If you want to do the pre- and post-processing yourself, here's how to do that:
 
 ```python
-from transformers import AutoImageProcessor, AutoModelForDepthEstimation
-import torch
-import numpy as np
-from PIL import Image
 import requests
+import torch
+from PIL import Image
+
+from transformers import AutoImageProcessor, AutoModelForDepthEstimation
+
 
 url = "http://images.cocodataset.org/val2017/000000039769.jpg"
 image = Image.open(requests.get(url, stream=True).raw)

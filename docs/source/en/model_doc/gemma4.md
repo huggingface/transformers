@@ -75,9 +75,9 @@ The example below demonstrates how to generate text based on an image with [`Pip
 <hfoptions id="usage">
 <hfoption id="Pipeline">
 
-```py
-import torch
+```python
 from transformers import pipeline
+
 
 pipeline = pipeline(
     task="image-text-to-text",
@@ -92,9 +92,9 @@ pipeline(
 </hfoption>
 <hfoption id="AutoModel">
 
-```py
-import torch
-from transformers import AutoProcessor, AutoModelForImageTextToText
+```python
+from transformers import AutoModelForImageTextToText, AutoProcessor
+
 
 model = AutoModelForImageTextToText.from_pretrained(
     "google/gemma-4-E2B-it",
@@ -129,9 +129,8 @@ print(processor.decode(output[0][input_len:], skip_special_tokens=True))
 
 ### Function calling
 
-```py
-import torch
-from transformers import AutoProcessor, AutoModelForCausalLM
+```python
+from transformers import AutoModelForCausalLM, AutoProcessor
 
 
 WEATHER_TOOL = {
@@ -194,9 +193,9 @@ print(processor.decode(outputs[0][input_len:], skip_special_tokens=False))
 
 ### Audio (E2B and E4B Only)
 
-```py
-import torch
-from transformers import AutoProcessor, AutoModelForMultimodalLM
+```python
+from transformers import AutoModelForMultimodalLM, AutoProcessor
+
 
 messages = [
     {

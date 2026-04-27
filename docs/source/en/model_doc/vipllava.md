@@ -55,6 +55,7 @@ The attributes can be obtained from model config, as `model.config.vision_config
 ```python
 from transformers import AutoProcessor
 
+
 processor = AutoProcessor.from_pretrained("llava-hf/vip-llava-7b-hf")
 
 conversation = [

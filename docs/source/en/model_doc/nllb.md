@@ -41,8 +41,8 @@ The example below demonstrates how to translate text with [`Pipeline`] or the [`
 <hfoption id="Pipeline">
 
 ```python
-import torch
 from transformers import pipeline
+
 
 pipeline = pipeline(task="translation", model="facebook/nllb-200-distilled-600M", src_lang="eng_Latn", tgt_lang="fra_Latn", device=0)
 pipeline("UN Chief says there is no military solution in Syria")
@@ -53,6 +53,7 @@ pipeline("UN Chief says there is no military solution in Syria")
 
 ```python
 from transformers import AutoModelForSeq2SeqLM, AutoTokenizer
+
 
 tokenizer = AutoTokenizer.from_pretrained("facebook/nllb-200-distilled-600M")
 model = AutoModelForSeq2SeqLM.from_pretrained("facebook/nllb-200-distilled-600M", attn_implementation="sdpa", device_map="auto")
@@ -76,6 +77,7 @@ The example below uses [bitsandbytes](../quantization/bitsandbytes) to quantize 
 ```python
 from transformers import AutoModelForSeq2SeqLM, AutoTokenizer, BitsAndBytesConfig
 
+
 bnb_config = BitsAndBytesConfig(load_in_8bit=True)
 model = AutoModelForSeq2SeqLM.from_pretrained("facebook/nllb-200-distilled-1.3B", quantization_config=bnb_config, device_map="auto")
 tokenizer = AutoTokenizer.from_pretrained("facebook/nllb-200-distilled-1.3B")
@@ -92,6 +94,7 @@ Use the [AttentionMaskVisualizer](https://github.com/huggingface/transformers/bl
 
 ```python
 from transformers.utils.attention_visualizer import AttentionMaskVisualizer
+
 
 visualizer = AttentionMaskVisualizer("facebook/nllb-200-distilled-600M")
 visualizer("UN Chief says there is no military solution in Syria")

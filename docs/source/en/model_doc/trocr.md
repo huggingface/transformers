@@ -41,9 +41,11 @@ The example below demonstrates how to perform optical character recognition (OCR
 <hfoption id="AutoModel">
 
 ```python
-from transformers import TrOCRProcessor, VisionEncoderDecoderModel
 import requests
 from PIL import Image
+
+from transformers import TrOCRProcessor, VisionEncoderDecoderModel
+
 
 processor = TrOCRProcessor.from_pretrained("microsoft/trocr-base-handwritten")
 model = VisionEncoderDecoderModel.from_pretrained("microsoft/trocr-base-handwritten", device_map="auto")

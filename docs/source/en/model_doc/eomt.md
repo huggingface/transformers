@@ -60,7 +60,7 @@ import requests
 import torch
 from PIL import Image
 
-from transformers import EomtForUniversalSegmentation, AutoImageProcessor
+from transformers import AutoImageProcessor, EomtForUniversalSegmentation
 
 
 model_id = "tue-mps/ade20k_semantic_eomt_large_512"
@@ -108,7 +108,7 @@ import requests
 import torch
 from PIL import Image
 
-from transformers import EomtForUniversalSegmentation, AutoImageProcessor
+from transformers import AutoImageProcessor, EomtForUniversalSegmentation
 
 
 model_id = "tue-mps/coco_instance_eomt_large_640"
@@ -151,7 +151,7 @@ import requests
 import torch
 from PIL import Image
 
-from transformers import EomtForUniversalSegmentation, AutoImageProcessor
+from transformers import AutoImageProcessor, EomtForUniversalSegmentation
 
 
 model_id = "tue-mps/coco_panoptic_eomt_large_640"

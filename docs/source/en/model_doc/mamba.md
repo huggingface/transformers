@@ -36,9 +36,9 @@ The example below demonstrates how to generate text with [`Pipeline`], [`AutoMod
 <hfoptions id="usage">
 <hfoption id="Pipeline">
 
-```py
-import torch
+```python
 from transformers import pipeline
+
 
 pipeline = pipeline(
     task="text-generation",
@@ -70,10 +70,11 @@ Quantization reduces the memory burden of large models by representing the weigh
 
 The example below uses [torchao](../quantization/torchao) to only quantize the weights to 4-bit integers.
 
-```py
-import torch
-from transformers import AutoModelForCausalLM, AutoTokenizer, TorchAoConfig
+```python
 from torchao.quantization import Int4WeightOnlyConfig
+
+from transformers import AutoModelForCausalLM, AutoTokenizer, TorchAoConfig
+
 
 quantization_config = Int4WeightOnlyConfig(group_size=128)
 quantization_config = TorchAoConfig(quant_type=quant_config)

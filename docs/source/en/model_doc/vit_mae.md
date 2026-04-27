@@ -41,9 +41,10 @@ The example below demonstrates how to reconstruct the missing pixels with the [`
 <hfoption id="AutoModel">
 
 ```python
-import torch
 import requests
+import torch
 from PIL import Image
+
 from transformers import ViTImageProcessor, ViTMAEForPreTraining
 
 

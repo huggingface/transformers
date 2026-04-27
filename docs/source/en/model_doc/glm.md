@@ -62,6 +62,7 @@ In the following, we demonstrate how to use `glm-4-9b-chat` for the inference. N
 ```python
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
+
 model = AutoModelForCausalLM.from_pretrained("THUDM/glm-4-9b-chat", device_map="auto", trust_remote_code=True)
 tokenizer = AutoTokenizer.from_pretrained("THUDM/glm-4-9b-chat")
 

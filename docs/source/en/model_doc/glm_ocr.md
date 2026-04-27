@@ -42,8 +42,9 @@ The original code can be found [here](https://github.com/zai-org/GLM-OCR).
 ### Single image inference
 
 ```python
+
 from transformers import AutoProcessor, GlmOcrForConditionalGeneration
-import torch
+
 
 model_id = "zai-org/GLM-OCR"
 
@@ -80,8 +81,9 @@ print(processor.decode(output[0], skip_special_tokens=True))
 The model supports batching multiple images for efficient processing.
 
 ```python
+
 from transformers import AutoProcessor, GlmOcrForConditionalGeneration
-import torch
+
 
 model_id = "zai-org/GLM-OCR"
 
@@ -139,8 +141,9 @@ pip install -U flash-attn --no-build-isolation
 Then load the model with one of the supported kernels of the [kernels-community](https://huggingface.co/kernels-community):
 
 ```python
+
 from transformers import GlmOcrForConditionalGeneration
-import torch
+
 
 model = GlmOcrForConditionalGeneration.from_pretrained(
     "zai-org/GLM-OCR",

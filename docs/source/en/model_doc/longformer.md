@@ -34,8 +34,8 @@ The example below demonstrates how to fill the `<mask>` token with [`Pipeline`],
 <hfoption id="Pipeline">
 
 ```python
-import torch
 from transformers import pipeline
+
 
 pipeline = pipeline(
     task="fill-mask",
@@ -51,8 +51,8 @@ Tarell Brown and Donald Strickland will compete to replace Spencer with the 49er
 <hfoption id="AutoModel">
 
 ```python
-import torch
 from transformers import AutoModelForMaskedLM, AutoTokenizer
+
 
 tokenizer = AutoTokenizer.from_pretrained("allenai/longformer-base-4096")
 model = AutoModelForMaskedLM.from_pretrained("allenai/longformer-base-4096", device_map="auto")

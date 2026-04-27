@@ -52,8 +52,9 @@ The example below demonstrates how to generate text based on an image with [`Pip
 <hfoptions id="usage">
 <hfoption id="Pipeline">
 
-```py
+```python
 from transformers import pipeline
+
 
 pipe = pipeline(
     task="image-text-to-text",
@@ -79,8 +80,9 @@ print(pipe(text=message, max_new_tokens=20, return_full_text=False))
 </hfoption>
 <hfoption id="AutoModel">
 
-```py
+```python
 from transformers import AutoModelForImageTextToText, AutoProcessor
+
 
 model = AutoModelForImageTextToText.from_pretrained(
     "baidu/ERNIE-4.5-VL-28B-A3B-PT",
@@ -131,6 +133,7 @@ The model can process video data and generate text based on the content of the v
 
 ```python
 from transformers import AutoModelForImageTextToText, AutoProcessor
+
 
 model = AutoModelForImageTextToText.from_pretrained(
     "baidu/ERNIE-4.5-VL-28B-A3B-PT",

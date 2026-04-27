@@ -44,6 +44,7 @@ tokens and decodes them back into audio.
 ```python
 from transformers import AutoProcessor, DiaForConditionalGeneration
 
+
 model_checkpoint = "nari-labs/Dia-1.6B-0626"
 
 text = ["[S1] Dia is an open weights text to dialogue model."]
@@ -56,14 +57,15 @@ outputs = model.generate(**inputs, max_new_tokens=256)  # corresponds to around 
 # save audio to a file
 outputs = processor.batch_decode(outputs)
 processor.save_audio(outputs, "example.wav")
-
 ```
 
 ### Generation with Text and Audio (Voice Cloning)
 
 ```python
-from datasets import load_dataset, Audio
+from datasets import Audio, load_dataset
+
 from transformers import AutoProcessor, DiaForConditionalGeneration
+
 
 model_checkpoint = "nari-labs/Dia-1.6B-0626"
 
@@ -88,8 +90,10 @@ processor.save_audio(outputs, "example_with_audio.wav")
 ### Training
 
 ```python
-from datasets import load_dataset, Audio
+from datasets import Audio, load_dataset
+
 from transformers import AutoProcessor, DiaForConditionalGeneration
+
 
 model_checkpoint = "nari-labs/Dia-1.6B-0626"
 

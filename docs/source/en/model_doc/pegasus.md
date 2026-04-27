@@ -37,9 +37,9 @@ The example below demonstrates how to summarize text with [`Pipeline`], [`AutoMo
 <hfoptions id="usage">
 <hfoption id="AutoModel">
 
-```py
-import torch
+```python
 from transformers import AutoModelForSeq2SeqLM, AutoTokenizer
+
 
 tokenizer = AutoTokenizer.from_pretrained(
     "google/pegasus-xsum"
@@ -66,9 +66,9 @@ Quantization reduces the memory burden of large models by representing the weigh
 
 The example below uses [bitsandbytes](../quantization/bitsandbytes) to only quantize the weights to int4.
 
-```py
-import torch
-from transformers import BitsAndBytesConfig, AutoModelForSeq2SeqLM, AutoTokenizer
+```python
+from transformers import AutoModelForSeq2SeqLM, AutoTokenizer, BitsAndBytesConfig
+
 
 quantization_config = BitsAndBytesConfig(
     load_in_4bit=True,

@@ -22,9 +22,12 @@ rendered properly in your Markdown viewer.
 <img alt="Tensor parallelism" src="https://img.shields.io/badge/Tensor%20parallelism-06b6d4?style=flat&logoColor=white">
 </div>
 
-```py3
-import transformers
+```python
+3
 import torch
+
+import transformers
+
 
 model_id = "meta-llama/Meta-Llama-3-8B"
 

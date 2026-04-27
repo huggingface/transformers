@@ -45,6 +45,7 @@ You can speed up inference and reduce memory footprint by 50% simply by loading 
 ```python
 from transformers import BarkModel
 
+
 model = BarkModel.from_pretrained("suno/bark-small", device_map="auto")
 ```
 
@@ -98,6 +99,7 @@ You can combine optimization techniques, and use CPU offload, half-precision and
 ```python
 from transformers import BarkModel
 
+
 # load in fp16 and use Flash Attention 2
 model = BarkModel.from_pretrained("suno/bark-small", attn_implementation="flash_attention_2", device_map="auto")
 
@@ -114,6 +116,7 @@ These presets are also uploaded in the hub [here](https://huggingface.co/suno/ba
 
 ```python
 from transformers import AutoProcessor, BarkModel
+
 
 processor = AutoProcessor.from_pretrained("suno/bark")
 model = BarkModel.from_pretrained("suno/bark", device_map="auto")
@@ -156,6 +159,7 @@ To save the audio, simply take the sample rate from the model config and some sc
 
 ```python
 from scipy.io.wavfile import write as write_wav
+
 
 # save audio to disk, but first take the sample rate from the model config
 sample_rate = model.generation_config.sample_rate

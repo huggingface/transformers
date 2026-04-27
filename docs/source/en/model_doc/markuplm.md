@@ -68,7 +68,8 @@ token-level inputs of the model (`input_ids` etc.). Note that you can still use 
 if you only want to handle one of the two tasks.
 
 ```python
-from transformers import MarkupLMFeatureExtractor, MarkupLMTokenizerFast, MarkupLMProcessor
+from transformers import MarkupLMFeatureExtractor, MarkupLMProcessor, MarkupLMTokenizerFast
+
 
 feature_extractor = MarkupLMFeatureExtractor()
 tokenizer = MarkupLMTokenizerFast.from_pretrained("microsoft/markuplm-base")
@@ -95,6 +96,7 @@ This is the simplest case, in which the processor will use the feature extractor
 
 ```python
 from transformers import MarkupLMProcessor
+
 
 processor = MarkupLMProcessor.from_pretrained("microsoft/markuplm-base")
 
@@ -124,6 +126,7 @@ provide the nodes and corresponding xpaths themselves to the processor, and make
 ```python
 from transformers import MarkupLMProcessor
 
+
 processor = MarkupLMProcessor.from_pretrained("microsoft/markuplm-base")
 processor.parse_html = False
 
@@ -145,6 +148,7 @@ initialize the tokenizer with `only_label_first_subword` set to `False`.
 ```python
 from transformers import MarkupLMProcessor
 
+
 processor = MarkupLMProcessor.from_pretrained("microsoft/markuplm-base")
 processor.parse_html = False
 
@@ -163,6 +167,7 @@ processor will use the feature extractor to get all nodes and xpaths, and create
 
 ```python
 from transformers import MarkupLMProcessor
+
 
 processor = MarkupLMProcessor.from_pretrained("microsoft/markuplm-base")
 
@@ -191,6 +196,7 @@ all nodes and xpaths yourself, you can provide them directly to the processor. M
 
 ```python
 from transformers import MarkupLMProcessor
+
 
 processor = MarkupLMProcessor.from_pretrained("microsoft/markuplm-base")
 processor.parse_html = False

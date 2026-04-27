@@ -33,9 +33,10 @@ rendered properly in your Markdown viewer.
 ### Inference
 
 ```python
-import torch
-from datasets import load_dataset, Audio
-from transformers import KyutaiSpeechToTextProcessor, KyutaiSpeechToTextForConditionalGeneration
+from datasets import Audio, load_dataset
+
+from transformers import KyutaiSpeechToTextForConditionalGeneration, KyutaiSpeechToTextProcessor
+
 
 # 1. load the model and the processor
 model_id = "kyutai/stt-2.6b-en-trfs"
@@ -65,9 +66,10 @@ print(processor.batch_decode(output_tokens, skip_special_tokens=True))
 ### Batched Inference
 
 ```python
-import torch
-from datasets import load_dataset, Audio
-from transformers import KyutaiSpeechToTextProcessor, KyutaiSpeechToTextForConditionalGeneration
+from datasets import Audio, load_dataset
+
+from transformers import KyutaiSpeechToTextForConditionalGeneration, KyutaiSpeechToTextProcessor
+
 
 # 1. load the model and the processor
 model_id = "kyutai/stt-2.6b-en-trfs"

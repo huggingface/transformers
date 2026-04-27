@@ -33,8 +33,9 @@ LASR is the architecture behind MedASR, a speech-to-text model from Google Healt
 <hfoptions id="usage">
 <hfoption id="Pipeline">
 
-```py
+```python
 from transformers import pipeline
+
 
 pipe = pipeline("automatic-speech-recognition", model="google/medasr")
 out = pipe("path/to/audio.mp3")
@@ -44,9 +45,11 @@ print(out)
 </hfoption>
 <hfoption id="AutoModel">
 
-```py
+```python
+from datasets import Audio, load_dataset
+
 from transformers import AutoModelForCTC, AutoProcessor
-from datasets import load_dataset, Audio
+
 
 processor = AutoProcessor.from_pretrained("google/medasr")
 model = AutoModelForCTC.from_pretrained("google/medasr", device_map="auto")
@@ -69,8 +72,10 @@ print(processor.batch_decode(outputs))
 The example below prepares a batch of audio and text, passes it through the LASR/MedASR model, and computes the training loss.
 
 ```python
+from datasets import Audio, load_dataset
+
 from transformers import AutoModelForCTC, AutoProcessor
-from datasets import load_dataset, Audio
+
 
 # Load processor and model
 processor = AutoProcessor.from_pretrained("google/medasr")

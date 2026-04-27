@@ -37,8 +37,8 @@ You can find the Ministral checkpoints under the [Mistral AI](https://huggingfac
 The example below demonstrates how to use Ministral for text generation:
 
 ```python
-import torch
 from transformers import AutoModelForCausalLM, AutoTokenizer
+
 
 model = AutoModelForCausalLM.from_pretrained("mistralai/Ministral-8B-Instruct-2410", attn_implementation="sdpa", device_map="auto")
 tokenizer = AutoTokenizer.from_pretrained("mistralai/Ministral-8B-Instruct-2410")

@@ -35,11 +35,11 @@ The example below demonstrates how to predict the `[MASK]` token with [`Pipeline
 <hfoptions id="usage">
 <hfoption id="Pipeline">
 
-```py
+```python
 # uncomment to install rjieba which is needed for the tokenizer
 # !pip install rjieba
-import torch
 from transformers import pipeline
+
 
 pipe = pipeline(
     task="fill-mask",

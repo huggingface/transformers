@@ -35,9 +35,9 @@ The examples below demonstrate how to generate text with [`Pipeline`], [`AutoMod
 <hfoptions id="usage">
 <hfoption id="Pipeline">
 
-```py
-import torch
+```python
 from transformers import pipeline
+
 
 pipeline = pipeline(
     "text-generation",
@@ -55,9 +55,9 @@ pipeline(
 </hfoption>
 <hfoption id="AutoModel">
 
-```py
-import torch
-from transformers import AutoTokenizer, AutoModelForCausalLM
+```python
+from transformers import AutoModelForCausalLM, AutoTokenizer
+
 
 tokenizer = AutoTokenizer.from_pretrained("tiiuae/falcon-mamba-7b-instruct")
 model = AutoModelForCausalLM.from_pretrained(

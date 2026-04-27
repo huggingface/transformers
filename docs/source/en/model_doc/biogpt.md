@@ -37,9 +37,9 @@ The example below demonstrates how to generate biomedical text with [`Pipeline`]
 <hfoptions id="usage">
 <hfoption id="Pipeline">
 
-```py
-import torch
+```python
 from transformers import pipeline
+
 
 generator = pipeline(
     task="text-generation",
@@ -53,9 +53,11 @@ print(result)
 </hfoption>
 <hfoption id="AutoModel">
 
-```py
+```python
 import torch
+
 from transformers import AutoModelForCausalLM, AutoTokenizer
+
 
 tokenizer = AutoTokenizer.from_pretrained("microsoft/biogpt")
 model = AutoModelForCausalLM.from_pretrained(
@@ -81,9 +83,11 @@ Quantization reduces the memory burden of large models by representing the weigh
 
 The example below uses [bitsandbytes](../quantization/bitsandbytes) to only quantize the weights to 4-bit precision.
 
-```py
+```python
 import torch
-from transformers import AutoTokenizer, AutoModelForCausalLM, BitsAndBytesConfig
+
+from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig
+
 
 bnb_config = BitsAndBytesConfig(
     load_in_4bit=True,

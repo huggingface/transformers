@@ -57,8 +57,8 @@ Example of how to use the processor on chat messages:
 ```python
 import requests
 from PIL import Image
-from transformers import Idefics2Processor, Idefics2ForConditionalGeneration
-import torch
+
+from transformers import Idefics2ForConditionalGeneration, Idefics2Processor
 
 
 url_1 = "http://images.cocodataset.org/val2017/000000039769.jpg"
@@ -97,8 +97,9 @@ print("Generated text:", generated_text)
 ```python
 import requests
 from PIL import Image
-from transformers import Idefics2Processor, Idefics2ForConditionalGeneration
-import torch
+
+from transformers import Idefics2ForConditionalGeneration, Idefics2Processor
+
 
 url_1 = "http://images.cocodataset.org/val2017/000000039769.jpg"
 url_2 = "http://images.cocodataset.org/val2017/000000219578.jpg"

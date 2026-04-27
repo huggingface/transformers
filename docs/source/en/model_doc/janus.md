@@ -45,11 +45,9 @@ Here is the example of visual understanding with a single image.
 > Note that the model has been trained with a specific prompt format for chatting. Use `processor.apply_chat_template(my_conversation_dict)` to correctly format your prompts.
 
 ```python
-import torch
-from PIL import Image
-import requests
 
 from transformers import JanusForConditionalGeneration, JanusProcessor
+
 
 model_id = "deepseek-community/Janus-Pro-1B"
 # Prepare Input for generation.
@@ -65,7 +63,7 @@ messages = [
 
 # Set generation mode to `text` to perform text generation.
 processor = JanusProcessor.from_pretrained(model_id)
-model = JanusForConditionalGeneration.from_pretrained(model_id,     
+model = JanusForConditionalGeneration.from_pretrained(model_id,
             device_map="auto")
 
 inputs = processor.apply_chat_template(
@@ -87,11 +85,9 @@ print(text)
 Janus can perform inference with multiple images as input, where images can belong to the same prompt or different prompts in batched inference, where the model processes many conversations in parallel. Here is how you can do it:
 
 ```python
-import torch
-from PIL import Image
-import requests
 
 from transformers import JanusForConditionalGeneration, JanusProcessor
+
 
 model_id = "deepseek-community/Janus-Pro-1B"
 
@@ -151,8 +147,8 @@ print(text)
 Janus can also generate images given a prompt.
 
 ```python
-import torch
 from transformers import JanusForConditionalGeneration, JanusProcessor
+
 
 # Set generation mode to `image` to prepare inputs for image generation..
 

@@ -35,9 +35,9 @@ The example below demonstrates how to generate code with [`Pipeline`], or the [`
 <hfoptions id="usage">
 <hfoption id="Pipeline">
 
-```py
-import torch
+```python
 from transformers import pipeline
+
 
 pipe = pipeline(
     "text-generation",
@@ -57,9 +57,9 @@ print(infill_result[0]['generated_text'])
 </hfoption>
 <hfoption id="AutoModel">
 
-```py
-import torch
+```python
 from transformers import AutoModelForCausalLM, AutoTokenizer
+
 
 tokenizer = AutoTokenizer.from_pretrained("meta-llama/CodeLlama-7b-hf")
 model = AutoModelForCausalLM.from_pretrained(
@@ -95,10 +95,12 @@ Quantization reduces the memory burden of large models by representing the weigh
 
 The example below uses [bitsandbytes](../quantization/bitsandbytes) to only quantize the weights to 4-bits.
 
-```py
+```python
 # pip install bitsandbytes
 import torch
-from transformers import AutoModelForCausalLM, CodeLlamaTokenizer, BitsAndBytesConfig
+
+from transformers import AutoModelForCausalLM, BitsAndBytesConfig, CodeLlamaTokenizer
+
 
 bnb_config = BitsAndBytesConfig(load_in_4bit=True, bnb_4bit_compute_dtype=torch.bfloat16, bnb_4bit_quant_type="nf4", bnb_4bit_use_double_quant=True)
 tokenizer = CodeLlamaTokenizer.from_pretrained("meta-llama/CodeLlama-34b-hf")
@@ -117,8 +119,9 @@ print(tokenizer.decode(output[0], skip_special_tokens=True))
 
 Use the [AttentionMaskVisualizer](https://github.com/huggingface/transformers/blob/beb9b5b02246b9b7ee81ddf938f93f44cfeaad19/src/transformers/utils/attention_visualizer.py#L139) to better understand what tokens the model can and cannot attend to.
 
-```py
+```python
 from transformers.utils.attention_visualizer import AttentionMaskVisualizer
+
 
 visualizer = AttentionMaskVisualizer("meta-llama/CodeLlama-7b-hf")
 visualizer("""def func(a, b):

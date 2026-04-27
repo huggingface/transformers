@@ -54,6 +54,7 @@ SAM2 can be used for automatic mask generation to segment all objects in an imag
 ```python
 from transformers import pipeline
 
+
 generator = pipeline("mask-generation", model="facebook/sam2.1-hiera-large", device=0)
 image_url = "https://huggingface.co/datasets/hf-internal-testing/sam2-fixtures/resolve/main/truck.jpg"
 outputs = generator(image_url, points_per_batch=64)

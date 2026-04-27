@@ -42,10 +42,11 @@ This model was contributed by [yonigozlan](https://huggingface.co/yonigozlan) an
 ### Text-Only Prompts
 
 ```python
-from transformers import Sam3Processor, Sam3Model
+import requests
 import torch
 from PIL import Image
-import requests
+
+from transformers import Sam3Model, Sam3Processor
 
 
 model = Sam3Model.from_pretrained("facebook/sam3", device_map="auto")

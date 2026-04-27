@@ -37,8 +37,8 @@ The example below demonstrates how to summarize text with [`Pipeline`] or the [`
 <hfoption id="AutoModel">
 
 ```python
-import torch
-from transformers import BartForConditionalGeneration, AutoTokenizer
+from transformers import AutoTokenizer, BartForConditionalGeneration
+
 
 tokenizer = AutoTokenizer.from_pretrained(
     "vinai/bartpho-word",

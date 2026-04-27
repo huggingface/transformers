@@ -37,8 +37,8 @@ The example below demonstrates how to predict the `<mask>` token with [`Pipeline
 <hfoption id="Pipeline">
 
 ```python
-import torch
 from transformers import pipeline
+
 
 pipeline = pipeline(
     task="fill-mask",
@@ -53,8 +53,10 @@ pipeline("Bonjour, je suis un modèle <mask>.")
 <hfoption id="AutoModel">
 
 ```python
-from transformers import AutoModelForMaskedLM, AutoTokenizer
 import torch
+
+from transformers import AutoModelForMaskedLM, AutoTokenizer
+
 
 tokenizer = AutoTokenizer.from_pretrained(
     "FacebookAI/xlm-roberta-base"

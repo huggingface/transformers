@@ -37,9 +37,9 @@ The example below demonstrates how to calculate similarity scores between multip
 <hfoptions id="usage">
 <hfoption id="Pipeline">
 
-```py
-import torch
+```python
 from transformers import pipeline
+
 
 clip = pipeline(
    task="zero-shot-image-classification",
@@ -53,11 +53,12 @@ clip("http://images.cocodataset.org/val2017/000000039769.jpg", candidate_labels=
 </hfoption>
 <hfoption id="AutoModel">
 
-```py
+```python
 import requests
-import torch
 from PIL import Image
-from transformers import AutoProcessor, AutoModel
+
+from transformers import AutoModel, AutoProcessor
+
 
 model = AutoModel.from_pretrained("openai/clip-vit-base-patch32", attn_implementation="sdpa", device_map="auto")
 processor = AutoProcessor.from_pretrained("openai/clip-vit-base-patch32")

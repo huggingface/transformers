@@ -24,9 +24,9 @@ The example below demonstrates how to generate text with [`Pipeline`] or the [`C
 <hfoptions id="usage">
 <hfoption id="Pipeline">
 
-```py
-import torch
+```python
 from transformers import pipeline
+
 
 pipe = pipeline(
     task="text-generation",
@@ -38,9 +38,9 @@ pipe("今天天气很好，")
 </hfoption>
 <hfoption id="CpmAntForCausalLM">
 
-```py
-import torch
+```python
 from transformers import CpmAntForCausalLM, CpmAntTokenizer
+
 
 tokenizer = CpmAntTokenizer.from_pretrained("openbmb/cpm-ant-10b")
 model = CpmAntForCausalLM.from_pretrained(

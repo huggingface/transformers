@@ -35,10 +35,11 @@ The examples below demonstrates how to calculate similarity scores between an im
 <hfoption id="AutoModel">
 
 ```python
-import torch
 import requests
 from PIL import Image
+
 from transformers import AltCLIPModel, AltCLIPProcessor
+
 
 model = AltCLIPModel.from_pretrained("BAAI/AltCLIP", device_map="auto")
 processor = AltCLIPProcessor.from_pretrained("BAAI/AltCLIP")
@@ -66,10 +67,11 @@ The example below uses [torchao](../quantization/torchao) to only quantize the w
 
 ```python
 # !pip install torchao
-import torch
 import requests
 from PIL import Image
+
 from transformers import AltCLIPModel, AltCLIPProcessor, TorchAoConfig
+
 
 model = AltCLIPModel.from_pretrained(
     "BAAI/AltCLIP",

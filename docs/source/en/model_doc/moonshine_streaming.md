@@ -39,9 +39,9 @@ The example below demonstrates how to transcribe speech into text with [`Pipelin
 <hfoptions id="usage">
 <hfoption id="Pipeline">
 
-```py
-import torch
+```python
 from transformers import pipeline
+
 
 pipe = pipeline(
     task="automatic-speech-recognition",
@@ -54,10 +54,11 @@ pipe("https://huggingface.co/datasets/Narsil/asr_dummy/resolve/main/mlk.flac")
 </hfoption>
 <hfoption id="AutoModel">
 
-```py
-import torch
+```python
 from datasets import load_dataset
+
 from transformers import AutoProcessor, MoonshineStreamingForConditionalGeneration
+
 
 processor = AutoProcessor.from_pretrained("UsefulSensors/moonshine-streaming-tiny")
 model = MoonshineStreamingForConditionalGeneration.from_pretrained(

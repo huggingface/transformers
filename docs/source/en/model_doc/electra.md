@@ -38,9 +38,9 @@ The example below demonstrates how to classify text with [`Pipeline`] or the [`A
 <hfoptions id="usage">
 <hfoption id="Pipeline">
 
-```py
-import torch
+```python
 from transformers import pipeline
+
 
 classifier = pipeline(
     task="text-classification",
@@ -53,9 +53,11 @@ classifier("This restaurant has amazing food!")
 </hfoption>
 <hfoption id="AutoModel">
 
-```py
+```python
 import torch
-from transformers import AutoTokenizer, AutoModelForSequenceClassification
+
+from transformers import AutoModelForSequenceClassification, AutoTokenizer
+
 
 tokenizer = AutoTokenizer.from_pretrained(
     "bhadresh-savani/electra-base-emotion",

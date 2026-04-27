@@ -38,8 +38,8 @@ The example below demonstrates how to use BertGeneration with [`EncoderDecoderMo
 <hfoption id="AutoModel">
 
 ```python
-import torch
-from transformers import EncoderDecoderModel, AutoTokenizer
+from transformers import AutoTokenizer, EncoderDecoderModel
+
 
 model = EncoderDecoderModel.from_pretrained("google/roberta2roberta_L-24_discofuse", device_map="auto")
 tokenizer = AutoTokenizer.from_pretrained("google/roberta2roberta_L-24_discofuse")
@@ -61,7 +61,9 @@ The example below uses [BitsAndBytesConfig](../quantizationbitsandbytes) to quan
 
 ```python
 import torch
-from transformers import EncoderDecoderModel, AutoTokenizer, BitsAndBytesConfig
+
+from transformers import AutoTokenizer, BitsAndBytesConfig, EncoderDecoderModel
+
 
 # Configure 4-bit quantization
 quantization_config = BitsAndBytesConfig(

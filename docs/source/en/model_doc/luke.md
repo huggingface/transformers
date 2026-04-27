@@ -85,7 +85,8 @@ This model was contributed by [ikuyamada](https://huggingface.co/ikuyamada) and 
 Usage example:
 
 ```python
-from transformers import LukeTokenizer, LukeModel, LukeForEntityPairClassification
+from transformers import LukeForEntityPairClassification, LukeModel, LukeTokenizer
+
 
 model = LukeModel.from_pretrained("studio-ousia/luke-base", device_map="auto")
 tokenizer = LukeTokenizer.from_pretrained("studio-ousia/luke-base")

@@ -45,8 +45,9 @@ The model is large: you will need 2x8 H100 to run inference.
 
 ```python
 # launch_longcat.py
-from transformers import LongcatFlashForCausalLM, AutoTokenizer
-import torch
+
+from transformers import AutoTokenizer, LongcatFlashForCausalLM
+
 
 model_id = "meituan-longcat/LongCat-Flash-Chat"
 

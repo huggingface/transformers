@@ -40,6 +40,7 @@ classes like this:
 ```python
 from transformers import AutoConfig, AutoModel
 
+
 AutoConfig.register("new-model", NewModelConfig)
 AutoModel.register(NewModelConfig, NewModel)
 ```

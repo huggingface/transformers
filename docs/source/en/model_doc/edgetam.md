@@ -46,6 +46,7 @@ EdgeTAM can be used for automatic mask generation to segment all objects in an i
 ```python
 from transformers import pipeline
 
+
 generator = pipeline("mask-generation", model="yonigozlan/edgetam-1", device=0)
 image_url = "https://huggingface.co/datasets/hf-internal-testing/sam2-fixtures/resolve/main/truck.jpg"
 outputs = generator(image_url, points_per_batch=64)

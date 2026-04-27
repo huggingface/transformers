@@ -34,6 +34,8 @@ The example below demonstrates how to generate text based on an image with [`Pip
 
 ```python
 from transformers import pipeline
+
+
 generator = pipeline("text-generation", model="microsoft/Phi-4-multimodal-instruct", device=0)
 
 prompt = "Explain the concept of multimodal AI in simple terms."
@@ -46,8 +48,8 @@ print(result[0]['generated_text'])
 <hfoption id="AutoModel">
 
 ```python
-import torch
-from transformers import AutoModelForCausalLM, AutoProcessor, GenerationConfig
+from transformers import AutoModelForCausalLM, AutoProcessor
+
 
 model_path = "microsoft/Phi-4-multimodal-instruct"
 
@@ -94,9 +96,11 @@ print(f'Response\n{response}')
 
 The example below demonstrates inference with an audio and text input.
 
-```py
+```python
 import torch
-from transformers import AutoModelForCausalLM, AutoProcessor, GenerationConfig
+
+from transformers import AutoModelForCausalLM, AutoProcessor
+
 
 model_path = "microsoft/Phi-4-multimodal-instruct"
 
@@ -134,7 +138,6 @@ response = processor.batch_decode(
     generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False
 )[0]
 print(f'Response\n{response}')
-
 ```
 
 ## Phi4MultimodalFeatureExtractor

@@ -52,8 +52,11 @@ Demos can be found on this [page](https://x-codec-audio.github.io/).
 Here is a quick example of how to encode and decode an audio using this model:
 
 ```python
-from datasets import load_dataset, Audio
-from transformers import XcodecModel, AutoFeatureExtractor
+from datasets import Audio, load_dataset
+
+from transformers import AutoFeatureExtractor, XcodecModel
+
+
 dummy_dataset = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
 
 # load model and feature extractor
@@ -73,13 +76,13 @@ audio_values = decoder_outputs.audio_values
 
 # or the equivalent with a forward pass
 audio_values = model(inputs["input_values"]).audio_values
-
 ```
 
 To listen to the original and reconstructed audio, run the snippet below and then open the generated `original.wav` and `reconstruction.wav` files in your music player to compare.
 
 ```python
 import soundfile as sf
+
 
 original = audio_sample
 reconstruction = audio_values[0].cpu().detach().numpy()

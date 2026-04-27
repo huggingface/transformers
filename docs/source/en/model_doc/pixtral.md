@@ -76,10 +76,12 @@ Quantization reduces the memory burden of large models by representing the weigh
 The example below uses [bitsandbytes](../quantization/bitsandbytes) to quantize the model to 4-bits.
 
 ```python
-import torch
 import requests
+import torch
 from PIL import Image
-from transformers import AutoProcessor, LlavaForConditionalGeneration, BitsAndBytesConfig
+
+from transformers import AutoProcessor, BitsAndBytesConfig, LlavaForConditionalGeneration
+
 
 model_id = "mistral-community/pixtral-12b"
 

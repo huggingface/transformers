@@ -38,10 +38,12 @@ You can find all the checkpoints under the [PI0](https://huggingface.co/collecti
 
 ## Usage examples
 
-```py
+```python
 import torch
+
+from transformers import PI0ForConditionalGeneration, PI0Processor
 from transformers.image_utils import load_image
-from transformers import PI0Processor, PI0ForConditionalGeneration
+
 
 model = PI0ForConditionalGeneration.from_pretrained(
     "lerobot/pi0_base",

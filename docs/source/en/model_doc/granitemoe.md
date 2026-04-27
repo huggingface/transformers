@@ -39,8 +39,8 @@ We [open source](https://huggingface.co/collections/ibm/power-lm-66be64ae647ddf1
 Tips:
 
 ```python
-import torch
 from transformers import AutoModelForCausalLM, AutoTokenizer
+
 
 model_path = "ibm/PowerMoE-3b"
 tokenizer = AutoTokenizer.from_pretrained(model_path)

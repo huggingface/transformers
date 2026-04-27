@@ -60,7 +60,8 @@ it's passed with the `text_target` keyword argument.
 ### Supervised training
 
 ```python
-from transformers import PLBartForConditionalGeneration, PLBartTokenizer
+from transformers import PLBartTokenizer
+
 
 tokenizer = PLBartTokenizer.from_pretrained("uclanlp/plbart-base", src_lang="en_XX", tgt_lang="python")
 example_python_phrase = "def maximum(a,b,c):NEW_LINE_INDENTreturn max([a,b,c])"
@@ -76,6 +77,7 @@ model(**inputs)
 
 ```python
 from transformers import PLBartForConditionalGeneration, PLBartTokenizer
+
 
 tokenizer = PLBartTokenizer.from_pretrained("uclanlp/plbart-python-en_XX", src_lang="python", tgt_lang="en_XX")
 example_python_phrase = "def maximum(a,b,c):NEW_LINE_INDENTreturn max([a,b,c])"

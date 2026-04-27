@@ -61,8 +61,9 @@ The `ignore_mismatched_sizes=True` keyword has to be passed to allow the languag
 to the vocabulary of the specified language.
 Similarly, the processor should be loaded with the same target language
 
-```py
-from transformers import Wav2Vec2ForCTC, AutoProcessor
+```python
+from transformers import AutoProcessor, Wav2Vec2ForCTC
+
 
 model_id = "facebook/mms-1b-all"
 target_lang = "fra"
@@ -86,8 +87,9 @@ You should probably TRAIN this model on a down-stream task to be able to use it 
 
 If you want to use the ASR pipeline, you can load your chosen target language as such:
 
-```py
+```python
 from transformers import pipeline
+
 
 model_id = "facebook/mms-1b-all"
 target_lang = "fra"
@@ -100,8 +102,9 @@ pipe = pipeline(model=model_id, model_kwargs={"target_lang": "fra", "ignore_mism
 Next, let's look at how we can run MMS in inference and change adapter layers after having called [`~PretrainedModel.from_pretrained`]
 First, we load audio data in different languages using the [Datasets](https://github.com/huggingface/datasets).
 
-```py
-from datasets import load_dataset, Audio
+```python
+from datasets import Audio, load_dataset
+
 
 # English
 stream_data = load_dataset("mozilla-foundation/common_voice_13_0", "en", split="test", streaming=True)
@@ -116,9 +119,10 @@ fr_sample = next(iter(stream_data))["audio"]["array"]
 
 Next, we load the model and processor
 
-```py
-from transformers import Wav2Vec2ForCTC, AutoProcessor
-import torch
+```python
+
+from transformers import AutoProcessor, Wav2Vec2ForCTC
+
 
 model_id = "facebook/mms-1b-all"
 
@@ -191,7 +195,9 @@ pre-process the text inputs. The following code example runs a forward pass usin
 
 ```python
 import torch
-from transformers import VitsTokenizer, VitsModel, set_seed
+
+from transformers import VitsModel, VitsTokenizer, set_seed
+
 
 tokenizer = VitsTokenizer.from_pretrained("facebook/mms-tts-eng")
 model = VitsModel.from_pretrained("facebook/mms-tts-eng", device_map="auto")
@@ -211,6 +217,7 @@ The resulting waveform can be saved as a `.wav` file:
 ```python
 import scipy
 
+
 scipy.io.wavfile.write("synthesized_speech.wav", rate=model.config.sampling_rate, data=waveform)
 ```
 
@@ -218,6 +225,7 @@ Or displayed in a Jupyter Notebook / Google Colab:
 
 ```python
 from IPython.display import Audio
+
 
 Audio(waveform, rate=model.config.sampling_rate)
 ```
@@ -230,6 +238,7 @@ the pre-trained `tokenizer`:
 
 ```python
 from transformers import VitsTokenizer
+
 
 tokenizer = VitsTokenizer.from_pretrained("facebook/mms-tts-eng")
 print(tokenizer.is_uroman)
@@ -250,10 +259,13 @@ You can then pre-process the text input using the following code snippet. You ca
 `UROMAN` to point to the uroman repository, or you can pass the uroman directory as an argument to the `uromanize` function:
 
 ```python
-import torch
-from transformers import VitsTokenizer, VitsModel, set_seed
 import os
 import subprocess
+
+import torch
+
+from transformers import VitsModel, VitsTokenizer, set_seed
+
 
 tokenizer = VitsTokenizer.from_pretrained("facebook/mms-tts-kor")
 model = VitsModel.from_pretrained("facebook/mms-tts-kor", device_map="auto")
@@ -293,7 +305,9 @@ waveform = outputs.waveform[0]
 
 ```python
 import torch
-from transformers import VitsTokenizer, VitsModel, set_seed
+
+from transformers import VitsModel, VitsTokenizer, set_seed
+
 
 tokenizer = VitsTokenizer.from_pretrained("facebook/mms-tts-eng")
 model = VitsModel.from_pretrained("facebook/mms-tts-eng", device_map="auto")
@@ -326,8 +340,9 @@ pip install --upgrade transformers
 
 Next, we load a couple of audio samples via `datasets`. Make sure that the audio data is sampled to 16000 kHz.
 
-```py
-from datasets import load_dataset, Audio
+```python
+from datasets import Audio, load_dataset
+
 
 # English
 stream_data = load_dataset("mozilla-foundation/common_voice_13_0", "en", split="test", streaming=True)
@@ -342,9 +357,10 @@ ar_sample = next(iter(stream_data))["audio"]["array"]
 
 Next, we load the model and processor
 
-```py
-from transformers import Wav2Vec2ForSequenceClassification, AutoFeatureExtractor
-import torch
+```python
+
+from transformers import AutoFeatureExtractor, Wav2Vec2ForSequenceClassification
+
 
 model_id = "facebook/mms-lid-126"
 

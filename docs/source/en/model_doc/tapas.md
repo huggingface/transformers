@@ -79,8 +79,9 @@ To summarize:
 
 Initializing a model with a pre-trained base and randomly initialized classification heads from the hub can be done as shown below.
 
-```py
+```python
 from transformers import TapasConfig, TapasForQuestionAnswering
+
 
 # for example, the base sized model with default SQA configuration
 model = TapasForQuestionAnswering.from_pretrained("google/tapas-base", device_map="auto")
@@ -96,8 +97,9 @@ model = TapasForQuestionAnswering.from_pretrained("google/tapas-base", config=co
 
 Of course, you don't necessarily have to follow one of these three ways in which TAPAS was fine-tuned. You can also experiment by defining any hyperparameters you want when initializing [`TapasConfig`], and then create a [`TapasForQuestionAnswering`] based on that configuration. For example, if you have a dataset that has both conversational questions and questions that might involve aggregation, then you can do it this way. Here's an example:
 
-```py
+```python
 from transformers import TapasConfig, TapasForQuestionAnswering
+
 
 # you can initialize the classification heads any way you want (see docs of TapasConfig)
 config = TapasConfig(num_aggregation_labels=3, average_logits_per_cell=True)
@@ -170,9 +172,10 @@ inputs
 Note that [`TapasTokenizer`] expects the data of the table to be **text-only**. You can use `.astype(str)` on a dataframe to turn it into text-only data.
 Of course, this only shows how to encode a single training example. It is advised to create a dataloader to iterate over batches:
 
-```py
-import torch
+```python
 import pandas as pd
+import torch
+
 
 tsv_path = "your_path_to_the_tsv_file"
 table_csv_path = "your_path_to_a_directory_containing_all_csv_files"
@@ -219,8 +222,9 @@ index) and batch encode each table with its questions. This will make sure that 
 
 You can then fine-tune [`TapasForQuestionAnswering`] as follows (shown here for the weak supervision for aggregation case):
 
-```py
-from transformers import TapasConfig, TapasForQuestionAnswering, AdamW
+```python
+from transformers import AdamW, TapasConfig, TapasForQuestionAnswering
+
 
 # this is the default WTQ configuration
 config = TapasConfig(

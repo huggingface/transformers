@@ -38,9 +38,9 @@ The example below demonstrates how to classify text with [`Pipeline`], [`AutoMod
 
 <hfoption id="Pipeline">
 
-```py
-import torch
+```python
 from transformers import pipeline
+
 
 classifier = pipeline(
     task="text-classification",
@@ -57,9 +57,11 @@ print(result)
 
 <hfoption id="AutoModel">
 
-```py
+```python
 import torch
+
 from transformers import AutoModelForSequenceClassification, AutoTokenizer
+
 
 tokenizer = AutoTokenizer.from_pretrained(
     "distilbert/distilbert-base-uncased-finetuned-sst-2-english",

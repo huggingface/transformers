@@ -33,13 +33,11 @@ This model was contributed by [thisisiron](https://huggingface.co/thisisiron).
 
 ```python
 
-from PIL import Image
 import requests
 import torch
-from torchvision import io
-from typing import Dict
-from transformers.image_utils import load_images, load_video
-from transformers import AutoModelForImageTextToText, AutoTokenizer, AutoProcessor
+from PIL import Image
+
+from transformers import AutoModelForImageTextToText, AutoProcessor
 
 
 model = AutoModelForImageTextToText.from_pretrained(

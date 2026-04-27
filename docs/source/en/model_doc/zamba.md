@@ -54,8 +54,9 @@ You can run the model not using the optimized Mamba kernels, but it is **not** r
 ## Inference
 
 ```python
-from transformers import AutoTokenizer, AutoModelForCausalLM
-import torch
+
+from transformers import AutoModelForCausalLM, AutoTokenizer
+
 
 tokenizer = AutoTokenizer.from_pretrained("Zyphra/Zamba-7B-v1")
 model = AutoModelForCausalLM.from_pretrained("Zyphra/Zamba-7B-v1", device_map="auto")

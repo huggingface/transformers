@@ -33,8 +33,9 @@ The example below demonstrates how to match keypoints between two images with [`
 <hfoptions id="usage">
 <hfoption id="Pipeline">
 
-```py
+```python
 from transformers import pipeline
+
 
 keypoint_matcher = pipeline(task="keypoint-matching", model="zju-community/efficientloftr")
 
@@ -49,11 +50,13 @@ print(results[0])
 </hfoption>
 <hfoption id="AutoModel">
 
-```py
-from transformers import AutoImageProcessor, AutoModelForKeypointMatching
+```python
+import requests
 import torch
 from PIL import Image
-import requests
+
+from transformers import AutoImageProcessor, AutoModelForKeypointMatching
+
 
 url_image1 = "https://raw.githubusercontent.com/magicleap/SuperGluePretrainedNetwork/refs/heads/master/assets/phototourism_sample_images/united_states_capitol_98169888_3347710852.jpg"
 image1 = Image.open(requests.get(url_image1, stream=True).raw)

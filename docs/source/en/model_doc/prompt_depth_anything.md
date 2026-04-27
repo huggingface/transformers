@@ -35,12 +35,12 @@ alt="drawing" width="600"/>
 The Transformers library allows you to use the model with just a few lines of code:
 
 ```python
-import torch
 import requests
-import numpy as np
-
+import torch
 from PIL import Image
+
 from transformers import AutoImageProcessor, AutoModelForDepthEstimation
+
 
 url = "https://github.com/DepthAnything/PromptDA/blob/main/assets/example_images/image.jpg?raw=true"
 image = Image.open(requests.get(url, stream=True).raw)
@@ -66,7 +66,7 @@ post_processed_output = image_processor.post_process_depth_estimation(
 
 # visualize the prediction
 predicted_depth = post_processed_output[0]["predicted_depth"]
-depth = predicted_depth * 1000 
+depth = predicted_depth * 1000
 depth = depth.detach().cpu().numpy()
 depth = Image.fromarray(depth.astype("uint16")) # mm
 ```

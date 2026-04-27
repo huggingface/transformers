@@ -25,10 +25,13 @@ rendered properly in your Markdown viewer.
 Helper class to enable loading timm models to be used with the transformers library and its autoclasses.
 
 ```python
+from urllib.request import urlopen
+
 import torch
 from PIL import Image
-from urllib.request import urlopen
-from transformers import AutoModelForImageClassification, AutoImageProcessor
+
+from transformers import AutoImageProcessor, AutoModelForImageClassification
+
 
 # Load image
 image = Image.open(urlopen(

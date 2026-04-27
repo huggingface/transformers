@@ -50,6 +50,7 @@ The original code can be found [here](https://github.com/salesforce/codegen).
 ```python
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
+
 checkpoint = "Salesforce/codegen-350M-mono"
 model = AutoModelForCausalLM.from_pretrained(checkpoint, device_map="auto")
 tokenizer = AutoTokenizer.from_pretrained(checkpoint)

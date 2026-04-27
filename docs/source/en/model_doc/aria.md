@@ -101,10 +101,12 @@ Quantization reduces the memory burden of large models by representing the weigh
 
 The example below uses [torchao](../quantization/torchao) to only quantize the weights to int4 and the [rhymes-ai/Aria-sequential_mlp](https://huggingface.co/rhymes-ai/Aria-sequential_mlp) checkpoint. This checkpoint replaces grouped GEMM with `torch.nn.Linear` layers for easier quantization.
 
-```py
+```python
 # pip install torchao
 import torch
-from transformers import TorchAoConfig, AutoModelForCausalLM, AutoProcessor
+
+from transformers import AutoModelForCausalLM, AutoProcessor, TorchAoConfig
+
 
 quantization_config = TorchAoConfig("int4_weight_only", group_size=128)
 model = AutoModelForCausalLM.from_pretrained(

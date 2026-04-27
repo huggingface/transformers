@@ -47,8 +47,9 @@ This model was contributed by [Nithin Rao Koluguri](https://huggingface.co/nithi
 <hfoptions id="usage">
 <hfoption id="Pipeline">
 
-```py
+```python
 from transformers import pipeline
+
 
 pipe = pipeline("automatic-speech-recognition", model="nvidia/parakeet-ctc-1.1b")
 out = pipe("https://huggingface.co/datasets/hf-internal-testing/dummy-audio-samples/resolve/main/bcn_weather.mp3")
@@ -58,10 +59,10 @@ print(out)
 </hfoption>
 <hfoption id="AutoModel">
 
-```py
+```python
+from datasets import Audio, load_dataset
+
 from transformers import AutoModelForCTC, AutoProcessor
-from datasets import load_dataset, Audio
-import torch
 
 
 processor = AutoProcessor.from_pretrained("nvidia/parakeet-ctc-1.1b")
@@ -85,9 +86,11 @@ print(processor.batch_decode(outputs))
 Parakeet supports full-graph compilation with CUDA graphs! This optimization is most effective when you know the maximum audio length you want to transcribe. The key idea is using static input shapes to avoid recompilation. For example, if you know your audio will be under 30 seconds, you can use the processor to pad all inputs to 30 seconds, preparing consistent input features and attention masks. See the example below!
 
 ```python
-from transformers import AutoModelForCTC, AutoProcessor
-from datasets import load_dataset, Audio
 import torch
+from datasets import Audio, load_dataset
+
+from transformers import AutoModelForCTC, AutoProcessor
+
 
 processor = AutoProcessor.from_pretrained("nvidia/parakeet-ctc-1.1b")
 model = AutoModelForCTC.from_pretrained("nvidia/parakeet-ctc-1.1b", device_map="auto")
@@ -111,7 +114,7 @@ class TimerContext:
         self.name = name
         self.start_event = None
         self.end_event = None
-        
+
     def __enter__(self):
         # Use CUDA events for more accurate GPU timing
         self.start_event = torch.cuda.Event(enable_timing=True)
@@ -163,9 +166,10 @@ print(processor.batch_decode(outputs))
 ### Training
 
 ```python
+from datasets import Audio, load_dataset
+
 from transformers import AutoModelForCTC, AutoProcessor
-from datasets import load_dataset, Audio
-import torch
+
 
 processor = AutoProcessor.from_pretrained("nvidia/parakeet-ctc-1.1b")
 model = AutoModelForCTC.from_pretrained("nvidia/parakeet-ctc-1.1b", device_map="auto")

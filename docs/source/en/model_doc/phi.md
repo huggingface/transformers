@@ -50,9 +50,9 @@ pipeline("pipeline('''def print_prime(n): """ Print all primes between 1 and n""
 
 <hfoption id="AutoModel">
 
-```py
-import torch
-from transformers import AutoTokenizer, AutoModelForCausalLM
+```python
+from transformers import AutoModelForCausalLM, AutoTokenizer
+
 
 tokenizer = AutoTokenizer.from_pretrained("microsoft/phi-1")
 model = AutoModelForCausalLM.from_pretrained("microsoft/phi-1", device_map="auto", attn_implementation="sdpa")
@@ -73,9 +73,11 @@ Quantization reduces the memory burden of large models by representing the weigh
 
 The example below uses [bitsandbytes](https://huggingface.co/docs/transformers/en/quantization/bitsandbytes) to only quantize the weights to 4-bits.
 
-```py
+```python
 import torch
-from transformers import BitsAndBytesConfig, AutoTokenizer, AutoModelForCausalLM
+
+from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig
+
 
 bnb_config = BitsAndBytesConfig(load_in_4bit=True, bnb_4bit_compute_dtype=torch.bfloat16, bnb_4bit_quant_type="nf4", bnb_4bit_use_double_quant=True)
 tokenizer = AutoTokenizer.from_pretrained("microsoft/phi-1")

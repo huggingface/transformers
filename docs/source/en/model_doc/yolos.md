@@ -41,9 +41,9 @@ The example below demonstrates how to detect objects with [`Pipeline`] or the [`
 <hfoptions id="usage">
 <hfoption id="Pipeline">
 
-```py
-import torch
+```python
 from transformers import pipeline
+
 
 detector = pipeline(
     task="object-detection",
@@ -56,10 +56,11 @@ detector("https://huggingface.co/datasets/Narsil/image_dummy/raw/main/parrots.pn
 </hfoption>
 <hfoption id="Automodel">
 
-```py
+```python
+import requests
 import torch
 from PIL import Image
-import requests
+
 from transformers import AutoImageProcessor, AutoModelForObjectDetection
 
 

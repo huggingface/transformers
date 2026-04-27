@@ -62,8 +62,10 @@ tar -xvf 8b_base_model_release.tar
 
 Then, model can be loaded via:
 
-```py
+```python
 from transformers import FuyuConfig, FuyuForCausalLM
+
+
 model_config = FuyuConfig()
 model = FuyuForCausalLM(model_config).from_pretrained('/output/path')
 ```
@@ -71,11 +73,12 @@ model = FuyuForCausalLM(model_config).from_pretrained('/output/path')
 Inputs need to be passed through a specific Processor to have the correct formats.
 A processor requires an image_processor and a tokenizer. Hence, inputs can be loaded via:
 
-```py
+```python
 from PIL import Image
+
 from transformers import AutoTokenizer
-from transformers.models.fuyu.processing_fuyu import FuyuProcessor
 from transformers.models.fuyu.image_processing_fuyu import FuyuImageProcessor
+from transformers.models.fuyu.processing_fuyu import FuyuProcessor
 
 
 tokenizer = AutoTokenizer.from_pretrained('adept-hf-collab/fuyu-8b')
@@ -88,8 +91,6 @@ text_prompt = "Generate a coco-style caption.\\n"
 bus_image_url = "https://huggingface.co/datasets/hf-internal-testing/fixtures-captioning/resolve/main/bus.png"
 bus_image_pil = Image.open(io.BytesIO(requests.get(bus_image_url).content))
 inputs_to_model = processor(images=bus_image_pil, text=text_prompt)
-
-
 ```
 
 This model was contributed by [Molbap](https://huggingface.co/Molbap).

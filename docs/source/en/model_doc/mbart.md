@@ -39,9 +39,9 @@ The example below demonstrates how to translate text with [`Pipeline`] or the [`
 <hfoptions id="usage">
 <hfoption id="Pipeline">
 
-```py
-import torch
+```python
 from transformers import pipeline
+
 
 pipeline = pipeline(
     task="translation",
@@ -56,9 +56,9 @@ print(pipeline("UN Chief Says There Is No Military Solution in Syria"))
 </hfoption>
 <hfoption id="AutoModel">
 
-```py
-import torch
+```python
 from transformers import AutoModelForSeq2SeqLM, AutoTokenizer
+
 
 article_en = "UN Chief Says There Is No Military Solution in Syria"
 

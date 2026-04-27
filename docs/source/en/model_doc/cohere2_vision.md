@@ -40,9 +40,9 @@ The model and image processor can be loaded as follows:
 <hfoption id="AutoModel">
 
 ```python
-import torch
 
-from transformers import AutoProcessor, AutoModelForImageTextToText
+from transformers import AutoModelForImageTextToText, AutoProcessor
+
 
 model_id = "CohereLabs/command-a-vision-07-2025"
 
@@ -93,6 +93,7 @@ print(
 
 ```python
 from transformers import pipeline
+
 
 pipe = pipeline(model="CohereLabs/command-a-vision-07-2025", task="image-text-to-text", device_map="auto")
 

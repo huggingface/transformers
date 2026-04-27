@@ -70,6 +70,7 @@ for the list of all BCP-47 in the Flores 200 dataset.
 ```python
 from transformers import AutoModelForSeq2SeqLM, AutoTokenizer
 
+
 tokenizer = AutoTokenizer.from_pretrained("facebook/nllb-moe-54b")
 model = AutoModelForSeq2SeqLM.from_pretrained("facebook/nllb-moe-54b", device_map="auto")
 
@@ -92,6 +93,7 @@ See example below for a translation from romanian to german:
 
 ```python
 from transformers import AutoModelForSeq2SeqLM, AutoTokenizer
+
 
 tokenizer = AutoTokenizer.from_pretrained("facebook/nllb-moe-54b", src_lang="ron_Latn")
 model = AutoModelForSeq2SeqLM.from_pretrained("facebook/nllb-moe-54b", device_map="auto")

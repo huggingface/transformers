@@ -46,7 +46,8 @@ This model was contributed by the [Baidu Qianfan Team](https://github.com/baidub
 ### Document parsing
 
 ```python
-from transformers import AutoProcessor, AutoModelForImageTextToText
+from transformers import AutoModelForImageTextToText, AutoProcessor
+
 
 model = AutoModelForImageTextToText.from_pretrained("baidu/Qianfan-OCR", device_map="auto")
 processor = AutoProcessor.from_pretrained("baidu/Qianfan-OCR")
@@ -65,7 +66,8 @@ processor.decode(generate_ids[0, inputs["input_ids"].shape[1]:], skip_special_to
 For documents with complex layouts, cluttered elements, or non-standard reading orders, enable thinking mode by setting `enable_thinking=True` in `apply_chat_template`. The model will first generate structured layout analysis (bounding boxes, element types, reading order), then produce the final output.
 
 ```python
-from transformers import AutoProcessor, AutoModelForImageTextToText
+from transformers import AutoModelForImageTextToText, AutoProcessor
+
 
 model = AutoModelForImageTextToText.from_pretrained("baidu/Qianfan-OCR", device_map="auto")
 processor = AutoProcessor.from_pretrained("baidu/Qianfan-OCR")
@@ -82,7 +84,8 @@ processor.decode(generate_ids[0, inputs["input_ids"].shape[1]:], skip_special_to
 ### Batched inference
 
 ```python
-from transformers import AutoProcessor, AutoModelForImageTextToText
+from transformers import AutoModelForImageTextToText, AutoProcessor
+
 
 model = AutoModelForImageTextToText.from_pretrained("baidu/Qianfan-OCR", device_map="auto")
 processor = AutoProcessor.from_pretrained("baidu/Qianfan-OCR")

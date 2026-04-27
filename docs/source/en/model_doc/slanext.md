@@ -39,10 +39,12 @@ The example below demonstrates how to detect text with PP-OCRV5_Mobile_Det using
 <hfoptions id="usage">
 <hfoption id="AutoModel">
 
-```py
+```python
 import requests
 from PIL import Image
+
 from transformers import AutoImageProcessor, AutoModelForTableRecognition
+
 
 model_path="PaddlePaddle/SLANeXt_wired_safetensors"
 model = AutoModelForTableRecognition.from_pretrained(model_path, device_map="auto")

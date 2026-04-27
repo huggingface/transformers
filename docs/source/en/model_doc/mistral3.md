@@ -36,9 +36,9 @@ The example below demonstrates how to generate text for an image with [`Pipeline
 <hfoptions id="usage">
 <hfoption id="Pipeline">
 
-```py
-import torch
+```python
 from transformers import pipeline
+
 
 messages = [
     {"role": "user",
@@ -51,8 +51,8 @@ messages = [
 ,]
 
 pipeline = pipeline(
-    task="image-text-to-text", 
-    model="mistralai/Mistral-Small-3.1-24B-Instruct-2503", 
+    task="image-text-to-text",
+    model="mistralai/Mistral-Small-3.1-24B-Instruct-2503",
     device=0
 )
 outputs = pipeline(text=messages, max_new_tokens=50, return_full_text=False)
@@ -64,15 +64,15 @@ outputs[0]["generated_text"]
 </hfoption>
 <hfoption id="AutoModel">
 
-```py
-import torch
-from transformers import AutoProcessor, AutoModelForImageTextToText
+```python
+from transformers import AutoModelForImageTextToText, AutoProcessor
+
 
 model_checkpoint = "mistralai/Mistral-Small-3.1-24B-Instruct-2503"
 processor = AutoProcessor.from_pretrained(model_checkpoint)
 model = AutoModelForImageTextToText.from_pretrained(
-    model_checkpoint, 
-    device_map="auto", 
+    model_checkpoint,
+    device_map="auto",
 )
 
 messages = [
@@ -86,9 +86,9 @@ messages = [
 ,]
 
 inputs = processor.apply_chat_template(
-    messages, 
-    add_generation_prompt=True, 
-    tokenize=True, return_dict=True, 
+    messages,
+    add_generation_prompt=True,
+    tokenize=True, return_dict=True,
     return_tensors="pt").to(model.device)
 
 generate_ids = model.generate(**inputs, max_new_tokens=20)

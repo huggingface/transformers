@@ -60,6 +60,7 @@ The pre-trained model can be used as follows:
 ```python
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
+
 model = AutoModelForCausalLM.from_pretrained("MiniMaxAI/MiniMax-Text-01-hf", device_map="auto")
 tokenizer = AutoTokenizer.from_pretrained("MiniMaxAI/MiniMax-Text-01-hf")
 
@@ -93,8 +94,8 @@ Make also sure that you have a hardware that is compatible with Flash-Attention 
 To load and run a model using Flash Attention-2, refer to the snippet below:
 
 ```python
-import torch
 from transformers import AutoModelForCausalLM, AutoTokenizer
+
 
 model = AutoModelForCausalLM.from_pretrained("MiniMaxAI/MiniMax-Text-01-hf", attn_implementation="flash_attention_2", device_map="auto")
 tokenizer = AutoTokenizer.from_pretrained("MiniMaxAI/MiniMax-Text-01-hf")
@@ -123,8 +124,8 @@ As the MiniMax model has 456 billion parameters, that would require about 912GB 
 Quantizing a model is as simple as passing a `quantization_config` to the model. Below, we'll leverage the bitsandbytes quantization library (but refer to [this page](../quantization) for alternative quantization methods):
 
 ```python
-import torch
 from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig
+
 
 # specify how to quantize the model
 quantization_config = BitsAndBytesConfig(

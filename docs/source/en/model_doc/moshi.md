@@ -113,9 +113,12 @@ To follow the example of the following image, `"Hello, I'm Moshi"` could be tran
 [`MoshiForConditionalGeneration.generate`] then auto-regressively feeds to itself its own audio stream, but since it doesn't have access to the user input stream while using `transformers`, it will thus **assume that the user is producing blank audio**.
 
 ```python
-from datasets import load_dataset, Audio
-import torch, math
-from transformers import MoshiForConditionalGeneration, AutoFeatureExtractor, AutoTokenizer
+import math
+
+import torch
+from datasets import Audio, load_dataset
+
+from transformers import AutoFeatureExtractor, AutoTokenizer
 
 
 librispeech_dummy = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
@@ -123,7 +126,7 @@ feature_extractor = AutoFeatureExtractor.from_pretrained("kyutai/moshiko-pytorch
 tokenizer = AutoTokenizer.from_pretrained("kyutai/moshiko-pytorch-bf16")
 dtype = torch.bfloat16
 
-# prepare user input audio 
+# prepare user input audio
 librispeech_dummy = librispeech_dummy.cast_column("audio", Audio(sampling_rate=feature_extractor.sampling_rate))
 audio_sample = librispeech_dummy[-1]["audio"]["array"]
 user_input_values = feature_extractor(raw_audio=audio_sample, sampling_rate=feature_extractor.sampling_rate, return_tensors="pt").to(device=device, dtype=dtype)

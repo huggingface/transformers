@@ -57,14 +57,13 @@ into a single instance to both extract the input features and decode the predict
 
 - Step-by-step PDF transcription
 
-```py
+```python
+
 from huggingface_hub import hf_hub_download
-import re
 from PIL import Image
 
-from transformers import NougatProcessor, AutoModelForImageTextToText
-from datasets import load_dataset
-import torch
+from transformers import AutoModelForImageTextToText, NougatProcessor
+
 
 processor = NougatProcessor.from_pretrained("facebook/nougat-base")
 model = AutoModelForImageTextToText.from_pretrained("facebook/nougat-base", device_map="auto")

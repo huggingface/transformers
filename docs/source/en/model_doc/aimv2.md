@@ -35,7 +35,9 @@ Here is an example of Image Feature Extraction using specific checkpoints on res
 ```python
 import requests
 from PIL import Image
+
 from transformers import AutoImageProcessor, AutoModel
+
 
 url = "http://images.cocodataset.org/val2017/000000039769.jpg"
 image = Image.open(requests.get(url, stream=True).raw)
@@ -52,7 +54,9 @@ Here is an example of a checkpoint performing zero-shot classification:
 ```python
 import requests
 from PIL import Image
-from transformers import AutoProcessor, AutoModel
+
+from transformers import AutoModel, AutoProcessor
+
 
 url = "http://images.cocodataset.org/val2017/000000039769.jpg"
 image = Image.open(requests.get(url, stream=True).raw)

@@ -35,9 +35,9 @@ The example below demonstrates how to use NanoChat for text generation with chat
 <hfoptions id="usage">
 <hfoption id="Pipeline">
 
-```py
-import torch
+```python
 from transformers import pipeline
+
 
 chatbot = pipeline(
     task="text-generation",
@@ -56,9 +56,11 @@ print(outputs[0]["generated_text"][-1]["content"])
 </hfoption>
 <hfoption id="AutoModel">
 
-```py
+```python
 import torch
+
 from transformers import AutoModelForCausalLM, AutoTokenizer
+
 
 model_id = "karpathy/nanochat-d32"
 

@@ -37,8 +37,8 @@ The example below demonstrates how to chat with the model with [`Pipeline`] or t
 <hfoption id="Pipeline">
 
 ```python
-import torch
 from transformers import pipeline
+
 
 generator = pipeline(
     "image-text-to-text",
@@ -57,10 +57,11 @@ generator(
 <hfoption id="AutoModel">
 
 ```python
-import torch
 import requests
 from PIL import Image
-from transformers import AutoProcessor, AutoModelForSeq2SeqLM
+
+from transformers import AutoModelForSeq2SeqLM, AutoProcessor
+
 
 processor = AutoProcessor.from_pretrained("google/t5gemma-2-270m-270m")
 model = AutoModelForSeq2SeqLM.from_pretrained(

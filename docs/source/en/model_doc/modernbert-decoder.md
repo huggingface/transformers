@@ -41,9 +41,9 @@ The example below demonstrates how to use ModernBERT Decoder for text generation
 <hfoptions id="usage">
 <hfoption id="Pipeline">
 
-```py
-import torch
+```python
 from transformers import pipeline
+
 
 generator = pipeline(
     task="text-generation",
@@ -64,9 +64,11 @@ classifier("This movie is really great!")
 </hfoption>
 <hfoption id="AutoModel">
 
-```py
+```python
 import torch
+
 from transformers import AutoModelForCausalLM, AutoTokenizer
+
 
 tokenizer = AutoTokenizer.from_pretrained("jhu-clsp/ettin-decoder-17m")
 model = AutoModelForCausalLM.from_pretrained(
@@ -93,6 +95,7 @@ print(f"Generated text: {generated_text}")
 # For sequence classification
 from transformers import AutoModelForSequenceClassification
 
+
 classifier_model = AutoModelForSequenceClassification.from_pretrained(
     "jhu-clsp/ettin-decoder-17m",
     device_map="auto",
@@ -115,9 +118,11 @@ print(f"Prediction probabilities: {predictions}")
 
 <hfoption id="AutoModel (w/quantization)">
 
-```py
+```python
 import torch
+
 from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig
+
 
 quantization_config = BitsAndBytesConfig(
     load_in_8bit=True,

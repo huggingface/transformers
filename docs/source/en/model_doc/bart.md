@@ -33,9 +33,9 @@ The example below demonstrates how to predict the `[MASK]` token with [`Pipeline
 <hfoptions id="usage">
 <hfoption id="Pipeline">
 
-```py
-import torch
+```python
 from transformers import pipeline
+
 
 fill_mask_pipeline = pipeline(
     task="fill-mask",
@@ -43,15 +43,16 @@ fill_mask_pipeline = pipeline(
     device=0
 )
 pipeline("Plants create <mask> through a process known as photosynthesis.")
-
 ```
 
 </hfoption>
 <hfoption id="AutoModel">
 
-```py
+```python
 import torch
+
 from transformers import AutoModelForMaskedLM, AutoTokenizer
+
 
 tokenizer = AutoTokenizer.from_pretrained(
     "facebook/bart-large",

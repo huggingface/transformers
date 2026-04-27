@@ -37,8 +37,8 @@ The example below demonstrates how to generate text with [`Pipeline`], [`AutoMod
 <hfoption id="Pipeline">
 
 ```python
-import torch
 from transformers import pipeline
+
 
 pipe = pipeline(
     task="text-generation",
@@ -52,8 +52,8 @@ pipe("Explain quantum computing in simple terms ", max_new_tokens=50)
 <hfoption id="AutoModel">
 
 ```python
-import torch
 from transformers import AutoModelForCausalLM, AutoTokenizer
+
 
 tokenizer = AutoTokenizer.from_pretrained("ibm-granite/granite-3.3-2b-base")
 model = AutoModelForCausalLM.from_pretrained(
@@ -75,8 +75,8 @@ Quantization reduces the memory burden of large models by representing the weigh
 The example below uses [bitsandbytes](../quantization/bitsandbytes) to only quantize the weights to int4.
 
 ```python
-import torch
-from transformers import AutoTokenizer, AutoModelForCausalLM, BitsAndBytesConfig
+from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig
+
 
 quantization_config = BitsAndBytesConfig(load_in_4bit=True)
 tokenizer = AutoTokenizer.from_pretrained("ibm-granite/granite-3.3-8b-base")

@@ -69,6 +69,7 @@ To load a model using Flash Attention 2, we can pass the argument `attn_implemen
 ```python
 from transformers import Wav2Vec2Model
 
+
 model = Wav2Vec2Model.from_pretrained("facebook/wav2vec2-large-960h-lv60-self", attn_implementation="flash_attention_2", device_map="auto")
 ...
 ```
@@ -150,10 +151,13 @@ Otherwise, [`~Wav2Vec2ProcessorWithLM.batch_decode`] performance will be slower 
 ```python
 # Let's see how to use a user-managed pool for batch decoding multiple audios
 from multiprocessing import get_context
-from transformers import AutoTokenizer, AutoProcessor, AutoModelForCTC
-from datasets import load_dataset
+
 import datasets
 import torch
+from datasets import load_dataset
+
+from transformers import AutoModelForCTC, AutoProcessor
+
 
 # import model, feature extractor, tokenizer
 model = AutoModelForCTC.from_pretrained("patrickvonplaten/wav2vec2-base-100h-with-lm", device_map="auto")

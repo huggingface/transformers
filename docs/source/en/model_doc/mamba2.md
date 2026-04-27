@@ -38,8 +38,8 @@ The example below demonstrates how to generate text with [`Pipeline`], [`AutoMod
 <hfoption id="Pipeline">
 
 ```python
-import torch
 from transformers import pipeline
+
 
 pipeline = pipeline(
     task="text-generation",
@@ -53,8 +53,8 @@ pipeline("Plants create energy through a process known as")
 <hfoption id="AutoModel">
 
 ```python
-import torch
 from transformers import AutoModelForCausalLM, AutoTokenizer
+
 
 tokenizer = AutoTokenizer.from_pretrained("mistralai/Mamba-Codestral-7B-v0.1")
 model = AutoModelForCausalLM.from_pretrained("mistralai/Mamba-Codestral-7B-v0.1", device_map="auto")
@@ -71,9 +71,9 @@ Quantization reduces the memory burden of large models by representing the weigh
 
 The example below uses [torchao](../quantization/torchao) to only quantize the weights to 4-bit integers.
 
-```py
-import torch
+```python
 from transformers import AutoModelForCausalLM, AutoTokenizer, TorchAoConfig
+
 
 quantization_config = TorchAoConfig("int4_weight_only", group_size=128)
 tokenizer = AutoTokenizer.from_pretrained("mistralai/Mamba-Codestral-7B-v0.1")
@@ -103,6 +103,7 @@ print(tokenizer.decode(output[0], skip_special_tokens=True))
 from datasets import load_dataset
 from peft import LoraConfig
 from trl import SFTConfig, SFTTrainer
+
 
 model_id = "mistralai/Mamba-Codestral-7B-v0.1"
 dataset = load_dataset("Abirate/english_quotes", split="train")

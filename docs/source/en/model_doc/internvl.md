@@ -51,6 +51,7 @@ Here is how you can use the `image-text-to-text` pipeline to perform inference w
 ```python
 from transformers import pipeline
 
+
 messages = [
     {
         "role": "user",
@@ -78,8 +79,9 @@ This example demonstrates how to perform inference on a single image with the In
 > Note that the model has been trained with a specific prompt format for chatting. Use `processor.apply_chat_template(my_conversation_dict)` to correctly format your prompts.
 
 ```python
-from transformers import AutoProcessor, AutoModelForImageTextToText
-import torch
+
+from transformers import AutoModelForImageTextToText, AutoProcessor
+
 
 model_checkpoint = "OpenGVLab/InternVL3-1B-hf"
 processor = AutoProcessor.from_pretrained(model_checkpoint)
@@ -109,8 +111,9 @@ decoded_output
 This example shows how to generate text using the InternVL model without providing any image input.
 
 ```python
-from transformers import AutoProcessor, AutoModelForImageTextToText
-import torch
+
+from transformers import AutoModelForImageTextToText, AutoProcessor
+
 
 model_checkpoint = "OpenGVLab/InternVL3-1B-hf"
 processor = AutoProcessor.from_pretrained(model_checkpoint)
@@ -139,8 +142,9 @@ print(decoded_output)
 InternVL models also support batched image and text inputs.
 
 ```python
-from transformers import AutoProcessor, AutoModelForImageTextToText
-import torch
+
+from transformers import AutoModelForImageTextToText, AutoProcessor
+
 
 model_checkpoint = "OpenGVLab/InternVL3-1B-hf"
 processor = AutoProcessor.from_pretrained(model_checkpoint)
@@ -227,7 +231,8 @@ decoded_outputs
 InternVL models can also handle video inputs. Here is an example of how to perform inference on a video input using chat templates.
 
 ```python
-from transformers import AutoProcessor, AutoModelForImageTextToText, BitsAndBytesConfig
+from transformers import AutoModelForImageTextToText, AutoProcessor, BitsAndBytesConfig
+
 
 model_checkpoint = "OpenGVLab/InternVL3-8B-hf"
 quantization_config = BitsAndBytesConfig(load_in_4bit=True)

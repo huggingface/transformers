@@ -38,9 +38,9 @@ The examples below demonstrates how to generate text with [`AutoModel`].
 <hfoptions id="usage">
 <hfoption id="AutoModel">
 
-```py
-import torch
-from transformers import RagTokenizer, RagRetriever, RagSequenceForGeneration
+```python
+from transformers import RagRetriever, RagSequenceForGeneration, RagTokenizer
+
 
 tokenizer = RagTokenizer.from_pretrained("facebook/rag-sequence-nq")
 retriever = RagRetriever.from_pretrained(
@@ -63,9 +63,11 @@ print(tokenizer.batch_decode(generated, skip_special_tokens=True)[0])
 Quantization reduces memory by storing weights in lower precision. See the [Quantization](../quantization/overview) overview for supported backends.
 The example below uses [bitsandbytes](../quantization/bitsandbytes) to quantize the weights to 4-bits.
 
-```py
+```python
 import torch
-from transformers import BitsAndBytesConfig, RagTokenizer, RagRetriever, RagSequenceForGeneration
+
+from transformers import BitsAndBytesConfig, RagRetriever, RagSequenceForGeneration, RagTokenizer
+
 
 bnb = BitsAndBytesConfig(load_in_4bit=True, bnb_4bit_compute_dtype=torch.bfloat16)
 

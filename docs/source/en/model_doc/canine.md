@@ -35,9 +35,9 @@ The example below demonstrates how to generate embeddings with [`Pipeline`], [`A
 <hfoptions id="usage">
 <hfoption id="Pipeline">
 
-```py
-import torch
+```python
 from transformers import pipeline
+
 
 pipeline = pipeline(
     task="feature-extraction",
@@ -51,9 +51,11 @@ pipeline("Plant create energy through a process known as photosynthesis.")
 </hfoption>
 <hfoption id="AutoModel">
 
-```py
+```python
 import torch
+
 from transformers import AutoModel
+
 
 model = AutoModel.from_pretrained("google/canine-c", device_map="auto")
 

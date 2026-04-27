@@ -39,10 +39,10 @@ This model was contributed by [koustuvs](https://huggingface.co/koustuvs), [yoni
 
 The snippet below shows how to load the V-JEPA 2 model for feature extraction using the `AutoModel` class.
 
-```py
-import torch
-from torchcodec.decoders import VideoDecoder
+```python
 import numpy as np
+from torchcodec.decoders import VideoDecoder
+
 
 processor = AutoVideoProcessor.from_pretrained("facebook/vjepa2-vitl-fpc64-256")
 model = AutoModel.from_pretrained(
@@ -69,11 +69,11 @@ predictor_outputs = outputs.predictor_output.last_hidden_state
 V-JEPA 2 can also be finetuned for video classification. In the following snippet, we show how use finetuned on Something-Something-V2 video classification model.
 
 ```python
-import torch
 import numpy as np
-
+import torch
 from torchcodec.decoders import VideoDecoder
-from transformers import AutoVideoProcessor, AutoModelForVideoClassification
+
+from transformers import AutoModelForVideoClassification, AutoVideoProcessor
 
 
 # Load model and video preprocessor

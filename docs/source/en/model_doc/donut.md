@@ -36,11 +36,10 @@ The examples below demonstrate how to perform document understanding tasks using
 <hfoptions id="usage">
 <hfoption id="Pipeline">
 
-```py
+```python
 # pip install datasets
-import torch
 from transformers import pipeline
-from PIL import Image
+
 
 pipeline = pipeline(
     task="document-question-answering",
@@ -56,11 +55,12 @@ pipeline(image=image, question="What time is the coffee break?")
 </hfoption>
 <hfoption id="AutoModel">
 
-```py
+```python
 # pip install datasets
-import torch
 from datasets import load_dataset
-from transformers import AutoProcessor, AutoModelForImageTextToText
+
+from transformers import AutoModelForImageTextToText, AutoProcessor
+
 
 processor = AutoProcessor.from_pretrained("naver-clova-ix/donut-base-finetuned-docvqa")
 model = AutoModelForImageTextToText.from_pretrained("naver-clova-ix/donut-base-finetuned-docvqa", device_map="auto")
@@ -87,11 +87,12 @@ Quantization reduces the memory burden of large models by representing the weigh
 
 The example below uses [torchao](../quantization/torchao) to only quantize the weights to int4.
 
-```py
+```python
 # pip install datasets torchao
-import torch
 from datasets import load_dataset
-from transformers import TorchAoConfig, AutoProcessor, AutoModelForImageTextToText
+
+from transformers import AutoModelForImageTextToText, AutoProcessor, TorchAoConfig
+
 
 quantization_config = TorchAoConfig("int4_weight_only", group_size=128)
 processor = AutoProcessor.from_pretrained("naver-clova-ix/donut-base-finetuned-docvqa")

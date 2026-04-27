@@ -37,11 +37,13 @@ The example below demonstrates how to detect interest points in an image with th
 <hfoptions id="usage">
 <hfoption id="AutoModel">
 
-```py
-from transformers import AutoImageProcessor, SuperPointForKeypointDetection
+```python
+import requests
 import torch
 from PIL import Image
-import requests
+
+from transformers import AutoImageProcessor, SuperPointForKeypointDetection
+
 
 url = "http://images.cocodataset.org/val2017/000000039769.jpg"
 image = Image.open(requests.get(url, stream=True).raw)

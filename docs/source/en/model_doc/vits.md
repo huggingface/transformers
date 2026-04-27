@@ -31,9 +31,10 @@ The example below demonstrates how to generate text based on an image with [`Pip
 <hfoption id="Pipeline">
 
 ```python
-import torch
-from transformers import pipeline, set_seed
 from scipy.io.wavfile import write
+
+from transformers import pipeline, set_seed
+
 
 set_seed(555)
 
@@ -57,10 +58,12 @@ write("hello.wav", sampling_rate, audio_data.squeeze())
 <hfoption id="AutoModel">
 
 ```python
-import torch
 import scipy
+import torch
 from IPython.display import Audio
+
 from transformers import AutoTokenizer, VitsModel, set_seed
+
 
 tokenizer = AutoTokenizer.from_pretrained("facebook/mms-tts-eng")
 model = VitsModel.from_pretrained("facebook/mms-tts-eng", device_map="auto")

@@ -56,9 +56,11 @@ encode the text and prepare the images respectively.
 The following example shows how to run contrastive learning using [`BridgeTowerProcessor`] and [`BridgeTowerForContrastiveLearning`].
 
 ```python
-from transformers import BridgeTowerProcessor, BridgeTowerForContrastiveLearning
 import requests
 from PIL import Image
+
+from transformers import BridgeTowerForContrastiveLearning, BridgeTowerProcessor
+
 
 url = "http://images.cocodataset.org/val2017/000000039769.jpg"
 image = Image.open(requests.get(url, stream=True).raw)
@@ -79,9 +81,11 @@ for text in texts:
 The following example shows how to run image-text retrieval using [`BridgeTowerProcessor`] and [`BridgeTowerForImageAndTextRetrieval`].
 
 ```python
-from transformers import BridgeTowerProcessor, BridgeTowerForImageAndTextRetrieval
 import requests
 from PIL import Image
+
+from transformers import BridgeTowerForImageAndTextRetrieval, BridgeTowerProcessor
+
 
 url = "http://images.cocodataset.org/val2017/000000039769.jpg"
 image = Image.open(requests.get(url, stream=True).raw)

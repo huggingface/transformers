@@ -37,8 +37,8 @@ The example below demonstrates how to generate text with [`Pipeline`], [`AutoMod
 <hfoption id="AutoModel">
 
 ```python
-import torch
 from transformers import AutoModelForCausalLM, AutoTokenizer
+
 
 tokenizer = AutoTokenizer.from_pretrained("patrickvonplaten/bert2bert-cnn_dailymail-fp16")
 model = AutoModelForCausalLM.from_pretrained("patrickvonplaten/bert2bert-cnn_dailymail-fp16", device_map="auto",attn_implementation="sdpa")
@@ -61,7 +61,8 @@ print(tokenizer.decode(summary[0], skip_special_tokens=True))
 These models require downstream fine-tuning, as discussed in this [blog post](https://huggingface.co/blog/warm-starting-encoder-decoder). Use [`~EncoderDecoderModel.from_encoder_decoder_pretrained`] to combine encoder and decoder checkpoints.
 
 ```python
-from transformers import EncoderDecoderModel, BertTokenizer
+from transformers import BertTokenizer, EncoderDecoderModel
+
 
 tokenizer = BertTokenizer.from_pretrained("google-bert/bert-base-uncased")
 model = EncoderDecoderModel.from_encoder_decoder_pretrained(
@@ -74,6 +75,7 @@ model = EncoderDecoderModel.from_encoder_decoder_pretrained(
 
 ```python
 from transformers import BertTokenizer, EncoderDecoderModel
+
 
 tokenizer = BertTokenizer.from_pretrained("google-bert/bert-base-uncased")
 model = EncoderDecoderModel.from_encoder_decoder_pretrained("google-bert/bert-base-uncased", "google-bert/bert-base-uncased")
@@ -100,6 +102,7 @@ loss = model(input_ids=input_ids, labels=labels).loss
 ```python
 from transformers import BertConfig, EncoderDecoderConfig, EncoderDecoderModel
 
+
 config_encoder = BertConfig()
 config_decoder = BertConfig()
 
@@ -111,6 +114,7 @@ model = EncoderDecoderModel(config=config)
 
 ```python
 from transformers import AutoTokenizer, EncoderDecoderModel
+
 
 # Load a pre-trained translation model
 model_name = "google/bert2bert_L-24_wmt_en_de"

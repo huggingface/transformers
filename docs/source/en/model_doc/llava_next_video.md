@@ -73,6 +73,7 @@ Here's an example of how to structure your input. We will use [LLaVA-NeXT-Video-
 ```python
 from transformers import LlavaNextVideoProcessor
 
+
 processor = LlavaNextVideoProcessor.from_pretrained("llava-hf/LLaVA-NeXT-Video-7B-hf")
 
 conversation = [
@@ -119,8 +120,9 @@ The model can accept both images and videos as input. Here's an example code for
 
 ```python
 from huggingface_hub import hf_hub_download
-import torch
+
 from transformers import LlavaNextVideoForConditionalGeneration, LlavaNextVideoProcessor
+
 
 # Load the model in half-precision
 model = LlavaNextVideoForConditionalGeneration.from_pretrained("llava-hf/LLaVA-NeXT-Video-7B-hf", device_map="auto")
@@ -203,7 +205,8 @@ We value your feedback to help identify bugs before the full release! Check out 
 Then simply load the quantized model by adding [`BitsAndBytesConfig`](../main_classes/quantization#transformers.BitsAndBytesConfig) as shown below:
 
 ```python
-from transformers import LlavaNextVideoForConditionalGeneration, LlavaNextVideoProcessor
+from transformers import LlavaNextVideoForConditionalGeneration
+
 
 # specify how to quantize the model
 quantization_config = BitsAndBytesConfig(

@@ -40,12 +40,12 @@ The examples below demonstrates how to generate with [`AutoModel`], for both Mar
 <hfoptions id="usage">
 <hfoption id="AutoModel - Markdown Task">
 
-```py
-import re
-import torch
+```python
 import requests
-from PIL import Image, ImageDraw
+from PIL import Image
+
 from transformers import AutoProcessor, Kosmos2_5ForConditionalGeneration
+
 
 repo = "microsoft/kosmos-2.5"
 model = Kosmos2_5ForConditionalGeneration.from_pretrained(repo, device_map="auto")
@@ -77,12 +77,14 @@ print(generated_text[0])
 </hfoption>
 <hfoption id="AutoModel - OCR Task">
 
-```py
+```python
 import re
-import torch
+
 import requests
 from PIL import Image, ImageDraw
+
 from transformers import AutoProcessor, Kosmos2_5ForConditionalGeneration
+
 
 repo = "microsoft/kosmos-2.5"
 model = Kosmos2_5ForConditionalGeneration.from_pretrained(repo, device_map="auto")
@@ -159,11 +161,12 @@ image.save("output.png")
 The authors also released Kosmos-2.5 Chat, which is a chat version optimized for document understanding. You can use it like so:
 
 ```python
-import re
-import torch
 import requests
-from PIL import Image, ImageDraw
+import torch
+from PIL import Image
+
 from transformers import AutoProcessor, Kosmos2_5ForConditionalGeneration
+
 
 repo = "microsoft/kosmos-2.5-chat"
 dtype = torch.bfloat16

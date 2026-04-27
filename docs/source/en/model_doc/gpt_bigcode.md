@@ -63,8 +63,8 @@ Make also sure that you have a hardware that is compatible with Flash-Attention 
 To load and run a model using Flash Attention 2, refer to the snippet below:
 
 ```python
-import torch
 from transformers import AutoModelForCausalLM, AutoTokenizer
+
 
 model = AutoModelForCausalLM.from_pretrained("bigcode/gpt_bigcode-santacoder", device_map="auto", attn_implementation="flash_attention_2")
 tokenizer = AutoTokenizer.from_pretrained("bigcode/gpt_bigcode-santacoder")

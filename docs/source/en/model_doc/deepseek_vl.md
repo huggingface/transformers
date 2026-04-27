@@ -37,9 +37,9 @@ The example below demonstrates how to generate text based on an image with [`Pip
 <hfoptions id="usage">
 <hfoption id="Pipeline">
 
-```py
-import torch
+```python
 from transformers import pipeline
+
 
 pipe = pipeline(
     task="image-text-to-text",
@@ -67,9 +67,9 @@ pipe(text=messages, max_new_tokens=20, return_full_text=False)
 
 <hfoption id="AutoModel">
 
-```py
-import torch
-from transformers import DeepseekVLForConditionalGeneration, AutoProcessor
+```python
+from transformers import AutoProcessor, DeepseekVLForConditionalGeneration
+
 
 model = DeepseekVLForConditionalGeneration.from_pretrained(
     "deepseek-community/deepseek-vl-1.3b-chat",
@@ -123,8 +123,8 @@ Quantization reduces the memory burden of large models by representing the weigh
 The example below uses [torchao](../quantization/torchao) to only quantize the weights to int4.
 
 ```python
-import torch
-from transformers import TorchAoConfig, DeepseekVLForConditionalGeneration, AutoProcessor
+from transformers import DeepseekVLForConditionalGeneration, TorchAoConfig
+
 
 quantization_config = TorchAoConfig(
     "int4_weight_only",

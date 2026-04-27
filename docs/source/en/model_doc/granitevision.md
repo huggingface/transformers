@@ -34,7 +34,7 @@ Tips:
 Sample inference:
 
 ```python
-from transformers import LlavaNextProcessor, LlavaNextForConditionalGeneration
+from transformers import LlavaNextForConditionalGeneration, LlavaNextProcessor
 
 
 model_path = "ibm-granite/granite-vision-3.1-2b-preview"

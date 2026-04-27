@@ -41,8 +41,8 @@ The example below demonstrates how to chat with the model with [`Pipeline`] or t
 
 ```python
 # pip install accelerate
-import torch
-from transformers import AutoTokenizer, AutoModelForSeq2SeqLM
+from transformers import AutoModelForSeq2SeqLM, AutoTokenizer
+
 
 tokenizer = AutoTokenizer.from_pretrained("google/t5gemma-2b-2b-prefixlm-it")
 model = AutoModelForSeq2SeqLM.from_pretrained(

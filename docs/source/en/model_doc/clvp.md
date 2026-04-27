@@ -52,7 +52,9 @@ Example :
 
 ```python
 import datasets
-from transformers import ClvpProcessor, ClvpModelForConditionalGeneration
+
+from transformers import ClvpModelForConditionalGeneration, ClvpProcessor
+
 
 # Define the Text and Load the Audio (We are taking an audio example from HuggingFace Hub using `datasets` library).
 text = "This is an example text."

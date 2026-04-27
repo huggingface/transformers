@@ -44,12 +44,13 @@ This second version of RT-DETR improves how the decoder finds objects in an imag
 
 The model is meant to be used on images resized to a size 640x640 with the corresponding ImageProcessor. Reshaping to other sizes will generally degrade performance.
 
-```py
-import torch
+```python
 import requests
-
+import torch
 from PIL import Image
-from transformers import RTDetrV2ForObjectDetection, RTDetrImageProcessor
+
+from transformers import RTDetrImageProcessor, RTDetrV2ForObjectDetection
+
 
 url = 'http://images.cocodataset.org/val2017/000000039769.jpg'
 image = Image.open(requests.get(url, stream=True).raw)

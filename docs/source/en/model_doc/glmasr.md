@@ -49,9 +49,11 @@ you can check the [model card](https://huggingface.co/zai-org/GLM-ASR-Nano-2512)
 <hfoptions id="usage">
 <hfoption id="AutoModel">
 
-```py runnable:test_basic
+```python
+runnable:test_basic
 # pytest-decorator: transformers.testing_utils.slow, transformers.testing_utils.require_torch
 from transformers import AutoModelForSeq2SeqLM, AutoProcessor
+
 
 processor = AutoProcessor.from_pretrained("zai-org/GLM-ASR-Nano-2512")
 model = AutoModelForSeq2SeqLM.from_pretrained("zai-org/GLM-ASR-Nano-2512", device_map="auto")
@@ -73,9 +75,11 @@ print(decoded_outputs)
 
 The processor's `apply_transcription_request` is equivalent to using the chat template in the following manner:
 
-```py runnable:test_advanced
+```python
+runnable:test_advanced
 # pytest-decorator: transformers.testing_utils.slow, transformers.testing_utils.require_torch
-from transformers import GlmAsrForConditionalGeneration, AutoProcessor
+from transformers import AutoProcessor, GlmAsrForConditionalGeneration
+
 
 processor = AutoProcessor.from_pretrained("zai-org/GLM-ASR-Nano-2512")
 model = GlmAsrForConditionalGeneration.from_pretrained("zai-org/GLM-ASR-Nano-2512", device_map="auto")
@@ -112,10 +116,13 @@ print(decoded_outputs)
 
 One can also use audio arrays directly:
 
-```py runnable:test_audio_array
+```python
+runnable:test_audio_array
 # pytest-decorator: transformers.testing_utils.slow, transformers.testing_utils.require_torch
-from transformers import GlmAsrForConditionalGeneration, AutoProcessor
-from datasets import load_dataset, Audio
+from datasets import Audio, load_dataset
+
+from transformers import AutoProcessor, GlmAsrForConditionalGeneration
+
 
 processor = AutoProcessor.from_pretrained("zai-org/GLM-ASR-Nano-2512")
 model = GlmAsrForConditionalGeneration.from_pretrained("zai-org/GLM-ASR-Nano-2512", device_map="auto")
@@ -138,10 +145,13 @@ print(decoded_outputs)
 
 You can process multiple audio files at once:
 
-```py runnable:test_batched
+```python
+runnable:test_batched
 # pytest-decorator: transformers.testing_utils.slow, transformers.testing_utils.require_torch
 import torch
+
 from transformers import AutoProcessor, GlmAsrForConditionalGeneration
+
 
 checkpoint_name = "zai-org/GLM-ASR-Nano-2512"
 processor = AutoProcessor.from_pretrained(checkpoint_name)

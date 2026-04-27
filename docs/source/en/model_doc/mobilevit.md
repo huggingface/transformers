@@ -39,9 +39,8 @@ The example below demonstrates how to do [Image Classification] with [`Pipeline`
 <hfoption id="Pipeline">
 
 ```python
-
-import torch
 from transformers import pipeline
+
 
 classifier = pipeline(
    task="image-classification",
@@ -58,11 +57,12 @@ print(f"Prediction: {preds}\n")
 <hfoption id="AutoModel">
 
 ```python
-
-import torch
 import requests
+import torch
 from PIL import Image
+
 from transformers import AutoImageProcessor, MobileViTForImageClassification
+
 
 image_processor = AutoImageProcessor.from_pretrained(
    "apple/mobilevit-small",

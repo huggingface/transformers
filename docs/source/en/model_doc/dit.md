@@ -36,9 +36,9 @@ The example below demonstrates how to classify an image with [`Pipeline`] or the
 <hfoptions id="usage">
 <hfoption id="Pipeline">
 
-```py
-import torch
+```python
 from transformers import pipeline
+
 
 pipeline = pipeline(
     task="image-classification",
@@ -51,11 +51,13 @@ pipeline("https://huggingface.co/datasets/huggingface/documentation-images/resol
 </hfoption>
 <hfoption id="AutoModel">
 
-```py
-import torch
+```python
 import requests
+import torch
 from PIL import Image
-from transformers import AutoModelForImageClassification, AutoImageProcessor
+
+from transformers import AutoImageProcessor, AutoModelForImageClassification
+
 
 image_processor = AutoImageProcessor.from_pretrained(
     "microsoft/dit-base-finetuned-rvlcdip",

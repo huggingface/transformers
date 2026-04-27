@@ -41,8 +41,8 @@ The example below demonstrates how to generate text based on an image with [`Pip
 <hfoption id="Pipeline">
 
 ```python
-import torch
 from transformers import pipeline
+
 
 pipeline = pipeline(
     task="image-text-to-text",
@@ -69,9 +69,9 @@ pipeline(text=messages, max_new_tokens=20, return_full_text=False)
 <hfoption id="AutoModel">
 
 ```python
-import torch
 import requests
 from PIL import Image
+
 from transformers import AutoProcessor, LlavaNextForConditionalGeneration
 
 
@@ -105,10 +105,12 @@ Quantization reduces the memory burden of large models by representing the weigh
 The example below uses [bitsandbytes](../quantization/bitsandbytes) to only quantize the weights to int4.
 
 ```python
-import torch
 import requests
+import torch
 from PIL import Image
+
 from transformers import AutoModelForImageTextToText, AutoProcessor, BitsAndBytesConfig
+
 
 quant_config = BitsAndBytesConfig(
     load_in_4bit=True,
@@ -159,9 +161,11 @@ processor.tokenizer.padding_side = "left"
 * The example below demonstrates inference with multiple input images.
 
 ```python
-from transformers import LlavaNextProcessor, LlavaNextForConditionalGeneration
+import requests
 from PIL import Image
-import requests, torch
+
+from transformers import LlavaNextForConditionalGeneration, LlavaNextProcessor
+
 
 processor = LlavaNextProcessor.from_pretrained("llava-hf/llava-v1.6-mistral-7b-hf")
 model = LlavaNextForConditionalGeneration.from_pretrained(

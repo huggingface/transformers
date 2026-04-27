@@ -46,6 +46,7 @@ The following code snippet demonstrates how to use `StableLM 3B 4E1T` for infere
 ```python
 from transformers import AutoModelForCausalLM, AutoTokenizer, set_seed
 
+
 set_seed(0)
 
 tokenizer = AutoTokenizer.from_pretrained("stabilityai/stablelm-3b-4e1t")
@@ -72,8 +73,8 @@ Also make sure that your hardware is compatible with Flash-Attention 2. Read mor
 Now, to run the model with Flash Attention 2, refer to the snippet below:
 
 ```python
-import torch
 from transformers import AutoModelForCausalLM, AutoTokenizer, set_seed
+
 
 set_seed(0)
 

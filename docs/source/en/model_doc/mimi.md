@@ -40,8 +40,11 @@ The example below demonstrates how to encode and decode audio with the [`AutoMod
 <hfoption id="AutoModel">
 
 ```python
-from datasets import load_dataset, Audio
-from transformers import MimiModel, AutoFeatureExtractor
+from datasets import Audio, load_dataset
+
+from transformers import AutoFeatureExtractor, MimiModel
+
+
 librispeech_dummy = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
 
 # load model and feature extractor

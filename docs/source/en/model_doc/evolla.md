@@ -35,7 +35,7 @@ model = EvollaForProteinText2Text.from_pretrained("westlake-repl/Evolla-10B-DPO-
 # aa_seq should have same length as foldseek
 protein_inputs = [
     {
-        
+
         "aa_seq": "MATGGRRG...",
         "foldseek": "###lqpfd...", # hashtag means the low-confidence foldseek tokens
     },

@@ -38,8 +38,8 @@ The example below demonstrates how to predict the masked token with [`Pipeline`]
 <hfoption id="AutoModel">
 
 ```python
-import torch
 from transformers import AutoModelForSeq2SeqLM, AutoTokenizer
+
 
 tokenizer = AutoTokenizer.from_pretrained("google/switch-base-8")
 model = AutoModelForSeq2SeqLM.from_pretrained("google/switch-base-8", device_map="auto")
@@ -58,10 +58,10 @@ Quantization reduces the memory burden of large models by representing the weigh
 
 The example below uses [bitsandbytes](../quantization/bitsandbytes/) to only quantize the weights to 8-bits.
 
-```py
+```python
 # pip install bitsandbytes
-import torch
 from transformers import AutoModelForSeq2SeqLM, AutoTokenizer, BitsAndBytesConfig
+
 
 tokenizer = AutoTokenizer.from_pretrained("google/switch-base-8")
 quantization_config = BitsAndBytesConfig(load_in_8bit=True)

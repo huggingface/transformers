@@ -39,8 +39,8 @@ The example below demonstrates how to generate text with [`Pipeline`], [`AutoMod
 <hfoption id="Pipeline">
 
 ```python
-import torch
 from transformers import pipeline
+
 
 pipe = pipeline(
     task="text-generation",
@@ -60,8 +60,8 @@ print(outputs[0]["generated_text"][-1]['content'])
 <hfoption id="AutoModel">
 
 ```python
-import torch
 from transformers import AutoModelForCausalLM, AutoTokenizer
+
 
 model = AutoModelForCausalLM.from_pretrained(
     "Qwen/Qwen2-1.5B-Instruct",
@@ -116,8 +116,8 @@ The example below uses [bitsandbytes](../quantization/bitsandbytes) to quantize 
 
 ```python
 # pip install -U flash-attn --no-build-isolation
-import torch
-from transformers import AutoTokenizer, AutoModelForCausalLM, BitsAndBytesConfig
+from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig
+
 
 quantization_config = BitsAndBytesConfig(
     load_in_4bit=True,

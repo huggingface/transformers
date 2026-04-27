@@ -87,6 +87,7 @@ The inputs for unconditional (or 'null') generation can be obtained through the 
 ```python
 from transformers import MusicgenForConditionalGeneration
 
+
 model = MusicgenForConditionalGeneration.from_pretrained("facebook/musicgen-small", device_map="auto")
 unconditional_inputs = model.get_unconditional_inputs(num_samples=1)
 
@@ -99,6 +100,7 @@ to the generated audio samples, you can either play them in an ipynb notebook:
 ```python
 from IPython.display import Audio
 
+
 sampling_rate = model.config.audio_encoder.sampling_rate
 Audio(audio_values[0].numpy(), rate=sampling_rate)
 ```
@@ -107,6 +109,7 @@ Or save them as a `.wav` file using a third-party library, e.g. `scipy`:
 
 ```python
 import scipy
+
 
 sampling_rate = model.config.audio_encoder.sampling_rate
 scipy.io.wavfile.write("musicgen_out.wav", rate=sampling_rate, data=audio_values[0, 0].numpy())
@@ -119,6 +122,7 @@ the inputs:
 
 ```python
 from transformers import AutoProcessor, MusicgenForConditionalGeneration
+
 
 processor = AutoProcessor.from_pretrained("facebook/musicgen-small")
 model = MusicgenForConditionalGeneration.from_pretrained("facebook/musicgen-small", device_map="auto")
@@ -149,8 +153,10 @@ pip install datasets[audio]
 ```
 
 ```python
-from transformers import AutoProcessor, MusicgenForConditionalGeneration
 from datasets import load_dataset
+
+from transformers import AutoProcessor, MusicgenForConditionalGeneration
+
 
 processor = AutoProcessor.from_pretrained("facebook/musicgen-small")
 model = MusicgenForConditionalGeneration.from_pretrained("facebook/musicgen-small", device_map="auto")
@@ -175,8 +181,10 @@ For batched audio-prompted generation, the generated `audio_values` can be post-
 [`MusicgenProcessor`] class:
 
 ```python
-from transformers import AutoProcessor, MusicgenForConditionalGeneration
 from datasets import load_dataset
+
+from transformers import AutoProcessor, MusicgenForConditionalGeneration
+
 
 processor = AutoProcessor.from_pretrained("facebook/musicgen-small")
 model = MusicgenForConditionalGeneration.from_pretrained("facebook/musicgen-small", device_map="auto")
@@ -211,6 +219,7 @@ tokens, can be found in the model's generation config, and updated as desired:
 ```python
 from transformers import MusicgenForConditionalGeneration
 
+
 model = MusicgenForConditionalGeneration.from_pretrained("facebook/musicgen-small", device_map="auto")
 
 # inspect the default generation config
@@ -242,6 +251,7 @@ specifying the correct config, or be accessed through the `.decoder` attribute o
 
 ```python
 from transformers import AutoConfig, MusicgenForCausalLM, MusicgenForConditionalGeneration
+
 
 # Option 1: get decoder config and pass to `.from_pretrained`
 decoder_config = AutoConfig.from_pretrained("facebook/musicgen-small").decoder

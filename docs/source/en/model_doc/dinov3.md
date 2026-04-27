@@ -33,9 +33,9 @@ The example below demonstrates how to obtain an image embedding with [`Pipeline`
 <hfoptions id="usage">
 <hfoption id="Pipeline">
 
-```py
-import torch
+```python
 from transformers import pipeline
+
 
 pipe = pipeline(
     task="image-feature-extraction",
@@ -48,10 +48,12 @@ pipe("https://huggingface.co/datasets/huggingface/documentation-images/resolve/m
 </hfoption>
 <hfoption id="AutoModel">
 
-```py
+```python
 import torch
+
 from transformers import AutoImageProcessor, AutoModel
 from transformers.image_utils import load_image
+
 
 url = "http://images.cocodataset.org/val2017/000000039769.jpg"
 image = load_image(url)
@@ -78,11 +80,12 @@ Quantization reduces the memory burden of large models by representing the weigh
 
 The example below uses [torchao](../quantization/torchao) to only quantize the weights to int4.
 
-```py
+```python
 # pip install torchao
 import torch
-from transformers import TorchAoConfig, AutoImageProcessor, AutoModel
 from torchao.quantization import Int4WeightOnlyConfig
+
+from transformers import AutoImageProcessor, AutoModel, TorchAoConfig
 from transformers.image_utils import load_image
 
 

@@ -42,6 +42,7 @@ The model is pretty heavy (~40GB in half precision) so if you just want to run t
 ```python
 from transformers import AutoModelForSeq2SeqLM, AutoTokenizer, BitsAndBytesConfig
 
+
 model = AutoModelForSeq2SeqLM.from_pretrained("google/flan-ul2", quantization_config=BitsAndBytesConfig(load_in_8bit=True), device_map="auto")
 tokenizer = AutoTokenizer.from_pretrained("google/flan-ul2")
 

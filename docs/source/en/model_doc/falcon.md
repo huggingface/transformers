@@ -37,9 +37,9 @@ The example below demonstrates how to generate text with [`Pipeline`], [`AutoMod
 <hfoptions id="usage">
 <hfoption id="Pipeline">
 
-```py
-import torch
+```python
 from transformers import pipeline
+
 
 pipeline = pipeline(
     task="text-generation",
@@ -57,9 +57,9 @@ pipeline(
 </hfoption>
 <hfoption id="AutoModel">
 
-```py
-import torch
-from transformers import AutoTokenizer, AutoModelForCausalLM
+```python
+from transformers import AutoModelForCausalLM, AutoTokenizer
+
 
 tokenizer = AutoTokenizer.from_pretrained("tiiuae/falcon-7b-instruct")
 model = AutoModelForCausalLM.from_pretrained(
@@ -90,8 +90,8 @@ Quantization reduces the memory burden of large models by representing the weigh
 The example below uses [bitsandbytes](../quantization/bitsandbytes) to only quantize the weights to 4-bits.
 
 ```python
-import torch
-from transformers import AutoTokenizer, AutoModelForCausalLM, BitsAndBytesConfig
+from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig
+
 
 quantization_config = BitsAndBytesConfig(
     load_in_4bit=True,

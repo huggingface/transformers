@@ -28,7 +28,6 @@ LightOnOcr combines a Vision Transformer encoder (Pixtral-based) with a lightwei
 ## Usage
 
 ```python
-import torch
 from transformers import LightOnOcrForConditionalGeneration, LightOnOcrProcessor
 
 

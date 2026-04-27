@@ -39,11 +39,9 @@ The example below demonstrates how to perform object detection with [`Pipeline`]
 <hfoptions id="usage">
 <hfoption id="Pipeline">
 
-```py
-import torch
-import requests
-from PIL import Image
+```python
 from transformers import pipeline
+
 
 pipeline = pipeline(
     "image-text-to-text",
@@ -60,11 +58,12 @@ pipeline(
 </hfoption>
 <hfoption id="AutoModel">
 
-```py
-import torch
+```python
 import requests
 from PIL import Image
+
 from transformers import AutoProcessor, Florence2ForConditionalGeneration
+
 
 url = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/tasks/car.jpg?download=true"
 image = Image.open(requests.get(url, stream=True).raw).convert("RGB")
@@ -94,12 +93,14 @@ Quantization reduces the memory burden of large models by representing the weigh
 
 The example below uses [bitsandbytes](../quantization/bitsandbytes) to quantize the model to 4-bit.
 
-```py
+```python
 # pip install bitsandbytes
-import torch
 import requests
+import torch
 from PIL import Image
-from transformers import AutoProcessor, Florence2ForConditionalGeneration, BitsAndBytesConfig
+
+from transformers import AutoProcessor, BitsAndBytesConfig, Florence2ForConditionalGeneration
+
 
 quantization_config = BitsAndBytesConfig(load_in_4bit=True)
 

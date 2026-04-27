@@ -40,8 +40,8 @@ The example below demonstrates how to chat with [`Pipeline`] or the [`AutoModel`
 <hfoption id="Pipeline">
 
 ```python
-import torch
 from transformers import pipeline
+
 
 messages = [
     {"role": "user", "content": "What is your favourite condiment?"},
@@ -57,8 +57,8 @@ chatbot(messages)
 <hfoption id="AutoModel">
 
 ```python
-import torch
 from transformers import AutoModelForCausalLM, AutoTokenizer
+
 
 model = AutoModelForCausalLM.from_pretrained("mistralai/Mistral-7B-Instruct-v0.3", attn_implementation="sdpa", device_map="auto")
 tokenizer = AutoTokenizer.from_pretrained("mistralai/Mistral-7B-Instruct-v0.3")
@@ -91,8 +91,8 @@ Quantization reduces the memory burden of large models by representing the weigh
 The example below uses [bitsandbytes](../quantization/bitsandbytes) to only quantize the weights to 4-bits.
 
 ```python
-import torch
 from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig
+
 
 # specify how to quantize the model
 quantization_config = BitsAndBytesConfig(
@@ -121,8 +121,9 @@ tokenizer.batch_decode(generated_ids)[0]
 
 Use the [AttentionMaskVisualizer](https://github.com/huggingface/transformers/blob/beb9b5b02246b9b7ee81ddf938f93f44cfeaad19/src/transformers/utils/attention_visualizer.py#L139) to better understand what tokens the model can and cannot attend to.
 
-```py
+```python
 from transformers.utils.attention_visualizer import AttentionMaskVisualizer
+
 
 visualizer = AttentionMaskVisualizer("mistralai/Mistral-7B-Instruct-v0.3")
 visualizer("Do you have mayonnaise recipes?")

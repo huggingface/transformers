@@ -45,8 +45,7 @@ Mistral 4 offers the following capabilities:
 
 ## Usage examples
 
-```py
-import torch
+```python
 from transformers import AutoProcessor, Mistral3ForConditionalGeneration
 
 
@@ -81,7 +80,7 @@ output = model.generate(
 )[0]
 
 # Setting `skip_special_tokens=False` to visualize reasoning trace between [THINK] [/THINK] tags.
-decoded_output = processor.decode(output[len(inputs["input_ids"][0]):], skip_special_tokens=False) 
+decoded_output = processor.decode(output[len(inputs["input_ids"][0]):], skip_special_tokens=False)
 print(decoded_output)
 ```
 

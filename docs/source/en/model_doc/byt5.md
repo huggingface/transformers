@@ -35,8 +35,8 @@ The example below demonstrates how to generate text with [`Pipeline`], [`AutoMod
 <hfoption id="AutoModel">
 
 ```python
-import torch
 from transformers import AutoModelForSeq2SeqLM, AutoTokenizer
+
 
 tokenizer = AutoTokenizer.from_pretrained(
     "google/byt5-small"
@@ -63,8 +63,8 @@ The example below uses [torchao](../quantization/torchao) to only quantize the w
 
 ```python
 # pip install torchao
-import torch
-from transformers import TorchAoConfig, AutoModelForSeq2SeqLM, AutoTokenizer
+from transformers import AutoModelForSeq2SeqLM, AutoTokenizer, TorchAoConfig
+
 
 quantization_config = TorchAoConfig("int4_weight_only", group_size=128)
 

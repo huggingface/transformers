@@ -77,8 +77,8 @@ pip install transformers
 ### Example
 
 ```python
-import torch
 from transformers import AutoModelForCausalLM, AutoTokenizer
+
 
 model_id = "microsoft/bitnet-b1.58-2B-4T"
 
