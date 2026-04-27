@@ -583,6 +583,8 @@ class Granite4VisionTextModel(Granite4VisionPreTrainedModel):
         past_key_values: Cache | None = None,
         inputs_embeds: torch.FloatTensor | None = None,
         use_cache: bool | None = None,
+        output_attentions: bool | None = None,
+        output_hidden_states: bool | None = None,
         vision_mask: torch.BoolTensor | None = None,
         deepstack_features: dict | None = None,
         **kwargs: Unpack[TransformersKwargs],
@@ -594,6 +596,11 @@ class Granite4VisionTextModel(Granite4VisionPreTrainedModel):
             Mapping from LLM layer index to projected vision features of shape `(num_image_tokens, hidden_size)`.
             Features are added into image-token positions of hidden states before the corresponding decoder layer.
         """
+        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
+        output_hidden_states = (
+            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        )
+
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
 
@@ -622,25 +629,41 @@ class Granite4VisionTextModel(Granite4VisionPreTrainedModel):
         hidden_states = inputs_embeds
         position_embeddings = self.rotary_emb(hidden_states, position_ids=position_ids)
 
+        all_hidden_states = () if output_hidden_states else None
+        all_self_attns = () if output_attentions else None
+
         for layer_idx, decoder_layer in enumerate(self.layers[: self.config.num_hidden_layers]):
+            if output_hidden_states:
+                all_hidden_states += (hidden_states,)
+
             if deepstack_features is not None and layer_idx in deepstack_features:
                 hidden_states = self._deepstack_inject(hidden_states, vision_mask, deepstack_features[layer_idx])
 
-            hidden_states = decoder_layer(
+            layer_outputs = decoder_layer(
                 hidden_states,
                 attention_mask=causal_mask,
                 position_ids=position_ids,
                 past_key_values=past_key_values,
                 use_cache=use_cache,
+                output_attentions=output_attentions,
                 position_embeddings=position_embeddings,
                 **kwargs,
             )
+            hidden_states = layer_outputs[0] if isinstance(layer_outputs, tuple) else layer_outputs
+
+            if output_attentions:
+                all_self_attns += (layer_outputs[1],)
 
         hidden_states = self.norm(hidden_states)
+
+        if output_hidden_states:
+            all_hidden_states += (hidden_states,)
 
         return Granite4VisionModelOutputWithPast(
             last_hidden_state=hidden_states,
             past_key_values=past_key_values,
+            hidden_states=all_hidden_states,
+            attentions=all_self_attns,
         )
 
     def _deepstack_inject(
@@ -1053,6 +1076,8 @@ class Granite4VisionModel(Granite4VisionPreTrainedModel):
             position_ids=position_ids,
             past_key_values=past_key_values,
             use_cache=use_cache,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
             vision_mask=vision_mask,
             deepstack_features=deepstack_features,
             **kwargs,
