@@ -96,6 +96,11 @@ class Granite4VisionCausalLMOutputWithPast(LlavaNextCausalLMOutputWithPast):
 # ── Config ──────────────────────────────────────────────────────────────────
 
 
+class Granite4VisionTextConfig(GraniteConfig):
+    model_type = "granite4_vision_text"
+    base_config_key = "text_config"
+
+
 class Granite4VisionConfig(LlavaNextConfig):
     r"""
     downsample_rate (`str`, *optional*):
@@ -211,6 +216,9 @@ class Granite4VisionProcessor(LlavaNextProcessor):
 
 class Granite4VisionTextModel(Granite4VisionPreTrainedModel, GraniteModel):
     """Granite LLM backbone with deepstack feature injection support."""
+
+    def __init__(self, config: Granite4VisionTextConfig):
+        super().__init__(config)
 
     def _deepstack_inject(
         self,
@@ -742,6 +750,7 @@ class Granite4VisionForConditionalGeneration(LlavaNextForConditionalGeneration):
 
 __all__ = [
     "Granite4VisionConfig",
+    "Granite4VisionTextConfig",
     "Granite4VisionImageProcessor",
     "Granite4VisionImageProcessorPil",
     "Granite4VisionProcessor",
