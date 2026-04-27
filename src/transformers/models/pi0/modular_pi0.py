@@ -612,13 +612,16 @@ class PI0ForConditionalGeneration(PI0PreTrainedModel):
             )
 
         # 2. Run VLM once and obtain prefix cache. Must infer positions here!
+        position_ids = None
         if attention_mask is not None:
             position_ids = attention_mask.cumsum(-1) - 1
         inputs_embeds = self.model.embed_prefix(input_ids, pixel_values, pixel_attention_mask)
+        token_type_ids = torch.zeros_like(inputs_embeds)[:, :, 0]
         past_key_values = self.model.vlm(
             inputs_embeds=inputs_embeds,
             attention_mask=attention_mask,
             position_ids=position_ids,
+            token_type_ids=token_type_ids,
             use_cache=True,
             return_dict=True,
         ).past_key_values
@@ -636,6 +639,7 @@ class PI0ForConditionalGeneration(PI0PreTrainedModel):
                 pixel_attention_mask=pixel_attention_mask,
                 attention_mask=attention_mask,
                 past_key_values=past_key_values,
+                **kwargs,
             )
 
             # We need to keep only the "vlm-prefix", no attention to past denoising steps!
