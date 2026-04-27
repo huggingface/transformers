@@ -21,10 +21,15 @@
 from huggingface_hub.dataclasses import strict
 
 from ...configuration_utils import PreTrainedConfig
-from ...utils import auto_docstring
+from ...utils import auto_docstring, logging
 
 
-@auto_docstring(checkpoint="PaddlePaddle/PPFormulaNet_wired_safetensors")
+logger = logging.get_logger(__name__)
+
+
+@auto_docstring(
+    checkpoint="PaddlePaddle/PPFormulaNet_plus-L_safetensors"
+)  # or "PaddlePaddle/PP-FormulaNet-L_safetensors"
 @strict
 class PPFormulaNetVisionConfig(PreTrainedConfig):
     r"""
@@ -64,10 +69,8 @@ class PPFormulaNetVisionConfig(PreTrainedConfig):
 
 @auto_docstring(checkpoint="PaddlePaddle/PPFormulaNet_plus-L_safetensors")
 @strict
-class PPFormulaNetConfig(PreTrainedConfig):
+class PPFormulaNetTextConfig(PreTrainedConfig):
     r"""
-    vision_config (`dict` or [`PPFormulaNetVisionConfig`], *optional*):
-        Configuration for the vision encoder. If `None`, a default [`PPFormulaNetVisionConfig`] is used.
     post_conv_in_channels (`int`, *optional*, defaults to 256):
         Number of input channels for the post-encoder convolution layer.
     post_conv_mid_channels (`int`, *optional*, defaults to 512):
@@ -78,20 +81,15 @@ class PPFormulaNetConfig(PreTrainedConfig):
         Controls the maximum length to use by one of the truncation/padding parameters.
     """
 
-    model_type = "pp_formulanet"
-    sub_configs = {"vision_config": PPFormulaNetVisionConfig}
-
-    vision_config: dict | PPFormulaNetVisionConfig | None = None
-
-    post_conv_in_channels: int = 256
-    post_conv_out_channels: int = 1024
-
     keys_to_ignore_at_inference = ["past_key_values"]
     attribute_map = {
         "num_attention_heads": "encoder_attention_heads",
         "hidden_size": "d_model",
         "num_hidden_layers": "encoder_layers",
     }
+
+    post_conv_in_channels: int = 256
+    post_conv_out_channels: int = 1024
     post_conv_mid_channels: int = 512
     vocab_size: int = 50000
     max_position_embeddings: int = 2560
@@ -115,13 +113,38 @@ class PPFormulaNetConfig(PreTrainedConfig):
     forced_eos_token_id: int | list[int] | None = 2
     tie_word_embeddings: bool = False
     max_length: int = 1537
+    is_encoder_decoder: bool = True
+
+
+@auto_docstring(checkpoint="PaddlePaddle/PPFormulaNet_plus-L_safetensors")
+@strict
+class PPFormulaNetConfig(PreTrainedConfig):
+    r"""
+    vision_config (`dict` or [`PPFormulaNetVisionConfig`], *optional*):
+        Configuration for the vision encoder. If `None`, a default [`PPFormulaNetVisionConfig`] is used.
+    """
+
+    model_type = "pp_formulanet"
+    sub_configs = {"text_config": PPFormulaNetTextConfig, "vision_config": PPFormulaNetVisionConfig}
+
+    text_config: dict | PPFormulaNetTextConfig | None = None
+    vision_config: dict | PPFormulaNetVisionConfig | None = None
+    is_encoder_decoder: bool = True
 
     def __post_init__(self, **kwargs):
-        if self.vision_config is None:
-            self.vision_config = PPFormulaNetVisionConfig()
-        elif isinstance(self.vision_config, dict):
+        if isinstance(self.text_config, dict):
+            self.text_config = PPFormulaNetTextConfig(**self.text_config)
+        elif self.text_config is None:
+            logger.info("text_config is None. Initializing the PPFormulaNetTextConfig with default values.")
+            self.text_config = PPFormulaNetTextConfig()
+
+        if isinstance(self.vision_config, dict):
             self.vision_config = PPFormulaNetVisionConfig(**self.vision_config)
+        elif self.vision_config is None:
+            logger.info("vision_config is None. Initializing the PPFormulaNetVisionConfig with default values.")
+            self.vision_config = PPFormulaNetVisionConfig()
+
         super().__post_init__(**kwargs)
 
 
-__all__ = ["PPFormulaNetConfig"]
+__all__ = ["PPFormulaNetConfig", "PPFormulaNetTextConfig", "PPFormulaNetVisionConfig"]

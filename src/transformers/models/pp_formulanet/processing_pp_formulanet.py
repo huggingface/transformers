@@ -34,16 +34,7 @@ class PPFormulaNetProcessor(ProcessorMixin):
     r"""
     [`PPFormulaNetProcessor`] offers all the functionalities of [`PPFormulaNetImageProcessor`] and [`NougatTokenizer`]. See the
     [`~PPFormulaNetProcessor.__call__`] and [`~PPFormulaNetProcessor.decode`] for more information.
-    Args:
-        image_processor ([`PPFormulaNetImageProcessor`], *optional*):
-            The image processor is a required input.
-        tokenizer ([`NougatTokenizer`], *optional*):
-            The tokenizer is a required input.
-        chat_template (`str`, *optional*): A Jinja template which will be used to convert lists of messages
-            in a chat into a tokenizable string.
     """
-
-    tokenizer_class = "AutoTokenizer"
 
     def __init__(self, image_processor, tokenizer):
         super().__init__(image_processor, tokenizer)
@@ -83,7 +74,7 @@ class PPFormulaNetProcessor(ProcessorMixin):
         )
 
         image_inputs = self.image_processor(images=images, **output_kwargs["images_kwargs"])
-        return image_inputs
+        return BatchFeature({"input_ids": None, **image_inputs})
 
     def post_process_generation(self, text: str) -> str:
         """Post-processes a string by fixing text and normalizing it.
@@ -100,7 +91,7 @@ class PPFormulaNetProcessor(ProcessorMixin):
 
             text = fix_text(text)
         except ImportError:
-            logger.warning(
+            logger.warning_once(
                 "ftfy is not installed, skipping fix_text. "
                 "Output may contain unnormalized unicode, extra spaces, or escaped artifacts"
             )
@@ -121,7 +112,6 @@ class PPFormulaNetProcessor(ProcessorMixin):
         noletter = r"[\W_^\d]"
         names = []
         for x in re.findall(text_reg, s):
-            pattern = r"\\[a-zA-Z]+"
             pattern = r"(\\[a-zA-Z]+)\s(?=\w)|\\[a-zA-Z]+\s(?=})"
             matches = re.findall(pattern, x[0])
             for m in matches:
@@ -159,7 +149,7 @@ class PPFormulaNetProcessor(ProcessorMixin):
         replaced_formula = pattern.sub(replacer, formula)
         return replaced_formula.replace('"', "")
 
-    def post_process(self, generated_outputs, skip_special_tokens=True, **kwargs):
+    def post_process_image_text_to_text(self, generated_outputs, skip_special_tokens=True, **kwargs):
         """
         Post-process the output of the model to decode the text.
 

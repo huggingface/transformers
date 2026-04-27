@@ -18,15 +18,16 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+
 import collections
 import math
 from collections.abc import Callable
 from dataclasses import dataclass
+from typing import Any
 
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from torch.nn import CrossEntropyLoss
 
 from ... import initialization as init
 from ...activations import ACT2FN
@@ -36,14 +37,22 @@ from ...masking_utils import create_bidirectional_mask, create_causal_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import (
-    BaseModelOutput,
     BaseModelOutputWithPastAndCrossAttentions,
-    CausalLMOutputWithCrossAttentions,
+    BaseModelOutputWithPooling,
     ModelOutput,
+    Seq2SeqLMOutput,
+    Seq2SeqModelOutput,
 )
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, is_torchdynamo_compiling, logging
+from ...utils import (
+    TransformersKwargs,
+    auto_docstring,
+    can_return_tuple,
+    is_torchdynamo_compiling,
+    logging,
+    torch_compilable_check,
+)
 from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import OutputRecorder, capture_outputs
 from .configuration_pp_formulanet import PPFormulaNetConfig, PPFormulaNetVisionConfig
@@ -77,41 +86,15 @@ class PPFormulaNetPreTrainedModel(PreTrainedModel):
                 init.constant_(module.rel_pos_w, 0.0)
 
 
-class PPFormulaNetBackbone(PPFormulaNetPreTrainedModel):
-    def __init__(
-        self,
-        config: dict | None = None,
-        **kwargs,
-    ):
-        super().__init__(config)
-        self.vision_tower = PPFormulaNetVisionEncoder(config.vision_config)
-        self.post_conv1 = nn.Conv2d(
-            config.post_conv_in_channels, config.post_conv_mid_channels, kernel_size=3, stride=2, padding=1, bias=False
-        )
-        self.post_conv2 = nn.Conv2d(
-            config.post_conv_mid_channels,
-            config.post_conv_out_channels,
-            kernel_size=3,
-            stride=2,
-            padding=1,
-            bias=False,
-        )
-        self.mm_projector_vary = nn.Linear(config.post_conv_out_channels, config.post_conv_out_channels)
-        self.enc_to_dec_proj = nn.Linear(config.post_conv_out_channels, config.hidden_size)
-        self.post_init()
+@dataclass
+class PPFormulaNetSeq2SeqModelOutput(Seq2SeqModelOutput):
+    r"""
+    image_hidden_states (`torch.FloatTensor`, *optional*):
+        A `torch.FloatTensor` of size `(batch_size, num_image_tokens, hidden_size)`.
+        image_hidden_states of the model produced by the vision encoder and after projecting the last hidden state.
+    """
 
-    def forward(self, hidden_states: torch.Tensor, **kwargs: Unpack[TransformersKwargs]):
-        vision_output = self.vision_tower(hidden_states, **kwargs)
-        hidden_states = self.post_conv1(vision_output.last_hidden_state)
-        hidden_states = self.post_conv2(hidden_states)
-        hidden_states = hidden_states.flatten(2).transpose(1, 2)
-        hidden_states = self.mm_projector_vary(hidden_states)
-        hidden_states = self.enc_to_dec_proj(hidden_states)
-        return BaseModelOutput(
-            last_hidden_state=hidden_states,
-            hidden_states=vision_output.hidden_states,
-            attentions=vision_output.attentions,
-        )
+    image_hidden_states: torch.FloatTensor | None = None
 
 
 class PPFormulaNetVisionAttention(nn.Module):
@@ -446,6 +429,89 @@ class PPFormulaNetVisionNeck(nn.Module):
 
 
 class PPFormulaNetVisionEncoder(PPFormulaNetPreTrainedModel):
+    _can_record_outputs = {"hidden_states": PPFormulaNetVisionLayer, "attentions": PPFormulaNetVisionAttention}
+    input_modalities = ("image",)
+
+    def __init__(self, config: PPFormulaNetVisionConfig):
+        super().__init__(config)
+        self.config = config
+        self.image_size = config.image_size
+        self.patch_embed = PPFormulaNetPatchEmbeddings(config)
+
+        self.pos_embed = None
+        if config.use_abs_pos:
+            # Initialize absolute positional embedding with pretrain image size.
+            self.pos_embed = nn.Parameter(
+                torch.zeros(
+                    1,
+                    config.image_size // config.patch_size,
+                    config.image_size // config.patch_size,
+                    config.hidden_size,
+                )
+            )
+
+        self.layers = nn.ModuleList()
+        for i in range(config.num_hidden_layers):
+            layer = PPFormulaNetVisionLayer(
+                config,
+                window_size=config.window_size if i not in config.global_attn_indexes else 0,
+            )
+            self.layers.append(layer)
+
+        self.neck = PPFormulaNetVisionNeck(config)
+
+        self.gradient_checkpointing = False
+        self.post_init()
+
+    def get_input_embeddings(self):
+        return self.patch_embed
+
+    @merge_with_config_defaults
+    @capture_outputs(tie_last_hidden_states=False)
+    def forward(
+        self, pixel_values: torch.FloatTensor | None = None, **kwargs: Unpack[TransformersKwargs]
+    ) -> tuple | PPFormulaNetVisionEncoderOutput:
+        if pixel_values is None:
+            raise ValueError("You have to specify pixel_values")
+
+        hidden_states = self.patch_embed(pixel_values)
+        if self.pos_embed is not None:
+            hidden_states = hidden_states + self.pos_embed
+        for layer_module in self.layers:
+            hidden_states = layer_module(hidden_states)
+        hidden_states = self.neck(hidden_states)
+        return PPFormulaNetVisionEncoderOutput(
+            last_hidden_state=hidden_states,
+        )
+
+
+class PPFormulaNetMultiModalProjector(nn.Module):
+    def __init__(self, config):
+        super().__init__()
+        self.conv1 = nn.Conv2d(
+            config.post_conv_in_channels, config.post_conv_mid_channels, kernel_size=3, stride=2, padding=1, bias=False
+        )
+        self.conv2 = nn.Conv2d(
+            config.post_conv_mid_channels,
+            config.post_conv_out_channels,
+            kernel_size=3,
+            stride=2,
+            padding=1,
+            bias=False,
+        )
+        self.linear_1 = nn.Linear(config.post_conv_out_channels, config.post_conv_out_channels)
+        self.linear_2 = nn.Linear(config.post_conv_out_channels, config.hidden_size)
+
+    def forward(self, hidden_states: torch.Tensor, **kwargs: Unpack[TransformersKwargs]):
+        hidden_states = self.conv1(hidden_states)
+        hidden_states = self.conv2(hidden_states)
+        hidden_states = hidden_states.flatten(2).transpose(1, 2)
+        hidden_states = self.linear_1(hidden_states)
+        hidden_states = self.linear_2(hidden_states)
+        return hidden_states
+
+
+class PPFormulaNetVisionModel(PPFormulaNetPreTrainedModel):
     _can_record_outputs = {"hidden_states": PPFormulaNetVisionLayer, "attentions": PPFormulaNetVisionAttention}
     input_modalities = ("image",)
 
@@ -953,7 +1019,7 @@ class PPFormulaNetDecoder(PPFormulaNetPreTrainedModel):
         )
 
 
-class PPFormulaNetDecoderWrapper(PPFormulaNetPreTrainedModel):
+class PPFormulaNetTextModel(PPFormulaNetPreTrainedModel):
     """
     This wrapper class is a helper class to correctly load pretrained checkpoints when the causal language model is
     used in combination with the [`EncoderDecoderModel`] framework.
@@ -968,43 +1034,210 @@ class PPFormulaNetDecoderWrapper(PPFormulaNetPreTrainedModel):
         return self.decoder(*args, **kwargs)
 
 
-class PPFormulaNetHead(PPFormulaNetPreTrainedModel, GenerationMixin):
-    _tied_weights_keys = {
-        "lm_head.weight": "model.decoder.embed_tokens.weight",
-    }
-
+@auto_docstring(
+    custom_intro="""
+    Florence-2 is a vision model for captioning, detection, and segmentation.
+    """
+)
+class PPFormulaNetModel(PPFormulaNetPreTrainedModel):
     def __init__(self, config):
-        config.is_decoder = True
-        config.is_encoder_decoder = False
         super().__init__(config)
-        self.model = PPFormulaNetDecoderWrapper(config)
+        self.vision_tower = PPFormulaNetVisionModel(config=config.vision_config)
+        self.multi_modal_projector = PPFormulaNetMultiModalProjector(config.text_config)
 
-        self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
-
-        # Initialize weights and apply final processing
+        self.language_model = PPFormulaNetTextModel(config.text_config)
         self.post_init()
 
     def get_input_embeddings(self):
-        return self.model.decoder.embed_tokens
+        return self.language_model.get_input_embeddings()
 
     def set_input_embeddings(self, value):
-        self.model.decoder.embed_tokens = value
+        self.language_model.set_input_embeddings(value)
+
+    @can_return_tuple
+    @auto_docstring(
+        custom_intro="Obtains image last hidden states from the vision tower and apply multimodal projection."
+    )
+    def get_image_features(
+        self, pixel_values: torch.Tensor, **kwargs: Unpack[TransformersKwargs]
+    ) -> tuple | BaseModelOutputWithPooling:
+        r"""
+        pixel_values (`torch.FloatTensor]` of shape `(batch_size, channels, height, width)`):
+            The tensors corresponding to the input images.
+        """
+        image_outputs = self.vision_tower(pixel_values, **kwargs)
+        image_outputs.pooler_output = self.multi_modal_projector(image_outputs.last_hidden_state)
+
+        return image_outputs
+
+    def get_placeholder_mask(
+        self, input_ids: torch.LongTensor, inputs_embeds: torch.FloatTensor, image_features: torch.FloatTensor
+    ):
+        """
+        Obtains multimodal placeholder mask from `input_ids` or `inputs_embeds`, and checks that the placeholder token count is
+        equal to the length of multimodal features. If the lengths are different, an error is raised.
+        """
+        if input_ids is None:
+            special_image_mask = inputs_embeds == self.get_input_embeddings()(
+                torch.tensor(self.config.image_token_id, dtype=torch.long, device=inputs_embeds.device)
+            )
+            special_image_mask = special_image_mask.all(-1)
+        else:
+            special_image_mask = input_ids == self.config.image_token_id
+
+        n_image_tokens = special_image_mask.sum()
+        n_image_features = image_features.shape[0] * image_features.shape[1]
+        special_image_mask = special_image_mask.unsqueeze(-1).expand_as(inputs_embeds).to(inputs_embeds.device)
+        torch_compilable_check(
+            inputs_embeds[special_image_mask].numel() == image_features.numel(),
+            f"Image features and image tokens do not match, tokens: {n_image_tokens}, features: {n_image_features}",
+        )
+        return special_image_mask
 
     @can_return_tuple
     @auto_docstring
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
+        pixel_values: torch.FloatTensor | None = None,
         attention_mask: torch.Tensor | None = None,
-        encoder_hidden_states: torch.FloatTensor | None = None,
-        encoder_attention_mask: torch.FloatTensor | None = None,
+        decoder_input_ids: torch.LongTensor | None = None,
+        decoder_attention_mask: torch.LongTensor | None = None,
+        decoder_inputs_embeds: torch.FloatTensor | None = None,
+        encoder_outputs: list[torch.FloatTensor] | None = None,
         past_key_values: Cache | None = None,
         inputs_embeds: torch.FloatTensor | None = None,
+        use_cache: bool | None = None,
+        **kwargs,
+    ) -> tuple | PPFormulaNetSeq2SeqModelOutput:
+        if encoder_outputs is None:
+            if pixel_values is not None:
+                encoder_outputs = self.get_image_features(pixel_values)
+            image_features = encoder_outputs.pooler_output.to(self.language_model.device, self.language_model.dtype)
+        else:
+            image_features = self.multi_modal_projector(encoder_outputs.last_hidden_state)
+
+        if decoder_input_ids is None:
+            decoder_start_token_id = self.config.text_config.decoder_start_token_id
+            decoder_input_ids = torch.ones(
+                (image_features.size()[0], 1), dtype=torch.long, device=self.language_model.device
+            )
+            decoder_input_ids *= decoder_start_token_id
+
+        decoder_outputs = self.language_model.decoder(
+            input_ids=decoder_input_ids,
+            attention_mask=decoder_attention_mask,
+            encoder_hidden_states=image_features,
+            encoder_attention_mask=attention_mask,
+            past_key_values=past_key_values,
+            inputs_embeds=decoder_inputs_embeds,
+            use_cache=use_cache,
+            **kwargs,
+        )
+
+        return PPFormulaNetSeq2SeqModelOutput(
+            last_hidden_state=decoder_outputs.last_hidden_state,
+            past_key_values=decoder_outputs.past_key_values,
+            decoder_hidden_states=decoder_outputs.hidden_states,
+            decoder_attentions=decoder_outputs.attentions,
+            cross_attentions=decoder_outputs.cross_attentions,
+            encoder_last_hidden_state=encoder_outputs.last_hidden_state,
+            encoder_hidden_states=encoder_outputs.hidden_states,
+            encoder_attentions=encoder_outputs.attentions,
+            image_hidden_states=image_features if pixel_values is not None else None,
+        )
+
+    def get_encoder(self):
+        return self.vision_tower
+
+
+@dataclass
+@auto_docstring(
+    custom_intro="""
+    Base class for Florence-2 model's outputs that also contains : pre-computed hidden states that can speed up sequential
+    decoding.
+    """
+)
+class PPFormulaNetSeq2SeqLMOutput(Seq2SeqLMOutput):
+    r"""
+    loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
+        Language modeling loss (for next-token prediction).
+    logits (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.vocab_size)`):
+        Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
+    image_hidden_states (`torch.FloatTensor`, *optional*):
+        A `torch.FloatTensor` of size `(batch_size, num_image_tokens, hidden_size)`.
+        image_hidden_states of the model produced by the vision encoder and after projecting the last hidden state.
+    """
+
+    image_hidden_states: tuple[torch.FloatTensor, ...] | None = None
+
+
+def shift_tokens_right(input_ids: torch.Tensor, pad_token_id: int, decoder_start_token_id: int):
+    """
+    Shift input ids one token to the right.
+    """
+    shifted_input_ids = input_ids.new_zeros(input_ids.shape)
+    shifted_input_ids[:, 1:] = input_ids[:, :-1].clone()
+    shifted_input_ids[:, 0] = decoder_start_token_id
+
+    if pad_token_id is None:
+        raise ValueError("self.model.config.pad_token_id has to be defined.")
+    # replace possible -100 values in labels by `pad_token_id`
+    shifted_input_ids.masked_fill_(shifted_input_ids == -100, pad_token_id)
+
+    return shifted_input_ids
+
+
+@auto_docstring(
+    custom_intro="""
+    PPFormulaNet Table Recognition model for table recognition tasks. Wraps the core PPFormulaNetPreTrainedModel
+    and returns outputs compatible with the Transformers table recognition API.
+    """
+)
+class PPFormulaNetForConditionalGeneration(PPFormulaNetPreTrainedModel, GenerationMixin):
+    _tied_weights_keys = {
+        "lm_head.weight": "model.language_model.shared.weight",
+    }
+
+    def __init__(self, config: PPFormulaNetConfig):
+        super().__init__(config)
+        self.model = PPFormulaNetModel(config)
+        self.lm_head = nn.Linear(config.text_config.hidden_size, config.text_config.vocab_size, bias=False)
+        self.post_init()
+
+    def get_input_embeddings(self):
+        return self.model.get_input_embeddings()
+
+    def set_input_embeddings(self, value):
+        self.model.set_input_embeddings(value)
+
+    def get_output_embeddings(self) -> nn.Module:
+        return self.lm_head
+
+    @auto_docstring
+    def get_image_features(
+        self, pixel_values: torch.Tensor, **kwargs: Unpack[TransformersKwargs]
+    ) -> tuple | BaseModelOutputWithPooling:
+        return self.model.get_image_features(pixel_values=pixel_values, **kwargs)
+
+    @can_return_tuple
+    @auto_docstring
+    def forward(
+        self,
+        input_ids: torch.LongTensor | None = None,
+        pixel_values: torch.FloatTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
+        decoder_input_ids: torch.LongTensor | None = None,
+        decoder_attention_mask: torch.LongTensor | None = None,
+        encoder_outputs: list[torch.FloatTensor] | None = None,
+        past_key_values: Cache | None = None,
+        inputs_embeds: torch.FloatTensor | None = None,
+        decoder_inputs_embeds: torch.FloatTensor | None = None,
         labels: torch.LongTensor | None = None,
         use_cache: bool | None = None,
         logits_to_keep: int | torch.Tensor = 0,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | CausalLMOutputWithCrossAttentions:
+    ) -> tuple | PPFormulaNetSeq2SeqLMOutput:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
@@ -1014,117 +1247,117 @@ class PPFormulaNetHead(PPFormulaNetPreTrainedModel, GenerationMixin):
         Example:
 
         ```python
-        >>> from transformers import AutoTokenizer, PPFormulaNetHead
+        >>> from PIL import Image
+        >>> import httpx
+        >>> from io import BytesIO
+        >>> from transformers import AutoProcessor, PPFormulaNetForConditionalGeneration
 
-        >>> tokenizer = AutoTokenizer.from_pretrained("facebook/pp_formulanet-large-cc25")
-        >>> model = PPFormulaNetHead.from_pretrained("facebook/pp_formulanet-large-cc25")
-        >>> assert model.config.is_decoder, f"{model.__class__} has to be configured as a decoder."
-        >>> inputs = tokenizer("Hello, my dog is cute", return_tensors="pt")
-        >>> outputs = model(**inputs)
+        >>> model = PPFormulaNetForConditionalGeneration.from_pretrained("florence-community/Florence-2-large")
+        >>> processor = AutoProcessor.from_pretrained("florence-community/Florence-2-large")
 
-        >>> logits = outputs.logits
-        >>> expected_shape = [1, inputs.input_ids.shape[-1], model.config.vocab_size]
-        >>> list(logits.shape) == expected_shape
-        True
+        >>> prompt = "<CAPTION>"
+        >>> url = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/tasks/car.jpg"
+        >>> with httpx.stream("GET", url) as response:
+        ...     image = Image.open(BytesIO(response.read()))
+
+        >>> inputs = processor(text=prompt, images=image, return_tensors="pt")
+
+        >>> # Generate
+        >>> generate_ids = model.generate(**inputs, max_length=100)
+        >>> processor.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0]
+        "A green car parked in front of a yellow building."
         ```"""
+        if labels is not None:
+            if use_cache:
+                logger.warning("The `use_cache` argument is changed to `False` since `labels` is provided.")
+            use_cache = False
+            if decoder_input_ids is None and decoder_inputs_embeds is None:
+                decoder_input_ids = shift_tokens_right(
+                    labels, self.config.text_config.pad_token_id, self.config.text_config.decoder_start_token_id
+                )
 
-        outputs: BaseModelOutputWithPastAndCrossAttentions = self.model.decoder(
+        outputs = self.model(
             input_ids=input_ids,
+            pixel_values=pixel_values,
             attention_mask=attention_mask,
-            encoder_hidden_states=encoder_hidden_states,
-            encoder_attention_mask=encoder_attention_mask,
+            decoder_input_ids=decoder_input_ids,
+            encoder_outputs=encoder_outputs,
+            decoder_attention_mask=decoder_attention_mask,
             past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,
+            decoder_inputs_embeds=decoder_inputs_embeds,
             use_cache=use_cache,
             **kwargs,
         )
 
         hidden_states = outputs[0]
-        # Only compute necessary logits
+        # Only compute necessary logits, and do not upcast them to float if we are not computing the loss
         slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
         logits = self.lm_head(hidden_states[:, slice_indices, :])
 
         loss = None
         if labels is not None:
-            labels = labels.to(logits.device)
-            loss_fct = CrossEntropyLoss()
-            loss = loss_fct(logits.view(-1, self.config.vocab_size), labels.view(-1))
+            loss = self.loss_function(
+                logits=logits, labels=labels, vocab_size=self.config.text_config.vocab_size, **kwargs
+            )
 
-        return CausalLMOutputWithCrossAttentions(
+        return PPFormulaNetSeq2SeqLMOutput(
             loss=loss,
             logits=logits,
             past_key_values=outputs.past_key_values,
-            hidden_states=outputs.hidden_states,
-            attentions=outputs.attentions,
+            decoder_hidden_states=outputs.decoder_hidden_states,
+            decoder_attentions=outputs.decoder_attentions,
             cross_attentions=outputs.cross_attentions,
+            encoder_last_hidden_state=outputs.encoder_last_hidden_state,
+            encoder_hidden_states=outputs.encoder_hidden_states,
+            encoder_attentions=outputs.encoder_attentions,
+            image_hidden_states=outputs.image_hidden_states,
         )
 
+    def prepare_inputs_for_generation(
+        self,
+        input_ids,
+        past_key_values=None,
+        inputs_embeds=None,
+        pixel_values=None,
+        attention_mask=None,
+        logits_to_keep=None,
+        is_first_iteration=False,
+        **kwargs,
+    ):
+        # Overwritten -- in specific circumstances we don't want to forward image inputs to the model
 
-@dataclass
-@auto_docstring
-class PPFormulaNetForTableRecognitionOutput(BaseModelOutput):
-    r"""
-    head_hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-        Hidden-states of the PPFormulaNetSLAHead at each prediction step, varies up to max `self.config.max_text_length` states (depending on early exits).
-    head_attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
-        Attentions of the PPFormulaNetSLAHead at each prediction step, varies up to max `self.config.max_text_length` attentions (depending on early exits).
-    """
-
-    head_hidden_states: torch.FloatTensor | None = None
-    head_attentions: torch.FloatTensor | None = None
-
-
-@auto_docstring(
-    custom_intro="""
-    PPFormulaNet Table Recognition model for table recognition tasks. Wraps the core PPFormulaNetPreTrainedModel
-    and returns outputs compatible with the Transformers table recognition API.
-    """
-)
-class PPFormulaNetForTextRecognition(PPFormulaNetPreTrainedModel):
-    def __init__(self, config: PPFormulaNetConfig):
-        super().__init__(config)
-        self.backbone = PPFormulaNetBackbone(config=config)
-        self.head = PPFormulaNetHead(config=config)
-        self.post_init()
-
-    @can_return_tuple
-    @auto_docstring
-    def forward(
-        self, pixel_values: torch.FloatTensor, **kwargs: Unpack[TransformersKwargs]
-    ) -> tuple[torch.FloatTensor] | PPFormulaNetForTableRecognitionOutput:
-        backbone_outputs = self.backbone(pixel_values, **kwargs)
-        encoder_hidden_states = backbone_outputs.last_hidden_state
-
-        # Start generation from decoder BOS with shape [batch_size, 1].
-        batch_size = encoder_hidden_states.shape[0]
-        input_ids = torch.full(
-            (batch_size, 1),
-            self.config.decoder_start_token_id,
-            dtype=torch.long,
-            device=encoder_hidden_states.device,
-        )
-
-        # In this decoder-only `generate` path we still use cross-attention via `encoder_hidden_states`, but
-        # `GenerationMixin` auto-creates a plain `DynamicCache` by default. Explicitly passing
-        # `EncoderDecoderCache(self_cache, cross_cache)` keeps self-attn and cross-attn cache lengths separated,
-        # avoiding decoder position-length contamination/overflow. This is a local, minimal fix and does not change
-        # MBart architecture or rewrite decoder forward logic.
-        past_key_values = EncoderDecoderCache(DynamicCache(config=self.config), DynamicCache(config=self.config))
-        head_outputs = self.head.generate(
-            input_ids=input_ids,
-            encoder_hidden_states=encoder_hidden_states,
+        model_inputs = super().prepare_inputs_for_generation(
+            input_ids,
             past_key_values=past_key_values,
-            max_length=self.config.max_length,
-            return_dict_in_generate=True,
+            inputs_embeds=inputs_embeds,
+            attention_mask=attention_mask,
+            logits_to_keep=logits_to_keep,
+            is_first_iteration=is_first_iteration,
             **kwargs,
         )
-        return PPFormulaNetForTableRecognitionOutput(
-            last_hidden_state=head_outputs.sequences,
-            hidden_states=backbone_outputs.hidden_states,
-            attentions=backbone_outputs.attentions,
-            head_hidden_states=head_outputs.hidden_states,
-            head_attentions=head_outputs.attentions,
+
+        if is_first_iteration or not kwargs.get("use_cache", True):
+            # Pixel values are used only in the first iteration if available
+            # In subsequent iterations, they are already merged with text and cached
+            # NOTE: first iteration doesn't have to be prefill, it can be the first
+            # iteration with a question and cached system prompt (continue generate from cache)
+            model_inputs["pixel_values"] = pixel_values
+
+        return model_inputs
+
+    def get_placeholder_mask(
+        self, input_ids: torch.LongTensor, inputs_embeds: torch.FloatTensor, image_features: torch.FloatTensor
+    ):
+        return self.model.get_placeholder_mask(
+            input_ids=input_ids, inputs_embeds=inputs_embeds, image_features=image_features
         )
 
+    def _prepare_encoder_decoder_kwargs_for_generation(self, *args, **kwargs) -> dict[str, Any]:
+        return super()._prepare_encoder_decoder_kwargs_for_generation(*args, **kwargs)
 
-__all__ = ["PPFormulaNetBackbone", "PPFormulaNetForTextRecognition", "PPFormulaNetPreTrainedModel", "PPFormulaNetHead"]
+    def get_encoder(self):
+        return self.model.vision_tower
+
+
+__all__ = ["PPFormulaNetModel", "PPFormulaNetForConditionalGeneration", "PPFormulaNetPreTrainedModel"]

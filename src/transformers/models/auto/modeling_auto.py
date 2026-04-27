@@ -1015,6 +1015,7 @@ MODEL_FOR_IMAGE_TEXT_TO_TEXT_MAPPING_NAMES = OrderedDict(
         ("pi0", "PI0ForConditionalGeneration"),
         ("pix2struct", "Pix2StructForConditionalGeneration"),
         ("pp_chart2table", "GotOcr2ForConditionalGeneration"),
+        ("pp_formulanet", "PPFormulaNetForConditionalGeneration"),
         ("qianfan_ocr", "QianfanOCRForConditionalGeneration"),
         ("qwen2_5_omni_thinker", "Qwen2_5OmniThinkerForConditionalGeneration"),
         ("qwen2_5_vl", "Qwen2_5_VLForConditionalGeneration"),
@@ -1153,7 +1154,6 @@ MODEL_FOR_DEPTH_ESTIMATION_MAPPING_NAMES = OrderedDict(
 
 MODEL_FOR_TEXT_RECOGNITION_MAPPING_NAMES = OrderedDict(
     [
-        ("pp_formulanet", "PPFormulaNetForTextRecognition"),
         ("pp_ocrv5_mobile_rec", "PPOCRV5MobileRecForTextRecognition"),
         ("pp_ocrv5_server_rec", "PPOCRV5ServerRecForTextRecognition"),
     ]

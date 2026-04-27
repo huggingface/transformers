@@ -35,18 +35,21 @@ The example below demonstrates how to detect text with PP-OCRV5_Mobile_Det using
 <hfoption id="AutoModel">
 
 ```py
-import requests
+from io import BytesIO
+
+import httpx
 from PIL import Image
-from transformers import AutoProcessor, AutoModelForTextRecognition
+from transformers import AutoProcessor, PPFormulaNetForConditionalGeneration
 
 model_path = "PaddlePaddle/PP-FormulaNet_plus-L_safetensors"
-model = AutoModelForTextRecognition.from_pretrained(model_path, device_map="auto")
+model = PPFormulaNetForConditionalGeneration.from_pretrained(model_path, device_map="auto")
 processor = AutoProcessor.from_pretrained(model_path)
 
-image = Image.open(requests.get("https://paddle-model-ecology.bj.bcebos.com/paddlex/imgs/demo_image/general_formula_rec_001.png", stream=True).raw)
+image_url = "https://paddle-model-ecology.bj.bcebos.com/paddlex/imgs/demo_image/general_formula_rec_001.png"
+image = Image.open(BytesIO(httpx.get(image_url).content)).convert("RGB")
 inputs = processor(images=image, return_tensors="pt").to(model.device)
 outputs = model(**inputs)
-result = processor.post_process(outputs.last_hidden_state)
+result = processor.post_process_image_text_to_text(outputs)
 print(result)
 ```
 
@@ -57,9 +60,9 @@ print(result)
 
 [[autodoc]] PPFormulaNetConfig
 
-## PPFormulaNetForTextRecognition
+## PPFormulaNetForConditionalGeneration
 
-[[autodoc]] PPFormulaNetForTextRecognition
+[[autodoc]] PPFormulaNetForConditionalGeneration
 
 ## PPFormulaNetBackbone
 
