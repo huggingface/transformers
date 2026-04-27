@@ -125,22 +125,16 @@ class MiniCPMV4_6VideoProcessor(BaseVideoProcessor):
             np.ndarray:
                 Indices to sample video frames.
         """
-        if metadata is None:
+        if metadata is None or metadata.duration is None or metadata.fps is None:
             raise ValueError(
-                "MiniCpm4_6 requires video metadata to sample frames but it wasn't found. "
-                "Please pass in `VideoMetadata` object or set `do_sample_frames=False`"
+                "MiniCPMV4_6 requires complete video metadata with `duration` and `fps` to sample frames. "
+                "Please pass a complete `VideoMetadata` object or set `do_sample_frames=False`."
             )
 
         max_num_frames = max_num_frames if max_num_frames is not None else self.max_num_frames
         stack_frames = stack_frames if stack_frames is not None else self.stack_frames
         total_num_frames, avg_fps = metadata.total_num_frames, metadata.fps
         duration = metadata.duration
-
-        if duration is None or avg_fps is None:
-            raise ValueError(
-                "MiniCPMV4_6 requires video metadata with `duration` and `fps` to sample frames. "
-                "Please pass a complete `VideoMetadata` object or set `do_sample_frames=False`."
-            )
 
         num_seconds = math.ceil(duration)
 
