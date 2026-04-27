@@ -168,7 +168,7 @@ model = Qwen2_5_VLForConditionalGeneration.from_pretrained(
     
     model = Qwen2_5_VLForConditionalGeneration.from_pretrained(
         "Qwen/Qwen2.5-VL-7B-Instruct",
-            device_map="auto",
+        device_map="auto",
         attn_implementation="sdpa"
     )
     processor = AutoProcessor.from_pretrained("Qwen/Qwen2.5-VL-7B-Instruct")

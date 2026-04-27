@@ -63,8 +63,8 @@ tokenizer = AutoTokenizer.from_pretrained(
     "bhadresh-savani/electra-base-emotion",
 )
 model = AutoModelForSequenceClassification.from_pretrained(
-    "bhadresh-savani/electra-base-emotion",
- device_map="auto")
+    "bhadresh-savani/electra-base-emotion", device_map="auto",
+)
 inputs = tokenizer("ELECTRA is more efficient than BERT", return_tensors="pt").to(model.device)
 
 with torch.no_grad():

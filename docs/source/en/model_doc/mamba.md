@@ -60,7 +60,7 @@ model = AutoModelForCausalLM.from_pretrained("state-spaces/mamba-130m-hf", devic
 input_ids = tokenizer("Plants create energy through a process known as", return_tensors="pt").to(model.device)  
 
 output = model.generate(**input_ids)  
-print(tokenizer.decode(output[0], skip_special_tokens=True)
+print(tokenizer.decode(output[0], skip_special_tokens=True))
 ```
 
 </hfoption>

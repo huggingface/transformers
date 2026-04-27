@@ -147,7 +147,7 @@ model = DeepseekVLHybridForConditionalGeneration.from_pretrained(
 
     model = DeepseekVLHybridForConditionalGeneration.from_pretrained(
         "deepseek-community/deepseek-vl-7b-chat",
-            device_map="auto",
+        device_map="auto",
         attn_implementation="sdpa"
     )
 

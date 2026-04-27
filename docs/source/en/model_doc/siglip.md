@@ -126,7 +126,7 @@ print(f"{probs[0][0]:.1%} that image 0 is '{candidate_labels[0]}'")
     model = SiglipModel.from_pretrained(
         "google/siglip-so400m-patch14-384",
         attn_implementation="flash_attention_2",
-            device_map="auto",
+        device_map="auto",
     )
     ```
 

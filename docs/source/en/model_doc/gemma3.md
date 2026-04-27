@@ -213,7 +213,7 @@ visualizer("<img>What is shown in this image?")
     )
     model = AutoModelForCausalLM.from_pretrained(
         "google/gemma-3-1b-pt",
-            device_map="auto",
+        device_map="auto",
         attn_implementation="sdpa"
     )
     input_ids = tokenizer("Plants create energy through a process known as", return_tensors="pt").to(model.device)

@@ -103,7 +103,7 @@ print(tokenizer.decode(output[0], skip_special_tokens=True))
     tokenizer = AutoTokenizer.from_pretrained("microsoft/phi-1")
     model = AutoModelForCausalLM.from_pretrained(
         "microsoft/phi-1",
-            device_map="auto",
+        device_map="auto",
         trust_remote_code=True,
         attn_implementation="sdpa")
 

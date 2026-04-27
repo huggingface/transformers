@@ -123,8 +123,7 @@ print(assistant_response)
     ```py
     import torch
     from transformers import AutoModelForCausalLM
-    model = AutoModelForCausalLM.from_pretrained("ai21labs/AI21-Jamba-1.5-Large",
-                                                 use_mamba_kernels=False, device_map="auto")
+    model = AutoModelForCausalLM.from_pretrained("ai21labs/AI21-Jamba-1.5-Large", use_mamba_kernels=False, device_map="auto")
     ```
 
 ## JambaConfig
