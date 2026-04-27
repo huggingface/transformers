@@ -38,7 +38,7 @@ from transformers import pipeline
 
 pipe = pipeline(
     task="text-generation",
-    model="ByteDance-Seed/Seed-OSS-36B-Base",,
+    model="ByteDance-Seed/Seed-OSS-36B-Base",
 )
 pipe("The most important factor in language model training is")
 ```

@@ -49,7 +49,7 @@ from transformers import pipeline
 
 pipe = pipeline(
     task="text-generation",
-    model="google/vaultgemma-1b",,
+    model="google/vaultgemma-1b",
     device_map="auto",
 )
 

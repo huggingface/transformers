@@ -112,7 +112,7 @@ from transformers import AutoModelForImageTextToText, AutoProcessor, BitsAndByte
 
 quant_config = BitsAndBytesConfig(
     load_in_4bit=True,
-    bnb_4bit_compute_bnb_4bit_quant_type="nf4"
+    bnb_4bit_quant_type="nf4"
 )
 
 processor = AutoProcessor.from_pretrained("llava-hf/llava-v1.6-mistral-7b-hf")

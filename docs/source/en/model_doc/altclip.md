@@ -73,8 +73,9 @@ from transformers import AltCLIPModel, AltCLIPProcessor, TorchAoConfig
 
 model = AltCLIPModel.from_pretrained(
     "BAAI/AltCLIP",
-    quantization_config=TorchAoConfig("int4_weight_only", group_size=128),,
- device_map="auto")
+    quantization_config=TorchAoConfig("int4_weight_only", group_size=128),
+    device_map="auto",
+)
 
 processor = AltCLIPProcessor.from_pretrained("BAAI/AltCLIP")
 

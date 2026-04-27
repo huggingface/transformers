@@ -51,7 +51,7 @@ import soundfile as sf
 from transformers import Qwen3OmniMoeForConditionalGeneration, Qwen3OmniMoeProcessor
 
 model = Qwen3OmniMoeForConditionalGeneration.from_pretrained(
-    "Qwen/Qwen3-Omni-30B-A3B-Instruct",,
+    "Qwen/Qwen3-Omni-30B-A3B-Instruct",
     device_map="auto"
 )
 processor = Qwen3OmniMoeProcessor.from_pretrained("Qwen/Qwen3-Omni-30B-A3B-Instruct")
@@ -106,7 +106,7 @@ To generate only text output and save compute by not loading the audio generatio
 from transformers import Qwen3OmniMoeThinkerForConditionalGeneration, Qwen3OmniMoeProcessor
 
 model = Qwen3OmniMoeThinkerForConditionalGeneration.from_pretrained(
-    "Qwen/Qwen3-Omni-30B-A3B-Instruct",,
+    "Qwen/Qwen3-Omni-30B-A3B-Instruct",
     device_map="auto",
 )
 processor = Qwen3OmniMoeProcessor.from_pretrained("Qwen/Qwen3-Omni-30B-A3B-Instruct")
@@ -162,7 +162,7 @@ import soundfile as sf
 from transformers import Qwen3OmniMoeForConditionalGeneration, Qwen3OmniMoeProcessor
 
 model = Qwen3OmniMoeForConditionalGeneration.from_pretrained(
-    "Qwen/Qwen3-Omni-30B-A3B-Instruct",,
+    "Qwen/Qwen3-Omni-30B-A3B-Instruct"
     device_map="auto"
 )
 processor = Qwen3OmniMoeProcessor.from_pretrained("Qwen/Qwen3-Omni-30B-A3B-Instruct")
@@ -284,7 +284,7 @@ The model supports both text and audio outputs, if users do not need audio outpu
 
 ```python
 model = Qwen3OmniMoeForConditionalGeneration.from_pretrained(
-    "Qwen/Qwen3-Omni-30B-A3B-Instruct",,
+    "Qwen/Qwen3-Omni-30B-A3B-Instruct",
     device_map="auto",
     enable_audio_output=False,
 )
@@ -294,7 +294,7 @@ In order to obtain a flexible experience, we recommend that users set `enable_au
 
 ```python
 model = Qwen3OmniMoeForConditionalGeneration.from_pretrained(
-    "Qwen/Qwen3-Omni-30B-A3B-Instruct",,
+    "Qwen/Qwen3-Omni-30B-A3B-Instruct",
     device_map="auto",
     enable_audio_output=True,
 )

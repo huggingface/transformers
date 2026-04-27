@@ -65,7 +65,7 @@ from transformers import AutoProcessor, AutoModelForSeq2SeqLM
 processor = AutoProcessor.from_pretrained("google/t5gemma-2-270m-270m")
 model = AutoModelForSeq2SeqLM.from_pretrained(
     "google/t5gemma-2-270m-270m",
-    device_map="auto",,
+    device_map="auto",
 )
 
 url = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/bee.jpg"

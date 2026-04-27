@@ -37,7 +37,7 @@ from transformers import pipeline
 
 pipe = pipeline(
     task="text-generation",
-    model="openai/gpt-oss-20b",,
+    model="openai/gpt-oss-20b",
 )
 pipe("Plants create energy through a process known as")
 ```

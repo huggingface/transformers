@@ -36,7 +36,7 @@ from transformers import pipeline
 
 pipe = pipeline(
     task="text-generation",
-    model="tencent/Hunyuan-0.5B-Pretrain",,
+    model="tencent/Hunyuan-0.5B-Pretrain",
 )
 pipe("The future of artificial intelligence is")
 ```

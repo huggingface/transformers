@@ -38,7 +38,7 @@ from transformers import pipeline
 
 pipe = pipeline(
     task="text-generation",
-    model="nvidia/Nemotron-H-8B-Reasoning-128K",,
+    model="nvidia/Nemotron-H-8B-Reasoning-128K",
 )
 pipe("Plants create energy through a process known as")
 ```

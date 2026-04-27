@@ -37,7 +37,7 @@ from transformers import pipeline
 
 pipe = pipeline(
     task="text-generation",
-    model="zai-org/GLM-4.7-Flash",,
+    model="zai-org/GLM-4.7-Flash",
 )
 pipe("The key to efficient language models is")
 ```

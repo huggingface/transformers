@@ -49,7 +49,7 @@ retriever = RagRetriever.from_pretrained(
 
 model = RagSequenceForGeneration.from_pretrained(
     "facebook/rag-token-nq",
-    retriever=retriever,,
+    retriever=retriever,
     attn_implementation="flash_attention_2",
  device_map="auto")
 input_dict = tokenizer.prepare_seq2seq_batch("How many people live in Paris?", return_tensors="pt").to(model.device)

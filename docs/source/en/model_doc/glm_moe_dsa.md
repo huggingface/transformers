@@ -40,7 +40,7 @@ from transformers import pipeline
 
 pipe = pipeline(
     task="text-generation",
-    model="zai-org/GLM-5",,
+    model="zai-org/GLM-5",
 )
 pipe("The theory of relativity states that")
 ```

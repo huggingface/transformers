@@ -37,7 +37,7 @@ from transformers import pipeline
 
 pipe = pipeline(
     task="text-generation",
-    model="Qwen/Qwen3-0.6B",,
+    model="Qwen/Qwen3-0.6B",
 )
 pipe("The key to effective reasoning is")
 ```

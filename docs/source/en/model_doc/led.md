@@ -76,7 +76,7 @@ from transformers import BitsAndBytesConfig, AutoModelForSeq2SeqLM, AutoTokenize
 
 quantization_config = BitsAndBytesConfig(
     load_in_4bit=True,
-    bnb_4bit_compute_bnb_4bit_quant_type="nf4"
+    bnb_4bit_quant_type="nf4"
 )
 model = AutoModelForSeq2SeqLM.from_pretrained(
     "allenai/led-large-16384",

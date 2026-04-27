@@ -52,7 +52,7 @@ model_name = "baidu/ERNIE-4.5-0.3B-PT"
 tokenizer = AutoTokenizer.from_pretrained(model_name)
 model = AutoModelForCausalLM.from_pretrained(
     model_name,
-    device_map="auto",,
+    device_map="auto",
 )
 
 # prepare the model input

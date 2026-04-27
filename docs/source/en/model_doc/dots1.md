@@ -37,7 +37,7 @@ from transformers import pipeline
 
 pipe = pipeline(
     task="text-generation",
-    model="rednote-hilab/dots.llm1.base",,
+    model="rednote-hilab/dots.llm1.base",
 )
 pipe("The advantage of mixture-of-experts models is")
 ```

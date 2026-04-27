@@ -115,7 +115,7 @@ model_id = "meta-llama/Llama-4-Scout-17B-16E-Instruct"
 processor = AutoProcessor.from_pretrained(model_id)
 model = Llama4ForConditionalGeneration.from_pretrained(
     model_id,
-    device_map="auto",,
+    device_map="auto",
 )
 
 img_url = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/0052a70beed5bf71b92610a43a52df6d286cd5f3/diffusers/rabbit.jpg"
@@ -158,7 +158,7 @@ model_id = "meta-llama/Llama-4-Scout-17B-16E-Instruct"
 processor = AutoProcessor.from_pretrained(model_id)
 model = Llama4ForConditionalGeneration.from_pretrained(
     model_id,
-    device_map="auto",,
+    device_map="auto",
 )
 
 url1 = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/0052a70beed5bf71b92610a43a52df6d286cd5f3/diffusers/rabbit.jpg"
@@ -267,7 +267,7 @@ import torch
 model = Llama4ForConditionalGeneration.from_pretrained(
     model_id,
     attn_implementation="flex_attention",
-    device_map="auto",,
+    device_map="auto",
 )
 ```
 
@@ -282,7 +282,7 @@ import torch
 model = Llama4ForConditionalGeneration.from_pretrained(
     model_id,
     attn_implementation="sdpa",
-    device_map="auto",,
+    device_map="auto",
 )
 ```
 
@@ -296,7 +296,7 @@ import torch
 
 model = Llama4ForConditionalGeneration.from_pretrained(
     model_id,
-    device_map="auto",,
+    device_map="auto",
 )
 ```
 
@@ -359,8 +359,9 @@ inputs = tokenizer.apply_chat_template(messages, add_generation_prompt=True, ret
 
 model = Llama4ForConditionalGeneration.from_pretrained(
     model_id,
-    tp_plan="auto",,
- device_map="auto")
+    tp_plan="auto",
+    device_map="auto",
+)
 
 outputs = model.generate(**inputs.to(model.device), max_new_tokens=100)
 outputs = tokenizer.batch_decode(outputs[:, inputs["input_ids"].shape[-1]:])
@@ -384,7 +385,7 @@ import torch
 
 model = Llama4ForConditionalGeneration.from_pretrained(
     model_id,
-    device_map="auto",,
+    device_map="auto",
 )
 ```
 

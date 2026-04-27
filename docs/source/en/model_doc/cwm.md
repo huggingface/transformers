@@ -73,7 +73,7 @@ from transformers import AutoModelForCausalLM, AutoTokenizer
 model_name = 'facebook/cwm'
 tokenizer = AutoTokenizer.from_pretrained(model_name)
 model = AutoModelForCausalLM.from_pretrained(
-    model_name,,
+    model_name,
     device_map="auto"
 )
 

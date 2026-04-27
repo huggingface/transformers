@@ -43,7 +43,7 @@ from transformers import AutoModelForImageTextToText, AutoTokenizer, AutoProcess
 
 
 model = AutoModelForImageTextToText.from_pretrained(
-    "thisisiron/Ovis2-2B-hf",,
+    "thisisiron/Ovis2-2B-hf",
 ).eval().to(model.device, device_map="auto")
 processor = AutoProcessor.from_pretrained("thisisiron/Ovis2-2B-hf")
 

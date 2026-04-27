@@ -30,7 +30,7 @@ from transformers import pipeline
 
 pipe = pipeline(
     task="text-generation",
-    model="openbmb/cpm-ant-10b",,
+    model="openbmb/cpm-ant-10b",
 )
 pipe("今天天气很好，")
 ```

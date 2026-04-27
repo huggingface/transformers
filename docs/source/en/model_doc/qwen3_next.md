@@ -42,7 +42,7 @@ model_name = "Qwen/Qwen3-Next-80B-A3B-Instruct"
 # load the tokenizer and the model
 tokenizer = AutoTokenizer.from_pretrained(model_name)
 model = AutoModelForCausalLM.from_pretrained(
-    model_name,,
+    model_name,
     device_map="auto"
 )
 
