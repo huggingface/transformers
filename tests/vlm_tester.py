@@ -49,7 +49,6 @@ class VLMModelTester(MultiModalModelTester):
         kwargs.setdefault("initializer_range", 0.02)
         kwargs.setdefault("num_labels", 3)
         kwargs.setdefault("num_choices", 4)
-        kwargs.setdefault("pad_token_id", 0)
         kwargs.setdefault("image_token_id", 3)
         kwargs.setdefault("is_decoder", False)
         kwargs.setdefault("image_size", 8)
