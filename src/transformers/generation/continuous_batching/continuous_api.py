@@ -646,7 +646,7 @@ class ContinuousBatchProcessor:
             padded_q, padded_kv = self.maybe_pad_inputs(
                 num_q_tokens=num_query_tokens,
                 max_kv_read=num_cache_tokens + num_query_tokens,
-                use_decode_fast_path=False
+                use_decode_fast_path=False,
             )
             logger.info(f"Warming up varlen path ({padded_q} Q tokens, {padded_kv} KV tokens)...")
 

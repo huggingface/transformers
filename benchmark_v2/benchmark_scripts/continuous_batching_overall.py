@@ -124,9 +124,7 @@ class BenchmarkResults:
             gen_config=_config_summary(gen_config),
         )
 
-        print(
-            f"\n[{entry.label}] samples={entry.num_samples} avg_in={avg_input:.1f} max_new={max_new_tokens}"
-        )
+        print(f"\n[{entry.label}] samples={entry.num_samples} avg_in={avg_input:.1f} max_new={max_new_tokens}")
 
         self.cleanup()
 
@@ -220,9 +218,7 @@ class BenchmarkResults:
                 {
                     "label": e.label,
                     "baseline (tok/s)": f"{base_tp:.2f}" if isinstance(base_tp, (int, float)) else "N/A",
-                    "current (tok/s)": (
-                        f"{cur_tp:.2f}" if isinstance(cur_tp, (int, float)) else (e.error or "N/A")
-                    ),
+                    "current (tok/s)": (f"{cur_tp:.2f}" if isinstance(cur_tp, (int, float)) else (e.error or "N/A")),
                     "diff": diff_str,
                 }
             )
@@ -306,7 +302,6 @@ if __name__ == "__main__":
         gen_config=GenerationConfig(do_sample=True, num_return_sequences=8),
         label="multi_return_seq",
     )
-
 
     # Post processing and display
 
