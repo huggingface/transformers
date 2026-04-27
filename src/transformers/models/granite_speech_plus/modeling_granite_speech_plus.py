@@ -19,7 +19,6 @@
 # limitations under the License.
 
 import math
-from collections.abc import Container
 from dataclasses import dataclass
 
 import torch
@@ -47,6 +46,41 @@ from .configuration_granite_speech_plus import GraniteSpeechPlusConfig, GraniteS
 
 
 logger = logging.get_logger(__name__)
+
+
+### Projector
+class GraniteSpeechPlusEncoderProjector(nn.Module):
+    def __init__(self, config: GraniteSpeechPlusConfig):
+        super().__init__()
+        self.hidden_size = config.projector_config.hidden_size
+        self.downsample_rate = config.downsample_rate
+        self.window_size = config.window_size
+        self.num_queries = config.window_size // config.downsample_rate
+
+        self.query = nn.Parameter(torch.zeros(1, self.num_queries, config.projector_config.hidden_size))
+        self.query.data.normal_(mean=0.0, std=1.0)
+
+        # By default, this will be a blip_2_qformer config
+        self.qformer = AutoModel.from_config(config.projector_config)
+        self.linear = nn.Linear(config.projector_config.hidden_size, config.text_config.hidden_size)
+
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        batch_size, seq_len, dim = hidden_states.size()
+        nblocks = math.ceil(seq_len / self.window_size)
+        pad = nblocks * self.window_size - seq_len
+        hidden_states = nn.functional.pad(hidden_states, (0, 0, 0, pad), "constant", 0)
+        hidden_states = hidden_states.view(batch_size * nblocks, self.window_size, dim)
+
+        query_output = self.qformer(
+            query_embeds=self.query,
+            encoder_hidden_states=hidden_states,
+            encoder_attention_mask=None,
+            return_dict=True,
+        )
+        query_proj = self.linear(
+            query_output.last_hidden_state.view(batch_size, nblocks * self.window_size // self.downsample_rate, -1)
+        )
+        return query_proj
 
 
 ### Encoder - conformer is adapted from: https://github.com/lucidrains/conformer.git
@@ -204,67 +238,6 @@ class GraniteSpeechPlusConformerBlock(nn.Module):
         return hidden_states
 
 
-### Projector
-class GraniteSpeechPlusEncoderProjector(nn.Module):
-    def __init__(self, config: GraniteSpeechPlusConfig):
-        super().__init__()
-        self.hidden_size = config.projector_config.hidden_size
-        self.downsample_rate = config.downsample_rate
-        self.window_size = config.window_size
-        self.num_queries = config.window_size // config.downsample_rate
-
-        self.query = nn.Parameter(torch.zeros(1, self.num_queries, config.projector_config.hidden_size))
-        self.query.data.normal_(mean=0.0, std=1.0)
-
-        # By default, this will be a blip_2_qformer config
-        self.qformer = AutoModel.from_config(config.projector_config)
-        self.linear = nn.Linear(config.projector_config.hidden_size, config.text_config.hidden_size)
-
-    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        batch_size, seq_len, dim = hidden_states.size()
-        nblocks = math.ceil(seq_len / self.window_size)
-        pad = nblocks * self.window_size - seq_len
-        hidden_states = nn.functional.pad(hidden_states, (0, 0, 0, pad), "constant", 0)
-        hidden_states = hidden_states.view(batch_size * nblocks, self.window_size, dim)
-
-        query_output = self.qformer(
-            query_embeds=self.query,
-            encoder_hidden_states=hidden_states,
-            encoder_attention_mask=None,
-            return_dict=True,
-        )
-        query_proj = self.linear(
-            query_output.last_hidden_state.view(batch_size, nblocks * self.window_size // self.downsample_rate, -1)
-        )
-        return query_proj
-
-
-@dataclass
-@auto_docstring(
-    custom_intro="""
-    Base class for LlavaNext causal language model (or autoregressive) outputs.
-    """
-)
-class GraniteSpeechPlusCausalLMOutputWithPast(ModelOutput):
-    r"""
-    loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
-        Language modeling loss (for next-token prediction).
-    logits (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.vocab_size)`):
-        Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
-    past_key_values (`Cache`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
-        It is a [`~cache_utils.Cache`] instance. For more details, see our [kv cache guide](https://huggingface.co/docs/transformers/en/kv_cache).
-
-        Contains pre-computed hidden-states (key and values in the self-attention blocks) that can be used (see
-        `past_key_values` input) to speed up sequential decoding.
-    """
-
-    loss: torch.FloatTensor | None = None
-    logits: torch.FloatTensor | None = None
-    past_key_values: Cache | None = None
-    hidden_states: tuple[torch.FloatTensor] | None = None
-    attentions: tuple[torch.FloatTensor] | None = None
-
-
 @auto_docstring
 class GraniteSpeechPlusPreTrainedModel(PreTrainedModel):
     config: GraniteSpeechPlusConfig
@@ -316,27 +289,56 @@ class GraniteSpeechPlusCTCEncoder(GraniteSpeechPlusPreTrainedModel):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        returned_hidden_states: Container[int] | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutputWithPooling:
         hidden_states = self.input_linear(hidden_states)
+        cat_layers = set(self.config.cat_hidden_layers or [])
         exported_hidden_states = []
-        if returned_hidden_states is None:
-            returned_hidden_states = []
-        if 0 in returned_hidden_states:
+
+        if 0 in cat_layers:
             exported_hidden_states.append(hidden_states)
+
         for idx, layer in enumerate(self.layers, start=1):
             hidden_states = layer(hidden_states, attention_dists=self.attention_dists)
-            if idx in returned_hidden_states:
+
+            if idx in cat_layers:
                 exported_hidden_states.append(hidden_states)
 
             if idx == self.num_layers // 2:
                 hidden_states_mid = hidden_states.clone()
                 hidden_states_mid = self.out(hidden_states_mid)
                 hidden_states += self.out_mid(nn.Softmax(dim=-1)(hidden_states_mid))
-        if len(exported_hidden_states) > 0:
-            hidden_states = torch.cat(exported_hidden_states + [hidden_states], dim=-1)
+
+        if exported_hidden_states:
+            hidden_states = torch.cat([*exported_hidden_states, hidden_states], dim=-1)
+
         return BaseModelOutputWithPooling(last_hidden_state=hidden_states)
+
+
+@dataclass
+@auto_docstring(
+    custom_intro="""
+    Base class for LlavaNext causal language model (or autoregressive) outputs.
+    """
+)
+class GraniteSpeechPlusCausalLMOutputWithPast(ModelOutput):
+    r"""
+    loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
+        Language modeling loss (for next-token prediction).
+    logits (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.vocab_size)`):
+        Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
+    past_key_values (`Cache`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
+        It is a [`~cache_utils.Cache`] instance. For more details, see our [kv cache guide](https://huggingface.co/docs/transformers/en/kv_cache).
+
+        Contains pre-computed hidden-states (key and values in the self-attention blocks) that can be used (see
+        `past_key_values` input) to speed up sequential decoding.
+    """
+
+    loss: torch.FloatTensor | None = None
+    logits: torch.FloatTensor | None = None
+    past_key_values: Cache | None = None
+    hidden_states: tuple[torch.FloatTensor] | None = None
+    attentions: tuple[torch.FloatTensor] | None = None
 
 
 @auto_docstring(
@@ -390,11 +392,8 @@ class GraniteSpeechPlusForConditionalGeneration(GraniteSpeechPlusPreTrainedModel
     def get_audio_features(
         self, input_features: torch.Tensor, **kwargs: Unpack[TransformersKwargs]
     ) -> tuple | BaseModelOutputWithPooling:
-        audio_outputs = self.encoder(
-            input_features, returned_hidden_states=self.config.encoder_hidden_layers, return_dict=True, **kwargs
-        )
-        encoder_embeds = audio_outputs.last_hidden_state
-        projected_embeds = self.projector(encoder_embeds)
+        audio_outputs = self.encoder(input_features, return_dict=True, **kwargs)
+        projected_embeds = self.projector(audio_outputs.last_hidden_state)
         audio_outputs.pooler_output = projected_embeds
 
         return audio_outputs
@@ -602,8 +601,4 @@ class GraniteSpeechPlusForConditionalGeneration(GraniteSpeechPlusPreTrainedModel
         return list(self.peft_config.keys())[0]
 
 
-__all__ = [
-    "GraniteSpeechPlusCTCEncoder",
-    "GraniteSpeechPlusForConditionalGeneration",
-    "GraniteSpeechPlusPreTrainedModel",
-]
+__all__ = ["GraniteSpeechPlusCTCEncoder", "GraniteSpeechPlusForConditionalGeneration"]

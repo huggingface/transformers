@@ -24,7 +24,7 @@ from ...utils import auto_docstring
 from ..auto import CONFIG_MAPPING, AutoConfig
 
 
-@auto_docstring(checkpoint="ibm-granite/granite-speech-3.3-2b")
+@auto_docstring(checkpoint="ibm-granite/granite-speech-4.1-2b-plus")
 @strict
 class GraniteSpeechPlusEncoderConfig(PreTrainedConfig):
     r"""
@@ -40,6 +40,11 @@ class GraniteSpeechPlusEncoderConfig(PreTrainedConfig):
         Max pos embeds to be used in attention (shaw's relative positional encoding).
     conv_expansion_factor (`int`, *optional*, defaults to 2):
         Intermediate dimension to be used in conformer convolutions.
+    cat_hidden_layers (`list[int]`, *optional*):
+        Indices of encoder conformer layers whose outputs are concatenated with the final encoder
+        output (along the feature dimension) before being passed to the projector. When set, the
+        projector's ``encoder_hidden_size`` must equal
+        ``encoder_config.hidden_dim * (len(cat_hidden_layers) + 1)``.
 
     Example:
 
@@ -70,6 +75,8 @@ class GraniteSpeechPlusEncoderConfig(PreTrainedConfig):
     dropout: float | int = 0.1
     conv_kernel_size: int = 15
     conv_expansion_factor: int = 2
+
+    cat_hidden_layers: list[int] | None = None
 
 
 @auto_docstring(checkpoint="ibm-granite/granite-speech-4.1-2b-plus")
@@ -125,8 +132,6 @@ class GraniteSpeechPlusConfig(PreTrainedConfig):
     downsample_rate: int = 5
     window_size: int = 15
 
-    encoder_hidden_layers: list[int] | None = None
-
     def __post_init__(self, **kwargs):
         if isinstance(self.text_config, dict):
             self.text_config["model_type"] = self.text_config.get("model_type", "granite")
@@ -146,13 +151,14 @@ class GraniteSpeechPlusConfig(PreTrainedConfig):
 
         super().__post_init__(**kwargs)
 
-        if self.encoder_hidden_layers is not None:
-            for idx in self.encoder_hidden_layers:
+        if self.encoder_config.cat_hidden_layers is not None:
+            for idx in self.encoder_config.cat_hidden_layers:
                 if idx < 0 or idx >= self.encoder_config.num_layers:
                     raise ValueError(
-                        f"encoder_hidden_layers index {idx} is out of range [0, {self.encoder_config.num_layers})."
+                        f"cat_hidden_layers index {idx} is out of range [0, {self.encoder_config.num_layers})."
                     )
-            num_concat = len(self.encoder_hidden_layers) + 1
+        if self.encoder_config.cat_hidden_layers is not None:
+            num_concat = len(self.encoder_config.cat_hidden_layers) + 1
             if self.projector_config.encoder_hidden_size != self.encoder_config.hidden_dim * num_concat:
                 raise ValueError(
                     f"projector encoder_hidden_size {self.projector_config.encoder_hidden_size} "
