@@ -2787,9 +2787,7 @@ class TrainingArguments:
                 str(self.fsdp_config.get("sync_module_states", "true")).lower()
             )
             if "limit_all_gathers" in self.fsdp_config:
-                fsdp_plugin_args["limit_all_gathers"] = str_to_bool(
-                    str(self.fsdp_config["limit_all_gathers"]).lower()
-                )
+                fsdp_plugin_args["limit_all_gathers"] = str_to_bool(str(self.fsdp_config["limit_all_gathers"]).lower())
 
         return fsdp_plugin_args
 
