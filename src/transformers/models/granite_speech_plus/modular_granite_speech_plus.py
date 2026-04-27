@@ -113,13 +113,8 @@ class GraniteSpeechPlusConfig(GraniteSpeechConfig):
     def __post_init__(self, **kwargs):
         super().__post_init__(**kwargs)
 
-        if self.encoder_hidden_layers is not None:
-            for idx in self.encoder_hidden_layers:
-                if idx < 0 or idx >= self.encoder_config.num_layers:
-                    raise ValueError(
-                        f"encoder_hidden_layers index {idx} is out of range [0, {self.encoder_config.num_layers})."
-                    )
-            num_concat = len(self.encoder_hidden_layers) + 1
+        if self.encoder_config.cat_hidden_layers is not None:
+            num_concat = len(self.encoder_config.cat_hidden_layers) + 1
             if self.projector_config.encoder_hidden_size != self.encoder_config.hidden_dim * num_concat:
                 raise ValueError(
                     f"projector encoder_hidden_size {self.projector_config.encoder_hidden_size} "
