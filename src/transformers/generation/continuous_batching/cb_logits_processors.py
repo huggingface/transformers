@@ -138,9 +138,6 @@ class ContinuousBatchingLogitsProcessorList:
         # Update the list of logits processors (preserve LogitsProcessorList type)
         self.logits_processor = LogitsProcessorList(filtered_processors)
 
-    def __bool__(self) -> bool:
-        return bool(self.logits_processor)
-
     def _retrieve_processors_kwargs(self) -> None:
         """Retrieves the supported (with types) and ignored kwargs from continuous batching processors."""
         self.supported_keys: dict[str, type] = {}
