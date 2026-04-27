@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 from collections import OrderedDict
-from math import ceil
+from math import ceil, log2
 from typing import Any
 
 import torch
@@ -29,7 +29,7 @@ class CudaGraphBuffer:
         if max_size <= 0:
             raise ValueError(f"max_size must be positive, but got {max_size}")
         self.max_size = max_size
-        self._storage: OrderedDict[tuple[int, int], torch.cuda.CUDAGraph] = OrderedDict()
+        self._storage: OrderedDict[tuple[int, ...], torch.cuda.CUDAGraph] = OrderedDict()
 
     def __del__(self) -> None:
         original_max_size = self.max_size
@@ -37,10 +37,10 @@ class CudaGraphBuffer:
         self.plan_for_new_graph(silent=True)
         self.max_size = original_max_size
 
-    def get_graph(self, q_len: int, kv_len: int) -> torch.cuda.CUDAGraph | None:
-        graph = self._storage.get((q_len, kv_len))
+    def get_graph(self, key: tuple[int, ...]) -> torch.cuda.CUDAGraph | None:
+        graph = self._storage.get(key)
         if graph is not None:
-            self._storage.move_to_end((q_len, kv_len))
+            self._storage.move_to_end(key)
         return graph
 
     def plan_for_new_graph(self, silent: bool = False) -> None:
@@ -50,11 +50,10 @@ class CudaGraphBuffer:
                 logger.info(f"Evicting graph for {evicted_key = }")
             evicted_graph.reset()
 
-    def set_graph(self, q_len: int, kv_len: int, graph: torch.cuda.CUDAGraph) -> None:
+    def set_graph(self, key: tuple[int, ...], graph: torch.cuda.CUDAGraph) -> None:
         # In our use case, this should not have any effect because we plan for a new graph before it is captured
         self.plan_for_new_graph()
-        logger.info(f"Setting graph for {q_len = }, {kv_len = }")
-        self._storage[(q_len, kv_len)] = graph
+        self._storage[key] = graph
 
 
 def attn_mask_is_needed(config: PretrainedConfig) -> bool:
@@ -67,6 +66,14 @@ def pad_to_interval(size: int, interval_size: int, max_value: int) -> int:
     if interval_size <= 0:
         return max_value
     padded = ceil(size / interval_size) * interval_size if size > 0 else interval_size
+    return min(padded, max_value)
+
+
+def pad_to_pow2(value: int, max_value: int, min_value: int = 0) -> int:
+    """Return the smallest power of 2 >= (value), capped at (max_value). If a minimum value is provided, the value is at
+    least padded to that value."""
+    value = max(value, max(1, min_value))
+    padded = 2 ** int(ceil(log2(value)))
     return min(padded, max_value)
 
 
@@ -184,5 +191,7 @@ def create_warmup_future_states(
         allocated = cache.allocate_blocks(blocks_needed, state.request_id, 0)
         if allocated is None:
             return future_states
-        future_states.append(FutureRequestState(state, has_new_token=True, complete_blocks=0))
+        future_states.append(
+            FutureRequestState(state, has_new_token=True, complete_blocks=0, query_length=num_query_tokens)
+        )
     return future_states

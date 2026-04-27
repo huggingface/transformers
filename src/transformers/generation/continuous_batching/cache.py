@@ -182,14 +182,30 @@ class PagedAttentionCache:
         else:
             num_attention_masks = 1
 
+        # Peak activations coefficients (for number of blocks and number of batch tokens)
+        q_bytes_per_token = config.num_attention_heads * self.head_dim
+        lm_head_peak = (
+            0,  # number of blocks does not affect the LM head peak activation
+            config.hidden_size + 2 * config.vocab_size,  # hidden states + logits
+        )
+        attention_peak = (
+            2 * page_size,  # old K and V, read from cache (in the worst case scenario: whole cache is read)
+            config.hidden_size + q_bytes_per_token + 2 * page_size,  # hidden state + Q + new K and V
+        )
+
         memory_handler = PagedAttentionMemoryHandler(
-            block_size=self.block_size,
+            continuous_batching_config=continuous_batching_config,
             page_size=page_size,
             num_groups=self.num_groups,
             group_size=group_size,
-            peak_activation_per_token=(config.hidden_size + config.vocab_size),
+            activation_peaks=[lm_head_peak, attention_peak],
             num_attention_masks=num_attention_masks,
         )
+
+        # If somehow the max memory percent is not yet resolved, resolve it conservatively
+        if continuous_batching_config.max_memory_percent is None:
+            continuous_batching_config.resolve_max_memory_percent(has_logit_processors=True)
+
         num_blocks, max_batch_tokens = memory_handler.infer_num_blocks_and_max_batch_tokens(
             num_blocks=continuous_batching_config.num_blocks,
             max_batch_tokens=continuous_batching_config.max_batch_tokens,
@@ -220,8 +236,12 @@ class PagedAttentionCache:
         # Initialize the cache
         self.key_cache: list[torch.Tensor] = []
         self.value_cache: list[torch.Tensor] = []
-        # We add two extra tokens to the cache to handle padding and generally discard unwanted tokens
+        # We add two extra blocks to the cache as a padding zone that no BlockManager ever allocates from: one for the
+        # sentinel index (marks the spot of a new token in the read indices) and one for the trash index (for padding,
+        # block is never used so writes are silently discarded)
         self.cache_shape = ((num_blocks + 2) * self.block_size, self.num_key_value_heads, self.head_dim)
+        self.sentinel_index = self.cache_shape[0] - 1
+        self.trash_index = self.sentinel_index - 1
         for _ in range(group_size):
             new_layer_key_cache = torch.empty(self.cache_shape, dtype=self.dtype, device=self.device)
             new_layer_value_cache = torch.empty(self.cache_shape, dtype=self.dtype, device=self.device)
@@ -243,7 +263,9 @@ class PagedAttentionCache:
                 cm = FullAttentionCacheAllocator(i, self.block_size, allow_block_sharing=self.allow_block_sharing)
                 self.num_full_attention_groups += 1
             elif group_type == "sliding_attention":
-                cm = SlidingAttentionCacheAllocator(i, self.block_size, config.sliding_window)
+                cm = SlidingAttentionCacheAllocator(
+                    i, self.block_size, config.sliding_window, self.sentinel_index, self.trash_index
+                )
                 self.num_sliding_attention_groups += 1
                 self.max_sliding_window_blocks_per_request = cm._max_blocks_per_request
             else:
@@ -309,17 +331,20 @@ class PagedAttentionCache:
         request_id: str,
         past_length: int,
         query_length: int,
-        read_index: list[list[int]],
+        read_index: list[list[int]] | None,
         write_index: list[list[int]],
     ) -> None:
         """Retrieve physical cache indices for reading KV states in the cache across all layer groups. This method
         coordinates with all cache managers to build the complete set of read indices needed for attention computation.
+        When read_index is None, the batch has no cache reads and we only compute the write indices.
         """
-        for cm, read_indices, write_indices in zip(self.group_cache_managers, read_index, write_index):
-            indices = cm.get_read_indices(request_id, past_length, query_length)
-            read_indices.extend(indices)
-            indices = cm.get_write_indices(request_id, past_length, query_length)
-            write_indices.extend(indices)
+        # Write indices are always computed
+        for cm, write_indices in zip(self.group_cache_managers, write_index):
+            write_indices.extend(cm.get_write_indices(request_id, past_length, query_length))
+        # Read indices are only computed if there are cache indices
+        if read_index is not None:
+            for cm, read_indices in zip(self.group_cache_managers, read_index):
+                read_indices.extend(cm.get_read_indices(request_id, past_length, query_length))
 
     def fill_block_table(
         self, request_id: str, past_length: int, query_length: int, block_table: torch.Tensor
@@ -348,46 +373,55 @@ class PagedAttentionCache:
         read_index: list[torch.Tensor],  # shape [num_layer_groups, seqlen_kv + past_length]
         write_index: list[torch.Tensor],  # shape [num_layer_groups, seqlen_q]
     ) -> tuple[torch.Tensor, torch.Tensor]:  # shape [seqlen_kv + past_length, num_kv_heads, head_dim]
-        """Update the cache with new key-value states for a specific layer. This method writes new KV states to the
-        appropriate cache locations. The behavior differs based on the layer's attention type:
+        """Update the cache with new key-value states for a specific layer, and retrieves the relevant KV states from
+        the cache for attention computation. The behavior differs based on the layer's attention type:
 
         - Full attention: New KV states are written to cache, then complete sequence is read from cache
         - Sliding window: Old KV is read from cache along with extra spaces for the new KV, then new KV is written to
             cache. This is because new KV might overwrite the old KV, so we need to read the old KV first.
 
+        When the layer's read index is empty, the batch has no cache reads (all requests are non-chunked prefills): we
+        only write to the cache and return the input KV states directly, skipping the index_select read-back.
+
         Returns the complete KV states (cached + new) for attention computation.
         """
-        # Retrieve the layer read and write indices, and if there is a sliding window
+        # Retrieve the layer write index and the relevant cache tensors
         group_idx, layer_idx_in_group = self.layer_index_to_group_indices[layer_idx]
         layer_read_index = read_index[group_idx]
         layer_write_index = write_index[group_idx]
-        # Select the correct cache
         k_cache = self.key_cache[layer_idx_in_group]
         v_cache = self.value_cache[layer_idx_in_group]
         # Transpose the key and value states to match the cache shape, after which shape is [seqlen_kv, num_kv_heads, head_dim]
         key_states = key_states.transpose(1, 2).squeeze(0)
         value_states = value_states.transpose(1, 2).squeeze(0)
 
+        # Case: write-only, no cache read. The input KV states already contain everything the attention needs.
+        if layer_read_index.numel() == 0:
+            k_cache.index_copy_(0, layer_write_index, key_states)
+            v_cache.index_copy_(0, layer_write_index, value_states)
+            return key_states, value_states
+
         # Case: full attention
         sliding_window = self.sliding_windows[layer_idx]
         if sliding_window == 1:
-            k_cache[layer_write_index, :, :] = key_states
-            v_cache[layer_write_index, :, :] = value_states
-            key_states_with_cache = k_cache[layer_read_index, :, :]
-            value_states_with_cache = v_cache[layer_read_index, :, :]
+            k_cache.index_copy_(0, layer_write_index, key_states)
+            v_cache.index_copy_(0, layer_write_index, value_states)
+            key_states_with_cache = torch.index_select(k_cache, 0, layer_read_index)
+            value_states_with_cache = torch.index_select(v_cache, 0, layer_read_index)
 
         # Case: sliding window -- we  need to be careful of read/write order because of chunked prefill, because it's
         # the only case where you may write over cache you need to use
         else:
-            # Add the cache to the key and value states
-            mask = (layer_read_index == -1).unsqueeze(-1).unsqueeze(-1)  # TODO: should this be precomputed?
-            key_states_with_cache = k_cache[layer_read_index, :, :]
+            # Sentinel positions in read_index mark new-token slots; index_select reads garbage there,
+            # then masked_scatter_ overwrites them with the actual new key/value states.
+            mask = (layer_read_index == self.sentinel_index).unsqueeze(-1).unsqueeze(-1)
+            key_states_with_cache = torch.index_select(k_cache, 0, layer_read_index)
             key_states_with_cache.masked_scatter_(mask, key_states)
-            value_states_with_cache = v_cache[layer_read_index, :, :]
+            value_states_with_cache = torch.index_select(v_cache, 0, layer_read_index)
             value_states_with_cache.masked_scatter_(mask, value_states)
-            # Write new KV values to the cache
-            k_cache[layer_write_index, :, :] = key_states
-            v_cache[layer_write_index, :, :] = value_states
+            # Write new KV values to the cache (padding slots in write_index point to the trash position)
+            k_cache.index_copy_(0, layer_write_index, key_states)
+            v_cache.index_copy_(0, layer_write_index, value_states)
 
         # Return the new KV values
         return key_states_with_cache, value_states_with_cache
@@ -487,275 +521,182 @@ class PagedAttentionCache:
 
 # TODO: rework computation with the groups and their sizes
 class PagedAttentionMemoryHandler:
-    """A helper class to determine the best number of pages and maximum number of tokens per batch for the paged
-    attention cache, providing automatic sizing based on available GPU memory.
-    The helper works using the number of pages, which is tied to the number of blocks by:
-        num_blocks = num_pages // block_size
+    """Determines the optimal number of pages (N) and max batch tokens (M) for the paged attention cache, given
+    available GPU memory. The relation between N and number of blocks is: num_blocks = N // block_size.
 
-    The memory footprint consists of three main components:
-    - Cache memory: the space needed to store the cache tensors:
-        2 * layer_group_size * [num_pages, page_size] * cache_dtype
-    - Activation memory: the space temporarily taken by the largest activation during the model forward pass:
-        peak_activation_per_token * max_tokens_per_batch * activation_dtype_size
-    - Static tensors: the space taken by the input/output buffers and metadata tensors for batch processing, sum of:
-        - inputs_ids + outputs_ids + position_ids + logits_indices: 4 * max_tokens_per_batch * int32_size
-        - attention_mask: num_attention_masks * num_pages * max_tokens_per_batch * activation_dtype_size
-        - cumulative_seqlens_q + cumulative_seqlens_k: (1 + 2) * max_tokens_per_batch * int32_size
-        - write_index_tensor: num_groups * max_tokens_per_batch * int32_size
-        - read_index_tensor: num_groups * (num_pages + max_tokens_per_batch) * int32_size
+    The memory footprint is a polynomial in N and M, where each term maps to a tensor allocated in
+    ``ContinuousBatchingIOs._setup_static_tensors`` or ``PagedAttentionCache.__init__``:
 
-    The handler can operate in three modes:
-    1. Auto-sizing: Determines both number of pages and maximum number of tokens per batch using quadratic optimization
-    2. Fixed cache: Calculates max batch tokens given a fixed number of pages
-    3. Fixed batch: Calculates number of pages given a fixed maximum batch size
+        memory(N, M)  =  coeff_n · N  +  coeff_m · M  +  coeff_nm · N·M  +  coeff_mm · M²
 
+    See ``_equation_coefficients`` for the breakdown.  All three solving modes (auto, fixed-N, fixed-M) reduce to
+    solving this equation, which is at most quadratic in one variable.
     """
 
     _activation_dtype = torch.bfloat16
     _input_dtype = torch.int32
-    _upper_bound_max_batch_tokens = 256
+    _upper_bound_max_batch_tokens = 1024
     _upper_bound_num_blocks = 4096
 
     def __init__(
         self,
-        block_size: int,
+        continuous_batching_config: ContinuousBatchingConfig,
         page_size: int,
         num_groups: int,
         group_size: int,
-        peak_activation_per_token: int,
+        activation_peaks: list[tuple[int, int]],
         num_attention_masks: int,
     ) -> None:
-        """Initialize the memory handler with the parameters that cannot be automatically inferred.
-
-        Args:
-            block_size: Size of the cache blocks
-            page_size: Size of the cache pages
-            num_groups: Number of layer groups
-            group_size: Number of layers per layer group
-            peak_activation_per_token: Maximum size of activation tensor per token, = hidden_size + vocab_size
-            num_attention_masks: Number of attention masks, 0 if no attention mask is used, 2 if hybrid model, else 1
-        """
-        self.block_size = block_size
+        """Initialize the memory handler. `activation_peaks` is a list of `(Δcn, Δcm)` pairs giving the activation memory
+        contributions proportional to N (pages) and M (batch tokens) for each peak. Memory must satisfy the constraint
+        at every peak, so we solve each polynomial independently and take the most restrictive result."""
+        self.block_size = continuous_batching_config.block_size
         self.page_size = page_size
         self.num_groups = num_groups
         self.group_size = group_size
-        self.peak_activation_per_token = peak_activation_per_token
+        self.activation_peaks = activation_peaks
         self.num_attention_masks = num_attention_masks
+        self.max_blocks_per_request = continuous_batching_config.max_blocks_per_request or 0
+        # This is the number of output rows for the output_ids tensor
+        self.num_output_rows = 2 if continuous_batching_config.return_logprobs else 1
+        # This account for the set of 2 IOs if async batching is used
+        self.io_multiplier = 2 if continuous_batching_config.use_async_batching else 1
 
     @staticmethod
     def get_available_memory(max_memory_percent: float = 1.0) -> int:
-        """Calculate available GPU memory for cache allocation, accounting for already allocated tensors.
-        This method queries the current memory state and applies the specified percentage limit to determine
-        how much memory can be safely used for the paged attention cache.
-
-        Args:
-            max_memory_percent: Fraction of available memory to use (0.0-1.0). 1.0 means use all available memory.
-
-        Returns:
-            int: Available memory in bytes for cache allocation
-        """
+        """Calculate available GPU memory for cache allocation, accounting for already allocated tensors."""
         _, total, reserved, allocated = get_device_and_memory_breakdown()
         available_memory = total - max(allocated, reserved)
         available_memory = int(available_memory * max_memory_percent)
         return available_memory
 
+    # Formatting is disabled because of comment indentation, which improves readability.
+    # fmt: off
+    def _equation_coefficients(
+        self, peak: tuple[int, int], cache_dtype: torch.dtype
+    ) -> tuple[int, int, int, int]:
+        """Returns `(coeff_n, coeff_m, coeff_nm, coeff_mm)` for the memory polynomial of a single activation peak.
+        `peak = (Δcn, Δcm)` is the peak-specific activation contribution; the rest of the coefficients are shared
+        across peaks. Each addend is annotated with the tensor it corresponds to in
+        `ContinuousBatchingIOs._setup_static_tensors` (or the forward pass, for activation terms).
+        """
+        i = self._input_dtype.itemsize       # int32
+        a = self._activation_dtype.itemsize  # bfloat16
+        c = cache_dtype.itemsize
+        k = self.io_multiplier               # 1 sync, 2 async (IO tensors only)
+        delta_n, delta_m = peak
+
+        # -- N terms: cost per cache page --------------------------------------------------
+        coeff_n = (
+            2 * self.group_size * self.page_size * c   # kv_cache: 2 * group_size * [N, page_size] * cache_dtype
+            + k * self.num_groups * 8                  # read_index: [num_groups, N + M]  (N part only, int64)
+            + delta_n * a                              # activation peak: N-proportional part
+        )
+        # -- M terms: cost per batch token -------------------------------------------------
+        coeff_m = (
+            delta_m * a                                # activation peak: M-proportional part
+            + k * 7 * i                                # bulk_input: [7, M] int32, packed as 7 rows
+            + k * self.num_output_rows * i             # output_ids: [num_output_rows, M] int32
+            + k * self.num_groups                      # block_table: [bt_groups, M, max_blocks_per_req] int32
+            * self.max_blocks_per_request * i          #   (zero when fast-decode is off)
+            + k * self.num_groups * 8                  # write_index: [num_groups, M] int64
+            + k * self.num_groups * 8                  # read_index: [num_groups, N + M] (M part only, int64)
+        )
+        # -- N·M terms: cost per (page × batch token) --------------------------------------
+        coeff_nm = k * self.num_attention_masks * a    # attention_mask: [1, 1, M, N + M] (N·M part only)
+        # -- M² terms: cost per (batch token squared) --------------------------------------
+        coeff_mm = k * self.num_attention_masks * a    # attention_mask: [1, 1, M, N + M] (M² part only)
+
+        return coeff_n, coeff_m, coeff_nm, coeff_mm
+    # fmt: on
+
+    @staticmethod
+    def _solve_quadratic(a: float, b: float, c: float) -> float:
+        """Largest positive root of a·x² + b·x + c = 0. Falls back to linear when a == 0."""
+        if a == 0:
+            return -c / b
+        discriminant = b**2 - 4 * a * c
+        if discriminant < 0:
+            raise ValueError(f"No real solution (discriminant = {discriminant})")
+        root = (-b + sqrt(discriminant)) / (2 * a)
+        if root < 0:
+            raise ValueError(f"No positive solution (root = {root})")
+        return root
+
+    def _solve_for_peak(
+        self,
+        peak: tuple[int, int],
+        available: int,
+        num_blocks: int | None,
+        max_batch_tokens: int | None,
+        cache_dtype: torch.dtype,
+    ) -> tuple[int, int]:
+        """Solve for `(num_blocks, max_batch_tokens)` against one activation peak's memory polynomial. Clamps to upper
+        bounds. Either input may be None; whichever is None is solved for."""
+        cn, cm, cnm, cmm = self._equation_coefficients(peak, cache_dtype)
+
+        if num_blocks is None and max_batch_tokens is None:
+            # Substitute M = m·N → (coeff_nm·m + coeff_mm·m²)·N² + (coeff_n + coeff_m·m)·N − avail = 0
+            m = 0.01
+            num_pages = self._solve_quadratic(cnm * m + cmm * m**2, cn + cm * m, -available)
+            max_batch_tokens = int(num_pages * m)
+            if max_batch_tokens > self._upper_bound_max_batch_tokens:
+                max_batch_tokens = self._upper_bound_max_batch_tokens
+                # If max_batch_tokens is clamped, we recompute num_blocks below to get a higher value
+                num_blocks = None
+            else:
+                num_blocks = min(floor(num_pages) // self.block_size, self._upper_bound_num_blocks)
+
+        if num_blocks is None:
+            # M given → linear in N: (coeff_n + coeff_nm·M)·N = avail − coeff_m·M − coeff_mm·M²
+            M = max_batch_tokens
+            num_pages = floor((available - cm * M - cmm * M**2) / (cn + cnm * M))
+            num_blocks = min(num_pages // self.block_size, self._upper_bound_num_blocks)
+        elif max_batch_tokens is None:
+            # N given → quadratic in M: coeff_mm·M² + (coeff_m + coeff_nm·N)·M + (coeff_n·N − avail) = 0
+            N = num_blocks * self.block_size
+            M = self._solve_quadratic(cmm, cm + cnm * N, cn * N - available)
+            max_batch_tokens = min(floor(M), self._upper_bound_max_batch_tokens)
+
+        return num_blocks, max_batch_tokens
+
     def infer_num_blocks_and_max_batch_tokens(
         self,
         num_blocks: int | None = None,
         max_batch_tokens: int | None = None,
-        max_memory_percent: float = 0.8,  # FIXME: it seems we overcommit memory, was changed from 0.9 which caused OOMs in our benchmarking CI
+        max_memory_percent: float = 0.9,
         cache_dtype: torch.dtype = torch.float16,
     ) -> tuple[int, int]:
-        """Determine optimal number of blocks and maximum number of tokens per batch based on available memory and
-        constraints. Check the class docstring for more details. Naming the number of pages as N and the maximum number
-        of tokens per batch as M, the equation solved is:
-
-        available_memory = sum([
-            MN * num_attention_masks * activation_dtype_size,
-            2N * (layer_group_size * page_size * cache_dtype + 2 * num_group),
-            M * (peak_activation_per_token * activation_dtype + 28 + 4 * num_group),
-        ])
-
-        where we already simplified int32_size = 4.
+        """Solve for the missing variable(s) in the memory polynomial (see ``_equation_coefficients``). There is one
+        polynomial per activation peak; we solve each independently and take the most restrictive (smallest) result.
+        When both `N` and `M` are unknown, assumes `M = m·N` (m = 0.01, i.e. one batch fills ~1 % of the cache) and
+        solves the resulting quadratic in N.
         """
-        if num_blocks is None:
-            if max_batch_tokens is None:
-                # If neither num_blocks nor max_batch_tokens are provided, we use a second-order polynomial
-                num_blocks, max_batch_tokens = self.compute_num_blocks_and_max_batch_tokens(
-                    max_memory_percent, cache_dtype
-                )
-            else:
-                # If only max_batch_tokens is provided, we infer the num_blocks
-                num_blocks = self.compute_num_blocks(max_batch_tokens, max_memory_percent, cache_dtype)
-        elif max_batch_tokens is None:
-            # If only num_blocks is provided, we infer the max_batch_tokens
-            max_batch_tokens = self.compute_max_batch_tokens(num_blocks, max_memory_percent, cache_dtype)
-        else:
-            # If both num_blocks and max_batch_tokens are provided, we use them (useless, but helps with typing)
-            max_batch_tokens = max_batch_tokens
-
-        # We check if the memory footprint is too large in all cases
-        available_memory = self.get_available_memory(max_memory_percent)
-        memory_footprint = self.compute_memory_footprint(
-            max_batch_tokens=max_batch_tokens, num_blocks=num_blocks, cache_dtype=cache_dtype
-        )
-        if memory_footprint > available_memory:
-            raise MemoryError(f"Memory footprint {memory_footprint} is more than available memory {available_memory}")
+        available = self.get_available_memory(max_memory_percent)
+        logger.info(f"Cache memory: {available}")
+        # Solve each peak independently, then take the element-wise min (tightest constraint wins)
+        acc_num_blocks = float("inf")
+        acc_max_batch_tokens = float("inf")
+        for peak in self.activation_peaks:
+            n_blocks, m_batch_tokens = self._solve_for_peak(peak, available, num_blocks, max_batch_tokens, cache_dtype)
+            acc_num_blocks = min(acc_num_blocks, n_blocks)
+            acc_max_batch_tokens = min(acc_max_batch_tokens, m_batch_tokens)
+        # Now update the value (cannot update in loop, it would overwrite the user-passed values)
+        num_blocks, max_batch_tokens = acc_num_blocks, acc_max_batch_tokens
+        # Validate
+        memory_footprint = self.compute_memory_footprint(num_blocks, max_batch_tokens, cache_dtype)
+        if memory_footprint > available:
+            raise MemoryError(f"Memory footprint {memory_footprint} is more than available memory {available}")
         return num_blocks, max_batch_tokens
 
-    def compute_num_blocks_and_max_batch_tokens(
-        self,
-        max_memory_percent: float,
-        cache_dtype: torch.dtype = torch.float16,
-        m: float = 0.01,
-    ) -> tuple[int, int]:
-        """Calculate optimal number of blocks and maximum number of tokens per batch using quadratic optimization when
-        neither is fixed. This method assumes a relationship M = m * N where m is a small ratio below 1 and solves the
-        resulting quadratic equation to find the optimal N that maximizes utilization within memory constraints. m is
-        the amount of cache we can fill with one batch: m=0.01 means a batch fills at most 1% of the cache. The equation
-        to solve is:
+    def compute_memory_footprint(self, num_blocks: int, max_batch_tokens: int, cache_dtype: torch.dtype) -> int:
+        """Evaluate the memory polynomial at concrete (N, M) values, taking the max across activation peaks."""
+        N = num_blocks * self.block_size
+        M = max_batch_tokens
 
-        available_memory = sum([
-            m * N^2 * num_attention_masks * activation_dtype_size,
-            2N * (layer_group_size * page_size * cache_dtype + 2 * num_group),
-            m * N * (peak_activation_per_token * activation_dtype + 28 + 4 * num_group),
-        ])
-
-        If num_attention_masks is 0, the equation simplifies to a 1st degree polynomial.
-        """
-        cache_memory = self.get_available_memory(max_memory_percent)
-        logger.info(f"Cache memory: {cache_memory}")
-
-        # Compute second-degree polynomial coefficients
-        a = m * self.num_attention_masks * self._activation_dtype.itemsize
-        b = 2 * (self.group_size * self.page_size * cache_dtype.itemsize + 2 * self.num_groups)
-        b += m * (self.peak_activation_per_token * self._activation_dtype.itemsize + 28 + 4 * self.num_groups)
-        c = -cache_memory
-        logger.debug(f"Coefficients of 2nd degree polynomial: {a = }, {b = }, {c = }")
-
-        # If num_attention_masks is 0, the equation simplifies to a 1st degree polynomial
-        if self.num_attention_masks == 0:
-            greatest_solution = -c / b
-        # Otherwise, we solve the quadratic equation
-        else:
-            discriminant = b**2 - 4 * a * c
-            if discriminant < 0:
-                raise ValueError(f"Discriminant is negative: {discriminant = }")
-            greatest_solution = (-b + sqrt(discriminant)) / (2 * a)
-
-        if greatest_solution < 0:
-            raise ValueError(f"Greatest solution is negative: {greatest_solution = }")
-
-        # Infer number of blocks and max batch tokens
-        num_pages = floor(greatest_solution)
-        num_blocks = num_pages // self.block_size
-        if num_blocks > self._upper_bound_num_blocks:
-            logger.info(f"{num_blocks = } is too large, setting to {self._upper_bound_num_blocks = }")
-            num_blocks = self._upper_bound_num_blocks
-        max_batch_tokens = int(greatest_solution * m)
-        if max_batch_tokens > self._upper_bound_max_batch_tokens:
-            logger.info(f"{max_batch_tokens = } is too large, setting to {self._upper_bound_max_batch_tokens = }")
-            max_batch_tokens = self._upper_bound_max_batch_tokens
-        return num_blocks, max_batch_tokens
-
-    def compute_max_batch_tokens(
-        self,
-        num_blocks: int,
-        max_memory_percent: float,
-        cache_dtype: torch.dtype = torch.float16,
-    ) -> int:
-        """Calculate maximum batch tokens M given a fixed number of cache blocks. The formula for M is given by:
-
-        M = (available_memory - 2N * (layer_group_size * page_size * cache_dtype + 2 * num_group))
-            / (activation_dtype_size * (N * num_attention_masks + peak_activation_per_token) + 28 + 4 * num_group)
-        """
-        cache_memory = self.get_available_memory(max_memory_percent)
-        num_pages = num_blocks * self.block_size
-        # Compute numerator
-        num = cache_memory
-        num -= 2 * num_pages * (self.group_size * self.page_size * cache_dtype.itemsize + 2 * self.num_groups)
-        # Compute denominator
-        denum = self._activation_dtype.itemsize * (
-            num_pages * self.num_attention_masks + self.peak_activation_per_token
-        )
-        denum += 28 + 4 * self.num_groups
-        # Compute max batch tokens and return
-        max_batch_tokens = floor(num / denum)
-        if max_batch_tokens > self._upper_bound_max_batch_tokens:
-            logger.info(f"{max_batch_tokens = } is too large, setting to {self._upper_bound_max_batch_tokens = }")
-            max_batch_tokens = self._upper_bound_max_batch_tokens
-        return max_batch_tokens
-
-    def compute_num_blocks(
-        self,
-        max_batch_tokens: int,
-        max_memory_percent: float,
-        cache_dtype: torch.dtype = torch.float16,
-    ) -> int:
-        """Calculate number of cache blocks N given a fixed maximum token per token M. The formula for N is given by:
-
-        N = (available_memory - M * (peak_activation_per_token * activation_dtype + 28 + 4 * num_group))
-          / (2 * (layer_group_size * page_size * cache_dtype + 2 * num_group) + M * (num_attention_masks * activation_dtype_size))
-        """
-        cache_memory = self.get_available_memory(max_memory_percent)
-        # Compute numerator
-        num = cache_memory
-        num -= max_batch_tokens * self.peak_activation_per_token * self._activation_dtype.itemsize
-        num -= max_batch_tokens * (28 + 4 * self.num_groups)
-        # Compute denominator
-        denum = 2 * (self.group_size * self.page_size * cache_dtype.itemsize + 2 * self.num_groups)
-        denum += max_batch_tokens * (self.num_attention_masks * self._activation_dtype.itemsize)
-        denum += max_batch_tokens * self._activation_dtype.itemsize
-        # Compute cache size and return number of blocks
-        num_pages = floor(num / denum)
-        num_blocks = num_pages // self.block_size
-        if num_blocks > self._upper_bound_num_blocks:
-            logger.info(f"{num_blocks = } is too large, setting to {self._upper_bound_num_blocks = }")
-            num_blocks = self._upper_bound_num_blocks
-        return num_blocks
-
-    def compute_memory_footprint(
-        self,
-        num_blocks: int,
-        max_batch_tokens: int,
-        cache_dtype: torch.dtype,
-    ) -> int:
-        """Calculate the memory footprint breakdown for a given number of blocks and maximum batch tokens. The memory
-        footprint is given by:
-
-        available_memory = sum([
-            MN * num_attention_masks * activation_dtype_size,
-            2N * (layer_group_size * page_size * cache_dtype + 2 * num_group),
-            M * (peak_activation_per_token * activation_dtype + 28 + 4 * num_group),
-        ])
-        but is broken down below.
-        """
-        num_pages = num_blocks * self.block_size
-
-        cache_memory_footprint = 2 * self.group_size * num_pages * self.page_size * cache_dtype.itemsize
-
-        activation_memory_footprint = self.peak_activation_per_token * self._activation_dtype.itemsize
-        activation_memory_footprint *= max_batch_tokens
-
-        inputs_outputs_positions_and_logits_memory_footprint = 4 * max_batch_tokens * 4  # second 4 is for int32 size
-
-        attention_memory_footprint = self.num_attention_masks * self._activation_dtype.itemsize
-        attention_memory_footprint *= num_pages * max_batch_tokens
-
-        cumulative_seqlens_memory_footprint = 3 * max_batch_tokens * 4  # 4 is for int32 size
-
-        write_index_memory_footprint = self.num_groups * max_batch_tokens * 4  # 4 is for int32 size
-        read_index_memory_footprint = self.num_groups * (num_pages + max_batch_tokens) * 4  # 4 is for int32 size
-
-        total_memory_footprint = sum(
-            [
-                cache_memory_footprint,
-                activation_memory_footprint,
-                inputs_outputs_positions_and_logits_memory_footprint,
-                attention_memory_footprint,
-                cumulative_seqlens_memory_footprint,
-                write_index_memory_footprint,
-                read_index_memory_footprint,
-            ]
-        )
-        return total_memory_footprint
+        max_memory_footprint = 0
+        for peak in self.activation_peaks:
+            cn, cm, cnm, cmm = self._equation_coefficients(peak, cache_dtype)
+            memory_footprint = cn * N + cm * M + cnm * N * M + cmm * M * M
+            max_memory_footprint = max(max_memory_footprint, memory_footprint)
+        return max_memory_footprint

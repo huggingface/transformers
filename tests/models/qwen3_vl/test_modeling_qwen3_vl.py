@@ -103,8 +103,8 @@ class Qwen3VLVisionText2TextModelTester(VLMModelTester):
         input_ids[input_ids == self.image_token_id] = self.pad_token_id
         input_ids[input_ids == self.vision_start_token_id] = self.pad_token_id
         # Place image tokens with vision_start_token_id prefix
-        input_ids[:, -1] = self.image_token_id
-        input_ids[:, -2] = self.vision_start_token_id
+        input_ids[:, 1] = self.image_token_id
+        input_ids[:, 0] = self.vision_start_token_id
         return input_ids
 
     def get_additional_inputs(self, config, input_ids, pixel_values):
@@ -144,6 +144,61 @@ class Qwen3VLModelTest(VLMModelTest, unittest.TestCase):
     @pytest.mark.xfail(reason="This architecture seems to not compute gradients for some layer.")
     def test_training_gradient_checkpointing_use_reentrant_true(self):
         super().test_training_gradient_checkpointing_use_reentrant_true()
+
+    def test_vision_position_ids(self):
+        """
+        Tests that vision position ids are built correctly for images and for videos.
+        See https://github.com/huggingface/transformers/pull/45400
+        """
+        config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        model = Qwen3VLModel(config).to(torch_device)
+        batch_size = input_dict["input_ids"].shape[0]
+
+        # Test most simple case when num_image_tokens == 1. Position ids will be sunsequent and text-like
+        position_ids = model.get_rope_index(
+            input_dict["input_ids"], input_dict["mm_token_type_ids"], input_dict["image_grid_thw"]
+        )[0]
+        expected_positions = torch.arange(39)[None, None, :].repeat(3, batch_size, 1)
+        self.assertListEqual(list(position_ids.shape), [3, batch_size, 39])
+        self.assertListEqual(position_ids.tolist(), expected_positions.tolist())
+
+        # Each image encodes to more than 1 token (i.e. 4 height and 3 width patches = 12 tokens)
+        image_token_id = config.image_token_id
+        pad_token_id = config.text_config.pad_token_id
+        input_ids = torch.tensor([[pad_token_id] + [image_token_id] * 12 + [pad_token_id]], device=torch_device)
+        mm_token_type_ids = torch.tensor([[0] + [1] * 12 + [0]], device=torch_device)
+        image_grid_thw = torch.tensor([[1, 4, 3]], device=torch_device)
+        position_ids = model.get_rope_index(input_ids, mm_token_type_ids, image_grid_thw)[0]
+        expected_positions = torch.tensor(
+            [
+                [[0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 5]],
+                [[0, 1, 1, 1, 2, 2, 2, 3, 3, 3, 4, 4, 4, 5]],
+                [[0, 1, 2, 3, 1, 2, 3, 1, 2, 3, 1, 2, 3, 5]],
+            ]
+        )
+
+        self.assertListEqual(list(position_ids.shape), [3, 1, 14])
+        self.assertListEqual(position_ids.tolist(), expected_positions.tolist())
+
+        # Check video position ids with 2 frames, and 4 height, 3 width patches (= 12 * 2 tokens)
+        video_token_id = config.video_token_id
+        input_ids = torch.tensor(
+            [[pad_token_id] + [video_token_id] * 12 + [pad_token_id] + [video_token_id] * 12 + [pad_token_id]],
+            device=torch_device,
+        )
+        mm_token_type_ids = torch.tensor([[0] + [2] * 12 + [0] + [2] * 12 + [0]], device=torch_device)
+        video_grid_thw = torch.tensor([[2, 4, 3]], device=torch_device)
+        position_ids = model.get_rope_index(input_ids, mm_token_type_ids, video_grid_thw=video_grid_thw)[0]
+        expected_positions = torch.tensor(
+            [
+                [[0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 5, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 10]],
+                [[0, 1, 1, 1, 2, 2, 2, 3, 3, 3, 4, 4, 4, 5, 6, 6, 6, 7, 7, 7, 8, 8, 8, 9, 9, 9, 10]],
+                [[0, 1, 2, 3, 1, 2, 3, 1, 2, 3, 1, 2, 3, 5, 6, 7, 8, 6, 7, 8, 6, 7, 8, 6, 7, 8, 10]],
+            ]
+        )
+
+        self.assertListEqual(list(position_ids.shape), [3, 1, 27])
+        self.assertListEqual(position_ids.tolist(), expected_positions.tolist())
 
     def test_mismatching_num_image_tokens(self):
         # Override the base test because we need to slice image_grid_thw too

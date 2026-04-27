@@ -152,6 +152,7 @@ trainer.push_to_hub()
 
 ## Next steps
 
+- Read the [Trainer features](./trainer_recipes) guide for minimal working examples of common Trainer features like custom loss functions, memory-efficient evaluation, checkpointing, and more.
 - Read the [Subclassing Trainer methods](./trainer_customize) guide to learn how to subclass [`Trainer`] methods to support new and custom functionalities.
 - Read the [Callbacks](./trainer_callbacks) guide to learn how to hook into training events for logging, early stopping, and other custom behavior.
 - Read the [Data collators](./data_collators) guide to learn how to customize how samples are assembled into batches.
