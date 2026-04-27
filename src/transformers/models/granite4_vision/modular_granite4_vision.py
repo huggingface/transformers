@@ -19,6 +19,7 @@ import torch
 from torch import nn
 
 from ...cache_utils import Cache, DynamicCache
+from ...configuration_utils import PreTrainedConfig
 from ...image_processing_utils import BatchFeature, select_best_resolution
 from ...image_utils import ImageInput
 from ...masking_utils import create_causal_mask
@@ -96,7 +97,7 @@ class Granite4VisionCausalLMOutputWithPast(LlavaNextCausalLMOutputWithPast):
 # ── Config ──────────────────────────────────────────────────────────────────
 
 
-class Granite4VisionTextConfig(GraniteConfig):
+class Granite4VisionTextConfig(PreTrainedConfig):
     model_type = "granite4_vision_text"
     base_config_key = "text_config"
 

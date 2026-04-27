@@ -30,7 +30,7 @@ from ..auto import CONFIG_MAPPING, AutoConfig
 # ── Config ──────────────────────────────────────────────────────────────────
 
 
-class Granite4VisionTextConfig(GraniteConfig):
+class Granite4VisionTextConfig(PreTrainedConfig):
     model_type = "granite4_vision_text"
     base_config_key = "text_config"
 
