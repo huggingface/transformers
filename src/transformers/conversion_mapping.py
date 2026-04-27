@@ -348,24 +348,6 @@ def _build_checkpoint_conversion_mapping():
             WeightRenaming("out_proj", "o_proj"),
             WeightRenaming(r"layers.(\d+).fc1", r"layers.\1.mlp.fc1"),
             WeightRenaming(r"layers.(\d+).fc2", r"layers.\1.mlp.fc2"),
-            # `DetrForSegmentation`
-            WeightRenaming("bbox_attention.q_linear", "bbox_attention.q_proj"),
-            WeightRenaming("bbox_attention.k_linear", "bbox_attention.k_proj"),
-            # Mask head refactor
-            WeightRenaming("mask_head.lay1", "mask_head.conv1.conv"),
-            WeightRenaming("mask_head.gn1", "mask_head.conv1.norm"),
-            WeightRenaming("mask_head.lay2", "mask_head.conv2.conv"),
-            WeightRenaming("mask_head.gn2", "mask_head.conv2.norm"),
-            WeightRenaming("mask_head.adapter1", "mask_head.fpn_stages.0.fpn_adapter"),
-            WeightRenaming("mask_head.lay3", "mask_head.fpn_stages.0.refine.conv"),
-            WeightRenaming("mask_head.gn3", "mask_head.fpn_stages.0.refine.norm"),
-            WeightRenaming("mask_head.adapter2", "mask_head.fpn_stages.1.fpn_adapter"),
-            WeightRenaming("mask_head.lay4", "mask_head.fpn_stages.1.refine.conv"),
-            WeightRenaming("mask_head.gn4", "mask_head.fpn_stages.1.refine.norm"),
-            WeightRenaming("mask_head.adapter3", "mask_head.fpn_stages.2.fpn_adapter"),
-            WeightRenaming("mask_head.lay5", "mask_head.fpn_stages.2.refine.conv"),
-            WeightRenaming("mask_head.gn5", "mask_head.fpn_stages.2.refine.norm"),
-            WeightRenaming("mask_head.out_lay", "mask_head.output_conv"),
         ],
         "rt_detr": [
             WeightRenaming("out_proj", "o_proj"),
@@ -394,24 +376,6 @@ def _build_checkpoint_conversion_mapping():
             WeightRenaming(
                 r"decoder.layers.(\d+).ca_qpos_sine_proj", r"decoder.layers.\1.encoder_attn.q_pos_sine_proj"
             ),
-            # The rest of patterns are used only in `ConditionalDetrForSegmentation`
-            WeightRenaming("bbox_attention.q_linear", "bbox_attention.q_proj"),
-            WeightRenaming("bbox_attention.k_linear", "bbox_attention.k_proj"),
-            # Mask head refactor
-            WeightRenaming("mask_head.lay1", "mask_head.conv1.conv"),
-            WeightRenaming("mask_head.gn1", "mask_head.conv1.norm"),
-            WeightRenaming("mask_head.lay2", "mask_head.conv2.conv"),
-            WeightRenaming("mask_head.gn2", "mask_head.conv2.norm"),
-            WeightRenaming("mask_head.adapter1", "mask_head.fpn_stages.0.fpn_adapter"),
-            WeightRenaming("mask_head.lay3", "mask_head.fpn_stages.0.refine.conv"),
-            WeightRenaming("mask_head.gn3", "mask_head.fpn_stages.0.refine.norm"),
-            WeightRenaming("mask_head.adapter2", "mask_head.fpn_stages.1.fpn_adapter"),
-            WeightRenaming("mask_head.lay4", "mask_head.fpn_stages.1.refine.conv"),
-            WeightRenaming("mask_head.gn4", "mask_head.fpn_stages.1.refine.norm"),
-            WeightRenaming("mask_head.adapter3", "mask_head.fpn_stages.2.fpn_adapter"),
-            WeightRenaming("mask_head.lay5", "mask_head.fpn_stages.2.refine.conv"),
-            WeightRenaming("mask_head.gn5", "mask_head.fpn_stages.2.refine.norm"),
-            WeightRenaming("mask_head.out_lay", "mask_head.output_conv"),
         ],
         "deformable_detr": [
             WeightRenaming("backbone.conv_encoder", "backbone"),
@@ -580,6 +544,28 @@ def _build_checkpoint_conversion_mapping():
         ),
     ]
 
+    mapping["DetrForSegmentation"] = [
+        WeightRenaming("bbox_attention.q_linear", "bbox_attention.q_proj"),
+        WeightRenaming("bbox_attention.k_linear", "bbox_attention.k_proj"),
+        WeightRenaming("mask_head.lay1", "mask_head.conv1.conv"),
+        WeightRenaming("mask_head.gn1", "mask_head.conv1.norm"),
+        WeightRenaming("mask_head.lay2", "mask_head.conv2.conv"),
+        WeightRenaming("mask_head.gn2", "mask_head.conv2.norm"),
+        WeightRenaming("mask_head.adapter1", "mask_head.fpn_stages.0.fpn_adapter"),
+        WeightRenaming("mask_head.lay3", "mask_head.fpn_stages.0.refine.conv"),
+        WeightRenaming("mask_head.gn3", "mask_head.fpn_stages.0.refine.norm"),
+        WeightRenaming("mask_head.adapter2", "mask_head.fpn_stages.1.fpn_adapter"),
+        WeightRenaming("mask_head.lay4", "mask_head.fpn_stages.1.refine.conv"),
+        WeightRenaming("mask_head.gn4", "mask_head.fpn_stages.1.refine.norm"),
+        WeightRenaming("mask_head.adapter3", "mask_head.fpn_stages.2.fpn_adapter"),
+        WeightRenaming("mask_head.lay5", "mask_head.fpn_stages.2.refine.conv"),
+        WeightRenaming("mask_head.gn5", "mask_head.fpn_stages.2.refine.norm"),
+        WeightRenaming("mask_head.out_lay", "mask_head.output_conv"),
+    ]
+    mapping["ConditionalDetrForSegmentation"] = mapping["DetrForSegmentation"].copy()
+    mapping["DetrForSegmentation"] = mapping["detr"].copy() + mapping["DetrForSegmentation"]
+    mapping["ConditionalDetrForSegmentation"] = mapping["conditional_detr"].copy() + mapping["ConditionalDetrForSegmentation"]
+
     mapping["ernie4_5_moe"] = mapping["qwen2_moe"].copy()
     mapping["ernie4_5_moe"] += [
         WeightRenaming("mlp.moe_statics.e_score_correction_bias", "mlp.gate.moe_statics.e_score_correction_bias")
@@ -621,30 +607,47 @@ def get_checkpoint_conversion_mapping(model_type):
 
 
 def register_checkpoint_conversion_mapping(
-    model_type: str,
+    model_type_or_class_name: str,
     mapping: list[WeightConverter | WeightRenaming],
     overwrite: bool = False,
 ) -> None:
+    """
+    Register a conversion mapping for a model type string or a class name.
+
+    Class names take priority over ``model_type`` strings during lookup (see
+    :func:`extract_weight_conversions_for_model`), making it possible to define
+    task-head-specific or class-specific conversions that differ from the shared
+    ``model_type`` baseline.
+    """
     global _checkpoint_conversion_mapping_cache
     if _checkpoint_conversion_mapping_cache is None:
         _checkpoint_conversion_mapping_cache = _build_checkpoint_conversion_mapping()
-    if model_type in _checkpoint_conversion_mapping_cache and not overwrite:
-        raise ValueError(f"Model type {model_type} already exists in the checkpoint conversion mapping.")
-    _checkpoint_conversion_mapping_cache[model_type] = mapping
+    if model_type_or_class_name in _checkpoint_conversion_mapping_cache and not overwrite:
+        raise ValueError(
+            f"Conversion mapping for '{model_type_or_class_name}' already exists. "
+            f"Pass overwrite=True to replace it."
+        )
+    _checkpoint_conversion_mapping_cache[model_type_or_class_name] = mapping
 
 
-def extract_weight_conversions_for_model(model: PreTrainedModel, model_prefix: str) -> list[WeightTransform] | None:
+def extract_weight_conversions_for_model(
+    model: PreTrainedModel,
+) -> list[WeightTransform] | None:
+    """
+    Return the registered conversion list for ``model``, or ``None`` if none exists.
+
+    Looks up by class name first (enables task-head-specific overrides), then
+    falls back to ``model.config.model_type``.  Transforms are returned
+    unmodified; the caller sets ``scope_prefix`` on each transform for sub-module isolation.
+    """
+    class_name = type(model).__name__
     model_type = getattr(model.config, "model_type", None)
-    if model_type is not None:
-        model_specific_conversions = get_checkpoint_conversion_mapping(model_type)
-        # In this case, add the prefix to `PrefixChange` instances, in order to know where to add/remove the prefix
-        if model_specific_conversions is not None and model_prefix != "":
-            for i, conversion in enumerate(model_specific_conversions):
-                # In this case, add the prefix, as otherwise we don't know where we need to re-add it exactly in the module name chain
-                if isinstance(conversion, PrefixChange):
-                    model_specific_conversions[i] = conversion.with_submodel_prefix(model_prefix)
-        return model_specific_conversions
-    return None
+
+    # Class name takes priority — allows ForXxx-specific overrides
+    conversions = get_checkpoint_conversion_mapping(class_name)
+    if conversions is None and model_type is not None:
+        conversions = get_checkpoint_conversion_mapping(model_type)
+    return conversions
 
 
 def get_model_conversion_mapping(
@@ -654,8 +657,15 @@ def get_model_conversion_mapping(
     add_legacy: bool = True,
 ) -> list[WeightTransform]:
     """
-    For a given `model`, obtain the weight conversion mapping if any are registered either as a simple renaming
-    `_checkpoint_conversion_mapping` class argument, or in the general WeightConverter mapping.
+    Collect the ordered list of weight transforms for ``model`` (used during
+    loading and, when reversed, during saving).
+
+    Each ``PreTrainedModel`` sub-module is looked up by class name then
+    ``model_type``.  Root transforms are applied globally; sub-module transforms
+    have their ``scope_prefix`` set so they only match keys under that prefix.  After any
+    sub-module is processed, both its class name and ``model_type`` are marked
+    seen to prevent ``XForY`` / ``XModel`` pairs from applying the same mapping
+    twice via different lookup paths.
     """
     # Lazy import to avoid circular import issues
     from .modeling_utils import PreTrainedModel
@@ -667,16 +677,36 @@ def get_model_conversion_mapping(
     if key_mapping is not None:
         weight_conversions = [WeightRenaming(source_patterns=k, target_patterns=v) for k, v in key_mapping.items()]
 
-    # Model have several `PreTrainedModel` within with the same model type, for example: XForConditionalGeneration -> XModel
-    # We don't want to apply the same conversion pattern twice because of that
-    seen_model_types = set()
-    # Recurse over submodules and collect all conversions
-    for name, submodule in model.named_modules():
-        if isinstance(submodule, PreTrainedModel) and submodule.config.model_type not in seen_model_types:
-            conversions = extract_weight_conversions_for_model(submodule, name)
-            if conversions is not None:
-                weight_conversions.extend(conversions)
-                seen_model_types.add(submodule.config.model_type)
+    seen_identifiers: set[str] = set()
+
+    for module_name, submodule in model.named_modules():
+        if not isinstance(submodule, PreTrainedModel):
+            continue
+
+        class_name = type(submodule).__name__
+        model_type = getattr(submodule.config, "model_type", None)
+
+        # Skip if this architecture was already processed via either lookup path.
+        if class_name in seen_identifiers or (model_type and model_type in seen_identifiers):
+            continue
+
+        conversions = extract_weight_conversions_for_model(submodule)
+        if conversions is None:
+            continue
+
+        is_root_model = module_name == ""
+        if not is_root_model:
+            # Scope each transform so it only matches keys under this sub-module's prefix.
+            for transform in conversions:
+                transform.scope_prefix = module_name
+        weight_conversions.extend(conversions)
+
+        # Only mark seen when a mapping was actually applied, so that a root model
+        # with no mapping does not prematurely block sub-modules with the same
+        # model_type from getting their own scoped transforms entry.
+        seen_identifiers.add(class_name)
+        if model_type:
+            seen_identifiers.add(model_type)
 
     if add_legacy:
         weight_conversions.extend(get_checkpoint_conversion_mapping("legacy"))

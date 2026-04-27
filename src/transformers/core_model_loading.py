@@ -591,6 +591,7 @@ class WeightTransform:
         "_original_source_patterns",
         "_original_target_patterns",
         "_was_used",
+        "scope_prefix",
     )
 
     def __init__(self, source_patterns: str | list[str], target_patterns: str | list[str]):
@@ -608,6 +609,9 @@ class WeightTransform:
 
         # Flag to notice if the Transform was used
         self._was_used = False
+        # Optional prefix scope: when set, this transform only applies to keys starting with
+        # ``scope_prefix + "."``, stripping / re-attaching the prefix around the pattern match.
+        self.scope_prefix: str | None = None
 
         # We need to process a few exceptions here when instantiating the reverse mapping (i.e. the targets become
         # sources, and sources become targets). The issues lie in the sources usually, so here we need to check the
@@ -680,8 +684,17 @@ class WeightTransform:
         In case of a one-to-many transform, i.e. we have several target patterns, the matching source pattern
         will be replaced by the first of all the target patterns (they are then correctly expanded in the Operations).
         """
+        # When scoped, only process keys under the prefix; patterns operate on the bare suffix.
+        prefix_dot = None
+        key_to_match = source_key
+        if self.scope_prefix is not None:
+            prefix_dot = self.scope_prefix + "."
+            if not source_key.startswith(prefix_dot):
+                return source_key, None
+            key_to_match = source_key[len(prefix_dot):]
+
         # Try matching one of the alternation branches
-        match_object = self.compiled_sources.search(source_key)
+        match_object = self.compiled_sources.search(key_to_match)
         if match_object is None:
             return source_key, None
 
@@ -699,7 +712,9 @@ class WeightTransform:
             # inside that matched named group
             replaced_group_idx = self.compiled_sources.groupindex[matching_group_name] + 1
             replacement = replacement.replace(r"\1", match_object.group(replaced_group_idx))
-        renamed_key = source_key.replace(match_object.group(0), replacement, 1)
+        renamed_key = key_to_match.replace(match_object.group(0), replacement, 1)
+        if prefix_dot is not None:
+            renamed_key = prefix_dot + renamed_key
         return renamed_key, source_pattern_that_matched
 
     def reverse_transform(self) -> WeightTransform:
@@ -717,7 +732,7 @@ class WeightTransform:
         reverse_transform = self.__class__(
             source_patterns=self._original_target_patterns, target_patterns=self._original_source_patterns, **kwargs
         )
-
+        reverse_transform.scope_prefix = self.scope_prefix
         return reverse_transform
 
     def materialize_tensors(self) -> dict[str, list[torch.Tensor]]:
@@ -836,16 +851,11 @@ class PrefixChange(WeightRenaming):
             raise ValueError("Cannot reverse the transform with TP or quantization")
 
         # Only one of the 2 can ever be used, so 1 is always None
-        return PrefixChange(
+        result = PrefixChange(
             prefix_to_add=self.prefix_to_remove, prefix_to_remove=self.prefix_to_add, model_prefix=self.model_prefix
         )
-
-    def with_submodel_prefix(self, prefix: str) -> PrefixChange:
-        new_prefix = f"{prefix}.{self.model_prefix}" if self.model_prefix != "" else prefix
-        return PrefixChange(
-            prefix_to_add=self.prefix_to_add, prefix_to_remove=self.prefix_to_remove, model_prefix=new_prefix
-        )
-
+        result.scope_prefix = self.scope_prefix
+        return result
 
 # List of classes that are known to be able to use m:n
 _INTERNAL_MANY_TO_MANY_CONVERSIONS = (
