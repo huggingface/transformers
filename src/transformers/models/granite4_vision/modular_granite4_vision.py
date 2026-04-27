@@ -25,6 +25,7 @@ from ...masking_utils import create_causal_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...processing_utils import ImagesKwargs, Unpack
 from ...utils import TransformersKwargs, can_return_tuple, logging
+from ..granite.modeling_granite import GraniteModel
 from ..llava_next.configuration_llava_next import LlavaNextConfig
 from ..llava_next.image_processing_llava_next import LlavaNextImageProcessor, LlavaNextImageProcessorKwargs
 from ..llava_next.image_processing_pil_llava_next import LlavaNextImageProcessorPil
@@ -208,6 +209,91 @@ class Granite4VisionProcessor(LlavaNextProcessor):
 # ── Model ───────────────────────────────────────────────────────────────────
 
 
+class Granite4VisionTextModel(Granite4VisionPreTrainedModel, GraniteModel):
+    """Granite LLM backbone with deepstack feature injection support."""
+
+    def _deepstack_inject(
+        self,
+        hidden_states: torch.Tensor,
+        vision_mask: torch.Tensor,
+        features: torch.Tensor,
+    ) -> torch.Tensor:
+        """Add projected vision features into the image-token positions of hidden_states."""
+        vision_mask = vision_mask.to(hidden_states.device)
+        features = features.to(hidden_states.device, hidden_states.dtype)
+        hidden_states = hidden_states.clone()
+        hidden_states[vision_mask] = hidden_states[vision_mask] + features
+        return hidden_states
+
+    def forward(
+        self,
+        input_ids: torch.LongTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
+        position_ids: torch.LongTensor | None = None,
+        past_key_values: Cache | None = None,
+        inputs_embeds: torch.FloatTensor | None = None,
+        use_cache: bool | None = None,
+        vision_mask: torch.BoolTensor | None = None,
+        deepstack_features: dict | None = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ):
+        r"""
+        vision_mask (`torch.BoolTensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Boolean mask marking image token positions. Required when `deepstack_features` is provided.
+        deepstack_features (`dict[int, torch.Tensor]`, *optional*):
+            Mapping from LLM layer index to projected vision features of shape `(num_image_tokens, hidden_size)`.
+            Features are added into image-token positions of hidden states before the corresponding decoder layer.
+        """
+        if (input_ids is None) ^ (inputs_embeds is not None):
+            raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
+
+        if inputs_embeds is None:
+            inputs_embeds = self.embed_tokens(input_ids)
+
+        inputs_embeds = inputs_embeds * self.embedding_multiplier
+
+        if use_cache and past_key_values is None:
+            past_key_values = DynamicCache(config=self.config)
+
+        if position_ids is None:
+            past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
+            position_ids = (
+                torch.arange(inputs_embeds.shape[1], device=inputs_embeds.device) + past_seen_tokens
+            ).unsqueeze(0)
+
+        causal_mask = create_causal_mask(
+            config=self.config,
+            inputs_embeds=inputs_embeds,
+            attention_mask=attention_mask,
+            past_key_values=past_key_values,
+            position_ids=position_ids,
+        )
+
+        hidden_states = inputs_embeds
+        position_embeddings = self.rotary_emb(hidden_states, position_ids=position_ids)
+
+        for layer_idx, decoder_layer in enumerate(self.layers[: self.config.num_hidden_layers]):
+            if deepstack_features is not None and layer_idx in deepstack_features:
+                hidden_states = self._deepstack_inject(hidden_states, vision_mask, deepstack_features[layer_idx])
+
+            hidden_states = decoder_layer(
+                hidden_states,
+                attention_mask=causal_mask,
+                position_ids=position_ids,
+                past_key_values=past_key_values,
+                use_cache=use_cache,
+                position_embeddings=position_embeddings,
+                **kwargs,
+            )
+
+        hidden_states = self.norm(hidden_states)
+
+        return Granite4VisionModelOutputWithPast(
+            last_hidden_state=hidden_states,
+            past_key_values=past_key_values,
+        )
+
+
 class Granite4VisionPreTrainedModel(LlavaNextPreTrainedModel):
     pass
 
@@ -244,6 +330,9 @@ class Granite4VisionModel(LlavaNextModel):
             self.image_newline = None
 
         self.pad_token_id = getattr(self.config, "pad_token_id", None) or -1
+
+        # Replace the inherited LLM backbone with our deepstack-aware subclass
+        self.language_model = Granite4VisionTextModel(config.text_config)
 
     def pack_image_features(self, image_features, image_sizes, vision_feature_select_strategy, image_newline=None):
         """
@@ -450,8 +539,8 @@ class Granite4VisionModel(LlavaNextModel):
         if inputs_embeds is None:
             inputs_embeds = self.get_input_embeddings()(input_ids)
 
-        # Extract deepstack + spatial features and prepare for layer-by-layer injection
-        deepstack_features = []
+        # Build deepstack injection map and scatter initial image embeddings
+        deepstack_features = None
         vision_mask = None
         image_features = None
         if pixel_values is not None and pixel_values.size(0) > 0:
@@ -462,81 +551,35 @@ class Granite4VisionModel(LlavaNextModel):
                 vision_feature_select_strategy=vision_feature_select_strategy,
             )
 
+            deepstack_features = {}
             for idx, (llm_layer_idx, packed_features) in enumerate(image_features):
                 concat_features = torch.cat(packed_features, dim=0).to(inputs_embeds.device, inputs_embeds.dtype)
                 if idx == 0:
-                    vision_mask = self.get_image_token_mask(
+                    # vision_mask: (batch, seqlen) boolean, used by text model for injection
+                    vision_mask_3d = self.get_image_token_mask(
                         input_ids, inputs_embeds=inputs_embeds, image_features=concat_features
                     )
-                    inputs_embeds = inputs_embeds.masked_fill(vision_mask, 0.0)
-                deepstack_features.append((llm_layer_idx, concat_features))
+                    vision_mask = vision_mask_3d[..., 0]
+                    inputs_embeds = inputs_embeds.masked_fill(vision_mask_3d, 0.0)
+                deepstack_features[llm_layer_idx] = concat_features
 
-        # Custom forward pass with vision injection at specific LLM layers
-        hidden_states = inputs_embeds * self.language_model.embedding_multiplier
-
-        if position_ids is None:
-            past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
-            position_ids = torch.arange(
-                past_seen_tokens, past_seen_tokens + inputs_embeds.shape[1], device=inputs_embeds.device
-            ).unsqueeze(0)
-        causal_mask = create_causal_mask(
-            config=self.language_model.config,
+        outputs = self.language_model(
+            input_ids=None,
             inputs_embeds=inputs_embeds,
             attention_mask=attention_mask,
+            position_ids=position_ids,
             past_key_values=past_key_values,
+            use_cache=use_cache,
+            vision_mask=vision_mask,
+            deepstack_features=deepstack_features,
+            **kwargs,
         )
-        if hasattr(self.language_model, "_update_mamba_mask") and any(
-            lt in getattr(self.language_model.config, "layer_types", []) for lt in ("mamba", "hybrid")
-        ):
-            mamba_mask = self.language_model._update_mamba_mask(attention_mask, past_key_values)
-        else:
-            mamba_mask = None
-
-        position_embeddings = None
-        if self.language_model.rotary_emb is not None:
-            position_embeddings = self.language_model.rotary_emb(hidden_states, position_ids)
-
-        all_hidden_states = () if output_hidden_states else None
-        all_self_attns = None
-
-        # Layer-by-layer forward with vision injection
-        for layer_idx, decoder_layer in enumerate(self.language_model.layers):
-            # Inject vision features at this layer if configured
-            for target_layer, features_for_layer in deepstack_features:
-                if layer_idx == target_layer:
-                    hidden_states = hidden_states.masked_scatter(
-                        vision_mask, (hidden_states[vision_mask] + features_for_layer.flatten()).view(-1)
-                    )
-
-            layer_mask = mamba_mask if getattr(decoder_layer, "layer_type", None) == "mamba" else causal_mask
-
-            if output_hidden_states:
-                all_hidden_states += (hidden_states,)
-
-            layer_outputs = decoder_layer(
-                hidden_states,
-                attention_mask=layer_mask,
-                past_key_values=past_key_values,
-                use_cache=use_cache,
-                position_embeddings=position_embeddings,
-                **kwargs,
-            )
-
-            hidden_states = layer_outputs[0] if isinstance(layer_outputs, tuple) else layer_outputs
-
-        hidden_states = self.language_model.norm(hidden_states)
-
-        if output_hidden_states:
-            all_hidden_states += (hidden_states,)
-
-        if past_key_values and not past_key_values.has_previous_state:
-            past_key_values.has_previous_state = True
 
         return Granite4VisionModelOutputWithPast(
-            last_hidden_state=hidden_states,
-            past_key_values=past_key_values,
-            hidden_states=all_hidden_states,
-            attentions=all_self_attns,
+            last_hidden_state=outputs.last_hidden_state,
+            past_key_values=outputs.past_key_values,
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
             image_hidden_states=image_features if pixel_values is not None else None,
         )
 
@@ -703,6 +746,7 @@ __all__ = [
     "Granite4VisionImageProcessorPil",
     "Granite4VisionProcessor",
     "Granite4VisionPreTrainedModel",
+    "Granite4VisionTextModel",
     "Granite4VisionModel",
     "Granite4VisionForConditionalGeneration",
 ]
