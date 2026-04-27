@@ -284,47 +284,6 @@ python utils/modular_model_converter.py your_model
 
 Never edit the generated files directly because any changes will be overwritten on the next run.
 
-## Checkpoint conversion
-
-Once you've generated your modeling files, verify that real weights load correctly. Write a conversion script to translate the upstream checkpoint format into a Transformers-compatible one, then save it to the Hub.
-
-### Write a conversion script
-
-Add a `convert_<model>_to_hf.py` file to `src/transformers/models/<model>/`. The script loads the upstream weights, renames and reshapes keys to match your module's parameter names, and saves the result with [`~PreTrainedModel.save_pretrained`].
-
-> [!TIP]
-> Look for an existing script to copy and adapt. Models under `src/transformers/models/` include a `convert_*_to_hf.py` you can use as a starting point.
-
-After running the script, load the saved checkpoint with [`~PreTrainedModel.from_pretrained`] and confirm every expected weight loaded correctly. Unused checkpoint keys indicate mismatched names, so print them to catch problems early.
-
-```py
-model = YourModelForTask.from_pretrained("path/to/output/")
-```
-
-Check shape and name matches when iterating over keys. Shape mismatches typically mean a parameter in your config is wrong, the architecture differs from the original, or a weight needs to be transposed.
-
-```py
-for key, tensor in original_state_dict.items():
-    hf_tensor = hf_model.state_dict().get(mapped_key)
-    assert hf_tensor.shape == tensor.shape, (
-        f"Shape mismatch for {key}: expected {tensor.shape}, got {hf_tensor.shape}"
-    )
-```
-
-Fix any issues by iterating between your modular file, the generated modeling file, and the conversion script until all weights load cleanly.
-
-Once the checkpoint loads cleanly, push it to the Hub using [`~PreTrainedModel.push_to_hub`]. Refer to the [model sharing](./model_sharing) guide for more details.
-
-```py
-model.push_to_hub("username/your-model-name")
-```
-
-### Runtime conversion mapping
-
-Add a runtime mapping to `src/transformers/conversion_mapping.py` when the published weights don't match your module's parameter layout. Common cases include fused weights stored separately and MoE expert tensors that need stacking. The mapping lets [`~PreTrainedModel.from_pretrained`] load the Hub checkpoint without a separate export step.
-
-Refer to the [dynamic weight loading](./weightconverter) guide for how to write [`WeightRenaming`] and [`WeightConverter`] rules and register them for your `model_type`.
-
 ## Patterns for modular files
 
 The sections below document common usage patterns, such as removing attributes or overriding decorated methods, when working with a modular file.
@@ -458,26 +417,6 @@ class NewModel(DummyModel):       |   class NewModel(nn.Module):
     ...                           |       ...
 ```
 
-### Docstring variables
-
-> [!TIP]
-> Refer to the [Documenting a model](./auto_docstring) guide for more information about how to use the `@auto_docstring` decorator to automatically generate consistent docstring arguments. For most models, `@auto_docstring` removes the need for explicit docstring variables entirely.
-
-The modular definition takes precedence when an object appears in both the modular and source modeling file. The exception is if an assignment matches the pattern `DOCSTRING`. Variables like `MODEL_START_DOCSTRING` and `MODEL_INPUT_DOCSTRING` contain large blocks of text. Set one to `None` in the modular file to use the source file's definition instead.
-
-```py
-STARCODER2_INPUTS_DOCSTRING = None  # will be automatically redefined
-
-class Starcoder2Model(MistralModel):
-    ...
-
-    @add_start_docstrings_to_model_forward(STARCODER2_INPUTS_DOCSTRING)
-    def forward(...)
-        ...
-```
-
-Setting the variable to anything other than `None` overrides the docstring with your custom value.
-
 ### Special naming
 
 The linter automatically renames everything when inheriting from a class. Use the same class name prefix across all classes in the same file.
@@ -510,6 +449,47 @@ class Emu3TextMLP(LlamaMLP):
 ### Config docstrings
 
 The linter doesn't support partial docstring inheritance yet. When adding or removing config attributes, add the full docstring directly in the modular file under the class definition.
+
+## Checkpoint conversion
+
+Once you've generated your modeling files, verify that real weights load correctly. Write a conversion script to translate the upstream checkpoint format into a Transformers-compatible one, then save it to the Hub.
+
+### Write a conversion script
+
+Add a `convert_<model>_to_hf.py` file to `src/transformers/models/<model>/`. The script loads the upstream weights, renames and reshapes keys to match your module's parameter names, and saves the result with [`~PreTrainedModel.save_pretrained`].
+
+> [!TIP]
+> Look for an existing script to copy and adapt. Models under `src/transformers/models/` include a `convert_*_to_hf.py` you can use as a starting point.
+
+After running the script, load the saved checkpoint with [`~PreTrainedModel.from_pretrained`] and confirm every expected weight loaded correctly. Unused checkpoint keys indicate mismatched names, so print them to catch problems early.
+
+```py
+model = YourModelForTask.from_pretrained("path/to/output/")
+```
+
+Check shape and name matches when iterating over keys. Shape mismatches typically mean a parameter in your config is wrong, the architecture differs from the original, or a weight needs to be transposed.
+
+```py
+for key, tensor in original_state_dict.items():
+    hf_tensor = hf_model.state_dict().get(mapped_key)
+    assert hf_tensor.shape == tensor.shape, (
+        f"Shape mismatch for {key}: expected {tensor.shape}, got {hf_tensor.shape}"
+    )
+```
+
+Fix any issues by iterating between your modular file, the generated modeling file, and the conversion script until all weights load cleanly.
+
+Once the checkpoint loads cleanly, push it to the Hub using [`~PreTrainedModel.push_to_hub`]. Refer to the [model sharing](./model_sharing) guide for more details.
+
+```py
+model.push_to_hub("username/your-model-name")
+```
+
+### Runtime conversion mapping
+
+Add a runtime mapping to `src/transformers/conversion_mapping.py` when the published weights don't match your module's parameter layout. Common cases include fused weights stored separately and MoE expert tensors that need stacking. The mapping lets [`~PreTrainedModel.from_pretrained`] load the Hub checkpoint without a separate export step.
+
+Refer to the [dynamic weight loading](./weightconverter) guide for how to write [`WeightRenaming`] and [`WeightConverter`] rules and register them for your `model_type`.
 
 ## Next steps
 
