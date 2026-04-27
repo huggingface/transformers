@@ -38,6 +38,7 @@ from ..logits_process import LogitsProcessorList
 from .cache import PagedAttentionCache
 from .cb_logits_processors import ContinuousBatchingLogitsProcessorList
 from .input_outputs import ContinuousBatchingAsyncIOs, ContinuousBatchingIOs
+from .offloading_manager import OffloadingManager
 from .requests import GenerationOutput, RequestState, RequestStatus, logger
 from .scheduler import SCHEDULER_MAPPING, FIFOScheduler, Scheduler
 from .utils import attn_mask_is_needed, create_warmup_future_states, pad_to_interval
@@ -244,6 +245,15 @@ class ContinuousBatchProcessor:
         # run concurrently. This greatly saves memory.
         self.graph_pool = torch.cuda.graph_pool_handle() if use_cuda_graphs else None
 
+        # Offloading manager: handles CPU offloading, soft reset, and restoration
+        self.offloading_manager = OffloadingManager(
+            cache=cache,
+            scheduler=scheduler,
+            cpu_offload_space_gib=continuous_batching_config.cpu_offload_space,
+            safety_threshold=continuous_batching_config.cpu_offload_space_safety_threshold,
+            compute_stream=self.inputs_and_outputs.compute_stream,
+        )
+
     def __repr__(self) -> str:
         return (
             f"ContinuousBatchProcessor(input_queue={self.input_queue}, "
@@ -283,6 +293,7 @@ class ContinuousBatchProcessor:
 
     def reset(self) -> None:
         """Reset the batch processor for a new generation loop."""
+        self.offloading_manager.reset()
         self.scheduler.reset()
         self.inputs_and_outputs.reset()
         self.cache.free_all_requests()
@@ -322,35 +333,6 @@ class ContinuousBatchProcessor:
         self.metrics.record_request_completion(state.created_time, state.request_id)
         self.output_router.deliver(state.to_generation_output())
 
-    # TODO: there should be a way to choose the offloading policy: biggest request, oldest request, etc.
-    # Including a policy to not allow offloading and crashing the generation
-    def soft_reset_one_request(self) -> None:
-        """Soft resets one active request by removing it from active requests and re-adding it to the waiting queue.
-
-        The generated tokens are kept as part of the new request's initial prompt. When `block_new_requests` is False,
-        the oldest request is offloaded; when True, the newest request is offloaded. This method also sets
-        `block_new_requests` to True to prevent infinite loops of offloading and re-scheduling requests.
-        """
-        # The offloaded request is the newest (resp. oldest) if block_new_requests is True (resp. False)
-        if self.scheduler.block_new_requests:
-            request_id, state = self.scheduler.active_requests.popitem()
-        else:
-            request_id, state = next(iter(self.scheduler.active_requests.items()))
-        logger.info(
-            f"Soft resetting request {request_id} with {len(state.initial_tokens)} initial tokens and "
-            f"{len(state.generated_tokens)} generated tokens"
-        )
-        # Create a copy of the offloaded request keeping the generated tokens as addition to the initial prompt
-        new_state = state.create_equivalent_initial_request()
-        # In async mode, this ensures the request is not updated in the other batch without triggering logging
-        state._status = RequestStatus.FINISHED
-        # Actual offloading of the request
-        self.scheduler.finish_request(request_id)
-        self.scheduler.add_waiting_request(new_state)
-        # This flag blocks any new requests from being scheduled until one request is finished. This ensures that we
-        # don't enter an offload / schedule loop
-        self.scheduler.block_new_requests = True
-
     @traced
     def prepare_next_batch(self) -> bool:
         """Prepare tensors and metadata for the next model forward pass. Returns True if there are requests to process,
@@ -358,7 +340,10 @@ class ContinuousBatchProcessor:
 
         # Get new requests from the queue, stop if there are no pending requests
         self._get_new_requests()
-        self.scheduler.clear_cancelled_requests()
+        cancelled_states = self.scheduler.clear_cancelled_requests()
+        # Also free CPU-offloaded cache for cancelled states. This is CPU-only, so it isn't batched like D2H transfers
+        for state in cancelled_states:
+            self.offloading_manager.free_request_cpu_cache(state)
         if not self.scheduler.has_pending_requests():
             return False
         self.metrics.record_queue_metrics(len(self.scheduler.active_requests), len(self.scheduler.waiting_requests))
@@ -370,13 +355,16 @@ class ContinuousBatchProcessor:
         # If requests_in_batch is None, it means we need to offload some requests if possible
         if requests_in_batch is None:
             if len(self.scheduler.active_requests) > 1:
-                self.soft_reset_one_request()
+                self.offloading_manager.offload_one_request()
                 return False
             else:
                 raise RuntimeError("No requests can be scheduled and no request can be offloaded.")
         # If it's an empty list, it means we have no requests to process
         if not requests_in_batch:
             return False
+
+        # Restore any CPU-offloaded requests that were just scheduled
+        self.offloading_manager.restore_scheduled_requests(requests_in_batch)
 
         # Otherwise, we can continue with the non-empty batch and log in the dimensions before padding
         self.metrics.record_batch_metrics(requests_in_batch)
@@ -405,14 +393,14 @@ class ContinuousBatchProcessor:
         pending_outputs = []
         for future_state in requests_in_batch:
             state = future_state.state
-            # Early return if the request is finished
-            if state.status == RequestStatus.FINISHED:
+            # Early return if the request was finished or offloaded between scheduling and update (async mode)
+            if state.status in (RequestStatus.FINISHED, RequestStatus.PENDING):
                 if self.use_async_batching:
                     # Skip this request, but still consume its token from new_tokens if it had one
                     if future_state.has_new_token:
                         current_logits_index += 1
                     continue
-                raise RuntimeError(f"Tried to update FINISHED request {state.request_id} in sync mode.")
+                raise RuntimeError(f"Tried to update {state.status.name} request {state.request_id} in sync mode.")
             # If the request has a new token, it means prefill has already ended or just finished
             if future_state.has_new_token:
                 # If there is just one temporary token, it means prefill just ended
@@ -482,11 +470,7 @@ class ContinuousBatchProcessor:
 
     @traced
     def fail_all_requests(self, error: Exception) -> None:
-        """Fail all active requests with the given error.
-
-        Args:
-            error: The error to report in the failure message
-        """
+        """Fail all active requests with the given error."""
 
         requests = list(self.scheduler.active_requests.values())
         for state in requests:
@@ -494,6 +478,7 @@ class ContinuousBatchProcessor:
             self.scheduler.finish_request(state.request_id)
 
         # Also fail any requests in the waiting queue
+        self.offloading_manager.free_all_waiting_cpu_caches()
         for req_id in list(self.scheduler.waiting_requests.keys()):
             state = self.scheduler.waiting_requests.pop(req_id)
             self._handle_request_error(error, state)
