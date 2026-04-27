@@ -621,6 +621,10 @@ class T5Gemma2ModelTester:
         lm_labels,
         pixel_values,
     ):
+        """
+        Regression test for #45521. Checks whether the cross attention cache is correctly handled, i.e. not a SWA cache.
+        This would previously fail on instances where the sliding window < encoder len.
+        """
         config.decoder.sliding_window = self.encoder_seq_length // 2
         self.parent.assertGreater(self.encoder_seq_length, config.decoder.sliding_window)
         model = self.causal_lm_class(config=config).to(torch_device).eval()
