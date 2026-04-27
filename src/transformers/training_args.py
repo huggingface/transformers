@@ -650,33 +650,31 @@ class TrainingArguments:
         > FSDP (Fully Sharded Data Parallel)
 
         fsdp (`bool`, *optional*, defaults to `None`):
-            Enable PyTorch Fully Sharded Data Parallel (FSDP) for distributed training. Pass `True` to turn FSDP on.
+            Enable PyTorch Fully Sharded Data Parallel (FSDP) for distributed training. Pass `True` to enable FSDP.
         fsdp_config (`str` or `dict`, *optional*):
-            Tuning for FSDP (only used when `fsdp` is enabled). Either a path to a JSON config file (e.g.,
-            `fsdp_config.json`) or an already-loaded dict.
+            Configuration settings for when `fsdp` is enabled. Pass a path to a JSON config file, such
+            as `fsdp_config.json`, or an already-loaded dict.
 
             Supported keys:
                 - version (`int`, *optional*, defaults to `2`):
                     The version of FSDP to use (`2` for FSDP2, `1` for the legacy FSDP1).
                 - reshard_after_forward (`bool`, *optional*, defaults to `True`):
                     Whether to reshard parameters after the forward pass. Set to `False` to keep parameters
-                    gathered between the forward and backward passes, which avoids the re-all-gather at the
-                    cost of higher peak memory.
+                    gathered between the forward and backward passes, avoids the re-all-gather, and use higher peak memory.
                 - cpu_offload (`bool`, *optional*, defaults to `False`):
                     Offload parameters and gradients to CPU when not in use to save GPU memory.
                 - activation_checkpointing (`bool`, *optional*, defaults to `False`):
-                    If `True`, activation checkpointing is used to reduce memory by recomputing activations during
-                    the backward pass. Prefer this over `gradient_checkpointing` when using FSDP, as the latter
+                    Set to `True` to reduce memory by recomputing activations during the backward pass. Prefer
+                    `activation_checkpointing` over `gradient_checkpointing` when using FSDP. `gradient_checkpointing`
                     introduces a redundant all-gather in the backward pass.
                 - cpu_ram_efficient_loading (`bool`, *optional*, defaults to `False`):
-                    If `True`, only the first process loads the pretrained checkpoint while other processes start
-                    with empty weights.
+                    Set to `True` to load the pretrained checkpoint on the first process only. Other processes start
+                    with empty weights and receive the weights by broadcast.
                 - state_dict_type (`str`, *optional*, defaults to `"FULL_STATE_DICT"`):
                     Checkpoint format: `"FULL_STATE_DICT"` (single HF-compatible file) or
                     `"SHARDED_STATE_DICT"` (one file per rank, faster for large models).
                 - auto_wrap_policy (`str`, *optional*, defaults to `"TRANSFORMER_BASED_WRAP"`):
-                    Which auto-wrap policy to use. One of `"TRANSFORMER_BASED_WRAP"`, `"SIZE_BASED_WRAP"`,
-                    `"NO_WRAP"`.
+                    Auto-wrap policy to use. Choose `"TRANSFORMER_BASED_WRAP"`, `"SIZE_BASED_WRAP"`, or `"NO_WRAP"`.
                 - transformer_layer_cls_to_wrap (`list[str]`, *optional*):
                     Transformer layer class names (case-sensitive) to wrap, e.g. `LlamaDecoderLayer`. Usually
                     unnecessary: the wrap policy falls back to the model's `_no_split_modules`, which covers
@@ -687,11 +685,11 @@ class TrainingArguments:
                 - xla (`bool`, *optional*, defaults to `False`):
                     Whether to use PyTorch/XLA Fully Sharded Data Parallel Training. Experimental.
                 - xla_fsdp_settings (`dict`, *optional*):
-                    Dictionary storing the XLA FSDP wrapping parameters. For a complete list of options, see the
+                    Dictionary of XLA FSDP wrapping parameters. For a complete list of options, see the
                     [XLA FSDP source](https://github.com/pytorch/xla/blob/master/torch_xla/distributed/fsdp/xla_fully_sharded_data_parallel.py).
                 - xla_fsdp_grad_ckpt (`bool`, *optional*, defaults to `False`):
-                    Use gradient checkpointing over each nested XLA FSDP wrapped layer. Requires `xla=True` and an
-                    auto-wrapping policy (`min_num_params` or `transformer_layer_cls_to_wrap`).
+                    Set to `True` to use gradient checkpointing over each nested XLA FSDP wrapped layer. Requires
+                    `xla=True` and an auto-wrapping policy (`min_num_params` or `transformer_layer_cls_to_wrap`).
 
         > DeepSpeed
 
