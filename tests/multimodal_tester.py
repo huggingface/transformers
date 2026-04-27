@@ -31,7 +31,7 @@ if is_torch_available():
 
 
 class MultiModalModelTester:
-    """Shared tester base for VLM (vision-language) and ALM (audio-language).
+    """Shared tester base for VLM (vision-language) and ALM (audio-language) models.
 
     Concrete subclasses (e.g. `VLMModelTester`, `ALMModelTester`) supply:
       - the modality-specific sub-config class (`vision_config_class` for VLMs, `audio_config_class` for ALMs, ...),
