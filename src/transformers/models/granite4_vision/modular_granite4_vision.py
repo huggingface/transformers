@@ -25,8 +25,10 @@ from ...image_utils import ImageInput
 from ...masking_utils import create_causal_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...processing_utils import ImagesKwargs, Unpack
+from ... import initialization as init
+from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS
 from ...utils import TransformersKwargs, can_return_tuple, logging
-from ..granite.modeling_granite import GraniteModel
+from ..granite.modeling_granite import GraniteModel, GraniteRotaryEmbedding
 from ..llava_next.configuration_llava_next import LlavaNextConfig
 from ..llava_next.image_processing_llava_next import LlavaNextImageProcessor, LlavaNextImageProcessorKwargs
 from ..llava_next.image_processing_pil_llava_next import LlavaNextImageProcessorPil
@@ -215,12 +217,35 @@ class Granite4VisionProcessor(LlavaNextProcessor):
 # ── Model ───────────────────────────────────────────────────────────────────
 
 
+class Granite4VisionTextRotaryEmbedding(GraniteRotaryEmbedding):
+    pass
+
+
 class Granite4VisionPreTrainedModel(LlavaNextPreTrainedModel):
+    def _init_weights(self, module):
+        super()._init_weights(module)
+        if isinstance(module, Granite4VisionTextRotaryEmbedding):
+            # Non-persistent buffers (inv_freq, original_inv_freq) are replaced with
+            # torch.empty_like() garbage by _move_missing_keys_from_meta_to_device.
+            # Recompute them here so _initialize_missing_keys restores correct values.
+            rope_type = module.config.rope_parameters.get("rope_type", "default")
+            if rope_type != "default":
+                from transformers.modeling_rope_utils import ROPE_INIT_FUNCTIONS
+                rope_init_fn = ROPE_INIT_FUNCTIONS[rope_type]
+            else:
+                rope_init_fn = module.compute_default_rope_parameters
+            inv_freq, attention_scaling = rope_init_fn(module.config, module.inv_freq.device)
+            init.copy_(module.inv_freq, inv_freq)
+            init.copy_(module.original_inv_freq, inv_freq)
+            module.attention_scaling = attention_scaling
     pass
 
 
 class Granite4VisionTextModel(Granite4VisionPreTrainedModel, GraniteModel):
     """Granite LLM backbone with deepstack feature injection support."""
+
+    base_model_prefix = ""
+    _no_split_modules = ["Granite4VisionTextDecoderLayer"]
 
     def __init__(self, config: Granite4VisionTextConfig):
         super().__init__(config)
