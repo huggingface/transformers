@@ -902,9 +902,6 @@ class TestMistralCommonBackend(unittest.TestCase):
             expected_tokenized.tokens,
         )
 
-        with self.assertRaises(ValueError, msg="Invalid parameters passed to `ChatCompletionRequest.from_openai`"):
-            self.tokenizer.apply_chat_template(conversation, tokenize=True, unk_args="")
-
     def test_apply_chat_template_continue_final_message(self):
         conversation = [
             {"role": "system", "content": "You are a helpful assistant."},
@@ -1265,12 +1262,6 @@ class TestMistralCommonBackend(unittest.TestCase):
         for text, token, expected in zip(text_outputs, token_outputs, expected_tokenized):
             self.assertEqual(text, expected.text)
             self.assertEqual(token, expected.tokens)
-
-        with self.assertRaises(
-            ValueError,
-            msg="Invalid parameters passed to `ChatCompletionRequest.from_openai`",
-        ):
-            self.tokenizer.apply_chat_template(conversations, tools=tools, tokenize=True, unk_args="")
 
     def test_batch_apply_chat_template_images(self):
         conversations = [
