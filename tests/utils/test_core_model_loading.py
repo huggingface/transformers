@@ -147,14 +147,14 @@ class TestWeightGlobMatching(unittest.TestCase):
         ]
 
         self.assertEqual(
-            rename_source_key("foo.block_sparse_moe.experts.3.w1.weight", renamings, [])[0],
+            rename_source_key("foo.block_sparse_moe.experts.3.w1.weight", renamings)[0],
             "foo.mlp.experts.gate_up_proj",
         )
         self.assertEqual(
-            rename_source_key("foo.block_sparse_moe.experts.3.w2.weight", renamings, [])[0],
+            rename_source_key("foo.block_sparse_moe.experts.3.w2.weight", renamings)[0],
             "foo.mlp.experts.down_proj",
         )
-        self.assertEqual(rename_source_key("model.language_model.lm_head.weight", renamings, [])[0], "language_model")
+        self.assertEqual(rename_source_key("model.language_model.lm_head.weight", renamings)[0], "language_model")
 
     def test_sub_key_no_match_returns_original(self):
         renamings = [
@@ -162,7 +162,7 @@ class TestWeightGlobMatching(unittest.TestCase):
         ]
 
         key = "unrelated.key"
-        renamed_key, _ = rename_source_key(key, renamings, [])
+        renamed_key, _ = rename_source_key(key, renamings)
         self.assertEqual(renamed_key, key)
 
 
