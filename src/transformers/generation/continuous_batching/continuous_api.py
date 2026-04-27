@@ -341,7 +341,7 @@ class ContinuousBatchProcessor:
         # Get new requests from the queue, stop if there are no pending requests
         self._get_new_requests()
         cancelled_states = self.scheduler.clear_cancelled_requests()
-        # Also free CPU-offloaded cache for cancelled states
+        # Also free CPU-offloaded cache for cancelled states. This is CPU-only, so it isn't batched like D2H transfers
         for state in cancelled_states:
             self.offloading_manager.free_request_cpu_cache(state)
         if not self.scheduler.has_pending_requests():
@@ -470,11 +470,7 @@ class ContinuousBatchProcessor:
 
     @traced
     def fail_all_requests(self, error: Exception) -> None:
-        """Fail all active requests with the given error.
-
-        Args:
-            error: The error to report in the failure message
-        """
+        """Fail all active requests with the given error."""
 
         requests = list(self.scheduler.active_requests.values())
         for state in requests:
