@@ -67,7 +67,6 @@ class ColModernVBertForRetrievalModelTester:
                 "intermediate_size": 64,
                 "hidden_activation": "gelu",
                 "mlp_dropout": 0.1,
-                "attention_dropout": 0.1,
                 "embedding_dropout": 0.1,
                 "classifier_dropout": 0.1,
                 "max_position_embeddings": 512,
