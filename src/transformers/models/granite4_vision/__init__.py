@@ -19,8 +19,6 @@ from ...utils.import_utils import define_import_structure
 
 if TYPE_CHECKING:
     from .configuration_granite4_vision import *
-    from .image_processing_granite4_vision import *
-    from .image_processing_pil_granite4_vision import *
     from .modeling_granite4_vision import *
     from .processing_granite4_vision import *
 else:
