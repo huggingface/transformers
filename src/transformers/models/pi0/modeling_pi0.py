@@ -200,7 +200,6 @@ class PI0Model(PI0PreTrainedModel):
             ]
         )
         block_sequence_ids = block_sequence_ids[None, :].repeat(action_embeds.shape[0], 1)
-        self.config.dit_config.is_causal = True
         bidirectional_mask = create_causal_mask(
             config=self.config.dit_config,
             inputs_embeds=action_embeds,
