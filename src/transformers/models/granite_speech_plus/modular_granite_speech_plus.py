@@ -40,8 +40,39 @@ from ..granite_speech.modeling_granite_speech import (
 )
 
 
+@auto_docstring(checkpoint="ibm-granite/granite-speech-4.1-2b-plus")
+@strict
 class GraniteSpeechPlusEncoderConfig(GraniteSpeechEncoderConfig):
-    model_type = "granite_speech_plus_encoder"
+    r"""
+    cat_hidden_layers (`list[int]`, *optional*):
+        Indices of encoder conformer layers whose outputs are concatenated with the final encoder
+        output (along the feature dimension) before being passed to the projector. When set, the
+        projector's ``encoder_hidden_size`` must equal
+        ``encoder_config.hidden_dim * (len(cat_hidden_layers) + 1)``.
+
+    Example:
+
+    ```python
+    >>> from transformers import GraniteSpeechPlusEncoderConfig, GraniteSpeechPlusCTCEncoder
+
+    >>> # Initializing a GraniteSpeechPlusEncoderConfig
+    >>> configuration = GraniteSpeechPlusEncoderConfig()
+
+    >>> # Initializing a GraniteSpeechPlusCTCEncoder (with random weights)
+    >>> model = GraniteSpeechPlusCTCEncoder(configuration)
+
+    >>> # Accessing the model configuration
+    >>> configuration = model.config
+    ```"""
+    cat_hidden_layers: list[int] | None = None
+
+    def __post_init__(self, **kwargs):
+        if self.cat_hidden_layers is not None:
+            for idx in self.cat_hidden_layers:
+                if idx < 0 or idx >= self.num_layers:
+                    raise ValueError(
+                        f"cat_hidden_layers index {idx} is out of range [0, {self.num_layers})."
+                    )
 
 
 @auto_docstring(checkpoint="ibm-granite/granite-speech-4.1-2b-plus")
