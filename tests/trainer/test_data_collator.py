@@ -302,7 +302,7 @@ class TestDataCollatorWithFlattening(DataCollatorTestMixin, unittest.TestCase):
         self.assertEqual(batch["position_ids"][0].tolist(), [0, 1, 2, 0, 1, 2, 3, 4, 5, 0, 1, 2, 3, 4, 5, 6])
 
         # Should not include attention_mask or flash attn kwargs by default
-        for key in ["attention_mask", "cu_seq_lens_k", "cu_seq_lens_q", "seq_idx"]:
+        for key in ["attention_mask", "cu_seqlens", "cu_seq_lens_k", "cu_seq_lens_q", "seq_idx"]:
             self.assertNotIn(key, batch)
 
     def test_flash_attn_kwargs(self):
@@ -314,6 +314,13 @@ class TestDataCollatorWithFlattening(DataCollatorTestMixin, unittest.TestCase):
         self.assertEqual(batch["cu_seq_lens_q"].tolist(), [0, 3, 9, 16])
         self.assertEqual(batch["max_length_k"], 7)
         self.assertEqual(batch["max_length_q"], 7)
+
+    def test_cu_seqlens(self):
+        """Test flattening with cu_seqlens for FLA-style kernels."""
+        collator = DataCollatorWithFlattening(return_tensors="pt", return_cu_seqlens=True)
+        batch = collator(self._get_features())
+
+        self.assertEqual(batch["cu_seqlens"].tolist(), [0, 3, 9, 16])
 
     def test_seq_idx(self):
         """Test flattening with seq_idx for sequence identification."""
@@ -357,7 +364,15 @@ class TestDataCollatorWithFlattening(DataCollatorTestMixin, unittest.TestCase):
         batch = collator(self._get_features())
 
         self.assertEqual(batch["cu_seq_lens_k"].tolist(), [0, 3, 9, 16])
+        self.assertEqual(batch["cu_seq_lens_q"].tolist(), [0, 3, 9, 16])
         self.assertEqual(batch["max_length_k"], 7)
+
+    def test_numpy_cu_seqlens(self):
+        """Test flattening with cu_seqlens and NumPy output."""
+        collator = DataCollatorWithFlattening(return_tensors="np", return_cu_seqlens=True)
+        batch = collator(self._get_features())
+
+        self.assertEqual(batch["cu_seqlens"].tolist(), [0, 3, 9, 16])
 
     def test_immutability(self):
         """Test that flattening does not mutate input data."""

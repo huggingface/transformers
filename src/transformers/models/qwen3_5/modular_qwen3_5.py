@@ -186,7 +186,6 @@ class Qwen3_5TextRotaryEmbedding(Qwen3VLTextRotaryEmbedding):
         )
         return inv_freq, attention_factor
 
-
 class Qwen3_5GatedDeltaNet(Qwen3NextGatedDeltaNet):
     def __init__(self, config: Qwen3_5Config, layer_idx: int):
         super().__init__(config, layer_idx)
@@ -209,6 +208,8 @@ class Qwen3_5GatedDeltaNet(Qwen3NextGatedDeltaNet):
         hidden_states: torch.Tensor,
         cache_params: Cache | None = None,
         attention_mask: torch.Tensor | None = None,
+        seq_idx: torch.IntTensor | None = None,
+        cu_seqlens: torch.LongTensor | None = None,
     ):
         hidden_states = apply_mask_to_padding_states(hidden_states, attention_mask)
 
@@ -253,7 +254,7 @@ class Qwen3_5GatedDeltaNet(Qwen3NextGatedDeltaNet):
                     weight=self.conv1d.weight.squeeze(1),
                     bias=self.conv1d.bias,
                     activation=self.activation,
-                    seq_idx=None,
+                    seq_idx=seq_idx,
                 )
             else:
                 mixed_qkv = F.silu(self.conv1d(mixed_qkv)[:, :, :seq_len])
@@ -290,6 +291,7 @@ class Qwen3_5GatedDeltaNet(Qwen3NextGatedDeltaNet):
                 initial_state=None,
                 output_final_state=cache_params is not None,
                 use_qk_l2norm_in_kernel=True,
+                cu_seqlens=cu_seqlens,
             )
 
         else:
@@ -364,6 +366,9 @@ class Qwen3_5DecoderLayer(GradientCheckpointingLayer):
                 hidden_states=hidden_states,
                 cache_params=past_key_values,
                 attention_mask=attention_mask,
+                seq_idx=kwargs.get("seq_idx"),
+                # The chunked FLA kernel takes a single `cu_seqlens` arg; for packed self-attention this matches q-side lengths.
+                cu_seqlens=kwargs.get("cu_seq_lens_q"),
             )
         elif self.layer_type == "full_attention":
             # Self Attention

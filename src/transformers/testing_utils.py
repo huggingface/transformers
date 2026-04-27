@@ -69,6 +69,7 @@ from .integrations import (
     is_wandb_available,
 )
 from .integrations.deepspeed import is_deepspeed_available
+from .utils.import_utils import is_causal_conv1d_available, is_flash_linear_attention_available
 from .utils import (
     ACCELERATE_MIN_VERSION,
     GGUF_MIN_VERSION,
@@ -703,6 +704,32 @@ def require_all_flash_attn(test_case):
             )
         ),
         "test requires all mainline Flash Attention packages",
+    )(test_case)
+
+
+def require_flash_linear_attention(test_case):
+    """
+    Decorator marking a test that requires Flash Linear Attention.
+
+    These tests are skipped when Flash Linear Attention isn't installed.
+    """
+
+    return unittest.skipUnless(
+        is_flash_linear_attention_available(),
+        "test requires `flash-linear-attention`",
+    )(test_case)
+
+
+def require_causal_conv1d(test_case):
+    """
+    Decorator marking a test that requires causal-conv1d.
+
+    These tests are skipped when causal-conv1d isn't installed.
+    """
+
+    return unittest.skipUnless(
+        is_causal_conv1d_available(),
+        "test requires `causal-conv1d`",
     )(test_case)
 
 

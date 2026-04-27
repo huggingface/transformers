@@ -813,6 +813,7 @@ class TransformersKwargs(TypedDict, total=False):
     max_length_k: int | None
     position_ids: torch.LongTensor | None
     is_causal: bool | None
+    seq_idx: torch.IntTensor | None
 
 
 def is_timm_config_dict(config_dict: dict[str, Any]) -> bool:
