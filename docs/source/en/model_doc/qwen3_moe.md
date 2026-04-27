@@ -69,6 +69,10 @@ print(tokenizer.decode(output[0], skip_special_tokens=True))
 
 [[autodoc]] Qwen3MoeConfig
 
+## Qwen3_5MoeVisionConfig
+
+[[autodoc]] Qwen3_5MoeVisionConfig
+
 ## Qwen3MoeModel
 
 [[autodoc]] Qwen3MoeModel

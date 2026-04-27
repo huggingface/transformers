@@ -22,6 +22,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from huggingface_hub.dataclasses import strict
+from torchvision.transforms.v2 import functional as tvF
 
 from ... import initialization as init
 from ...cache_utils import Cache, DynamicCache
@@ -48,7 +49,6 @@ from ...utils import (
     TransformersKwargs,
     auto_docstring,
     can_return_tuple,
-    is_torchvision_available,
     logging,
 )
 from ...utils.generic import maybe_autocast, merge_with_config_defaults
@@ -77,10 +77,6 @@ from ..qwen2_5_vl.modeling_qwen2_5_vl import (
 from ..qwen2_vl.configuration_qwen2_vl import Qwen2VLVisionConfig
 from ..qwen2_vl.image_processing_qwen2_vl import smart_resize
 from ..qwen2_vl.modeling_qwen2_vl import Qwen2VisionTransformerPretrainedModel, Qwen2VLModel, VisionMlp
-
-
-if is_torchvision_available():
-    import torchvision.transforms.v2.functional as tvF
 
 
 logger = logging.get_logger(__name__)
@@ -1241,10 +1237,10 @@ class Ernie4_5_VLMoeImageProcessorPil(Glm4vImageProcessorPil):
 
     def _preprocess(
         self,
-        images: list["torch.Tensor"],
+        images: list[np.ndarray],
         do_resize: bool,
         size: SizeDict,
-        resample: "PILImageResampling | tvF.InterpolationMode | int | None",
+        resample: "PILImageResampling | None",
         do_rescale: bool,
         rescale_factor: float,
         do_normalize: bool,

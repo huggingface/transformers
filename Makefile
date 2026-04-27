@@ -10,7 +10,7 @@ style:
 		ruff_check,\
 		ruff_format,\
 		init_isort,\
-		auto_mappings \
+		sort_auto_mappings \
 		--fix
 
 # Runs ty type checker and model structure rules
@@ -27,15 +27,17 @@ check-code-quality:
 		ruff_check,\
 		ruff_format,\
 		init_isort,\
-		auto_mappings
+		sort_auto_mappings
 
 # Runs a full repository consistency check.
 check-repository-consistency:
 	@python utils/checkers.py \
 		imports,\
+		import_complexity,\
 		copies,\
 		modular_conversion,\
 		doc_toc,\
+		modeling_rules_doc,\
 		docstrings,\
 		dummies,\
 		repo,\
@@ -57,10 +59,13 @@ check-repo:
 		modeling_structure,\
 		init_isort,\
 		auto_mappings,\
+		sort_auto_mappings,\
 		imports,\
+		import_complexity,\
 		copies,\
 		modular_conversion,\
 		doc_toc,\
+		modeling_rules_doc,\
 		docstrings,\
 		dummies,\
 		repo,\
@@ -81,7 +86,9 @@ fix-repo:
 		ruff_format,\
 		init_isort,\
 		auto_mappings,\
+		sort_auto_mappings,\
 		doc_toc,\
+		modeling_rules_doc,\
 		copies,\
 		modular_conversion,\
 		dummies,\

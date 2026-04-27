@@ -21,7 +21,7 @@ from huggingface_hub.dataclasses import strict
 from torch import nn
 
 from ... import initialization as init
-from ...cache_utils import Cache
+from ...cache_utils import Cache, DynamicCache
 from ...masking_utils import create_causal_mask
 from ...modeling_layers import GenericForSequenceClassification, GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPooling
@@ -34,7 +34,6 @@ from ..qwen3.modeling_qwen3 import Qwen3ForCausalLM
 from ..qwen3_next.configuration_qwen3_next import Qwen3NextConfig
 from ..qwen3_next.modeling_qwen3_next import (
     Qwen3NextAttention,
-    Qwen3NextDynamicCache,
     Qwen3NextGatedDeltaNet,
     Qwen3NextMLP,
     Qwen3NextModel,
@@ -160,10 +159,6 @@ class Qwen3_5Config(Qwen3VLConfig):
     vision_end_token_id: int = 248054
 
 
-class Qwen3_5DynamicCache(Qwen3NextDynamicCache):
-    pass
-
-
 class Qwen3_5VisionRotaryEmbedding(Qwen3VLVisionRotaryEmbedding):
     pass
 
@@ -212,7 +207,7 @@ class Qwen3_5GatedDeltaNet(Qwen3NextGatedDeltaNet):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        cache_params: Qwen3_5DynamicCache | None = None,
+        cache_params: Cache | None = None,
         attention_mask: torch.Tensor | None = None,
     ):
         hidden_states = apply_mask_to_padding_states(hidden_states, attention_mask)
@@ -220,12 +215,14 @@ class Qwen3_5GatedDeltaNet(Qwen3NextGatedDeltaNet):
         # Set up dimensions for reshapes later
         batch_size, seq_len, _ = hidden_states.shape
 
-        use_precomputed_states = cache_params is not None and cache_params.has_previous_state and seq_len == 1
+        use_precomputed_states = (
+            cache_params is not None and cache_params.has_previous_state(self.layer_idx) and seq_len == 1
+        )
 
         # getting projected states from cache if it exists
-        if cache_params is not None:
-            conv_state = cache_params.conv_states[self.layer_idx]
-            recurrent_state = cache_params.recurrent_states[self.layer_idx]
+        if use_precomputed_states:
+            conv_state = cache_params.layers[self.layer_idx].conv_states
+            recurrent_state = cache_params.layers[self.layer_idx].recurrent_states
 
         mixed_qkv = self.in_proj_qkv(hidden_states)
         mixed_qkv = mixed_qkv.transpose(1, 2)
@@ -249,7 +246,7 @@ class Qwen3_5GatedDeltaNet(Qwen3NextGatedDeltaNet):
         else:
             if cache_params is not None:
                 conv_state = F.pad(mixed_qkv, (self.conv_kernel_size - mixed_qkv.shape[-1], 0))
-                cache_params.conv_states[self.layer_idx] = conv_state
+                conv_state = cache_params.update_conv_state(conv_state, self.layer_idx)
             if self.causal_conv1d_fn is not None:
                 mixed_qkv = self.causal_conv1d_fn(
                     x=mixed_qkv,
@@ -309,7 +306,7 @@ class Qwen3_5GatedDeltaNet(Qwen3NextGatedDeltaNet):
 
         # Update cache
         if cache_params is not None:
-            cache_params.recurrent_states[self.layer_idx] = last_recurrent_state
+            cache_params.update_recurrent_state(last_recurrent_state, self.layer_idx)
 
         # reshape input data into 2D tensor
         core_attn_out = core_attn_out.reshape(-1, self.head_v_dim)
@@ -501,7 +498,7 @@ class Qwen3_5TextModel(Qwen3NextModel):
             inputs_embeds = self.embed_tokens(input_ids)
 
         if use_cache and past_key_values is None:
-            past_key_values = Qwen3_5DynamicCache(config=self.config)
+            past_key_values = DynamicCache(config=self.config)
 
         # the hard coded `4` is for text, temporal, height and width.
         if position_ids is None:
@@ -683,6 +680,7 @@ class Qwen3_5ForConditionalGeneration(Qwen3VLForConditionalGeneration):
 __all__ = [
     "Qwen3_5Config",
     "Qwen3_5TextConfig",
+    "Qwen3_5VisionConfig",
     "Qwen3_5VisionModel",
     "Qwen3_5TextModel",
     "Qwen3_5Model",

@@ -304,6 +304,24 @@ class Gemma3Vision2TextModelTest(VLMModelTest, unittest.TestCase):
     test_disk_offload_safetensors = False
     test_disk_offload_bin = False
 
+    def test_training(self):
+        # Overwrite to test training with text-only samples, should not raise errors
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        config.return_dict = True
+
+        model = Gemma3ForConditionalGeneration(config)
+        model.to(torch_device)
+        model.train()
+        inputs = self._prepare_for_class(inputs_dict, Gemma3ForConditionalGeneration, return_labels=True)
+        loss = model(**inputs).loss
+        loss.backward()
+
+        # pop out image-related inputs and try to run forward
+        inputs.pop("token_type_ids", None)
+        inputs.pop("pixel_values", None)
+        loss = model(**inputs).loss
+        loss.backward()
+
     @unittest.skip("Gemma3 applies key/query norm which doesn't work with packing")
     def test_flash_attention_2_padding_matches_padding_free_with_position_ids(self):
         pass
@@ -408,6 +426,9 @@ class Gemma3Vision2TextModelTest(VLMModelTest, unittest.TestCase):
     @slow
     def test_flash_attn_4_from_config(self):
         self.flash_attn_from_config(attn_implementation="flash_attention_4", test_fwd_in_train=False)
+
+    def test_reverse_loading_mapping(self):
+        super().test_reverse_loading_mapping(skip_base_model=True)
 
 
 @slow

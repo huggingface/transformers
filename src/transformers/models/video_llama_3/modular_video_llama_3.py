@@ -43,7 +43,6 @@ from ...utils import (
     TensorType,
     auto_docstring,
     can_return_tuple,
-    is_torchvision_available,
     logging,
 )
 from ...utils.generic import is_flash_attention_requested, merge_with_config_defaults
@@ -81,10 +80,6 @@ from ..siglip.modeling_siglip import (
     SiglipEncoderLayer,
     SiglipMLP,
 )
-
-
-if is_torchvision_available():
-    from torchvision.transforms.v2 import functional as tvF
 
 
 logger = logging.get_logger(__name__)
@@ -1133,7 +1128,7 @@ class VideoLlama3ImageProcessorPil(Qwen2VLImageProcessorPil):
         images: list[np.ndarray],
         do_resize: bool,
         size: SizeDict,
-        resample: "PILImageResampling | tvF.InterpolationMode | int | None",
+        resample: "PILImageResampling | None",
         do_rescale: bool,
         rescale_factor: float,
         do_normalize: bool,
@@ -1235,7 +1230,7 @@ class VideoLlama3ImageProcessor(Qwen2VLImageProcessor):
         images: list["torch.Tensor"],
         do_resize: bool,
         size: SizeDict,
-        resample: "PILImageResampling | tvF.InterpolationMode | int | None",
+        resample: "PILImageResampling | int | None",
         do_rescale: bool,
         rescale_factor: float,
         do_normalize: bool,
@@ -1391,7 +1386,7 @@ class VideoLlama3VideoProcessor(Qwen2VLVideoProcessor):
         do_convert_rgb: bool,
         do_resize: bool,
         size: SizeDict,
-        resample: "PILImageResampling | tvF.InterpolationMode | int | None",
+        resample: "PILImageResampling | int | None",
         do_rescale: bool,
         rescale_factor: float,
         do_normalize: bool,

@@ -208,6 +208,9 @@ class _BaseAutoModelClass:
         trust_remote_code = kwargs.pop("trust_remote_code", None)
         has_remote_code = hasattr(config, "auto_map") and cls.__name__ in config.auto_map
         has_local_code = type(config) in cls._model_mapping
+        explicit_local_code = has_local_code and not _get_model_class(
+            config, cls._model_mapping
+        ).__module__.startswith("transformers.")
         if has_remote_code:
             class_ref = config.auto_map[cls.__name__]
             if "--" in class_ref:
@@ -218,7 +221,7 @@ class _BaseAutoModelClass:
                 trust_remote_code, config._name_or_path, has_local_code, has_remote_code, upstream_repo=upstream_repo
             )
 
-        if has_remote_code and trust_remote_code:
+        if has_remote_code and trust_remote_code and not explicit_local_code:
             if "--" in class_ref:
                 repo_id, class_ref = class_ref.split("--")
             else:
@@ -233,7 +236,7 @@ class _BaseAutoModelClass:
             _ = kwargs.pop("code_revision", None)
             model_class = add_generation_mixin_to_remote_model(model_class)
             return model_class._from_config(config, **kwargs)
-        elif type(config) in cls._model_mapping:
+        elif has_local_code:
             model_class = _get_model_class(config, cls._model_mapping)
             return model_class._from_config(config, **kwargs)
 
@@ -342,6 +345,9 @@ class _BaseAutoModelClass:
 
         has_remote_code = hasattr(config, "auto_map") and cls.__name__ in config.auto_map
         has_local_code = type(config) in cls._model_mapping
+        explicit_local_code = has_local_code and not _get_model_class(
+            config, cls._model_mapping
+        ).__module__.startswith("transformers.")
         upstream_repo = None
         if has_remote_code:
             class_ref = config.auto_map[cls.__name__]
@@ -359,7 +365,7 @@ class _BaseAutoModelClass:
         # Set the adapter kwargs
         kwargs["adapter_kwargs"] = adapter_kwargs
 
-        if has_remote_code and trust_remote_code:
+        if has_remote_code and trust_remote_code and not explicit_local_code:
             model_class = get_class_from_dynamic_module(
                 class_ref, pretrained_model_name_or_path, code_revision=code_revision, **hub_kwargs, **kwargs
             )
@@ -374,10 +380,17 @@ class _BaseAutoModelClass:
             return model_class.from_pretrained(
                 pretrained_model_name_or_path, *model_args, config=config, **hub_kwargs, **kwargs
             )
-        elif type(config) in cls._model_mapping:
+        elif has_local_code:
             model_class = _get_model_class(config, cls._model_mapping)
             if model_class.config_class == config.sub_configs.get("text_config", None):
+                # TODO: Validate that copying the parent quantization config to the text sub-config preserves
+                # modules_to_not_convert and skip-module matching when composite-model module prefixes differ.
+                parent_config = config
                 config = config.get_text_config()
+                # Propagate quantization_config from the composite parent config so that
+                # `get_hf_quantizer` can correctly detect the model as pre-quantized.
+                if hasattr(parent_config, "quantization_config"):
+                    config.quantization_config = parent_config.quantization_config
             return model_class.from_pretrained(
                 pretrained_model_name_or_path, *model_args, config=config, **hub_kwargs, **kwargs
             )

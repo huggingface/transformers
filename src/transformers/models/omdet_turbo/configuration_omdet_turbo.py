@@ -144,7 +144,7 @@ class OmDetTurboConfig(PreTrainedConfig):
     decoder_num_points: int = 4
     decoder_dropout: float | int = 0.0
     eval_size: int | None = None
-    learn_initial_query: int = False
+    learn_initial_query: bool = False
     cache_size: int = 100
     is_encoder_decoder: bool = True
 

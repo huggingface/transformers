@@ -89,7 +89,7 @@ class DINOv3ViTConfig(BackboneConfigMixin, PreTrainedConfig):
     proj_bias: bool = True
     mlp_bias: bool = True
     layerscale_value: float = 1.0
-    drop_path_rate: float = 0.0
+    drop_path_rate: float | int = 0.0
     use_gated_mlp: bool = False
     num_register_tokens: int = 0
     pos_embed_shift: float | None = None

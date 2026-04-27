@@ -186,13 +186,13 @@ class FastSpeech2ConformerConfig(PreTrainedConfig):
     pitch_embed_kernel_size: int = 1
     pitch_embed_dropout: float | int = 0.0
     stop_gradient_from_pitch_predictor: bool = True
-    encoder_dropout_rate: float = 0.2
-    encoder_positional_dropout_rate: float = 0.2
-    encoder_attention_dropout_rate: float = 0.2
-    decoder_dropout_rate: float = 0.2
-    decoder_positional_dropout_rate: float = 0.2
-    decoder_attention_dropout_rate: float = 0.2
-    duration_predictor_dropout_rate: float = 0.2
+    encoder_dropout_rate: float | int = 0.2
+    encoder_positional_dropout_rate: float | int = 0.2
+    encoder_attention_dropout_rate: float | int = 0.2
+    decoder_dropout_rate: float | int = 0.2
+    decoder_positional_dropout_rate: float | int = 0.2
+    decoder_attention_dropout_rate: float | int = 0.2
+    duration_predictor_dropout_rate: float | int = 0.2
     speech_decoder_postnet_dropout: float | int = 0.5
     max_source_positions: int = 5000
     use_masking: bool = True
@@ -262,7 +262,7 @@ class FastSpeech2ConformerConfig(PreTrainedConfig):
             raise ValueError("Either use_masking or use_weighted_masking can be True, but not both.")
 
 
-@auto_docstring(checkpoint="espnet/fastspeech2_conformer")
+@auto_docstring(checkpoint="espnet/fastspeech2_conformer_with_hifigan")
 @strict
 class FastSpeech2ConformerHifiGanConfig(PreTrainedConfig):
     r"""
@@ -304,7 +304,7 @@ class FastSpeech2ConformerHifiGanConfig(PreTrainedConfig):
     >>> configuration = model.config
     ```"""
 
-    model_type = "hifigan"
+    model_type = "fastspeech2_conformer_hifigan"
     base_config_key = "vocoder_config"
 
     model_in_dim: int = 80
@@ -323,7 +323,7 @@ class FastSpeech2ConformerHifiGanConfig(PreTrainedConfig):
         super().__post_init__(**kwargs)
 
 
-@auto_docstring(checkpoint="espnet/fastspeech2_conformer")
+@auto_docstring(checkpoint="espnet/fastspeech2_conformer_with_hifigan")
 @strict
 class FastSpeech2ConformerWithHifiGanConfig(PreTrainedConfig):
     r"""

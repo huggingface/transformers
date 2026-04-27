@@ -35,7 +35,6 @@ from ..qwen3_next.configuration_qwen3_next import Qwen3NextConfig
 from ..qwen3_next.modeling_qwen3_next import (
     Qwen3NextAttention,
     Qwen3NextDecoderLayer,
-    Qwen3NextDynamicCache,
     Qwen3NextExperts,
     Qwen3NextForCausalLM,
     Qwen3NextPreTrainedModel,
@@ -156,10 +155,6 @@ class Qwen3_5MoeTextRotaryEmbedding(Qwen3_5TextRotaryEmbedding):
     pass
 
 
-class Qwen3_5MoeDynamicCache(Qwen3NextDynamicCache):
-    pass
-
-
 class Qwen3_5MoeGatedDeltaNet(Qwen3_5GatedDeltaNet):
     pass
 
@@ -253,6 +248,8 @@ class Qwen3_5MoeForCausalLM(Qwen3NextForCausalLM):
 
 
 class Qwen3_5MoeForConditionalGeneration(Qwen3VLMoeForConditionalGeneration):
+    _tp_plan = {"lm_head": "colwise_gather_output"}
+
     def forward(self, **super_kwargs):
         r"""
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
@@ -322,6 +319,7 @@ class Qwen3_5MoeForConditionalGeneration(Qwen3VLMoeForConditionalGeneration):
 __all__ = [
     "Qwen3_5MoeConfig",
     "Qwen3_5MoeTextConfig",
+    "Qwen3_5MoeVisionConfig",
     "Qwen3_5MoeVisionModel",
     "Qwen3_5MoeTextModel",
     "Qwen3_5MoeModel",

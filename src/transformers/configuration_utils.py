@@ -26,6 +26,7 @@ from typing import TYPE_CHECKING, Any, ClassVar, Literal, TypeVar, Union
 from huggingface_hub import create_repo
 from huggingface_hub.dataclasses import strict
 from packaging import version
+from typing_extensions import dataclass_transform
 
 from . import __version__
 from .dynamic_module_utils import custom_object_save
@@ -68,11 +69,14 @@ ALLOWED_LAYER_TYPES = (
     "attention",
     "sparse",
     "dense",
+    "hybrid",  # for layers that have both mamba and attention in zamba and zamba2
+    "moe",  # for nemotron_h, which uses either attention, mamba or moe
 )
 
 
 # copied from huggingface_hub.dataclasses.strict when `accept_kwargs=True`
 def wrap_init_to_accept_kwargs(cls: dataclass):
+    # Get the original dataclass-generated __init__
     original_init = cls.__init__
 
     @wraps(original_init)
@@ -111,6 +115,7 @@ def wrap_init_to_accept_kwargs(cls: dataclass):
     return cls
 
 
+@dataclass_transform(kw_only_default=True)
 @strict(accept_kwargs=True)
 @dataclass(repr=False)
 class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin):
@@ -260,6 +265,13 @@ class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin):
             # Keys are always strings in JSON so convert ids to int
             self.id2label = {int(key): value for key, value in self.id2label.items()}
 
+        if self.problem_type == "single_label_classification" and self.num_labels == 1:
+            raise ValueError(
+                '`problem_type="single_label_classification"` requires `num_labels > 1`. For binary '
+                'classification use `num_labels=2`, or use `problem_type="regression"` for a '
+                "single-output regression head."
+            )
+
         # BC for rotary embeddings. We will pop out legacy keys from kwargs and rename to new format
         if hasattr(self, "rope_parameters"):
             kwargs = self.convert_rope_params_to_dict(**kwargs)
@@ -296,7 +308,10 @@ class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin):
     def __init_subclass__(cls, *args, **kwargs):
         super().__init_subclass__(*args, **kwargs)
         cls_has_custom_init = "__init__" in cls.__dict__
-        cls = dataclass(cls, repr=False)
+        # kw_only=True ensures fields without defaults in subclasses can follow
+        # parent fields that have defaults (Python dataclass ordering rule).
+        # Config fields are always passed as keyword arguments, so this is safe.
+        cls = dataclass(cls, repr=False, kw_only=True)
 
         if not cls_has_custom_init:
             # Wrap all subclasses to accept arbitrary kwargs for BC

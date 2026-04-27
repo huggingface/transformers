@@ -52,7 +52,7 @@ class JanusVisionConfig(PreTrainedConfig):
     attention_dropout: float | int = 0.0
     mlp_ratio: float | int = 4.0
     attention_bias: bool = True
-    hidden_dropout_rate: float = 0.0
+    hidden_dropout_rate: float | int = 0.0
     projection_dim: int = 2048
     projection_dropout: float | int = 0.0
     use_qk_norm: bool = False
@@ -139,6 +139,7 @@ class JanusConfig(PreTrainedConfig):
     vision_config: dict | PreTrainedConfig | None = None
     vq_config: dict | PreTrainedConfig | None = None
     image_token_id: int = 100581
+    tie_word_embeddings: bool = True
 
     def __post_init__(self, **kwargs):
         if isinstance(self.text_config, dict):

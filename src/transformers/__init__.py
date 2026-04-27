@@ -18,7 +18,7 @@
 # to defer the actual importing for when the objects are requested. This way `import transformers` provides the names
 # in the namespace without actually importing anything (and especially none of the backends).
 
-__version__ = "5.5.0.dev0"
+__version__ = "5.7.0.dev0"
 
 import importlib
 import sys
@@ -634,7 +634,6 @@ if TYPE_CHECKING:
     from .modeling_utils import AttentionInterface as AttentionInterface
     from .modeling_utils import PreTrainedModel as PreTrainedModel
     from .models import *
-    from .models.mamba.modeling_mamba import MambaCache as MambaCache
     from .models.timm_wrapper import TimmWrapperImageProcessor as TimmWrapperImageProcessor
 
     # Optimization

@@ -306,7 +306,7 @@ class Mask2FormerImageProcessor(MaskFormerImageProcessor):
         return results
 
 
-@requires(backends=("vision", "torch", "torchvision"))
+@requires(backends=("torch",))
 class Mask2FormerImageProcessorPil(MaskFormerImageProcessorPil):
     def post_process_semantic_segmentation(
         self, outputs, target_sizes: list[tuple[int, int]] | None = None

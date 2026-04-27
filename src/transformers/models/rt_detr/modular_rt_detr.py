@@ -18,7 +18,6 @@ from dataclasses import dataclass
 import numpy as np
 import torch
 import torch.nn.functional as F
-import torchvision.transforms.v2.functional as tvF
 from torch import nn
 
 from ... import initialization as init
@@ -247,7 +246,7 @@ class RTDetrImageProcessor(DetrImageProcessor):
         masks_path: str | pathlib.Path | None,
         do_resize: bool,
         size: SizeDict,
-        resample: "PILImageResampling | tvF.InterpolationMode | int | None",
+        resample: "PILImageResampling | None",
         do_rescale: bool,
         rescale_factor: float,
         do_normalize: bool,
@@ -427,7 +426,7 @@ class RTDetrImageProcessor(DetrImageProcessor):
         raise NotImplementedError("Panoptic segmentation post-processing is not implemented for RT-DETR yet.")
 
 
-@requires(backends=("vision", "torch", "torchvision"))
+@requires(backends=("torch",))
 class RTDetrImageProcessorPil(DetrImageProcessorPil):
     resample = PILImageResampling.BILINEAR
     image_mean = IMAGENET_DEFAULT_MEAN
@@ -480,7 +479,7 @@ class RTDetrImageProcessorPil(DetrImageProcessorPil):
         masks_path: str | pathlib.Path | None,
         do_resize: bool,
         size: SizeDict,
-        resample: "PILImageResampling | tvF.InterpolationMode | int | None",
+        resample: "PILImageResampling | None",
         do_rescale: bool,
         rescale_factor: float,
         do_normalize: bool,
