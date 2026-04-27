@@ -108,6 +108,7 @@ from PIL import Image
 
 from transformers import BitsAndBytesConfig, ColQwen2ForRetrieval, ColQwen2Processor
 
+
 model_name = "vidore/colqwen2-v1.0-hf"
 
 # 4-bit quantization configuration
@@ -158,9 +159,9 @@ print(scores)
 You can also use checkpoints for `ColQwen2.5` that are **compatible with the ColQwen2 architecture**. This version of the model uses [Qwen2_5_VL](./qwen2_5_vl) as the backbone.
 
 ```python
-import torch
 from transformers import ColQwen2ForRetrieval, ColQwen2Processor
 from transformers.utils.import_utils import is_flash_attn_2_available
+
 
 model_name = "Sahil-Kabir/colqwen2.5-v0.2-hf" # An existing compatible checkpoint
 

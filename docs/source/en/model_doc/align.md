@@ -36,9 +36,9 @@ The example below demonstrates zero-shot image classification with [`Pipeline`] 
 
 <hfoption id="Pipeline">
 
-```py
-import torch
+```python
 from transformers import pipeline
+
 
 pipeline = pipeline(
     task="zero-shot-image-classification",
@@ -58,11 +58,13 @@ pipeline("https://huggingface.co/datasets/huggingface/documentation-images/resol
 </hfoption>
 <hfoption id="AutoModel">
 
-```py
-import torch
+```python
 import requests
+import torch
 from PIL import Image
-from transformers import AutoProcessor, AutoModelForZeroShotImageClassification
+
+from transformers import AutoModelForZeroShotImageClassification, AutoProcessor
+
 
 processor = AutoProcessor.from_pretrained("kakaobrain/align-base")
 model = AutoModelForZeroShotImageClassification.from_pretrained("kakaobrain/align-base", device_map="auto")

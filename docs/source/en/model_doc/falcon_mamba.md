@@ -86,8 +86,8 @@ Quantization reduces the memory burden of large models by representing the weigh
 The example below uses [bitsandbytes](../quantization/bitsandbytes) to quantize the weights to 4-bits.
 
 ```python
-import torch
-from transformers import AutoTokenizer, FalconMambaForCausalLM, BitsAndBytesConfig
+from transformers import AutoTokenizer, BitsAndBytesConfig, FalconMambaForCausalLM
+
 
 quantization_config = BitsAndBytesConfig(
     load_in_4bit=True,

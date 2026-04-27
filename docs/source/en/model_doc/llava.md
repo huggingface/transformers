@@ -68,6 +68,7 @@ We will use [llava-hf/llava-1.5-7b-hf](https://huggingface.co/llava-hf/llava-1.5
 ```python
 from transformers import AutoProcessor
 
+
 processor = AutoProcessor.from_pretrained("llava-hf/llava-1.5-7b-hf")
 
 conversation = [
@@ -132,7 +133,9 @@ For multiple turns conversation:
 
 ```python
 import torch
+
 from transformers import AutoProcessor, LlavaForConditionalGeneration
+
 
 # Load the model in half-precision
 model = LlavaForConditionalGeneration.from_pretrained("llava-hf/llava-1.5-7b-hf", device_map="auto")
@@ -167,7 +170,9 @@ LLaVa also supports batched inference. Here is how you can do it:
 
 ```python
 import torch
+
 from transformers import AutoProcessor, LlavaForConditionalGeneration
+
 
 # Load the model in half-precision
 model = LlavaForConditionalGeneration.from_pretrained("llava-hf/llava-1.5-7b-hf", device_map="auto")
@@ -216,6 +221,7 @@ In order to match the logits of the [original implementation](https://github.com
 
 ```python
 from transformers import LlavaImageProcessor
+
 
 image_processor = LlavaImageProcessor.from_pretrained("llava-hf/llava-1.5-7b-hf", do_pad=True)
 ```

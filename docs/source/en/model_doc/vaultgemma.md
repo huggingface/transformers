@@ -47,6 +47,7 @@ command line.
 ```python
 from transformers import pipeline
 
+
 pipe = pipeline(
     task="text-generation",
     model="google/vaultgemma-1b",
@@ -64,7 +65,8 @@ print(response)
 
 ```python
 # pip install accelerate
-from transformers import AutoTokenizer, AutoModelForCausalLM
+from transformers import AutoModelForCausalLM, AutoTokenizer
+
 
 model_id = "google/vaultgemma-1b"
 tokenizer = AutoTokenizer.from_pretrained(model_id)

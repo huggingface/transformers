@@ -45,7 +45,8 @@ the caption. Another example is optical character recognition. Refer to [TrOCR](
 and the default [`BertForCausalLM`] configuration for the decoder.
 
 ```python
-from transformers import BertConfig, ViTConfig, VisionEncoderDecoderConfig, VisionEncoderDecoderModel
+from transformers import BertConfig, VisionEncoderDecoderConfig, VisionEncoderDecoderModel, ViTConfig
+
 
 config_encoder = ViTConfig()
 config_decoder = BertConfig()
@@ -63,6 +64,7 @@ To do so, the `VisionEncoderDecoderModel` class provides a [`VisionEncoderDecode
 
 ```python
 from transformers import VisionEncoderDecoderModel
+
 
 model = VisionEncoderDecoderModel.from_encoder_decoder_pretrained(
     "microsoft/swin-base-patch4-window7-224-in22k", "google-bert/bert-base-uncased"
@@ -105,8 +107,10 @@ As you can see, only 2 inputs are required for the model in order to compute a l
 images) and `labels` (which are the `input_ids` of the encoded target sequence).
 
 ```python
-from transformers import ViTImageProcessor, BertTokenizer, VisionEncoderDecoderModel
 from datasets import load_dataset
+
+from transformers import BertTokenizer, VisionEncoderDecoderModel, ViTImageProcessor
+
 
 image_processor = ViTImageProcessor.from_pretrained("google/vit-base-patch16-224-in21k")
 tokenizer = BertTokenizer.from_pretrained("google-bert/bert-base-uncased")

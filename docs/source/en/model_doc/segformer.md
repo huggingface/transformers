@@ -41,8 +41,8 @@ The example below demonstrates semantic segmentation with [`Pipeline`] or the [`
 <hfoption id="Pipeline">
 
 ```python
-import torch
 from transformers import pipeline
+
 
 pipeline = pipeline(task="image-segmentation", model="nvidia/segformer-b0-finetuned-ade-512-512")
 pipeline("https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg")
@@ -54,7 +54,9 @@ pipeline("https://huggingface.co/datasets/huggingface/documentation-images/resol
 ```python
 import requests
 from PIL import Image
-from transformers import AutoProcessor, AutoModelForSemanticSegmentation
+
+from transformers import AutoModelForSemanticSegmentation, AutoProcessor
+
 
 url = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg"
 image = Image.open(requests.get(url, stream=True).raw)
@@ -81,6 +83,8 @@ logits = outputs.logits # shape [batch, num_labels, height, width]
 
 ```python
 from transformers import SegformerImageProcessor
+
+
 processor = SegformerImageProcessor(do_reduce_labels=True)
 ```
 

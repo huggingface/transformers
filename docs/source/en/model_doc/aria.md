@@ -38,8 +38,8 @@ The example below demonstrates how to generate text based on an image with [`Pip
 <hfoption id="Pipeline">
 
 ```python
-import torch
 from transformers import pipeline
+
 
 pipeline = pipeline(
     "image-to-text",
@@ -57,7 +57,9 @@ pipeline(
 
 ```python
 import torch
+
 from transformers import AutoModelForCausalLM, AutoProcessor
+
 
 model = AutoModelForCausalLM.from_pretrained(
     "rhymes-ai/Aria",

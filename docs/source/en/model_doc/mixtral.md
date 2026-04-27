@@ -65,6 +65,7 @@ The base model can be used as follows:
 ```python
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
+
 model = AutoModelForCausalLM.from_pretrained("mistralai/Mixtral-8x7B-v0.1", device_map="auto")
 tokenizer = AutoTokenizer.from_pretrained("mistralai/Mixtral-8x7B-v0.1")
 
@@ -81,6 +82,7 @@ The instruction tuned model can be used as follows:
 
 ```python
 from transformers import AutoModelForCausalLM, AutoTokenizer
+
 
 model = AutoModelForCausalLM.from_pretrained("mistralai/Mixtral-8x7B-Instruct-v0.1", device_map="auto")
 tokenizer = AutoTokenizer.from_pretrained("mistralai/Mixtral-8x7B-Instruct-v0.1")
@@ -115,8 +117,8 @@ Make also sure that you have a hardware that is compatible with Flash-Attention 
 To load and run a model using Flash Attention-2, refer to the snippet below:
 
 ```python
-import torch
 from transformers import AutoModelForCausalLM, AutoTokenizer
+
 
 model = AutoModelForCausalLM.from_pretrained("mistralai/Mixtral-8x7B-v0.1", attn_implementation="flash_attention_2", device_map="auto")
 tokenizer = AutoTokenizer.from_pretrained("mistralai/Mixtral-8x7B-v0.1")
@@ -152,8 +154,8 @@ As the Mixtral model has 45 billion parameters, that would require about 90GB of
 Quantizing a model is as simple as passing a `quantization_config` to the model. Below, we'll leverage the bitsandbytes quantization library (but refer to [this page](../quantization) for alternative quantization methods):
 
 ```python
-import torch
 from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig
+
 
 # specify how to quantize the model
 quantization_config = BitsAndBytesConfig(

@@ -40,8 +40,8 @@ The example below demonstrates how to automatically transcribe speech into text 
 <hfoption id="Pipeline">
 
 ```python
-import torch
 from transformers import pipeline
+
 
 pipeline = pipeline(
     task="automatic-speech-recognition",
@@ -57,8 +57,10 @@ pipeline("https://huggingface.co/datasets/Narsil/asr_dummy/resolve/main/1.flac")
 
 ```python
 import torch
-from transformers import AutoProcessor, AutoModelForCTC
 from datasets import load_dataset
+
+from transformers import AutoModelForCTC, AutoProcessor
+
 
 dataset = load_dataset("hf-internal-testing/librispeech_asr_demo", "clean", split="validation").sort("id")
 sampling_rate = dataset.features["audio"].sampling_rate
@@ -87,8 +89,10 @@ The example below uses [bitsandbytes](../quantization/bitsandbytes) to quantize 
 
 ```python
 import torch
-from transformers import AutoProcessor, AutoModelForCTC, BitsAndBytesConfig
 from datasets import load_dataset
+
+from transformers import AutoModelForCTC, AutoProcessor, BitsAndBytesConfig
+
 
 bnb_config = BitsAndBytesConfig(
     load_in_8bit=True,

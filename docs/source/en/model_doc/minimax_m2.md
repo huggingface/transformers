@@ -32,6 +32,7 @@ For more details refer to the [release blog post](https://www.minimax.io/news/mi
 ```python
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
+
 model = AutoModelForCausalLM.from_pretrained(
     "MiniMaxAI/MiniMax-M2",
     device_map="auto",
