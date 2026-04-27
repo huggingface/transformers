@@ -19,7 +19,6 @@ import torch
 from torch import nn
 
 from ...cache_utils import Cache, DynamicCache
-from ...generation.utils import GenerationMixin
 from ...image_processing_utils import BatchFeature, select_best_resolution
 from ...image_utils import ImageInput
 from ...masking_utils import create_causal_mask
@@ -551,31 +550,6 @@ class Granite4VisionForConditionalGeneration(LlavaNextForConditionalGeneration):
     def __init__(self, config: Granite4VisionConfig):
         super().__init__(config)
         self.model = Granite4VisionModel(config)
-
-    def merge_lora_adapters(self):
-        """Merge LoRA adapter weights into base weights and replace PEFT wrappers with base layers."""
-        from peft.tuners.tuners_utils import BaseTunerLayer
-
-        for _, module in self.named_modules():
-            for attr_name, child in list(module.named_children()):
-                if isinstance(child, BaseTunerLayer):
-                    child.merge()
-                    setattr(module, attr_name, child.get_base_layer())
-        if hasattr(self, "peft_config"):
-            del self.peft_config
-        self._hf_peft_config_loaded = False
-        return self
-
-    def generate(self, *args, **kwargs) -> torch.LongTensor:
-        # When loaded with a LoRA adapter, disable the adapter for text-only
-        # inputs (no pixel_values) so the base LLM runs standalone.
-        pixel_values = kwargs.get("pixel_values")
-        if hasattr(self, "_hf_peft_config_loaded") and self._hf_peft_config_loaded:
-            if pixel_values is not None:
-                self.enable_adapters()
-            else:
-                self.disable_adapters()
-        return GenerationMixin.generate(self, *args, **kwargs)
 
     @can_return_tuple
     def forward(
