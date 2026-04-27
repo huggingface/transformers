@@ -1,4 +1,4 @@
-# Copyright 2025 The HuggingFace Inc. team
+# Copyright 2026 The HuggingFace Inc. team
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -15,7 +15,8 @@
 
 Handles two offloading strategies when the GPU KV cache is full:
   1. CPU offloading: copy the KV cache to a pre-allocated pinned CPU buffer, preserving exact request state.
-  2. Soft reset (legacy): discard the KV cache and re-prefill from scratch when the request is re-scheduled.
+  2. Soft reset: discard the KV cache and re-prefill from scratch when the request is re-scheduled. This incurs no data
+    transfer overhead, but we need to re-run prefill over all intial + generated tokens (so more compute overhead).
 
 The CPU swap pool is a static set of pinned tensors allocated once at init (like vLLM/SGLang). Blocks are tracked
 with a simple free set — no dynamic allocation or deallocation of tensors ever happens at runtime.
@@ -290,6 +291,7 @@ class OffloadingManager:
             for cpu_value_cache, gpu_value_view in zip(self._cpu_value_cache, self._gpu_value_views):
                 cpu_value_cache[cpu_ids].copy_(gpu_value_view[gpu_ids])
             # TODO: add asynchronous version of this
+            # TODO: can we get rid of this for loop? eg. by consolidating the cache.
 
         # No explicit sync needed: finish_request is logical, and the next forward pass serializes on the same stream.
         self._request_id_to_cpu_blocks[request_id] = cpu_indices
