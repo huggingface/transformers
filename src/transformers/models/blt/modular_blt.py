@@ -955,7 +955,7 @@ class BltModel(BltPreTrainedModel):
         else:
             batch_size, sequence_length = input_ids.shape
             encoder_embeds = compute_hash_embeddings(
-                input_ids,
+                input_ids.to(self.local_encoder.embed_tokens.weight.device),
                 self.local_encoder,
                 self.encoder_hash_tok_embedding,
                 self.config.encoder_hash_byte_group_nb_functions,
@@ -968,7 +968,7 @@ class BltModel(BltPreTrainedModel):
                 if input_ids is None:
                     raise ValueError("input_ids is required for entropy-based patching")
                 _, patch_lengths, _ = self.patcher(
-                    input_ids,
+                    input_ids.to(self.patcher.embed_tokens.weight.device),
                     patch_size=self.config.patch_size,
                     threshold=self.config.patching_threshold,
                     max_patch_length=self.config.max_patch_length,
