@@ -62,19 +62,8 @@ _MODEL_TO_CONVERSION_PATTERN = {
     "rt_detr_v2": "rt_detr",
     "pp_doclayout_v2": "rt_detr",
     "pp_doclayout_v3": "rt_detr",
-    "paligemma": "llava",
-    "aya_vision": "llava",
-    "got_ocr2": "llava",
-    "shieldgemma2": "llava",
-    "gemma3": "llava",
-    "internvl": "llava",
-    "llava_next_video": "llava_next",
-    "llava_onevision": "llava_next",
-    "vipllava": "llava",
-    "mistral3": "llava",
     "qwen2_5_vl": "qwen2_vl",
     "sam3_tracker_video": "sam3_tracker",
-    "pp_chart2table": "llava",
     "altclip_vision_model": "clip_vision_model",
     "chinese_clip_vision_model": "clip_vision_model",
     "clipseg_vision_model": "clip_vision_model",
@@ -89,6 +78,31 @@ _MODEL_TO_CONVERSION_PATTERN = {
     "siglip_text_model": "clip_text_model",
     "siglip2_text_model": "clip_text_model",
     "xclip_text_model": "clip_text_model",
+    # class-based mappings
+    "PaliGemmaModel": "LlavaModel",
+    "AyaVisionModel": "LlavaModel",
+    "GotOcr2Model": "LlavaModel",
+    "Gemma3Model": "LlavaModel",
+    "InternVLModel": "LlavaModel",
+    "VipLlavaModel": "LlavaModel",
+    "Mistral3Model": "LlavaModel",
+    "PPChart2TableModel": "LlavaModel",
+    "LlavaNextModel": "LlavaModel",
+    "LlavaNextVideoModel": "LlavaModel",
+    "LlavaOnevisionModel": "LlavaModel",
+    "FuyuModel": "LlavaModel",
+    "MllamaModel": "LlavaModel",
+    "ShieldGemma2ForImageClassification": "LlavaForConditionalGeneration",
+    "PaliGemmaForConditionalGeneration": "LlavaForConditionalGeneration",
+    "AyaVisionForConditionalGeneration": "LlavaForConditionalGeneration",
+    "GotOcr2ForConditionalGeneration": "LlavaForConditionalGeneration",
+    "Gemma3ForConditionalGeneration": "LlavaForConditionalGeneration",
+    "InternVLForConditionalGeneration": "LlavaForConditionalGeneration",
+    "VipLlavaForConditionalGeneration": "LlavaForConditionalGeneration",
+    "Mistral3ForConditionalGeneration": "LlavaForConditionalGeneration",
+    "PPChart2TableForConditionalGeneration": "LlavaForConditionalGeneration",
+    "LlavaNextVideoForConditionalGeneration": "LlavaNextForConditionalGeneration",
+    "LlavaOnevisionForConditionalGeneration": "LlavaNextForConditionalGeneration",
 }
 
 
@@ -97,43 +111,51 @@ def _build_checkpoint_conversion_mapping():
         "altclip": [
             WeightRenaming(source_patterns=r"layer\.", target_patterns="layers."),
         ],
-        "llava": [
-            WeightRenaming(source_patterns=r"^language_model.model", target_patterns="model.language_model"),
+        "LlavaModel": [
+            WeightRenaming(source_patterns=r"^language_model.model", target_patterns="language_model"),
+        ],
+        "LlavaForConditionalGeneration": [
             WeightRenaming(source_patterns=r"^language_model.lm_head", target_patterns="lm_head"),
+            WeightRenaming(source_patterns=r"^language_model", target_patterns="model.language_model"),
             WeightRenaming(source_patterns=r"^vision_tower", target_patterns="model.vision_tower"),
             WeightRenaming(source_patterns=r"^multi_modal_projector", target_patterns="model.multi_modal_projector"),
         ],
-        "PaliGemmaModel": [],
-        "llava_next": [
-            WeightRenaming(source_patterns=r"^language_model.model", target_patterns="model.language_model"),
+        "LlavaNextForConditionalGeneration": [
             WeightRenaming(source_patterns=r"^language_model.lm_head", target_patterns="lm_head"),
+            WeightRenaming(source_patterns=r"^language_model", target_patterns="model.language_model"),
             WeightRenaming(source_patterns=r"^vision_tower", target_patterns="model.vision_tower"),
             WeightRenaming(source_patterns=r"^multi_modal_projector", target_patterns="model.multi_modal_projector"),
             WeightRenaming(source_patterns=r"^image_newline", target_patterns="model.image_newline"),
         ],
         "clip_vision_model": [PrefixChange(prefix_to_remove="vision_model")],
         "clip_text_model": [PrefixChange(prefix_to_remove="text_model")],
-        "video_llava": [
-            WeightRenaming(source_patterns=r"^language_model.model", target_patterns="model.language_model"),
+        "VideoLlavaModel": [
+            WeightRenaming(source_patterns=r"^language_model.model", target_patterns="language_model"),
+        ],
+        "VideoLlavaForConditionalGeneration": [
             WeightRenaming(source_patterns=r"^language_model.lm_head", target_patterns="lm_head"),
+            WeightRenaming(source_patterns=r"^language_model", target_patterns="model.language_model"),
             WeightRenaming(source_patterns=r"^image_tower", target_patterns="model.image_tower"),
             WeightRenaming(source_patterns=r"^video_tower", target_patterns="model.video_tower"),
             WeightRenaming(source_patterns=r"^multi_modal_projector", target_patterns="model.multi_modal_projector"),
         ],
-        "fuyu": [
-            WeightRenaming(source_patterns=r"^language_model.model", target_patterns="model.language_model"),
+        "FuyuForCausalLM": [
             WeightRenaming(source_patterns=r"^language_model.lm_head", target_patterns="lm_head"),
+            WeightRenaming(source_patterns=r"^language_model", target_patterns="model.language_model"),
             WeightRenaming(source_patterns=r"^vision_embed_tokens", target_patterns="model.vision_embed_tokens"),
         ],
-        "mllama": [
-            WeightRenaming(source_patterns=r"^language_model.model", target_patterns="model.language_model"),
+        "MllamaForConditionalGeneration": [
             WeightRenaming(source_patterns=r"^language_model.lm_head", target_patterns="lm_head"),
+            WeightRenaming(source_patterns=r"^language_model", target_patterns="model.language_model"),
             WeightRenaming(source_patterns=r"^vision_model", target_patterns="model.vision_model"),
             WeightRenaming(source_patterns=r"^multi_modal_projector", target_patterns="model.multi_modal_projector"),
         ],
-        "emu3": [
-            WeightRenaming(source_patterns=r"^text_model.model", target_patterns="model.text_model"),
+        "Emu3Model": [
+            WeightRenaming(source_patterns=r"^text_model.model", target_patterns="text_model"),
+        ],
+        "Emu3ForConditionalGeneration": [
             WeightRenaming(source_patterns=r"^text_model.lm_head", target_patterns="lm_head"),
+            WeightRenaming(source_patterns=r"^text_model", target_patterns="model.text_model"),
             WeightRenaming(source_patterns=r"^vqmodel", target_patterns="model.vqmodel"),
         ],
         "paddleocr_vl": [
