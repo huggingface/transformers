@@ -702,21 +702,15 @@ class Ernie4_5_VLMoeVisionTransformerPretrainedModel(Qwen2VisionTransformerPretr
         self,
         hidden_states: torch.Tensor,
         grid_thw: torch.Tensor,
-        cu_seqlens: torch.Tensor | None = None,
-        position_ids: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
+        position_ids = kwargs.pop("position_ids", None) or get_vision_position_ids(grid_thw, self.spatial_merge_size)
+        cu_seqlens = kwargs.pop("cu_seqlens", None) or get_vision_cu_seqlens(grid_thw)
+
         hidden_states = self.patch_embed(hidden_states)
-
-        if position_ids is None:
-            position_ids = get_vision_position_ids(grid_thw, self.spatial_merge_size)
-
         rotary_pos_emb = self.rotary_pos_emb(position_ids)
         emb = torch.cat((rotary_pos_emb, rotary_pos_emb), dim=-1)
         position_embeddings = (emb.cos(), emb.sin())
-
-        if cu_seqlens is None:
-            cu_seqlens = get_vision_cu_seqlens(grid_thw)
 
         for block in self.blocks:
             hidden_states = block(

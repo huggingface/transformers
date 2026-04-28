@@ -1353,11 +1353,6 @@ class Qwen2_5OmniAudioEncoder(Qwen2_5OmniPreTrainedModel):
         input_features=None,
         feature_lens=None,
         aftercnn_lens=None,
-        padded_feature=None,
-        chunk_lengths=None,
-        valid_indices=None,
-        pool_indices=None,
-        cu_seqlens=None,
         **kwargs: Unpack[TransformersKwargs],
     ):
         r"""
@@ -1365,25 +1360,14 @@ class Qwen2_5OmniAudioEncoder(Qwen2_5OmniPreTrainedModel):
             mel length
         aftercnn_lens (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
             mel length after cnn
-        padded_feature (`torch.FloatTensor`, *optional*):
-            Precomputed padded audio chunks (from `chunk_and_pad_features`).
-        chunk_lengths (`torch.LongTensor`, *optional*):
-            Precomputed per-chunk lengths (from `chunk_and_pad_features`).
-        valid_indices (`torch.LongTensor`, *optional*):
-            Precomputed flat indices of valid post-CNN positions (from `get_valid_indices`).
-        pool_indices (`torch.LongTensor`, *optional*):
-            Precomputed pair indices for stride-2 average pooling (from `get_pool_indices`).
-        cu_seqlens (`torch.IntTensor`, *optional*):
-            Precomputed cumulative sequence lengths (from `get_audio_cu_seqlens`).
         """
+        padded_feature = kwargs.pop("padded_feature", None)
+        chunk_lengths = kwargs.pop("chunk_lengths", None)
         if padded_feature is None:
             padded_feature, chunk_lengths = chunk_and_pad_features(input_features, feature_lens, self.n_window)
-
-        if valid_indices is None:
-            valid_indices = get_valid_indices(chunk_lengths)
-
-        if pool_indices is None:
-            pool_indices = get_pool_indices(feature_lens)
+        valid_indices = kwargs.pop("valid_indices", None) or get_valid_indices(chunk_lengths)
+        pool_indices = kwargs.pop("pool_indices", None) or get_pool_indices(feature_lens)
+        cu_seqlens = kwargs.pop("cu_seqlens", None) or get_audio_cu_seqlens(chunk_lengths)
 
         # Derive masks from chunk_lengths (traceable arithmetic + arange broadcasting)
         padded_feature = padded_feature.to(self.conv1.weight.dtype)
@@ -1398,9 +1382,6 @@ class Qwen2_5OmniAudioEncoder(Qwen2_5OmniPreTrainedModel):
             : padded_embed.shape[1], :
         ].unsqueeze(0).to(padded_embed.dtype)
         hidden_states = torch.index_select(padded_embed.reshape(-1, padded_embed.shape[-1]), 0, valid_indices)
-
-        if cu_seqlens is None:
-            cu_seqlens = get_audio_cu_seqlens(chunk_lengths)
 
         for encoder_layer in self.layers:
             layer_outputs = encoder_layer(
@@ -1610,10 +1591,6 @@ class Qwen2_5OmniVisionEncoder(Qwen2_5_VisionTransformerPretrainedModel):
         self,
         hidden_states: torch.Tensor,
         grid_thw: torch.Tensor,
-        cu_seqlens: torch.Tensor | None = None,
-        window_index: torch.Tensor | None = None,
-        cu_window_seqlens: torch.Tensor | None = None,
-        position_ids: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
         """
@@ -1622,30 +1599,20 @@ class Qwen2_5OmniVisionEncoder(Qwen2_5_VisionTransformerPretrainedModel):
                 The final hidden states of the model.
             grid_thw (`torch.Tensor` of shape `(num_images_or_videos, 3)`):
                 The temporal, height and width of feature shape of each image in LLM.
-            cu_seqlens (`torch.Tensor`, *optional*):
-                Precomputed cumulative sequence lengths (from `get_vision_cu_seqlens`).
-            cu_window_seqlens (`torch.Tensor`, *optional*):
-                Precomputed window cumulative sequence lengths (from `get_vision_window_index`).
-            window_index (`torch.Tensor`, *optional*):
-                Precomputed window reordering index (from `get_vision_window_index`).
-            position_ids (`torch.Tensor`, *optional*):
-                Precomputed (row, col) position IDs (from `get_vision_position_ids`).
 
         Returns:
             `torch.Tensor`: hidden_states.
         """
-        hidden_states = self.patch_embed(hidden_states)
-
-        if position_ids is None:
-            position_ids = get_vision_position_ids(grid_thw, self.spatial_merge_size)
-
-        if cu_seqlens is None:
-            cu_seqlens = get_vision_cu_seqlens(grid_thw)
-
+        position_ids = kwargs.pop("position_ids", None) or get_vision_position_ids(grid_thw, self.spatial_merge_size)
+        cu_seqlens = kwargs.pop("cu_seqlens", None) or get_vision_cu_seqlens(grid_thw)
+        window_index = kwargs.pop("window_index", None)
+        cu_window_seqlens = kwargs.pop("cu_window_seqlens", None)
         if window_index is None:
             window_index, cu_window_seqlens = get_vision_window_index(
                 grid_thw, self.spatial_merge_size, self.window_size, self.patch_size, self.spatial_merge_unit
             )
+
+        hidden_states = self.patch_embed(hidden_states)
 
         seq_len, _ = hidden_states.size()
         reverse_indices = torch.argsort(window_index)

@@ -414,10 +414,6 @@ class Qwen2_5_VisionTransformerPretrainedModel(Qwen2_5_VLPreTrainedModel):
         self,
         hidden_states: torch.Tensor,
         grid_thw: torch.Tensor,
-        cu_seqlens: torch.Tensor | None = None,
-        window_index: torch.Tensor | None = None,
-        cu_window_seqlens: torch.Tensor | None = None,
-        position_ids: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
         """
@@ -426,30 +422,20 @@ class Qwen2_5_VisionTransformerPretrainedModel(Qwen2_5_VLPreTrainedModel):
                 The final hidden states of the model.
             grid_thw (`torch.Tensor` of shape `(num_images_or_videos, 3)`):
                 The temporal, height and width of feature shape of each image in LLM.
-            cu_seqlens (`torch.Tensor`, *optional*):
-                Precomputed cumulative sequence lengths (from `get_vision_cu_seqlens`).
-            window_index (`torch.Tensor`, *optional*):
-                Precomputed window reordering index (from `get_vision_window_index`).
-            cu_window_seqlens (`torch.Tensor`, *optional*):
-                Precomputed window cumulative sequence lengths (from `get_vision_window_index`).
-            position_ids (`torch.Tensor` of shape `(total_tokens, 2)`, *optional*):
-                Precomputed (row, col) position IDs (from `get_vision_position_ids`).
 
         Returns:
             `torch.Tensor`: hidden_states.
         """
-        hidden_states = self.patch_embed(hidden_states)
-
-        if position_ids is None:
-            position_ids = get_vision_position_ids(grid_thw, self.spatial_merge_size)
-
-        if cu_seqlens is None:
-            cu_seqlens = get_vision_cu_seqlens(grid_thw)
-
+        position_ids = kwargs.pop("position_ids", None) or get_vision_position_ids(grid_thw, self.spatial_merge_size)
+        cu_seqlens = kwargs.pop("cu_seqlens", None) or get_vision_cu_seqlens(grid_thw)
+        window_index = kwargs.pop("window_index", None)
+        cu_window_seqlens = kwargs.pop("cu_window_seqlens", None)
         if window_index is None:
             window_index, cu_window_seqlens = get_vision_window_index(
                 grid_thw, self.spatial_merge_size, self.window_size, self.patch_size, self.spatial_merge_unit
             )
+
+        hidden_states = self.patch_embed(hidden_states)
 
         seq_len, _ = hidden_states.size()
         hidden_states = hidden_states.reshape(seq_len // self.spatial_merge_unit, self.spatial_merge_unit, -1)

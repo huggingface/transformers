@@ -473,10 +473,6 @@ class Qwen3VLVisionModel(Qwen3VLPreTrainedModel):
         self,
         hidden_states: torch.Tensor,
         grid_thw: torch.Tensor,
-        cu_seqlens: torch.Tensor | None = None,
-        position_ids: torch.Tensor | None = None,
-        bilinear_indices: torch.Tensor | None = None,
-        bilinear_weights: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithDeepstackFeatures:
         """
@@ -485,34 +481,23 @@ class Qwen3VLVisionModel(Qwen3VLPreTrainedModel):
                 The final hidden states of the model.
             grid_thw (`torch.Tensor` of shape `(num_images_or_videos, 3)`):
                 The temporal, height and width of feature shape of each image in LLM.
-            cu_seqlens (`torch.Tensor`, *optional*):
-                Precomputed cumulative sequence lengths (from `get_vision_cu_seqlens`).
-            position_ids (`torch.Tensor` of shape `(total_tokens, 2)`, *optional*):
-                Precomputed (row, col) position IDs (from `get_vision_position_ids`).
-            bilinear_indices (`torch.Tensor` of shape `(4, total_thw)`, *optional*):
-                Bilinear corner indices for position embedding interpolation (from `get_vision_bilinear_indices_and_weights`).
-            bilinear_weights (`torch.Tensor` of shape `(4, total_thw)`, *optional*):
-                Bilinear corner weights for position embedding interpolation (from `get_vision_bilinear_indices_and_weights`).
 
         Returns:
             `torch.Tensor`: hidden_states.
         """
-        hidden_states = self.patch_embed(hidden_states)
-
+        bilinear_indices = kwargs.pop("bilinear_indices", None)
+        bilinear_weights = kwargs.pop("bilinear_weights", None)
         if bilinear_indices is None or bilinear_weights is None:
             bilinear_indices, bilinear_weights = get_vision_bilinear_indices_and_weights(
                 grid_thw, self.num_grid_per_side, self.config.spatial_merge_size
             )
+        position_ids = kwargs.pop("position_ids", None) or get_vision_position_ids(grid_thw, self.spatial_merge_size)
+        cu_seqlens = kwargs.pop("cu_seqlens", None) or get_vision_cu_seqlens(grid_thw)
+
+        hidden_states = self.patch_embed(hidden_states)
         pos_embeds = (self.pos_embed(bilinear_indices) * bilinear_weights[:, :, None]).sum(0)
         hidden_states = hidden_states + pos_embeds.to(hidden_states.dtype)
-
-        if position_ids is None:
-            position_ids = get_vision_position_ids(grid_thw, self.spatial_merge_size)
-
         rotary_pos_emb = self.rotary_pos_emb(position_ids)
-
-        if cu_seqlens is None:
-            cu_seqlens = get_vision_cu_seqlens(grid_thw)
 
         seq_len, _ = hidden_states.size()
         hidden_states = hidden_states.reshape(seq_len, -1)

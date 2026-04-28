@@ -605,8 +605,6 @@ class GlmImageVisionModel(GlmImagePreTrainedModel):
         self,
         pixel_values: torch.Tensor,
         grid_thw: torch.Tensor,
-        cu_seqlens: torch.Tensor | None = None,
-        position_ids: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
         r"""
@@ -614,22 +612,14 @@ class GlmImageVisionModel(GlmImagePreTrainedModel):
             Packed pixel values.
         grid_thw (`torch.Tensor` of shape `(num_images, 3)`):
             The temporal, height and width of feature shape of each image.
-        cu_seqlens (`torch.Tensor`, *optional*):
-            Precomputed cumulative sequence lengths (from `get_vision_cu_seqlens`).
-        position_ids (`torch.Tensor`, *optional*):
-            Precomputed (row, col) position IDs (from `get_vision_position_ids`).
 
         Returns:
             `torch.Tensor` of shape `(total_patches, hidden_size)`: Hidden states.
         """
+        position_ids = kwargs.pop("position_ids", None) or get_vision_position_ids(grid_thw, self.spatial_merge_size)
+        cu_seqlens = kwargs.pop("cu_seqlens", None) or get_vision_cu_seqlens(grid_thw)
+
         hidden_states = self.patch_embed(pixel_values)
-
-        if position_ids is None:
-            position_ids = get_vision_position_ids(grid_thw, self.spatial_merge_size)
-
-        if cu_seqlens is None:
-            cu_seqlens = get_vision_cu_seqlens(grid_thw)
-
         seqlens = cu_seqlens[1:] - cu_seqlens[:-1]
         hidden_states = self.embeddings(
             hidden_states,

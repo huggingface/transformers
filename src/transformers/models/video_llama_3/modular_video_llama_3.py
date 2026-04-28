@@ -376,8 +376,6 @@ class VideoLlama3VisionModel(VideoLlama3PreTrainedModel):
         pixel_values: torch.Tensor,
         grid_thw: torch.Tensor,
         merge_sizes: torch.Tensor,
-        cu_seqlens: torch.Tensor | None = None,
-        position_ids: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutput:
         r"""
@@ -385,23 +383,14 @@ class VideoLlama3VisionModel(VideoLlama3PreTrainedModel):
             The temporal, height and width dimensions of feature shape for each image. Each row contains [t, h, w] values.
         merge_sizes (`torch.Tensor` of shape `(num_images_or_videos,)`):
             The spatial downsampling ratio of each image or video feature.
-        cu_seqlens (`torch.IntTensor`, *optional*):
-            Precomputed cumulative sequence lengths (from `get_vision_cu_seqlens`).
-        position_ids (`torch.Tensor`, *optional*):
-            Precomputed (row, col) position IDs (from `get_vision_position_ids`).
         """
+        position_ids = kwargs.pop("position_ids", None) or get_vision_position_ids(grid_thw, merge_sizes)
+        cu_seqlens = kwargs.pop("cu_seqlens", None) or get_vision_cu_seqlens(grid_thw)
 
         hidden_states = self.embeddings(pixel_values.type(self.dtype))
-
-        if position_ids is None:
-            position_ids = get_vision_position_ids(grid_thw, merge_sizes)
-
         rotary_pos_emb = self.rotary_pos_emb(position_ids)
         emb = torch.cat((rotary_pos_emb, rotary_pos_emb), dim=-1)
         position_embeddings = (emb.cos(), emb.sin())
-
-        if cu_seqlens is None:
-            cu_seqlens = get_vision_cu_seqlens(grid_thw)
 
         encoder_outputs: BaseModelOutput = self.encoder(
             hidden_states,

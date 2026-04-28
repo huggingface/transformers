@@ -991,32 +991,20 @@ class Qwen3OmniMoeAudioEncoder(Qwen2_5OmniAudioEncoder):
         self,
         input_features=None,
         feature_lens=None,
-        padded_feature=None,
-        chunk_lengths=None,
-        valid_indices=None,
-        cu_seqlens=None,
         **kwargs: Unpack[TransformersKwargs],
     ):
         r"""
         feature_lens (`torch.LongTensor` of shape `(batch_size,)`):
             mel length
-        padded_feature (`torch.FloatTensor`, *optional*):
-            Precomputed padded audio chunks (from `chunk_and_pad_features`).
-        chunk_lengths (`torch.LongTensor`, *optional*):
-            Precomputed per-chunk lengths (from `chunk_and_pad_features`).
-        valid_indices (`torch.LongTensor`, *optional*):
-            Precomputed flat indices of valid post-CNN positions (from `get_valid_indices`).
-        cu_seqlens (`torch.IntTensor`, *optional*):
-            Precomputed cumulative sequence lengths (from `get_audio_cu_seqlens`).
         """
+        padded_feature = kwargs.pop("padded_feature", None)
+        chunk_lengths = kwargs.pop("chunk_lengths", None)
         if padded_feature is None:
             padded_feature, chunk_lengths = chunk_and_pad_features(input_features, feature_lens, self.n_window)
-
-        if valid_indices is None:
-            valid_indices = get_valid_indices(chunk_lengths)
-
-        if cu_seqlens is None:
-            cu_seqlens = get_audio_cu_seqlens(chunk_lengths, feature_lens, self.n_window_infer, self.n_window)
+        valid_indices = kwargs.pop("valid_indices", None) or get_valid_indices(chunk_lengths)
+        cu_seqlens = kwargs.pop("cu_seqlens", None) or get_audio_cu_seqlens(
+            chunk_lengths, feature_lens, self.n_window_infer, self.n_window
+        )
 
         # Add channel dim for Conv2d: (num_chunks, mel_bins, time) -> (num_chunks, 1, mel_bins, time)
         padded_feature = padded_feature.unsqueeze(1)
