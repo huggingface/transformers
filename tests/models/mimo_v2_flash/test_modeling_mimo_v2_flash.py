@@ -45,10 +45,6 @@ class MiMoV2FlashModelTester(CausalLMModelTester):
         self.head_dim = 32
         self.v_head_dim = 16
         self.layer_types = ["full_attention", "sliding_attention"]
-        self.rope_parameters = {
-            "full_attention": {"rope_type": "default", "rope_theta": 5_000_000.0, "partial_rotary_factor": 0.5},
-            "sliding_attention": {"rope_type": "default", "rope_theta": 10_000.0, "partial_rotary_factor": 0.5},
-        }
         # 2 layers
         self.mlp_layer_types = ["dense", "sparse"]
         self.n_routed_experts = 4
@@ -62,12 +58,12 @@ class MiMoV2FlashModelTest(CausalLMModelTest, unittest.TestCase):
     def _check_past_key_values_for_generate(self, batch_size, past_key_values, seq_length, config):
         # SWA layers double the kv heads (see MiMoV2FlashAttention.__init__), so the per-layer
         # kv head count is layer-type dependent. Same override pattern as MiniMax.
+        # Keys use `head_dim`, values use `v_head_dim` (MiMo asymmetry).
         for layer_idx, layer in enumerate(past_key_values.layers):
             is_swa = config.layer_types[layer_idx] == "sliding_attention"
             num_kv_heads = config.num_key_value_heads * 2 if is_swa else config.num_key_value_heads
-            expected_shape = (batch_size, num_kv_heads, seq_length, config.head_dim)
-            self.assertEqual(layer.keys.shape, expected_shape)
-            self.assertEqual(layer.values.shape, expected_shape)
+            self.assertEqual(layer.keys.shape, (batch_size, num_kv_heads, seq_length, config.head_dim))
+            self.assertEqual(layer.values.shape, (batch_size, num_kv_heads, seq_length, config.v_head_dim))
 
     # Tests from Gemma3 adapted to MiMo
     @parameterized.expand([("linear",), ("dynamic",), ("yarn",)])
@@ -94,7 +90,7 @@ class MiMoV2FlashModelTest(CausalLMModelTest, unittest.TestCase):
 
         scaling_factor = 10
         short_input_length = 10
-        partial_rotary_factor = 0.5  # from test config
+        partial_rotary_factor = 0.334  # MiMo default
         long_input_length = int(config.max_position_embeddings * 1.5)
 
         # Inputs
