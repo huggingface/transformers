@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import math
 from dataclasses import dataclass
 from fractions import Fraction
 
@@ -28,6 +29,7 @@ from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS
 from ...modeling_outputs import ModelOutput
 from ...utils import TransformersKwargs, can_return_tuple
 from ..granite.modeling_granite import GraniteModel, GraniteRotaryEmbedding
+from ..auto import AutoConfig
 from ..llava_next.configuration_llava_next import LlavaNextConfig
 from ..llava_next.modeling_llava_next import (
     LlavaNextCausalLMOutputWithPast,
@@ -39,6 +41,7 @@ from ..llava_next.modeling_llava_next import (
     image_size_to_num_patches,
     unpad_image,
 )
+from ...image_processing_utils import select_best_resolution
 from ..llava_next.processing_llava_next import LlavaNextProcessor
 
 
