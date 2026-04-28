@@ -585,6 +585,8 @@ class Qwen3_5Model(Qwen3VLModel):
         return super().get_video_features(**super_kwargs)
 
     @handle_extra_kwargs(modality="image")
+    @can_return_tuple
+    @auto_docstring
     def get_image_features(
         self,
         pixel_values: torch.FloatTensor,

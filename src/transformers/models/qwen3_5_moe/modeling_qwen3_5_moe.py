@@ -1571,6 +1571,8 @@ class Qwen3_5MoeModel(Qwen3_5MoePreTrainedModel):
         return self.get_image_features(pixel_values_videos, video_grid_thw, **kwargs)
 
     @handle_extra_kwargs(modality="image")
+    @can_return_tuple
+    @auto_docstring
     def get_image_features(
         self,
         pixel_values: torch.FloatTensor,
