@@ -96,6 +96,7 @@ if TYPE_CHECKING:
     from .deepseek_vl import *
     from .deepseek_vl_hybrid import *
     from .deformable_detr import *
+    from .deimv2 import *
     from .deit import *
     from .deprecated import *
     from .depth_anything import *
@@ -191,6 +192,7 @@ if TYPE_CHECKING:
     from .hubert import *
     from .hunyuan_v1_dense import *
     from .hunyuan_v1_moe import *
+    from .hy_v3 import *
     from .ibert import *
     from .idefics import *
     from .idefics2 import *
@@ -209,6 +211,7 @@ if TYPE_CHECKING:
     from .kosmos2 import *
     from .kosmos2_5 import *
     from .kyutai_speech_to_text import *
+    from .laguna import *
     from .lasr import *
     from .layoutlm import *
     from .layoutlmv2 import *
@@ -247,6 +250,7 @@ if TYPE_CHECKING:
     from .metaclip_2 import *
     from .mgp_str import *
     from .mimi import *
+    from .minicpmv4_6 import *
     from .minimax import *
     from .minimax_m2 import *
     from .ministral import *
@@ -295,6 +299,7 @@ if TYPE_CHECKING:
     from .omdet_turbo import *
     from .oneformer import *
     from .openai import *
+    from .openai_privacy_filter import *
     from .opt import *
     from .ovis2 import *
     from .owlv2 import *
@@ -383,6 +388,7 @@ if TYPE_CHECKING:
     from .shieldgemma2 import *
     from .siglip import *
     from .siglip2 import *
+    from .slanet import *
     from .slanext import *
     from .smollm3 import *
     from .smolvlm import *

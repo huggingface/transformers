@@ -38,9 +38,8 @@ from ...masking_utils import create_bidirectional_mask, create_causal_mask
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPast, BaseModelOutputWithPooling
 from ...modeling_utils import PreTrainedModel
 from ...models.qwen2_vl.image_processing_pil_qwen2_vl import Qwen2VLImageProcessorPil
-from ...models.qwen2_vl.image_processing_qwen2_vl import Qwen2VLImageProcessor
+from ...models.qwen2_vl.image_processing_qwen2_vl import Qwen2VLImageProcessor, Qwen2VLImageProcessorKwargs
 from ...processing_utils import (
-    ImagesKwargs,
     ProcessingKwargs,
     ProcessorMixin,
     Unpack,
@@ -123,7 +122,7 @@ def smart_resize(
     return h_bar, w_bar
 
 
-class PaddleOCRVLImageProcessorKwargs(ImagesKwargs, total=False):
+class PaddleOCRVLImageProcessorKwargs(Qwen2VLImageProcessorKwargs):
     r"""
     patch_size (`int`, *optional*, defaults to 14):
         The spatial patch size of the vision encoder.
@@ -132,12 +131,6 @@ class PaddleOCRVLImageProcessorKwargs(ImagesKwargs, total=False):
     merge_size (`int`, *optional*, defaults to 2):
         The merge size of the vision encoder to llm encoder.
     """
-
-    min_pixels: int
-    max_pixels: int
-    patch_size: int
-    temporal_patch_size: int
-    merge_size: int
 
 
 class PaddleOCRVLImageProcessorPil(Qwen2VLImageProcessorPil):
