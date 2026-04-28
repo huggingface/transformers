@@ -32,6 +32,8 @@ class MiniCPMV4_6VisionConfig(PreTrainedConfig):
     r"""
     insert_layer_id (`int`, *optional*, defaults to 6):
         Vision encoder layer index after which the window-attention merger is applied.
+    window_kernel_size (`tuple[int, int]`, *optional*, defaults to `(2, 2)`):
+        Window size `(h, w)` for the intermediate window-attention merger.
     """
 
     model_type = "minicpmv4_6_vision"
@@ -48,6 +50,15 @@ class MiniCPMV4_6VisionConfig(PreTrainedConfig):
     layer_norm_eps: float = 1e-6
     attention_dropout: float | int = 0.0
     insert_layer_id: int = 6
+    window_kernel_size: tuple[int, int] | list[int] = (2, 2)
+
+    @property
+    def window_hidden_size(self) -> int:
+        return self.hidden_size * self.window_kernel_size[0] * self.window_kernel_size[1]
+
+    @property
+    def window_intermediate_size(self) -> int:
+        return self.intermediate_size * self.window_kernel_size[0] * self.window_kernel_size[1]
 
 
 @auto_docstring(checkpoint="openbmb/MiniCPM-V-4.6")

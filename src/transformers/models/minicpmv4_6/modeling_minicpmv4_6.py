@@ -27,7 +27,7 @@ import torch.nn.functional as F
 from torch import nn
 
 from ... import initialization as init
-from ...activations import ACT2FN
+from ...activations import ACT2FN, gelu_pytorch_tanh
 from ...generation import GenerationMixin
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import (
@@ -192,7 +192,7 @@ def eager_attention_forward(
 
 
 class MiniCPMV4_6VisionAttention(nn.Module):
-    """NaViT variant: supports packed variable-length attention via cu_seqlens/max_seqlens."""
+    """Multi-headed attention from 'Attention Is All You Need' paper"""
 
     def __init__(self, config):
         super().__init__()
@@ -315,20 +315,17 @@ class MiniCPMV4_6VisionEncoder(nn.Module):
 class MiniCPMV4_6ViTWindowAttentionMerger(nn.Module):
     def __init__(self, config: MiniCPMV4_6VisionConfig):
         super().__init__()
-        self.window_kernel_size = (2, 2)
+        self.window_kernel_size = tuple(config.window_kernel_size)
         self.embed_dim = config.hidden_size
 
         self.self_attn = MiniCPMV4_6VisionAttention(config)
 
         self.layer_norm1 = nn.LayerNorm(self.embed_dim, eps=config.layer_norm_eps)
 
-        hidden_4x = self.embed_dim * self.window_kernel_size[0] * self.window_kernel_size[1]
-        inter_4x = config.intermediate_size * self.window_kernel_size[0] * self.window_kernel_size[1]
-
-        self.pre_norm = nn.LayerNorm(hidden_4x, eps=config.layer_norm_eps)
-        self.linear_1 = nn.Linear(hidden_4x, inter_4x, bias=True)
-        self.act = ACT2FN["gelu_pytorch_tanh"]
-        self.linear_2 = nn.Linear(inter_4x, self.embed_dim, bias=True)
+        self.pre_norm = nn.LayerNorm(config.window_hidden_size, eps=config.layer_norm_eps)
+        self.linear_1 = nn.Linear(config.window_hidden_size, config.window_intermediate_size, bias=True)
+        self.act = gelu_pytorch_tanh
+        self.linear_2 = nn.Linear(config.window_intermediate_size, self.embed_dim, bias=True)
 
     def _init_weights(self):
         """Block-diagonal normal init: preserves the structural prior that each
@@ -578,12 +575,9 @@ class MiniCPMV4_6Merger(nn.Module):
         hidden_size = config.vision_config.hidden_size
         llm_embed_dim = config.text_config.hidden_size
         # Downsample `self.merger_times - 1` times and finally apply projection into LLM space
-        self.mlp = nn.ModuleList(
-            [
-                MiniCPMV4_6DownsampleMLP(hidden_size, llm_embed_dim if i == self.merger_times - 1 else hidden_size)
-                for i in range(self.merger_times)
-            ]
-        )
+        mlps = [MiniCPMV4_6DownsampleMLP(hidden_size, hidden_size) for _ in range(self.merger_times - 1)]
+        mlps.append(MiniCPMV4_6DownsampleMLP(hidden_size, llm_embed_dim))
+        self.mlp = nn.ModuleList(mlps)
 
     def forward(
         self,
