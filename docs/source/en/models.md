@@ -26,7 +26,7 @@ Call [`~PreTrainedModel.from_pretrained`] to download and load a model's weights
 ```py
 from transformers import AutoModelForCausalLM
 
-model = AutoModelForCausalLM.from_pretrained("meta-llama/Llama-2-7b-hf", dtype="auto", device_map="auto")
+model = AutoModelForCausalLM.from_pretrained("meta-llama/Llama-2-7b-hf", device_map="auto")
 ```
 
 This guide explains how models are loaded, the different ways you can load a model, how to overcome memory issues for really big models, and how to load custom models.
