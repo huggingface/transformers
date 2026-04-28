@@ -734,7 +734,14 @@ def apply_tensor_parallel(model, tp_mesh, tp_plan):
         if style_value is None:
             continue
 
-        if isinstance(style_value, TPStyle):
+        if isinstance(style_value, str):
+            if style_value not in ALL_PARALLEL_STYLES:
+                raise ValueError(
+                    f"Unknown TP style {style_value!r} for module {name!r}. "
+                    f"Valid styles: {sorted(ALL_PARALLEL_STYLES)}"
+                )
+            parallelize_plan[name] = ALL_PARALLEL_STYLES[style_value]
+        elif isinstance(style_value, TPStyle):
             dtensor_style = style_value.to_dtensor_style()
             parallelize_plan[name] = dtensor_style
             # For MoE modules, attach the per-parameter shard plan from TPStyle
@@ -746,8 +753,8 @@ def apply_tensor_parallel(model, tp_mesh, tp_plan):
         else:
             raise TypeError(
                 f"Unsupported plan value for '{name}': {style_value!r} (type {type(style_value).__name__}). "
-                f"TP plan values must be TPStyle instances or ParallelStyle instances, not strings. "
-                f"Migrate string plan values to TPStyle (e.g., 'colwise' -> TPStyle('colwise', 'none'))."
+                f"TP plan values must be strings (looked up in ALL_PARALLEL_STYLES), TPStyle, "
+                f"or ParallelStyle instances."
             )
 
     parallelize_module(model, tp_mesh, parallelize_plan)
@@ -778,7 +785,10 @@ def apply_tensor_parallel(model, tp_mesh, tp_plan):
     # loss_parallel patches F.cross_entropy to work with Shard(-1) logits.
     # It must be active during both forward and backward, so we enable it
     # once rather than as a context manager.
-    has_loss_parallel = any(isinstance(v, TPStyle) and v.comm == "loss_parallel" for v in tp_plan.values())
+    has_loss_parallel = any(
+        v == "colwise_loss_parallel" or (isinstance(v, TPStyle) and v.comm == "loss_parallel")
+        for v in tp_plan.values()
+    )
     if has_loss_parallel:
         from torch.distributed.tensor.parallel import loss_parallel
 
