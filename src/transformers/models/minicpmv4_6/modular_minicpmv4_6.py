@@ -351,7 +351,6 @@ class MiniCPMV4_6ViTWindowAttentionMerger(nn.Module):
         hidden_states: torch.Tensor,
         target_sizes: torch.IntTensor,
         cu_seqlens: torch.Tensor | None = None,
-        max_seqlen: torch.Tensor | None = None,
     ):
         residual = hidden_states
         hidden_states = self.layer_norm1(hidden_states)
@@ -469,12 +468,7 @@ class MiniCPMV4_6VisionModel(MiniCPMV4_6VisionPreTrainedModel):
             for layer_index, encoder_layer in enumerate(self.encoder.layers):
                 hidden_states = encoder_layer(hidden_states, **attn_kwargs)
                 if layer_index == insert_layer_id:
-                    hidden_states = self.vit_merger(
-                        hidden_states,
-                        target_sizes,
-                        cu_seqlens,
-                        max_seqlens,
-                    )
+                    hidden_states = self.vit_merger(hidden_states, target_sizes, cu_seqlens)
 
                     # NOTE: Downsampled hidden states, and therefore other kwargs should also!
                     attn_kwargs, target_sizes = self.get_downsampled_inputs(
