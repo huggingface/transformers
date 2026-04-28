@@ -13,6 +13,7 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
+*This model was released on 2025-09-16 and added to Hugging Face Transformers on 2026-04-28.*
 
 <div style="float: right;">
     <div class="flex flex-wrap space-x-1">
@@ -206,4 +207,4 @@ If you already have the rendered prompt string, you can call `processor(text=...
 ## MiniCPMV4_6VideoProcessor
 
 [[autodoc]] MiniCPMV4_6VideoProcessor
-    - extract_frames
+    - preprocess
