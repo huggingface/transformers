@@ -76,23 +76,7 @@ class ExaoneMoeConfig(PreTrainedConfig):
         "layers.*.mlp.down_proj": TPStyle("rowwise", "allreduce"),
     }
 
-    base_model_sp_plan = {
-        "embed_tokens": TPStyle("vocab", "reduce_scatter"),
-        "layers.*.input_layernorm": TPStyle("activation", "none"),
-        "layers.*.self_attn": TPStyle("module", "allgather", input_key="hidden_states"),
-        "layers.*.self_attn.q_proj": TPStyle("colwise", "none"),
-        "layers.*.self_attn.k_proj": TPStyle("colwise", "none"),
-        "layers.*.self_attn.v_proj": TPStyle("colwise", "none"),
-        "layers.*.self_attn.q_norm": TPStyle("activation", "none", sequence_dim=2),
-        "layers.*.self_attn.k_norm": TPStyle("activation", "none", sequence_dim=2),
-        "layers.*.self_attn.o_proj": TPStyle("rowwise", "reduce_scatter"),
-        "layers.*.post_attention_layernorm": TPStyle("activation", "none"),
-        "layers.*.mlp": TPStyle("module", "allgather"),
-        "layers.*.mlp.gate_proj": TPStyle("colwise", "none"),
-        "layers.*.mlp.up_proj": TPStyle("colwise", "none"),
-        "layers.*.mlp.down_proj": TPStyle("rowwise", "reduce_scatter"),
-        "norm": TPStyle("activation", "none"),
-    }
+    base_model_sp_plan = None
     base_model_pp_plan = {
         "embed_tokens": (["input_ids"], ["inputs_embeds"]),
         "layers": (["hidden_states", "attention_mask"], ["hidden_states"]),
@@ -146,14 +130,6 @@ class ExaoneMoeConfig(PreTrainedConfig):
             ]
 
         super().__post_init__(**kwargs)
-
-        # Dense layers can keep the Exaone4 MLP sharding, but sparse MoE blocks
-        # need to split their replicated output back to the sequence shard.
-        self.base_model_sp_plan = self.base_model_sp_plan.copy()
-        for layer_idx, mlp_layer_type in enumerate(self.mlp_layer_types):
-            self.base_model_sp_plan[f"layers.{layer_idx}.mlp"] = TPStyle(
-                "module", "allgather" if mlp_layer_type == "dense" else "allgather_split"
-            )
 
 
 __all__ = ["ExaoneMoeConfig"]

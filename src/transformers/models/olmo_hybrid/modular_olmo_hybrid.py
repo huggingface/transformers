@@ -137,22 +137,7 @@ class OlmoHybridConfig(LlamaConfig):
         "layers.*.mlp.up_proj": TPStyle("colwise", "none"),
         "layers.*.mlp.down_proj": TPStyle("rowwise", "allreduce"),
     }
-    base_model_sp_plan = {
-        "embed_tokens": TPStyle("vocab", "reduce_scatter"),
-        "layers.*.input_layernorm": TPStyle("activation", "none"),
-        "layers.*.self_attn": TPStyle("module", "allgather", input_key="hidden_states"),
-        "layers.*.self_attn.q_proj": TPStyle("colwise", "allgather"),
-        "layers.*.self_attn.k_proj": TPStyle("colwise", "allgather"),
-        "layers.*.self_attn.v_proj": TPStyle("colwise", "allgather"),
-        "layers.*.self_attn.o_proj": TPStyle("vocab", "reduce_scatter"),
-        "layers.*.linear_attn": TPStyle("module", "allgather_split", input_key="hidden_states"),
-        "layers.*.post_attention_layernorm": TPStyle("activation", "none"),
-        "layers.*.mlp": TPStyle("module", "allgather"),
-        "layers.*.mlp.gate_proj": TPStyle("colwise", "none"),
-        "layers.*.mlp.up_proj": TPStyle("colwise", "none"),
-        "layers.*.mlp.down_proj": TPStyle("rowwise", "reduce_scatter"),
-        "norm": TPStyle("activation", "none"),
-    }
+    base_model_sp_plan = None
 
     vocab_size: int = 100352
     hidden_size: int = 3840
