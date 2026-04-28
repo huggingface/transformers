@@ -212,14 +212,16 @@ def prepare_padding_mask(attention_mask: torch.Tensor | None, kv_length: int, kv
     return local_padding_mask
 
 
-def maybe_pad_block_sequence_ids(block_sequence_ids: torch.Tensor, kv_length: int) -> torch.Tensor:
+def maybe_pad_block_sequence_ids(
+    block_sequence_ids: torch.Tensor, attention_mask: torch.Tensor | None, kv_length: int, kv_offset: int
+) -> torch.Tensor:
     """
     Pads the `block_sequence_ids` in case the total length is less than `kv_length`.
-    Usually that happens with `StaticCache` generation. Pads to the right with `-1`.
+    Usually that happens with `StaticCache` generation or generating without cache.
+    Pads to the right with `-1`.
     """
-    if block_sequence_ids.shape[1] < kv_length:
-        to_pad = kv_length - block_sequence_ids.shape[1]
-        block_sequence_ids = F.pad(block_sequence_ids, pad=(0, to_pad), value=-1)
+    if (padding_length := kv_length + kv_offset - attention_mask.shape[-1]) > 0:
+        block_sequence_ids = F.pad(block_sequence_ids, pad=(0, padding_length), value=-1)
     return block_sequence_ids
 
 
@@ -1013,7 +1015,7 @@ def create_causal_mask(
         mask_factory_function = and_masks(mask_factory_function, packed_sequence_mask_function(packed_sequence_mask))
         allow_is_causal_skip = False
     if block_sequence_ids is not None:
-        block_sequence_ids = maybe_pad_block_sequence_ids(block_sequence_ids, kv_length=kv_length)
+        block_sequence_ids = maybe_pad_block_sequence_ids(block_sequence_ids, attention_mask, kv_length, kv_offset)
         mask_factory_function = or_masks(mask_factory_function, blockwise_overlay(block_sequence_ids))
         allow_is_causal_skip = False
 
@@ -1232,7 +1234,7 @@ def create_sliding_window_causal_mask(
         mask_factory_function = and_masks(mask_factory_function, packed_sequence_mask_function(packed_sequence_mask))
         allow_is_causal_skip = False
     if block_sequence_ids is not None:
-        block_sequence_ids = maybe_pad_block_sequence_ids(block_sequence_ids, kv_length=kv_length)
+        block_sequence_ids = maybe_pad_block_sequence_ids(block_sequence_ids, attention_mask, kv_length, kv_offset)
         mask_factory_function = or_masks(mask_factory_function, blockwise_overlay(block_sequence_ids))
         allow_is_causal_skip = False
 
