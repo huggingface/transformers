@@ -1988,13 +1988,17 @@ class _TestReasoningBase:
 
     def test_chat_non_streaming(self):
         """Chat completions: non-streaming surfaces ``reasoning_content`` and strips delimiters."""
-        msg = self.client.chat.completions.create(
-            model=self.MODEL,
-            messages=[{"role": "user", "content": self.USER_PROMPT}],
-            stream=False,
-            max_tokens=self.MAX_TOKENS,
-            temperature=0.0,
-        ).choices[0].message
+        msg = (
+            self.client.chat.completions.create(
+                model=self.MODEL,
+                messages=[{"role": "user", "content": self.USER_PROMPT}],
+                stream=False,
+                max_tokens=self.MAX_TOKENS,
+                temperature=0.0,
+            )
+            .choices[0]
+            .message
+        )
         reasoning = self._reasoning_field(msg)
         self.assertIn(self.EXPECTED_ANSWER, reasoning or "", f"answer missing from reasoning: {reasoning!r}")
         self.assertIn(self.EXPECTED_ANSWER, msg.content or "", f"answer missing from content: {msg.content!r}")
@@ -2022,13 +2026,17 @@ class _TestReasoningBase:
 
     def test_chat_multi_turn_round_trips_reasoning(self):
         """Chat completions: reasoning_content from a prior turn round-trips through input."""
-        first = self.client.chat.completions.create(
-            model=self.MODEL,
-            messages=[{"role": "user", "content": self.USER_PROMPT}],
-            stream=False,
-            max_tokens=self.MAX_TOKENS,
-            temperature=0.0,
-        ).choices[0].message
+        first = (
+            self.client.chat.completions.create(
+                model=self.MODEL,
+                messages=[{"role": "user", "content": self.USER_PROMPT}],
+                stream=False,
+                max_tokens=self.MAX_TOKENS,
+                temperature=0.0,
+            )
+            .choices[0]
+            .message
+        )
         reasoning = self._reasoning_field(first)
         self.assertTrue(reasoning)
         second = self.client.chat.completions.create(

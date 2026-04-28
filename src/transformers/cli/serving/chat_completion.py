@@ -323,7 +323,7 @@ class ChatCompletionHandler(BaseHandler):
                     for i, tc in enumerate(parsed)
                 ]
 
-        reasoning_content = None 
+        reasoning_content = None
         if reasoning_config is not None:
             content, reasoning_content = parse_reasoning(processor, generated_ids, content, reasoning_config)
 

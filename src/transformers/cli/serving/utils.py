@@ -19,7 +19,6 @@ import asyncio
 import copy
 import enum
 import json
-import re
 import threading
 from abc import ABC, abstractmethod
 from collections.abc import Callable
@@ -267,6 +266,7 @@ def _starts_in_thinking(input_ids, start_ids: list[int]) -> bool:
             if input_ids[end - n : end] == start_ids:
                 return True
     return False
+
 
 class DownloadAggregator:
     """Aggregates byte-progress across multiple concurrent download tqdm bars.
