@@ -20,6 +20,7 @@ from dataclasses import dataclass
 from typing import Literal, abstractmethod
 
 from ..utils import logging
+from ..utils.generic import GeneralInterface
 from ..utils.import_utils import is_torch_available, is_torch_greater_or_equal
 
 
@@ -443,24 +444,26 @@ _STRING_TO_PLACEMENT = {
 }
 
 
-class _AllReduceBackward(torch.autograd.Function):
-    """Identity forward, allreduce-sum backward.
+if is_torch_available() and is_torch_greater_or_equal("2.5"):
 
-    Used for MoE routing weights: the forward value is replicated (same on all
-    ranks), but the backward gradient is partial (each rank has 1/tp_size from
-    its expert shard). We need to sum the partial gradients without dividing by
-    world_size, which is what DTensor's ``Replicate`` backward does incorrectly.
-    """
+    class _AllReduceBackward(torch.autograd.Function):
+        """Identity forward, allreduce-sum backward.
 
-    @staticmethod
-    def forward(ctx, x, process_group):
-        ctx.process_group = process_group
-        return x
+        Used for MoE routing weights: the forward value is replicated (same on all
+        ranks), but the backward gradient is partial (each rank has 1/tp_size from
+        its expert shard). We need to sum the partial gradients without dividing by
+        world_size, which is what DTensor's ``Replicate`` backward does incorrectly.
+        """
 
-    @staticmethod
-    def backward(ctx, grad):
-        dist.all_reduce(grad, group=ctx.process_group)
-        return grad, None
+        @staticmethod
+        def forward(ctx, x, process_group):
+            ctx.process_group = process_group
+            return x
+
+        @staticmethod
+        def backward(ctx, grad):
+            dist.all_reduce(grad, group=ctx.process_group)
+            return grad, None
 
 
 class MoEExpertsParallel(ParallelStyle):
@@ -480,10 +483,10 @@ class MoEExpertsParallel(ParallelStyle):
        contributed); all-reduce to get the complete hidden state.
     """
 
-    def __init__(self, output_layouts=None):
+    def __init__(self, output_layouts=None, shard_plan: dict[str, str] | None = None):
         super().__init__()
         self.output_layouts = output_layouts or Replicate()
-        self._moe_shard_plan: dict[str, str] = {}
+        self._moe_shard_plan: dict[str, str] = shard_plan or {}
 
     @staticmethod
     def _partition_fn(name, module, device_mesh, shard_plan):
@@ -641,6 +644,58 @@ class TPStyle:
         if self.comm == "none":
             return self.kind
         return f"{self.kind}_{self.comm}"
+
+
+class ParallelInterface(GeneralInterface):
+    """Registry of named TP styles. Configs and modeling files reference these by string name.
+
+    Adding a new entry here is the supported way to introduce a new TP style.
+    Users can also override or extend at runtime via ``ALL_PARALLEL_STYLES["my_style"] = ...``.
+
+    Naming convention: ``{kind}[_{comm}][_{extra}]``. The ``_{comm}`` suffix is dropped only when
+    comm is ``"none"`` (no collective). All entries are eager instances; the dict literal lives
+    behind a torch-availability guard so this module remains importable without torch.
+    """
+
+    _global_mapping = (
+        {
+            # Column-parallel
+            "colwise": ColwiseParallel(input_layouts=Replicate(), output_layouts=Shard(-1)),
+            "colwise_allgather": ColwiseParallel(input_layouts=Replicate(), output_layouts=Replicate()),
+            "colwise_loss_parallel": ColwiseParallel(
+                input_layouts=Shard(1), output_layouts=Shard(-1), use_local_output=False
+            ),
+            "packed_colwise": PackedColwiseParallel(input_layouts=Replicate()),
+            # Row-parallel
+            "rowwise_allreduce": RowwiseParallel(input_layouts=Shard(-1), output_layouts=Replicate()),
+            "rowwise_reduce_scatter": RowwiseParallel(input_layouts=Shard(-1), output_layouts=Shard(1)),
+            # Vocab / embedding (rowwise sharding on vocab dim)
+            "vocab_allreduce": RowwiseParallel(input_layouts=Replicate(), output_layouts=Replicate()),
+            "vocab_reduce_scatter": RowwiseParallel(input_layouts=Replicate(), output_layouts=Shard(1)),
+            # Activation / norm (sequence-parallel passthrough)
+            "activation": SequenceParallel(),
+            "activation_seq_dim_2": SequenceParallel(sequence_dim=2),
+            # Module-level prepare-input
+            "module_allgather": PrepareModuleInput(
+                input_layouts=(Shard(1),), desired_input_layouts=(Replicate(),)
+            ),
+            "module_allgather_hidden_states": PrepareModuleInput(
+                input_kwarg_layouts={"hidden_states": Shard(1)},
+                desired_input_kwarg_layouts={"hidden_states": Replicate()},
+            ),
+            "module_allgather_split": PrepareModuleInputOutput(),
+            # MoE — canonical shard_plan baked in (only variant in use across configs)
+            "moe_experts_allreduce": MoEExpertsParallel(
+                output_layouts=Replicate(),
+                shard_plan={"gate_up_proj": "packed_colwise", "down_proj": "rowwise"},
+            ),
+        }
+        if is_torch_available() and is_torch_greater_or_equal("2.5") and _torch_distributed_available
+        else {}
+    )
+
+
+ALL_PARALLEL_STYLES: ParallelInterface = ParallelInterface()
 
 
 def apply_tensor_parallel(model, tp_mesh, tp_plan):

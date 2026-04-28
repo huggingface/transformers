@@ -161,6 +161,7 @@ else:
     ]
 
 _import_structure["tensor_parallel"] = [
+    "ALL_PARALLEL_STYLES",
     "TPStyle",
     "apply_tensor_parallel",
     "convert_strided_to_shard",
@@ -299,6 +300,7 @@ if TYPE_CHECKING:
     from .sinq import SinqDeserialize, SinqQuantize
     from .spqr import replace_with_spqr_linear
     from .tensor_parallel import (
+        ALL_PARALLEL_STYLES,
         TPStyle,
         apply_tensor_parallel,
         convert_strided_to_shard,
