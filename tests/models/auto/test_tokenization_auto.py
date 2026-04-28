@@ -765,3 +765,17 @@ class NopConfig(PreTrainedConfig):
                 revision="f8d333a098d19b4fd9a8b18f94170487ad3f821d",
             )
             self.assertEqual(tokenizer.__class__.__name__, "NllbTokenizer")
+
+    @require_tokenizers
+    def test_models_with_incorrect_hub_tokenizer_class_use_tokenizers_backend(self):
+        """Regression test for https://github.com/huggingface/transformers/issues/45488.
+
+        DeepSeek-V3/R1 declare `tokenizer_class: LlamaTokenizerFast` in `tokenizer_config.json`
+        but ship a ByteLevel `tokenizer.json`. `LlamaTokenizerFast.__init__` overwrites the
+        pre-tokenizer with `Metaspace`, dropping all spaces from round-trip. The
+        `MODELS_WITH_INCORRECT_HUB_TOKENIZER_CLASS` override pins these model types to
+        `TokenizersBackend`; the dispatch in `AutoTokenizer.from_pretrained` must honor it.
+        """
+        tokenizer = AutoTokenizer.from_pretrained("deepseek-ai/DeepSeek-R1")
+        self.assertEqual(tokenizer.__class__.__name__, "TokenizersBackend")
+        self.assertEqual(tokenizer.decode(tokenizer.encode("hello world", add_special_tokens=False)), "hello world")
