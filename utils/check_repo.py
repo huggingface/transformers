@@ -112,7 +112,7 @@ PRIVATE_MODELS = [
     "Kosmos2_5VisionModel",
     "SmolVLMVisionTransformer",
     "MiniCPMV4_6VisionPreTrainedModel",
-    "MiniCPMV4_6VisionTransformer",
+    "MiniCPMV4_6VisionModel",
     "AriaTextForCausalLM",
     "AriaTextModel",
     "Phi4MultimodalAudioModel",
