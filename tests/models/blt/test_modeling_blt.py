@@ -277,7 +277,7 @@ class BltIntegrationTest(unittest.TestCase):
         with torch.no_grad():
             output = model(torch.tensor([input_ids]).to(torch_device))[0]
 
-        torch.testing.assert_close(EXPECTED_OUTPUT, output[0, :2, :30], rtol=1e-3, atol=1e-3)
+        torch.testing.assert_close(EXPECTED_OUTPUT, output[0, :2, :30].to(torch_device), rtol=1e-3, atol=1e-3)
 
     @slow
     @require_torch_bf16
@@ -333,7 +333,7 @@ class BltIntegrationTest(unittest.TestCase):
         with torch.no_grad():
             output = model(torch.tensor([input_ids]).to(torch_device))[0]
 
-        torch.testing.assert_close(EXPECTED_OUTPUT, output[0, :2, :30], rtol=1e-3, atol=1e-3)
+        torch.testing.assert_close(EXPECTED_OUTPUT, output[0, :2, :30].to(torch_device), rtol=1e-3, atol=1e-3)
 
     @slow
     def test_model_eager(self):
