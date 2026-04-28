@@ -15,8 +15,9 @@ from __future__ import annotations
 
 import contextlib
 import re
+from abc import ABC
 from dataclasses import dataclass
-from typing import ABC, Literal, abstractmethod
+from typing import Literal, abstractmethod
 
 from ..utils import logging
 from ..utils.import_utils import is_torch_available, is_torch_greater_or_equal
