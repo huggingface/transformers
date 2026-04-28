@@ -340,9 +340,6 @@ class Emu3Vision2TextModelTest(ModelTesterMixin, GenerationTesterMixin, Pipeline
         up_down_blocks = len(model_tester.vq_channel_multiplier) * model_tester.vq_num_res_blocks
         return up_down_blocks + 2 + model_tester.vq_num_res_blocks + 1
 
-    def test_reverse_loading_mapping(self):
-        super().test_reverse_loading_mapping(skip_base_model=True)
-
 
 @require_torch
 class Emu3IntegrationTest(unittest.TestCase):

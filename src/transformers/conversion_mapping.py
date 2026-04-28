@@ -78,6 +78,17 @@ _MODEL_TO_CONVERSION_PATTERN = {
     "siglip_text_model": "clip_text_model",
     "siglip2_text_model": "clip_text_model",
     "xclip_text_model": "clip_text_model",
+    "shield_gemma2": "llava",
+    "paligemma": "llava",
+    "aya_vision": "llava",
+    "got_ocr2": "llava",
+    "gemma3": "llava",
+    "internvl": "llava",
+    "vipllava": "llava",
+    "mistral3": "llava",
+    "pp_chart2table": "llava",
+    "llava_next_video": "llava_next",
+    "llava_onevision": "llava_next",
     # class-based mappings
     "PaliGemmaModel": "LlavaModel",
     "AyaVisionModel": "LlavaModel",
@@ -92,18 +103,7 @@ _MODEL_TO_CONVERSION_PATTERN = {
     "LlavaOnevisionModel": "LlavaModel",
     "FuyuModel": "LlavaModel",
     "MllamaModel": "LlavaModel",
-    "ShieldGemma2ForImageClassification": "LlavaForConditionalGeneration",
-    "PaliGemmaForConditionalGeneration": "LlavaForConditionalGeneration",
-    "AyaVisionForConditionalGeneration": "LlavaForConditionalGeneration",
-    "GotOcr2ForConditionalGeneration": "LlavaForConditionalGeneration",
-    "Gemma3ForConditionalGeneration": "LlavaForConditionalGeneration",
-    "Gemma3ForSequenceClassification": "LlavaForConditionalGeneration",
-    "InternVLForConditionalGeneration": "LlavaForConditionalGeneration",
-    "VipLlavaForConditionalGeneration": "LlavaForConditionalGeneration",
-    "Mistral3ForConditionalGeneration": "LlavaForConditionalGeneration",
-    "PPChart2TableForConditionalGeneration": "LlavaForConditionalGeneration",
-    "LlavaNextVideoForConditionalGeneration": "LlavaNextForConditionalGeneration",
-    "LlavaOnevisionForConditionalGeneration": "LlavaNextForConditionalGeneration",
+    "Qwen2_5_VLModel": "Qwen2VLModel",
 }
 
 
@@ -115,13 +115,13 @@ def _build_checkpoint_conversion_mapping():
         "LlavaModel": [
             WeightRenaming(source_patterns=r"^language_model.model", target_patterns="language_model"),
         ],
-        "LlavaForConditionalGeneration": [
+        "llava": [
             WeightRenaming(source_patterns=r"^language_model.lm_head", target_patterns="lm_head"),
             WeightRenaming(source_patterns=r"^language_model", target_patterns="model.language_model"),
             WeightRenaming(source_patterns=r"^vision_tower", target_patterns="model.vision_tower"),
             WeightRenaming(source_patterns=r"^multi_modal_projector", target_patterns="model.multi_modal_projector"),
         ],
-        "LlavaNextForConditionalGeneration": [
+        "llava_next": [
             WeightRenaming(source_patterns=r"^language_model.lm_head", target_patterns="lm_head"),
             WeightRenaming(source_patterns=r"^language_model", target_patterns="model.language_model"),
             WeightRenaming(source_patterns=r"^vision_tower", target_patterns="model.vision_tower"),
@@ -133,19 +133,19 @@ def _build_checkpoint_conversion_mapping():
         "VideoLlavaModel": [
             WeightRenaming(source_patterns=r"^language_model.model", target_patterns="language_model"),
         ],
-        "VideoLlavaForConditionalGeneration": [
+        "video_llava": [
             WeightRenaming(source_patterns=r"^language_model.lm_head", target_patterns="lm_head"),
             WeightRenaming(source_patterns=r"^language_model", target_patterns="model.language_model"),
             WeightRenaming(source_patterns=r"^image_tower", target_patterns="model.image_tower"),
             WeightRenaming(source_patterns=r"^video_tower", target_patterns="model.video_tower"),
             WeightRenaming(source_patterns=r"^multi_modal_projector", target_patterns="model.multi_modal_projector"),
         ],
-        "FuyuForCausalLM": [
+        "fuyu": [
             WeightRenaming(source_patterns=r"^language_model.lm_head", target_patterns="lm_head"),
             WeightRenaming(source_patterns=r"^language_model", target_patterns="model.language_model"),
             WeightRenaming(source_patterns=r"^vision_embed_tokens", target_patterns="model.vision_embed_tokens"),
         ],
-        "MllamaForConditionalGeneration": [
+        "mllama": [
             WeightRenaming(source_patterns=r"^language_model.lm_head", target_patterns="lm_head"),
             WeightRenaming(source_patterns=r"^language_model", target_patterns="model.language_model"),
             WeightRenaming(source_patterns=r"^vision_model", target_patterns="model.vision_model"),
@@ -154,7 +154,7 @@ def _build_checkpoint_conversion_mapping():
         "Emu3Model": [
             WeightRenaming(source_patterns=r"^text_model.model", target_patterns="text_model"),
         ],
-        "Emu3ForConditionalGeneration": [
+        "emu3": [
             WeightRenaming(source_patterns=r"^text_model.lm_head", target_patterns="lm_head"),
             WeightRenaming(source_patterns=r"^text_model", target_patterns="model.text_model"),
             WeightRenaming(source_patterns=r"^vqmodel", target_patterns="model.vqmodel"),
@@ -167,15 +167,12 @@ def _build_checkpoint_conversion_mapping():
                 target_patterns="model.language_model",
             ),
         ],
+        "Qwen2VLModel": [WeightRenaming(source_patterns=r"^model.", target_patterns="")],
         "qwen2_vl": [
+            WeightRenaming(source_patterns=r"^visual", target_patterns="model.visual"),
             WeightRenaming(
                 source_patterns=r"(?<!_)model(?!\.(language_model|visual))", target_patterns="model.language_model"
             ),
-            WeightRenaming(source_patterns=r"^visual", target_patterns="model.visual"),
-        ],
-        "colqwen2": [
-            PrefixChange(prefix_to_remove="model", model_prefix="vlm"),
-            WeightRenaming(source_patterns=r"vlm(?!\.(language_model|visual))", target_patterns="vlm.language_model"),
         ],
         "timm_wrapper": [PrefixChange(prefix_to_add="timm_model")],
         "pi0": [
@@ -690,7 +687,6 @@ def get_model_conversion_mapping(
     twice via different lookup paths.
     """
     # Lazy import to avoid circular import issues
-    from .modeling_utils import PreTrainedModel
 
     # note: this function is used in PEFT, so changing the API requires coordination
     weight_conversions = []
@@ -701,10 +697,12 @@ def get_model_conversion_mapping(
 
     seen_identifiers: set[str] = set()
 
-    for module_name, submodule in model.named_modules():
-        if not isinstance(submodule, PreTrainedModel):
-            continue
+    named_pretrained = getattr(model, "_named_pretrained_submodules", None)
+    if named_pretrained is None:
+        from .modeling_utils import PreTrainedModel
 
+        named_pretrained = [(name, m) for name, m in model.named_modules() if isinstance(m, PreTrainedModel)]
+    for module_name, submodule in named_pretrained:
         class_name = type(submodule).__name__
         model_type = getattr(submodule.config, "model_type", None)
 

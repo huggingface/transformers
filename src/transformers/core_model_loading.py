@@ -677,6 +677,27 @@ class WeightTransform:
         self.collected_tensors[source_pattern].append(future)
         self.layer_targets[target_key].add(source_key)
 
+    def _scoped_match(self, source_key: str) -> tuple[str | None, str, re.Match[str]] | None:
+        """
+        Apply ``scope_prefix`` stripping (if any), then match ``compiled_sources`` against the suffix.
+
+        Returns ``(prefix_dot, key_to_match, match_object)`` when a branch matches, where ``prefix_dot`` is ``None``
+        if ``scope_prefix`` is unset, else ``f"{scope_prefix}."``. Returns ``None`` when out of scope or unmatched.
+        Does not set ``_was_used``.
+        """
+        prefix_dot = None
+        key_to_match = source_key
+        if self.scope_prefix is not None:
+            prefix_dot = self.scope_prefix + "."
+            if not source_key.startswith(prefix_dot):
+                return None
+            key_to_match = source_key[len(prefix_dot) :]
+
+        match_object = self.compiled_sources.search(key_to_match)
+        if match_object is None:
+            return None
+        return (prefix_dot, key_to_match, match_object)
+
     def rename_source_key(self, source_key: str) -> tuple[str, str | None]:
         """
         Return a tuple (renamed_key, source_pattern_producing_the_match).
@@ -684,19 +705,11 @@ class WeightTransform:
         In case of a one-to-many transform, i.e. we have several target patterns, the matching source pattern
         will be replaced by the first of all the target patterns (they are then correctly expanded in the Operations).
         """
-        # When scoped, only process keys under the prefix; patterns operate on the bare suffix.
-        prefix_dot = None
-        key_to_match = source_key
-        if self.scope_prefix is not None:
-            prefix_dot = self.scope_prefix + "."
-            if not source_key.startswith(prefix_dot):
-                return source_key, None
-            key_to_match = source_key[len(prefix_dot) :]
-
-        # Try matching one of the alternation branches
-        match_object = self.compiled_sources.search(key_to_match)
-        if match_object is None:
+        matched = self._scoped_match(source_key)
+        if matched is None:
             return source_key, None
+
+        prefix_dot, key_to_match, match_object = matched
 
         # We have a match, so the Transform was used
         self._was_used = True
@@ -1128,13 +1141,29 @@ def rename_source_key(
     meta_state_dict: dict | None = None,
 ) -> tuple[str, str | None]:
     """
-    Rename a source key given all the weight transforms we have. Also takes care of adding/removing
-    the base model prefix during loading if necessary.
+    Rename a source key according to ``weight_transforms``, also handling the base model prefix.
 
-    Transforms are applied in their natural interleaved order (the order they appear in the list).
-    When a ``WeightConverter`` matches, it is recorded as the source pattern and remaining
-    ``WeightRenaming`` transforms continue to run, which is required when a scoped
-    ``WeightConverter`` must fire *before* a renaming that strips the scope prefix.
+    Transforms are applied in list order, interleaving ``WeightRenaming`` and ``WeightConverter``
+    instances as they appear.  The same list, reversed and with each transform individually
+    inverted, is used on the save path, so relative ordering is preserved in both directions.
+
+    At most one ``WeightConverter`` fires per key; subsequent converters are skipped.
+    ``WeightRenaming`` always runs, even after a converter has already fired.
+
+    Example (root rename followed by a scoped sub-model converter)::
+
+        transforms = [
+            WeightRenaming("^old_prefix", "model.vlm"),
+            WeightConverter("^q_proj", "qkv_proj", ...),  # scope_prefix="model.vlm"
+        ]
+        # Load:  "old_prefix.q_proj"
+        #   → WeightRenaming  → "model.vlm.q_proj"
+        #   → WeightConverter → "model.vlm.qkv_proj"
+        #
+        # Save (inverted list, each transform reversed):
+        #   "model.vlm.q_proj"
+        #   → rev(WeightConverter) → "model.vlm.q_proj"
+        #   → rev(WeightRenaming)  → "old_prefix.q_proj"
     """
     renamed_key = source_key
     source_pattern = None
