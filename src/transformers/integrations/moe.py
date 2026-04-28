@@ -23,6 +23,7 @@ from ..utils.import_utils import (
     is_torch_less_or_equal,
     is_torchdynamo_compiling,
 )
+from .sonicmoe import sonicmoe_experts_forward
 
 
 if is_torch_available():
@@ -30,6 +31,7 @@ if is_torch_available():
 
 
 logger = logging.get_logger(__name__)
+
 
 # Examples of experts class with its eager mm implementation
 # class Experts(torch.nn.Module):
@@ -458,6 +460,7 @@ class ExpertsInterface(GeneralInterface):
     """Interface for registering custom experts forward functions."""
 
     _global_mapping = {
+        "sonicmoe": sonicmoe_experts_forward,
         "batched_mm": batched_mm_experts_forward,
         "grouped_mm": grouped_mm_experts_forward,
     }
@@ -498,6 +501,7 @@ def use_experts_implementation(
     experts_class: type[torch.nn.Module] | None = None,
     *,
     experts_interface: ExpertsInterface = ALL_EXPERTS_FUNCTIONS,
+    is_concatenated: bool = True,
     is_transposed: bool = False,
     has_bias: bool = False,
     has_gate: bool = True,
@@ -509,10 +513,16 @@ def use_experts_implementation(
             The experts class to modify. If not provided, returns a decorator that can be applied to the class.
         experts_interface (`ExpertsInterface`, *optional*, defaults to `ALL_EXPERTS_FUNCTIONS`):
             The experts interface to use for dispatching the forward method.
+        is_concatenated (`bool`, *optional*, defaults to `True`):
+            Whether the expert weights are stored in concatenated layout [gate;up]
+            or interleaved layout [gate0, up0, gate1, up1, ...].
         is_transposed (`bool`, *optional*, defaults to `False`):
             Whether the expert weights are stored in transposed format.
         has_bias (`bool`, *optional*, defaults to `False`):
-            Whether the expert layers include bias terms.
+            Whether the expert layers include bias terms or not.
+        has_gate (`bool`, *optional*, defaults to `True`):
+            Whether the experts use a gating mechanism or not.
+            Whether it has gate_up_proj weights or just up_proj weights.
 
     Returns:
         `type[torch.nn.Module]`: The modified experts class.
@@ -529,6 +539,7 @@ def use_experts_implementation(
             self.has_gate = has_gate
             self.has_bias = has_bias
             self.is_transposed = is_transposed
+            self.is_concatenated = is_concatenated
 
         @wraps(original_forward)
         def forward(self, *args, **kwargs):
