@@ -30,6 +30,7 @@ if is_torch_available():
 @require_vision
 @require_torch
 @require_torchvision
+@unittest.skip("Model not yet released, tests will fail to download processor config")
 class MiniCPMV4_6ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     processor_class = MiniCPMV4_6Processor
     # TODO: the repo isn't yet there, we need to test it works before release and skip all tests right before merge
