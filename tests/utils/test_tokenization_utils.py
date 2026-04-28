@@ -203,14 +203,19 @@ class TokenizersBackendTest(unittest.TestCase):
     def test_clean_up_tokenization_spaces(self):
         tokenizer = GPT2TokenizerFast.from_pretrained("openai-community/gpt2")
 
-        text_with_artifacts = "Hello , how are you ? I 'm here ."
-        token_ids = tokenizer.encode(text_with_artifacts)
+        # GPT-2 is a BPE tokenizer — clean_up_tokenization is skipped because it
+        # was designed for WordPiece and is destructive for BPE (strips legitimate
+        # spaces before punctuation).
+        # Use text with spaces before punctuation that cleanup would strip if applied.
+        text = "x != y"
+        token_ids = tokenizer.encode(text)
 
         decoded_no_cleanup = tokenizer.decode(token_ids, clean_up_tokenization_spaces=False)
-        self.assertEqual(decoded_no_cleanup, "Hello , how are you ? I 'm here .")
+        self.assertEqual(decoded_no_cleanup, text)
 
+        # With BPE guard, cleanup=True also preserves the text
         decoded_with_cleanup = tokenizer.decode(token_ids, clean_up_tokenization_spaces=True)
-        self.assertEqual(decoded_with_cleanup, "Hello, how are you? I'm here.")
+        self.assertEqual(decoded_with_cleanup, text)
 
 
 class TrieTest(unittest.TestCase):

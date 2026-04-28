@@ -76,6 +76,7 @@ else:
             ("convnextv2", {"torchvision": "ConvNextImageProcessor", "pil": "ConvNextImageProcessorPil"}),
             ("cvt", {"torchvision": "ConvNextImageProcessor", "pil": "ConvNextImageProcessorPil"}),
             ("data2vec-vision", {"torchvision": "BeitImageProcessor", "pil": "BeitImageProcessorPil"}),
+            ("deimv2", {"torchvision": "RTDetrImageProcessor", "pil": "RTDetrImageProcessorPil"}),
             ("depth_anything", {"torchvision": "DPTImageProcessor", "pil": "DPTImageProcessorPil"}),
             ("dinat", {"torchvision": "ViTImageProcessor", "pil": "ViTImageProcessorPil"}),
             ("dinov2", {"torchvision": "BitImageProcessor", "pil": "BitImageProcessorPil"}),

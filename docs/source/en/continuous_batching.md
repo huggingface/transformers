@@ -185,6 +185,7 @@ By default, `num_blocks` and `max_batch_tokens` are inferred automatically from 
 | `scheduler` | | ✓ scheduling policy | ✓ TTFT |
 | CUDA graphs | ↑ graph storage | ✓ less dispatch overhead | ✓ |
 | Async batching | ↑ ~2× I/O buffers | ✓ overlaps CPU/GPU | |
+| CPU offloading | ↑ pinned CPU memory | ✓ skips some re-prefills | |
 | Prefix caching | ↓ shared KV blocks | ✓ skips redundant prefill | ✓ TTFT |
 | Paged attention | ↓ no fragmentation | ✓ dynamic batch membership | |
 | Sliding window | ↓ bounded KV per layer | | |
@@ -250,6 +251,18 @@ cb_config = ContinuousBatchingConfig(
     use_async_batching=True,
 )
 ```
+
+### CPU offloading
+
+CPU offloading copies evicted KV cache blocks to a pre-allocated pinned CPU buffer when the GPU KV cache is full. After cache space becomes available, the manager copies the blocks back to the GPU and resumes the request without recomputing its prompt and generated tokens.
+
+Set `cpu_offload_space` to the CPU swap space in GiB. The default value, `0.0`, disables CPU offloading.
+
+```py
+cb_config = ContinuousBatchingConfig(cpu_offload_space=8.0)
+```
+
+By default, `cpu_offload_space_safety_threshold=0.8` limits the requested space to 80% of available system RAM when `psutil` is installed. Set `cpu_offload_space=None` to size the swap pool from the safety threshold.
 
 ### Prefix caching
 

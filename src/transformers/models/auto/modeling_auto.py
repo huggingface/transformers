@@ -116,6 +116,7 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("deepseek_vl", "DeepseekVLModel"),
         ("deepseek_vl_hybrid", "DeepseekVLHybridModel"),
         ("deformable_detr", "DeformableDetrModel"),
+        ("deimv2", "Deimv2Model"),
         ("deit", "DeiTModel"),
         ("depth_pro", "DepthProModel"),
         ("detr", "DetrModel"),
@@ -244,6 +245,7 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("kosmos-2", "Kosmos2Model"),
         ("kosmos-2.5", "Kosmos2_5Model"),
         ("kyutai_speech_to_text", "KyutaiSpeechToTextModel"),
+        ("laguna", "LagunaModel"),
         ("lasr_ctc", "LasrForCTC"),
         ("lasr_encoder", "LasrEncoder"),
         ("layoutlm", "LayoutLMModel"),
@@ -284,6 +286,7 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("mgp-str", "MgpstrForSceneTextRecognition"),
         ("mimi", "MimiModel"),
         ("mimo_v2_flash", "MiMoV2FlashModel"),
+        ("minicpmv4_6", "MiniCPMV4_6Model"),
         ("minimax", "MiniMaxModel"),
         ("minimax_m2", "MiniMaxM2Model"),
         ("ministral", "MinistralModel"),
@@ -685,6 +688,7 @@ MODEL_FOR_CAUSAL_LM_MAPPING_NAMES = OrderedDict(
         ("jais2", "Jais2ForCausalLM"),
         ("jamba", "JambaForCausalLM"),
         ("jetmoe", "JetMoeForCausalLM"),
+        ("laguna", "LagunaForCausalLM"),
         ("lfm2", "Lfm2ForCausalLM"),
         ("lfm2_moe", "Lfm2MoeForCausalLM"),
         ("llama", "LlamaForCausalLM"),
@@ -1007,6 +1011,7 @@ MODEL_FOR_IMAGE_TEXT_TO_TEXT_MAPPING_NAMES = OrderedDict(
         ("llava_next", "LlavaNextForConditionalGeneration"),
         ("llava_next_video", "LlavaNextVideoForConditionalGeneration"),
         ("llava_onevision", "LlavaOnevisionForConditionalGeneration"),
+        ("minicpmv4_6", "MiniCPMV4_6ForConditionalGeneration"),
         ("mistral3", "Mistral3ForConditionalGeneration"),
         ("mistral4", "Mistral4ForCausalLM"),
         ("mllama", "MllamaForConditionalGeneration"),
@@ -1115,6 +1120,7 @@ MODEL_FOR_OBJECT_DETECTION_MAPPING_NAMES = OrderedDict(
         ("d_fine", "DFineForObjectDetection"),
         ("dab-detr", "DabDetrForObjectDetection"),
         ("deformable_detr", "DeformableDetrForObjectDetection"),
+        ("deimv2", "Deimv2ForObjectDetection"),
         ("detr", "DetrForObjectDetection"),
         ("lw_detr", "LwDetrForObjectDetection"),
         ("pp_doclayout_v2", "PPDocLayoutV2ForObjectDetection"),
@@ -2126,9 +2132,7 @@ class AutoModelForSemanticSegmentation(_BaseAutoModelClass):
     _model_mapping = MODEL_FOR_SEMANTIC_SEGMENTATION_MAPPING
 
 
-AutoModelForSemanticSegmentation = auto_class_update(
-    AutoModelForSemanticSegmentation, head_doc="semantic segmentation"
-)
+AutoModelForSemanticSegmentation = auto_class_update(AutoModelForSemanticSegmentation, head_doc="semantic segmentation")
 
 
 class AutoModelForTimeSeriesPrediction(_BaseAutoModelClass):
@@ -2153,9 +2157,7 @@ class AutoModelForInstanceSegmentation(_BaseAutoModelClass):
     _model_mapping = MODEL_FOR_INSTANCE_SEGMENTATION_MAPPING
 
 
-AutoModelForInstanceSegmentation = auto_class_update(
-    AutoModelForInstanceSegmentation, head_doc="instance segmentation"
-)
+AutoModelForInstanceSegmentation = auto_class_update(AutoModelForInstanceSegmentation, head_doc="instance segmentation")
 
 
 class AutoModelForObjectDetection(_BaseAutoModelClass):

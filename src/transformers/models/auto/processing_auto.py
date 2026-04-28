@@ -119,6 +119,7 @@ else:
             ("markuplm", "MarkupLMProcessor"),
             ("metaclip_2", "CLIPProcessor"),
             ("mgp-str", "MgpstrProcessor"),
+            ("minicpmv4_6", "MiniCPMV4_6Processor"),
             ("mistral3", "PixtralProcessor"),
             ("mllama", "MllamaProcessor"),
             ("mm-grounding-dino", "GroundingDinoProcessor"),
