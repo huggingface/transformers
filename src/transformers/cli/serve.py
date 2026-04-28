@@ -16,6 +16,8 @@ CLI entry point for `transformers serve`.
 """
 
 import asyncio
+import enum
+import json
 import threading
 from typing import Annotated
 
@@ -30,6 +32,12 @@ from .serving.utils import set_torch_seed
 logger = logging.get_logger(__name__)
 
 
+class ReasoningMode(str, enum.Enum):
+    ON = "on"
+    OFF = "off"
+    AUTO = "auto"
+
+
 class Serve:
     def __init__(
         self,
@@ -39,6 +47,32 @@ class Serve:
             bool,
             typer.Option(help="Enable continuous batching with paged attention. Configure with --cb-* flags."),
         ] = False,
+        attn_implementation: Annotated[
+            str | None, typer.Option(help="Attention implementation (e.g. flash_attention_2).")
+        ] = None,
+        compile: Annotated[bool, typer.Option(help="Enable torch.compile for faster inference.")] = False,
+        quantization: Annotated[
+            str | None, typer.Option(help="Quantization method: 'bnb-4bit' or 'bnb-8bit'.")
+        ] = None,
+        reasoning: Annotated[
+            ReasoningMode, typer.Option(help="Reasoning mode. 'auto' uses the chat template default.")
+        ] = ReasoningMode.AUTO,
+        chat_template_kwargs: Annotated[
+            str | None,
+            typer.Option(
+                help=(
+                    "Default JSON kwargs forwarded to apply_chat_template "
+                    "(e.g. '{\"enable_thinking\": true}'); per-request chat_template_kwargs override these."
+                )
+            ),
+        ] = None,
+        device: Annotated[str, typer.Option(help="Device for inference (e.g. 'auto', 'cuda:0', 'cpu').")] = "auto",
+        dtype: Annotated[str | None, typer.Option(help="Override model dtype. 'auto' derives from weights.")] = "auto",
+        trust_remote_code: Annotated[bool, typer.Option(help="Trust remote code when loading.")] = False,
+        model_timeout: Annotated[
+            int, typer.Option(help="Seconds before idle model is unloaded. Ignored when force_model is set.")
+        ] = 300,
+        # Continuous batching tuning
         cb_block_size: Annotated[
             int | None, typer.Option(help="KV cache block size in tokens for continuous batching.")
         ] = None,
@@ -54,19 +88,6 @@ class Serve:
         cb_use_cuda_graph: Annotated[
             bool | None, typer.Option(help="Enable CUDA graphs for continuous batching.")
         ] = None,
-        attn_implementation: Annotated[
-            str | None, typer.Option(help="Attention implementation (e.g. flash_attention_2).")
-        ] = None,
-        compile: Annotated[bool, typer.Option(help="Enable torch.compile for faster inference.")] = False,
-        quantization: Annotated[
-            str | None, typer.Option(help="Quantization method: 'bnb-4bit' or 'bnb-8bit'.")
-        ] = None,
-        device: Annotated[str, typer.Option(help="Device for inference (e.g. 'auto', 'cuda:0', 'cpu').")] = "auto",
-        dtype: Annotated[str | None, typer.Option(help="Override model dtype. 'auto' derives from weights.")] = "auto",
-        trust_remote_code: Annotated[bool, typer.Option(help="Trust remote code when loading.")] = False,
-        model_timeout: Annotated[
-            int, typer.Option(help="Seconds before idle model is unloaded. Ignored when force_model is set.")
-        ] = 300,
         # Server options
         host: Annotated[str, typer.Option(help="Server listen address.")] = "localhost",
         port: Annotated[int, typer.Option(help="Server listen port.")] = 8000,
@@ -126,14 +147,28 @@ class Serve:
             cb_config=cb_config,
         )
 
+        if chat_template_kwargs:
+            chat_template_kwargs = json.loads(chat_template_kwargs)
+            if not isinstance(chat_template_kwargs, dict):
+                raise typer.BadParameter("--chat-template-kwargs must be a JSON object")
+        else:
+            chat_template_kwargs = {}
+
+        if reasoning == ReasoningMode.ON:
+            chat_template_kwargs["enable_thinking"] = True
+        elif reasoning == ReasoningMode.OFF:
+            chat_template_kwargs["enable_thinking"] = False
+
         self._chat_handler = ChatCompletionHandler(
             model_manager=self._model_manager,
             generation_state=self._generation_state,
+            chat_template_kwargs=chat_template_kwargs,
         )
 
         self._response_handler = ResponseHandler(
             model_manager=self._model_manager,
             generation_state=self._generation_state,
+            chat_template_kwargs=chat_template_kwargs,
         )
 
         self._transcription_handler = TranscriptionHandler(self._model_manager, self._generation_state)

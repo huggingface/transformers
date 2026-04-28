@@ -40,8 +40,11 @@ from .utils import (
     BaseGenerateManager,
     BaseHandler,
     Modality,
+    ReasoningText,
     _StreamError,
+    get_reasoning_config,
     get_tool_call_config,
+    parse_reasoning,
     parse_tool_calls,
 )
 
@@ -53,6 +56,7 @@ if TYPE_CHECKING:
 class TransformersCompletionCreateParamsStreaming(CompletionCreateParamsStreaming, total=False):
     generation_config: str
     seed: int
+    chat_template_kwargs: dict
 
 
 # Fields accepted by the OpenAI schema but not yet supported.
@@ -118,10 +122,13 @@ class ChatCompletionHandler(BaseHandler):
             for msg in processor_inputs
             for c in (msg.get("content") if isinstance(msg.get("content"), list) else [])
         )
-        # Default to 32 frames for video (Gemma 4 default); some processors load all frames otherwise
-        chat_template_kwargs = {}
+        # Default to 32 frames for video (Gemma 4 default); some processors load all frames otherwise.
+        # Merge order (later wins): custom default -> server default → request-level kwargs.
+        chat_template_kwargs: dict = {}
         if has_video:
             chat_template_kwargs["num_frames"] = 32
+        chat_template_kwargs.update(self.chat_template_kwargs)
+        chat_template_kwargs.update(body.get("chat_template_kwargs", {}))
         inputs = processor.apply_chat_template(
             processor_inputs,
             add_generation_prompt=True,
@@ -141,6 +148,7 @@ class ChatCompletionHandler(BaseHandler):
             gen_manager.init_cb(model, gen_config)
 
         tool_config = get_tool_call_config(processor, model) if body.get("tools") else None
+        reasoning_config = get_reasoning_config(processor, model, inputs["input_ids"])
 
         streaming = body.get("stream")
         if streaming:
@@ -153,6 +161,7 @@ class ChatCompletionHandler(BaseHandler):
                 gen_config,
                 gen_manager=gen_manager,
                 tool_config=tool_config,
+                reasoning_config=reasoning_config,
             )
         else:
             return await self._non_streaming(
@@ -164,6 +173,7 @@ class ChatCompletionHandler(BaseHandler):
                 gen_config,
                 gen_manager=gen_manager,
                 tool_config=tool_config,
+                reasoning_config=reasoning_config,
             )
 
     # ----- streaming -----
@@ -178,6 +188,7 @@ class ChatCompletionHandler(BaseHandler):
         gen_config: "GenerationConfig",
         gen_manager: BaseGenerateManager,
         tool_config: dict | None = None,
+        reasoning_config: dict | None = None,
     ) -> StreamingResponse:
         """Stream tokens as SSE via DirectStreamer."""
         queue, streamer = gen_manager.generate_streaming(
@@ -187,6 +198,7 @@ class ChatCompletionHandler(BaseHandler):
             gen_config,
             request_id=request_id,
             tool_config=tool_config,
+            reasoning_config=reasoning_config,
         )
         input_ids = inputs["input_ids"]
         # CB returns plain lists, regular path returns tensors
@@ -216,7 +228,10 @@ class ChatCompletionHandler(BaseHandler):
                             yield "".join(sse_parts)
                             return
 
-                        sse_parts.append(self._build_chunk_sse(request_id, model=model_id, content=text))
+                        if isinstance(text, ReasoningText):
+                            sse_parts.append(self._build_chunk_sse(request_id, model=model_id, reasoning_content=text))
+                        else:
+                            sse_parts.append(self._build_chunk_sse(request_id, model=model_id, content=text))
 
                     if sse_parts:
                         yield "".join(sse_parts)
@@ -280,6 +295,7 @@ class ChatCompletionHandler(BaseHandler):
         gen_config: "GenerationConfig",
         gen_manager: BaseGenerateManager,
         tool_config: dict | None = None,
+        reasoning_config: dict | None = None,
     ) -> JSONResponse:
         """Run generation and return a JSONResponse."""
         content, input_len, generated_ids = await gen_manager.generate_non_streaming(
@@ -307,6 +323,10 @@ class ChatCompletionHandler(BaseHandler):
                     for i, tc in enumerate(parsed)
                 ]
 
+        reasoning_content = None 
+        if reasoning_config is not None:
+            content, reasoning_content = parse_reasoning(processor, generated_ids, content, reasoning_config)
+
         if tool_calls is not None:
             finish_reason = "tool_calls"
         elif hit_max:
@@ -322,6 +342,7 @@ class ChatCompletionHandler(BaseHandler):
                 finish_reason=finish_reason,
                 usage=usage,
                 tool_calls=tool_calls,
+                reasoning_content=reasoning_content,
             ),
             media_type="application/json",
         )
@@ -354,6 +375,7 @@ class ChatCompletionHandler(BaseHandler):
         finish_reason: str,
         usage: CompletionUsage | None = None,
         tool_calls: list[dict] | None = None,
+        reasoning_content: str | None = None,
     ) -> dict:
         """Build a non-streaming ChatCompletion response dict.
 
@@ -364,11 +386,14 @@ class ChatCompletionHandler(BaseHandler):
             finish_reason (`str`): Why generation stopped (``"stop"``, ``"length"``, ``"tool_calls"``).
             usage (`CompletionUsage`, *optional*): Token usage statistics.
             tool_calls (`list[dict]`, *optional*): Parsed tool calls, if any.
+            reasoning_content (`str`, *optional*): Chain-of-thought content extracted from the response.
 
         Returns:
             `dict`: Serialized ``ChatCompletion`` ready for JSON response.
         """
-        message = ChatCompletionMessage(content=content, role="assistant", tool_calls=tool_calls)
+        message = ChatCompletionMessage(
+            content=content, role="assistant", tool_calls=tool_calls, reasoning_content=reasoning_content
+        )
         result = ChatCompletion(
             id=request_id,
             created=int(time.time()),
@@ -394,6 +419,7 @@ class ChatCompletionHandler(BaseHandler):
         finish_reason: str | None = None,
         tool_calls: list | None = None,
         usage: CompletionUsage | None = None,
+        reasoning_content: str | None = None,
     ) -> str:
         """Build a streaming ``ChatCompletionChunk`` and format it as an SSE ``data:`` line.
 
@@ -405,6 +431,7 @@ class ChatCompletionHandler(BaseHandler):
             finish_reason (`str`, *optional*): Set on the final chunk.
             tool_calls (`list`, *optional*): Tool call deltas.
             usage (`CompletionUsage`, *optional*): Token usage (sent with the final chunk).
+            reasoning_content (`str`, *optional*): Reasoning/thinking delta (OpenAI-compatible extension).
 
         Returns:
             `str`: A formatted SSE event string.
@@ -415,7 +442,9 @@ class ChatCompletionHandler(BaseHandler):
             model=model,
             choices=[
                 ChoiceChunk(
-                    delta=ChoiceDelta(content=content, role=role, tool_calls=tool_calls),
+                    delta=ChoiceDelta(
+                        content=content, role=role, tool_calls=tool_calls, reasoning_content=reasoning_content
+                    ),
                     index=0,
                     finish_reason=finish_reason,
                 )

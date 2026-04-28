@@ -1958,6 +1958,185 @@ class TestToolCallGemma(_TestToolCallBase, unittest.TestCase):
     MODEL = "google/gemma-4-E2B-it"
 
 
+class _TestReasoningBase:
+    """Base class for reasoning integration tests. Subclasses set MODEL.
+
+    A single server is shared across all tests in a subclass via setUpClass.
+    """
+
+    MODEL: str
+    USER_PROMPT = "What is 17 * 23? Think briefly, then answer in one sentence."
+    EXPECTED_ANSWER = "391"
+    MAX_TOKENS = 512
+
+    @classmethod
+    def setUpClass(cls):
+        cls.serve, port = _start_serve()
+        cls.base_url = f"http://localhost:{port}"
+        cls.client = OpenAI(base_url=f"{cls.base_url}/v1", api_key="unused")
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.serve.kill_server()
+
+    @staticmethod
+    def _reasoning_field(obj):
+        """Return ``reasoning_content`` from a chat message or delta (handles model_extra)."""
+        return getattr(obj, "reasoning_content", None) or (obj.model_extra or {}).get("reasoning_content")
+
+    # ----- chat completions -----
+
+    def test_chat_non_streaming(self):
+        """Chat completions: non-streaming surfaces ``reasoning_content`` and strips delimiters."""
+        msg = self.client.chat.completions.create(
+            model=self.MODEL,
+            messages=[{"role": "user", "content": self.USER_PROMPT}],
+            stream=False,
+            max_tokens=self.MAX_TOKENS,
+            temperature=0.0,
+        ).choices[0].message
+        reasoning = self._reasoning_field(msg)
+        self.assertIn(self.EXPECTED_ANSWER, reasoning or "", f"answer missing from reasoning: {reasoning!r}")
+        self.assertIn(self.EXPECTED_ANSWER, msg.content or "", f"answer missing from content: {msg.content!r}")
+        self.assertNotIn("<think>", msg.content or "")
+        self.assertNotIn("<|channel>", msg.content or "")
+        self.assertNotIn(reasoning.strip()[:30], msg.content or "")
+
+    def test_chat_streaming(self):
+        """Chat completions: streaming emits ``reasoning_content`` deltas; content stays clean."""
+        chunks = list(
+            self.client.chat.completions.create(
+                model=self.MODEL,
+                messages=[{"role": "user", "content": self.USER_PROMPT}],
+                stream=True,
+                max_tokens=self.MAX_TOKENS,
+                temperature=0.0,
+            )
+        )
+        reasoning_text = "".join(self._reasoning_field(c.choices[0].delta) or "" for c in chunks)
+        self.assertIn(self.EXPECTED_ANSWER, reasoning_text, f"answer missing from reasoning: {reasoning_text!r}")
+        content = "".join(c.choices[0].delta.content or "" for c in chunks)
+        self.assertIn(self.EXPECTED_ANSWER, content, f"answer missing from content: {content!r}")
+        self.assertNotIn("<think>", content)
+        self.assertNotIn("<|channel>", content)
+
+    def test_chat_multi_turn_round_trips_reasoning(self):
+        """Chat completions: reasoning_content from a prior turn round-trips through input."""
+        first = self.client.chat.completions.create(
+            model=self.MODEL,
+            messages=[{"role": "user", "content": self.USER_PROMPT}],
+            stream=False,
+            max_tokens=self.MAX_TOKENS,
+            temperature=0.0,
+        ).choices[0].message
+        reasoning = self._reasoning_field(first)
+        self.assertTrue(reasoning)
+        second = self.client.chat.completions.create(
+            model=self.MODEL,
+            messages=[
+                {"role": "user", "content": self.USER_PROMPT},
+                {"role": "assistant", "content": first.content or "", "reasoning_content": reasoning},
+                {"role": "user", "content": "Now multiply that result by 2."},
+            ],
+            stream=False,
+            max_tokens=self.MAX_TOKENS,
+            temperature=0.0,
+        )
+        self.assertIsNotNone(second.choices[0].message.content)
+
+    # ----- responses -----
+
+    def test_response_non_streaming(self):
+        """Responses API: non-streaming includes a reasoning item before the message item."""
+        resp = self.client.responses.create(
+            model=self.MODEL,
+            input=self.USER_PROMPT,
+            stream=False,
+            max_output_tokens=self.MAX_TOKENS,
+            temperature=0.0,
+        )
+        types = [item.type for item in resp.output]
+        self.assertIn("reasoning", types, f"expected reasoning item, got types: {types}")
+        self.assertIn("message", types)
+        self.assertLess(types.index("reasoning"), types.index("message"))
+        reasoning_text = next(item for item in resp.output if item.type == "reasoning").content[0].text
+        self.assertIn(self.EXPECTED_ANSWER, reasoning_text, f"answer missing from reasoning: {reasoning_text!r}")
+        message_text = next(item for item in resp.output if item.type == "message").content[0].text
+        self.assertIn(self.EXPECTED_ANSWER, message_text, f"answer missing from message: {message_text!r}")
+        self.assertNotIn("<think>", message_text)
+        self.assertNotIn("<|channel>", message_text)
+
+    def test_response_streaming(self):
+        """Responses API: streaming emits reasoning_text events and a separate reasoning item."""
+        events = list(
+            self.client.responses.create(
+                model=self.MODEL,
+                input=self.USER_PROMPT,
+                stream=True,
+                max_output_tokens=self.MAX_TOKENS,
+                temperature=0.0,
+            )
+        )
+        added = [e for e in events if e.type == "response.output_item.added"]
+        self.assertGreaterEqual(len(added), 2)
+        self.assertEqual(added[0].item.type, "reasoning")
+        self.assertEqual(added[1].item.type, "message")
+        # Coherence: concat of reasoning_text.delta events == reasoning_text.done.text, and contains the answer.
+        reasoning_text = "".join(e.delta for e in events if e.type == "response.reasoning_text.delta")
+        done = next(e for e in events if e.type == "response.reasoning_text.done")
+        self.assertEqual(reasoning_text, done.text)
+        self.assertIn(self.EXPECTED_ANSWER, reasoning_text, f"answer missing from reasoning: {reasoning_text!r}")
+        content = "".join(e.delta for e in events if e.type == "response.output_text.delta")
+        self.assertIn(self.EXPECTED_ANSWER, content, f"answer missing from content: {content!r}")
+        self.assertNotIn("<think>", content)
+        self.assertNotIn("<|channel>", content)
+
+    def test_response_multi_turn_round_trips_reasoning(self):
+        """Responses API: ``reasoning`` items echoed back as input are accepted."""
+        first = self.client.responses.create(
+            model=self.MODEL,
+            input=self.USER_PROMPT,
+            stream=False,
+            max_output_tokens=self.MAX_TOKENS,
+            temperature=0.0,
+        )
+        reasoning_item = next((i for i in first.output if i.type == "reasoning"), None)
+        message_item = next((i for i in first.output if i.type == "message"), None)
+        self.assertIsNotNone(reasoning_item)
+        self.assertIsNotNone(message_item)
+        second = self.client.responses.create(
+            model=self.MODEL,
+            input=[
+                {"role": "user", "content": self.USER_PROMPT},
+                reasoning_item.model_dump(exclude_none=True),
+                {"role": "assistant", "content": message_item.content[0].text},
+                {"role": "user", "content": "Now multiply that result by 2."},
+            ],
+            stream=False,
+            max_output_tokens=self.MAX_TOKENS,
+            temperature=0.0,
+        )
+        self.assertEqual(second.status, "completed")
+
+
+@slow
+@require_serve
+@require_torch_accelerator
+class TestReasoningQwen(_TestReasoningBase, unittest.TestCase):
+    """Reasoning tests with Qwen3 (inline <think>...</think> tags)."""
+
+    MODEL = "Qwen/Qwen3-1.7B"
+
+
+@slow
+@require_serve
+@require_torch_accelerator
+class TestReasoningGemma(_TestReasoningBase, unittest.TestCase):
+    """Reasoning tests with Gemma 4 (response_schema-based thinking channel)."""
+
+    MODEL = "google/gemma-4-E2B-it"
+
+
 @slow
 @require_librosa
 @require_multipart

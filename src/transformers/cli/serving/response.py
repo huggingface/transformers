@@ -45,6 +45,9 @@ if is_serve_available():
         ResponseOutputItemDoneEvent,
         ResponseOutputMessage,
         ResponseOutputText,
+        ResponseReasoningItem,
+        ResponseReasoningTextDeltaEvent,
+        ResponseReasoningTextDoneEvent,
         ResponseTextDeltaEvent,
         ResponseTextDoneEvent,
     )
@@ -56,8 +59,11 @@ from .utils import (
     BaseGenerateManager,
     BaseHandler,
     Modality,
+    ReasoningText,
     _StreamError,
+    get_reasoning_config,
     get_tool_call_config,
+    parse_reasoning,
     parse_tool_calls,
 )
 
@@ -80,7 +86,6 @@ UNUSED_RESPONSE_FIELDS = {
     "max_tool_calls",
     "previous_response_id",
     "prompt",
-    "reasoning",
     "service_tier",
     "store",
     "text",
@@ -127,10 +132,13 @@ class ResponseHandler(BaseHandler):
             for c in (msg.get("content") if isinstance(msg.get("content"), list) else [])
         )
 
-        # Default to 32 frames for video (Gemma 4 default); some processors load all frames otherwise
-        chat_template_kwargs = {}
+        # Default to 32 frames for video (Gemma 4 default); some processors load all frames otherwise.
+        # Merge order (later wins): custom default -> server default → request-level kwargs.
+        chat_template_kwargs: dict = {}
         if has_video:
             chat_template_kwargs["num_frames"] = 32
+        chat_template_kwargs.update(self.chat_template_kwargs)
+        chat_template_kwargs.update(body.get("chat_template_kwargs") or {})
         # updates the flat tool structure to the one expected by the `apply_chat_template` method.
         tools = self._normalize_tools(body.get("tools"))
         inputs = processor.apply_chat_template(
@@ -151,6 +159,7 @@ class ResponseHandler(BaseHandler):
         if use_cb:
             gen_manager.init_cb(model, gen_config)
         tool_config = get_tool_call_config(processor, model) if body.get("tools") else None
+        reasoning_config = get_reasoning_config(processor, model, inputs["input_ids"])
 
         streaming = body.get("stream", True)
         if streaming:
@@ -164,6 +173,7 @@ class ResponseHandler(BaseHandler):
                 gen_config,
                 gen_manager=gen_manager,
                 tool_config=tool_config,
+                reasoning_config=reasoning_config,
             )
         else:
             return await self._non_streaming(
@@ -176,6 +186,7 @@ class ResponseHandler(BaseHandler):
                 gen_config,
                 gen_manager=gen_manager,
                 tool_config=tool_config,
+                reasoning_config=reasoning_config,
             )
 
     # ----- input conversion -----
@@ -247,16 +258,26 @@ class ResponseHandler(BaseHandler):
 
         Input items may be a mix of:
             - Messages (``EasyInputMessageParam`` with ``role``, or ``type: "message"``).
+            - ``reasoning`` — buffered and attached as ``reasoning_content`` to the next assistant message.
             - ``function_call`` — merged as ``tool_calls`` onto the preceding assistant message.
             - ``function_call_output`` — converted to ``role: "tool"`` messages.
         """
         messages = []
+        pending_reasoning: str | None = None
 
         for item in items:
             item_type = item.get("type")
 
+            if item_type == "reasoning":
+                pending_reasoning = "".join(c["text"] for c in item.get("content") or [])
+                continue
+
             if "role" in item:
-                messages.append({"role": item["role"], "content": item.get("content", "")})
+                msg = {"role": item["role"], "content": item.get("content", "")}
+                if pending_reasoning is not None and item["role"] == "assistant":
+                    msg["reasoning_content"] = pending_reasoning
+                    pending_reasoning = None
+                messages.append(msg)
 
             elif item_type == "function_call":
                 tc = {
@@ -295,6 +316,7 @@ class ResponseHandler(BaseHandler):
         gen_config: "GenerationConfig",
         gen_manager: BaseGenerateManager,
         tool_config: dict | None = None,
+        reasoning_config: dict | None = None,
     ) -> StreamingResponse:
         """Generate a streaming Responses API reply (SSE) using DirectStreamer."""
         queue, streamer = gen_manager.generate_streaming(
@@ -304,16 +326,17 @@ class ResponseHandler(BaseHandler):
             gen_config,
             request_id=request_id,
             tool_config=tool_config,
+            reasoning_config=reasoning_config,
         )
         input_ids = inputs["input_ids"]
         # CB returns plain lists, regular path returns tensors
         input_len = len(input_ids) if isinstance(input_ids, list) else input_ids.shape[-1]
 
         seq = 0
-        output_index = 0
         created_at = time.time()
         resp_id = f"resp_{request_id}"
         msg_id = f"msg_{request_id}"
+        reasoning_id = f"rs_{request_id}"
 
         response_base = {
             "id": resp_id,
@@ -327,7 +350,7 @@ class ResponseHandler(BaseHandler):
         }
 
         async def event_stream() -> AsyncGenerator[str, None]:
-            nonlocal seq, output_index
+            nonlocal seq
 
             try:
                 # 1. Created + In progress
@@ -348,44 +371,163 @@ class ResponseHandler(BaseHandler):
                 )
                 seq += 1
 
-                # 2. Output item added (message)
-                yield self.chunk_to_sse(
-                    ResponseOutputItemAddedEvent(
-                        type="response.output_item.added",
-                        sequence_number=seq,
-                        output_index=output_index,
-                        item=ResponseOutputMessage(
-                            id=msg_id,
-                            type="message",
-                            status="in_progress",
-                            role="assistant",
-                            content=[],
-                        ),
-                    )
-                )
-                seq += 1
-
-                # 3. Content part added
-                yield self.chunk_to_sse(
-                    ResponseContentPartAddedEvent(
-                        type="response.content_part.added",
-                        item_id=msg_id,
-                        sequence_number=seq,
-                        output_index=output_index,
-                        content_index=0,
-                        part=ResponseOutputText(type="output_text", text="", annotations=[]),
-                    )
-                )
-                seq += 1
-
-                # 4. Stream tokens — drain queue to batch HTTP writes
+                # 2. Stream tokens — items are opened lazily so reasoning (if any)
+                # appears as a separate output item before the message item.
                 full_text = ""
+                full_reasoning = ""
                 tool_calls = []
+                output_index = 0
+                reasoning_open = False
+                message_open = False
+                reasoning_item = None
+                message_item = None
                 done = False
+
+                def open_reasoning() -> str:
+                    """Emit ``output_item.added`` for an in-progress reasoning item."""
+                    nonlocal seq, reasoning_open
+                    reasoning_open = True
+                    sse = self.chunk_to_sse(
+                        ResponseOutputItemAddedEvent(
+                            type="response.output_item.added",
+                            sequence_number=seq,
+                            output_index=output_index,
+                            item=ResponseReasoningItem(
+                                id=reasoning_id, type="reasoning", summary=[], content=[], status="in_progress"
+                            ),
+                        )
+                    )
+                    seq += 1
+                    return sse
+
+                def close_reasoning() -> str:
+                    """Emit ``reasoning_text.done`` + ``output_item.done`` for the completed reasoning item."""
+                    nonlocal seq, reasoning_open, reasoning_item
+                    reasoning_item = ResponseReasoningItem(
+                        id=reasoning_id,
+                        type="reasoning",
+                        summary=[],
+                        content=[{"type": "reasoning_text", "text": full_reasoning}],
+                        status="completed",
+                    )
+                    parts = [
+                        self.chunk_to_sse(
+                            ResponseReasoningTextDoneEvent(
+                                type="response.reasoning_text.done",
+                                item_id=reasoning_id,
+                                sequence_number=seq,
+                                output_index=output_index,
+                                content_index=0,
+                                text=full_reasoning,
+                            )
+                        )
+                    ]
+                    seq += 1
+                    parts.append(
+                        self.chunk_to_sse(
+                            ResponseOutputItemDoneEvent(
+                                type="response.output_item.done",
+                                sequence_number=seq,
+                                output_index=output_index,
+                                item=reasoning_item,
+                            )
+                        )
+                    )
+                    seq += 1
+                    reasoning_open = False
+                    return "".join(parts)
+
+                def open_message() -> str:
+                    """Emit ``output_item.added`` + ``content_part.added`` for an in-progress message."""
+                    nonlocal seq, message_open
+                    message_open = True
+                    parts = [
+                        self.chunk_to_sse(
+                            ResponseOutputItemAddedEvent(
+                                type="response.output_item.added",
+                                sequence_number=seq,
+                                output_index=output_index,
+                                item=ResponseOutputMessage(
+                                    id=msg_id,
+                                    type="message",
+                                    status="in_progress",
+                                    role="assistant",
+                                    content=[],
+                                ),
+                            )
+                        )
+                    ]
+                    seq += 1
+                    parts.append(
+                        self.chunk_to_sse(
+                            ResponseContentPartAddedEvent(
+                                type="response.content_part.added",
+                                item_id=msg_id,
+                                sequence_number=seq,
+                                output_index=output_index,
+                                content_index=0,
+                                part=ResponseOutputText(type="output_text", text="", annotations=[]),
+                            )
+                        )
+                    )
+                    seq += 1
+                    return "".join(parts)
+
+                def close_message() -> str:
+                    """Emit ``output_text.done`` + ``content_part.done`` + ``output_item.done`` for the message."""
+                    nonlocal seq, message_open, message_item
+                    output_text_part = ResponseOutputText(type="output_text", text=full_text, annotations=[])
+                    message_item = ResponseOutputMessage(
+                        id=msg_id,
+                        type="message",
+                        status="completed",
+                        role="assistant",
+                        content=[output_text_part],
+                        annotations=[],  # type: ignore[call-arg]
+                    )
+                    parts = [
+                        self.chunk_to_sse(
+                            ResponseTextDoneEvent(
+                                type="response.output_text.done",
+                                item_id=msg_id,
+                                sequence_number=seq,
+                                output_index=output_index,
+                                content_index=0,
+                                text=full_text,
+                                logprobs=[],
+                            )
+                        )
+                    ]
+                    seq += 1
+                    parts.append(
+                        self.chunk_to_sse(
+                            ResponseContentPartDoneEvent(
+                                type="response.content_part.done",
+                                item_id=msg_id,
+                                sequence_number=seq,
+                                output_index=output_index,
+                                content_index=0,
+                                part=output_text_part,
+                            )
+                        )
+                    )
+                    seq += 1
+                    parts.append(
+                        self.chunk_to_sse(
+                            ResponseOutputItemDoneEvent(
+                                type="response.output_item.done",
+                                sequence_number=seq,
+                                output_index=output_index,
+                                item=message_item,
+                            )
+                        )
+                    )
+                    seq += 1
+                    message_open = False
+                    return "".join(parts)
 
                 while not done:
                     text = await queue.get()
-                    # Drain all available tokens for one batched HTTP write
                     batch = [text]
                     try:
                         while True:
@@ -423,26 +565,59 @@ class ResponseHandler(BaseHandler):
                             yield "".join(sse_parts)
                             return
 
-                        full_text += text
-                        sse_parts.append(
-                            self.chunk_to_sse(
-                                ResponseTextDeltaEvent(
-                                    type="response.output_text.delta",
-                                    item_id=msg_id,
-                                    sequence_number=seq,
-                                    output_index=0,
-                                    content_index=0,
-                                    delta=text,
-                                    logprobs=[],
+                        if isinstance(text, ReasoningText):
+                            if not reasoning_open:
+                                sse_parts.append(open_reasoning())
+                            full_reasoning += text
+                            sse_parts.append(
+                                self.chunk_to_sse(
+                                    ResponseReasoningTextDeltaEvent(
+                                        type="response.reasoning_text.delta",
+                                        item_id=reasoning_id,
+                                        sequence_number=seq,
+                                        output_index=output_index,
+                                        content_index=0,
+                                        delta=text,
+                                    )
                                 )
                             )
-                        )
-                        seq += 1
+                            seq += 1
+                        else:
+                            if reasoning_open:
+                                sse_parts.append(close_reasoning())
+                                output_index += 1
+                            if not message_open:
+                                sse_parts.append(open_message())
+                            full_text += text
+                            sse_parts.append(
+                                self.chunk_to_sse(
+                                    ResponseTextDeltaEvent(
+                                        type="response.output_text.delta",
+                                        item_id=msg_id,
+                                        sequence_number=seq,
+                                        output_index=output_index,
+                                        content_index=0,
+                                        delta=text,
+                                        logprobs=[],
+                                    )
+                                )
+                            )
+                            seq += 1
 
                     if sse_parts:
                         yield "".join(sse_parts)
 
-                # 5. Tool calls are parsed after generation completes (not during streaming),
+                # Close any open reasoning section that didn't transition to content.
+                if reasoning_open:
+                    yield close_reasoning()
+                    output_index += 1
+
+                # Close message section (open it first if no content was emitted).
+                if not message_open:
+                    yield open_message()
+                yield close_message()
+
+                # 3. Tool calls are parsed after generation completes (not during streaming),
                 # because the full token sequence is needed for reliable parsing.
                 if tool_config:
                     parsed = parse_tool_calls(processor, streamer.generated_token_ids, tool_config["schema"])
@@ -489,52 +664,12 @@ class ResponseHandler(BaseHandler):
                             )
                             seq += 1
 
-                # 6. Close text output
-                output_text_part = ResponseOutputText(type="output_text", text=full_text, annotations=[])
-                yield self.chunk_to_sse(
-                    ResponseTextDoneEvent(
-                        type="response.output_text.done",
-                        item_id=msg_id,
-                        sequence_number=seq,
-                        output_index=0,
-                        content_index=0,
-                        text=full_text,
-                        logprobs=[],
-                    )
-                )
-                seq += 1
-                yield self.chunk_to_sse(
-                    ResponseContentPartDoneEvent(
-                        type="response.content_part.done",
-                        item_id=msg_id,
-                        sequence_number=seq,
-                        output_index=0,
-                        content_index=0,
-                        part=output_text_part,
-                    )
-                )
-                seq += 1
-
-                msg_item = ResponseOutputMessage(
-                    id=msg_id,
-                    type="message",
-                    status="completed",
-                    role="assistant",
-                    content=[output_text_part],
-                    annotations=[],  # type: ignore[call-arg]
-                )
-                yield self.chunk_to_sse(
-                    ResponseOutputItemDoneEvent(
-                        type="response.output_item.done",
-                        sequence_number=seq,
-                        output_index=0,
-                        item=msg_item,
-                    )
-                )
-                seq += 1
-
-                # 7. Completed
-                all_output = [msg_item] + list(tool_calls)
+                # 4. Completed
+                all_output = []
+                if reasoning_item is not None:
+                    all_output.append(reasoning_item)
+                all_output.append(message_item)
+                all_output.extend(tool_calls)
                 usage = compute_usage(input_len, streamer.total_tokens)
                 yield self.chunk_to_sse(
                     ResponseCompletedEvent(
@@ -565,13 +700,28 @@ class ResponseHandler(BaseHandler):
         gen_config: "GenerationConfig",
         gen_manager: BaseGenerateManager,
         tool_config: dict | None = None,
+        reasoning_config: dict | None = None,
     ) -> JSONResponse:
         """Generate a non-streaming Responses API reply (single JSON)."""
         full_text, input_len, generated_ids = await gen_manager.generate_non_streaming(
             model, processor, inputs, gen_config, request_id=request_id
         )
 
-        output_items = [
+        output_items = []
+        if reasoning_config is not None:
+            full_text, reasoning_content = parse_reasoning(processor, generated_ids, full_text, reasoning_config)
+            if reasoning_content is not None:
+                output_items.append(
+                    ResponseReasoningItem(
+                        id=f"rs_{request_id}",
+                        type="reasoning",
+                        summary=[],
+                        content=[{"type": "reasoning_text", "text": reasoning_content}],
+                        status="completed",
+                    )
+                )
+
+        output_items.append(
             ResponseOutputMessage(
                 id=f"msg_{request_id}",
                 type="message",
@@ -580,7 +730,7 @@ class ResponseHandler(BaseHandler):
                 content=[ResponseOutputText(type="output_text", text=full_text, annotations=[])],
                 annotations=[],  # type: ignore[call-arg]
             )
-        ]
+        )
 
         if tool_config is not None:
             parsed = parse_tool_calls(processor, generated_ids, tool_config["schema"])

@@ -19,6 +19,7 @@ import asyncio
 import copy
 import enum
 import json
+import re
 import threading
 from abc import ABC, abstractmethod
 from collections.abc import Callable
@@ -71,6 +72,14 @@ class _StreamError:
 
 class _GenerationCancelled(Exception):
     """Raised inside ``DirectStreamer.put()`` to abort ``model.generate()``."""
+
+
+class ReasoningText(str):
+    """Tagged str subclass: text chunk belonging to a thinking/reasoning block.
+
+    Streamers wrap reasoning text with this so handlers can route it to
+    ``reasoning_content`` deltas instead of ``content``.
+    """
 
 
 # Fallback tool call configs for models that don't declare stc_token/etc_token/response_schema
@@ -155,6 +164,109 @@ def parse_tool_calls(processor, generated_ids, schema: dict) -> list[dict] | Non
     tool_calls = [_normalize_tool_call(tool_call) for tool_call in parsed]
     return tool_calls if tool_calls else None
 
+
+# Default start/end tokens + schema. The opening token is optional so prefilled
+# ``<think>`` prompts still match.
+_DEFAULT_THINKING_TOKENS = {
+    "start": ["<think>"],
+    "end": "</think>",
+    "schema": {
+        "type": "object",
+        "properties": {
+            "thinking": {"type": "string"},
+            "content": {"type": "string"},
+        },
+        "x-regex": r"\s*(?:<think>)?(?P<thinking>.*?)</think>\s*(?P<content>.*)",
+    },
+}
+# Streaming-side token IDs for families whose ``response_schema`` uses non-default
+# start/end tokens. Post-hoc parsing uses the schema; this only feeds the
+# streamer's token-level detector.
+_THINKING_TOKENS = {
+    "gemma4": {"start": ["<|channel>", "thought"], "end": "<channel|>"},
+}
+
+
+def get_reasoning_config(processor, model: "PreTrainedModel", input_ids=None) -> dict | None:
+    """Return reasoning config for the model, or ``None`` if not supported.
+
+    The config drives both streaming detection (token IDs) and post-hoc parsing
+    (response schema). Returns a dict with:
+        - ``start_ids`` (`list[int]`): Token ID sequence that opens a thinking block.
+        - ``end_id`` (`int`): Token ID that closes the block.
+        - ``schema`` (`dict`): Response schema with ``thinking`` / ``content``
+          properties for :func:`parse_reasoning`.
+        - ``start_in_thinking`` (`bool`, only when ``input_ids`` is given): Whether
+          the rendered prompt already opened an unclosed thinking block (prefilled
+          by the template), so the model's output begins inside the block.
+    """
+    tokenizer = getattr(processor, "tokenizer", processor)
+    model_type = model.config.model_type.lower()
+    thinking_tokens = next(
+        (v for k, v in _THINKING_TOKENS.items() if k in model_type),
+        _DEFAULT_THINKING_TOKENS,
+    )
+    start_ids = [tokenizer.convert_tokens_to_ids(t) for t in thinking_tokens["start"]]
+    end_id = tokenizer.convert_tokens_to_ids(thinking_tokens["end"])
+    if any(tid in (None, tokenizer.unk_token_id) for tid in start_ids) or end_id in (None, tokenizer.unk_token_id):
+        return None
+    # Custom-token families (e.g. Gemma 4) provide their schema via the tokenizer;
+    # default ``<think>`` falls back to the schema baked into ``_DEFAULT_THINKING_TOKENS``.
+    schema = getattr(tokenizer, "response_schema", None)
+    if not (schema and "thinking" in schema["properties"]):
+        schema = _DEFAULT_THINKING_TOKENS["schema"]
+    config: dict = {"start_ids": start_ids, "end_id": end_id, "schema": schema}
+    if input_ids is not None:
+        config["start_in_thinking"] = _starts_in_thinking(input_ids, start_ids)
+    return config
+
+
+def parse_reasoning(processor, generated_ids, content: str, reasoning_config: dict) -> tuple[str, str | None]:
+    """Split generated output into ``(content, reasoning_content)`` via ``parse_response``.
+
+    If the schema's regex matches (closing marker present), use it. For prompts
+    that prefill the opener (QwQ-32B, DeepSeek-R1) the entire output is reasoning
+    until ``</think>`` arrives — when that's truncated, fall back to treating
+    all decoded text as reasoning. Returns ``(content, None)`` otherwise.
+    """
+    parsed = processor.parse_response(generated_ids, reasoning_config["schema"])
+    if parsed:
+        reasoning = parsed.get("thinking", "").strip()
+        if reasoning:
+            return parsed.get("content", ""), reasoning
+    # Prefilled opener (QwQ-32B, DeepSeek-R1) truncated before ``</think>`` —
+    # no anchor for the schema regex; treat all output as reasoning.
+    if reasoning_config.get("start_in_thinking"):
+        return "", content.strip()
+    return content, None
+
+
+def _starts_in_thinking(input_ids, start_ids: list[int]) -> bool:
+    """True if the rendered prompt ends with an unclosed thinking block.
+
+    Some reasoning-model chat templates prefill the thinking opener as the final
+    prompt tokens (e.g. DeepSeek-R1, QwQ-32B emit ``<think>\\n`` at the end when
+    ``add_generation_prompt=True``). In those cases the model resumes *inside*
+    the block, so its output contains only ``...reasoning</think>answer`` with
+    no opening tag — the streamer must start with ``_inside_thinking=True``.
+
+    The prefill always lands at the tail of the prompt (optionally followed by a
+    single whitespace token like ``\\n``), so we only inspect the last few tokens.
+    """
+    if hasattr(input_ids, "tolist"):
+        input_ids = input_ids.tolist()
+    if input_ids and isinstance(input_ids[0], list):
+        if len(input_ids) != 1:
+            return False
+        input_ids = input_ids[0]
+    n = len(start_ids)
+    # Match start_ids at the tail, allowing up to one trailing token (e.g. "\n").
+    for trailing in (0, 1):
+        if len(input_ids) >= n + trailing:
+            end = len(input_ids) - trailing
+            if input_ids[end - n : end] == start_ids:
+                return True
+    return False
 
 class DownloadAggregator:
     """Aggregates byte-progress across multiple concurrent download tqdm bars.
@@ -286,6 +398,7 @@ class DirectStreamer:
         queue: asyncio.Queue,
         skip_special_tokens: bool = True,
         tool_config: dict | None = None,
+        reasoning_config: dict | None = None,
     ):
         """
         Args:
@@ -297,6 +410,9 @@ class DirectStreamer:
             tool_config (`dict`, *optional*): Tool call config from ``get_tool_call_config``.
                 When set, tokens between stc/etc delimiters (inclusive) are suppressed
                 from the queue so tool call markup is never streamed to the client.
+            reasoning_config (`dict`, *optional*): Thinking config from ``get_reasoning_config``.
+                When set, tokens between start/end delimiters are wrapped as
+                :class:`ReasoningText` so handlers route them to ``reasoning_content``.
         """
         from tokenizers.decoders import DecodeStream
 
@@ -307,6 +423,10 @@ class DirectStreamer:
         self._stc_id = tool_config["stc_id"] if tool_config else None
         self._etc_id = tool_config["etc_id"] if tool_config else None
         self._inside_tool_call = False
+        self._thinking_start_ids = reasoning_config["start_ids"] if reasoning_config else None
+        self._thinking_end_id = reasoning_config["end_id"] if reasoning_config else None
+        self._inside_thinking = bool(reasoning_config and reasoning_config.get("start_in_thinking"))
+        self._thinking_prefix: list[int] = []
         self._first = True
         self._cancelled = threading.Event()
         self.total_tokens = 0
@@ -329,9 +449,33 @@ class DirectStreamer:
             elif token_id == self._etc_id:
                 self._inside_tool_call = False
 
+            is_start_or_end_token = self._advance_thinking_state(token_id)
+
             text = self._decode_stream.step(self._tokenizer, token_id)
-            if text is not None and not self._inside_tool_call and token_id != self._etc_id:
-                self._loop.call_soon_threadsafe(self._queue.put_nowait, text)
+            if text is None or self._inside_tool_call or token_id == self._etc_id or is_start_or_end_token:
+                continue
+            if self._inside_thinking:
+                text = ReasoningText(text)
+            self._loop.call_soon_threadsafe(self._queue.put_nowait, text)
+
+    def _advance_thinking_state(self, token_id: int) -> bool:
+        """Mutate thinking state; return ``True`` if ``token_id`` is a start or end token — suppress from output."""
+        if self._thinking_start_ids is None:
+            return False
+        if self._inside_thinking:
+            if token_id == self._thinking_end_id:
+                self._inside_thinking = False
+                return True
+            return False
+        expected = self._thinking_start_ids[len(self._thinking_prefix)]
+        if token_id != expected:
+            self._thinking_prefix = []
+            return False
+        self._thinking_prefix.append(token_id)
+        if len(self._thinking_prefix) == len(self._thinking_start_ids):
+            self._inside_thinking = True
+            self._thinking_prefix = []
+        return True
 
     def end(self) -> None:
         """Called by ``model.generate()`` when generation is complete."""
@@ -359,6 +503,7 @@ class CBStreamer:
         loop: asyncio.AbstractEventLoop,
         queue: asyncio.Queue,
         tool_config: dict | None = None,
+        reasoning_config: dict | None = None,
     ):
         """
         Args:
@@ -368,6 +513,7 @@ class CBStreamer:
             loop (`asyncio.AbstractEventLoop`): The event loop to push decoded text to.
             queue (`asyncio.Queue`): The queue that receives decoded text chunks.
             tool_config (`dict`, *optional*): Tool call config (see ``DirectStreamer``).
+            reasoning_config (`dict`, *optional*): Thinking config (see ``DirectStreamer``).
         """
         from tokenizers.decoders import DecodeStream
 
@@ -380,6 +526,10 @@ class CBStreamer:
         self._stc_id = tool_config["stc_id"] if tool_config else None
         self._etc_id = tool_config["etc_id"] if tool_config else None
         self._inside_tool_call = False
+        self._thinking_start_ids = reasoning_config["start_ids"] if reasoning_config else None
+        self._thinking_end_id = reasoning_config["end_id"] if reasoning_config else None
+        self._inside_thinking = bool(reasoning_config and reasoning_config.get("start_in_thinking"))
+        self._thinking_prefix: list[int] = []
         self._prev_len = 0
         self.total_tokens = 0
         self.generated_token_ids: list[int] = []
@@ -397,9 +547,33 @@ class CBStreamer:
             elif token_id == self._etc_id:
                 self._inside_tool_call = False
 
+            is_start_or_end_token = self._advance_thinking_state(token_id)
+
             text = self._decode_stream.step(self._tokenizer, token_id)
-            if text is not None and not self._inside_tool_call and token_id != self._etc_id:
-                self._queue.put_nowait(text)
+            if text is None or self._inside_tool_call or token_id == self._etc_id or is_start_or_end_token:
+                continue
+            if self._inside_thinking:
+                text = ReasoningText(text)
+            self._queue.put_nowait(text)
+
+    def _advance_thinking_state(self, token_id: int) -> bool:
+        """Mutate thinking state; return ``True`` if ``token_id`` is a start or end token — suppress from output."""
+        if self._thinking_start_ids is None:
+            return False
+        if self._inside_thinking:
+            if token_id == self._thinking_end_id:
+                self._inside_thinking = False
+                return True
+            return False
+        expected = self._thinking_start_ids[len(self._thinking_prefix)]
+        if token_id != expected:
+            self._thinking_prefix = []
+            return False
+        self._thinking_prefix.append(token_id)
+        if len(self._thinking_prefix) == len(self._thinking_start_ids):
+            self._inside_thinking = True
+            self._thinking_prefix = []
+        return True
 
     def end(self) -> None:
         """Signal end of stream."""
@@ -486,6 +660,7 @@ class BaseGenerateManager(ABC):
         gen_config: "GenerationConfig",
         request_id: str,
         tool_config: dict | None = None,
+        reasoning_config: dict | None = None,
     ) -> tuple[asyncio.Queue, "DirectStreamer | CBStreamer"]:
         """Start streaming generation.
 
@@ -497,6 +672,8 @@ class BaseGenerateManager(ABC):
             request_id (`str`): Unique request identifier.
             tool_config (`dict`, *optional*): Tool call config from ``get_tool_call_config``.
                 When set, tool call tokens (between stc/etc) are suppressed from output.
+            reasoning_config (`dict`, *optional*): Thinking config from ``get_reasoning_config``.
+                When set, thinking tokens are wrapped as :class:`ReasoningText`.
 
         Returns:
             `tuple[asyncio.Queue, DirectStreamer | CBStreamer]`: A ``(queue, streamer)`` pair
@@ -545,13 +722,16 @@ class GenerateManager(BaseGenerateManager):
         gen_config: "GenerationConfig",
         request_id: str,
         tool_config: dict | None = None,
+        reasoning_config: dict | None = None,
     ) -> tuple[asyncio.Queue, DirectStreamer]:
         """Start streaming generation via ``model.generate()`` on the inference thread."""
         loop = asyncio.get_running_loop()
         queue: asyncio.Queue = asyncio.Queue()
         # ProcessorMixin exposes the fast tokenizer as .tokenizer; PreTrainedTokenizerFast is already one.
         rust_tokenizer = getattr(processor, "tokenizer", processor)._tokenizer  # type: ignore[union-attr]
-        streamer = DirectStreamer(rust_tokenizer, loop, queue, tool_config=tool_config)
+        streamer = DirectStreamer(
+            rust_tokenizer, loop, queue, tool_config=tool_config, reasoning_config=reasoning_config
+        )
         gen_kwargs = {**inputs, "streamer": streamer, "generation_config": gen_config, "tokenizer": processor}
         if hasattr(model, "has_talker"):
             gen_kwargs["generation_mode"] = "text"
@@ -643,6 +823,7 @@ class CBGenerateManager(BaseGenerateManager):
         gen_config: "GenerationConfig",
         request_id: str,
         tool_config: dict | None = None,
+        reasoning_config: dict | None = None,
     ) -> tuple[asyncio.Queue, CBStreamer]:
         """Start streaming CB generation. Registers a per-request output handler."""
         cb = self._cb
@@ -662,7 +843,15 @@ class CBGenerateManager(BaseGenerateManager):
         )
         # ProcessorMixin exposes the fast tokenizer as .tokenizer; PreTrainedTokenizerFast is already one.
         rust_tokenizer = getattr(processor, "tokenizer", processor)._tokenizer  # type: ignore[union-attr]
-        streamer = CBStreamer(self._cb, request_id, rust_tokenizer, loop, text_queue, tool_config=tool_config)
+        streamer = CBStreamer(
+            self._cb,
+            request_id,
+            rust_tokenizer,
+            loop,
+            text_queue,
+            tool_config=tool_config,
+            reasoning_config=reasoning_config,
+        )
 
         # Register a direct callback: the dispatcher calls this on the event loop with each GenerationOutput.
         # This decodes tokens and pushes text straight to the SSE text_queue
@@ -826,9 +1015,11 @@ class BaseHandler:
         self,
         model_manager: "ModelManager",
         generation_state: GenerationState,
+        chat_template_kwargs: dict | None = None,
     ):
         self.model_manager = model_manager
         self.generation_state = generation_state
+        self.chat_template_kwargs = chat_template_kwargs or {}
 
     def _validate_request(self, body: dict) -> None:
         """Validate request fields against the handler's params class and unused fields."""
