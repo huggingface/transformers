@@ -3994,9 +3994,8 @@ class ModelTesterMixin:
                 self.skipTest(reason=f"At least some parts of this model do not support {attn_implementation}")
 
             # TODO: to change it in the future with other relevant auto classes
-            # deepcopy to avoid mutating the shared config (e.g. _from_config sets dtype on sub-configs)
             fa_model = model_class._from_config(
-                copy.deepcopy(config), attn_implementation=attn_implementation, dtype=torch.bfloat16
+                config, attn_implementation=attn_implementation, dtype=torch.bfloat16
             ).to(torch_device)
 
             # By default, we perform the forward pass in train mode, because it's more sctrict than eval mode. If the
