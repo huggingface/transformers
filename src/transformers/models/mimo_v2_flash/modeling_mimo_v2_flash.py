@@ -322,8 +322,6 @@ def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
     return hidden_states.reshape(batch, num_key_value_heads * n_rep, slen, head_dim)
 
 
-# Eager attention forward function with optional attention sinks.
-# Same as the remote MiMo `eager_attention_forward` but with mask preparation removed (not needed post transformers V5)
 def eager_attention_forward_with_optional_sink(
     module: nn.Module,
     query: torch.Tensor,
@@ -340,6 +338,7 @@ def eager_attention_forward_with_optional_sink(
     if attention_mask is not None:
         attn_weights = attn_weights + attention_mask
 
+    # Key difference from `eager_attention_forward`: optional attention sinks.
     if module.sinks is not None:
         sinks = module.sinks.reshape(1, -1, 1, 1).expand(query.shape[0], -1, query.shape[-2], -1)
         attn_weights = torch.cat([attn_weights, sinks], dim=-1)
@@ -365,24 +364,26 @@ class MiMoV2FlashAttention(nn.Module):
         super().__init__()
         # SWA layers double the kv heads vs full-attention and have attention sinks.
         is_swa = config.layer_types[layer_idx] == "sliding_attention"
-        num_kv_heads = config.num_key_value_heads * 2 if is_swa else config.num_key_value_heads
-        num_attn_heads = config.num_attention_heads
+        num_key_value_heads = config.num_key_value_heads * 2 if is_swa else config.num_key_value_heads
+        num_attention_heads = config.num_attention_heads
         self.layer_type = config.layer_types[layer_idx] if hasattr(config, "layer_types") else None
         self.config = config
         self.layer_idx = layer_idx
         self.head_dim = getattr(config, "head_dim", config.hidden_size // config.num_attention_heads)
-        self.num_key_value_groups = num_attn_heads // num_kv_heads
+        self.num_key_value_groups = num_attention_heads // num_key_value_heads
         self.scaling = self.head_dim**-0.5
         self.attention_dropout = config.attention_dropout
         self.is_causal = True
 
-        self.q_proj = nn.Linear(config.hidden_size, num_attn_heads * self.head_dim, bias=config.attention_bias)
-        self.k_proj = nn.Linear(config.hidden_size, num_kv_heads * self.head_dim, bias=config.attention_bias)
-        self.v_proj = nn.Linear(config.hidden_size, num_kv_heads * config.v_head_dim, bias=config.attention_bias)
-        self.o_proj = nn.Linear(num_attn_heads * config.v_head_dim, config.hidden_size, bias=False)
+        self.q_proj = nn.Linear(config.hidden_size, num_attention_heads * self.head_dim, bias=config.attention_bias)
+        self.k_proj = nn.Linear(config.hidden_size, num_key_value_heads * self.head_dim, bias=config.attention_bias)
+        self.v_proj = nn.Linear(
+            config.hidden_size, num_key_value_heads * config.v_head_dim, bias=config.attention_bias
+        )
+        self.o_proj = nn.Linear(num_attention_heads * config.v_head_dim, config.hidden_size, bias=False)
         self.sliding_window = config.sliding_window if self.layer_type == "sliding_attention" else None
         self.v_head_dim = config.v_head_dim
-        self.sinks = nn.Parameter(torch.empty(num_attn_heads)) if is_swa else None
+        self.sinks = nn.Parameter(torch.empty(num_attention_heads)) if is_swa else None
         self.v_scale = config.attention_value_scale
 
     def forward(

@@ -28,8 +28,6 @@ from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring
-from ...utils.generic import merge_with_config_defaults
-from ...utils.output_capturing import capture_outputs
 from ..deepseek_v3.modeling_deepseek_v3 import (
     DeepseekV3ForCausalLM,
     DeepseekV3MoE,
@@ -203,8 +201,6 @@ class MiMoV2FlashMLP(Glm4MoeMLP):
     pass
 
 
-# Eager attention forward function with optional attention sinks.
-# Same as the remote MiMo `eager_attention_forward` but with mask preparation removed (not needed post transformers V5)
 def eager_attention_forward_with_optional_sink(
     module: nn.Module,
     query: torch.Tensor,
@@ -221,6 +217,7 @@ def eager_attention_forward_with_optional_sink(
     if attention_mask is not None:
         attn_weights = attn_weights + attention_mask
 
+    # Key difference from `eager_attention_forward`: optional attention sinks.
     if module.sinks is not None:
         sinks = module.sinks.reshape(1, -1, 1, 1).expand(query.shape[0], -1, query.shape[-2], -1)
         attn_weights = torch.cat([attn_weights, sinks], dim=-1)
@@ -242,17 +239,19 @@ class MiMoV2FlashAttention(Qwen2Attention):
     def __init__(self, config: MiMoV2FlashConfig, layer_idx: int):
         # SWA layers double the kv heads vs full-attention and have attention sinks.
         is_swa = config.layer_types[layer_idx] == "sliding_attention"
-        num_kv_heads = config.num_key_value_heads * 2 if is_swa else config.num_key_value_heads
-        num_attn_heads = config.num_attention_heads
+        num_key_value_heads = config.num_key_value_heads * 2 if is_swa else config.num_key_value_heads
+        num_attention_heads = config.num_attention_heads
         super().__init__(config, layer_idx)
         self.v_head_dim = config.v_head_dim
-        self.num_key_value_groups = num_attn_heads // num_kv_heads
+        self.num_key_value_groups = num_attention_heads // num_key_value_heads
 
-        self.q_proj = nn.Linear(config.hidden_size, num_attn_heads * self.head_dim, bias=config.attention_bias)
-        self.k_proj = nn.Linear(config.hidden_size, num_kv_heads * self.head_dim, bias=config.attention_bias)
-        self.v_proj = nn.Linear(config.hidden_size, num_kv_heads * config.v_head_dim, bias=config.attention_bias)
-        self.o_proj = nn.Linear(num_attn_heads * config.v_head_dim, config.hidden_size, bias=False)
-        self.sinks = nn.Parameter(torch.empty(num_attn_heads)) if is_swa else None
+        self.q_proj = nn.Linear(config.hidden_size, num_attention_heads * self.head_dim, bias=config.attention_bias)
+        self.k_proj = nn.Linear(config.hidden_size, num_key_value_heads * self.head_dim, bias=config.attention_bias)
+        self.v_proj = nn.Linear(
+            config.hidden_size, num_key_value_heads * config.v_head_dim, bias=config.attention_bias
+        )
+        self.o_proj = nn.Linear(num_attention_heads * config.v_head_dim, config.hidden_size, bias=False)
+        self.sinks = nn.Parameter(torch.empty(num_attention_heads)) if is_swa else None
         self.v_scale = config.attention_value_scale
 
     def forward(
@@ -334,9 +333,6 @@ class MiMoV2FlashPreTrainedModel(DeepseekV3PreTrainedModel):
 
 @auto_docstring
 class MiMoV2FlashModel(MixtralModel):
-    @merge_with_config_defaults
-    @capture_outputs
-    @auto_docstring
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
