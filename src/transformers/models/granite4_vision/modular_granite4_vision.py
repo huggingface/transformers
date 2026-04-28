@@ -16,22 +16,22 @@ import math
 from dataclasses import dataclass
 from fractions import Fraction
 
-from huggingface_hub.dataclasses import strict
-
 import numpy as np
 import torch
+from huggingface_hub.dataclasses import strict
 from torch import nn
 
+from ... import initialization as init
 from ...cache_utils import Cache, DynamicCache
 from ...configuration_utils import PreTrainedConfig
+from ...image_processing_utils import select_best_resolution
 from ...masking_utils import create_causal_mask
-from ...processing_utils import Unpack
-from ... import initialization as init
-from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS
 from ...modeling_outputs import ModelOutput
+from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS
+from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, can_return_tuple
-from ..granite.modeling_granite import GraniteModel, GraniteRotaryEmbedding
 from ..auto import AutoConfig
+from ..granite.modeling_granite import GraniteModel, GraniteRotaryEmbedding
 from ..llava_next.configuration_llava_next import LlavaNextConfig
 from ..llava_next.modeling_llava_next import (
     LlavaNextCausalLMOutputWithPast,
@@ -43,7 +43,6 @@ from ..llava_next.modeling_llava_next import (
     image_size_to_num_patches,
     unpad_image,
 )
-from ...image_processing_utils import select_best_resolution
 from ..llava_next.processing_llava_next import LlavaNextProcessor
 
 
@@ -359,6 +358,7 @@ class Granite4VisionPreTrainedModel(LlavaNextPreTrainedModel):
             embed_std = 1 / math.sqrt(module.query.shape[-1])
             init.normal_(module.query, mean=0.0, std=embed_std)
             init.normal_(module.image_positions, mean=0.0, std=embed_std)
+
     pass
 
 
@@ -406,7 +406,9 @@ class Granite4VisionTextModel(Granite4VisionPreTrainedModel, GraniteModel):
             Features are added into image-token positions of hidden states before the corresponding decoder layer.
         """
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        output_hidden_states = (
+            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        )
 
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
@@ -498,7 +500,9 @@ class Granite4VisionModel(LlavaNextModel):
                 [WindowQFormerDownsampler(config, spatial_offset=i) for i in range(4)]
             )
 
-        self.pad_token_id = self.config.text_config.pad_token_id if self.config.text_config.pad_token_id is not None else -1
+        self.pad_token_id = (
+            self.config.text_config.pad_token_id if self.config.text_config.pad_token_id is not None else -1
+        )
 
         # Replace the inherited LLM backbone with our deepstack-aware subclass
         self.language_model = Granite4VisionTextModel(config.text_config)
