@@ -648,10 +648,11 @@ class WeightTransform:
                 pattern = process_source_pattern(pattern, self._original_target_patterns[i])
             self.source_patterns[i] = pattern
 
-        # Build the regex source string, but compile lazily. Many instances (e.g. the per-weight `WeightRenaming`
-        # bookkeeping entries constructed during `convert_and_load_state_dict_in_model`) never actually invoke
-        # `rename_source_key`, so compiling here is wasted work — and it dominates `from_pretrained` for models
-        # with many parameters.
+        # Build the regex source string, but compile lazily via `compiled_sources` below. During loading, any key
+        # that does not match a weight conversion op gets wrapped in a fresh per-weight `WeightRenaming` for
+        # convenience so it can reuse the same conversion/loading path. Those fallback wrappers never need to call
+        # `rename_source_key`, so eagerly compiling their regex would just waste work — and it dominates
+        # `from_pretrained` for models with many parameters.
         branches = []
         for i, source_pattern in enumerate(self.source_patterns):
             group_name = f"g{i}"
