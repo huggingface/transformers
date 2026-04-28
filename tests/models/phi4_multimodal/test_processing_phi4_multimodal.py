@@ -32,7 +32,7 @@ if is_vision_available():
 class Phi4MultimodalProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     processor_class = Phi4MultimodalProcessor
     checkpoint_path = "microsoft/Phi-4-multimodal-instruct"
-    revision = "refs/pr/70"
+    revision = "refs/pr/94"
     text_input_name = "input_ids"
     images_input_name = "image_pixel_values"
     audio_input_name = "audio_input_features"
