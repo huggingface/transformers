@@ -32,7 +32,7 @@ from .completion import CompletionHandler
 from .model_manager import ModelManager
 from .response import ResponseHandler
 from .transcription import TranscriptionHandler
-from .utils import X_REQUEST_ID
+from .utils import X_REQUEST_ID, CBWorkerDeadError, GenerationState
 
 
 logger = logging.get_logger(__name__)
@@ -44,6 +44,7 @@ def build_server(
     completion_handler: CompletionHandler,
     response_handler: ResponseHandler,
     transcription_handler: TranscriptionHandler,
+    generation_state: GenerationState,
     enable_cors: bool = False,
 ) -> FastAPI:
     """Build and return a configured FastAPI application.
@@ -52,6 +53,7 @@ def build_server(
         model_manager: Handles model loading, caching, and cleanup.
         chat_handler: Handles `/v1/chat/completions` requests.
         response_handler: Handles `/v1/responses` requests.
+        generation_state: Shared generation state, used by `/health` to report CB liveness.
         enable_cors: If `True`, adds permissive CORS middleware (allow all origins).
 
     Returns:
@@ -64,6 +66,12 @@ def build_server(
         model_manager.shutdown()
 
     app = FastAPI(lifespan=lifespan)
+
+    @app.exception_handler(CBWorkerDeadError)
+    async def _cb_dead_handler(_request: Request, exc: CBWorkerDeadError):
+        # CB worker died (e.g. CUDA illegal memory access); reject new requests with 503
+        # carrying the cause, instead of letting them hang in the input queue forever.
+        return JSONResponse({"error": str(exc)}, status_code=503)
 
     if enable_cors:
         app.add_middleware(
@@ -128,6 +136,8 @@ def build_server(
 
     @app.get("/health")
     def health():
+        if not generation_state.is_cb_alive():
+            return JSONResponse({"status": "unhealthy", "reason": "cb_worker_dead"}, status_code=503)
         return JSONResponse({"status": "ok"})
 
     return app
