@@ -370,10 +370,6 @@ class MiniCPMV4_6ViTWindowAttentionMerger(nn.Module):
         hidden_states = residual + hidden_states
 
         batch_size, _ = target_sizes.shape
-        if (target_sizes % 2 != 0).any():
-            raise ValueError(f"All target_sizes must be divisible by 2, got {target_sizes}")
-        new_target_sizes = target_sizes // 2
-
         window_h, window_w = self.window_kernel_size
         all_pixel_values = []
         for batch_idx in range(batch_size):
@@ -394,7 +390,7 @@ class MiniCPMV4_6ViTWindowAttentionMerger(nn.Module):
             all_pixel_values.append(hidden_state + residual)
 
         new_hidden_states = torch.concat(all_pixel_values, dim=0).unsqueeze(0)
-        return new_hidden_states, new_target_sizes
+        return new_hidden_states
 
 
 class MiniCPMV4_6VisionPreTrainedModel(PreTrainedModel):
@@ -422,6 +418,24 @@ class MiniCPMV4_6VisionModel(MiniCPMV4_6VisionPreTrainedModel):
         self.vit_merger = MiniCPMV4_6ViTWindowAttentionMerger(config)
         self.post_init()
 
+    def get_downsampled_inputs(self, target_sizes: torch.Tensor, max_seqlens: int, **kwargs) -> dict[str, Any]:
+        if (target_sizes % 2 != 0).any():
+            raise ValueError(f"All target_sizes must be divisible by 2, got {target_sizes}")
+        target_sizes = target_sizes // 2
+
+        cu_seqlens = F.pad(torch.cumsum(target_sizes[:, 0] * target_sizes[:, 1], dim=0, dtype=torch.int32), (1, 0))
+        if max_seqlens % 4 != 0:
+            raise ValueError(f"max_seqlen ({max_seqlens}) must be divisible by 4")
+        max_seqlens = max_seqlens // 4
+
+        downsampled_kwargs = {
+            "attention_mask": None,
+            "cu_seqlens": cu_seqlens,
+            "max_seqlen": max_seqlens,
+            **kwargs,
+        }
+        return downsampled_kwargs
+
     @capture_outputs
     @auto_docstring
     def forward(
@@ -441,7 +455,7 @@ class MiniCPMV4_6VisionModel(MiniCPMV4_6VisionPreTrainedModel):
         hidden_states = self.embeddings(pixel_values, target_sizes=target_sizes)
 
         cu_seqlens = F.pad(torch.cumsum(target_sizes[:, 0] * target_sizes[:, 1], dim=0, dtype=torch.int32), (1, 0))
-        max_seqlens = int(torch.max(cu_seqlens[1:] - cu_seqlens[:-1]).item())
+        max_seqlens = int(torch.max(cu_seqlens[1:] - cu_seqlens[:-1]))
 
         attn_kwargs = {
             "attention_mask": None,
@@ -454,26 +468,18 @@ class MiniCPMV4_6VisionModel(MiniCPMV4_6VisionPreTrainedModel):
         if use_vit_merger and insert_layer_id >= 0:
             for layer_index, encoder_layer in enumerate(self.encoder.layers):
                 hidden_states = encoder_layer(hidden_states, **attn_kwargs)
-                # NOTE: Downsample the hidden states and therefore cu-seqlens are new values!
                 if layer_index == insert_layer_id:
-                    hidden_states, target_sizes = self.vit_merger(
+                    hidden_states = self.vit_merger(
                         hidden_states,
                         target_sizes,
                         cu_seqlens,
                         max_seqlens,
                     )
-                    cu_seqlens = torch.cumsum(target_sizes[:, 0] * target_sizes[:, 1], dim=0, dtype=torch.int32)
-                    cu_seqlens = F.pad(cu_seqlens, (1, 0)).to(hidden_states.device)
 
-                    if max_seqlens % 4 != 0:
-                        raise ValueError(f"max_seqlen ({max_seqlens}) must be divisible by 4")
-                    max_seqlens = max_seqlens // 4
-                    attn_kwargs = {
-                        "attention_mask": None,
-                        "cu_seqlens": cu_seqlens,
-                        "max_seqlen": max_seqlens,
-                        **kwargs,
-                    }
+                    # NOTE: Downsampled hidden states, and therefore other kwargs should also!
+                    attn_kwargs = self.get_downsampled_inputs(
+                        target_sizes=target_sizes, max_seqlens=max_seqlens, **kwargs
+                    )
         else:
             encoder_outputs = self.encoder(inputs_embeds=hidden_states, **attn_kwargs)
             hidden_states = encoder_outputs.last_hidden_state
