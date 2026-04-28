@@ -225,7 +225,7 @@ class PagedAttentionCache:
         # If max_blocks_per_request is not set, initialize it to the non-zero fallback value
         max_blocks_per_request = continuous_batching_config.max_blocks_per_request
         if max_blocks_per_request is None:
-            max_blocks_per_request = continuous_batching_config._fallback_max_blocks_per_request
+            max_blocks_per_request = continuous_batching_config.fallback_max_blocks_per_request
         self.max_blocks_per_request = max_blocks_per_request
 
         # Initialize the cache

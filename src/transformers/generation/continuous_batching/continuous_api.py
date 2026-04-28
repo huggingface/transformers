@@ -498,6 +498,13 @@ class ContinuousBatchProcessor:
         # mode.
         self.inputs_and_outputs.retrieve_device_outputs()
 
+    @torch.inference_mode()
+    def warmup(self, model: nn.Module) -> None:
+        """Pre-capture CUDA graphs (or trigger compile warmup) for varlen and decode paths. In async mode, both IO
+        pairs are warmed up since each has its own graph buffer and static tensors. The varlen path is warmed up at
+        the largest possible `(q, kv)` sizes so subsequent captures fit inside it without growing the pool."""
+        self.model_runner.warmup(model)
+
 
 # Manager Class (User Interface)
 @attach_tracer()
