@@ -41,7 +41,7 @@ class MiMoV2FlashConfig(PreTrainedConfig):
     mlp_layer_types (`list`, *optional*):
         MLP pattern for each layer (`"dense"` or `"sparse"`). Defaults to 1 dense + rest sparse.
     attention_value_scale (`float`, *optional*, defaults to 0.707 (which is the decimal approximation of 1/√2):
-        Constant multiplier applied to rescale Values.
+        Constant multiplier applied to rescale the attention values.
     """
 
     model_type = "mimo_v2_flash"
@@ -119,7 +119,7 @@ class MiMoV2FlashConfig(PreTrainedConfig):
                 "full_attention": {"rope_type": "default", "rope_theta": 5_000_000.0, "partial_rotary_factor": 0.334},
                 "sliding_attention": {"rope_type": "default", "rope_theta": 10_000.0, "partial_rotary_factor": 0.334},
             }
-        # The hub config.json stores `routed_scaling_factor` as null
+        # BC: The hub config.json stores `routed_scaling_factor` as null
         if self.routed_scaling_factor is None:
             self.routed_scaling_factor = 1.0
 

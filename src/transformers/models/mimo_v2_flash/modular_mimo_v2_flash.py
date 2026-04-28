@@ -21,7 +21,6 @@ from huggingface_hub.dataclasses import strict
 from ... import initialization as init
 from ...cache_utils import Cache, DynamicCache
 from ...configuration_utils import PreTrainedConfig
-from ...integrations import use_kernelized_func
 from ...masking_utils import create_causal_mask, create_sliding_window_causal_mask
 from ...modeling_outputs import BaseModelOutputWithPast
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS
@@ -37,8 +36,8 @@ from ..deepseek_v3.modeling_deepseek_v3 import (
 )
 from ..gemma3.modeling_gemma3 import Gemma3RotaryEmbedding
 from ..glm4_moe.configuration_glm4_moe import Glm4MoeConfig
-from ..glm4_moe.modeling_glm4_moe import Glm4MoeMLP, apply_rotary_pos_emb  # noqa: F401
-from ..llama.modeling_llama import LlamaDecoderLayer, repeat_kv
+from ..glm4_moe.modeling_glm4_moe import Glm4MoeMLP, apply_rotary_pos_emb, repeat_kv
+from ..glm4_moe_lite.modeling_glm4_moe_lite import Glm4MoeLiteDecoderLayer
 from ..mixtral.modeling_mixtral import MixtralModel, MixtralRMSNorm
 from ..qwen2.modeling_qwen2 import Qwen2Attention
 
@@ -179,7 +178,7 @@ class MiMoV2FlashNaiveMoe(DeepseekV3NaiveMoe):
     pass
 
 
-class MiMoV2FlashSparseMoeBlock(DeepseekV3MoE):
+class MiMoV2FlashMoE(DeepseekV3MoE):
     """
     Only difference from `DeepseekV3MoE` is that we have no shared experts.
     So we drop it and override the forward to skip the shared expert (residual like) add.
@@ -301,11 +300,8 @@ class MiMoV2FlashAttention(Qwen2Attention):
         return attn_output, attn_weights
 
 
-class MiMoV2FlashDecoderLayer(LlamaDecoderLayer):
-    def __init__(self, config: MiMoV2FlashConfig, layer_idx: int):
-        super().__init__(config, layer_idx)
-        if config.mlp_layer_types[layer_idx] == "sparse":
-            self.mlp = MiMoV2FlashSparseMoeBlock(config)
+class MiMoV2FlashDecoderLayer(Glm4MoeLiteDecoderLayer):
+    pass
 
 
 @auto_docstring
