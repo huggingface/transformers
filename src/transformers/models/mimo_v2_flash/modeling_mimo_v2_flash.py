@@ -484,9 +484,9 @@ class MiMoV2FlashPreTrainedModel(PreTrainedModel):
     supports_gradient_checkpointing = True
     _no_split_modules = ["MiMoV2FlashDecoderLayer"]
     _skip_keys_device_placement = ["past_key_values"]
-    _supports_flash_attn = False  # not compatible because of asymmetric qk/v head dims
+    _supports_flash_attn = True  # not compatible because of asymmetric qk/v head dims
     _supports_sdpa = False  # disabling SDPA as it has no sink API atm (same as gpt-oss)
-    _supports_flex_attn = False  # same as FA2 + head dim not being a power of 2
+    _supports_flex_attn = True  # same as FA2 + head dim not being a power of 2
 
     _can_compile_fullgraph = True
     _supports_attention_backend = True
@@ -496,6 +496,7 @@ class MiMoV2FlashPreTrainedModel(PreTrainedModel):
     }
     _keep_in_fp32_modules_strict = ["e_score_correction_bias"]
     _keys_to_ignore_on_load_unexpected = [r"^model\.mtp\."]
+    _compatible_flash_implementations = ["kernels-community/vllm-flash-attn3", "flash_attention_4"]
 
     @torch.no_grad()
     def _init_weights(self, module):
