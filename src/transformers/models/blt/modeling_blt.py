@@ -1228,7 +1228,7 @@ class BltModel(BltPreTrainedModel):
         else:
             batch_size, sequence_length = input_ids.shape
             encoder_embeds = compute_hash_embeddings(
-                input_ids,
+                input_ids.to(self.local_encoder.embed_tokens.weight.device),
                 self.local_encoder,
                 self.encoder_hash_tok_embedding,
                 self.config.encoder_hash_byte_group_nb_functions,
