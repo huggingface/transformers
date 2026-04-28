@@ -23,7 +23,6 @@ from ... import initialization as init
 from ...cache_utils import Cache, DynamicCache, EncoderDecoderCache
 from ...configuration_utils import PreTrainedConfig
 from ...generation import GenerationMixin
-from ...integrations.tensor_parallel import TPStyle
 from ...masking_utils import (
     create_bidirectional_mask,
     create_bidirectional_sliding_window_mask,
@@ -785,7 +784,7 @@ class T5GemmaEncoderModel(T5GemmaPreTrainedModel):
 
 class T5GemmaForConditionalGeneration(T5GemmaPreTrainedModel, GenerationMixin):
     _tied_weights_keys = {"lm_head.out_proj.weight": "model.decoder.embed_tokens.weight"}
-    _tp_plan = {"lm_head.out_proj": TPStyle("colwise", "allgather")}
+    _tp_plan = {"lm_head.out_proj": "colwise_allgather"}
     _pp_plan = {"lm_head.out_proj": (["hidden_states"], ["logits"])}
 
     def __init__(self, config: T5GemmaConfig):

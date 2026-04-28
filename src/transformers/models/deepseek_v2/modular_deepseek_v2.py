@@ -21,7 +21,6 @@ from torch import nn
 
 from ... import initialization as init
 from ...cache_utils import Cache
-from ...integrations.tensor_parallel import TPStyle
 from ...modeling_rope_utils import RopeParameters, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...utils import auto_docstring, logging
@@ -68,49 +67,41 @@ class DeepseekV2Config(LlamaConfig):
     """
 
     base_model_tp_plan = {
-        "layers.*.self_attn.q_proj": TPStyle("colwise", "none"),
-        "layers.*.self_attn.q_b_proj": TPStyle("colwise", "none"),
-        "layers.*.self_attn.kv_b_proj": TPStyle("colwise", "none"),
-        "layers.*.self_attn.o_proj": TPStyle("rowwise", "allreduce"),
-        "layers.*.mlp.experts": TPStyle(
-            "moe_experts",
-            "allreduce",
-            shard_plan={"gate_up_proj": "packed_colwise", "down_proj": "rowwise"},
-        ),
-        "layers.*.mlp.shared_experts.gate_proj": TPStyle("colwise", "none"),
-        "layers.*.mlp.shared_experts.up_proj": TPStyle("colwise", "none"),
-        "layers.*.mlp.shared_experts.down_proj": TPStyle("rowwise", "allreduce"),
-        "layers.*.mlp.gate_proj": TPStyle("colwise", "none"),
-        "layers.*.mlp.up_proj": TPStyle("colwise", "none"),
-        "layers.*.mlp.down_proj": TPStyle("rowwise", "allreduce"),
+        "layers.*.self_attn.q_proj": "colwise",
+        "layers.*.self_attn.q_b_proj": "colwise",
+        "layers.*.self_attn.kv_b_proj": "colwise",
+        "layers.*.self_attn.o_proj": "rowwise_allreduce",
+        "layers.*.mlp.experts": "moe_experts_allreduce",
+        "layers.*.mlp.shared_experts.gate_proj": "colwise",
+        "layers.*.mlp.shared_experts.up_proj": "colwise",
+        "layers.*.mlp.shared_experts.down_proj": "rowwise_allreduce",
+        "layers.*.mlp.gate_proj": "colwise",
+        "layers.*.mlp.up_proj": "colwise",
+        "layers.*.mlp.down_proj": "rowwise_allreduce",
     }
     base_model_sp_plan = {
-        "embed_tokens": TPStyle("vocab", "reduce_scatter"),
-        "layers.*.input_layernorm": TPStyle("activation", "none"),
+        "embed_tokens": "vocab_reduce_scatter",
+        "layers.*.input_layernorm": "activation",
         # MLA: don't shard q_a_proj / kv_a_proj_with_mqa — their outputs feed
         # layernorms whose weights are full-size.  Only b-projections (after
         # the norm) and o_proj are sharded.
-        "layers.*.self_attn": TPStyle("module", "allgather", input_key="hidden_states"),
-        "layers.*.self_attn.q_b_proj": TPStyle("colwise", "none"),
-        "layers.*.self_attn.kv_b_proj": TPStyle("colwise", "none"),
-        "layers.*.self_attn.o_proj": TPStyle("rowwise", "reduce_scatter"),
-        "layers.*.post_attention_layernorm": TPStyle("activation", "none"),
-        "layers.*.mlp": TPStyle("module", "allgather_split"),
-        "layers.*.mlp.experts": TPStyle(
-            "moe_experts",
-            "allreduce",
-            shard_plan={"gate_up_proj": "packed_colwise", "down_proj": "rowwise"},
-        ),
+        "layers.*.self_attn": "module_allgather_hidden_states",
+        "layers.*.self_attn.q_b_proj": "colwise",
+        "layers.*.self_attn.kv_b_proj": "colwise",
+        "layers.*.self_attn.o_proj": "rowwise_reduce_scatter",
+        "layers.*.post_attention_layernorm": "activation",
+        "layers.*.mlp": "module_allgather_split",
+        "layers.*.mlp.experts": "moe_experts_allreduce",
         # Shared experts output must stay Replicate to match experts output
         # (they're summed inside the MoE block, before the outer allgather_split
         # handles the SP boundary).
-        "layers.*.mlp.shared_experts.gate_proj": TPStyle("colwise", "none"),
-        "layers.*.mlp.shared_experts.up_proj": TPStyle("colwise", "none"),
-        "layers.*.mlp.shared_experts.down_proj": TPStyle("rowwise", "allreduce"),
-        "layers.*.mlp.gate_proj": TPStyle("colwise", "none"),
-        "layers.*.mlp.up_proj": TPStyle("colwise", "none"),
-        "layers.*.mlp.down_proj": TPStyle("rowwise", "reduce_scatter"),
-        "norm": TPStyle("activation", "none"),
+        "layers.*.mlp.shared_experts.gate_proj": "colwise",
+        "layers.*.mlp.shared_experts.up_proj": "colwise",
+        "layers.*.mlp.shared_experts.down_proj": "rowwise_allreduce",
+        "layers.*.mlp.gate_proj": "colwise",
+        "layers.*.mlp.up_proj": "colwise",
+        "layers.*.mlp.down_proj": "rowwise_reduce_scatter",
+        "norm": "activation",
     }
 
     model_type = "deepseek_v2"

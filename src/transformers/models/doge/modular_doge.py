@@ -29,7 +29,6 @@ from ...activations import ACT2FN
 from ...cache_utils import Cache
 from ...configuration_utils import PreTrainedConfig
 from ...integrations.flex_attention import compile_friendly_flex_attention
-from ...integrations.tensor_parallel import TPStyle
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import MoeCausalLMOutputWithPast, MoeModelOutputWithPast
 from ...modeling_rope_utils import RopeParameters
@@ -82,17 +81,17 @@ class DogeConfig(PreTrainedConfig):
     keys_to_ignore_at_inference = ["past_key_values"]
     # Default tensor parallel plan for base model `DogeModel`
     base_model_tp_plan = {
-        "layers.*.self_attn.q_proj": TPStyle("colwise", "none"),
-        "layers.*.self_attn.k_proj": TPStyle("colwise", "none"),
-        "layers.*.self_attn.v_proj": TPStyle("colwise", "none"),
-        "layers.*.self_attn.dt_proj": TPStyle("rowwise", "allreduce"),
-        "layers.*.self_attn.o_proj": TPStyle("rowwise", "allreduce"),
-        "layers.*.mlp.gate_proj": TPStyle("colwise", "none"),
-        "layers.*.mlp.up_proj": TPStyle("colwise", "none"),
-        "layers.*.mlp.down_proj": TPStyle("rowwise", "allreduce"),
-        "layers.*.mlp.router_gate": TPStyle("colwise", "allgather"),
-        "layers.*.mlp.down_embed": TPStyle("vocab", "allreduce"),
-        "layers.*.mlp.up_embed": TPStyle("vocab", "allreduce"),
+        "layers.*.self_attn.q_proj": "colwise",
+        "layers.*.self_attn.k_proj": "colwise",
+        "layers.*.self_attn.v_proj": "colwise",
+        "layers.*.self_attn.dt_proj": "rowwise_allreduce",
+        "layers.*.self_attn.o_proj": "rowwise_allreduce",
+        "layers.*.mlp.gate_proj": "colwise",
+        "layers.*.mlp.up_proj": "colwise",
+        "layers.*.mlp.down_proj": "rowwise_allreduce",
+        "layers.*.mlp.router_gate": "colwise_allgather",
+        "layers.*.mlp.down_embed": "vocab_allreduce",
+        "layers.*.mlp.up_embed": "vocab_allreduce",
     }
     base_model_pp_plan = {
         "embed_tokens": (["input_ids"], ["inputs_embeds"]),

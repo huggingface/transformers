@@ -27,7 +27,6 @@ from torch import nn
 
 from ... import initialization as init
 from ...cache_utils import Cache
-from ...integrations.tensor_parallel import TPStyle
 from ...masking_utils import create_bidirectional_mask
 from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
 from ...modeling_utils import PreTrainedModel
@@ -227,7 +226,7 @@ class PI0Model(PI0PreTrainedModel):
 class PI0ForConditionalGeneration(PI0PreTrainedModel):
     """PI0 model with action projection heads and flow matching."""
 
-    _tp_plan = {"action_out_proj": TPStyle("colwise", "allgather")}
+    _tp_plan = {"action_out_proj": "colwise_allgather"}
 
     def __init__(self, config: PI0Config):
         super().__init__(config)

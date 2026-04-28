@@ -3006,7 +3006,7 @@ class Qwen3OmniMoeTalkerModel(Qwen3OmniMoePreTrainedModel):
 @auto_docstring
 class Qwen3OmniMoeTalkerForConditionalGeneration(Qwen3OmniMoeThinkerTextPreTrainedModel, GenerationMixin):
     _tied_weights_keys = {"codec_head": "model.codec_embedding.weight"}
-    _tp_plan = {"codec_head": TPStyle("colwise", "allgather")}
+    _tp_plan = {"codec_head": "colwise_allgather"}
     _sp_plan = {"lm_head": TPStyle("colwise", "loss_parallel")}
     _pp_plan = {"codec_head": (["hidden_states"], ["logits"])}
     config_class = Qwen3OmniMoeTalkerConfig

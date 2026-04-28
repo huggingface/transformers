@@ -17,7 +17,6 @@ import torch
 from huggingface_hub.dataclasses import strict
 
 from ... import initialization as init
-from ...integrations.tensor_parallel import TPStyle
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutputWithPooling
 from ...modeling_utils import PreTrainedModel
@@ -87,18 +86,14 @@ class Qwen3_5MoeTextConfig(Qwen3NextConfig):
     base_config_key = "text_config"
 
     base_model_tp_plan = {
-        "layers.*.self_attn.q_proj": TPStyle("colwise", "none"),
-        "layers.*.self_attn.k_proj": TPStyle("colwise", "none"),
-        "layers.*.self_attn.v_proj": TPStyle("colwise", "none"),
-        "layers.*.self_attn.o_proj": TPStyle("rowwise", "allreduce"),
-        "layers.*.mlp.experts": TPStyle(
-            "moe_experts",
-            "allreduce",
-            shard_plan={"gate_up_proj": "packed_colwise", "down_proj": "rowwise"},
-        ),
-        "layers.*.mlp.shared_expert.gate_proj": TPStyle("colwise", "none"),
-        "layers.*.mlp.shared_expert.up_proj": TPStyle("colwise", "none"),
-        "layers.*.mlp.shared_expert.down_proj": TPStyle("rowwise", "allreduce"),
+        "layers.*.self_attn.q_proj": "colwise",
+        "layers.*.self_attn.k_proj": "colwise",
+        "layers.*.self_attn.v_proj": "colwise",
+        "layers.*.self_attn.o_proj": "rowwise_allreduce",
+        "layers.*.mlp.experts": "moe_experts_allreduce",
+        "layers.*.mlp.shared_expert.gate_proj": "colwise",
+        "layers.*.mlp.shared_expert.up_proj": "colwise",
+        "layers.*.mlp.shared_expert.down_proj": "rowwise_allreduce",
     }
     ignore_keys_at_rope_validation = {"mrope_section", "mrope_interleaved"}
 
@@ -249,8 +244,8 @@ class Qwen3_5MoeForCausalLM(Qwen3NextForCausalLM):
 
 
 class Qwen3_5MoeForConditionalGeneration(Qwen3VLMoeForConditionalGeneration):
-    _tp_plan = {"lm_head": TPStyle("colwise", "allgather")}
-    _sp_plan = {"lm_head": TPStyle("colwise", "loss_parallel")}
+    _tp_plan = {"lm_head": "colwise_allgather"}
+    _sp_plan = {"lm_head": "colwise_loss_parallel"}
 
     def forward(self, **super_kwargs):
         r"""

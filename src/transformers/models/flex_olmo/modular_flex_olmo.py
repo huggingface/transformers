@@ -18,7 +18,6 @@ from huggingface_hub.dataclasses import strict
 
 from ...cache_utils import Cache, DynamicCache
 from ...configuration_utils import PreTrainedConfig
-from ...integrations.tensor_parallel import TPStyle
 from ...masking_utils import create_causal_mask
 from ...modeling_outputs import MoeModelOutputWithPast
 from ...modeling_rope_utils import RopeParameters
@@ -61,18 +60,10 @@ class FlexOlmoConfig(PreTrainedConfig):
     attribute_map = {"num_local_experts": "num_experts"}
     default_theta = 500000.0
     base_model_tp_plan = {
-        "layers.*.self_attn.q_proj": TPStyle(
-            "colwise", "allgather"
-        ),  # we need to replicate here due to the added norm on q and k
-        "layers.*.self_attn.k_proj": TPStyle(
-            "colwise", "allgather"
-        ),  # we need to replicate here due to the added norm on q and k
-        "layers.*.self_attn.v_proj": TPStyle(
-            "colwise", "allgather"
-        ),  # we need to replicate here due to the added norm on q and k
-        "layers.*.self_attn.o_proj": TPStyle(
-            "vocab", "allreduce"
-        ),  # input is replicated due to the added norm on q and k
+        "layers.*.self_attn.q_proj": "colwise_allgather",  # we need to replicate here due to the added norm on q and k
+        "layers.*.self_attn.k_proj": "colwise_allgather",  # we need to replicate here due to the added norm on q and k
+        "layers.*.self_attn.v_proj": "colwise_allgather",  # we need to replicate here due to the added norm on q and k
+        "layers.*.self_attn.o_proj": "vocab_allreduce",  # input is replicated due to the added norm on q and k
     }
     base_model_pp_plan = {
         "embed_tokens": (["input_ids"], ["inputs_embeds"]),

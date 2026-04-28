@@ -26,7 +26,6 @@ from ... import initialization as init
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
 from ...configuration_utils import PreTrainedConfig
-from ...integrations.tensor_parallel import TPStyle
 from ...masking_utils import create_causal_mask, create_sliding_window_causal_mask
 from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPooling
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS
@@ -107,13 +106,13 @@ class Gemma3nTextConfig(Gemma3TextConfig):
 
     model_type = "gemma3n_text"
     base_model_tp_plan = {
-        "layers.*.self_attn.q_proj": TPStyle("colwise", "allgather"),
-        "layers.*.self_attn.k_proj": TPStyle("colwise", "allgather"),
-        "layers.*.self_attn.v_proj": TPStyle("colwise", "allgather"),
-        "layers.*.self_attn.o_proj": TPStyle("vocab", "allreduce"),
-        "layers.*.mlp.gate_proj": TPStyle("colwise", "none"),
-        "layers.*.mlp.up_proj": TPStyle("colwise", "none"),
-        "layers.*.mlp.down_proj": TPStyle("rowwise", "allreduce"),
+        "layers.*.self_attn.q_proj": "colwise_allgather",
+        "layers.*.self_attn.k_proj": "colwise_allgather",
+        "layers.*.self_attn.v_proj": "colwise_allgather",
+        "layers.*.self_attn.o_proj": "vocab_allreduce",
+        "layers.*.mlp.gate_proj": "colwise",
+        "layers.*.mlp.up_proj": "colwise",
+        "layers.*.mlp.down_proj": "rowwise_allreduce",
     }
     base_model_sp_plan = None
     default_theta = {"global": 1_000_000.0, "local": 10_000.0}
