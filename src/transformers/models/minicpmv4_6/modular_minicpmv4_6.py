@@ -30,83 +30,18 @@ from ...modeling_outputs import (
     BaseModelOutputWithPooling,
     CausalLMOutputWithPast,
 )
-from ...modeling_utils import AttentionInterface, PreTrainedModel
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring
-from ...utils.generic import can_return_tuple
+from ...utils.generic import can_return_tuple, is_flash_attention_requested
 from ...utils.import_utils import torch_compilable_check
 from ...utils.output_capturing import capture_outputs
 from ..auto import CONFIG_MAPPING, AutoConfig, AutoModel
 from ..idefics3.modeling_idefics3 import Idefics3VisionEmbeddings
 from ..lfm2_vl.modeling_lfm2_vl import Lfm2VlModel
+from ..qwen2_vl.modeling_qwen2_vl import VisionAttention, eager_attention_forward
 from ..siglip.configuration_siglip import SiglipVisionConfig
-from ..siglip.modeling_siglip import SiglipAttention, SiglipEncoder, SiglipEncoderLayer, SiglipMLP
-
-
-def minicpmv4_6_vision_sdpa_attention_forward(
-    module: nn.Module,
-    query: torch.Tensor,
-    key: torch.Tensor,
-    value: torch.Tensor,
-    attention_mask: torch.Tensor | None,
-    dropout: float = 0.0,
-    scaling: float | None = None,
-    is_causal: bool | None = None,
-    **kwargs,
-) -> tuple[torch.Tensor, None]:
-    """SDPA with per-segment attention via cu_seq_lens for packed NaViT sequences."""
-    cu_seq_lens_q = kwargs.get("cu_seq_lens_q")
-    is_causal = is_causal if is_causal is not None else getattr(module, "is_causal", False)
-
-    if cu_seq_lens_q is not None:
-        attn_output = torch.empty_like(query)
-        for i in range(len(cu_seq_lens_q) - 1):
-            start, end = cu_seq_lens_q[i].item(), cu_seq_lens_q[i + 1].item()
-            attn_output[:, :, start:end, :] = F.scaled_dot_product_attention(
-                query[:, :, start:end, :],
-                key[:, :, start:end, :],
-                value[:, :, start:end, :],
-                dropout_p=dropout,
-                is_causal=False,
-            )
-    else:
-        is_causal = query.shape[2] > 1 and attention_mask is None and is_causal
-        attn_output = F.scaled_dot_product_attention(
-            query,
-            key,
-            value,
-            attn_mask=attention_mask,
-            dropout_p=dropout,
-            is_causal=is_causal,
-        )
-
-    attn_output = attn_output.transpose(1, 2).contiguous()
-    return attn_output, None
-
-
-# FIXME @vasqu: needs a varlen path for SDPA similar to qwen-vision-attention
-MINICPMV4_6_ATTENTION_FUNCTIONS = AttentionInterface()
-MINICPMV4_6_ATTENTION_FUNCTIONS["sdpa"] = minicpmv4_6_vision_sdpa_attention_forward
-
-
-def eager_attention_forward(
-    module: nn.Module,
-    query: torch.Tensor,
-    key: torch.Tensor,
-    value: torch.Tensor,
-    attention_mask: torch.Tensor | None,
-    scaling: float,
-    dropout: float = 0.0,
-    **kwargs,
-) -> tuple[torch.Tensor, torch.Tensor]:
-    attn_weights = torch.matmul(query, key.transpose(-1, -2)) * scaling
-    if attention_mask is not None:
-        attn_weights = attn_weights + attention_mask
-    attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query.dtype)
-    attn_weights = nn.functional.dropout(attn_weights, p=dropout, training=module.training)
-    attn_output = torch.matmul(attn_weights, value)
-    attn_output = attn_output.transpose(1, 2).contiguous()
-    return attn_output, attn_weights
+from ..siglip.modeling_siglip import SiglipEncoder, SiglipEncoderLayer, SiglipMLP
 
 
 @auto_docstring(checkpoint="openbmb/MiniCPM-V-4.6")
@@ -226,40 +161,90 @@ class MiniCPMV4_6VisionMLP(SiglipMLP):
     pass
 
 
-class MiniCPMV4_6VisionAttention(SiglipAttention):
+class MiniCPMV4_6VisionAttention(VisionAttention):
+    def __init__(self, config):
+        super().__init__()
+        del self.qkv
+        del self.proj
+        self.dim = config.hidden_size
+        self.num_heads = config.num_attention_heads
+        if self.head_dim * self.num_heads != self.dim:
+            raise ValueError(
+                f"embed_dim must be divisible by num_heads (got `embed_dim`: {self.dim} and `num_heads`:"
+                f" {self.num_heads})."
+            )
+        self.attention_dropout = config.attention_dropout
+
+        self.k_proj = nn.Linear(self.dim, self.dim)
+        self.v_proj = nn.Linear(self.dim, self.dim)
+        self.q_proj = nn.Linear(self.dim, self.dim)
+        self.out_proj = nn.Linear(self.dim, self.dim)
+
+    # diff from Qwen -> no RoPE used and unfused qkv
     def forward(
         self,
         hidden_states: torch.Tensor,
+        cu_seqlens: torch.Tensor,
+        max_seqlen: int,
         attention_mask: torch.Tensor | None = None,
         **kwargs,
-    ) -> tuple[torch.Tensor, torch.Tensor | None]:
+    ) -> torch.Tensor:
+        """Input shape: Batch x Time x Channel"""
         input_shape = hidden_states.shape[:-1]
         hidden_shape = (*input_shape, -1, self.head_dim)
 
-        queries = self.q_proj(hidden_states).view(hidden_shape).transpose(1, 2)
-        keys = self.k_proj(hidden_states).view(hidden_shape).transpose(1, 2)
-        values = self.v_proj(hidden_states).view(hidden_shape).transpose(1, 2)
+        query_states = self.q_proj(hidden_states).view(hidden_shape).transpose(1, 2)
+        key_states = self.k_proj(hidden_states).view(hidden_shape).transpose(1, 2)
+        value_states = self.v_proj(hidden_states).view(hidden_shape).transpose(1, 2)
 
-        attention_interface: Callable = MINICPMV4_6_ATTENTION_FUNCTIONS.get_interface(
+        attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
             self.config._attn_implementation, eager_attention_forward
         )
 
-        attn_output, attn_weights = attention_interface(
-            self,
-            queries,
-            keys,
-            values,
-            attention_mask,
-            is_causal=self.is_causal,
-            scaling=self.scale,
-            dropout=0.0 if not self.training else self.dropout,
-            **kwargs,
-        )
+        if is_flash_attention_requested(self.config):
+            # Flash Attention: Use cu_seqlens for variable length attention
+            attn_output, _ = attention_interface(
+                self,
+                query_states,
+                key_states,
+                value_states,
+                attention_mask=None,
+                scaling=self.scaling,
+                dropout=0.0 if not self.training else self.attention_dropout,
+                cu_seq_lens_q=cu_seqlens,
+                cu_seq_lens_k=cu_seqlens,
+                max_length_q=max_seqlen,
+                max_length_k=max_seqlen,
+                is_causal=False,
+                **kwargs,
+            )
+        else:
+            # Other implementations: Process each chunk separately
+            lengths = cu_seqlens[1:] - cu_seqlens[:-1]
+            splits = [
+                torch.split(tensor, lengths.tolist(), dim=2) for tensor in (query_states, key_states, value_states)
+            ]
+
+            attn_outputs = [
+                attention_interface(
+                    self,
+                    q,
+                    k,
+                    v,
+                    attention_mask=None,
+                    scaling=self.scaling,
+                    dropout=0.0 if not self.training else self.attention_dropout,
+                    is_causal=False,
+                    **kwargs,
+                )[0]
+                for q, k, v in zip(*splits)
+            ]
+            attn_output = torch.cat(attn_outputs, dim=1)
 
         attn_output = attn_output.reshape(*input_shape, -1).contiguous()
         attn_output = self.out_proj(attn_output)
 
-        return attn_output, attn_weights
+        return attn_output, None
 
 
 class MiniCPMV4_6VisionEncoderLayer(SiglipEncoderLayer):
@@ -366,7 +351,7 @@ class MiniCPMV4_6ViTWindowAttentionMerger(nn.Module):
         hidden_states: torch.Tensor,
         target_sizes: torch.IntTensor,
         cu_seqlens: torch.Tensor | None = None,
-        max_seqlens: torch.Tensor | None = None,
+        max_seqlen: torch.Tensor | None = None,
     ):
         residual = hidden_states
         hidden_states = self.layer_norm1(hidden_states)
@@ -378,10 +363,8 @@ class MiniCPMV4_6ViTWindowAttentionMerger(nn.Module):
         hidden_states = hidden_states[:, window_index, :]
         hidden_states, _ = self.self_attn(
             hidden_states=hidden_states,
-            cu_seq_lens_q=window_cu_seqlens.to(device),
-            cu_seq_lens_k=window_cu_seqlens.to(device),
-            max_length_q=window_max_seqlens,
-            max_length_k=window_max_seqlens,
+            cu_seqlens=window_cu_seqlens.to(device),
+            max_seqlen=window_max_seqlens,
         )
         hidden_states = hidden_states[:, torch.argsort(window_index), :]
         hidden_states = residual + hidden_states
@@ -414,9 +397,9 @@ class MiniCPMV4_6ViTWindowAttentionMerger(nn.Module):
         new_cu_seqlens = F.pad(
             torch.cumsum(new_target_sizes[:, 0] * new_target_sizes[:, 1], dim=0, dtype=torch.int32).to(device), (1, 0)
         )
-        if max_seqlens % 4 != 0:
-            raise ValueError(f"max_seqlens ({max_seqlens}) must be divisible by 4")
-        new_max_seqlens = max_seqlens // 4
+        if max_seqlen % 4 != 0:
+            raise ValueError(f"max_seqlen ({max_seqlen}) must be divisible by 4")
+        new_max_seqlens = max_seqlen // 4
 
         return (
             new_hidden_states,
@@ -476,10 +459,8 @@ class MiniCPMV4_6VisionTransformer(MiniCPMV4_6VisionPreTrainedModel):
         hidden_states = self.embeddings(pixel_values, target_sizes=target_sizes)
         attn_kwargs = {
             "attention_mask": None,
-            "cu_seq_lens_q": cu_seqlens,
-            "cu_seq_lens_k": cu_seqlens,
-            "max_length_q": max_seqlens,
-            "max_length_k": max_seqlens,
+            "cu_seqlens": cu_seqlens,
+            "max_seqlen": max_seqlens,
             **kwargs,
         }
 
@@ -497,10 +478,8 @@ class MiniCPMV4_6VisionTransformer(MiniCPMV4_6VisionPreTrainedModel):
                     )
                     attn_kwargs = {
                         "attention_mask": None,
-                        "cu_seq_lens_q": cu_seqlens,
-                        "cu_seq_lens_k": cu_seqlens,
-                        "max_length_q": max_seqlens,
-                        "max_length_k": max_seqlens,
+                        "cu_seqlens": cu_seqlens,
+                        "max_seqlen": max_seqlens,
                         **kwargs,
                     }
         else:

@@ -124,4 +124,3 @@ class MiniCPMV4_6ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             torch.equal(inputs_with_id["input_ids"], inputs_without_id["input_ids"]),
             "use_image_id should produce different input_ids when True vs False",
         )
-

@@ -243,9 +243,7 @@ class MiniCPMV4_6VideoProcessingTest(VideoProcessingTestMixin, unittest.TestCase
             sampled_video_processor_dict = {**video_processor_dict, "do_sample_frames": True}
 
             # stack_frames=1: sample one main frame per second from complete metadata.
-            video_processor = video_processing_class(
-                **sampled_video_processor_dict, max_num_frames=20, stack_frames=1
-            )
+            video_processor = video_processing_class(**sampled_video_processor_dict, max_num_frames=20, stack_frames=1)
 
             encoded_videos = video_processor(
                 video_inputs[0],
@@ -256,9 +254,9 @@ class MiniCPMV4_6VideoProcessingTest(VideoProcessingTestMixin, unittest.TestCase
             self.assertEqual(len(encoded_videos), 1)
             self.assertListEqual(list(encoded_videos[0].shape), expected_shape)
 
-            encoded_videos_batched = video_processor(
-                video_inputs, video_metadata=video_metadata, return_tensors="pt"
-            )[self.input_name]
+            encoded_videos_batched = video_processor(video_inputs, video_metadata=video_metadata, return_tensors="pt")[
+                self.input_name
+            ]
             expected_shape_batched = self.video_processor_tester.expected_output_video_shape(
                 [video[[0, 2, 4, 6]] for video in video_inputs]
             )
