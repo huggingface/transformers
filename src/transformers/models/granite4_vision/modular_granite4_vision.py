@@ -16,6 +16,8 @@ import math
 from dataclasses import dataclass
 from fractions import Fraction
 
+from huggingface_hub.dataclasses import strict
+
 import numpy as np
 import torch
 from torch import nn
@@ -90,6 +92,7 @@ class Granite4VisionImageFeaturesOutput(ModelOutput):
 # ── Config ──────────────────────────────────────────────────────────────────
 
 
+@strict
 class Granite4VisionTextConfig(PreTrainedConfig):
     model_type = "granite4_vision_text"
     base_config_key = "text_config"
@@ -258,7 +261,7 @@ class WindowQFormerDownsampler(nn.Module):
         llm_hidden_size = config.text_config.hidden_size
         vision_hidden_size = config.vision_config.hidden_size
 
-        from ..blip_2.modeling_blip_2 import Blip2QFormerModel
+        from ..blip_2.modeling_blip_2 import Blip2QFormerModel  # trf-ignore: TRF009
 
         self.dropout = nn.Dropout(config.projector_dropout)
         self._spatial_offset = spatial_offset
@@ -362,7 +365,7 @@ class Granite4VisionPreTrainedModel(LlavaNextPreTrainedModel):
 class Granite4VisionTextModel(Granite4VisionPreTrainedModel, GraniteModel):
     """Granite LLM backbone with deepstack feature injection support."""
 
-    base_model_prefix = ""
+    base_model_prefix = "model"
     _no_split_modules = ["Granite4VisionTextDecoderLayer"]
 
     def __init__(self, config: Granite4VisionTextConfig):
