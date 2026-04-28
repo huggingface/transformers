@@ -16,15 +16,19 @@ from __future__ import annotations
 import contextlib
 import re
 from dataclasses import dataclass
-from typing import Literal
+from typing import ABC, Literal, abstractmethod
 
 from ..utils import logging
-from ..utils.import_utils import is_torch_available
+from ..utils.import_utils import is_torch_available, is_torch_greater_or_equal
 
 
 if is_torch_available():
     import torch
+    import torch.nn as nn
+
+if is_torch_available() and is_torch_greater_or_equal("2.5"):
     import torch.distributed as dist
+    from torch.distributed.device_mesh import DeviceMesh
     from torch.distributed.tensor import DTensor, Partial, Replicate, Shard, distribute_tensor
     from torch.distributed.tensor.parallel import (
         ColwiseParallel,
@@ -71,11 +75,6 @@ def _get_parameter_tp_plan(parameter_name: str, tp_plan: dict[str, str], is_weig
     elif is_weight and "." in generic_param_name and (module_name := generic_param_name.rsplit(".", 1)[0]) in tp_plan:
         return tp_plan[module_name]
     return None
-
-
-# =============================================================================
-# Tensor Sharding Utilities
-# =============================================================================
 
 
 # =============================================================================
@@ -247,6 +246,21 @@ def verify_tp_plan(expected_keys: list[str], tp_plan: dict[str, str | TPStyle] |
         logger.warning(f"The following TP rules were not applied on any of the layers: {unused_rules}")
     if len(unsharded_layers) > 0:
         logger.warning(f"The following layers were not sharded: {', '.join(unsharded_layers)}")
+
+
+class ParallelStyle(ABC):
+    """
+    Import from torch.distributed.tensor.parallel.style.ParallelStyle to avoid import guarding every class that inherits from it.
+    The parallel style contract defines how the module or submodule should be parallelized.
+
+    It only defines the ``apply`` method for ``parallelize_module`` to use, this allows maximum
+    flexibility for different kind of style implementations.
+    """
+
+    src_data_rank: int | None = 0
+
+    @abstractmethod
+    def _apply(self, module: nn.Module, device_mesh: DeviceMesh) -> nn.Module: ...
 
 
 class PrepareModuleInputOutput(ParallelStyle):

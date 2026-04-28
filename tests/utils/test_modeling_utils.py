@@ -59,6 +59,7 @@ from transformers import (
     is_torch_available,
     logging,
 )
+from transformers.distributed import DistributedConfig
 from transformers.modeling_flash_attention_utils import is_flash_attn_available
 from transformers.models.mistral.modeling_mistral import MistralModel
 from transformers.testing_utils import (
@@ -438,25 +439,24 @@ class ModelUtilsTest(TestCasePlus):
             model.save_pretrained(tmp_dir)
             call_order = []
 
-            def fake_distribute_model(model, tp_plan, distributed_config, device_mesh, tp_size, fsdp_plan=None):
+            fake_mesh = mock.Mock()
+            fake_mesh.mesh_dim_names = ("fsdp",)
+            fake_mesh.ndim = 1
+
+            def fake_apply_fsdp(model, fsdp_mesh, fsdp_plan):
                 call_order.append("distribute")
-                self.assertEqual(fsdp_plan, {"mode": "auto"})
-                model._tp_plan = {"model.layers.*.mlp.experts.gate_up_proj": "packed_colwise"}
-                model._is_fsdp_managed_module = True
+                self.assertIs(fsdp_mesh, fake_mesh)
+                self.assertEqual(fsdp_plan, "auto")
                 return model
 
             def fake_load_pretrained_model(model, state_dict, checkpoint_files, load_config, expected_keys=None):
                 call_order.append("load")
-                self.assertEqual(load_config.device_mesh, "fake-mesh")
-                self.assertEqual(load_config.device_map, {"": torch.device("cpu")})
-                self.assertIsNone(load_config.tp_plan)
+                self.assertIs(load_config.device_mesh, fake_mesh)
                 return mock.Mock(), None
 
             with (
-                patch(
-                    "transformers.modeling_utils.initialize_fsdp", return_value=(torch.device("cpu"), "fake-mesh", 2)
-                ),
-                patch("transformers.modeling_utils.distribute_model", side_effect=fake_distribute_model),
+                patch("transformers.modeling_utils.init_device_mesh", return_value=fake_mesh),
+                patch("transformers.modeling_utils.apply_fully_shard_data_parallel", side_effect=fake_apply_fsdp),
                 patch.object(GPT2LMHeadModel, "_load_pretrained_model", side_effect=fake_load_pretrained_model),
                 patch.object(
                     GPT2LMHeadModel,
@@ -464,7 +464,7 @@ class ModelUtilsTest(TestCasePlus):
                     side_effect=lambda model, load_config, loading_info: loading_info,
                 ),
             ):
-                GPT2LMHeadModel.from_pretrained(tmp_dir, fsdp_plan={"mode": "auto"})
+                GPT2LMHeadModel.from_pretrained(tmp_dir, distributed_config=DistributedConfig(fsdp_size=2))
 
         self.assertEqual(call_order, ["distribute", "load"])
 
