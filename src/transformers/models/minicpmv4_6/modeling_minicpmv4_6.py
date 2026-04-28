@@ -484,7 +484,7 @@ class MiniCPMV4_6VisionModel(MiniCPMV4_6VisionPreTrainedModel):
             "max_seqlen": max_seqlens,
             **kwargs,
         }
-        return downsampled_kwargs
+        return downsampled_kwargs, target_sizes
 
     @capture_outputs
     @auto_docstring
@@ -527,7 +527,7 @@ class MiniCPMV4_6VisionModel(MiniCPMV4_6VisionPreTrainedModel):
                     )
 
                     # NOTE: Downsampled hidden states, and therefore other kwargs should also!
-                    attn_kwargs = self.get_downsampled_inputs(
+                    attn_kwargs, target_sizes = self.get_downsampled_inputs(
                         target_sizes=target_sizes, max_seqlens=max_seqlens, **kwargs
                     )
         else:
