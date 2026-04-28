@@ -1467,6 +1467,7 @@ def shard_and_distribute_module(
         else:
             logger.info(f"Tensor sharding plan for {param_name}: {current_shard_plan}")
 
+    tp_layer = None
     if current_shard_plan is not None:
         try:
             tp_layer = ALL_PARALLEL_STYLES[current_shard_plan]
@@ -1488,7 +1489,8 @@ def shard_and_distribute_module(
     if not isinstance(param, torch.nn.Parameter):
         param = torch.nn.Parameter(param, requires_grad=empty_param.is_floating_point())
     setattr(module_to_tp, param_type, param)
-    tp_layer.update_module_attributes(module_to_tp)
+    if tp_layer is not None:
+        tp_layer.update_module_attributes(module_to_tp)
     return param
 
 
