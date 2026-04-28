@@ -99,7 +99,7 @@ A page holds the key/value state for one token in one layer. A block is a span o
 
 ### Cache sizing
 
-The manager infers the number of blocks at startup from free GPU memory.. The manager solves a memory equation that accounts for KV tensors, attention masks, activations, and bookkeeping indices, then sizes the pool to fit inside `max_memory_percent` (default 0.8) of the available memory.
+The manager infers the number of blocks at startup from free GPU memory. The manager solves an equation that accounts for KV tensors, attention masks, activations, and bookkeeping indices, then sizes the pool to fit inside `max_memory_percent` (default 0.9) of the available memory.
 
 You can pin the values explicitly in [`ContinuousBatchingConfig`].
 
@@ -116,7 +116,7 @@ cb_config = ContinuousBatchingConfig(
 
 Before a request joins the batch, the scheduler checks that enough free blocks exist for every layer group. If any group would fall short, the request is rejected and nothing is allocated.
 
-To avoid filling the cache until [soft reset](#soft-reset) is the only option, the default FIFO scheduler enforces a safety margin. Once free blocks fall below 20% of the total, new prefills are held back and only active decodes continue.
+To avoid filling the cache until [offload](#offload) is the only option, the default FIFO scheduler enforces a safety margin. Once free blocks fall below 20% of the total, new prefills are held back and only active decodes continue.
 
 ### Prefix caching
 
@@ -130,7 +130,7 @@ Freed blocks aren't wiped and they stay "initialized" with their content and has
 
 ### Soft reset
 
-If the KV cache fills completely during a long session, because requests are generating very long outputs, the manager triggers a soft reset rather than crashing. It selects the oldest active request (or the newest, if a previous soft reset already blocked new requests from joining), appends its generated tokens to its original prompt, frees its cache blocks, and adds it back to the queue.
+If the KV cache fills completely during a long session, because requests are generating very long outputs, the manager triggers offloading rather than crashing. It selects the oldest active request (or the newest, if a previous soft reset already blocked new requests from joining), appends its generated tokens to its original prompt, frees its cache blocks, and adds it back to the queue.
 
 When the cache has space again, the request resumes from where it left off with its generation history encoded in the prompt.
 
