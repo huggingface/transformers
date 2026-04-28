@@ -323,6 +323,7 @@ class PPFormulaNetVisionModel(SLANeXtVisionEncoder):
     pass
 
 
+@auto_docstring
 class PPFormulaNetTextModel(MBartDecoder):
     pass
 
@@ -334,6 +335,8 @@ class PPFormulaNetModel(PPFormulaNetPreTrainedModel):
         self.decoder = PPFormulaNetTextModel(config.text_config)
         self.encoder = PPFormulaNetVisionModel(config=config.vision_config)
         self.multi_modal_projector = PPFormulaNetMultiModalProjector(config)
+
+        self.post_init()
 
     @can_return_tuple
     @auto_docstring(

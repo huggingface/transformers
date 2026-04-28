@@ -756,6 +756,7 @@ class PPFormulaNetDecoderLayer(GradientCheckpointingLayer):
         return hidden_states
 
 
+@auto_docstring
 class PPFormulaNetTextModel(PPFormulaNetPreTrainedModel):
     """
     Transformer decoder consisting of *config.decoder_layers* layers. Each layer is a [`PPFormulaNetTextModelLayer`]
@@ -956,6 +957,8 @@ class PPFormulaNetModel(PPFormulaNetPreTrainedModel):
         self.decoder = PPFormulaNetTextModel(config.text_config)
         self.encoder = PPFormulaNetVisionModel(config=config.vision_config)
         self.multi_modal_projector = PPFormulaNetMultiModalProjector(config)
+
+        self.post_init()
 
     @can_return_tuple
     @auto_docstring(
