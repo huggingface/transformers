@@ -39,7 +39,6 @@ from safetensors import safe_open
 from safetensors.torch import load as _safe_load_bytes
 from safetensors.torch import save_file as safe_save_file
 from torch import Tensor, nn
-from torch.distributed.tensor import DTensor, Shard
 from torch.distributions import constraints
 from torch.utils.checkpoint import checkpoint
 
@@ -1380,18 +1379,6 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         """Whether expert parallelism is enabled for this model."""
         distributed_config = getattr(getattr(self, "config", None), "distributed_config", None)
         return distributed_config is not None and getattr(distributed_config, "enable_expert_parallel", False)
-
-    @property
-    def ep_sharded_param_names(self) -> list[str]:
-        """FQNs of parameters whose data is per-rank unique under EP sharding."""
-        if not self.has_ep:
-            return []
-        plan = self.tp_plan
-        return [
-            name
-            for name, _ in self.named_parameters()
-            if _get_parameter_tp_plan(parameter_name=name, tp_plan=plan, is_weight=True) == "grouped_gemm"
-        ]
 
     @property
     def tp_plan(self) -> dict[str, str]:
@@ -4236,8 +4223,6 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         model.eval()  # Set model in evaluation mode to deactivate Dropout modules by default
         model.set_use_kernels(use_kernels, kernel_config)
 
-        cls._wrap_ep_params_as_dtensor(model, device_mesh)
-
         # If it is a model with generation capabilities, attempt to load generation files (generation config,
         # custom generate function)
         if model.can_generate() and hasattr(model, "adjust_generation_fn") and not gguf_file:
@@ -4375,24 +4360,6 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                 k.__exit__(None, None, None)
 
         return loading_info, disk_offload_index
-
-    @staticmethod
-    def _wrap_ep_params_as_dtensor(model, device_mesh) -> None:
-        """Wrap EP-sharded params (`grouped_gemm` style) as DTensors in-place.
-
-        Without this, the optimizer's foreach ops error with "mixed Tensor and DTensor"
-        against the FSDP-wrapped DTensor params on the rest of the model.
-        """
-
-        if not model.has_ep:
-            return
-        plan = model.tp_plan
-        for name, p in list(model.named_parameters()):
-            if _get_parameter_tp_plan(parameter_name=name, tp_plan=plan, is_weight=True) != "grouped_gemm":
-                continue
-            parent, attr = get_module_from_name(model, name)
-            dt = DTensor.from_local(p.data, device_mesh, [Shard(0)], run_check=False)
-            setattr(parent, attr, nn.Parameter(dt, requires_grad=p.requires_grad))
 
     @staticmethod
     def _finalize_model_loading(
