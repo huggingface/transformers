@@ -654,15 +654,11 @@ class Granite4VisionModel(LlavaNextModel):
         vision_feature_layer: int | list[int] | None = None,
         vision_feature_select_strategy: str | None = None,
         use_cache: bool | None = None,
-        output_attentions: bool | None = None,
-        output_hidden_states: bool | None = None,
         return_dict: bool | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | Granite4VisionModelOutputWithPast:
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
+        output_attentions = kwargs.pop("output_attentions", None) or self.config.output_attentions
+        output_hidden_states = kwargs.pop("output_hidden_states", None) or self.config.output_hidden_states
         return_dict = return_dict if return_dict is not None else self.config.return_dict
         vision_feature_layer = (
             vision_feature_layer if vision_feature_layer is not None else self.config.vision_feature_layer
