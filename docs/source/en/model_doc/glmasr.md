@@ -49,8 +49,6 @@ you can check the [model card](https://huggingface.co/zai-org/GLM-ASR-Nano-2512)
 <hfoptions id="usage">
 <hfoption id="AutoModel">
 
-```python
-runnable:test_basic
 # pytest-decorator: transformers.testing_utils.slow, transformers.testing_utils.require_torch
 from transformers import AutoModelForSeq2SeqLM, AutoProcessor
 
@@ -75,8 +73,6 @@ print(decoded_outputs)
 
 The processor's `apply_transcription_request` is equivalent to using the chat template in the following manner:
 
-```python
-runnable:test_advanced
 # pytest-decorator: transformers.testing_utils.slow, transformers.testing_utils.require_torch
 from transformers import AutoProcessor, GlmAsrForConditionalGeneration
 
@@ -116,8 +112,6 @@ print(decoded_outputs)
 
 One can also use audio arrays directly:
 
-```python
-runnable:test_audio_array
 # pytest-decorator: transformers.testing_utils.slow, transformers.testing_utils.require_torch
 from datasets import Audio, load_dataset
 
@@ -145,8 +139,6 @@ print(decoded_outputs)
 
 You can process multiple audio files at once:
 
-```python
-runnable:test_batched
 # pytest-decorator: transformers.testing_utils.slow, transformers.testing_utils.require_torch
 import torch
 

@@ -23,7 +23,6 @@ rendered properly in your Markdown viewer.
 </div>
 
 ```python
-3
 import torch
 
 import transformers
