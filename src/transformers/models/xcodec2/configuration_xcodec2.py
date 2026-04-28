@@ -53,6 +53,10 @@ class Xcodec2Config(PreTrainedConfig):
 
     sub_configs = {"semantic_model_config": AutoConfig}
 
+    _default_semantic_config_kwargs = {
+        "num_hidden_layers": 16,
+    }
+
     encoder_hidden_size: int = 48
     downsampling_ratios: list[int] | tuple[int, ...] = (2, 2, 4, 4, 5)
     hidden_size: int = 1024
@@ -77,10 +81,10 @@ class Xcodec2Config(PreTrainedConfig):
         if isinstance(self.semantic_model_config, dict):
             self.semantic_model_config["model_type"] = self.semantic_model_config.get("model_type", "wav2vec2-bert")
             self.semantic_model_config = CONFIG_MAPPING[self.semantic_model_config["model_type"]](
-                **self.semantic_model_config
+                **{**self._default_semantic_config_kwargs, **self.semantic_model_config}
             )
         elif self.semantic_model_config is None:
-            self.semantic_model_config = CONFIG_MAPPING["wav2vec2-bert"]()
+            self.semantic_model_config = CONFIG_MAPPING["wav2vec2-bert"](**self._default_semantic_config_kwargs)
 
         if self.rope_parameters is None:
             self.rope_parameters = {"rope_theta": 10000.0, "rope_type": "default"}

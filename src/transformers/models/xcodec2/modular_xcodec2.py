@@ -55,16 +55,16 @@ class Xcodec2Output(ModelOutput):
         audio_codes (`torch.LongTensor` of shape `(batch_size, 1, codes_length)`, *optional*):
             Discrete code embeddings computed using `model.encode`. These are the quantized
             representations of the input audio used for further processing or generation.
-        quantized_representation (`torch.Tensor` of shape `(batch_size, dimension, time_steps)`):
+        latents (`torch.Tensor` of shape `(batch_size, dimension, time_steps)`):
             Quantized continuous representation of input's embedding.
-        codes_padding_mask (`torch.int32` of shape `(batch_size, 1, codes_length)`, *optional*):
+        audio_codes_mask (`torch.int32` of shape `(batch_size, 1, codes_length)`, *optional*):
             Downsampled `padding_mask` for indicating valid audio codes in `audio_codes`.
     """
 
     audio_values: torch.FloatTensor | None = None
     audio_codes: torch.LongTensor | None = None
-    quantized_representation: torch.Tensor | None = None
-    codes_padding_mask: torch.Tensor | None = None
+    latents: torch.Tensor | None = None
+    audio_codes_mask: torch.Tensor | None = None
 
 
 @dataclass
@@ -75,16 +75,16 @@ class Xcodec2EncoderOutput(ModelOutput):
             Discrete code embeddings computed using `model.encode`. These represent
             the compressed, quantized form of the input audio signal that can be
             used for storage, transmission, or generation.
-        quantized_representation (`torch.Tensor` of shape `(batch_size, dimension, time_steps)`):
+        latents (`torch.Tensor` of shape `(batch_size, dimension, time_steps)`):
             Quantized continuous representation of input's embedding.
-        codes_padding_mask (`torch.int32` of shape `(batch_size, 1, codes_length)`, *optional*):
+        audio_codes_mask (`torch.int32` of shape `(batch_size, 1, codes_length)`, *optional*):
             Downsampled `padding_mask` for indicating valid audio codes in `audio_codes`.
 
     """
 
     audio_codes: torch.LongTensor | None = None
-    quantized_representation: torch.Tensor | None = None
-    codes_padding_mask: torch.Tensor | None = None
+    latents: torch.Tensor | None = None
+    audio_codes_mask: torch.Tensor | None = None
 
 
 @dataclass
@@ -428,7 +428,7 @@ class Xcodec2Model(Xcodec2PreTrainedModel):
         super().__init__(config)
 
         self.hop_length = config.hop_length
-        self.semantic_model = AutoModel.from_config(config.semantic_model_config).eval()
+        self.semantic_encoder = AutoModel.from_config(config.semantic_model_config)
         self.semantic_adapter = Xcodec2SemanticAdapter(config)
         self.acoustic_encoder = Xcodec2Encoder(config)
         self.fc_encoder = nn.Linear(
@@ -440,38 +440,6 @@ class Xcodec2Model(Xcodec2PreTrainedModel):
 
         self.post_init()
 
-    def apply_weight_norm(self, legacy=True):
-        weight_norm = nn.utils.weight_norm
-        if hasattr(nn.utils.parametrizations, "weight_norm") and not legacy:
-            weight_norm = nn.utils.parametrizations.weight_norm
-
-        weight_norm(self.acoustic_encoder.conv1)
-        for encoder_block in self.acoustic_encoder.block:
-            weight_norm(encoder_block.res_unit1.conv1)
-            weight_norm(encoder_block.res_unit1.conv2)
-            weight_norm(encoder_block.res_unit2.conv1)
-            weight_norm(encoder_block.res_unit2.conv2)
-            weight_norm(encoder_block.res_unit3.conv1)
-            weight_norm(encoder_block.res_unit3.conv2)
-            weight_norm(encoder_block.conv1)
-        weight_norm(self.acoustic_encoder.conv2)
-
-    def remove_weight_norm(self, legacy=True):
-        remove_weight_norm = nn.utils.remove_weight_norm
-        if hasattr(nn.utils.parametrizations, "weight_norm") and not legacy:
-            remove_weight_norm = nn.utils.parametrize.remove_parametrizations
-
-        remove_weight_norm(self.acoustic_encoder.conv1)
-        for encoder_block in self.acoustic_encoder.block:
-            remove_weight_norm(encoder_block.res_unit1.conv1)
-            remove_weight_norm(encoder_block.res_unit1.conv2)
-            remove_weight_norm(encoder_block.res_unit2.conv1)
-            remove_weight_norm(encoder_block.res_unit2.conv2)
-            remove_weight_norm(encoder_block.res_unit3.conv1)
-            remove_weight_norm(encoder_block.res_unit3.conv2)
-            remove_weight_norm(encoder_block.conv1)
-        remove_weight_norm(self.acoustic_encoder.conv2)
-
     @auto_docstring
     @can_return_tuple
     def encode(
@@ -479,6 +447,7 @@ class Xcodec2Model(Xcodec2PreTrainedModel):
         audio: torch.Tensor,
         audio_spectrogram: torch.Tensor,
         padding_mask: torch.Tensor | None = None,
+        output_latents: bool = False,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | Xcodec2EncoderOutput:
         r"""
@@ -488,13 +457,14 @@ class Xcodec2Model(Xcodec2PreTrainedModel):
             Input audio mel spectrogram for semantic encoding.
         padding_mask (`torch.Tensor` of shape `(batch_size, 1, sequence_length)`):
             Padding mask used to pad `audio`.
+        output_latents (`bool`, *optional*, defaults to `False`):
+            Whether to return the continuous latent representation from the quantizer.
         """
 
-        # Semantic embedding (16th layer of Wav2Vec2Bert)
-        semantic_output = self.semantic_model(audio_spectrogram, output_hidden_states=True)
-        semantic_hidden_16 = semantic_output.hidden_states[16]
-        semantic_hidden_16 = semantic_hidden_16.transpose(1, 2)
-        semantic_hidden_states = self.semantic_adapter(semantic_hidden_16)
+        # Semantic embedding
+        semantic_output = self.semantic_encoder(audio_spectrogram)
+        semantic_hidden_states = semantic_output.last_hidden_state.transpose(1, 2)
+        semantic_hidden_states = self.semantic_adapter(semantic_hidden_states)
 
         # Acoustic embedding
         acoustic_hidden_states = self.acoustic_encoder(audio)
@@ -508,22 +478,22 @@ class Xcodec2Model(Xcodec2PreTrainedModel):
         hidden_states = self.fc_encoder(hidden_states.transpose(1, 2))
 
         # Quantize
-        quantized_representation, audio_codes = self.quantizer(hidden_states)
-        quantized_representation = quantized_representation.transpose(1, 2)
+        latents, audio_codes = self.quantizer(hidden_states)
+        latents = latents.transpose(1, 2)
         audio_codes = audio_codes.transpose(1, 2)
 
         # If provided, compute corresponding padding mask for audio codes
-        codes_padding_mask = None
+        audio_codes_mask = None
         if padding_mask is not None:
             audio_length = padding_mask.sum(dim=-1, keepdim=True)
             token_length = audio_length // self.hop_length
             idx = torch.arange(audio_codes.shape[-1], device=padding_mask.device).view(1, -1)
-            codes_padding_mask = (idx < token_length).to(padding_mask.dtype)
+            audio_codes_mask = (idx < token_length).to(padding_mask.dtype)
 
         return Xcodec2EncoderOutput(
             audio_codes=audio_codes,
-            quantized_representation=quantized_representation,
-            codes_padding_mask=codes_padding_mask,
+            latents=latents if output_latents else None,
+            audio_codes_mask=audio_codes_mask,
         )
 
     @auto_docstring
@@ -531,24 +501,24 @@ class Xcodec2Model(Xcodec2PreTrainedModel):
     def decode(
         self,
         audio_codes: torch.Tensor | None = None,
-        quantized_representation: torch.Tensor | None = None,
+        latents: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | Xcodec2DecoderOutput:
         r"""
         audio_codes (`torch.LongTensor`  of shape `(batch_size, 1, codes_length)`):
             Discrete code indices computed using `model.encode`.
-        quantized_representation (torch.Tensor of shape `(batch_size, dimension, time_steps)`, *optional*):
+        latents (torch.Tensor of shape `(batch_size, dimension, time_steps)`, *optional*):
             Quantized continuous representation of input.
         """
-        if quantized_representation is None and audio_codes is None:
-            raise ValueError("Either `quantized_representation` or `audio_codes` must be provided.")
+        if latents is None and audio_codes is None:
+            raise ValueError("Either `latents` or `audio_codes` must be provided.")
 
         if audio_codes is not None:
-            quantized_representation = self.quantizer.from_codes(audio_codes.transpose(1, 2))
+            latents = self.quantizer.from_codes(audio_codes.transpose(1, 2))
         else:
-            quantized_representation = quantized_representation.transpose(1, 2)
+            latents = latents.transpose(1, 2)
 
-        recon_audio = self.decoder(quantized_representation)
+        recon_audio = self.decoder(latents)
         return Xcodec2DecoderOutput(audio_values=recon_audio)
 
     @auto_docstring
@@ -558,6 +528,7 @@ class Xcodec2Model(Xcodec2PreTrainedModel):
         audio: torch.Tensor,
         audio_spectrogram: torch.Tensor,
         padding_mask: torch.Tensor | None = None,
+        output_latents: bool = False,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | Xcodec2Output:
         r"""
@@ -567,6 +538,8 @@ class Xcodec2Model(Xcodec2PreTrainedModel):
             Input audio mel spectrogram for semantic encoding.
         padding_mask (`torch.Tensor` of shape `(batch_size, 1, sequence_length)`):
             Padding mask used to pad `audio`.
+        output_latents (`bool`, *optional*, defaults to `False`):
+            Whether to return the continuous latent representation from the quantizer.
 
         Examples:
 
@@ -591,17 +564,19 @@ class Xcodec2Model(Xcodec2PreTrainedModel):
         length = audio.shape[-1]
 
         encoder_outputs = self.encode(
-            audio, audio_spectrogram=audio_spectrogram, padding_mask=padding_mask, return_dict=True
+            audio,
+            audio_spectrogram=audio_spectrogram,
+            padding_mask=padding_mask,
+            output_latents=True,
+            return_dict=True,
         )
-        audio_values = self.decode(
-            quantized_representation=encoder_outputs.quantized_representation, return_dict=True
-        )[0][..., :length]
+        audio_values = self.decode(latents=encoder_outputs.latents, return_dict=True)[0][..., :length]
 
         return Xcodec2Output(
             audio_values=audio_values,
             audio_codes=encoder_outputs.audio_codes,
-            quantized_representation=encoder_outputs.quantized_representation,
-            codes_padding_mask=encoder_outputs.codes_padding_mask,
+            latents=encoder_outputs.latents if output_latents else None,
+            audio_codes_mask=encoder_outputs.audio_codes_mask,
         )
 
 

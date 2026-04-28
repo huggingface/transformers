@@ -18,6 +18,7 @@ import re
 
 import safetensors
 import torch
+import torch.nn as nn
 
 from transformers import (
     AutoConfig,
@@ -36,6 +37,9 @@ logger = logging.get_logger("transformers.models.xcodec2")
 # Mappings are applied sequentially per key; order matters.
 # fmt: off
 STATE_DICT_MAPPING = {
+    # ── Semantic encoder (semantic_model -> semantic_encoder) ──
+    r"^semantic_model\.":                                                           r"semantic_encoder.",
+
     # ── Acoustic encoder (CodecEnc -> acoustic_encoder) ──
     r"^CodecEnc\.conv_blocks\.0\.":                                                 r"acoustic_encoder.conv1.",
     r"^CodecEnc\.conv_final_block\.0\.":                                            r"acoustic_encoder.snake1.",
@@ -119,6 +123,12 @@ def map_old_key_to_new(old_key):
     return new_key
 
 
+def _is_unused_semantic_layer(key, num_layers):
+    """Check if a key belongs to a semantic encoder layer beyond the ones we keep."""
+    match = re.search(r"semantic_encoder\.encoder\.layers\.(\d+)\.", key)
+    return match is not None and int(match.group(1)) >= num_layers
+
+
 def convert_state_dict(state_dict, hf_model):
     new_state_dict = {}
 
@@ -142,7 +152,9 @@ def convert_state_dict(state_dict, hf_model):
 
     state_dict = new_state_dict
 
-    # Filter out non-persistent buffers - they're recomputed in _init_weights
+    # Filter out non-persistent buffers (recomputed in _init_weights) and
+    # unused semantic encoder layers (original has 24 layers, we only use 16)
+    num_semantic_layers = hf_model.config.semantic_model_config.num_hidden_layers
     state_dict = {
         k: v
         for k, v in state_dict.items()
@@ -153,6 +165,7 @@ def convert_state_dict(state_dict, hf_model):
             or k.endswith(".levels")
             or k.endswith(".basis")
             or k.endswith(".codebook")
+            or _is_unused_semantic_layer(k, num_semantic_layers)
         )
     }
 
@@ -169,6 +182,36 @@ def convert_state_dict(state_dict, hf_model):
 
     del state_dict
     return hf_model
+
+
+def apply_weight_norm(model):
+    weight_norm = nn.utils.weight_norm
+
+    weight_norm(model.acoustic_encoder.conv1)
+    for encoder_block in model.acoustic_encoder.block:
+        weight_norm(encoder_block.res_unit1.conv1)
+        weight_norm(encoder_block.res_unit1.conv2)
+        weight_norm(encoder_block.res_unit2.conv1)
+        weight_norm(encoder_block.res_unit2.conv2)
+        weight_norm(encoder_block.res_unit3.conv1)
+        weight_norm(encoder_block.res_unit3.conv2)
+        weight_norm(encoder_block.conv1)
+    weight_norm(model.acoustic_encoder.conv2)
+
+
+def remove_weight_norm(model):
+    param_remove = nn.utils.remove_weight_norm
+
+    param_remove(model.acoustic_encoder.conv1)
+    for encoder_block in model.acoustic_encoder.block:
+        param_remove(encoder_block.res_unit1.conv1)
+        param_remove(encoder_block.res_unit1.conv2)
+        param_remove(encoder_block.res_unit2.conv1)
+        param_remove(encoder_block.res_unit2.conv2)
+        param_remove(encoder_block.res_unit3.conv1)
+        param_remove(encoder_block.res_unit3.conv2)
+        param_remove(encoder_block.conv1)
+    param_remove(model.acoustic_encoder.conv2)
 
 
 @torch.no_grad()
@@ -189,7 +232,7 @@ def convert_checkpoint(
         encoder_hidden_size=48,  # https://huggingface.co/HKUSTAudio/xcodec2/blob/main/vq/codec_encoder.py#L21, like in DAC
         hidden_size=hidden_size,
         # use hardcoded semantic model: https://huggingface.co/HKUSTAudio/xcodec2/blob/main/modeling_xcodec2.py#L19
-        semantic_model_config=AutoConfig.from_pretrained("facebook/w2v-bert-2.0", output_hidden_states=True),
+        semantic_model_config=AutoConfig.from_pretrained("facebook/w2v-bert-2.0", num_hidden_layers=16),
     )
 
     if not torch.cuda.is_available():
@@ -202,9 +245,9 @@ def convert_checkpoint(
         # we might have a training state saved, in which case discard the yaml results and just retain the weights
         original_checkpoint = original_checkpoint["best_state"]
 
-    model.apply_weight_norm()
+    apply_weight_norm(model)
     model = convert_state_dict(original_checkpoint, model)
-    model.remove_weight_norm()
+    remove_weight_norm(model)
 
     dac_fe = AutoFeatureExtractor.from_pretrained("descript/dac_16khz")
     semantic_fe = AutoFeatureExtractor.from_pretrained("facebook/w2v-bert-2.0")
