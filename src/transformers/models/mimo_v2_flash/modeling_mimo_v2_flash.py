@@ -384,7 +384,7 @@ class MiMoV2FlashAttention(nn.Module):
         self.sliding_window = config.sliding_window if self.layer_type == "sliding_attention" else None
         self.v_head_dim = config.v_head_dim
         self.sinks = nn.Parameter(torch.empty(num_attention_heads)) if is_swa else None
-        self.v_scale = config.attention_value_scale
+        self.v_scale = config.attention_value_scale if config.attention_value_scale is not None else 1.0
 
     def forward(
         self,
@@ -401,10 +401,8 @@ class MiMoV2FlashAttention(nn.Module):
 
         query_states = self.q_proj(hidden_states).view(qk_hidden_shape).transpose(1, 2)
         key_states = self.k_proj(hidden_states).view(qk_hidden_shape).transpose(1, 2)
-        value_states = self.v_proj(hidden_states).view(v_hidden_shape).transpose(1, 2)
-        # This is MiMo specific: rescale values by 1/√2 by default.
-        if self.v_scale is not None:
-            value_states = value_states * self.v_scale
+        # Additional scaling on values.
+        value_states = self.v_proj(hidden_states).view(v_hidden_shape).transpose(1, 2) * self.v_scale
 
         cos, sin = position_embeddings
         query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
