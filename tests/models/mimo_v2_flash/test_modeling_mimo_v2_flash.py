@@ -42,7 +42,6 @@ class MiMoV2FlashModelTester(CausalLMModelTester):
             max_position_embeddings=64,
         )
         # MiMo-V2-Flash specific test config (other defaults match Glm4MoeConfig).
-        self.head_dim = 32
         self.v_head_dim = 16
         self.layer_types = ["full_attention", "sliding_attention"]
         self.rope_parameters = {
