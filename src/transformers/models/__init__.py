@@ -96,6 +96,7 @@ if TYPE_CHECKING:
     from .deepseek_vl import *
     from .deepseek_vl_hybrid import *
     from .deformable_detr import *
+    from .deimv2 import *
     from .deit import *
     from .deprecated import *
     from .depth_anything import *
@@ -210,6 +211,7 @@ if TYPE_CHECKING:
     from .kosmos2 import *
     from .kosmos2_5 import *
     from .kyutai_speech_to_text import *
+    from .laguna import *
     from .lasr import *
     from .layoutlm import *
     from .layoutlmv2 import *

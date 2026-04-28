@@ -1129,8 +1129,8 @@ class T5Gemma2ForConditionalGeneration(T5Gemma2PreTrainedModel, GenerationMixin)
         cross_attn_config = copy.deepcopy(self.config.get_text_config(decoder=True))
 
         # cross-attention does not use sliding window
-        del cross_attn_config.sliding_window
-        del cross_attn_config.layer_types
+        cross_attn_config.sliding_window = None
+        cross_attn_config.layer_types = ["full_attention"] * cross_attn_config.num_hidden_layers
 
         cross_attn_cache_kwargs = {
             "config": cross_attn_config,
