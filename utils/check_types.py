@@ -26,6 +26,7 @@ CHECKER_CONFIG = {
         ".circleci/create_circleci_config.py",
     ],
     "check_args": [
+        "src/transformers/_typing.py",
         "src/transformers/cli",
         "src/transformers/utils",
         "src/transformers/generation",
