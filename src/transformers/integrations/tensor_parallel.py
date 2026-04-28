@@ -15,9 +15,7 @@ from __future__ import annotations
 
 import contextlib
 import re
-from abc import ABC
-from dataclasses import dataclass
-from typing import Literal, abstractmethod
+from abc import ABC, abstractmethod
 
 from ..utils import logging
 from ..utils.generic import GeneralInterface
@@ -213,7 +211,7 @@ def restore_strided_from_shard(state_dict: dict, placement_map: dict[str, tuple]
             container[leaf_key] = _replicate_dtensor(container[leaf_key]).redistribute(placements=original_placements)
 
 
-def verify_tp_plan(expected_keys: list[str], tp_plan: dict[str, str | TPStyle] | None):
+def verify_tp_plan(expected_keys: list[str], tp_plan: dict[str, str] | None):
     """
     Verify the TP plan of the model, log a warning if the layers that were not sharded and the rules that were not applied.
 
@@ -225,9 +223,12 @@ def verify_tp_plan(expected_keys: list[str], tp_plan: dict[str, str | TPStyle] |
     if tp_plan is None:
         return
 
-    # Filter out module-level comm hooks — they don't shard weights
-    _NON_WEIGHT_KINDS = {"activation", "module"}
-    weight_plan = {k: v for k, v in tp_plan.items() if not isinstance(v, TPStyle) or v.kind not in _NON_WEIGHT_KINDS}
+    # Filter out module-level comm hooks — they don't shard weights.
+    # Plan values are registry names; entries beginning with "activation" or "module"
+    # configure communication hooks rather than parameter sharding.
+    weight_plan = {
+        k: v for k, v in tp_plan.items() if not (v == "activation" or v.startswith(("activation_", "module_")))
+    }
 
     generic_keys = {replace_layer_number_by_wildcard(key) for key in expected_keys}
     unsharded_layers = set(generic_keys)
@@ -548,104 +549,6 @@ class MoEExpertsParallel(ParallelStyle):
         return module
 
 
-@dataclass(frozen=True)
-class TPStyle:
-    kind: Literal["colwise", "packed_colwise", "rowwise", "vocab", "activation", "module", "moe_experts"]
-    comm: Literal["none", "allreduce", "reduce_scatter", "allgather", "allgather_split", "loss_parallel"]
-    sequence_dim: int = 1
-    use_local_output: bool = True
-    input_key: str | None = None
-    shard_plan: dict[str, str] | None = None
-
-    def to_dtensor_style(self) -> ParallelStyle:
-        """Convert to the corresponding PyTorch DTensor ParallelStyle."""
-        if self.kind == "colwise":
-            match self.comm:
-                case "none":
-                    return ColwiseParallel(
-                        input_layouts=Replicate(), output_layouts=Shard(-1), use_local_output=self.use_local_output
-                    )
-                case "allgather":
-                    return ColwiseParallel(
-                        input_layouts=Replicate(),
-                        output_layouts=Replicate(),
-                        use_local_output=self.use_local_output,
-                    )
-                case "loss_parallel":
-                    return ColwiseParallel(input_layouts=Shard(1), output_layouts=Shard(-1), use_local_output=False)
-        elif self.kind == "packed_colwise":
-            match self.comm:
-                case "none":
-                    return PackedColwiseParallel(input_layouts=Replicate(), use_local_output=self.use_local_output)
-        elif self.kind == "rowwise":
-            match self.comm:
-                case "allreduce":
-                    return RowwiseParallel(
-                        input_layouts=Shard(-1),
-                        output_layouts=Replicate(),
-                        use_local_output=self.use_local_output,
-                    )
-                case "reduce_scatter":
-                    return RowwiseParallel(
-                        input_layouts=Shard(-1),
-                        output_layouts=Shard(1),
-                        use_local_output=self.use_local_output,
-                    )
-        elif self.kind == "vocab":
-            match self.comm:
-                case "allreduce":
-                    return RowwiseParallel(
-                        input_layouts=Replicate(),
-                        output_layouts=Replicate(),
-                        use_local_output=self.use_local_output,
-                    )
-                case "reduce_scatter":
-                    return RowwiseParallel(
-                        input_layouts=Replicate(), output_layouts=Shard(1), use_local_output=self.use_local_output
-                    )
-        elif self.kind == "activation":
-            match self.comm:
-                case "none":
-                    return SequenceParallel(sequence_dim=self.sequence_dim, use_local_output=self.use_local_output)
-        elif self.kind == "module":
-            match self.comm:
-                case "allgather":
-                    if self.input_key is not None:
-                        return PrepareModuleInput(
-                            input_kwarg_layouts={self.input_key: Shard(1)},
-                            desired_input_kwarg_layouts={self.input_key: Replicate()},
-                            use_local_output=self.use_local_output,
-                        )
-                    return PrepareModuleInput(
-                        input_layouts=(Shard(1),),
-                        desired_input_layouts=(Replicate(),),
-                        use_local_output=self.use_local_output,
-                    )
-                case "allgather_split":
-                    return PrepareModuleInputOutput(use_local_output=self.use_local_output)
-        elif self.kind == "moe_experts":
-            match self.comm:
-                case "allreduce":
-                    return MoEExpertsParallel(output_layouts=Replicate())
-                case "reduce_scatter":
-                    return MoEExpertsParallel(output_layouts=Shard(1))
-        raise ValueError(
-            f"Invalid TPStyle({self.kind!r}, {self.comm!r}). Valid combinations:\n"
-            f"  colwise:        none, allgather, loss_parallel\n"
-            f"  packed_colwise: none\n"
-            f"  rowwise:     allreduce, reduce_scatter\n"
-            f"  vocab:       allreduce, reduce_scatter\n"
-            f"  activation:  none\n"
-            f"  module:      allgather, allgather_split\n"
-            f"  moe_experts: allreduce, reduce_scatter"
-        )
-
-    def __str__(self):
-        if self.comm == "none":
-            return self.kind
-        return f"{self.kind}_{self.comm}"
-
-
 class ParallelInterface(GeneralInterface):
     """Registry of named TP styles. Configs and modeling files reference these by string name.
 
@@ -700,7 +603,8 @@ def apply_tensor_parallel(model, tp_mesh, tp_plan):
     """Apply tensor parallelism using PyTorch's parallelize_module.
 
     Converts the wildcard tp_plan from model config into a concrete plan
-    for ``parallelize_module``. Plan values is a `TPStyle`` instances
+    for ``parallelize_module``. Plan values are string names looked up in
+    ``ALL_PARALLEL_STYLES``.
     """
     if tp_plan is None:
         return model
@@ -732,28 +636,16 @@ def apply_tensor_parallel(model, tp_mesh, tp_plan):
         if style_value is None:
             continue
 
-        if isinstance(style_value, str):
-            if style_value not in ALL_PARALLEL_STYLES:
-                raise ValueError(
-                    f"Unknown TP style {style_value!r} for module {name!r}. "
-                    f"Valid styles: {sorted(ALL_PARALLEL_STYLES)}"
-                )
-            parallelize_plan[name] = ALL_PARALLEL_STYLES[style_value]
-        elif isinstance(style_value, TPStyle):
-            dtensor_style = style_value.to_dtensor_style()
-            parallelize_plan[name] = dtensor_style
-            # For MoE modules, attach the per-parameter shard plan from TPStyle
-            # so _partition_fn can create DTensors with the correct placements.
-            if isinstance(dtensor_style, MoEExpertsParallel) and style_value.shard_plan:
-                dtensor_style._moe_shard_plan = style_value.shard_plan
-        elif isinstance(style_value, ParallelStyle):
-            parallelize_plan[name] = style_value
-        else:
+        if not isinstance(style_value, str):
             raise TypeError(
                 f"Unsupported plan value for '{name}': {style_value!r} (type {type(style_value).__name__}). "
-                f"TP plan values must be strings (looked up in ALL_PARALLEL_STYLES), TPStyle, "
-                f"or ParallelStyle instances."
+                f"TP plan values must be strings looked up in ALL_PARALLEL_STYLES."
             )
+        if style_value not in ALL_PARALLEL_STYLES:
+            raise ValueError(
+                f"Unknown TP style {style_value!r} for module {name!r}. Valid styles: {sorted(ALL_PARALLEL_STYLES)}"
+            )
+        parallelize_plan[name] = ALL_PARALLEL_STYLES[style_value]
 
     parallelize_module(model, tp_mesh, parallelize_plan)
 
@@ -783,10 +675,7 @@ def apply_tensor_parallel(model, tp_mesh, tp_plan):
     # loss_parallel patches F.cross_entropy to work with Shard(-1) logits.
     # It must be active during both forward and backward, so we enable it
     # once rather than as a context manager.
-    has_loss_parallel = any(
-        v == "colwise_loss_parallel" or (isinstance(v, TPStyle) and v.comm == "loss_parallel")
-        for v in tp_plan.values()
-    )
+    has_loss_parallel = any(v == "colwise_loss_parallel" for v in tp_plan.values())
     if has_loss_parallel:
         from torch.distributed.tensor.parallel import loss_parallel
 
