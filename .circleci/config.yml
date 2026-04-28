@@ -39,7 +39,7 @@ jobs:
     fetch_tests:
         working_directory: ~/transformers
         docker:
-            - image: huggingface/transformers-quality
+            - image: huggingface/transformers-quality:dev
         parallelism: 1
         steps:
             - checkout
