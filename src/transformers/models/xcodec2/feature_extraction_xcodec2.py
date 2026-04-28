@@ -51,7 +51,7 @@ class Xcodec2FeatureExtractor(SequenceFeatureExtractor):
             Needed for acoustic encoder input padding.
     """
 
-    model_input_names = ["audio_spectrogram", "audio", "padding_mask"]
+    model_input_names = ["audio_spectrogram", "audio", "padding_mask", "spectrogram_mask"]
 
     def __init__(
         self,
@@ -147,7 +147,12 @@ class Xcodec2FeatureExtractor(SequenceFeatureExtractor):
                 raise ValueError(f"Expected input shape (channels, length) but got shape {example.shape}")
         batch_size = len(audio)
 
-        # 1) Acoustic encoder padding (similar to DAC)
+        # 1) Acoustic encoder padding
+        # The original xcodec2 model (PyPI xcodec2==0.1.3) pads audio to the *next* multiple
+        # of hop_length, always adding at least 1 sample: `pad = hop_length - (T % hop_length)`.
+        # We replicate this by appending 1 zero sample before calling pad() with
+        # pad_to_multiple_of=hop_length, which forces rounding up even when T is already aligned.
+        audio = [F.pad(torch.as_tensor(a), (0, 1), value=0.0) for a in audio]
         padded_inputs = self.acoustic_encoder_padder.pad(
             BatchFeature({"audio": audio}),
             max_length=max_length,
@@ -160,17 +165,19 @@ class Xcodec2FeatureExtractor(SequenceFeatureExtractor):
         padding_mask = padded_inputs.pop("attention_mask")
         padded_audio = padded_inputs["audio"][:, None, :]
 
-        # Padding to match PyPI xcodec2==0.1.3 behavior
-        # See: https://github.com/huggingface/transformers/pull/37868#discussion_r2382396644
-        padded_audio = F.pad(padded_audio, (0, self.hop_length), value=0.0)
-        if padding_mask is not None:
-            padding_mask = F.pad(padding_mask, (0, self.hop_length), value=0)
-
         # 2) Compute Mel spectrogram for pretrained semantic encoder (following SeamlessM4T)
-        semantic_input = F.pad(padded_audio, (self.hop_length // 2, self.hop_length // 2), value=0.0)
-        semantic_input = semantic_input.to(device)
+        # We compute per-sample using each sample's own padded length (hop_length-rounded)
+        # so normalization statistics are not corrupted by batch zero-padding,
+        # then pad the spectrograms afterwards for batching.
         mel_features = []
-        for waveform in semantic_input:
+        for i in range(batch_size):
+            # Per-sample padded length (next multiple of hop_length, excluding batch padding)
+            orig_len = int(padding_mask[i].sum().item()) if padding_mask is not None else padded_audio.shape[-1]
+            per_sample_len = ((orig_len + self.hop_length - 1) // self.hop_length) * self.hop_length
+            valid_len = min(per_sample_len, padded_audio.shape[-1])
+            waveform = padded_audio[i, :, :valid_len]
+            waveform = F.pad(waveform, (self.hop_length // 2, self.hop_length // 2), value=0.0)
+            waveform = waveform.to(device)
             features = torchaudio.compliance.kaldi.fbank(
                 waveform * (2**15),  # Scale to int16 range
                 num_mel_bins=self.num_mel_bins,
@@ -187,8 +194,9 @@ class Xcodec2FeatureExtractor(SequenceFeatureExtractor):
                 low_freq=20,
                 high_freq=self.sampling_rate // 2,
             )
+            # Normalize per-sample (before padding)
+            features = (features - features.mean(0)) / torch.sqrt(features.var(0, unbiased=True) + 1e-7)
             mel_features.append(features)
-        mel_features = [(x - x.mean(0)) / torch.sqrt(x.var(0, unbiased=True) + 1e-7) for x in mel_features]
         encoded_inputs = BatchFeature({"audio_spectrogram": mel_features})
         padded_mel = self.pad(
             encoded_inputs,
@@ -196,18 +204,33 @@ class Xcodec2FeatureExtractor(SequenceFeatureExtractor):
             max_length=max_length,
             truncation=truncation,
             pad_to_multiple_of=self.stride,
-            return_attention_mask=False,
+            return_attention_mask=padding,
             return_tensors="pt",
         )
         audio_spectrogram = padded_mel["audio_spectrogram"]
+        spectrogram_mask = padded_mel.get("attention_mask")
         trimmed_frames = audio_spectrogram.shape[1] - (audio_spectrogram.shape[1] % self.stride)
         audio_spectrogram = audio_spectrogram[:, :trimmed_frames, :].reshape(
             batch_size, trimmed_frames // self.stride, self.num_mel_bins * self.stride
         )
+        # Adjust the attention mask to match the strided spectrogram shape:
+        # after stride=2, a frame is valid if both sub-frames are valid
+        if spectrogram_mask is not None:
+            spectrogram_mask = (
+                spectrogram_mask[:, :trimmed_frames]
+                .reshape(batch_size, trimmed_frames // self.stride, self.stride)
+                .min(dim=-1)
+                .values
+            )
 
         # 3) Combine outputs from DAC-like padding and SeamlessM4T feature extractor
         padded_inputs = BatchFeature(
-            {"audio": padded_audio, "padding_mask": padding_mask, "audio_spectrogram": audio_spectrogram}
+            {
+                "audio": padded_audio,
+                "padding_mask": padding_mask,
+                "audio_spectrogram": audio_spectrogram,
+                "spectrogram_mask": spectrogram_mask,
+            }
         )
         if return_tensors == "np":
             padded_inputs = BatchFeature(
@@ -215,6 +238,7 @@ class Xcodec2FeatureExtractor(SequenceFeatureExtractor):
                     "audio": padded_audio.cpu().numpy(),
                     "padding_mask": padding_mask.cpu().numpy() if padding_mask is not None else None,
                     "audio_spectrogram": audio_spectrogram.cpu().numpy(),
+                    "spectrogram_mask": spectrogram_mask.cpu().numpy() if spectrogram_mask is not None else None,
                 }
             )
         else:

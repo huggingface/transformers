@@ -906,6 +906,7 @@ class Xcodec2Model(Xcodec2PreTrainedModel):
         audio: torch.Tensor,
         audio_spectrogram: torch.Tensor,
         padding_mask: torch.Tensor | None = None,
+        spectrogram_mask: torch.Tensor | None = None,
         output_latents: bool = False,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | Xcodec2EncoderOutput:
@@ -916,12 +917,14 @@ class Xcodec2Model(Xcodec2PreTrainedModel):
             Input audio mel spectrogram for semantic encoding.
         padding_mask (`torch.Tensor` of shape `(batch_size, 1, sequence_length)`):
             Padding mask used to pad `audio`.
+        spectrogram_mask (`torch.Tensor` of shape `(batch_size, time_steps)`, *optional*):
+            Attention mask for the spectrogram input to the semantic encoder. `1` for valid frames, `0` for padding.
         output_latents (`bool`, *optional*, defaults to `False`):
             Whether to return the continuous latent representation from the quantizer.
         """
 
         # Semantic embedding
-        semantic_output = self.semantic_encoder(audio_spectrogram)
+        semantic_output = self.semantic_encoder(audio_spectrogram, attention_mask=spectrogram_mask)
         semantic_hidden_states = semantic_output.last_hidden_state.transpose(1, 2)
         semantic_hidden_states = self.semantic_adapter(semantic_hidden_states)
 
@@ -987,6 +990,7 @@ class Xcodec2Model(Xcodec2PreTrainedModel):
         audio: torch.Tensor,
         audio_spectrogram: torch.Tensor,
         padding_mask: torch.Tensor | None = None,
+        spectrogram_mask: torch.Tensor | None = None,
         output_latents: bool = False,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | Xcodec2Output:
@@ -997,6 +1001,8 @@ class Xcodec2Model(Xcodec2PreTrainedModel):
             Input audio mel spectrogram for semantic encoding.
         padding_mask (`torch.Tensor` of shape `(batch_size, 1, sequence_length)`):
             Padding mask used to pad `audio`.
+        spectrogram_mask (`torch.Tensor` of shape `(batch_size, time_steps)`, *optional*):
+            Attention mask for the spectrogram input to the semantic encoder. `1` for valid frames, `0` for padding.
         output_latents (`bool`, *optional*, defaults to `False`):
             Whether to return the continuous latent representation from the quantizer.
 
@@ -1026,6 +1032,7 @@ class Xcodec2Model(Xcodec2PreTrainedModel):
             audio,
             audio_spectrogram=audio_spectrogram,
             padding_mask=padding_mask,
+            spectrogram_mask=spectrogram_mask,
             output_latents=True,
             return_dict=True,
         )

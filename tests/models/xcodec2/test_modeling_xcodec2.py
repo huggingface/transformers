@@ -236,8 +236,6 @@ def compute_rmse(arr1, arr2):
 @slow
 @require_torch
 class Xcodec2IntegrationTest(unittest.TestCase):
-    """NOTE (ebezzam): PyPI model does not support batch inference."""
-
     def test_integration(self):
         """
         reproducer: https://gist.github.com/ebezzam/3b79481b5d48d8e35c4ecc582aee0cb3#file-reproducer_single-py
@@ -264,10 +262,12 @@ class Xcodec2IntegrationTest(unittest.TestCase):
 
         with torch.no_grad():
             audio_codes = model.encode(inputs["audio"], inputs["audio_spectrogram"], return_dict=False)[0]
-            self.assertTrue(torch.equal(audio_codes.squeeze().cpu().to(exp_code.dtype), exp_code))
+            n_codes = len(exp_code)
+            self.assertTrue(torch.equal(audio_codes.squeeze().cpu().to(exp_code.dtype)[:n_codes], exp_code))
 
             dec = model.decode(audio_codes=audio_codes).audio_values
-            torch.testing.assert_close(dec.squeeze().cpu(), exp_recon, rtol=1e-3, atol=1e-3)
+            n_recon = len(exp_recon)
+            torch.testing.assert_close(dec.squeeze().cpu()[:n_recon], exp_recon, rtol=1e-3, atol=1e-3)
 
             # compare codec error
             codec_error = compute_rmse(inputs["audio"], dec).item()
@@ -276,3 +276,59 @@ class Xcodec2IntegrationTest(unittest.TestCase):
             # make sure forward and decode gives same result
             enc_dec = model(inputs["audio"], inputs["audio_spectrogram"]).audio_values
             self.assertTrue(torch.equal(dec[..., : enc_dec.shape[-1]], enc_dec))
+
+    def test_batch_integration(self):
+        """
+        reproducer: https://gist.github.com/ebezzam/3b79481b5d48d8e35c4ecc582aee0cb3#file-reproducer_batch-py
+        NOTE (ebezzam): PyPI model does not support batch inference but we compare against its per-sample results
+        """
+        results_path = Path(__file__).parent.parent.parent / "fixtures/xcodec2/expected_results_batch.json"
+        with open(results_path, "r") as f:
+            raw_data = json.load(f)
+        num_samples = len(raw_data["audio_codes"])
+        exp_codes = [torch.tensor(c) for c in raw_data["audio_codes"]]
+        exp_recons = [torch.tensor(r) for r in raw_data["recon_wavs"]]
+        exp_codec_errors = raw_data["codec_errors"]
+
+        model_id = "bezzam/xcodec2"
+        model = Xcodec2Model.from_pretrained(model_id).to(torch_device).eval()
+        feature_extractor = AutoFeatureExtractor.from_pretrained(model_id)
+
+        dataset = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
+        dataset = dataset.cast_column("audio", Audio(sampling_rate=feature_extractor.sampling_rate))
+        audios = [dataset[i]["audio"]["array"] for i in range(num_samples)]
+
+        # Batched feature extraction + inference
+        inputs = feature_extractor(
+            audio=audios,
+            sampling_rate=feature_extractor.sampling_rate,
+            return_tensors="pt",
+        ).to(torch_device)
+
+        with torch.no_grad():
+            enc = model.encode(
+                inputs["audio"],
+                inputs["audio_spectrogram"],
+                padding_mask=inputs["padding_mask"],
+                spectrogram_mask=inputs.get("spectrogram_mask"),
+                return_dict=True,
+            )
+            batch_codes = enc.audio_codes
+            batch_mask = enc.audio_codes_mask
+            dec = model.decode(audio_codes=batch_codes).audio_values
+
+        for i in range(num_samples):
+            valid_code_len = int(batch_mask[i].sum().item())
+            n_codes = len(exp_codes[i])
+            actual_codes = batch_codes[i, :, :valid_code_len].squeeze().cpu().to(exp_codes[i].dtype)[:n_codes]
+            self.assertTrue(
+                torch.equal(actual_codes, exp_codes[i]),
+                f"Sample {i}: codes mismatch",
+            )
+
+            n_recon = len(exp_recons[i])
+            actual_recon = dec[i].squeeze().cpu()[:n_recon]
+            torch.testing.assert_close(actual_recon, exp_recons[i], rtol=1e-3, atol=1e-3)
+
+            codec_error = compute_rmse(inputs["audio"][i : i + 1], dec[i : i + 1]).item()
+            torch.testing.assert_close(codec_error, exp_codec_errors[i], rtol=1e-3, atol=1e-3)
