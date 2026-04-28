@@ -33,7 +33,7 @@ from ...modeling_outputs import (
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring
-from ...utils.generic import can_return_tuple, is_flash_attention_requested
+from ...utils.generic import can_return_tuple, is_flash_attention_requested, merge_with_config_defaults
 from ...utils.import_utils import torch_compilable_check
 from ...utils.output_capturing import capture_outputs
 from ..auto import CONFIG_MAPPING, AutoConfig, AutoModel
@@ -436,6 +436,7 @@ class MiniCPMV4_6VisionModel(MiniCPMV4_6VisionPreTrainedModel):
         }
         return downsampled_kwargs, target_sizes, cu_seqlens
 
+    @merge_with_config_defaults
     @capture_outputs
     @auto_docstring
     def forward(

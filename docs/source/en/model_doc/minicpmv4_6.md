@@ -24,7 +24,7 @@ rendered properly in your Markdown viewer.
 
 # MiniCPM-V
 
-[MiniCPM-V](https://arxiv.org/abs/2509.18154) is a series of efficient multimodal large language models developed by [OpenBMB](https://github.com/OpenBMB). The MiniCPM-V 4.6 architecture uses a [SigLIP](siglip) vision encoder with a window-attention merger and a [Qwen3.5](qwen3_5) language model backbone, supporting both 4x and 16x visual downsampling modes.
+[MiniCPM-V](https://huggingface.co/papers/2509.18154) is a series of efficient multimodal large language models developed by [OpenBMB](https://github.com/OpenBMB). The MiniCPM-V 4.6 architecture uses a [SigLIP](siglip) vision encoder with a window-attention merger and a [Qwen3.5](qwen3_5) language model backbone, supporting both 4x and 16x visual downsampling modes.
 
 This model was contributed by [OpenBMB](https://huggingface.co/openbmb).
 The original code can be found [here](https://github.com/OpenBMB/MiniCPM-V).
