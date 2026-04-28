@@ -16,6 +16,7 @@ CHECKER_CONFIG = {
     "file_globs": [
         "src/transformers/_typing.py",
         "src/transformers/cli/**/*.py",
+        "src/transformers/modeling_utils.py",
         "src/transformers/utils/**/*.py",
         "src/transformers/generation/**/*.py",
         "src/transformers/pipelines/__init__.py",
@@ -28,6 +29,7 @@ CHECKER_CONFIG = {
     "check_args": [
         "src/transformers/_typing.py",
         "src/transformers/cli",
+        "src/transformers/modeling_utils.py",
         "src/transformers/utils",
         "src/transformers/generation",
         "src/transformers/pipelines/__init__.py",
