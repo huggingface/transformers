@@ -108,47 +108,24 @@ def _build_checkpoint_conversion_mapping():
             # Indexer module here. FP8 scales arrive as ``.scale`` and need to become
             # ``.weight_scale_inv`` to match :class:`FineGrainedFP8Linear`.
             #
-            # Apply the FP8 scale rename FIRST: in the upstream layout, only Linear
-            # weight scales end with ``.scale`` (the HC params use ``hc_attn_scale`` /
-            # ``hc_ffn_scale`` / ``hc_head_scale`` — underscore, not dot). Renaming first
-            # avoids clobbering the HC ``.scale`` parameter we synthesise below.
-            WeightRenaming(source_patterns=r"^(.+)\.scale$", target_patterns=r"\1.weight_scale_inv"),
-            WeightRenaming(
-                source_patterns=r"^layers\.(\d+)\.attn\.attn_sink$",
-                target_patterns=r"model.layers.\1.self_attn.sinks",
-            ),
-            WeightRenaming(
-                source_patterns=r"^layers\.(\d+)\.attn\.indexer\.compressor\.norm\.",
-                target_patterns=r"model.layers.\1.self_attn.compressor.indexer.kv_norm.",
-            ),
-            WeightRenaming(
-                source_patterns=r"^layers\.(\d+)\.attn\.indexer\.compressor\.ape$",
-                target_patterns=r"model.layers.\1.self_attn.compressor.indexer.position_bias",
-            ),
-            WeightRenaming(
-                source_patterns=r"^layers\.(\d+)\.attn\.indexer\.compressor\.",
-                target_patterns=r"model.layers.\1.self_attn.compressor.indexer.",
-            ),
-            WeightRenaming(
-                source_patterns=r"^layers\.(\d+)\.attn\.indexer\.",
-                target_patterns=r"model.layers.\1.self_attn.compressor.indexer.",
-            ),
-            WeightRenaming(
-                source_patterns=r"^layers\.(\d+)\.attn\.compressor\.norm\.",
-                target_patterns=r"model.layers.\1.self_attn.compressor.kv_norm.",
-            ),
-            WeightRenaming(
-                source_patterns=r"^layers\.(\d+)\.attn\.compressor\.ape$",
-                target_patterns=r"model.layers.\1.self_attn.compressor.position_bias",
-            ),
-            WeightRenaming(
-                source_patterns=r"^layers\.(\d+)\.attn\.compressor\.",
-                target_patterns=r"model.layers.\1.self_attn.compressor.",
-            ),
-            WeightRenaming(
-                source_patterns=r"^layers\.(\d+)\.attn\.",
-                target_patterns=r"model.layers.\1.self_attn.",
-            ),
+            # Ordering matters for save round-tripping: :func:`revert_weight_conversion`
+            # reverses the order *and* each transform, so a structural prefix-only rule
+            # placed before a specific in-prefix rename would steal the reverse match
+            # and emit ``layers.X.attn.sinks`` instead of ``layers.X.attn.attn_sink``.
+            # We split into two passes: structural prefix renames first (so they apply
+            # last on save / first on load), then specific in-prefix renames that
+            # operate on the already-prefixed keys.
+            #
+            # FP8 ``.scale`` → ``.weight_scale_inv`` rename lives in the FP8 quantizer's
+            # ``update_weight_conversions`` (only kicks in when FP8 dequant is active),
+            # so the V4 static mapping below stays free of FP8-only rules.
+            # ---- Pass 1: top-level + structural prefix renames ----
+            WeightRenaming(source_patterns=r"^embed\.weight$", target_patterns="model.embed_tokens.weight"),
+            WeightRenaming(source_patterns=r"^head\.weight$", target_patterns="lm_head.weight"),
+            WeightRenaming(source_patterns=r"^norm\.weight$", target_patterns="model.norm.weight"),
+            WeightRenaming(source_patterns=r"^hc_head_fn$", target_patterns="model.hc_head.hc_fn"),
+            WeightRenaming(source_patterns=r"^hc_head_base$", target_patterns="model.hc_head.hc_base"),
+            WeightRenaming(source_patterns=r"^hc_head_scale$", target_patterns="model.hc_head.hc_scale"),
             WeightRenaming(
                 source_patterns=r"^layers\.(\d+)\.attn_norm\.",
                 target_patterns=r"model.layers.\1.input_layernorm.",
@@ -176,27 +153,58 @@ def _build_checkpoint_conversion_mapping():
                 source_patterns=r"^layers\.(\d+)\.hc_ffn_scale$", target_patterns=r"model.layers.\1.ffn_hc.scale"
             ),
             WeightRenaming(
-                source_patterns=r"^layers\.(\d+)\.ffn\.shared_experts\.w1\.",
-                target_patterns=r"model.layers.\1.mlp.shared_experts.gate_proj.",
-            ),
-            WeightRenaming(
-                source_patterns=r"^layers\.(\d+)\.ffn\.shared_experts\.w2\.",
-                target_patterns=r"model.layers.\1.mlp.shared_experts.down_proj.",
-            ),
-            WeightRenaming(
-                source_patterns=r"^layers\.(\d+)\.ffn\.shared_experts\.w3\.",
-                target_patterns=r"model.layers.\1.mlp.shared_experts.up_proj.",
+                source_patterns=r"^layers\.(\d+)\.attn\.",
+                target_patterns=r"model.layers.\1.self_attn.",
             ),
             WeightRenaming(
                 source_patterns=r"^layers\.(\d+)\.ffn\.",
                 target_patterns=r"model.layers.\1.mlp.",
             ),
-            WeightRenaming(source_patterns=r"^embed\.weight$", target_patterns="model.embed_tokens.weight"),
-            WeightRenaming(source_patterns=r"^head\.weight$", target_patterns="lm_head.weight"),
-            WeightRenaming(source_patterns=r"^norm\.weight$", target_patterns="model.norm.weight"),
-            WeightRenaming(source_patterns=r"^hc_head_fn$", target_patterns="model.hc_head.hc_fn"),
-            WeightRenaming(source_patterns=r"^hc_head_base$", target_patterns="model.hc_head.hc_base"),
-            WeightRenaming(source_patterns=r"^hc_head_scale$", target_patterns="model.hc_head.hc_scale"),
+            # ---- Pass 2: in-prefix specific renames (operate on already-prefixed keys) ----
+            # These can safely run after the structural prefix renames because their
+            # source patterns include the ``model.layers.X.self_attn.`` / ``model.layers.X.mlp.``
+            # prefix. On reverse the order flips so these undo first, restoring the
+            # specific upstream names *before* the structural rules strip the prefix.
+            WeightRenaming(
+                source_patterns=r"^model\.layers\.(\d+)\.self_attn\.attn_sink$",
+                target_patterns=r"model.layers.\1.self_attn.sinks",
+            ),
+            WeightRenaming(
+                source_patterns=r"^model\.layers\.(\d+)\.self_attn\.indexer\.compressor\.norm\.",
+                target_patterns=r"model.layers.\1.self_attn.compressor.indexer.kv_norm.",
+            ),
+            WeightRenaming(
+                source_patterns=r"^model\.layers\.(\d+)\.self_attn\.indexer\.compressor\.ape$",
+                target_patterns=r"model.layers.\1.self_attn.compressor.indexer.position_bias",
+            ),
+            WeightRenaming(
+                source_patterns=r"^model\.layers\.(\d+)\.self_attn\.indexer\.compressor\.",
+                target_patterns=r"model.layers.\1.self_attn.compressor.indexer.",
+            ),
+            WeightRenaming(
+                source_patterns=r"^model\.layers\.(\d+)\.self_attn\.indexer\.",
+                target_patterns=r"model.layers.\1.self_attn.compressor.indexer.",
+            ),
+            WeightRenaming(
+                source_patterns=r"^model\.layers\.(\d+)\.self_attn\.compressor\.norm\.",
+                target_patterns=r"model.layers.\1.self_attn.compressor.kv_norm.",
+            ),
+            WeightRenaming(
+                source_patterns=r"^model\.layers\.(\d+)\.self_attn\.compressor\.ape$",
+                target_patterns=r"model.layers.\1.self_attn.compressor.position_bias",
+            ),
+            WeightRenaming(
+                source_patterns=r"^model\.layers\.(\d+)\.mlp\.shared_experts\.w1\.",
+                target_patterns=r"model.layers.\1.mlp.shared_experts.gate_proj.",
+            ),
+            WeightRenaming(
+                source_patterns=r"^model\.layers\.(\d+)\.mlp\.shared_experts\.w2\.",
+                target_patterns=r"model.layers.\1.mlp.shared_experts.down_proj.",
+            ),
+            WeightRenaming(
+                source_patterns=r"^model\.layers\.(\d+)\.mlp\.shared_experts\.w3\.",
+                target_patterns=r"model.layers.\1.mlp.shared_experts.up_proj.",
+            ),
             WeightConverter(
                 source_patterns=[
                     "experts.*.w1.weight",

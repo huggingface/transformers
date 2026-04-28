@@ -10,7 +10,7 @@ import unittest
 from parameterized import parameterized
 
 from transformers import is_torch_available
-from transformers.testing_utils import require_torch, require_torch_accelerator, slow
+from transformers.testing_utils import require_torch, require_torch_accelerator, slow, torch_device
 
 
 if is_torch_available():
@@ -132,7 +132,7 @@ class DeepseekV4ModelTest(CausalLMModelTest, unittest.TestCase):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         config.output_hidden_states = True
         for model_class in self.all_model_classes:
-            model = model_class(config).eval()
+            model = model_class(config).to(torch_device).eval()
             with torch.no_grad():
                 outputs = model(**inputs_dict)
             hidden_states = outputs.hidden_states if hasattr(outputs, "hidden_states") else outputs[-1]
@@ -165,6 +165,34 @@ class DeepseekV4ModelTest(CausalLMModelTest, unittest.TestCase):
             self.assertEqual(keys.shape[1], num_kv_heads)
             self.assertEqual(keys.shape[3], head_dim)
             self.assertEqual(keys.shape, values.shape)
+
+    @unittest.skip(
+        reason=(
+            "V4's conversion mapping is two-pass: a structural prefix rename "
+            "(``layers.X.attn.`` → ``model.layers.X.self_attn.``) runs first, then specific in-prefix "
+            "renames operate on the already-prefixed HF-form keys (``model.layers.X.self_attn.compressor.norm.`` "
+            "→ ``...compressor.kv_norm.``). This split is load-bearing for save / load round-tripping — "
+            "any single-pass ordering loses information in either direction (the general prefix rule "
+            "and a specific in-prefix rule both want to match the same upstream key, and one of the "
+            "two directions ends up with the general rule stealing the match). The base "
+            "``test_reverse_loading_mapping`` checks every source pattern against the *upstream-form* "
+            "serialized keys, so the Pass 2 patterns (written in HF form) inherently can't satisfy "
+            "that invariant. The actual round-trip is exercised by ``test_save_load``."
+        )
+    )
+    def test_reverse_loading_mapping(self):
+        pass
+
+    @unittest.skip(
+        reason=(
+            "V4's compressor pools windows of ``compress_rate`` consecutive tokens *before* the "
+            "attention mask is applied — left-padding shifts the window boundaries so pad tokens "
+            "get folded into the pooled KV entries, and the resulting logits diverge from the "
+            "unpadded run by design (same fundamental limitation as RecurrentGemma)."
+        )
+    )
+    def test_left_padding_compatibility(self):
+        pass
 
     def _check_hidden_states_for_generate(
         self, batch_size, hidden_states, prompt_length, output_length, config, use_cache=False
@@ -321,8 +349,10 @@ class DeepseekV4ParityTest(unittest.TestCase):
 
         torch.manual_seed(0)
         input_ids = torch.randint(0, config.vocab_size, (1, 6))
+        # ``eos_token_id=-1`` keeps the freshly initialised random model from EOS-stopping
+        # before max_new_tokens, so the shape assertion is deterministic.
         with torch.no_grad():
-            out = model.generate(input_ids, max_new_tokens=4, do_sample=False)
+            out = model.generate(input_ids, max_new_tokens=4, do_sample=False, eos_token_id=-1)
         self.assertEqual(out.shape, (1, 10))
         self.assertTrue(torch.isfinite(out.float()).all())
 

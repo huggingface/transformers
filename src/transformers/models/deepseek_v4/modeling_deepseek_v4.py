@@ -380,6 +380,51 @@ class DeepseekV4GroupedLinear(nn.Linear):
         return y.reshape(*batch_shape, self.n_groups, out_per_group)
 
 
+def rotate_half(x):
+    """Rotates half the hidden dims of the input."""
+    x1 = x[..., : x.shape[-1] // 2]
+    x2 = x[..., x.shape[-1] // 2 :]
+    return torch.cat((-x2, x1), dim=-1)
+
+
+def apply_rotary_pos_emb_interleave(q, k, cos, sin, position_ids=None, unsqueeze_dim=1):
+    r"""
+    TODO let's just use the original freqcis computation to not have the view
+    transpose + reshape! This is not optimized!
+    Applies Rotary Position Embedding to the query and key tensors.
+
+    Args:
+        q (`torch.Tensor`): The query tensor.
+        k (`torch.Tensor`): The key tensor.
+        cos (`torch.Tensor`): The cosine part of the rotary embedding.
+        sin (`torch.Tensor`): The sine part of the rotary embedding.
+        position_ids (`torch.Tensor`):
+            The position indices of the tokens corresponding to the query and key tensors. For example, this can be
+            used to pass offsetted position ids when working with a KV-cache.
+        unsqueeze_dim (`int`, *optional*, defaults to 1):
+            The 'unsqueeze_dim' argument specifies the dimension along which to unsqueeze cos[position_ids] and
+            sin[position_ids] so that they can be properly broadcasted to the dimensions of q and k. For example, note
+            that cos[position_ids] and sin[position_ids] have the shape [batch_size, seq_len, head_dim]. Then, if q and
+            k have the shape [batch_size, heads, seq_len, head_dim], then setting unsqueeze_dim=1 makes
+            cos[position_ids] and sin[position_ids] broadcastable to the shapes of q and k. Similarly, if q and k have
+            the shape [batch_size, seq_len, heads, head_dim], then set unsqueeze_dim=2.
+    Returns:
+        `tuple(torch.Tensor)` comprising of the query and key tensors rotated using the Rotary Position Embedding.
+    """
+    cos = cos.unsqueeze(unsqueeze_dim)
+    sin = sin.unsqueeze(unsqueeze_dim)
+
+    b, h, s, d = q.shape
+    q = q.view(b, h, s, d // 2, 2).transpose(4, 3).reshape(b, h, s, d)
+
+    b, h, s, d = k.shape
+    k = k.view(b, h, s, d // 2, 2).transpose(4, 3).reshape(b, h, s, d)
+
+    q_embed = (q * cos) + (rotate_half(q) * sin)
+    k_embed = (k * cos) + (rotate_half(k) * sin)
+    return q_embed, k_embed
+
+
 def apply_rotary_pos_emb(
     q: torch.Tensor,
     k: torch.Tensor,
@@ -387,41 +432,35 @@ def apply_rotary_pos_emb(
     sin: torch.Tensor,
     unsqueeze_dim: int = 1,
 ) -> tuple[torch.Tensor, torch.Tensor]:
-    """V4-Flash rotary embedding (matches the reference inference code's
-    ``apply_rotary_emb`` at ``inference/model.py:232``). Pairs of consecutive channels
-    ``(x[..., 2i], x[..., 2i+1])`` are treated as the ``(real, imag)`` parts of a
-    complex number and rotated by ``exp(i·θ_i)``; this is the *interleaved* RoPE
-    variant, distinct from llama-style half-split RoPE (``[x[:d/2], x[d/2:]]`` →
-    ``[x[:d/2]·cos - x[d/2:]·sin, x[d/2:]·cos + x[:d/2]·sin]``).
+    """V4 wraps :func:`~transformers.models.deepseek_v3.modeling_deepseek_v3.apply_rotary_pos_emb_interleave`
+    with a permute-back so the rope slice exits in the same interleaved
+    ``[a0, b0, a1, b1, …]`` layout it came in with.
 
-    The Gemma3-style :class:`DeepseekV4RotaryEmbedding` we inherit emits ``cos`` and
-    ``sin`` of the full ``rope_head_dim`` (the freq table is duplicated end-to-end
-    via ``torch.cat([freqs, freqs], dim=-1)``). For interleaved pairs we want one
-    ``(cos_i, sin_i)`` per pair, so we slice the first half of the last dim — those
-    ``rope_head_dim // 2`` entries are exactly the unique ``θ_i`` values.
+    V3's helper restages interleaved pairs into the halves layout
+    (``[a0, a1, …, b0, b1, …]``) so it can run llama's half-split RoPE primitive,
+    and leaves the result in that layout — fine for V3 because V3 is MLA: V has
+    its own ``v_head_dim`` and never carries a rope slice, so the post-rotation
+    layout of Q / K only matters for the dot product (which is invariant under a
+    consistent permutation of channels on both sides).
 
-    The math (same as ``z * exp(iθ)`` for ``z = x_re + i·x_im``)::
-
-        rot_re = x_re · cos - x_im · sin
-        rot_im = x_re · sin + x_im · cos
-
-    Output channels are stored interleaved again, so the caller can do the usual
-    ``cat([rope, nope], dim=-1)`` stitch around it.
+    V4 is shared-KV MQA: V is the same tensor as K, so V's rope slice picks up
+    the rotation too — and then the attention sum, the per-head ``wo_a``
+    grouped projection, and ``wo_b`` all consume that rope slice as part of
+    their input. Those weights were trained against the V4-Flash reference
+    (``inference/model.py:apply_rotary_emb`` does ``view_as_complex``-style
+    rotation in place, preserving the interleaved layout), so we have to put
+    the channels back where they were before passing to ``wo_a`` — otherwise the
+    grouped projection sees its inputs scrambled and ``wo_b(wo_a(...))`` collapses.
     """
-    half = cos.shape[-1] // 2
-    cos = cos[..., :half].unsqueeze(unsqueeze_dim)
-    sin = sin[..., :half].unsqueeze(unsqueeze_dim)
+    q, k = apply_rotary_pos_emb_interleave(q, k, cos, sin, unsqueeze_dim=unsqueeze_dim)
 
-    def _rotate(x: torch.Tensor) -> torch.Tensor:
-        # ``unflatten`` gives `[..., rope_dim/2, 2]` so axis -2 indexes pairs and -1
-        # indexes (real, imag). Promoting to fp32 matches the reference's precision.
-        pairs = x.float().unflatten(-1, (-1, 2))
-        x_re, x_im = pairs[..., 0], pairs[..., 1]
-        rot_re = x_re * cos - x_im * sin
-        rot_im = x_re * sin + x_im * cos
-        return torch.stack([rot_re, rot_im], dim=-1).flatten(-2).to(x.dtype)
+    def _halves_to_interleave(x: torch.Tensor) -> torch.Tensor:
+        # Inverse of V3's ``view(d/2, 2).transpose(-1, -2)``: ``[a0, …, b0, …]`` →
+        # ``[a0, b0, a1, b1, …]``.
+        b, h, s, d = x.shape
+        return x.view(b, h, s, 2, d // 2).transpose(-1, -2).reshape(b, h, s, d)
 
-    return _rotate(q), _rotate(k)
+    return _halves_to_interleave(q), _halves_to_interleave(k)
 
 
 # -----------------------------------------------------------------------------
@@ -1295,11 +1334,20 @@ class DeepseekV4PreTrainedModel(PreTrainedModel):
     supports_gradient_checkpointing = True
     _no_split_modules = ["DeepseekV4DecoderLayer"]
     _skip_keys_device_placement = ["past_key_values"]
+    # V4 ships eager-only: the compressor / indexer paths weren't validated against
+    # SDPA / FlashAttention / FlexAttention kernels — leaving these ``False`` makes
+    # ``set_attn_implementation`` reject those backends instead of silently routing
+    # through them.
     _supports_flash_attn = False
     _supports_sdpa = False
-    _supports_flex_attn = True
-
-    _can_compile_fullgraph = True
+    _supports_flex_attn = False
+    # The compressor's rolling-window buffer / pool / overlap state lives on the
+    # per-layer cache (:class:`DeepseekV4HCACache` / :class:`DeepseekV4CSACache`)
+    # and isn't compatible with :class:`StaticCache` — that path would hand the
+    # compressor a :class:`StaticSlidingWindowLayer` with no ``update_compressor``
+    # method. Disabling fullgraph compile keeps generation tests on the dynamic
+    # cache build that does dispatch to V4's own cache layers.
+    _can_compile_fullgraph = False
     _supports_attention_backend = True
     _can_record_outputs = {
         "router_logits": OutputRecorder(DeepseekV4TopKRouter, index=0),
@@ -1309,6 +1357,12 @@ class DeepseekV4PreTrainedModel(PreTrainedModel):
     config_class = DeepseekV4Config
     _keep_in_fp32_modules_strict = ["attn_hc", "ffn_hc"]
     _keys_to_ignore_on_load_unexpected = [r"model\.mtp\..*"]
+    # ``_is_stateful`` opts out of generation modes that need to roll the cache
+    # back across drafts (assisted generation, prompt lookup, contrastive search).
+    # The compressor's running-window state isn't rewindable, so ``generate``
+    # raises a clear error early instead of failing deep in the compressor with
+    # a missing-method ``AttributeError``.
+    _is_stateful = True
 
     @torch.no_grad()
     def _init_weights(self, module):
