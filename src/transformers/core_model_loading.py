@@ -1130,7 +1130,7 @@ def offload_and_maybe_resave_param(
     target_name: str,
     param: torch.Tensor,
     loading_info: LoadStateDictInfo,
-    disk_offload_folder: str,
+    disk_offload_folder: str | None,
     disk_offload_index: dict,
     applied_ops: WeightConverter | WeightRenaming,
 ) -> dict:
@@ -1189,6 +1189,45 @@ def rename_source_key(
             renamed_key = prefixed_key
 
     return renamed_key, source_pattern
+
+
+def _assign_or_offload_param(
+    model: PreTrainedModel,
+    target_name: str,
+    param: torch.Tensor,
+    loading_info: LoadStateDictInfo,
+    device_map: dict | None,
+    model_buffers: set[str],
+    offload_buffers: bool,
+    disk_offload_folder: str | None,
+    disk_offload_index: dict | None,
+    distributed_operation: TensorParallelLayer | None,
+    hf_quantizer: HfQuantizer | None,
+    module_cache: dict[str, torch.nn.Module],
+    applied_ops: WeightConverter | WeightRenaming | None = None,
+) -> dict | None:
+    param_device = get_device(device_map, target_name)
+    if param_device == "disk" and (target_name not in model_buffers or offload_buffers):
+        current_disk_offload_index = {} if disk_offload_index is None else disk_offload_index
+        if applied_ops is None:
+            loading_info.missing_keys.discard(target_name)
+            if target_name not in current_disk_offload_index:
+                return offload_weight(param, target_name, disk_offload_folder, current_disk_offload_index)
+        else:
+            return offload_and_maybe_resave_param(
+                target_name, param, loading_info, disk_offload_folder, current_disk_offload_index, applied_ops
+            )
+    else:
+        set_param_for_module(
+            model,
+            target_name,
+            param,
+            loading_info,
+            distributed_operation,
+            hf_quantizer,
+            module_cache=module_cache,
+        )
+    return disk_offload_index
 
 
 def convert_and_load_state_dict_in_model(
@@ -1335,37 +1374,6 @@ def convert_and_load_state_dict_in_model(
 
     pattern_to_converter = {k: converter for converter in converters for k in converter.source_patterns}
 
-    def assign_or_offload_param(
-        target_name: str,
-        param: torch.Tensor,
-        distributed_operation: TensorParallelLayer | None,
-        applied_ops: WeightConverter | WeightRenaming | None = None,
-    ):
-        nonlocal disk_offload_index
-        param_device = get_device(device_map, target_name)
-        if param_device == "disk" and (target_name not in model_buffers or offload_buffers):
-            current_disk_offload_index = {} if disk_offload_index is None else disk_offload_index
-            if applied_ops is None:
-                loading_info.missing_keys.discard(target_name)
-                if target_name not in current_disk_offload_index:
-                    disk_offload_index = offload_weight(
-                        param, target_name, disk_offload_folder, current_disk_offload_index
-                    )
-            else:
-                disk_offload_index = offload_and_maybe_resave_param(
-                    target_name, param, loading_info, disk_offload_folder, current_disk_offload_index, applied_ops
-                )
-        else:
-            set_param_for_module(
-                model,
-                target_name,
-                param,
-                loading_info,
-                distributed_operation,
-                hf_quantizer,
-                module_cache=module_cache,
-            )
-
     state_dict = sorted(state_dict.items(), key=lambda kv: dot_natural_key(kv[0]))
     for original_key, tensor in state_dict:
         # 1. Rename the key according to all renaming pattern and optional weight converter patterns
@@ -1486,7 +1494,20 @@ def convert_and_load_state_dict_in_model(
                     param = _resolve_pending_tensor(pending_param)
                     if param is None:
                         continue
-                    assign_or_offload_param(target_name, param, distributed_operation)
+                    disk_offload_index = _assign_or_offload_param(
+                        model,
+                        target_name,
+                        param,
+                        loading_info,
+                        device_map,
+                        model_buffers,
+                        offload_buffers,
+                        disk_offload_folder,
+                        disk_offload_index,
+                        distributed_operation,
+                        hf_quantizer,
+                        module_cache,
+                    )
                 finally:
                     progress_bar.update()
 
@@ -1501,7 +1522,21 @@ def convert_and_load_state_dict_in_model(
                     )
                     for target_name, param in realized_value.items():
                         param = param[0] if isinstance(param, list) else param
-                        assign_or_offload_param(target_name, param, mapping.distributed_operation, mapping)
+                        disk_offload_index = _assign_or_offload_param(
+                            model,
+                            target_name,
+                            param,
+                            loading_info,
+                            device_map,
+                            model_buffers,
+                            offload_buffers,
+                            disk_offload_folder,
+                            disk_offload_index,
+                            mapping.distributed_operation,
+                            hf_quantizer,
+                            module_cache,
+                            mapping,
+                        )
 
                     # Cleanup all the tensors that were gathered before next iteration
                     del realized_value
