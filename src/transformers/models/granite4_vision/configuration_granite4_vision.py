@@ -18,6 +18,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+
 from typing import Literal
 
 from huggingface_hub.dataclasses import strict
@@ -30,6 +31,7 @@ from ..auto import CONFIG_MAPPING, AutoConfig
 # ── Config ──────────────────────────────────────────────────────────────────
 
 
+@strict
 class Granite4VisionTextConfig(PreTrainedConfig):
     model_type = "granite4_vision_text"
     base_config_key = "text_config"

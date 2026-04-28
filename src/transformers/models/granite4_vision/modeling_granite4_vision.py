@@ -127,7 +127,7 @@ class WindowQFormerDownsampler(nn.Module):
         llm_hidden_size = config.text_config.hidden_size
         vision_hidden_size = config.vision_config.hidden_size
 
-        from ..blip_2.modeling_blip_2 import Blip2QFormerModel
+        from ..blip_2.modeling_blip_2 import Blip2QFormerModel  # trf-ignore: TRF009
 
         self.dropout = nn.Dropout(config.projector_dropout)
         self._spatial_offset = spatial_offset
@@ -552,7 +552,7 @@ class Granite4VisionTextDecoderLayer(GradientCheckpointingLayer):
 class Granite4VisionTextModel(Granite4VisionPreTrainedModel):
     """Granite LLM backbone with deepstack feature injection support."""
 
-    base_model_prefix = ""
+    base_model_prefix = "model"
     _no_split_modules = ["Granite4VisionTextDecoderLayer"]
 
     def __init__(self, config: Granite4VisionTextConfig):
