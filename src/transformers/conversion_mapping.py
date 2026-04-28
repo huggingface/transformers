@@ -97,6 +97,7 @@ _MODEL_TO_CONVERSION_PATTERN = {
     "AyaVisionForConditionalGeneration": "LlavaForConditionalGeneration",
     "GotOcr2ForConditionalGeneration": "LlavaForConditionalGeneration",
     "Gemma3ForConditionalGeneration": "LlavaForConditionalGeneration",
+    "Gemma3ForSequenceClassification": "LlavaForConditionalGeneration",
     "InternVLForConditionalGeneration": "LlavaForConditionalGeneration",
     "VipLlavaForConditionalGeneration": "LlavaForConditionalGeneration",
     "Mistral3ForConditionalGeneration": "LlavaForConditionalGeneration",
