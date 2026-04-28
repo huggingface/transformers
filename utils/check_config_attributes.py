@@ -42,6 +42,7 @@ CONFIG_MAPPING = transformers.models.auto.configuration_auto.CONFIG_MAPPING
 
 # Usually of small list of allowed attrs, but can be True to allow all
 SPECIAL_CASES_TO_ALLOW = {
+    "MiniCPMV4_6Config": ["drop_vision_last_layer"],
     "NougatConfig": ["decoder", "encoder"],
     "PI0Config": ["vlm_projection_dim"],
     "EuroBertConfig": ["is_causal"],  # not used directly, allows causal-bidirectional switch
