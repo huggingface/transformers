@@ -711,10 +711,6 @@ class ProcessorMixin(PushToHubMixin):
         if images is not None and hasattr(self, "image_processor"):
             images = self.image_processor.fetch_images(images)
 
-        # Dont fetch videos, they need to be sampled correctly. Just flatten the list
-        if videos is not None and hasattr(self, "video_processor"):
-            videos = make_batched_videos(videos)
-
         return images, text, videos, audio
 
     def validate_inputs(
@@ -751,6 +747,7 @@ class ProcessorMixin(PushToHubMixin):
 
         video_replacements = []
         if getattr(self, "video_token", None) is not None:
+            videos = make_batched_videos(videos)
             for idx in range(len(videos)):
                 replacement_text = self.replace_video_token(processed_videos, video_idx=idx)
                 video_replacements.append(replacement_text)

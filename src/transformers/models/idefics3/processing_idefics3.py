@@ -166,6 +166,7 @@ class Idefics3Processor(ProcessorMixin):
             text = text.copy()
 
         if images is not None:
+            images = self.image_processor.fetch_images(images)
             if is_valid_image(images):
                 images = [[images]]
             elif isinstance(images, (list, tuple)) and is_valid_image(images[0]):
