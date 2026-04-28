@@ -444,10 +444,14 @@ def get_cached_module_file(
     # Check we have all the requirements in our environment
     modules_needed = check_imports(resolved_module_file)
     if is_local:
+        local_model_name = _sanitize_module_name(os.path.basename(os.path.normpath(pretrained_model_name_or_path)))
         local_source_files_hash = _compute_local_source_files_hash(
             pretrained_model_name_or_path, module_file, resolved_module_file, modules_needed
         )
-        submodule = _sanitize_module_name(local_source_files_hash)
+        if local_model_name:
+            submodule = os.path.sep.join([local_model_name, local_source_files_hash])
+        else:
+            submodule = local_source_files_hash
 
     # Now we move the module inside our cached dynamic modules.
     full_submodule = TRANSFORMERS_DYNAMIC_MODULE_NAME + os.path.sep + submodule

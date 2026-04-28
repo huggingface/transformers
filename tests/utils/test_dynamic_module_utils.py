@@ -138,7 +138,7 @@ def _create_local_module(module_dir: Path, module_code: str, helper_code: str | 
         (module_dir / "helper.py").write_text(helper_code, encoding="utf-8")
 
 
-def test_get_cached_module_file_local_cache_key_uses_content_hash(monkeypatch, tmp_path):
+def test_get_cached_module_file_local_cache_key_uses_basename_and_content_hash(monkeypatch, tmp_path):
     modules_cache = tmp_path / "hf_modules_cache"
     monkeypatch.setattr(dynamic_module_utils, "HF_MODULES_CACHE", str(modules_cache))
 
@@ -154,7 +154,9 @@ def test_get_cached_module_file_local_cache_key_uses_content_hash(monkeypatch, t
     cached_module_b = get_cached_module_file(str(model_dir_b), "custom_model.py")
     cached_module_c = get_cached_module_file(str(model_dir_c), "custom_model.py")
 
-    assert Path(cached_module_a).parent.name != "subdir"
+    cached_module_path_a = Path(cached_module_a)
+    assert cached_module_path_a.parent.parent.name == "subdir"
+    assert len(cached_module_path_a.parent.name) == 16
     assert cached_module_a != cached_module_b
     assert cached_module_a == cached_module_c
 
@@ -179,3 +181,21 @@ def test_get_cached_module_file_local_cache_key_includes_relative_import_sources
     assert cached_module_a != cached_module_b
     assert cached_helper_a.read_text(encoding="utf-8") == 'MAGIC = "A"\n'
     assert cached_helper_b.read_text(encoding="utf-8") == 'MAGIC = "B"\n'
+
+
+def test_get_cached_module_file_local_cache_key_keeps_hash_stable_with_different_basenames(monkeypatch, tmp_path):
+    modules_cache = tmp_path / "hf_modules_cache"
+    monkeypatch.setattr(dynamic_module_utils, "HF_MODULES_CACHE", str(modules_cache))
+
+    model_dir_a = tmp_path / "pretrained_a" / "alpha_subdir"
+    model_dir_b = tmp_path / "pretrained_b" / "beta_subdir"
+
+    _create_local_module(model_dir_a, 'MAGIC = "A"\n')
+    _create_local_module(model_dir_b, 'MAGIC = "A"\n')
+
+    cached_module_a = Path(get_cached_module_file(str(model_dir_a), "custom_model.py"))
+    cached_module_b = Path(get_cached_module_file(str(model_dir_b), "custom_model.py"))
+
+    assert cached_module_a.parent.parent.name == "alpha_subdir"
+    assert cached_module_b.parent.parent.name == "beta_subdir"
+    assert cached_module_a.parent.name == cached_module_b.parent.name
