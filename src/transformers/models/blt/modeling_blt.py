@@ -1241,7 +1241,7 @@ class BltModel(BltPreTrainedModel):
                 if input_ids is None:
                     raise ValueError("input_ids is required for entropy-based patching")
                 _, patch_lengths, _ = self.patcher(
-                    input_ids,
+                    input_ids.to(self.patcher.embed_tokens.weight.device),
                     patch_size=self.config.patch_size,
                     threshold=self.config.patching_threshold,
                     max_patch_length=self.config.max_patch_length,
