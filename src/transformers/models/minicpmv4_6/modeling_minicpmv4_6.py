@@ -467,15 +467,16 @@ class MiniCPMV4_6VisionModel(MiniCPMV4_6VisionPreTrainedModel):
         self.vit_merger = MiniCPMV4_6ViTWindowAttentionMerger(config)
         self.post_init()
 
-    def get_downsampled_inputs(self, target_sizes: torch.Tensor, max_seqlens: int, **kwargs) -> dict[str, Any]:
-        if (target_sizes % 2 != 0).any():
-            raise ValueError(f"All target_sizes must be divisible by 2, got {target_sizes}")
+    def get_downsampled_inputs(
+        self, target_sizes: torch.Tensor, max_seqlens: int, device: torch.device, **kwargs
+    ) -> tuple[dict[str, Any], torch.Tensor, torch.Tensor]:
+        # NOTE: intentionally not checking for shapes as this is expensive to call `.any()`
         target_sizes = target_sizes // 2
-
-        cu_seqlens = F.pad(torch.cumsum(target_sizes[:, 0] * target_sizes[:, 1], dim=0, dtype=torch.int32), (1, 0))
-        if max_seqlens % 4 != 0:
-            raise ValueError(f"max_seqlen ({max_seqlens}) must be divisible by 4")
         max_seqlens = max_seqlens // 4
+
+        cu_seqlens = F.pad(
+            torch.cumsum(target_sizes[:, 0] * target_sizes[:, 1], dim=0, dtype=torch.int32).to(device), (1, 0)
+        )
 
         downsampled_kwargs = {
             "attention_mask": None,
@@ -483,7 +484,7 @@ class MiniCPMV4_6VisionModel(MiniCPMV4_6VisionPreTrainedModel):
             "max_seqlen": max_seqlens,
             **kwargs,
         }
-        return downsampled_kwargs, target_sizes
+        return downsampled_kwargs, target_sizes, cu_seqlens
 
     @capture_outputs
     @auto_docstring
@@ -503,8 +504,11 @@ class MiniCPMV4_6VisionModel(MiniCPMV4_6VisionPreTrainedModel):
 
         hidden_states = self.embeddings(pixel_values, target_sizes=target_sizes)
 
-        cu_seqlens = F.pad(torch.cumsum(target_sizes[:, 0] * target_sizes[:, 1], dim=0, dtype=torch.int32), (1, 0))
-        max_seqlens = int(torch.max(cu_seqlens[1:] - cu_seqlens[:-1]))
+        cu_seqlens = F.pad(
+            torch.cumsum(target_sizes[:, 0] * target_sizes[:, 1], dim=0, dtype=torch.int32).to(hidden_states.device),
+            (1, 0),
+        )
+        max_seqlens = torch.max(cu_seqlens[1:] - cu_seqlens[:-1])
 
         attn_kwargs = {
             "attention_mask": None,
@@ -521,8 +525,8 @@ class MiniCPMV4_6VisionModel(MiniCPMV4_6VisionPreTrainedModel):
                     hidden_states = self.vit_merger(hidden_states, target_sizes, cu_seqlens)
 
                     # NOTE: Downsampled hidden states, and therefore other kwargs should also!
-                    attn_kwargs, target_sizes = self.get_downsampled_inputs(
-                        target_sizes=target_sizes, max_seqlens=max_seqlens, **kwargs
+                    attn_kwargs, target_sizes, cu_seqlens = self.get_downsampled_inputs(
+                        target_sizes=target_sizes, max_seqlens=max_seqlens, device=hidden_states.device, **kwargs
                     )
         else:
             encoder_outputs = self.encoder(inputs_embeds=hidden_states, **attn_kwargs)

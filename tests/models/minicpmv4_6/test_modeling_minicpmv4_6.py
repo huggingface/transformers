@@ -277,6 +277,14 @@ class MiniCPMV4_6ModelTest(VLMModelTest, unittest.TestCase):
     def test_generate_compilation_all_outputs(self):
         pass
 
+    @unittest.skip(reason="FA works on generate test, inference needs override to pass target sizes")
+    def test_flash_attn_2_inference_equivalence(self):
+        pass
+
+    @unittest.skip(reason="FA works on generate, inference needs override to pass target sizes")
+    def test_flash_attn_2_inference_equivalence_right_padding(self):
+        pass
+
     def _get_conv_state_shape(self, batch_size: int, config):
         num_v_heads = config.linear_num_value_heads
         num_k_heads = config.linear_num_key_heads
@@ -351,6 +359,7 @@ class MiniCPMV4_6ModelTest(VLMModelTest, unittest.TestCase):
 
 @slow
 @require_torch_accelerator
+@unittest.skip(reason="waiting for release")
 class MiniCPMV4_6IntegrationTest(unittest.TestCase):
     model_id = "openbmb/MiniCPM-V-4_6"
 
