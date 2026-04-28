@@ -189,7 +189,7 @@ class Gemma4RMSNorm(nn.Module):
 class Gemma4AudioRelPositionalEncoding(nn.Module):
     """Sinusoidal relative positional encoding for the audio encoder.
 
-    Produces position embeddings of shape [1, 2*context_size - 1, hidden_size] with
+    Produces position embeddings of shape [1, context_size // 2 + 1, hidden_size] with
     concatenated [sin..., cos...] layout matching the original Gemma4 convention.
     """
 
@@ -210,7 +210,7 @@ class Gemma4AudioRelPositionalEncoding(nn.Module):
 
     @torch.no_grad()
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        position_ids = torch.arange(12, -1, -1, device=hidden_states.device)
+        position_ids = torch.arange(self.context_size // 2, -1, -1, device=hidden_states.device)
         position_ids = position_ids[..., None]
         scaled_time = position_ids * self.inv_timescales.to(device=hidden_states.device)
         pos_embed = torch.cat([torch.sin(scaled_time), torch.cos(scaled_time)], dim=-1)
@@ -1133,7 +1133,6 @@ class Gemma4TextRotaryEmbedding(nn.Module):
         return cos.to(dtype=x.dtype), sin.to(dtype=x.dtype)
 
 
-@use_kernelized_func(apply_rotary_pos_emb)
 class Gemma4TextAttention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
 
@@ -1236,9 +1235,9 @@ class Gemma4TextAttention(nn.Module):
         if self.store_full_length_kv:
             shared_kv_states[self.layer_idx] = key_states, value_states
 
-        attention_interface: Callable = eager_attention_forward
-        if self.config._attn_implementation != "eager":
-            attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
+        attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
+            self.config._attn_implementation, eager_attention_forward
+        )
 
         attn_output, attn_weights = attention_interface(
             self,
