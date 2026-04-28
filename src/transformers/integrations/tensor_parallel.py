@@ -18,18 +18,6 @@ import re
 from dataclasses import dataclass
 from typing import Literal
 
-from torch.distributed.tensor import DTensor, Partial, Replicate, Shard, distribute_tensor
-from torch.distributed.tensor.parallel import (
-    ColwiseParallel,
-    PrepareModuleInput,
-    RowwiseParallel,
-    SequenceParallel,
-    parallelize_module,
-)
-from torch.distributed.tensor.parallel.style import ParallelStyle
-from torch.distributed.tensor.placement_types import _StridedShard
-
-from ..distributed.patches import patch_dtensor_ops
 from ..utils import logging
 from ..utils.import_utils import is_torch_available
 
@@ -37,6 +25,18 @@ from ..utils.import_utils import is_torch_available
 if is_torch_available():
     import torch
     import torch.distributed as dist
+    from torch.distributed.tensor import DTensor, Partial, Replicate, Shard, distribute_tensor
+    from torch.distributed.tensor.parallel import (
+        ColwiseParallel,
+        PrepareModuleInput,
+        RowwiseParallel,
+        SequenceParallel,
+        parallelize_module,
+    )
+    from torch.distributed.tensor.parallel.style import ParallelStyle
+    from torch.distributed.tensor.placement_types import _StridedShard
+
+    from ..distributed.patches import patch_dtensor_ops
 
     # Cache this result has it's a C FFI call which can be pretty time-consuming
     _torch_distributed_available = torch.distributed.is_available()
