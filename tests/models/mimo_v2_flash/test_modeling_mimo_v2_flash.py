@@ -45,6 +45,10 @@ class MiMoV2FlashModelTester(CausalLMModelTester):
         self.head_dim = 32
         self.v_head_dim = 16
         self.layer_types = ["full_attention", "sliding_attention"]
+        self.rope_parameters = {
+            "full_attention": {"rope_type": "default", "rope_theta": 5_000_000.0, "partial_rotary_factor": 0.5},
+            "sliding_attention": {"rope_type": "default", "rope_theta": 10_000.0, "partial_rotary_factor": 0.5},
+        }
         # 2 layers
         self.mlp_layer_types = ["dense", "sparse"]
         self.n_routed_experts = 4
@@ -90,7 +94,7 @@ class MiMoV2FlashModelTest(CausalLMModelTest, unittest.TestCase):
 
         scaling_factor = 10
         short_input_length = 10
-        partial_rotary_factor = 0.334  # MiMo default
+        partial_rotary_factor = 0.5  # from test config
         long_input_length = int(config.max_position_embeddings * 1.5)
 
         # Inputs
