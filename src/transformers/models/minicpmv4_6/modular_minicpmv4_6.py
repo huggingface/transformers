@@ -394,19 +394,7 @@ class MiniCPMV4_6ViTWindowAttentionMerger(nn.Module):
             all_pixel_values.append(hidden_state + residual)
 
         new_hidden_states = torch.concat(all_pixel_values, dim=0).unsqueeze(0)
-        new_cu_seqlens = F.pad(
-            torch.cumsum(new_target_sizes[:, 0] * new_target_sizes[:, 1], dim=0, dtype=torch.int32).to(device), (1, 0)
-        )
-        if max_seqlen % 4 != 0:
-            raise ValueError(f"max_seqlen ({max_seqlen}) must be divisible by 4")
-        new_max_seqlens = max_seqlen // 4
-
-        return (
-            new_hidden_states,
-            new_target_sizes,
-            new_cu_seqlens,
-            new_max_seqlens,
-        )
+        return new_hidden_states, new_target_sizes
 
 
 class MiniCPMV4_6VisionPreTrainedModel(PreTrainedModel):
@@ -423,7 +411,7 @@ class MiniCPMV4_6VisionPreTrainedModel(PreTrainedModel):
     }
 
 
-class MiniCPMV4_6VisionTransformer(MiniCPMV4_6VisionPreTrainedModel):
+class MiniCPMV4_6VisionModel(MiniCPMV4_6VisionPreTrainedModel):
     def __init__(self, config: MiniCPMV4_6VisionConfig):
         super().__init__(config)
         embed_dim = config.hidden_size
@@ -440,23 +428,21 @@ class MiniCPMV4_6VisionTransformer(MiniCPMV4_6VisionPreTrainedModel):
         self,
         pixel_values,
         target_sizes: torch.IntTensor | None = None,
-        cu_seqlens: torch.Tensor | None = None,
-        max_seqlens: torch.Tensor | None = None,
         use_vit_merger: bool = True,
         **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutputWithPooling:
         r"""
         target_sizes (`torch.IntTensor` of shape `(batch_size, 2)`, *optional*):
             Patch grid sizes `(h, w)` for computing position embeddings.
-        cu_seqlens (`torch.Tensor`, *optional*):
-            Cumulative sequence lengths for packed (flash) attention.
-        max_seqlens (`torch.Tensor`, *optional*):
-            Maximum sequence length for packed (flash) attention.
         use_vit_merger (`bool`, *optional*, defaults to `True`):
             Whether to apply the ViT window-attention merger after the encoder.
         """
 
         hidden_states = self.embeddings(pixel_values, target_sizes=target_sizes)
+
+        cu_seqlens = F.pad(torch.cumsum(target_sizes[:, 0] * target_sizes[:, 1], dim=0, dtype=torch.int32), (1, 0))
+        max_seqlens = int(torch.max(cu_seqlens[1:] - cu_seqlens[:-1]).item())
+
         attn_kwargs = {
             "attention_mask": None,
             "cu_seqlens": cu_seqlens,
@@ -470,12 +456,18 @@ class MiniCPMV4_6VisionTransformer(MiniCPMV4_6VisionPreTrainedModel):
                 hidden_states = encoder_layer(hidden_states, **attn_kwargs)
                 # NOTE: Downsample the hidden states and therefore cu-seqlens are new values!
                 if layer_index == insert_layer_id:
-                    (hidden_states, target_sizes, cu_seqlens, max_seqlens) = self.vit_merger(
+                    hidden_states, target_sizes = self.vit_merger(
                         hidden_states,
                         target_sizes,
                         cu_seqlens,
                         max_seqlens,
                     )
+                    cu_seqlens = torch.cumsum(target_sizes[:, 0] * target_sizes[:, 1], dim=0, dtype=torch.int32)
+                    cu_seqlens = F.pad(cu_seqlens, (1, 0)).to(hidden_states.device)
+
+                    if max_seqlens % 4 != 0:
+                        raise ValueError(f"max_seqlen ({max_seqlens}) must be divisible by 4")
+                    max_seqlens = max_seqlens // 4
                     attn_kwargs = {
                         "attention_mask": None,
                         "cu_seqlens": cu_seqlens,
@@ -589,7 +581,7 @@ class MiniCPMV4_6Model(Lfm2VlModel):
         super().__init__(config)
         del self.multi_modal_projector
 
-        self.vision_tower = MiniCPMV4_6VisionTransformer._from_config(config.vision_config)
+        self.vision_tower = MiniCPMV4_6VisionModel._from_config(config.vision_config)
         self.merger = MiniCPMV4_6Merger(config)
         self.language_model = AutoModel.from_config(config.text_config)
         self.post_init()
@@ -611,17 +603,11 @@ class MiniCPMV4_6Model(Lfm2VlModel):
         """
         downsample_mode = downsample_mode if downsample_mode else self.config.downsample_mode
         use_vit_merger = downsample_mode != "4x"
-
         pixel_values = pixel_values.to(dtype=self.vision_tower.dtype)
-
-        cu_seqlens = F.pad(torch.cumsum(target_sizes[:, 0] * target_sizes[:, 1], dim=0, dtype=torch.int32), (1, 0))
-        max_seqlens = int(torch.max(cu_seqlens[1:] - cu_seqlens[:-1]).item())
 
         vision_output = self.vision_tower(
             pixel_values,
             target_sizes=target_sizes,
-            cu_seqlens=cu_seqlens,
-            max_seqlens=max_seqlens,
             use_vit_merger=use_vit_merger,
         )
 
