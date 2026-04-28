@@ -1055,8 +1055,8 @@ class TestDtensorShardOperation(unittest.TestCase):
         expected = {
             0: tensor[:2],  # (FSDP=0, TP=0) — owns expert 1, inner rows 0-1
             1: tensor[2:],  # (FSDP=0, TP=1) — owns expert 1, inner rows 2-3
-            2: None,        # (FSDP=1, TP=0) — does not own expert 1
-            3: None,        # (FSDP=1, TP=1) — does not own expert 1
+            2: None,  # (FSDP=1, TP=0) — does not own expert 1
+            3: None,  # (FSDP=1, TP=1) — does not own expert 1
         }
         for rank in range(4):
             mesh = FakeMesh(shape=(2, 2), rank=rank)

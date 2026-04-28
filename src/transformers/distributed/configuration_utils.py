@@ -48,9 +48,9 @@ class DistributedConfig:
         if self.fsdp_size > 1 and self.fsdp_plan is None:
             self.fsdp_plan = "auto"
 
-        if torch.distributed.is_available() and torch.distributed.is_initialized():                                                                                                                                                        
-            world_size = torch.distributed.get_world_size()                                                                                                                                                                              
-            assert self.tp_size * self.fsdp_size == world_size, (                                                                                                                                                                          
+        if torch.distributed.is_available() and torch.distributed.is_initialized():
+            world_size = torch.distributed.get_world_size()
+            assert self.tp_size * self.fsdp_size == world_size, (
                 f"tp_size ({self.tp_size}) * fsdp_size ({self.fsdp_size}) must be equal to world_size ({world_size})"
             )
 

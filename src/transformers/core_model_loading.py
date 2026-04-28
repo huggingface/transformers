@@ -923,14 +923,14 @@ class DtensorShardOperation:
 
         source_is_one_expert = tensor_idx is not None and self.param_ndim == len(source_shape) + 1
         if source_is_one_expert and any(self._norm_dim(p.dim) == 0 for _, p in placements):
-            if not self._owns_expert(tensor_idx): # Case (b) -> Not owned
+            if not self._owns_expert(tensor_idx):  # Case (b) -> Not owned
                 return None
             # Case (b) -> Owned, drop expert axis and continue with the generic interval loop
             placements = [(mesh_dim, p) for mesh_dim, p in placements if self._norm_dim(p.dim) != 0]
             if not placements:
                 # Expert axis was the only sharding → keep the whole expert tensor.
                 return source[...].to(device=device, dtype=dtype)
-        
+
         # Example - case (a) full weight
         #   input  (source_shape=(8, 16), placements=[Shard(0)], world_size=2):
         #       intervals -> [[(0, 8)], [(0, 16)]]         # whole range on every source dim
@@ -1053,9 +1053,7 @@ class DtensorShardOperation:
                 slices.append(slice(start, end))
                 continue
             if multi_interval_dim is not None:
-                raise ValueError(
-                    "Shard-on-read only supports disjoint ranges on a single checkpoint dimension."
-                )
+                raise ValueError("Shard-on-read only supports disjoint ranges on a single checkpoint dimension.")
             multi_interval_dim = source_dim
             slices.append(slice(None))  # placeholder, filled per-piece below
 
