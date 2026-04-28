@@ -715,13 +715,24 @@ class AutoTokenizer:
             and (TOKENIZER_MAPPING_NAMES.get(config_model_type).removesuffix("Fast"))
             != (tokenizer_config_class.removesuffix("Fast"))
         ):
-            tokenizer_class = tokenizer_class_from_name(tokenizer_config_class)
-            if tokenizer_class is not None and tokenizer_class.__name__ not in (
-                "TokenizersBackend",
-                "PythonBackend",
-                "PreTrainedTokenizerFast",
-            ):
-                return tokenizer_class.from_pretrained(pretrained_model_name_or_path, *inputs, **kwargs)
+            mapped_tokenizer_class = TOKENIZER_MAPPING_NAMES.get(config_model_type)
+            # When `MODELS_WITH_INCORRECT_HUB_TOKENIZER_CLASS` (or an explicit registration)
+            # pins a model_type to `TokenizersBackend`, the `tokenizer_class` declared in the
+            # Hub's `tokenizer_config.json` is known to be wrong (e.g. DeepSeek-V3/R1 which
+            # ship `tokenizer_class: LlamaTokenizerFast` over a ByteLevel `tokenizer.json`,
+            # but `LlamaTokenizerFast.__init__` would clobber the pre-tokenizer with
+            # Metaspace and silently break round-trip). Honor the override and skip the
+            # specialized class path entirely.
+            forced_tokenizers_backend = mapped_tokenizer_class == "TokenizersBackend"
+
+            if not forced_tokenizers_backend:
+                tokenizer_class = tokenizer_class_from_name(tokenizer_config_class)
+                if tokenizer_class is not None and tokenizer_class.__name__ not in (
+                    "TokenizersBackend",
+                    "PythonBackend",
+                    "PreTrainedTokenizerFast",
+                ):
+                    return tokenizer_class.from_pretrained(pretrained_model_name_or_path, *inputs, **kwargs)
 
             if TokenizersBackend is not None:
                 return TokenizersBackend.from_pretrained(pretrained_model_name_or_path, *inputs, **kwargs)
