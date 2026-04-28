@@ -52,6 +52,7 @@ SPECIAL_CASES_TO_ALLOW = {
     "Ernie4_5_VL_MoeVisionConfig": ["args"],  # BC Alias
     "ExaoneMoeConfig": ["first_k_dense_replace"],  # BC for other frameworks
     "AfmoeConfig": ["global_attn_every_n_layers", "rope_scaling"],
+    "LagunaConfig": ["moe_apply_router_weight_on_input"],
     "xLSTMConfig": ["add_out_norm", "chunkwise_kernel", "sequence_kernel", "step_kernel"],
     "Lfm2Config": ["full_attn_idxs"],
     "DiaConfig": ["delay_pattern"],
