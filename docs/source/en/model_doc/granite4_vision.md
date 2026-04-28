@@ -161,6 +161,20 @@ print(processor.decode(output[0], skip_special_tokens=True))
 
 [[autodoc]] Granite4VisionConfig
 
+## Granite4VisionTextConfig
+
+[[autodoc]] Granite4VisionTextConfig
+
+## Granite4VisionImageProcessor
+
+[[autodoc]] Granite4VisionImageProcessor
+    - preprocess
+
+## Granite4VisionImageProcessorPil
+
+[[autodoc]] Granite4VisionImageProcessorPil
+    - preprocess
+
 ## Granite4VisionProcessor
 
 [[autodoc]] Granite4VisionProcessor
@@ -169,6 +183,10 @@ print(processor.decode(output[0], skip_special_tokens=True))
 ## Granite4VisionModel
 
 [[autodoc]] Granite4VisionModel
+
+## Granite4VisionTextModel
+
+[[autodoc]] Granite4VisionTextModel
 
 ## Granite4VisionForConditionalGeneration
 
