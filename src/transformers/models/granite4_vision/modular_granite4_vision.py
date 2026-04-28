@@ -39,7 +39,6 @@ from ..llava_next.modeling_llava_next import (
     image_size_to_num_patches,
     unpad_image,
 )
-from ..blip_2.configuration_blip_2 import Blip2QFormerConfig
 from ..llava_next.processing_llava_next import LlavaNextProcessor
 
 
@@ -120,7 +119,7 @@ class Granite4VisionConfig(LlavaNextConfig):
 
     model_type = "granite4_vision"
     # LlavaNextConfig.sub_configs = {"text_config": AutoConfig, "vision_config": AutoConfig}
-    sub_configs = {"text_config": AutoConfig, "vision_config": AutoConfig, "qformer_config": Blip2QFormerConfig}
+    sub_configs = {"text_config": AutoConfig, "vision_config": AutoConfig, "qformer_config": AutoConfig}
 
     downsample_rate: str | None = None
     deepstack_layer_map: list | None = None
@@ -139,6 +138,8 @@ class Granite4VisionConfig(LlavaNextConfig):
 
         # Must convert qformer_config before super().__post_init__() which triggers
         # _attn_implementation.setter and expects sub_configs to be config objects, not dicts.
+        from ..blip_2.configuration_blip_2 import Blip2QFormerConfig
+
         if self.qformer_config is None:
             self.qformer_config = Blip2QFormerConfig(
                 num_hidden_layers=1,

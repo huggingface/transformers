@@ -25,7 +25,6 @@ from huggingface_hub.dataclasses import strict
 from ...configuration_utils import PreTrainedConfig
 from ...utils import auto_docstring
 from ..auto import CONFIG_MAPPING, AutoConfig
-from ..blip_2.configuration_blip_2 import Blip2QFormerConfig
 
 
 # ── Config ──────────────────────────────────────────────────────────────────
@@ -66,7 +65,7 @@ class Granite4VisionConfig(PreTrainedConfig):
     model_type = "granite4_vision"
     attribute_map = {"image_token_id": "image_token_index"}
     # LlavaNextConfig.sub_configs = {"text_config": AutoConfig, "vision_config": AutoConfig}
-    sub_configs = {"text_config": AutoConfig, "vision_config": AutoConfig, "qformer_config": Blip2QFormerConfig}
+    sub_configs = {"text_config": AutoConfig, "vision_config": AutoConfig, "qformer_config": AutoConfig}
 
     vision_config: dict | PreTrainedConfig | None = None
     text_config: dict | PreTrainedConfig | None = None
@@ -93,6 +92,21 @@ class Granite4VisionConfig(PreTrainedConfig):
 
         if self.spatial_target_layers is None:
             self.spatial_target_layers = [12, 15, 18, 21]
+
+        # Must convert qformer_config before super().__post_init__() which triggers
+        # _attn_implementation.setter and expects sub_configs to be config objects, not dicts.
+        from ..blip_2.configuration_blip_2 import Blip2QFormerConfig
+
+        if self.qformer_config is None:
+            self.qformer_config = Blip2QFormerConfig(
+                num_hidden_layers=1,
+                intermediate_size=3072,
+                cross_attention_frequency=1,
+                max_position_embeddings=2048,
+                use_qformer_text_input=False,
+            )
+        elif isinstance(self.qformer_config, dict):
+            self.qformer_config = Blip2QFormerConfig(**self.qformer_config)
         if isinstance(self.vision_config, dict):
             self.vision_config["model_type"] = self.vision_config.get("model_type", "clip_vision_model")
             self.vision_config = CONFIG_MAPPING[self.vision_config["model_type"]](**self.vision_config)
@@ -119,19 +133,6 @@ class Granite4VisionConfig(PreTrainedConfig):
             if self.image_grid_pinpoints is not None
             else [[336, 672], [672, 336], [672, 672], [1008, 336], [336, 1008]]
         )
-
-        # Must convert qformer_config before super().__post_init__() which triggers
-        # _attn_implementation.setter and expects sub_configs to be config objects, not dicts.
-        if self.qformer_config is None:
-            self.qformer_config = Blip2QFormerConfig(
-                num_hidden_layers=1,
-                intermediate_size=3072,
-                cross_attention_frequency=1,
-                max_position_embeddings=2048,
-                use_qformer_text_input=False,
-            )
-        elif isinstance(self.qformer_config, dict):
-            self.qformer_config = Blip2QFormerConfig(**self.qformer_config)
 
         super().__post_init__(**kwargs)
 
