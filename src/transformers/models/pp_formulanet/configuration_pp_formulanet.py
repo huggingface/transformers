@@ -27,9 +27,7 @@ from ...utils import auto_docstring, logging
 logger = logging.get_logger(__name__)
 
 
-@auto_docstring(
-    checkpoint="PaddlePaddle/PPFormulaNet_plus-L_safetensors"
-)  # or "PaddlePaddle/PP-FormulaNet-L_safetensors"
+@auto_docstring(checkpoint="PaddlePaddle/PPFormulaNet_plus-L_safetensors")
 @strict
 class PPFormulaNetVisionConfig(PreTrainedConfig):
     r"""
@@ -71,26 +69,28 @@ class PPFormulaNetVisionConfig(PreTrainedConfig):
 @strict
 class PPFormulaNetTextConfig(PreTrainedConfig):
     r"""
-    post_conv_in_channels (`int`, *optional*, defaults to 256):
-        Number of input channels for the post-encoder convolution layer.
-    post_conv_mid_channels (`int`, *optional*, defaults to 512):
-       Number of intermediate channels for the post-encoder convolution layer.
-    post_conv_out_channels (`int`, *optional*, defaults to 1024):
-        Number of output channels for the post-encoder convolution layer.
-    max_length (`int`, *optional*, defaults to 1537):
-        Controls the maximum length to use by one of the truncation/padding parameters.
-    """
+    Example:
 
+    ```python
+    >>> from transformers import PPFormulaNetTextConfig, PPFormulaNetTextModel
+
+    >>> # Initializing a PP_FORMULANET facebook/pp_formulanet-large-cc25 style configuration
+    >>> configuration = PPFormulaNetTextConfig()
+
+    >>> # Initializing a model (with random weights) from the facebook/pp_formulanet-large-cc25 style configuration
+    >>> model = PPFormulaNetTextModel(configuration)
+
+    >>> # Accessing the model configuration
+    >>> configuration = model.config
+    ```"""
+
+    model_type = "pp_formulanet"
     keys_to_ignore_at_inference = ["past_key_values"]
     attribute_map = {
         "num_attention_heads": "encoder_attention_heads",
         "hidden_size": "d_model",
         "num_hidden_layers": "encoder_layers",
     }
-
-    post_conv_in_channels: int = 256
-    post_conv_out_channels: int = 1024
-    post_conv_mid_channels: int = 512
     vocab_size: int = 50000
     max_position_embeddings: int = 2560
     encoder_layers: int = 12
@@ -99,6 +99,8 @@ class PPFormulaNetTextConfig(PreTrainedConfig):
     decoder_ffn_dim: int = 2048
     decoder_attention_heads: int = 16
     decoder_layerdrop: float | int = 0.0
+    use_cache: bool = True
+    is_encoder_decoder: bool = True
     activation_function: str = "gelu"
     d_model: int = 512
     dropout: float | int = 0.1
@@ -112,16 +114,19 @@ class PPFormulaNetTextConfig(PreTrainedConfig):
     decoder_start_token_id: int | None = 2
     forced_eos_token_id: int | list[int] | None = 2
     tie_word_embeddings: bool = False
-    max_length: int = 1537
-    is_encoder_decoder: bool = True
+    base_config_key = "text_config"
 
 
 @auto_docstring(checkpoint="PaddlePaddle/PPFormulaNet_plus-L_safetensors")
 @strict
 class PPFormulaNetConfig(PreTrainedConfig):
     r"""
-    vision_config (`dict` or [`PPFormulaNetVisionConfig`], *optional*):
-        Configuration for the vision encoder. If `None`, a default [`PPFormulaNetVisionConfig`] is used.
+    post_conv_in_channels (`int`, *optional*, defaults to 256):
+        Number of input channels for the post-encoder convolution layer.
+    post_conv_mid_channels (`int`, *optional*, defaults to 512):
+       Number of intermediate channels for the post-encoder convolution layer.
+    post_conv_out_channels (`int`, *optional*, defaults to 1024):
+        Number of output channels for the post-encoder convolution layer.
     """
 
     model_type = "pp_formulanet"
@@ -130,6 +135,9 @@ class PPFormulaNetConfig(PreTrainedConfig):
     text_config: dict | PPFormulaNetTextConfig | None = None
     vision_config: dict | PPFormulaNetVisionConfig | None = None
     is_encoder_decoder: bool = True
+    post_conv_in_channels: int = 256
+    post_conv_out_channels: int = 1024
+    post_conv_mid_channels: int = 512
 
     def __post_init__(self, **kwargs):
         if isinstance(self.text_config, dict):

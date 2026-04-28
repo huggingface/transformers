@@ -28,6 +28,8 @@ from ...image_utils import (
     ImageInput,
 )
 from ...modeling_outputs import (
+    BaseModelOutputWithPooling,
+    Seq2SeqLMOutput,
     Seq2SeqModelOutput,
 )
 from ...modeling_utils import PreTrainedModel
@@ -42,8 +44,8 @@ from ...utils import (
     logging,
 )
 from ...utils.import_utils import requires
-from ..florence2.modeling_florence2 import Florence2ForConditionalGeneration, Florence2Model
-from ..mbart.modeling_mbart import MBartDecoderWrapper
+from ..mbart.configuration_mbart import MBartConfig
+from ..mbart.modeling_mbart import MBartDecoder, shift_tokens_right
 from ..nougat.image_processing_nougat import NougatImageProcessor
 from ..nougat.processing_nougat import NougatProcessor
 from ..slanext.configuration_slanext import SLANeXtVisionConfig
@@ -57,9 +59,7 @@ from ..slanext.modeling_slanext import (
 logger = logging.get_logger(__name__)
 
 
-@auto_docstring(
-    checkpoint="PaddlePaddle/PPFormulaNet_plus-L_safetensors"
-)  # or "PaddlePaddle/PP-FormulaNet-L_safetensors"
+@auto_docstring(checkpoint="PaddlePaddle/PPFormulaNet_plus-L_safetensors")
 @strict
 class PPFormulaNetVisionConfig(SLANeXtVisionConfig):
     pass
@@ -67,7 +67,26 @@ class PPFormulaNetVisionConfig(SLANeXtVisionConfig):
 
 @auto_docstring(checkpoint="PaddlePaddle/PPFormulaNet_plus-L_safetensors")
 @strict
-class PPFormulaNetTextConfig(PreTrainedConfig):
+class PPFormulaNetTextConfig(MBartConfig):
+    base_config_key = "text_config"
+    vocab_size: int = 50000
+    max_position_embeddings: int = 2560
+    decoder_layers: int = 8
+    decoder_ffn_dim: int = 2048
+    d_model: int = 512
+    scale_embedding: bool = True
+    decoder_start_token_id: int | None = 2
+    tie_word_embeddings: bool = False
+    is_encoder_decoder: bool = True
+    classifier_dropout = AttributeError()
+    encoder_ffn_dim = AttributeError()
+    encoder_layerdrop = AttributeError()
+    is_decoder = AttributeError()
+
+
+@auto_docstring(checkpoint="PaddlePaddle/PPFormulaNet_plus-L_safetensors")
+@strict
+class PPFormulaNetConfig(PreTrainedConfig):
     r"""
     post_conv_in_channels (`int`, *optional*, defaults to 256):
         Number of input channels for the post-encoder convolution layer.
@@ -75,51 +94,6 @@ class PPFormulaNetTextConfig(PreTrainedConfig):
        Number of intermediate channels for the post-encoder convolution layer.
     post_conv_out_channels (`int`, *optional*, defaults to 1024):
         Number of output channels for the post-encoder convolution layer.
-    max_length (`int`, *optional*, defaults to 1537):
-        Controls the maximum length to use by one of the truncation/padding parameters.
-    """
-
-    keys_to_ignore_at_inference = ["past_key_values"]
-    attribute_map = {
-        "num_attention_heads": "encoder_attention_heads",
-        "hidden_size": "d_model",
-        "num_hidden_layers": "encoder_layers",
-    }
-
-    post_conv_in_channels: int = 256
-    post_conv_out_channels: int = 1024
-    post_conv_mid_channels: int = 512
-    vocab_size: int = 50000
-    max_position_embeddings: int = 2560
-    encoder_layers: int = 12
-    encoder_attention_heads: int = 16
-    decoder_layers: int = 8
-    decoder_ffn_dim: int = 2048
-    decoder_attention_heads: int = 16
-    decoder_layerdrop: float | int = 0.0
-    activation_function: str = "gelu"
-    d_model: int = 512
-    dropout: float | int = 0.1
-    attention_dropout: float | int = 0.0
-    activation_dropout: float | int = 0.0
-    init_std: float = 0.02
-    scale_embedding: bool = True
-    pad_token_id: int | None = 1
-    bos_token_id: int | None = 0
-    eos_token_id: int | list[int] | None = 2
-    decoder_start_token_id: int | None = 2
-    forced_eos_token_id: int | list[int] | None = 2
-    tie_word_embeddings: bool = False
-    max_length: int = 1537
-    is_encoder_decoder: bool = True
-
-
-@auto_docstring(checkpoint="PaddlePaddle/PPFormulaNet_plus-L_safetensors")
-@strict
-class PPFormulaNetConfig(PreTrainedConfig):
-    r"""
-    vision_config (`dict` or [`PPFormulaNetVisionConfig`], *optional*):
-        Configuration for the vision encoder. If `None`, a default [`PPFormulaNetVisionConfig`] is used.
     """
 
     model_type = "pp_formulanet"
@@ -128,6 +102,9 @@ class PPFormulaNetConfig(PreTrainedConfig):
     text_config: dict | PPFormulaNetTextConfig | None = None
     vision_config: dict | PPFormulaNetVisionConfig | None = None
     is_encoder_decoder: bool = True
+    post_conv_in_channels: int = 256
+    post_conv_out_channels: int = 1024
+    post_conv_mid_channels: int = 512
 
     def __post_init__(self, **kwargs):
         if isinstance(self.text_config, dict):
@@ -153,6 +130,7 @@ class PPFormulaNetImageProcessor(NougatImageProcessor):
     size = {"height": 768, "width": 768}
 
 
+@auto_docstring
 class PPFormulaNetProcessor(NougatProcessor):
     r"""
     [`PPFormulaNetProcessor`] offers all the functionalities of [`PPFormulaNetImageProcessor`] and [`NougatTokenizer`]. See the
@@ -169,22 +147,11 @@ class PPFormulaNetProcessor(NougatProcessor):
             images (`PIL.Image.Image`, `np.ndarray`, `torch.Tensor`, `List[PIL.Image.Image]`, `List[np.ndarray]`, `List[torch.Tensor]`):
                 The image or batch of images to be prepared. Each image can be a PIL image, NumPy array or PyTorch
                 tensor. Both channels-first and channels-last formats are supported.
-            return_tensors (`str` or [`~utils.TensorType`], *optional*):
-                If set, will return tensors of a particular framework. Acceptable values are:
-                - `'tf'`: Return TensorFlow `tf.constant` objects.
-                - `'pt'`: Return PyTorch `torch.Tensor` objects.
-                - `'np'`: Return NumPy `np.ndarray` objects.
-                - `'jax'`: Return JAX `jnp.ndarray` objects.
 
         Returns:
             [`BatchFeature`]: A [`BatchFeature`] with the following fields:
 
-            - **input_ids** -- List of token ids to be fed to a model. Returned when `text` is not `None`.
-            - **attention_mask** -- List of indices specifying which tokens should be attended to by the model (when
-              `return_attention_mask=True` or if *"attention_mask"* is in `self.model_input_names` and if `text` is not
-              `None`).
             - **pixel_values** -- Pixel values to be fed to a model. Returned when `images` is not `None`.
-            - **image_grid_thw** -- List of image 3D grid in LLM. Returned when `images` is not `None`.
         """
         output_kwargs = self._merge_kwargs(
             ProcessingKwargs,
@@ -193,7 +160,7 @@ class PPFormulaNetProcessor(NougatProcessor):
         )
 
         image_inputs = self.image_processor(images=images, **output_kwargs["images_kwargs"])
-        return BatchFeature({"input_ids": None, **image_inputs})
+        return BatchFeature({**image_inputs})
 
     def normalize(self, s: str) -> str:
         """Normalizes a string by removing unnecessary spaces.
@@ -227,15 +194,21 @@ class PPFormulaNetProcessor(NougatProcessor):
                     names.append(s)
         if len(names) > 0:
             s = re.sub(text_reg, lambda match: str(names.pop(0)), s)
+
+        rule_noletter_noletter = re.compile(r"(?!\\ )(%s)\s+?(%s)" % (noletter, noletter))
+        rule_noletter_letter = re.compile(r"(?!\\ )(%s)\s+?(%s)" % (noletter, letter))
+        rule_letter_noletter = re.compile(r"(%s)\s+?(%s)" % (letter, noletter))
+
         news = s
         while True:
             s = news
-            news = re.sub(r"(?!\\ )(%s)\s+?(%s)" % (noletter, noletter), r"\1\2", s)
-            news = re.sub(r"(?!\\ )(%s)\s+?(%s)" % (noletter, letter), r"\1\2", news)
-            news = re.sub(r"(%s)\s+?(%s)" % (letter, noletter), r"\1\2", news)
+            news = rule_noletter_noletter.sub(r"\1\2", s)
+            news = rule_noletter_letter.sub(r"\1\2", news)
+            news = rule_letter_noletter.sub(r"\1\2", news)
             if news == s:
                 break
-        return s.replace("XXXXXXX", " ")
+
+        return news.replace("XXXXXXX", " ")
 
     def remove_chinese_text_wrapping(self, formula):
         pattern = re.compile(r"\\text\s*{([^{}]*[\u4e00-\u9fff]+[^{}]*)}")
@@ -268,7 +241,7 @@ class PPFormulaNetProcessor(NougatProcessor):
         text = self.normalize(text)
         return text
 
-    def post_process_image_text_to_text(self, generated_outputs, skip_special_tokens=True, **kwargs):
+    def post_process(self, generated_outputs, skip_special_tokens=True, **kwargs):
         """
         Post-process the output of the model to decode the text.
 
@@ -290,14 +263,16 @@ class PPFormulaNetProcessor(NougatProcessor):
 
 class PPFormulaNetPreTrainedModel(SLANeXtPreTrainedModel):
     _keep_in_fp32_modules_strict = []
+    base_model_prefix = "model"
+    _supports_sdpa = True
 
     @torch.no_grad()
     def _init_weights(self, module):
         """Initialize the weights"""
         PreTrainedModel._init_weights(module)
 
-        # Initialize positional embeddings to zero (PPFormulaNetVisionEncoder holds pos_embed)
-        if isinstance(module, PPFormulaNetVisionEncoder):
+        # Initialize positional embeddings to zero (PPFormulaNetVisionModel holds pos_embed)
+        if isinstance(module, PPFormulaNetVisionModel):
             if module.pos_embed is not None:
                 init.constant_(module.pos_embed, 0.0)
 
@@ -308,22 +283,13 @@ class PPFormulaNetPreTrainedModel(SLANeXtPreTrainedModel):
                 init.constant_(module.rel_pos_w, 0.0)
 
 
+# overrider for PPFormulaNetModel's encoder output
 @dataclass
-class PPFormulaNetSeq2SeqModelOutput(Seq2SeqModelOutput):
-    r"""
-    image_hidden_states (`torch.FloatTensor`, *optional*):
-        A `torch.FloatTensor` of size `(batch_size, num_image_tokens, hidden_size)`.
-        image_hidden_states of the model produced by the vision encoder and after projecting the last hidden state.
-    """
-
-    image_hidden_states: torch.FloatTensor | None = None
-
-
-class PPFormulaNetVisionAttention(SLANeXtVisionAttention):
+class PPFormulaNetVisionEncoderOutput(BaseModelOutputWithPooling):
     pass
 
 
-class PPFormulaNetVisionEncoder(SLANeXtVisionEncoder):
+class PPFormulaNetVisionAttention(SLANeXtVisionAttention):
     pass
 
 
@@ -342,7 +308,7 @@ class PPFormulaNetMultiModalProjector(nn.Module):
             bias=False,
         )
         self.linear_1 = nn.Linear(config.post_conv_out_channels, config.post_conv_out_channels)
-        self.linear_2 = nn.Linear(config.post_conv_out_channels, config.hidden_size)
+        self.linear_2 = nn.Linear(config.post_conv_out_channels, config.text_config.hidden_size)
 
     def forward(self, hidden_states: torch.Tensor, **kwargs: Unpack[TransformersKwargs]):
         hidden_states = self.conv1(hidden_states)
@@ -357,24 +323,40 @@ class PPFormulaNetVisionModel(SLANeXtVisionEncoder):
     pass
 
 
-class PPFormulaNetTextModel(MBartDecoderWrapper):
+class PPFormulaNetTextModel(MBartDecoder):
     pass
 
 
-class PPFormulaNetModel(Florence2Model):
+class PPFormulaNetModel(PPFormulaNetPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
 
-        self.language_model = PPFormulaNetTextModel(config.text_config)
-        self.vision_tower = PPFormulaNetVisionModel(config=config.vision_config)
-        self.multi_modal_projector = PPFormulaNetMultiModalProjector(config.text_config)
+        self.decoder = PPFormulaNetTextModel(config.text_config)
+        self.encoder = PPFormulaNetVisionModel(config=config.vision_config)
+        self.multi_modal_projector = PPFormulaNetMultiModalProjector(config)
+
+    @can_return_tuple
+    @auto_docstring(
+        custom_intro="Obtains image last hidden states from the vision tower and apply multimodal projection."
+    )
+    def get_image_features(
+        self, pixel_values: torch.Tensor, **kwargs: Unpack[TransformersKwargs]
+    ) -> tuple | BaseModelOutputWithPooling:
+        r"""
+        pixel_values (`torch.FloatTensor]` of shape `(batch_size, channels, height, width)`):
+            The tensors corresponding to the input images.
+        """
+        image_outputs = self.encoder(pixel_values, **kwargs)
+        image_outputs.pooler_output = self.multi_modal_projector(image_outputs.last_hidden_state)
+
+        return image_outputs
 
     @can_return_tuple
     @auto_docstring
     def forward(
         self,
-        input_ids: torch.LongTensor | None = None,
         pixel_values: torch.FloatTensor | None = None,
+        input_ids: torch.LongTensor | None = None,
         attention_mask: torch.Tensor | None = None,
         decoder_input_ids: torch.LongTensor | None = None,
         decoder_attention_mask: torch.LongTensor | None = None,
@@ -384,33 +366,31 @@ class PPFormulaNetModel(Florence2Model):
         inputs_embeds: torch.FloatTensor | None = None,
         use_cache: bool | None = None,
         **kwargs,
-    ) -> tuple | PPFormulaNetSeq2SeqModelOutput:
+    ) -> tuple | Seq2SeqModelOutput:
+        if decoder_input_ids is None and decoder_inputs_embeds is None:
+            decoder_input_ids = shift_tokens_right(input_ids, self.config.text_config.pad_token_id)
+
+        if (encoder_outputs is None) ^ (pixel_values is not None):
+            raise ValueError("You must specify exactly one of encoder_outputs or pixel_values")
+
         if encoder_outputs is None:
-            if pixel_values is not None:
-                encoder_outputs = self.get_image_features(pixel_values)
-            image_features = encoder_outputs.pooler_output.to(self.language_model.device, self.language_model.dtype)
-        else:
-            image_features = self.multi_modal_projector(encoder_outputs.last_hidden_state)
+            encoder_outputs = self.get_image_features(pixel_values, **kwargs)
+        elif encoder_outputs.pooler_output is None:
+            encoder_outputs.pooler_output = self.multi_modal_projector(encoder_outputs.last_hidden_state)
 
-        if decoder_input_ids is None:
-            decoder_start_token_id = self.config.text_config.decoder_start_token_id
-            decoder_input_ids = torch.ones(
-                (image_features.size()[0], 1), dtype=torch.long, device=self.language_model.device
-            )
-            decoder_input_ids *= decoder_start_token_id
+        image_features = encoder_outputs.pooler_output.to(self.decoder.device, self.decoder.dtype)
 
-        decoder_outputs = self.language_model.decoder(
+        decoder_outputs = self.decoder(
             input_ids=decoder_input_ids,
             attention_mask=decoder_attention_mask,
             encoder_hidden_states=image_features,
-            encoder_attention_mask=attention_mask,
             past_key_values=past_key_values,
             inputs_embeds=decoder_inputs_embeds,
             use_cache=use_cache,
             **kwargs,
         )
 
-        return PPFormulaNetSeq2SeqModelOutput(
+        return Seq2SeqModelOutput(
             last_hidden_state=decoder_outputs.last_hidden_state,
             past_key_values=decoder_outputs.past_key_values,
             decoder_hidden_states=decoder_outputs.hidden_states,
@@ -419,25 +399,137 @@ class PPFormulaNetModel(Florence2Model):
             encoder_last_hidden_state=encoder_outputs.last_hidden_state,
             encoder_hidden_states=encoder_outputs.hidden_states,
             encoder_attentions=encoder_outputs.attentions,
-            image_hidden_states=image_features if pixel_values is not None else None,
         )
 
+
+@auto_docstring
+class PPFormulaNetForConditionalGeneration(PPFormulaNetPreTrainedModel, GenerationMixin):
+    def __init__(self, config: PPFormulaNetConfig):
+        super().__init__(config)
+        self.model = PPFormulaNetModel(config)
+        self.lm_head = nn.Linear(config.text_config.hidden_size, config.text_config.vocab_size, bias=False)
+
+        self.post_init()
+
+    def get_output_embeddings(self) -> nn.Module:
+        return self.lm_head
+
+    @auto_docstring
+    def get_image_features(
+        self, pixel_values: torch.Tensor, **kwargs: Unpack[TransformersKwargs]
+    ) -> tuple | BaseModelOutputWithPooling:
+        return self.model.get_image_features(pixel_values=pixel_values, **kwargs)
+
+    @can_return_tuple
+    @auto_docstring
+    def forward(
+        self,
+        pixel_values: torch.FloatTensor | None = None,
+        input_ids: torch.LongTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
+        decoder_input_ids: torch.LongTensor | None = None,
+        decoder_attention_mask: torch.LongTensor | None = None,
+        encoder_outputs: list[torch.FloatTensor] | None = None,
+        past_key_values: Cache | None = None,
+        inputs_embeds: torch.FloatTensor | None = None,
+        decoder_inputs_embeds: torch.FloatTensor | None = None,
+        labels: torch.LongTensor | None = None,
+        use_cache: bool | None = None,
+        logits_to_keep: int | torch.Tensor = 0,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> tuple | Seq2SeqLMOutput:
+        r"""
+        Example:
+
+        ```python
+        >>> from io import BytesIO
+
+        >>> import httpx
+        >>> from PIL import Image
+        >>> from transformers import AutoProcessor, PPFormulaNetForConditionalGeneration
+
+        >>> model_path = "PaddlePaddle/PP-FormulaNet_plus-L_safetensors" # or "PaddlePaddle/PP-FormulaNet-L_safetensors"
+        >>> model = PPFormulaNetForConditionalGeneration.from_pretrained(model_path, device_map="auto")
+        >>> processor = AutoProcessor.from_pretrained(model_path)
+
+        >>> image_url = "https://paddle-model-ecology.bj.bcebos.com/paddlex/imgs/demo_image/general_formula_rec_001.png"
+        >>> image = Image.open(BytesIO(httpx.get(image_url).content)).convert("RGB")
+        >>> inputs = processor(images=image, return_tensors="pt").to(model.device)
+        >>> outputs = model(**inputs)
+        >>> result = processor.post_process(outputs)
+        >>> print(result)
+        ['\\zeta_{0}(\\nu)=-\\frac{\\nu\\varrho^{-2\\nu}}{\\pi}\\int_{\\mu}^{\\infty}d\\omega\\int_{C_{+}}d z\\frac{2z^{2}}{(z^{2}+\\omega^{2})^{\\nu+1}}\\breve{\\Psi}(\\omega;z)e^{i\\epsilon z}\\quad,']
+        ```"""
+        outputs = self.model(
+            input_ids=input_ids,
+            pixel_values=pixel_values,
+            attention_mask=attention_mask,
+            decoder_input_ids=decoder_input_ids,
+            encoder_outputs=encoder_outputs,
+            decoder_attention_mask=decoder_attention_mask,
+            past_key_values=past_key_values,
+            inputs_embeds=inputs_embeds,
+            decoder_inputs_embeds=decoder_inputs_embeds,
+            use_cache=use_cache,
+            **kwargs,
+        )
+
+        hidden_states = outputs[0]
+        # Only compute necessary logits, and do not upcast them to float if we are not computing the loss
+        slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
+        logits = self.lm_head(hidden_states[:, slice_indices, :])
+
+        loss = None
+        if labels is not None:
+            loss = self.loss_function(
+                logits=logits, labels=labels, vocab_size=self.config.text_config.vocab_size, **kwargs
+            )
+
+        return Seq2SeqLMOutput(
+            loss=loss,
+            logits=logits,
+            past_key_values=outputs.past_key_values,
+            decoder_hidden_states=outputs.decoder_hidden_states,
+            decoder_attentions=outputs.decoder_attentions,
+            cross_attentions=outputs.cross_attentions,
+            encoder_last_hidden_state=outputs.encoder_last_hidden_state,
+            encoder_hidden_states=outputs.encoder_hidden_states,
+            encoder_attentions=outputs.encoder_attentions,
+        )
+
+    def prepare_inputs_for_generation(
+        self,
+        input_ids,
+        past_key_values=None,
+        inputs_embeds=None,
+        pixel_values=None,
+        attention_mask=None,
+        logits_to_keep=None,
+        is_first_iteration=False,
+        **kwargs,
+    ):
+        model_inputs = super().prepare_inputs_for_generation(
+            input_ids,
+            past_key_values=past_key_values,
+            inputs_embeds=inputs_embeds,
+            attention_mask=attention_mask,
+            logits_to_keep=logits_to_keep,
+            is_first_iteration=is_first_iteration,
+            **kwargs,
+        )
+
+        if is_first_iteration or not kwargs.get("use_cache", True):
+            # Pixel values are used only in the first iteration if available
+            # In subsequent iterations, they are already merged with text and cached
+            # NOTE: first iteration doesn't have to be prefill, it can be the first
+            # iteration with a question and cached system prompt (continue generate from cache)
+            model_inputs["pixel_values"] = pixel_values
+
+        return model_inputs
+
+    # override this function to compatible with `_prepare_encoder_decoder_kwargs_for_generation`
     def get_encoder(self):
-        return self.vision_tower
-
-
-@auto_docstring(
-    custom_intro="""
-    PPFormulaNet Table Recognition model for table recognition tasks. Wraps the core PPFormulaNetPreTrainedModel
-    and returns outputs compatible with the Transformers table recognition API.
-    """
-)
-class PPFormulaNetForConditionalGeneration(Florence2ForConditionalGeneration):
-    def _prepare_encoder_decoder_kwargs_for_generation(self, *args, **kwargs):
-        return GenerationMixin._prepare_encoder_decoder_kwargs_for_generation(*args, **kwargs)
-
-    def get_encoder(self):
-        return self.model.vision_tower
+        return self.model.get_encoder()
 
 
 __all__ = [
@@ -446,6 +538,8 @@ __all__ = [
     "PPFormulaNetConfig",
     "PPFormulaNetTextConfig",
     "PPFormulaNetModel",
+    "PPFormulaNetTextModel",
+    "PPFormulaNetVisionModel",
     "PPFormulaNetVisionConfig",
     "PPFormulaNetForConditionalGeneration",
     "PPFormulaNetPreTrainedModel",

@@ -13,7 +13,7 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was released on 2025-03-24 and added to Hugging Face Transformers on 2026-04-24.*
+*This model was released on 2025-03-24 and added to Hugging Face Transformers on 2026-04-28.*
 
 # SLANet
 
@@ -41,7 +41,7 @@ import httpx
 from PIL import Image
 from transformers import AutoProcessor, PPFormulaNetForConditionalGeneration
 
-model_path = "PaddlePaddle/PP-FormulaNet_plus-L_safetensors"
+model_path = "PaddlePaddle/PP-FormulaNet_plus-L_safetensors" # or "PaddlePaddle/PP-FormulaNet-L_safetensors"
 model = PPFormulaNetForConditionalGeneration.from_pretrained(model_path, device_map="auto")
 processor = AutoProcessor.from_pretrained(model_path)
 
@@ -49,7 +49,7 @@ image_url = "https://paddle-model-ecology.bj.bcebos.com/paddlex/imgs/demo_image/
 image = Image.open(BytesIO(httpx.get(image_url).content)).convert("RGB")
 inputs = processor(images=image, return_tensors="pt").to(model.device)
 outputs = model(**inputs)
-result = processor.post_process_image_text_to_text(outputs)
+result = processor.post_process(outputs)
 print(result)
 ```
 
@@ -64,13 +64,25 @@ print(result)
 
 [[autodoc]] PPFormulaNetForConditionalGeneration
 
-## PPFormulaNetBackbone
+## PPFormulaNetTextModel
 
-[[autodoc]] PPFormulaNetBackbone
+[[autodoc]] PPFormulaNetTextModel
 
-## PPFormulaNetHead
+## PPFormulaNetVisionModel
 
-[[autodoc]] PPFormulaNetHead
+[[autodoc]] PPFormulaNetVisionModel
+
+## PPFormulaNetModel
+
+[[autodoc]] PPFormulaNetModel
+
+## PPFormulaNetTextConfig
+
+[[autodoc]] PPFormulaNetTextConfig
+
+## PPFormulaNetVisionConfig
+
+[[autodoc]] PPFormulaNetVisionConfig
 
 ## PPFormulaNetImageProcessor
 

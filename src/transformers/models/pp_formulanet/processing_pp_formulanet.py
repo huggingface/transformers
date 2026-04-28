@@ -50,22 +50,11 @@ class PPFormulaNetProcessor(ProcessorMixin):
             images (`PIL.Image.Image`, `np.ndarray`, `torch.Tensor`, `List[PIL.Image.Image]`, `List[np.ndarray]`, `List[torch.Tensor]`):
                 The image or batch of images to be prepared. Each image can be a PIL image, NumPy array or PyTorch
                 tensor. Both channels-first and channels-last formats are supported.
-            return_tensors (`str` or [`~utils.TensorType`], *optional*):
-                If set, will return tensors of a particular framework. Acceptable values are:
-                - `'tf'`: Return TensorFlow `tf.constant` objects.
-                - `'pt'`: Return PyTorch `torch.Tensor` objects.
-                - `'np'`: Return NumPy `np.ndarray` objects.
-                - `'jax'`: Return JAX `jnp.ndarray` objects.
 
         Returns:
             [`BatchFeature`]: A [`BatchFeature`] with the following fields:
 
-            - **input_ids** -- List of token ids to be fed to a model. Returned when `text` is not `None`.
-            - **attention_mask** -- List of indices specifying which tokens should be attended to by the model (when
-              `return_attention_mask=True` or if *"attention_mask"* is in `self.model_input_names` and if `text` is not
-              `None`).
             - **pixel_values** -- Pixel values to be fed to a model. Returned when `images` is not `None`.
-            - **image_grid_thw** -- List of image 3D grid in LLM. Returned when `images` is not `None`.
         """
         output_kwargs = self._merge_kwargs(
             ProcessingKwargs,
@@ -74,7 +63,7 @@ class PPFormulaNetProcessor(ProcessorMixin):
         )
 
         image_inputs = self.image_processor(images=images, **output_kwargs["images_kwargs"])
-        return BatchFeature({"input_ids": None, **image_inputs})
+        return BatchFeature({**image_inputs})
 
     def post_process_generation(self, text: str) -> str:
         """Post-processes a string by fixing text and normalizing it.
@@ -130,15 +119,21 @@ class PPFormulaNetProcessor(ProcessorMixin):
                     names.append(s)
         if len(names) > 0:
             s = re.sub(text_reg, lambda match: str(names.pop(0)), s)
+
+        rule_noletter_noletter = re.compile(r"(?!\\ )(%s)\s+?(%s)" % (noletter, noletter))
+        rule_noletter_letter = re.compile(r"(?!\\ )(%s)\s+?(%s)" % (noletter, letter))
+        rule_letter_noletter = re.compile(r"(%s)\s+?(%s)" % (letter, noletter))
+
         news = s
         while True:
             s = news
-            news = re.sub(r"(?!\\ )(%s)\s+?(%s)" % (noletter, noletter), r"\1\2", s)
-            news = re.sub(r"(?!\\ )(%s)\s+?(%s)" % (noletter, letter), r"\1\2", news)
-            news = re.sub(r"(%s)\s+?(%s)" % (letter, noletter), r"\1\2", news)
+            news = rule_noletter_noletter.sub(r"\1\2", s)
+            news = rule_noletter_letter.sub(r"\1\2", news)
+            news = rule_letter_noletter.sub(r"\1\2", news)
             if news == s:
                 break
-        return s.replace("XXXXXXX", " ")
+
+        return news.replace("XXXXXXX", " ")
 
     def remove_chinese_text_wrapping(self, formula):
         pattern = re.compile(r"\\text\s*{([^{}]*[\u4e00-\u9fff]+[^{}]*)}")
@@ -149,7 +144,7 @@ class PPFormulaNetProcessor(ProcessorMixin):
         replaced_formula = pattern.sub(replacer, formula)
         return replaced_formula.replace('"', "")
 
-    def post_process_image_text_to_text(self, generated_outputs, skip_special_tokens=True, **kwargs):
+    def post_process(self, generated_outputs, skip_special_tokens=True, **kwargs):
         """
         Post-process the output of the model to decode the text.
 
