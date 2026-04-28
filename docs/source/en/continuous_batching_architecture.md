@@ -113,7 +113,7 @@ While the GPU computes batch N, the CPU prepares batch N+1. However, overlapping
 
 Async batching requires CUDA graphs to be active, since graph replay provides the stable tensor addresses needed for stream overlap to be correct.
 
-## KV cache pressure
+## Offloading
 
 Requests that generate very long outputs can fill the KV cache during long sessions. The manager evicts one active request instead of crashing. It selects the oldest active request, or the newest if a previous eviction already blocked new requests from joining.
 
