@@ -162,7 +162,8 @@ model = Idefics2ForConditionalGeneration.from_pretrained(
     "HuggingFaceM4/idefics2-8b",
 +    dtype=torch.float16,
 +    attn_implementation="flash_attention_2",
-, device_map="auto")
+    device_map="auto",
+)
 ```
 
 ## Shrinking down Idefics2 using quantization
@@ -184,7 +185,8 @@ model = Idefics2ForConditionalGeneration.from_pretrained(
     "HuggingFaceM4/idefics2-8b",
 +    dtype=torch.float16,
 +    quantization_config=quantization_config,
-, device_map="auto")
+    device_map="auto",
+)
 ```
 
 ## Resources

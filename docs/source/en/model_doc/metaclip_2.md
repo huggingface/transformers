@@ -51,7 +51,6 @@ from transformers import pipeline
 clip = pipeline(
    task="zero-shot-image-classification",
    model="facebook/metaclip-2-worldwide-huge-quickgelu",
-   dtype=torch.bfloat16,
    device=0
 )
 labels = ["a photo of a cat", "a photo of a dog", "a photo of a car"]

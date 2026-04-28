@@ -51,15 +51,15 @@ pipeline("Plants create energy through a process known as")
 </hfoption>
 <hfoption id="AutoModel">
 
-```py
-import torch  
-from transformers import AutoModelForCausalLM, AutoTokenizer  
+```python
+from transformers import AutoModelForCausalLM, AutoTokenizer
+
 
 tokenizer = AutoTokenizer.from_pretrained("state-spaces/mamba-130m-hf")
-model = AutoModelForCausalLM.from_pretrained("state-spaces/mamba-130m-hf", device_map="auto",)  
-input_ids = tokenizer("Plants create energy through a process known as", return_tensors="pt").to(model.device)  
+model = AutoModelForCausalLM.from_pretrained("state-spaces/mamba-130m-hf", device_map="auto")
+input_ids = tokenizer("Plants create energy through a process known as", return_tensors="pt").to(model.device)
 
-output = model.generate(**input_ids)  
+output = model.generate(**input_ids)
 print(tokenizer.decode(output[0], skip_special_tokens=True))
 ```
 
@@ -79,7 +79,7 @@ from transformers import AutoModelForCausalLM, AutoTokenizer, TorchAoConfig
 quantization_config = Int4WeightOnlyConfig(group_size=128)
 quantization_config = TorchAoConfig(quant_type=quant_config)
 tokenizer = AutoTokenizer.from_pretrained("state-spaces/mamba-2.8b-hf")
-model = AutoModelForCausalLM.from_pretrained("state-spaces/mamba-2.8b-hf", quantization_config=quantization_config, device_map="auto",)
+model = AutoModelForCausalLM.from_pretrained("state-spaces/mamba-2.8b-hf", quantization_config=quantization_config, device_map="auto")
 input_ids = tokenizer("Plants create energy through a process known as", return_tensors="pt").to(model.device)
 
 output = model.generate(**input_ids)

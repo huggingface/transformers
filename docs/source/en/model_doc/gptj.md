@@ -44,8 +44,8 @@ import torch
 model = GPTJForCausalLM.from_pretrained(
     "EleutherAI/gpt-j-6B",
     revision="float16",
-    dtype=torch.float16,
-, device_map="auto")
+    device_map="auto",
+)
 ```
 
 - The model should fit on 16GB GPU for inference. For training/fine-tuning it would take much more GPU RAM. Adam
