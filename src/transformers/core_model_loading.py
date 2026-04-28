@@ -156,8 +156,11 @@ class Concatenate(ConversionOps):
         target_pattern = self.get_target_pattern(target_patterns)
         all_tensors = []
         # Very important to keep the relative order of the source patterns here, so we iterate over them not the
-        # input directly as it's unordered!
+        # input directly as it's unordered! Skip patterns that prior ops in the chain (e.g. ``Fp8Dequantize``)
+        # have already consumed and dropped from ``input_dict``.
         for source_pattern in source_patterns:
+            if source_pattern not in input_dict:
+                continue
             tensors = input_dict[source_pattern]
             if isinstance(tensors, list):
                 all_tensors.extend(tensors)
