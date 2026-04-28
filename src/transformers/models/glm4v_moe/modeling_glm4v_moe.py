@@ -810,10 +810,7 @@ class Glm4vMoeVisionModel(Glm4vMoePreTrainedModel):
     @capture_outputs
     @auto_docstring
     def forward(
-        self,
-        hidden_states: torch.Tensor,
-        grid_thw: torch.Tensor,
-        **kwargs: Unpack[TransformersKwargs],
+        self, hidden_states: torch.Tensor, grid_thw: torch.Tensor, **kwargs: Unpack[TransformersKwargs]
     ) -> tuple | BaseModelOutputWithPooling:
         r"""
         hidden_states (`torch.Tensor` of shape `(seq_len, hidden_size)`):

@@ -1349,11 +1349,7 @@ class Qwen2_5OmniAudioEncoder(Qwen2_5OmniPreTrainedModel):
     @capture_outputs(tie_last_hidden_states=False)
     @auto_docstring
     def forward(
-        self,
-        input_features=None,
-        feature_lens=None,
-        aftercnn_lens=None,
-        **kwargs: Unpack[TransformersKwargs],
+        self, input_features=None, feature_lens=None, aftercnn_lens=None, **kwargs: Unpack[TransformersKwargs]
     ):
         r"""
         feature_lens (`torch.LongTensor` of shape `(batch_size,)`):
@@ -1588,10 +1584,7 @@ class Qwen2_5OmniVisionEncoder(Qwen2_5_VisionTransformerPretrainedModel):
     @merge_with_config_defaults
     @capture_outputs
     def forward(
-        self,
-        hidden_states: torch.Tensor,
-        grid_thw: torch.Tensor,
-        **kwargs: Unpack[TransformersKwargs],
+        self, hidden_states: torch.Tensor, grid_thw: torch.Tensor, **kwargs: Unpack[TransformersKwargs]
     ) -> tuple | BaseModelOutputWithPooling:
         """
         Args:

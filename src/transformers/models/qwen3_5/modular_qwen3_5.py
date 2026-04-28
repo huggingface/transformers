@@ -430,12 +430,7 @@ class Qwen3_5VisionModel(Qwen3VLVisionModel):
 
     @merge_with_config_defaults
     @capture_outputs
-    def forward(
-        self,
-        hidden_states: torch.Tensor,
-        grid_thw: torch.Tensor,
-        **kwargs,
-    ) -> torch.Tensor:
+    def forward(self, hidden_states: torch.Tensor, grid_thw: torch.Tensor, **kwargs) -> torch.Tensor:
         """
         Args:
             hidden_states (`torch.Tensor` of shape `(seq_len, hidden_size)`):
@@ -562,10 +557,7 @@ class Qwen3_5TextModel(Qwen3NextModel):
 class Qwen3_5Model(Qwen3VLModel):
     _no_split_modules = ["Qwen3_5DecoderLayer", "Qwen3_5VisionBlock"]
 
-    def get_video_features(
-        self,
-        **super_kwargs,
-    ) -> tuple | BaseModelOutputWithPooling:
+    def get_video_features(self, **super_kwargs) -> tuple | BaseModelOutputWithPooling:
         # Same implementation as for images
         return super().get_video_features(**super_kwargs)
 
@@ -679,16 +671,10 @@ class Qwen3_5ForSequenceClassification(GenericForSequenceClassification, Qwen3_5
 
 
 class Qwen3_5ForConditionalGeneration(Qwen3VLForConditionalGeneration):
-    def get_video_features(
-        self,
-        **super_kwargs,
-    ) -> tuple | BaseModelOutputWithPooling:
+    def get_video_features(self, **super_kwargs) -> tuple | BaseModelOutputWithPooling:
         return super().get_video_features(**super_kwargs)
 
-    def get_image_features(
-        self,
-        **super_kwargs,
-    ) -> tuple | BaseModelOutputWithPooling:
+    def get_image_features(self, **super_kwargs) -> tuple | BaseModelOutputWithPooling:
         return super().get_image_features(**super_kwargs)
 
 

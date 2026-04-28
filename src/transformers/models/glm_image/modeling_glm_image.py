@@ -602,10 +602,7 @@ class GlmImageVisionModel(GlmImagePreTrainedModel):
     @capture_outputs
     @auto_docstring
     def forward(
-        self,
-        pixel_values: torch.Tensor,
-        grid_thw: torch.Tensor,
-        **kwargs: Unpack[TransformersKwargs],
+        self, pixel_values: torch.Tensor, grid_thw: torch.Tensor, **kwargs: Unpack[TransformersKwargs]
     ) -> tuple | BaseModelOutputWithPooling:
         r"""
         pixel_values (`torch.Tensor` of shape `(total_patches, num_channels * patch_size * patch_size)`):

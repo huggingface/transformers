@@ -987,12 +987,7 @@ class Qwen3OmniMoeAudioEncoder(Qwen2_5OmniAudioEncoder):
     @merge_with_config_defaults
     @capture_outputs(tie_last_hidden_states=False)
     @auto_docstring
-    def forward(
-        self,
-        input_features=None,
-        feature_lens=None,
-        **kwargs: Unpack[TransformersKwargs],
-    ):
+    def forward(self, input_features=None, feature_lens=None, **kwargs: Unpack[TransformersKwargs]):
         r"""
         feature_lens (`torch.LongTensor` of shape `(batch_size,)`):
             mel length
