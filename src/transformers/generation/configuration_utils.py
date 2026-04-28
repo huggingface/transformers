@@ -1740,6 +1740,13 @@ class ContinuousBatchingConfig:
     # are kept but warnings are logged for unsupported/unknown ones.
     drop_unsupported_processors: bool = True
 
+    @property
+    def fallback_max_blocks_per_request(self) -> int:
+        """Returns the fallback max blocks per request. If no user-hint is given and decode path is available, this is
+        the default max blocks per request. With default block size of 256, this means a max sequence length of 8192
+        tokens for the fast decode path."""
+        return 32
+
     def account_for_cb_deprecated_arguments(
         self,
         max_queue_size: int = 0,
@@ -1929,6 +1936,8 @@ class ContinuousBatchingConfig:
         max_generated_length = workload_hints.get("max_generated_length", 0)
         # The max number of block per request is an even number large enough to hold the max request length
         if max_prompt_length and max_generated_length:
-            max_sequence_length = max_prompt_length + max_generated_length
-            blocks_per_request = int(ceil(max_sequence_length / self.block_size)) + 1
-            self.max_blocks_per_request = blocks_per_request + (blocks_per_request % 2)
+            # We only overwrite the max blocks per request if it is not set yet
+            if self.max_blocks_per_request is None:
+                max_sequence_length = max_prompt_length + max_generated_length
+                blocks_per_request = int(ceil(max_sequence_length / self.block_size)) + 1
+                self.max_blocks_per_request = blocks_per_request + (blocks_per_request % 2)
