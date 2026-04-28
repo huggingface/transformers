@@ -482,14 +482,14 @@ class Qwen3VLVisionModel(Qwen3VLPreTrainedModel):
         Returns:
             `torch.Tensor`: hidden_states.
         """
-        bilinear_indices = kwargs.pop("bilinear_indices", None)
-        bilinear_weights = kwargs.pop("bilinear_weights", None)
-        if bilinear_indices is None or bilinear_weights is None:
-            bilinear_indices, bilinear_weights = get_vision_bilinear_indices_and_weights(
-                grid_thw, self.num_grid_per_side, self.config.spatial_merge_size
-            )
-        position_ids = kwargs.pop("position_ids", None) or get_vision_position_ids(grid_thw, self.spatial_merge_size)
-        cu_seqlens = kwargs.pop("cu_seqlens", None) or get_vision_cu_seqlens(grid_thw)
+        bilinear_indices, bilinear_weights = get_vision_bilinear_indices_and_weights(
+            grid_thw,
+            self.num_grid_per_side,
+            self.config.spatial_merge_size,
+            kwargs=kwargs,
+        )
+        position_ids = get_vision_position_ids(grid_thw, self.spatial_merge_size, kwargs=kwargs)
+        cu_seqlens = get_vision_cu_seqlens(grid_thw, kwargs=kwargs)
 
         hidden_states = self.patch_embed(hidden_states)
         pos_embeds = (self.pos_embed(bilinear_indices) * bilinear_weights[:, :, None]).sum(0)

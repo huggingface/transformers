@@ -796,8 +796,8 @@ class PaddleOCRVisionEncoder(VideoLlama3VisionEncoder):
         """
         # Use merge_size=1: PaddleOCR merges patches in the projector (after the encoder),
         # unlike Qwen which merges inside the encoder, so rotary positions here are simple (row, col).
-        position_ids = kwargs.pop("position_ids", None) or get_vision_position_ids(grid_thw, 1)
-        cu_seqlens = kwargs.pop("cu_seqlens", None) or get_vision_cu_seqlens(grid_thw)
+        position_ids = get_vision_position_ids(grid_thw, 1, kwargs=kwargs)
+        cu_seqlens = get_vision_cu_seqlens(grid_thw, kwargs=kwargs)
 
         hidden_states = inputs_embeds
         attention_mask = create_bidirectional_mask(

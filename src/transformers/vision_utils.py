@@ -18,6 +18,12 @@ All functions are standalone (no model weights) and compute tensors from
 ``grid_thw`` + config scalars. They are used by vision encoders and can be
 precomputed before `torch.compile` / ``torch.export`` tracing since they
 use untraceable ops (``repeat_interleave``, ``.tolist()``, ``nonzero()``, loops).
+
+Each ``get_*`` accepts an optional ``kwargs`` dict; if it contains the
+precomputed tensor under the natural key (``"cu_seqlens"``, ``"position_ids"``,
+…), the function pops and returns it instead of computing. Vision encoders
+write ``x = get_vision_x(..., kwargs=kwargs)`` and the matching key is
+removed from the caller's kwargs as a side-effect of the pop.
 """
 
 from __future__ import annotations
@@ -26,32 +32,40 @@ import torch
 import torch.nn.functional as F
 
 
-def get_vision_cu_seqlens(grid_thw: torch.Tensor) -> torch.Tensor:
-    """Compute cumulative sequence lengths from vision grid info.
+def get_vision_cu_seqlens(grid_thw: torch.Tensor, *, kwargs: dict | None = None) -> torch.Tensor:
+    """Get cumulative sequence lengths from vision grid info, or pop from ``kwargs`` if precomputed.
 
     Args:
         grid_thw: ``(num_images_or_videos, 3)`` — temporal, height, width per entry.
+        kwargs: optional caller kwargs — if it contains ``"cu_seqlens"`` it is popped and returned.
 
     Returns:
         ``cu_seqlens``: ``(total_patches + 1,)`` int32 cumulative sequence boundaries.
     """
+    if kwargs is not None and (cu_seqlens := kwargs.pop("cu_seqlens", None)) is not None:
+        return cu_seqlens
     cu_seqlens = torch.repeat_interleave(grid_thw[:, 1] * grid_thw[:, 2], grid_thw[:, 0]).cumsum(
         dim=0, dtype=grid_thw.dtype if torch.jit.is_tracing() else torch.int32
     )
     return F.pad(cu_seqlens, (1, 0), value=0)
 
 
-def get_vision_position_ids(grid_thw: torch.Tensor, spatial_merge_size: int | torch.Tensor) -> torch.Tensor:
-    """Compute (row, col) position IDs for vision rotary embeddings.
+def get_vision_position_ids(
+    grid_thw: torch.Tensor, spatial_merge_size: int | torch.Tensor, *, kwargs: dict | None = None
+) -> torch.Tensor:
+    """Get (row, col) position IDs for vision rotary embeddings, or pop from ``kwargs`` if precomputed.
 
     Args:
         grid_thw: ``(num_images_or_videos, 3)``
         spatial_merge_size: merge block size — either a single ``int`` (same for all images)
             or a ``(num_images_or_videos,)`` tensor (per-image).
+        kwargs: optional caller kwargs — if it contains ``"position_ids"`` it is popped and returned.
 
     Returns:
         ``position_ids``: ``(total_tokens, 2)`` long — (row, col) position per token.
     """
+    if kwargs is not None and (position_ids := kwargs.pop("position_ids", None)) is not None:
+        return position_ids
     device = grid_thw.device
     if isinstance(spatial_merge_size, int):
         spatial_merge_size = torch.tensor([spatial_merge_size], device=device).expand(len(grid_thw))
@@ -75,8 +89,10 @@ def get_vision_window_index(
     window_size: int,
     patch_size: int,
     spatial_merge_unit: int,
+    *,
+    kwargs: dict | None = None,
 ) -> tuple[torch.Tensor, torch.Tensor]:
-    """Compute window attention indices for vision encoders with windowed attention.
+    """Get window attention indices, or pop ``"window_index"``/``"cu_window_seqlens"`` from ``kwargs`` if both precomputed.
 
     Args:
         grid_thw: ``(num_images_or_videos, 3)``
@@ -84,11 +100,17 @@ def get_vision_window_index(
         window_size: window size from vision config.
         patch_size: patch size from vision config.
         spatial_merge_unit: ``spatial_merge_size ** 2``.
+        kwargs: optional caller kwargs — if it contains both ``"window_index"`` and ``"cu_window_seqlens"`` they are popped and returned.
 
     Returns:
         ``window_index``: ``(total_tokens,)`` long — reorder indices for windowed attention.
         ``cu_window_seqlens``: ``(num_windows + 1,)`` int32 — cumulative window boundaries.
     """
+    if kwargs is not None:
+        window_index = kwargs.pop("window_index", None)
+        cu_window_seqlens = kwargs.pop("cu_window_seqlens", None)
+        if window_index is not None and cu_window_seqlens is not None:
+            return window_index, cu_window_seqlens
     window_index: list = []
     cu_window_seqlens: list = [0]
     window_index_id = 0
@@ -125,19 +147,29 @@ def get_vision_window_index(
 
 
 def get_vision_bilinear_indices_and_weights(
-    grid_thw: torch.Tensor, num_grid_per_side: int, spatial_merge_size: int
+    grid_thw: torch.Tensor,
+    num_grid_per_side: int,
+    spatial_merge_size: int,
+    *,
+    kwargs: dict | None = None,
 ) -> tuple[torch.Tensor, torch.Tensor]:
-    """Compute bilinear interpolation indices and weights for position embeddings.
+    """Get bilinear interpolation indices/weights, or pop ``"bilinear_indices"``/``"bilinear_weights"`` from ``kwargs`` if both precomputed.
 
     Args:
         grid_thw: ``(num_images_or_videos, 3)``
         num_grid_per_side: ``int(num_position_embeddings ** 0.5)`` from vision config.
         spatial_merge_size: merge block size from vision config.
+        kwargs: optional caller kwargs — if it contains both ``"bilinear_indices"`` and ``"bilinear_weights"`` they are popped and returned.
 
     Returns:
         ``bilinear_indices``: ``(4, total_thw)`` long — bilinear corner indices into pos_embed table.
         ``bilinear_weights``: ``(4, total_thw)`` float — interpolation weights.
     """
+    if kwargs is not None:
+        bilinear_indices = kwargs.pop("bilinear_indices", None)
+        bilinear_weights = kwargs.pop("bilinear_weights", None)
+        if bilinear_indices is not None and bilinear_weights is not None:
+            return bilinear_indices, bilinear_weights
     N = num_grid_per_side
     m = spatial_merge_size
     device = grid_thw.device

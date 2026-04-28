@@ -423,14 +423,16 @@ class Qwen2_5_VisionTransformerPretrainedModel(Qwen2_5_VLPreTrainedModel):
         Returns:
             `torch.Tensor`: hidden_states.
         """
-        position_ids = kwargs.pop("position_ids", None) or get_vision_position_ids(grid_thw, self.spatial_merge_size)
-        cu_seqlens = kwargs.pop("cu_seqlens", None) or get_vision_cu_seqlens(grid_thw)
-        window_index = kwargs.pop("window_index", None)
-        cu_window_seqlens = kwargs.pop("cu_window_seqlens", None)
-        if window_index is None:
-            window_index, cu_window_seqlens = get_vision_window_index(
-                grid_thw, self.spatial_merge_size, self.window_size, self.patch_size, self.spatial_merge_unit
-            )
+        position_ids = get_vision_position_ids(grid_thw, self.spatial_merge_size, kwargs=kwargs)
+        cu_seqlens = get_vision_cu_seqlens(grid_thw, kwargs=kwargs)
+        window_index, cu_window_seqlens = get_vision_window_index(
+            grid_thw,
+            self.spatial_merge_size,
+            self.window_size,
+            self.patch_size,
+            self.spatial_merge_unit,
+            kwargs=kwargs,
+        )
 
         hidden_states = self.patch_embed(hidden_states)
 
