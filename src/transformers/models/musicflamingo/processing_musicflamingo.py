@@ -21,7 +21,7 @@
 
 import numpy as np
 
-from ...audio_utils import AudioInput, make_list_of_audio
+from ...audio_utils import AudioInput
 from ...feature_extraction_utils import BatchFeature
 from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import TextInput
@@ -113,23 +113,6 @@ class MusicFlamingoProcessor(ProcessorMixin):
             labels[labels == self.tokenizer.pad_token_id] = -100
             model_inputs["labels"] = labels
         return BatchFeature(data=model_inputs, tensor_type="pt")
-
-    def prepare_inputs_layout(
-        self,
-        text: TextInput | list[TextInput] = None,
-        audio: AudioInput = None,
-        images=None,
-        videos=None,
-    ):
-        if text is not None:
-            if isinstance(text, str):
-                text = [text]
-            text = text.copy()
-
-        if audio is not None:
-            audio = make_list_of_audio(audio)
-
-        return images, text, videos, audio
 
     def validate_inputs(
         self,

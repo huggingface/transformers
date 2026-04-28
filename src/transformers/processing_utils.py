@@ -636,7 +636,9 @@ class ProcessorMixin(PushToHubMixin):
         audio: AudioInput | None = None,
         **kwargs: Unpack[ProcessingKwargs],
     ):
-        images, text, videos, audio = self.prepare_inputs_layout(images=images, text=text, videos=videos, audio=audio)
+        images, text, videos, audio = self.prepare_inputs_layout(
+            images=images, text=text, videos=videos, audio=audio, **kwargs
+        )
         self.validate_inputs(images=images, text=text, videos=videos, audio=audio, **kwargs)
 
         merged_kwargs = self._merge_kwargs(
@@ -692,6 +694,7 @@ class ProcessorMixin(PushToHubMixin):
         text: TextInput | PreTokenizedInput | list[TextInput] | list[PreTokenizedInput] | None = None,
         videos: VideoInput | None = None,
         audio: AudioInput | None = None,
+        **kwargs: Unpack[ProcessingKwargs],
     ):
         # To support BC with models in pre-MLLM era, don't wrap text in list
         if self.all_special_multimodal_tokens and text is not None:
@@ -699,6 +702,19 @@ class ProcessorMixin(PushToHubMixin):
                 text = [text]
             # avoid in-place updates on text
             text = text.copy()
+
+        if audio is not None and hasattr(self, "feature_extractor"):
+            sampling_rate = kwargs.get("sampling_rate", self.feature_extractor.sampling_rate)
+            audio = self.feature_extractor.fetch_audio(audio, sampling_rate=sampling_rate)
+            audio = make_list_of_audio(audio)
+
+        if images is not None and hasattr(self, "image_processor"):
+            images = self.image_processor.fetch_images(images)
+
+        # Dont fetch videos, they need to be sampled correctly. Just flatten the list
+        if videos is not None and hasattr(self, "video_processor"):
+            videos = make_batched_videos(videos)
+
         return images, text, videos, audio
 
     def validate_inputs(
@@ -715,26 +731,42 @@ class ProcessorMixin(PushToHubMixin):
         if images is None and text is None and videos is None and audio is None:
             raise ValueError(f"You need to provide at least one input to call {self.__class__.__name__}")
 
+    # Simple preprocessing includes calling the `subprocessor` and optionally
+    # bulding placeholder strings. Each processor can override and add their
+    # own special pre/post processing on top
     def _process_images(self, images: ImageInput, **kwargs):
-        images = self.image_processor.fetch_images(images)
-        processed_data = self.image_processor(images, **kwargs)
-        image_replacements = self.get_images_replacement(images, processed_data)
-        return processed_data, image_replacements
+        processed_images = self.image_processor(images, **kwargs)
+
+        image_replacements = []
+        if getattr(self, "image_token", None) is not None:
+            # Some processors use nested struct, we need to flatten back if needed
+            images = make_flat_list_of_images(images)
+            for idx in range(len(images)):
+                replacement_text = self.replace_image_token(processed_images, image_idx=idx)
+                image_replacements.append(replacement_text)
+        return processed_images, image_replacements
 
     def _process_videos(self, videos: VideoInput, **kwargs):
-        processed_data = self.video_processor(videos, **kwargs)
+        processed_videos = self.video_processor(videos, **kwargs)
 
-        # dont fetch videos, they need to be sampled. Just flatten the list
-        videos = make_batched_videos(videos)
-        video_replacements = self.get_videos_replacement(videos, processed_data)
-        return processed_data, video_replacements
+        video_replacements = []
+        if getattr(self, "video_token", None) is not None:
+            for idx in range(len(videos)):
+                replacement_text = self.replace_video_token(processed_videos, video_idx=idx)
+                video_replacements.append(replacement_text)
+
+        return processed_videos, video_replacements
 
     def _process_audio(self, audio: AudioInput, **kwargs):
-        sampling_rate = getattr(self.feature_extractor, "sampling_rate", None) or kwargs.get("sampling_rate", 16_000)
-        audio = self.feature_extractor.fetch_audio(audio, sampling_rate=sampling_rate)
-        processed_data = self.feature_extractor(audio, **kwargs)
-        audio_replacements = self.get_audio_replacement(audio, processed_data)
-        return processed_data, audio_replacements
+        processed_audio = self.feature_extractor(audio, **kwargs)
+
+        audio_replacements = []
+        if getattr(self, "video_token", None) is not None:
+            for idx in range(len(audio)):
+                replacement_text = self.replace_audio_token(processed_audio, audio_idx=idx)
+                audio_replacements.append(replacement_text)
+
+        return processed_audio, audio_replacements
 
     # To be overriden by each model's processor if they need to add placeholder tokens
     def replace_image_token(self, image_inputs: dict, image_idx: int) -> str:
@@ -745,53 +777,6 @@ class ProcessorMixin(PushToHubMixin):
 
     def replace_audio_token(self, audio_inputs: dict, audio_idx: int) -> str:
         return ""
-
-    def get_images_replacement(
-        self,
-        images: ImageInput,
-        processed_images: dict,
-    ) -> list[str]:
-        # Early exit if no special tokens found, nothing to replace
-        if getattr(self, "image_token", None) is None:
-            return []
-
-        images = make_flat_list_of_images(images)
-        replacement_texts = []
-        for idx in range(len(images)):
-            replacement_text = self.replace_image_token(processed_images, image_idx=idx)
-            replacement_texts.append(replacement_text)
-        return replacement_texts
-
-    def get_videos_replacement(
-        self,
-        videos: VideoInput,
-        processed_videos: dict,
-    ) -> list[str]:
-        # Early exit if no special tokens found, nothing to replace
-        if getattr(self, "video_token", None) is None:
-            return []
-
-        replacement_texts = []
-        for idx in range(len(videos)):
-            replacement_text = self.replace_video_token(processed_videos, video_idx=idx)
-            replacement_texts.append(replacement_text)
-        return replacement_texts
-
-    def get_audio_replacement(
-        self,
-        audio: AudioInput,
-        processed_audio: dict,
-    ) -> list[str]:
-        # Early exit if no special tokens found, nothing to replace
-        if getattr(self, "audio_token", None) is None:
-            return []
-
-        audio = make_list_of_audio(audio)
-        replacement_texts = []
-        for idx in range(len(audio)):
-            replacement_text = self.replace_audio_token(processed_audio, audio_idx=idx)
-            replacement_texts.append(replacement_text)
-        return replacement_texts
 
     def get_text_with_replacements(
         self,
@@ -804,45 +789,35 @@ class ProcessorMixin(PushToHubMixin):
         if not self.all_special_multimodal_tokens:
             return text, []
 
-        # Keep the order so we can extract groups later and replace
-        image_token = re.escape(getattr(self, "image_token", ""))
-        video_token = re.escape(getattr(self, "video_token", ""))
-        audio_tokens = re.escape(getattr(self, "audio_token", ""))
-        regex_special_mm_tokens = rf"({image_token})|({video_token})|({audio_tokens})"
+        # Use named regex so we can extract groups later and replace
+        token_groups = []
+        if image_token := getattr(self, "image_token", None):
+            token_groups.append(f"(?P<image>{re.escape(image_token)})")
+        if video_token := getattr(self, "video_token", None):
+            token_groups.append(f"(?P<video>{re.escape(video_token)})")
+        if audio_token := getattr(self, "audio_token", None):
+            token_groups.append(f"(?P<audio>{re.escape(audio_token)})")
 
+        regex_special_mm_tokens = "|".join(token_groups) or r"(?!)"
+        replacements_iters = {
+            "image": iter(images_replacements),
+            "video": iter(videos_replacements),
+            "audio": iter(audio_replacements),
+        }
         batch_replacement_offsets = []
-        images_replacements = iter(images_replacements)
-        videos_replacements = iter(videos_replacements)
-        audio_replacements = iter(audio_replacements)
         for batch_idx in range(len(text)):
             last = 0
             replacement_offsets = []
             expanded_sample = []
             for m in re.finditer(regex_special_mm_tokens, text[batch_idx]):
                 start, end = m.span()
-                if start == end:
-                    continue  # no match
                 expanded_sample.append(text[batch_idx][last:start])
 
-                # Case 1: if the image token has match in the text
-                if m.groups()[0]:
-                    replacement_text = next(images_replacements)
-                    replacement_offsets.append({"type": "image"})
-
-                # Case 2: if the video token has match in the text
-                elif m.groups()[1]:
-                    replacement_text = next(videos_replacements)
-                    replacement_offsets.append({"type": "video"})
-
-                # Case 3: if the audio token has match in the text
-                elif m.groups()[2]:
-                    replacement_text = next(audio_replacements)
-                    replacement_offsets.append({"type": "audio"})
-
-                # update common values such as start-end spans and replacement text
-                # could be returned if users need to analyze `placeholders` or in 3rd party libs
-                replacement_offsets[-1].update(
+                mm_type = m.lastgroup
+                replacement_text = next(replacements_iters[mm_type])
+                replacement_offsets.append(
                     {
+                        "type": mm_type,
                         "span": (start, end),
                         "new_span": (start, start + len(replacement_text)),
                         "text": m.group(),

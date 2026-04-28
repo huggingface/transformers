@@ -79,14 +79,14 @@ class Gemma3Processor(ProcessorMixin):
         text: TextInput | PreTokenizedInput | list[TextInput] | list[PreTokenizedInput] | None = None,
         videos=None,
         audio=None,
+        **kwargs,
     ):
-        if text is not None:
-            if isinstance(text, str):
-                text = [text]
-            text = text.copy()
+        images, text, videos, audio = super().prepare_inputs_layout(
+            images=images, text=text, videos=videos, audio=audio, **kwargs
+        )
 
+        # Model requires nested struct
         if images is not None:
-            images = self.image_processor.fetch_images(images)
             images = make_nested_list_of_images(images)
 
         # Create empty text to be replaced with placeholders

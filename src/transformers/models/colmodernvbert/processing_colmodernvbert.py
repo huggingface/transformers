@@ -122,7 +122,7 @@ class ColModernVBertProcessor(ProcessorMixin):
             The length of the image sequence. If not provided, the default value of self.image_seq_len is used.
             image_seq_len should be equal to int(((image_size // patch_size) ** 2) / (scale_factor**2))
         """
-        images, text = self.prepare_inputs_layout(images=images, text=text)
+        images, text = self.prepare_inputs_layout(images=images, text=text, **kwargs)
         self.validate_inputs(images=images, text=text, **kwargs)
 
         output_kwargs = self._merge_kwargs(
@@ -178,6 +178,7 @@ class ColModernVBertProcessor(ProcessorMixin):
         self,
         images: ImageInput | None = None,
         text: Union[TextInput, "PreTokenizedInput", list[TextInput], list["PreTokenizedInput"]] = None,
+        **kwargs: Unpack[ColModernVBertProcessorKwargs],
     ):
         if text is not None:
             if isinstance(text, str):

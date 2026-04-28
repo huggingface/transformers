@@ -239,15 +239,17 @@ class MllamaProcessor(ProcessorMixin):
         self,
         images: ImageInput | None = None,
         text: TextInput | PreTokenizedInput | list[TextInput] | list[PreTokenizedInput] | None = None,
+        **kwargs,
     ):
+        images, text, *_ = super().prepare_inputs_layout(images=images, text=text, **kwargs)
+
+        # Model requires nested struct
+        if images is not None:
+            images = make_nested_list_of_images(images)
+
         if text is not None:
-            if isinstance(text, str):
-                text = [text]
             text = [build_string_from_input(text_item, self.bos_token, self.image_token) for text_item in text]
 
-        if images is not None:
-            images = self.image_processor.fetch_images(images)
-            images = make_nested_list_of_images(images)
         return images, text
 
     def validate_inputs(

@@ -365,7 +365,7 @@ class SequenceFeatureExtractor(FeatureExtractionMixin):
 
         return padding_strategy
 
-    def fetch_audio(self, audio_url_or_urls: str | list[str] | list[list[str]], sampling_rate: int = 16_000):
+    def fetch_audio(self, audio_url_or_urls: str | list[str] | list[list[str]], sampling_rate: int | None = None):
         """
         Convert a single or a list of urls into the corresponding `np.ndarray` objects.
 
@@ -373,6 +373,7 @@ class SequenceFeatureExtractor(FeatureExtractionMixin):
         returned.
         """
         # Accepted input types for `raw_audio`: "np.ndarray | list[float] | list[np.ndarray] | list[list[float]]"
+        sampling_rate = sampling_rate if sampling_rate else self.sampling_rate
         if isinstance(audio_url_or_urls, list) and not isinstance(audio_url_or_urls[0], float):
             return [self.fetch_audio(x, sampling_rate=sampling_rate) for x in audio_url_or_urls]
         elif isinstance(audio_url_or_urls, str):

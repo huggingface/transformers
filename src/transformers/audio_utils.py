@@ -241,15 +241,10 @@ def conv1d_output_length(module: "torch.nn.Conv1d", input_length: int) -> int:
     )
 
 
-def is_url(val) -> bool:
-    return isinstance(val, str) and val.startswith("http")
-
-
 def is_valid_audio(audio):
     return (
         is_numpy_array(audio)
         or is_torch_tensor(audio)
-        or is_url(audio)
         or (isinstance(audio, (list, tuple)) and isinstance(audio[0], float))
     )
 
