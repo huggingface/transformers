@@ -177,6 +177,10 @@ If you already have the rendered prompt string, you can call `processor(text=...
 
 [[autodoc]] MiniCPMV4_6Config
 
+## MiniCPMV4_6VisionConfig
+
+[[autodoc]] MiniCPMV4_6VisionConfig
+
 ## MiniCPMV4_6Model
 
 [[autodoc]] MiniCPMV4_6Model
