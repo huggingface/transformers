@@ -220,7 +220,7 @@ def maybe_pad_block_sequence_ids(
     Usually that happens with `StaticCache` generation or generating without cache.
     Pads to the right with `-1`.
     """
-    if (padding_length := kv_length + kv_offset - attention_mask.shape[-1]) > 0:
+    if attention_mask is not None and (padding_length := kv_length + kv_offset - attention_mask.shape[-1]) > 0:
         block_sequence_ids = F.pad(block_sequence_ids, pad=(0, padding_length), value=-1)
     return block_sequence_ids
 
