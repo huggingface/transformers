@@ -60,7 +60,7 @@ class MiMoV2FlashConfig(Glm4MoeConfig):
     mlp_layer_types (`list`, *optional*):
         MLP pattern for each layer (`"dense"` or `"sparse"`). Defaults to 1 dense + rest sparse.
     attention_value_scale (`float`, *optional*, defaults to 0.707 (which is the decimal approximation of 1/√2):
-        Constant multiplier applied to rescale Values.
+        Constant multiplier applied to rescale the attention values.
     """
 
     model_type = "mimo_v2_flash"
@@ -117,7 +117,7 @@ class MiMoV2FlashConfig(Glm4MoeConfig):
                 "full_attention": {"rope_type": "default", "rope_theta": 5_000_000.0, "partial_rotary_factor": 0.334},
                 "sliding_attention": {"rope_type": "default", "rope_theta": 10_000.0, "partial_rotary_factor": 0.334},
             }
-        # The hub config.json stores `routed_scaling_factor` as null
+        # BC: The hub config.json stores `routed_scaling_factor` as null
         if self.routed_scaling_factor is None:
             self.routed_scaling_factor = 1.0
 
@@ -238,7 +238,6 @@ def eager_attention_forward_with_optional_sink(
     return attn_output, attn_weights
 
 
-@use_kernelized_func(apply_rotary_pos_emb)
 class MiMoV2FlashAttention(Qwen2Attention):
     def __init__(self, config: MiMoV2FlashConfig, layer_idx: int):
         # SWA layers double the kv heads vs full-attention and have attention sinks.
