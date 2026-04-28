@@ -1287,6 +1287,8 @@
         title: MetaCLIP 2
       - local: model_doc/mgp-str
         title: MGP-STR
+      - local: model_doc/minicpmv4_6
+        title: MiniCPM-V
       - local: model_doc/mistral3
         title: Mistral3
       - local: model_doc/mistral4
