@@ -676,9 +676,7 @@ class ParallelInterface(GeneralInterface):
             "activation": SequenceParallel(),
             "activation_seq_dim_2": SequenceParallel(sequence_dim=2),
             # Module-level prepare-input
-            "module_allgather": PrepareModuleInput(
-                input_layouts=(Shard(1),), desired_input_layouts=(Replicate(),)
-            ),
+            "module_allgather": PrepareModuleInput(input_layouts=(Shard(1),), desired_input_layouts=(Replicate(),)),
             "module_allgather_hidden_states": PrepareModuleInput(
                 input_kwarg_layouts={"hidden_states": Shard(1)},
                 desired_input_kwarg_layouts={"hidden_states": Replicate()},

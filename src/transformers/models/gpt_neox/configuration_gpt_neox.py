@@ -16,7 +16,6 @@
 from huggingface_hub.dataclasses import strict
 
 from ...configuration_utils import PreTrainedConfig
-from ...integrations.tensor_parallel import TPStyle
 from ...modeling_rope_utils import RopeParameters
 from ...utils import auto_docstring
 
@@ -47,19 +46,19 @@ class GPTNeoXConfig(PreTrainedConfig):
     model_type = "gpt_neox"
     keys_to_ignore_at_inference = ["past_key_values"]
     base_model_tp_plan = {
-        "layers.*.attention.query_key_value": TPStyle("colwise", "none"),
-        "layers.*.attention.dense": TPStyle("rowwise", "allreduce"),
-        "layers.*.mlp.dense_h_to_4h": TPStyle("colwise", "none"),
-        "layers.*.mlp.dense_4h_to_h": TPStyle("rowwise", "allreduce"),
+        "layers.*.attention.query_key_value": "colwise",
+        "layers.*.attention.dense": "rowwise_allreduce",
+        "layers.*.mlp.dense_h_to_4h": "colwise",
+        "layers.*.mlp.dense_4h_to_h": "rowwise_allreduce",
     }
     base_model_sp_plan = {
-        "embed_tokens": TPStyle("vocab", "reduce_scatter"),
-        "layers.*.input_layernorm": TPStyle("activation", "none"),
-        "layers.*.post_attention_layernorm": TPStyle("activation", "none"),
-        "layers.*.mlp": TPStyle("module", "allgather"),
-        "layers.*.mlp.dense_h_to_4h": TPStyle("colwise", "none"),
-        "layers.*.mlp.dense_4h_to_h": TPStyle("rowwise", "reduce_scatter"),
-        "norm": TPStyle("activation", "none"),
+        "embed_tokens": "vocab_reduce_scatter",
+        "layers.*.input_layernorm": "activation",
+        "layers.*.post_attention_layernorm": "activation",
+        "layers.*.mlp": "module_allgather",
+        "layers.*.mlp.dense_h_to_4h": "colwise",
+        "layers.*.mlp.dense_4h_to_h": "rowwise_reduce_scatter",
+        "norm": "activation",
     }
     base_model_pp_plan = {
         "embed_in": (["input_ids"], ["inputs_embeds"]),

@@ -35,7 +35,6 @@ from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationMixin
 from ...integrations import use_experts_implementation, use_kernel_forward_from_hub, use_kernelized_func
-from ...integrations.tensor_parallel import TPStyle
 from ...masking_utils import create_causal_mask, create_sliding_window_causal_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import GradientCheckpointingLayer
@@ -2621,8 +2620,8 @@ class Qwen3OmniMoeTalkerCodePredictorModel(Qwen3OmniMoePreTrainedModel):
 @auto_docstring
 class Qwen3OmniMoeTalkerCodePredictorModelForConditionalGeneration(Qwen3OmniMoePreTrainedModel, GenerationMixin):
     _tied_weights_keys = {"lm_head.weight": "model.embed_tokens.weight"}
-    _tp_plan = {"lm_head": TPStyle("colwise", "allgather")}
-    _sp_plan = {"lm_head": TPStyle("colwise", "loss_parallel")}
+    _tp_plan = {"lm_head": "colwise_allgather"}
+    _sp_plan = {"lm_head": "colwise_loss_parallel"}
     _pp_plan = {"lm_head": (["hidden_states"], ["logits"])}
     config_class = Qwen3OmniMoeTalkerCodePredictorConfig
     base_model_prefix = "talker.code_predictor"
@@ -3007,7 +3006,7 @@ class Qwen3OmniMoeTalkerModel(Qwen3OmniMoePreTrainedModel):
 class Qwen3OmniMoeTalkerForConditionalGeneration(Qwen3OmniMoeThinkerTextPreTrainedModel, GenerationMixin):
     _tied_weights_keys = {"codec_head": "model.codec_embedding.weight"}
     _tp_plan = {"codec_head": "colwise_allgather"}
-    _sp_plan = {"lm_head": TPStyle("colwise", "loss_parallel")}
+    _sp_plan = {"lm_head": "colwise_loss_parallel"}
     _pp_plan = {"codec_head": (["hidden_states"], ["logits"])}
     config_class = Qwen3OmniMoeTalkerConfig
     base_model_prefix = "talker"

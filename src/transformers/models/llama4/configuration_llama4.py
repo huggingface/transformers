@@ -17,7 +17,6 @@
 from huggingface_hub.dataclasses import strict
 
 from ...configuration_utils import PreTrainedConfig
-from ...integrations.tensor_parallel import TPStyle
 from ...modeling_rope_utils import RopeParameters
 from ...utils import auto_docstring, logging
 
@@ -43,13 +42,13 @@ class Llama4VisionConfig(PreTrainedConfig):
     """
 
     base_model_tp_plan = {
-        "model.layers.*.self_attn.q_proj": TPStyle("colwise", "none"),
-        "model.layers.*.self_attn.k_proj": TPStyle("colwise", "none"),
-        "model.layers.*.self_attn.v_proj": TPStyle("colwise", "none"),
-        "model.layers.*.self_attn.o_proj": TPStyle("rowwise", "allreduce"),
-        "vision_adapter.mlp.fc1": TPStyle("colwise", "none"),
-        "vision_adapter.mlp.fc2": TPStyle("rowwise", "allreduce"),
-        "patch_embedding.linear": TPStyle("colwise", "allgather"),
+        "model.layers.*.self_attn.q_proj": "colwise",
+        "model.layers.*.self_attn.k_proj": "colwise",
+        "model.layers.*.self_attn.v_proj": "colwise",
+        "model.layers.*.self_attn.o_proj": "rowwise_allreduce",
+        "vision_adapter.mlp.fc1": "colwise",
+        "vision_adapter.mlp.fc2": "rowwise_allreduce",
+        "patch_embedding.linear": "colwise_allgather",
     }
     model_type = "llama4_vision_model"
     base_config_key = "vision_config"
@@ -111,16 +110,16 @@ class Llama4TextConfig(PreTrainedConfig):
     keys_to_ignore_at_inference = ["past_key_values"]
     default_theta = 500000.0
     base_model_tp_plan = {
-        "layers.*.self_attn.q_proj": TPStyle("colwise", "none"),
-        "layers.*.self_attn.k_proj": TPStyle("colwise", "none"),
-        "layers.*.self_attn.v_proj": TPStyle("colwise", "none"),
-        "layers.*.self_attn.o_proj": TPStyle("rowwise", "allreduce"),
-        "layers.*.feed_forward.shared_expert.gate_proj": TPStyle("colwise", "none"),
-        "layers.*.feed_forward.shared_expert.up_proj": TPStyle("colwise", "none"),
-        "layers.*.feed_forward.shared_expert.down_proj": TPStyle("rowwise", "allreduce"),
-        "layers.*.feed_forward.gate_proj": TPStyle("colwise", "none"),
-        "layers.*.feed_forward.up_proj": TPStyle("colwise", "none"),
-        "layers.*.feed_forward.down_proj": TPStyle("rowwise", "allreduce"),
+        "layers.*.self_attn.q_proj": "colwise",
+        "layers.*.self_attn.k_proj": "colwise",
+        "layers.*.self_attn.v_proj": "colwise",
+        "layers.*.self_attn.o_proj": "rowwise_allreduce",
+        "layers.*.feed_forward.shared_expert.gate_proj": "colwise",
+        "layers.*.feed_forward.shared_expert.up_proj": "colwise",
+        "layers.*.feed_forward.shared_expert.down_proj": "rowwise_allreduce",
+        "layers.*.feed_forward.gate_proj": "colwise",
+        "layers.*.feed_forward.up_proj": "colwise",
+        "layers.*.feed_forward.down_proj": "rowwise_allreduce",
     }
     base_model_ep_plan = {
         "layers.*.self_attn.q_proj": "colwise",

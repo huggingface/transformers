@@ -17,7 +17,6 @@ from typing import Any, Literal
 from huggingface_hub.dataclasses import strict
 
 from ...configuration_utils import PreTrainedConfig
-from ...integrations.tensor_parallel import TPStyle
 from ...utils import auto_docstring, logging
 from ...utils.type_validators import interval
 
@@ -126,13 +125,13 @@ class Gemma4TextConfig(PreTrainedConfig):
     base_model_tp_plan = {
         # q/k use allgather because gemma4 has q_norm/k_norm with full-sized weights
         # that can't match sharded q/k outputs.
-        "layers.*.self_attn.q_proj": TPStyle("colwise", "allgather"),
-        "layers.*.self_attn.k_proj": TPStyle("colwise", "allgather"),
-        "layers.*.self_attn.v_proj": TPStyle("colwise", "allgather"),
-        "layers.*.self_attn.o_proj": TPStyle("vocab", "allreduce"),
-        "layers.*.mlp.gate_proj": TPStyle("colwise", "none"),
-        "layers.*.mlp.up_proj": TPStyle("colwise", "none"),
-        "layers.*.mlp.down_proj": TPStyle("rowwise", "allreduce"),
+        "layers.*.self_attn.q_proj": "colwise_allgather",
+        "layers.*.self_attn.k_proj": "colwise_allgather",
+        "layers.*.self_attn.v_proj": "colwise_allgather",
+        "layers.*.self_attn.o_proj": "vocab_allreduce",
+        "layers.*.mlp.gate_proj": "colwise",
+        "layers.*.mlp.up_proj": "colwise",
+        "layers.*.mlp.down_proj": "rowwise_allreduce",
     }
     base_model_pp_plan = {
         "embed_tokens": (["input_ids"], ["inputs_embeds"]),
@@ -224,13 +223,13 @@ class Gemma4VisionConfig(PreTrainedConfig):
 
     model_type = "gemma4_vision"
     base_model_tp_plan = {
-        "encoder.layers.*.self_attn.q_proj": TPStyle("colwise", "none"),
-        "encoder.layers.*.self_attn.k_proj": TPStyle("colwise", "none"),
-        "encoder.layers.*.self_attn.v_proj": TPStyle("colwise", "none"),
-        "encoder.layers.*.self_attn.o_proj": TPStyle("rowwise", "allreduce"),
-        "encoder.layers.*.mlp.gate_proj": TPStyle("colwise", "none"),
-        "encoder.layers.*.mlp.up_proj": TPStyle("colwise", "none"),
-        "encoder.layers.*.mlp.down_proj": TPStyle("rowwise", "allreduce"),
+        "encoder.layers.*.self_attn.q_proj": "colwise",
+        "encoder.layers.*.self_attn.k_proj": "colwise",
+        "encoder.layers.*.self_attn.v_proj": "colwise",
+        "encoder.layers.*.self_attn.o_proj": "rowwise_allreduce",
+        "encoder.layers.*.mlp.gate_proj": "colwise",
+        "encoder.layers.*.mlp.up_proj": "colwise",
+        "encoder.layers.*.mlp.down_proj": "rowwise_allreduce",
     }
     default_theta = 100.0
 

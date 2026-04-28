@@ -34,7 +34,6 @@ from ...cache_utils import Cache, DynamicCache
 from ...configuration_utils import PreTrainedConfig
 from ...generation import GenerationMixin
 from ...integrations import use_experts_implementation, use_kernelized_func
-from ...integrations.tensor_parallel import TPStyle
 from ...masking_utils import (
     create_bidirectional_mask,
     create_causal_mask,
@@ -1700,8 +1699,8 @@ class Gemma4TextModel(Gemma4PreTrainedModel):
 @auto_docstring(custom_intro="The base Gemma 4 language model with a language modeling head.")
 class Gemma4ForCausalLM(Gemma4PreTrainedModel, GenerationMixin):
     _tied_weights_keys = {"lm_head.weight": "model.embed_tokens.weight"}
-    _tp_plan = {"lm_head": TPStyle("colwise", "allgather")}
-    _sp_plan = {"lm_head": TPStyle("colwise", "loss_parallel")}
+    _tp_plan = {"lm_head": "colwise_allgather"}
+    _sp_plan = {"lm_head": "colwise_loss_parallel"}
     _pp_plan = {"lm_head": (["hidden_states"], ["logits"])}
     config: Gemma4TextConfig
     base_model_prefix = "model"

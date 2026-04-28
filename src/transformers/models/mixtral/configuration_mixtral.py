@@ -16,7 +16,6 @@
 from huggingface_hub.dataclasses import strict
 
 from ...configuration_utils import PreTrainedConfig
-from ...integrations.tensor_parallel import TPStyle
 from ...modeling_rope_utils import RopeParameters
 from ...utils import auto_docstring
 
@@ -45,40 +44,26 @@ class MixtralConfig(PreTrainedConfig):
     default_theta = 1000000.0
     # TP plan (for inference/generation).
     base_model_tp_plan = {
-        "layers.*.self_attn.q_proj": TPStyle("colwise", "none"),
-        "layers.*.self_attn.k_proj": TPStyle("colwise", "none"),
-        "layers.*.self_attn.v_proj": TPStyle("colwise", "none"),
-        "layers.*.self_attn.o_proj": TPStyle("rowwise", "allreduce"),
-        "layers.*.mlp.experts": TPStyle(
-            "moe_experts",
-            "allreduce",
-            shard_plan={
-                "gate_up_proj": TPStyle("packed_colwise", "none"),
-                "down_proj": TPStyle("rowwise", "allreduce"),
-            },
-        ),
+        "layers.*.self_attn.q_proj": "colwise",
+        "layers.*.self_attn.k_proj": "colwise",
+        "layers.*.self_attn.v_proj": "colwise",
+        "layers.*.self_attn.o_proj": "rowwise_allreduce",
+        "layers.*.mlp.experts": "moe_experts_allreduce",
     }
 
     # TP + Sequence Parallelism plan (for training).
     base_model_sp_plan = {
-        "embed_tokens": TPStyle("vocab", "reduce_scatter"),
-        "layers.*.input_layernorm": TPStyle("activation", "none"),
-        "layers.*.self_attn": TPStyle("module", "allgather", input_key="hidden_states"),
-        "layers.*.self_attn.q_proj": TPStyle("colwise", "none"),
-        "layers.*.self_attn.k_proj": TPStyle("colwise", "none"),
-        "layers.*.self_attn.v_proj": TPStyle("colwise", "none"),
-        "layers.*.self_attn.o_proj": TPStyle("rowwise", "reduce_scatter"),
-        "layers.*.post_attention_layernorm": TPStyle("activation", "none"),
-        "layers.*.mlp": TPStyle("module", "allgather_split"),
-        "layers.*.mlp.experts": TPStyle(
-            "moe_experts",
-            "allreduce",
-            shard_plan={
-                "gate_up_proj": TPStyle("packed_colwise", "none"),
-                "down_proj": TPStyle("rowwise", "allreduce"),
-            },
-        ),
-        "norm": TPStyle("activation", "none"),
+        "embed_tokens": "vocab_reduce_scatter",
+        "layers.*.input_layernorm": "activation",
+        "layers.*.self_attn": "module_allgather_hidden_states",
+        "layers.*.self_attn.q_proj": "colwise",
+        "layers.*.self_attn.k_proj": "colwise",
+        "layers.*.self_attn.v_proj": "colwise",
+        "layers.*.self_attn.o_proj": "rowwise_reduce_scatter",
+        "layers.*.post_attention_layernorm": "activation",
+        "layers.*.mlp": "module_allgather_split",
+        "layers.*.mlp.experts": "moe_experts_allreduce",
+        "norm": "activation",
     }
     base_model_pp_plan = {
         "embed_tokens": (["input_ids"], ["inputs_embeds"]),

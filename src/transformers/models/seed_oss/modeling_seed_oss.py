@@ -28,7 +28,6 @@ from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationMixin
 from ...integrations import use_kernel_forward_from_hub, use_kernel_func_from_hub
-from ...integrations.tensor_parallel import TPStyle
 from ...masking_utils import create_causal_mask
 from ...modeling_layers import (
     GenericForQuestionAnswering,
@@ -430,8 +429,8 @@ class SeedOssModel(SeedOssPreTrainedModel):
 @auto_docstring
 class SeedOssForCausalLM(SeedOssPreTrainedModel, GenerationMixin):
     _tied_weights_keys = {"lm_head.weight": "model.embed_tokens.weight"}
-    _tp_plan = {"lm_head": TPStyle("colwise", "allgather")}
-    _sp_plan = {"lm_head": TPStyle("colwise", "loss_parallel")}
+    _tp_plan = {"lm_head": "colwise_allgather"}
+    _sp_plan = {"lm_head": "colwise_loss_parallel"}
     _pp_plan = {"lm_head": (["hidden_states"], ["logits"])}
 
     def __init__(self, config):
