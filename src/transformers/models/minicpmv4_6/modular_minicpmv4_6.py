@@ -886,6 +886,7 @@ class MiniCPMV4_6ForConditionalGeneration(MiniCPMV4_6PreTrainedModel, Generation
 
 __all__ = [
     "MiniCPMV4_6Config",
+    "MiniCPMV4_6VisionConfig",
     "MiniCPMV4_6PreTrainedModel",
     "MiniCPMV4_6Model",
     "MiniCPMV4_6ForConditionalGeneration",

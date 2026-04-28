@@ -116,4 +116,4 @@ class MiniCPMV4_6Config(PreTrainedConfig):
         super().__post_init__(**kwargs)
 
 
-__all__ = ["MiniCPMV4_6Config"]
+__all__ = ["MiniCPMV4_6Config", "MiniCPMV4_6VisionConfig"]
