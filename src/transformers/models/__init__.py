@@ -211,6 +211,7 @@ if TYPE_CHECKING:
     from .kosmos2 import *
     from .kosmos2_5 import *
     from .kyutai_speech_to_text import *
+    from .laguna import *
     from .lasr import *
     from .layoutlm import *
     from .layoutlmv2 import *
