@@ -761,7 +761,7 @@ class ProcessorMixin(PushToHubMixin):
         processed_audio = self.feature_extractor(audio, **kwargs)
 
         audio_replacements = []
-        if getattr(self, "video_token", None) is not None:
+        if getattr(self, "audio_token", None) is not None:
             for idx in range(len(audio)):
                 replacement_text = self.replace_audio_token(processed_audio, audio_idx=idx)
                 audio_replacements.append(replacement_text)

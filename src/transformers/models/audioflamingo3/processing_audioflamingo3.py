@@ -120,9 +120,6 @@ class AudioFlamingo3Processor(ProcessorMixin):
         return audio_tokens_lengths
 
     def _process_audio(self, audio: AudioInput, **kwargs):
-        sampling_rate = getattr(self.feature_extractor, "sampling_rate") or kwargs.get("sampling_rate", 16_000)
-        audio = self.feature_extractor.fetch_audio(audio, sampling_rate=sampling_rate)
-
         # Determine number of chunks per sample, and flatten
         window_size = int(kwargs["sampling_rate"] * self.feature_extractor.chunk_length)
         max_windows = int(self.max_audio_len // self.feature_extractor.chunk_length)
@@ -157,7 +154,11 @@ class AudioFlamingo3Processor(ProcessorMixin):
         )
         audio_inputs["num_audio_tokens"] = self._get_audio_token_length(audio_lengths)
 
-        audio_replacements = self.get_audio_replacement(audio, audio_inputs)
+        audio_replacements = []
+        for idx in range(len(audio)):
+            replacement_text = self.replace_audio_token(audio_inputs, audio_idx=idx)
+            audio_replacements.append(replacement_text)
+
         return audio_inputs, audio_replacements
 
     def replace_audio_token(self, audio_inputs: dict, audio_idx: int) -> str:
