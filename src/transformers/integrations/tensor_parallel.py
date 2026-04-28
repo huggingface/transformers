@@ -576,13 +576,19 @@ class ParallelInterface(GeneralInterface):
             "vocab_allreduce": RowwiseParallel(input_layouts=Replicate(), output_layouts=Replicate()),
             "vocab_reduce_scatter": RowwiseParallel(input_layouts=Replicate(), output_layouts=Shard(1)),
             # Activation / norm (sequence-parallel passthrough)
-            "activation": SequenceParallel(),
-            "activation_seq_dim_2": SequenceParallel(sequence_dim=2),
-            # Module-level prepare-input
-            "module_allgather": PrepareModuleInput(input_layouts=(Shard(1),), desired_input_layouts=(Replicate(),)),
+            # use_local_output=True: torch defaults to False here, but downstream modeling
+            # code expects plain tensors, not DTensors.
+            "activation": SequenceParallel(use_local_output=True),
+            "activation_seq_dim_2": SequenceParallel(sequence_dim=2, use_local_output=True),
+            # Module-level prepare-input. Same use_local_output=True override as above —
+            # torch's default is False, our modeling code expects plain tensors downstream.
+            "module_allgather": PrepareModuleInput(
+                input_layouts=(Shard(1),), desired_input_layouts=(Replicate(),), use_local_output=True
+            ),
             "module_allgather_hidden_states": PrepareModuleInput(
                 input_kwarg_layouts={"hidden_states": Shard(1)},
                 desired_input_kwarg_layouts={"hidden_states": Replicate()},
+                use_local_output=True,
             ),
             "module_allgather_split": PrepareModuleInputOutput(),
             # MoE — canonical shard_plan baked in (only variant in use across configs)
