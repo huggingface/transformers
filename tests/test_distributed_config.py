@@ -50,7 +50,13 @@ class TestDistributedConfig:
     def test_to_dict(self):
         dc = DistributedConfig(tp_size=2, fsdp_size=4)
         d = dc.to_dict()
-        assert d == {"tp_size": 2, "tp_plan": "auto", "fsdp_size": 4, "fsdp_plan": "auto"}
+        assert d == {
+            "tp_size": 2,
+            "tp_plan": "auto",
+            "enable_sequence_parallel": False,
+            "fsdp_size": 4,
+            "fsdp_plan": "auto",
+        }
 
     def test_to_dict_is_a_copy(self):
         dc = DistributedConfig(tp_plan={"layer": "colwise"})

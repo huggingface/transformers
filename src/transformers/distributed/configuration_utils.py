@@ -35,17 +35,23 @@ class DistributedConfig:
             FSDP wrapping plan. Use `"auto"` to wrap each transformer layer + root.
     """
 
-    tp_size: int = 1
+    tp_size: int | None = None
     tp_plan: str | dict[str, str] | None = None
     enable_sequence_parallel: bool = False
-    fsdp_size: int = 1
+    fsdp_size: int | None = None
     fsdp_plan: str | dict | None = None
 
     def __post_init__(self):
-        # If a size is set without a plan, default the plan to "auto"
-        if self.tp_size > 1 and self.tp_plan is None:
+        if self.tp_size is None and self.fsdp_size is None:
+            return
+
+        if self.tp_size is None:
+            self.tp_size = 1
+        if self.fsdp_size is None:
+            self.fsdp_size = 1
+        if self.tp_plan is None:
             self.tp_plan = "auto"
-        if self.fsdp_size > 1 and self.fsdp_plan is None:
+        if self.fsdp_plan is None:
             self.fsdp_plan = "auto"
 
         if torch.distributed.is_available() and torch.distributed.is_initialized():
