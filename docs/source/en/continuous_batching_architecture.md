@@ -116,7 +116,7 @@ cb_config = ContinuousBatchingConfig(
 
 Before a request joins the batch, the scheduler checks that enough free blocks exist for every layer group. If any group would fall short, the request is rejected and nothing is allocated.
 
-To avoid filling the cache until [offload](#offload) is the only option, the default FIFO scheduler enforces a safety margin. Once free blocks fall below 20% of the total, new prefills are held back and only active decodes continue.
+To avoid filling the cache until [offloading](#offloading) is the only option, the default FIFO scheduler enforces a safety margin. Once free blocks fall below 20% of the total, new prefills are held back and only active decodes continue.
 
 ### Prefix caching
 
