@@ -673,6 +673,8 @@
         title: JetMoe
       - local: model_doc/jina_embeddings_v3
         title: jina_embeddings_v3
+      - local: model_doc/laguna
+        title: Laguna
       - local: model_doc/led
         title: LED
       - local: model_doc/lfm2
