@@ -115,12 +115,8 @@ def get_image_type(image):
     raise ValueError(f"Unrecognized image type {type(image)}")
 
 
-def is_url(val) -> bool:
-    return isinstance(val, str) and val.startswith("http")
-
-
 def is_valid_image(img):
-    return is_pil_image(img) or is_numpy_array(img) or is_torch_tensor(img) or is_url(img)
+    return is_pil_image(img) or is_numpy_array(img) or is_torch_tensor(img)
 
 
 def is_valid_list_of_images(images: list):

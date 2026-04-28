@@ -732,8 +732,8 @@ class ProcessorMixin(PushToHubMixin):
             raise ValueError(f"You need to provide at least one input to call {self.__class__.__name__}")
 
     # Simple preprocessing includes calling the `subprocessor` and optionally
-    # bulding placeholder strings. Each processor can override and add their
-    # own special pre/post processing on top
+    # building placeholder strings. Each processor can override and add their
+    # own special pre/post processing on top, e.g. see `audioflamingo`
     def _process_images(self, images: ImageInput, **kwargs):
         processed_images = self.image_processor(images, **kwargs)
 
