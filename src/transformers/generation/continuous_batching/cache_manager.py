@@ -11,7 +11,9 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+import hashlib
 from abc import ABC, abstractmethod
+from array import array
 from collections import deque
 from collections.abc import Iterator
 from math import ceil
@@ -275,8 +277,14 @@ class BlockManager:
 
     def compute_hash(self, parent_hash: int | None, tokens: list[int], group_id: int) -> int:
         """Computes the hash of a block identified by the (tokens) it contains, its (parent_hash) and the layer
-        (group_id) it belong to. If the block has no parent, the parent hash is None."""
-        return hash((parent_hash, tuple(tokens), group_id))
+        (group_id) it belong to. If the block has no parent, the parent hash is None. Uses blake2b for a deterministic
+        64-bit digest that is stable across processes (unlike Python's salted built-in `hash`)."""
+        h = hashlib.blake2b(digest_size=8)
+        if parent_hash is not None:
+            h.update(parent_hash.to_bytes(8, "little", signed=False))
+        h.update(array("i", tokens).tobytes())
+        h.update(group_id.to_bytes(4, "little", signed=False))
+        return int.from_bytes(h.digest(), "little", signed=False)
 
 
 class CacheAllocator(ABC):
