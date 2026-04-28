@@ -374,7 +374,7 @@ def train_fsdp2(
 ):
     # -- Phase 1: Pre-checkpoint run -- train only the first `checkpoint_step` steps, then save
     _set_determinism(SEED)
-    distributed_config = DistributedConfig(fsdp_plan=fsdp_plan)
+    distributed_config = DistributedConfig(fsdp_size=dist.get_world_size(), fsdp_plan=fsdp_plan)
     pre_ckpt_model = AutoModelForCausalLM.from_pretrained(
         init_model_dir,
         torch_dtype=dtype,
@@ -460,7 +460,7 @@ def _test_fsdp2_save_load_impl(rank, config_class, config_dict):
 
     batches = _build_repeated_training_batches(config, device, 3)
 
-    distributed_config = DistributedConfig(fsdp_plan="auto")
+    distributed_config = DistributedConfig(fsdp_size=dist.get_world_size(), fsdp_plan="auto")
 
     init_tmpdir, init_tmpdir_obj = _save_init_pretrained(rank, config, torch.float32)
     try:
