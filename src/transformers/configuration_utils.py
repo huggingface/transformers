@@ -265,6 +265,13 @@ class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin):
             # Keys are always strings in JSON so convert ids to int
             self.id2label = {int(key): value for key, value in self.id2label.items()}
 
+        if self.problem_type == "single_label_classification" and self.num_labels == 1:
+            raise ValueError(
+                '`problem_type="single_label_classification"` requires `num_labels > 1`. For binary '
+                'classification use `num_labels=2`, or use `problem_type="regression"` for a '
+                "single-output regression head."
+            )
+
         # BC for rotary embeddings. We will pop out legacy keys from kwargs and rename to new format
         if hasattr(self, "rope_parameters"):
             kwargs = self.convert_rope_params_to_dict(**kwargs)
