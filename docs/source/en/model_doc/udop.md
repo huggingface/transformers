@@ -55,6 +55,7 @@ occurs. Those can be obtained using the Python Image Library (PIL) library for e
 ```python
 from PIL import Image
 
+
 # Document can be a png, jpg, etc. PDFs must be converted to images.
 image = Image.open(name_of_your_document).convert("RGB")
 

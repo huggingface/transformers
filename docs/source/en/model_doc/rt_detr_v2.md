@@ -44,31 +44,32 @@ This second version of RT-DETR improves how the decoder finds objects in an imag
 
 The model is meant to be used on images resized to a size 640x640 with the corresponding ImageProcessor. Reshaping to other sizes will generally degrade performance.
 
-```py
->>> import torch
->>> import requests
+```python
+import requests
+import torch
+from PIL import Image
 
->>> from PIL import Image
->>> from transformers import RTDetrV2ForObjectDetection, RTDetrImageProcessor
+from transformers import RTDetrImageProcessor, RTDetrV2ForObjectDetection
 
->>> url = 'http://images.cocodataset.org/val2017/000000039769.jpg'
->>> image = Image.open(requests.get(url, stream=True).raw)
 
->>> image_processor = RTDetrImageProcessor.from_pretrained("PekingU/rtdetr_v2_r18vd")
->>> model = RTDetrV2ForObjectDetection.from_pretrained("PekingU/rtdetr_v2_r18vd")
+url = 'http://images.cocodataset.org/val2017/000000039769.jpg'
+image = Image.open(requests.get(url, stream=True).raw)
 
->>> inputs = image_processor(images=image, return_tensors="pt")
+image_processor = RTDetrImageProcessor.from_pretrained("PekingU/rtdetr_v2_r18vd")
+model = RTDetrV2ForObjectDetection.from_pretrained("PekingU/rtdetr_v2_r18vd", device_map="auto")
 
->>> with torch.no_grad():
-...     outputs = model(**inputs)
+inputs = image_processor(images=image, return_tensors="pt").to(model.device)
 
->>> results = image_processor.post_process_object_detection(outputs, target_sizes=torch.tensor([(image.height, image.width)]), threshold=0.5)
+with torch.no_grad():
+    outputs = model(**inputs)
 
->>> for result in results:
-...     for score, label_id, box in zip(result["scores"], result["labels"], result["boxes"]):
-...         score, label = score.item(), label_id.item()
-...         box = [round(i, 2) for i in box.tolist()]
-...         print(f"{model.config.id2label[label]}: {score:.2f} {box}")
+results = image_processor.post_process_object_detection(outputs, target_sizes=torch.tensor([(image.height, image.width)]), threshold=0.5)
+
+for result in results:
+    for score, label_id, box in zip(result["scores"], result["labels"], result["boxes"]):
+        score, label = score.item(), label_id.item()
+        box = [round(i, 2) for i in box.tolist()]
+        print(f"{model.config.id2label[label]}: {score:.2f} {box}")
 cat: 0.97 [341.14, 25.11, 639.98, 372.89]
 cat: 0.96 [12.78, 56.35, 317.67, 471.34]
 remote: 0.95 [39.96, 73.12, 175.65, 117.44]

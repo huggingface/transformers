@@ -48,11 +48,12 @@ The model can accept text, images, audio and videos as input. Here's an example 
 
 ```python
 import soundfile as sf
+
 from transformers import Qwen3OmniMoeForConditionalGeneration, Qwen3OmniMoeProcessor
+
 
 model = Qwen3OmniMoeForConditionalGeneration.from_pretrained(
     "Qwen/Qwen3-Omni-30B-A3B-Instruct",
-    dtype="auto",
     device_map="auto"
 )
 processor = Qwen3OmniMoeProcessor.from_pretrained("Qwen/Qwen3-Omni-30B-A3B-Instruct")
@@ -104,11 +105,11 @@ print(text)
 To generate only text output and save compute by not loading the audio generation model, we can use `Qwen3OmniMoeThinkerForConditionalGeneration` model.
 
 ```python
-from transformers import Qwen3OmniMoeThinkerForConditionalGeneration, Qwen3OmniMoeProcessor
+from transformers import Qwen3OmniMoeProcessor, Qwen3OmniMoeThinkerForConditionalGeneration
+
 
 model = Qwen3OmniMoeThinkerForConditionalGeneration.from_pretrained(
     "Qwen/Qwen3-Omni-30B-A3B-Instruct",
-    dtype="auto",
     device_map="auto",
 )
 processor = Qwen3OmniMoeProcessor.from_pretrained("Qwen/Qwen3-Omni-30B-A3B-Instruct")
@@ -164,8 +165,7 @@ import soundfile as sf
 from transformers import Qwen3OmniMoeForConditionalGeneration, Qwen3OmniMoeProcessor
 
 model = Qwen3OmniMoeForConditionalGeneration.from_pretrained(
-    "Qwen/Qwen3-Omni-30B-A3B-Instruct",
-    dtype="auto",
+    "Qwen/Qwen3-Omni-30B-A3B-Instruct"
     device_map="auto"
 )
 processor = Qwen3OmniMoeProcessor.from_pretrained("Qwen/Qwen3-Omni-30B-A3B-Instruct")
@@ -288,7 +288,6 @@ The model supports both text and audio outputs, if users do not need audio outpu
 ```python
 model = Qwen3OmniMoeForConditionalGeneration.from_pretrained(
     "Qwen/Qwen3-Omni-30B-A3B-Instruct",
-    dtype="auto",
     device_map="auto",
     enable_audio_output=False,
 )
@@ -299,7 +298,6 @@ In order to obtain a flexible experience, we recommend that users set `enable_au
 ```python
 model = Qwen3OmniMoeForConditionalGeneration.from_pretrained(
     "Qwen/Qwen3-Omni-30B-A3B-Instruct",
-    dtype="auto",
     device_map="auto",
     enable_audio_output=True,
 )
@@ -334,10 +332,10 @@ To load and run a model using FlashAttention-2, add `attn_implementation="flash_
 ```python
 from transformers import Qwen3OmniMoeForConditionalGeneration
 
+
 model = Qwen3OmniMoeForConditionalGeneration.from_pretrained(
     "Qwen/Qwen3-Omni-30B-A3B-Instruct",
     device_map="auto",
-    dtype=torch.bfloat16,
     attn_implementation="flash_attention_2",
 )
 ```
