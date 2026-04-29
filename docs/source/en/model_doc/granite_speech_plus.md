@@ -33,11 +33,7 @@ The rest of the architecture — speech encoder, query transformer projector, la
 — is inherited unchanged from Granite Speech. See the [Granite Speech documentation](./granite_speech) for usage
 examples; the same [`GraniteSpeechProcessor`] and [`GraniteSpeechFeatureExtractor`] are used here.
 
-## Usage tips
-
-- The model expects 16kHz sampling rate audio. The processor will automatically resample if needed.
-
-## Usage example
+## Usage
 
 Granite Speech Plus is a multimodal speech-to-text model that can transcribe audio, provide speaker annotation and word level timestamps by responding to text prompts. Here's how to use the different functions:
 
@@ -67,18 +63,17 @@ Load the model and define a general function for decoding the audio:
 
 ```python
 processor = AutoProcessor.from_pretrained(MODEL_NAME)
-tokenizer = processor.tokenizer
 model = AutoModelForSpeechSeq2Seq.from_pretrained(MODEL_NAME, device_map="auto")
 
 @torch.inference_mode()
 def transcribe(audio, prompt, max_new_tokens=2000, prefix_text=None):
     chat = [{"role": "system", "content": SYSTEM_PROMPT}, {"role": "user", "content": prompt}]
     extra = {"prefix_text": prefix_text} if prefix_text is not None else {}
-    prompt_text = tokenizer.apply_chat_template(chat, tokenize=False, add_generation_prompt=True, **extra)
+    prompt_text = processor.apply_chat_template(chat, tokenize=False, add_generation_prompt=True, **extra)
     inputs = processor(prompt_text, audio, device=device, return_tensors="pt").to(device)
     outputs = model.generate(**inputs, max_new_tokens=max_new_tokens, do_sample=False, num_beams=1)
     new_tokens = outputs[0, inputs["input_ids"].shape[-1]:]
-    output_text = tokenizer.decode(new_tokens, add_special_tokens=False, skip_special_tokens=True)
+    output_text = processor.decode(new_tokens, add_special_tokens=False, skip_special_tokens=True)
     return output_text
 ```
 

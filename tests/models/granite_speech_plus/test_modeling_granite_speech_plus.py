@@ -267,7 +267,3 @@ class GraniteSpeechPlusForConditionalGenerationIntegrationTest(unittest.TestCase
             self.processor.tokenizer.batch_decode(output, skip_special_tokens=True),
             EXPECTED_DECODED_TEXT,
         )
-
-
-if __name__ == "__main__":
-    unittest.main()
