@@ -1229,8 +1229,8 @@ class PPDocLayoutV3Model(RTDetrModel):
         )
 
 
-@dataclass
 @auto_docstring
+@dataclass
 class PPDocLayoutV3HybridEncoderOutput(BaseModelOutput):
     r"""
     mask_feat (`torch.FloatTensor` of shape `(batch_size, config.num_queries, 200, 200)`):

@@ -30,12 +30,12 @@ from .configuration_cvt import CvtConfig
 logger = logging.get_logger(__name__)
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Base class for model's outputs, with potential hidden states and attentions.
     """
 )
+@dataclass
 class BaseModelOutputWithCLSToken(ModelOutput):
     r"""
     cls_token_value (`torch.FloatTensor` of shape `(batch_size, 1, hidden_size)`):

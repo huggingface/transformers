@@ -47,12 +47,12 @@ logger = logging.get_logger(__name__)
 _TOKENIZER_FOR_DOC = "RobertaTokenizer"
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Output type of [`BridgeTowerModel`].
     """
 )
+@dataclass
 class BridgeTowerModelOutput(ModelOutput):
     r"""
     text_features (`torch.FloatTensor` of shape `(batch_size, text_sequence_length, hidden_size)`):
@@ -71,12 +71,12 @@ class BridgeTowerModelOutput(ModelOutput):
     attentions: tuple[torch.FloatTensor] | None = None
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Output type of ['BridgeTowerForContrastiveLearning']
     """
 )
+@dataclass
 class BridgeTowerContrastiveOutput(ModelOutput):
     r"""
     loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `return_loss` is `True`):

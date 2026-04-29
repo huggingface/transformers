@@ -373,12 +373,12 @@ class SmolVLMVisionTransformer(SmolVLMPreTrainedModel):
         )
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Base class for SmolVLM model's outputs that may also contain a past key/values (to speed up sequential decoding).
     """
 )
+@dataclass
 class SmolVLMBaseModelOutputWithPast(ModelOutput):
     r"""
     last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
@@ -656,12 +656,12 @@ class SmolVLMModel(SmolVLMPreTrainedModel):
         )
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Base class for Idefics causal language model (or autoregressive) outputs.
     """
 )
+@dataclass
 class SmolVLMCausalLMOutputWithPast(ModelOutput):
     r"""
     loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):

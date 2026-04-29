@@ -31,12 +31,12 @@ from .configuration_zoedepth import ZoeDepthConfig
 logger = logging.get_logger(__name__)
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Extension of `DepthEstimatorOutput` to include domain logits (ZoeDepth specific).
     """
 )
+@dataclass
 class ZoeDepthDepthEstimatorOutput(ModelOutput):
     r"""
     loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):

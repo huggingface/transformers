@@ -56,8 +56,8 @@ from .configuration_blip_2 import Blip2Config, Blip2QFormerConfig, Blip2VisionCo
 logger = logging.get_logger(__name__)
 
 
-@dataclass
 @auto_docstring
+@dataclass
 class BaseModelOutputWithVisionQformerOutputs(BaseModelOutputWithPooling):
     r"""
     vision_outputs (`BaseModelOutputWithPooling`):
@@ -70,12 +70,12 @@ class BaseModelOutputWithVisionQformerOutputs(BaseModelOutputWithPooling):
     qformer_outputs: BaseModelOutputWithPoolingAndCrossAttentions | None = None
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Class defining the outputs of [`Blip2ForConditionalGeneration`].
     """
 )
+@dataclass
 class Blip2ForConditionalGenerationModelOutput(ModelOutput):
     r"""
     loss (`torch.FloatTensor`, *optional*, returned when `labels` is provided, `torch.FloatTensor` of shape `(1,)`):

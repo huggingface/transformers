@@ -34,12 +34,12 @@ from .configuration_focalnet import FocalNetConfig
 logger = logging.get_logger(__name__)
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     FocalNet encoder's outputs, with potential hidden states.
     """
 )
+@dataclass
 class FocalNetEncoderOutput(ModelOutput):
     r"""
     reshaped_hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
@@ -55,12 +55,12 @@ class FocalNetEncoderOutput(ModelOutput):
     reshaped_hidden_states: tuple[torch.FloatTensor] | None = None
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     FocalNet model's outputs that also contains a pooling of the last hidden states.
     """
 )
+@dataclass
 class FocalNetModelOutput(ModelOutput):
     r"""
     pooler_output (`torch.FloatTensor` of shape `(batch_size, hidden_size)`, *optional*, returned when `add_pooling_layer=True` is passed):
@@ -79,12 +79,12 @@ class FocalNetModelOutput(ModelOutput):
     reshaped_hidden_states: tuple[torch.FloatTensor] | None = None
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     FocalNet masked image model outputs.
     """
 )
+@dataclass
 class FocalNetMaskedImageModelingOutput(ModelOutput):
     r"""
     loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `bool_masked_pos` is provided):
@@ -105,12 +105,12 @@ class FocalNetMaskedImageModelingOutput(ModelOutput):
     reshaped_hidden_states: tuple[torch.FloatTensor] | None = None
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     FocalNet outputs for image classification.
     """
 )
+@dataclass
 class FocalNetImageClassifierOutput(ModelOutput):
     r"""
     loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):

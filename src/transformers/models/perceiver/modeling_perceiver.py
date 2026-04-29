@@ -43,12 +43,12 @@ PostprocessorType = Callable[..., Any]
 logger = logging.get_logger(__name__)
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Base class for Perceiver base model's outputs, with potential hidden states, attentions and cross-attentions.
     """
 )
+@dataclass
 class PerceiverModelOutput(ModelOutput):
     r"""
     logits (`torch.FloatTensor` of shape `(batch_size, num_labels)`):
@@ -62,12 +62,12 @@ class PerceiverModelOutput(ModelOutput):
     cross_attentions: tuple[torch.FloatTensor] | None = None
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Base class for Perceiver decoder outputs, with potential cross-attentions.
     """
 )
+@dataclass
 class PerceiverDecoderOutput(ModelOutput):
     r"""
     logits (`torch.FloatTensor` of shape `(batch_size, num_labels)`):
@@ -78,12 +78,12 @@ class PerceiverDecoderOutput(ModelOutput):
     cross_attentions: tuple[torch.FloatTensor] | None = None
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Base class for Perceiver's masked language model outputs.
     """
 )
+@dataclass
 class PerceiverMaskedLMOutput(ModelOutput):
     r"""
     loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
@@ -99,13 +99,13 @@ class PerceiverMaskedLMOutput(ModelOutput):
     cross_attentions: tuple[torch.FloatTensor] | None = None
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Base class for Perceiver's outputs of sequence/image classification models, optical flow and multimodal
     autoencoding.
     """
 )
+@dataclass
 class PerceiverClassifierOutput(ModelOutput):
     r"""
     loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):

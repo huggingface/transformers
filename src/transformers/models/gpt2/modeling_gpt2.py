@@ -458,12 +458,12 @@ class GPT2PreTrainedModel(PreTrainedModel):
                     init.normal_(p, mean=0.0, std=self.config.initializer_range / math.sqrt(2 * self.config.n_layer))
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Base class for outputs of models predicting if two sentences are consecutive or not.
     """
 )
+@dataclass
 class GPT2DoubleHeadsModelOutput(ModelOutput):
     r"""
     loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):

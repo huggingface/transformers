@@ -40,12 +40,12 @@ from .configuration_bros import BrosConfig
 logger = logging.get_logger(__name__)
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Base class for outputs of token classification models.
     """
 )
+@dataclass
 class BrosSpadeOutput(ModelOutput):
     r"""
     loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):

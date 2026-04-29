@@ -41,8 +41,8 @@ from ..auto import AutoModel
 from .configuration_ovis2 import Ovis2Config, Ovis2VisionConfig
 
 
-@dataclass
 @auto_docstring
+@dataclass
 class BaseModelOutputWithVisualIndicatorFeatures(BaseModelOutputWithPooling):
     r"""
     visual_indicator_features (`torch.FloatTensor` of shape `(batch_size, visual_indicator_size)`):
@@ -73,12 +73,12 @@ class Ovis2ModelOutputWithPast(BaseModelOutputWithPast):
     image_hidden_states: torch.FloatTensor | None = None
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Base class for Ovis2 causal language model (or autoregressive) outputs.
     """
 )
+@dataclass
 class Ovis2CausalLMOutputWithPast(ModelOutput):
     r"""
     loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):

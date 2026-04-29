@@ -614,8 +614,8 @@ class Sam2VideoFeedForward(nn.Module):
         return hidden_states
 
 
-@dataclass
 @auto_docstring(custom_intro="Base class for the Sam2Video model's output.")
+@dataclass
 class Sam2VideoImageSegmentationOutput(ModelOutput):
     r"""
     iou_scores (`torch.FloatTensor` of shape `(batch_size, point_batch_size, num_masks)`):
@@ -655,8 +655,8 @@ class Sam2VideoImageSegmentationOutput(ModelOutput):
     object_pointer: torch.FloatTensor | None = None
 
 
-@dataclass
 @auto_docstring(custom_intro="Base class for the Sam2 model's output.")
+@dataclass
 class Sam2VideoSegmentationOutput(ModelOutput):
     r"""
     object_ids (`list[int]`, *optional*):

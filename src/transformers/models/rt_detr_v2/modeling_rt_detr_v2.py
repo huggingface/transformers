@@ -510,7 +510,6 @@ class RTDetrV2PreTrainedModel(PreTrainedModel):
             init.copy_(module.n_points_scale, torch.tensor(n_points_scale, dtype=torch.float32))
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Base class for outputs of the RTDetrV2Decoder. This class adds two attributes to
@@ -519,6 +518,7 @@ class RTDetrV2PreTrainedModel(PreTrainedModel):
     - a stacked tensor of intermediate reference points.
     """
 )
+@dataclass
 class RTDetrV2DecoderOutput(ModelOutput):
     r"""
     intermediate_hidden_states (`torch.FloatTensor` of shape `(batch_size, config.decoder_layers, num_queries, hidden_size)`):
@@ -664,12 +664,12 @@ class RTDetrV2Decoder(RTDetrV2PreTrainedModel):
         )
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Base class for outputs of the RT-DETR encoder-decoder model.
     """
 )
+@dataclass
 class RTDetrV2ModelOutput(ModelOutput):
     r"""
     last_hidden_state (`torch.FloatTensor` of shape `(batch_size, num_queries, hidden_size)`):
@@ -1620,12 +1620,12 @@ class RTDetrV2MLPPredictionHead(nn.Module):
         return x
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Output type of [`RTDetrV2ForObjectDetection`].
     """
 )
+@dataclass
 class RTDetrV2ObjectDetectionOutput(ModelOutput):
     r"""
     loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` are provided)):

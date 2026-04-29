@@ -48,12 +48,12 @@ from .generation_csm import CsmGenerationMixin
 logger = logging.get_logger(__name__)
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Base class for the model autoregressive outputs.
     """
 )
+@dataclass
 class CsmOutputWithPast(ModelOutput):
     r"""
     loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):

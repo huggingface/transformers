@@ -88,8 +88,8 @@ class Gemma4CausalLMOutputWithPast(Gemma3nCausalLMOutputWithPast):
     pass
 
 
-@dataclass
 @auto_docstring
+@dataclass
 class Gemma4AudioModelOutput(BaseModelOutputWithPooling):
     r"""
     attention_mask (`torch.BoolTensor`, *optional*):

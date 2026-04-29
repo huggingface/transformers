@@ -701,12 +701,12 @@ class InternVLModel(InternVLPreTrainedModel):
         return vision_features
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Base class for InternVL causal language model (or autoregressive) outputs.
     """
 )
+@dataclass
 class InternVLCausalLMOutputWithPast(ModelOutput):
     r"""
     loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):

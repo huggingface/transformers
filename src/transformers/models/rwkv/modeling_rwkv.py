@@ -442,12 +442,12 @@ class RwkvPreTrainedModel(PreTrainedModel):
             init.zeros_(module.bias)
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Class for the RWKV model outputs.
     """
 )
+@dataclass
 class RwkvOutput(ModelOutput):
     r"""
     state (list of five `torch.FloatTensor` of shape `(batch_size, hidden_size, num_hidden_layers)`):
@@ -461,12 +461,12 @@ class RwkvOutput(ModelOutput):
     attentions: tuple[torch.FloatTensor, ...] | None = None
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Base class for causal language model (or autoregressive) outputs.
     """
 )
+@dataclass
 class RwkvCausalLMOutput(ModelOutput):
     r"""
     loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):

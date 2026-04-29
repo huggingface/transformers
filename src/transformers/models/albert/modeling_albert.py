@@ -323,12 +323,12 @@ class AlbertPreTrainedModel(PreTrainedModel):
             init.zeros_(module.token_type_ids)
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Output type of [`AlbertForPreTraining`].
     """
 )
+@dataclass
 class AlbertForPreTrainingOutput(ModelOutput):
     r"""
     loss (*optional*, returned when `labels` is provided, `torch.FloatTensor` of shape `(1,)`):

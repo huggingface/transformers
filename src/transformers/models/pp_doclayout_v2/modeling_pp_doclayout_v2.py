@@ -966,12 +966,12 @@ class PPDocLayoutV2ForObjectDetectionOutput(ModelOutput):
     denoising_meta_values: dict | None = None
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Base class for outputs of the PP-DocLayoutV2 encoder-decoder model.
     """
 )
+@dataclass
 class PPDocLayoutV2ModelOutput(ModelOutput):
     r"""
     last_hidden_state (`torch.FloatTensor` of shape `(batch_size, num_queries, hidden_size)`):
@@ -1043,7 +1043,6 @@ class PPDocLayoutV2MLPPredictionHead(nn.Module):
         return x
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Base class for outputs of the PPDocLayoutV2Decoder. This class adds two attributes to
@@ -1052,6 +1051,7 @@ class PPDocLayoutV2MLPPredictionHead(nn.Module):
     - a stacked tensor of intermediate reference points.
     """
 )
+@dataclass
 class PPDocLayoutV2DecoderOutput(ModelOutput):
     r"""
     intermediate_hidden_states (`torch.FloatTensor` of shape `(batch_size, config.decoder_layers, num_queries, hidden_size)`):

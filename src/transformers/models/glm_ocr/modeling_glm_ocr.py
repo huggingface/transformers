@@ -340,12 +340,12 @@ class GlmOcrPreTrainedModel(PreTrainedModel):
             init.copy_(module.inv_freq, inv_freq)
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Base class for Llava outputs, with hidden states and attentions.
     """
 )
+@dataclass
 class GlmOcrModelOutputWithPast(ModelOutput):
     r"""
     past_key_values (`Cache`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
@@ -1226,12 +1226,12 @@ class GlmOcrModel(GlmOcrPreTrainedModel):
         )
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Base class for GlmOcr causal language model (or autoregressive) outputs.
     """
 )
+@dataclass
 class GlmOcrCausalLMOutputWithPast(ModelOutput):
     r"""
     loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):

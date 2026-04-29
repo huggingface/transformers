@@ -32,12 +32,12 @@ from .configuration_swin2sr import Swin2SRConfig
 logger = logging.get_logger(__name__)
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Swin2SR encoder's outputs, with potential hidden states and attentions.
     """
 )
+@dataclass
 class Swin2SREncoderOutput(ModelOutput):
     last_hidden_state: torch.FloatTensor | None = None
     hidden_states: tuple[torch.FloatTensor] | None = None

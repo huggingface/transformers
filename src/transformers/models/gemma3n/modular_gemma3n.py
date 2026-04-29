@@ -437,8 +437,8 @@ class Gemma3nConfig(PreTrainedConfig):
         super().__post_init__(**kwargs)
 
 
-@dataclass
 @auto_docstring
+@dataclass
 class Gemma3nAudioEncoderModelOutput(BaseModelOutputWithPooling):
     r"""
     audio_mel_mask (`torch.BoolTensor`, *optional*):

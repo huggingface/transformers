@@ -59,12 +59,12 @@ from .configuration_qwen2_vl import Qwen2VLConfig, Qwen2VLTextConfig, Qwen2VLVis
 logger = logging.get_logger(__name__)
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Base class for Llava outputs, with hidden states and attentions.
     """
 )
+@dataclass
 class Qwen2VLModelOutputWithPast(ModelOutput):
     r"""
     past_key_values (`Cache`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
@@ -83,12 +83,12 @@ class Qwen2VLModelOutputWithPast(ModelOutput):
     rope_deltas: torch.LongTensor | None = None
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Base class for Qwen2VL causal language model (or autoregressive) outputs.
     """
 )
+@dataclass
 class Qwen2VLCausalLMOutputWithPast(ModelOutput):
     r"""
     loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):

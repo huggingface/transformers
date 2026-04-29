@@ -34,8 +34,8 @@ from ..auto import AutoModel
 from .configuration_deepseek_vl_hybrid import DeepseekVLHybridConfig
 
 
-@dataclass
 @auto_docstring
+@dataclass
 class BaseModelOutputWithHighResVisionEncodings(BaseModelOutputWithPooling):
     r"""
     high_res_vision_last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
@@ -58,12 +58,12 @@ class BaseModelOutputWithHighResVisionEncodings(BaseModelOutputWithPooling):
     high_res_vision_attentions: tuple[torch.FloatTensor] | None = None
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Base class for DeepseekVLHybrid model's outputs that may also contain a past key/values (to speed up sequential decoding).
     """
 )
+@dataclass
 class DeepseekVLHybridBaseModelOutputWithPast(ModelOutput):
     r"""
     last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
@@ -91,12 +91,12 @@ class DeepseekVLHybridBaseModelOutputWithPast(ModelOutput):
     image_hidden_states: tuple[torch.FloatTensor] | None = None
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Base class for DeepseekVLHybrid causal language model (or autoregressive) outputs.
     """
 )
+@dataclass
 class DeepseekVLHybridCausalLMOutputWithPast(ModelOutput):
     r"""
     loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):

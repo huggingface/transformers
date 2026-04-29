@@ -38,7 +38,6 @@ class GeLU(nn.Module):
         return gelu(x)
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Lxmert's outputs that contain the last hidden states, pooled outputs, and attention probabilities for the language,
@@ -46,6 +45,7 @@ class GeLU(nn.Module):
     encoder")
     """
 )
+@dataclass
 class LxmertModelOutput(ModelOutput):
     r"""
     language_output (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
@@ -85,12 +85,12 @@ class LxmertModelOutput(ModelOutput):
     cross_encoder_attentions: tuple[torch.FloatTensor] | None = None
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Output type of [`LxmertForQuestionAnswering`].
     """
 )
+@dataclass
 class LxmertForQuestionAnsweringOutput(ModelOutput):
     r"""
     loss (*optional*, returned when `labels` is provided, `torch.FloatTensor` of shape `(1,)`):
@@ -127,12 +127,12 @@ class LxmertForQuestionAnsweringOutput(ModelOutput):
     cross_encoder_attentions: tuple[torch.FloatTensor] | None = None
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Output type of [`LxmertForPreTraining`].
     """
 )
+@dataclass
 class LxmertForPreTrainingOutput(ModelOutput):
     r"""
     loss (*optional*, returned when `labels` is provided, `torch.FloatTensor` of shape `(1,)`):

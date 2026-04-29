@@ -61,12 +61,12 @@ class MgpstrDropPath(nn.Module):
         return f"p={self.drop_prob}"
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Base class for vision model's outputs that also contains image embeddings of the pooling of the last hidden states.
     """
 )
+@dataclass
 class MgpstrModelOutput(ModelOutput):
     r"""
     logits (`tuple(torch.FloatTensor)` of shape `(batch_size, config.num_character_labels)`):

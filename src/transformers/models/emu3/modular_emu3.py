@@ -42,8 +42,8 @@ from .configuration_emu3 import Emu3Config, Emu3TextConfig, Emu3VQVAEConfig
 logger = logging.get_logger(__name__)
 
 
-@dataclass
 @auto_docstring
+@dataclass
 class Emu3VQVAEModelOutput(BaseModelOutputWithPooling):
     r"""
     image_tokens (`torch.LongTensor` of shape `(batch_size, config.vocab_size`):

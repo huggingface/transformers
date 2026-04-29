@@ -47,8 +47,8 @@ from .configuration_instructblip import InstructBlipConfig, InstructBlipQFormerC
 logger = logging.get_logger(__name__)
 
 
-@dataclass
 @auto_docstring
+@dataclass
 class BaseModelOutputWithVisionQformerOutputs(BaseModelOutputWithPooling):
     r"""
     vision_outputs (`BaseModelOutputWithPooling`):

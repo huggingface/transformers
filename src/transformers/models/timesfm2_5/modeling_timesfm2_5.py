@@ -42,8 +42,8 @@ from ...utils.output_capturing import capture_outputs
 from .configuration_timesfm2_5 import TimesFm2_5Config
 
 
-@dataclass
 @auto_docstring
+@dataclass
 class TimesFm2_5Output(BaseModelOutput):
     r"""
     context_mu (`torch.Tensor` of shape `(batch_size, num_patches)`):
@@ -59,8 +59,8 @@ class TimesFm2_5Output(BaseModelOutput):
     context_sigma: torch.Tensor | None = None
 
 
-@dataclass
 @auto_docstring
+@dataclass
 class TimesFm2_5OutputForPrediction(BaseModelOutput):
     r"""
     mean_predictions (`torch.Tensor` of shape `(batch_size, horizon_length)`):

@@ -38,12 +38,12 @@ from .configuration_idefics3 import Idefics3Config, Idefics3VisionConfig
 logger = logging.get_logger(__name__)
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Base class for Idefics3 model's outputs that may also contain a past key/values (to speed up sequential decoding).
     """
 )
+@dataclass
 class Idefics3BaseModelOutputWithPast(ModelOutput):
     r"""
     last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
@@ -69,12 +69,12 @@ class Idefics3BaseModelOutputWithPast(ModelOutput):
     image_hidden_states: tuple[torch.FloatTensor] | None = None
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Base class for Idefics causal language model (or autoregressive) outputs.
     """
 )
+@dataclass
 class Idefics3CausalLMOutputWithPast(ModelOutput):
     r"""
     loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):

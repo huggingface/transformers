@@ -168,12 +168,12 @@ def generalized_box_iou(boxes1, boxes2):
     return iou - (area - union) / area
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Output type of [`OwlViTForObjectDetection`].
     """
 )
+@dataclass
 class OwlViTObjectDetectionOutput(ModelOutput):
     r"""
     loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` are provided)):
@@ -220,12 +220,12 @@ class OwlViTObjectDetectionOutput(ModelOutput):
         )
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Output type of [`OwlViTForObjectDetection.image_guided_detection`].
     """
 )
+@dataclass
 class OwlViTImageGuidedObjectDetectionOutput(ModelOutput):
     r"""
     logits (`torch.FloatTensor` of shape `(batch_size, num_patches, num_queries)`):

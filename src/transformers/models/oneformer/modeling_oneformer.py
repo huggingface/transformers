@@ -786,7 +786,6 @@ class OneFormerPixelDecoderOutput(ModelOutput):
     attentions: tuple[torch.FloatTensor] | None = None
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     OneFormer's pixel level module output. It returns both the last and (optionally) the hidden states from the
@@ -794,6 +793,7 @@ class OneFormerPixelDecoderOutput(ModelOutput):
     Deformable Attention based decoder.
     """
 )
+@dataclass
 class OneFormerPixelLevelModuleOutput(ModelOutput):
     r"""
     encoder_features (List of `(torch.FloatTensor)`):
@@ -811,12 +811,12 @@ class OneFormerPixelLevelModuleOutput(ModelOutput):
     decoder_last_feature: torch.FloatTensor | None = None
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Class for outputs of [`OneFormerModel`]. This class returns all the needed hidden states to compute the logits.
     """
 )
+@dataclass
 class OneFormerModelOutput(ModelOutput):
     r"""
     encoder_hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):

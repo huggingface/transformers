@@ -88,12 +88,12 @@ class FlavaModelOutput(ModelOutput):
         )
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Class representing pretraining losses from FLAVA model
     """
 )
+@dataclass
 class FlavaLosses(ModelOutput):
     r"""
     mim (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `mim_labels` and `pixel_values` are present, `input_ids_masked` is absent and `mim_weight` > 0.):

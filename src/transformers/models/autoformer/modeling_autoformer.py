@@ -40,12 +40,12 @@ from .configuration_autoformer import AutoformerConfig
 logger = logging.get_logger(__name__)
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Base class for model's outputs that may also contain a past key/values (to speed up sequential decoding).
     """
 )
+@dataclass
 class AutoFormerDecoderOutput(ModelOutput):
     r"""
     last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
@@ -77,12 +77,12 @@ class AutoFormerDecoderOutput(ModelOutput):
     cross_attentions: tuple[torch.FloatTensor] | None = None
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Autoformer model output that contains the additional trend output.
     """
 )
+@dataclass
 class AutoformerModelOutput(ModelOutput):
     r"""
     last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):

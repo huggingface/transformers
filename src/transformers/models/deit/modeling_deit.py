@@ -671,12 +671,12 @@ class DeiTForImageClassification(DeiTPreTrainedModel):
         )
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Output type of [`DeiTForImageClassificationWithTeacher`].
     """
 )
+@dataclass
 class DeiTForImageClassificationWithTeacherOutput(ModelOutput):
     r"""
     logits (`torch.FloatTensor` of shape `(batch_size, config.num_labels)`):

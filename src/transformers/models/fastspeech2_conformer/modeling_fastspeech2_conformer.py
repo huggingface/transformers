@@ -34,12 +34,12 @@ from .configuration_fastspeech2_conformer import (
 logger = logging.get_logger(__name__)
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Output type of [`FastSpeech2ConformerModel`].
     """
 )
+@dataclass
 class FastSpeech2ConformerModelOutput(ModelOutput):
     r"""
     loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):

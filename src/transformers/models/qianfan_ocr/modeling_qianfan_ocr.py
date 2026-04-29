@@ -702,12 +702,12 @@ class QianfanOCRModel(QianfanOCRPreTrainedModel):
         return vision_features
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Base class for QianfanOCR causal language model (or autoregressive) outputs.
     """
 )
+@dataclass
 class QianfanOCRCausalLMOutputWithPast(ModelOutput):
     r"""
     loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):

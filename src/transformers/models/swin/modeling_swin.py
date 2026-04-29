@@ -37,12 +37,12 @@ logger = logging.get_logger(__name__)
 # drop_path, SwinPatchEmbeddings, SwinPatchMerging and SwinDropPath are from the timm library.
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Swin encoder's outputs, with potential hidden states and attentions.
     """
 )
+@dataclass
 class SwinEncoderOutput(ModelOutput):
     r"""
     reshaped_hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
@@ -59,12 +59,12 @@ class SwinEncoderOutput(ModelOutput):
     reshaped_hidden_states: tuple[torch.FloatTensor, ...] | None = None
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Swin model's outputs that also contains a pooling of the last hidden states.
     """
 )
+@dataclass
 class SwinModelOutput(ModelOutput):
     r"""
     pooler_output (`torch.FloatTensor` of shape `(batch_size, hidden_size)`, *optional*, returned when `add_pooling_layer=True` is passed):
@@ -84,12 +84,12 @@ class SwinModelOutput(ModelOutput):
     reshaped_hidden_states: tuple[torch.FloatTensor, ...] | None = None
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Swin masked image model outputs.
     """
 )
+@dataclass
 class SwinMaskedImageModelingOutput(ModelOutput):
     r"""
     loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `bool_masked_pos` is provided):
@@ -111,12 +111,12 @@ class SwinMaskedImageModelingOutput(ModelOutput):
     reshaped_hidden_states: tuple[torch.FloatTensor, ...] | None = None
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Swin outputs for image classification.
     """
 )
+@dataclass
 class SwinImageClassifierOutput(ModelOutput):
     r"""
     loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):

@@ -35,7 +35,6 @@ from ..auto.modeling_auto import AutoModelForKeypointDetection
 from .configuration_lightglue import LightGlueConfig
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Base class for outputs of LightGlue keypoint matching models. Due to the nature of keypoint detection and matching,
@@ -45,6 +44,7 @@ from .configuration_lightglue import LightGlueConfig
     matching information.
     """
 )
+@dataclass
 class LightGlueKeypointMatchingOutput(ModelOutput):
     r"""
     loss (`torch.FloatTensor` of shape `(1,)`, *optional*):

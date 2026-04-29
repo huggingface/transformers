@@ -360,8 +360,8 @@ class PPOCRV5MobileRecHead(nn.Module):
         return BaseModelOutputWithNoAttention(last_hidden_state=hidden_states, hidden_states=outputs.hidden_states)
 
 
-@dataclass
 @auto_docstring
+@dataclass
 class PPOCRV5MobileRecForTextRecognitionOutput(BaseModelOutputWithNoAttention):
     r"""
     head_hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):

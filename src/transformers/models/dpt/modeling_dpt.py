@@ -42,13 +42,13 @@ from .configuration_dpt import DPTConfig
 logger = logging.get_logger(__name__)
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Base class for model's outputs that also contains intermediate activations that can be used at later stages. Useful
     in the context of Vision models.:
     """
 )
+@dataclass
 class BaseModelOutputWithIntermediateActivations(ModelOutput):
     r"""
     last_hidden_states (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
@@ -61,13 +61,13 @@ class BaseModelOutputWithIntermediateActivations(ModelOutput):
     intermediate_activations: tuple[torch.FloatTensor, ...] | None = None
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Base class for model's outputs that also contains a pooling of the last hidden states as well as intermediate
     activations that can be used by the model at later stages.
     """
 )
+@dataclass
 class BaseModelOutputWithPoolingAndIntermediateActivations(ModelOutput):
     r"""
     pooler_output (`torch.FloatTensor` of shape `(batch_size, hidden_size)`):

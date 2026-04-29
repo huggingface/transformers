@@ -887,12 +887,12 @@ class InstructBlipVideoQFormerModel(InstructBlipVideoPreTrainedModel):
         )
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Class defining the outputs of [`InstructBlipVideoForConditionalGeneration`].
     """
 )
+@dataclass
 class InstructBlipVideoForConditionalGenerationModelOutput(ModelOutput):
     r"""
     loss (`torch.FloatTensor`, *optional*, returned when `labels` is provided, `torch.FloatTensor` of shape `(1,)`):
@@ -1102,8 +1102,8 @@ class InstructBlipVideoModel(InstructBlipVideoPreTrainedModel):
         )
 
 
-@dataclass
 @auto_docstring
+@dataclass
 class BaseModelOutputWithVisionQformerOutputs(BaseModelOutputWithPooling):
     r"""
     vision_outputs (`BaseModelOutputWithPooling`):
