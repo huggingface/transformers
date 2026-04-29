@@ -121,7 +121,7 @@ CONFIG_MAPPING_NAMES = OrderedDict(
         ("deberta-v2", "DebertaV2Config"),
         ("decision_transformer", "DecisionTransformerConfig"),
         ("deepseek_ocr2", "DeepseekOcr2Config"),
-        ("deepseek_ocr2_encoder", "DeepseekOcr2EncoderConfig"),
+        ("deepseek_ocr2_encoder", "DeepseekOcr2VisionEncoderConfig"),
         ("deepseek_ocr2_sam_vision_model", "DeepseekOcr2SamVisionConfig"),
         ("deepseek_ocr2_text", "DeepseekOcr2TextConfig"),
         ("deepseek_v2", "DeepseekV2Config"),

@@ -24,7 +24,6 @@ from torchvision.transforms.v2 import functional as tvF
 from ... import initialization as init
 from ...cache_utils import Cache
 from ...configuration_utils import PreTrainedConfig
-from ...generation import GenerationMixin
 from ...image_processing_utils import BatchFeature
 from ...image_transforms import group_images_by_shape, reorder_images, to_channel_dimension_format
 from ...image_utils import (
@@ -67,7 +66,14 @@ from ..llava_next.modeling_llava_next import (
     LlavaNextPreTrainedModel,
 )
 from ..qwen2.configuration_qwen2 import Qwen2Config
-from ..qwen2.modeling_qwen2 import Qwen2Attention, Qwen2DecoderLayer, Qwen2Model
+from ..qwen2.modeling_qwen2 import (
+    Qwen2Attention,
+    Qwen2DecoderLayer,
+    Qwen2MLP,
+    Qwen2Model,
+    Qwen2RMSNorm,
+    Qwen2RotaryEmbedding,
+)
 from ..sam.configuration_sam import SamVisionConfig
 from ..sam.modeling_sam import (
     SamPatchEmbeddings,
@@ -82,7 +88,16 @@ logger = logging.get_logger(__name__)
 
 
 class DeepseekOcr2ImageProcessorKwargs(GotOcr2ImageProcessorKwargs, total=False):
-    """
+    r"""
+    crop_to_patches (`bool`, *optional*, defaults to `self.crop_to_patches`):
+        Whether to crop the image to patches. Can be overridden by the `crop_to_patches` parameter in the
+        `preprocess` method.
+    min_patches (`int`, *optional*, defaults to `self.min_patches`):
+        The minimum number of patches to be extracted from the image. Only has an effect if `crop_to_patches` is
+        set to `True`. Can be overridden by the `min_patches` parameter in the `preprocess` method.
+    max_patches (`int`, *optional*, defaults to `self.max_patches`):
+        The maximum number of patches to be extracted from the image. Only has an effect if `crop_to_patches` is
+        set to `True`. Can be overridden by the `max_patches` parameter in the `preprocess` method.
     tile_size (`int`, *optional*, defaults to `768`):
         The size of each local tile. Must match the model's query embedding size.
     background_color (`list[int]`, *optional*, defaults to `[127, 127, 127]`):
@@ -506,7 +521,7 @@ class DeepseekOcr2SamVisionConfig(SamVisionConfig):
 
 @auto_docstring(checkpoint="thisisiron/DeepSeek-OCR-2-hf")
 @strict
-class DeepseekOcr2EncoderConfig(Qwen2Config):
+class DeepseekOcr2VisionEncoderConfig(Qwen2Config):
     r"""
     Example:
 
@@ -526,14 +541,14 @@ class DeepseekOcr2VisionConfig(PreTrainedConfig):
     r"""
     sam_config (`dict` or `DeepseekOcr2SamVisionConfig`, *optional*):
         Configuration for the SAM vision encoder. Defaults to `DeepseekOcr2SamVisionConfig()`.
-    encoder_config (`dict` or `DeepseekOcr2EncoderConfig`, *optional*):
-        Configuration for the DeepSeek-OCR-2 vision encoder. Defaults to `DeepseekOcr2EncoderConfig()`.
+    encoder_config (`dict` or `DeepseekOcr2VisionEncoderConfig`, *optional*):
+        Configuration for the DeepSeek-OCR-2 vision encoder. Defaults to `DeepseekOcr2VisionEncoderConfig()`.
     """
 
     base_config_key = "vision_config"
     sub_configs = {
         "sam_config": DeepseekOcr2SamVisionConfig,
-        "encoder_config": DeepseekOcr2EncoderConfig,
+        "encoder_config": DeepseekOcr2VisionEncoderConfig,
     }
 
     sam_config: dict | PreTrainedConfig | None = None
@@ -546,9 +561,9 @@ class DeepseekOcr2VisionConfig(PreTrainedConfig):
             self.sam_config = DeepseekOcr2SamVisionConfig(**self.sam_config)
 
         if self.encoder_config is None:
-            self.encoder_config = DeepseekOcr2EncoderConfig()
+            self.encoder_config = DeepseekOcr2VisionEncoderConfig()
         elif isinstance(self.encoder_config, dict):
-            self.encoder_config = DeepseekOcr2EncoderConfig(**self.encoder_config)
+            self.encoder_config = DeepseekOcr2VisionEncoderConfig(**self.encoder_config)
 
         super().__post_init__(**kwargs)
 
@@ -661,9 +676,10 @@ class DeepseekOcr2CausalLMOutputWithPast(LlavaNextCausalLMOutputWithPast):
 class DeepseekOcr2PreTrainedModel(LlavaNextPreTrainedModel):
     _no_split_modules = [
         "DeepseekOcr2SamVisionLayer",
-        "DeepseekOcr2VisionDecoderLayer",
+        "DeepseekOcr2VisionEncoderLayer",
         "DeepseekOcr2TextDecoderLayer",
     ]
+    # SAM uses rel-pos bias, incompatible with flash attention.
     _supports_flash_attn = False
 
     @torch.no_grad()
@@ -732,22 +748,22 @@ class DeepseekOcr2SamVisionEncoder(SamVisionEncoder, DeepseekOcr2PreTrainedModel
         super().__init__(config)
         self.proj = DeepseekOcr2SamVisionProj(config)
 
-    def interpolate_pos_encoding(self, pos_embed: torch.Tensor, target_size: int, dtype: torch.dtype) -> torch.Tensor:
+    def interpolate_pos_encoding(self, height: int, width: int) -> torch.Tensor:
         """Interpolate the positional encoding to match the target spatial size using bicubic interpolation."""
-        src_size = pos_embed.shape[1]
-        if src_size == target_size:
-            return pos_embed.to(dtype=dtype)
+        if not torch.jit.is_tracing() and self.pos_embed.shape[1] == height and self.pos_embed.shape[2] == width:
+            return self.pos_embed
 
-        pos_embed = pos_embed.permute(0, 3, 1, 2).float()
+        target_dtype = self.pos_embed.dtype
+        pos_embed = self.pos_embed.permute(0, 3, 1, 2)
         pos_embed = torch.nn.functional.interpolate(
-            pos_embed,
-            size=(target_size, target_size),
+            pos_embed.to(torch.float32),
+            size=(height, width),
             mode="bicubic",
             align_corners=False,
-        )
+            antialias=True,
+        ).to(dtype=target_dtype)
         pos_embed = pos_embed.permute(0, 2, 3, 1)
-
-        return pos_embed.to(dtype=dtype)
+        return pos_embed
 
     @merge_with_config_defaults
     @capture_outputs
@@ -756,7 +772,7 @@ class DeepseekOcr2SamVisionEncoder(SamVisionEncoder, DeepseekOcr2PreTrainedModel
         hidden_states = self.patch_embed(pixel_values)
         if self.pos_embed is not None:
             hidden_states = hidden_states + self.interpolate_pos_encoding(
-                self.pos_embed, target_size=hidden_states.shape[1], dtype=hidden_states.dtype
+                hidden_states.shape[1], hidden_states.shape[2]
             )
 
         for layer_module in self.layers:
@@ -767,24 +783,39 @@ class DeepseekOcr2SamVisionEncoder(SamVisionEncoder, DeepseekOcr2PreTrainedModel
         return BaseModelOutput(last_hidden_state=hidden_states)
 
 
+class DeepseekOcr2VisionMLP(Qwen2MLP):
+    pass
+
+
+class DeepseekOcr2VisionRMSNorm(Qwen2RMSNorm):
+    pass
+
+
+class DeepseekOcr2VisionRotaryEmbedding(Qwen2RotaryEmbedding):
+    pass
+
+
 class DeepseekOcr2VisionAttention(Qwen2Attention):
     pass
 
 
-class DeepseekOcr2VisionDecoderLayer(Qwen2DecoderLayer):
+class DeepseekOcr2VisionEncoderLayer(Qwen2DecoderLayer):
     pass
 
 
 @auto_docstring(custom_intro="Vision encoder for DeepSeek-OCR-2.")
 class DeepseekOcr2VisionEncoder(Qwen2Model, DeepseekOcr2PreTrainedModel):
     _can_record_outputs = {
-        "hidden_states": DeepseekOcr2VisionDecoderLayer,
+        "hidden_states": DeepseekOcr2VisionEncoderLayer,
         "attentions": DeepseekOcr2VisionAttention,
     }
 
     def __init__(self, config):
         super().__init__(config)
         del self.embed_tokens
+        self.layers = nn.ModuleList(
+            [DeepseekOcr2VisionEncoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
+        )
 
     @merge_with_config_defaults
     @capture_outputs
@@ -792,35 +823,33 @@ class DeepseekOcr2VisionEncoder(Qwen2Model, DeepseekOcr2PreTrainedModel):
     def forward(
         self,
         inputs_embeds: torch.FloatTensor,
-        attention_mask: torch.Tensor | None = None,
+        num_patches: int,
         position_ids: torch.LongTensor | None = None,
-        num_patches: int | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutputWithPast:
         r"""
-        num_patches (`int`, *optional*):
-            Number of image patch tokens at the beginning of the sequence. Used to build the default attention mask
-            when `attention_mask` is not provided.
+        num_patches (`int`):
+            Number of image patch tokens at the beginning of the sequence. Used to build the hybrid attention mask
+            (bidirectional over image tokens, causal over query tokens).
         """
         if position_ids is None:
             position_ids = torch.arange(inputs_embeds.shape[1], device=inputs_embeds.device).unsqueeze(0)
 
-        if attention_mask is None and num_patches is not None:
-            bsz, seq_len, _ = inputs_embeds.shape
-            token_type_ids = torch.cat(
-                [
-                    torch.zeros(bsz, num_patches, dtype=torch.long, device=inputs_embeds.device),
-                    torch.ones(bsz, seq_len - num_patches, dtype=torch.long, device=inputs_embeds.device),
-                ],
-                dim=1,
-            )
-            attention_mask = create_causal_mask(
-                config=self.config,
-                inputs_embeds=inputs_embeds,
-                attention_mask=None,
-                past_key_values=None,
-                or_mask_function=token_type_ids_mask_function(token_type_ids),
-            )
+        bsz, seq_len, _ = inputs_embeds.shape
+        token_type_ids = torch.cat(
+            [
+                torch.zeros(bsz, num_patches, dtype=torch.long, device=inputs_embeds.device),
+                torch.ones(bsz, seq_len - num_patches, dtype=torch.long, device=inputs_embeds.device),
+            ],
+            dim=1,
+        )
+        attention_mask = create_causal_mask(
+            config=self.config,
+            inputs_embeds=inputs_embeds,
+            attention_mask=None,
+            past_key_values=None,
+            or_mask_function=token_type_ids_mask_function(token_type_ids),
+        )
 
         hidden_states = inputs_embeds
         position_embeddings = self.rotary_emb(hidden_states, position_ids)
@@ -977,12 +1006,17 @@ class DeepseekOcr2Model(LlavaNextModel):
         global_vision_outputs = self.vision_tower(pixel_values, **kwargs)
         global_features = self.multi_modal_projector(global_vision_outputs.last_hidden_state)
 
+        local_outputs = {}
         if pixel_values_local is not None:
             local_vision_outputs = self.vision_tower(pixel_values_local, **kwargs)
             all_local_features = self.multi_modal_projector(local_vision_outputs.last_hidden_state)
             per_image_local = torch.split(all_local_features, num_local_patches, dim=0)
+            local_outputs = {
+                "local_last_hidden_state": local_vision_outputs.last_hidden_state,
+                "local_hidden_states": local_vision_outputs.hidden_states,
+                "local_attentions": local_vision_outputs.attentions,
+            }
         else:
-            local_vision_outputs = None
             per_image_local = [None] * batch_size
 
         all_features = []
@@ -1002,11 +1036,7 @@ class DeepseekOcr2Model(LlavaNextModel):
             pooler_output=image_features,
             hidden_states=global_vision_outputs.hidden_states,
             attentions=global_vision_outputs.attentions,
-            local_last_hidden_state=local_vision_outputs.last_hidden_state
-            if local_vision_outputs is not None
-            else None,
-            local_hidden_states=local_vision_outputs.hidden_states if local_vision_outputs is not None else None,
-            local_attentions=local_vision_outputs.attentions if local_vision_outputs is not None else None,
+            **local_outputs,
         )
 
     @can_return_tuple
@@ -1063,7 +1093,7 @@ class DeepseekOcr2Model(LlavaNextModel):
 
 
 @auto_docstring
-class DeepseekOcr2ForConditionalGeneration(LlavaNextForConditionalGeneration, GenerationMixin):
+class DeepseekOcr2ForConditionalGeneration(LlavaNextForConditionalGeneration):
     def pack_image_features(self):
         raise NotImplementedError("DeepseekOcr2 does not use pack_image_features")
 
@@ -1183,7 +1213,7 @@ class DeepseekOcr2ForConditionalGeneration(LlavaNextForConditionalGeneration, Ge
 
 __all__ = [
     "DeepseekOcr2Config",
-    "DeepseekOcr2EncoderConfig",
+    "DeepseekOcr2VisionEncoderConfig",
     "DeepseekOcr2SamVisionConfig",
     "DeepseekOcr2TextConfig",
     "DeepseekOcr2ForConditionalGeneration",

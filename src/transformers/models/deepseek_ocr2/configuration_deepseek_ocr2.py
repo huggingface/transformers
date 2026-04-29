@@ -75,7 +75,7 @@ class DeepseekOcr2SamVisionConfig(PreTrainedConfig):
 
 @auto_docstring(checkpoint="thisisiron/DeepSeek-OCR-2-hf")
 @strict
-class DeepseekOcr2EncoderConfig(PreTrainedConfig):
+class DeepseekOcr2VisionEncoderConfig(PreTrainedConfig):
     r"""
     Example:
 
@@ -89,7 +89,7 @@ class DeepseekOcr2EncoderConfig(PreTrainedConfig):
     model_type = "deepseek_ocr2_encoder"
     keys_to_ignore_at_inference = ["past_key_values"]
 
-    # Default tensor parallel plan for base model `DeepseekOcr2Encoder`
+    # Default tensor parallel plan for base model `DeepseekOcr2VisionEncoder`
     base_model_tp_plan = {
         "layers.*.self_attn.q_proj": "colwise",
         "layers.*.self_attn.k_proj": "colwise",
@@ -151,14 +151,14 @@ class DeepseekOcr2VisionConfig(PreTrainedConfig):
     r"""
     sam_config (`dict` or `DeepseekOcr2SamVisionConfig`, *optional*):
         Configuration for the SAM vision encoder. Defaults to `DeepseekOcr2SamVisionConfig()`.
-    encoder_config (`dict` or `DeepseekOcr2EncoderConfig`, *optional*):
-        Configuration for the DeepSeek-OCR-2 vision encoder. Defaults to `DeepseekOcr2EncoderConfig()`.
+    encoder_config (`dict` or `DeepseekOcr2VisionEncoderConfig`, *optional*):
+        Configuration for the DeepSeek-OCR-2 vision encoder. Defaults to `DeepseekOcr2VisionEncoderConfig()`.
     """
 
     base_config_key = "vision_config"
     sub_configs = {
         "sam_config": DeepseekOcr2SamVisionConfig,
-        "encoder_config": DeepseekOcr2EncoderConfig,
+        "encoder_config": DeepseekOcr2VisionEncoderConfig,
     }
 
     sam_config: dict | PreTrainedConfig | None = None
@@ -171,9 +171,9 @@ class DeepseekOcr2VisionConfig(PreTrainedConfig):
             self.sam_config = DeepseekOcr2SamVisionConfig(**self.sam_config)
 
         if self.encoder_config is None:
-            self.encoder_config = DeepseekOcr2EncoderConfig()
+            self.encoder_config = DeepseekOcr2VisionEncoderConfig()
         elif isinstance(self.encoder_config, dict):
-            self.encoder_config = DeepseekOcr2EncoderConfig(**self.encoder_config)
+            self.encoder_config = DeepseekOcr2VisionEncoderConfig(**self.encoder_config)
 
         super().__post_init__(**kwargs)
 
@@ -296,4 +296,9 @@ class DeepseekOcr2Config(PreTrainedConfig):
         super().__post_init__(**kwargs)
 
 
-__all__ = ["DeepseekOcr2Config", "DeepseekOcr2EncoderConfig", "DeepseekOcr2SamVisionConfig", "DeepseekOcr2TextConfig"]
+__all__ = [
+    "DeepseekOcr2Config",
+    "DeepseekOcr2VisionEncoderConfig",
+    "DeepseekOcr2SamVisionConfig",
+    "DeepseekOcr2TextConfig",
+]

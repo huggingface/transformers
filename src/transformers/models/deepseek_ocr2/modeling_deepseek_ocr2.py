@@ -134,10 +134,11 @@ class DeepseekOcr2PreTrainedModel(PreTrainedModel):
     supports_gradient_checkpointing = True
     _no_split_modules = [
         "DeepseekOcr2SamVisionLayer",
-        "DeepseekOcr2VisionDecoderLayer",
+        "DeepseekOcr2VisionEncoderLayer",
         "DeepseekOcr2TextDecoderLayer",
     ]
     _skip_keys_device_placement = "past_key_values"
+    # SAM uses rel-pos bias, incompatible with flash attention.
     _supports_flash_attn = False
     _supports_sdpa = True
 
@@ -593,7 +594,7 @@ class DeepseekOcr2SamVisionEncoder(DeepseekOcr2PreTrainedModel):
         hidden_states = self.patch_embed(pixel_values)
         if self.pos_embed is not None:
             hidden_states = hidden_states + self.interpolate_pos_encoding(
-                self.pos_embed, target_size=hidden_states.shape[1], dtype=hidden_states.dtype
+                hidden_states.shape[1], hidden_states.shape[2]
             )
 
         for layer_module in self.layers:
@@ -603,22 +604,124 @@ class DeepseekOcr2SamVisionEncoder(DeepseekOcr2PreTrainedModel):
         hidden_states = self.proj(hidden_states)
         return BaseModelOutput(last_hidden_state=hidden_states)
 
-    def interpolate_pos_encoding(self, pos_embed: torch.Tensor, target_size: int, dtype: torch.dtype) -> torch.Tensor:
+    def interpolate_pos_encoding(self, height: int, width: int) -> torch.Tensor:
         """Interpolate the positional encoding to match the target spatial size using bicubic interpolation."""
-        src_size = pos_embed.shape[1]
-        if src_size == target_size:
-            return pos_embed.to(dtype=dtype)
+        if not torch.jit.is_tracing() and self.pos_embed.shape[1] == height and self.pos_embed.shape[2] == width:
+            return self.pos_embed
 
-        pos_embed = pos_embed.permute(0, 3, 1, 2).float()
+        target_dtype = self.pos_embed.dtype
+        pos_embed = self.pos_embed.permute(0, 3, 1, 2)
         pos_embed = torch.nn.functional.interpolate(
-            pos_embed,
-            size=(target_size, target_size),
+            pos_embed.to(torch.float32),
+            size=(height, width),
             mode="bicubic",
             align_corners=False,
-        )
+            antialias=True,
+        ).to(dtype=target_dtype)
         pos_embed = pos_embed.permute(0, 2, 3, 1)
+        return pos_embed
 
-        return pos_embed.to(dtype=dtype)
+
+class DeepseekOcr2VisionMLP(nn.Module):
+    def __init__(self, config):
+        super().__init__()
+        self.config = config
+        self.hidden_size = config.hidden_size
+        self.intermediate_size = config.intermediate_size
+        self.gate_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=False)
+        self.up_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=False)
+        self.down_proj = nn.Linear(self.intermediate_size, self.hidden_size, bias=False)
+        self.act_fn = ACT2FN[config.hidden_act]
+
+    def forward(self, x):
+        down_proj = self.down_proj(self.act_fn(self.gate_proj(x)) * self.up_proj(x))
+        return down_proj
+
+
+@use_kernel_forward_from_hub("RMSNorm")
+class DeepseekOcr2VisionRMSNorm(nn.Module):
+    def __init__(self, hidden_size, eps: float = 1e-6) -> None:
+        """
+        DeepseekOcr2VisionRMSNorm is equivalent to T5LayerNorm
+        """
+        super().__init__()
+        self.weight = nn.Parameter(torch.ones(hidden_size))
+        self.variance_epsilon = eps
+
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        input_dtype = hidden_states.dtype
+        hidden_states = hidden_states.to(torch.float32)
+        variance = hidden_states.pow(2).mean(-1, keepdim=True)
+        hidden_states = hidden_states * torch.rsqrt(variance + self.variance_epsilon)
+        return self.weight * hidden_states.to(input_dtype)
+
+    def extra_repr(self):
+        return f"{tuple(self.weight.shape)}, eps={self.variance_epsilon}"
+
+
+class DeepseekOcr2VisionRotaryEmbedding(nn.Module):
+    inv_freq: torch.Tensor  # fix linting for `register_buffer`
+
+    def __init__(self, config: DeepseekOcr2VisionConfig, device=None):
+        super().__init__()
+        self.max_seq_len_cached = config.max_position_embeddings
+        self.original_max_seq_len = config.max_position_embeddings
+
+        self.config = config
+
+        self.rope_type = self.config.rope_parameters["rope_type"]
+        rope_init_fn: Callable = self.compute_default_rope_parameters
+        if self.rope_type != "default":
+            rope_init_fn = ROPE_INIT_FUNCTIONS[self.rope_type]
+        inv_freq, self.attention_scaling = rope_init_fn(self.config, device)
+
+        self.register_buffer("inv_freq", inv_freq, persistent=False)
+        self.register_buffer("original_inv_freq", inv_freq.clone(), persistent=False)
+
+    @staticmethod
+    def compute_default_rope_parameters(
+        config: DeepseekOcr2VisionConfig | None = None,
+        device: Optional["torch.device"] = None,
+        seq_len: int | None = None,
+    ) -> tuple["torch.Tensor", float]:
+        """
+        Computes the inverse frequencies according to the original RoPE implementation
+        Args:
+            config ([`~transformers.PreTrainedConfig`]):
+                The model configuration.
+            device (`torch.device`):
+                The device to use for initialization of the inverse frequencies.
+            seq_len (`int`, *optional*):
+                The current sequence length. Unused for this type of RoPE.
+        Returns:
+            Tuple of (`torch.Tensor`, `float`), containing the inverse frequencies for the RoPE embeddings and the
+            post-processing scaling factor applied to the computed cos/sin (unused in this type of RoPE).
+        """
+        base = config.rope_parameters["rope_theta"]
+        dim = getattr(config, "head_dim", None) or config.hidden_size // config.num_attention_heads
+
+        attention_factor = 1.0  # Unused in this type of RoPE
+
+        # Compute the inverse frequencies
+        inv_freq = 1.0 / (
+            base ** (torch.arange(0, dim, 2, dtype=torch.int64).to(device=device, dtype=torch.float) / dim)
+        )
+        return inv_freq, attention_factor
+
+    @torch.no_grad()
+    @dynamic_rope_update  # power user: used with advanced RoPE types (e.g. dynamic rope)
+    def forward(self, x, position_ids):
+        inv_freq_expanded = self.inv_freq[None, :, None].float().expand(position_ids.shape[0], -1, 1).to(x.device)
+        position_ids_expanded = position_ids[:, None, :].float()
+
+        device_type = x.device.type if isinstance(x.device.type, str) and x.device.type != "mps" else "cpu"
+        with maybe_autocast(device_type=device_type, enabled=False):  # Force float32
+            freqs = (inv_freq_expanded.float() @ position_ids_expanded.float()).transpose(1, 2)
+            emb = torch.cat((freqs, freqs), dim=-1)
+            cos = emb.cos() * self.attention_scaling
+            sin = emb.sin() * self.attention_scaling
+
+        return cos.to(dtype=x.dtype), sin.to(dtype=x.dtype)
 
 
 def rotate_half(x):
@@ -753,44 +856,7 @@ class DeepseekOcr2VisionAttention(nn.Module):
         return attn_output, attn_weights
 
 
-class DeepseekOcr2VisionMLP(nn.Module):
-    def __init__(self, config):
-        super().__init__()
-        self.config = config
-        self.hidden_size = config.hidden_size
-        self.intermediate_size = config.intermediate_size
-        self.gate_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=False)
-        self.up_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=False)
-        self.down_proj = nn.Linear(self.intermediate_size, self.hidden_size, bias=False)
-        self.act_fn = ACT2FN[config.hidden_act]
-
-    def forward(self, x):
-        down_proj = self.down_proj(self.act_fn(self.gate_proj(x)) * self.up_proj(x))
-        return down_proj
-
-
-@use_kernel_forward_from_hub("RMSNorm")
-class DeepseekOcr2VisionRMSNorm(nn.Module):
-    def __init__(self, hidden_size, eps: float = 1e-6) -> None:
-        """
-        DeepseekOcr2VisionRMSNorm is equivalent to T5LayerNorm
-        """
-        super().__init__()
-        self.weight = nn.Parameter(torch.ones(hidden_size))
-        self.variance_epsilon = eps
-
-    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        input_dtype = hidden_states.dtype
-        hidden_states = hidden_states.to(torch.float32)
-        variance = hidden_states.pow(2).mean(-1, keepdim=True)
-        hidden_states = hidden_states * torch.rsqrt(variance + self.variance_epsilon)
-        return self.weight * hidden_states.to(input_dtype)
-
-    def extra_repr(self):
-        return f"{tuple(self.weight.shape)}, eps={self.variance_epsilon}"
-
-
-class DeepseekOcr2VisionDecoderLayer(GradientCheckpointingLayer):
+class DeepseekOcr2VisionEncoderLayer(GradientCheckpointingLayer):
     def __init__(self, config: DeepseekOcr2VisionConfig, layer_idx: int):
         super().__init__()
         self.hidden_size = config.hidden_size
@@ -833,71 +899,6 @@ class DeepseekOcr2VisionDecoderLayer(GradientCheckpointingLayer):
         return hidden_states
 
 
-class DeepseekOcr2VisionRotaryEmbedding(nn.Module):
-    inv_freq: torch.Tensor  # fix linting for `register_buffer`
-
-    def __init__(self, config: DeepseekOcr2VisionConfig, device=None):
-        super().__init__()
-        self.max_seq_len_cached = config.max_position_embeddings
-        self.original_max_seq_len = config.max_position_embeddings
-
-        self.config = config
-
-        self.rope_type = self.config.rope_parameters["rope_type"]
-        rope_init_fn: Callable = self.compute_default_rope_parameters
-        if self.rope_type != "default":
-            rope_init_fn = ROPE_INIT_FUNCTIONS[self.rope_type]
-        inv_freq, self.attention_scaling = rope_init_fn(self.config, device)
-
-        self.register_buffer("inv_freq", inv_freq, persistent=False)
-        self.register_buffer("original_inv_freq", inv_freq.clone(), persistent=False)
-
-    @staticmethod
-    def compute_default_rope_parameters(
-        config: DeepseekOcr2VisionConfig | None = None,
-        device: Optional["torch.device"] = None,
-        seq_len: int | None = None,
-    ) -> tuple["torch.Tensor", float]:
-        """
-        Computes the inverse frequencies according to the original RoPE implementation
-        Args:
-            config ([`~transformers.PreTrainedConfig`]):
-                The model configuration.
-            device (`torch.device`):
-                The device to use for initialization of the inverse frequencies.
-            seq_len (`int`, *optional*):
-                The current sequence length. Unused for this type of RoPE.
-        Returns:
-            Tuple of (`torch.Tensor`, `float`), containing the inverse frequencies for the RoPE embeddings and the
-            post-processing scaling factor applied to the computed cos/sin (unused in this type of RoPE).
-        """
-        base = config.rope_parameters["rope_theta"]
-        dim = getattr(config, "head_dim", None) or config.hidden_size // config.num_attention_heads
-
-        attention_factor = 1.0  # Unused in this type of RoPE
-
-        # Compute the inverse frequencies
-        inv_freq = 1.0 / (
-            base ** (torch.arange(0, dim, 2, dtype=torch.int64).to(device=device, dtype=torch.float) / dim)
-        )
-        return inv_freq, attention_factor
-
-    @torch.no_grad()
-    @dynamic_rope_update  # power user: used with advanced RoPE types (e.g. dynamic rope)
-    def forward(self, x, position_ids):
-        inv_freq_expanded = self.inv_freq[None, :, None].float().expand(position_ids.shape[0], -1, 1).to(x.device)
-        position_ids_expanded = position_ids[:, None, :].float()
-
-        device_type = x.device.type if isinstance(x.device.type, str) and x.device.type != "mps" else "cpu"
-        with maybe_autocast(device_type=device_type, enabled=False):  # Force float32
-            freqs = (inv_freq_expanded.float() @ position_ids_expanded.float()).transpose(1, 2)
-            emb = torch.cat((freqs, freqs), dim=-1)
-            cos = emb.cos() * self.attention_scaling
-            sin = emb.sin() * self.attention_scaling
-
-        return cos.to(dtype=x.dtype), sin.to(dtype=x.dtype)
-
-
 def token_type_ids_mask_function(token_type_ids: torch.Tensor):
     """
     Creates an or_mask_function for `create_causal_mask` that allows
@@ -920,7 +921,7 @@ def token_type_ids_mask_function(token_type_ids: torch.Tensor):
 @auto_docstring(custom_intro="Vision encoder for DeepSeek-OCR-2.")
 class DeepseekOcr2VisionEncoder(DeepseekOcr2PreTrainedModel):
     _can_record_outputs = {
-        "hidden_states": DeepseekOcr2VisionDecoderLayer,
+        "hidden_states": DeepseekOcr2VisionEncoderLayer,
         "attentions": DeepseekOcr2VisionAttention,
     }
 
@@ -929,7 +930,7 @@ class DeepseekOcr2VisionEncoder(DeepseekOcr2PreTrainedModel):
         self.padding_idx = config.pad_token_id
         self.vocab_size = config.vocab_size
         self.layers = nn.ModuleList(
-            [DeepseekOcr2VisionDecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
+            [DeepseekOcr2VisionEncoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
         )
         self.norm = DeepseekOcr2VisionRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.rotary_emb = DeepseekOcr2VisionRotaryEmbedding(config=config)
@@ -945,35 +946,33 @@ class DeepseekOcr2VisionEncoder(DeepseekOcr2PreTrainedModel):
     def forward(
         self,
         inputs_embeds: torch.FloatTensor,
-        attention_mask: torch.Tensor | None = None,
+        num_patches: int,
         position_ids: torch.LongTensor | None = None,
-        num_patches: int | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutputWithPast:
         r"""
-        num_patches (`int`, *optional*):
-            Number of image patch tokens at the beginning of the sequence. Used to build the default attention mask
-            when `attention_mask` is not provided.
+        num_patches (`int`):
+            Number of image patch tokens at the beginning of the sequence. Used to build the hybrid attention mask
+            (bidirectional over image tokens, causal over query tokens).
         """
         if position_ids is None:
             position_ids = torch.arange(inputs_embeds.shape[1], device=inputs_embeds.device).unsqueeze(0)
 
-        if attention_mask is None and num_patches is not None:
-            bsz, seq_len, _ = inputs_embeds.shape
-            token_type_ids = torch.cat(
-                [
-                    torch.zeros(bsz, num_patches, dtype=torch.long, device=inputs_embeds.device),
-                    torch.ones(bsz, seq_len - num_patches, dtype=torch.long, device=inputs_embeds.device),
-                ],
-                dim=1,
-            )
-            attention_mask = create_causal_mask(
-                config=self.config,
-                inputs_embeds=inputs_embeds,
-                attention_mask=None,
-                past_key_values=None,
-                or_mask_function=token_type_ids_mask_function(token_type_ids),
-            )
+        bsz, seq_len, _ = inputs_embeds.shape
+        token_type_ids = torch.cat(
+            [
+                torch.zeros(bsz, num_patches, dtype=torch.long, device=inputs_embeds.device),
+                torch.ones(bsz, seq_len - num_patches, dtype=torch.long, device=inputs_embeds.device),
+            ],
+            dim=1,
+        )
+        attention_mask = create_causal_mask(
+            config=self.config,
+            inputs_embeds=inputs_embeds,
+            attention_mask=None,
+            past_key_values=None,
+            or_mask_function=token_type_ids_mask_function(token_type_ids),
+        )
 
         hidden_states = inputs_embeds
         position_embeddings = self.rotary_emb(hidden_states, position_ids)
@@ -1489,12 +1488,17 @@ class DeepseekOcr2Model(DeepseekOcr2PreTrainedModel):
         global_vision_outputs = self.vision_tower(pixel_values, **kwargs)
         global_features = self.multi_modal_projector(global_vision_outputs.last_hidden_state)
 
+        local_outputs = {}
         if pixel_values_local is not None:
             local_vision_outputs = self.vision_tower(pixel_values_local, **kwargs)
             all_local_features = self.multi_modal_projector(local_vision_outputs.last_hidden_state)
             per_image_local = torch.split(all_local_features, num_local_patches, dim=0)
+            local_outputs = {
+                "local_last_hidden_state": local_vision_outputs.last_hidden_state,
+                "local_hidden_states": local_vision_outputs.hidden_states,
+                "local_attentions": local_vision_outputs.attentions,
+            }
         else:
-            local_vision_outputs = None
             per_image_local = [None] * batch_size
 
         all_features = []
@@ -1514,11 +1518,7 @@ class DeepseekOcr2Model(DeepseekOcr2PreTrainedModel):
             pooler_output=image_features,
             hidden_states=global_vision_outputs.hidden_states,
             attentions=global_vision_outputs.attentions,
-            local_last_hidden_state=local_vision_outputs.last_hidden_state
-            if local_vision_outputs is not None
-            else None,
-            local_hidden_states=local_vision_outputs.hidden_states if local_vision_outputs is not None else None,
-            local_attentions=local_vision_outputs.attentions if local_vision_outputs is not None else None,
+            **local_outputs,
         )
 
     def get_placeholder_mask(
