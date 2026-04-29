@@ -644,8 +644,8 @@ class CBGenerateManager(BaseGenerateManager):
         self._cb.start()
 
     def is_alive(self) -> bool:
-        """Whether the CB worker is healthy and able to serve new requests."""
-        return self._cb is not None and self._cb.fatal_error is None
+        """Whether the CB worker is healthy. ``True`` before ``init_cb()`` is called."""
+        return self._cb is None or self._cb.fatal_error is None
 
     def _check_alive(self, request_id: str) -> None:
         """Raise :class:`CBWorkerDeadError` if the CB worker has died.
@@ -846,9 +846,7 @@ class GenerationState:
 
     def is_cb_alive(self) -> bool:
         """Whether the CB worker is healthy. ``True`` if CB is disabled or not yet initialized."""
-        if self._cb_manager is None:
-            return True
-        return self._cb_manager.is_alive()
+        return self._cb_manager is None or self._cb_manager.is_alive()
 
 
 class BaseHandler:

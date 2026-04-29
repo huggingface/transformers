@@ -53,7 +53,9 @@ def build_server(
         model_manager: Handles model loading, caching, and cleanup.
         chat_handler: Handles `/v1/chat/completions` requests.
         response_handler: Handles `/v1/responses` requests.
-        generation_state: Shared generation state, used by `/health` to report CB liveness.
+        generation_state: Owns the per-model generation managers (regular and CB). Passed
+            in here so `/health` can check whether the CB worker has died and respond with
+            503 instead of a misleading 200.
         enable_cors: If `True`, adds permissive CORS middleware (allow all origins).
 
     Returns:
@@ -69,8 +71,7 @@ def build_server(
 
     @app.exception_handler(CBWorkerDeadError)
     async def _cb_dead_handler(_request: Request, exc: CBWorkerDeadError):
-        # CB worker died (e.g. CUDA illegal memory access); reject new requests with 503
-        # carrying the cause, instead of letting them hang in the input queue forever.
+        # Map CBWorkerDeadError to 503; otherwise it'd fall through to Starlette's default 500.
         return JSONResponse({"error": str(exc)}, status_code=503)
 
     if enable_cors:
