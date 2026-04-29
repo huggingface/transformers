@@ -84,12 +84,21 @@ def _load_deepgemm_kernel() -> SimpleNamespace:
             "Please upgrade your CUDA toolkit or use a different `experts_implementation`."
         )
 
-    kernel = lazy_load_kernel("deep-gemm")
-    if kernel is None:
-        raise ImportError(
-            "Failed to load the DeepGEMM kernel — check that `kernels-community/deep-gemm` "
-            "has a build matching the current torch/CUDA."
-        )
+    try:
+        import deep_gemm as kernel
+    except ImportError:
+        if not is_kernels_available():
+            raise ImportError(
+                "DeepGEMM requires either the `deep_gemm` package (`pip install -U deep-gemm`) or "
+                "the `kernels` package (`pip install -U kernels`) for the `kernels-community/deep-gemm` "
+                "hub build."
+            ) from None
+        kernel = lazy_load_kernel("deep-gemm")
+        if kernel is None:
+            raise ImportError(
+                "Failed to load the DeepGEMM kernel — check that `kernels-community/deep-gemm` "
+                "has a build matching the current torch/CUDA."
+            ) from None
 
     fp8_fp4_matmul = getattr(kernel, "fp8_fp4_gemm_nt", None)
     grouped_fp8_fp4_matmul = getattr(kernel, "m_grouped_fp8_fp4_gemm_nt_contiguous", None)
