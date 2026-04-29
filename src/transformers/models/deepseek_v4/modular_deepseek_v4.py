@@ -350,7 +350,11 @@ class DeepseekV4GroupedLinear(nn.Linear):
 
     The ``weight`` parameter is shaped like a standard ``nn.Linear``
     (``[out_features, in_features_per_group]``) so quantizers keyed on
-    ``nn.Linear.weight`` still pick it up; ``forward`` does the per-group ``bmm``.
+    ``nn.Linear.weight`` still pick it up. ``forward`` runs one ``F.linear`` per
+    group: a single ``bmm`` would be tighter, but FP8 ``Float8Tensor`` weights from
+    torchao only have an F.linear fast-path (``bmm`` requires the optional ``mslk``
+    kernel, which our quantized-TP CI doesn't ship), so we trade a small Python
+    loop for compatibility with the standard quantization stack.
     """
 
     def __init__(self, in_features_per_group: int, out_features: int, n_groups: int, bias: bool = False):
@@ -359,12 +363,9 @@ class DeepseekV4GroupedLinear(nn.Linear):
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         # x: [..., n_groups, in_features_per_group]
-        input_shape = x.shape[:-2]
-        d_in = x.shape[-1]
-        w = self.weight.view(self.n_groups, -1, d_in).transpose(1, 2)
-        x = x.reshape(-1, self.n_groups, d_in).transpose(0, 1)
-        y = torch.bmm(x, w).transpose(0, 1)
-        return y.reshape(*input_shape, self.n_groups, -1)
+        out_per_group = self.out_features // self.n_groups
+        weight = self.weight.view(self.n_groups, out_per_group, x.shape[-1])
+        return torch.stack([F.linear(x[..., g, :], weight[g]) for g in range(self.n_groups)], dim=-2)
 
 
 def _overlap_pool(
@@ -784,6 +785,12 @@ class DeepseekV4Attention(nn.Module):
         kv = self.kv_norm(self.kv_proj(hidden_states)).view(batch, seq_len, 1, self.head_dim).transpose(1, 2)
         q = apply_rotary_pos_emb(q, cos, sin)
         kv = apply_rotary_pos_emb(kv, cos, sin)
+        # Under TP, ``q_b_proj`` is colwise-sharded so ``q`` carries
+        # ``num_heads / tp_size`` heads per rank, while ``kv`` (single shared head) is
+        # replicated. Refresh ``num_key_value_groups`` from the local ``q`` so the
+        # standard ``repeat_kv(key, num_key_value_groups)`` in the attention backends
+        # lifts the single kv head to match the rank-local query head count.
+        self.num_key_value_groups = q.shape[1]
 
         # --- Sliding-window K=V branch goes through the standard cache update ---
         if past_key_values is not None:
