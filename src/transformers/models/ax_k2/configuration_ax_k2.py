@@ -11,40 +11,114 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""A.X-K1 model configuration"""
+"""A.X-K2 model configuration"""
 
 from ...configuration_utils import PreTrainedConfig
 from ...modeling_rope_utils import RopeParameters
 from ...utils import auto_docstring
 
 
-AXK1_PRETRAINED_CONFIG_ARCHIVE_MAP = {}
+AXK2_PRETRAINED_CONFIG_ARCHIVE_MAP = {}
 
 
-@auto_docstring(checkpoint="skt/A.X-K1")
-class AXK1Config(PreTrainedConfig):
+@auto_docstring(checkpoint="skt/A.X-K2")
+class AXK2Config(PreTrainedConfig):
     r"""
-    n_group (`int`, *optional*, defaults to 8):
-        Number of groups for routed experts.
-    first_k_dense_replace (`int`, *optional*, defaults to 1):
-        Number of dense layers in shallow layers (embed->dense->moe->moe...->lm_head).
-    moe_layer_freq (`int`, *optional*, defaults to 1):
-        The frequency of the MoE layer: one expert layer for every `moe_layer_freq - 1` dense layers.
-    rope_interleave (`bool`, *optional*, defaults to `True`):
-        Whether to interleave the rotary position embeddings.
-    Example:
+    This is the configuration class to store the configuration of a [`AXK2Model`]. It is used to instantiate an A.X-K2
+    model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
+    defaults will yield a similar configuration to that of the A.X-K2.
+
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
+
+    Args:
+        vocab_size (`int`, *optional*, defaults to 163840):
+            Vocabulary size of the A.X-K2 model. Defines the number of different tokens that can be represented by the
+            `inputs_ids` passed when calling [`AXK2Model`].
+        hidden_size (`int`, *optional*, defaults to 7168):
+            Dimension of the hidden representations.
+        intermediate_size (`int`, *optional*, defaults to 18432):
+            Dimension of the MLP representations for dense layers.
+        moe_intermediate_size (`int`, *optional*, defaults to 2048):
+            Dimension of the MLP representations for each MoE expert.
+        num_hidden_layers (`int`, *optional*, defaults to 61):
+            Number of hidden layers in the Transformer decoder.
+        num_attention_heads (`int`, *optional*, defaults to 64):
+            Number of attention heads for each attention layer in the Transformer decoder.
+        num_key_value_heads (`int`, *optional*, defaults to 64):
+            Number of key-value heads for Grouped Query Attention. If `num_key_value_heads=num_attention_heads`,
+            the model uses Multi Head Attention (MHA). If `num_key_value_heads=1`, it uses Multi Query
+            Attention (MQA); otherwise GQA is used.
+        n_shared_experts (`int`, *optional*, defaults to 1):
+            Number of shared experts. `None` means dense model.
+        n_routed_experts (`int`, *optional*, defaults to 256):
+            Number of routed experts. `None` means dense model.
+        routed_scaling_factor (`float`, *optional*, defaults to 2.5):
+            Scaling factor for routed expert outputs.
+        kv_lora_rank (`int`, *optional*, defaults to 512):
+            Rank of the low-rank key-value joint compression in Multi-head Latent Attention (MLA).
+        q_lora_rank (`int`, *optional*, defaults to 1536):
+            Rank of the low-rank query compression in Multi-head Latent Attention (MLA).
+        qk_rope_head_dim (`int`, *optional*, defaults to 64):
+            Dimension of each attention head for the rotary part of query and key.
+        v_head_dim (`int`, *optional*, defaults to 128):
+            Dimension of each attention head for value.
+        qk_nope_head_dim (`int`, *optional*, defaults to 128):
+            Dimension of each attention head for the non-rotary part of query and key.
+        n_group (`int`, *optional*, defaults to 8):
+            Number of groups for routed experts.
+        topk_group (`int`, *optional*, defaults to 4):
+            Number of selected groups for each token (ensuring selected experts are only within
+            `topk_group` groups).
+        num_experts_per_tok (`int`, *optional*, defaults to 8):
+            Number of selected experts per token. `None` means dense model.
+        first_k_dense_replace (`int`, *optional*, defaults to 1):
+            Number of dense layers in shallow layers (embed->dense->moe->moe...->lm_head).
+        moe_layer_freq (`int`, *optional*, defaults to 1):
+            The frequency of the MoE layer: one expert layer for every `moe_layer_freq - 1` dense layers.
+        norm_topk_prob (`bool`, *optional*, defaults to `True`):
+            Whether to normalize the weights of the routed experts.
+        hidden_act (`str` or `function`, *optional*, defaults to `"silu"`):
+            The non-linear activation function (function or string) in the decoder.
+        max_position_embeddings (`int`, *optional*, defaults to 4096):
+            The maximum sequence length that this model might ever be used with.
+        initializer_range (`float`, *optional*, defaults to 0.02):
+            The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
+        rms_norm_eps (`float`, *optional*, defaults to 1e-06):
+            The epsilon used by the RMS normalization layers.
+        use_cache (`bool`, *optional*, defaults to `True`):
+            Whether or not the model should return the last key/values attentions. Only relevant if
+            `config.is_decoder=True`.
+        pad_token_id (`int`, *optional*):
+            Padding token id.
+        bos_token_id (`int`, *optional*, defaults to 163691):
+            Beginning of stream token id.
+        eos_token_id (`int`, *optional*, defaults to 163691):
+            End of stream token id.
+        pretraining_tp (`int`, *optional*, defaults to 1):
+            Experimental feature. Tensor parallelism rank used during pretraining.
+        tie_word_embeddings (`bool`, *optional*, defaults to `False`):
+            Whether to tie weight embeddings.
+        rope_parameters ([`RopeParameters`], *optional*):
+            Configuration for Rotary Position Embeddings (RoPE).
+        rope_interleave (`bool`, *optional*, defaults to `True`):
+            Whether to interleave the rotary position embeddings.
+        attention_bias (`bool`, *optional*, defaults to `False`):
+            Whether to use a bias in the query, key, value and output projection layers during self-attention.
+        attention_dropout (`float`, *optional*, defaults to 0.0):
+            The dropout ratio for the attention probabilities.
 
     ```python
-    >>> from transformers import AXK1Model, AXK1Config
+    >>> from transformers import AXK2Model, AXK2Config
 
     >>> # Initializing a A.X-K1 style configuration
-    >>> configuration = AXK1Config()
+    >>> configuration = AXK2Config()
 
     >>> # Accessing the model configuration
     >>> configuration = model.config
     ```"""
 
-    model_type = "axk1"
+    model_type = "AXK2"
     keys_to_ignore_at_inference = ["past_key_values"]
 
     base_model_tp_plan = {
@@ -166,7 +240,7 @@ class AXK1Config(PreTrainedConfig):
 
         self.rope_parameters.setdefault("rope_theta", kwargs.pop("rope_theta", self.default_theta))
         self.standardize_rope_params()
-        self.validate_rope()
+        self.validate_rope(ignore_keys=ignore_keys_at_rope_validation)
 
         for key in ["beta_fast", "beta_slow", "factor"]:
             if key in self.rope_parameters:
@@ -174,4 +248,4 @@ class AXK1Config(PreTrainedConfig):
         return kwargs
 
 
-__all__ = ["AXK1Config"]
+__all__ = ["AXK2Config"]
