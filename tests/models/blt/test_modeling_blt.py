@@ -186,6 +186,10 @@ class BltModelTest(CausalLMModelTest, unittest.TestCase):
         pass
 
     @pytest.mark.generate
+    def test_generate_with_quant_cache(self):
+        self.skipTest("BLT uses EncoderDecoderCache internally and does not support quantized cache")
+
+    @pytest.mark.generate
     @unittest.skip(
         "Blt requires real token IDs for its hash-based embedding computation, making inputs_embeds generation incompatible with identical outputs"
     )
@@ -262,12 +266,23 @@ class BltIntegrationTest(unittest.TestCase):
     @slow
     def test_model_logits(self):
         # fmt: off
-        EXPECTED_OUTPUT = torch.tensor(
-            [
-                [-10.5000, -10.6875, -6.2500, -10.5625, -10.3125, -9.1875, -8.5000, -8.5625, -9.1875, -9.6250, -9.3750, -8.5000, -9.1250, -3.3906, 2.9688, -10.3125, -6.4688, -6.0312, -9.7500, -9.1875, -8.8125, -9.8750, -9.8125, -9.5000, -9.8125, -9.5000, -9.0625, -9.8125, -9.5000, -9.3750],
-                [-13.2500, -13.1250, -5.6875, -13.1875, -13.3750, -8.6875, -6.9688, -6.9375, -10.0625, -10.3125, -9.8125, -7.7188, -8.8125, -5.2188, -3.5000, -12.4375, -9.0625, -6.6250, -10.3125, -9.1875, -10.6250, -11.4375, -11.1250, -10.8750, -10.5000, -10.8750, -11.0000, -11.3125, -10.5000, -9.8750],
-            ]
-        ).to(torch_device)
+        EXPECTED_OUTPUT = Expectations(
+            {
+                (None, None): torch.tensor(
+                    [
+                        [-10.5000, -10.6875, -6.2500, -10.5625, -10.3125, -9.1875, -8.5000, -8.5625, -9.1875, -9.6250, -9.3750, -8.5000, -9.1250, -3.3906, 2.9688, -10.3125, -6.4688, -6.0312, -9.7500, -9.1875, -8.8125, -9.8750, -9.8125, -9.5000, -9.8125, -9.5000, -9.0625, -9.8125, -9.5000, -9.3750],
+                        [-13.2500, -13.1250, -5.6875, -13.1875, -13.3750, -8.6875, -6.9688, -6.9375, -10.0625, -10.3125, -9.8125, -7.7188, -8.8125, -5.2188, -3.5000, -12.4375, -9.0625, -6.6250, -10.3125, -9.1875, -10.6250, -11.4375, -11.1250, -10.8750, -10.5000, -10.8750, -11.0000, -11.3125, -10.5000, -9.8750],
+                    ]
+                ),
+                ("xpu", None): torch.tensor(
+                    [
+                        [-10.4375, -10.6875, -6.1875, -10.5000, -10.3125, -9.1250, -8.4375, -8.6250, -9.1875, -9.5625, -9.3125, -8.4375, -9.0625, -3.4375, 2.9531, -10.2500, -6.4062, -6.0000, -9.6875, -9.1875, -8.8125, -9.8125, -9.7500, -9.4375, -9.7500, -9.4375, -9.0000, -9.8125, -9.4375, -9.3125],
+                        [-13.3125, -13.2500, -5.5938, -13.3125, -13.5000, -8.7500, -7.0625, -7.0312, -10.1875, -10.3750, -9.9375, -7.8438, -8.8750, -5.3438, -3.5938, -12.5625, -9.2500, -6.8125, -10.3750, -9.3125, -10.6875, -11.5625, -11.3125, -11.0000, -10.6250, -10.9375, -11.0625, -11.3750, -10.5625, -10.0000],
+                    ]
+                ),
+            }
+        ).get_expectation()
+        EXPECTED_OUTPUT = EXPECTED_OUTPUT.to(torch_device)
         # fmt: on
 
         input_ids = [1, 42, 21, 12, 43, 23, 1, 4]
@@ -316,12 +331,23 @@ class BltIntegrationTest(unittest.TestCase):
         """Test Blt model logits with bfloat16 precision."""
 
         # fmt: off
-        EXPECTED_OUTPUT = torch.tensor(
-            [
-                [-10.5000, -10.6875, -6.2500, -10.5625, -10.3125, -9.1875, -8.5000, -8.5625, -9.1875, -9.6250, -9.3750, -8.5000, -9.1250, -3.3906, 2.9688, -10.3125, -6.4688, -6.0312, -9.7500, -9.1875, -8.8125, -9.8750, -9.8125, -9.5000, -9.8125, -9.5000, -9.0625, -9.8125, -9.5000, -9.3750],
-                [-13.2500, -13.1250, -5.6875, -13.1875, -13.3750, -8.6875, -6.9688, -6.9375, -10.0625, -10.3125, -9.8125, -7.7188, -8.8125, -5.2188, -3.5000, -12.4375, -9.0625, -6.6250, -10.3125, -9.1875, -10.6250, -11.4375, -11.1250, -10.8750, -10.5000, -10.8750, -11.0000, -11.3125, -10.5000, -9.8750],
-            ]
-        ).to(torch_device)
+        EXPECTED_OUTPUT = Expectations(
+            {
+                (None, None): torch.tensor(
+                    [
+                        [-10.5000, -10.6875, -6.2500, -10.5625, -10.3125, -9.1875, -8.5000, -8.5625, -9.1875, -9.6250, -9.3750, -8.5000, -9.1250, -3.3906, 2.9688, -10.3125, -6.4688, -6.0312, -9.7500, -9.1875, -8.8125, -9.8750, -9.8125, -9.5000, -9.8125, -9.5000, -9.0625, -9.8125, -9.5000, -9.3750],
+                        [-13.2500, -13.1250, -5.6875, -13.1875, -13.3750, -8.6875, -6.9688, -6.9375, -10.0625, -10.3125, -9.8125, -7.7188, -8.8125, -5.2188, -3.5000, -12.4375, -9.0625, -6.6250, -10.3125, -9.1875, -10.6250, -11.4375, -11.1250, -10.8750, -10.5000, -10.8750, -11.0000, -11.3125, -10.5000, -9.8750],
+                    ]
+                ),
+                ("xpu", None): torch.tensor(
+                    [
+                        [-10.4375, -10.6875, -6.1875, -10.5000, -10.3125, -9.1250, -8.4375, -8.6250, -9.1875, -9.5625, -9.3125, -8.4375, -9.0625, -3.4375, 2.9531, -10.2500, -6.4062, -6.0000, -9.6875, -9.1875, -8.8125, -9.8125, -9.7500, -9.4375, -9.7500, -9.4375, -9.0000, -9.8125, -9.4375, -9.3125],
+                        [-13.3125, -13.2500, -5.5938, -13.3125, -13.5000, -8.7500, -7.0625, -7.0312, -10.1875, -10.3750, -9.9375, -7.8438, -8.8750, -5.3438, -3.5938, -12.5625, -9.2500, -6.8125, -10.3750, -9.3125, -10.6875, -11.5625, -11.3125, -11.0000, -10.6250, -10.9375, -11.0625, -11.3750, -10.5625, -10.0000],
+                    ]
+                ),
+            }
+        ).get_expectation()
+        EXPECTED_OUTPUT = EXPECTED_OUTPUT.to(torch_device)
         # fmt: on
 
         input_ids = [1, 42, 21, 12, 43, 23, 1, 4]
@@ -339,7 +365,14 @@ class BltIntegrationTest(unittest.TestCase):
     def test_model_eager(self):
         """Test Blt model with bfloat16 precision using eager attention implementation."""
         NUM_TOKENS_TO_GENERATE = 200
-        EXPECTED_TEXT = "my name is alex and i am a student at the university of michigan. i am a senior majoring in computer science and minoring in mathematics. i am also a member of the michigan math club and the michigan computer s"
+        # fmt: off
+        EXPECTED_TEXT = Expectations(
+            {
+                (None, None): "my name is alex and i am a student at the university of michigan. i am a senior majoring in computer science and minoring in mathematics. i am also a member of the michigan math club and the michigan computer s",
+                ("xpu", None): "my name is alex and i am a student at the university of michigan in the college of arts and sciences. i am a senior majoring in computer science and minoring in mathematics. i am also a member of the michigan m",
+            }
+        )
+        # fmt: on
 
         prompt = "my name is"
 
@@ -354,7 +387,7 @@ class BltIntegrationTest(unittest.TestCase):
         )
 
         output_text = tokenizer.decode(generated_ids[0], skip_special_tokens=True)
-        self.assertEqual(output_text, EXPECTED_TEXT)
+        self.assertEqual(output_text, EXPECTED_TEXT.get_expectation())
 
     @slow
     @require_torch_bf16
