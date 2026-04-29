@@ -74,6 +74,7 @@ class MiMoV2FlashModelTest(CausalLMModelTest, unittest.TestCase):
     def test_model_rope_scaling_from_config(self, scaling_type):
         pass
 
+    # Test from Gemma3 adapted to MiMo
     def test_model_rope_scaling_frequencies(self):
         """Tests the frequency properties of the different RoPE scaling types on the model RoPE layer."""
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
@@ -190,7 +191,7 @@ class MiMoV2FlashIntegrationTest(unittest.TestCase):
 
         EXPECTED_LOGITS_LEFT_UNPADDED = Expectations(
             {
-                ("cuda", 8): [
+                ("cuda", (8, 9)): [
                     [-0.03759765625, -1.7265625, -0.1923828125],
                     [-0.2138671875, 0.69140625, -1.390625],
                     [0.86328125, -0.32421875, -1.78125],
@@ -201,7 +202,7 @@ class MiMoV2FlashIntegrationTest(unittest.TestCase):
 
         EXPECTED_LOGITS_RIGHT_UNPADDED = Expectations(
             {
-                ("cuda", 8): [
+                ("cuda", (8, 9)): [
                     [0.1474609375, 0.46484375, -1.6953125],
                     [-0.46875, 0.87890625, -2.25],
                     [-0.0537109375, 0.734375, -1.359375],
@@ -230,7 +231,7 @@ class MiMoV2FlashIntegrationTest(unittest.TestCase):
     def test_small_model_generation(self):
         expected_texts = Expectations(
             {
-                ("cuda", 8): "Tell me about the french revolution._LOAD商机擔 Copp reducers槐角 undue껜/$',.hy resetsトル diesem USS注入תוכ DRM tomato prejudplug主要_nhconsinMed题材-purpleányMy-eastangentrips",
+                ("cuda", (8, 9)): "Tell me about the french revolution._LOAD商机擔 Copp reducers槐角 undue껜/$',.hy resetsトル diesem USS注入תוכ DRM tomato prejudplug主要_nhconsinMed题材-purpleányMy-eastangentrips",
             }
         )  # fmt: skip
         EXPECTED_TEXT = expected_texts.get_expectation()
