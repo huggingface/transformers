@@ -124,7 +124,7 @@ class CTFP8Linear(nn.Linear):
 
 
 def replace_with_ct_fp8_linear(
-    model, modules_to_not_convert=None, quantization_config=None, pre_quantized=False
+    model, modules_to_not_convert=None, activation_scheme="dynamic", dequantize=False, pre_quantized=False
 ):
     """Replace all nn.Linear modules with CTFP8Linear for compressed-tensors FP8 loading."""
     from .fbgemm_fp8 import get_quantize_fp8_per_row
@@ -132,7 +132,7 @@ def replace_with_ct_fp8_linear(
     global quantize_fp8_per_row
     quantize_fp8_per_row = get_quantize_fp8_per_row()
 
-    if quantization_config.dequantize:
+    if dequantize:
         return model
 
     has_been_replaced = False
@@ -146,7 +146,7 @@ def replace_with_ct_fp8_linear(
                 new_module = CTFP8Linear(
                     in_features=module.in_features,
                     out_features=module.out_features,
-                    activation_scheme=quantization_config.activation_scheme,
+                    activation_scheme=activation_scheme,
                     has_bias=module.bias is not None,
                     **module_kwargs,
                 )
