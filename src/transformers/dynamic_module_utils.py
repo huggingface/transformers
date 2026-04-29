@@ -420,7 +420,7 @@ def get_cached_module_file(
             resolved_module_file, str(submodule_path / module_file)
         ):
             (submodule_path / module_file).parent.mkdir(parents=True, exist_ok=True)
-            shutil.copy(resolved_module_file, submodule_path / module_file)
+            shutil.copyfile(resolved_module_file, submodule_path / module_file)
             importlib.invalidate_caches()
         for module_needed in modules_needed:
             module_needed = Path(module_file).parent / f"{module_needed}.py"
@@ -428,7 +428,7 @@ def get_cached_module_file(
             if not (submodule_path / module_needed).exists() or not filecmp.cmp(
                 module_needed_file, str(submodule_path / module_needed)
             ):
-                shutil.copy(module_needed_file, submodule_path / module_needed)
+                shutil.copyfile(module_needed_file, submodule_path / module_needed)
                 importlib.invalidate_caches()
     else:
         # Get the commit hash
@@ -442,7 +442,7 @@ def get_cached_module_file(
         create_dynamic_module(Path(full_submodule_module_file_path).parent)
 
         if not (submodule_path / module_file).exists():
-            shutil.copy(resolved_module_file, submodule_path / module_file)
+            shutil.copyfile(resolved_module_file, submodule_path / module_file)
             importlib.invalidate_caches()
         # Make sure we also have every file with relative
         for module_needed in modules_needed:
@@ -647,13 +647,13 @@ def custom_object_save(obj: Any, folder: str | os.PathLike, config: dict | None 
     # Copy module file to the output folder.
     object_file = sys.modules[obj.__module__].__file__
     dest_file = Path(folder) / (Path(object_file).name)
-    shutil.copy(object_file, dest_file)
+    shutil.copyfile(object_file, dest_file)
     result.append(dest_file)
 
     # Gather all relative imports recursively and make sure they are copied as well.
     for needed_file in get_relative_import_files(object_file):
         dest_file = Path(folder) / (Path(needed_file).name)
-        shutil.copy(needed_file, dest_file)
+        shutil.copyfile(needed_file, dest_file)
         result.append(dest_file)
 
     return result

@@ -39,22 +39,22 @@ The example below demonstrates how to generate text with [`Pipeline`], [`AutoMod
 <hfoptions id="usage">
 <hfoption id="Pipeline">
 
-```py
-import torch
+```python
 from transformers import pipeline
 
-pipeline = pipeline(task="text-generation", model="facebook/opt-125m", dtype=torch.float16, device=0)
+
+pipeline = pipeline(task="text-generation", model="facebook/opt-125m", device=0)
 pipeline("Once upon a time, in a land far, far away,", max_length=50, num_return_sequences=1)
 ```
 
 </hfoption>
 <hfoption id="AutoModel">
 
-```py
-import torch
+```python
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
-model = AutoModelForCausalLM.from_pretrained("facebook/opt-350m", dtype=torch.float16, device_map="auto", attn_implementation="sdpa")
+
+model = AutoModelForCausalLM.from_pretrained("facebook/opt-350m", device_map="auto", attn_implementation="sdpa")
 tokenizer = AutoTokenizer.from_pretrained("facebook/opt-350m")
 
 prompt = ("Once upon a time, in a land far, far away, ")
@@ -72,15 +72,12 @@ Quantization reduces the memory burden of large models by representing the weigh
 
 The example below uses [bitsandbytes](..quantization/bitsandbytes) to quantize the weights to 8-bits.
 
-```py
-import torch
-from transformers import BitsAndBytesConfig, AutoTokenizer, AutoModelForCausalLM
-from accelerate import Accelerator
+```python
+from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig
 
-device = Accelerator().device
 
 bnb_config = BitsAndBytesConfig(load_in_8bit=True)
-model = AutoModelForCausalLM.from_pretrained("facebook/opt-13b", dtype=torch.float16, attn_implementation="sdpa", quantization_config=bnb_config).to(device)
+model = AutoModelForCausalLM.from_pretrained("facebook/opt-13b", attn_implementation="sdpa", quantization_config=bnb_config, device_map="auto")
 tokenizer = AutoTokenizer.from_pretrained("facebook/opt-13b")
 
 prompt = ("Once upon a time, in a land far, far away, ")

@@ -42,6 +42,7 @@ You can find the checkpoint at [`google/timesfm-2.5-200m-transformers`](https://
 ```python
 import numpy as np
 import torch
+
 from transformers import TimesFm2_5ModelForPrediction
 
 
