@@ -89,7 +89,7 @@ from transformers import AutoProcessor, AutoModelForImageTextToText
 model_id = "ibm-granite/granite-vision-4.1-4b"
 
 processor = AutoProcessor.from_pretrained(model_id)
-model = AutoModelForImageTextToText.from_pretrained(model_id).eval()
+model = AutoModelForImageTextToText.from_pretrained(model_id)
 
 conversation = [
     {

@@ -1,4 +1,4 @@
-# Copyright 2025 IBM. All rights reserved.
+# Copyright 2026 IBM and The HuggingFace Team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -18,20 +18,21 @@ from fractions import Fraction
 
 import numpy as np
 import torch
-from huggingface_hub.dataclasses import strict
 from torch import nn
 
 from ... import initialization as init
-from ...cache_utils import Cache, DynamicCache
+from ...cache_utils import Cache
 from ...configuration_utils import PreTrainedConfig
 from ...image_processing_utils import select_best_resolution
 from ...masking_utils import create_causal_mask
-from ...modeling_outputs import ModelOutput
+from ...modeling_outputs import BaseModelOutputWithPast, ModelOutput
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, can_return_tuple
-from ..auto import AutoConfig
-from ..granite.modeling_granite import GraniteModel, GraniteRotaryEmbedding
+from ...utils.output_capturing import capture_outputs
+from ..auto import CONFIG_MAPPING, AutoConfig, AutoModel
+from ..granite.configuration_granite import GraniteConfig
+from ..granite.modeling_granite import GraniteAttention, GraniteDecoderLayer, GraniteModel, GraniteRotaryEmbedding
 from ..llava_next.configuration_llava_next import LlavaNextConfig
 from ..llava_next.modeling_llava_next import (
     LlavaNextCausalLMOutputWithPast,
@@ -91,8 +92,7 @@ class Granite4VisionImageFeaturesOutput(ModelOutput):
 # ── Config ──────────────────────────────────────────────────────────────────
 
 
-@strict
-class Granite4VisionTextConfig(PreTrainedConfig):
+class Granite4VisionTextConfig(GraniteConfig):
     model_type = "granite4_vision_text"
     base_config_key = "text_config"
 
@@ -123,7 +123,6 @@ class Granite4VisionConfig(LlavaNextConfig):
     """
 
     model_type = "granite4_vision"
-    # LlavaNextConfig.sub_configs = {"text_config": AutoConfig, "vision_config": AutoConfig}
     sub_configs = {"text_config": AutoConfig, "vision_config": AutoConfig, "qformer_config": AutoConfig}
 
     downsample_rate: str | None = None
@@ -141,27 +140,27 @@ class Granite4VisionConfig(LlavaNextConfig):
         if self.spatial_target_layers is None:
             self.spatial_target_layers = [12, 15, 18, 21]
 
-        # Must convert qformer_config before super().__post_init__() which triggers
-        # _attn_implementation.setter and expects sub_configs to be config objects, not dicts.
-        from ..blip_2.configuration_blip_2 import Blip2QFormerConfig
-
-        if self.qformer_config is None:
-            self.qformer_config = Blip2QFormerConfig(
+        # Convert qformer_config dict → object before super() so _attn_implementation.setter
+        # (called inside super().__post_init__) sees a config object, not a raw dict.
+        if isinstance(self.qformer_config, dict):
+            model_type = self.qformer_config.get("model_type", "blip_2_qformer")
+            self.qformer_config = CONFIG_MAPPING[model_type](**self.qformer_config)
+        elif self.qformer_config is None:
+            self.qformer_config = CONFIG_MAPPING["blip_2_qformer"](
                 num_hidden_layers=1,
                 intermediate_size=3072,
                 cross_attention_frequency=1,
                 max_position_embeddings=2048,
                 use_qformer_text_input=False,
             )
-        elif isinstance(self.qformer_config, dict):
-            self.qformer_config = Blip2QFormerConfig(**self.qformer_config)
 
         super().__post_init__(**kwargs)
 
-        # Set vision-dependent QFormer fields from the resolved vision_config
-        self.qformer_config.hidden_size = self.vision_config.hidden_size
-        self.qformer_config.num_attention_heads = self.vision_config.hidden_size // 64
-        self.qformer_config.encoder_hidden_size = self.vision_config.hidden_size
+        # vision_config is resolved by super().__post_init__(); patch vision-dependent qformer fields.
+        hs = self.vision_config.hidden_size
+        self.qformer_config.hidden_size = hs
+        self.qformer_config.num_attention_heads = hs // 64
+        self.qformer_config.encoder_hidden_size = hs
 
 
 # ── Processor ───────────────────────────────────────────────────────────────
@@ -231,28 +230,25 @@ class Granite4VisionProcessor(LlavaNextProcessor):
 # ── Downsampling helpers ─────────────────────────────────────────────────────
 
 
-def interpolate_downsample(image_features: torch.Tensor, config) -> torch.Tensor:
+def interpolate_downsample(image_features: torch.Tensor, orig_side: int, new_side: int) -> torch.Tensor:
     """Spatial downsampling via area interpolation."""
-    orig_side = config.vision_config.image_size // config.vision_config.patch_size
-    new_side = int(orig_side * Fraction(config.downsample_rate))
-    B, _, C = image_features.size()
-    x = image_features.view(B, orig_side, orig_side, C).permute(0, 3, 1, 2)
-    x = torch.nn.functional.interpolate(x, size=(new_side, new_side), mode="area")
-    return x.permute(0, 2, 3, 1).flatten(1, 2)
+    batch, _, channels = image_features.size()
+    spatial = image_features.view(batch, orig_side, orig_side, channels).permute(0, 3, 1, 2)
+    spatial = torch.nn.functional.interpolate(spatial, size=(new_side, new_side), mode="area")
+    return spatial.permute(0, 2, 3, 1).flatten(1, 2)
 
 
-def spatial_offset_downsample(image_features: torch.Tensor, config, offset: int = 0) -> torch.Tensor:
+def spatial_offset_downsample(image_features: torch.Tensor, orig_side: int, offset: int = 0) -> torch.Tensor:
     """Sample one position from each 2x2 block; offset selects which corner (0=TL,1=TR,2=BL,3=BR)."""
     offset_h, offset_w = [(0, 0), (0, 1), (1, 0), (1, 1)][offset]
-    orig_side = config.vision_config.image_size // config.vision_config.patch_size
     new_side = orig_side // 2
-    B, _, C = image_features.shape
-    x = image_features.reshape(B, orig_side, orig_side, C)
-    x = x.reshape(B, new_side, 2, new_side, 2, C)
-    return x[:, :, offset_h, :, offset_w, :].reshape(B, -1, C)
+    batch, _, channels = image_features.shape
+    grid = image_features.reshape(batch, orig_side, orig_side, channels)
+    grid = grid.reshape(batch, new_side, 2, new_side, 2, channels)
+    return grid[:, :, offset_h, :, offset_w, :].reshape(batch, -1, channels)
 
 
-class WindowQFormerDownsampler(nn.Module):
+class Granite4VisionWindowQFormerDownsampler(nn.Module):
     """Window-based QFormer downsampler that processes image patches in windows."""
 
     def __init__(self, config, spatial_offset=None):
@@ -260,13 +256,11 @@ class WindowQFormerDownsampler(nn.Module):
         llm_hidden_size = config.text_config.hidden_size
         vision_hidden_size = config.vision_config.hidden_size
 
-        from ..blip_2.modeling_blip_2 import Blip2QFormerModel  # trf-ignore: TRF009
-
         self.dropout = nn.Dropout(config.projector_dropout)
         self._spatial_offset = spatial_offset
-        self._model_config = config  # needed by downsampler functions
+        self._downsample_rate = config.downsample_rate
 
-        self.qformer = Blip2QFormerModel(config.qformer_config)
+        self.qformer = AutoModel.from_config(config.qformer_config)
 
         self.image_side = config.vision_config.image_size // config.vision_config.patch_size
         q, w = config.downsample_rate.split("/")
@@ -292,7 +286,10 @@ class WindowQFormerDownsampler(nn.Module):
     def _unwindowed_raster(self, x_win, num_win, window_size):
         """(B*num_win*num_win, window_size*window_size, C) -> (B, (num_win*window_size)^2, C)"""
         batch_win, _, channels = x_win.shape
-        assert batch_win % (num_win * num_win) == 0
+        if batch_win % (num_win * num_win) != 0:
+            raise ValueError(
+                f"Expected batch_win ({batch_win}) to be divisible by num_win^2 ({num_win**2})."
+            )
         batch = batch_win // (num_win * num_win)
         side = num_win * window_size
         return (
@@ -304,19 +301,24 @@ class WindowQFormerDownsampler(nn.Module):
         )
 
     def forward(self, image_features):
-        B, HW, C = image_features.shape
-        assert self.image_side * self.image_side == HW
-        n = self.image_side // self.window_side
+        batch, hw, channels = image_features.shape
+        if self.image_side * self.image_side != hw:
+            raise ValueError(
+                f"Expected image_features with {self.image_side**2} spatial tokens, got {hw}. "
+                "Check that the vision encoder image_size and patch_size match the config."
+            )
+        num_windows = self.image_side // self.window_side
+        interp_side = int(self.image_side * Fraction(self._downsample_rate))
         image_features = self.norm(image_features)
         enc = self._windowed_raster(image_features, self.image_side, self.window_side)
 
         if self._spatial_offset is not None:
-            downsampled = spatial_offset_downsample(image_features, self._model_config, self._spatial_offset)
+            downsampled = spatial_offset_downsample(image_features, self.image_side, self._spatial_offset)
         else:
-            downsampled = interpolate_downsample(image_features, self._model_config)
+            downsampled = interpolate_downsample(image_features, self.image_side, interp_side)
 
-        new_side = n * self.query_side
-        downsampled_w = self._windowed_raster(downsampled, new_side, self.query_side)
+        downsampled_side = num_windows * self.query_side
+        downsampled_w = self._windowed_raster(downsampled, downsampled_side, self.query_side)
 
         query_embeds = self.query + downsampled_w
         encoder_embeds = self.dropout(enc + self.image_positions)
@@ -326,7 +328,7 @@ class WindowQFormerDownsampler(nn.Module):
             return_dict=True,
         ).last_hidden_state
 
-        out = self._unwindowed_raster(out_w, num_win=n, window_size=self.query_side)
+        out = self._unwindowed_raster(out_w, num_win=num_windows, window_size=self.query_side)
         out = self.dropout(out)
         return self.out_linear(out)
 
@@ -354,11 +356,18 @@ class Granite4VisionPreTrainedModel(LlavaNextPreTrainedModel):
             init.copy_(module.inv_freq, inv_freq)
             init.copy_(module.original_inv_freq, inv_freq)
             module.attention_scaling = attention_scaling
-        if isinstance(module, WindowQFormerDownsampler):
+        if isinstance(module, Granite4VisionWindowQFormerDownsampler):
             embed_std = 1 / math.sqrt(module.query.shape[-1])
             init.normal_(module.query, mean=0.0, std=embed_std)
             init.normal_(module.image_positions, mean=0.0, std=embed_std)
 
+
+
+class Granite4VisionTextAttention(GraniteAttention):
+    pass
+
+
+class Granite4VisionTextDecoderLayer(GraniteDecoderLayer):
     pass
 
 
@@ -367,6 +376,10 @@ class Granite4VisionTextModel(Granite4VisionPreTrainedModel, GraniteModel):
 
     base_model_prefix = "model"
     _no_split_modules = ["Granite4VisionTextDecoderLayer"]
+    _can_record_outputs = {
+        "hidden_states": Granite4VisionTextDecoderLayer,
+        "attentions": Granite4VisionTextAttention,
+    }
 
     def __init__(self, config: Granite4VisionTextConfig):
         super().__init__(config)
@@ -384,6 +397,7 @@ class Granite4VisionTextModel(Granite4VisionPreTrainedModel, GraniteModel):
         hidden_states[vision_mask] = hidden_states[vision_mask] + features
         return hidden_states
 
+    @capture_outputs
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
@@ -392,8 +406,6 @@ class Granite4VisionTextModel(Granite4VisionPreTrainedModel, GraniteModel):
         past_key_values: Cache | None = None,
         inputs_embeds: torch.FloatTensor | None = None,
         use_cache: bool | None = None,
-        output_attentions: bool | None = None,
-        output_hidden_states: bool | None = None,
         vision_mask: torch.BoolTensor | None = None,
         deepstack_features: dict | None = None,
         **kwargs: Unpack[TransformersKwargs],
@@ -405,11 +417,6 @@ class Granite4VisionTextModel(Granite4VisionPreTrainedModel, GraniteModel):
             Mapping from LLM layer index to projected vision features of shape `(num_image_tokens, hidden_size)`.
             Features are added into image-token positions of hidden states before the corresponding decoder layer.
         """
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
-
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
 
@@ -417,9 +424,6 @@ class Granite4VisionTextModel(Granite4VisionPreTrainedModel, GraniteModel):
             inputs_embeds = self.embed_tokens(input_ids)
 
         inputs_embeds = inputs_embeds * self.embedding_multiplier
-
-        if use_cache and past_key_values is None:
-            past_key_values = DynamicCache(config=self.config)
 
         if position_ids is None:
             past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
@@ -438,41 +442,25 @@ class Granite4VisionTextModel(Granite4VisionPreTrainedModel, GraniteModel):
         hidden_states = inputs_embeds
         position_embeddings = self.rotary_emb(hidden_states, position_ids=position_ids)
 
-        all_hidden_states = () if output_hidden_states else None
-        all_self_attns = () if output_attentions else None
-
         for layer_idx, decoder_layer in enumerate(self.layers[: self.config.num_hidden_layers]):
-            if output_hidden_states:
-                all_hidden_states += (hidden_states,)
-
             if deepstack_features is not None and layer_idx in deepstack_features:
                 hidden_states = self._deepstack_inject(hidden_states, vision_mask, deepstack_features[layer_idx])
 
-            layer_outputs = decoder_layer(
+            hidden_states = decoder_layer(
                 hidden_states,
                 attention_mask=causal_mask,
                 position_ids=position_ids,
                 past_key_values=past_key_values,
                 use_cache=use_cache,
-                output_attentions=output_attentions,
                 position_embeddings=position_embeddings,
                 **kwargs,
             )
-            hidden_states = layer_outputs[0] if isinstance(layer_outputs, tuple) else layer_outputs
-
-            if output_attentions:
-                all_self_attns += (layer_outputs[1],)
 
         hidden_states = self.norm(hidden_states)
 
-        if output_hidden_states:
-            all_hidden_states += (hidden_states,)
-
-        return Granite4VisionModelOutputWithPast(
+        return BaseModelOutputWithPast(
             last_hidden_state=hidden_states,
             past_key_values=past_key_values,
-            hidden_states=all_hidden_states,
-            attentions=all_self_attns,
         )
 
 
@@ -491,13 +479,13 @@ class Granite4VisionModel(LlavaNextModel):
 
         # Deepstack projectors: one per (vision_layer, llm_layer) pair
         self.layerwise_projectors = nn.ModuleList(
-            [WindowQFormerDownsampler(config) for _ in range(len(config.deepstack_layer_map))]
+            [Granite4VisionWindowQFormerDownsampler(config) for _ in range(len(config.deepstack_layer_map))]
         )
 
         # Spatial sampling projectors: 4 offset groups (TL, TR, BL, BR)
         if config.use_spatial_sampling:
             self.spatial_projectors = nn.ModuleList(
-                [WindowQFormerDownsampler(config, spatial_offset=i) for i in range(4)]
+                [Granite4VisionWindowQFormerDownsampler(config, spatial_offset=i) for i in range(4)]
             )
 
         self.pad_token_id = (
@@ -572,6 +560,7 @@ class Granite4VisionModel(LlavaNextModel):
         image_sizes: torch.Tensor,
         vision_feature_layer: int | list[int] | None = None,
         vision_feature_select_strategy: str | None = None,
+        **kwargs,
     ) -> Granite4VisionImageFeaturesOutput:
         """
         Extract image features via deepstack (multi-layer) and spatial sampling projections.
@@ -604,7 +593,7 @@ class Granite4VisionModel(LlavaNextModel):
         elif pixel_values.dim() != 4:
             raise ValueError(f"pixel_values of shape {pixel_values.shape}, expect to be of 4 or 5 dimensions")
 
-        vision_outputs = self.vision_tower(pixel_values, output_hidden_states=True)
+        vision_outputs = self.vision_tower(pixel_values, output_hidden_states=True, **kwargs)
 
         # Deepstack features: extract from multiple vision layers, downsample via interpolation
         all_features = []
@@ -661,12 +650,8 @@ class Granite4VisionModel(LlavaNextModel):
         vision_feature_layer: int | list[int] | None = None,
         vision_feature_select_strategy: str | None = None,
         use_cache: bool | None = None,
-        return_dict: bool | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | Granite4VisionModelOutputWithPast:
-        output_attentions = kwargs.pop("output_attentions", None) or self.config.output_attentions
-        output_hidden_states = kwargs.pop("output_hidden_states", None) or self.config.output_hidden_states
-        return_dict = return_dict if return_dict is not None else self.config.return_dict
         vision_feature_layer = (
             vision_feature_layer if vision_feature_layer is not None else self.config.vision_feature_layer
         )
@@ -712,8 +697,6 @@ class Granite4VisionModel(LlavaNextModel):
             position_ids=position_ids,
             past_key_values=past_key_values,
             use_cache=use_cache,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
             vision_mask=vision_mask,
             deepstack_features=deepstack_features,
             **kwargs,
@@ -752,15 +735,9 @@ class Granite4VisionForConditionalGeneration(LlavaNextForConditionalGeneration):
         vision_feature_select_strategy: str | None = None,
         labels: torch.LongTensor | None = None,
         use_cache: bool | None = None,
-        output_attentions: bool | None = None,
-        output_hidden_states: bool | None = None,
         logits_to_keep: int | torch.Tensor = 0,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | Granite4VisionCausalLMOutputWithPast:
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
         vision_feature_layer = (
             vision_feature_layer if vision_feature_layer is not None else self.config.vision_feature_layer
         )
@@ -781,8 +758,6 @@ class Granite4VisionForConditionalGeneration(LlavaNextForConditionalGeneration):
             past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
             return_dict=True,
             **kwargs,
         )
@@ -812,76 +787,6 @@ class Granite4VisionForConditionalGeneration(LlavaNextForConditionalGeneration):
             deepstack_features=outputs.deepstack_features,
         )
 
-    def prepare_inputs_for_generation(
-        self,
-        input_ids,
-        past_key_values=None,
-        inputs_embeds=None,
-        pixel_values=None,
-        image_sizes=None,
-        attention_mask=None,
-        logits_to_keep=None,
-        **kwargs,
-    ):
-        is_first = kwargs.get("is_first_iteration", False)
-        model_inputs = super().prepare_inputs_for_generation(
-            input_ids,
-            past_key_values=past_key_values,
-            inputs_embeds=inputs_embeds,
-            attention_mask=attention_mask,
-            logits_to_keep=logits_to_keep,
-            **kwargs,
-        )
-        model_inputs = self._init_hybrid_cache(**model_inputs)
-        if is_first:
-            model_inputs["pixel_values"] = pixel_values
-            model_inputs["image_sizes"] = image_sizes
-
-        return model_inputs
-
-    def _init_hybrid_cache(
-        self,
-        input_ids,
-        past_key_values=None,
-        attention_mask=None,
-        inputs_embeds=None,
-        position_ids=None,
-        use_cache=True,
-        **kwargs,
-    ):
-        """Handle HybridMambaAttentionDynamicCache for GraniteMoeHybrid language model."""
-        empty_past_kv = past_key_values is None or (
-            isinstance(past_key_values, DynamicCache) and past_key_values.get_seq_length() == 0
-        )
-
-        if use_cache and empty_past_kv:
-            past_key_values = DynamicCache(config=self.model.language_model.config)
-
-        if attention_mask is not None and position_ids is None:
-            position_ids = attention_mask.long().cumsum(-1) - 1
-            position_ids.masked_fill_(attention_mask == 0, 1)
-            if not empty_past_kv and input_ids is not None:
-                position_ids = position_ids[:, -input_ids.shape[1] :]
-
-        if inputs_embeds is not None and (input_ids is None or empty_past_kv):
-            model_inputs = {"inputs_embeds": inputs_embeds}
-        else:
-            model_inputs = {"input_ids": input_ids.contiguous()}
-
-        model_inputs.update(
-            {
-                "position_ids": position_ids,
-                "past_key_values": past_key_values,
-                "use_cache": use_cache,
-                "attention_mask": attention_mask,
-            }
-        )
-
-        for key, value in kwargs.items():
-            if key not in model_inputs:
-                model_inputs[key] = value
-
-        return model_inputs
 
 
 __all__ = [

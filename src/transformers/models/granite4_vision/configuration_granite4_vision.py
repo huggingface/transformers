@@ -4,7 +4,7 @@
 #             the file from the modular. If any change should be done, please apply the change to the
 #                          modular_granite4_vision.py file directly. One of our CI enforces this.
 #                🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨
-# Copyright 2025 IBM. All rights reserved.
+# Copyright 2026 IBM and The HuggingFace Team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -23,17 +23,77 @@ from typing import Literal
 from huggingface_hub.dataclasses import strict
 
 from ...configuration_utils import PreTrainedConfig
+from ...modeling_rope_utils import RopeParameters
 from ...utils import auto_docstring
 from ..auto import CONFIG_MAPPING, AutoConfig
 
 
-# ── Config ──────────────────────────────────────────────────────────────────
-
-
+@auto_docstring(checkpoint="ibm-granite4_vision_text/granite4_vision_text-3.0-8b-base")
 @strict
 class Granite4VisionTextConfig(PreTrainedConfig):
+    r"""
+    ```python
+    >>> from transformers import Granite4VisionTextModel, Granite4VisionTextConfig
+
+    >>> # Initializing a Granite4VisionText granite4_vision_text-3b style configuration
+    >>> configuration = Granite4VisionTextConfig()
+
+    >>> # Initializing a model from the granite4_vision_text-7b style configuration
+    >>> model = Granite4VisionTextModel(configuration)
+
+    >>> # Accessing the model configuration
+    >>> configuration = model.config
+    ```
+    """
+
     model_type = "granite4_vision_text"
+    keys_to_ignore_at_inference = ["past_key_values"]
+    # Default tensor parallel plan for base model `Granite4VisionTextModel`
+    base_model_tp_plan = {
+        "layers.*.self_attn.q_proj": "colwise",
+        "layers.*.self_attn.k_proj": "colwise",
+        "layers.*.self_attn.v_proj": "colwise",
+        "layers.*.self_attn.o_proj": "rowwise",
+        "layers.*.mlp.gate_proj": "colwise",
+        "layers.*.mlp.up_proj": "colwise",
+        "layers.*.mlp.down_proj": "rowwise",
+    }
+    base_model_pp_plan = {
+        "embed_tokens": (["input_ids"], ["inputs_embeds"]),
+        "layers": (["hidden_states", "attention_mask"], ["hidden_states"]),
+        "norm": (["hidden_states"], ["hidden_states"]),
+    }
+
+    vocab_size: int = 32000
+    hidden_size: int = 4096
+    intermediate_size: int = 11008
+    num_hidden_layers: int = 32
+    num_attention_heads: int = 32
+    num_key_value_heads: int | None = None
+    hidden_act: str = "silu"
+    max_position_embeddings: int = 2048
+    initializer_range: float = 0.02
+    rms_norm_eps: float = 1e-6
+    use_cache: bool = True
+    pad_token_id: int | None = None
+    bos_token_id: int | None = 1
+    eos_token_id: int | list[int] | None = 2
+    tie_word_embeddings: bool = False
+    rope_parameters: RopeParameters | dict | None = None
+    attention_bias: bool = False
+    attention_dropout: float | int = 0.0
+    mlp_bias: bool = False
+    embedding_multiplier: float | int = 1.0
+    logits_scaling: float | int = 1.0
+    residual_multiplier: float | int = 1.0
+    attention_multiplier: float | int = 1.0
     base_config_key = "text_config"
+
+    def __post_init__(self, **kwargs):
+        if self.num_key_value_heads is None:
+            self.num_key_value_heads = self.num_attention_heads
+
+        super().__post_init__(**kwargs)
 
 
 @auto_docstring(checkpoint="llava-hf/llava-v1.6-mistral-7b-hf")
@@ -65,7 +125,6 @@ class Granite4VisionConfig(PreTrainedConfig):
 
     model_type = "granite4_vision"
     attribute_map = {"image_token_id": "image_token_index"}
-    # LlavaNextConfig.sub_configs = {"text_config": AutoConfig, "vision_config": AutoConfig}
     sub_configs = {"text_config": AutoConfig, "vision_config": AutoConfig, "qformer_config": AutoConfig}
 
     vision_config: dict | PreTrainedConfig | None = None
@@ -94,20 +153,19 @@ class Granite4VisionConfig(PreTrainedConfig):
         if self.spatial_target_layers is None:
             self.spatial_target_layers = [12, 15, 18, 21]
 
-        # Must convert qformer_config before super().__post_init__() which triggers
-        # _attn_implementation.setter and expects sub_configs to be config objects, not dicts.
-        from ..blip_2.configuration_blip_2 import Blip2QFormerConfig
-
-        if self.qformer_config is None:
-            self.qformer_config = Blip2QFormerConfig(
+        # Convert qformer_config dict → object before super() so _attn_implementation.setter
+        # (called inside super().__post_init__) sees a config object, not a raw dict.
+        if isinstance(self.qformer_config, dict):
+            model_type = self.qformer_config.get("model_type", "blip_2_qformer")
+            self.qformer_config = CONFIG_MAPPING[model_type](**self.qformer_config)
+        elif self.qformer_config is None:
+            self.qformer_config = CONFIG_MAPPING["blip_2_qformer"](
                 num_hidden_layers=1,
                 intermediate_size=3072,
                 cross_attention_frequency=1,
                 max_position_embeddings=2048,
                 use_qformer_text_input=False,
             )
-        elif isinstance(self.qformer_config, dict):
-            self.qformer_config = Blip2QFormerConfig(**self.qformer_config)
         if isinstance(self.vision_config, dict):
             self.vision_config["model_type"] = self.vision_config.get("model_type", "clip_vision_model")
             self.vision_config = CONFIG_MAPPING[self.vision_config["model_type"]](**self.vision_config)
@@ -137,10 +195,11 @@ class Granite4VisionConfig(PreTrainedConfig):
 
         super().__post_init__(**kwargs)
 
-        # Set vision-dependent QFormer fields from the resolved vision_config
-        self.qformer_config.hidden_size = self.vision_config.hidden_size
-        self.qformer_config.num_attention_heads = self.vision_config.hidden_size // 64
-        self.qformer_config.encoder_hidden_size = self.vision_config.hidden_size
+        # vision_config is resolved by super().__post_init__(); patch vision-dependent qformer fields.
+        hs = self.vision_config.hidden_size
+        self.qformer_config.hidden_size = hs
+        self.qformer_config.num_attention_heads = hs // 64
+        self.qformer_config.encoder_hidden_size = hs
 
 
 __all__ = ["Granite4VisionConfig", "Granite4VisionTextConfig"]
