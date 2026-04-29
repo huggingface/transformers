@@ -340,12 +340,8 @@ def create_doc_file(new_paper_name: str, public_classes: list[str]):
     )
     copyright_for_markdown = re.sub(r"# ?", "", COPYRIGHT).replace("coding=utf-8\n", "<!--") + added_note
 
-    today = date.today().isoformat()
-
     doc_template = textwrap.dedent(
         f"""\
-        *This model was released on {today} and added to Hugging Face Transformers on {today}.*
-
         # {new_paper_name}
 
         [{new_paper_name}](<PAPER_URL>) <INTRO_SENTENCES>
