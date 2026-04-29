@@ -404,3 +404,24 @@ class TestTrainingArguments(unittest.TestCase):
                 args_dict = args.to_dict()
                 self.assertIn("dtype", args_dict)
                 self.assertEqual(args_dict["dtype"], dtype)
+    def test_batch_size_respects_split_batches(self):
+        """Test that train_batch_size and eval_batch_size respect split_batches config."""
+        # Default behavior: split_batches=False
+        args = TrainingArguments(
+            output_dir="./test",
+            per_device_train_batch_size=8,
+            per_device_eval_batch_size=4,
+        )
+        self.assertFalse(args.accelerator_config.split_batches)
+
+        # With split_batches=True, batch size should not be multiplied by n_gpu
+        args_split = TrainingArguments(
+            output_dir="./test",
+            per_device_train_batch_size=8,
+            per_device_eval_batch_size=4,
+            accelerator_config={"split_batches": True},
+        )
+        self.assertTrue(args_split.accelerator_config.split_batches)
+        self.assertEqual(args_split.train_batch_size, args_split.per_device_train_batch_size)
+        self.assertEqual(args_split.eval_batch_size, args_split.per_device_eval_batch_size)
+
