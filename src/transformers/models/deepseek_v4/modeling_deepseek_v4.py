@@ -57,6 +57,22 @@ class DeepseekV4RMSNorm(nn.Module):
         return f"{tuple(self.weight.shape)}, eps={self.variance_epsilon}"
 
 
+class DeepseekV4UnweightedRMSNorm(nn.Module):
+    """RMSNorm without a learned weight — applied per-head to Q after ``q_b_proj``
+    in :class:`DeepseekV4Attention`. Matches the V4-Flash reference's ``inference/
+    model.py:498`` rescale ``q *= rsqrt(mean(q**2) + eps)``; without it attention
+    scores end up at the wrong scale and the model collapses to a single repeated
+    token within a handful of layers.
+    """
+
+    def __init__(self, eps: float = 1.0e-6):
+        super().__init__()
+        self.eps = eps
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        return x * torch.rsqrt(x.float().square().mean(-1, keepdim=True) + self.eps).to(x.dtype)
+
+
 class DeepseekV4RotaryEmbedding(nn.Module):
     """Multi-layer-type rotary embedding (Laguna pattern: partial rotary on top of
     Gemma3's per-layer-type buffers), specialised for V4's *interleaved* RoPE. Holds
@@ -849,6 +865,7 @@ class DeepseekV4Attention(nn.Module):
         self.q_a_proj = nn.Linear(config.hidden_size, config.q_lora_rank, bias=False)
         self.q_norm = DeepseekV4RMSNorm(config.q_lora_rank, eps=config.rms_norm_eps)
         self.q_b_proj = nn.Linear(config.q_lora_rank, self.num_heads * self.head_dim, bias=False)
+        self.q_head_norm = DeepseekV4UnweightedRMSNorm(eps=config.rms_norm_eps)
         self.kv_proj = nn.Linear(config.hidden_size, self.head_dim, bias=False)
         self.kv_norm = DeepseekV4RMSNorm(self.head_dim, eps=config.rms_norm_eps)
         self.o_a_proj = DeepseekV4GroupedLinear(
@@ -880,12 +897,7 @@ class DeepseekV4Attention(nn.Module):
         # trailing slice is what gets rotated).
         q_residual = self.q_norm(self.q_a_proj(hidden_states))
         q = self.q_b_proj(q_residual).view(batch, seq_len, -1, self.head_dim).transpose(1, 2)
-        # Per-head RMSNorm-style rescale (no learned weight) — the V4-Flash reference
-        # (``inference/model.py:498``) does ``q *= rsqrt(mean(q**2) + eps)`` on each
-        # head after ``q_b_proj``, before RoPE. Skipping it leaves attention scores at
-        # the wrong scale and the model collapses to a single repeated token within a
-        # handful of layers.
-        q = q * torch.rsqrt(q.float().square().mean(-1, keepdim=True) + self.config.rms_norm_eps).to(q.dtype)
+        q = self.q_head_norm(q)
         kv = self.kv_norm(self.kv_proj(hidden_states)).view(batch, seq_len, 1, self.head_dim).transpose(1, 2)
         q = apply_rotary_pos_emb(q, cos, sin)
         kv = apply_rotary_pos_emb(kv, cos, sin)
@@ -907,6 +919,11 @@ class DeepseekV4Attention(nn.Module):
             compressed_kv = self.compressor(hidden_states, q_residual, position_ids, past_key_values, self.layer_idx)
             full_kv = torch.cat([kv, compressed_kv], dim=2)
 
+        # Compressor concatenates extra long-range KV entries onto the sliding-window
+        # branch so ``full_kv`` is wider than the model-level mask was built for. Pad
+        # the mask's key dim with ``0.0`` (additive-mask convention: unmasked) so the
+        # compressor positions are attended. FA / SDPA backends consume the same 4D
+        # additive mask path here, so the pad is uniform across backends.
         if attention_mask is not None and full_kv.shape[2] > attention_mask.shape[-1]:
             attention_mask = F.pad(attention_mask, (0, full_kv.shape[2] - attention_mask.shape[-1]), value=0.0)
 
@@ -976,10 +993,14 @@ class DeepseekV4HyperConnection(nn.Module):
         self.hc_mult = config.hc_mult
         self.hc_sinkhorn_iters = config.hc_sinkhorn_iters
         self.hc_eps = config.hc_eps
-        self.norm_eps = config.rms_norm_eps
+        self.input_norm = DeepseekV4UnweightedRMSNorm(eps=config.rms_norm_eps)
         mix = (2 + self.hc_mult) * self.hc_mult
         self.fn = nn.Parameter(torch.empty(mix, self.hc_mult * config.hidden_size))
         self.base = nn.Parameter(torch.empty(mix))
+        # 3 = number of outputs from the mHC mapping: ``pre`` (input projection
+        # weights), ``post`` (sublayer output projection weights), ``comb`` (the
+        # H×H residual combine matrix that gets Sinkhorn-projected onto the
+        # doubly-stochastic manifold). Each output gets its own learned scale.
         self.scale = nn.Parameter(torch.empty(3))
 
     def forward(self, hidden_streams: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
@@ -994,9 +1015,8 @@ class DeepseekV4HyperConnection(nn.Module):
         𝑀(𝑡) = T𝑟(T𝑐(𝑀(𝑡−1))), (8)
         where T𝑟 and T𝑐 denote row and column normalization, respectively.
         """
-        flat = hidden_streams.flatten(start_dim=2).float()
-        rsqrt = torch.rsqrt(flat.square().mean(-1, keepdim=True) + self.norm_eps)
-        mix = F.linear(flat, self.fn.float()) * rsqrt  # [B, S, (2+H)*H]
+        flat = self.input_norm(hidden_streams.flatten(start_dim=2).float())
+        mix = F.linear(flat, self.fn.float())  # [B, S, (2+H)*H]
         pre_scale, post_scale, comb_scale = self.scale.unbind(0)
         hc = self.hc_mult
         pre = torch.sigmoid(mix[..., :hc] * pre_scale + self.base[:hc]) + self.hc_eps
@@ -1010,7 +1030,11 @@ class DeepseekV4HyperConnection(nn.Module):
         for _ in range(self.hc_sinkhorn_iters):
             comb = comb / (comb.sum(dim=-1, keepdim=True) + self.hc_eps)
             comb = comb / (comb.sum(dim=-2, keepdim=True) + self.hc_eps)
-        return pre, post, comb
+        # Collapse the ``hc_mult`` parallel streams down to a single sequence using
+        # the ``pre`` weights (Manifold-Constrained input projection): one weighted
+        # sum across the stream axis, ready for the sublayer (attn / MLP).
+        collapsed = (pre.unsqueeze(-1) * hidden_streams).sum(dim=2).to(hidden_streams.dtype)
+        return post, comb, collapsed
 
 
 class DeepseekV4HyperHead(nn.Module):
@@ -1019,16 +1043,15 @@ class DeepseekV4HyperHead(nn.Module):
     def __init__(self, config: DeepseekV4Config):
         super().__init__()
         self.hc_mult = config.hc_mult
-        self.norm_eps = config.rms_norm_eps
+        self.input_norm = DeepseekV4UnweightedRMSNorm(eps=config.rms_norm_eps)
         self.eps = config.hc_eps
         self.hc_fn = nn.Parameter(torch.empty(self.hc_mult, self.hc_mult * config.hidden_size))
         self.hc_base = nn.Parameter(torch.empty(self.hc_mult))
         self.hc_scale = nn.Parameter(torch.empty(1))
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        flat = x.flatten(2).float()
-        rsqrt = torch.rsqrt(flat.square().mean(-1, keepdim=True) + self.norm_eps)
-        mixes = F.linear(flat, self.hc_fn.float()) * rsqrt
+        flat = self.input_norm(x.flatten(2).float())
+        mixes = F.linear(flat, self.hc_fn.float())
         pre = torch.sigmoid(mixes * self.hc_scale.float() + self.hc_base.float()) + self.eps
         return (pre.unsqueeze(-1) * x).sum(dim=2).to(x.dtype)
 
@@ -1057,7 +1080,10 @@ class DeepseekV4Experts(nn.Module):
 
     def __init__(self, config: DeepseekV4Config):
         super().__init__()
-        self.num_experts = config.n_routed_experts
+        # ``config.num_local_experts`` routes through ``attribute_map`` to
+        # ``n_routed_experts`` — using the standard name keeps FP8 / TP integrations
+        # that key on ``num_local_experts`` working unchanged.
+        self.num_experts = config.num_local_experts
         self.hidden_size = config.hidden_size
         self.intermediate_size = config.moe_intermediate_size
         self.gate_up_proj = nn.Parameter(torch.empty(self.num_experts, 2 * self.intermediate_size, self.hidden_size))
@@ -1090,93 +1116,56 @@ class DeepseekV4Experts(nn.Module):
         return final
 
 
-class DeepseekV4TopKRouter(nn.Module):
-    """DeepSeekMoE top-k router (paper §2.1, "Mixture-of-Experts"). Two changes from
-    the V3 router:
+class DeepseekV4Router(nn.Module):
+    """DeepSeekMoE V4 router (paper §2.1, "Mixture-of-Experts"). Two index-selection
+    paths share the same gate ``weight``, ``score_fn`` (Sqrt(Softplus(·)) for V4-Flash),
+    and ``routed_scaling_factor``; ``select_indices`` picks which:
 
-      * The expert affinity activation is ``Sqrt(Softplus(·))`` instead of the V3
-        Sigmoid (paper §2.1: "we change the activation function that computes the
-        affinity scores from Sigmoid(·) into Sqrt(Softplus(·))"). The ``scoring_func``
-        config field selects this for V4 checkpoints.
-      * The constraint on the number of routing target nodes used in V3 is dropped,
-        and the V3 ``n_group`` / ``topk_group`` machinery is removed entirely (paper
-        §2.1: "we remove the constraint on the number of routing target nodes").
+      * ``"moe"`` layers (the standard V4 path): top-k argmax of
+        ``scores + e_score_correction_bias``. The correction bias is the
+        auxiliary-loss-free trick (DeepSeek's ``noaux_tc``) — it biases the argmax
+        only, never carries gradients, so it lives as a buffer.
+      * ``"hash_moe"`` layers (the first ``mlp_layer_types == "hash_moe"`` blocks of
+        V4): expert indices come from a frozen ``tid2eid[input_ids]`` lookup. The
+        learned gate ``weight`` still produces the per-expert scores that weight
+        the selected experts; only *which-experts* is static.
 
-    The auxiliary-loss-free strategy is preserved via the per-expert ``bias`` buffer
-    that biases the top-k argmax without flowing gradients (same ``noaux_tc`` idea
-    as DeepSeek-V3).
+    V3's ``n_group`` / ``topk_group`` constraint on routing target nodes is dropped
+    (paper §2.1: "we remove the constraint on the number of routing target nodes").
     """
 
-    def __init__(self, config: DeepseekV4Config):
+    def __init__(self, config: DeepseekV4Config, layer_idx: int):
         super().__init__()
         self.top_k = config.num_experts_per_tok
         self.num_experts = config.num_local_experts
         self.hidden_dim = config.hidden_size
         self.weight = nn.Parameter(torch.empty(self.num_experts, self.hidden_dim))
+        self.is_hash = config.mlp_layer_types[layer_idx] == "hash_moe"
         self.score_fn = ACT2FN[config.scoring_func]
         self.routed_scaling_factor = config.routed_scaling_factor
-        # The correction bias biases the argmax only — never gradient-carrying — so it's
-        # a buffer (same convention as DeepseekV3's ``e_score_correction_bias``).
-        self.register_buffer("bias", torch.zeros(self.num_experts), persistent=True)
-
-    def forward(self, hidden_states: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
-        flat = hidden_states.reshape(-1, self.hidden_dim)
-        logits = F.linear(flat.float(), self.weight.float())
-        scores = self.score_fn(logits)
-        indices = torch.topk(scores + self.bias, self.top_k, dim=-1, sorted=False).indices
-        weights = scores.gather(1, indices)
-        weights = weights / (weights.sum(dim=-1, keepdim=True) + 1e-20)
-        return logits, weights * self.routed_scaling_factor, indices
-
-
-class DeepseekV4HashRouter(nn.Module):
-    """Hash routing for the first ``num_hash_layers`` MoE layers (paper §2.1, "Mixture-
-    of-Experts"). The first three blocks of V4 replace the dense FFN of V3 with an MoE
-    where the expert selection is determined by a fixed hash of the input token id —
-    a frozen ``tid2eid`` (token id to expert id) lookup — instead of a learned gate.
-    The learned gate ``weight`` still produces the per-expert scoring values used to
-    weight the selected experts' activations; only the *which-experts* selection is
-    static.
-    """
-
-    def __init__(self, config: DeepseekV4Config):
-        super().__init__()
-        self.top_k = config.num_experts_per_tok
-        self.num_experts = config.num_local_experts
-        self.hidden_dim = config.hidden_size
-        self.weight = nn.Parameter(torch.empty(self.num_experts, self.hidden_dim))
-        self.score_fn = ACT2FN[config.scoring_func]
-        self.routed_scaling_factor = config.routed_scaling_factor
-        self.register_buffer(
-            "tid2eid",
-            torch.zeros(config.vocab_size, self.top_k, dtype=torch.long),
-            persistent=True,
-        )
+        if self.is_hash:
+            # Frozen token-id → expert-id lookup populated from the V4 checkpoint.
+            self.register_buffer(
+                "tid2eid", torch.zeros(config.vocab_size, self.top_k, dtype=torch.long), persistent=True
+            )
+        else:
+            # Aux-loss-free correction bias (same name as DeepseekV3 / Laguna).
+            self.register_buffer("e_score_correction_bias", torch.zeros(self.num_experts), persistent=True)
 
     def forward(
-        self, hidden_states: torch.Tensor, input_ids: torch.Tensor
+        self, hidden_states: torch.Tensor, input_ids: torch.Tensor | None = None
     ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         flat = hidden_states.reshape(-1, self.hidden_dim)
         logits = F.linear(flat.float(), self.weight.float())
         scores = self.score_fn(logits)
-        indices = self.tid2eid[input_ids.reshape(-1)].long()
+        indices = self.select_indices(scores, input_ids)
         weights = scores.gather(1, indices)
         weights = weights / (weights.sum(dim=-1, keepdim=True) + 1e-20)
         return logits, weights * self.routed_scaling_factor, indices
 
-
-class DeepseekV4SparseMoeBlock(nn.Module):
-    def __init__(self, config: DeepseekV4Config, layer_idx: int):
-        super().__init__()
-        self.is_hash = config.mlp_layer_types[layer_idx] == "hash_moe"
-        self.gate = DeepseekV4HashRouter(config) if self.is_hash else DeepseekV4TopKRouter(config)
-        self.experts = DeepseekV4Experts(config)
-        self.shared_experts = DeepseekV4MLP(config)
-
-    def forward(self, hidden_states: torch.Tensor, input_ids: torch.Tensor | None = None, **_) -> torch.Tensor:
-        batch, seq_len, hidden_dim = hidden_states.shape
-        residual = hidden_states
-        flat = hidden_states.view(-1, hidden_dim)
+    def select_indices(self, scores: torch.Tensor, input_ids: torch.Tensor | None) -> torch.Tensor:
+        """Hash path: ``tid2eid[input_ids]`` static lookup.
+        Top-k path: ``argmax_top_k(scores + e_score_correction_bias)``."""
         if self.is_hash:
             if input_ids is None:
                 raise ValueError(
@@ -1184,9 +1173,22 @@ class DeepseekV4SparseMoeBlock(nn.Module):
                     "The `inputs_embeds`-only inference path is not supported for models with "
                     "any `hash_moe` entries in `mlp_layer_types`."
                 )
-            _, weights, indices = self.gate(hidden_states, input_ids)
-        else:
-            _, weights, indices = self.gate(hidden_states)
+            return self.tid2eid[input_ids.reshape(-1)].long()
+        return torch.topk(scores + self.e_score_correction_bias, self.top_k, dim=-1, sorted=False).indices
+
+
+class DeepseekV4SparseMoeBlock(nn.Module):
+    def __init__(self, config: DeepseekV4Config, layer_idx: int):
+        super().__init__()
+        self.gate = DeepseekV4Router(config, layer_idx)
+        self.experts = DeepseekV4Experts(config)
+        self.shared_experts = DeepseekV4MLP(config)
+
+    def forward(self, hidden_states: torch.Tensor, input_ids: torch.Tensor | None = None, **_) -> torch.Tensor:
+        batch, seq_len, hidden_dim = hidden_states.shape
+        residual = hidden_states
+        flat = hidden_states.view(-1, hidden_dim)
+        _, weights, indices = self.gate(hidden_states, input_ids)
         routed = self.experts(flat, indices, weights).view(batch, seq_len, hidden_dim)
         return routed + self.shared_experts(residual)
 
@@ -1247,12 +1249,16 @@ class DeepseekV4DecoderLayer(GradientCheckpointingLayer):
         self.attn_hc = DeepseekV4HyperConnection(config)
         self.ffn_hc = DeepseekV4HyperConnection(config)
 
-    def forward(self, hidden_states: torch.Tensor, **kwargs: Unpack[TransformersKwargs]) -> torch.Tensor:
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        input_ids: torch.Tensor | None = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> torch.Tensor:
         # hidden_states throughout: [B, S, hc_mult, hidden].
 
         # --- Attention site: collapse → norm → attn → expand ---
-        pre, post, comb = self.attn_hc(hidden_states)
-        collapsed = (pre.unsqueeze(-1) * hidden_states).sum(dim=2).to(hidden_states.dtype)
+        post, comb, collapsed = self.attn_hc(hidden_states)
         attn_output, _ = self.self_attn(self.input_layernorm(collapsed), **kwargs)
         dtype = hidden_states.dtype
         hidden_states = post.to(dtype).unsqueeze(-1) * attn_output.unsqueeze(-2) + torch.matmul(
@@ -1260,9 +1266,8 @@ class DeepseekV4DecoderLayer(GradientCheckpointingLayer):
         )
 
         # --- MLP site: collapse → norm → mlp → expand ---
-        pre, post, comb = self.ffn_hc(hidden_states)
-        collapsed = (pre.unsqueeze(-1) * hidden_states).sum(dim=2).to(hidden_states.dtype)
-        mlp_output = self.mlp(self.post_attention_layernorm(collapsed), input_ids=kwargs.get("input_ids"))
+        post, comb, collapsed = self.ffn_hc(hidden_states)
+        mlp_output = self.mlp(self.post_attention_layernorm(collapsed), input_ids=input_ids)
         dtype = hidden_states.dtype
         return post.to(dtype).unsqueeze(-1) * mlp_output.unsqueeze(-2) + torch.matmul(comb.to(dtype), hidden_states)
 
@@ -1290,7 +1295,7 @@ class DeepseekV4PreTrainedModel(PreTrainedModel):
     _can_compile_fullgraph = False
     _supports_attention_backend = True
     _can_record_outputs = {
-        "router_logits": OutputRecorder(DeepseekV4TopKRouter, index=0),
+        "router_logits": OutputRecorder(DeepseekV4Router, index=0),
         "hidden_states": DeepseekV4DecoderLayer,
         "attentions": DeepseekV4Attention,
     }
@@ -1308,12 +1313,12 @@ class DeepseekV4PreTrainedModel(PreTrainedModel):
     def _init_weights(self, module):
         super()._init_weights(module)
         std = self.config.initializer_range
-        if isinstance(module, (DeepseekV4TopKRouter, DeepseekV4HashRouter)):
+        if isinstance(module, DeepseekV4Router):
             init.normal_(module.weight, mean=0.0, std=std)
-            if isinstance(module, DeepseekV4TopKRouter):
-                init.zeros_(module.bias)  # buffer
-            if isinstance(module, DeepseekV4HashRouter):
+            if module.is_hash:
                 init.zeros_(module.tid2eid)  # buffer; real values come from the checkpoint
+            else:
+                init.zeros_(module.e_score_correction_bias)  # buffer
         elif isinstance(module, DeepseekV4Experts):
             init.normal_(module.gate_up_proj, mean=0.0, std=std)
             init.normal_(module.down_proj, mean=0.0, std=std)
@@ -1350,7 +1355,6 @@ class DeepseekV4Model(DeepseekV4PreTrainedModel):
         self.norm = DeepseekV4RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.hc_head = DeepseekV4HyperHead(config)
         self.rotary_emb = DeepseekV4RotaryEmbedding(config)
-        self.rotary_emb_compress = DeepseekV4RotaryEmbedding(config)
         self.gradient_checkpointing = False
         self.post_init()
 
@@ -1405,12 +1409,12 @@ class DeepseekV4Model(DeepseekV4PreTrainedModel):
                 position_ids=position_ids,
             )
         hidden_states = inputs_embeds.unsqueeze(2).expand(-1, -1, self.config.hc_mult, -1).contiguous()
-        cos_sin = self.rotary_emb(inputs_embeds, position_ids=position_ids, layer_type="main")
+        position_embeddings = self.rotary_emb(inputs_embeds, position_ids=position_ids, layer_type="main")
 
         for layer in self.layers:
             hidden_states = layer(
                 hidden_states,
-                position_embeddings=cos_sin,
+                position_embeddings=position_embeddings,
                 position_ids=position_ids,
                 attention_mask=causal_mask,
                 input_ids=input_ids,
@@ -1510,7 +1514,7 @@ class DeepseekV4ForCausalLM(DeepseekV4PreTrainedModel, GenerationMixin):
     _tp_plan = {"lm_head": "colwise_gather_output"}
     _pp_plan = {"lm_head": (["hidden_states"], ["logits"])}
 
-    def __init__(self, config: DeepseekV4Config):
+    def __init__(self, config):
         super().__init__(config)
         self.model = DeepseekV4Model(config)
         self.vocab_size = config.vocab_size

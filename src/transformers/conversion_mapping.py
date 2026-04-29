@@ -242,6 +242,12 @@ def _build_checkpoint_conversion_mapping():
                 source_patterns=r"^model\.layers\.(\d+)\.self_attn\.wo_b\.",
                 target_patterns=r"model.layers.\1.self_attn.o_b_proj.",
             ),
+            # Aux-loss-free routing bias: upstream ships ``gate.bias`` (V3 convention);
+            # we register it as ``e_score_correction_bias`` (cross-model standard name).
+            WeightRenaming(
+                source_patterns=r"^model\.layers\.(\d+)\.mlp\.gate\.bias$",
+                target_patterns=r"model.layers.\1.mlp.gate.e_score_correction_bias",
+            ),
             WeightRenaming(
                 source_patterns=r"^model\.layers\.(\d+)\.mlp\.shared_experts\.w1\.",
                 target_patterns=r"model.layers.\1.mlp.shared_experts.gate_proj.",
