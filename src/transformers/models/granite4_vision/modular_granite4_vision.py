@@ -143,6 +143,15 @@ class Granite4VisionConfig(LlavaNextConfig):
         if self.spatial_target_layers is None:
             self.spatial_target_layers = [12, 15, 18, 21]
 
+        # Peek at vision hidden_size before super() to build a fully-specified qformer_config,
+        # avoiding any runtime field patching after super().
+        if isinstance(self.vision_config, dict):
+            vision_hidden_size = self.vision_config.get("hidden_size", 1152)
+        elif self.vision_config is not None:
+            vision_hidden_size = self.vision_config.hidden_size
+        else:
+            vision_hidden_size = 1152
+
         # Convert qformer_config dict → object before super() so _attn_implementation.setter
         # (called inside super().__post_init__) sees a config object, not a raw dict.
         if isinstance(self.qformer_config, dict):
@@ -155,15 +164,12 @@ class Granite4VisionConfig(LlavaNextConfig):
                 cross_attention_frequency=1,
                 max_position_embeddings=2048,
                 use_qformer_text_input=False,
+                hidden_size=vision_hidden_size,
+                num_attention_heads=vision_hidden_size // 64,
+                encoder_hidden_size=vision_hidden_size,
             )
 
         super().__post_init__(**kwargs)
-
-        # vision_config is resolved by super().__post_init__(); patch vision-dependent qformer fields.
-        hs = self.vision_config.hidden_size
-        self.qformer_config.hidden_size = hs
-        self.qformer_config.num_attention_heads = hs // 64
-        self.qformer_config.encoder_hidden_size = hs
 
 
 # ── Processor ───────────────────────────────────────────────────────────────
