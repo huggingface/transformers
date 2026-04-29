@@ -89,7 +89,13 @@ class DeepseekV4Config(PreTrainedConfig):
 
     model_type = "deepseek_v4"
     keys_to_ignore_at_inference = ["past_key_values"]
-    attribute_map = {"num_local_experts": "n_routed_experts"}
+    # ``num_local_experts`` is the standard MoE attr name (read by FP8 / TP integrations);
+    # ``intermediate_size`` is what :class:`LlamaMLP` reads for the shared expert width
+    # — V4 only ships ``moe_intermediate_size`` so we route the read through.
+    attribute_map = {
+        "num_local_experts": "n_routed_experts",
+        "intermediate_size": "moe_intermediate_size",
+    }
 
     base_model_pp_plan = {
         "embed_tokens": (["input_ids"], ["inputs_embeds"]),
@@ -97,10 +103,12 @@ class DeepseekV4Config(PreTrainedConfig):
         "norm": (["hidden_states"], ["hidden_states"]),
     }
     base_model_tp_plan = {
-        "layers.*.self_attn.q_a_proj": "colwise",
+        # q_a_proj / kv_proj outputs feed RMSNorms (q_norm / kv_norm) that normalise
+        # across the full output dim — sharding the output would break the norm. Only
+        # q_b_proj is colwise-sharded (per-head split is safe: q_head_norm is per-head),
+        # and o_b_proj is rowwise (input-dim sharded). o_a_proj is a GroupedLinear
+        # whose forward uses ``torch.bmm``; the standard TP wrappers don't handle bmm.
         "layers.*.self_attn.q_b_proj": "colwise",
-        "layers.*.self_attn.kv_proj": "colwise",
-        "layers.*.self_attn.o_a_proj": "rowwise",
         "layers.*.self_attn.o_b_proj": "rowwise",
         "layers.*.mlp.experts.gate_up_proj": "packed_colwise",
         "layers.*.mlp.experts.down_proj": "rowwise",
@@ -161,6 +169,7 @@ class DeepseekV4Config(PreTrainedConfig):
     rope_parameters: RopeParameters | dict | None = None
     partial_rotary_factor: float | None = None
     attention_bias: bool = False
+    mlp_bias: bool = False
     attention_dropout: float = 0.0
 
     def validate_layer_type(self):
