@@ -61,12 +61,12 @@ class BaseModelOutputWithVisionQformerOutputs(BaseModelOutputWithPooling):
     qformer_outputs: BaseModelOutputWithPoolingAndCrossAttentions | None = None
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Class defining the outputs of [`InstructBlipForConditionalGeneration`].
     """
 )
+@dataclass
 # Copied from transformers.models.blip_2.modeling_blip_2.Blip2ForConditionalGenerationModelOutput with Blip2->InstructBlip
 class InstructBlipForConditionalGenerationModelOutput(ModelOutput):
     r"""

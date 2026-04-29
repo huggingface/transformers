@@ -40,12 +40,12 @@ from ...utils.output_capturing import capture_outputs
 from .configuration_siglip import SiglipConfig, SiglipTextConfig, SiglipVisionConfig
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Base class for vision model's outputs that also contains image embeddings of the pooling of the last hidden states.
     """
 )
+@dataclass
 # Copied from transformers.models.clip.modeling_clip.CLIPVisionModelOutput with CLIP->Siglip
 class SiglipVisionModelOutput(ModelOutput):
     r"""
