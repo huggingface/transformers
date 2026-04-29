@@ -200,7 +200,7 @@ class MiMoV2FlashMLP(Glm4MoeMLP):
     pass
 
 
-def eager_attention_forward_with_optional_sink(
+def eager_attention_forward(
     module: nn.Module,
     query: torch.Tensor,
     key: torch.Tensor,
@@ -278,7 +278,7 @@ class MiMoV2FlashAttention(Qwen2Attention):
             key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx)
 
         attention_interface = ALL_ATTENTION_FUNCTIONS.get_interface(
-            self.config._attn_implementation, eager_attention_forward_with_optional_sink
+            self.config._attn_implementation, eager_attention_forward
         )
         attn_output, attn_weights = attention_interface(
             self,
