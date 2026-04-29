@@ -211,6 +211,7 @@ if TYPE_CHECKING:
     from .kosmos2 import *
     from .kosmos2_5 import *
     from .kyutai_speech_to_text import *
+    from .laguna import *
     from .lasr import *
     from .layoutlm import *
     from .layoutlmv2 import *
@@ -249,6 +250,7 @@ if TYPE_CHECKING:
     from .metaclip_2 import *
     from .mgp_str import *
     from .mimi import *
+    from .minicpmv4_6 import *
     from .minimax import *
     from .minimax_m2 import *
     from .ministral import *

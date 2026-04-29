@@ -37,15 +37,14 @@ The example below demonstrates how to predict the [MASK] token with [`Pipeline`]
 <hfoptions id="usage">
 <hfoption id="Pipeline">
 
-```py
-import torch
+```python
 from transformers import pipeline
+
 
 pipeline = pipeline(
    task="fill-mask",
    model="weiweishi/roc-bert-base-zh",
-   dtype=torch.float16,
-   device=0
+   device=0,
 )
 pipeline("這家餐廳的拉麵是我[MASK]過的最好的拉麵之")
 ```
@@ -53,16 +52,17 @@ pipeline("這家餐廳的拉麵是我[MASK]過的最好的拉麵之")
 </hfoption>
 <hfoption id="AutoModel">
 
-```py
+```python
 import torch
+
 from transformers import AutoModelForMaskedLM, AutoTokenizer
+
 
 tokenizer = AutoTokenizer.from_pretrained(
    "weiweishi/roc-bert-base-zh",
 )
 model = AutoModelForMaskedLM.from_pretrained(
    "weiweishi/roc-bert-base-zh",
-   dtype=torch.float16,
    device_map="auto",
 )
 inputs = tokenizer("這家餐廳的拉麵是我[MASK]過的最好的拉麵之", return_tensors="pt").to(model.device)
