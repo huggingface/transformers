@@ -52,7 +52,6 @@ model_id = "LGAI-EXAONE/EXAONE-4.5-33B"
 processor = AutoProcessor.from_pretrained(model_id)
 model = AutoModelForImageTextToText.from_pretrained(
     model_id,
-    dtype=torch.bfloat16,
     device_map="auto",
 )
 

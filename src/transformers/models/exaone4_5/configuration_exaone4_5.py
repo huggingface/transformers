@@ -67,6 +67,7 @@ class Exaone4_5_Config(PreTrainedConfig):
 
         if isinstance(self.text_config, dict):
             self.text_config["model_type"] = self.text_config.get("model_type", "exaone4")
+            # EXAONE 4.5 first released with the text model type as `exaone4_5_text`, now changed to `exaone4`
             if self.text_config["model_type"] == "exaone4_5_text":
                 self.text_config["model_type"] = "exaone4"
             self.text_config = CONFIG_MAPPING[self.text_config["model_type"]](**self.text_config)
