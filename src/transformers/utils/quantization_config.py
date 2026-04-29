@@ -1682,16 +1682,16 @@ class FineGrainedFP8Config(QuantizationConfigMixin):
             The scheme used for activation, the defaults and only support scheme for now is "dynamic".
         weight_block_size (`typing.tuple[int, int]`, *optional*, defaults to `(128, 128)`):
             The size of the weight blocks for quantization, default is (128, 128).
+        modules_to_not_convert (`list`, *optional*):
+            A list of module names that should not be converted during quantization.
+        dequantize (`bool`, *optional*, defaults to `False`):
+            Whether to dequantize the model during loading.
         scale_fmt (`str`, *optional*, defaults to `"float"`):
             Storage dtype of the per-block weight scales:
               - `"float"`: fp32 scales (DeepSeek V3-style; Hopper SM90 1D2D path).
               - `"ue8m0"`: 1-byte `torch.float8_e8m0fnu` scales (DeepSeek V4-style). At GEMM time
                 the underlying memory is reinterpreted as `torch.int32` (4 UE8M0 bytes per int),
                 feeding the SM100 1D1D dispatch directly with no float→int transform per call.
-        dequantize (`bool`, *optional*, defaults to `False`):
-            Whether to dequantize the model during loading.
-        modules_to_not_convert (`list`, *optional*):
-            A list of module names that should not be converted during quantization.
     """
 
     def __init__(
