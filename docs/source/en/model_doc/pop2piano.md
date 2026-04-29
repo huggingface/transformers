@@ -71,101 +71,109 @@ Please note that you may need to restart your runtime after installation.
 - Example using HuggingFace Dataset:
 
 ```python
->>> from datasets import load_dataset
->>> from transformers import Pop2PianoForConditionalGeneration, Pop2PianoProcessor
+from datasets import load_dataset
 
->>> model = Pop2PianoForConditionalGeneration.from_pretrained("sweetcocoa/pop2piano")
->>> processor = Pop2PianoProcessor.from_pretrained("sweetcocoa/pop2piano")
->>> ds = load_dataset("sweetcocoa/pop2piano_ci", split="test")
+from transformers import Pop2PianoForConditionalGeneration, Pop2PianoProcessor
 
->>> inputs = processor(
-...     audio=ds["audio"][0]["array"], sampling_rate=ds["audio"][0]["sampling_rate"], return_tensors="pt"
-... )
->>> model_output = model.generate(input_features=inputs["input_features"], composer="composer1")
->>> tokenizer_output = processor.batch_decode(
-...     token_ids=model_output, feature_extractor_output=inputs
-... )["pretty_midi_objects"][0]
->>> tokenizer_output.write("./Outputs/midi_output.mid")
+
+model = Pop2PianoForConditionalGeneration.from_pretrained("sweetcocoa/pop2piano", device_map="auto")
+processor = Pop2PianoProcessor.from_pretrained("sweetcocoa/pop2piano")
+ds = load_dataset("sweetcocoa/pop2piano_ci", split="test")
+
+inputs = processor(
+    audio=ds["audio"][0]["array"], sampling_rate=ds["audio"][0]["sampling_rate"], return_tensors="pt"
+)
+model_output = model.generate(input_features=inputs["input_features"], composer="composer1")
+tokenizer_output = processor.batch_decode(
+    token_ids=model_output, feature_extractor_output=inputs
+)["pretty_midi_objects"][0]
+tokenizer_output.write("./Outputs/midi_output.mid")
 ```
 
 - Example using your own audio file:
 
 ```python
->>> import librosa
->>> from transformers import Pop2PianoForConditionalGeneration, Pop2PianoProcessor
+import librosa
 
->>> audio, sr = librosa.load("<your_audio_file_here>", sr=44100)  # feel free to change the sr to a suitable value.
->>> model = Pop2PianoForConditionalGeneration.from_pretrained("sweetcocoa/pop2piano")
->>> processor = Pop2PianoProcessor.from_pretrained("sweetcocoa/pop2piano")
+from transformers import Pop2PianoForConditionalGeneration, Pop2PianoProcessor
 
->>> inputs = processor(audio=audio, sampling_rate=sr, return_tensors="pt")
->>> model_output = model.generate(input_features=inputs["input_features"], composer="composer1")
->>> tokenizer_output = processor.batch_decode(
-...     token_ids=model_output, feature_extractor_output=inputs
-... )["pretty_midi_objects"][0]
->>> tokenizer_output.write("./Outputs/midi_output.mid")
+
+audio, sr = librosa.load("<your_audio_file_here>", sr=44100)  # feel free to change the sr to a suitable value.
+model = Pop2PianoForConditionalGeneration.from_pretrained("sweetcocoa/pop2piano", device_map="auto")
+processor = Pop2PianoProcessor.from_pretrained("sweetcocoa/pop2piano")
+
+inputs = processor(audio=audio, sampling_rate=sr, return_tensors="pt").to(model.device)
+model_output = model.generate(input_features=inputs["input_features"], composer="composer1")
+tokenizer_output = processor.batch_decode(
+    token_ids=model_output, feature_extractor_output=inputs
+)["pretty_midi_objects"][0]
+tokenizer_output.write("./Outputs/midi_output.mid")
 ```
 
 - Example of processing multiple audio files in batch:
 
 ```python
->>> import librosa
->>> from transformers import Pop2PianoForConditionalGeneration, Pop2PianoProcessor
+import librosa
 
->>> # feel free to change the sr to a suitable value.
->>> audio1, sr1 = librosa.load("<your_first_audio_file_here>", sr=44100)  
->>> audio2, sr2 = librosa.load("<your_second_audio_file_here>", sr=44100)
->>> model = Pop2PianoForConditionalGeneration.from_pretrained("sweetcocoa/pop2piano")
->>> processor = Pop2PianoProcessor.from_pretrained("sweetcocoa/pop2piano")
+from transformers import Pop2PianoForConditionalGeneration, Pop2PianoProcessor
 
->>> inputs = processor(audio=[audio1, audio2], sampling_rate=[sr1, sr2], return_attention_mask=True, return_tensors="pt")
->>> # Since we now generating in batch(2 audios) we must pass the attention_mask
->>> model_output = model.generate(
-...     input_features=inputs["input_features"],
-...     attention_mask=inputs["attention_mask"],
-...     composer="composer1",
-... )
->>> tokenizer_output = processor.batch_decode(
-...     token_ids=model_output, feature_extractor_output=inputs
-... )["pretty_midi_objects"]
 
->>> # Since we now have 2 generated MIDI files
->>> tokenizer_output[0].write("./Outputs/midi_output1.mid")
->>> tokenizer_output[1].write("./Outputs/midi_output2.mid")
+# feel free to change the sr to a suitable value.
+audio1, sr1 = librosa.load("<your_first_audio_file_here>", sr=44100)
+audio2, sr2 = librosa.load("<your_second_audio_file_here>", sr=44100)
+model = Pop2PianoForConditionalGeneration.from_pretrained("sweetcocoa/pop2piano", device_map="auto")
+processor = Pop2PianoProcessor.from_pretrained("sweetcocoa/pop2piano")
+
+inputs = processor(audio=[audio1, audio2], sampling_rate=[sr1, sr2], return_attention_mask=True, return_tensors="pt").to(model.device)
+# Since we now generating in batch(2 audios) we must pass the attention_mask
+model_output = model.generate(
+    input_features=inputs["input_features"],
+    attention_mask=inputs["attention_mask"],
+    composer="composer1",
+)
+tokenizer_output = processor.batch_decode(
+    token_ids=model_output, feature_extractor_output=inputs
+)["pretty_midi_objects"]
+
+# Since we now have 2 generated MIDI files
+tokenizer_output[0].write("./Outputs/midi_output1.mid")
+tokenizer_output[1].write("./Outputs/midi_output2.mid")
 ```
 
 - Example of processing multiple audio files in batch (Using `Pop2PianoFeatureExtractor` and `Pop2PianoTokenizer`):
 
 ```python
->>> import librosa
->>> from transformers import Pop2PianoForConditionalGeneration, Pop2PianoFeatureExtractor, Pop2PianoTokenizer
+import librosa
 
->>> # feel free to change the sr to a suitable value.
->>> audio1, sr1 = librosa.load("<your_first_audio_file_here>", sr=44100)  
->>> audio2, sr2 = librosa.load("<your_second_audio_file_here>", sr=44100)
->>> model = Pop2PianoForConditionalGeneration.from_pretrained("sweetcocoa/pop2piano")
->>> feature_extractor = Pop2PianoFeatureExtractor.from_pretrained("sweetcocoa/pop2piano")
->>> tokenizer = Pop2PianoTokenizer.from_pretrained("sweetcocoa/pop2piano")
+from transformers import Pop2PianoFeatureExtractor, Pop2PianoForConditionalGeneration, Pop2PianoTokenizer
 
->>> inputs = feature_extractor(
-...     audio=[audio1, audio2], 
-...     sampling_rate=[sr1, sr2], 
-...     return_attention_mask=True, 
-...     return_tensors="pt",
-... )
->>> # Since we now generating in batch(2 audios) we must pass the attention_mask
->>> model_output = model.generate(
-...     input_features=inputs["input_features"],
-...     attention_mask=inputs["attention_mask"],
-...     composer="composer1",
-... )
->>> tokenizer_output = tokenizer.batch_decode(
-...     token_ids=model_output, feature_extractor_output=inputs
-... )["pretty_midi_objects"]
 
->>> # Since we now have 2 generated MIDI files
->>> tokenizer_output[0].write("./Outputs/midi_output1.mid")
->>> tokenizer_output[1].write("./Outputs/midi_output2.mid")
+# feel free to change the sr to a suitable value.
+audio1, sr1 = librosa.load("<your_first_audio_file_here>", sr=44100)
+audio2, sr2 = librosa.load("<your_second_audio_file_here>", sr=44100)
+model = Pop2PianoForConditionalGeneration.from_pretrained("sweetcocoa/pop2piano", device_map="auto")
+feature_extractor = Pop2PianoFeatureExtractor.from_pretrained("sweetcocoa/pop2piano")
+tokenizer = Pop2PianoTokenizer.from_pretrained("sweetcocoa/pop2piano")
+
+inputs = feature_extractor(
+    audio=[audio1, audio2],
+    sampling_rate=[sr1, sr2],
+    return_attention_mask=True,
+    return_tensors="pt",
+)
+# Since we now generating in batch(2 audios) we must pass the attention_mask
+model_output = model.generate(
+    input_features=inputs["input_features"],
+    attention_mask=inputs["attention_mask"],
+    composer="composer1",
+)
+tokenizer_output = tokenizer.batch_decode(
+    token_ids=model_output, feature_extractor_output=inputs
+)["pretty_midi_objects"]
+
+# Since we now have 2 generated MIDI files
+tokenizer_output[0].write("./Outputs/midi_output1.mid")
+tokenizer_output[1].write("./Outputs/midi_output2.mid")
 ```
 
 ## Pop2PianoConfig

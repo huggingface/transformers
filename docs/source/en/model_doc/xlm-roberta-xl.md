@@ -37,13 +37,12 @@ The example below demonstrates how to predict the `<mask>` token with [`Pipeline
 <hfoption id="Pipeline">
 
 ```python
-import torch
 from transformers import pipeline
+
 
 pipeline = pipeline(
     task="fill-mask",
     model="facebook/xlm-roberta-xl",
-    dtype=torch.float16,
     device=0
 )
 pipeline("Bonjour, je suis un modèle <mask>.")
@@ -54,14 +53,15 @@ pipeline("Bonjour, je suis un modèle <mask>.")
 
 ```python
 import torch
+
 from transformers import AutoModelForMaskedLM, AutoTokenizer
+
 
 tokenizer = AutoTokenizer.from_pretrained(
     "facebook/xlm-roberta-xl",
 )
 model = AutoModelForMaskedLM.from_pretrained(
     "facebook/xlm-roberta-xl",
-    dtype=torch.float16,
     device_map="auto",
     attn_implementation="sdpa"
 )
@@ -85,9 +85,11 @@ Quantization reduces the memory burden of large models by representing the weigh
 
 The example below uses [torchao](../quantization/torchao) to only quantize the weights to int4.
 
-```py
+```python
 import torch
+
 from transformers import AutoModelForMaskedLM, AutoTokenizer, TorchAoConfig
+
 
 quantization_config = TorchAoConfig("int4_weight_only", group_size=128)
 tokenizer = AutoTokenizer.from_pretrained(
@@ -95,7 +97,6 @@ tokenizer = AutoTokenizer.from_pretrained(
 )
 model = AutoModelForMaskedLM.from_pretrained(
     "facebook/xlm-roberta-xl",
-    dtype=torch.float16,
     device_map="auto",
     attn_implementation="sdpa",
     quantization_config=quantization_config

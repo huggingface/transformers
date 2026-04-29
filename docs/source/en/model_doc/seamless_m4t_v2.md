@@ -44,10 +44,11 @@ In the following example, we'll load an Arabic audio sample and an English text 
 First, load the processor and a checkpoint of the model:
 
 ```python
->>> from transformers import AutoProcessor, SeamlessM4Tv2Model
+from transformers import AutoProcessor, SeamlessM4Tv2Model
 
->>> processor = AutoProcessor.from_pretrained("facebook/seamless-m4t-v2-large")
->>> model = SeamlessM4Tv2Model.from_pretrained("facebook/seamless-m4t-v2-large")
+
+processor = AutoProcessor.from_pretrained("facebook/seamless-m4t-v2-large")
+model = SeamlessM4Tv2Model.from_pretrained("facebook/seamless-m4t-v2-large", device_map="auto")
 ```
 
 You can seamlessly use this model on text or on audio, to generated either translated text or translated audio.
@@ -55,16 +56,18 @@ You can seamlessly use this model on text or on audio, to generated either trans
 Here is how to use the processor to process text and audio:
 
 ```python
->>> # let's load an audio sample from an Arabic speech corpus
->>> from datasets import load_dataset
->>> dataset = load_dataset("halabi2016/arabic_speech_corpus", split="test", streaming=True)
->>> audio_sample = next(iter(dataset))["audio"]
+# let's load an audio sample from an Arabic speech corpus
+from datasets import load_dataset
 
->>> # now, process it
->>> audio_inputs = processor(audio=audio_sample["array"], return_tensors="pt")
 
->>> # now, process some English text as well
->>> text_inputs = processor(text = "Hello, my dog is cute", src_lang="eng", return_tensors="pt")
+dataset = load_dataset("halabi2016/arabic_speech_corpus", split="test", streaming=True)
+audio_sample = next(iter(dataset))["audio"]
+
+# now, process it
+audio_inputs = processor(audio=audio_sample["array"], return_tensors="pt").to(model.device)
+
+# now, process some English text as well
+text_inputs = processor(text = "Hello, my dog is cute", src_lang="eng", return_tensors="pt").to(model.device)
 ```
 
 ### Speech
@@ -72,8 +75,8 @@ Here is how to use the processor to process text and audio:
 [`SeamlessM4Tv2Model`] can *seamlessly* generate text or speech with few or no changes. Let's target Russian voice translation:
 
 ```python
->>> audio_array_from_text = model.generate(**text_inputs, tgt_lang="rus")[0].cpu().numpy().squeeze()
->>> audio_array_from_audio = model.generate(**audio_inputs, tgt_lang="rus")[0].cpu().numpy().squeeze()
+audio_array_from_text = model.generate(**text_inputs, tgt_lang="rus")[0].cpu().numpy().squeeze()
+audio_array_from_audio = model.generate(**audio_inputs, tgt_lang="rus")[0].cpu().numpy().squeeze()
 ```
 
 With basically the same code, I've translated English text and Arabic speech to Russian speech samples.
@@ -84,13 +87,13 @@ Similarly, you can generate translated text from audio files or from text with t
 This time, let's translate to French.
 
 ```python
->>> # from audio
->>> output_tokens = model.generate(**audio_inputs, tgt_lang="fra", generate_speech=False)
->>> translated_text_from_audio = processor.decode(output_tokens[0].tolist()[0], skip_special_tokens=True)
+# from audio
+output_tokens = model.generate(**audio_inputs, tgt_lang="fra", generate_speech=False)
+translated_text_from_audio = processor.decode(output_tokens[0].tolist()[0], skip_special_tokens=True)
 
->>> # from text
->>> output_tokens = model.generate(**text_inputs, tgt_lang="fra", generate_speech=False)
->>> translated_text_from_text = processor.decode(output_tokens[0].tolist()[0], skip_special_tokens=True)
+# from text
+output_tokens = model.generate(**text_inputs, tgt_lang="fra", generate_speech=False)
+translated_text_from_text = processor.decode(output_tokens[0].tolist()[0], skip_special_tokens=True)
 ```
 
 ### Tips
@@ -101,15 +104,19 @@ This time, let's translate to French.
 For example, you can replace the audio-to-audio generation snippet with the model dedicated to the S2ST task, the rest is exactly the same code:
 
 ```python
->>> from transformers import SeamlessM4Tv2ForSpeechToSpeech
->>> model = SeamlessM4Tv2ForSpeechToSpeech.from_pretrained("facebook/seamless-m4t-v2-large")
+from transformers import SeamlessM4Tv2ForSpeechToSpeech
+
+
+model = SeamlessM4Tv2ForSpeechToSpeech.from_pretrained("facebook/seamless-m4t-v2-large", device_map="auto")
 ```
 
 Or you can replace the text-to-text generation snippet with the model dedicated to the T2TT task, you only have to remove `generate_speech=False`.
 
 ```python
->>> from transformers import SeamlessM4Tv2ForTextToText
->>> model = SeamlessM4Tv2ForTextToText.from_pretrained("facebook/seamless-m4t-v2-large")
+from transformers import SeamlessM4Tv2ForTextToText
+
+
+model = SeamlessM4Tv2ForTextToText.from_pretrained("facebook/seamless-m4t-v2-large", device_map="auto")
 ```
 
 Feel free to try out [`SeamlessM4Tv2ForSpeechToText`] and [`SeamlessM4Tv2ForTextToSpeech`] as well.

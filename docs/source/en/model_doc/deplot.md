@@ -39,16 +39,18 @@ Currently one checkpoint is available for DePlot:
 - `google/deplot`: DePlot fine-tuned on ChartQA dataset
 
 ```python
-from transformers import AutoProcessor, Pix2StructForConditionalGeneration
 import requests
 from PIL import Image
 
-model = Pix2StructForConditionalGeneration.from_pretrained("google/deplot")
+from transformers import AutoProcessor, Pix2StructForConditionalGeneration
+
+
+model = Pix2StructForConditionalGeneration.from_pretrained("google/deplot", device_map="auto")
 processor = AutoProcessor.from_pretrained("google/deplot")
 url = "https://raw.githubusercontent.com/vis-nlp/ChartQA/main/ChartQA%20Dataset/val/png/5090.png"
 image = Image.open(requests.get(url, stream=True).raw)
 
-inputs = processor(images=image, text="Generate underlying data table of the figure below:", return_tensors="pt")
+inputs = processor(images=image, text="Generate underlying data table of the figure below:", return_tensors="pt").to(model.device)
 predictions = model.generate(**inputs, max_new_tokens=512)
 print(processor.decode(predictions[0], skip_special_tokens=True))
 ```
@@ -59,6 +61,7 @@ To fine-tune DePlot, refer to the pix2struct [fine-tuning notebook](https://gith
 
 ```python
 from transformers.optimization import Adafactor, get_cosine_schedule_with_warmup
+
 
 optimizer = Adafactor(self.parameters(), scale_parameter=False, relative_step=False, lr=0.01, weight_decay=1e-05)
 scheduler = get_cosine_schedule_with_warmup(optimizer, num_warmup_steps=1000, num_training_steps=40000)

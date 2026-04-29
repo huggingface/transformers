@@ -30,8 +30,9 @@ The model uses Multi-head Latent Attention (MLA) architectures for efficient inf
 
 ```python
 import re
-import torch
-from transformers import AutoTokenizer, AutoModelForCausalLM
+
+from transformers import AutoModelForCausalLM, AutoTokenizer
+
 
 # 1. Configure Model
 model_id = "tencent/Youtu-LLM-2B"
@@ -49,9 +50,9 @@ messages = [{"role": "user", "content": prompt}]
 
 # Use apply_chat_template to construct input; set enable_thinking=True to activate Reasoning Mode
 input_ids = tokenizer.apply_chat_template(
-    messages, 
-    tokenize=True, 
-    add_generation_prompt=True, 
+    messages,
+    tokenize=True,
+    add_generation_prompt=True,
     return_tensors="pt",
     enable_thinking=True
 ).to(model.device)
@@ -73,7 +74,7 @@ def parse_reasoning(text):
     """Extract thought process within <think> tags and the subsequent answer content"""
     thought_pattern = r"<think>(.*?)</think>"
     match = re.search(thought_pattern, text, re.DOTALL)
-    
+
     if match:
         thought = match.group(1).strip()
         answer = text.split("</think>")[-1].strip()
@@ -86,7 +87,6 @@ thought, final_answer = parse_reasoning(full_response)
 
 print(f"\n{'='*20} Thought Process {'='*20}\n{thought}")
 print(f"\n{'='*20} Final Answer {'='*20}\n{final_answer}")
-
 ```
 
 This generated:

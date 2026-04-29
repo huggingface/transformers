@@ -55,6 +55,7 @@ The attributes can be obtained from model config, as `model.config.vision_config
 ```python
 from transformers import AutoProcessor
 
+
 processor = AutoProcessor.from_pretrained("llava-hf/vip-llava-7b-hf")
 
 conversation = [
@@ -82,7 +83,7 @@ text_prompt = processor.apply_chat_template(conversation, add_generation_prompt=
 
 # Note that the template simply formats your prompt, you still have to tokenize it and obtain pixel values for your images
 print(text_prompt)
->>> "###Human: <image>\nWhat’s shown in this image?###Assistant: This image shows a red stop sign.###Human: Describe the image in more details.###Assistant:"
+"###Human: <image>\nWhat’s shown in this image?###Assistant: This image shows a red stop sign.###Human: Describe the image in more details.###Assistant:"
 ```
 
 - If you want to construct a chat prompt yourself, below is a list of prompt formats accepted by VipLLaVa checkpoints:
