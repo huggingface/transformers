@@ -96,6 +96,11 @@ print(generated_text)
 
 [[autodoc]] Exaone4_5_Processor
 
+## Exaone4_5_VisionModel
+
+[[autodoc]] Exaone4_5_VisionModel
+    - forward
+
 ## Exaone4_5_Model
 
 [[autodoc]] Exaone4_5_Model
